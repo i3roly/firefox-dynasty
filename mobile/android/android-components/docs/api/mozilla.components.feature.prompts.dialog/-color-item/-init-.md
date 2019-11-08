@@ -1,4 +1,4 @@
-[android-components](../../index.md) / [mozilla.components.feature.prompts](../index.md) / [ColorItem](index.md) / [&lt;init&gt;](./-init-.md)
+[android-components](../../index.md) / [mozilla.components.feature.prompts.dialog](../index.md) / [ColorItem](index.md) / [&lt;init&gt;](./-init-.md)
 
 # &lt;init&gt;
 
