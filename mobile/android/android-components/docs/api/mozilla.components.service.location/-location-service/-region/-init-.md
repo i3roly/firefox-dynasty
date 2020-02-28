@@ -1,4 +1,4 @@
-[android-components](../../../index.md) / [mozilla.components.service.location](../../index.md) / [MozillaLocationService](../index.md) / [Region](index.md) / [&lt;init&gt;](./-init-.md)
+[android-components](../../../index.md) / [mozilla.components.service.location](../../index.md) / [LocationService](../index.md) / [Region](index.md) / [&lt;init&gt;](./-init-.md)
 
 # &lt;init&gt;
 
