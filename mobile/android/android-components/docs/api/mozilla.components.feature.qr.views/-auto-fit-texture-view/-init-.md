@@ -1,4 +1,4 @@
-[android-components](../../index.md) / [mozilla.components.support.base.android.view](../index.md) / [AutoFitTextureView](index.md) / [&lt;init&gt;](./-init-.md)
+[android-components](../../index.md) / [mozilla.components.feature.qr.views](../index.md) / [AutoFitTextureView](index.md) / [&lt;init&gt;](./-init-.md)
 
 # &lt;init&gt;
 
