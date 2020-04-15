@@ -1,6 +1,6 @@
-[android-components](../index.md) / [mozilla.components.support.base.android.view](./index.md)
+[android-components](../index.md) / [mozilla.components.feature.qr.views](./index.md)
 
-## Package mozilla.components.support.base.android.view
+## Package mozilla.components.feature.qr.views
 
 ### Types
 

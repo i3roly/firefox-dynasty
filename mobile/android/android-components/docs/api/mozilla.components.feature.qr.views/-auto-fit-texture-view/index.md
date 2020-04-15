@@ -1,8 +1,8 @@
-[android-components](../../index.md) / [mozilla.components.support.base.android.view](../index.md) / [AutoFitTextureView](./index.md)
+[android-components](../../index.md) / [mozilla.components.feature.qr.views](../index.md) / [AutoFitTextureView](./index.md)
 
 # AutoFitTextureView
 
-`open class AutoFitTextureView` [(source)](https://github.com/mozilla-mobile/android-components/blob/master/components/support/base/src/main/java/mozilla/components/support/base/android/view/AutoFitTextureView.kt#L27)
+`open class AutoFitTextureView` [(source)](https://github.com/mozilla-mobile/android-components/blob/master/components/feature/qr/src/main/java/mozilla/components/feature/qr/views/AutoFitTextureView.kt#L27)
 
 A [TextureView](#) that can be adjusted to a specified aspect ratio.
 
