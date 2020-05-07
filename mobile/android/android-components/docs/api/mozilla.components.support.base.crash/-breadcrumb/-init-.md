@@ -1,4 +1,4 @@
-[android-components](../../index.md) / [mozilla.components.lib.crash](../index.md) / [Breadcrumb](index.md) / [&lt;init&gt;](./-init-.md)
+[android-components](../../index.md) / [mozilla.components.support.base.crash](../index.md) / [Breadcrumb](index.md) / [&lt;init&gt;](./-init-.md)
 
 # &lt;init&gt;
 
