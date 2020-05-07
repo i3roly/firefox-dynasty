@@ -1,8 +1,8 @@
-[android-components](../../index.md) / [mozilla.components.lib.crash](../index.md) / [Breadcrumb](./index.md)
+[android-components](../../index.md) / [mozilla.components.support.base.crash](../index.md) / [Breadcrumb](./index.md)
 
 # Breadcrumb
 
-`data class Breadcrumb : `[`Comparable`](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-comparable/index.html)`<`[`Breadcrumb`](./index.md)`>` [(source)](https://github.com/mozilla-mobile/android-components/blob/master/components/lib/crash/src/main/java/mozilla/components/lib/crash/Breadcrumb.kt#L15)
+`data class Breadcrumb : `[`Comparable`](https://kotlinlang.org/api/latest/jvm/stdlib/kotlin/-comparable/index.html)`<`[`Breadcrumb`](./index.md)`>` [(source)](https://github.com/mozilla-mobile/android-components/blob/master/components/support/base/src/main/java/mozilla/components/support/base/crash/Breadcrumb.kt#L15)
 
 Represents a single crash breadcrumb.
 
