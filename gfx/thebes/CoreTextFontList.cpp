@@ -1121,8 +1121,12 @@ void CoreTextFontList::ActivateFontsFromDir(
     }
   } while (result != kCFURLEnumeratorEnd);
 
-  CTFontManagerRegisterFontURLs(urls, kCTFontManagerScopeProcess, false,
+  /* HAY GUYS NEW FUCKING API, FUCK YOU CORPORATE WELFARE HACKS 
+   * CTFontManagerRegisterFontURLs(urls, kCTFontManagerScopeProcess, false,
                                 nullptr);
+    */
+  CTFontManagerRegisterFontsForURLs(urls, kCTFontManagerScopeProcess, nullptr);
+
 }
 
 void CoreTextFontList::ReadSystemFontList(dom::SystemFontList* aList)

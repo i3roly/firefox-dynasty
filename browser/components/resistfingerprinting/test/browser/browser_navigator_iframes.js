@@ -29,7 +29,18 @@ ChromeUtils.defineESModuleGetters(this, {
     "resource://gre/modules/components-utils/WindowsVersionInfo.sys.mjs",
 });
 
-const osVersion = Services.sysinfo.get("version");
+let osVersion = Services.sysinfo.get("version");
+if (AppConstants.platform == "macosx") {
+  // Convert Darwin version to macOS version: 19.x.x -> 10.15 etc.
+  // https://en.wikipedia.org/wiki/Darwin_%28operating_system%29
+  let DarwinVersionParts = osVersion.split(".");
+  let DarwinMajorVersion = +DarwinVersionParts[0];
+  let macOsMinorVersion = DarwinMajorVersion - 4;
+  if (macOsMinorVersion > 15) {
+    macOsMinorVersion = 15;
+  }
+  osVersion = `10.${macOsMinorVersion}`;
+}
 
 const DEFAULT_APPVERSION = {
   linux: "5.0 (X11)",
@@ -102,8 +113,9 @@ const WindowsOscpuPromise = (async () => {
 
 const DEFAULT_OSCPU = {
   linux: `Linux ${defaultLinuxCpu}`,
-  macosx: "Intel Mac OS X 10.15",
-  android: `Linux ${defaultLinuxCpu}`,
+     win: WindowsOscpu,
+   macosx: `Intel Mac OS X ${osVersion}`,
+    android: `Linux ${defaultLinuxCpu}`,
   other: `Linux ${defaultLinuxCpu}`,
 };
 
@@ -117,8 +129,9 @@ const SPOOFED_OSCPU = {
 
 const DEFAULT_UA_OS = {
   linux: `X11; Linux ${defaultLinuxCpu}`,
-  macosx: "Macintosh; Intel Mac OS X 10.15",
-  android: `Android ${osVersion}; Mobile`,
+       win: WindowsOscpu,
+   macosx: `Intel Mac OS X ${osVersion}`,
+    android: `Android ${osVersion}; Mobile`,
   other: `X11; Linux ${defaultLinuxCpu}`,
 };
 
