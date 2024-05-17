@@ -228,7 +228,7 @@ class OSXBootstrapper(OSXAndroidBootstrapper, BaseBootstrapper):
         if self.os_version < Version("10.15"): # macOS Mojave
             ''' Note that LLVM must be installed first. Otherwise, the system attempts to install
             the latest version of LLVM compiler infrastructure which does not build. '''
-            subprocess.check_call(create_homebrew_cmd("install") + ["llvm@11"])
+            subprocess.check_call(create_homebrew_cmd("install") + ["llvm-11"])
             exclude_recent_versions = ["llvm"] # the list will grow with time
             for dependency in exclude_recent_versions:
                 if dependency in to_install:
