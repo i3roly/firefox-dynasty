@@ -151,11 +151,11 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       aColor = NS_TRANSPARENT;
       break;
     case ColorID::Accentcolor:
-      color = GetColorFromNSColor(NSColor.controlAccentColor);
+      color = GetColorFromNSColor(ControlAccentColor());
       break;
     case ColorID::MozMenuhover:
     case ColorID::Selecteditem:
-      color = GetColorFromNSColor(NSColor.selectedContentBackgroundColor);
+      color = GetColorFromNSColor(NSColor.alternateSelectedControlColor);
       if (aID == ColorID::MozMenuhover &&
           !LookAndFeel::GetInt(IntID::PrefersReducedTransparency)) {
         // Wash the color a little bit with semi-transparent white to match a
@@ -282,9 +282,17 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       break;
     case ColorID::MozDialog:
     case ColorID::Window:
-      color = GetColorFromNSColor(aScheme == ColorScheme::Light
+      if (@available(macOS 10.14, *)) {
+        color = GetColorFromNSColor(NSColor.windowBackgroundColor);
+      } else {
+        // On 10.13 and below, NSColor.windowBackgroundColor is transparent black.
+        // Use a light grey instead (taken from macOS 11.5).
+        color = NS_RGB(0xF6, 0xF6, 0xF6);
+      }
+/* NOPE. FUCK YOU      color = GetColorFromNSColor(aScheme == ColorScheme::Light
                                       ? NSColor.windowBackgroundColor
                                       : NSColor.underPageBackgroundColor);
+      */
       break;
     case ColorID::Field:
     case ColorID::MozCombobox:
@@ -317,10 +325,12 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::MozColheaderactivetext:
       color = GetColorFromNSColor(NSColor.headerTextColor);
       break;
-    case ColorID::MozColheaderactive:
+    // don't know how to implmement this
+    /*case ColorID::MozColheaderactive:
       color = GetColorFromNSColor(
           NSColor.unemphasizedSelectedContentBackgroundColor);
       break;
+      */
     case ColorID::MozColheader:
     case ColorID::MozColheaderhover:
     case ColorID::MozEventreerow:
@@ -374,11 +384,15 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
 static bool SystemWantsDarkTheme() {
   // This returns true if the macOS system appearance is set to dark mode,
   // false otherwise.
-  NSAppearanceName aquaOrDarkAqua =
-      [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
-        NSAppearanceNameAqua, NSAppearanceNameDarkAqua
-      ]];
-  return [aquaOrDarkAqua isEqualToString:NSAppearanceNameDarkAqua];
+    if (@available(macOS 10.14, *)) {
+        NSAppearanceName aquaOrDarkAqua =
+            [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
+            NSAppearanceNameAqua, NSAppearanceNameDarkAqua
+            ]];
+        return [aquaOrDarkAqua isEqualToString:NSAppearanceNameDarkAqua];
+    }
+    else
+        return false;
 }
 
 nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {

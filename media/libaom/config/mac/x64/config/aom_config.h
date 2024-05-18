@@ -76,8 +76,8 @@
 #define DECODE_WIDTH_LIMIT 0
 #define FORCE_HIGHBITDEPTH_DECODING 0
 #define HAVE_ARM_CRC32 0
-#define HAVE_AVX 0
-#define HAVE_AVX2 0
+#define HAVE_AVX 1
+#define HAVE_AVX2 1
 #define HAVE_FEXCEPT 1
 #define HAVE_MMX 1
 #define HAVE_NEON 0

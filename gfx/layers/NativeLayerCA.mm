@@ -943,12 +943,17 @@ void NativeLayerCA::AttachExternalImage(wr::RenderTextureHost* aExternalImage) {
         this);
   }
 #endif
+  bool oldIsDRM = mIsDRM;
+  mIsDRM = aExternalImage->IsFromDRMSource();
+  bool changedIsDRM = (mIsDRM != oldIsDRM);
+
 
   ForAllRepresentations([&](Representation& r) {
     r.mMutatedFrontSurface = true;
     r.mMutatedDisplayRect |= changedSizeAndDisplayRect;
     r.mMutatedSize |= changedSizeAndDisplayRect;
     r.mMutatedSpecializeVideo |= changedSpecializeVideo;
+    r.mMutatedIsDRM |= changedIsDRM;
   });
 }
 
@@ -969,10 +974,11 @@ bool NativeLayerCA::ShouldSpecializeVideo(const MutexAutoLock& aProofOfLock) {
 
   // DRM video is supported in macOS 10.15 and beyond, and such video must use
   // a specialized video layer.
-  if (mTextureHost->IsFromDRMSource()) {
-    return true;
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+      if (mTextureHost->IsFromDRMSource()) {
+          return true;
+      }
   }
-
   // Beyond this point, we need to know about the format of the video.
   MacIOSurface* macIOSurface = mTextureHost->GetSurface();
   if (macIOSurface->GetYUVColorSpace() == gfx::YUVColorSpace::BT2020) {
@@ -1258,7 +1264,8 @@ NativeLayerCA::Representation::Representation()
       mMutatedSurfaceIsFlipped(true),
       mMutatedFrontSurface(true),
       mMutatedSamplingFilter(true),
-      mMutatedSpecializeVideo(true) {}
+      mMutatedSpecializeVideo(true), 
+      mMutatedIsDRM(true) {}
 
 
 NativeLayerCA::Representation::~Representation() {
@@ -1527,7 +1534,7 @@ bool NativeLayerCA::ApplyChanges(WhichRepresentation aRepresentation,
   return GetRepresentation(aRepresentation)
       .ApplyChanges(aUpdate, mSize, mIsOpaque, mPosition, mTransform,
                     mDisplayRect, mClipRect, mBackingScale, mSurfaceIsFlipped,
-                    mSamplingFilter, mSpecializeVideo, surface, mColor, 
+                    mSamplingFilter, mSpecializeVideo, surface, mColor, mIsDRM, 
                     IsVideo(lock));
 }
 
@@ -1734,7 +1741,7 @@ bool NativeLayerCA::Representation::ApplyChanges(
     float aBackingScale, bool aSurfaceIsFlipped,
     gfx::SamplingFilter aSamplingFilter, bool aSpecializeVideo,
     CFTypeRefPtr<IOSurfaceRef> aFrontSurface, CFTypeRefPtr<CGColorRef> aColor,
-     bool aIsVideo) {
+    bool aIsDRM, bool aIsVideo) {
   // If we have an OnlyVideo update, handle it and early exit.
   if (aUpdate == UpdateType::OnlyVideo) {
     // If we don't have any updates to do, exit early with success. This is
@@ -1851,7 +1858,11 @@ bool NativeLayerCA::Representation::ApplyChanges(
     }
   }
 
-
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+      if (aSpecializeVideo && mMutatedIsDRM) {
+          ((AVSampleBufferDisplayLayer*)mContentCALayer).preventsCapture = aIsDRM;
+      }
+  }
   bool shouldTintOpaqueness = StaticPrefs::gfx_core_animation_tint_opaque();
   if (shouldTintOpaqueness && !mOpaquenessTintLayer) {
     mOpaquenessTintLayer = [[CALayer layer] retain];
@@ -2022,7 +2033,7 @@ NativeLayerCA::UpdateType NativeLayerCA::Representation::HasUpdate(
   if (mMutatedPosition || mMutatedTransform || mMutatedDisplayRect ||
       mMutatedClipRect || mMutatedBackingScale || mMutatedSize ||
       mMutatedSurfaceIsFlipped || mMutatedSamplingFilter ||
-      mMutatedSpecializeVideo) {
+      mMutatedSpecializeVideo || mMutatedIsDRM) {
     return UpdateType::All;
   }
 
