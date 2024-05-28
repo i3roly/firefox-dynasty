@@ -32,7 +32,7 @@ SOURCES += ["RLBoxSoundTouch.cpp"]
 #mozilla devs or enhtusiassts sure af won't help because it's obvious why they deprecated old OSX.
 ##HINT: it isn't due to "difficulty". planned obsolescence 
 
-UNIFIED_SOURCES += ["/xpcom/threads/RWLock.cpp"]
+SOURCES += ["/xpcom/threads/RWLock.cpp"]
 
 # Some xpcom things are #included indirectly (but not actually used), and
 # it's simpler to set MOZILLA_INTERNAL_API to make it compile than to

@@ -289,10 +289,13 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
         // Use a light grey instead (taken from macOS 11.5).
         color = NS_RGB(0xF6, 0xF6, 0xF6);
       }
-/* NOPE. FUCK YOU      color = GetColorFromNSColor(aScheme == ColorScheme::Light
-                                      ? NSColor.windowBackgroundColor
-                                      : NSColor.underPageBackgroundColor);
-      */
+      /* NOPE. FUCK YOU */
+      if (@available(macOS 10.14, *)) {
+
+          color = GetColorFromNSColor(aScheme == ColorScheme::Light
+                  ? NSColor.windowBackgroundColor
+                  : NSColor.underPageBackgroundColor);
+      }
       break;
     case ColorID::Field:
     case ColorID::MozCombobox:
