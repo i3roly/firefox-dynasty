@@ -185,7 +185,7 @@ class OSXBootstrapper(OSXAndroidBootstrapper, BaseBootstrapper):
                 "It will be installed with brew"
             )
 
-        packages = ["git", "gnutar", "terminal-notifier", "watchman"]
+        packages = ["git", "gnutar", "terminal-notifier", "watchman", "rust", "cargo"]
         if not hg_modern:
             packages.append("mercurial")
         self._ensure_homebrew_packages(packages)
