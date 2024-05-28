@@ -32,7 +32,7 @@ SOURCES += ["RLBoxSoundTouch.cpp"]
 #mozilla devs or enhtusiassts sure af won't help because it's obvious why they deprecated old OSX.
 ##HINT: it isn't due to "difficulty". planned obsolescence 
 
-SOURCES += ["/xpcom/threads/RWLock.cpp"]
+include("/ipc/chromium/chromium-config.mozbuild")
 
 # Some xpcom things are #included indirectly (but not actually used), and
 # it's simpler to set MOZILLA_INTERNAL_API to make it compile than to
@@ -50,6 +50,7 @@ if CONFIG["MOZ_WASM_SANDBOXING_SOUNDTOUCH"]:
         "/config/external/rlbox_wasm2c_sandbox/rlbox_wasm2c_thread_locals.cpp",
         "/third_party/rlbox_wasm2c_sandbox/src/wasm2c_rt_mem.c",
         "/third_party/rlbox_wasm2c_sandbox/src/wasm2c_rt_minwasi.c",
+        "/xpcom/threads/RWLock.cpp",
     ]
     if CONFIG['OS_ARCH'] != 'WINNT':
         OS_LIBS += ["m"]

@@ -8,6 +8,15 @@
 
 #include "mozilla/Assertions.h"
 
+bool Mutex::SpinInKernelSpace() {
+    if (__builtin_available(macOS 10.15, *)) {
+        return true;
+    }
+
+    return false;
+}
+const bool Mutex::gSpinInKernelSpace = SpinInKernelSpace();
+
 bool Mutex::TryLock() {
 #if defined(XP_WIN)
   return !!TryEnterCriticalSection(&mMutex);

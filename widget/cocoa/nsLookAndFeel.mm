@@ -283,18 +283,13 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::MozDialog:
     case ColorID::Window:
       if (@available(macOS 10.14, *)) {
-        color = GetColorFromNSColor(NSColor.windowBackgroundColor);
+          color = GetColorFromNSColor(aScheme == ColorScheme::Light
+                  ? NSColor.windowBackgroundColor
+                  : NSColor.underPageBackgroundColor);
       } else {
         // On 10.13 and below, NSColor.windowBackgroundColor is transparent black.
         // Use a light grey instead (taken from macOS 11.5).
         color = NS_RGB(0xF6, 0xF6, 0xF6);
-      }
-      /* NOPE. FUCK YOU */
-      if (@available(macOS 10.14, *)) {
-
-          color = GetColorFromNSColor(aScheme == ColorScheme::Light
-                  ? NSColor.windowBackgroundColor
-                  : NSColor.underPageBackgroundColor);
       }
       break;
     case ColorID::Field:
@@ -328,12 +323,14 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::MozColheaderactivetext:
       color = GetColorFromNSColor(NSColor.headerTextColor);
       break;
-    // don't know how to implmement this
-    /*case ColorID::MozColheaderactive:
-      color = GetColorFromNSColor(
-          NSColor.unemphasizedSelectedContentBackgroundColor);
-      break;
-      */
+      // don't know how to implmement this on lower machines
+      // probably use that rgb colour hack or something they have above
+    case ColorID::MozColheaderactive:
+      if (@available(macOS 10.14, *)) {
+          color = GetColorFromNSColor(
+                  NSColor.unemphasizedSelectedContentBackgroundColor);
+          break;
+      }
     case ColorID::MozColheader:
     case ColorID::MozColheaderhover:
     case ColorID::MozEventreerow:
