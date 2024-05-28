@@ -339,7 +339,7 @@ def macos_sign(
     # signatures if the --force option used. Remove all signatures so
     # subsequent signing commands with different options will result
     # in re-signing without requiring --force.
-    cs_reset_cmd = ["find", app, "-exec", "codesign", "--remove-signature", "{}", ";"]
+    cs_reset_cmd = ["gfind", app, "-exec", "codesign", "--remove-signature", "{}", ";"]
     run(command_context, cs_reset_cmd, capture_output=not verbose_arg)
 
     if use_rcodesign_arg is True:
@@ -434,6 +434,8 @@ def sign_with_codesign(
 
     for signing_group in signing_groups:
         cs_cmd = ["codesign"]
+        #add deep signing, had issues without it.
+        cs_cmd.append("--deep")
         cs_cmd.append("--sign")
         cs_cmd.append(signing_identity)
 

@@ -1163,6 +1163,7 @@ void CoreTextFontList::PreloadNamesList() {
     }
   }
 }
+
 gfxFontFamily* CoreTextFontList::FindSystemFontFamily(
     const nsACString& aFamily) {
   nsAutoCString key;
