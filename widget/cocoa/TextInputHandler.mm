@@ -20,6 +20,7 @@
 #include "mozilla/ToString.h"
 
 #include "nsChildView.h"
+#include "nsCocoaFeatures.h"
 #include "nsObjCExceptions.h"
 #include "nsBidiUtils.h"
 #include "nsToolkit.h"
@@ -4952,7 +4953,7 @@ bool IMEInputHandler::OnHandleEvent(NSEvent* aEvent) {
   }
 
   bool allowConsumeEvent = true;
-  if (!IsIMEComposing()) {
+  if (nsCocoaFeatures::OnCatalinaOrLater() && !IsIMEComposing()) {
     // Hack for bug of Korean IMEs on Catalina (10.15).
     // If we are inactivated during composition, active Korean IME keeps
     // consuming all mousedown events of any mouse buttons.  So, we should

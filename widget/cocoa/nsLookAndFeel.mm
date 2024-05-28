@@ -127,6 +127,13 @@ static nscolor ProcessSelectionBackground(nscolor aColor, ColorScheme aScheme) {
 nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
                                        nscolor& aColor) {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK
+  if (@available(macOS 10.14, *)) {
+    // No-op. macOS 10.14+ supports dark mode, so currentAppearance can be set
+    // to either Light or Dark.
+  } else {
+    // System colors before 10.14 are always Light.
+    aScheme = ColorScheme::Light;
+  }
 
   NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
 
@@ -464,6 +471,15 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
     case IntID::TreeScrollLinesMax:
       aResult = 3;
       break;
+    case IntID::MacGraphiteTheme:
+      aResult = [NSColor currentControlTint] == NSGraphiteControlTint;
+      break;
+    case IntID::MacLionTheme:
+      aResult = 1;
+      break;
+    case IntID::MacYosemiteTheme:
+      aResult = nsCocoaFeatures::OnYosemiteOrLater();
+      break;
     case IntID::MacBigSurTheme:
       aResult = nsCocoaFeatures::OnBigSurOrLater();
       break;
@@ -616,12 +632,19 @@ void nsLookAndFeel::RecordAccessibilityTelemetry() {
              name:NSSystemColorsDidChangeNotification
            object:nil];
 
-  [NSWorkspace.sharedWorkspace.notificationCenter
-      addObserver:self
-         selector:@selector(mediaQueriesChanged)
-             name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
-           object:nil];
-
+  if (@available(macOS 10.14, *)) {
+      [NSWorkspace.sharedWorkspace.notificationCenter
+          addObserver:self
+              selector:@selector(mediaQueriesChanged)
+              name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+              object:nil];
+  } else {
+      [NSNotificationCenter.defaultCenter
+          addObserver:self
+              selector:@selector(mediaQueriesChanged)
+              name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+              object:nil];
+  }
   [NSNotificationCenter.defaultCenter
       addObserver:self
          selector:@selector(scrollbarsChanged)

@@ -3840,7 +3840,7 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 // shadowOptions method on the various window types.
 static const NSUInteger kWindowShadowOptionsNoShadow = 0;
 static const NSUInteger kWindowShadowOptionsMenu = 2;
-static const NSUInteger kWindowShadowOptionsTooltip = 4;
+static const NSUInteger kWindowShadowOptionsTooltipMojaveOrLater = 4;
 
 - (NSDictionary*)shadowParameters {
   NSDictionary* parent = [super shadowParameters];
@@ -3872,8 +3872,11 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
       return kWindowShadowOptionsMenu;
 
     case WindowShadow::Tooltip:
-      return kWindowShadowOptionsTooltip;
-  }
+      if (nsCocoaFeatures::OnMojaveOrLater()) {
+        return kWindowShadowOptionsTooltipMojaveOrLater;
+      }
+      return kWindowShadowOptionsMenu;
+    }
 }
 
 - (BOOL)isContextMenu {

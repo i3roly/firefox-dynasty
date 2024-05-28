@@ -18,6 +18,16 @@ class nsCocoaFeatures {
   static int32_t macOSVersionMajor();
   static int32_t macOSVersionMinor();
   static int32_t macOSVersionBugFix();
+  static bool OnLionOrLater();
+  static bool OnMountainLionOrLater();
+  static bool OnMavericksOrLater();
+  static bool OnYosemiteOrLater();
+  static bool OnElCapitanOrLater();
+  static bool OnSierraExactly();
+  static bool OnSierraOrLater();
+  static bool OnHighSierraOrLater();
+  static bool OnMojaveOrLater();
+  static bool OnCatalinaOrLater();
   static bool OnBigSurOrLater();
   static bool OnMontereyOrLater();
   static bool OnVenturaOrLater();
