@@ -5,6 +5,7 @@
 
 #include "mozilla/Assertions.h"
 #include "RLBoxSoundTouch.h"
+#include "mozilla/RWLock.h"
 
 using namespace rlbox;
 using namespace mozilla;

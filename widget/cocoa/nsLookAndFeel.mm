@@ -127,6 +127,13 @@ static nscolor ProcessSelectionBackground(nscolor aColor, ColorScheme aScheme) {
 nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
                                        nscolor& aColor) {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK
+  if (@available(macOS 10.14, *)) {
+    // No-op. macOS 10.14+ supports dark mode, so currentAppearance can be set
+    // to either Light or Dark.
+  } else {
+    // System colors before 10.14 are always Light.
+    aScheme = ColorScheme::Light;
+  }
 
   NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
 
@@ -151,11 +158,11 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       aColor = NS_TRANSPARENT;
       break;
     case ColorID::Accentcolor:
-      color = GetColorFromNSColor(NSColor.controlAccentColor);
+      color = GetColorFromNSColor(ControlAccentColor());
       break;
     case ColorID::MozMenuhover:
     case ColorID::Selecteditem:
-      color = GetColorFromNSColor(NSColor.selectedContentBackgroundColor);
+      color = GetColorFromNSColor(NSColor.alternateSelectedControlColor);
       if (aID == ColorID::MozMenuhover &&
           !LookAndFeel::GetInt(IntID::PrefersReducedTransparency)) {
         // Wash the color a little bit with semi-transparent white to match a
@@ -282,9 +289,15 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       break;
     case ColorID::MozDialog:
     case ColorID::Window:
-      color = GetColorFromNSColor(aScheme == ColorScheme::Light
-                                      ? NSColor.windowBackgroundColor
-                                      : NSColor.underPageBackgroundColor);
+      if (@available(macOS 10.14, *)) {
+          color = GetColorFromNSColor(aScheme == ColorScheme::Light
+                  ? NSColor.windowBackgroundColor
+                  : NSColor.underPageBackgroundColor);
+      } else {
+        // On 10.13 and below, NSColor.windowBackgroundColor is transparent black.
+        // Use a light grey instead (taken from macOS 11.5).
+        color = NS_RGB(0xF6, 0xF6, 0xF6);
+      }
       break;
     case ColorID::Field:
     case ColorID::MozCombobox:
@@ -317,10 +330,14 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::MozColheaderactivetext:
       color = GetColorFromNSColor(NSColor.headerTextColor);
       break;
+      // don't know how to implmement this on lower machines
+      // probably use that rgb colour hack or something they have above
     case ColorID::MozColheaderactive:
-      color = GetColorFromNSColor(
-          NSColor.unemphasizedSelectedContentBackgroundColor);
-      break;
+      if (@available(macOS 10.14, *)) {
+          color = GetColorFromNSColor(
+                  NSColor.unemphasizedSelectedContentBackgroundColor);
+          break;
+      }
     case ColorID::MozColheader:
     case ColorID::MozColheaderhover:
     case ColorID::MozEventreerow:
@@ -374,11 +391,15 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
 static bool SystemWantsDarkTheme() {
   // This returns true if the macOS system appearance is set to dark mode,
   // false otherwise.
-  NSAppearanceName aquaOrDarkAqua =
-      [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
-        NSAppearanceNameAqua, NSAppearanceNameDarkAqua
-      ]];
-  return [aquaOrDarkAqua isEqualToString:NSAppearanceNameDarkAqua];
+    if (@available(macOS 10.14, *)) {
+        NSAppearanceName aquaOrDarkAqua =
+            [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
+            NSAppearanceNameAqua, NSAppearanceNameDarkAqua
+            ]];
+        return [aquaOrDarkAqua isEqualToString:NSAppearanceNameDarkAqua];
+    }
+    else
+        return false;
 }
 
 nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
@@ -449,6 +470,15 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       break;
     case IntID::TreeScrollLinesMax:
       aResult = 3;
+      break;
+    case IntID::MacGraphiteTheme:
+      aResult = [NSColor currentControlTint] == NSGraphiteControlTint;
+      break;
+    case IntID::MacLionTheme:
+      aResult = 1;
+      break;
+    case IntID::MacYosemiteTheme:
+      aResult = nsCocoaFeatures::OnYosemiteOrLater();
       break;
     case IntID::MacBigSurTheme:
       aResult = nsCocoaFeatures::OnBigSurOrLater();
@@ -602,12 +632,19 @@ void nsLookAndFeel::RecordAccessibilityTelemetry() {
              name:NSSystemColorsDidChangeNotification
            object:nil];
 
-  [NSWorkspace.sharedWorkspace.notificationCenter
-      addObserver:self
-         selector:@selector(mediaQueriesChanged)
-             name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
-           object:nil];
-
+  if (@available(macOS 10.14, *)) {
+      [NSWorkspace.sharedWorkspace.notificationCenter
+          addObserver:self
+              selector:@selector(mediaQueriesChanged)
+              name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+              object:nil];
+  } else {
+      [NSNotificationCenter.defaultCenter
+          addObserver:self
+              selector:@selector(mediaQueriesChanged)
+              name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+              object:nil];
+  }
   [NSNotificationCenter.defaultCenter
       addObserver:self
          selector:@selector(scrollbarsChanged)

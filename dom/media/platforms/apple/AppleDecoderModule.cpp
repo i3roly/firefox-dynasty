@@ -215,7 +215,7 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
 
   VideoInfo info(1920, 1080);
   bool vtReportsSupport = false;
-
+  if (__builtin_available(macOS 10.13, *)) {
   if (!VTIsHardwareDecodeSupported) {
     return false;
   }
@@ -273,6 +273,7 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
     }
     decoder->Shutdown();
     return hwSupport;
+  }
   }
   return false;
 }
