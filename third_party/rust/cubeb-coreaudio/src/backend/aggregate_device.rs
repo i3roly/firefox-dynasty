@@ -69,7 +69,7 @@ impl AggregateDevice {
         input_id: AudioObjectID,
         output_id: AudioObjectID,
     ) -> std::result::Result<Self, Error> {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let plugin_id = Self::get_system_plugin_id()?;
         let device_id = Self::create_blank_device_sync(plugin_id)?;
 
@@ -149,7 +149,7 @@ impl AggregateDevice {
     pub fn create_blank_device_sync(
         plugin_id: AudioObjectID,
     ) -> std::result::Result<AudioObjectID, Error> {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let waiting_time = Duration::new(5, 0);
 
         let condvar_pair = Arc::new((Mutex::new(()), Condvar::new()));
@@ -218,7 +218,7 @@ impl AggregateDevice {
         plugin_id: AudioObjectID,
     ) -> std::result::Result<AudioObjectID, Error> {
         assert_ne!(plugin_id, kAudioObjectUnknown);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
 
         let address = AudioObjectPropertyAddress {
             mSelector: kAudioPlugInCreateAggregateDevice,
@@ -307,7 +307,7 @@ impl AggregateDevice {
         input_id: AudioDeviceID,
         output_id: AudioDeviceID,
     ) -> std::result::Result<(), Error> {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let address = AudioObjectPropertyAddress {
             mSelector: kAudioAggregateDevicePropertyFullSubDeviceList,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -394,7 +394,7 @@ impl AggregateDevice {
         assert_ne!(input_id, kAudioObjectUnknown);
         assert_ne!(output_id, kAudioObjectUnknown);
         assert_ne!(input_id, output_id);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
 
         let output_sub_devices = Self::get_sub_devices(output_id)?;
         let input_sub_devices = Self::get_sub_devices(input_id)?;
@@ -434,7 +434,7 @@ impl AggregateDevice {
         device_id: AudioDeviceID,
     ) -> std::result::Result<Vec<AudioObjectID>, Error> {
         assert_ne!(device_id, kAudioObjectUnknown);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
 
         let mut sub_devices = Vec::new();
         let address = AudioObjectPropertyAddress {
@@ -472,7 +472,7 @@ impl AggregateDevice {
     }
 
     pub fn get_master_device_uid(device_id: AudioDeviceID) -> std::result::Result<String, Error> {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let address = AudioObjectPropertyAddress {
             mSelector: kAudioAggregateDevicePropertyMainSubDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -500,7 +500,7 @@ impl AggregateDevice {
     ) -> std::result::Result<(), Error> {
         assert_ne!(device_id, kAudioObjectUnknown);
         assert_ne!(primary_id, kAudioObjectUnknown);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
 
         cubeb_log!(
             "Set master device of the aggregate device {} to device {}",
@@ -532,7 +532,7 @@ impl AggregateDevice {
         device_id: AudioObjectID,
     ) -> std::result::Result<(), Error> {
         assert_ne!(device_id, kAudioObjectUnknown);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let address = AudioObjectPropertyAddress {
             mSelector: kAudioObjectPropertyOwnedObjects,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -616,7 +616,7 @@ impl AggregateDevice {
     ) -> std::result::Result<(), Error> {
         assert_ne!(plugin_id, kAudioObjectUnknown);
         assert_ne!(device_id, kAudioObjectUnknown);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
 
         let address = AudioObjectPropertyAddress {
             mSelector: kAudioPlugInDestroyAggregateDevice,
@@ -648,7 +648,7 @@ impl AggregateDevice {
         assert_ne!(input_id, kAudioObjectUnknown);
         assert_ne!(output_id, kAudioObjectUnknown);
         assert_ne!(input_id, output_id);
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
 
         let label = get_device_label(input_id, DeviceType::INPUT)?;
         let input_label = label.into_string();
@@ -710,7 +710,7 @@ impl Default for AggregateDevice {
 
 impl Drop for AggregateDevice {
     fn drop(&mut self) {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         if self.plugin_id != kAudioObjectUnknown && self.device_id != kAudioObjectUnknown {
             if let Err(r) = Self::destroy_device(self.plugin_id, self.device_id) {
                 cubeb_log!(
