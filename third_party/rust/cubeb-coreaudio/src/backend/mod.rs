@@ -327,6 +327,85 @@ fn get_volume(unit: AudioUnit) -> Result<f32> {
     }
 }
 
+fn set_input_mute(unit: AudioUnit, mute: bool) -> Result<()> {
+    assert!(!unit.is_null());
+    let mute: UInt32 = mute.into();
+    let r = audio_unit_set_property(
+        unit,
+        kAUVoiceIOProperty_MuteOutput,
+        kAudioUnitScope_Global,
+        AU_IN_BUS,
+        &mute,
+        mem::size_of::<u32>(),
+    );
+    if r == NO_ERR {
+        Ok(())
+    } else {
+        cubeb_log!(
+            "AudioUnitSetProperty/kAUVoiceIOProperty_MuteOutput rv={}",
+            r
+        );
+        Err(Error::error())
+    }
+
+}
+
+fn set_input_processing_params(unit: AudioUnit, params: InputProcessingParams) -> Result<()> {
+    assert!(!unit.is_null());
+    let aec = params.contains(InputProcessingParams::ECHO_CANCELLATION);
+    let ns = params.contains(InputProcessingParams::NOISE_SUPPRESSION);
+
+    // We don't use AGC, but keep it here for reference.
+    // See the comment in supported_input_processing_params.
+    let agc = params.contains(InputProcessingParams::AUTOMATIC_GAIN_CONTROL);
+    assert!(!agc);
+
+    // AEC and NS are active as soon as VPIO is not bypassed.
+    // Therefore the only modes we can explicitly support are {} and {aec, ns}.
+
+    if aec != ns {
+        // No control to turn on AEC without NS or vice versa.
+        return Err(Error::error());
+    }
+
+    let agc = u32::from(agc);
+    let r = audio_unit_set_property(
+        unit,
+        kAUVoiceIOProperty_VoiceProcessingEnableAGC,
+        kAudioUnitScope_Global,
+        AU_IN_BUS,
+        &agc,
+        mem::size_of::<u32>(),
+    );
+    if r != NO_ERR {
+        cubeb_log!(
+            "AudioUnitSetProperty/kAUVoiceIOProperty_VoiceProcessingEnableAGC rv={}",
+            r
+        );
+        return Err(Error::error());
+    }
+
+    let bypass = u32::from(!aec);
+    let r = audio_unit_set_property(
+        unit,
+        kAUVoiceIOProperty_BypassVoiceProcessing,
+        kAudioUnitScope_Global,
+        AU_IN_BUS,
+        &bypass,
+        mem::size_of::<u32>(),
+    );
+    if r != NO_ERR {
+        cubeb_log!(
+            "AudioUnitSetProperty/kAUVoiceIOProperty_BypassVoiceProcessing rv={}",
+            r
+        );
+        return Err(Error::error());
+    }
+
+    Ok(())
+
+}
+
 fn minimum_resampling_input_frames(
     input_rate: f64,
     output_rate: f64,
@@ -4748,6 +4827,7 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
         }
         Ok(self.prev_position)
     }
+
     #[cfg(target_os = "ios")]
     fn latency(&mut self) -> Result<u32> {
         Err(not_supported())
@@ -4759,12 +4839,6 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
     #[cfg(target_os = "ios")]
     fn input_latency(&mut self) -> Result<u32> {
         Err(not_supported())
-    }
-    fn set_input_mute(&mut self, _mute: bool) -> Result<()> {
-        Err(Error::not_supported())
-    }
-    fn set_input_processing_params(&mut self, _params: InputProcessingParams) -> Result<()> {
-        Err(Error::not_supported())
     }
     #[cfg(not(target_os = "ios"))]
     fn input_latency(&mut self) -> Result<u32> {
@@ -4780,7 +4854,9 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
         } else {
             Err(Error::error())
         }
+
     }
+
     fn set_volume(&mut self, volume: f32) -> Result<()> {
         // Execute set_volume in serial queue to avoid racing with destroy or reinit.
         let mut result = Err(Error::error());
@@ -4802,50 +4878,76 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
     fn set_name(&mut self, _: &CStr) -> Result<()> {
         Err(Error::not_supported())
     }
-    #[cfg(target_os = "ios")]
     fn current_device(&mut self) -> Result<&DeviceRef> {
-        Err(not_supported())
+        Err(Error::not_supported())
+
     }
-    #[cfg(not(target_os = "ios"))]
-    fn current_device(&mut self) -> Result<&DeviceRef> {
-        let output_device = match get_default_device(DeviceType::OUTPUT) {
-            None => {
-                cubeb_log!("Could not get default output device");
-                return Err(Error::error());
-            }
-            Some(id) => id,
-        };
-        let output_name =
-            get_device_source_string(output_device, DeviceType::OUTPUT).map_err(|e| {
-                cubeb_log!(
-                    "Could not get device source string for default output device. Error: {}",
-                    e
-                );
-                Error::error()
-            })?;
+    fn set_input_mute(&mut self, mute: bool) -> Result<()> {
+        if self.core_stream_data.input_unit.is_null() {
+            return Err(Error::invalid_parameter());
+        }
 
-        let input_device = match get_default_device(DeviceType::INPUT) {
-            None => {
-                cubeb_log!("Could not get default input device");
-                return Err(Error::error());
-            }
-            Some(id) => id,
-        };
-        let input_name =
-            get_device_source_string(input_device, DeviceType::INPUT).map_err(|e| {
-                cubeb_log!(
-                    "Could not get device source string for default input device. Error: {}",
-                    e
-                );
-                Error::error()
-            })?;
+        if !self.core_stream_data.using_voice_processing_unit() {
+            return Err(Error::error());
+        }
 
-        let mut device: Box<ffi::cubeb_device> = Box::default();
+        // Execute set_input_mute in serial queue to avoid racing with destroy or reinit.
+        let mut result = Err(Error::error());
+        let set = &mut result;
+        let stream = &self;
+        self.queue.run_sync(move || {
+            *set = set_input_mute(stream.core_stream_data.input_unit, mute);
+        });
 
-        device.input_name = input_name.into_raw();
-        device.output_name = output_name.into_raw();
+        result?;
 
-        Ok(unsafe { DeviceRef::from_ptr(Box::into_raw(device)) })
+        cubeb_log!(
+            "Cubeb stream ({:p}) set input mute to {}.",
+            self as *const AudioUnitStream,
+            mute
+        );
+        Ok(())
+    }
+
+    fn set_input_processing_params(&mut self, params: InputProcessingParams) -> Result<()> {
+        // CUBEB_ERROR_INVALID_PARAMETER if a given param is not supported by
+        // this backend, or if this stream does not have an input device
+        if self.core_stream_data.input_unit.is_null() {
+            return Err(Error::invalid_parameter());
+        }
+
+        if self
+            .context
+                .supported_input_processing_params()
+                .unwrap()
+                .intersection(params)
+                != params
+        {
+            return Err(Error::invalid_parameter());
+        }
+
+        // CUBEB_ERROR if params could not be applied
+        //   note: only works with VoiceProcessingIO
+        if !self.core_stream_data.using_voice_processing_unit() {
+            return Err(Error::error());
+        }
+
+        // Execute set_input_processing_params in serial queue to avoid racing with destroy or reinit.
+        let mut result = Err(Error::error());
+        let set = &mut result;
+        let stream = &self;
+        self.queue.run_sync(move || {
+            *set = set_input_processing_params(stream.core_stream_data.input_unit, params);
+        });
+
+        result?;
+
+        cubeb_log!(
+            "Cubeb stream ({:p}) set input processing params to {:?}.",
+            self as *const AudioUnitStream,
+            params
+        );
+        Ok(())
     }
     #[cfg(target_os = "ios")]
     fn device_destroy(&mut self, device: &DeviceRef) -> Result<()> {
@@ -4884,6 +4986,7 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
             *callback = device_changed_callback;
             Ok(())
         }
+
     }
 }
 
