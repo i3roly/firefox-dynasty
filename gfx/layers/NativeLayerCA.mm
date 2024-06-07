@@ -40,6 +40,9 @@
 - (void)setContentsOpaque:(BOOL)opaque;
 @end
 
+//remove DRM which seems to be a central reason we don't have firefox on mojave.
+// fucking corporate cocksucker jim mathies https://phabricator.services.mozilla.com/D155297
+
 namespace mozilla {
 namespace layers {
 
@@ -846,10 +849,27 @@ NativeLayerCA::NativeLayerCA(bool aIsOpaque)
 
 CGColorRef CGColorCreateForDeviceColor(gfx::DeviceColor aColor) {
   if (StaticPrefs::gfx_color_management_native_srgb()) {
-    return CGColorCreateSRGB(aColor.r, aColor.g, aColor.b, aColor.a);
+    // Use CGColorCreateSRGB if it's available, otherwise use older macOS API methods,
+    // which unfortunately allocate additional memory for the colorSpace object.
+    if (@available(macOS 10.15, iOS 13.0, *)) {
+      // Even if it is available, we have to address the function dynamically, to keep
+      // compiler happy when building with earlier versions of the SDK.
+      static auto CGColorCreateSRGBPtr = (CGColorRef(*)(CGFloat, CGFloat, CGFloat, CGFloat))dlsym(
+          RTLD_DEFAULT, "CGColorCreateSRGB");
+      if (CGColorCreateSRGBPtr) {
+        return CGColorCreateSRGBPtr(aColor.r, aColor.g, aColor.b, aColor.a);
+      }
+    }
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CGFloat components[] = {aColor.r, aColor.g, aColor.b, aColor.a};
+    CGColorRef color = CGColorCreate(colorSpace, components);
+    CFRelease(colorSpace);
+    return color;
   }
 
   return CGColorCreateGenericRGB(aColor.r, aColor.g, aColor.b, aColor.a);
+   //return CGColorCreateSRGB(aColor.r, aColor.g, aColor.b, aColor.a);
 }
 
 NativeLayerCA::NativeLayerCA(gfx::DeviceColor aColor)
@@ -923,10 +943,10 @@ void NativeLayerCA::AttachExternalImage(wr::RenderTextureHost* aExternalImage) {
         this);
   }
 #endif
-
   bool oldIsDRM = mIsDRM;
   mIsDRM = aExternalImage->IsFromDRMSource();
   bool changedIsDRM = (mIsDRM != oldIsDRM);
+
 
   ForAllRepresentations([&](Representation& r) {
     r.mMutatedFrontSurface = true;
@@ -954,10 +974,11 @@ bool NativeLayerCA::ShouldSpecializeVideo(const MutexAutoLock& aProofOfLock) {
 
   // DRM video is supported in macOS 10.15 and beyond, and such video must use
   // a specialized video layer.
-  if (mTextureHost->IsFromDRMSource()) {
-    return true;
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+      if (mTextureHost->IsFromDRMSource()) {
+          return true;
+      }
   }
-
   // Beyond this point, we need to know about the format of the video.
   MacIOSurface* macIOSurface = mTextureHost->GetSurface();
   if (macIOSurface->GetYUVColorSpace() == gfx::YUVColorSpace::BT2020) {
@@ -1243,8 +1264,9 @@ NativeLayerCA::Representation::Representation()
       mMutatedSurfaceIsFlipped(true),
       mMutatedFrontSurface(true),
       mMutatedSamplingFilter(true),
-      mMutatedSpecializeVideo(true),
+      mMutatedSpecializeVideo(true), 
       mMutatedIsDRM(true) {}
+
 
 NativeLayerCA::Representation::~Representation() {
   [mContentCALayer release];
@@ -1512,7 +1534,7 @@ bool NativeLayerCA::ApplyChanges(WhichRepresentation aRepresentation,
   return GetRepresentation(aRepresentation)
       .ApplyChanges(aUpdate, mSize, mIsOpaque, mPosition, mTransform,
                     mDisplayRect, mClipRect, mBackingScale, mSurfaceIsFlipped,
-                    mSamplingFilter, mSpecializeVideo, surface, mColor, mIsDRM,
+                    mSamplingFilter, mSpecializeVideo, surface, mColor, mIsDRM, 
                     IsVideo(lock));
 }
 
@@ -1836,10 +1858,11 @@ bool NativeLayerCA::Representation::ApplyChanges(
     }
   }
 
-  if (aSpecializeVideo && mMutatedIsDRM) {
-    ((AVSampleBufferDisplayLayer*)mContentCALayer).preventsCapture = aIsDRM;
+  if (@available(macOS 10.15, iOS 13.0, *)) {
+      if (aSpecializeVideo && mMutatedIsDRM) {
+          ((AVSampleBufferDisplayLayer*)mContentCALayer).preventsCapture = aIsDRM;
+      }
   }
-
   bool shouldTintOpaqueness = StaticPrefs::gfx_core_animation_tint_opaque();
   if (shouldTintOpaqueness && !mOpaquenessTintLayer) {
     mOpaquenessTintLayer = [[CALayer layer] retain];
@@ -1995,7 +2018,6 @@ bool NativeLayerCA::Representation::ApplyChanges(
   mMutatedFrontSurface = false;
   mMutatedSamplingFilter = false;
   mMutatedSpecializeVideo = false;
-  mMutatedIsDRM = false;
 
   return true;
 }

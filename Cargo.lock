@@ -6971,6 +6971,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "once_cell",
+ "whatsys",
 ]
 
 [[package]]

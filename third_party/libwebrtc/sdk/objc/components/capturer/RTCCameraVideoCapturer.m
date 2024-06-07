@@ -117,25 +117,18 @@ const int64_t kNanosecondsPerSecond = 1000000000;
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-+ (NSArray<AVCaptureDevice *> *)captureDevicesWithDeviceTypes:
-    (NSArray<AVCaptureDeviceType> *)deviceTypes {
++ (NSArray<AVCaptureDevice *> *)captureDevices {
+#if defined(WEBRTC_IOS) && defined(__IPHONE_10_0) && \
+    __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_10_0
   AVCaptureDeviceDiscoverySession *session = [AVCaptureDeviceDiscoverySession
-      discoverySessionWithDeviceTypes:deviceTypes
+      discoverySessionWithDeviceTypes:@[ AVCaptureDeviceTypeBuiltInWideAngleCamera ]
                             mediaType:AVMediaTypeVideo
                              position:AVCaptureDevicePositionUnspecified];
   return session.devices;
-}
-
-+ (NSArray<AVCaptureDeviceType> *)defaultCaptureDeviceTypes {
-  NSArray *types = @[ AVCaptureDeviceTypeBuiltInWideAngleCamera ];
-#if !defined(WEBRTC_IOS)
-  if (@available(macOS 14.0, *)) {
-    types = [types arrayByAddingObject:AVCaptureDeviceTypeExternal];
-  } else {
-    types = [types arrayByAddingObject:AVCaptureDeviceTypeExternalUnknown];
-  }
+#else
+  return [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
 #endif
-  return types;
+
 }
 
 + (NSArray<AVCaptureDeviceFormat *> *)supportedFormatsForDevice:(AVCaptureDevice *)device {

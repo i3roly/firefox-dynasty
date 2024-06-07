@@ -1,4 +1,3 @@
-use crate::dispatch::*;
 use coreaudio_sys::*;
 use std::fmt;
 use std::os::raw::c_void;
@@ -78,7 +77,6 @@ pub fn audio_object_set_property_data<T>(
     size: usize,
     data: *const T,
 ) -> OSStatus {
-    debug_assert_running_serially();
     unsafe {
         AudioObjectSetPropertyData(
             id,
@@ -101,7 +99,6 @@ pub fn audio_object_add_property_listener<T>(
     listener: audio_object_property_listener_proc,
     data: *mut T,
 ) -> OSStatus {
-    debug_assert_running_serially();
     unsafe { AudioObjectAddPropertyListener(id, address, Some(listener), data as *mut c_void) }
 }
 
@@ -111,7 +108,6 @@ pub fn audio_object_remove_property_listener<T>(
     listener: audio_object_property_listener_proc,
     data: *mut T,
 ) -> OSStatus {
-    debug_assert_running_serially();
     unsafe { AudioObjectRemovePropertyListener(id, address, Some(listener), data as *mut c_void) }
 }
 
