@@ -35,11 +35,22 @@ class nsLookAndFeel final : public nsXPLookAndFeel {
   // chunk of telemetry logging code at initialization and when we
   // recieve an event that changes the value of our telemetry probe.
   static void RecordAccessibilityTelemetry();
-
+  static bool UseOverlayScrollbars();
  protected:
   bool mInitialized = false;
   bool mRtl = false;
   int32_t mTitlebarHeight = 0;
+
+  static bool SystemWantsOverlayScrollbars();
+  static bool AllowOverlayScrollbarsOverlap();
+
+ private:
+  int32_t mUseOverlayScrollbars;
+  bool mUseOverlayScrollbarsCached;
+
+  int32_t mAllowOverlayScrollbarsOverlap;
+
+  bool mAllowOverlayScrollbarsOverlapCached;
 };
 
 #endif  // nsLookAndFeel_h_

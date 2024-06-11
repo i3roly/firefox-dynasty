@@ -14,6 +14,7 @@
 #include "gfxUtils.h"
 #include "ImageRegion.h"
 #include "nsClipboard.h"
+#include "nsCocoaFeatures.h"
 #include "nsCocoaUtils.h"
 #include "nsChildView.h"
 #include "nsMenuBarX.h"
@@ -1234,15 +1235,53 @@ bool nsCocoaUtils::ShouldZoomOnTitlebarDoubleClick() {
   if ([NSWindow respondsToSelector:@selector(_shouldZoomOnDoubleClick)]) {
     return [NSWindow _shouldZoomOnDoubleClick];
   }
-  return [ActionOnDoubleClickSystemPref() isEqualToString:@"Maximize"];
+  if (nsCocoaFeatures::OnElCapitanOrLater()) {
+    return [ActionOnDoubleClickSystemPref() isEqualToString:@"Maximize"];
+  }
+  return false;
 }
-
 bool nsCocoaUtils::ShouldMinimizeOnTitlebarDoubleClick() {
   // Check the system preferences.
   // We could also check -[NSWindow _shouldMiniaturizeOnDoubleClick]. It's not
   // clear to me which approach would be preferable; neither is public API.
-  return [ActionOnDoubleClickSystemPref() isEqualToString:@"Minimize"];
+  if (nsCocoaFeatures::OnElCapitanOrLater()) {
+    return [ActionOnDoubleClickSystemPref() isEqualToString:@"Minimize"];
+  }
+
+  // Pre-10.11:
+  NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
+  NSString* kAppleMiniaturizeOnDoubleClickKey = @"AppleMiniaturizeOnDoubleClick";
+  id value1 = [userDefaults objectForKey:kAppleMiniaturizeOnDoubleClickKey];
+  return [value1 isKindOfClass:[NSValue class]] && [value1 boolValue];
 }
+
+// AVAuthorizationStatus is not needed unless we are running on 10.14.
+// However, on pre-10.14 SDK's, AVAuthorizationStatus and its enum values
+// are both defined and prohibited from use by compile-time checks. We
+// define a copy of AVAuthorizationStatus to allow compilation on pre-10.14
+// SDK's. The enum values must match what is defined in the 10.14 SDK.
+// We use ASSERTS for 10.14 SDK builds to check the enum values match.
+enum GeckoAVAuthorizationStatus : NSInteger {
+  GeckoAVAuthorizationStatusNotDetermined = 0,
+  GeckoAVAuthorizationStatusRestricted = 1,
+  GeckoAVAuthorizationStatusDenied = 2,
+  GeckoAVAuthorizationStatusAuthorized = 3
+};
+
+#if !defined(MAC_OS_X_VERSION_10_14) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_14
+// Define authorizationStatusForMediaType: as returning
+// GeckoAVAuthorizationStatus instead of AVAuthorizationStatus to allow
+// compilation on pre-10.14 SDK's.
+@interface AVCaptureDevice (GeckoAVAuthorizationStatus)
++ (GeckoAVAuthorizationStatus)authorizationStatusForMediaType:(AVMediaType)mediaType;
+@end
+
+@interface AVCaptureDevice (WithCompletionHandler)
++ (void)requestAccessForMediaType:(AVMediaType)mediaType
+                completionHandler:(void (^)(BOOL granted))handler;
+@end
+
+#endif
 
 static const char* AVMediaTypeToString(AVMediaType aType) {
   if (aType == AVMediaTypeVideo) {
@@ -1281,29 +1320,32 @@ static void LogAuthorizationStatus(AVMediaType aType, int aState) {
 
 static nsresult GetPermissionState(AVMediaType aMediaType, uint16_t& aState) {
   MOZ_ASSERT(aMediaType == AVMediaTypeVideo || aMediaType == AVMediaTypeAudio);
+  if (@available(macOS 10.14, *)) {
+      AVAuthorizationStatus authStatus = static_cast<AVAuthorizationStatus>(
+              [AVCaptureDevice authorizationStatusForMediaType:aMediaType]);
+      LogAuthorizationStatus(aMediaType, authStatus);
 
-  AVAuthorizationStatus authStatus = static_cast<AVAuthorizationStatus>(
-      [AVCaptureDevice authorizationStatusForMediaType:aMediaType]);
-  LogAuthorizationStatus(aMediaType, authStatus);
-
-  // Convert AVAuthorizationStatus to nsIOSPermissionRequest const
-  switch (authStatus) {
-    case AVAuthorizationStatusAuthorized:
-      aState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
-      return NS_OK;
-    case AVAuthorizationStatusDenied:
-      aState = nsIOSPermissionRequest::PERMISSION_STATE_DENIED;
-      return NS_OK;
-    case AVAuthorizationStatusNotDetermined:
-      aState = nsIOSPermissionRequest::PERMISSION_STATE_NOTDETERMINED;
-      return NS_OK;
-    case AVAuthorizationStatusRestricted:
-      aState = nsIOSPermissionRequest::PERMISSION_STATE_RESTRICTED;
-      return NS_OK;
-    default:
-      MOZ_ASSERT(false, "Invalid authorization status");
-      return NS_ERROR_UNEXPECTED;
+      // Convert AVAuthorizationStatus to nsIOSPermissionRequest const
+      switch (authStatus) {
+          case AVAuthorizationStatusAuthorized:
+              aState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
+              return NS_OK;
+          case AVAuthorizationStatusDenied:
+              aState = nsIOSPermissionRequest::PERMISSION_STATE_DENIED;
+              return NS_OK;
+          case AVAuthorizationStatusNotDetermined:
+              aState = nsIOSPermissionRequest::PERMISSION_STATE_NOTDETERMINED;
+              return NS_OK;
+          case AVAuthorizationStatusRestricted:
+              aState = nsIOSPermissionRequest::PERMISSION_STATE_RESTRICTED;
+              return NS_OK;
+          default:
+              MOZ_ASSERT(false, "Invalid authorization status");
+              return NS_ERROR_UNEXPECTED;
+      }
   }
+
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 nsresult nsCocoaUtils::GetVideoCapturePermissionState(
@@ -1441,6 +1483,7 @@ nsresult nsCocoaUtils::RequestCapturePermission(
   MOZ_ASSERT(aType == AVMediaTypeVideo || aType == AVMediaTypeAudio);
   LOG("RequestCapturePermission(%s)", AVMediaTypeToString(aType));
 
+  if (@available(macOS 10.14, *)) {
   sMediaCaptureMutex.Lock();
 
   // Initialize our list of promises on first invocation
@@ -1466,6 +1509,10 @@ nsresult nsCocoaUtils::RequestCapturePermission(
   // Start the request
   [AVCaptureDevice requestAccessForMediaType:aType completionHandler:aHandler];
   return NS_OK;
+    }
+
+  return NS_ERROR_NOT_IMPLEMENTED;
+
 }
 
 //

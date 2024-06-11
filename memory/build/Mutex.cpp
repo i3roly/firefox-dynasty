@@ -8,11 +8,23 @@
 
 #include "mozilla/Assertions.h"
 
+bool Mutex::SpinInKernelSpace() {
+    if (__builtin_available(macOS 10.15, *)) {
+        return true;
+    }
+
+    return false;
+}
+const bool Mutex::gSpinInKernelSpace = SpinInKernelSpace();
+
 bool Mutex::TryLock() {
 #if defined(XP_WIN)
   return !!TryEnterCriticalSection(&mMutex);
 #elif defined(XP_DARWIN)
-  return os_unfair_lock_trylock(&mMutex);
+  if(__builtin_available(macOS 10.12, *))  
+  return os_unfair_lock_trylock(&mMutex.mUnfairLock);
+  else
+      return OSSpinLockTry(&mMutex.mSpinLock);
 #else
   switch (pthread_mutex_trylock(&mMutex)) {
     case 0:

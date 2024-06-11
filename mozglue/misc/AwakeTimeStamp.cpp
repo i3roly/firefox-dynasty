@@ -57,10 +57,39 @@ void AwakeTimeStamp::operator-=(const AwakeTimeDuration& aOther) {
 #  include <sys/types.h>
 #  include <mach/mach_time.h>
 
-AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
-  return AwakeTimeStamp(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / kNSperUS);
+static int clock_gettime_missing(uint32_t clock_id, struct timespec *tp)
+{
+        tp->tv_nsec = 0;
+        tp->tv_sec = 0;
+        uint64_t tk;
+        struct timeval tv;
+        switch (clock_id) {
+        case CLOCK_REALTIME:
+        case CLOCK_MONOTONIC:
+                gettimeofday (&tv, 0);
+                tp->tv_sec = tv.tv_sec;
+                tp->tv_nsec = tv.tv_usec * 1000;
+                break;
+        case CLOCK_PROCESS_CPUTIME_ID:
+        case CLOCK_THREAD_CPUTIME_ID:
+                tk = clock();
+                tp->tv_sec = tk / CLOCKS_PER_SEC;
+                tp->tv_nsec = (tk % CLOCKS_PER_SEC) *
+                                (1000000000 / CLOCKS_PER_SEC);
+                break;
+        }
+        return 0;
 }
 
+
+AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
+  if(__builtin_available(macOS 10.12, *))
+  return AwakeTimeStamp(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / kNSperUS);
+  else {
+    struct timespec tv;
+    return AwakeTimeStamp(clock_gettime_missing(CLOCK_UPTIME_RAW, &tv)/ kNSperUS);
+  }
+}
 #elif defined(XP_WIN)
 
 // Number of hundreds of nanoseconds in a microsecond

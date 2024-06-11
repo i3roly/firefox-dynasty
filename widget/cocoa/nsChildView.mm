@@ -13,6 +13,7 @@
 
 #include "nsChildView.h"
 #include "nsCocoaWindow.h"
+#include "nsCocoaFeatures.h"
 
 #include "mozilla/Maybe.h"
 #include "mozilla/MiscEvents.h"
@@ -3152,7 +3153,7 @@ static int32_t RoundUp(double aDouble) {
 }
 
 static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
-  if ([aEvent hasPreciseScrollingDeltas]) {
+  if (nsCocoaFeatures::OnSierraOrLater() && [aEvent hasPreciseScrollingDeltas]) {
     // Pixel scroll events (events with hasPreciseScrollingDeltas == YES)
     // carry pixel deltas in the scrollingDeltaX/Y fields and line scroll
     // information in the deltaX/Y fields.

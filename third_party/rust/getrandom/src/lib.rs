@@ -303,6 +303,7 @@ cfg_if! {
         #[path = "apple-other.rs"] mod imp;
     } else if #[cfg(target_os = "macos")] {
         mod util_libc;
+        mod use_file;
         #[path = "macos.rs"] mod imp;
     } else if #[cfg(target_os = "openbsd")] {
         mod util_libc;

@@ -982,7 +982,7 @@ nsTArray<uint8_t> gfxPlatformMac::GetPlatformCMSOutputProfileData() {
     return nsTArray<uint8_t>();
   }
 
-  CFDataRef iccp = ::CGColorSpaceCopyICCData(cspace);
+  CFDataRef iccp = ::CGColorSpaceCopyICCProfile(cspace);
 
   ::CFRelease(cspace);
 

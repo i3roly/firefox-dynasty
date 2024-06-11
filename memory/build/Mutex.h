@@ -14,6 +14,7 @@
 #endif
 #if defined(XP_DARWIN)
 #  include <os/lock.h>
+#  include <libkern/OSAtomic.h>
 #endif
 
 #include "mozilla/Assertions.h"
@@ -44,7 +45,10 @@ struct MOZ_CAPABILITY("mutex") Mutex {
 #if defined(XP_WIN)
   CRITICAL_SECTION mMutex;
 #elif defined(XP_DARWIN)
-  os_unfair_lock mMutex;
+  union {
+    os_unfair_lock mUnfairLock;
+    OSSpinLock mSpinLock;
+  } mMutex;
 #else
   pthread_mutex_t mMutex;
 #endif
@@ -56,7 +60,10 @@ struct MOZ_CAPABILITY("mutex") Mutex {
       return false;
     }
 #elif defined(XP_DARWIN)
-    mMutex = OS_UNFAIR_LOCK_INIT;
+    // The hack below works because both OS_UNFAIR_LOCK_INIT and
+    // OS_SPINLOCK_INIT initialize the lock to 0 and in both case it's a 32-bit
+    // integer.
+    mMutex.mUnfairLock = OS_UNFAIR_LOCK_INIT;
 #elif defined(XP_LINUX) && !defined(ANDROID)
     pthread_mutexattr_t attr;
     if (pthread_mutexattr_init(&attr) != 0) {
@@ -87,9 +94,37 @@ struct MOZ_CAPABILITY("mutex") Mutex {
     // kernel to spin on a contested lock if the owning thread is running on
     // the same physical core (presumably only on x86 CPUs given that ARM
     // macs don't have cores capable of SMT).
-    os_unfair_lock_lock_with_options(
-        &mMutex,
-        OS_UNFAIR_LOCK_DATA_SYNCHRONIZATION | OS_UNFAIR_LOCK_ADAPTIVE_SPIN);
+        if (!Mutex::gSpinInKernelSpace) {
+           OSSpinLockLock(&mMutex.mSpinLock);
+      } else {
+#  if defined(__x86_64__)
+      // On older versions of macOS (10.14 and older) the
+      // `OS_UNFAIR_LOCK_ADAPTIVE_SPIN` flag is not supported by the kernel,
+      // we spin in user-space instead like `OSSpinLock` does:
+      // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L183-L198
+      // Note that `OSSpinLock` uses 1000 iterations on x86-64:
+      // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L93
+      // ...but we only use 100 like it does on ARM:
+      // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L90
+      // We choose this value because it yields the same results in our
+      // benchmarks but is less likely to have detrimental effects caused by
+      // excessive spinning.
+      uint32_t retries = 100;
+
+      do {
+        if (os_unfair_lock_trylock(&mMutex.mUnfairLock)) {
+          return;
+        }
+
+        __asm__ __volatile__("pause");
+      } while (retries--);
+
+      os_unfair_lock_lock_with_options(&mMutex.mUnfairLock,
+                                       OS_UNFAIR_LOCK_DATA_SYNCHRONIZATION);
+#  else
+      MOZ_CRASH("User-space spin-locks should never be used on ARM");
+#  endif  // defined(__x86_64__)
+     }
 #else
     pthread_mutex_lock(&mMutex);
 #endif
@@ -101,7 +136,11 @@ struct MOZ_CAPABILITY("mutex") Mutex {
 #if defined(XP_WIN)
     LeaveCriticalSection(&mMutex);
 #elif defined(XP_DARWIN)
-    os_unfair_lock_unlock(&mMutex);
+    if (!Mutex::gSpinInKernelSpace) {
+      OSSpinLockUnlock(&mMutex.mSpinLock);
+    } else {
+      os_unfair_lock_unlock(&mMutex.mUnfairLock);
+    }
 #else
     pthread_mutex_unlock(&mMutex);
 #endif

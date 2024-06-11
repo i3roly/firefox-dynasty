@@ -136,6 +136,7 @@ nsCocoaWindow::nsCocoaWindow()
       mIgnoreOcclusionCount(0),
       mHasStartedNativeFullscreen(false),
       mWindowAnimationBehavior(NSWindowAnimationBehaviorDefault) {
+  if(@available(macOS 10.12, *)) 
   // Disable automatic tabbing. We need to do this before we
   // orderFront any of our windows.
   NSWindow.allowsAutomaticWindowTabbing = NO;
@@ -1131,6 +1132,10 @@ int32_t nsCocoaWindow::GetWorkspaceID() {
   // effectively.
   CGSSpaceID sid = 0;
 
+  if (!nsCocoaFeatures::OnElCapitanOrLater()) {
+    return sid;
+  }
+
   CGSCopySpacesForWindowsFunc CopySpacesForWindows =
       GetCGSCopySpacesForWindowsFunc();
   if (!CopySpacesForWindows) {
@@ -1162,6 +1167,10 @@ int32_t nsCocoaWindow::GetWorkspaceID() {
 
 void nsCocoaWindow::MoveToWorkspace(const nsAString& workspaceIDStr) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
+
+  if (!nsCocoaFeatures::OnElCapitanOrLater()) {
+    return;
+  }
 
   if ([NSScreen screensHaveSeparateSpaces] && [[NSScreen screens] count] > 1) {
     // We don't support moving to a workspace when the user has this option
@@ -3031,6 +3040,7 @@ void nsCocoaWindow::CocoaWindowDidResize() {
       // making them invisible.
       return NSMakePoint(buttonsRect.origin.x, win.frame.size.height);
     }
+    if(@available(macOS 10.12, *))
     if (win.windowTitlebarLayoutDirection ==
         NSUserInterfaceLayoutDirectionRightToLeft) {
       // We're in RTL mode, which means that the close button is the rightmost
@@ -3072,6 +3082,20 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 
 @interface NSWindow (PrivateSetNeedsDisplayInRectMethod)
 - (void)_setNeedsDisplayInRect:(NSRect)aRect;
+@end
+
+// This method is on NSThemeFrame starting with 10.10, but since NSThemeFrame
+// is not a public class, we declare the method on NSView instead. We only have
+// this declaration in order to avoid compiler warnings.
+@interface NSView (PrivateAddKnownSubviewMethod)
+- (void)_addKnownSubview:(NSView*)aView
+              positioned:(NSWindowOrderingMode)place
+              relativeTo:(NSView*)otherView;
+
+@end
+
+@interface NSView (NSVisualEffectViewSetMaskImage)
+- (void)setMaskImage:(NSImage*)image;
 @end
 
 @interface BaseWindow (Private)
@@ -3173,40 +3197,36 @@ static NSImage* GetMenuMaskImage() {
   return maskImage;
 }
 
-// Add an effect view wrapper if needed so that the OS draws the appropriate
-// vibrancy effect and window border.
-- (void)setEffectViewWrapperForStyle:(WindowShadow)aStyle {
-  NSView* wrapper = [&]() -> NSView* {
-    if (aStyle == WindowShadow::Menu || aStyle == WindowShadow::Tooltip) {
-      const bool isMenu = aStyle == WindowShadow::Menu;
-      auto* effectView =
-          [[NSVisualEffectView alloc] initWithFrame:self.contentView.frame];
-      effectView.material =
-          isMenu ? NSVisualEffectMaterialMenu : NSVisualEffectMaterialToolTip;
-      // Tooltip and menu windows are never "key", so we need to tell the
-      // vibrancy effect to look active regardless of window state.
-      effectView.state = NSVisualEffectStateActive;
-      effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-      if (isMenu) {
-        // Turn on rounded corner masking.
-        effectView.maskImage = GetMenuMaskImage();
-      }
-      return effectView;
-    }
-    return [[NSView alloc] initWithFrame:self.contentView.frame];
-  }();
-
-  wrapper.wantsLayer = YES;
-  // Swap out our content view by the new view. Setting .contentView releases
-  // the old view.
+- (void)swapOutChildViewWrapper:(NSView*)aNewWrapper {
+  aNewWrapper.frame = self.contentView.frame;
   NSView* childView = [self.mainChildView retain];
   [childView removeFromSuperview];
-  [wrapper addSubview:childView];
+  [aNewWrapper addSubview:childView];
   [childView release];
-  super.contentView = wrapper;
-  [wrapper release];
+  [super setContentView:aNewWrapper];
 }
+- (void)setEffectViewWrapperForStyle:(WindowShadow)aStyle {
+  if (aStyle == WindowShadow::Menu || aStyle == WindowShadow::Tooltip) {
+    // Add an effect view wrapper so that the OS draws the appropriate
+    // vibrancy effect and window border.
+    BOOL isMenu = aStyle == WindowShadow::Menu;
+    NSView* effectView = VibrancyManager::CreateEffectView(
+        isMenu ? VibrancyType::MENU : VibrancyType::TOOLTIP, YES);
+    if (isMenu) {
+      // Turn on rounded corner masking.
+      [effectView setMaskImage:GetMenuMaskImage()];
+    }
+    [self swapOutChildViewWrapper:effectView];
+    [effectView release];
+  } else {
+    // Remove the existing wrapper.
+    NSView* wrapper = [[NSView alloc] initWithFrame:NSZeroRect];
+    [wrapper setWantsLayer:YES];
+    [self swapOutChildViewWrapper:wrapper];
+    [wrapper release];
+  }
 
+}
 - (NSTouchBar*)makeTouchBar {
   mTouchBar = [[nsTouchBar alloc] init];
   if (mTouchBar) {
@@ -3514,6 +3534,7 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
 @implementation FullscreenTitlebarTracker
 - (FullscreenTitlebarTracker*)init {
   [super init];
+  if(@available(macOS 10.11, *))
   self.hidden = YES;
   return self;
 }
@@ -3573,6 +3594,8 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   NSRect frameRect = [NSWindow frameRectForContentRect:aChildViewRect
                                              styleMask:aStyle];
 
+  if (nsCocoaFeatures::OnYosemiteOrLater()) {
+
   // Always size the content view to the full frame size of the window.
   // We do this even if we want this window to have a titlebar; in that case,
   // the window's content view covers the entire window but the ChildView inside
@@ -3584,8 +3607,8 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   // lets us toggle the titlebar on and off without changing the window's style
   // mask (which would have other subtle effects, for example on keyboard
   // focus).
-  aStyle |= NSWindowStyleMaskFullSizeContentView;
-
+     aStyle |= NSWindowStyleMaskFullSizeContentView;
+  }
   // -[NSWindow initWithContentRect:styleMask:backing:defer:] calls
   // [self frameRectForContentRect:styleMask:] to convert the supplied content
   // rect to the window's frame rect. We've overridden that method to be a
@@ -3719,6 +3742,47 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   return [[self.contentView.subviews copy] autorelease];
 }
 
+// Override methods that translate between content rect and frame rect.
+// These overrides are only needed on 10.9 or when the CoreAnimation pref is
+// is false; otherwise we use NSFullSizeContentViewMask and get this behavior
+// for free.
+- (NSRect)contentRectForFrameRect:(NSRect)aRect {
+  return aRect;
+}
+
+- (NSRect)contentRectForFrameRect:(NSRect)aRect styleMask:(NSUInteger)aMask {
+  return aRect;
+}
+
+- (NSRect)frameRectForContentRect:(NSRect)aRect {
+  return aRect;
+}
+
+- (NSRect)frameRectForContentRect:(NSRect)aRect styleMask:(NSUInteger)aMask {
+  return aRect;
+}
+
+- (void)setContentView:(NSView*)aView {
+  [super setContentView:aView];
+
+  if (!([self styleMask] & NSWindowStyleMaskFullSizeContentView)) {
+    // Move the contentView to the bottommost layer so that it's guaranteed
+    // to be under the window buttons.
+    // When the window uses the NSFullSizeContentViewMask, this manual
+    // adjustment is not necessary.
+    NSView* frameView = [aView superview];
+    [aView removeFromSuperview];
+    if ([frameView respondsToSelector:@selector(_addKnownSubview:positioned:relativeTo:)]) {
+      // 10.10 prints a warning when we call addSubview on the frame view, so we
+      // silence the warning by calling a private method instead.
+      [frameView _addKnownSubview:aView positioned:NSWindowBelow relativeTo:nil];
+    } else {
+      [frameView addSubview:aView positioned:NSWindowBelow relativeTo:nil];
+    }
+  }
+}
+
+
 - (void)windowMainStateChanged {
   [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
 }
@@ -3840,7 +3904,7 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 // shadowOptions method on the various window types.
 static const NSUInteger kWindowShadowOptionsNoShadow = 0;
 static const NSUInteger kWindowShadowOptionsMenu = 2;
-static const NSUInteger kWindowShadowOptionsTooltip = 4;
+static const NSUInteger kWindowShadowOptionsTooltipMojaveOrLater = 4;
 
 - (NSDictionary*)shadowParameters {
   NSDictionary* parent = [super shadowParameters];
@@ -3872,8 +3936,11 @@ static const NSUInteger kWindowShadowOptionsTooltip = 4;
       return kWindowShadowOptionsMenu;
 
     case WindowShadow::Tooltip:
-      return kWindowShadowOptionsTooltip;
-  }
+      if (nsCocoaFeatures::OnMojaveOrLater()) {
+        return kWindowShadowOptionsTooltipMojaveOrLater;
+      }
+      return kWindowShadowOptionsMenu;
+    }
 }
 
 - (BOOL)isContextMenu {
