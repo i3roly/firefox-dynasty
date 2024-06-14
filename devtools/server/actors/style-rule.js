@@ -321,7 +321,18 @@ class StyleRuleActor extends Actor {
 
     switch (this.ruleClassName) {
       case "CSSStyleRule":
-        form.selectors = CssLogic.getSelectors(this.rawRule);
+        form.selectors = [];
+        form.selectorsSpecificity = [];
+
+        for (let i = 0, len = this.rawRule.selectorCount; i < len; i++) {
+          form.selectors.push(this.rawRule.selectorTextAt(i));
+          form.selectorsSpecificity.push(
+            this.rawRule.selectorSpecificityAt(
+              i,
+              /* desugared, so we get the actual specificity */ true
+            )
+          );
+        }
 
         // Only add the property when there are elements in the array to save up on serialization.
         const selectorWarnings = this.rawRule.getSelectorWarnings();
@@ -532,6 +543,16 @@ class StyleRuleActor extends Actor {
         ancestorData.push({
           type,
           conditionText: rawRule.conditionText,
+        });
+      } else if (ruleClassName === "CSSScopeRule") {
+        ancestorData.push({
+          type,
+          start: rawRule.start,
+          end: rawRule.end,
+        });
+      } else if (ruleClassName === "CSSStartingStyleRule") {
+        ancestorData.push({
+          type,
         });
       } else if (rawRule.selectorText) {
         // All the previous cases where about at-rules; this one is for regular rule

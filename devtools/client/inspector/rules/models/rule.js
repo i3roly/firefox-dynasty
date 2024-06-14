@@ -111,6 +111,7 @@ class Rule {
     const data = {
       getUniqueSelector: this.getUniqueSelector,
       selectors: this.domRule.selectors,
+      selectorsSpecificity: this.domRule.selectorsSpecificity,
       selectorWarnings: this.domRule.selectors,
       selectorText: this.keyframes ? this.domRule.keyText : this.selectorText,
     };
@@ -877,6 +878,15 @@ class Rule {
         (otherRuleLayer.value || otherRuleLayer.actorID)
       );
     });
+  }
+
+  /**
+   * @returns {Boolean} Whether or not the rule is in a @starting-style rule
+   */
+  isInStartingStyle() {
+    return this.domRule.ancestorData.some(
+      ({ type }) => type === "starting-style"
+    );
   }
 
   /**

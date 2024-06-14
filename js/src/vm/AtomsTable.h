@@ -119,7 +119,7 @@ class AtomSet : public JS::GCHashSet<WeakHeapPtr<JSAtom*>, AtomHasher,
 
  public:
   AtomSet() = default;
-  explicit AtomSet(size_t length) : Base(length){};
+  explicit AtomSet(size_t length) : Base(length) {};
 };
 
 // This class is a wrapper for AtomSet that is used to ensure the AtomSet is

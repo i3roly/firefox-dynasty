@@ -549,8 +549,12 @@ HttpBaseChannel::SetDocshellUserAgentOverride() {
   }
 
   NS_ConvertUTF16toUTF8 utf8CustomUserAgent(customUserAgent);
-  nsresult rv = SetRequestHeader("User-Agent"_ns, utf8CustomUserAgent, false);
-  if (NS_FAILED(rv)) return rv;
+  nsresult rv = SetRequestHeaderInternal(
+      "User-Agent"_ns, utf8CustomUserAgent, false,
+      nsHttpHeaderArray::eVarietyRequestEnforceDefault);
+  if (NS_FAILED(rv)) {
+    return rv;
+  }
 
   return NS_OK;
 }
@@ -1970,6 +1974,13 @@ HttpBaseChannel::GetRequestHeader(const nsACString& aHeader,
 NS_IMETHODIMP
 HttpBaseChannel::SetRequestHeader(const nsACString& aHeader,
                                   const nsACString& aValue, bool aMerge) {
+  return SetRequestHeaderInternal(aHeader, aValue, aMerge,
+                                  nsHttpHeaderArray::eVarietyRequestOverride);
+}
+
+nsresult HttpBaseChannel::SetRequestHeaderInternal(
+    const nsACString& aHeader, const nsACString& aValue, bool aMerge,
+    nsHttpHeaderArray::HeaderVariety aVariety) {
   const nsCString& flatHeader = PromiseFlatCString(aHeader);
   const nsCString& flatValue = PromiseFlatCString(aValue);
 
@@ -3757,7 +3768,7 @@ HttpBaseChannel::GetOnlyConnect(bool* aOnlyConnect) {
 }
 
 NS_IMETHODIMP
-HttpBaseChannel::SetConnectOnly() {
+HttpBaseChannel::SetConnectOnly(bool aTlsTunnel) {
   ENSURE_CALLED_BEFORE_CONNECT();
 
   if (!mUpgradeProtocolCallback) {
@@ -3765,6 +3776,9 @@ HttpBaseChannel::SetConnectOnly() {
   }
 
   mCaps |= NS_HTTP_CONNECT_ONLY;
+  if (aTlsTunnel) {
+    mCaps |= NS_HTTP_TLS_TUNNEL;
+  }
   mProxyResolveFlags = nsIProtocolProxyService::RESOLVE_PREFER_HTTPS_PROXY |
                        nsIProtocolProxyService::RESOLVE_ALWAYS_TUNNEL;
   return SetLoadFlags(nsIRequest::INHIBIT_CACHING | nsIChannel::LOAD_ANONYMOUS |
@@ -5449,6 +5463,112 @@ HttpBaseChannel::SetAllRedirectsPassTimingAllowCheck(bool aPassesCheck) {
   return NS_OK;
 }
 
+// https://fetch.spec.whatwg.org/#cors-check
+bool HttpBaseChannel::PerformCORSCheck() {
+  // Step 1
+  // Let origin be the result of getting `Access-Control-Allow-Origin`
+  // from response’s header list.
+  nsAutoCString origin;
+  nsresult rv = GetResponseHeader("Access-Control-Allow-Origin"_ns, origin);
+
+  // Step 2
+  // If origin is null, then return failure. (Note: null, not 'null').
+  if (NS_FAILED(rv) || origin.IsVoid()) {
+    return false;
+  }
+
+  // Step 3
+  // If request’s credentials mode is not "include"
+  // and origin is `*`, then return success.
+  uint32_t cookiePolicy = mLoadInfo->GetCookiePolicy();
+  if (cookiePolicy != nsILoadInfo::SEC_COOKIES_INCLUDE &&
+      origin.EqualsLiteral("*")) {
+    return true;
+  }
+
+  // Step 4
+  // If the result of byte-serializing a request origin
+  // with request is not origin, then return failure.
+  nsIScriptSecurityManager* ssm = nsContentUtils::GetSecurityManager();
+  nsCOMPtr<nsIPrincipal> resourcePrincipal;
+  rv = ssm->GetChannelURIPrincipal(this, getter_AddRefs(resourcePrincipal));
+  if (NS_FAILED(rv) || !resourcePrincipal) {
+    return false;
+  }
+  nsAutoCString serializedOrigin;
+  nsContentSecurityManager::GetSerializedOrigin(
+      mLoadInfo->TriggeringPrincipal(), resourcePrincipal, serializedOrigin,
+      mLoadInfo);
+  if (!serializedOrigin.Equals(origin)) {
+    return false;
+  }
+
+  // Step 5
+  // If request’s credentials mode is not "include", then return success.
+  if (cookiePolicy != nsILoadInfo::SEC_COOKIES_INCLUDE) {
+    return true;
+  }
+
+  // Step 6
+  // Let credentials be the result of getting
+  // `Access-Control-Allow-Credentials` from response’s header list.
+  nsAutoCString credentials;
+  rv = GetResponseHeader("Access-Control-Allow-Credentials"_ns, credentials);
+
+  // Step 7 and 8
+  // If credentials is `true`, then return success.
+  // (else) return failure.
+  return NS_SUCCEEDED(rv) && credentials.EqualsLiteral("true");
+}
+
+NS_IMETHODIMP
+HttpBaseChannel::BodyInfoAccessAllowedCheck(nsIPrincipal* aOrigin,
+                                            BodyInfoAccess* _retval) {
+  // Per the Fetch spec, https://fetch.spec.whatwg.org/#response-body-info,
+  // the bodyInfo for Resource Timing and Navigation Timing info consists of
+  // encoded size, decoded size, and content type. It is however made opaque
+  // whenever the response is turned into a network error, which sets its
+  // bodyInfo to its default values (sizes=0, content-type="").
+
+  // Case 1:
+  // "no-cors" -> Upon success, fetch will return an opaque filtered response.
+  // An opaque(-redirect) filtered response is a filtered response
+  //   whose ... body info is a new response body info.
+  auto tainting = mLoadInfo->GetTainting();
+  if (tainting == mozilla::LoadTainting::Opaque) {
+    *_retval = BodyInfoAccess::DISALLOWED;
+    return NS_OK;
+  }
+
+  // Case 2:
+  // If request’s response tainting is "cors" and a CORS check for request
+  // and response returns failure, then return a network error.
+  if (tainting == mozilla::LoadTainting::CORS && !PerformCORSCheck()) {
+    *_retval = BodyInfoAccess::DISALLOWED;
+    return NS_OK;
+  }
+
+  // Otherwise:
+  // The fetch response handover, given a fetch params fetchParams
+  //    and a response response, run these steps:
+  // processResponseEndOfBody:
+  // - If fetchParams’s request’s mode is not "navigate" or response’s
+  //   has-cross-origin-redirects is false:
+  //   - Let mimeType be the result of extracting a MIME type from
+  //     response’s header list.
+  //   - If mimeType is not failure, then set bodyInfo’s content type to the
+  //     result of minimizing a supported MIME type given mimeType.
+  dom::RequestMode requestMode;
+  MOZ_ALWAYS_SUCCEEDS(GetRequestMode(&requestMode));
+  if (requestMode != RequestMode::Navigate || LoadAllRedirectsSameOrigin()) {
+    *_retval = BodyInfoAccess::ALLOW_ALL;
+    return NS_OK;
+  }
+
+  *_retval = BodyInfoAccess::ALLOW_SIZES;
+  return NS_OK;
+}
+
 // https://fetch.spec.whatwg.org/#tao-check
 NS_IMETHODIMP
 HttpBaseChannel::TimingAllowCheck(nsIPrincipal* aOrigin, bool* _retval) {
@@ -5969,7 +6089,8 @@ HttpBaseChannel::SetNavigationStartTimeStamp(TimeStamp aTimeStamp) {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
-nsresult HttpBaseChannel::CheckRedirectLimit(uint32_t aRedirectFlags) const {
+nsresult HttpBaseChannel::CheckRedirectLimit(nsIURI* aNewURI,
+                                             uint32_t aRedirectFlags) const {
   if (aRedirectFlags & nsIChannelEventSink::REDIRECT_INTERNAL) {
     // for internal redirect due to auth retry we do not have any limit
     // as we might restrict the number of times a user might retry
@@ -6003,14 +6124,38 @@ nsresult HttpBaseChannel::CheckRedirectLimit(uint32_t aRedirectFlags) const {
   // https and the page answers with a redirect (meta, 302, win.location, ...)
   // then this method can break the cycle which causes the https-only exception
   // page to appear. Note that https-first mode breaks upgrade downgrade endless
-  // loops within ShouldUpgradeHTTPSFirstRequest because https-first does not
+  // loops within ShouldUpgradeHttpsFirstRequest because https-first does not
   // display an exception page but needs a soft fallback/downgrade.
   if (nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
-          mURI, mLoadInfo,
+          mURI, aNewURI, mLoadInfo,
           {nsHTTPSOnlyUtils::UpgradeDowngradeEndlessLoopOptions::
                EnforceForHTTPSOnlyMode})) {
+    // Mark that we didn't upgrade to https due to loop detection in https-only
+    // mode to show https-only error page. We know that we are in https-only
+    // mode, because we passed `EnforceForHTTPSOnlyMode` to
+    // `IsUpgradeDowngradeEndlessLoop`. In other words we upgrade the request
+    // with https-only mode, but then immediately cancel the request.
+    uint32_t httpsOnlyStatus = mLoadInfo->GetHttpsOnlyStatus();
+    if (httpsOnlyStatus & nsILoadInfo::HTTPS_ONLY_UNINITIALIZED) {
+      httpsOnlyStatus ^= nsILoadInfo::HTTPS_ONLY_UNINITIALIZED;
+      httpsOnlyStatus |=
+          nsILoadInfo::HTTPS_ONLY_UPGRADED_LISTENER_NOT_REGISTERED;
+      mLoadInfo->SetHttpsOnlyStatus(httpsOnlyStatus);
+    }
+
     LOG(("upgrade downgrade redirect loop!\n"));
     return NS_ERROR_REDIRECT_LOOP;
+  }
+  // in case of http-first mode we want to add an exception to disable the
+  // upgrade behavior if we have upgrade-downgrade loop to break the loop and
+  // load the http request next
+  if (mozilla::StaticPrefs::
+          dom_security_https_first_add_exception_on_failiure() &&
+      nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
+          mURI, aNewURI, mLoadInfo,
+          {nsHTTPSOnlyUtils::UpgradeDowngradeEndlessLoopOptions::
+               EnforceForHTTPSFirstMode})) {
+    nsHTTPSOnlyUtils::AddHTTPSFirstExceptionForSession(mURI, mLoadInfo);
   }
 
   return NS_OK;

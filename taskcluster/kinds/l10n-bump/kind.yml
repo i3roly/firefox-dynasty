@@ -2,13 +2,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ---
-loader: gecko_taskgraph.loader.transform:loader
+loader: taskgraph.loader.transform:loader
 
 transforms:
     - gecko_taskgraph.transforms.release_version_bump:transforms
     - gecko_taskgraph.transforms.task:transforms
 
-job-defaults:
+task-defaults:
     worker-type: tree
     worker:
         implementation: treescript
@@ -40,7 +40,8 @@ job-defaults:
                     - name: Firefox l10n changesets
                       path: browser/locales/l10n-changesets.json
                       version-path: browser/config/version.txt
-                      l10n-repo-url: "https://hg.mozilla.org/l10n-central/%(locale)s/json-pushes?version=2&tipsonly=1"
+                      l10n-repo-url: https://github.com/mozilla-l10n/firefox-l10n
+                      l10n-repo-target-branch: main
                       ignore-config:
                           ja:
                               - macosx64
@@ -79,10 +80,28 @@ job-defaults:
                                   "path": "browser/locales/shipped-locales",
                               },
                           ]
+                    - name: Mobile l10n changesets
+                      path: mobile/locales/l10n-changesets.json
+                      l10n-repo-url: https://github.com/mozilla-l10n/firefox-l10n
+                      l10n-repo-target-branch: main
+                      version-path: mobile/android/version.txt
+                      platform-configs:
+                          [
+                              {
+                                  "platforms":
+                                      [
+                                          "android",
+                                          "android-arm",
+                                          "android-multilocale",
+                                      ],
+                                  "path": "mobile/android/locales/all-locales",
+                              },
+                          ]
                 default:
                     - name: Firefox l10n changesets
                       path: browser/locales/l10n-changesets.json
-                      l10n-repo-url: "https://hg.mozilla.org/l10n-central/%(locale)s/json-pushes?version=2&tipsonly=1"
+                      l10n-repo-url: https://github.com/mozilla-l10n/firefox-l10n
+                      l10n-repo-target-branch: main
                       version-path: browser/config/version.txt
                       ignore-config:
                           ja:
@@ -122,8 +141,25 @@ job-defaults:
                                   "path": "browser/locales/all-locales",
                               },
                           ]
+                    - name: Mobile l10n changesets
+                      path: mobile/locales/l10n-changesets.json
+                      l10n-repo-url: https://github.com/mozilla-l10n/firefox-l10n
+                      l10n-repo-target-branch: main
+                      version-path: mobile/android/version.txt
+                      platform-configs:
+                          [
+                              {
+                                  "platforms":
+                                      [
+                                          "android",
+                                          "android-arm",
+                                          "android-multilocale",
+                                      ],
+                                  "path": "mobile/android/locales/all-locales",
+                              },
+                          ]
 
-jobs:
+tasks:
     l10n-bumper:
         name: l10n_bumper
         description: l10n changesets bumper

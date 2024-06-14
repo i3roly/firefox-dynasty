@@ -7713,6 +7713,20 @@ first_session:
       tags:
         - Performance
         - Attribution
+  install_source:
+    type: string
+    lifetime: application
+    description: |
+      Used to identify the source the app was installed from.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898363
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D212913
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - android-probes@mozilla.com
+    expires: never
 play_store_attribution:
   install_referrer_response:
     type: text
@@ -11742,4 +11756,25 @@ address_toolbar:
       - interaction
     notification_emails:
       - android-probes@mozilla.com
+    expires: never
+
+nimbus_system:
+  recorded_nimbus_context:
+    type: object
+    structure:
+      type: object
+      properties:
+        is_first_run:
+          type: boolean
+    description: |
+      The Nimbus context object that is recorded to Glean
+    bugs:
+      - 'https://bugzilla.mozilla.org/show_bug.cgi?id=1898552'
+    data_reviews:
+      - 'https://bugzilla.mozilla.org/show_bug.cgi?id=1898552#c3'
+    data_sensitivity:
+      - interaction
+    notification_emails:
+      - chumphreys@mozilla.com
+      - project-nimbus@mozilla.com
     expires: never

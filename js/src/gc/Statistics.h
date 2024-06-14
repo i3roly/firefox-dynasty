@@ -326,7 +326,7 @@ struct Statistics {
   // Print a logging message.
   void log(const char* fmt, ...);
 #else
-  void log(const char* fmt, ...){};
+  void log(const char* fmt, ...) {};
 #endif
 
  private:

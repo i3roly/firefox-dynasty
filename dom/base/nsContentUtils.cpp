@@ -2932,9 +2932,10 @@ nsresult nsContentUtils::GetInclusiveAncestors(nsINode* aNode,
 }
 
 // static
-nsresult nsContentUtils::GetInclusiveAncestorsAndOffsets(
-    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>* aAncestorNodes,
-    nsTArray<Maybe<uint32_t>>* aAncestorOffsets) {
+template <typename GetParentFunc>
+nsresult static GetInclusiveAncestorsAndOffsetsHelper(
+    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+    nsTArray<Maybe<uint32_t>>& aAncestorOffsets, GetParentFunc aGetParentFunc) {
   NS_ENSURE_ARG_POINTER(aNode);
 
   if (!aNode->IsContent()) {
@@ -2942,31 +2943,50 @@ nsresult nsContentUtils::GetInclusiveAncestorsAndOffsets(
   }
   nsIContent* content = aNode->AsContent();
 
-  if (!aAncestorNodes->IsEmpty()) {
+  if (!aAncestorNodes.IsEmpty()) {
     NS_WARNING("aAncestorNodes is not empty");
-    aAncestorNodes->Clear();
+    aAncestorNodes.Clear();
   }
 
-  if (!aAncestorOffsets->IsEmpty()) {
+  if (!aAncestorOffsets.IsEmpty()) {
     NS_WARNING("aAncestorOffsets is not empty");
-    aAncestorOffsets->Clear();
+    aAncestorOffsets.Clear();
   }
 
   // insert the node itself
-  aAncestorNodes->AppendElement(content);
-  aAncestorOffsets->AppendElement(Some(aOffset));
+  aAncestorNodes.AppendElement(content);
+  aAncestorOffsets.AppendElement(Some(aOffset));
 
   // insert all the ancestors
   nsIContent* child = content;
-  nsIContent* parent = child->GetParent();
+  nsIContent* parent = aGetParentFunc(child);
   while (parent) {
-    aAncestorNodes->AppendElement(parent);
-    aAncestorOffsets->AppendElement(parent->ComputeIndexOf(child));
+    aAncestorNodes.AppendElement(parent->AsContent());
+    aAncestorOffsets.AppendElement(parent->ComputeIndexOf(child));
     child = parent;
-    parent = parent->GetParent();
+    parent = aGetParentFunc(child);
   }
 
   return NS_OK;
+}
+
+nsresult nsContentUtils::GetInclusiveAncestorsAndOffsets(
+    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+    nsTArray<Maybe<uint32_t>>& aAncestorOffsets) {
+  return GetInclusiveAncestorsAndOffsetsHelper(
+      aNode, aOffset, aAncestorNodes, aAncestorOffsets,
+      [](nsIContent* aContent) { return aContent->GetParent(); });
+}
+
+nsresult nsContentUtils::GetShadowIncludingAncestorsAndOffsets(
+    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+    nsTArray<Maybe<uint32_t>>& aAncestorOffsets) {
+  return GetInclusiveAncestorsAndOffsetsHelper(
+      aNode, aOffset, aAncestorNodes, aAncestorOffsets,
+      [](nsIContent* aContent) -> nsIContent* {
+        return nsIContent::FromNodeOrNull(
+            aContent->GetParentOrShadowHostNode());
+      });
 }
 
 template <typename Node, typename GetParentFunc>
@@ -7272,9 +7292,19 @@ nsContentUtils::FindInternalDocumentViewer(const nsACString& aType,
 }
 
 static void ReportPatternCompileFailure(nsAString& aPattern,
+                                        const JS::RegExpFlags& aFlags,
                                         const Document* aDocument,
                                         JS::MutableHandle<JS::Value> error,
                                         JSContext* cx) {
+  AutoTArray<nsString, 3> strings;
+
+  strings.AppendElement(aPattern);
+
+  std::stringstream flag_ss;
+  flag_ss << aFlags;
+  nsString* flagstr = strings.AppendElement();
+  AppendUTF8toUTF16(flag_ss.str(), *flagstr);
+
   JS::AutoSaveExceptionState savedExc(cx);
   JS::Rooted<JSObject*> exnObj(cx, &error.toObject());
   JS::Rooted<JS::Value> messageVal(cx);
@@ -7283,16 +7313,13 @@ static void ReportPatternCompileFailure(nsAString& aPattern,
   }
   JS::Rooted<JSString*> messageStr(cx, messageVal.toString());
   MOZ_ASSERT(messageStr);
-
-  AutoTArray<nsString, 2> strings;
-  strings.AppendElement(aPattern);
   if (!AssignJSString(cx, *strings.AppendElement(), messageStr)) {
     return;
   }
 
   nsContentUtils::ReportToConsole(nsIScriptError::errorFlag, "DOM"_ns,
                                   aDocument, nsContentUtils::eDOM_PROPERTIES,
-                                  "PatternAttributeCompileFailure", strings);
+                                  "PatternAttributeCompileFailurev2", strings);
   savedExc.drop();
 }
 
@@ -7326,7 +7353,7 @@ Maybe<bool> nsContentUtils::IsPatternMatching(const nsAString& aValue,
   }
 
   if (!error.isUndefined()) {
-    ReportPatternCompileFailure(aPattern, aDocument, &error, cx);
+    ReportPatternCompileFailure(aPattern, aFlags, aDocument, &error, cx);
     return Some(true);
   }
 

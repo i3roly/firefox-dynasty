@@ -37,7 +37,7 @@
 
 use api::{AlphaType, BorderDetails, BorderDisplayItem, BuiltDisplayListIter, BuiltDisplayList, PrimitiveFlags};
 use api::{ClipId, ColorF, CommonItemProperties, ComplexClipRegion, ComponentTransferFuncType, RasterSpace};
-use api::{DisplayItem, DisplayItemRef, ExtendMode, ExternalScrollId, FilterData};
+use api::{DebugFlags, DisplayItem, DisplayItemRef, ExtendMode, ExternalScrollId, FilterData};
 use api::{FilterOp, FilterPrimitive, FontInstanceKey, FontSize, GlyphInstance, GlyphOptions, GradientStop};
 use api::{IframeDisplayItem, ImageKey, ImageRendering, ItemRange, ColorDepth, QualitySettings};
 use api::{LineOrientation, LineStyle, NinePatchBorderSource, PipelineId, MixBlendMode, StackingContextFlags};
@@ -540,6 +540,7 @@ impl<'a> SceneBuilder<'a> {
         interners: &mut Interners,
         spatial_tree: &mut SceneSpatialTree,
         stats: &SceneStats,
+        debug_flags: DebugFlags,
     ) -> BuiltScene {
         profile_scope!("build_scene");
 
@@ -575,6 +576,7 @@ impl<'a> SceneBuilder<'a> {
             tile_cache_builder: TileCacheBuilder::new(
                 root_reference_frame_index,
                 frame_builder_config.background_color,
+                debug_flags,
             ),
             snap_to_device,
             picture_graph: PictureGraph::new(),
@@ -1193,10 +1195,12 @@ impl<'a> SceneBuilder<'a> {
 
         self.id_to_index_mapper_stack.push(NodeIdToIndexMapper::default());
 
-        let bounds = self.snap_rect(
-            &info.bounds.translate(external_scroll_offset),
+        let mut bounds = self.snap_rect(
+            &info.bounds,
             spatial_node_index,
         );
+
+        bounds = bounds.translate(external_scroll_offset);
 
         let spatial_node_index = self.push_reference_frame(
             SpatialId::root_reference_frame(iframe_pipeline_id),
@@ -1239,7 +1243,7 @@ impl<'a> SceneBuilder<'a> {
             self.root_iframe_clip = Some(ClipId::root(iframe_pipeline_id));
             self.add_tile_cache_barrier_if_needed(SliceFlags::empty());
         }
-        self.iframe_size.push(info.bounds.size());
+        self.iframe_size.push(bounds.size());
 
         self.build_spatial_tree_for_display_list(
             &pipeline.display_list.display_list,

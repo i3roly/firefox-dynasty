@@ -172,6 +172,12 @@
 #define IS_NOT_EARLY_BETA_OR_EARLIER true
 #endif
 
+#if defined(MOZ_DEV_EDITION) || defined(EARLY_BETA_OR_EARLIER)
+#define DEV_EDITION_OR_EARLY_BETA_OR_EARLIER true
+#else
+#define DEV_EDITION_OR_EARLY_BETA_OR_EARLIER false
+#endif
+
 #ifdef ANDROID
 #define IS_ANDROID true
 #define IS_NOT_ANDROID false
@@ -1200,9 +1206,11 @@
 # Space-separated list of regexs that are compared to URLs of resources
 # being checked by content-analysis.  Resources that match are not checked
 # and are always permitted.
+# By default this does not check any about: page except for about:blank
+# and about:srcdoc.
 - name: browser.contentanalysis.allow_url_regex_list
   type: String
-  value: "^about:.*"
+  value: "^about:(?!blank|srcdoc).*"
   mirror: never
 
 # Space-separated list of regexs that are compared to URLs of resources
@@ -1403,7 +1411,9 @@
     Material Symbols Outlined,
     Material Symbols Round,
     Material Symbols Rounded,
-    Material Symbols Sharp
+    Material Symbols Sharp,
+    Google Symbols,
+    FontAwesome
   mirror: never
 
 - name: browser.display.use_system_colors
@@ -3749,13 +3759,6 @@
   value: true
   mirror: always
 
-# If true, when checking if it's upgrade downgrade cycles, the URI path will be
-# also checked.
-- name: dom.security.https_only_check_path_upgrade_downgrade_endless_loop
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-
 # If true and HTTPS-only mode is enabled, requests
 # to local IP addresses are also upgraded
 - name: dom.security.https_only_mode.upgrade_local
@@ -4331,7 +4334,7 @@
 
 - name: dom.vibrator.enabled
   type: bool
-  value: true
+  value: false
   mirror: always
 
 - name: dom.vibrator.max_vibrate_ms
@@ -4769,11 +4772,7 @@
 
 - name: dom.webnotifications.vibrate.enabled
   type: RelaxedAtomicBool
-#if defined(MOZ_WIDGET_ANDROID)
-  value: @IS_NIGHTLY_BUILD@
-#else
   value: false
-#endif
   mirror: always
 
 # Setting log level for notification modules.
@@ -5889,7 +5888,7 @@
 
 - name: gfx.canvas.remote.recycle-used-data-surface
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 - name: gfx.canvas.willreadfrequently.enabled
@@ -6543,6 +6542,14 @@
   value: false
   mirror: always
 
+# When true, we output warning messages when rejecting surface promotion
+# when it has been requested. This is important for color correctness of
+# wide color videos, as well as for GPU performance for all videos.
+- name: gfx.webrender.debug.surface-promotion-logging
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 #ifdef MOZ_WIDGET_GTK
 - name: gfx.webrender.reject-software-driver
   type: bool
@@ -6553,6 +6560,11 @@
 - name: gfx.webrender.debug.highlight-painted-layers
   type: RelaxedAtomicBool
   value: false
+  mirror: always
+
+- name: gfx.webrender.debug.slow-cpu-frame-threshold
+  type: AtomicFloat
+  value: 10.0
   mirror: always
 
 - name: gfx.webrender.late-scenebuild-threshold
@@ -7982,6 +7994,12 @@
     mirror: always
     set_spidermonkey_pref: startup
 
+-   name: javascript.options.wasm_experimental_compile_pipeline
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
 # Support for pretenuring allocations based on their allocation site.
 - name: javascript.options.site_based_pretenuring
   type: bool
@@ -8818,6 +8836,12 @@
   value: false
   mirror: always
 
+# Is eager first-letter processing during intrinsic size computation enabled?
+- name: layout.css.intrinsic-size-first-letter.enabled
+  type: bool
+  value: true
+  mirror: always
+
 # Which model to use for CSS letter-spacing:
 #   0 - Gecko legacy model, spacing added to trailing side of letter
 #   1 - WebKit/Blink-compatible, spacing always added to right-hand side
@@ -9517,6 +9541,12 @@
 
 # Whether we want scrollbar-width: thin to behave as scrollbar-width: auto.
 - name: layout.css.scrollbar-width-thin.disabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# field-sizing CSS property
+- name: layout.css.field-sizing.enabled
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -10525,7 +10555,7 @@
 # 2 : enable for encrypted only, 3 : enable for clear only
 -   name: media.wmf.media-engine.enabled
     type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
+#if defined(DEV_EDITION_OR_EARLY_BETA_OR_EARLIER)
     value: 2
 #else
     value: 0
@@ -10579,7 +10609,7 @@
 # Enable PlayReady DRM for EME
 -   name: media.eme.playready.enabled
     type: RelaxedAtomicBool
-#if defined(MOZ_WMF_CDM) && defined(IS_NIGHTLY_OR_DEV_EDITION)
+#if defined(MOZ_WMF_CDM) && defined(DEV_EDITION_OR_EARLY_BETA_OR_EARLIER)
     value: true
 #else
     value: false
@@ -10599,7 +10629,7 @@
     type: RelaxedAtomicUint32
 #if defined(NIGHTLY_BUILD)
     value: 1
-#elif defined(MOZ_DEV_EDITION)
+#elif defined(MOZ_DEV_EDITION) || defined(EARLY_BETA_OR_EARLIER)
     value: 2
 #else
     value: 0
@@ -10942,11 +10972,6 @@
 - name: media.autoplay.block-event.enabled
   type: bool
   value: false
-  mirror: always
-
-- name: media.media-capabilities.enabled
-  type: RelaxedAtomicBool
-  value: true
   mirror: always
 
 - name: media.media-capabilities.screen.enabled
@@ -11348,6 +11373,11 @@
 #endif
   mirror: always
 
+- name: media.webrtc.tls_tunnel_for_all_proxy
+  type: bool
+  value: true
+  mirror: always
+
  # If true, then we require explicit approval from the embedding app (ex. Fenix)
  # on GeckoView to know if we can allow audible, inaudible media or both kinds
  # of media to autoplay.
@@ -11726,7 +11756,7 @@
 # mode.
 - name: network.cookie.cookieBehavior.optInPartitioning.pbmode
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Whether to support CHIPS(Cookies Having Independent Partitioned State).
@@ -11768,6 +11798,11 @@
 - name: network.cookie.sameSite.schemeful
   type: bool
   value: false
+  mirror: always
+
+- name: network.cookie.sameSite.crossSiteIframeSetCheck
+  type: bool
+  value: true
   mirror: always
 
 - name: network.cookie.thirdparty.sessionOnly
@@ -12379,7 +12414,7 @@
   value: 0
   mirror: always
 
-# Adjustments to apply to the internal priority of gloable fetch API
+# Adjustments to apply to the internal priority of global fetch API
 # for fetchpriority=low/high/auto with respect to the case when
 # network.fetchpriority is disabled.
 # - When the flag is disabled, Gecko currently sets priority to NORMAL.
@@ -12417,6 +12452,24 @@
   value: 0
   mirror: always
 
+# Adjustments to apply to the internal priority of <audio>, <track>, <video>,
+# or <link rel=preload as=audio/track/video> with respect to the case when
+# network.fetchpriority is disabled.
+# - When the flag is disabled, Gecko currently sets priority to NORMAL.
+# - When the flag is enabled, it respectively maps to LOW/LOW/HIGH.
+- name: network.fetchpriority.adjustments.media.low
+  type: int32_t
+  value: 10
+  mirror: always
+- name: network.fetchpriority.adjustments.media.high
+  type: int32_t
+  value: 0
+  mirror: always
+- name: network.fetchpriority.adjustments.media.auto
+  type: int32_t
+  value: 0
+  mirror: always
+
 # Enables `<link rel="preconnect">` tag and `Link: rel=preconnect` response header
 # handling.
 - name: network.preconnect
@@ -12433,6 +12486,12 @@
 
 # Enable 103 Early Hint status code (RFC 8297)
 - name: network.early-hints.enabled
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# Enable sending 103 (Early Hints) responses over HTTP/1.1
+- name: network.early-hints.over-http-v1-1.enabled
   type: RelaxedAtomicBool
   value: true
   mirror: always
@@ -13481,13 +13540,6 @@
 - name: network.jar.max_available_size
   type: RelaxedAtomicUint32
   value: 256*1024*1024 # 256 Mb
-  mirror: always
-
-# Whether JAR entries that defate to a different size than RealSize/orglen
-# are considered corrupted or not
-- name: network.jar.require_size_match
-  type: RelaxedAtomicBool
-  value: true
   mirror: always
 
 # When decompressing an archived entry we need to allocate a buffer
@@ -15552,21 +15604,6 @@
 - name: toolkit.telemetry.ipcBatchTimeout
   type: uint32_t
   value: 2000
-  mirror: always
-
-- name: toolkit.telemetry.geckoview.batchDurationMS
-  type: RelaxedAtomicUint32
-  value: 5000
-  mirror: always
-
-- name: toolkit.telemetry.geckoview.maxBatchStalenessMS
-  type: RelaxedAtomicUint32
-  value: 60000
-  mirror: always
-
-- name: toolkit.telemetry.geckoview.streaming
-  type: RelaxedAtomicBool
-  value: false
   mirror: always
 
 - name: toolkit.telemetry.testing.overrideProductsCheck

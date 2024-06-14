@@ -296,8 +296,8 @@ sccache:
     fetch:
         type: git
         repo: https://github.com/mozilla/sccache
-        # 0.7.7 release
-        revision: e976c42c2141969915bdd39dd3177db6f27405a8
+        # 0.8.1 release
+        revision: 634d8af1401d7703c4837b4974d3f80ed3c5aacc
 
 fxc2:
     description: fxc2 source code
@@ -354,19 +354,12 @@ clang-14:
         repo: https://github.com/llvm/llvm-project
         revision: 4bc1d0b51c8e488d78ab69c8b19cfbcd1f7db6a4
 
-clang-17:
-    description: clang 17.0.6 source code
-    fetch:
-        type: git
-        repo: https://github.com/llvm/llvm-project
-        revision: 6009708b4367171ccdbf4b5905cb6a803753fe18
-
 clang-18:
-    description: clang 18.1.5 source code
+    description: clang 18.1.7 source code
     fetch:
         type: git
         repo: https://github.com/llvm/llvm-project
-        revision: 617a15a9eac96088ae5e9134248d8236e34b91b1
+        revision: 768118d1ad38bf13c545828f67bd6b474d61fc55
 
 clang-trunk:
     description: clang main branch source code
@@ -683,3 +676,12 @@ mozilla-pdf.js:
         type: git
         repo: https://github.com/mozilla/pdf.js
         revision: d64f334f98d4b7f1c2e09a731a63b68629c946f9
+
+xmlstarlet-1.6.1:
+    description: xmlstarlet for Android Performance Tests
+    fetch:
+        type: static-url
+        url: http://ca.archive.ubuntu.com/ubuntu/pool/universe/x/xmlstarlet/xmlstarlet_1.6.1-2build1_amd64.deb
+        sha256: d1d7f55f7887d2d1c3283e1b06a68675b5bead2eebf14939f9cdd84b849ced19
+        size: 267112
+        artifact-name: xmlstarlet.deb

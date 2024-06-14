@@ -19,6 +19,7 @@
 #include "jit/JitSpewer.h"
 #include "jit/LIR.h"
 #include "jit/MacroAssembler.h"
+#include "jit/MIR-wasm.h"
 #include "jit/MIR.h"
 #include "jit/MIRGraph.h"
 #include "jit/SharedICRegisters.h"
@@ -5227,6 +5228,16 @@ void LIRGenerator::visitMegamorphicLoadSlot(MMegamorphicLoadSlot* ins) {
   defineReturn(lir, ins);
 }
 
+void LIRGenerator::visitMegamorphicLoadSlotPermissive(
+    MMegamorphicLoadSlotPermissive* ins) {
+  MOZ_ASSERT(ins->object()->type() == MIRType::Object);
+  auto* lir = new (alloc()) LMegamorphicLoadSlotPermissive(
+      useRegisterAtStart(ins->object()), tempFixed(CallTempReg0),
+      tempFixed(CallTempReg1), tempFixed(CallTempReg2));
+  defineReturn(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
 void LIRGenerator::visitMegamorphicLoadSlotByValue(
     MMegamorphicLoadSlotByValue* ins) {
   MOZ_ASSERT(ins->object()->type() == MIRType::Object);
@@ -5237,6 +5248,18 @@ void LIRGenerator::visitMegamorphicLoadSlotByValue(
       tempFixed(CallTempReg2));
   assignSnapshot(lir, ins->bailoutKind());
   defineReturn(lir, ins);
+}
+
+void LIRGenerator::visitMegamorphicLoadSlotByValuePermissive(
+    MMegamorphicLoadSlotByValuePermissive* ins) {
+  MOZ_ASSERT(ins->object()->type() == MIRType::Object);
+  MOZ_ASSERT(ins->idVal()->type() == MIRType::Value);
+  auto* lir = new (alloc()) LMegamorphicLoadSlotByValuePermissive(
+      useRegisterAtStart(ins->object()), useBoxAtStart(ins->idVal()),
+      tempFixed(CallTempReg0), tempFixed(CallTempReg1),
+      tempFixed(CallTempReg2));
+  defineReturn(lir, ins);
+  assignSafepoint(lir, ins);
 }
 
 void LIRGenerator::visitMegamorphicStoreSlot(MMegamorphicStoreSlot* ins) {

@@ -56,6 +56,21 @@ netwerk:
     expires: never
 
 network:
+  byte_range_request:
+    type: labeled_counter
+    labels:
+      - cacheable
+      - not_cacheable
+    description: >
+      Counts of cacheable/non-cacheable byte-range requests
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898737
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898737
+    notification_emails:
+      - necko@mozilla.com
+    expires: never
+
   data_size_per_type:
     type: labeled_counter
     labels:
@@ -141,12 +156,13 @@ network:
       `Access-Control-Request-Headers` header and the possible outcomes.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1687364
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902182
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1687364
     notification_emails:
       - necko@mozilla.com
       - kershaw@mozilla.com
-    expires: 130
+    expires: 140
 
   cache_hit_time:
     type: timing_distribution

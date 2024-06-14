@@ -229,6 +229,18 @@ struct ParamTraits<mozilla::layers::RemoteTextureOwnerId> {
 };
 
 template <>
+struct ParamTraits<mozilla::layers::SurfaceDescriptorRemoteDecoderId> {
+  typedef mozilla::layers::SurfaceDescriptorRemoteDecoderId paramType;
+
+  static void Write(MessageWriter* writer, const paramType& param) {
+    WriteParam(writer, param.mId);
+  }
+  static bool Read(MessageReader* reader, paramType* result) {
+    return ReadParam(reader, &result->mId);
+  }
+};
+
+template <>
 struct ParamTraits<mozilla::layers::GpuProcessTextureId> {
   typedef mozilla::layers::GpuProcessTextureId paramType;
 
@@ -1002,6 +1014,8 @@ struct ParamTraits<mozilla::layers::OverlayInfo> {
     WriteParam(aWriter, aParam.mYuy2Overlay);
     WriteParam(aWriter, aParam.mBgra8Overlay);
     WriteParam(aWriter, aParam.mRgb10a2Overlay);
+    WriteParam(aWriter, aParam.mSupportsVpSuperResolution);
+    WriteParam(aWriter, aParam.mSupportsVpAutoHDR);
   }
 
   static bool Read(MessageReader* aReader, paramType* aResult) {
@@ -1009,7 +1023,9 @@ struct ParamTraits<mozilla::layers::OverlayInfo> {
            ReadParam(aReader, &aResult->mNv12Overlay) &&
            ReadParam(aReader, &aResult->mYuy2Overlay) &&
            ReadParam(aReader, &aResult->mBgra8Overlay) &&
-           ReadParam(aReader, &aResult->mRgb10a2Overlay);
+           ReadParam(aReader, &aResult->mRgb10a2Overlay) &&
+           ReadParam(aReader, &aResult->mSupportsVpSuperResolution) &&
+           ReadParam(aReader, &aResult->mSupportsVpAutoHDR);
   }
 };
 

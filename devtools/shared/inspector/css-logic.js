@@ -74,6 +74,8 @@ exports.CSSAtRuleClassNameType = {
   CSSMediaRule: "media",
   CSSNamespaceRule: "namespace",
   CSSPageRule: "page",
+  CSSScopeRule: "scope",
+  CSSStartingStyleRule: "starting-style",
   CSSSupportsRule: "supports",
 };
 

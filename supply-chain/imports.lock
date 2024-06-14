@@ -197,6 +197,20 @@ user-id = 1281
 user-login = "nical"
 user-name = "Nicolas Silva"
 
+[[publisher.etagere]]
+version = "0.2.11"
+when = "2024-06-04"
+user-id = 1281
+user-login = "nical"
+user-name = "Nicolas Silva"
+
+[[publisher.etagere]]
+version = "0.2.12"
+when = "2024-06-05"
+user-id = 1281
+user-login = "nical"
+user-name = "Nicolas Silva"
+
 [[publisher.euclid]]
 version = "0.22.10"
 when = "2024-05-21"
@@ -657,12 +671,24 @@ user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
 
+[[publisher.uniffi]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
+
 [[publisher.uniffi_bindgen]]
 version = "0.27.1"
 when = "2024-04-03"
 user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
+
+[[publisher.uniffi_bindgen]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
 
 [[publisher.uniffi_build]]
 version = "0.27.1"
@@ -671,12 +697,24 @@ user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
 
+[[publisher.uniffi_build]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
+
 [[publisher.uniffi_checksum_derive]]
 version = "0.27.1"
 when = "2024-04-03"
 user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
+
+[[publisher.uniffi_checksum_derive]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
 
 [[publisher.uniffi_core]]
 version = "0.27.1"
@@ -685,12 +723,24 @@ user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
 
+[[publisher.uniffi_core]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
+
 [[publisher.uniffi_macros]]
 version = "0.27.1"
 when = "2024-04-03"
 user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
+
+[[publisher.uniffi_macros]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
 
 [[publisher.uniffi_meta]]
 version = "0.27.1"
@@ -699,6 +749,12 @@ user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
 
+[[publisher.uniffi_meta]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
+
 [[publisher.uniffi_testing]]
 version = "0.27.1"
 when = "2024-04-03"
@@ -706,12 +762,24 @@ user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
 
+[[publisher.uniffi_testing]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
+
 [[publisher.uniffi_udl]]
 version = "0.27.1"
 when = "2024-04-03"
 user-id = 111105
 user-login = "mhammond"
 user-name = "Mark Hammond"
+
+[[publisher.uniffi_udl]]
+version = "0.27.3"
+when = "2024-06-03"
+user-id = 127697
+user-login = "bendk"
 
 [[publisher.utf8_iter]]
 version = "1.0.3"

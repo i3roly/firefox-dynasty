@@ -1104,6 +1104,16 @@ public:
     auto cxxDecl = dyn_cast<CXXRecordDecl>(decl);
 
     if (cxxDecl) {
+      if (Layout.hasOwnVFPtr()) {
+        // Encode the size of virtual function table pointer
+        // instead of just true/false, for 2 reasons:
+        //  * having the size here is easier for the consumer
+        //  * the size string 4/8 is shorter than true/false in the analysis
+        //    file
+        const QualType ptrType = C.getUIntPtrType();
+        J.attribute("ownVFPtrBytes", C.getTypeSizeInChars(ptrType).getQuantity());
+      }
+
       J.attributeBegin("supers");
       J.arrayBegin();
       for (const CXXBaseSpecifier &Base : cxxDecl->bases()) {
@@ -2206,6 +2216,9 @@ public:
   // with an identical string representation (which is a good reason to have
   // this helper, as it ensures identical representations).
   void visitHeuristicResult(SourceLocation Loc, const NamedDecl *ND) {
+    if (const UsingShadowDecl *USD = dyn_cast<UsingShadowDecl>(ND)) {
+      ND = USD->getTargetDecl();
+    }
     if (const TemplateDecl *TD = dyn_cast<TemplateDecl>(ND)) {
       ND = TD->getTemplatedDecl();
     }

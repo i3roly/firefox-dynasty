@@ -1,4 +1,5 @@
 [DEFAULT]
+https_first_disabled = true
 tags = "devtools"
 subsuite = "devtools"
 skip-if = [
@@ -114,6 +115,8 @@ support-files = [
 ["browser_net_background_update.js"]
 
 ["browser_net_basic-search.js"]
+
+["browser_net_block-before-network.js"]
 
 ["browser_net_block-context.js"]
 

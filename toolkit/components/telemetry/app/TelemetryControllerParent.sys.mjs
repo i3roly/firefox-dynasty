@@ -55,7 +55,10 @@ ChromeUtils.defineESModuleGetters(lazy, {
   jwcrypto: "resource://services-crypto/jwcrypto.sys.mjs",
 });
 
-if (AppConstants.platform === "win") {
+if (
+  AppConstants.platform === "win" &&
+  AppConstants.MOZ_APP_NAME !== "thunderbird"
+) {
   ChromeUtils.defineESModuleGetters(lazy, {
     // eslint-disable-next-line mozilla/no-browser-refs-in-toolkit
     BrowserUsageTelemetry: "resource:///modules/BrowserUsageTelemetry.sys.mjs",
@@ -1242,7 +1245,10 @@ var Impl = {
       NEWPROFILE_PING_DEFAULT_DELAY
     );
 
-    if (AppConstants.platform == "win") {
+    if (
+      AppConstants.platform == "win" &&
+      AppConstants.MOZ_APP_NAME !== "thunderbird"
+    ) {
       try {
         // This is asynchronous, but we aren't going to await on it now. Just
         // kick it off.
@@ -1274,27 +1280,29 @@ var Impl = {
       "sendNewProfilePing - shutting down: " + this._shuttingDown
     );
 
-    if (AppConstants.platform == "win") {
+    if (
+      AppConstants.platform == "win" &&
+      AppConstants.MOZ_APP_NAME !== "thunderbird"
+    ) {
+      Glean.installationFirstSeen.failureReason.set("UnknownError");
       try {
         await lazy.BrowserUsageTelemetry.reportInstallationTelemetry();
+        Glean.installationFirstSeen.failureReason.set("NoError");
       } catch (ex) {
         this._log.warn(
           "sendNewProfilePing - reportInstallationTelemetry failed",
           ex
         );
-        if (!lazy.TelemetrySession.newProfilePingSent) {
-          Glean.installationFirstSeen.failureReason.set(ex.name);
-        }
+        // Overwrite with a more specific error if possible.
+        Glean.installationFirstSeen.failureReason.set(ex.name);
       } finally {
         // No dataPathOverride here so we can check the default location
         // for installation_telemetry.json
-        if (!lazy.TelemetrySession.newProfilePingSent) {
-          let dataPath = Services.dirsvc.get("GreD", Ci.nsIFile);
-          dataPath.append("installation_telemetry.json");
-          let fileExists = await IOUtils.exists(dataPath.path);
-          if (!fileExists) {
-            Glean.installationFirstSeen.failureReason.set("NotFoundError");
-          }
+        let dataPath = Services.dirsvc.get("GreD", Ci.nsIFile);
+        dataPath.append("installation_telemetry.json");
+        let fileExists = await IOUtils.exists(dataPath.path);
+        if (!fileExists) {
+          Glean.installationFirstSeen.failureReason.set("NotFoundError");
         }
       }
     }

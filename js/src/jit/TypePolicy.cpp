@@ -7,6 +7,7 @@
 #include "jit/TypePolicy.h"
 
 #include "jit/JitAllocPolicy.h"
+#include "jit/MIR-wasm.h"
 #include "jit/MIR.h"
 #include "jit/MIRGraph.h"
 #include "js/ScalarType.h"  // js::Scalar::Type
@@ -344,6 +345,7 @@ bool PowPolicy::adjustInputs(TempAllocator& alloc, MInstruction* ins) const {
   if (power->isToDouble()) {
     MDefinition* input = power->toToDouble()->input();
     if (input->type() == MIRType::Int32) {
+      power->setImplicitlyUsedUnchecked();
       ins->replaceOperand(1, input);
       return true;
     }

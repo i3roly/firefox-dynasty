@@ -242,6 +242,7 @@ treeherder:
         'perftest-detect': 'Performance regression detection tooling'
         'perftest-chrome': 'Performance tests using Chrone'
         'perftest-http3': 'Performance tests with HTTP/3'
+        'perftest-fenix': 'Performance tests using Fenix'
         'l10n': 'Localization checks'
         'fxrec': 'Desktop startup recorder (fxrecord)'
         'wc': 'webcompat'
@@ -868,6 +869,11 @@ workers:
             os: linux
             worker-type: 'gecko-{alias}'
         t-linux-wayland:
+            provisioner: '{trust-domain}-t'
+            implementation: generic-worker
+            os: linux
+            worker-type: 't-linux-2204-wayland'
+        t-linux-wayland-vm:
             provisioner: '{trust-domain}-t'
             implementation: generic-worker
             os: linux

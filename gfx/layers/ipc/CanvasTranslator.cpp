@@ -10,6 +10,7 @@
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/CanvasManagerParent.h"
 #include "mozilla/gfx/CanvasRenderThread.h"
+#include "mozilla/gfx/DataSourceSurfaceWrapper.h"
 #include "mozilla/gfx/DrawTargetWebgl.h"
 #include "mozilla/gfx/gfxVars.h"
 #include "mozilla/gfx/GPUParent.h"
@@ -866,6 +867,9 @@ void CanvasTranslator::PrepareShmem(int64_t aTextureId) {
 
 void CanvasTranslator::ClearCachedResources() {
   mUsedDataSurfaceForSurfaceDescriptor = nullptr;
+  mUsedWrapperForSurfaceDescriptor = nullptr;
+  mUsedSurfaceDescriptorForSurfaceDescriptor = Nothing();
+
   if (mSharedContext) {
     // If there are any DrawTargetWebgls, then try to cache their framebuffers
     // in software surfaces, just in case the GL context is lost. So long as
@@ -1155,6 +1159,9 @@ bool CanvasTranslator::PushRemoteTexture(int64_t aTextureId, TextureData* aData,
 
 void CanvasTranslator::ClearTextureInfo() {
   mUsedDataSurfaceForSurfaceDescriptor = nullptr;
+  mUsedWrapperForSurfaceDescriptor = nullptr;
+  mUsedSurfaceDescriptorForSurfaceDescriptor = Nothing();
+
   for (auto const& entry : mTextureInfo) {
     if (entry.second.mTextureData) {
       entry.second.mTextureData->Unlock();
@@ -1217,13 +1224,29 @@ static bool SDIsSupportedRemoteDecoder(const SurfaceDescriptor& sd) {
 }
 
 already_AddRefed<gfx::DataSourceSurface>
-CanvasTranslator::GetRecycledDataSurfaceForSurfaceDescriptor(
-    TextureHost* aTextureHost) {
+CanvasTranslator::MaybeRecycleDataSurfaceForSurfaceDescriptor(
+    TextureHost* aTextureHost,
+    const SurfaceDescriptorRemoteDecoder& aSurfaceDescriptor) {
   if (!StaticPrefs::gfx_canvas_remote_recycle_used_data_surface()) {
     return nullptr;
   }
 
   auto& usedSurf = mUsedDataSurfaceForSurfaceDescriptor;
+  auto& usedWrapper = mUsedWrapperForSurfaceDescriptor;
+  auto& usedDescriptor = mUsedSurfaceDescriptorForSurfaceDescriptor;
+
+  if (usedDescriptor.isSome() && usedDescriptor.ref() == aSurfaceDescriptor) {
+    MOZ_ASSERT(usedSurf);
+    MOZ_ASSERT(usedWrapper);
+    MOZ_ASSERT(aTextureHost->GetSize() == usedSurf->GetSize());
+
+    // Since the data is the same as before, the DataSourceSurfaceWrapper can be
+    // reused.
+    return do_AddRef(usedWrapper);
+  }
+
+  usedWrapper = nullptr;
+  usedDescriptor = Some(aSurfaceDescriptor);
 
   bool isYuvVideo = false;
   if (aTextureHost->AsMacIOSurfaceTextureHost()) {
@@ -1240,10 +1263,20 @@ CanvasTranslator::GetRecycledDataSurfaceForSurfaceDescriptor(
       aTextureHost->GetSize() == usedSurf->GetSize()) {
     // Reuse previously used DataSourceSurface if it is not used and same
     // size/format.
-    return usedSurf.forget();
+    usedSurf = aTextureHost->GetAsSurface(usedSurf);
+    // Wrap DataSourceSurface with DataSourceSurfaceWrapper to force upload in
+    // DrawTargetWebgl::DrawSurface().
+    usedWrapper =
+        new gfx::DataSourceSurfaceWrapper(mUsedDataSurfaceForSurfaceDescriptor);
+    return do_AddRef(usedWrapper);
   }
-  usedSurf = nullptr;
-  return nullptr;
+
+  usedSurf = aTextureHost->GetAsSurface(nullptr);
+  // Wrap DataSourceSurface with DataSourceSurfaceWrapper to force upload in
+  // DrawTargetWebgl::DrawSurface().
+  usedWrapper =
+      new gfx::DataSourceSurfaceWrapper(mUsedDataSurfaceForSurfaceDescriptor);
+  return do_AddRef(usedWrapper);
 }
 
 already_AddRefed<gfx::SourceSurface>
@@ -1277,18 +1310,14 @@ CanvasTranslator::LookupSourceSurfaceFromSurfaceDescriptor(
       RemoteDecoderVideoSubDescriptor::TSurfaceDescriptorMacIOSurface) {
     MOZ_ASSERT(texture->AsMacIOSurfaceTextureHost());
 
-    RefPtr<gfx::DataSourceSurface> reuseSurf =
-        GetRecycledDataSurfaceForSurfaceDescriptor(texture);
-    RefPtr<gfx::DataSourceSurface> surf = texture->GetAsSurface(reuseSurf);
-    mUsedDataSurfaceForSurfaceDescriptor = surf;
+    RefPtr<gfx::DataSourceSurface> surf =
+        MaybeRecycleDataSurfaceForSurfaceDescriptor(texture, sdrd);
     return surf.forget();
   }
 
   if (subdescType == RemoteDecoderVideoSubDescriptor::Tnull_t) {
-    RefPtr<gfx::DataSourceSurface> reuseSurf =
-        GetRecycledDataSurfaceForSurfaceDescriptor(texture);
-    RefPtr<gfx::DataSourceSurface> surf = texture->GetAsSurface(reuseSurf);
-    mUsedDataSurfaceForSurfaceDescriptor = surf;
+    RefPtr<gfx::DataSourceSurface> surf =
+        MaybeRecycleDataSurfaceForSurfaceDescriptor(texture, sdrd);
     return surf.forget();
   }
 

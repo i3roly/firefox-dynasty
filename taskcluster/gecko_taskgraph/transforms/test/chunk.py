@@ -7,6 +7,7 @@ import json
 import taskgraph
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.util.attributes import keymatch
+from taskgraph.util.copy import deepcopy
 from taskgraph.util.treeherder import join_symbol, split_symbol
 
 from gecko_taskgraph.util.attributes import is_try
@@ -18,7 +19,6 @@ from gecko_taskgraph.util.chunking import (
     get_runtimes,
     guess_mozinfo_from_task,
 )
-from gecko_taskgraph.util.copy_task import copy_task
 from gecko_taskgraph.util.perfile import perfile_number_of_chunks
 
 DYNAMIC_CHUNK_DURATION = 20 * 60  # seconds
@@ -92,7 +92,9 @@ def set_test_manifests(config, tasks):
             continue
 
         mozinfo = guess_mozinfo_from_task(
-            task, config.params.get("head_repository", "")
+            task,
+            config.params.get("head_repository", ""),
+            config.params.get("try_task_config", {}).get("env", {}),
         )
 
         loader_name = task.pop(
@@ -116,7 +118,10 @@ def set_test_manifests(config, tasks):
                 config.params["try_task_config"]["env"]["MOZHARNESS_TEST_PATHS"]
             )
 
-        if task["attributes"]["unittest_suite"] in mh_test_paths.keys():
+        if (
+            mh_test_paths
+            and task["attributes"]["unittest_suite"] in mh_test_paths.keys()
+        ):
             input_paths = mh_test_paths[task["attributes"]["unittest_suite"]]
             remaining_manifests = []
 
@@ -158,6 +163,19 @@ def set_test_manifests(config, tasks):
 
             if remaining_manifests == []:
                 continue
+
+        elif mh_test_paths:
+            # we have test paths and they are not related to the test suite
+            # this could be the test suite doesn't support test paths
+            continue
+        elif (
+            config.params.get("try_task_config", {})
+            .get("env", {})
+            .get("MOZHARNESS_TEST_TAG", "")
+            and not task["test-manifests"]["active"]
+        ):
+            # no MH_TEST_PATHS, but MH_TEST_TAG or other filters
+            continue
 
         # The default loader loads all manifests. If we use a non-default
         # loader, we'll only run some subset of manifests and the hardcoded
@@ -265,7 +283,7 @@ def split_chunks(config, tasks):
             this_chunk = i + 1
 
             # copy the test and update with the chunk number
-            chunked = copy_task(task)
+            chunked = deepcopy(task)
             chunked["this-chunk"] = this_chunk
 
             if chunked_manifests is not None:
