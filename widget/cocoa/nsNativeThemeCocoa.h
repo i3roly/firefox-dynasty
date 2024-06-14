@@ -333,7 +333,7 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
                       ControlParams aControlParams);
   void DrawDisclosureButton(CGContextRef cgContext, const HIRect& inBoxRect,
                             ControlParams aControlParams,
-                            NSControlStateValue aState);
+                            NSCellStateValue aState);
   void DrawHIThemeButton(CGContextRef cgContext, const HIRect& aRect,
                          ThemeButtonKind aKind, ThemeButtonValue aValue,
                          ThemeDrawState aState, ThemeButtonAdornment aAdornment,

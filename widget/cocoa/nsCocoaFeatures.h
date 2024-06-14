@@ -55,4 +55,10 @@ class nsCocoaFeatures {
   static int32_t mOSVersion;
 };
 
+// C-callable helper for cairo-quartz-font.c and SkFontHost_mac.cpp
+extern "C" {
+    bool Gecko_OnSierraExactly();
+    bool Gecko_OnSierraOrLater();
+}
+
 #endif  // nsCocoaFeatures_h_

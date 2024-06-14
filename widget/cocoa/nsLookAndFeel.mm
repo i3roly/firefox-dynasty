@@ -26,6 +26,7 @@
 #include "nsObjCExceptions.h"
 
 using namespace mozilla;
+static bool SystemWantsDarkTheme(void);
 
 @interface MOZLookAndFeelDynamicChangeObserver : NSObject
 + (void)startObserving;
@@ -368,10 +369,22 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
           GetColorFromNSColor(NSColor.controlAlternatingRowBackgroundColors[1]);
       break;
     case ColorID::MozNativehyperlinktext:
-      color = GetColorFromNSColor(NSColor.linkColor);
+      if (@available(macOS 10.10, *))
+        color = GetColorFromNSColor(NSColor.linkColor);
+      else
+        // There appears to be no available system defined color. HARDCODING to the appropriate color.
+        aColor = NS_RGB(0x14, 0x4F, 0xAE);
       break;
     case ColorID::MozNativevisitedhyperlinktext:
-      color = GetColorFromNSColor(NSColor.systemPurpleColor);
+      if (@available(macOS 10.10, *))
+        color = GetColorFromNSColor(NSColor.systemPurpleColor);
+      else {
+        //ripped from https://noahgilmore.com/blog/dark-mode-uicolor-compatibility/ thanks
+        if(SystemWantsDarkTheme())
+            color = NS_RGBA(191, 90, 242, 1);  
+        else
+            color = NS_RGBA(175, 82, 222, 1);
+      }
       break;
     case ColorID::MozHeaderbartext:
     case ColorID::MozHeaderbarinactivetext:
@@ -541,7 +554,10 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       aResult = 0;
       break;
     case IntID::SwipeAnimationEnabled:
-      aResult = NSEvent.isSwipeTrackingFromScrollEventsEnabled;
+      aResult = 0;
+      if ([NSEvent respondsToSelector:@selector(isSwipeTrackingFromScrollEventsEnabled)]) {
+        aResult = [NSEvent isSwipeTrackingFromScrollEventsEnabled];
+      }
       break;
     case IntID::ContextMenuOffsetVertical:
       aResult = -6;
@@ -560,6 +576,7 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
           }
       break;
     case IntID::PrefersReducedTransparency:
+      if(@available(macOS 10.10, *))
       aResult = NSWorkspace.sharedWorkspace
                     .accessibilityDisplayShouldReduceTransparency;
       break;
@@ -569,6 +586,7 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
           NSWorkspace.sharedWorkspace.accessibilityDisplayShouldInvertColors;
       break;
     case IntID::UseAccessibilityTheme:
+      if(@available(macOS 10.10, *))
       aResult = NSWorkspace.sharedWorkspace
                     .accessibilityDisplayShouldIncreaseContrast;
       break;

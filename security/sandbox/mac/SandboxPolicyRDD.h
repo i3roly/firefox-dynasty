@@ -12,8 +12,8 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (version 1)
 
   (define should-log (param "SHOULD_LOG"))
-  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define app-path (param "APP_PATH"))
+  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define home-path (param "HOME_PATH"))
   (define crashPort (param "CRASH_PORT"))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
@@ -71,6 +71,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (subpath "/usr/share/zoneinfo.default")
     (literal "/private/etc/localtime"))
 
+  (if (= macosVersion 1009)
   (allow sysctl-read
     (sysctl-name-regex #"^sysctl\.")
     (sysctl-name "kern.ostype")
@@ -114,7 +115,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (sysctl-name "machdep.cpu.model")
     (sysctl-name "machdep.cpu.stepping")
     (sysctl-name "debug.intel.gstLevelGST")
-    (sysctl-name "debug.intel.gstLoaderControl"))
+    (sysctl-name "debug.intel.gstLoaderControl")))
 
   (define (home-regex home-relative-regex)
     (regex (string-append "^" (regex-quote home-path) home-relative-regex)))

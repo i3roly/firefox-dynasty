@@ -33,48 +33,63 @@ static Maybe<uint64_t> mStartIncludingSuspendMs;
 #  include <mach/mach_time.h>
 
 const uint64_t kNSperMS = 1000000;
-static int clock_gettime_missing(uint32_t clock_id, struct timespec *tp)
-{
-	tp->tv_nsec = 0;
-	tp->tv_sec = 0;
-	uint64_t tk;
-	struct timeval tv;
-	switch (clock_id) {
-	case CLOCK_REALTIME:
-	case CLOCK_MONOTONIC:
-		gettimeofday (&tv, 0);
-		tp->tv_sec = tv.tv_sec;
-		tp->tv_nsec = tv.tv_usec * 1000;
-		break;
-	case CLOCK_PROCESS_CPUTIME_ID:
-	case CLOCK_THREAD_CPUTIME_ID:
-		tk = clock();
-		tp->tv_sec = tk / CLOCKS_PER_SEC;
-		tp->tv_nsec = (tk % CLOCKS_PER_SEC) *
-				(1000000000 / CLOCKS_PER_SEC);
-		break;
-	}
-	return 0;
-}
+#if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
+
+#  include <mach/mach.h>
+#  include <mach/clock.h>
+    //taken from https://github.com/ChisholmKyle/PosixMachTiming/
+    /* timing struct for osx */
+    typedef struct RoTimingMach {
+        mach_timebase_info_data_t timebase;
+        clock_serv_t cclock;
+    } RoTimingMach;
+
+    /* internal timing struct for osx */
+    static RoTimingMach ro_timing_mach_g;
+
+    /* mach clock port */
+    static mach_port_t clock_port;
+
+    /* emulate posix clock_gettime */
+    static inline int clock_gettime_missing (clockid_t id, struct timespec *tspec)
+    {
+        int retval = -1;
+        mach_timespec_t mts;
+        if (id == CLOCK_REALTIME) {
+            retval = clock_get_time (ro_timing_mach_g.cclock, &mts);
+            if (retval == 0 && tspec != NULL) {
+                tspec->tv_sec = mts.tv_sec;
+                tspec->tv_nsec = mts.tv_nsec;
+            }
+        } else if (id == CLOCK_MONOTONIC) {
+            retval = clock_get_time (clock_port, &mts);
+            if (retval == 0 && tspec != NULL) {
+                tspec->tv_sec = mts.tv_sec;
+                tspec->tv_nsec = mts.tv_nsec;
+            }
+        } else {}
+        return retval;
+    }
 
 
+#endif
 
 Maybe<uint64_t> NowExcludingSuspendMs() {
-  if(__builtin_available(macOS 10.12, *))
+#if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
+  struct timespec ts = {0};
+  return Some(clock_gettime_missing(CLOCK_UPTIME_RAW, &ts)/ kNSperMS);
+#else
   return Some(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / kNSperMS);
-  else {
-    struct timespec ts = {0};
-    return Some(clock_gettime_missing(CLOCK_UPTIME_RAW, &ts)/ kNSperMS);
-  }
+#endif
 }
 
 Maybe<uint64_t> NowIncludingSuspendMs() {
-  if(__builtin_available(macOS 10.12, *))
+#if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
+  struct timespec ts = {0};
+  return Some(clock_gettime_missing(CLOCK_MONOTONIC_RAW, &ts)/ kNSperMS);
+#else
   return Some(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) / kNSperMS);
-  else {
-    struct timespec ts = {0};
-    return Some(clock_gettime_missing(CLOCK_MONOTONIC_RAW, &ts)/ kNSperMS);
-  }
+#endif
 }
 
 #elif defined(XP_WIN)

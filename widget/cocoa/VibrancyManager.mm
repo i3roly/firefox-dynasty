@@ -17,9 +17,16 @@
 
 using namespace mozilla;
 
+#if !defined(MAC_OS_X_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12
+@interface NSVisualEffectView (NSVisualEffectViewMethods)
+- (void)setEmphasized:(BOOL)emphasized;
+@end
+#endif
+
 @interface MOZVibrantView : NSVisualEffectView {
   VibrancyType mType;
 }
+
 - (instancetype)initWithFrame:(NSRect)aRect
                  vibrancyType:(VibrancyType)aVibrancyType;
 @end

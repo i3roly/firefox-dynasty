@@ -15,6 +15,7 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
   (define app-path (param "APP_PATH"))
   (define crashPort (param "CRASH_PORT"))
   (define home-path (param "HOME_PATH"))
+  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
 
   (define (moz-deny feature)
@@ -141,8 +142,9 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
     (home-subpath "/Library/Keychains"))
 
   ; For enabling TCSM
+ (if (> macosVersion 1009) 
   (allow sysctl-write
-    (sysctl-name "kern.tcsm_enable"))
+    (sysctl-name "kern.tcsm_enable")))
 )SANDBOX_LITERAL";
 
 }  // namespace mozilla
