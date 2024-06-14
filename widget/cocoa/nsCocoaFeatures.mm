@@ -153,20 +153,17 @@ int32_t nsCocoaFeatures::GetVersion(int32_t aMajor, int32_t aMinor,
   return ExtractBugFixVersion(macOSVersion());
 }
 
-/* static */ bool
-nsCocoaFeatures::OnLionOrLater()
+/* static */ bool nsCocoaFeatures::OnLionOrLater()
 {
     return (macOSVersion() >= MACOS_VERSION_10_7_HEX);
 }
 
-/* static */ bool
-nsCocoaFeatures::OnMountainLionOrLater()
+/* static */ bool nsCocoaFeatures::OnMountainLionOrLater()
 {
     return (macOSVersion() >= MACOS_VERSION_10_8_HEX);
 }
 
-/* static */ bool
-nsCocoaFeatures::OnMavericksOrLater()
+/* static */ bool nsCocoaFeatures::OnMavericksOrLater()
 {
     return (macOSVersion() >= MACOS_VERSION_10_9_HEX);
 }

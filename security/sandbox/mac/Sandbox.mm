@@ -347,6 +347,8 @@ bool StartMacSandbox(MacSandboxInfo const& aInfo, std::string& aErrorMessage) {
       params.push_back("CRASH_PORT");
       params.push_back(aInfo.crashServerPort.c_str());
     }
+    params.push_back("MAC_OS_VERSION");
+    params.push_back(combinedVersion.c_str());
     params.push_back("HOME_PATH");
     params.push_back(getenv("HOME"));
   } else if (aInfo.type == MacSandboxType_GMP) {

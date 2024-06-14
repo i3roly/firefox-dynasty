@@ -75,6 +75,35 @@ extern BOOL gSomeMenuBarPainted;
 
 static uint32_t sModalWindowCount = 0;
 
+#if !defined(MAC_OS_X_VERSION_10_9) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_9
+
+enum NSWindowOcclusionState { NSWindowOcclusionStateVisible = 0x1 << 1 };
+
+@interface NSWindow (OcclusionState)
+- (NSWindowOcclusionState)occlusionState;
+@end
+
+#endif
+
+#if !defined(MAC_OS_X_VERSION_10_10) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_10
+
+enum NSWindowTitleVisibility { NSWindowTitleVisible = 0, NSWindowTitleHidden = 1 };
+
+@interface NSWindow (TitleVisibility)
+- (void)setTitleVisibility:(NSWindowTitleVisibility)visibility;
+- (void)setTitlebarAppearsTransparent:(BOOL)isTitlebarTransparent;
+@end
+
+#endif
+
+#if !defined(MAC_OS_X_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12
+
+@interface NSWindow (AutomaticWindowTabbing)
++ (void)setAllowsAutomaticWindowTabbing:(BOOL)allow;
+@end
+
+#endif
+
 extern "C" {
 // CGSPrivate.h
 typedef NSInteger CGSConnection;
@@ -136,10 +165,11 @@ nsCocoaWindow::nsCocoaWindow()
       mIgnoreOcclusionCount(0),
       mHasStartedNativeFullscreen(false),
       mWindowAnimationBehavior(NSWindowAnimationBehaviorDefault) {
-  if(@available(macOS 10.12, *)) 
-  // Disable automatic tabbing. We need to do this before we
-  // orderFront any of our windows.
-  NSWindow.allowsAutomaticWindowTabbing = NO;
+  if ([NSWindow respondsToSelector:@selector(setAllowsAutomaticWindowTabbing:)]) {
+    // Disable automatic tabbing. We need to do this before we
+    // orderFront any of our windows.
+     NSWindow.allowsAutomaticWindowTabbing = NO;
+  }
 }
 
 void nsCocoaWindow::DestroyNativeWindow() {
@@ -2230,16 +2260,38 @@ LayoutDeviceIntMargin nsCocoaWindow::ClientToWindowMargin() {
     return {};
   }
 
-  NSRect clientNSRect = mWindow.contentLayoutRect;
-  NSRect frameNSRect = [mWindow frameRectForChildViewRect:clientNSRect];
-
   CGFloat backingScale = BackingScaleFactor();
-  const auto clientRect =
+
+  if(@available(macOS 10.10, *)) {
+    NSRect clientNSRect = mWindow.contentLayoutRect;
+    NSRect frameNSRect = [mWindow frameRectForChildViewRect:clientNSRect];
+    const auto clientRect =
       nsCocoaUtils::CocoaRectToGeckoRectDevPix(clientNSRect, backingScale);
-  const auto frameRect =
+    const auto frameRect =
       nsCocoaUtils::CocoaRectToGeckoRectDevPix(frameNSRect, backingScale);
 
-  return frameRect - clientRect;
+    return frameRect - clientRect;
+  }
+  /*else {
+   LayoutDeviceIntRect r(0, 0, .width, aClientSize.height);
+    NSRect rect = nsCocoaUtils::DevPixelsToCocoaPoints(r, backingScale);
+
+  // Our caller expects the inflated rect for windows *with separate titlebars*,
+  // i.e. for windows where [mWindow drawsContentsIntoWindowFrame] is NO.
+  //
+  // So we call frameRectForContentRect on NSWindow here, instead of mWindow, so
+  // that we don't run into our override if this window is a window that draws
+  // its content into the titlebar.
+  //
+  // This is the same thing the windows widget does, but we probably should fix
+  // that, see bug 1445738.
+  NSUInteger styleMask = [mWindow styleMask];
+  styleMask &= ~NSFullSizeContentViewWindowMask;
+  NSRect inflatedRect = [NSWindow frameRectForContentRect:rect styleMask:styleMask];
+  r = nsCocoaUtils::CocoaRectToGeckoRectDevPix(inflatedRect, backingScale);
+
+  return r.Size();
+  }*/
 
   NS_OBJC_END_TRY_BLOCK_RETURN({});
 }
@@ -3084,6 +3136,25 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 - (void)_setNeedsDisplayInRect:(NSRect)aRect;
 @end
 
+#if !defined(MAC_OS_X_VERSION_10_10) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_10
+
+@interface NSImage (CapInsets)
+- (void)setCapInsets:(NSEdgeInsets)capInsets;
+@end
+
+#endif
+
+#if !defined(MAC_OS_X_VERSION_10_8) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_8
+
+@interface NSImage (ImageCreationWithDrawingHandler)
++ (NSImage*)imageWithSize:(NSSize)size
+                  flipped:(BOOL)drawingHandlerShouldBeCalledWithFlippedContext
+           drawingHandler:(BOOL (^)(NSRect dstRect))drawingHandler;
+@end
+
+#endif
+
+
 // This method is on NSThemeFrame starting with 10.10, but since NSThemeFrame
 // is not a public class, we declare the method on NSView instead. We only have
 // this declaration in order to avoid compiler warnings.
@@ -3349,8 +3420,10 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
 
 - (void)setWantsTitleDrawn:(BOOL)aDrawTitle {
   mDrawTitle = aDrawTitle;
-  [self setTitleVisibility:mDrawTitle ? NSWindowTitleVisible
+  if ([self respondsToSelector:@selector(setTitleVisibility:)]) {
+     [self setTitleVisibility:mDrawTitle ? NSWindowTitleVisible
                                       : NSWindowTitleHidden];
+   }
 }
 
 - (BOOL)wantsTitleDrawn {
@@ -3374,7 +3447,6 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   }
   return nil;
 }
-
 - (void)removeTrackingArea {
   if (mTrackingArea) {
     [self.trackingAreaView removeTrackingArea:mTrackingArea];
@@ -3510,7 +3582,45 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
 }
 
 @end
+@implementation MOZTitlebarView
 
+- (instancetype)initWithFrame:(NSRect)aFrame {
+  self = [super initWithFrame:aFrame];
+
+  self.material = NSVisualEffectMaterialTitlebar;
+  self.blendingMode = NSVisualEffectBlendingModeWithinWindow;
+
+  // Add a separator line at the bottom of the titlebar. NSBoxSeparator isn't a perfect match for
+  // a native titlebar separator, but it's better than nothing.
+  // We really want the appearance that _NSTitlebarDecorationView creates with the help of CoreUI,
+  // but there's no public API for that.
+  NSBox* separatorLine = [[NSBox alloc] initWithFrame:NSMakeRect(0, 0, aFrame.size.width, 1)];
+  separatorLine.autoresizingMask = NSViewWidthSizable | NSViewMaxYMargin;
+  separatorLine.boxType = NSBoxSeparator;
+  [self addSubview:separatorLine];
+  [separatorLine release];
+
+  return self;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+  return YES;
+}
+
+- (void)mouseUp:(NSEvent*)event {
+  if ([event clickCount] == 2) {
+    // Handle titlebar double click. We don't get the window's default behavior here because the
+    // window uses NSWindowStyleMaskFullSizeContentView, and this view (the titlebar gradient view)
+    // is technically part of the window "contents" (it's a subview of the content view).
+    if (nsCocoaUtils::ShouldZoomOnTitlebarDoubleClick()) {
+      [[self window] performZoom:nil];
+    } else if (nsCocoaUtils::ShouldMinimizeOnTitlebarDoubleClick()) {
+      [[self window] performMiniaturize:nil];
+    }
+  }
+}
+
+@end
 @interface MOZTitlebarAccessoryView : NSView
 @end
 
@@ -3621,11 +3731,19 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
                                  backing:aBufferingType
                                    defer:aFlag])) {
     mWindowButtonsRect = NSZeroRect;
+    
+    mTitlebarView = nil;
+    mUnifiedToolbarHeight = 22.0f;
+    mSheetAttachmentPosition = aChildViewRect.size.height;
+    mInitialTitlebarHeight = [self titlebarHeight];
 
-    self.titlebarAppearsTransparent = YES;
+    if ([self respondsToSelector:@selector(setTitlebarAppearsTransparent:)]) 
+      self.titlebarAppearsTransparent = YES;
+    
     if (@available(macOS 11.0, *)) {
       self.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
+    [self updateTitlebarView];
 
     mFullscreenTitlebarTracker = [[FullscreenTitlebarTracker alloc] init];
     // revealAmount is an undocumented property of
@@ -3637,6 +3755,7 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
                                     context:nil];
     // Adding this accessory view controller allows us to shift the toolbar down
     // when the user mouses to the top of the screen in fullscreen.
+    if (@available(macOS 10.10, *))
     [(NSWindow*)self
         addTitlebarAccessoryViewController:mFullscreenTitlebarTracker];
   }
@@ -3785,6 +3904,63 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 
 - (void)windowMainStateChanged {
   [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
+}
+
+- (void)setTitlebarNeedsDisplay {
+  [mTitlebarView setNeedsDisplay:YES];
+}
+
+- (NSRect)titlebarRect {
+  CGFloat titlebarHeight = [self titlebarHeight];
+  return NSMakeRect(0, [self frame].size.height - titlebarHeight, [self frame].size.width,
+                    titlebarHeight);
+}
+
+// In window contentView coordinates (origin bottom left)
+- (NSRect)unifiedToolbarRect {
+  return NSMakeRect(0, [self frame].size.height - mUnifiedToolbarHeight, [self frame].size.width,
+                    mUnifiedToolbarHeight);
+}
+
+// Returns the unified height of titlebar + toolbar.
+- (CGFloat)unifiedToolbarHeight {
+  return mUnifiedToolbarHeight;
+}
+
+- (CGFloat)titlebarHeight {
+  // We use the original content rect here, not what we return from
+  // [self contentRectForFrameRect:], because that would give us a
+  // titlebarHeight of zero.
+  NSRect frameRect = [self frame];
+  NSUInteger styleMask = [self styleMask];
+  styleMask &= ~NSWindowStyleMaskFullSizeContentView;
+  NSRect originalContentRect = [NSWindow contentRectForFrameRect:frameRect styleMask:styleMask];
+  return NSMaxY(frameRect) - NSMaxY(originalContentRect);
+}
+
+// Stores the complete height of titlebar + toolbar.
+- (void)setUnifiedToolbarHeight:(CGFloat)aHeight {
+  if (aHeight == mUnifiedToolbarHeight) return;
+
+  mUnifiedToolbarHeight = aHeight;
+
+  [self updateTitlebarView];
+
+}
+
+- (void)updateTitlebarView {
+  BOOL needTitlebarView = ![self drawsContentsIntoWindowFrame] || mUnifiedToolbarHeight > 0;
+  if (needTitlebarView && !mTitlebarView) {
+    mTitlebarView = [[MOZTitlebarView alloc] initWithFrame:[self unifiedToolbarRect]];
+    mTitlebarView.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
+    [self.contentView addSubview:mTitlebarView positioned:NSWindowBelow relativeTo:nil];
+  } else if (needTitlebarView && mTitlebarView) {
+    mTitlebarView.frame = [self unifiedToolbarRect];
+  } else if (!needTitlebarView && mTitlebarView) {
+    [mTitlebarView removeFromSuperview];
+    [mTitlebarView release];
+    mTitlebarView = nil;
+  }
 }
 
 // Extending the content area into the title bar works by resizing the

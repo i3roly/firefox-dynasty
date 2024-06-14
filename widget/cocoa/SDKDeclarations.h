@@ -7,6 +7,21 @@
 #define SDKDefines_h
 
 #import <Cocoa/Cocoa.h>
+extern "C" {
+#if !defined(MAC_OS_X_VERSION_10_9) || \
+    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_9
+extern NSString* const NSWindowDidChangeOcclusionStateNotification;
+extern NSString* const CBAdvertisementDataOverflowServiceUUIDsKey;
+extern NSString* const CBAdvertisementDataIsConnectable;
+#endif  // MAC_OS_X_VERSION_10_9
+
+#if !defined(MAC_OS_X_VERSION_10_10) || \
+    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10
+extern NSString* const NSUserActivityTypeBrowsingWeb;
+extern NSString* const NSAppearanceNameVibrantDark;
+extern NSString* const NSAppearanceNameVibrantLight;
+#endif  // MAC_OS_X_VERSION_10_10
+}  // extern "C"
 
 /**
  * This file contains header declarations from SDKs more recent than the minimum macOS SDK which we

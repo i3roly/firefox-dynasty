@@ -213,6 +213,11 @@ static nsCString gServerURL;
 static xpstring pendingDirectory;
 static xpstring crashReporterPath;
 static xpstring memoryReportPath;
+// undoing commit https://hg.mozilla.org/mozilla-unified/rev/1bc4ee894015268a6be66950b80705e73f17147e
+// for backwards compatibility
+#ifdef XP_MACOSX
+static xpstring libraryPath;  // Path where the NSS library is
+#endif
 
 // Where crash events should go.
 static xpstring eventsDirectory;
@@ -1294,6 +1299,11 @@ static bool LaunchProgram(const XP_CHAR* aProgramPath,
     CloseHandle(pi.hThread);
   }
 #  elif defined(XP_MACOSX)
+  //reverting commit https://hg.mozilla.org/mozilla-unified/rev/1bc4ee894015268a6be66950b80705e73f17147e
+  //for backwards compatibility
+  // Needed to locate NSS and its dependencies
+  setenv("DYLD_LIBRARY_PATH", libraryPath.c_str(), /* overwrite */ 1);
+
   pid_t pid = 0;
   char* const my_argv[] = {const_cast<char*>(aProgramPath),
                            const_cast<char*>(aMinidumpPath), nullptr};
@@ -1989,7 +1999,26 @@ nsresult SetExceptionHandler(nsIFile* aXREDirectory, bool force /*=false*/) {
     return rv;
   }
 
+  // need this for the old style of loading
+  nsCOMPtr<nsIFile> libPath;
+  rv = aXREDirectory->Clone(getter_AddRefs(libPath));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+
+  }
+  nsAutoString libraryPath_temp;
+  rv = libPath->GetPath(libraryPath_temp);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
   crashReporterPath = crashReporterPath_temp.get();
+#    ifdef XP_MACOSX
+// reverting commit 3https://hg.mozilla.org/mozilla-unified/rev/1bc4ee894015268a6be66950b80705e73f17147e
+// for bakcwards compatibility
+  libraryPath = xpstring(NS_ConvertUTF16toUTF8(libraryPath_temp).get()); 
+#    endif
+
 #else
   // On Android, we launch a service defined via MOZ_ANDROID_CRASH_HANDLER
   const char* androidCrashHandler = PR_GetEnv("MOZ_ANDROID_CRASH_HANDLER");
