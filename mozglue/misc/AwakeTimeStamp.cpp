@@ -57,10 +57,55 @@ void AwakeTimeStamp::operator-=(const AwakeTimeDuration& aOther) {
 #  include <sys/types.h>
 #  include <mach/mach_time.h>
 
-AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
-  return AwakeTimeStamp(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / kNSperUS);
-}
+#if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
+#  include <mach/mach.h>
+#  include <mach/clock.h>
+    //taken from https://github.com/ChisholmKyle/PosixMachTiming/
+    /* timing struct for osx */
+    typedef struct RoTimingMach {
+        mach_timebase_info_data_t timebase;
+        clock_serv_t cclock;
+    } RoTimingMach;
 
+    /* internal timing struct for osx */
+    static RoTimingMach ro_timing_mach_g;
+
+    /* mach clock port */
+    static mach_port_t clock_port;
+
+    /* emulate posix clock_gettime */
+    static inline int clock_gettime_missing (clockid_t id, struct timespec *tspec)
+    {
+        int retval = -1;
+        mach_timespec_t mts;
+        if (id == CLOCK_REALTIME) {
+            retval = clock_get_time (ro_timing_mach_g.cclock, &mts);
+            if (retval == 0 && tspec != NULL) {
+                tspec->tv_sec = mts.tv_sec;
+                tspec->tv_nsec = mts.tv_nsec;
+            }
+        } else if (id == CLOCK_MONOTONIC) {
+            retval = clock_get_time (clock_port, &mts);
+            if (retval == 0 && tspec != NULL) {
+                tspec->tv_sec = mts.tv_sec;
+                tspec->tv_nsec = mts.tv_nsec;
+            }
+        } else {}
+        return retval;
+    }
+
+
+#endif
+
+AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
+#if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
+    struct timespec tv;
+    return AwakeTimeStamp(clock_gettime_missing(CLOCK_UPTIME_RAW, &tv)/ kNSperUS);
+#else
+    return AwakeTimeStamp(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / kNSperUS);
+#endif 
+
+}
 #elif defined(XP_WIN)
 
 // Number of hundreds of nanoseconds in a microsecond

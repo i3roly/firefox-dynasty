@@ -26,9 +26,26 @@
 #include "nsObjCExceptions.h"
 
 using namespace mozilla;
+static bool SystemWantsDarkTheme(void);
 
 @interface MOZLookAndFeelDynamicChangeObserver : NSObject
 + (void)startObserving;
+@end
+
+enum {
+  mozNSScrollerStyleLegacy       = 0,
+  mozNSScrollerStyleOverlay      = 1
+};
+typedef NSInteger mozNSScrollerStyle;
+
+@interface NSScroller(AvailableSinceLion)
++ (mozNSScrollerStyle)preferredScrollerStyle;
+@end
+
+// Available from 10.12 onwards; test availability at runtime before using
+@interface NSWorkspace(AvailableSinceSierra)
+@property (readonly) BOOL accessibilityDisplayShouldReduceMotion;
+
 @end
 
 nsLookAndFeel::nsLookAndFeel() {
@@ -52,6 +69,7 @@ void nsLookAndFeel::EnsureInit() {
                                       defer:NO];
   auto release = MakeScopeExit([&] { [window release]; });
 
+  if(@available(macOS 10.11, *)) 
   mRtl = window.windowTitlebarLayoutDirection ==
          NSUserInterfaceLayoutDirectionRightToLeft;
   mTitlebarHeight = std::ceil(window.frame.size.height);
@@ -127,6 +145,13 @@ static nscolor ProcessSelectionBackground(nscolor aColor, ColorScheme aScheme) {
 nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
                                        nscolor& aColor) {
   NS_OBJC_BEGIN_TRY_ABORT_BLOCK
+  if (@available(macOS 10.14, *)) {
+    // No-op. macOS 10.14+ supports dark mode, so currentAppearance can be set
+    // to either Light or Dark.
+  } else {
+    // System colors before 10.14 are always Light.
+    aScheme = ColorScheme::Light;
+  }
 
   NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
 
@@ -151,11 +176,11 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       aColor = NS_TRANSPARENT;
       break;
     case ColorID::Accentcolor:
-      color = GetColorFromNSColor(NSColor.controlAccentColor);
+      color = GetColorFromNSColor(ControlAccentColor());
       break;
     case ColorID::MozMenuhover:
     case ColorID::Selecteditem:
-      color = GetColorFromNSColor(NSColor.selectedContentBackgroundColor);
+      color = GetColorFromNSColor(NSColor.alternateSelectedControlColor);
       if (aID == ColorID::MozMenuhover &&
           !LookAndFeel::GetInt(IntID::PrefersReducedTransparency)) {
         // Wash the color a little bit with semi-transparent white to match a
@@ -282,9 +307,15 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       break;
     case ColorID::MozDialog:
     case ColorID::Window:
-      color = GetColorFromNSColor(aScheme == ColorScheme::Light
-                                      ? NSColor.windowBackgroundColor
-                                      : NSColor.underPageBackgroundColor);
+      if (@available(macOS 10.14, *)) {
+          color = GetColorFromNSColor(aScheme == ColorScheme::Light
+                  ? NSColor.windowBackgroundColor
+                  : NSColor.underPageBackgroundColor);
+      } else {
+        // On 10.13 and below, NSColor.windowBackgroundColor is transparent black.
+        // Use a light grey instead (taken from macOS 11.5).
+        color = NS_RGB(0xF6, 0xF6, 0xF6);
+      }
       break;
     case ColorID::Field:
     case ColorID::MozCombobox:
@@ -317,10 +348,14 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::MozColheaderactivetext:
       color = GetColorFromNSColor(NSColor.headerTextColor);
       break;
+      // don't know how to implmement this on lower machines
+      // probably use that rgb colour hack or something they have above
     case ColorID::MozColheaderactive:
-      color = GetColorFromNSColor(
-          NSColor.unemphasizedSelectedContentBackgroundColor);
-      break;
+      if (@available(macOS 10.14, *)) {
+          color = GetColorFromNSColor(
+                  NSColor.unemphasizedSelectedContentBackgroundColor);
+          break;
+      }
     case ColorID::MozColheader:
     case ColorID::MozColheaderhover:
     case ColorID::MozEventreerow:
@@ -334,10 +369,22 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
           GetColorFromNSColor(NSColor.controlAlternatingRowBackgroundColors[1]);
       break;
     case ColorID::MozNativehyperlinktext:
-      color = GetColorFromNSColor(NSColor.linkColor);
+      if (@available(macOS 10.10, *))
+        color = GetColorFromNSColor(NSColor.linkColor);
+      else
+        // There appears to be no available system defined color. HARDCODING to the appropriate color.
+        aColor = NS_RGB(0x14, 0x4F, 0xAE);
       break;
     case ColorID::MozNativevisitedhyperlinktext:
-      color = GetColorFromNSColor(NSColor.systemPurpleColor);
+      if (@available(macOS 10.10, *))
+        color = GetColorFromNSColor(NSColor.systemPurpleColor);
+      else {
+        //ripped from https://noahgilmore.com/blog/dark-mode-uicolor-compatibility/ thanks
+        if(SystemWantsDarkTheme())
+            color = NS_RGBA(191, 90, 242, 1);  
+        else
+            color = NS_RGBA(175, 82, 222, 1);
+      }
       break;
     case ColorID::MozHeaderbartext:
     case ColorID::MozHeaderbarinactivetext:
@@ -376,11 +423,15 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
 static bool SystemWantsDarkTheme() {
   // This returns true if the macOS system appearance is set to dark mode,
   // false otherwise.
-  NSAppearanceName aquaOrDarkAqua =
-      [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
-        NSAppearanceNameAqua, NSAppearanceNameDarkAqua
-      ]];
-  return [aquaOrDarkAqua isEqualToString:NSAppearanceNameDarkAqua];
+    if (@available(macOS 10.14, *)) {
+        NSAppearanceName aquaOrDarkAqua =
+            [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
+            NSAppearanceNameAqua, NSAppearanceNameDarkAqua
+            ]];
+        return [aquaOrDarkAqua isEqualToString:NSAppearanceNameDarkAqua];
+    }
+    else
+        return false;
 }
 
 nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
@@ -425,8 +476,18 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       aResult = eScrollArrow_None;
       break;
     case IntID::UseOverlayScrollbars:
+      if (!mUseOverlayScrollbarsCached) {
+          mUseOverlayScrollbars = SystemWantsOverlayScrollbars() ? 1 : 0;
+          mUseOverlayScrollbarsCached = true;
+      }
+      aResult = mUseOverlayScrollbars;
+      break;
     case IntID::AllowOverlayScrollbarsOverlap:
-      aResult = NSScroller.preferredScrollerStyle == NSScrollerStyleOverlay;
+      if (!mAllowOverlayScrollbarsOverlapCached) {
+          mAllowOverlayScrollbarsOverlap = AllowOverlayScrollbarsOverlap() ? 1 : 0;
+          mAllowOverlayScrollbarsOverlapCached = true;
+      }
+      aResult = mAllowOverlayScrollbarsOverlap;
       break;
     case IntID::ScrollbarDisplayOnMouseMove:
       aResult = 0;
@@ -451,6 +512,15 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       break;
     case IntID::TreeScrollLinesMax:
       aResult = 3;
+      break;
+    case IntID::MacGraphiteTheme:
+      aResult = [NSColor currentControlTint] == NSGraphiteControlTint;
+      break;
+    case IntID::MacLionTheme:
+      aResult = nsCocoaFeatures::OnLionOrLater();
+      break;
+    case IntID::MacYosemiteTheme:
+      aResult = nsCocoaFeatures::OnYosemiteOrLater();
       break;
     case IntID::MacBigSurTheme:
       aResult = nsCocoaFeatures::OnBigSurOrLater();
@@ -486,7 +556,10 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       aResult = 0;
       break;
     case IntID::SwipeAnimationEnabled:
-      aResult = NSEvent.isSwipeTrackingFromScrollEventsEnabled;
+      aResult = 0;
+      if ([NSEvent respondsToSelector:@selector(isSwipeTrackingFromScrollEventsEnabled)]) {
+        aResult = [NSEvent isSwipeTrackingFromScrollEventsEnabled];
+      }
       break;
     case IntID::ContextMenuOffsetVertical:
       aResult = -6;
@@ -498,18 +571,24 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       aResult = SystemWantsDarkTheme();
       break;
     case IntID::PrefersReducedMotion:
+      if([[NSWorkspace sharedWorkspace] respondsToSelector:@selector(
+              accessibilityDisplayShouldReduceMotion)]) {
       aResult =
           NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion;
+          }
       break;
     case IntID::PrefersReducedTransparency:
+      if(@available(macOS 10.10, *))
       aResult = NSWorkspace.sharedWorkspace
                     .accessibilityDisplayShouldReduceTransparency;
       break;
     case IntID::InvertedColors:
+      if(@available(macOS 10.12, *))
       aResult =
           NSWorkspace.sharedWorkspace.accessibilityDisplayShouldInvertColors;
       break;
     case IntID::UseAccessibilityTheme:
+      if(@available(macOS 10.10, *))
       aResult = NSWorkspace.sharedWorkspace
                     .accessibilityDisplayShouldIncreaseContrast;
       break;
@@ -558,6 +637,23 @@ nsresult nsLookAndFeel::NativeGetFloat(FloatID aID, float& aResult) {
   NS_OBJC_END_TRY_BLOCK_RETURN(NS_ERROR_FAILURE);
 }
 
+bool nsLookAndFeel::UseOverlayScrollbars()
+{
+  return GetInt(IntID::UseOverlayScrollbars) != 0;
+}
+
+bool nsLookAndFeel::SystemWantsOverlayScrollbars()
+{
+  return ([NSScroller respondsToSelector:@selector(preferredScrollerStyle)] &&
+          [NSScroller preferredScrollerStyle] == mozNSScrollerStyleOverlay);
+}
+
+bool nsLookAndFeel::AllowOverlayScrollbarsOverlap()
+{
+  return (UseOverlayScrollbars() && nsCocoaFeatures::OnMountainLionOrLater());
+}
+
+
 bool nsLookAndFeel::NativeGetFont(FontID aID, nsString& aFontName,
                                   gfxFontStyle& aFontStyle) {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
@@ -604,12 +700,20 @@ void nsLookAndFeel::RecordAccessibilityTelemetry() {
              name:NSSystemColorsDidChangeNotification
            object:nil];
 
-  [NSWorkspace.sharedWorkspace.notificationCenter
-      addObserver:self
-         selector:@selector(mediaQueriesChanged)
-             name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
-           object:nil];
-
+  if (@available(macOS 10.14, *)) {
+      [NSWorkspace.sharedWorkspace.notificationCenter
+          addObserver:self
+              selector:@selector(mediaQueriesChanged)
+              name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+              object:nil];
+  } else if (nsCocoaFeatures::OnYosemiteOrLater() &&
+            NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification) {
+      [NSNotificationCenter.defaultCenter
+          addObserver:self
+              selector:@selector(mediaQueriesChanged)
+              name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+              object:nil];
+  }
   [NSNotificationCenter.defaultCenter
       addObserver:self
          selector:@selector(scrollbarsChanged)

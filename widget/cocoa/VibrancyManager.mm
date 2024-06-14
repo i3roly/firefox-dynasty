@@ -12,21 +12,39 @@
 #import <objc/message.h>
 
 #include "nsChildView.h"
+#include "SDKDeclarations.h"
 #include "mozilla/StaticPrefs_widget.h"
 
 using namespace mozilla;
 
+#if !defined(MAC_OS_X_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12
+@interface NSVisualEffectView (NSVisualEffectViewMethods)
+- (void)setEmphasized:(BOOL)emphasized;
+@end
+#endif
+
 @interface MOZVibrantView : NSVisualEffectView {
   VibrancyType mType;
 }
+
 - (instancetype)initWithFrame:(NSRect)aRect
                  vibrancyType:(VibrancyType)aVibrancyType;
+@end
+
+@interface MOZVibrantLeafView : MOZVibrantView
 @end
 
 static NSVisualEffectState VisualEffectStateForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
-    case VibrancyType::Titlebar:
+     case VibrancyType::TOOLTIP:
+     case VibrancyType::MENU:
+       // Tooltip and menu windows are never "key", so we need to tell the
+       // vibrancy effect to look active regardless of window state.
+       return NSVisualEffectStateActive;
+    default:
+      return NSVisualEffectStateFollowsWindowActiveState;
+   case VibrancyType::Titlebar:
       break;
   }
   return NSVisualEffectStateFollowsWindowActiveState;
@@ -35,6 +53,14 @@ static NSVisualEffectState VisualEffectStateForVibrancyType(
 static NSVisualEffectMaterial VisualEffectMaterialForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
+    case VibrancyType::TOOLTIP:
+      if (@available(macOS 10.14, *)) {
+        return (NSVisualEffectMaterial)NSVisualEffectMaterialToolTip;
+      } else {
+        return NSVisualEffectMaterialMenu;
+      }
+    case VibrancyType::MENU:
+      return NSVisualEffectMaterialMenu;
     case VibrancyType::Titlebar:
       return NSVisualEffectMaterialTitlebar;
   }
@@ -43,6 +69,9 @@ static NSVisualEffectMaterial VisualEffectMaterialForVibrancyType(
 static NSVisualEffectBlendingMode VisualEffectBlendingModeForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
+    case VibrancyType::TOOLTIP:
+    case VibrancyType::MENU:
+      return NSVisualEffectBlendingModeBehindWindow;
     case VibrancyType::Titlebar:
       return StaticPrefs::widget_macos_titlebar_blend_mode_behind_window()
                  ? NSVisualEffectBlendingModeBehindWindow
@@ -62,12 +91,23 @@ static NSVisualEffectBlendingMode VisualEffectBlendingModeForVibrancyType(
   self.emphasized = NO;
   return self;
 }
+@end
+
+@implementation MOZVibrantLeafView
 
 - (NSView*)hitTest:(NSPoint)aPoint {
   // This view must be transparent to mouse events.
   return nil;
 }
+
+// MOZVibrantLeafView does not have subviews, so we can return YES here without
+// having unintended effects on other contents of the window.
+- (BOOL)allowsVibrancy {
+  return NO;
+}
+
 @end
+
 
 VibrancyManager::VibrancyManager(const nsChildView& aCoordinateConverter,
                                  NSView* aContainerView)
@@ -91,3 +131,10 @@ bool VibrancyManager::UpdateVibrantRegion(
     return [[MOZVibrantView alloc] initWithFrame:NSZeroRect vibrancyType:aType];
   });
 }
+
+/* static */ NSView* VibrancyManager::CreateEffectView(VibrancyType aType, BOOL aIsContainer) {
+  return aIsContainer ? [[MOZVibrantView alloc] initWithFrame:NSZeroRect vibrancyType:aType]
+                      : [[MOZVibrantLeafView alloc] initWithFrame:NSZeroRect vibrancyType:aType];
+
+}
+

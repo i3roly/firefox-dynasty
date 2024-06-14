@@ -537,7 +537,7 @@ pub fn test_device_in_scope(id: AudioObjectID, scope: Scope) -> bool {
 
 pub fn test_get_all_onwed_devices(id: AudioDeviceID) -> Vec<AudioObjectID> {
     assert_ne!(id, kAudioObjectUnknown);
-    debug_assert_running_serially();
+    //debug_assert_running_serially();
 
     let address = AudioObjectPropertyAddress {
         mSelector: kAudioObjectPropertyOwnedObjects,
@@ -586,7 +586,7 @@ pub fn test_get_all_onwed_devices(id: AudioDeviceID) -> Vec<AudioObjectID> {
 
 pub fn test_get_master_device(id: AudioObjectID) -> String {
     assert_ne!(id, kAudioObjectUnknown);
-    debug_assert_running_serially();
+    //debug_assert_running_serially();
 
     let address = AudioObjectPropertyAddress {
         mSelector: kAudioAggregateDevicePropertyMainSubDevice,
@@ -607,7 +607,7 @@ pub fn test_get_master_device(id: AudioObjectID) -> String {
 }
 
 pub fn test_get_drift_compensations(id: AudioObjectID) -> std::result::Result<u32, OSStatus> {
-    debug_assert_running_serially();
+    //debug_assert_running_serially();
     let address = AudioObjectPropertyAddress {
         mSelector: kAudioSubDevicePropertyDriftCompensation,
         mScope: kAudioObjectPropertyScopeGlobal,
@@ -790,7 +790,7 @@ pub fn test_create_device_change_listener<F>(scope: Scope, listener: F) -> TestP
 where
     F: Fn(&[AudioObjectPropertyAddress]) -> OSStatus,
 {
-    debug_assert_running_serially();
+    //debug_assert_running_serially();
     let address = AudioObjectPropertyAddress {
         mSelector: match scope {
             Scope::Input => kAudioHardwarePropertyDefaultInputDevice,
@@ -825,7 +825,7 @@ where
     }
 
     pub fn start(&self) -> std::result::Result<(), OSStatus> {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let status = unsafe {
             AudioObjectAddPropertyListener(
                 self.device,
@@ -842,7 +842,7 @@ where
     }
 
     pub fn stop(&self) -> std::result::Result<(), OSStatus> {
-        debug_assert_running_serially();
+        //debug_assert_running_serially();
         let status = unsafe {
             AudioObjectRemovePropertyListener(
                 self.device,

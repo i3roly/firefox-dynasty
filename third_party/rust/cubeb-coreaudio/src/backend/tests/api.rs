@@ -56,7 +56,7 @@ fn test_increase_and_decrease_context_streams() {
     assert_eq!(context.active_streams(), STREAMS);
     check_streams(&context, STREAMS);
 
-    check_latency(&context, Some(latencies[0]));
+    check_latency(&context, latencies[0]);
     for i in 0..latencies.len() - 1 {
         assert_eq!(latencies[i], latencies[i + 1]);
     }
@@ -149,8 +149,7 @@ fn test_minimum_resampling_input_frames_equal_input_output_rate() {
 #[test]
 fn test_create_device_info_from_unknown_input_device() {
     if let Some(default_device_id) = test_get_default_device(Scope::Input) {
-        let default_device =
-            run_serially(|| create_device_info(kAudioObjectUnknown, DeviceType::INPUT).unwrap());
+        let default_device = create_device_info(kAudioObjectUnknown, DeviceType::INPUT).unwrap();
         assert_eq!(default_device.id, default_device_id);
         assert_eq!(
             default_device.flags,
@@ -164,8 +163,7 @@ fn test_create_device_info_from_unknown_input_device() {
 #[test]
 fn test_create_device_info_from_unknown_output_device() {
     if let Some(default_device_id) = test_get_default_device(Scope::Output) {
-        let default_device =
-            run_serially(|| create_device_info(kAudioObjectUnknown, DeviceType::OUTPUT)).unwrap();
+        let default_device = create_device_info(kAudioObjectUnknown, DeviceType::OUTPUT).unwrap();
         assert_eq!(default_device.id, default_device_id);
         assert_eq!(
             default_device.flags,
@@ -179,17 +177,13 @@ fn test_create_device_info_from_unknown_output_device() {
 #[test]
 #[should_panic]
 fn test_set_device_info_to_system_input_device() {
-    let _device = run_serially_forward_panics(|| {
-        create_device_info(kAudioObjectSystemObject, DeviceType::INPUT)
-    });
+    let _device = create_device_info(kAudioObjectSystemObject, DeviceType::INPUT);
 }
 
 #[test]
 #[should_panic]
 fn test_set_device_info_to_system_output_device() {
-    let _device = run_serially_forward_panics(|| {
-        create_device_info(kAudioObjectSystemObject, DeviceType::OUTPUT)
-    });
+    let _device = create_device_info(kAudioObjectSystemObject, DeviceType::OUTPUT);
 }
 
 // FIXME: Is it ok to set input device to a nonexistent device ?
@@ -198,8 +192,7 @@ fn test_set_device_info_to_system_output_device() {
 #[should_panic]
 fn test_set_device_info_to_nonexistent_input_device() {
     let nonexistent_id = std::u32::MAX;
-    let _device =
-        run_serially_forward_panics(|| create_device_info(nonexistent_id, DeviceType::INPUT));
+    let _device = create_device_info(nonexistent_id, DeviceType::INPUT);
 }
 
 // FIXME: Is it ok to set output device to a nonexistent device ?
@@ -208,8 +201,7 @@ fn test_set_device_info_to_nonexistent_input_device() {
 #[should_panic]
 fn test_set_device_info_to_nonexistent_output_device() {
     let nonexistent_id = std::u32::MAX;
-    let _device =
-        run_serially_forward_panics(|| create_device_info(nonexistent_id, DeviceType::OUTPUT));
+    let _device = create_device_info(nonexistent_id, DeviceType::OUTPUT);
 }
 
 // add_listener (for default output device)
@@ -235,10 +227,10 @@ fn test_add_listener_unknown_device() {
             ),
             callback,
         );
-        let res = stream
+        let mut res: OSStatus = 0;
+        stream
             .queue
-            .run_sync(|| stream.add_device_listener(&listener))
-            .unwrap();
+            .run_sync(|| res = stream.add_device_listener(&listener));
         assert_eq!(res, kAudioHardwareBadObjectError as OSStatus);
     });
 }
@@ -266,15 +258,14 @@ fn test_add_listener_then_remove_system_device() {
             ),
             callback,
         );
-        let res = stream
+        let mut res: OSStatus = 0;
+        stream
             .queue
-            .run_sync(|| stream.add_device_listener(&listener))
-            .unwrap();
+            .run_sync(|| res = stream.add_device_listener(&listener));
         assert_eq!(res, NO_ERR);
-        let res = stream
+        stream
             .queue
-            .run_sync(|| stream.remove_device_listener(&listener))
-            .unwrap();
+            .run_sync(|| res = stream.remove_device_listener(&listener));
         assert_eq!(res, NO_ERR);
     });
 }
@@ -300,10 +291,10 @@ fn test_remove_listener_without_adding_any_listener_before_system_device() {
             ),
             callback,
         );
-        let res = stream
+        let mut res: OSStatus = 0;
+        stream
             .queue
-            .run_sync(|| stream.remove_device_listener(&listener))
-            .unwrap();
+            .run_sync(|| res = stream.remove_device_listener(&listener));
         assert_eq!(res, NO_ERR);
     });
 }
@@ -329,10 +320,10 @@ fn test_remove_listener_unknown_device() {
             ),
             callback,
         );
-        let res = stream
+        let mut res: OSStatus = 0;
+        stream
             .queue
-            .run_sync(|| stream.remove_device_listener(&listener))
-            .unwrap();
+            .run_sync(|| res = stream.remove_device_listener(&listener));
         assert_eq!(res, kAudioHardwareBadObjectError as OSStatus);
     });
 }
@@ -343,14 +334,14 @@ fn test_remove_listener_unknown_device() {
 fn test_get_default_device_id() {
     if test_get_default_device(Scope::Input).is_some() {
         assert_ne!(
-            run_serially(|| get_default_device_id(DeviceType::INPUT)).unwrap(),
+            get_default_device_id(DeviceType::INPUT).unwrap(),
             kAudioObjectUnknown,
         );
     }
 
     if test_get_default_device(Scope::Output).is_some() {
         assert_ne!(
-            run_serially(|| get_default_device_id(DeviceType::OUTPUT)).unwrap(),
+            get_default_device_id(DeviceType::OUTPUT).unwrap(),
             kAudioObjectUnknown,
         );
     }
@@ -359,16 +350,13 @@ fn test_get_default_device_id() {
 #[test]
 #[should_panic]
 fn test_get_default_device_id_with_unknown_type() {
-    assert!(run_serially_forward_panics(|| get_default_device_id(DeviceType::UNKNOWN)).is_err());
+    assert!(get_default_device_id(DeviceType::UNKNOWN).is_err());
 }
 
 #[test]
 #[should_panic]
 fn test_get_default_device_id_with_inout_type() {
-    assert!(run_serially_forward_panics(|| get_default_device_id(
-        DeviceType::INPUT | DeviceType::OUTPUT
-    ))
-    .is_err());
+    assert!(get_default_device_id(DeviceType::INPUT | DeviceType::OUTPUT).is_err());
 }
 
 // convert_channel_layout
@@ -376,6 +364,7 @@ fn test_get_default_device_id_with_inout_type() {
 #[test]
 fn test_convert_channel_layout() {
     let pairs = [
+        (vec![kAudioObjectUnknown], vec![mixer::Channel::Silence]),
         (
             vec![kAudioChannelLabel_Mono],
             vec![mixer::Channel::FrontCenter],
@@ -397,7 +386,7 @@ fn test_convert_channel_layout() {
             vec![
                 mixer::Channel::FrontLeft,
                 mixer::Channel::FrontRight,
-                mixer::Channel::Discrete,
+                mixer::Channel::Silence,
             ],
         ),
         (
@@ -735,11 +724,9 @@ fn test_convert_channel_layout() {
 #[test]
 fn test_get_preferred_channel_layout_output() {
     match test_get_default_audiounit(Scope::Output) {
-        Some(unit) => assert!(!run_serially(|| audiounit_get_preferred_channel_layout(
-            unit.get_inner()
-        ))
-        .unwrap()
-        .is_empty()),
+        Some(unit) => assert!(!audiounit_get_preferred_channel_layout(unit.get_inner())
+            .unwrap()
+            .is_empty()),
         None => println!("No output audiounit for test."),
     }
 }
@@ -749,15 +736,9 @@ fn test_get_preferred_channel_layout_output() {
 #[test]
 fn test_get_current_channel_layout_output() {
     match test_get_default_audiounit(Scope::Output) {
-        Some(unit) => {
-            assert!(
-                !run_serially_forward_panics(|| audiounit_get_current_channel_layout(
-                    unit.get_inner()
-                ))
-                .unwrap()
-                .is_empty()
-            )
-        }
+        Some(unit) => assert!(!audiounit_get_current_channel_layout(unit.get_inner())
+            .unwrap()
+            .is_empty()),
         None => println!("No output audiounit for test."),
     }
 }
@@ -833,30 +814,10 @@ fn test_enable_audiounit_scope() {
     // for the unit whose subtype is kAudioUnitSubType_HALOutput
     // even when there is no available input or output devices.
     if let Some(unit) = test_create_audiounit(ComponentSubType::HALOutput) {
-        assert!(run_serially_forward_panics(|| enable_audiounit_scope(
-            unit.get_inner(),
-            DeviceType::OUTPUT,
-            true
-        ))
-        .is_ok());
-        assert!(run_serially_forward_panics(|| enable_audiounit_scope(
-            unit.get_inner(),
-            DeviceType::OUTPUT,
-            false
-        ))
-        .is_ok());
-        assert!(run_serially_forward_panics(|| enable_audiounit_scope(
-            unit.get_inner(),
-            DeviceType::INPUT,
-            true
-        ))
-        .is_ok());
-        assert!(run_serially_forward_panics(|| enable_audiounit_scope(
-            unit.get_inner(),
-            DeviceType::INPUT,
-            false
-        ))
-        .is_ok());
+        assert!(enable_audiounit_scope(unit.get_inner(), DeviceType::OUTPUT, true).is_ok());
+        assert!(enable_audiounit_scope(unit.get_inner(), DeviceType::OUTPUT, false).is_ok());
+        assert!(enable_audiounit_scope(unit.get_inner(), DeviceType::INPUT, true).is_ok());
+        assert!(enable_audiounit_scope(unit.get_inner(), DeviceType::INPUT, false).is_ok());
     } else {
         println!("No audiounit to perform test.");
     }
@@ -866,23 +827,19 @@ fn test_enable_audiounit_scope() {
 fn test_enable_audiounit_scope_for_default_output_unit() {
     if let Some(unit) = test_create_audiounit(ComponentSubType::DefaultOutput) {
         assert_eq!(
-            run_serially(|| enable_audiounit_scope(unit.get_inner(), DeviceType::OUTPUT, true))
-                .unwrap_err(),
+            enable_audiounit_scope(unit.get_inner(), DeviceType::OUTPUT, true).unwrap_err(),
             kAudioUnitErr_InvalidProperty
         );
         assert_eq!(
-            run_serially(|| enable_audiounit_scope(unit.get_inner(), DeviceType::OUTPUT, false))
-                .unwrap_err(),
+            enable_audiounit_scope(unit.get_inner(), DeviceType::OUTPUT, false).unwrap_err(),
             kAudioUnitErr_InvalidProperty
         );
         assert_eq!(
-            run_serially(|| enable_audiounit_scope(unit.get_inner(), DeviceType::INPUT, true))
-                .unwrap_err(),
+            enable_audiounit_scope(unit.get_inner(), DeviceType::INPUT, true).unwrap_err(),
             kAudioUnitErr_InvalidProperty
         );
         assert_eq!(
-            run_serially(|| enable_audiounit_scope(unit.get_inner(), DeviceType::INPUT, false))
-                .unwrap_err(),
+            enable_audiounit_scope(unit.get_inner(), DeviceType::INPUT, false).unwrap_err(),
             kAudioUnitErr_InvalidProperty
         );
     }
@@ -892,10 +849,7 @@ fn test_enable_audiounit_scope_for_default_output_unit() {
 #[should_panic]
 fn test_enable_audiounit_scope_with_null_unit() {
     let unit: AudioUnit = ptr::null_mut();
-    assert!(
-        run_serially_forward_panics(|| enable_audiounit_scope(unit, DeviceType::INPUT, false))
-            .is_err()
-    );
+    assert!(enable_audiounit_scope(unit, DeviceType::INPUT, false).is_err());
 }
 
 // create_audiounit
@@ -914,29 +868,29 @@ fn test_for_create_audiounit() {
         // Check the output scope is enabled.
         if device.flags.contains(device_flags::DEV_OUTPUT) && default_output.is_some() {
             device.id = default_output.unwrap();
-            let unit = run_serially(|| create_audiounit(&device).unwrap());
+            let unit = create_audiounit(&device).unwrap();
             assert!(!unit.is_null());
             assert!(test_audiounit_scope_is_enabled(unit, Scope::Output));
 
             // Destroy the AudioUnit.
-            run_serially(|| unsafe {
+            unsafe {
                 AudioUnitUninitialize(unit);
                 AudioComponentInstanceDispose(unit);
-            });
+            }
         }
 
         // Check the input scope is enabled.
         if device.flags.contains(device_flags::DEV_INPUT) && default_input.is_some() {
             let device_id = default_input.unwrap();
             device.id = device_id;
-            let unit = run_serially(|| create_audiounit(&device).unwrap());
+            let unit = create_audiounit(&device).unwrap();
             assert!(!unit.is_null());
             assert!(test_audiounit_scope_is_enabled(unit, Scope::Input));
             // Destroy the AudioUnit.
-            run_serially(|| unsafe {
+            unsafe {
                 AudioUnitUninitialize(unit);
                 AudioComponentInstanceDispose(unit);
-            });
+            }
         }
     }
 }
@@ -945,7 +899,7 @@ fn test_for_create_audiounit() {
 #[should_panic]
 fn test_create_audiounit_with_unknown_scope() {
     let device = device_info::default();
-    let _unit = run_serially_forward_panics(|| create_audiounit(&device));
+    let _unit = create_audiounit(&device);
 }
 
 // set_buffer_size_sync
@@ -973,12 +927,9 @@ fn test_set_buffer_size_sync() {
         .unwrap();
         assert_ne!(buffer_frames, 0);
         buffer_frames *= 2;
-        assert!(run_serially(|| set_buffer_size_sync(
-            unit.get_inner(),
-            scope.clone().into(),
-            buffer_frames
-        ))
-        .is_ok());
+        assert!(
+            set_buffer_size_sync(unit.get_inner(), scope.clone().into(), buffer_frames).is_ok()
+        );
         let new_buffer_frames =
             test_audiounit_get_buffer_frame_size(unit.get_inner(), scope.clone(), prop_scope)
                 .unwrap();
@@ -1000,9 +951,7 @@ fn test_set_buffer_size_sync_for_output_with_null_output_unit() {
 
 fn test_set_buffer_size_sync_by_scope_with_null_unit(scope: Scope) {
     let unit: AudioUnit = ptr::null_mut();
-    assert!(
-        run_serially_forward_panics(|| set_buffer_size_sync(unit, scope.into(), 2048)).is_err()
-    );
+    assert!(set_buffer_size_sync(unit, scope.into(), 2048).is_err());
 }
 
 // get_volume, set_volume
@@ -1011,11 +960,8 @@ fn test_set_buffer_size_sync_by_scope_with_null_unit(scope: Scope) {
 fn test_stream_get_volume() {
     if let Some(unit) = test_get_default_audiounit(Scope::Output) {
         let expected_volume: f32 = 0.5;
-        run_serially(|| set_volume(unit.get_inner(), expected_volume));
-        assert_eq!(
-            expected_volume,
-            run_serially(|| get_volume(unit.get_inner()).unwrap())
-        );
+        set_volume(unit.get_inner(), expected_volume);
+        assert_eq!(expected_volume, get_volume(unit.get_inner()).unwrap());
     } else {
         println!("No output audiounit.");
     }
@@ -1033,6 +979,30 @@ fn test_convert_uint32_into_string() {
     assert_eq!(data_string, CString::new("RUST").unwrap());
 }
 
+// get_device_source_string
+// ------------------------------------
+#[test]
+fn test_get_device_source_string() {
+    test_get_source_name_in_scope(Scope::Input);
+    test_get_source_name_in_scope(Scope::Output);
+
+    fn test_get_source_name_in_scope(scope: Scope) {
+        if let Some(dev) = test_get_default_device(scope.clone()) {
+            if let Some(name) = test_get_source_name(dev, scope.clone()) {
+                let source = get_device_source_string(dev, scope.into())
+                    .unwrap()
+                    .into_string()
+                    .unwrap();
+                assert_eq!(name, source);
+            } else {
+                println!("No source name for default {:?} device ", scope);
+            }
+        } else {
+            println!("No default {:?} device", scope);
+        }
+    }
+}
+
 // get_channel_count
 // ------------------------------------
 #[test]
@@ -1042,9 +1012,7 @@ fn test_get_channel_count() {
 
     fn test_channel_count(scope: Scope) {
         if let Some(device) = test_get_default_device(scope.clone()) {
-            let channels =
-                run_serially(|| get_channel_count(device, DeviceType::from(scope.clone())))
-                    .unwrap();
+            let channels = get_channel_count(device, DeviceType::from(scope.clone())).unwrap();
             assert!(channels > 0);
             assert_eq!(
                 channels,
@@ -1064,7 +1032,7 @@ fn test_get_channel_count_of_input_for_a_output_only_deivce() {
         if test_device_in_scope(device, Scope::Input) {
             continue;
         }
-        let count = run_serially(|| get_channel_count(device, DeviceType::INPUT)).unwrap();
+        let count = get_channel_count(device, DeviceType::INPUT).unwrap();
         assert_eq!(count, 0);
     }
 }
@@ -1077,7 +1045,7 @@ fn test_get_channel_count_of_output_for_a_input_only_deivce() {
         if test_device_in_scope(device, Scope::Output) {
             continue;
         }
-        let count = run_serially(|| get_channel_count(device, DeviceType::OUTPUT)).unwrap();
+        let count = get_channel_count(device, DeviceType::OUTPUT).unwrap();
         assert_eq!(count, 0);
     }
 }
@@ -1085,11 +1053,7 @@ fn test_get_channel_count_of_output_for_a_input_only_deivce() {
 #[test]
 #[should_panic]
 fn test_get_channel_count_of_unknown_device() {
-    assert!(run_serially_forward_panics(|| get_channel_count(
-        kAudioObjectUnknown,
-        DeviceType::OUTPUT
-    ))
-    .is_err());
+    assert!(get_channel_count(kAudioObjectUnknown, DeviceType::OUTPUT).is_err());
 }
 
 #[test]
@@ -1099,16 +1063,14 @@ fn test_get_channel_count_of_inout_type() {
 
     fn test_channel_count(scope: Scope) {
         if let Some(device) = test_get_default_device(scope.clone()) {
-            run_serially_forward_panics(|| {
-                assert_eq!(
-                    get_channel_count(device, DeviceType::INPUT | DeviceType::OUTPUT),
-                    get_channel_count(device, DeviceType::INPUT).map(|c| c + get_channel_count(
-                        device,
-                        DeviceType::OUTPUT
-                    )
-                    .unwrap_or(0))
-                );
-            });
+            assert_eq!(
+                get_channel_count(device, DeviceType::INPUT | DeviceType::OUTPUT),
+                get_channel_count(device, DeviceType::INPUT).map(|c| c + get_channel_count(
+                    device,
+                    DeviceType::OUTPUT
+                )
+                .unwrap_or(0))
+            );
         } else {
             println!("No device for {:?}.", scope);
         }
@@ -1135,7 +1097,7 @@ fn test_get_channel_count_of_unknwon_type() {
 }
 
 fn is_vpio(id: AudioObjectID) -> bool {
-    debug_assert_running_serially();
+    //debug_assert_running_serially();
     get_device_global_uid(id)
         .map(|uid| uid.into_string())
         .map(|uid| uid.contains(VOICEPROCESSING_AGGREGATE_DEVICE_NAME))
@@ -1143,7 +1105,7 @@ fn is_vpio(id: AudioObjectID) -> bool {
 }
 
 fn get_nonvpio_input_channel_counts() -> Vec<u32> {
-    debug_assert_running_serially();
+    //debug_assert_running_serially();
     get_devices()
         .into_iter()
         .filter(|&id| !is_vpio(id))
@@ -1253,9 +1215,7 @@ fn test_get_range_of_sample_rates() {
         ];
         let mut ranges = Vec::new();
         for scope in scopes.iter() {
-            ranges.push(
-                run_serially_forward_panics(|| get_range_of_sample_rates(id, *scope)).unwrap(),
-            );
+            ranges.push(get_range_of_sample_rates(id, *scope).unwrap());
         }
         ranges
     }
@@ -1375,11 +1335,7 @@ fn test_get_same_group_id_for_builtin_device_pairs() {
 #[test]
 #[should_panic]
 fn test_get_device_group_id_by_unknown_device() {
-    assert!(run_serially_forward_panics(|| get_device_group_id(
-        kAudioObjectUnknown,
-        DeviceType::INPUT
-    ))
-    .is_err());
+    assert!(get_device_group_id(kAudioObjectUnknown, DeviceType::INPUT).is_err());
 }
 
 // get_device_label
@@ -1406,11 +1362,7 @@ fn test_get_device_label() {
 #[test]
 #[should_panic]
 fn test_get_device_label_by_unknown_device() {
-    assert!(run_serially_forward_panics(|| get_device_label(
-        kAudioObjectUnknown,
-        DeviceType::INPUT
-    ))
-    .is_err());
+    assert!(get_device_label(kAudioObjectUnknown, DeviceType::INPUT).is_err());
 }
 
 // get_device_global_uid
@@ -1460,7 +1412,7 @@ fn test_create_cubeb_device_info() {
             if is_input {
                 let mut input_device_info = input_result.unwrap();
                 check_device_info_by_device(&input_device_info, device, Scope::Input);
-                run_serially(|| destroy_cubeb_device_info(&mut input_device_info));
+                destroy_cubeb_device_info(&mut input_device_info);
             } else {
                 assert_eq!(input_result.unwrap_err(), Error::error());
             }
@@ -1469,7 +1421,7 @@ fn test_create_cubeb_device_info() {
             if is_output {
                 let mut output_device_info = output_result.unwrap();
                 check_device_info_by_device(&output_device_info, device, Scope::Output);
-                run_serially(|| destroy_cubeb_device_info(&mut output_device_info));
+                destroy_cubeb_device_info(&mut output_device_info);
             } else {
                 assert_eq!(output_result.unwrap_err(), Error::error());
             }
@@ -1630,10 +1582,8 @@ fn test_get_devices_of_type() {
 #[test]
 #[should_panic]
 fn test_get_devices_of_type_unknown() {
-    run_serially_forward_panics(|| {
-        let no_devs = audiounit_get_devices_of_type(DeviceType::UNKNOWN);
-        assert!(no_devs.is_empty());
-    });
+    let no_devs = audiounit_get_devices_of_type(DeviceType::UNKNOWN);
+    assert!(no_devs.is_empty());
 }
 
 // add_devices_changed_listener
@@ -1657,10 +1607,9 @@ fn test_add_devices_changed_listener() {
             assert!(get_devices_changed_callback(context, Scope::Output).is_none());
 
             // Register a callback within a specific scope.
-            assert!(run_serially(|| {
-                context.add_devices_changed_listener(*devtype, Some(*callback), ptr::null_mut())
-            })
-            .is_ok());
+            assert!(context
+                .add_devices_changed_listener(*devtype, Some(*callback), ptr::null_mut())
+                .is_ok());
 
             if devtype.contains(DeviceType::INPUT) {
                 let cb = get_devices_changed_callback(context, Scope::Input);
@@ -1681,10 +1630,9 @@ fn test_add_devices_changed_listener() {
             }
 
             // Unregister the callbacks within all scopes.
-            assert!(run_serially(|| {
-                context.remove_devices_changed_listener(DeviceType::INPUT | DeviceType::OUTPUT)
-            })
-            .is_ok());
+            assert!(context
+                .remove_devices_changed_listener(DeviceType::INPUT | DeviceType::OUTPUT)
+                .is_ok());
 
             assert!(get_devices_changed_callback(context, Scope::Input).is_none());
             assert!(get_devices_changed_callback(context, Scope::Output).is_none());
@@ -1738,12 +1686,9 @@ fn test_remove_devices_changed_listener() {
 
             // Register callbacks within all scopes.
             for (scope, listener) in map.iter() {
-                assert!(run_serially(|| context.add_devices_changed_listener(
-                    *scope,
-                    Some(*listener),
-                    ptr::null_mut()
-                ))
-                .is_ok());
+                assert!(context
+                    .add_devices_changed_listener(*scope, Some(*listener), ptr::null_mut())
+                    .is_ok());
             }
 
             let input_callback = get_devices_changed_callback(context, Scope::Input);
@@ -1760,7 +1705,7 @@ fn test_remove_devices_changed_listener() {
             );
 
             // Unregister the callbacks within one specific scopes.
-            assert!(run_serially(|| context.remove_devices_changed_listener(*devtype)).is_ok());
+            assert!(context.remove_devices_changed_listener(*devtype).is_ok());
 
             if devtype.contains(DeviceType::INPUT) {
                 let cb = get_devices_changed_callback(context, Scope::Input);
@@ -1781,10 +1726,9 @@ fn test_remove_devices_changed_listener() {
             }
 
             // Unregister the callbacks within all scopes.
-            assert!(run_serially(
-                || context.remove_devices_changed_listener(DeviceType::INPUT | DeviceType::OUTPUT)
-            )
-            .is_ok());
+            assert!(context
+                .remove_devices_changed_listener(DeviceType::INPUT | DeviceType::OUTPUT)
+                .is_ok());
         }
     });
 }
@@ -1797,7 +1741,7 @@ fn test_remove_devices_changed_listener_without_adding_listeners() {
             DeviceType::OUTPUT,
             DeviceType::INPUT | DeviceType::OUTPUT,
         ] {
-            assert!(run_serially(|| context.remove_devices_changed_listener(*devtype)).is_ok());
+            assert!(context.remove_devices_changed_listener(*devtype).is_ok());
         }
     });
 }
@@ -1820,12 +1764,9 @@ fn test_remove_devices_changed_listener_within_all_scopes() {
             assert!(get_devices_changed_callback(context, Scope::Input).is_none());
             assert!(get_devices_changed_callback(context, Scope::Output).is_none());
 
-            assert!(run_serially(|| context.add_devices_changed_listener(
-                *devtype,
-                Some(*callback),
-                ptr::null_mut()
-            ))
-            .is_ok());
+            assert!(context
+                .add_devices_changed_listener(*devtype, Some(*callback), ptr::null_mut())
+                .is_ok());
 
             if devtype.contains(DeviceType::INPUT) {
                 let cb = get_devices_changed_callback(context, Scope::Input);
@@ -1839,10 +1780,9 @@ fn test_remove_devices_changed_listener_within_all_scopes() {
                 assert_eq!(cb.unwrap(), *callback);
             }
 
-            assert!(run_serially(
-                || context.remove_devices_changed_listener(DeviceType::INPUT | DeviceType::OUTPUT)
-            )
-            .is_ok());
+            assert!(context
+                .remove_devices_changed_listener(DeviceType::INPUT | DeviceType::OUTPUT)
+                .is_ok());
 
             assert!(get_devices_changed_callback(context, Scope::Input).is_none());
             assert!(get_devices_changed_callback(context, Scope::Output).is_none());
@@ -1859,136 +1799,4 @@ fn get_devices_changed_callback(
         Scope::Input => devices_guard.input.changed_callback,
         Scope::Output => devices_guard.output.changed_callback,
     }
-}
-
-// SharedVoiceProcessingUnitManager
-// ------------------------------------
-#[test]
-fn test_shared_voice_processing_unit() {
-    let queue = Queue::new_with_target(
-        "test_shared_voice_processing_unit",
-        get_serial_queue_singleton(),
-    );
-    let mut shared = SharedVoiceProcessingUnitManager::new(queue.clone());
-    let r1 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r1.is_err());
-    let r2 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r2.is_ok());
-    {
-        let _handle = r2.unwrap();
-        let r3 = queue.run_sync(|| shared.take()).unwrap();
-        assert!(r3.is_err());
-    }
-    let r4 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r4.is_ok());
-}
-
-#[test]
-#[should_panic]
-fn test_shared_voice_processing_unit_bad_release_order() {
-    let queue = Queue::new_with_target(
-        "test_shared_voice_processing_unit_bad_release_order",
-        get_serial_queue_singleton(),
-    );
-    let mut shared = SharedVoiceProcessingUnitManager::new(queue.clone());
-    let r1 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r1.is_ok());
-    drop(shared);
-    run_serially_forward_panics(|| drop(r1));
-}
-
-#[test]
-fn test_shared_voice_processing_multiple_units() {
-    let queue = Queue::new_with_target(
-        "test_shared_voice_processing_multiple_units",
-        get_serial_queue_singleton(),
-    );
-    let mut shared = SharedVoiceProcessingUnitManager::new(queue.clone());
-    let r1 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r1.is_ok());
-    let r2 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r2.is_ok());
-    {
-        let _handle1 = r1.unwrap();
-        let _handle2 = r2.unwrap();
-        let r3 = queue.run_sync(|| shared.take()).unwrap();
-        assert!(r3.is_err());
-    }
-    let r1 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r1.is_ok());
-    let r2 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r2.is_ok());
-    let r3 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r3.is_err());
-}
-
-#[test]
-fn test_shared_voice_processing_release_on_idle() {
-    let queue = Queue::new_with_target(
-        "test_shared_voice_processing_release_on_idle",
-        get_serial_queue_singleton(),
-    );
-    let mut shared = SharedVoiceProcessingUnitManager::with_idle_timeout(
-        queue.clone(),
-        Duration::from_millis(0),
-    );
-    let r = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r.is_ok());
-    {
-        let _handle = r.unwrap();
-    }
-    queue.run_sync(|| {});
-    let r = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r.is_err());
-}
-
-#[test]
-fn test_shared_voice_processing_no_release_on_outstanding() {
-    let queue = Queue::new_with_target(
-        "test_shared_voice_processing_no_release_on_outstanding",
-        get_serial_queue_singleton(),
-    );
-    let mut shared = SharedVoiceProcessingUnitManager::with_idle_timeout(
-        queue.clone(),
-        Duration::from_millis(0),
-    );
-    let r1 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r1.is_ok());
-    let r2 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r2.is_ok());
-    {
-        let _handle1 = r1.unwrap();
-    }
-    queue.run_sync(|| {});
-    let r1 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r1.is_ok());
-}
-
-#[test]
-fn test_shared_voice_processing_release_on_idle_cancel_on_take() {
-    let queue = Queue::new_with_target(
-        "test_shared_voice_processing_release_on_idle_cancel_on_take",
-        get_serial_queue_singleton(),
-    );
-    let mut shared = SharedVoiceProcessingUnitManager::with_idle_timeout(
-        queue.clone(),
-        Duration::from_millis(0),
-    );
-    let r1 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r1.is_ok());
-    let r2 = queue.run_sync(|| shared.take_or_create()).unwrap();
-    assert!(r2.is_ok());
-    let r1 = queue
-        .run_sync(|| {
-            {
-                let _handle1 = r1.unwrap();
-                let _handle2 = r2.unwrap();
-            }
-            shared.take()
-        })
-        .unwrap();
-    assert!(r1.is_ok());
-    queue.run_sync(|| {});
-    let r2 = queue.run_sync(|| shared.take()).unwrap();
-    assert!(r2.is_ok());
 }

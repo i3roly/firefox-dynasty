@@ -11,7 +11,7 @@
 
 [package]
 edition = "2021"
-rust-version = "1.76.0"
+rust-version = "1.73.0"
 name = "neqo-bin"
 version = "0.7.9"
 authors = ["The Neqo Authors <necko@mozilla.com>"]

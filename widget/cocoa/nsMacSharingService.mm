@@ -12,6 +12,7 @@
 #include "js/PropertyAndElement.h"  // JS_SetElement, JS_SetProperty
 #include "nsCocoaUtils.h"
 #include "mozilla/MacStringHelpers.h"
+#include "SDKDeclarations.h"
 
 NS_IMPL_ISUPPORTS(nsMacSharingService, nsIMacSharingService)
 
@@ -27,6 +28,15 @@ NSString* const openSharingSubpaneActionKey = @"action";
 NSString* const openSharingSubpaneActionValue = @"revealExtensionPoint";
 NSString* const openSharingSubpaneProtocolKey = @"protocol";
 NSString* const openSharingSubpaneProtocolValue = @"com.apple.share-services";
+
+
+#if !defined(MAC_OS_X_VERSION_10_10) || \
+    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10
+NSString* const NSUserActivityTypeBrowsingWeb =
+    @"NSUserActivityTypeBrowsingWeb";
+
+NSString* const NSAppearanceNameVibrantDark = @"NSAppearanceNameVibrantDark";
+#endif  // MAC_OS_X_VERSION_10_10
 
 // Expose the id so we can pass reference through to JS and back
 @interface NSSharingService (ExposeName)

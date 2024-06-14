@@ -407,7 +407,7 @@ NS_IMPL_ISUPPORTS_INHERITED(nsNativeThemeCocoa, nsNativeTheme, nsITheme)
 nsNativeThemeCocoa::nsNativeThemeCocoa() : ThemeCocoa(ScrollbarStyle()) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
-  kMaxFocusRingWidth = 7;
+  kMaxFocusRingWidth = nsCocoaFeatures::OnYosemiteOrLater() ? 7 : 4;
 
   // provide a local autorelease pool, as this is called during startup
   // before the main event-loop pool is in place
@@ -504,7 +504,7 @@ nsNativeThemeCocoa::~nsNativeThemeCocoa() {
 // Limit on the area of the target rect (in pixels^2) in
 // DrawCellWithScaling() and DrawButton() and above which we
 // don't draw the object into a bitmap buffer.  This is to avoid crashes in
-// [NSGraphicsContext graphicsContextWithCGContext:flipped:] and
+// [NSGraphicsContext graphicsContextWithGraphicsPort:flipped:] and
 // CGContextDrawImage(), and also to avoid very poor drawing performance in
 // CGContextDrawImage() when it scales the bitmap (particularly if xscale or
 // yscale is less than but near 1 -- e.g. 0.9).  This value was determined
@@ -585,7 +585,7 @@ static void DrawCellWithScaling(NSCell* cell, CGContextRef cgContext,
     NSGraphicsContext* savedContext = [NSGraphicsContext currentContext];
     [NSGraphicsContext
         setCurrentContext:[NSGraphicsContext
-                              graphicsContextWithCGContext:cgContext
+                              graphicsContextWithGraphicsPort:cgContext
                                                    flipped:YES]];
 
     DrawCellIncludingFocusRing(cell, drawRect, view);
@@ -625,7 +625,7 @@ static void DrawCellWithScaling(NSCell* cell, CGContextRef cgContext,
 
     NSGraphicsContext* savedContext = [NSGraphicsContext currentContext];
     [NSGraphicsContext
-        setCurrentContext:[NSGraphicsContext graphicsContextWithCGContext:ctx
+        setCurrentContext:[NSGraphicsContext graphicsContextWithGraphicsPort:ctx
                                                                   flipped:YES]];
 
     CGContextScaleCTM(ctx, backingScaleFactor, backingScaleFactor);
@@ -937,7 +937,7 @@ static const CellRenderSettings checkboxSettings = {
          {0, 1, 0, 1}   // regular
      }}};
 
-static NSControlStateValue CellStateForCheckboxOrRadioState(
+static NSCellStateValue CellStateForCheckboxOrRadioState(
     nsNativeThemeCocoa::CheckboxOrRadioState aState) {
   switch (aState) {
     case nsNativeThemeCocoa::CheckboxOrRadioState::eOff:
@@ -2018,7 +2018,7 @@ void nsNativeThemeCocoa::DrawMultilineTextField(CGContextRef cgContext,
   // the usual save+restore dance.
   NSGraphicsContext* savedContext = NSGraphicsContext.currentContext;
   NSGraphicsContext.currentContext =
-      [NSGraphicsContext graphicsContextWithCGContext:cgContext flipped:YES];
+      [NSGraphicsContext graphicsContextWithGraphicsPort:cgContext flipped:YES];
   DrawCellIncludingFocusRing(mTextFieldCell, inBoxRect, mCellDrawView);
   NSGraphicsContext.currentContext = savedContext;
 }

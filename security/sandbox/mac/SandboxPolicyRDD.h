@@ -12,8 +12,8 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (version 1)
 
   (define should-log (param "SHOULD_LOG"))
-  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define app-path (param "APP_PATH"))
+  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define home-path (param "HOME_PATH"))
   (define crashPort (param "CRASH_PORT"))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
@@ -26,21 +26,33 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (moz-deny default)
   ; These are not included in (deny default)
   (moz-deny process-info*)
-  (moz-deny nvram*)
-  (moz-deny iokit-get-properties)
-  (moz-deny file-map-executable)
+  ; This isn't available in some older macOS releases.
+  (if (defined? 'nvram*)
+    (moz-deny nvram*))
+  ; The next two properties both require macOS 10.10+
+  (if (defined? 'iokit-get-properties)
+    (moz-deny iokit-get-properties))
+  (if (defined? 'file-map-executable)
+    (moz-deny file-map-executable))
 
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
   (allow process-info-pidinfo process-info-setcontrol (target self))
 
-  (if (string=? isRosettaTranslated "TRUE")
-    (allow file-map-executable (subpath "/private/var/db/oah")))
+  (if (defined? 'file-map-executable)
+    (begin
+      (if (string=? isRosettaTranslated "TRUE")
+        (allow file-map-executable (subpath "/private/var/db/oah")))
+      (allow file-map-executable file-read*
+        (subpath "/System")
+        (subpath "/usr/lib")
+        (subpath "/Library/GPUBundles")
+        (subpath app-path)))
+      (allow file-read*
+        (subpath "/System")
+        (subpath "/usr/lib")
+        (subpath "/Library/GPUBundles")
+        (subpath app-path)))
 
-  (allow file-map-executable file-read*
-    (subpath "/System")
-    (subpath "/usr/lib")
-    (subpath "/Library/GPUBundles")
-    (subpath app-path))
 
   (if (string? crashPort)
     (allow mach-lookup (global-name crashPort)))
@@ -59,6 +71,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (subpath "/usr/share/zoneinfo.default")
     (literal "/private/etc/localtime"))
 
+  (if (= macosVersion 1009)
   (allow sysctl-read
     (sysctl-name-regex #"^sysctl\.")
     (sysctl-name "kern.ostype")
@@ -102,7 +115,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (sysctl-name "machdep.cpu.model")
     (sysctl-name "machdep.cpu.stepping")
     (sysctl-name "debug.intel.gstLevelGST")
-    (sysctl-name "debug.intel.gstLoaderControl"))
+    (sysctl-name "debug.intel.gstLoaderControl")))
 
   (define (home-regex home-relative-regex)
     (regex (string-append "^" (regex-quote home-path) home-relative-regex)))
@@ -130,10 +143,11 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (home-subpath "/Library/Colors")
       (home-subpath "/Library/ColorSync/Profiles"))
 
-  (allow mach-lookup
-    ; bug 1392988
-    (xpc-service-name "com.apple.coremedia.videodecoder")
-    (xpc-service-name "com.apple.coremedia.videoencoder"))
+  (if (>= macosVersion 1013)
+    (allow mach-lookup
+      ; bug 1392988
+      (xpc-service-name "com.apple.coremedia.videodecoder")
+      (xpc-service-name "com.apple.coremedia.videoencoder")))
 
   (if (>= macosVersion 1100)
     (allow mach-lookup
@@ -164,8 +178,11 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (allow user-preference-read (preference-domain "com.apple.opengl"))
   (allow user-preference-read (preference-domain "com.nvidia.OpenGL"))
   (allow mach-lookup
-      (global-name "com.apple.cvmsServ")
-      (global-name "com.apple.MTLCompilerService"))
+      (global-name "com.apple.cvmsServ"))
+  (if (>= macosVersion 1014)
+    (allow mach-lookup
+      (global-name "com.apple.MTLCompilerService")))
+
   (allow iokit-open
       (iokit-connection "IOAccelerator")
       (iokit-user-client-class "IOAccelerationUserClient")
@@ -174,10 +191,11 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (iokit-user-client-class "IOFramebufferSharedUserClient")
       (iokit-user-client-class "AGPMClient")
       (iokit-user-client-class "AppleGraphicsControlClient"))
+ 
+  (if (>= macosVersion 1013)
+   (allow mach-lookup
+     (global-name "com.apple.audio.AudioComponentRegistrar")))
 
-  (allow mach-lookup
-    ; bug 1565575
-    (global-name "com.apple.audio.AudioComponentRegistrar"))
 )SANDBOX_LITERAL";
 
 }  // namespace mozilla

@@ -13,6 +13,7 @@
 
 #include "nsChildView.h"
 #include "nsCocoaWindow.h"
+#include "nsCocoaFeatures.h"
 
 #include "mozilla/Maybe.h"
 #include "mozilla/MiscEvents.h"
@@ -2688,18 +2689,22 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   if (!aEvent) {
     return false;
   }
+  bool usingElCapitanOrLaterSDK = true;
+#if !defined(MAC_OS_X_VERSION_10_11) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_11
+  usingElCapitanOrLaterSDK = false;
+#endif
 
-  if (aEvent.phase == NSEventPhaseBegan) {
-    [self beginGestureWithEvent:aEvent];
-    return true;
+  if (usingElCapitanOrLaterSDK) {
+    if (aEvent.phase == NSEventPhaseBegan) {
+      [self beginGestureWithEvent:aEvent];
+      return true;
+    }
+
+    if (aEvent.phase == NSEventPhaseEnded || aEvent.phase == NSEventPhaseCancelled) {
+      [self endGestureWithEvent:aEvent];
+      return true;
+    }
   }
-
-  if (aEvent.phase == NSEventPhaseEnded ||
-      aEvent.phase == NSEventPhaseCancelled) {
-    [self endGestureWithEvent:aEvent];
-    return true;
-  }
-
   return false;
 }
 
@@ -3152,7 +3157,7 @@ static int32_t RoundUp(double aDouble) {
 }
 
 static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
-  if ([aEvent hasPreciseScrollingDeltas]) {
+  if (nsCocoaFeatures::OnSierraOrLater() && [aEvent hasPreciseScrollingDeltas]) {
     // Pixel scroll events (events with hasPreciseScrollingDeltas == YES)
     // carry pixel deltas in the scrollingDeltaX/Y fields and line scroll
     // information in the deltaX/Y fields.

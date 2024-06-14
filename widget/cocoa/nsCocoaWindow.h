@@ -162,17 +162,32 @@ enum class NativeKeyBindingsType : uint8_t;
 - (void)sendToplevelDeactivateEvents;
 @end
 
+@interface MOZTitlebarView : NSVisualEffectView
+@end
+
 @interface FullscreenTitlebarTracker : NSTitlebarAccessoryViewController
 - (FullscreenTitlebarTracker*)init;
 @end
 
 // NSWindow subclass for handling windows with toolbars.
 @interface ToolbarWindow : BaseWindow {
+  // This window's titlebar view, if present.
+  // Will be nil if the window has neither a titlebar nor a unified toolbar.
+  // This view is a subview of the window's content view and gets created and
+  // destroyed by updateTitlebarView.
+  MOZTitlebarView* mTitlebarView;  // [STRONG]
   // mFullscreenTitlebarTracker attaches an invisible rectangle to the system
   // title bar. This allows us to detect when the title bar is showing in
   // fullscreen.
   FullscreenTitlebarTracker* mFullscreenTitlebarTracker;
 
+
+  CGFloat mUnifiedToolbarHeight;
+  CGFloat mSheetAttachmentPosition;
+  /* Store the height of the titlebar when this window is initialized. The
+     titlebarHeight getter returns 0 when in fullscreen, which is not useful in
+     some cases. */
+  CGFloat mInitialTitlebarHeight; 
   CGFloat mMenuBarHeight;
   NSRect mWindowButtonsRect;
 }

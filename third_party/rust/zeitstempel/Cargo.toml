@@ -24,7 +24,11 @@ version = "1.0.0"
 [dependencies.once_cell]
 version = "1.5.2"
 
+[dependencies]
+whatsys = "0.3"
+
 [features]
 win10plus = []
+
 [target."cfg(any(target_os = \"linux\", target_os = \"android\", target_os = \"macos\", target_os = \"ios\"))".dependencies.libc]
 version = "0.2"

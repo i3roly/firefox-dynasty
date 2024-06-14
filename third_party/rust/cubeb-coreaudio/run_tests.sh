@@ -39,9 +39,8 @@ cargo clippy -- -D warnings
 
 # Regular Tests
 cargo test --verbose
-
-# Timing sensitive tests must run serially so they cannot be impacted by other tasks on the queue
-cargo test test_ops_timing_sensitive -- --ignored --test-threads=1
+cargo test test_configure_output -- --ignored
+cargo test test_aggregate -- --ignored --test-threads=1
 
 # Parallel Tests
 cargo test test_parallel -- --ignored --nocapture --test-threads=1

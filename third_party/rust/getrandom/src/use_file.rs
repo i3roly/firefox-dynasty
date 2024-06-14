@@ -22,6 +22,7 @@ const FILE_PATH: &str = "/dev/random\0";
     target_os = "redox",
     target_os = "dragonfly",
     target_os = "haiku",
+    target_os = "macos",
     target_os = "nto",
 ))]
 const FILE_PATH: &str = "/dev/urandom\0";

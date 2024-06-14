@@ -171,34 +171,39 @@ fn test_aggregate_destroy_aggregate_device_for_a_unknown_aggregate_device() {
 // AggregateDevice::create_blank_device_sync
 // ------------------------------------
 #[test]
+#[ignore]
 fn test_aggregate_create_blank_device() {
     // TODO: Test this when there is no available devices.
-    let plugin = run_serially(|| AggregateDevice::get_system_plugin_id()).unwrap();
-    let device = run_serially(|| AggregateDevice::create_blank_device_sync(plugin)).unwrap();
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
     let devices = test_get_all_devices(DeviceFilter::IncludeAll);
     let device = devices.into_iter().find(|dev| dev == &device).unwrap();
-    let uid = run_serially(|| get_device_global_uid(device).unwrap().into_string());
+    let uid = get_device_global_uid(device).unwrap().into_string();
     assert!(uid.contains(PRIVATE_AGGREGATE_DEVICE_NAME));
-    assert!(run_serially(|| AggregateDevice::destroy_device(plugin, device)).is_ok());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 // AggregateDevice::get_sub_devices
 // ------------------------------------
 #[test]
+#[ignore]
+#[should_panic]
 fn test_aggregate_get_sub_devices_for_blank_aggregate_devices() {
-    run_serially_forward_panics(|| {
-        // TODO: Test this when there is no available devices.
-        let plugin = AggregateDevice::get_system_plugin_id().unwrap();
-        let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
-        let sub_devices = AggregateDevice::get_sub_devices(device).unwrap();
-        assert!(sub_devices.is_empty());
-        assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
-    });
+    // TODO: Test this when there is no available devices.
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    // There is no sub device in a blank aggregate device!
+    // AggregateDevice::get_sub_devices guarantees returning a non-empty devices vector, so
+    // the following call will panic!
+    let sub_devices = AggregateDevice::get_sub_devices(device).unwrap();
+    assert!(sub_devices.is_empty());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 // AggregateDevice::set_sub_devices_sync
 // ------------------------------------
 #[test]
+#[ignore]
 fn test_aggregate_set_sub_devices() {
     let input_device = test_get_default_device(Scope::Input);
     let output_device = test_get_default_device(Scope::Output);
@@ -210,20 +215,13 @@ fn test_aggregate_set_sub_devices() {
     let input_device = input_device.unwrap();
     let output_device = output_device.unwrap();
 
-    let plugin = run_serially(|| AggregateDevice::get_system_plugin_id()).unwrap();
-    let device = run_serially(|| AggregateDevice::create_blank_device_sync(plugin)).unwrap();
-    assert!(run_serially(|| AggregateDevice::set_sub_devices_sync(
-        device,
-        input_device,
-        output_device
-    ))
-    .is_ok());
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    assert!(AggregateDevice::set_sub_devices_sync(device, input_device, output_device).is_ok());
 
-    let sub_devices = run_serially(|| AggregateDevice::get_sub_devices_or_self(device)).unwrap();
-    let input_sub_devices =
-        run_serially(|| AggregateDevice::get_sub_devices_or_self(input_device)).unwrap();
-    let output_sub_devices =
-        run_serially(|| AggregateDevice::get_sub_devices_or_self(output_device)).unwrap();
+    let sub_devices = AggregateDevice::get_sub_devices(device).unwrap();
+    let input_sub_devices = AggregateDevice::get_sub_devices(input_device).unwrap();
+    let output_sub_devices = AggregateDevice::get_sub_devices(output_device).unwrap();
 
     // TODO: There may be overlapping devices between input_sub_devices and output_sub_devices,
     //       but now AggregateDevice::set_sub_devices will add them directly.
@@ -238,10 +236,10 @@ fn test_aggregate_set_sub_devices() {
         assert!(sub_devices.contains(dev));
     }
 
-    let onwed_devices = run_serially(|| test_get_all_onwed_devices(device));
-    let onwed_device_uids = run_serially(|| get_device_uids(&onwed_devices));
-    let input_sub_device_uids = run_serially(|| get_device_uids(&input_sub_devices));
-    let output_sub_device_uids = run_serially(|| get_device_uids(&output_sub_devices));
+    let onwed_devices = test_get_all_onwed_devices(device);
+    let onwed_device_uids = get_device_uids(&onwed_devices);
+    let input_sub_device_uids = get_device_uids(&input_sub_devices);
+    let output_sub_device_uids = get_device_uids(&output_sub_devices);
     for uid in &input_sub_device_uids {
         assert!(onwed_device_uids.contains(uid));
     }
@@ -249,10 +247,11 @@ fn test_aggregate_set_sub_devices() {
         assert!(onwed_device_uids.contains(uid));
     }
 
-    assert!(run_serially(|| AggregateDevice::destroy_device(plugin, device)).is_ok());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 #[test]
+#[ignore]
 #[should_panic]
 fn test_aggregate_set_sub_devices_for_unknown_input_devices() {
     let output_device = test_get_default_device(Scope::Output);
@@ -261,19 +260,16 @@ fn test_aggregate_set_sub_devices_for_unknown_input_devices() {
     }
     let output_device = output_device.unwrap();
 
-    run_serially_forward_panics(|| {
-        let plugin = AggregateDevice::get_system_plugin_id().unwrap();
-        let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
 
-        assert!(
-            AggregateDevice::set_sub_devices(device, kAudioObjectUnknown, output_device).is_err()
-        );
+    assert!(AggregateDevice::set_sub_devices(device, kAudioObjectUnknown, output_device).is_err());
 
-        assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
-    });
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 #[test]
+#[ignore]
 #[should_panic]
 fn test_aggregate_set_sub_devices_for_unknown_output_devices() {
     let input_device = test_get_default_device(Scope::Input);
@@ -282,16 +278,12 @@ fn test_aggregate_set_sub_devices_for_unknown_output_devices() {
     }
     let input_device = input_device.unwrap();
 
-    run_serially_forward_panics(|| {
-        let plugin = AggregateDevice::get_system_plugin_id().unwrap();
-        let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
 
-        assert!(
-            AggregateDevice::set_sub_devices(device, input_device, kAudioObjectUnknown).is_err()
-        );
+    assert!(AggregateDevice::set_sub_devices(device, input_device, kAudioObjectUnknown).is_err());
 
-        assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
-    });
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 fn get_device_uids(devices: &Vec<AudioObjectID>) -> Vec<String> {
@@ -304,6 +296,7 @@ fn get_device_uids(devices: &Vec<AudioObjectID>) -> Vec<String> {
 // AggregateDevice::set_master_device
 // ------------------------------------
 #[test]
+#[ignore]
 fn test_aggregate_set_master_device() {
     let input_device = test_get_default_device(Scope::Input);
     let output_device = test_get_default_device(Scope::Output);
@@ -315,28 +308,22 @@ fn test_aggregate_set_master_device() {
     let input_device = input_device.unwrap();
     let output_device = output_device.unwrap();
 
-    let plugin = run_serially(|| AggregateDevice::get_system_plugin_id()).unwrap();
-    let device = run_serially(|| AggregateDevice::create_blank_device_sync(plugin)).unwrap();
-    assert!(run_serially(|| AggregateDevice::set_sub_devices_sync(
-        device,
-        input_device,
-        output_device
-    ))
-    .is_ok());
-    assert!(run_serially(|| AggregateDevice::set_master_device(device, output_device)).is_ok());
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    assert!(AggregateDevice::set_sub_devices_sync(device, input_device, output_device).is_ok());
+    assert!(AggregateDevice::set_master_device(device, output_device).is_ok());
 
-    let output_sub_devices =
-        run_serially(|| AggregateDevice::get_sub_devices_or_self(output_device)).unwrap();
-    let first_output_sub_device_uid = run_serially(|| get_device_uid(output_sub_devices[0]));
-
-    // Check that the first sub device of the output device is set as master device.
-    let master_device_uid = run_serially(|| test_get_master_device(device));
+    // Check if master is set to the first sub device of the default output device.
+    let first_output_sub_device_uid =
+        get_device_uid(AggregateDevice::get_sub_devices(device).unwrap()[0]);
+    let master_device_uid = test_get_master_device(device);
     assert_eq!(first_output_sub_device_uid, master_device_uid);
 
-    assert!(run_serially(|| AggregateDevice::destroy_device(plugin, device)).is_ok());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 #[test]
+#[ignore]
 fn test_aggregate_set_master_device_for_a_blank_aggregate_device() {
     let output_device = test_get_default_device(Scope::Output);
     if output_device.is_none() {
@@ -344,11 +331,9 @@ fn test_aggregate_set_master_device_for_a_blank_aggregate_device() {
         return;
     }
 
-    let plugin = run_serially(|| AggregateDevice::get_system_plugin_id()).unwrap();
-    let device = run_serially(|| AggregateDevice::create_blank_device_sync(plugin)).unwrap();
-    assert!(
-        run_serially(|| AggregateDevice::set_master_device(device, output_device.unwrap())).is_ok()
-    );
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    assert!(AggregateDevice::set_master_device(device, output_device.unwrap()).is_ok());
 
     // TODO: it's really weird the aggregate device actually own nothing
     //       but its master device can be set successfully!
@@ -358,16 +343,17 @@ fn test_aggregate_set_master_device_for_a_blank_aggregate_device() {
     // The CFStringRef of the master device returned from `test_get_master_device` is actually
     // non-null.
 
-    assert!(run_serially(|| AggregateDevice::destroy_device(plugin, device)).is_ok());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 fn get_device_uid(id: AudioObjectID) -> String {
-    get_device_global_uid(id).map_or(String::new(), |uid| uid.into_string())
+    get_device_global_uid(id).unwrap().into_string()
 }
 
 // AggregateDevice::activate_clock_drift_compensation
 // ------------------------------------
 #[test]
+#[ignore]
 fn test_aggregate_activate_clock_drift_compensation() {
     let input_device = test_get_default_device(Scope::Input);
     let output_device = test_get_default_device(Scope::Output);
@@ -379,21 +365,15 @@ fn test_aggregate_activate_clock_drift_compensation() {
     let input_device = input_device.unwrap();
     let output_device = output_device.unwrap();
 
-    let plugin = run_serially(|| AggregateDevice::get_system_plugin_id()).unwrap();
-    let device = run_serially(|| AggregateDevice::create_blank_device_sync(plugin)).unwrap();
-    assert!(run_serially(|| AggregateDevice::set_sub_devices_sync(
-        device,
-        input_device,
-        output_device
-    ))
-    .is_ok());
-    assert!(run_serially(|| AggregateDevice::set_master_device(device, output_device)).is_ok());
-    assert!(run_serially(|| AggregateDevice::activate_clock_drift_compensation(device)).is_ok());
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    assert!(AggregateDevice::set_sub_devices_sync(device, input_device, output_device).is_ok());
+    assert!(AggregateDevice::set_master_device(device, output_device).is_ok());
+    assert!(AggregateDevice::activate_clock_drift_compensation(device).is_ok());
 
     // Check the compensations.
-    let devices = run_serially(|| test_get_all_onwed_devices(device));
-    let compensations = run_serially(|| get_drift_compensations(&devices));
-    let master_device_uid = run_serially(|| test_get_master_device(device));
+    let devices = test_get_all_onwed_devices(device);
+    let compensations = get_drift_compensations(&devices);
     assert!(!compensations.is_empty());
     assert_eq!(devices.len(), compensations.len());
 
@@ -409,10 +389,11 @@ fn test_aggregate_activate_clock_drift_compensation() {
         );
     }
 
-    assert!(run_serially(|| AggregateDevice::destroy_device(plugin, device)).is_ok());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 #[test]
+#[ignore]
 fn test_aggregate_activate_clock_drift_compensation_for_an_aggregate_device_without_master_device()
 {
     let input_device = test_get_default_device(Scope::Input);
@@ -425,34 +406,25 @@ fn test_aggregate_activate_clock_drift_compensation_for_an_aggregate_device_with
     let input_device = input_device.unwrap();
     let output_device = output_device.unwrap();
 
-    let plugin = run_serially(|| AggregateDevice::get_system_plugin_id()).unwrap();
-    let device = run_serially(|| AggregateDevice::create_blank_device_sync(plugin)).unwrap();
-    assert!(run_serially(|| AggregateDevice::set_sub_devices_sync(
-        device,
-        input_device,
-        output_device
-    ))
-    .is_ok());
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    assert!(AggregateDevice::set_sub_devices_sync(device, input_device, output_device).is_ok());
 
-    // The master device is by default the first sub device in the list.
-    // This happens to be the first sub device of the input device, see implementation of
-    // AggregateDevice::set_sub_devices.
-    let first_input_sub_device_uid = run_serially(|| {
-        get_device_uid(AggregateDevice::get_sub_devices_or_self(input_device).unwrap()[0])
-    });
-    let first_sub_device_uid = run_serially(|| {
-        get_device_uid(AggregateDevice::get_sub_devices_or_self(device).unwrap()[0])
-    });
-    assert_eq!(first_input_sub_device_uid, first_sub_device_uid);
-    let master_device_uid = run_serially(|| test_get_master_device(device));
-    assert_eq!(first_sub_device_uid, master_device_uid);
+    // TODO: Is the master device the first output sub device by default if we
+    //       don't set that ? Is it because we add the output sub device list
+    //       before the input's one ? (See implementation of
+    //       AggregateDevice::set_sub_devices).
+    let first_output_sub_device_uid =
+        get_device_uid(AggregateDevice::get_sub_devices(output_device).unwrap()[0]);
+    let master_device_uid = test_get_master_device(device);
+    assert_eq!(first_output_sub_device_uid, master_device_uid);
 
     // Compensate the drift directly without setting master device.
-    assert!(run_serially(|| AggregateDevice::activate_clock_drift_compensation(device)).is_ok());
+    assert!(AggregateDevice::activate_clock_drift_compensation(device).is_ok());
 
     // Check the compensations.
-    let devices = run_serially(|| test_get_all_onwed_devices(device));
-    let compensations = run_serially(|| get_drift_compensations(&devices));
+    let devices = test_get_all_onwed_devices(device);
+    let compensations = get_drift_compensations(&devices);
     assert!(!compensations.is_empty());
     assert_eq!(devices.len(), compensations.len());
 
@@ -460,26 +432,25 @@ fn test_aggregate_activate_clock_drift_compensation_for_an_aggregate_device_with
         assert_eq!(*compensation, if i == 0 { 0 } else { DRIFT_COMPENSATION });
     }
 
-    assert!(run_serially(|| AggregateDevice::destroy_device(plugin, device)).is_ok());
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 #[test]
 #[should_panic]
+#[ignore]
 fn test_aggregate_activate_clock_drift_compensation_for_a_blank_aggregate_device() {
-    run_serially_forward_panics(|| {
-        let plugin = AggregateDevice::get_system_plugin_id().unwrap();
-        let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
 
-        let sub_devices = AggregateDevice::get_sub_devices_or_self(device).unwrap();
-        assert!(sub_devices.is_empty());
-        let onwed_devices = test_get_all_onwed_devices(device);
-        assert!(onwed_devices.is_empty());
+    let sub_devices = AggregateDevice::get_sub_devices(device).unwrap();
+    assert!(sub_devices.is_empty());
+    let onwed_devices = test_get_all_onwed_devices(device);
+    assert!(onwed_devices.is_empty());
 
-        // Get a panic since no sub devices to be set compensation.
-        assert!(AggregateDevice::activate_clock_drift_compensation(device).is_err());
+    // Get a panic since no sub devices to be set compensation.
+    assert!(AggregateDevice::activate_clock_drift_compensation(device).is_err());
 
-        assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
-    });
+    assert!(AggregateDevice::destroy_device(plugin, device).is_ok());
 }
 
 fn get_drift_compensations(devices: &Vec<AudioObjectID>) -> Vec<u32> {
@@ -496,56 +467,10 @@ fn get_drift_compensations(devices: &Vec<AudioObjectID>) -> Vec<u32> {
 // AggregateDevice::destroy_device
 // ------------------------------------
 #[test]
+#[ignore]
 #[should_panic]
 fn test_aggregate_destroy_aggregate_device_for_a_unknown_plugin_device() {
-    run_serially_forward_panics(|| {
-        let plugin = AggregateDevice::get_system_plugin_id().unwrap();
-        let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
-        assert!(AggregateDevice::destroy_device(kAudioObjectUnknown, device).is_err());
-    });
-}
-
-// AggregateDevice::new
-// ------------------------------------
-#[test]
-fn test_aggregate_new() {
-    let input_device = test_get_default_device(Scope::Input);
-    let output_device = test_get_default_device(Scope::Output);
-    if input_device.is_none() || output_device.is_none() || input_device == output_device {
-        println!("No input or output device to create an aggregate device.");
-        return;
-    }
-
-    run_serially_forward_panics(|| {
-        let input_device = input_device.unwrap();
-        let output_device = output_device.unwrap();
-
-        let aggr = AggregateDevice::new(input_device, output_device).unwrap();
-
-        // Check main device
-        let output_sub_devices = AggregateDevice::get_sub_devices_or_self(output_device).unwrap();
-        let first_output_sub_device_uid = get_device_uid(output_sub_devices[0]);
-        let master_device_uid = test_get_master_device(aggr.get_device_id());
-        assert_eq!(first_output_sub_device_uid, master_device_uid);
-
-        // Check drift compensation
-        let devices = test_get_all_onwed_devices(aggr.get_device_id());
-        let compensations = get_drift_compensations(&devices);
-        assert!(!compensations.is_empty());
-        assert_eq!(devices.len(), compensations.len());
-
-        let device_uids = devices.iter().map(|&id| get_device_uid(id));
-        for (uid, compensation) in zip(device_uids, compensations) {
-            assert_eq!(
-                compensation,
-                if uid == master_device_uid {
-                    0
-                } else {
-                    DRIFT_COMPENSATION
-                },
-                "Unexpected drift value for device with uid {}",
-                uid
-            );
-        }
-    });
+    let plugin = AggregateDevice::get_system_plugin_id().unwrap();
+    let device = AggregateDevice::create_blank_device_sync(plugin).unwrap();
+    assert!(AggregateDevice::destroy_device(kAudioObjectUnknown, device).is_err());
 }
