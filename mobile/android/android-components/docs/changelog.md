@@ -4,7 +4,33 @@ title: Changelog
 permalink: /changelog/
 ---
 
-# 127.0 (In Development)
+# 128.0 (In Development)
+
+* **browser-toolbar**
+  * Added new data classes `CustomTabsToolbarButtonConfig` and `CustomTabsToolbarListeners` to `CustomTabsToolbarFeature`, see [Bug 1897811](https://bugzilla.mozilla.org/show_bug.cgi?id=1897811).
+  * Added new parameters for `showRefreshButton` and `showMenu` to `CustomTabsToolbarButtonConfig`, see [Bug 1897811](https://bugzilla.mozilla.org/show_bug.cgi?id=1897811).
+  * Added a new parameter for `refreshListener` and moved `shareListener` to `CustomTabsToolbarListeners`, see [Bug 1897811](https://bugzilla.mozilla.org/show_bug.cgi?id=1897811).
+
+* **browser-state**, **browser-engine-gecko**
+    * Added a new parameter `adjustPriority` to `onCheckForFormData`, `UpdateHasFormDataAction` and `checkForFormData` to specify whether or not to adjust session priority after checking from data. [Bug 1893846](https://bugzilla.mozilla.org/show_bug.cgi?id=1893846)
+
+* **concept-sync**
+  * 🆕 New `DeviceCommandQueue` interface for implementing a queue that holds device commands until they're ready to be sent.
+
+* **browser-storage-sync**
+  * 🆕 New `RemoteTabsCommandQueue` class for persisting outgoing remote tabs commands.
+
+* **feature-syncedtabs**
+  * 🆕 New `SyncedTabsCommands` class that sends synced tabs commands to other devices when flushed.
+  * 🆕 New `SyncedTabsCommandsFlushScheduler` class for scheduling a `SyncedTabsCommandsFlushWorker` to flush the `SyncedTabsCommands` queue.
+  * 🆕 New `GlobalSyncedTabsCommandsProvider` object for providing the `SyncedTabsCommands` queue to the `SyncedTabsCommandsFlushWorker`.
+  * ⚠️ **Breaking change**: `SyncedTabsFeature` now takes the `SyncedTabsCommands` queue as an argument, and registers an observer to refresh the synced tabs list when the queue changes.
+
+* **feature-accounts-push**
+  * ⚠️ **Breaking change**: `CloseTabsUseCases()` now takes a generic remote tabs command queue as its argument.
+  * ⚠️ **Breaking change**: `CloseTabsUseCases.close()` no longer returns a value.
+
+# 127.0
 
 * **feature-prompts** **browser-storage-sync**
   * A new `isLoginAutofillEnabled` callback is available in `PromptFeature` and `GeckoLoginStorageDelegate` to allow clients controlling whether saved logins should be autofilled or not. Default is false
@@ -16,6 +42,9 @@ permalink: /changelog/
 * **support-base**
   * Added `StartForegroundService` to safely start a foreground service, see [Bug 1839039](https://bugzilla.mozilla.org/show_bug.cgi?id=1839039) for crash reference.
   * Added `ProcessInfoProvider` and `BuildVersionProvider` to get information about the app process and the build version.
+
+* **support-utils**
+  * Added `DebouncedQueue`, a queue that manages function execution with a debounce mechanism.
 
 * **browser-engine-gecko**
     * For screenshot capture, include exception in failure result rather than throwing.

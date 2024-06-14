@@ -4,7 +4,9 @@
 
 import * as DefaultBackupResources from "resource:///modules/backup/BackupResources.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
+const SCHEDULED_BACKUPS_ENABLED_PREF_NAME = "browser.backup.scheduled.enabled";
 const lazy = {};
 
 ChromeUtils.defineLazyGetter(lazy, "logConsole", function () {
@@ -23,11 +25,30 @@ ChromeUtils.defineLazyGetter(lazy, "fxAccounts", () => {
 });
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  ArchiveEncryptionState:
+    "resource:///modules/backup/ArchiveEncryptionState.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
   JsonSchemaValidator:
     "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs",
   UIState: "resource://services-sync/UIState.sys.mjs",
 });
+
+ChromeUtils.defineLazyGetter(lazy, "ZipWriter", () =>
+  Components.Constructor("@mozilla.org/zipwriter;1", "nsIZipWriter", "open")
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "scheduledBackupsPref",
+  SCHEDULED_BACKUPS_ENABLED_PREF_NAME,
+  false,
+  function onUpdateScheduledBackups(_pref, _prevVal, newVal) {
+    let bs = BackupService.get();
+    if (bs) {
+      bs.onUpdateScheduledBackups(newVal);
+    }
+  }
+);
 
 /**
  * The BackupService class orchestrates the scheduling and creation of profile
@@ -90,7 +111,12 @@ export class BackupService extends EventTarget {
    *
    * @type {object}
    */
-  #_state = { backupInProgress: false };
+  #_state = {
+    backupFilePath: "Documents", // TODO: make save location configurable (bug 1895943)
+    backupInProgress: false,
+    scheduledBackupsEnabled: lazy.scheduledBackupsPref,
+    encryptionEnabled: false,
+  };
 
   /**
    * A Promise that will resolve once the postRecovery steps are done. It will
@@ -108,6 +134,33 @@ export class BackupService extends EventTarget {
    * @type {Function}
    */
   #postRecoveryResolver;
+
+  /**
+   * The currently used ArchiveEncryptionState. Callers should use
+   * loadEncryptionState() instead, to ensure that any pre-serialized
+   * encryption state has been read in and deserialized.
+   *
+   * This member can be in 3 states:
+   *
+   * 1. undefined - no attempt has been made to load encryption state from
+   *    disk yet.
+   * 2. null - encryption is not enabled.
+   * 3. ArchiveEncryptionState - encryption is enabled.
+   *
+   * @see BackupService.loadEncryptionState()
+   * @type {ArchiveEncryptionState|null|undefined}
+   */
+  #encState = undefined;
+
+  /**
+   * The name of the folder within the profile folder where this service reads
+   * and writes state to.
+   *
+   * @type {string}
+   */
+  static get PROFILE_FOLDER_NAME() {
+    return "backups";
+  }
 
   /**
    * The name of the backup manifest file.
@@ -164,6 +217,16 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * The name of the serialized ArchiveEncryptionState that is written to disk
+   * if encryption is enabled.
+   *
+   * @type {string}
+   */
+  static get ARCHIVE_ENCRYPTION_STATE_FILE() {
+    return "enc-state.json";
+  }
+
+  /**
    * Returns the schema for the backup manifest for a given version.
    *
    * This should really be #getSchemaForVersion, but for some reason,
@@ -182,6 +245,15 @@ export class BackupService extends EventTarget {
     let schemaURL = `chrome://browser/content/backup/BackupManifest.${version}.schema.json`;
     let response = await fetch(schemaURL);
     return response.json();
+  }
+
+  /**
+   * The level of Zip compression to use on the zipped staging folder.
+   *
+   * @type {number}
+   */
+  static get COMPRESSION_LEVEL() {
+    return Ci.nsIZipWriter.COMPRESSION_BEST;
   }
 
   /**
@@ -222,7 +294,8 @@ export class BackupService extends EventTarget {
   /**
    * Create a BackupService instance.
    *
-   * @param {object} [backupResources=DefaultBackupResources] - Object containing BackupResource classes to associate with this service.
+   * @param {object} [backupResources=DefaultBackupResources]
+   *   Object containing BackupResource classes to associate with this service.
    */
   constructor(backupResources = DefaultBackupResources) {
     super();
@@ -294,7 +367,10 @@ export class BackupService extends EventTarget {
 
       // First, check to see if a `backups` directory already exists in the
       // profile.
-      let backupDirPath = PathUtils.join(profilePath, "backups");
+      let backupDirPath = PathUtils.join(
+        profilePath,
+        BackupService.PROFILE_FOLDER_NAME
+      );
       lazy.logConsole.debug("Creating backups folder");
 
       // ignoreExisting: true is the default, but we're being explicit that it's
@@ -310,6 +386,10 @@ export class BackupService extends EventTarget {
         }
       );
 
+      let encState = await this.loadEncryptionState(profilePath);
+      let encryptionEnabled = !!encState;
+      lazy.logConsole.debug("Encryption enabled: ", encryptionEnabled);
+
       // Perform the backup for each resource.
       for (let resourceClass of sortedResources) {
         try {
@@ -317,6 +397,14 @@ export class BackupService extends EventTarget {
             `Backing up resource with key ${resourceClass.key}. ` +
               `Requires encryption: ${resourceClass.requiresEncryption}`
           );
+
+          if (resourceClass.requiresEncryption && !encryptionEnabled) {
+            lazy.logConsole.debug(
+              "Encryption is not currently enabled. Skipping."
+            );
+            continue;
+          }
+
           let resourcePath = PathUtils.join(stagingPath, resourceClass.key);
           await IOUtils.makeDirectory(resourcePath);
 
@@ -382,7 +470,13 @@ export class BackupService extends EventTarget {
         "Wrote backup to staging directory at ",
         renamedStagingPath
       );
-      return { stagingPath: renamedStagingPath };
+
+      let compressedStagingPath = await this.#compressStagingFolder(
+        renamedStagingPath,
+        backupDirPath
+      );
+
+      return { stagingPath: renamedStagingPath, compressedStagingPath };
     } finally {
       this.#backupInProgress = false;
     }
@@ -409,6 +503,90 @@ export class BackupService extends EventTarget {
     await IOUtils.makeDirectory(stagingPath);
 
     return stagingPath;
+  }
+
+  /**
+   * Compresses a staging folder into a Zip file. If a pre-existing Zip file
+   * for a staging folder resides in destFolderPath, it is overwritten. The
+   * Zip file will have the same name as the stagingPath folder, with `.zip`
+   * as the extension.
+   *
+   * @param {string} stagingPath
+   *   The path to the staging folder to be compressed.
+   * @param {string} destFolderPath
+   *   The parent folder to write the Zip file to.
+   * @returns {Promise<string>}
+   *   Resolves with the path to the created Zip file.
+   */
+  async #compressStagingFolder(stagingPath, destFolderPath) {
+    const PR_RDWR = 0x04;
+    const PR_CREATE_FILE = 0x08;
+    const PR_TRUNCATE = 0x20;
+
+    let archivePath = PathUtils.join(
+      destFolderPath,
+      `${PathUtils.filename(stagingPath)}.zip`
+    );
+    let archiveFile = await IOUtils.getFile(archivePath);
+
+    let writer = new lazy.ZipWriter(
+      archiveFile,
+      PR_RDWR | PR_CREATE_FILE | PR_TRUNCATE
+    );
+
+    lazy.logConsole.log("Compressing staging folder to ", archivePath);
+    let rootPathNSIFile = await IOUtils.getDirectory(stagingPath);
+    await this.#compressChildren(rootPathNSIFile, stagingPath, writer);
+    await new Promise(resolve => {
+      let observer = {
+        onStartRequest(_request) {
+          lazy.logConsole.debug("Starting to write out archive file");
+        },
+        onStopRequest(_request, status) {
+          lazy.logConsole.log("Done writing archive file");
+          resolve(status);
+        },
+      };
+      writer.processQueue(observer, null);
+    });
+    writer.close();
+
+    return archivePath;
+  }
+
+  /**
+   * A helper function for #compressStagingFolder that iterates through a
+   * directory, and adds each file to a nsIZipWriter. For each directory it
+   * finds, it recurses.
+   *
+   * @param {nsIFile} rootPathNSIFile
+   *   An nsIFile pointing at the root of the folder being compressed.
+   * @param {string} parentPath
+   *   The path to the folder whose children should be iterated.
+   * @param {nsIZipWriter} writer
+   *   The writer to add all of the children to.
+   * @returns {Promise<undefined>}
+   */
+  async #compressChildren(rootPathNSIFile, parentPath, writer) {
+    let children = await IOUtils.getChildren(parentPath);
+    for (let childPath of children) {
+      let childState = await IOUtils.stat(childPath);
+      if (childState.type == "directory") {
+        await this.#compressChildren(rootPathNSIFile, childPath, writer);
+      } else {
+        let childFile = await IOUtils.getFile(childPath);
+        // nsIFile.getRelativePath returns paths using the "/" separator,
+        // regardless of which platform we're on. That's handy, because this
+        // is the same separator that nsIZipWriter expects for entries.
+        let pathRelativeToRoot = childFile.getRelativePath(rootPathNSIFile);
+        writer.addEntryFile(
+          pathRelativeToRoot,
+          BackupService.COMPRESSION_LEVEL,
+          childFile,
+          true
+        );
+      }
+    }
   }
 
   /**
@@ -449,10 +627,15 @@ export class BackupService extends EventTarget {
 
       /**
        * Bug 1892532: for now, we only support a single backup file.
-       * If there are other pre-existing backup folders, delete them.
+       * If there are other pre-existing backup folders, delete them - but don't
+       * delete anything that doesn't match the backup folder naming scheme.
        */
+      let expectedFormatRegex = /\d{4}(-\d{2}){2}T(\d{2}-){2}\d{2}Z/;
       for (let existingBackupPath of existingBackups) {
-        if (existingBackupPath !== renamedBackupPath) {
+        if (
+          existingBackupPath !== renamedBackupPath &&
+          existingBackupPath.match(expectedFormatRegex)
+        ) {
           await IOUtils.remove(existingBackupPath, {
             recursive: true,
           });
@@ -742,6 +925,35 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * Sets browser.backup.scheduled.enabled to true or false.
+   *
+   * @param { boolean } shouldEnableScheduledBackups true if scheduled backups should be enabled. Else, false.
+   */
+  setScheduledBackups(shouldEnableScheduledBackups) {
+    Services.prefs.setBoolPref(
+      SCHEDULED_BACKUPS_ENABLED_PREF_NAME,
+      shouldEnableScheduledBackups
+    );
+  }
+
+  /**
+   * Updates scheduledBackupsEnabled in the backup service state. Should be called every time
+   * the value for browser.backup.scheduled.enabled changes.
+   *
+   * @param {boolean} isScheduledBackupsEnabled True if scheduled backups are enabled. Else false.
+   */
+  onUpdateScheduledBackups(isScheduledBackupsEnabled) {
+    if (this.#_state.scheduledBackupsEnabled != isScheduledBackupsEnabled) {
+      lazy.logConsole.debug(
+        "Updating scheduled backups",
+        isScheduledBackupsEnabled
+      );
+      this.#_state.scheduledBackupsEnabled = isScheduledBackupsEnabled;
+      this.stateUpdate();
+    }
+  }
+
+  /**
    * Take measurements of the current profile state for Telemetry.
    *
    * @returns {Promise<undefined>}
@@ -779,5 +991,154 @@ export class BackupService extends EventTarget {
         );
       }
     }
+  }
+
+  /**
+   * The internal promise that is created on the first call to
+   * loadEncryptionState.
+   *
+   * @type {Promise}
+   */
+  #loadEncryptionStatePromise = null;
+
+  /**
+   * Returns the current ArchiveEncryptionState. This method will only attempt
+   * to read the state from the disk the first time it is called.
+   *
+   * @param {string} [profilePath=PathUtils.profileDir]
+   *   The profile path where the encryption state might exist. This is only
+   *   used for testing.
+   * @returns {Promise<ArchiveEncryptionState>}
+   */
+  loadEncryptionState(profilePath = PathUtils.profileDir) {
+    if (this.#encState !== undefined) {
+      return Promise.resolve(this.#encState);
+    }
+
+    // This little dance makes it so that we only attempt to read the state off
+    // of the disk the first time `loadEncryptionState` is called. Any
+    // subsequent calls will await this same promise, OR, after the state has
+    // been read in, they'll just get the #encState which is set after the
+    // state has been read in.
+    if (!this.#loadEncryptionStatePromise) {
+      this.#loadEncryptionStatePromise = (async () => {
+        // Default this to null here - that way, if we fail to read it in,
+        // the null will indicate that we have at least _tried_ to load the
+        // state.
+        let encState = null;
+        let encStateFile = PathUtils.join(
+          profilePath,
+          BackupService.PROFILE_FOLDER_NAME,
+          BackupService.ARCHIVE_ENCRYPTION_STATE_FILE
+        );
+
+        // Try to read in any pre-existing encryption state. If that fails,
+        // we fallback to not encrypting, and only backing up non-sensitive data.
+        try {
+          if (await IOUtils.exists(encStateFile)) {
+            let stateObject = await IOUtils.readJSON(encStateFile);
+            ({ instance: encState } =
+              await lazy.ArchiveEncryptionState.initialize(stateObject));
+          }
+        } catch (e) {
+          lazy.logConsole.error(
+            "Failed to read / deserialize archive encryption state file: ",
+            e
+          );
+          // TODO: This kind of error might be worth collecting telemetry on.
+        }
+
+        this.#_state.encryptionEnabled = !!encState;
+        this.stateUpdate();
+
+        this.#encState = encState;
+        return encState;
+      })();
+    }
+
+    return this.#loadEncryptionStatePromise;
+  }
+
+  /**
+   * Enables encryption for backups, allowing sensitive data to be backed up.
+   * Throws if encryption is already enabled. After enabling encryption, that
+   * state is written to disk.
+   *
+   * @throws Exception
+   * @param {string} password
+   *   A non-blank password ("recovery code") that can be used to derive keys
+   *   for encrypting the backup.
+   * @param {string} [profilePath=PathUtils.profileDir]
+   *   The profile path where the encryption state will be written. This is only
+   *   used for testing.
+   */
+  async enableEncryption(password, profilePath = PathUtils.profileDir) {
+    lazy.logConsole.debug("Enabling encryption.");
+    let encState = await this.loadEncryptionState(profilePath);
+    if (encState) {
+      throw new Error("Encryption is already enabled.");
+    }
+
+    if (!password) {
+      throw new Error("Cannot supply a blank password.");
+    }
+
+    if (password.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
+    }
+
+    // TODO: Enforce other password rules here, such as ensuring that the
+    // password is not considered common.
+    ({ instance: encState } = await lazy.ArchiveEncryptionState.initialize(
+      password
+    ));
+    if (!encState) {
+      throw new Error("Failed to construct ArchiveEncryptionState");
+    }
+
+    this.#encState = encState;
+
+    let encStateFile = PathUtils.join(
+      profilePath,
+      BackupService.PROFILE_FOLDER_NAME,
+      BackupService.ARCHIVE_ENCRYPTION_STATE_FILE
+    );
+
+    let stateObj = await encState.serialize();
+    await IOUtils.writeJSON(encStateFile, stateObj);
+
+    this.#_state.encryptionEnabled = true;
+    this.stateUpdate();
+  }
+
+  /**
+   * Disables encryption of backups. Throws is encryption is already disabled.
+   *
+   * @throws Exception
+   * @param {string} [profilePath=PathUtils.profileDir]
+   *   The profile path where the encryption state exists. This is only used for
+   *   testing.
+   * @returns {Promise<undefined>}
+   */
+  async disableEncryption(profilePath = PathUtils.profileDir) {
+    lazy.logConsole.debug("Disabling encryption.");
+    let encState = await this.loadEncryptionState(profilePath);
+    if (!encState) {
+      throw new Error("Encryption is already disabled.");
+    }
+
+    let encStateFile = PathUtils.join(
+      profilePath,
+      BackupService.PROFILE_FOLDER_NAME,
+      BackupService.ARCHIVE_ENCRYPTION_STATE_FILE
+    );
+    // It'd be pretty strange, but not impossible, for something else to have
+    // gotten rid of the encryption state file at this point. We'll ignore it
+    // if that's the case.
+    await IOUtils.remove(encStateFile, { ignoreAbsent: true });
+
+    this.#encState = null;
+    this.#_state.encryptionEnabled = false;
+    this.stateUpdate();
   }
 }

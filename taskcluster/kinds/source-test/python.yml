@@ -49,6 +49,7 @@ firefox-ci:
             - '.taskcluster.yml'
             - 'taskcluster/kinds/**'
             - 'taskcluster/**/*.py'
+            - 'third_party/python/taskcluster_taskgraph/**/*.py'
             - 'tools/tryselect/selectors/auto.py'
 
 fog:
@@ -343,8 +344,9 @@ taskgraph-tests:
         subsuite: taskgraph
     when:
         files-changed:
-            - 'taskcluster/**/*.py'
             - 'python/mach/**/*.py'
+            - 'taskcluster/**/*.py'
+            - 'third_party/python/taskcluster_taskgraph/**/*.py'
 
 tryselect:
     description: tools/tryselect unit tests
@@ -362,6 +364,7 @@ tryselect:
             - 'taskcluster/config.yml'
             - 'taskcluster/kinds/test/**'
             - 'taskcluster/gecko_taskgraph/transforms/**'
+            - 'third_party/python/taskcluster_taskgraph/**/*.py'
             - 'tools/tryselect/**'
 
 mozbuild:
@@ -417,10 +420,13 @@ mozperftest:
             by-platform:
                 linux1804-64/opt:
                     - linux64-node
+                    - browsertime
                 macosx1015-64/opt:
                     - macosx64-node
+                    - browsertime
                 windows11-64/opt:
                     - win64-node
+                    - browsertime
     when:
         files-changed:
             - 'testing/performance/**'
@@ -615,7 +621,7 @@ webext:
             - 'toolkit/components/extensions/webidl-api/**'
             - 'toolkit/components/extensions/schemas/*.json'
             - 'browser/components/extensions/schemas/*.json'
-            - 'mobile/android/components/extensions/schemas/*.json'
+            - 'mobile/shared/components/extensions/schemas/*.json'
 
 xpcom:
     description: xpcom unit tests

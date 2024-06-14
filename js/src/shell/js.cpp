@@ -363,11 +363,9 @@ void counters_dump(int) { __gcov_dump(); }
 
 void counters_reset(int) { __gcov_reset(); }
 #  else
-void counters_dump(int) { /* Do nothing */
-}
+void counters_dump(int) { /* Do nothing */ }
 
-void counters_reset(int) { /* Do nothing */
-}
+void counters_reset(int) { /* Do nothing */ }
 #  endif
 
 static void InstallCoverageSignalHandlers() {
@@ -1507,6 +1505,54 @@ static void WriteTelemetryDataToDisk(const char* dir) {
 }
 
 #undef MAP_TELEMETRY
+
+// Use Counter introspection
+static Mutex useCounterLock(mutexid::ShellUseCounters);
+class MOZ_RAII AutoLockUseCounters : public LockGuard<Mutex> {
+  using Base = LockGuard<Mutex>;
+
+ public:
+  AutoLockUseCounters() : Base(useCounterLock) {}
+};
+
+using UseCounterArray =
+    mozilla::Array<uint32_t, static_cast<size_t>(JSUseCounter::COUNT)>;
+static UseCounterArray useCounterResults;
+static void SetUseCounterCallback(JSObject* obj, JSUseCounter counter) {
+  MOZ_RELEASE_ASSERT(obj);
+  AutoLockUseCounters aluc;
+  // Maybe should ensure obj is a global object?
+  useCounterResults[static_cast<size_t>(counter)]++;
+}
+
+static bool GetUseCounterResults(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  Rooted<JSObject*> obj(cx, JS_NewPlainObject(cx));
+  if (!obj) {
+    return false;
+  }
+
+  // Make a private copy holding the lock then release, because we can't
+  // hold this mutex while doing JS_DefineProperty, which holds MemoryTracker
+  // mutex.
+  UseCounterArray local;
+  {
+    AutoLockUseCounters aluc;
+    local = useCounterResults;
+  }
+
+  RootedValue val(cx);
+#define ADD_VALUE(ENUM, NAME)                                      \
+  val.setInt32(local[static_cast<size_t>(JSUseCounter::ENUM)]);    \
+  if (!JS_DefineProperty(cx, obj, #NAME, val, JSPROP_ENUMERATE)) { \
+    return false;                                                  \
+  }
+
+  FOR_EACH_JS_USE_COUNTER(ADD_VALUE);
+
+  args.rval().setObject(*obj);
+  return true;
+}
 
 static bool BoundToAsyncStack(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -9869,6 +9915,10 @@ JS_FN_HELP("createUserArrayBuffer", CreateUserArrayBuffer, 1, 0,
 " Return an object with a property 'obj.test == 42', backed by a resolve hook "
 " with the Debugger shouldAvoidSideEffects flag integration."),
 
+  JS_FN_HELP("getUseCounterResults", GetUseCounterResults, 0, 0,
+"getUseCounterResults()",
+" Return the values of the shell use counters."),
+
     JS_FS_HELP_END
 };
 // clang-format on
@@ -11894,6 +11944,7 @@ int main(int argc, char** argv) {
   if (telemetryLock) {
     JS_SetAccumulateTelemetryCallback(cx, AccumulateTelemetryDataCallback);
   }
+  JS_SetSetUseCounterCallback(cx, SetUseCounterCallback);
 
   auto destroyCx = MakeScopeExit([cx] { JS_DestroyContext(cx); });
 
@@ -12103,6 +12154,8 @@ bool InitOptionParser(OptionParser& op) {
                         "property of null or undefined") ||
       !op.addBoolOption('\0', "enable-iterator-helpers",
                         "Enable iterator helpers") ||
+      !op.addBoolOption('\0', "enable-async-iterator-helpers",
+                        "Enable async iterator helpers") ||
       !op.addBoolOption('\0', "enable-json-parse-with-source",
                         "Enable JSON.parse with source") ||
       !op.addBoolOption('\0', "enable-shadow-realms", "Enable ShadowRealms") ||
@@ -12123,6 +12176,8 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "enable-uint8array-base64",
                         "Enable Uint8Array base64/hex methods") ||
       !op.addBoolOption('\0', "enable-float16array", "Enable Float16Array") ||
+      !op.addBoolOption('\0', "enable-regexp-duplicate-named-groups",
+                        "Enable Duplicate Named Capture Groups") ||
       !op.addBoolOption('\0', "enable-top-level-await",
                         "Enable top-level await") ||
       !op.addBoolOption('\0', "enable-import-assertions",
@@ -12494,13 +12549,16 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("disable-well-formed-unicode-strings")) {
     JS::Prefs::setAtStartup_well_formed_unicode_strings(false);
   }
-#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-arraybuffer-resizable")) {
     JS::Prefs::setAtStartup_experimental_arraybuffer_resizable(true);
     JS::Prefs::setAtStartup_experimental_sharedarraybuffer_growable(true);
   }
+#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_iterator_helpers(true);
+  }
+  if (op.getBoolOption("enable-async-iterator-helpers")) {
+    JS::Prefs::setAtStartup_experimental_async_iterator_helpers(true);
   }
   if (op.getBoolOption("enable-new-set-methods")) {
     JS::Prefs::setAtStartup_experimental_new_set_methods(true);
@@ -12513,6 +12571,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-float16array")) {
     JS::Prefs::setAtStartup_experimental_float16array(true);
+  }
+  if (op.getBoolOption("enable-regexp-duplicate-named-groups")) {
+    JS::Prefs::setAtStartup_experimental_regexp_duplicate_named_groups(true);
   }
 #endif
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE
@@ -13325,6 +13386,11 @@ bool SetContextJITOptions(JSContext* cx, const OptionParser& op) {
 #  endif
 #endif
 
+#ifdef NIGHTLY_BUILD
+  if (op.getBoolOption("enable-regexp-duplicate-named-groups")) {
+    jit::JitOptions.js_regexp_duplicate_named_groups = true;
+  }
+#endif
   return true;
 }
 
@@ -13381,7 +13447,7 @@ bool SetContextGCOptions(JSContext* cx, const OptionParser& op) {
   }
   JS_SetGCParameter(cx, JSGC_PARALLEL_MARKING_ENABLED, parallelMarking);
 
-  JS_SetGCParameter(cx, JSGC_SLICE_TIME_BUDGET_MS, 5);
+  JS_SetGCParameter(cx, JSGC_SLICE_TIME_BUDGET_MS, 10);
 
   JS_SetGCParameter(cx, JSGC_PER_ZONE_GC_ENABLED, true);
 

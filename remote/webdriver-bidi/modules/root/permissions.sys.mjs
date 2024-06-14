@@ -10,13 +10,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
   assert: "chrome://remote/content/shared/webdriver/Assert.sys.mjs",
   error: "chrome://remote/content/shared/webdriver/Errors.sys.mjs",
   permissions: "chrome://remote/content/shared/Permissions.sys.mjs",
+  UserContextManager:
+    "chrome://remote/content/shared/UserContextManager.sys.mjs",
 });
-
-export const PermissionState = {
-  denied: "denied",
-  granted: "granted",
-  prompt: "prompt",
-};
 
 class PermissionsModule extends Module {
   constructor(messageHandler) {
@@ -63,28 +59,9 @@ class PermissionsModule extends Module {
       userContext: userContextId = null,
     } = options;
 
-    lazy.assert.object(
-      descriptor,
-      `Expected "descriptor" to be an object, got ${descriptor}`
-    );
+    lazy.permissions.validateDescriptor(descriptor);
+
     const permissionName = descriptor.name;
-    lazy.assert.string(
-      permissionName,
-      `Expected "descriptor.name" to be a string, got ${permissionName}`
-    );
-
-    lazy.permissions.validatePermission(permissionName);
-
-    // Bug 1878741: Allowing this permission causes timing related Android crash.
-    if (descriptor.name === "notifications") {
-      if (Services.prefs.getBoolPref("notification.prompt.testing", false)) {
-        // Okay, do nothing. The notifications module will work without permission.
-        return;
-      }
-      throw new lazy.error.UnsupportedOperationError(
-        `Setting "descriptor.name" "notifications" expected "notification.prompt.testing" preference to be set`
-      );
-    }
 
     if (permissionName === "storage-access") {
       // TODO: Bug 1895457. Add support for "storage-access" permission.
@@ -93,11 +70,7 @@ class PermissionsModule extends Module {
       );
     }
 
-    const permissionStateTypes = Object.keys(PermissionState);
-    lazy.assert.that(
-      state => permissionStateTypes.includes(state),
-      `Expected "state" to be one of ${permissionStateTypes}, got ${state}`
-    )(state);
+    lazy.permissions.validateState(state);
 
     lazy.assert.string(
       origin,
@@ -108,16 +81,20 @@ class PermissionsModule extends Module {
       `Expected "origin" to be a valid URL, got ${origin}`
     )(origin);
 
+    let userContext;
     if (userContextId !== null) {
       lazy.assert.string(
         userContextId,
         `Expected "userContext" to be a string, got ${userContextId}`
       );
 
-      // TODO: Bug 1894217. Add support for "userContext" argument.
-      throw new lazy.error.UnsupportedOperationError(
-        `"userContext" is not supported yet`
-      );
+      if (!lazy.UserContextManager.hasUserContextId(userContextId)) {
+        throw new lazy.error.NoSuchUserContextError(
+          `User Context with id ${userContextId} was not found`
+        );
+      }
+
+      userContext = lazy.UserContextManager.getInternalIdById(userContextId);
     }
 
     const activeWindow = Services.wm.getMostRecentBrowserWindow();
@@ -133,7 +110,7 @@ class PermissionsModule extends Module {
       );
     }
 
-    lazy.permissions.set(typedDescriptor, state, origin);
+    lazy.permissions.set(typedDescriptor, state, origin, userContext);
   }
 }
 

@@ -7,7 +7,6 @@ package org.mozilla.geckoview.test
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers
 import org.hamcrest.Matchers.greaterThan
 import org.hamcrest.core.IsEqual.equalTo
 import org.hamcrest.core.StringEndsWith.endsWith
@@ -699,7 +698,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -784,7 +787,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(
                     extension.metaData.description,
                     "Adds a red border to all webpages matching example.com.",
@@ -850,7 +857,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 1)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -929,7 +940,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 1)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1000,7 +1015,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 2)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1051,7 +1070,11 @@ class WebExtensionTest : BaseSessionTest() {
     ) {
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 0)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1107,7 +1130,11 @@ class WebExtensionTest : BaseSessionTest() {
         )
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1201,7 +1228,11 @@ class WebExtensionTest : BaseSessionTest() {
     fun corruptFileErrorWillNotReturnAnWebExtensionWithoutId() {
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 0)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1261,7 +1292,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 1)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.deny()
             }
         })
@@ -1867,7 +1902,11 @@ class WebExtensionTest : BaseSessionTest() {
         )
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1941,7 +1980,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -1951,7 +1994,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -2122,11 +2169,6 @@ class WebExtensionTest : BaseSessionTest() {
     // - verifies that the messages are received when restoring the tab in a fresh session
     @Test
     fun testRestoringExtensionPagePreservesMessages() {
-        // TODO: Bug 1884334
-        val geckoPrefs = sessionRule.getPrefs(
-            "fission.disableSessionHistoryInParent",
-        )
-        assumeThat(geckoPrefs[0] as Boolean, Matchers.equalTo(true))
         // TODO: Bug 1837551
         assumeThat(sessionRule.env.isFission, equalTo(false))
 
@@ -2870,7 +2912,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "1.0")
 
                 return GeckoResult.allow()
@@ -2927,7 +2973,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 1)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "1.0")
 
                 return GeckoResult.allow()
@@ -2964,7 +3014,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "1.0")
 
                 return GeckoResult.allow()
@@ -3008,7 +3062,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "1.0")
 
                 return GeckoResult.allow()
@@ -3079,7 +3137,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "2.0")
 
                 return GeckoResult.allow()
@@ -3132,7 +3194,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "1.0")
 
                 return GeckoResult.allow()
@@ -3204,7 +3270,11 @@ class WebExtensionTest : BaseSessionTest() {
     fun cancelInstallFailsAfterInstalled() {
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -3241,7 +3311,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.version, "1.0")
                 return GeckoResult.allow()
             }
@@ -3299,7 +3373,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -3454,7 +3532,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -3529,7 +3611,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 return GeckoResult.allow()
             }
         })
@@ -3821,7 +3907,11 @@ class WebExtensionTest : BaseSessionTest() {
         var addonId = ""
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny> {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny> {
                 assertEquals(extension.metaData.name, "Borderify")
                 assertEquals(extension.metaData.version, "1.0")
                 assertEquals(extension.isBuiltIn, false)
@@ -3957,7 +4047,11 @@ class WebExtensionTest : BaseSessionTest() {
 
         sessionRule.delegateDuringNextWait(object : WebExtensionController.PromptDelegate {
             @AssertCalled(count = 1)
-            override fun onInstallPrompt(extension: WebExtension): GeckoResult<AllowOrDeny>? {
+            override fun onInstallPrompt(
+                extension: WebExtension,
+                permissions: Array<String>,
+                origins: Array<String>,
+            ): GeckoResult<AllowOrDeny>? {
                 return GeckoResult.allow()
             }
         })

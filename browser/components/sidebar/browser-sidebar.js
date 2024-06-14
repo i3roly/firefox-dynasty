@@ -20,6 +20,39 @@ var SidebarController = {
     };
   },
 
+  registerPrefSidebar(pref, commandID, config) {
+    const sidebar = this.makeSidebar(config);
+    this._sidebars.set(commandID, sidebar);
+
+    let switcherMenuitem;
+    const updateMenus = visible => {
+      // Update visibility of View -> Sidebar menu item.
+      const viewItem = document.getElementById(sidebar.menuId);
+      viewItem.hidden = !visible;
+
+      // Add/remove switcher menu item.
+      if (visible) {
+        switcherMenuitem = this.createMenuItem(commandID, sidebar);
+        switcherMenuitem.setAttribute("id", config.elementId);
+        switcherMenuitem.removeAttribute("type");
+        const separator = this._switcherPanel.querySelector("menuseparator");
+        separator.parentNode.insertBefore(switcherMenuitem, separator);
+      } else {
+        switcherMenuitem?.remove();
+      }
+    };
+
+    // Detect pref changes and handle initial state.
+    XPCOMUtils.defineLazyPreferenceGetter(
+      sidebar,
+      "visible",
+      pref,
+      false,
+      (_pref, _prev, val) => updateMenus(val)
+    );
+    this.promiseInitialized.then(() => updateMenus(sidebar.visible));
+  },
+
   get sidebars() {
     if (this._sidebars) {
       return this._sidebars;
@@ -38,7 +71,7 @@ var SidebarController = {
           keyId: "key_gotoHistory",
           menuL10nId: "menu-view-history-button",
           revampL10nId: "sidebar-menu-history",
-          icon: `url("chrome://browser/content/firefoxview/view-history.svg")`,
+          iconUrl: "chrome://browser/content/firefoxview/view-history.svg",
         }),
       ],
       [
@@ -52,13 +85,10 @@ var SidebarController = {
           classAttribute: "sync-ui-item",
           menuL10nId: "menu-view-synced-tabs-sidebar",
           revampL10nId: "sidebar-menu-synced-tabs",
-          icon: `url("chrome://browser/content/firefoxview/view-syncedtabs.svg")`,
+          iconUrl: "chrome://browser/content/firefoxview/view-syncedtabs.svg",
         }),
       ],
-    ]);
-
-    if (!this.sidebarRevampEnabled) {
-      this._sidebars.set(
+      [
         "viewBookmarksSidebar",
         this.makeSidebar({
           elementId: "sidebar-switcher-bookmarks",
@@ -67,29 +97,30 @@ var SidebarController = {
           keyId: "viewBookmarksSidebarKb",
           menuL10nId: "menu-view-bookmarks",
           revampL10nId: "sidebar-menu-bookmarks",
-        })
+          iconUrl: "chrome://browser/skin/bookmark-hollow.svg",
+          disabled: true,
+        }),
+      ],
+    ]);
+
+    if (!this.sidebarRevampEnabled) {
+      this.registerPrefSidebar(
+        "browser.megalist.enabled",
+        "viewMegalistSidebar",
+        {
+          elementId: "sidebar-switcher-megalist",
+          url: "chrome://global/content/megalist/megalist.html",
+          menuId: "menu_megalistSidebar",
+          menuL10nId: "menu-view-megalist-sidebar",
+          revampL10nId: "sidebar-menu-megalist",
+        }
       );
-      if (this.megalistEnabled) {
-        this._sidebars.set(
-          "viewMegalistSidebar",
-          this.makeSidebar({
-            elementId: "sidebar-switcher-megalist",
-            url: "chrome://global/content/megalist/megalist.html",
-            menuId: "menu_megalistSidebar",
-            menuL10nId: "menu-view-megalist-sidebar",
-            revampL10nId: "sidebar-menu-megalist",
-          })
-        );
-      }
     } else {
-      this._sidebars.set(
-        "viewCustomizeSidebar",
-        this.makeSidebar({
-          url: "chrome://browser/content/sidebar/sidebar-customize.html",
-          revampL10nId: "sidebar-menu-customize",
-          icon: `url("chrome://browser/skin/preferences/category-general.svg")`,
-        })
-      );
+      this._sidebars.set("viewCustomizeSidebar", {
+        url: "chrome://browser/content/sidebar/sidebar-customize.html",
+        revampL10nId: "sidebar-menu-customize",
+        iconUrl: "chrome://browser/skin/preferences/category-general.svg",
+      });
     }
 
     return this._sidebars;
@@ -104,24 +135,11 @@ var SidebarController = {
     }
 
     this._toolsAndExtensions = new Map();
-    this.getSidebarPanels(["viewHistorySidebar", "viewTabsSidebar"]).forEach(
-      tool => {
-        this._toolsAndExtensions.set(tool.commandID, {
-          view: tool.commandID,
-          icon: tool.icon,
-          l10nId: tool.revampL10nId,
-          disabled: false,
-        });
-      }
-    );
+    this.getTools().forEach(tool => {
+      this._toolsAndExtensions.set(tool.commandID, tool);
+    });
     this.getExtensions().forEach(extension => {
-      this._toolsAndExtensions.set(extension.commandID, {
-        view: extension.commandID,
-        extensionId: extension.extensionId,
-        icon: extension.icon,
-        tooltiptext: extension.label,
-        disabled: false,
-      });
+      this._toolsAndExtensions.set(extension.commandID, extension);
     });
     return this._toolsAndExtensions;
   },
@@ -184,7 +202,10 @@ var SidebarController = {
 
     const menubar = document.getElementById("viewSidebarMenu");
     for (const [commandID, sidebar] of this.sidebars.entries()) {
-      if (!Object.hasOwn(sidebar, "extensionId")) {
+      if (
+        !Object.hasOwn(sidebar, "extensionId") &&
+        commandID !== "viewCustomizeSidebar"
+      ) {
         // registerExtension() already creates menu items for extensions.
         const menuitem = this.createMenuItem(commandID, sidebar);
         menubar.appendChild(menuitem);
@@ -195,6 +216,7 @@ var SidebarController = {
       await import("chrome://browser/content/sidebar/sidebar-main.mjs");
       document.getElementById("sidebar-main").hidden = false;
       document.getElementById("sidebar-header").hidden = true;
+      this._sidebarMain = document.querySelector("sidebar-main");
     } else {
       this._switcherTarget.addEventListener("command", () => {
         this.toggleSwitcherPanel();
@@ -211,24 +233,6 @@ var SidebarController = {
     this._initDeferred.resolve();
   },
 
-  toggleMegalistItem() {
-    const sideMenuPopupItem = document.getElementById(
-      "sidebar-switcher-megalist"
-    );
-    sideMenuPopupItem.style.display = this.megalistEnabled ? "" : "none";
-  },
-
-  setMegalistMenubarVisibility(aEvent) {
-    const popup = aEvent.target;
-    if (popup != aEvent.currentTarget) {
-      return;
-    }
-
-    // Show the megalist item if enabled
-    const megalistItem = popup.querySelector("#menu_megalistSidebar");
-    megalistItem.hidden = !this.megalistEnabled;
-  },
-
   uninit() {
     // If this is the last browser window, persist various values that should be
     // remembered for after a restart / reopening a browser window.
@@ -236,7 +240,6 @@ var SidebarController = {
     if (!enumerator.hasMoreElements()) {
       let xulStore = Services.xulStore;
 
-      xulStore.persist(this._box, "style");
       xulStore.persist(this._title, "value");
     }
 
@@ -333,7 +336,6 @@ var SidebarController = {
   },
 
   showSwitcherPanel() {
-    this.toggleMegalistItem();
     this._switcherPanel.addEventListener(
       "popuphiding",
       () => {
@@ -385,8 +387,7 @@ var SidebarController = {
     [...browser.children].forEach((node, i) => {
       node.style.order = i + 1;
     });
-    let sidebarMain = document.querySelector("sidebar-main");
-
+    let sidebarMain = document.getElementById("sidebar-main");
     if (!this._positionStart) {
       // DOM ordering is:     sidebar-main |  sidebar-box  | splitter |   appcontent  |
       // Want to display as:  |   appcontent  | splitter |  sidebar-box  | sidebar-main
@@ -425,20 +426,20 @@ var SidebarController = {
     // If the opener had a sidebar, open the same sidebar in our window.
     // The opener can be the hidden window too, if we're coming from the state
     // where no windows are open, and the hidden window has no sidebar box.
-    let sourceUI = sourceWindow.SidebarController;
-    if (!sourceUI || !sourceUI._box) {
+    let sourceController = sourceWindow.SidebarController;
+    if (!sourceController || !sourceController._box) {
       // no source UI or no _box means we also can't adopt the state.
       return false;
     }
 
     // Set sidebar command even if hidden, so that we keep the same sidebar
     // even if it's currently closed.
-    let commandID = sourceUI._box.getAttribute("sidebarcommand");
+    let commandID = sourceController._box.getAttribute("sidebarcommand");
     if (commandID) {
       this._box.setAttribute("sidebarcommand", commandID);
     }
 
-    if (sourceUI._box.hidden) {
+    if (sourceController._box.hidden) {
       // just hidden means we have adopted the hidden state.
       return true;
     }
@@ -449,7 +450,8 @@ var SidebarController = {
       return true;
     }
 
-    this._box.style.width = sourceUI._box.getBoundingClientRect().width + "px";
+    this._box.style.width =
+      sourceController._box.getBoundingClientRect().width + "px";
     this.showInitially(commandID);
 
     return true;
@@ -578,7 +580,11 @@ var SidebarController = {
       commandID = this._box.getAttribute("sidebarcommand");
     }
     if (!commandID || !this.sidebars.has(commandID)) {
-      commandID = this.DEFAULT_SIDEBAR_ID;
+      if (this.sidebarRevampEnabled && this.sidebars.size) {
+        commandID = this.sidebars.keys().next().value;
+      } else {
+        commandID = this.DEFAULT_SIDEBAR_ID;
+      }
     }
 
     if (this.isOpen && commandID == this.currentID) {
@@ -586,6 +592,13 @@ var SidebarController = {
       return Promise.resolve();
     }
     return this.show(commandID, triggerNode);
+  },
+
+  /**
+   * Toggle the expansion state of the sidebar.
+   */
+  toggleExpanded() {
+    this._sidebarMain.expanded = !this._sidebarMain.expanded;
   },
 
   _loadSidebarExtension(commandID) {
@@ -616,6 +629,7 @@ var SidebarController = {
       // Update existing extension
       let extensionToUpdate = this.toolsAndExtensions.get(commandID);
       extensionToUpdate.icon = extension.icon;
+      extensionToUpdate.iconUrl = extension.iconUrl;
       extensionToUpdate.tooltiptext = extension.label;
       window.dispatchEvent(new CustomEvent("SidebarItemChanged"));
     } else {
@@ -624,6 +638,7 @@ var SidebarController = {
         view: commandID,
         extensionId: extension.extensionId,
         icon: extension.icon,
+        iconUrl: extension.iconUrl,
         tooltiptext: extension.label,
         disabled: false,
       });
@@ -647,6 +662,7 @@ var SidebarController = {
       keyId: `ext-key-id-${commandID}`,
       label: props.title,
       icon: props.icon,
+      iconUrl: props.iconUrl,
       classAttribute: "menuitem-iconic webextension-menuitem",
       // The following properties are specific to extensions
       extensionId: props.extensionId,
@@ -670,7 +686,7 @@ var SidebarController = {
     }
     this._setExtensionAttributes(
       commandID,
-      { icon: props.icon, label: props.title },
+      { icon: props.icon, iconUrl: props.iconUrl, label: props.title },
       sidebar
     );
   },
@@ -705,6 +721,7 @@ var SidebarController = {
    * @param {string} commandID
    * @param {object} attributes
    * @param {string} attributes.icon
+   * @param {string} attributes.iconUrl
    * @param {string} attributes.label
    * @param {boolean} needsRefresh
    */
@@ -716,11 +733,12 @@ var SidebarController = {
 
   _setExtensionAttributes(
     commandID,
-    { icon, label },
+    { icon, iconUrl, label },
     sidebar,
     needsRefresh = false
   ) {
     sidebar.icon = icon;
+    sidebar.iconUrl = iconUrl;
     sidebar.label = label;
 
     const updateAttributes = el => {
@@ -752,27 +770,40 @@ var SidebarController = {
     const extensions = [];
     for (const [commandID, sidebar] of this.sidebars.entries()) {
       if (Object.hasOwn(sidebar, "extensionId")) {
-        extensions.push({ commandID, ...sidebar });
+        extensions.push({
+          commandID,
+          view: commandID,
+          extensionId: sidebar.extensionId,
+          iconUrl: sidebar.iconUrl,
+          tooltiptext: sidebar.label,
+          disabled: false,
+        });
       }
     }
     return extensions;
   },
 
   /**
-   * Retrieve the list of sidebar panels
+   * Retrieve the list of tools in the sidebar
    *
-   * @param {Array} commandIds
    * @returns {Array}
    */
-  getSidebarPanels(commandIds) {
-    const tools = [];
-    for (const commandID of commandIds) {
+  getTools() {
+    const toolIds = [
+      "viewHistorySidebar",
+      "viewTabsSidebar",
+      "viewBookmarksSidebar",
+    ];
+    return toolIds.map(commandID => {
       const sidebar = this.sidebars.get(commandID);
-      if (sidebar) {
-        tools.push({ commandID, ...sidebar });
-      }
-    }
-    return tools;
+      return {
+        commandID,
+        view: commandID,
+        iconUrl: sidebar.iconUrl,
+        l10nId: sidebar.revampL10nId,
+        disabled: sidebar.disabled ?? false,
+      };
+    });
   },
 
   /**
@@ -888,9 +919,12 @@ var SidebarController = {
 
       // use to live update <tree> elements if the locale changes
       this.lastOpenedId = commandID;
-      this.title = title;
-      // Keep the title element in the switcher in sync with any l10n changes.
-      this.observeTitleChanges(sourceL10nEl);
+      // These title changes only apply to the old sidebar menu
+      if (!this.sidebarRevampEnabled) {
+        this.title = title;
+        // Keep the title element in the switcher in sync with any l10n changes.
+        this.observeTitleChanges(sourceL10nEl);
+      }
 
       this.browser.setAttribute("src", url); // kick off async load
 
@@ -960,6 +994,9 @@ var SidebarController = {
   selectMenuItem(commandID) {
     for (let [id, { menuId, triggerButtonId }] of this.sidebars) {
       let menu = document.getElementById(menuId);
+      if (!menu) {
+        return;
+      }
       let triggerbutton =
         triggerButtonId && document.getElementById(triggerButtonId);
       if (id == commandID) {
@@ -992,11 +1029,5 @@ XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,
   "sidebarRevampEnabled",
   "sidebar.revamp",
-  false
-);
-XPCOMUtils.defineLazyPreferenceGetter(
-  SidebarController,
-  "megalistEnabled",
-  "browser.megalist.enabled",
   false
 );

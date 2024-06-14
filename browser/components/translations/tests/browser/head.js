@@ -755,6 +755,13 @@ class FullPageTranslationsTestUtils {
       FullPageTranslationsPanel,
       expectedId
     );
+
+    const panelView = document.getElementById(expectedId);
+    const label = document.getElementById(
+      panelView.getAttribute("aria-labelledby")
+    );
+    ok(label, "The a11y label for the panel view can be found.");
+    assertVisibility({ visible: { label } });
   }
 
   /**
@@ -1689,8 +1696,12 @@ class SelectTranslationsTestUtils {
    * state when the language lists fail to initialize upon opening the panel.
    */
   static async assertPanelViewInitFailure() {
-    const { cancelButton, settingsButton, tryAgainButton } =
-      SelectTranslationsPanel.elements;
+    const {
+      cancelButton,
+      initFailureMessageBar,
+      settingsButton,
+      tryAgainButton,
+    } = SelectTranslationsPanel.elements;
     await SelectTranslationsTestUtils.waitForPanelState("init-failure");
     SelectTranslationsTestUtils.#assertPanelElementVisibility({
       header: true,
@@ -1708,6 +1719,8 @@ class SelectTranslationsTestUtils {
         : [cancelButton, tryAgainButton]),
     ]);
     SharedTranslationsTestUtils._assertHasFocus(tryAgainButton);
+    const ariaDescribedBy = tryAgainButton.getAttribute("aria-describedby");
+    ok(ariaDescribedBy.includes(initFailureMessageBar.id));
   }
 
   /**
@@ -1756,6 +1769,8 @@ class SelectTranslationsTestUtils {
         : [cancelButton, tryAgainButton]),
     ]);
     SharedTranslationsTestUtils._assertHasFocus(tryAgainButton);
+    const ariaDescribedBy = tryAgainButton.getAttribute("aria-describedby");
+    ok(ariaDescribedBy.includes(translationFailureMessageBar.id));
   }
 
   static #assertPanelTextAreaDirection(langTag = null) {
@@ -1831,6 +1846,11 @@ class SelectTranslationsTestUtils {
     if (textArea.scrollHeight > textArea.clientHeight) {
       info("Ensuring that the textarea is scrolled to the top.");
       await waitForCondition(() => textArea.scrollTop === 0);
+
+      info("Ensuring that the textarea cursor is at the beginning.");
+      await waitForCondition(
+        () => textArea.selectionStart === 0 && textArea.selectionEnd === 0
+      );
     }
   }
 
@@ -2144,8 +2164,11 @@ class SelectTranslationsTestUtils {
         : [doneButtonSecondary, translateButton]),
     ]);
 
+    const translatablePhasePromise =
+      SelectTranslationsTestUtils.waitForPanelState("translatable");
     click(translateButton);
-    await SelectTranslationsTestUtils.waitForPanelState("translatable");
+    await translatablePhasePromise;
+
     if (downloadHandler) {
       await this.handleDownloads({ downloadHandler, pivotTranslation });
     }
@@ -2190,11 +2213,27 @@ class SelectTranslationsTestUtils {
     logAction();
     const { tryAgainButton } = SelectTranslationsPanel.elements;
     assertVisibility({ visible: { tryAgainButton } });
-    click(tryAgainButton, "Clicking the try-again button");
-    await SelectTranslationsTestUtils.waitForPanelState("translatable");
+
+    const translatablePhasePromise = downloadHandler
+      ? SelectTranslationsTestUtils.waitForPanelState("translatable")
+      : Promise.resolve();
+
+    if (SelectTranslationsPanel.phase() === "init-failure") {
+      // The try-again button reopens the panel from the "init-failure" phase.
+      await SelectTranslationsTestUtils.waitForPanelPopupEvent(
+        "popupshown",
+        () => click(tryAgainButton, "Clicking the try-again button")
+      );
+    } else {
+      // Otherwise the try-again button just attempts to re-translate.
+      click(tryAgainButton, "Clicking the try-again button");
+    }
+
     if (downloadHandler) {
+      await translatablePhasePromise;
       await this.handleDownloads({ downloadHandler, pivotTranslation });
     }
+
     if (viewAssertion) {
       await viewAssertion();
     }
@@ -2602,6 +2641,23 @@ class SelectTranslationsTestUtils {
     if (expectedToLanguage !== undefined) {
       SelectTranslationsTestUtils.assertSelectedToLanguage(expectedToLanguage);
     }
+
+    const { panel } = SelectTranslationsPanel.elements;
+
+    const documentRoleElement = panel.querySelector('[role="document"]');
+    ok(documentRoleElement, "The document-role element can be found.");
+
+    const ariaDescription = document.getElementById(
+      documentRoleElement.getAttribute("aria-describedby")
+    );
+    ok(ariaDescription, "The a11y description for the panel can be found.");
+
+    const ariaLabel = document.getElementById(
+      documentRoleElement.getAttribute("aria-labelledby")
+    );
+    ok(ariaLabel, "The a11y label for the panel can be found.");
+
+    assertVisibility({ visible: { ariaLabel } });
   }
 
   /**

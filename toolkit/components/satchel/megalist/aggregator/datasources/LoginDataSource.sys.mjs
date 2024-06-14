@@ -6,10 +6,12 @@ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 import { LoginHelper } from "resource://gre/modules/LoginHelper.sys.mjs";
 import { DataSourceBase } from "resource://gre/modules/megalist/aggregator/datasources/DataSourceBase.sys.mjs";
 import { LoginCSVImport } from "resource://gre/modules/LoginCSVImport.sys.mjs";
+import { LoginExport } from "resource://gre/modules/LoginExport.sys.mjs";
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   LoginBreaches: "resource:///modules/LoginBreaches.sys.mjs",
+  MigrationUtils: "resource:///modules/MigrationUtils.sys.mjs",
 });
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -34,6 +36,7 @@ export class LoginDataSource extends DataSourceBase {
   #loginsDisabledMessage;
   #enabled;
   #header;
+  #exportPasswordsStrings;
 
   constructor(...args) {
     super(...args);
@@ -44,6 +47,7 @@ export class LoginDataSource extends DataSourceBase {
       usernameLabel: "passwords-username-label",
       passwordLabel: "passwords-password-label",
       passwordsDisabled: "passwords-disabled",
+      passwordOSAuthDialogCaption: "passwords-os-auth-dialog-caption",
       passwordsImportFilePickerTitle: "passwords-import-file-picker-title",
       passwordsImportFilePickerImportButton:
         "passwords-import-file-picker-import-button",
@@ -51,6 +55,16 @@ export class LoginDataSource extends DataSourceBase {
         "passwords-import-file-picker-csv-filter-title",
       passwordsImportFilePickerTsvFilterTitle:
         "passwords-import-file-picker-tsv-filter-title",
+      exportPasswordsOSReauthMessage: this.getPlatformFtl(
+        "passwords-export-os-auth-dialog-message"
+      ),
+      passwordsExportFilePickerTitle: "passwords-export-file-picker-title",
+      passwordsExportFilePickerDefaultFileName:
+        "passwords-export-file-picker-default-filename",
+      passwordsExportFilePickerExportButton:
+        "passwords-export-file-picker-export-button",
+      passwordsExportFilePickerCsvFilterTitle:
+        "passwords-export-file-picker-csv-filter-title",
       dismissBreachCommandLabel: "passwords-dismiss-breach-alert-command",
     }).then(strings => {
       const copyCommand = { id: "Copy", label: "command-copy" };
@@ -68,6 +82,10 @@ export class LoginDataSource extends DataSourceBase {
       this.#header = this.createHeaderLine(strings.headerLabel);
       this.#header.commands.push(
         { id: "Create", label: "passwords-command-create" },
+        {
+          id: "ImportFromBrowser",
+          label: "passwords-command-import-from-browser",
+        },
         { id: "Import", label: "passwords-command-import" },
         { id: "Export", label: "passwords-command-export" },
         { id: "RemoveAll", label: "passwords-command-remove-all" },
@@ -82,10 +100,21 @@ export class LoginDataSource extends DataSourceBase {
           strings.passwordsImportFilePickerTsvFilterTitle
         );
 
+      this.#header.executeImportFromBrowser = () => this.#importFromBrowser();
       this.#header.executeRemoveAll = () => this.#removeAllPasswords();
       this.#header.executeSettings = () => this.#openPreferences();
       this.#header.executeHelp = () => this.#getHelp();
-      this.#header.executeExport = () => this.#exportAllPasswords();
+      this.#header.executeExport = async () => this.#exportAllPasswords();
+      this.#exportPasswordsStrings = {
+        OSReauthMessage: strings.exportPasswordsOSReauthMessage,
+        OSAuthDialogCaption: strings.passwordOSAuthDialogCaption,
+        ExportFilePickerTitle: strings.passwordsExportFilePickerTitle,
+        FilePickerExportButton: strings.passwordsExportFilePickerExportButton,
+        FilePickerDefaultFileName:
+          strings.passwordsExportFilePickerDefaultFileName.concat(".csv"),
+        FilePickerCsvFilterTitle:
+          strings.passwordsExportFilePickerCsvFilterTitle,
+      };
 
       this.#originPrototype = this.prototypeDataLine({
         label: { value: strings.originLabel },
@@ -327,6 +356,20 @@ export class LoginDataSource extends DataSourceBase {
     });
   }
 
+  #importFromBrowser() {
+    const { BrowserWindowTracker } = ChromeUtils.importESModule(
+      "resource:///modules/BrowserWindowTracker.sys.mjs"
+    );
+    const browser = BrowserWindowTracker.getTopWindow().gBrowser;
+    try {
+      lazy.MigrationUtils.showMigrationWizard(browser.ownerGlobal, {
+        entrypoint: lazy.MigrationUtils.MIGRATION_ENTRYPOINTS.PASSWORDS,
+      });
+    } catch (ex) {
+      console.error(ex);
+    }
+  }
+
   #removeAllPasswords() {
     let count = 0;
     let currentRecord;
@@ -340,33 +383,80 @@ export class LoginDataSource extends DataSourceBase {
     this.setLayout({ id: "remove-logins", l10nArgs: [{ count }] });
   }
 
-  #exportAllPasswords() {
-    this.setLayout({ id: "export-logins" });
-  }
-
   confirmRemoveAll() {
     Services.logins.removeAllLogins();
     this.cancelDialog();
   }
 
-  confirmExportLogins() {
-    // TODO: Implement this.
-    // We need to simplify this function first
-    // https://searchfox.org/mozilla-central/source/browser/components/aboutlogins/AboutLoginsParent.sys.mjs#377
-    // It's too messy right now.
-    this.cancelDialog();
-  }
-
-  confirmRemoveLogin() {
-    // TODO: Simplify getting record directly.
-    const login = this.lines?.[0]?.record;
-    Services.logins.removeLogin(login);
+  confirmRemoveLogin([record]) {
+    Services.logins.removeLogin(record);
     this.cancelDialog();
   }
 
   confirmRetryImport() {
-    // TODO: Implement this.
+    this.#header.executeImport();
     this.cancelDialog();
+  }
+
+  #exportAllPasswords() {
+    this.setLayout({ id: "export-logins" });
+  }
+
+  async confirmExportLogins() {
+    const { BrowserWindowTracker } = ChromeUtils.importESModule(
+      "resource:///modules/BrowserWindowTracker.sys.mjs"
+    );
+    const browsingContext = BrowserWindowTracker.getTopWindow().browsingContext;
+
+    const isOSAuthEnabled = LoginHelper.getOSAuthEnabled(
+      LoginHelper.OS_AUTH_FOR_PASSWORDS_PREF
+    );
+
+    let { isAuthorized, telemetryEvent } = await LoginHelper.requestReauth(
+      browsingContext,
+      isOSAuthEnabled,
+      null, // Prompt regardless of a recent prompt
+      this.#exportPasswordsStrings.OSReauthMessage,
+      this.#exportPasswordsStrings.OSAuthDialogCaption
+    );
+
+    let { method, object, extra = {}, value = null } = telemetryEvent;
+    Services.telemetry.recordEvent("pwmgr", method, object, value, extra);
+
+    if (!isAuthorized) {
+      this.cancelDialog();
+      return;
+    }
+    this.exportFilePickerDialog(browsingContext);
+    this.cancelDialog();
+  }
+
+  exportFilePickerDialog(browsingContext) {
+    let fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    function fpCallback(aResult) {
+      if (aResult != Ci.nsIFilePicker.returnCancel) {
+        LoginExport.exportAsCSV(fp.file.path);
+        Services.telemetry.recordEvent(
+          "pwmgr",
+          "mgmt_menu_item_used",
+          "export_complete"
+        );
+      }
+    }
+    fp.init(
+      browsingContext,
+      this.#exportPasswordsStrings.ExportFilePickerTitle,
+      Ci.nsIFilePicker.modeSave
+    );
+    fp.appendFilter(
+      this.#exportPasswordsStrings.FilePickerCsvFilterTitle,
+      "*.csv"
+    );
+    fp.appendFilters(Ci.nsIFilePicker.filterAll);
+    fp.defaultString = this.#exportPasswordsStrings.FilePickerDefaultFileName;
+    fp.defaultExtension = "csv";
+    fp.okButtonLabel = this.#exportPasswordsStrings.FilePickerExportButton;
+    fp.open(fpCallback);
   }
 
   #openPreferences() {

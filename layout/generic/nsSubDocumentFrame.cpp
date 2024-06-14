@@ -14,6 +14,7 @@
 #include "mozilla/ComputedStyleInlines.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
+#include "mozilla/ScrollContainerFrame.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "mozilla/Unused.h"
 #include "mozilla/dom/Document.h"
@@ -38,7 +39,6 @@
 #include "nsFrameSetFrame.h"
 #include "nsNameSpaceManager.h"
 #include "nsDisplayList.h"
-#include "nsIScrollableFrame.h"
 #include "nsIObjectLoadingContent.h"
 #include "nsLayoutUtils.h"
 #include "nsContentUtils.h"
@@ -271,11 +271,15 @@ nsRect nsSubDocumentFrame::GetDestRect() {
   nsRect rect = GetContent()->IsHTMLElement(nsGkAtoms::frame)
                     ? GetRectRelativeToSelf()
                     : GetContentRectRelativeToSelf();
+  return GetDestRect(rect);
+}
 
+nsRect nsSubDocumentFrame::GetDestRect(const nsRect& aConstraintRect) {
   // Adjust subdocument size, according to 'object-fit' and the subdocument's
   // intrinsic size and ratio.
   return nsLayoutUtils::ComputeObjectDestRect(
-      rect, GetIntrinsicSize(), GetIntrinsicRatio(), StylePosition());
+      aConstraintRect, ComputeIntrinsicSize(/* aIgnoreContainment = */ true),
+      GetIntrinsicRatio(), StylePosition());
 }
 
 ScreenIntSize nsSubDocumentFrame::GetSubdocumentSize() {
@@ -402,15 +406,13 @@ void nsSubDocumentFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
     visible = visible.ScaleToOtherAppUnitsRoundOut(parentAPD, subdocAPD);
     dirty = dirty.ScaleToOtherAppUnitsRoundOut(parentAPD, subdocAPD);
 
-    if (nsIScrollableFrame* rootScrollableFrame =
-            presShell->GetRootScrollFrameAsScrollable()) {
+    if (ScrollContainerFrame* sf = presShell->GetRootScrollContainerFrame()) {
       // Use a copy, so the rects don't get modified.
       nsRect copyOfDirty = dirty;
       nsRect copyOfVisible = visible;
       // TODO(botond): Can we just axe this DecideScrollableLayer call?
-      rootScrollableFrame->DecideScrollableLayer(aBuilder, &copyOfVisible,
-                                                 &copyOfDirty,
-                                                 /* aSetBase = */ true);
+      sf->DecideScrollableLayer(aBuilder, &copyOfVisible, &copyOfDirty,
+                                /* aSetBase = */ true);
 
       ignoreViewportScrolling = presShell->IgnoringViewportScrolling();
     }
@@ -425,7 +427,7 @@ void nsSubDocumentFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   DisplayListClipState::AutoSaveRestore clipState(aBuilder);
   clipState.ClipContainingBlockDescendantsToContentBox(aBuilder, this);
 
-  nsIScrollableFrame* sf = presShell->GetRootScrollFrameAsScrollable();
+  ScrollContainerFrame* sf = presShell->GetRootScrollContainerFrame();
   bool constructZoomItem = subdocRootFrame && parentAPD != subdocAPD;
   bool needsOwnLayer = constructZoomItem ||
                        presContext->IsRootContentDocumentCrossProcess() ||
@@ -569,7 +571,13 @@ nscoord nsSubDocumentFrame::GetPrefISize(gfxContext* aRenderingContext) {
 
 /* virtual */
 IntrinsicSize nsSubDocumentFrame::GetIntrinsicSize() {
-  const auto containAxes = GetContainSizeAxes();
+  return ComputeIntrinsicSize();
+}
+
+IntrinsicSize nsSubDocumentFrame::ComputeIntrinsicSize(
+    bool aIgnoreContainment) const {
+  const auto containAxes =
+      aIgnoreContainment ? ContainSizeAxes(false, false) : GetContainSizeAxes();
   if (containAxes.IsBoth()) {
     // Intrinsic size of 'contain:size' replaced elements is determined by
     // contain-intrinsic-size.
@@ -684,10 +692,7 @@ void nsSubDocumentFrame::Reflow(nsPresContext* aPresContext,
                      aDesiredSize.Height() - bp.TopBottom());
 
     // Size & position the view according to 'object-fit' & 'object-position'.
-    nsRect destRect = nsLayoutUtils::ComputeObjectDestRect(
-        nsRect(offset, innerSize), GetIntrinsicSize(), GetIntrinsicRatio(),
-        StylePosition());
-
+    nsRect destRect = GetDestRect(nsRect(offset, innerSize));
     nsViewManager* vm = mInnerView->GetViewManager();
     vm->MoveViewTo(mInnerView, destRect.x, destRect.y);
     vm->ResizeView(mInnerView, nsRect(nsPoint(0, 0), destRect.Size()));

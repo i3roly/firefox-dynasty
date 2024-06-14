@@ -21,6 +21,7 @@
 #include "builtin/Promise.h"
 #include "jit/MIRGenerator.h"
 #include "js/CallAndConstruct.h"
+#include "vm/Iteration.h"
 #include "vm/JSContext.h"
 #include "vm/JSObject.h"
 #include "vm/NativeObject.h"
@@ -52,6 +53,11 @@ SuspenderObjectData::SuspenderObjectData(void* stackMemory)
                      SuspendableStackPlusRedZoneSize),
       state_(SuspenderState::Initial) {}
 
+void SuspenderObjectData::releaseStackMemory() {
+  js_free(stackMemory_);
+  stackMemory_ = nullptr;
+}
+
 #  ifdef _WIN64
 // On WIN64, the Thread Information Block stack limits has to be modified to
 // avoid failures on SP checks.
@@ -82,6 +88,7 @@ SuspenderContext::SuspenderContext()
 
 SuspenderContext::~SuspenderContext() {
   MOZ_ASSERT(activeSuspender_ == nullptr);
+  MOZ_ASSERT(suspendedStacks_.isEmpty());
 }
 
 SuspenderObject* SuspenderContext::activeSuspender() {
@@ -268,12 +275,11 @@ void SuspenderObject::finalize(JS::GCContext* gcx, JSObject* obj) {
   }
   SuspenderObjectData* data = suspender.data();
   MOZ_RELEASE_ASSERT(data->state() == SuspenderState::Moribund);
-  js_free(data->stackMemory());
+  MOZ_RELEASE_ASSERT(!data->stackMemory());
   js_free(data);
 }
 
 void SuspenderObject::setMoribund(JSContext* cx) {
-  // TODO make sense to free stackMemory at this point to reduce memory usage?
   MOZ_ASSERT(state() == SuspenderState::Active);
   ResetInstanceStackLimits(cx);
 #  ifdef _WIN64
@@ -281,6 +287,7 @@ void SuspenderObject::setMoribund(JSContext* cx) {
 #  endif
   SuspenderObjectData* data = this->data();
   data->setState(SuspenderState::Moribund);
+  data->releaseStackMemory();
   DecrementSuspendableStacksCount(cx);
   MOZ_ASSERT(
       !cx->wasm().promiseIntegration.suspendedStacks_.ElementProbablyInList(
@@ -537,7 +544,7 @@ bool CallImportOnMainThread(JSContext* cx, Instance* instance,
   return ok;
 }
 
-void UnwindStackSwitch(JSContext* cx) {
+static void CleanupActiveSuspender(JSContext* cx) {
   SuspenderObject* suspender = cx->wasm().promiseIntegration.activeSuspender();
   MOZ_ASSERT(suspender);
   cx->wasm().promiseIntegration.setActiveSuspender(nullptr);
@@ -552,12 +559,17 @@ void UnwindStackSwitch(JSContext* cx) {
 //   (type $results (struct (field ..)*)))
 //   (import "" "" (func $suspending.wrappedfn ..))
 //   (import "" "" (func $suspending.add-promise-reactions ..))
-//   (import "" "" (func $suspending.get-suspending-promise-result ..))
 //   (func $suspending.exported .. )
 //   (func $suspending.trampoline ..)
 //   (func $suspending.continue-on-suspendable ..)
 //   (export "" (func $suspending.exported))
 // )
+//
+// The module provides logic for the state transitions (see the SMDOC):
+//  - Invoke Suspending Import via $suspending.exported
+//  - Suspending Function Returns a Promise via $suspending.trampoline
+//  - Promise Resolved transitions via $suspending.continue-on-suspendable
+//
 class SuspendingFunctionModuleFactory {
  public:
   enum TypeIdx {
@@ -1008,6 +1020,9 @@ static bool WasmPISuspendTaskContinue(JSContext* cx, unsigned argc, Value* vp) {
     return true;
   }
 
+  // The stack was unwound during exception -- time to release resources.
+  CleanupActiveSuspender(cx);
+
   if (cx->isThrowingOutOfMemory()) {
     return false;
   }
@@ -1174,6 +1189,10 @@ JSFunction* WasmSuspendingFunctionCreate(JSContext* cx, HandleObject func,
 //   (func $promising.trampoline ..)
 //   (export "" (func $promising.exported))
 // )
+//
+// The module provides logic for the Invoke Promising Import state transition
+// via $promising.exported and $promising.trampoline (see the SMDOC).
+//
 class PromisingFunctionModuleFactory {
  public:
   enum TypeIdx {
@@ -1491,6 +1510,9 @@ static bool WasmPIPromisingFunction(JSContext* cx, unsigned argc, Value* vp) {
     return true;
   }
 
+  // During an exception the stack was unwound -- time to release resources.
+  CleanupActiveSuspender(cx);
+
   if (cx->isThrowingOutOfMemory()) {
     return false;
   }
@@ -1669,8 +1691,7 @@ JSObject* GetSuspendingPromiseResult(Instance* instance,
               cx, SuspendingFunctionModuleFactory::ResultsTypeIndex));
   const StructFieldVector& fields = results->typeDef().structType().fields_;
 
-  MOZ_ASSERT(fields.length() <= 1);
-  if (fields.length() == 1) {
+  if (fields.length() > 0) {
     RootedValue jsValue(cx, promise->value());
 
     // The struct object is constructed based on returns of exported function.
@@ -1682,12 +1703,43 @@ JSObject* GetSuspendingPromiseResult(Instance* instance,
     const wasm::FuncType& sig =
         instance->metadata().getFuncExportType(funcExport);
 
-    RootedVal val(cx);
-    MOZ_ASSERT(sig.result(0).storageType() == fields[0].type);
-    if (!Val::fromJSValue(cx, sig.result(0), jsValue, &val)) {
-      return nullptr;
+    if (fields.length() == 1) {
+      RootedVal val(cx);
+      MOZ_ASSERT(sig.result(0).storageType() == fields[0].type);
+      if (!Val::fromJSValue(cx, sig.result(0), jsValue, &val)) {
+        return nullptr;
+      }
+      results->storeVal(val, 0);
+    } else {
+      // The multi-value result is wrapped into ArrayObject/Iterable.
+      Rooted<ArrayObject*> array(cx);
+      if (!IterableToArray(cx, jsValue, &array)) {
+        return nullptr;
+      }
+      if (fields.length() != array->length()) {
+        UniqueChars expected(JS_smprintf("%zu", fields.length()));
+        UniqueChars got(JS_smprintf("%u", array->length()));
+        if (!expected || !got) {
+          ReportOutOfMemory(cx);
+          return nullptr;
+        }
+
+        JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
+                                 JSMSG_WASM_WRONG_NUMBER_OF_VALUES,
+                                 expected.get(), got.get());
+        return nullptr;
+      }
+
+      for (size_t i = 0; i < fields.length(); i++) {
+        RootedVal val(cx);
+        RootedValue v(cx, array->getDenseElement(i));
+        MOZ_ASSERT(sig.result(i).storageType() == fields[i].type);
+        if (!Val::fromJSValue(cx, sig.result(i), v, &val)) {
+          return nullptr;
+        }
+        results->storeVal(val, i);
+      }
     }
-    results->storeVal(val, 0);
   }
   return results;
 }
@@ -1706,11 +1758,30 @@ int32_t SetPromisingPromiseResults(Instance* instance,
   const StructType& resultType = res->typeDef().structType();
   RootedValue val(cx);
   // Unbox the result value from the struct, if any.
-  if (resultType.fields_.length() > 0) {
-    MOZ_RELEASE_ASSERT(resultType.fields_.length() == 1);
-    if (!res->getField(cx, /*index=*/0, &val)) {
-      return -1;
-    }
+  switch (resultType.fields_.length()) {
+    case 0:
+      break;
+    case 1: {
+      if (!res->getField(cx, /*index=*/0, &val)) {
+        return false;
+      }
+    } break;
+    default: {
+      Rooted<ArrayObject*> array(cx, NewDenseEmptyArray(cx));
+      if (!array) {
+        return false;
+      }
+      for (size_t i = 0; i < resultType.fields_.length(); i++) {
+        RootedValue item(cx);
+        if (!res->getField(cx, i, &item)) {
+          return false;
+        }
+        if (!NewbornArrayPush(cx, array, item)) {
+          return false;
+        }
+      }
+      val.setObject(*array);
+    } break;
   }
   ResolvePromise(cx, promise, val);
   return 0;

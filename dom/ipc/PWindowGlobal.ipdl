@@ -36,6 +36,7 @@ using mozilla::UseCounters from "mozilla/UseCounter.h";
 using mozilla::dom::MaybeDiscardedWindowContext from "mozilla/dom/WindowContext.h";
 [RefCounted] using mozilla::dom::FeaturePolicy from "mozilla/dom/FeaturePolicy.h";
 [RefCounted] using mozilla::dom::SessionStoreRestoreData from "mozilla/dom/SessionStoreRestoreData.h";
+using mozilla::dom::IdentityCredentialInit from "mozilla/dom/IdentityCredentialBinding.h";
 using mozilla::dom::IdentityCredentialRequestOptions from "mozilla/dom/IdentityCredentialBinding.h";
 
 namespace mozilla {
@@ -207,8 +208,12 @@ parent:
   // credentialed requests that are specifically not partitioned are made and
   // the results must not enter the child process until the user consents via
   // purpose built UI.
-  async DiscoverIdentityCredentialFromExternalSource(IdentityCredentialRequestOptions aOptions) 
+  async DiscoverIdentityCredentialFromExternalSource(IdentityCredentialRequestOptions aOptions)
       returns (IPCIdentityCredential? identityCredential);
+  async CollectIdentityCredentialFromCredentialStore(IdentityCredentialRequestOptions aOptions)
+      returns (IPCIdentityCredential[] identityCredential);
+  async StoreIdentityCredential(IPCIdentityCredential aCredential)
+      returns (nsresult rv);
 
   async GetStorageAccessPermission() returns(uint32_t permission_action);
 
@@ -222,6 +227,9 @@ parent:
   // Notify parent of storage access in the content process. This only happens
   // once per window lifetime to avoid redundant IPC.
   async OnInitialStorageAccess();
+
+  // User activation notifications for BounceTrackingProtection.
+  async RecordUserActivationForBTP();
 
 child:
   async NotifyPermissionChange(nsCString type, uint32_t permission);

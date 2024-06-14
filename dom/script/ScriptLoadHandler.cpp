@@ -245,8 +245,7 @@ bool ScriptLoadHandler::TrySetDecoder(nsIIncrementalStreamLoader* aLoader,
   // request.
   nsAutoString hintCharset;
   if (!mRequest->GetScriptLoadContext()->IsPreload()) {
-    mRequest->GetScriptLoadContext()->GetScriptElement()->GetScriptCharset(
-        hintCharset);
+    mRequest->GetScriptLoadContext()->GetHintCharset(hintCharset);
   } else {
     nsTArray<ScriptLoader::PreloadInfo>::index_type i =
         mScriptLoader->mPreloads.IndexOf(
@@ -322,8 +321,7 @@ nsresult ScriptLoadHandler::EnsureKnownDataType(
 
   if (mRequest->mFetchSourceOnly) {
     mRequest->SetTextSource(mRequest->mLoadContext.get());
-    TRACE_FOR_TEST(mRequest->GetScriptLoadContext()->GetScriptElement(),
-                   "scriptloader_load_source");
+    TRACE_FOR_TEST(mRequest, "scriptloader_load_source");
     return NS_OK;
   }
 
@@ -333,16 +331,14 @@ nsresult ScriptLoadHandler::EnsureKnownDataType(
     cic->GetAlternativeDataType(altDataType);
     if (altDataType.Equals(ScriptLoader::BytecodeMimeTypeFor(mRequest))) {
       mRequest->SetBytecode();
-      TRACE_FOR_TEST(mRequest->GetScriptLoadContext()->GetScriptElement(),
-                     "scriptloader_load_bytecode");
+      TRACE_FOR_TEST(mRequest, "scriptloader_load_bytecode");
       return NS_OK;
     }
     MOZ_ASSERT(altDataType.IsEmpty());
   }
 
   mRequest->SetTextSource(mRequest->mLoadContext.get());
-  TRACE_FOR_TEST(mRequest->GetScriptLoadContext()->GetScriptElement(),
-                 "scriptloader_load_source");
+  TRACE_FOR_TEST(mRequest, "scriptloader_load_source");
 
   MOZ_ASSERT(!mRequest->IsUnknownDataType());
   MOZ_ASSERT(mRequest->IsFetching());

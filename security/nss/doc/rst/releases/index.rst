@@ -8,6 +8,7 @@ Releases
    :glob:
    :hidden:
 
+   nss_3_101.rst
    nss_3_100.rst
    nss_3_99.rst
    nss_3_98.rst
@@ -65,24 +66,42 @@ Releases
 
 .. note::
 
-   **NSS 3.100** is the latest version of NSS.
-   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_100_release_notes`
+   **NSS 3.101** is the latest version of NSS.
+   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_101_release_notes`
 
    **NSS 3.90.2 (ESR)** is the latest version of NSS.
    Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_90_2_release_notes`
 
 .. container::
 
-   Changes in 3.100 included in this release:
+   Changes in 3.101 included in this release:
 
- - Bug 1893029 - merge pk11_kyberSlotList into pk11_ecSlotList for faster Xyber operations.
- - Bug 1893752 - remove ckcapi.
- - Bug 1893162 - avoid a potential PK11GenericObject memory leak.
- - Bug 671060 - Remove incomplete ESDH code.
- - Bug 215997 - Decrypt RSA OAEP encrypted messages.
- - Bug 1887996 - Fix certutil CRLDP URI code.
- - Bug 1890069 - Don't set CKA_DERIVE for CKK_EC_EDWARDS private keys.
- - Bug 676118: Add ability to encrypt and decrypt CMS messages using ECDH.
- - Bug 676100 - Correct Templates for key agreement in smime/cmsasn.c.
- - Bug 1548723 - Moving the decodedCert allocation to NSS.
- - Bug 1885404 - Allow developers to speed up repeated local execution of NSS tests that depend on certificates.
+   - Bug 1900413 - add diagnostic assertions for SFTKObject refcount. 
+   - Bug 1899759 - freeing the slot in DeleteCertAndKey if authentication failed
+   - Bug 1899883 - fix formatting issues. 
+   - Bug 1889671 - Add Firmaprofesional CA Root-A Web to NSS.
+   - Bug 1899593 - remove invalid acvp fuzz test vectors. 
+   - Bug 1898830 - pad short P-384 and P-521 signatures gtests.
+   - Bug 1898627 - remove unused FreeBL ECC code. r=rrelyea
+   - Bug 1898830 - pad short P-384 and P-521 signatures. 
+   - Bug 1898825 - be less strict about ECDSA private key length. 
+   - Bug 1854439 - Integrate HACL* P-521. 
+   - Bug 1854438 - Integrate HACL* P-384. 
+   - Bug 1898074 - memory leak in create_objects_from_handles. 
+   - Bug 1898858 - ensure all input is consumed in a few places in mozilla::pkix 
+   - Bug 1884444 - SMIME/CMS and PKCS #12 do not integrate with modern NSS policy 
+   - Bug 1748105 - clean up escape handling 
+   - Bug 1896353 - Use lib::pkix as default validator instead of the old-one 
+   - Bug 1827444 - Need to add high level support for PQ signing.
+   - Bug 1548723 - Certificate Compression: changing the allocation/freeing of buffer + Improving the documentation 
+   - Bug 1884444 - SMIME/CMS and PKCS #12 do not integrate with modern NSS policy
+   - Bug 1893404 - Allow for non-full length ecdsa signature when using softoken
+   - Bug 1830415 - Modification of .taskcluster.yml due to mozlint indent defects
+   - Bug 1793811 - Implement support for PBMAC1 in PKCS#12 
+   - Bug 1897487 - disable VLA warnings for fuzz builds.
+   - Bug 1895032 - remove redundant AllocItem implementation. 
+   - Bug 1893334 - add PK11_ReadDistrustAfterAttribute. 
+   - Bug 215997  - Clang-formatting of SEC_GetMgfTypeByOidTag update
+   - Bug 1895012 - Set SEC_ERROR_LIBRARY_FAILURE on self-test failure
+   - Bug 1894572 - sftk_getParameters(): Fix fallback to default variable after error with configfile. 
+   - Bug 1830415 - Switch to the mozillareleases/image_builder image

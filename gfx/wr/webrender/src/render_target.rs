@@ -4,7 +4,7 @@
 
 
 use api::{units::*, PremultipliedColorF, ClipMode};
-use api::{ColorF, ImageFormat, LineOrientation, BorderStyle};
+use api::{ColorF, LineOrientation, BorderStyle};
 use crate::batch::{AlphaBatchBuilder, AlphaBatchContainer, BatchTextures};
 use crate::batch::{ClipBatcher, BatchBuilder, INVALID_SEGMENT_INDEX, ClipMaskInstanceList};
 use crate::command_buffer::{CommandBufferList, QuadFlags};
@@ -32,6 +32,7 @@ use crate::render_task::{RenderTask, ScalingTask, SvgFilterInfo, MaskSubPass, SV
 use crate::render_task_graph::{RenderTaskGraph, RenderTaskId};
 use crate::resource_cache::ResourceCache;
 use crate::spatial_tree::{SpatialNodeIndex};
+use crate::util::ScaleOffset;
 
 
 const STYLE_SOLID: i32 = ((BorderStyle::Solid as i32) << 8) | ((BorderStyle::Solid as i32) << 16);
@@ -45,12 +46,6 @@ pub enum RenderTargetKind {
     Color, // RGBA8
     Alpha, // R8
 }
-
-/// Identifies a given `RenderTarget` in a `RenderTargetList`.
-#[derive(Debug, Copy, Clone)]
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct RenderTargetIndex(pub usize);
 
 pub struct RenderTargetContext<'a, 'rc> {
     pub global_device_pixel_scale: DevicePixelScale,
@@ -161,16 +156,12 @@ pub trait RenderTarget {
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
 pub struct RenderTargetList<T> {
-    pub format: ImageFormat,
     pub targets: Vec<T>,
 }
 
 impl<T: RenderTarget> RenderTargetList<T> {
-    pub fn new(
-        format: ImageFormat,
-    ) -> Self {
+    pub fn new() -> Self {
         RenderTargetList {
-            format,
             targets: Vec::new(),
         }
     }
@@ -835,7 +826,7 @@ fn add_blur_instances(
     let instance = BlurInstance {
         task_address,
         src_task_address: src_task_id.into(),
-        blur_direction,
+        blur_direction: blur_direction.as_int(),
     };
 
     instances
@@ -1139,6 +1130,7 @@ pub struct BlitJob {
 
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
+#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct LineDecorationJob {
     pub task_rect: DeviceRect,
@@ -1228,10 +1220,10 @@ fn build_mask_tasks(
                 );
 
                 let clip_needs_scissor_rect = !is_same_coord_system;
-                let mut quad_flags = QuadFlags::SAMPLE_AS_MASK;
+                let mut quad_flags = QuadFlags::IS_MASK;
 
                 if is_same_coord_system {
-                    quad_flags |= QuadFlags::APPLY_DEVICE_CLIP;
+                    quad_flags |= QuadFlags::APPLY_RENDER_TASK_CLIP;
                 }
 
                 for tile in clip_store.visible_mask_tiles(&clip_instance) {
@@ -1243,7 +1235,8 @@ fn build_mask_tasks(
                         &[QuadSegment {
                             rect: tile.tile_rect,
                             task_id: tile.task_id,
-                        }]
+                        }],
+                        ScaleOffset::identity(),
                     );
 
                     let texture = render_tasks
@@ -1308,6 +1301,7 @@ fn build_mask_tasks(
                 task_world_rect.cast_unit(),
                 PremultipliedColorF::WHITE,
                 &[],
+                ScaleOffset::identity(),
             );
 
             (ClipSpace::Raster, clip_transform_id, main_prim_address, prim_transform_id, true)
@@ -1343,7 +1337,7 @@ fn build_mask_tasks(
         let clip_needs_scissor_rect = !is_same_coord_system;
 
         let quad_flags = if is_same_coord_system {
-            QuadFlags::APPLY_DEVICE_CLIP
+            QuadFlags::APPLY_RENDER_TASK_CLIP
         } else {
             QuadFlags::empty()
         };
@@ -1366,7 +1360,7 @@ fn build_mask_tasks(
                     prim,
                     clip_transform_id,
                     clip_address: clip_address.as_int(),
-                    clip_space,
+                    clip_space: clip_space.as_int(),
                     unused: 0,
                 };
 

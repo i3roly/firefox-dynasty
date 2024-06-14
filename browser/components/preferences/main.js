@@ -10,6 +10,7 @@
 
 ChromeUtils.defineESModuleGetters(this, {
   BackgroundUpdate: "resource://gre/modules/BackgroundUpdate.sys.mjs",
+  UpdateListener: "resource://gre/modules/UpdateListener.sys.mjs",
   MigrationUtils: "resource:///modules/MigrationUtils.sys.mjs",
   TranslationsParent: "resource://gre/actors/TranslationsParent.sys.mjs",
   WindowsLaunchOnLogin: "resource://gre/modules/WindowsLaunchOnLogin.sys.mjs",
@@ -86,8 +87,8 @@ Preferences.addAll([
   { id: "browser.warnOnQuitShortcut", type: "bool" },
   { id: "browser.tabs.warnOnOpen", type: "bool" },
   { id: "browser.ctrlTab.sortByRecentlyUsed", type: "bool" },
-  { id: "browser.tabs.cardPreview.enabled", type: "bool" },
-  { id: "browser.tabs.cardPreview.showThumbnails", type: "bool" },
+  { id: "browser.tabs.hoverPreview.enabled", type: "bool" },
+  { id: "browser.tabs.hoverPreview.showThumbnails", type: "bool" },
 
   // CFR
   {
@@ -357,7 +358,7 @@ var gMainPane = {
 
     let thumbsCheckbox = document.getElementById("tabPreviewShowThumbnails");
     let cardPreviewEnabledPref = Preferences.get(
-      "browser.tabs.cardPreview.enabled"
+      "browser.tabs.hoverPreview.enabled"
     );
     let maybeShowThumbsCheckbox = () =>
       (thumbsCheckbox.hidden = !cardPreviewEnabledPref.value);
@@ -438,8 +439,7 @@ var gMainPane = {
       if (
         Cc["@mozilla.org/toolkit/profile-service;1"].getService(
           Ci.nsIToolkitProfileService
-        ).startWithLastProfile &&
-        !Services.sysinfo.getProperty("hasWinPackageId", false)
+        ).startWithLastProfile
       ) {
         NimbusFeatures.windowsLaunchOnLogin.recordExposureEvent({
           once: true,
@@ -692,12 +692,16 @@ var gMainPane = {
         let launchOnLoginCheckbox = document.getElementById(
           "windowsLaunchOnLogin"
         );
-        launchOnLoginCheckbox.checked =
-          WindowsLaunchOnLogin.getLaunchOnLoginEnabled();
-        let approvedByWindows = WindowsLaunchOnLogin.getLaunchOnLoginApproved();
-        launchOnLoginCheckbox.disabled = !approvedByWindows;
-        document.getElementById("windowsLaunchOnLoginDisabledBox").hidden =
-          approvedByWindows;
+        WindowsLaunchOnLogin.getLaunchOnLoginEnabled().then(enabled => {
+          launchOnLoginCheckbox.checked = enabled;
+        });
+        WindowsLaunchOnLogin.getLaunchOnLoginApproved().then(
+          approvedByWindows => {
+            launchOnLoginCheckbox.disabled = !approvedByWindows;
+            document.getElementById("windowsLaunchOnLoginDisabledBox").hidden =
+              approvedByWindows;
+          }
+        );
 
         // On Windows, the Application Update setting is an installation-
         // specific preference, not a profile-specific one. Show a warning to
@@ -1646,16 +1650,19 @@ var gMainPane = {
       return;
     }
     if (event.target.checked) {
-      // windowsLaunchOnLogin has been checked: create registry key
-      WindowsLaunchOnLogin.createLaunchOnLoginRegistryKey();
+      // windowsLaunchOnLogin has been checked: create registry key or shortcut
+      // The shortcut is created with the same AUMID as Firefox itself. However,
+      // this is not set during browser tests and the fallback of checking the
+      // registry fails. As such we pass an arbitrary AUMID for the purpose
+      // of testing.
+      await WindowsLaunchOnLogin.createLaunchOnLogin();
       Services.prefs.setBoolPref(
         "browser.startup.windowsLaunchOnLogin.disableLaunchOnLoginPrompt",
         true
       );
     } else {
       // windowsLaunchOnLogin has been unchecked: delete registry key and shortcut
-      WindowsLaunchOnLogin.removeLaunchOnLoginRegistryKey();
-      await WindowsLaunchOnLogin.removeLaunchOnLoginShortcuts();
+      await WindowsLaunchOnLogin.removeLaunchOnLogin();
     }
   },
 
@@ -2536,10 +2543,16 @@ var gMainPane = {
   },
 
   async checkUpdateInProgress() {
+    const aus = Cc["@mozilla.org/updates/update-service;1"].getService(
+      Ci.nsIApplicationUpdateService
+    );
     let um = Cc["@mozilla.org/updates/update-manager;1"].getService(
       Ci.nsIUpdateManager
     );
-    if (!um.readyUpdate && !um.downloadingUpdate) {
+    // We don't want to see an idle state just because the updater hasn't
+    // initialized yet.
+    await aus.init();
+    if (aus.currentState == Ci.nsIApplicationUpdateService.STATE_IDLE) {
       return;
     }
 
@@ -2571,12 +2584,9 @@ var gMainPane = {
       {}
     );
     if (rv != 1) {
-      let aus = Cc["@mozilla.org/updates/update-service;1"].getService(
-        Ci.nsIApplicationUpdateService
-      );
       await aus.stopDownload();
-      um.cleanupReadyUpdate();
-      um.cleanupDownloadingUpdate();
+      await um.cleanupActiveUpdates();
+      UpdateListener.clearPendingAndActiveNotifications();
     }
   },
 

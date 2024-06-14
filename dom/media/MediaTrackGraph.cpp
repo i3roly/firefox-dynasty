@@ -1474,6 +1474,10 @@ void MediaTrackGraphImpl::SelectOutputDeviceForAEC() {
 void MediaTrackGraphImpl::Process(MixerCallbackReceiver* aMixerReceiver) {
   TRACE("MTG::Process");
   MOZ_ASSERT(OnGraphThread());
+  if (mStateComputedTime == mProcessedTime) {  // No frames to render.
+    return;
+  }
+
   // Play track contents.
   bool allBlockedForever = true;
   // True when we've done ProcessInput for all processed tracks.
@@ -1608,10 +1612,9 @@ bool MediaTrackGraphImpl::UpdateMainThreadState() {
   return false;
 }
 
-auto MediaTrackGraphImpl::OneIteration(GraphTime aStateTime,
-                                       GraphTime aIterationEnd,
-                                       MixerCallbackReceiver* aMixerReceiver)
-    -> IterationResult {
+auto MediaTrackGraphImpl::OneIteration(
+    GraphTime aStateTime, GraphTime aIterationEnd,
+    MixerCallbackReceiver* aMixerReceiver) -> IterationResult {
   if (mGraphRunner) {
     return mGraphRunner->OneIteration(aStateTime, aIterationEnd,
                                       aMixerReceiver);
@@ -3446,7 +3449,7 @@ MediaTrackGraphImpl::MediaTrackGraphImpl(uint64_t aWindowID,
       ,
       mMainThreadGraphTime(0, "MediaTrackGraphImpl::mMainThreadGraphTime"),
       mAudioOutputLatency(0.0),
-      mMaxOutputChannelCount(std::min(8u, CubebUtils::MaxNumberOfChannels())) {
+      mMaxOutputChannelCount(CubebUtils::MaxNumberOfChannels()) {
 }
 
 void MediaTrackGraphImpl::Init(GraphDriverType aDriverRequested,
@@ -3576,10 +3579,8 @@ MediaTrackGraphImpl* MediaTrackGraphImpl::GetInstance(
   }
 
   // In a real time graph, the number of output channels is determined by
-  // the underlying number of channel of the default audio output device, and
-  // capped to 8.
-  uint32_t channelCount =
-      std::min<uint32_t>(8, CubebUtils::MaxNumberOfChannels());
+  // the underlying number of channel of the default audio output device.
+  uint32_t channelCount = CubebUtils::MaxNumberOfChannels();
   MediaTrackGraphImpl* graph = new MediaTrackGraphImpl(
       aWindowID, aSampleRate, aPrimaryOutputDeviceID, aMainThread);
   graph->Init(aGraphDriverRequested, runType, channelCount);

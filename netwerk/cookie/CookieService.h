@@ -70,7 +70,7 @@ class CookieService final : public nsICookieService,
                            CookieStruct& aCookieData, bool aRequireHostMatch,
                            CookieStatus aStatus, nsCString& aCookieHeader,
                            bool aFromHttp, bool aIsForeignAndNotAddon,
-                           bool aPartitionedOnly,
+                           bool aPartitionedOnly, bool aIsInPrivateBrowsing,
                            nsIConsoleReportCollector* aCRC, bool& aSetCookie);
   static CookieStatus CheckPrefs(
       nsIConsoleReportCollector* aCRC, nsICookieJarSettings* aCookieJarSettings,
@@ -89,7 +89,7 @@ class CookieService final : public nsICookieService,
                         bool aHttpBound,
                         bool aAllowSecureCookiesToInsecureOrigin,
                         const nsTArray<OriginAttributes>& aOriginAttrsList,
-                        nsTArray<Cookie*>& aCookieList);
+                        nsTArray<RefPtr<Cookie>>& aCookieList);
 
   /**
    * This method is a helper that allows calling nsICookieManager::Remove()

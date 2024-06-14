@@ -142,6 +142,7 @@ class HTMLEditor;
 class LazyLogModule;
 class LogModule;
 class PresShell;
+class StringBuffer;
 class TextEditor;
 class WidgetDragEvent;
 class WidgetKeyboardEvent;
@@ -189,6 +190,7 @@ class NodeInfo;
 class OwningFileOrUSVStringOrFormData;
 class Selection;
 enum class ShadowRootMode : uint8_t;
+class ShadowRoot;
 struct StructuredSerializeOptions;
 class WorkerPrivate;
 enum class ElementCallbackType;
@@ -230,6 +232,8 @@ enum EventNameType {
 };
 
 enum class TreeKind : uint8_t { DOM, Flat };
+
+enum class SerializeShadowRoots : uint8_t { Yes, No };
 
 struct EventNameMapping {
   // This holds pointers to nsGkAtoms members, and is therefore safe as a
@@ -972,6 +976,11 @@ class nsContentUtils {
                                             nsIURI* aBaseURI);
 
   /**
+   * Returns true if |aAtom| contains at least one |aChar|.
+   */
+  static bool ContainsChar(nsAtom* aAtom, char aChar);
+
+  /**
    * Returns true if |aName| is a name with dashes.
    */
   static bool IsNameWithDash(nsAtom* aName);
@@ -1481,6 +1490,11 @@ class nsContentUtils {
    * Returns true if aDocument is a chrome document
    */
   static bool IsChromeDoc(const Document* aDocument);
+
+  /**
+   * Returns true if aDocument is an addon document
+   */
+  static bool IsAddonDoc(const Document* aDocument);
 
   /**
    * Returns true if aDocument is in a docshell whose parent is the same type
@@ -2755,6 +2769,7 @@ class nsContentUtils {
   static bool IsJavaScriptLanguage(const nsString& aName);
 
   static bool IsJavascriptMIMEType(const nsAString& aMIMEType);
+  static bool IsJavascriptMIMEType(const nsACString& aMIMEType);
 
   static void SplitMimeType(const nsAString& aValue, nsString& aType,
                             nsString& aParams);
@@ -3107,8 +3122,13 @@ class nsContentUtils {
   /*
    * Serializes a HTML nsINode into its markup representation.
    */
-  static bool SerializeNodeToMarkup(nsINode* aRoot, bool aDescendentsOnly,
-                                    nsAString& aOut);
+  template <SerializeShadowRoots ShouldSerializeShadowRoots =
+                SerializeShadowRoots::No>
+  static bool SerializeNodeToMarkup(
+      nsINode* aRoot, bool aDescendantsOnly, nsAString& aOut,
+      bool aSerializableShadowRoots,
+      const mozilla::dom::Sequence<
+          mozilla::OwningNonNull<mozilla::dom::ShadowRoot>>& aShadowRoots);
 
   /*
    * Returns true iff the provided JSObject is a global, and its URI matches
@@ -3542,7 +3562,7 @@ class nsContentUtils {
   MOZ_CAN_RUN_SCRIPT_BOUNDARY
   static nsIContent* AttachDeclarativeShadowRoot(
       nsIContent* aHost, mozilla::dom::ShadowRootMode aMode, bool aIsClonable,
-      bool aDelegatesFocus);
+      bool aIsSerializable, bool aDelegatesFocus);
 
  private:
   static bool InitializeEventTable();

@@ -284,6 +284,8 @@ mozilla::Atomic<bool, mozilla::MemoryOrdering::Relaxed> gStopAndDumpFromSignal(
 // Forward declare the function to call when we need to dump + stop from within
 // the async control thread
 void profiler_dump_and_stop();
+// Forward declare the function to call when we need to start the profiler.
+void profiler_start_from_signal();
 
 mozilla::Atomic<int, mozilla::MemoryOrdering::Relaxed> gSkipSampling;
 
@@ -628,16 +630,12 @@ class AsyncSignalControlThread {
       MOZ_RELEASE_ASSERT(nread == 1);
 
       if (msg[0] == sAsyncSignalControlCharStart) {
-        // Start the profiler here directly, as we're on a background thread.
-        // set of preferences, configuration of them is TODO, see Bug 1866007
-        uint32_t features = ProfilerFeature::JS | ProfilerFeature::StackWalk |
-                            ProfilerFeature::CPUUtilization;
-        // as we often don't know what threads we'll care about, tell the
-        // profiler to profile all threads.
-        const char* filters[] = {"*"};
-        profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
-                       PROFILER_DEFAULT_INTERVAL, features, filters,
-                       MOZ_ARRAY_LENGTH(filters), 0);
+        // Check to see if the profiler is already running. This is done within
+        // `profiler_start` anyway, but if we check sooner we avoid running all
+        // the other code between now and that check.
+        if (!profiler_is_active()) {
+          profiler_start_from_signal();
+        }
       } else if (msg[0] == sAsyncSignalControlCharStop) {
         // Check to see whether the profiler is even running before trying to
         // stop the profiler. Most other methods of stopping the profiler (i.e.
@@ -5328,13 +5326,6 @@ static ProfilingStack* locked_register_thread(
 
       if (ActivePS::FeatureJS(aLock)) {
         lockedRWFromAnyThread->StartJSSampling(ActivePS::JSFlags(aLock));
-        if (ThreadRegistration::LockedRWOnThread* lockedRWOnThread =
-                lockedRWFromAnyThread.GetLockedRWOnThread();
-            lockedRWOnThread) {
-          // We can manually poll the current thread so it starts sampling
-          // immediately.
-          lockedRWOnThread->PollJSSampling();
-        }
         if (lockedRWFromAnyThread->GetJSContext()) {
           profiledThreadData->NotifyReceivedJSContext(
               ActivePS::Buffer(aLock).BufferRangeEnd());
@@ -5559,18 +5550,39 @@ Maybe<nsAutoCString> profiler_find_dump_path() {
 }
 
 void profiler_dump_and_stop() {
-  // pause the profiler until we are done dumping
-  profiler_pause();
+  // Do nothing unless we're the parent process, as we're sandboxed and can't
+  // write anyway.
+  if (XRE_IsParentProcess()) {
+    // pause the profiler until we are done dumping
+    profiler_pause();
 
-  // Try to save the profile to a file
-  if (auto path = profiler_find_dump_path()) {
-    profiler_save_profile_to_file(path.value().get());
-  } else {
-    LOG("Failed to dump profile to disk");
+    // Try to save the profile to a file
+    if (auto path = profiler_find_dump_path()) {
+      profiler_save_profile_to_file(path.value().get());
+    } else {
+      LOG("Failed to dump profile to disk");
+    }
+
+    // Stop the profiler
+    profiler_stop();
   }
+}
 
-  // Stop the profiler
-  profiler_stop();
+void profiler_start_from_signal() {
+  // Do nothing unless we're the parent process, as we're sandboxed and can't
+  // write any data that we gather anyway.
+  if (XRE_IsParentProcess()) {
+    // Start the profiler here directly, as we're on a background thread.
+    // set of preferences, configuration of them is TODO, see Bug 1866007
+    uint32_t features = ProfilerFeature::JS | ProfilerFeature::StackWalk |
+                        ProfilerFeature::CPUUtilization;
+    // as we often don't know what threads we'll care about, tell the
+    // profiler to profile all threads.
+    const char* filters[] = {"*"};
+    profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
+                   PROFILER_DEFAULT_INTERVAL, features, filters,
+                   MOZ_ARRAY_LENGTH(filters), 0);
+  }
 }
 
 #if defined(GECKO_PROFILER_ASYNC_POSIX_SIGNAL_CONTROL)
@@ -5594,6 +5606,20 @@ void profiler_init_signal_handlers() {
   MOZ_ASSERT(rstop == 0, "Failed to install Profiler SIGUSR2 handler");
 }
 #endif
+
+static void PollJSSamplingForCurrentThread() {
+  // Don't call into the JS engine with the global profiler mutex held as this
+  // can deadlock.
+  MOZ_ASSERT(!PSAutoLock::IsLockedOnCurrentThread());
+
+  ThreadRegistration::WithOnThreadRef(
+      [](ThreadRegistration::OnThreadRef aOnThreadRef) {
+        aOnThreadRef.WithLockedRWOnThread(
+            [](ThreadRegistration::LockedRWOnThread& aThreadData) {
+              aThreadData.PollJSSampling();
+            });
+      });
+}
 
 void profiler_init(void* aStackTop) {
   LOG("profiler_init");
@@ -5815,6 +5841,8 @@ void profiler_init(void* aStackTop) {
                           filters.length(), activeTabID, duration);
   }
 
+  PollJSSamplingForCurrentThread();
+
   // The GeckoMain thread registration happened too early to record a marker,
   // so let's record it again now.
   profiler_mark_thread_awake();
@@ -5891,6 +5919,8 @@ void profiler_shutdown(IsFastShutdown aIsFastShutdown) {
 
     CorePS::Destroy(lock);
   }
+
+  PollJSSamplingForCurrentThread();
 
   // We do these operations with gPSMutex unlocked. The comments in
   // profiler_stop() explain why.
@@ -6184,16 +6214,6 @@ Maybe<ProfilerBufferInfo> profiler_get_buffer_info() {
   return Some(ActivePS::Buffer(lock).GetProfilerBufferInfo());
 }
 
-static void PollJSSamplingForCurrentThread() {
-  ThreadRegistration::WithOnThreadRef(
-      [](ThreadRegistration::OnThreadRef aOnThreadRef) {
-        aOnThreadRef.WithLockedRWOnThread(
-            [](ThreadRegistration::LockedRWOnThread& aThreadData) {
-              aThreadData.PollJSSampling();
-            });
-      });
-}
-
 // When the profiler is started on a background thread, we can't synchronously
 // call PollJSSampling on the main thread's ThreadInfo. And the next regular
 // call to PollJSSampling on the main thread would only happen once the main
@@ -6344,13 +6364,7 @@ static void locked_profiler_start(PSLockRef aLock, PowerOfTwo32 aCapacity,
       lockedThreadData->GetNewCpuTimeInNs();
       if (ActivePS::FeatureJS(aLock)) {
         lockedThreadData->StartJSSampling(ActivePS::JSFlags(aLock));
-        if (ThreadRegistration::LockedRWOnThread* lockedRWOnThread =
-                lockedThreadData.GetLockedRWOnThread();
-            lockedRWOnThread) {
-          // We can manually poll the current thread so it starts sampling
-          // immediately.
-          lockedRWOnThread->PollJSSampling();
-        } else if (info.IsMainThread()) {
+        if (!lockedThreadData.GetLockedRWOnThread() && info.IsMainThread()) {
           // Dispatch a runnable to the main thread to call
           // PollJSSampling(), so that we don't have wait for the next JS
           // interrupt callback in order to start profiling JS.
@@ -6455,6 +6469,8 @@ RefPtr<GenericPromise> profiler_start(PowerOfTwo32 aCapacity, double aInterval,
                           aFilterCount, aActiveTabID, aDuration);
   }
 
+  PollJSSamplingForCurrentThread();
+
 #if defined(MOZ_REPLACE_MALLOC) && defined(MOZ_PROFILER_MEMORY)
   if (ProfilerFeature::ShouldInstallMemoryHooks(aFeatures)) {
     // Start counting memory allocations (outside of lock because this may call
@@ -6521,6 +6537,8 @@ void profiler_ensure_started(PowerOfTwo32 aCapacity, double aInterval,
     }
   }
 
+  PollJSSamplingForCurrentThread();
+
   // We do these operations with gPSMutex unlocked. The comments in
   // profiler_stop() explain why.
   if (samplerThread) {
@@ -6573,13 +6591,8 @@ void profiler_ensure_started(PowerOfTwo32 aCapacity, double aInterval,
 
     if (ActivePS::FeatureJS(aLock)) {
       lockedThreadData->StopJSSampling();
-      if (ThreadRegistration::LockedRWOnThread* lockedRWOnThread =
-              lockedThreadData.GetLockedRWOnThread();
-          lockedRWOnThread) {
-        // We are on the thread, we can manually poll the current thread so it
-        // stops profiling immediately.
-        lockedRWOnThread->PollJSSampling();
-      } else if (lockedThreadData->Info().IsMainThread()) {
+      if (!lockedThreadData.GetLockedRWOnThread() &&
+          lockedThreadData->Info().IsMainThread()) {
         // Dispatch a runnable to the main thread to call PollJSSampling(),
         // so that we don't have wait for the next JS interrupt callback in
         // order to start profiling JS.
@@ -6641,6 +6654,8 @@ RefPtr<GenericPromise> profiler_stop() {
 
     samplerThread = locked_profiler_stop(lock);
   }
+
+  PollJSSamplingForCurrentThread();
 
   // We notify observers with gPSMutex unlocked. Otherwise we might get a
   // deadlock, if code run by these functions calls a profiler function that
@@ -6930,20 +6945,24 @@ void ThreadRegistry::Register(ThreadRegistration::OnThreadRef aOnThreadRef) {
         aOnThreadRef.UnlockedConstReaderCRef().Info().Name());
   }
 
-  PSAutoLock lock;
-
   {
-    RegistryLockExclusive lock{sRegistryMutex};
-    MOZ_RELEASE_ASSERT(sRegistryContainer.append(OffThreadRef{aOnThreadRef}));
+    PSAutoLock lock;
+
+    {
+      RegistryLockExclusive lock{sRegistryMutex};
+      MOZ_RELEASE_ASSERT(sRegistryContainer.append(OffThreadRef{aOnThreadRef}));
+    }
+
+    if (!CorePS::Exists()) {
+      // CorePS has not been created yet.
+      // If&when that happens, it will handle already-registered threads then.
+      return;
+    }
+
+    (void)locked_register_thread(lock, OffThreadRef{aOnThreadRef});
   }
 
-  if (!CorePS::Exists()) {
-    // CorePS has not been created yet.
-    // If&when that happens, it will handle already-registered threads then.
-    return;
-  }
-
-  (void)locked_register_thread(lock, OffThreadRef{aOnThreadRef});
+  PollJSSamplingForCurrentThread();
 }
 
 void profiler_unregister_thread() {
@@ -7463,10 +7482,6 @@ void profiler_set_js_context(JSContext* aCx) {
                 return;
               }
 
-              // This call is on-thread, so we can call PollJSSampling() to
-              // start JS sampling immediately.
-              aThreadData.PollJSSampling();
-
               if (ProfiledThreadData* profiledThreadData =
                       aThreadData.GetProfiledThreadData(lock);
                   profiledThreadData) {
@@ -7475,6 +7490,10 @@ void profiler_set_js_context(JSContext* aCx) {
               }
             });
       });
+
+  // This call is on-thread, so we can call PollJSSampling() to start JS
+  // sampling immediately.
+  PollJSSamplingForCurrentThread();
 }
 
 void profiler_clear_js_context() {
@@ -7489,14 +7508,21 @@ void profiler_clear_js_context() {
         }
 
         // The profiler mutex must be locked before the ThreadRegistration's.
-        PSAutoLock lock;
-        ThreadRegistration::OnThreadRef::RWOnThreadWithLock lockedThreadData =
-            aOnThreadRef.GetLockedRWOnThread();
+        {
+          PSAutoLock lock;
+          ThreadRegistration::OnThreadRef::RWOnThreadWithLock lockedThreadData =
+              aOnThreadRef.GetLockedRWOnThread();
 
-        if (ProfiledThreadData* profiledThreadData =
-                lockedThreadData->GetProfiledThreadData(lock);
-            profiledThreadData && ActivePS::Exists(lock) &&
-            ActivePS::FeatureJS(lock)) {
+          ProfiledThreadData* profiledThreadData =
+              lockedThreadData->GetProfiledThreadData(lock);
+          if (!(profiledThreadData && ActivePS::Exists(lock) &&
+                ActivePS::FeatureJS(lock))) {
+            // This thread is not being profiled or JS profiling is off, we only
+            // need to clear the context pointer.
+            lockedThreadData->ClearJSContext();
+            return;
+          }
+
           profiledThreadData->NotifyAboutToLoseJSContext(
               cx, CorePS::ProcessStartTime(), ActivePS::Buffer(lock));
 
@@ -7504,17 +7530,22 @@ void profiler_clear_js_context() {
           // stopped. Do this by calling StopJSSampling and PollJSSampling
           // before nulling out the JSContext.
           lockedThreadData->StopJSSampling();
-          lockedThreadData->PollJSSampling();
+        }
+
+        // Drop profiler mutex for call into JS engine. This must happen before
+        // ClearJSContext below.
+        PollJSSamplingForCurrentThread();
+
+        {
+          PSAutoLock lock;
+          ThreadRegistration::OnThreadRef::RWOnThreadWithLock lockedThreadData =
+              aOnThreadRef.GetLockedRWOnThread();
 
           lockedThreadData->ClearJSContext();
 
           // Tell the thread that we'd like to have JS sampling on this
           // thread again, once it gets a new JSContext (if ever).
           lockedThreadData->StartJSSampling(ActivePS::JSFlags(lock));
-        } else {
-          // This thread is not being profiled or JS profiling is off, we only
-          // need to clear the context pointer.
-          lockedThreadData->ClearJSContext();
         }
       });
 }

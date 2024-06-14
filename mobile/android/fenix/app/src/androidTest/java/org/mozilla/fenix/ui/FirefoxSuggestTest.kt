@@ -33,7 +33,6 @@ class FirefoxSuggestTest : TestSetup() {
             isRecentTabsFeatureEnabled = false,
             isTCPCFREnabled = false,
             isWallpaperOnboardingEnabled = false,
-            tabsTrayRewriteEnabled = false,
         ),
     ) { it.activity }
 
@@ -103,6 +102,7 @@ class FirefoxSuggestTest : TestSetup() {
 
     // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2348361
     // Known bug that might affect this UI test: https://bugzilla.mozilla.org/show_bug.cgi?id=1813587
+    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1898416")
     @SmokeTest
     @Test
     fun verifyFirefoxSuggestSponsoredSearchResultsTest() {
@@ -125,6 +125,7 @@ class FirefoxSuggestTest : TestSetup() {
 
     // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2348362
     // Known bug that might affect this UI test: https://bugzilla.mozilla.org/show_bug.cgi?id=1813587
+    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1898457")
     @Test
     fun verifyFirefoxSuggestSponsoredSearchResultsWithPartialKeywordTest() {
         runWithCondition(TestHelper.appContext.settings().enableFxSuggest) {
@@ -146,6 +147,7 @@ class FirefoxSuggestTest : TestSetup() {
 
     // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2348363
     // Known bug that might affect this UI test: https://bugzilla.mozilla.org/show_bug.cgi?id=1813587
+    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1879011")
     @Test
     fun openFirefoxSuggestSponsoredSearchResultsTest() {
         runWithCondition(TestHelper.appContext.settings().enableFxSuggest) {
@@ -170,6 +172,7 @@ class FirefoxSuggestTest : TestSetup() {
 
     // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2348369
     // Known bug that might affect this UI test: https://bugzilla.mozilla.org/show_bug.cgi?id=1813587
+    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1898435")
     @Test
     fun verifyFirefoxSuggestSponsoredSearchResultsWithEditedKeywordTest() {
         runWithCondition(TestHelper.appContext.settings().enableFxSuggest) {

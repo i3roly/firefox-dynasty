@@ -766,6 +766,19 @@ impl<Src, Dst> CoordinateSpaceMapping<Src, Dst> {
             }
         }
     }
+
+    pub fn as_2d_scale_offset(&self) -> Option<ScaleOffset> {
+        Some(match *self {
+            CoordinateSpaceMapping::Local => ScaleOffset::identity(),
+            CoordinateSpaceMapping::ScaleOffset(transfrom) => transfrom,
+            CoordinateSpaceMapping::Transform(ref transform) => {
+                if !transform.is_2d_scale_translation() {
+                    return None
+                }
+                ScaleOffset::new(transform.m11, transform.m22, transform.m41, transform.m42)
+            }
+        })
+    }
 }
 
 enum TransformScroll {
@@ -1028,9 +1041,7 @@ impl SpatialTree {
         );
 
         if child.coordinate_system_id == parent.coordinate_system_id {
-            let scale_offset = parent.content_transform
-                .inverse()
-                .accumulate(&child.content_transform);
+            let scale_offset = child.content_transform.then(&parent.content_transform.inverse());
             return CoordinateSpaceMapping::ScaleOffset(scale_offset);
         }
 
@@ -1396,8 +1407,7 @@ fn calculate_snapping_transform(
                     match ScaleOffset::from_transform(value) {
                         Some(scale_offset) => {
                             let origin_offset = info.origin_in_parent_reference_frame;
-                            ScaleOffset::from_offset(origin_offset.to_untyped())
-                                .accumulate(&scale_offset)
+                            scale_offset.then(&ScaleOffset::from_offset(origin_offset.to_untyped()))
                         }
                         None => return None,
                     }
@@ -1415,7 +1425,7 @@ fn calculate_snapping_transform(
         _ => ScaleOffset::identity(),
     };
 
-    Some(parent_scale_offset.accumulate(&scale_offset))
+    Some(scale_offset.then(&parent_scale_offset))
 }
 
 #[cfg(test)]

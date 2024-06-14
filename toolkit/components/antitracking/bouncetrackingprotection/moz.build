@@ -20,6 +20,7 @@ XPCOM_MANIFESTS += [
 ]
 
 EXPORTS.mozilla += [
+    "BounceTrackingAllowList.h",
     "BounceTrackingMapEntry.h",
     "BounceTrackingProtection.h",
     "BounceTrackingProtectionStorage.h",
@@ -27,9 +28,11 @@ EXPORTS.mozilla += [
     "BounceTrackingState.h",
     "BounceTrackingStateGlobal.h",
     "BounceTrackingStorageObserver.h",
+    "ClearDataCallback.h",
 ]
 
 UNIFIED_SOURCES += [
+    "BounceTrackingAllowList.cpp",
     "BounceTrackingMapEntry.cpp",
     "BounceTrackingProtection.cpp",
     "BounceTrackingProtectionStorage.cpp",
@@ -37,6 +40,7 @@ UNIFIED_SOURCES += [
     "BounceTrackingState.cpp",
     "BounceTrackingStateGlobal.cpp",
     "BounceTrackingStorageObserver.cpp",
+    "ClearDataCallback.cpp",
 ]
 
 include("/ipc/chromium/chromium-config.mozbuild")
@@ -52,3 +56,5 @@ BROWSER_CHROME_MANIFESTS += [
 ]
 
 XPCSHELL_TESTS_MANIFESTS += ["test/xpcshell/xpcshell.toml"]
+
+MARIONETTE_MANIFESTS += ["test/marionette/manifest.toml"]

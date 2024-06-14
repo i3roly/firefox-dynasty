@@ -6,6 +6,8 @@
 #ifndef LIB_JXL_COEFF_ORDER_H_
 #define LIB_JXL_COEFF_ORDER_H_
 
+#include <jxl/memory_manager.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -31,7 +33,7 @@ static constexpr std::array<size_t, 3 * kNumOrders + 1> JXL_MAYBE_UNUSED
         100,  108,  172,  236,  300,  332,  364,  396,  652,  908,
         1164, 1292, 1420, 1548, 2572, 3596, 4620, 5132, 5644, kCoeffOrderLimit};
 
-// TODO(eustas): rollback to constexpr once modern C++ becomes reuired.
+// TODO(eustas): rollback to constexpr once modern C++ becomes required.
 #define CoeffOrderOffset(O, C) \
   (kCoeffOrderOffset[3 * (O) + (C)] * kDCTBlockSize)
 
@@ -53,11 +55,12 @@ constexpr JXL_MAYBE_UNUSED uint32_t kPermutationContexts = 8;
 
 uint32_t CoeffOrderContext(uint32_t val);
 
-Status DecodeCoeffOrders(uint16_t used_orders, uint32_t used_acs,
-                         coeff_order_t* order, BitReader* br);
-
-Status DecodePermutation(size_t skip, size_t size, coeff_order_t* order,
+Status DecodeCoeffOrders(JxlMemoryManager* memory_manager, uint16_t used_orders,
+                         uint32_t used_acs, coeff_order_t* order,
                          BitReader* br);
+
+Status DecodePermutation(JxlMemoryManager* memory_manager, size_t skip,
+                         size_t size, coeff_order_t* order, BitReader* br);
 
 }  // namespace jxl
 

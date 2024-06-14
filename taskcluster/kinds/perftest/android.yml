@@ -8,6 +8,7 @@ job-defaults:
         toolchain:
             - linux64-node
             - linux64-geckodriver
+            - browsertime
 
     worker:
         env:
@@ -41,13 +42,20 @@ hw-a51-aarch64:
 
 hw-a51-startup-fenix-cold-main-first-frame:
     worker-type: t-bitbar-gw-perf-a51
+    run-on-projects: [trunk-only]
     description: Run android startup perftest on Fenix on a Samsung A51
     treeherder:
         symbol: perftest(startup-fenix-cmff)
         tier: 2
     platform: android-hw-a51-11-0-aarch64-shippable/opt
     attributes:
-        cron: true
+        cron: false
+    fetches:
+        build:
+            - artifact: target.arm64-v8a.apk
+              extract: false
+    require-build:
+        android-hw-a51-11-0-aarch64-shippable/opt: signing-apk-fenix-nightly-simulation
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -59,20 +67,24 @@ hw-a51-startup-fenix-cold-main-first-frame:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_main_first_frame
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=fenix
-            --AndroidStartUp-release-channel=nightly
 
 hw-a51-startup-fenix-cold-view-nav-start:
     worker-type: t-bitbar-gw-perf-a51
+    run-on-projects: [trunk-only]
     description: Run android startup perftest on Fenix on a Samsung A51
     treeherder:
         symbol: perftest(startup-fenix-cvns)
         tier: 2
     platform: android-hw-a51-11-0-aarch64-shippable/opt
     attributes:
-        cron: true
+        cron: false
+    fetches:
+        build:
+            - artifact: target.arm64-v8a.apk
+              extract: false
+    require-build:
+        android-hw-a51-11-0-aarch64-shippable/opt: signing-apk-fenix-nightly-simulation
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -84,10 +96,7 @@ hw-a51-startup-fenix-cold-view-nav-start:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_view_nav_start
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=fenix
-            --AndroidStartUp-release-channel=nightly
 
 hw-a51-startup-focus-cold-main-first-frame:
     worker-type: t-bitbar-gw-perf-a51
@@ -97,7 +106,13 @@ hw-a51-startup-focus-cold-main-first-frame:
         tier: 2
     platform: android-hw-a51-11-0-aarch64-shippable/opt
     attributes:
-        cron: true
+        cron: false
+    fetches:
+        build:
+            - artifact: target.arm64-v8a.apk
+              extract: false
+    require-build:
+        android-hw-a51-11-0-aarch64-shippable/opt: signing-apk-focus-nightly
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -109,10 +124,7 @@ hw-a51-startup-focus-cold-main-first-frame:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_main_first_frame
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=focus
-            --AndroidStartUp-release-channel=nightly
 
 hw-a51-startup-focus-cold-view-nav-start:
     worker-type: t-bitbar-gw-perf-a51
@@ -122,7 +134,13 @@ hw-a51-startup-focus-cold-view-nav-start:
         tier: 2
     platform: android-hw-a51-11-0-aarch64-shippable/opt
     attributes:
-        cron: true
+        cron: false
+    fetches:
+        build:
+            - artifact: target.arm64-v8a.apk
+              extract: false
+    require-build:
+        android-hw-a51-11-0-aarch64-shippable/opt: signing-apk-focus-nightly
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -134,20 +152,24 @@ hw-a51-startup-focus-cold-view-nav-start:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_view_nav_start
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=focus
-            --AndroidStartUp-release-channel=nightly
 
 hw-a51-startup-geckoview-cold-main-first-frame:
     worker-type: t-bitbar-gw-perf-a51
+    run-on-projects: [trunk-only]
     description: Run android startup perftest on Geckoview on a Samsung A51
     treeherder:
         symbol: perftest(startup-geckoview-cmff)
         tier: 2
     platform: android-hw-a51-11-0-aarch64-shippable/opt
     attributes:
-        cron: true
+        cron: false
+    fetches:
+        build:
+            - artifact: geckoview_example.apk
+              extract: false
+    require-build:
+        android-hw-a51-11-0-aarch64-shippable/opt: build-android-aarch64-shippable/opt
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -159,20 +181,24 @@ hw-a51-startup-geckoview-cold-main-first-frame:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_main_first_frame
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=geckoview_example
-            --AndroidStartUp-release-channel=nightly
 
 hw-a51-startup-geckoview-cold-view-nav-start:
     worker-type: t-bitbar-gw-perf-a51
+    run-on-projects: [trunk-only]
     description: Run android startup perftest on Geckoview_example on a Samsung A51
     treeherder:
         symbol: perftest(startup-geckoview-cvns)
         tier: 2
     platform: android-hw-a51-11-0-aarch64-shippable/opt
     attributes:
-        cron: true
+        cron: false
+    fetches:
+        build:
+            - artifact: geckoview_example.apk
+              extract: false
+    require-build:
+        android-hw-a51-11-0-aarch64-shippable/opt: build-android-aarch64-shippable/opt
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -184,10 +210,7 @@ hw-a51-startup-geckoview-cold-view-nav-start:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_view_nav_start
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=geckoview_example
-            --AndroidStartUp-release-channel=nightly
 
 hw-a51-startup-chrome-m-cold-main-first-frame:
     worker-type: t-bitbar-gw-perf-a51
@@ -209,10 +232,7 @@ hw-a51-startup-chrome-m-cold-main-first-frame:
             --browsertime-cycles=0
             --AndroidStartUp-test-name=cold_main_first_frame
             --perfherder
-            --hooks
-            testing/performance/hooks_android_startup.py
             --AndroidStartUp-product=chrome-m
-            --AndroidStartUp-release-channel=release
 
 hw-a51-perfstats-gv:
     worker-type: t-bitbar-gw-perf-a51
@@ -228,6 +248,7 @@ hw-a51-perfstats-gv:
             cd $GECKO_PATH &&
             python3 python/mozperftest/mozperftest/runner.py
             --flavor mobile-browser
+            --app geckoview
             --android
             --android-app-name org.mozilla.geckoview_example
             --android-activity org.mozilla.geckoview_example.GeckoViewActivity
@@ -237,7 +258,6 @@ hw-a51-perfstats-gv:
             --browsertime-geckodriver ${MOZ_FETCHES_DIR}/geckodriver
             --output $MOZ_FETCHES_DIR/../artifacts
             --perfherder
-            --perfherder-app geckoview
             --perfherder-metrics name:HttpChannelCompletion,unit:ms name:HttpChannelCompletion_Cache,unit:ms name:HttpChannelCompletion_Network,unit:ms name:DisplayListBuilding,unit:ms name:Reflowing,unit:ms name:Styling,unit:ms
             --browsertime-iterations 10
             --hooks testing/performance/hooks_perfstats.py
@@ -257,6 +277,7 @@ hw-a51-aarch64-perfstats-gv:
             cd $GECKO_PATH &&
             python3 python/mozperftest/mozperftest/runner.py
             --flavor mobile-browser
+            --app geckoview
             --android
             --android-app-name org.mozilla.geckoview_example
             --android-activity org.mozilla.geckoview_example.GeckoViewActivity
@@ -266,7 +287,6 @@ hw-a51-aarch64-perfstats-gv:
             --browsertime-geckodriver ${MOZ_FETCHES_DIR}/geckodriver
             --output $MOZ_FETCHES_DIR/../artifacts
             --perfherder
-            --perfherder-app geckoview
             --perfherder-metrics name:HttpChannelCompletion,unit:ms name:HttpChannelCompletion_Cache,unit:ms name:HttpChannelCompletion_Network,unit:ms name:DisplayListBuilding,unit:ms name:Reflowing,unit:ms name:Styling,unit:ms
             --browsertime-iterations 10
             --hooks testing/performance/hooks_perfstats.py
@@ -286,6 +306,7 @@ hw-a51-perfstats-fenix:
             cd $GECKO_PATH &&
             python3 python/mozperftest/mozperftest/runner.py
             --flavor mobile-browser
+            --app fenix
             --android
             --android-app-name org.mozilla.fenix
             --android-activity org.mozilla.fenix.IntentReceiverActivity
@@ -295,7 +316,6 @@ hw-a51-perfstats-fenix:
             --browsertime-geckodriver ${MOZ_FETCHES_DIR}/geckodriver
             --output $MOZ_FETCHES_DIR/../artifacts
             --perfherder
-            --perfherder-app fenix
             --perfherder-metrics name:HttpChannelCompletion,unit:ms name:HttpChannelCompletion_Cache,unit:ms name:HttpChannelCompletion_Network,unit:ms name:DisplayListBuilding,unit:ms name:Reflowing,unit:ms name:Styling,unit:ms
             --browsertime-iterations 10
             --hooks testing/performance/hooks_perfstats.py
@@ -315,6 +335,7 @@ hw-a51-aarch64-perfstats-fenix:
             cd $GECKO_PATH &&
             python3 python/mozperftest/mozperftest/runner.py
             --flavor mobile-browser
+            --app fenix
             --android
             --android-app-name org.mozilla.fenix
             --android-activity org.mozilla.fenix.IntentReceiverActivity
@@ -324,7 +345,6 @@ hw-a51-aarch64-perfstats-fenix:
             --browsertime-geckodriver ${MOZ_FETCHES_DIR}/geckodriver
             --output $MOZ_FETCHES_DIR/../artifacts
             --perfherder
-            --perfherder-app fenix
             --perfherder-metrics name:HttpChannelCompletion,unit:ms name:HttpChannelCompletion_Cache,unit:ms name:HttpChannelCompletion_Network,unit:ms name:DisplayListBuilding,unit:ms name:Reflowing,unit:ms name:Styling,unit:ms
             --browsertime-iterations 10
             --hooks testing/performance/hooks_perfstats.py

@@ -76,7 +76,7 @@ constexpr Matrix3x3 kBradfordInv{{{0.9869929f, -0.1470543f, 0.1599627f},
                                   {0.4323053f, 0.5183603f, 0.0492912f},
                                   {-0.0085287f, 0.0400428f, 0.9684867f}}};
 
-// Adapts whitepoint x, y to D50
+// Adapts white point x, y to D50
 static Status AdaptToXYZD50(float wx, float wy, Matrix3x3& matrix) {
   bool ok = (wx >= 0) && (wx <= 1) && (wy > 0) && (wy <= 1);
   if (!ok) {
@@ -146,7 +146,8 @@ static Status ToneMapPixel(const JxlColorEncoding& c, const float in[3],
     }
   }
   if (tf == JXL_TRANSFER_FUNCTION_PQ) {
-    Rec2408ToneMapperBase tone_mapper({0, 10000}, {0, 250}, luminances);
+    Rec2408ToneMapperBase tone_mapper({0.0f, 10000.0f}, {0.0f, 250.0f},
+                                      luminances);
     tone_mapper.ToneMap(linear);
   } else {
     HlgOOTF_Base ootf(/*source_luminance=*/300, /*target_luminance=*/80,
@@ -203,8 +204,8 @@ static std::vector<uint16_t> CreateTableCurve(uint32_t N, const ExtraTF tf,
   JXL_ASSERT(tf == ExtraTF::kPQ || tf == ExtraTF::kHLG);
 
   static constexpr Vector3 kLuminances{1.f / 3, 1.f / 3, 1.f / 3};
-  Rec2408ToneMapperBase tone_mapper({0, kPQIntensityTarget},
-                                    {0, kDefaultIntensityTarget}, kLuminances);
+  Rec2408ToneMapperBase tone_mapper(
+      {0.0f, kPQIntensityTarget}, {0.0f, kDefaultIntensityTarget}, kLuminances);
   // No point using float - LCMS converts to 16-bit for A2B/MFT.
   std::vector<uint16_t> table(N);
   for (uint32_t i = 0; i < N; ++i) {
@@ -359,7 +360,7 @@ static Status CreateICCChadMatrix(double wx, double wy, Matrix3x3& result) {
   return true;
 }
 
-// Creates RGB to XYZ matrix given RGB primaries and whitepoint in xy.
+// Creates RGB to XYZ matrix given RGB primaries and white point in xy.
 static Status CreateICCRGBMatrix(double rx, double ry, double gx, double gy,
                                  double bx, double by, double wx, double wy,
                                  Matrix3x3& result) {
@@ -734,7 +735,7 @@ static Status CreateICCLutAtoBTagForHDR(JxlColorEncoding c,
 
 // Some software (Apple Safari, Preview) requires this.
 static Status CreateICCNoOpBToATag(std::vector<uint8_t>* tags) {
-  WriteICCTag("mBA ", tags->size(), tags);
+  WriteICCTag("mBA ", tags->size(), tags);  // notypo
   // 4 reserved bytes set to 0
   WriteICCUint32(0, tags->size(), tags);
   // number of input channels

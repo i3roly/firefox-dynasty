@@ -40,7 +40,7 @@ class CrashReportingTest : TestSetup() {
         }.openNavigationToolbar {
         }.openTabCrashReporter {
         }.clickTabCrashedCloseButton {
-        }.openTabDrawer {
+        }.openTabDrawer(activityTestRule) {
             verifyNoOpenTabsInNormalBrowsing()
         }
     }
@@ -72,7 +72,7 @@ class CrashReportingTest : TestSetup() {
         }.openNavigationToolbar {
         }.enterURLAndEnterToBrowser(firstWebPage.url) {
             mDevice.waitForIdle()
-        }.openTabDrawer {
+        }.openTabDrawer(activityTestRule) {
         }.openNewTab {
         }.submitQuery(secondWebPage.url.toString()) {
             waitForPageToLoad()
@@ -81,7 +81,7 @@ class CrashReportingTest : TestSetup() {
         navigationToolbar {
         }.openTabCrashReporter {
             verifyPageContent(tabCrashMessage)
-        }.openTabDrawer {
+        }.openTabDrawer(activityTestRule) {
             verifyExistingOpenTabs(firstWebPage.title)
             verifyExistingOpenTabs("about:crashcontent")
         }.closeTabDrawer {

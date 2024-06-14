@@ -136,7 +136,7 @@ XPCOMUtils.defineLazyScriptGetter(
 XPCOMUtils.defineLazyScriptGetter(
   this,
   "FullZoom",
-  "chrome://browser/content/browser-fullZoom.js"
+  "chrome://browser/content/tabbrowser/browser-fullZoom.js"
 );
 XPCOMUtils.defineLazyScriptGetter(
   this,
@@ -151,7 +151,7 @@ XPCOMUtils.defineLazyScriptGetter(
 XPCOMUtils.defineLazyScriptGetter(
   this,
   "gTabsPanel",
-  "chrome://browser/content/browser-allTabsMenu.js"
+  "chrome://browser/content/tabbrowser/browser-allTabsMenu.js"
 );
 XPCOMUtils.defineLazyScriptGetter(
   this,
@@ -166,7 +166,7 @@ XPCOMUtils.defineLazyScriptGetter(
 XPCOMUtils.defineLazyScriptGetter(
   this,
   "ctrlTab",
-  "chrome://browser/content/browser-ctrlTab.js"
+  "chrome://browser/content/tabbrowser/browser-ctrlTab.js"
 );
 XPCOMUtils.defineLazyScriptGetter(
   this,
@@ -457,7 +457,7 @@ ChromeUtils.defineLazyGetter(this, "PopupNotifications", () => {
       }
       let fallback = [
         document.getElementById("identity-icon"),
-        document.getElementById("urlbar-search-button"),
+        gURLBar.querySelector(".urlbar-search-button"),
       ];
       return fallback.find(element => element?.checkVisibility()) ?? null;
     };
@@ -727,8 +727,11 @@ var gInitialPages = [
   "about:welcome",
   "about:welcomeback",
   "chrome://browser/content/blanktab.html",
-  "about:profilemanager",
 ];
+
+if (Services.prefs.getBoolPref("browser.profiles.enabled")) {
+  gInitialPages.push("about:profilemanager");
+}
 
 function isInitialPage(url) {
   if (!(url instanceof Ci.nsIURI)) {
@@ -2525,7 +2528,7 @@ const BrowserSearch = {
     csp,
     event
   ) {
-    event = getRootEvent(event);
+    event = BrowserUtils.getRootEvent(event);
     let where = BrowserUtils.whereToOpenLink(event);
     if (where == "current") {
       // override: historically search opens in new tab
@@ -3435,6 +3438,10 @@ var XULBrowserWindow = {
       ) {
         this.busyUI = true;
 
+        if (this.spinCursorWhileBusy) {
+          window.setCursor("progress");
+        }
+
         // XXX: This needs to be based on window activity...
         this.stopCommand.removeAttribute("disabled");
         CombinedStopReload.switchToStop(aRequest, aWebProgress);
@@ -3501,6 +3508,10 @@ var XULBrowserWindow = {
 
       if (this.busyUI && aWebProgress.isTopLevel) {
         this.busyUI = false;
+
+        if (this.spinCursorWhileBusy) {
+          window.setCursor("auto");
+        }
 
         this.stopCommand.setAttribute("disabled", "true");
         CombinedStopReload.switchToReload(aRequest, aWebProgress);
@@ -3967,6 +3978,12 @@ var XULBrowserWindow = {
   },
 };
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  XULBrowserWindow,
+  "spinCursorWhileBusy",
+  "browser.spin_cursor_while_busy"
+);
+
 var LinkTargetDisplay = {
   get DELAY_SHOW() {
     delete this.DELAY_SHOW;
@@ -4332,6 +4349,8 @@ var TabsProgressListener = {
       );
       return;
     }
+
+    Services.obs.notifyObservers(aBrowser, "mailto::onLocationChange", aFlags);
 
     // Only need to call locationChange if the PopupNotifications object
     // for this window has already been initialized (i.e. its getter no

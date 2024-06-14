@@ -59,37 +59,40 @@ namespace mozilla::dom {
  */
 
 template <typename DecoderType>
-DecoderTemplate<DecoderType>::ControlMessage::ControlMessage(
-    const nsACString& aTitle)
-    : mTitle(aTitle) {}
+DecoderTemplate<DecoderType>::ConfigureMessage::ConfigureMessage(
+    WebCodecsId aConfigId, already_AddRefed<ConfigTypeInternal> aConfig)
+    : ControlMessage(aConfigId),
+      mConfig(aConfig),
+      mCodec(NS_ConvertUTF16toUTF8(mConfig->mCodec)) {}
 
 template <typename DecoderType>
-DecoderTemplate<DecoderType>::ConfigureMessage::ConfigureMessage(
-    Id aId, UniquePtr<ConfigTypeInternal>&& aConfig)
-    : ControlMessage(
-          nsPrintfCString("configure #%d (%s)", aId,
-                          NS_ConvertUTF16toUTF8(aConfig->mCodec).get())),
-      mId(aId),
-      mConfig(std::move(aConfig)) {}
+nsCString DecoderTemplate<DecoderType>::ConfigureMessage::ToString() const {
+  return nsPrintfCString("configure #%zu (%s)", ControlMessage::mConfigId,
+                         mCodec.get());
+}
 
 /* static */
 template <typename DecoderType>
 typename DecoderTemplate<DecoderType>::ConfigureMessage*
 DecoderTemplate<DecoderType>::ConfigureMessage::Create(
-    UniquePtr<ConfigTypeInternal>&& aConfig) {
+    already_AddRefed<ConfigTypeInternal> aConfig) {
   // This needs to be atomic since this can run on the main thread or worker
   // thread.
-  static std::atomic<Id> sNextId = NoId;
+  static std::atomic<WebCodecsId> sNextId = 0;
   return new ConfigureMessage(++sNextId, std::move(aConfig));
 }
 
 template <typename DecoderType>
 DecoderTemplate<DecoderType>::DecodeMessage::DecodeMessage(
-    SeqId aSeqId, ConfigId aConfigId, UniquePtr<InputTypeInternal>&& aData)
-    : ControlMessage(
-          nsPrintfCString("decode #%zu (config #%d)", aSeqId, aConfigId)),
-      mSeqId(aSeqId),
-      mData(std::move(aData)) {}
+    WebCodecsId aSeqId, WebCodecsId aConfigId,
+    UniquePtr<InputTypeInternal>&& aData)
+    : ControlMessage(aConfigId), mSeqId(aSeqId), mData(std::move(aData)) {}
+
+template <typename DecoderType>
+nsCString DecoderTemplate<DecoderType>::DecodeMessage::ToString() const {
+  return nsPrintfCString("decode #%zu (config #%zu)", mSeqId,
+                         ControlMessage::mConfigId);
+}
 
 static int64_t GenerateUniqueId() {
   // This needs to be atomic since this can run on the main thread or worker
@@ -99,12 +102,17 @@ static int64_t GenerateUniqueId() {
 }
 
 template <typename DecoderType>
-DecoderTemplate<DecoderType>::FlushMessage::FlushMessage(SeqId aSeqId,
-                                                         ConfigId aConfigId)
-    : ControlMessage(
-          nsPrintfCString("flush #%zu (config #%d)", aSeqId, aConfigId)),
+DecoderTemplate<DecoderType>::FlushMessage::FlushMessage(WebCodecsId aSeqId,
+                                                         WebCodecsId aConfigId)
+    : ControlMessage(aConfigId),
       mSeqId(aSeqId),
       mUniqueId(GenerateUniqueId()) {}
+
+template <typename DecoderType>
+nsCString DecoderTemplate<DecoderType>::FlushMessage::ToString() const {
+  return nsPrintfCString("flush #%zu (config #%zu)", mSeqId,
+                         ControlMessage::mConfigId);
+}
 
 /*
  * Below are DecoderTemplate implementation
@@ -123,7 +131,7 @@ DecoderTemplate<DecoderType>::DecoderTemplate(
       mMessageQueueBlocked(false),
       mDecodeQueueSize(0),
       mDequeueEventScheduled(false),
-      mLatestConfigureId(ConfigureMessage::NoId),
+      mLatestConfigureId(0),
       mDecodeCounter(0),
       mFlushCounter(0) {}
 
@@ -149,7 +157,7 @@ void DecoderTemplate<DecoderType>::Configure(const ConfigType& aConfig,
   }
 
   // Clone a ConfigType as the active decoder config.
-  UniquePtr<ConfigTypeInternal> config =
+  RefPtr<ConfigTypeInternal> config =
       DecoderType::CreateConfigInternal(aConfig);
   if (!config) {
     aRv.Throw(NS_ERROR_UNEXPECTED);  // Invalid description data.
@@ -162,8 +170,8 @@ void DecoderTemplate<DecoderType>::Configure(const ConfigType& aConfig,
   mFlushCounter = 0;
 
   mControlMessageQueue.emplace(
-      UniquePtr<ControlMessage>(ConfigureMessage::Create(std::move(config))));
-  mLatestConfigureId = mControlMessageQueue.back()->AsConfigureMessage()->mId;
+      UniquePtr<ControlMessage>(ConfigureMessage::Create(config.forget())));
+  mLatestConfigureId = mControlMessageQueue.back()->mConfigId;
   LOG("%s %p enqueues %s", DecoderType::Name.get(), this,
       mControlMessageQueue.back()->ToString().get());
   ProcessControlMessageQueue();
@@ -320,13 +328,19 @@ void DecoderTemplate<DecoderType>::ReportError(const nsresult& aResult) {
 
 template <typename DecoderType>
 void DecoderTemplate<DecoderType>::OutputDecodedData(
-    const nsTArray<RefPtr<MediaData>>&& aData) {
+    const nsTArray<RefPtr<MediaData>>&& aData,
+    const ConfigTypeInternal& aConfig) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(mState == CodecState::Configured);
-  MOZ_ASSERT(mActiveConfig);
 
-  nsTArray<RefPtr<OutputType>> frames = DecodedDataToOutputType(
-      GetParentObject(), std::move(aData), *mActiveConfig);
+  if (!GetParentObject()) {
+    LOGE("%s %p Canceling output callbacks since parent-object is gone",
+         DecoderType::Name.get(), this);
+    return;
+  }
+
+  nsTArray<RefPtr<OutputType>> frames =
+      DecodedDataToOutputType(GetParentObject(), std::move(aData), aConfig);
   RefPtr<OutputCallbackType> cb(mOutputCallback);
   for (RefPtr<OutputType>& frame : frames) {
     LOG("Outputing decoded data: ts: %" PRId64, frame->Timestamp());
@@ -465,7 +479,8 @@ MessageProcessedResult DecoderTemplate<DecoderType>::ProcessConfigureMessage(
     errorMessage.AppendPrintf("CreateTrackInfo failed: %s", res.get());
   } else if (!DecoderType::IsSupported(msg->Config())) {
     errorMessage.Append("Not supported.");
-  } else if (!CreateDecoderAgent(msg->mId, msg->TakeConfig(), i.unwrap())) {
+  } else if (!CreateDecoderAgent(msg->mConfigId, msg->TakeConfig(),
+                                 i.unwrap())) {
     errorMessage.Append("DecoderAgent creation failed.");
   }
   if (!errorMessage.IsEmpty()) {
@@ -588,62 +603,64 @@ MessageProcessedResult DecoderTemplate<DecoderType>::ProcessDecodeMessage(
   }
 
   mAgent->Decode(data.get())
-      ->Then(
-          GetCurrentSerialEventTarget(), __func__,
-          [self = RefPtr{this}, id = mAgent->mId](
-              DecoderAgent::DecodePromise::ResolveOrRejectValue&& aResult) {
-            MOZ_ASSERT(self->mProcessingMessage);
-            MOZ_ASSERT(self->mProcessingMessage->AsDecodeMessage());
-            MOZ_ASSERT(self->mState == CodecState::Configured);
-            MOZ_ASSERT(self->mAgent);
-            MOZ_ASSERT(id == self->mAgent->mId);
-            MOZ_ASSERT(self->mActiveConfig);
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [self = RefPtr{this}, id = mAgent->mId](
+                 DecoderAgent::DecodePromise::ResolveOrRejectValue&& aResult) {
+               MOZ_ASSERT(self->mProcessingMessage);
+               MOZ_ASSERT(self->mProcessingMessage->AsDecodeMessage());
+               MOZ_ASSERT(self->mState == CodecState::Configured);
+               MOZ_ASSERT(self->mAgent);
+               MOZ_ASSERT(id == self->mAgent->mId);
+               MOZ_ASSERT(self->mActiveConfig);
 
-            DecodeMessage* msg = self->mProcessingMessage->AsDecodeMessage();
-            LOGV("%s %p, DecoderAgent #%d %s has been %s",
-                 DecoderType::Name.get(), self.get(), id, msg->ToString().get(),
-                 aResult.IsResolve() ? "resolved" : "rejected");
+               DecodeMessage* msg = self->mProcessingMessage->AsDecodeMessage();
+               LOGV("%s %p, DecoderAgent #%d %s has been %s",
+                    DecoderType::Name.get(), self.get(), id,
+                    msg->ToString().get(),
+                    aResult.IsResolve() ? "resolved" : "rejected");
 
-            nsCString msgStr = msg->ToString();
+               nsCString msgStr = msg->ToString();
 
-            msg->Complete();
-            self->mProcessingMessage.reset();
+               msg->Complete();
+               self->mProcessingMessage.reset();
 
-            if (aResult.IsReject()) {
-              // The spec asks to queue a task to run close the decoder
-              // with an EncodingError so we log the exact error here.
-              const MediaResult& error = aResult.RejectValue();
-              LOGE("%s %p, DecoderAgent #%d %s failed: %s",
-                   DecoderType::Name.get(), self.get(), id, msgStr.get(),
-                   error.Description().get());
-              self->QueueATask(
-                  "Error during decode runnable",
-                  [self = RefPtr{self}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
-                    MOZ_ASSERT(self->mState != CodecState::Closed);
-                    self->CloseInternal(
-                        NS_ERROR_DOM_ENCODING_NOT_SUPPORTED_ERR);
-                  });
-              return;
-            }
+               if (aResult.IsReject()) {
+                 // The spec asks to queue a task to run close the decoder
+                 // with an EncodingError so we log the exact error here.
+                 const MediaResult& error = aResult.RejectValue();
+                 LOGE("%s %p, DecoderAgent #%d %s failed: %s",
+                      DecoderType::Name.get(), self.get(), id, msgStr.get(),
+                      error.Description().get());
+                 self->QueueATask(
+                     "Error during decode runnable",
+                     [self = RefPtr{self}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+                       MOZ_ASSERT(self->mState != CodecState::Closed);
+                       self->CloseInternal(
+                           NS_ERROR_DOM_ENCODING_NOT_SUPPORTED_ERR);
+                     });
+                 return;
+               }
 
-            MOZ_ASSERT(aResult.IsResolve());
-            nsTArray<RefPtr<MediaData>> data =
-                std::move(aResult.ResolveValue());
-            if (data.IsEmpty()) {
-              LOGV("%s %p got no data for %s", DecoderType::Name.get(),
-                   self.get(), msgStr.get());
-            } else {
-              LOGV("%s %p, schedule %zu decoded data output for %s",
-                   DecoderType::Name.get(), self.get(), data.Length(),
-                   msgStr.get());
-              self->QueueATask("Output Decoded Data",
-                               [self = RefPtr{self}, data = std::move(data)]()
-                                   MOZ_CAN_RUN_SCRIPT_BOUNDARY {
-                                     self->OutputDecodedData(std::move(data));
-                                   });
-            }
-            self->ProcessControlMessageQueue();
-          })
+               MOZ_ASSERT(aResult.IsResolve());
+               nsTArray<RefPtr<MediaData>> data =
+                   std::move(aResult.ResolveValue());
+               if (data.IsEmpty()) {
+                 LOGV("%s %p got no data for %s", DecoderType::Name.get(),
+                      self.get(), msgStr.get());
+               } else {
+                 LOGV("%s %p, schedule %zu decoded data output for %s",
+                      DecoderType::Name.get(), self.get(), data.Length(),
+                      msgStr.get());
+                 self->QueueATask("Output Decoded Data",
+                                  [self = RefPtr{self}, data = std::move(data),
+                                   config = RefPtr{self->mActiveConfig}]()
+                                      MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+                                        self->OutputDecodedData(std::move(data),
+                                                                *config);
+                                      });
+               }
+               self->ProcessControlMessageQueue();
+             })
       ->Track(msg->Request());
 
   return MessageProcessedResult::Processed;
@@ -741,8 +758,9 @@ MessageProcessedResult DecoderTemplate<DecoderType>::ProcessFlushMessage(
             self->QueueATask(
                 "Flush: output decoding data task",
                 [self = RefPtr{self}, data = std::move(data),
+                 config = RefPtr{self->mActiveConfig},
                  flushPromiseId]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
-                  self->OutputDecodedData(std::move(data));
+                  self->OutputDecodedData(std::move(data), *config);
                   // If Reset() was invoked before this task executes, or
                   // during the output callback above in the execution of this
                   // task, the promise in mPendingFlushPromises is handled
@@ -779,7 +797,7 @@ MessageProcessedResult DecoderTemplate<DecoderType>::ProcessFlushMessage(
 
 template <typename DecoderType>
 bool DecoderTemplate<DecoderType>::CreateDecoderAgent(
-    DecoderAgent::Id aId, UniquePtr<ConfigTypeInternal>&& aConfig,
+    DecoderAgent::Id aId, already_AddRefed<ConfigTypeInternal> aConfig,
     UniquePtr<TrackInfo>&& aInfo) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(mState == CodecState::Configured);

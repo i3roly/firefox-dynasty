@@ -12,6 +12,7 @@
 #include <cmath>
 #include <stdint.h>
 
+#include "builtin/temporal/Crash.h"
 #include "builtin/temporal/Int128.h"
 
 namespace js::temporal {
@@ -52,9 +53,9 @@ enum class TemporalRoundingMode {
 };
 
 /**
- * NegateTemporalRoundingMode ( roundingMode )
+ * NegateRoundingMode ( roundingMode )
  */
-constexpr auto NegateTemporalRoundingMode(TemporalRoundingMode roundingMode) {
+constexpr auto NegateRoundingMode(TemporalRoundingMode roundingMode) {
   // Steps 1-5.
   switch (roundingMode) {
     case TemporalRoundingMode::Ceil:
@@ -76,7 +77,7 @@ constexpr auto NegateTemporalRoundingMode(TemporalRoundingMode roundingMode) {
     case TemporalRoundingMode::HalfEven:
       return roundingMode;
   }
-  MOZ_CRASH("invalid rounding mode");
+  JS_CONSTEXPR_CRASH("invalid rounding mode");
 }
 
 /**
@@ -115,7 +116,7 @@ constexpr auto ToPositiveRoundingMode(TemporalRoundingMode roundingMode) {
       // Adjust the rounding mode to Half-Floor, similar to the Trunc case.
       return TemporalRoundingMode::HalfFloor;
   }
-  MOZ_CRASH("unexpected rounding mode");
+  JS_CONSTEXPR_CRASH("unexpected rounding mode");
 }
 
 // Temporal performs division on "mathematical values" [1] with implies using
@@ -434,7 +435,7 @@ inline int64_t Divide(int64_t dividend, int64_t divisor,
  * Compute ceiling division ⌈dividend / divisor⌉. The divisor must be a positive
  * number.
  */
-constexpr Int128 CeilDiv(const Int128& dividend, const Int128& divisor) {
+inline Int128 CeilDiv(const Int128& dividend, const Int128& divisor) {
   MOZ_ASSERT(divisor > Int128{0}, "negative divisor not supported");
 
   auto [quotient, remainder] = dividend.divrem(divisor);
@@ -459,7 +460,7 @@ constexpr Int128 CeilDiv(const Int128& dividend, const Int128& divisor) {
  * Compute floor division ⌊dividend / divisor⌋. The divisor must be a positive
  * number.
  */
-constexpr Int128 FloorDiv(const Int128& dividend, const Int128& divisor) {
+inline Int128 FloorDiv(const Int128& dividend, const Int128& divisor) {
   MOZ_ASSERT(divisor > Int128{0}, "negative divisor not supported");
 
   auto [quotient, remainder] = dividend.divrem(divisor);
@@ -484,7 +485,7 @@ constexpr Int128 FloorDiv(const Int128& dividend, const Int128& divisor) {
  * Compute "round toward infinity" division `dividend / divisor`. The divisor
  * must be a positive number.
  */
-constexpr Int128 ExpandDiv(const Int128& dividend, const Int128& divisor) {
+inline Int128 ExpandDiv(const Int128& dividend, const Int128& divisor) {
   MOZ_ASSERT(divisor > Int128{0}, "negative divisor not supported");
 
   auto [quotient, remainder] = dividend.divrem(divisor);
@@ -513,7 +514,7 @@ constexpr Int128 ExpandDiv(const Int128& dividend, const Int128& divisor) {
  * Compute truncating division `dividend / divisor`. The divisor must be a
  * positive number.
  */
-constexpr Int128 TruncDiv(const Int128& dividend, const Int128& divisor) {
+inline Int128 TruncDiv(const Int128& dividend, const Int128& divisor) {
   MOZ_ASSERT(divisor > Int128{0}, "negative divisor not supported");
 
   // Truncating division rounds both positive and negative quotients toward

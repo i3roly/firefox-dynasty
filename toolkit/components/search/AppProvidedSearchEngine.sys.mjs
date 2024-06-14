@@ -453,7 +453,10 @@ export class AppProvidedSearchEngine extends SearchEngine {
       this.#blobURLPromise = null;
     }
     this.#blobURLPromise = Promise.resolve(blobURL);
-    lazy.SearchUtils.notifyAction(this, lazy.SearchUtils.MODIFIED_TYPE.CHANGED);
+    lazy.SearchUtils.notifyAction(
+      this,
+      lazy.SearchUtils.MODIFIED_TYPE.ICON_CHANGED
+    );
   }
 
   /**
@@ -491,6 +494,10 @@ export class AppProvidedSearchEngine extends SearchEngine {
 
     if (engineConfig.telemetrySuffix) {
       this._telemetryId += `-${engineConfig.telemetrySuffix}`;
+    }
+
+    if (engineConfig.clickUrl) {
+      this.clickUrl = engineConfig.clickUrl;
     }
 
     this._name = engineConfig.name.trim();

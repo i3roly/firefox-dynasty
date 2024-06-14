@@ -6,11 +6,14 @@ package org.mozilla.fenix.translations.preferences.automatic
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -20,6 +23,8 @@ import mozilla.components.concept.engine.translate.Language
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.compose.list.TextListItem
+import org.mozilla.fenix.shopping.ui.ReviewQualityCheckInfoCard
+import org.mozilla.fenix.shopping.ui.ReviewQualityCheckInfoType
 import org.mozilla.fenix.theme.FirefoxTheme
 import java.util.Locale
 
@@ -27,11 +32,13 @@ import java.util.Locale
  * Automatic Translate preference screen.
  *
  * @param automaticTranslationListPreferences List of [AutomaticTranslationItemPreference]s to display.
+ * @param hasLanguageError If a translation error occurs.
  * @param onItemClick Invoked when the user clicks on the a item from the list.
  */
 @Composable
 fun AutomaticTranslationPreference(
     automaticTranslationListPreferences: List<AutomaticTranslationItemPreference>,
+    hasLanguageError: Boolean = false,
     onItemClick: (AutomaticTranslationItemPreference) -> Unit,
 ) {
     Column(
@@ -46,9 +53,15 @@ fun AutomaticTranslationPreference(
                 .padding(
                     start = 56.dp,
                 )
-                .semantics { heading() },
+                .semantics { heading() }
+                .defaultMinSize(minHeight = 76.dp)
+                .wrapContentHeight(),
             maxLabelLines = Int.MAX_VALUE,
         )
+
+        if (hasLanguageError) {
+            CouldNotLoadLanguagesErrorWarning()
+        }
 
         LazyColumn {
             items(automaticTranslationListPreferences) { item: AutomaticTranslationItemPreference ->
@@ -65,7 +78,9 @@ fun AutomaticTranslationPreference(
                         description = description,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 56.dp),
+                            .padding(start = 56.dp)
+                            .defaultMinSize(minHeight = 56.dp)
+                            .wrapContentHeight(),
                         onClick = {
                             onItemClick(item)
                         },
@@ -74,6 +89,22 @@ fun AutomaticTranslationPreference(
             }
         }
     }
+}
+
+@Composable
+private fun CouldNotLoadLanguagesErrorWarning() {
+    val modifier = Modifier
+        .fillMaxWidth()
+        .padding(start = 72.dp, end = 16.dp, bottom = 16.dp, top = 16.dp)
+        .defaultMinSize(minHeight = 56.dp)
+        .wrapContentHeight()
+
+    ReviewQualityCheckInfoCard(
+        description = stringResource(id = R.string.automatic_translation_error_warning_text),
+        type = ReviewQualityCheckInfoType.Warning,
+        verticalRowAlignment = Alignment.CenterVertically,
+        modifier = modifier,
+    )
 }
 
 @Composable

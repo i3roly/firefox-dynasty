@@ -337,7 +337,9 @@ function makeUrlbarResult(tokens, info) {
           icon: info.icon,
           userContextId: info.userContextId,
         });
-        if (lazy.UrlbarPrefs.get("secondaryActions.featureGate")) {
+        if (
+          lazy.UrlbarPrefs.getScotchBonnetPref("secondaryActions.featureGate")
+        ) {
           payload[0].action = {
             key: "tabswitch",
             l10nId: "urlbar-result-action-switch-tab",
@@ -1447,8 +1449,7 @@ class ProviderPlaces extends UrlbarProvider {
   isActive(queryContext) {
     if (
       !queryContext.trimmedSearchString &&
-      queryContext.searchMode?.engineName &&
-      lazy.UrlbarPrefs.get("update2.emptySearchBehavior") < 2
+      queryContext.searchMode?.engineName
     ) {
       return false;
     }
@@ -1525,12 +1526,8 @@ class ProviderPlaces extends UrlbarProvider {
     search.notifyResult(false);
   }
 
-  onLegacyEngagement(state, queryContext, details, controller) {
+  onEngagement(queryContext, controller, details) {
     let { result } = details;
-    if (result?.providerName != this.name) {
-      return;
-    }
-
     if (details.selType == "dismiss") {
       switch (result.type) {
         case UrlbarUtils.RESULT_TYPE.SEARCH:

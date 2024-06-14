@@ -4,11 +4,9 @@
 "use strict";
 
 add_setup(() => {
-  // These are functional and not integration tests, cookieBehavior accept lets
-  // us have StorageAccess on thirparty.
   Services.prefs.setIntPref(
     "network.cookie.cookieBehavior",
-    Ci.nsICookieService.BEHAVIOR_ACCEPT
+    Ci.nsICookieService.BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN
   );
   Services.prefs.setBoolPref(
     "network.cookieJarSettings.unblocked_for_testing",
@@ -18,6 +16,7 @@ add_setup(() => {
     "network.cookie.cookieBehavior.optInPartitioning",
     true
   );
+  Services.prefs.setBoolPref("network.cookie.CHIPS.enabled", true);
   Services.prefs.setBoolPref("dom.storage_access.enabled", true);
   Services.prefs.setBoolPref("dom.storage_access.prompt.testing", true);
   Services.cookies.removeAll();
@@ -32,6 +31,7 @@ registerCleanupFunction(() => {
   Services.prefs.clearUserPref(
     "network.cookie.cookieBehavior.optInPartitioning"
   );
+  Services.prefs.clearUserPref("network.cookie.CHIPS.enabled");
   Services.prefs.clearUserPref("dom.storage_access.enabled");
   Services.prefs.clearUserPref("dom.storage_access.prompt.testing");
   Services.cookies.removeAll();
@@ -52,8 +52,10 @@ const THIRD_PARTY = "example.org";
 
 const URL_DOCUMENT_FIRSTPARTY = "https://" + FIRST_PARTY + PATH_EMPTY;
 const URL_DOCUMENT_THIRDPARTY = "https://" + THIRD_PARTY + PATH_EMPTY;
-const URL_HTTP_FIRSTPARTY = "https://" + FIRST_PARTY + "/" + HTTP_COOKIE_SET;
-const URL_HTTP_THIRDPARTY = "https://" + THIRD_PARTY + "/" + HTTP_COOKIE_SET;
+const FIRST_PARTY_DOMAIN = "https://" + FIRST_PARTY;
+const THIRD_PARTY_DOMAIN = "https://" + THIRD_PARTY;
+const URL_HTTP_FIRSTPARTY = FIRST_PARTY_DOMAIN + "/" + HTTP_COOKIE_SET;
+const URL_HTTP_THIRDPARTY = THIRD_PARTY_DOMAIN + "/" + HTTP_COOKIE_SET;
 
 function createOriginAttributes(partitionKey) {
   return JSON.stringify({
@@ -148,9 +150,17 @@ add_task(
           await ifr.browsingContext,
           [partitioned, unpartitioned],
           async (partitioned, unpartitioned) => {
+            SpecialPowers.wrap(content.document).notifyUserGestureActivation();
+            await SpecialPowers.addPermission(
+              "storageAccessAPI",
+              true,
+              content.location.href
+            );
+            await SpecialPowers.wrap(content.document).requestStorageAccess();
+
             ok(
               await content.document.hasStorageAccess(),
-              "example.org should have storageAccess by CookieBehavior 0 / test setup"
+              "example.org should have storageAccess"
             );
 
             content.document.cookie = partitioned;
@@ -225,22 +235,40 @@ add_task(
     await BrowserTestUtils.browserLoaded(browser);
 
     // Spawn document bc
-    await SpecialPowers.spawn(browser, [URL_HTTP_THIRDPARTY], async url => {
-      let ifr = content.document.createElement("iframe");
-      ifr.src = url;
-      content.document.body.appendChild(ifr);
-      // Send http request with "set" query parameter, partitioned and
-      // unpartitioned cookie will be set through http response from chips.sjs.
-      await ContentTaskUtils.waitForEvent(ifr, "load");
+    await SpecialPowers.spawn(
+      browser,
+      [THIRD_PARTY_DOMAIN, URL_HTTP_THIRDPARTY],
+      async (url, fetchUrl) => {
+        let ifr = content.document.createElement("iframe");
+        ifr.src = url;
+        content.document.body.appendChild(ifr);
+        // Send http request with "set" query parameter, partitioned and
+        // unpartitioned cookie will be set through http response from chips.sjs.
+        await ContentTaskUtils.waitForEvent(ifr, "load");
 
-      // Spawn iframe bc
-      await SpecialPowers.spawn(await ifr.browsingContext, [], async () => {
-        ok(
-          await content.document.hasStorageAccess(),
-          "example.org should have storageAccess by CookieBehavior 0 / test setup"
+        // Spawn iframe bc
+        await SpecialPowers.spawn(
+          await ifr.browsingContext,
+          [fetchUrl],
+          async url => {
+            SpecialPowers.wrap(content.document).notifyUserGestureActivation();
+            await SpecialPowers.addPermission(
+              "storageAccessAPI",
+              true,
+              content.location.href
+            );
+            await SpecialPowers.wrap(content.document).requestStorageAccess();
+
+            ok(
+              await content.document.hasStorageAccess(),
+              "example.org should have storageAccess"
+            );
+
+            await content.fetch(url);
+          }
         );
-      });
-    });
+      }
+    );
 
     // Get cookies from partitioned jar
     let partitioned = Services.cookies.getCookiesWithOriginAttributes(
@@ -311,10 +339,6 @@ add_task(
 // internally to update child's cookies.
 add_task(
   async function test_chips_send_partitioned_and_unpartitioned_on_storage_access_child() {
-    // Set cookieBehavior to BEHAVIOR_REJECT_TRACKERS_AND_PARTITION_FOREIGN for
-    // requestStorageAccess() based test.
-    Services.prefs.setIntPref("network.cookie.cookieBehavior", 5);
-
     // Set example.org first-party unpartitioned cookie
     await BrowserTestUtils.withNewTab(
       URL_DOCUMENT_THIRDPARTY,
@@ -410,7 +434,6 @@ add_task(
     BrowserTestUtils.removeTab(tab);
     Services.cookies.removeAll();
     Services.perms.removeAll();
-    Services.prefs.setIntPref("network.cookie.cookieBehavior", 0);
   }
 );
 

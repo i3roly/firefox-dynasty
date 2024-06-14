@@ -30,6 +30,9 @@ raptor_description_schema = Schema(
             Optional("test-url-param"): optionally_keyed_by(
                 "subtest", "test-platform", str
             ),
+            Optional("lull-schedule"): optionally_keyed_by(
+                "subtest", "test-platform", str
+            ),
         },
         # Configs defined in the 'test_description_schema'.
         Optional("max-run-time"): optionally_keyed_by(
@@ -79,6 +82,7 @@ def split_apps(config, tests):
         "fenix": "fenix",
         "refbrow": "refbrow",
         "safari": "Saf",
+        "safari-tp": "STP",
         "custom-car": "CaR",
         "cstm-car-m": "CaR",
     }
@@ -162,6 +166,7 @@ def handle_keyed_by(config, tests):
         "raptor.run-visual-metrics",
         "raptor.activity",
         "raptor.binary-path",
+        "raptor.lull-schedule",
         "limit-platforms",
         "fetches.fetch",
         "max-run-time",
@@ -338,6 +343,18 @@ def modify_mozharness_configs(config, tests):
         yield test
 
 
+@transforms.add
+def handle_lull_schedule(config, tests):
+    # Setup lull schedule attribute here since the attributes
+    # can't have any keyed by settings
+    for test in tests:
+        if "lull-schedule" in test["raptor"]:
+            lull_schedule = test["raptor"].pop("lull-schedule")
+            if lull_schedule:
+                test.setdefault("attributes", {})["lull-schedule"] = lull_schedule
+        yield test
+
+
 @task_transforms.add
 def add_scopes_and_proxy(config, tasks):
     for task in tasks:
@@ -345,4 +362,16 @@ def add_scopes_and_proxy(config, tasks):
         task.setdefault("scopes", []).append(
             "secrets:get:project/perftest/gecko/level-{level}/perftest-login"
         )
+        yield task
+
+
+@task_transforms.add
+def setup_lull_schedule(config, tasks):
+    for task in tasks:
+        attrs = task.setdefault("attributes", {})
+        if attrs.get("lull-schedule", None) is not None:
+            # Move the lull schedule attribute into the extras
+            # so that it can be accessible through mozci
+            lull_schedule = attrs.pop("lull-schedule")
+            task.setdefault("extra", {})["lull-schedule"] = lull_schedule
         yield task

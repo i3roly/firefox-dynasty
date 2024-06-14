@@ -969,16 +969,24 @@ static void ReloadPrefsCallback(const char* pref, void* aXpccx) {
   sStreamsEnabled = Preferences::GetBool(JS_OPTIONS_DOT_STR "streams");
 
 #ifdef JS_GC_ZEAL
-  int32_t zeal = Preferences::GetInt(JS_OPTIONS_DOT_STR "gczeal", -1);
-  int32_t zeal_frequency = Preferences::GetInt(
-      JS_OPTIONS_DOT_STR "gczeal.frequency", JS_DEFAULT_ZEAL_FREQ);
+  int32_t zeal = Preferences::GetInt(JS_OPTIONS_DOT_STR "mem.gc_zeal.mode", -1);
+  int32_t zeal_frequency =
+      Preferences::GetInt(JS_OPTIONS_DOT_STR "mem.gc_zeal.frequency",
+                          JS::BrowserDefaultGCZealFrequency);
   if (zeal >= 0) {
-    JS_SetGCZeal(cx, (uint8_t)zeal, zeal_frequency);
+    JS::SetGCZeal(cx, (uint8_t)zeal, zeal_frequency);
   }
 #endif  // JS_GC_ZEAL
 
   auto& contextOptions = JS::ContextOptionsRef(cx);
   SetPrefableContextOptions(contextOptions);
+
+#ifdef NIGHTLY_BUILD
+  JS_SetGlobalJitCompilerOption(
+      cx, JSJITCOMPILER_REGEXP_DUPLICATE_NAMED_GROUPS,
+      StaticPrefs::
+          javascript_options_experimental_regexp_duplicate_named_groups());
+#endif
 
   // Set options not shared with workers.
   contextOptions
@@ -1109,14 +1117,18 @@ CycleCollectedJSRuntime* XPCJSContext::CreateRuntime(JSContext* aCx) {
 }
 
 class HelperThreadTaskHandler : public Task {
+  JS::HelperThreadTask* mTask;
+
  public:
-  TaskResult Run() override {
-    JS::RunHelperThreadTask();
-    return TaskResult::Complete;
-  }
-  explicit HelperThreadTaskHandler()
-      : Task(Kind::OffMainThreadOnly, EventQueuePriority::Normal) {
+  explicit HelperThreadTaskHandler(JS::HelperThreadTask* aTask)
+      : Task(Kind::OffMainThreadOnly, EventQueuePriority::Normal),
+        mTask(aTask) {
     // Bug 1703185: Currently all tasks are run at the same priority.
+  }
+
+  TaskResult Run() override {
+    JS::RunHelperThreadTask(mTask);
+    return TaskResult::Complete;
   }
 
 #ifdef MOZ_COLLECTING_RUNNABLE_TELEMETRY
@@ -1130,8 +1142,8 @@ class HelperThreadTaskHandler : public Task {
   ~HelperThreadTaskHandler() = default;
 };
 
-static void DispatchOffThreadTask(JS::DispatchReason) {
-  TaskController::Get()->AddTask(MakeAndAddRef<HelperThreadTaskHandler>());
+static void DispatchOffThreadTask(JS::HelperThreadTask* aTask) {
+  TaskController::Get()->AddTask(MakeAndAddRef<HelperThreadTaskHandler>(aTask));
 }
 
 static bool CreateSelfHostedSharedMemory(JSContext* aCx,

@@ -306,26 +306,6 @@ void EncoderTemplate<EncoderType>::ReportError(const nsresult& aResult) {
   cb->Call(*e);
 }
 
-template <typename EncoderType>
-template <typename T, typename U>
-void EncoderTemplate<EncoderType>::CopyExtradataToDescriptionIfNeeded(
-    nsIGlobalObject* aGlobal, const T& aConfigInternal, U& aConfig) {
-  if (aConfigInternal.mDescription &&
-      !aConfigInternal.mDescription->IsEmpty()) {
-    auto& abov = aConfig.mDescription.Construct();
-    AutoEntryScript aes(aGlobal, "EncoderConfigToaConfigConfig");
-    size_t lengthBytes = aConfigInternal.mDescription->Length();
-    UniquePtr<uint8_t[], JS::FreePolicy> extradata(new uint8_t[lengthBytes]);
-    PodCopy(extradata.get(), aConfigInternal.mDescription->Elements(),
-            lengthBytes);
-    JS::Rooted<JSObject*> description(
-        aes.cx(), JS::NewArrayBufferWithContents(aes.cx(), lengthBytes,
-                                                 std::move(extradata)));
-    JS::Rooted<JS::Value> value(aes.cx(), JS::ObjectValue(*description));
-    DebugOnly<bool> rv = abov.Init(aes.cx(), value);
-  }
-}
-
 template <>
 void EncoderTemplate<VideoEncoderTraits>::OutputEncodedVideoData(
     const nsTArray<RefPtr<MediaRawData>>&& aData) {
@@ -337,8 +317,10 @@ void EncoderTemplate<VideoEncoderTraits>::OutputEncodedVideoData(
   // The EncoderType::MetadataType, VideoDecoderConfig, and VideoColorSpaceInit
   // below are rooted to work around the JS hazard issues.
   AutoJSAPI jsapi;
-  DebugOnly<bool> ok =
-      jsapi.Init(GetParentObject());  // TODO: check returned value?
+  if (!jsapi.Init(GetParentObject())) {
+    LOGE("%s %p AutoJSAPI init failed", VideoEncoderTraits::Name.get(), this);
+    return;
+  }
   JSContext* cx = jsapi.cx();
 
   RefPtr<EncodedVideoChunkOutputCallback> cb(mOutputCallback);
@@ -356,53 +338,11 @@ void EncoderTemplate<VideoEncoderTraits>::OutputEncodedVideoData(
 
     RootedDictionary<EncodedVideoChunkMetadata> metadata(cx);
     if (mOutputNewDecoderConfig) {
-      VideoDecoderConfigInternal decoderConfigInternal =
-          EncoderConfigToDecoderConfig(GetParentObject(), data, *mActiveConfig);
-
-      // Convert VideoDecoderConfigInternal to VideoDecoderConfig
       RootedDictionary<VideoDecoderConfig> decoderConfig(cx);
-      decoderConfig.mCodec = decoderConfigInternal.mCodec;
-      if (decoderConfigInternal.mCodedHeight) {
-        decoderConfig.mCodedHeight.Construct(
-            decoderConfigInternal.mCodedHeight.value());
-      }
-      if (decoderConfigInternal.mCodedWidth) {
-        decoderConfig.mCodedWidth.Construct(
-            decoderConfigInternal.mCodedWidth.value());
-      }
-      if (decoderConfigInternal.mColorSpace) {
-        RootedDictionary<VideoColorSpaceInit> colorSpace(cx);
-        colorSpace.mFullRange =
-            MaybeToNullable(decoderConfigInternal.mColorSpace->mFullRange);
-        colorSpace.mMatrix =
-            MaybeToNullable(decoderConfigInternal.mColorSpace->mMatrix);
-        colorSpace.mPrimaries =
-            MaybeToNullable(decoderConfigInternal.mColorSpace->mPrimaries);
-        colorSpace.mTransfer =
-            MaybeToNullable(decoderConfigInternal.mColorSpace->mTransfer);
-        decoderConfig.mColorSpace.Construct(std::move(colorSpace));
-      }
-
-      CopyExtradataToDescriptionIfNeeded(GetParentObject(),
-                                         decoderConfigInternal, decoderConfig);
-
-      if (decoderConfigInternal.mDisplayAspectHeight) {
-        decoderConfig.mDisplayAspectHeight.Construct(
-            decoderConfigInternal.mDisplayAspectHeight.value());
-      }
-      if (decoderConfigInternal.mDisplayAspectWidth) {
-        decoderConfig.mDisplayAspectWidth.Construct(
-            decoderConfigInternal.mDisplayAspectWidth.value());
-      }
-      if (decoderConfigInternal.mOptimizeForLatency) {
-        decoderConfig.mOptimizeForLatency.Construct(
-            decoderConfigInternal.mOptimizeForLatency.value());
-      }
-
+      EncoderConfigToDecoderConfig(cx, data, *mActiveConfig, decoderConfig);
       metadata.mDecoderConfig.Construct(std::move(decoderConfig));
       mOutputNewDecoderConfig = false;
-      LOG("New config passed to output callback: %s",
-          decoderConfigInternal.ToString().get());
+      LOG("New config passed to output callback");
     }
 
     nsAutoCString metadataInfo;
@@ -437,8 +377,10 @@ void EncoderTemplate<AudioEncoderTraits>::OutputEncodedAudioData(
   // The EncoderType::MetadataType, AudioDecoderConfig
   // below are rooted to work around the JS hazard issues.
   AutoJSAPI jsapi;
-  DebugOnly<bool> ok =
-      jsapi.Init(GetParentObject());  // TODO: check returned value?
+  if (!jsapi.Init(GetParentObject())) {
+    LOGE("%s %p AutoJSAPI init failed", AudioEncoderTraits::Name.get(), this);
+    return;
+  }
   JSContext* cx = jsapi.cx();
 
   RefPtr<EncodedAudioChunkOutputCallback> cb(mOutputCallback);
@@ -456,23 +398,11 @@ void EncoderTemplate<AudioEncoderTraits>::OutputEncodedAudioData(
 
     RootedDictionary<EncodedAudioChunkMetadata> metadata(cx);
     if (mOutputNewDecoderConfig) {
-      AudioDecoderConfigInternal decoderConfigInternal =
-          this->EncoderConfigToDecoderConfig(GetParentObject(), data,
-                                             *mActiveConfig);
-
-      // Convert AudioDecoderConfigInternal to AudioDecoderConfig
       RootedDictionary<AudioDecoderConfig> decoderConfig(cx);
-      decoderConfig.mCodec = decoderConfigInternal.mCodec;
-      decoderConfig.mNumberOfChannels = decoderConfigInternal.mNumberOfChannels;
-      decoderConfig.mSampleRate = decoderConfigInternal.mSampleRate;
-
-      CopyExtradataToDescriptionIfNeeded(GetParentObject(),
-                                         decoderConfigInternal, decoderConfig);
-
+      EncoderConfigToDecoderConfig(cx, data, *mActiveConfig, decoderConfig);
       metadata.mDecoderConfig.Construct(std::move(decoderConfig));
       mOutputNewDecoderConfig = false;
-      LOG("New config passed to output callback: %s",
-          decoderConfigInternal.ToString().get());
+      LOG("New config passed to output callback");
     }
 
     nsAutoCString metadataInfo;

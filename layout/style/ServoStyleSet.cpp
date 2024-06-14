@@ -598,6 +598,18 @@ already_AddRefed<ComputedStyle> ServoStyleSet::ResolveXULTreePseudoStyle(
       .Consume();
 }
 
+already_AddRefed<ComputedStyle> ServoStyleSet::ResolveStartingStyle(
+    dom::Element& aElement) {
+  nsPresContext* pc = GetPresContext();
+  if (!pc) {
+    return nullptr;
+  }
+
+  return Servo_ResolveStartingStyle(
+             &aElement, &pc->RestyleManager()->Snapshots(), mRawData.get())
+      .Consume();
+}
+
 // manage the set of style sheets in the style set
 void ServoStyleSet::AppendStyleSheet(StyleSheet& aSheet) {
   MOZ_ASSERT(aSheet.IsApplicable());
@@ -750,7 +762,7 @@ bool ServoStyleSet::GeneratedContentPseudoExists(
     }
     // ::marker only exist if we have 'content' or at least one of
     // 'list-style-type' or 'list-style-image'.
-    if (aPseudoStyle.StyleList()->mCounterStyle.IsNone() &&
+    if (aPseudoStyle.StyleList()->mListStyleType.IsNone() &&
         aPseudoStyle.StyleList()->mListStyleImage.IsNone() &&
         content.IsNormal()) {
       return false;
@@ -1431,12 +1443,12 @@ void ServoStyleSet::MaybeInvalidateRelativeSelectorForNthEdgeDependency(
 }
 
 void ServoStyleSet::MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
-    const Element* aFromSibling) {
-  if (aFromSibling == nullptr) {
+    const Element* aFromSibling, bool aForceRestyleSiblings) {
+  if (!aFromSibling) {
     return;
   }
   Servo_StyleSet_MaybeInvalidateRelativeSelectorNthDependencyFromSibling(
-      mRawData.get(), aFromSibling);
+      mRawData.get(), aFromSibling, aForceRestyleSiblings);
 }
 
 void ServoStyleSet::MaybeInvalidateForElementInsertion(

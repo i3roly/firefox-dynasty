@@ -9,6 +9,7 @@
 #include "mozilla/TimeStamp.h"
 #include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/NullPrincipal.h"
+#include "mozilla/OriginAttributes.h"
 #include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/net/DNS.h"
 #include "nsContentUtils.h"
@@ -334,6 +335,10 @@ bool nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
     return uriHost.Equals(principalHost) && uriPath.Equals(principalPath);
   };
 
+  // We do dot return early when we find a loop, as we still need to set an
+  // exception at the end.
+  bool isLoop = false;
+
   // 6. Check actual redirects. If the Principal that kicked off the
   // load/redirect is not https, then it's definitely not a redirect cause by
   // https-only. If the scheme of the principal however is https and the
@@ -346,7 +351,7 @@ bool nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
       entry->GetPrincipal(getter_AddRefs(redirectPrincipal));
       if (redirectPrincipal && redirectPrincipal->SchemeIs("https") &&
           uriAndPrincipalComparator(redirectPrincipal)) {
-        return true;
+        isLoop = true;
       }
     }
   } else {
@@ -359,18 +364,28 @@ bool nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
     }
   }
 
-  // 7. Meta redirects and JS based redirects (win.location). If the security
-  // context that triggered the load is not https, then it's defnitely no
-  // endless loop caused by https-only. If the scheme is http however and the
-  // asciiHost of the URI to be loaded matches the asciiHost of the Principal,
-  // then we are dealing with an upgrade downgrade scenario and we have to break
-  // the cycle.
-  nsCOMPtr<nsIPrincipal> triggeringPrincipal = aLoadInfo->TriggeringPrincipal();
-  if (!triggeringPrincipal->SchemeIs("https")) {
-    return false;
+  if (!isLoop) {
+    // 7. Meta redirects and JS based redirects (win.location). If the security
+    // context that triggered the load is not https, then it's defnitely no
+    // endless loop caused by https-only. If the scheme is http however and the
+    // asciiHost of the URI to be loaded matches the asciiHost of the Principal,
+    // then we are dealing with an upgrade downgrade scenario and we have to
+    // break the cycle.
+    nsCOMPtr<nsIPrincipal> triggeringPrincipal =
+        aLoadInfo->TriggeringPrincipal();
+    if (!triggeringPrincipal->SchemeIs("https")) {
+      return false;
+    }
+    isLoop = uriAndPrincipalComparator(triggeringPrincipal);
   }
 
-  return uriAndPrincipalComparator(triggeringPrincipal);
+  if (isLoop && enforceForHTTPSFirstMode &&
+      mozilla::StaticPrefs::
+          dom_security_https_first_add_exception_on_failiure()) {
+    AddHTTPSFirstExceptionForSession(aURI, aLoadInfo);
+  }
+
+  return isLoop;
 }
 
 /* static */
@@ -448,8 +463,6 @@ bool nsHTTPSOnlyUtils::ShouldUpgradeHttpsFirstRequest(nsIURI* aURI,
     nsHTTPSOnlyUtils::LogLocalizedString("HTTPSFirstSchemeless", params,
                                          nsIScriptError::warningFlag, aLoadInfo,
                                          aURI, true);
-
-    mozilla::glean::httpsfirst::upgraded_schemeless.Add();
   } else {
     nsAutoCString scheme;
 
@@ -464,10 +477,6 @@ bool nsHTTPSOnlyUtils::ShouldUpgradeHttpsFirstRequest(nsIURI* aURI,
         isSpeculative ? "HTTPSOnlyUpgradeSpeculativeConnection"
                       : "HTTPSOnlyUpgradeRequest",
         params, nsIScriptError::warningFlag, aLoadInfo, aURI, true);
-
-    if (!isSpeculative) {
-      mozilla::glean::httpsfirst::upgraded.Add();
-    }
   }
 
   // Set flag so we know that we upgraded the request
@@ -594,7 +603,22 @@ nsHTTPSOnlyUtils::PotentiallyDowngradeHttpsFirstRequest(
                                        nsIScriptError::warningFlag, loadInfo,
                                        uri, true);
 
-  // Record telemety
+  if (mozilla::StaticPrefs::
+          dom_security_https_first_add_exception_on_failiure()) {
+    AddHTTPSFirstExceptionForSession(uri, loadInfo);
+  }
+
+  return newURI.forget();
+}
+
+void nsHTTPSOnlyUtils::UpdateLoadStateAfterHTTPSFirstDowngrade(
+    mozilla::net::DocumentLoadListener* aDocumentLoadListener,
+    nsDocShellLoadState* aLoadState) {
+  // We have to exempt the load from HTTPS-First to prevent a upgrade-downgrade
+  // loop
+  aLoadState->SetIsExemptFromHTTPSFirstMode(true);
+
+  // Add downgrade data for later telemetry usage to load state
   nsDOMNavigationTiming* timing = aDocumentLoadListener->GetTiming();
   if (timing) {
     mozilla::TimeStamp navigationStart = timing->GetNavigationStartTimeStamp();
@@ -602,31 +626,60 @@ nsHTTPSOnlyUtils::PotentiallyDowngradeHttpsFirstRequest(
       mozilla::TimeDuration duration =
           mozilla::TimeStamp::Now() - navigationStart;
 
+      nsCOMPtr<nsIChannel> channel = aDocumentLoadListener->GetChannel();
+      nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
+
       bool isPrivateWin =
           loadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
       bool isSchemeless =
           loadInfo->GetWasSchemelessInput() &&
           !nsHTTPSOnlyUtils::IsHttpsFirstModeEnabled(isPrivateWin);
 
-      using namespace mozilla::glean::httpsfirst;
-      auto downgradedMetric = isSchemeless ? downgraded_schemeless : downgraded;
-      auto downgradedOnTimerMetric =
-          isSchemeless ? downgraded_on_timer_schemeless : downgraded_on_timer;
-      auto downgradeTimeMetric =
-          isSchemeless ? downgrade_time_schemeless : downgrade_time;
-
       nsresult channelStatus;
       channel->GetStatus(&channelStatus);
-      if (channelStatus == NS_ERROR_NET_TIMEOUT_EXTERNAL) {
-        downgradedOnTimerMetric.AddToNumerator();
-      } else {
-        downgradeTimeMetric.AccumulateRawDuration(duration);
-      }
-      downgradedMetric.Add();
+
+      RefPtr downgradeData = mozilla::MakeRefPtr<HTTPSFirstDowngradeData>();
+      downgradeData->downgradeTime = duration;
+      downgradeData->isOnTimer = channelStatus == NS_ERROR_NET_TIMEOUT_EXTERNAL;
+      downgradeData->isSchemeless = isSchemeless;
+      aLoadState->SetHttpsFirstDowngradeData(downgradeData);
     }
   }
+}
 
-  return newURI.forget();
+void nsHTTPSOnlyUtils::SubmitHTTPSFirstTelemetry(
+    nsCOMPtr<nsILoadInfo> const& aLoadInfo,
+    RefPtr<HTTPSFirstDowngradeData> const& aHttpsFirstDowngradeData) {
+  using namespace mozilla::glean::httpsfirst;
+  if (aHttpsFirstDowngradeData) {
+    // Successfully downgraded load
+
+    auto downgradedMetric = aHttpsFirstDowngradeData->isSchemeless
+                                ? downgraded_schemeless
+                                : downgraded;
+    auto downgradedOnTimerMetric = aHttpsFirstDowngradeData->isSchemeless
+                                       ? downgraded_on_timer_schemeless
+                                       : downgraded_on_timer;
+    auto downgradeTimeMetric = aHttpsFirstDowngradeData->isSchemeless
+                                   ? downgrade_time_schemeless
+                                   : downgrade_time;
+
+    if (aHttpsFirstDowngradeData->isOnTimer) {
+      downgradedOnTimerMetric.AddToNumerator();
+    }
+    downgradedMetric.Add();
+    downgradeTimeMetric.AccumulateRawDuration(
+        aHttpsFirstDowngradeData->downgradeTime);
+  } else if (aLoadInfo->GetHttpsOnlyStatus() &
+             nsILoadInfo::HTTPS_ONLY_UPGRADED_HTTPS_FIRST) {
+    // Successfully upgraded load
+
+    if (aLoadInfo->GetWasSchemelessInput()) {
+      upgraded_schemeless.Add();
+    } else {
+      upgraded.Add();
+    }
+  }
 }
 
 /* static */
@@ -658,7 +711,8 @@ bool nsHTTPSOnlyUtils::CouldBeHttpsOnlyError(nsIChannel* aChannel,
 }
 
 /* static */
-bool nsHTTPSOnlyUtils::TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal) {
+bool nsHTTPSOnlyUtils::TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal,
+                                               bool aCheckForHTTPSFirst) {
   static nsCOMPtr<nsIPermissionManager> sPermMgr;
   if (!sPermMgr) {
     sPermMgr = mozilla::components::PermissionManager::Service();
@@ -672,7 +726,11 @@ bool nsHTTPSOnlyUtils::TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal) {
   NS_ENSURE_SUCCESS(rv, false);
 
   return perm == nsIHttpsOnlyModePermission::LOAD_INSECURE_ALLOW ||
-         perm == nsIHttpsOnlyModePermission::LOAD_INSECURE_ALLOW_SESSION;
+         perm == nsIHttpsOnlyModePermission::LOAD_INSECURE_ALLOW_SESSION ||
+         (aCheckForHTTPSFirst &&
+          (perm == nsIHttpsOnlyModePermission::HTTPSFIRST_LOAD_INSECURE_ALLOW ||
+           perm == nsIHttpsOnlyModePermission::
+                       HTTPSFIRST_LOAD_INSECURE_ALLOW_SESSION));
 }
 
 /* static */
@@ -711,7 +769,8 @@ void nsHTTPSOnlyUtils::TestSitePermissionAndPotentiallyAddExemption(
   NS_ENSURE_SUCCESS_VOID(rv);
 
   uint32_t httpsOnlyStatus = loadInfo->GetHttpsOnlyStatus();
-  bool isPrincipalExempt = TestIfPrincipalIsExempt(principal);
+  bool isPrincipalExempt = TestIfPrincipalIsExempt(
+      principal, isHttpsFirst || isSchemelessHttpsFirst);
   if (isPrincipalExempt) {
     httpsOnlyStatus |= nsILoadInfo::HTTPS_ONLY_EXEMPT;
   } else {
@@ -894,6 +953,41 @@ bool nsHTTPSOnlyUtils::IsEqualURIExceptSchemeAndRef(nsIURI* aHTTPSSchemeURI,
   }
 
   return uriEquals;
+}
+
+/* static */
+nsresult nsHTTPSOnlyUtils::AddHTTPSFirstExceptionForSession(
+    nsCOMPtr<nsIURI> aURI, nsILoadInfo* const aLoadInfo) {
+  // We need to reconstruct a principal instead of taking one from the loadinfo,
+  // as the permission needs a http scheme, while the passed URL or principals
+  // on the loadinfo may have a https scheme.
+  nsresult rv =
+      NS_MutateURI(aURI).SetScheme("http"_ns).Finalize(getter_AddRefs(aURI));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  mozilla::OriginAttributes oa = aLoadInfo->GetOriginAttributes();
+  oa.SetFirstPartyDomain(true, aURI);
+
+  nsCOMPtr<nsIPermissionManager> permMgr =
+      mozilla::components::PermissionManager::Service();
+  NS_ENSURE_TRUE(permMgr, nsresult::NS_ERROR_SERVICE_NOT_AVAILABLE);
+
+  nsCOMPtr<nsIPrincipal> principal =
+      mozilla::BasePrincipal::CreateContentPrincipal(aURI, oa);
+
+  nsCString host;
+  aURI->GetHost(host);
+  LogLocalizedString("HTTPSFirstAddingSessionException",
+                     {NS_ConvertUTF8toUTF16(host)}, nsIScriptError::warningFlag,
+                     aLoadInfo, aURI, true);
+
+  rv = permMgr->AddFromPrincipal(
+      principal, "https-only-load-insecure"_ns,
+      nsIHttpsOnlyModePermission::HTTPSFIRST_LOAD_INSECURE_ALLOW_SESSION,
+      nsIPermissionManager::EXPIRE_SESSION, 0);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  return NS_OK;
 }
 
 /* static */

@@ -61,13 +61,16 @@ add_task(async function remote_disable() {
 
   userChoiceStub.resetHistory();
   setDefaultStub.resetHistory();
-  let doCleanup = await ExperimentFakes.enrollWithRollout({
-    featureId: NimbusFeatures.shellService.featureId,
-    value: {
-      setDefaultBrowserUserChoice: false,
-      enabled: true,
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
+    {
+      featureId: NimbusFeatures.shellService.featureId,
+      value: {
+        setDefaultBrowserUserChoice: false,
+        enabled: true,
+      },
     },
-  });
+    { isRollout: true }
+  );
 
   await ShellService.setDefaultBrowser();
 
@@ -77,7 +80,7 @@ add_task(async function remote_disable() {
   );
   Assert.ok(setDefaultStub.called, "Used plain set default insteead");
 
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function restore_default() {
@@ -116,14 +119,17 @@ add_task(async function ensure_fallback() {
   });
   userChoiceStub.resetHistory();
   setDefaultStub.resetHistory();
-  let doCleanup = await ExperimentFakes.enrollWithRollout({
-    featureId: NimbusFeatures.shellService.featureId,
-    value: {
-      setDefaultBrowserUserChoice: true,
-      setDefaultPDFHandler: false,
-      enabled: true,
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
+    {
+      featureId: NimbusFeatures.shellService.featureId,
+      value: {
+        setDefaultBrowserUserChoice: true,
+        setDefaultPDFHandler: false,
+        enabled: true,
+      },
     },
-  });
+    { isRollout: true }
+  );
 
   await ShellService.setDefaultBrowser();
 
@@ -138,5 +144,5 @@ add_task(async function ensure_fallback() {
   );
   Assert.ok(setDefaultStub.called, "Fallbacked to plain set default");
 
-  await doCleanup();
+  doCleanup();
 });

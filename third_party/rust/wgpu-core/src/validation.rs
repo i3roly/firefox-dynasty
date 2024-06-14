@@ -915,15 +915,6 @@ impl Interface {
                     class,
                 },
                 naga::TypeInner::Sampler { comparison } => ResourceType::Sampler { comparison },
-                naga::TypeInner::Array { stride, size, .. } => {
-                    let size = match size {
-                        naga::ArraySize::Constant(size) => size.get() * stride,
-                        naga::ArraySize::Dynamic => stride,
-                    };
-                    ResourceType::Buffer {
-                        size: wgt::BufferSize::new(size as u64).unwrap(),
-                    }
-                }
                 ref other => ResourceType::Buffer {
                     size: wgt::BufferSize::new(other.size(module.to_ctx()) as u64).unwrap(),
                 },
@@ -1118,7 +1109,7 @@ impl Interface {
 
                 let sampler_filtering = matches!(
                     sampler_layout.ty,
-                    wgt::BindingType::Sampler(wgt::SamplerBindingType::Filtering)
+                    BindingType::Sampler(wgt::SamplerBindingType::Filtering)
                 );
                 let texture_sample_type = match texture_layout.ty {
                     BindingType::Texture { sample_type, .. } => sample_type,

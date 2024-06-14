@@ -19,10 +19,9 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDirections
 import mozilla.components.concept.base.crash.Breadcrumb
 import mozilla.components.concept.engine.EngineSession
-import mozilla.components.concept.engine.manifest.WebAppManifestParser
 import mozilla.components.feature.intent.ext.getSessionId
-import mozilla.components.feature.pwa.ext.getWebAppManifest
 import mozilla.components.support.utils.SafeIntent
+import mozilla.components.support.utils.toSafeIntent
 import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.NavGraphDirections
@@ -56,6 +55,7 @@ import org.mozilla.fenix.shopping.ReviewQualityCheckFragmentDirections
 import org.mozilla.fenix.tabstray.TabsTrayFragmentDirections
 import org.mozilla.fenix.trackingprotection.TrackingProtectionPanelDialogFragmentDirections
 import org.mozilla.fenix.translations.TranslationsDialogFragmentDirections
+import org.mozilla.fenix.translations.preferences.downloadlanguages.DownloadLanguagesPreferenceFragmentDirections
 import java.security.InvalidParameterException
 
 /**
@@ -254,14 +254,11 @@ private fun Activity.getExternalAppBrowserNavDirections(
         return null
     }
 
-    val manifest =
-        intent.getWebAppManifest()?.let { WebAppManifestParser().serialize(it).toString() }
-
     return when (from) {
         BrowserDirection.FromGlobal ->
             NavGraphDirections.actionGlobalExternalAppBrowser(
                 activeSessionId = customTabSessionId,
-                webAppManifest = manifest,
+                webAppManifestUrl = intent.toSafeIntent().dataString,
                 isSandboxCustomTab = intent.getBooleanExtra(EXTRA_IS_SANDBOX_CUSTOM_TAB, false),
             )
 
@@ -330,6 +327,9 @@ private fun getHomeNavDirections(
     BrowserDirection.FromTranslationsDialogFragment -> TranslationsDialogFragmentDirections.actionGlobalBrowser()
 
     BrowserDirection.FromMenuDialogFragment -> MenuDialogFragmentDirections.actionGlobalBrowser()
+
+    BrowserDirection.FromDownloadLanguagesPreferenceFragment ->
+        DownloadLanguagesPreferenceFragmentDirections.actionGlobalBrowser()
 }
 
 const val REQUEST_CODE_BROWSER_ROLE = 1

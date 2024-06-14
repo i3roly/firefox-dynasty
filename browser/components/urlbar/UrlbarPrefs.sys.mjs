@@ -67,6 +67,11 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Feature gate pref for clipboard suggestions in the urlbar.
   ["clipboard.featureGate", false],
 
+  // Whether to close other panels when the urlbar panel opens.
+  // This feature gate exists just as an emergency rollback in case of
+  // unexpected issues in Release. We normally want this behavior.
+  ["closeOtherPanelsOnOpen", true],
+
   // Whether to show a link for using the search functionality provided by the
   // active view if the the view utilizes OpenSearch.
   ["contextualSearch.enabled", true],
@@ -290,7 +295,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   ["recentsearches.expirationMs", (1000 * 60 * 60 * 24 * 3).toString()],
 
   // Feature gate pref for recent searches being shown in the urlbar.
-  ["recentsearches.featureGate", false],
+  ["recentsearches.featureGate", true],
 
   // Store the time the last default engine changed so we can only show
   // recent searches since then.
@@ -313,6 +318,13 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // If true, we show tail suggestions when available.
   ["richSuggestions.tail", true],
+
+  // Disable the urlbar OneOff panel from being shown.
+  ["scotchBonnet.disableOneOffs", false],
+
+  // A short-circuit pref to enable all the features that are part of a
+  // grouped release.
+  ["scotchBonnet.enableOverride", false],
 
   // Hidden pref. Disables checks that prevent search tips being shown, thus
   // showing them every time the newtab page or the default search engine
@@ -438,7 +450,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   ["tipShownCount.searchTip_redirect", 0],
 
   // Feature gate pref for trending suggestions in the urlbar.
-  ["trending.featureGate", false],
+  ["trending.featureGate", true],
 
   // The maximum number of trending results to show while not in search mode.
   ["trending.maxResultsNoSearchMode", 10],
@@ -449,7 +461,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Whether to only show trending results when the urlbar is in search
   // mode or when the user initially opens the urlbar without selecting
   // an engine.
-  ["trending.requireSearchMode", true],
+  ["trending.requireSearchMode", false],
 
   // Remove 'https://' from url when urlbar is focused.
   ["trimHttps", true],
@@ -466,12 +478,6 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Untrim url, when urlbar is focused.
   // Note: This pref will be removed once the feature is stable.
   ["untrimOnUserInteraction.featureGate", false],
-
-  // Controls the empty search behavior in Search Mode:
-  //  0 - Show nothing
-  //  1 - Show search history
-  //  2 - Show search and browsing history
-  ["update2.emptySearchBehavior", 0],
 
   // Feature gate pref for weather suggestions in the urlbar.
   ["weather.featureGate", false],
@@ -512,6 +518,7 @@ const PREF_OTHER_DEFAULTS = new Map([
   ["browser.search.suggest.enabled.private", false],
   ["browser.search.widget.inNavBar", false],
   ["keyword.enabled", true],
+  ["security.insecure_connection_text.enabled", false],
   ["ui.popup.disable_autohide", false],
 ]);
 
@@ -787,6 +794,19 @@ class Preferences {
    */
   makeResultGroups(options) {
     return makeResultGroups(options);
+  }
+
+  /**
+   * Gets a pref but allows the `scotchBonnet.enableOverride` pref to
+   * short circuit them so one pref can be used to enable multiple
+   * features.
+   *
+   * @param {string} pref
+   *        The name of the preference to clear.
+   * @returns {*} The preference value.
+   */
+  getScotchBonnetPref(pref) {
+    return this.get("scotchBonnet.enableOverride") || this.get(pref);
   }
 
   get resultGroups() {

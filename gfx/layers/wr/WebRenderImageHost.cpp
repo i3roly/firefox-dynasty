@@ -19,6 +19,7 @@
 #include "mozilla/layers/WebRenderBridgeParent.h"
 #include "mozilla/layers/WebRenderTextureHost.h"
 #include "mozilla/ProfilerMarkers.h"
+#include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/StaticPrefs_webgl.h"
 #include "nsAString.h"
 #include "nsDebug.h"          // for NS_WARNING, NS_ASSERTION
@@ -199,15 +200,17 @@ void WebRenderImageHost::UseRemoteTexture() {
     while (!mPendingRemoteTextureWrappers.empty()) {
       auto* wrapper =
           mPendingRemoteTextureWrappers.front()->AsRemoteTextureHostWrapper();
+
       if (mWaitForRemoteTextureOwner) {
+        // XXX remove sync wait
         RemoteTextureMap::Get()->WaitForRemoteTextureOwner(wrapper);
       }
-      mWaitingReadyCallback =
-          RemoteTextureMap::Get()->GetRemoteTexture(wrapper, readyCallback);
-      MOZ_ASSERT_IF(mWaitingReadyCallback, !wrapper->IsReadyForRendering());
-      if (!wrapper->IsReadyForRendering()) {
+      mWaitingReadyCallback = !RemoteTextureMap::Get()->CheckRemoteTextureReady(
+          wrapper->GetRemoteTextureInfo(), readyCallback);
+      if (mWaitingReadyCallback) {
         break;
       }
+      RemoteTextureMap::Get()->GetRemoteTexture(wrapper);
       texture = mPendingRemoteTextureWrappers.front();
       mPendingRemoteTextureWrappers.pop_front();
     }
@@ -218,7 +221,11 @@ void WebRenderImageHost::UseRemoteTexture() {
     MOZ_ASSERT(mPendingRemoteTextureWrappers.empty());
 
     if (mWaitForRemoteTextureOwner) {
-      RemoteTextureMap::Get()->WaitForRemoteTextureOwner(wrapper);
+      if (StaticPrefs::gfx_remote_texture_wait_owner_at_image_host()) {
+        RemoteTextureMap::Get()->WaitForRemoteTextureOwner(wrapper);
+      } else {
+        wrapper->EnableWaitForRemoteTextureOwner(true);
+      }
     }
     mWaitForRemoteTextureOwner = false;
   }

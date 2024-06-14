@@ -14,31 +14,31 @@ class DependenciesPlugin : Plugin<Settings> {
 
 // Synchronized version numbers for dependencies used by (some) modules
 object Versions {
-    const val kotlin = "1.9.23"
-    const val coroutines = "1.8.0"
+    const val kotlin = "1.9.24"
+    const val coroutines = "1.8.1"
     const val serialization = "1.6.3"
     const val python_envs_plugin = "0.0.31"
 
-    const val mozilla_glean = "60.0.1"
+    const val mozilla_glean = "60.1.1"
 
     const val junit = "4.13.2"
     const val robolectric = "4.12.1"
-    const val mockito = "5.11.0"
+    const val mockito = "5.12.0"
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.11"
     const val okhttp = "4.12.0"
     const val okio = "3.9.0"
     const val androidsvg = "1.4"
 
-    const val android_gradle_plugin = "8.3.0"
+    const val android_gradle_plugin = "8.4.0"
 
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
-    const val lint = "31.3.0"
+    const val lint = "31.4.0"
     const val detekt = "1.23.6"
     const val ktlint = "0.49.1"
 
-    const val sentry = "7.8.0"
+    const val sentry = "7.9.0"
 
     const val zxing = "3.5.3"
 
@@ -51,12 +51,12 @@ object Versions {
 
     // see https://android-developers.googleblog.com/2022/06/independent-versioning-of-Jetpack-Compose-libraries.html
     // for Jetpack Compose libraries versioning
-    const val compose_compiler = "1.5.13"
+    const val compose_compiler = "1.5.14"
 
     object AndroidX {
         const val activityCompose = "1.7.2"
-        const val annotation = "1.7.1"
-        const val appcompat = "1.6.1"
+        const val annotation = "1.8.0"
+        const val appcompat = "1.7.0"
         const val autofill = "1.1.0"
         const val browser = "1.8.0"
         const val biometric = "1.1.0"
@@ -75,7 +75,7 @@ object Versions {
         const val espresso = "3.5.1"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"
-        const val paging = "3.2.1"
+        const val paging = "3.3.0"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
         const val lifecycle = "2.7.0"

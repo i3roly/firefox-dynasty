@@ -197,14 +197,6 @@ ChromeUtils.defineLazyGetter(lazy, "blankURI", () => {
 var gDebuggingEnabled = false;
 
 /**
- * A global value to tell that fingerprinting resistance is enabled or not.
- * If it's enabled, the session restore won't restore the window's size and
- * size mode.
- * This value is controlled by preference privacy.resistFingerprinting.
- */
-var gResistFingerprintingEnabled = false;
-
-/**
  * @namespace SessionStore
  */
 export var SessionStore = {
@@ -1298,11 +1290,6 @@ var SessionStoreInternal = {
       "sessionstore.restore_on_demand"
     );
     this._prefBranch.addObserver("sessionstore.restore_on_demand", this, true);
-
-    gResistFingerprintingEnabled = Services.prefs.getBoolPref(
-      "privacy.resistFingerprinting"
-    );
-    Services.prefs.addObserver("privacy.resistFingerprinting", this);
   },
 
   /**
@@ -1958,6 +1945,7 @@ var SessionStoreInternal = {
       // we actually restored the session just now.
       this._prefBranch.setBoolPref("sessionstore.resume_session_once", false);
     }
+
     if (this._restoreLastWindow && aWindow.toolbar.visible) {
       // always reset (if not a popup window)
       // we don't want to restore a window directly after, for example,
@@ -2284,6 +2272,7 @@ var SessionStoreInternal = {
       // _closedWindows from a previous call to this function.
       let winIndex = this._closedWindows.indexOf(winData);
       let alreadyStored = winIndex != -1;
+      // If sidebar command is truthy, i.e. sidebar is open, store sidebar settings
       let shouldStore = hasSaveableTabs || isLastWindow;
 
       if (shouldStore && !alreadyStored) {
@@ -2720,11 +2709,6 @@ var SessionStoreInternal = {
           "sessionstore.max_windows_undo"
         );
         this._capClosedWindows();
-        break;
-      case "privacy.resistFingerprinting":
-        gResistFingerprintingEnabled = Services.prefs.getBoolPref(
-          "privacy.resistFingerprinting"
-        );
         break;
       case "sessionstore.restore_on_demand":
         this._restore_on_demand = this._prefBranch.getBoolPref(
@@ -4566,6 +4550,7 @@ var SessionStoreInternal = {
       winData.sidebar = {
         command,
         positionEnd: sidebarBox.getAttribute("positionend"),
+        style: sidebarBox.style.cssText,
       };
     } else if (winData.sidebar?.command) {
       delete winData.sidebar.command;
@@ -4917,7 +4902,7 @@ var SessionStoreInternal = {
         winData.tabs
       );
       this._log.debug(
-        `restoreWindow, createTabsForSessionRestore returned {tabs.length} tabs`
+        `restoreWindow, createTabsForSessionRestore returned ${tabs.length} tabs`
       );
     }
 
@@ -5613,7 +5598,7 @@ var SessionStoreInternal = {
    * @param aWindow
    *        Window reference
    * @param aSidebar
-   *        Object containing command (sidebarcommand/category) and
+   *        Object containing command (sidebarcommand/category),styles and
    *        positionEnd (reflecting the sidebar.position_start pref)
    */
   restoreSidebar(aWindow, aSidebar) {
@@ -5624,9 +5609,8 @@ var SessionStoreInternal = {
         !sidebarBox.getAttribute("checked"))
     ) {
       aWindow.SidebarController.showInitially(aSidebar.command);
-      if (aSidebar?.positionEnd) {
-        sidebarBox.setAttribute("positionend", "");
-      }
+      sidebarBox.setAttribute("style", aSidebar.style);
+      sidebarBox.setAttribute("positionend", !!aSidebar?.positionEnd);
     }
   },
 
@@ -5764,7 +5748,7 @@ var SessionStoreInternal = {
         aWidth &&
         aHeight &&
         (aWidth != win_("width") || aHeight != win_("height")) &&
-        !gResistFingerprintingEnabled
+        !ChromeUtils.shouldResistFingerprinting("RoundWindowSize", null)
       ) {
         // Don't resize the window if it's currently maximized and we would
         // maximize it again shortly after.
@@ -5777,7 +5761,7 @@ var SessionStoreInternal = {
       if (
         aSizeMode &&
         win_("sizemode") != aSizeMode &&
-        !gResistFingerprintingEnabled
+        !ChromeUtils.shouldResistFingerprinting("RoundWindowSize", null)
       ) {
         switch (aSizeMode) {
           case "maximized":
@@ -6326,6 +6310,7 @@ var SessionStoreInternal = {
         newWindowState.sidebar = {
           command: window.sidebar.command,
           positionEnd: !!window.sidebar.positionEnd,
+          style: window.sidebar.style,
         };
       }
 

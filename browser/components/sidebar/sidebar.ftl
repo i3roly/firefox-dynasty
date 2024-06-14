@@ -25,9 +25,34 @@ sidebar-history-date-prev-month =
 sidebar-search-results-header =
   .heading = Search results for “{ $query }”
 
-sidebar-menu-customize =
-  .title = Customize sidebar
-sidebar-customize-header = Customize sidebar
 sidebar-customize-firefox-tools = { -brand-product-name } tools
-sidebar-customize-history = History
-sidebar-customize-synced-tabs = Tabs from other devices
+
+## Labels for sidebar context menu items
+
+sidebar-context-menu-manage-extension =
+  .label = Manage extension
+sidebar-context-menu-remove-extension =
+  .label = Remove extension
+sidebar-context-menu-report-extension =
+  .label = Report extension
+
+# A header for a list of sidebar-specific extensions in the sidebar
+sidebar-customize-extensions = Sidebar extensions
+
+## Labels for sidebar menu items.
+
+sidebar-menu-history-label = History
+sidebar-menu-synced-tabs-label = Tabs from other devices
+sidebar-menu-bookmarks-label = Bookmarks
+sidebar-menu-customize-label = Customize sidebar
+
+## Tooltips for sidebar menu items.
+
+sidebar-menu-history-item = {""}
+  .title = { sidebar-menu-history-label }
+sidebar-menu-synced-tabs-item = {""}
+  .title = { sidebar-menu-synced-tabs-label }
+sidebar-menu-bookmarks-item = {""}
+  .title = { sidebar-menu-bookmarks-label }
+sidebar-menu-customize-item = {""}
+  .title = { sidebar-menu-customize-label }

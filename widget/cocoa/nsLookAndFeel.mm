@@ -405,6 +405,8 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::Activeborder:
     case ColorID::Inactiveborder:
     case ColorID::MozAutofillBackground:
+    case ColorID::TargetTextBackground:
+    case ColorID::TargetTextForeground:
       aColor = GetStandinForNativeColor(aID, aScheme);
       return NS_OK;
     default:
@@ -592,6 +594,9 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       break;
     case IntID::PanelAnimations:
       aResult = 1;
+      break;
+    case IntID::FullKeyboardAccess:
+      aResult = NSApp.isFullKeyboardAccessEnabled;
       break;
     default:
       aResult = 0;

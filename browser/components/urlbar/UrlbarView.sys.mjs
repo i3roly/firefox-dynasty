@@ -1095,6 +1095,13 @@ export class UrlbarView {
     this.window.addEventListener("blur", this);
 
     this.controller.notify(this.controller.NOTIFICATIONS.VIEW_OPEN);
+
+    if (lazy.UrlbarPrefs.get("closeOtherPanelsOnOpen")) {
+      this.window.docShell.treeOwner
+        .QueryInterface(Ci.nsIInterfaceRequestor)
+        .getInterface(Ci.nsIAppWindow)
+        .rollupAllPopups();
+    }
   }
 
   #shouldShowHeuristic(result) {
@@ -1853,7 +1860,9 @@ export class UrlbarView {
     switch (result.type) {
       case lazy.UrlbarUtils.RESULT_TYPE.TAB_SWITCH:
         // Hide chichlet when showing secondaryActions.
-        if (lazy.UrlbarPrefs.get("secondaryActions.featureGate")) {
+        if (
+          lazy.UrlbarPrefs.getScotchBonnetPref("secondaryActions.featureGate")
+        ) {
           break;
         }
         actionSetter = () => {

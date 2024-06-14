@@ -13,7 +13,6 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.LayoutRes
 import androidx.annotation.VisibleForTesting
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -70,8 +69,6 @@ class BrowserToolbarView(
     var view: BrowserToolbar = layout
         .findViewById(R.id.toolbar)
 
-    private val tabStripView: ComposeView by lazy { layout.findViewById(R.id.tabStripView) }
-
     private val isNavBarEnabled = IncompleteRedesignToolbarFeature(context.settings()).isEnabled
 
     val toolbarIntegration: ToolbarIntegration
@@ -86,8 +83,8 @@ class BrowserToolbarView(
         container.addView(layout)
         val isCustomTabSession = customTabSession != null
 
-        if (shouldShowTabStrip()) {
-            tabStripView.apply {
+        if (toolbarLayout == R.layout.component_browser_top_toolbar_with_tab_strip) {
+            layout.findViewById<ComposeView>(R.id.tabStripView).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 setContent {
                     tabStripContent()
@@ -105,28 +102,15 @@ class BrowserToolbarView(
             true
         }
 
-        view.isNavBarEnabled = isNavBarEnabled
-
         with(context) {
             val isPinningSupported = components.useCases.webAppUseCases.isPinningSupported()
-            val searchUrlBackground = if (isNavBarEnabled) {
-                R.drawable.search_url_background
-            } else {
-                R.drawable.search_old_url_background
-            }
-
             layout.elevation = resources.getDimension(R.dimen.browser_fragment_toolbar_elevation)
 
             view.apply {
                 setToolbarBehavior()
 
                 if (!isCustomTabSession) {
-                    display.setUrlBackground(
-                        AppCompatResources.getDrawable(
-                            context,
-                            searchUrlBackground,
-                        ),
-                    )
+                    display.setUrlBackground(getDrawable(R.drawable.search_url_background))
                 }
 
                 display.onUrlClicked = {
@@ -151,10 +135,6 @@ class BrowserToolbarView(
                     context,
                     ThemeManager.resolveAttribute(R.attr.borderPrimary, context),
                 )
-                val pageActionSeparatorColor = ContextCompat.getColor(
-                    context,
-                    ThemeManager.resolveAttribute(R.attr.borderToolbarDivider, context),
-                )
 
                 display.urlFormatter = { url ->
                     if (isNavBarEnabled) {
@@ -176,7 +156,6 @@ class BrowserToolbarView(
                         context,
                         R.color.fx_mobile_icon_color_information,
                     ),
-                    pageActionSeparator = pageActionSeparatorColor,
                 )
 
                 display.hint = context.getString(R.string.search_hint)

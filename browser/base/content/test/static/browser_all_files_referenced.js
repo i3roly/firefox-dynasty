@@ -287,9 +287,6 @@ var allowlist = [
 
   // Referenced programmatically
   { file: "chrome://browser/content/backup/BackupManifest.1.schema.json" },
-
-  // Bug 1892002
-  { file: "resource://app/modules/TopSites.sys.mjs" },
 ];
 
 if (AppConstants.NIGHTLY_BUILD) {
@@ -362,9 +359,6 @@ const ignorableAllowlist = new Set([
 
   // dom/media/gmp/GMPParent.cpp
   "resource://gre/gmp-clearkey/0.1/manifest.json",
-
-  // Bug 1351669 - obsolete test file
-  "resource://gre/res/test.properties",
 ]);
 for (let entry of ignorableAllowlist) {
   allowlist.add(entry);

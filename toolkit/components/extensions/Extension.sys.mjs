@@ -44,6 +44,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   E10SUtils: "resource://gre/modules/E10SUtils.sys.mjs",
   ExtensionDNR: "resource://gre/modules/ExtensionDNR.sys.mjs",
   ExtensionDNRStore: "resource://gre/modules/ExtensionDNRStore.sys.mjs",
+  ExtensionMenus: "resource://gre/modules/ExtensionMenus.sys.mjs",
   ExtensionPermissions: "resource://gre/modules/ExtensionPermissions.sys.mjs",
   ExtensionPreferencesManager:
     "resource://gre/modules/ExtensionPreferencesManager.sys.mjs",
@@ -581,6 +582,12 @@ var ExtensionAddonObserver = {
     addShutdownBlocker(
       `Clear ServiceWorkers for ${addonId}`,
       lazy.ServiceWorkerCleanUp.removeFromPrincipal(principal)
+    );
+
+    // Clear the persisted menus created with the menus/contextMenus API (if any).
+    addShutdownBlocker(
+      `Clear menus store for ${addonId}`,
+      lazy.ExtensionMenus.clearPersistedMenusOnUninstall(addonId)
     );
 
     // Clear the persisted dynamic content scripts created with the scripting
@@ -1273,7 +1280,8 @@ export class ExtensionData {
     }
 
     let { permissions, origins } = this.permissionsObject(
-      this.manifest.optional_permissions
+      this.manifest.optional_permissions,
+      this.manifest.optional_host_permissions
     );
     if (this.originControls) {
       for (let origin of this.getManifestOrigins()) {
@@ -1521,6 +1529,8 @@ export class ExtensionData {
       },
       preprocessors: {},
       manifestVersion: this.manifestVersion,
+      // We introduced this context param in Bug 1831417.
+      ignoreUnrecognizedProperties: false,
     };
 
     if (this.fluentL10n || this.localeData) {
@@ -1860,11 +1870,20 @@ export class ExtensionData {
 
       result.contentScripts = [];
       for (let options of manifest.content_scripts || []) {
+        let { match_about_blank, match_origin_as_fallback } = options;
+        if (match_origin_as_fallback !== null) {
+          // match_about_blank is ignored when match_origin_as_fallback is set.
+          // When match_about_blank=true and match_origin_as_fallback=false,
+          // then match_about_blank should be treated as false.
+          match_about_blank = false;
+        }
         result.contentScripts.push({
           allFrames: options.all_frames,
-          matchAboutBlank: options.match_about_blank,
+          matchAboutBlank: match_about_blank,
+          matchOriginAsFallback: match_origin_as_fallback,
           frameID: options.frame_id,
           runAt: options.run_at,
+          world: options.world,
 
           matches: options.matches,
           excludeMatches: options.exclude_matches || [],

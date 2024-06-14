@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use crate::{
+    command::RecordedComputePass,
     error::{ErrMsg, ErrorBuffer, ErrorBufferType},
     wgpu_string, AdapterInformation, ByteBuf, CommandEncoderAction, DeviceAction, DropAction,
     QueueWriteAction, SwapChainId, TextureAction,
@@ -951,13 +952,11 @@ impl Global {
                 base,
                 timestamp_writes,
             } => {
-                if let Err(err) = self
-                    .command_encoder_run_compute_pass_with_unresolved_commands::<A>(
-                        self_id,
-                        base.as_ref(),
-                        timestamp_writes.as_ref(),
-                    )
-                {
+                if let Err(err) = self.compute_pass_end_with_unresolved_commands::<A>(
+                    self_id,
+                    base,
+                    timestamp_writes.as_ref(),
+                ) {
                     error_buf.init(err);
                 }
             }
@@ -996,7 +995,7 @@ impl Global {
                 timestamp_writes,
                 occlusion_query_set_id,
             } => {
-                if let Err(err) = self.command_encoder_run_render_pass_impl::<A>(
+                if let Err(err) = self.render_pass_end_impl::<A>(
                     self_id,
                     base.as_ref(),
                     &target_colors,
@@ -1095,10 +1094,31 @@ pub unsafe extern "C" fn wgpu_server_compute_pass(
     byte_buf: &ByteBuf,
     error_buf: ErrorBuffer,
 ) {
-    let pass = bincode::deserialize(byte_buf.as_slice()).unwrap();
-    let action = crate::command::replay_compute_pass(encoder_id, &pass).into_command();
+    let src_pass = bincode::deserialize(byte_buf.as_slice()).unwrap();
 
-    gfx_select!(encoder_id => global.command_encoder_action(encoder_id, action, error_buf));
+    trait ReplayComputePass {
+        fn replay_compute_pass<A>(
+            &self,
+            encoder_id: id::CommandEncoderId,
+            src_pass: &RecordedComputePass,
+            error_buf: ErrorBuffer,
+        ) where
+            A: wgc::hal_api::HalApi;
+    }
+    impl ReplayComputePass for Global {
+        fn replay_compute_pass<A>(
+            &self,
+            encoder_id: id::CommandEncoderId,
+            src_pass: &RecordedComputePass,
+            error_buf: ErrorBuffer,
+        ) where
+            A: wgc::hal_api::HalApi,
+        {
+            crate::command::replay_compute_pass::<A>(self, encoder_id, src_pass, error_buf);
+        }
+    }
+
+    gfx_select!(encoder_id => global.replay_compute_pass(encoder_id, &src_pass, error_buf));
 }
 
 #[no_mangle]

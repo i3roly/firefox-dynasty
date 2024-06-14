@@ -66,8 +66,6 @@ bitflags! {
 
         /// This property can be animated on the compositor.
         const CAN_ANIMATE_ON_COMPOSITOR = 0;
-        /// This shorthand property is accessible from getComputedStyle.
-        const SHORTHAND_IN_GETCS = 0;
         /// See data.py's documentation about the affects_flags.
         const AFFECTS_LAYOUT = 0;
         #[allow(missing_docs)]
@@ -185,7 +183,9 @@ impl fmt::Debug for PropertyDeclaration {
 }
 
 /// A longhand or shorthand property.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ToComputedValue, ToResolvedValue, ToShmem, MallocSizeOf)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, ToComputedValue, ToResolvedValue, ToShmem, MallocSizeOf,
+)]
 #[repr(C)]
 pub struct NonCustomPropertyId(u16);
 
@@ -695,7 +695,10 @@ fn parse_non_custom_property_declaration_value_into<'i>(
     context: &ParserContext,
     input: &mut Parser<'i, '_>,
     start: &cssparser::ParserState,
-    parse_entirely_into: impl FnOnce(&mut SourcePropertyDeclaration, &mut Parser<'i, '_>) -> Result<(), ParseError<'i>>,
+    parse_entirely_into: impl FnOnce(
+        &mut SourcePropertyDeclaration,
+        &mut Parser<'i, '_>,
+    ) -> Result<(), ParseError<'i>>,
     parsed_wide_keyword: impl FnOnce(&mut SourcePropertyDeclaration, CSSWideKeyword),
     parsed_custom: impl FnOnce(&mut SourcePropertyDeclaration, custom_properties::VariableValue),
 ) -> Result<(), ParseError<'i>> {
@@ -861,7 +864,8 @@ impl PropertyDeclaration {
                     input,
                     &start,
                     |declarations, input| {
-                        let decl = input.parse_entirely(|input| longhand_id.parse_value(context, input))?;
+                        let decl = input
+                            .parse_entirely(|input| longhand_id.parse_value(context, input))?;
                         declarations.push(decl);
                         Ok(())
                     },
@@ -876,7 +880,7 @@ impl PropertyDeclaration {
                                 from_shorthand: None,
                             }),
                         }))
-                    }
+                    },
                 )?;
             },
             Err(shorthand_id) => {
@@ -893,7 +897,8 @@ impl PropertyDeclaration {
                             declarations.all_shorthand = AllShorthand::CSSWideKeyword(wk)
                         } else {
                             for longhand in shorthand_id.longhands() {
-                                declarations.push(PropertyDeclaration::css_wide_keyword(longhand, wk));
+                                declarations
+                                    .push(PropertyDeclaration::css_wide_keyword(longhand, wk));
                             }
                         }
                     },
@@ -914,7 +919,7 @@ impl PropertyDeclaration {
                                 ))
                             }
                         }
-                    }
+                    },
                 )?;
             },
         }
@@ -1481,17 +1486,18 @@ impl UnparsedValue {
         let key = (shorthand, longhand_id);
         match shorthand_cache.get(&key) {
             Some(decl) => Cow::Borrowed(decl),
-            None => {
-                // FIXME: We should always have the key here but it seems
-                // sometimes we don't, see bug 1696409.
-                #[cfg(feature = "gecko")]
-                {
-                    if crate::gecko_bindings::structs::GECKO_IS_NIGHTLY {
-                        panic!("Expected {:?} to be in the cache but it was not!", key);
-                    }
-                }
-                invalid_at_computed_value_time()
-            },
+            // NOTE: Under normal circumstances we should always have a value, but when prefs
+            // change we might hit this case. Consider something like `animation-timeline`, which
+            // is a conditionally-enabled longhand of `animation`:
+            //
+            // If we have a sheet with `animation: var(--foo)`, and the `animation-timeline` pref
+            // enabled, then that expands to an `animation-timeline` declaration at parse time.
+            //
+            // If the user disables the pref and, some time later, we get here wanting to compute
+            // `animation-timeline`, parse_into won't generate any declaration for it anymore, so
+            // we haven't inserted in the cache. Computing to invalid / initial seems like the most
+            // sensible thing to do here.
+            None => invalid_at_computed_value_time(),
         }
     }
 }

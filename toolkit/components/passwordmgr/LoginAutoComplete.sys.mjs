@@ -7,10 +7,7 @@
  */
 
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
-import {
-  GenericAutocompleteItem,
-  sendFillRequestToParent,
-} from "resource://gre/modules/FillHelpers.sys.mjs";
+import { GenericAutocompleteItem } from "resource://gre/modules/FillHelpers.sys.mjs";
 
 const lazy = {};
 
@@ -146,11 +143,12 @@ class LoginAutocompleteItem extends AutocompleteItem {
     this.label = username;
     this.value = hasBeenTypePassword ? login.password : login.username;
     this.comment = JSON.stringify({
+      fillMessageName: "PasswordManager:OnFieldAutoComplete",
+      fillMessageData: login,
       guid: login.guid,
-      login, // We have to keep login here to satisfy Android
       isDuplicateUsername,
       isOriginMatched,
-      comment:
+      secondary:
         isOriginMatched && login.httpRealm === null
           ? getLocalizedString("displaySameOrigin")
           : login.displayOrigin,
@@ -177,6 +175,7 @@ class GeneratedPasswordAutocompleteItem extends AutocompleteItem {
     this.label = getLocalizedString("useASecurelyGeneratedPassword");
     this.value = generatedPassword;
     this.comment = JSON.stringify({
+      fillMessageName: "PasswordManager:FillGeneratedPassword",
       generatedPassword,
       willAutoSaveGeneratedPassword,
     });
@@ -331,16 +330,14 @@ export class LoginAutoCompleteResult {
 
     // The footer comes last if it's enabled
     if (isFooterEnabled()) {
-      // TODO: This would be removed once autofill is triggered from the parent.
-      gAutoCompleteListener.init();
       if (autocompleteItems) {
         this.#rows.push(
           ...autocompleteItems.map(
             item =>
               new GenericAutocompleteItem(
                 item.image,
-                item.title,
-                item.subtitle,
+                item.label,
+                item.secondary,
                 item.fillMessageName,
                 item.fillMessageData
               )
@@ -452,42 +449,11 @@ export class LoginAutoCompleteResult {
     return this.getValueAt(index);
   }
 
-  isRemovableAt(index) {
-    this.#throwOnBadIndex(index);
-    return true;
+  isRemovableAt(_index) {
+    return false;
   }
 
-  removeValueAt(index) {
-    this.#throwOnBadIndex(index);
-
-    let [removedItem] = this.#rows.splice(index, 1);
-
-    if (this.defaultIndex > this.#rows.length) {
-      this.defaultIndex--;
-    }
-
-    removedItem.removeFromStorage();
+  removeValueAt(_index) {
+    return false;
   }
 }
-
-let gAutoCompleteListener = {
-  added: false,
-
-  init() {
-    if (!this.added) {
-      Services.obs.addObserver(this, "autocomplete-will-enter-text");
-      this.added = true;
-    }
-  },
-
-  async observe(subject, topic, data) {
-    switch (topic) {
-      case "autocomplete-will-enter-text": {
-        if (subject && subject == lazy.formFillController.controller.input) {
-          await sendFillRequestToParent("LoginManager", subject, data);
-        }
-        break;
-      }
-    }
-  },
-};

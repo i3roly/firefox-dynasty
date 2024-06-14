@@ -132,7 +132,8 @@ class nsHTTPSOnlyUtils {
    * @param  aPrincipal The principal for whom the exception should be checked
    * @return            True if exempt
    */
-  static bool TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal);
+  static bool TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal,
+                                      bool aCheckForHTTPSFirst = false);
 
   /**
    * Tests if the HTTPS-Only Mode upgrade exception is set for channel result
@@ -165,6 +166,17 @@ class nsHTTPSOnlyUtils {
                                            nsILoadInfo* aLoadInfo);
 
   /**
+   * Will add a special temporary HTTPS-Only exception that only applies to
+   * HTTPS-First, and is not exposed in the UI.
+   * @param aURI      The URL for whose HTTP principal the exception should be
+   *                  added
+   * @param aLoadInfo The loadinfo of the request triggering this exception to
+   *                  be added (needs to match aURI)
+   */
+  static nsresult AddHTTPSFirstExceptionForSession(
+      nsCOMPtr<nsIURI> aURI, nsILoadInfo* const aLoadInfo);
+
+  /**
    * Determines which HTTPS-Only status flags should get propagated to
    * sub-resources or sub-documents. As sub-resources and sub-documents are
    * exempt when the top-level document is exempt, we need to copy the "exempt"
@@ -175,6 +187,31 @@ class nsHTTPSOnlyUtils {
    * receive.
    */
   static uint32_t GetStatusForSubresourceLoad(uint32_t aHttpsOnlyStatus);
+
+  /**
+   * When a downgrade is happening because of HTTPS-First, this function will
+   * update the load state for the new load accordingly. This includes
+   * information about the downgrade for later telemetry use.
+   * @param aDocumentLoadListener The calling document load listener.
+   * @param aLoadState The load state to be updated
+   */
+  static void UpdateLoadStateAfterHTTPSFirstDowngrade(
+      mozilla::net::DocumentLoadListener* aDocumentLoadListener,
+      nsDocShellLoadState* aLoadState);
+
+  /**
+   * When a load is successful, this should be called by the document load
+   * listener. In two cases, telemetry is then recorded:
+   * a) If downgrade data has been passed, the passed load is a successful
+   *    downgrade, which means telemetry based on the downgrade data will be
+   *    submitted.
+   * b) If the passed load info indicates that this load has been upgraded by
+   *    HTTPS-First, this means the upgrade was successful, which will be
+   *    recorded to telemetry.
+   */
+  static void SubmitHTTPSFirstTelemetry(
+      nsCOMPtr<nsILoadInfo> const& aLoadInfo,
+      RefPtr<HTTPSFirstDowngradeData> const& aHttpsFirstDowngradeData);
 
  private:
   /**
@@ -255,6 +292,19 @@ class TestHTTPAnswerRunnable final : public mozilla::Runnable,
   // through redirects)
   RefPtr<mozilla::net::DocumentLoadListener> mDocumentLoadListener;
   RefPtr<nsITimer> mTimer;
+};
+
+/**
+ * Data about a HTTPS-First downgrade used for Telemetry. We need to store this
+ * instead of directly submitting it when deciding to downgrade, because it is
+ * only interesting for us if the downgraded load is actually succesful.
+ */
+struct HTTPSFirstDowngradeData
+    : public mozilla::RefCounted<HTTPSFirstDowngradeData> {
+  MOZ_DECLARE_REFCOUNTED_TYPENAME(HTTPSFirstDowngradeData)
+  mozilla::TimeDuration downgradeTime;
+  bool isOnTimer = false;
+  bool isSchemeless = false;
 };
 
 #endif /* nsHTTPSOnlyUtils_h___ */

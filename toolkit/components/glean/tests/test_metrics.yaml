@@ -24,6 +24,7 @@ test_only:
     expires: never
     send_in_pings:
       - test-ping
+      - ride-along-ping
 
   can_we_time_it:
     type: timespan
@@ -199,6 +200,7 @@ test_only:
     labels:
       - next_to_the_fridge
       - clean
+      - 1st_counter
 
   mabels_bathroom_counters:
     type: labeled_counter
@@ -421,6 +423,8 @@ test_only:
           colour:
             type: string
           diameter:
+            type: number
+          CamelCasedParameter:
             type: number
 
   crash_stack:
@@ -646,6 +650,9 @@ test_only.ipc:
   an_event:
     type: event
     extra_keys:
+      value:
+        type: string
+        description: Maps to Legacy Telemetry `value` property
       extra1:
         type: string
         description: "Some extra data"

@@ -410,7 +410,7 @@ async function setup() {
     ],
   });
 
-  const engine = await SearchTestUtils.promiseNewSearchEngine({
+  const engine = await SearchTestUtils.installOpenSearchEngine({
     url: "chrome://mochitests/content/browser/browser/components/urlbar/tests/browser/searchSuggestionEngine.xml",
   });
   const originalDefaultEngine = await Services.search.getDefault();
@@ -440,4 +440,24 @@ async function showResultByArrowDown() {
     EventUtils.synthesizeKey("KEY_ArrowDown");
   });
   await UrlbarTestUtils.promiseSearchComplete(window);
+}
+
+async function expectNoConsoleErrors(task) {
+  let endConsoleListening = TestUtils.listenForConsoleMessages();
+  let msgs;
+  let taskResult;
+
+  try {
+    taskResult = await task();
+  } finally {
+    msgs = await endConsoleListening();
+  }
+
+  for (let msg of msgs) {
+    if (msg.level === "error") {
+      throw new Error(`Console error detected: ${msg.arguments[0]}`);
+    }
+  }
+
+  return taskResult;
 }

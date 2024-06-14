@@ -169,6 +169,60 @@ makeTest({
 });
 
 makeTest({
+  name: 'sellerRealTimeReportingConfig has default local reporting type',
+  expect:  EXPECT_WINNER,
+  auctionConfigOverrides: {sellerRealTimeReportingConfig:
+                            {type: 'default-local-reporting'}}
+});
+
+makeTest({
+  name: 'sellerRealTimeReportingConfig has no type',
+  expect: EXPECT_EXCEPTION(TypeError),
+  auctionConfigOverrides: {sellerRealTimeReportingConfig:
+                            {notType: 'default-local-reporting'}}
+});
+
+makeTest({
+  name: 'sellerRealTimeReportingConfig has unknown type',
+  expect:  EXPECT_WINNER,
+  auctionConfigOverrides: {sellerRealTimeReportingConfig: {type: 'unknown type'}}
+});
+
+makeTest({
+  name: 'perBuyerRealTimeReportingConfig',
+  expect: EXPECT_WINNER,
+  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
+                            {'https://example.com': {type: 'default-local-reporting'}}}
+});
+
+makeTest({
+  name: 'perBuyerRealTimeReportingConfig has invalid buyer',
+  expect: EXPECT_EXCEPTION(TypeError),
+  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
+                            {'http://example.com': {type: 'default-local-reporting'}}}
+});
+
+makeTest({
+  name: 'perBuyerRealTimeReportingConfig has no type',
+  expect: EXPECT_EXCEPTION(TypeError),
+  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
+                            {'https://example.com': {notType: 'default-local-reporting'}}}
+});
+
+makeTest({
+  name: 'perBuyerRealTimeReportingConfig has unknown type',
+  expect: EXPECT_WINNER,
+  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
+                            {'https://example.com': {type: 'unknown type'}}}
+});
+
+makeTest({
+  name: 'perBuyerRealTimeReportingConfig has no entry',
+  expect: EXPECT_WINNER,
+  auctionConfigOverrides: {perBuyerRealTimeReportingConfig: {}}
+});
+
+makeTest({
   name: 'no buyers => no winners',
   expect: EXPECT_NO_WINNER,
   auctionConfigOverrides: {interestGroupBuyers: []},
@@ -242,9 +296,12 @@ makeTest({
   }
 });
 
+// Cross-origin trustedScoringSignalsURL is fine, but it needs extra
+// headers to actually make it work. The auction here doesn't actually
+// care if the signals don't load.
 makeTest({
   name: 'trustedScoringSignalsURL is cross-origin with seller',
-  expect: EXPECT_EXCEPTION(TypeError),
+  expect: EXPECT_WINNER,
   auctionConfigOverrides: { trustedScoringSignalsURL: "https://example.com" },
 });
 
@@ -502,60 +559,6 @@ makeTest({
   auctionConfigOverrides: {allSlotsRequestedSizes:
                             [{width: '100', height: '100'},
                              {width: '200furlongs', height: '200'}]}
-});
-
-makeTest({
-  name: 'sellerRealTimeReportingConfig has default local reporting type',
-  expect:  EXPECT_WINNER,
-  auctionConfigOverrides: {sellerRealTimeReportingConfig:
-                            {type: 'default-local-reporting'}}
-});
-
-makeTest({
-  name: 'sellerRealTimeReportingConfig has no type',
-  expect: EXPECT_EXCEPTION(TypeError),
-  auctionConfigOverrides: {sellerRealTimeReportingConfig:
-                            {notType: 'default-local-reporting'}}
-});
-
-makeTest({
-  name: 'sellerRealTimeReportingConfig has unknown type',
-  expect:  EXPECT_WINNER,
-  auctionConfigOverrides: {sellerRealTimeReportingConfig: {type: 'unknown type'}}
-});
-
-makeTest({
-  name: 'perBuyerRealTimeReportingConfig',
-  expect: EXPECT_WINNER,
-  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
-                            {"https://example.com": {type: 'default-local-reporting'}}}
-});
-
-makeTest({
-  name: 'perBuyerRealTimeReportingConfig has no entry',
-  expect: EXPECT_WINNER,
-  auctionConfigOverrides: {perBuyerRealTimeReportingConfig: {}}
-});
-
-makeTest({
-  name: 'perBuyerRealTimeReportingConfig has invalid buyer',
-  expect: EXPECT_EXCEPTION(TypeError),
-  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
-                            {"http://example.com": {type: 'default-local-reporting'}}}
-});
-
-makeTest({
-  name: 'perBuyerRealTimeReportingConfig has no type',
-  expect: EXPECT_EXCEPTION(TypeError),
-  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
-                            {"https://example.com": {notType: 'default-local-reporting'}}}
-});
-
-makeTest({
-  name: 'perBuyerRealTimeReportingConfig has unknown type',
-  expect: EXPECT_WINNER,
-  auctionConfigOverrides: {perBuyerRealTimeReportingConfig:
-                            {"https://example.com": {type: 'unknown type'}}}
 });
 
 subsetTest(promise_test, async test => {

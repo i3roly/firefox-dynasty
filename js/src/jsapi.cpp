@@ -1434,7 +1434,7 @@ JS_PUBLIC_API void JS_SetGCParametersBasedOnAvailableMemory(
   };
 
   static const JSGCConfig minimal[] = {
-      {JSGC_SLICE_TIME_BUDGET_MS, 5},
+      {JSGC_SLICE_TIME_BUDGET_MS, 10},
       {JSGC_HIGH_FREQUENCY_TIME_LIMIT, 1500},
       {JSGC_LARGE_HEAP_SIZE_MIN, 250},
       {JSGC_SMALL_HEAP_SIZE_MAX, 50},
@@ -1448,7 +1448,7 @@ JS_PUBLIC_API void JS_SetGCParametersBasedOnAvailableMemory(
       {JSGC_URGENT_THRESHOLD_MB, 8}};
 
   static const JSGCConfig nominal[] = {
-      {JSGC_SLICE_TIME_BUDGET_MS, 5},
+      {JSGC_SLICE_TIME_BUDGET_MS, 10},
       {JSGC_HIGH_FREQUENCY_TIME_LIMIT, 1000},
       {JSGC_LARGE_HEAP_SIZE_MIN, 500},
       {JSGC_SMALL_HEAP_SIZE_MAX, 100},
@@ -4222,27 +4222,6 @@ extern MOZ_NEVER_INLINE JS_PUBLIC_API void JS_AbortIfWrongThread(
   }
 }
 
-#ifdef JS_GC_ZEAL
-JS_PUBLIC_API void JS_GetGCZealBits(JSContext* cx, uint32_t* zealBits,
-                                    uint32_t* frequency,
-                                    uint32_t* nextScheduled) {
-  cx->runtime()->gc.getZealBits(zealBits, frequency, nextScheduled);
-}
-
-JS_PUBLIC_API void JS_SetGCZeal(JSContext* cx, uint8_t zeal,
-                                uint32_t frequency) {
-  cx->runtime()->gc.setZeal(zeal, frequency);
-}
-
-JS_PUBLIC_API void JS_UnsetGCZeal(JSContext* cx, uint8_t zeal) {
-  cx->runtime()->gc.unsetZeal(zeal);
-}
-
-JS_PUBLIC_API void JS_ScheduleGC(JSContext* cx, uint32_t count) {
-  cx->runtime()->gc.setNextScheduled(count);
-}
-#endif
-
 JS_PUBLIC_API void JS_SetParallelParsingEnabled(JSContext* cx, bool enabled) {
   cx->runtime()->setParallelParsingEnabled(enabled);
 }
@@ -4443,6 +4422,12 @@ JS_PUBLIC_API void JS_SetGlobalJitCompilerOption(JSContext* cx,
     case JSJITCOMPILER_WASM_JIT_OPTIMIZING:
       JS::ContextOptionsRef(cx).setWasmIon(!!value);
       break;
+
+#ifdef NIGHTLY_BUILD
+    case JSJITCOMPILER_REGEXP_DUPLICATE_NAMED_GROUPS:
+      jit::JitOptions.js_regexp_duplicate_named_groups = !!value;
+      break;
+#endif
 
 #ifdef DEBUG
     case JSJITCOMPILER_FULL_DEBUG_CHECKS:

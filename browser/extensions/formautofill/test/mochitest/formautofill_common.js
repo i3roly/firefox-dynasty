@@ -279,7 +279,7 @@ async function onStorageChanged(type) {
   });
 }
 
-function makeAddressLabel({ primary, secondary, status }) {
+function makeAddressComment({ primary, secondary, status }) {
   return JSON.stringify({
     primary,
     secondary,
@@ -288,13 +288,34 @@ function makeAddressLabel({ primary, secondary, status }) {
   });
 }
 
+// Compare the labels on the autocomplete menu items to the expected labels.
 function checkMenuEntries(expectedValues, extraRows = 1) {
-  let actualValues = getMenuEntries();
+  let actualValues = getMenuEntries().labels;
   let expectedLength = expectedValues.length + extraRows;
 
   is(actualValues.length, expectedLength, " Checking length of expected menu");
   for (let i = 0; i < expectedValues.length; i++) {
     is(actualValues[i], expectedValues[i], " Checking menu entry #" + i);
+  }
+}
+
+// Compare the comment on the autocomplete menu items to the expected comment.
+// The profile field is not compared.
+function checkMenuEntriesComment(expectedValues, extraRows = 1) {
+  let actualValues = getMenuEntries().comments;
+  let expectedLength = expectedValues.length + extraRows;
+
+  is(actualValues.length, expectedLength, " Checking length of expected menu");
+  for (let i = 0; i < expectedValues.length; i++) {
+    const expectedValue = JSON.parse(expectedValues[i]);
+    const actualValue = JSON.parse(actualValues[i]);
+    for (const [key, value] of Object.entries(expectedValue)) {
+      is(
+        actualValue[key],
+        value,
+        ` Checking menu entry #${i}, ${key} should be ${value}`
+      );
+    }
   }
 }
 

@@ -611,14 +611,14 @@ class GeckoEngineSession(
     /**
      * See [EngineSession.checkForFormData].
      */
-    override fun checkForFormData() {
+    override fun checkForFormData(adjustPriority: Boolean) {
         geckoSession.containsFormData().then(
             { result ->
                 if (result == null) {
                     logger.error("No result from GeckoView containsFormData.")
                     return@then GeckoResult<Boolean>()
                 }
-                notifyObservers { onCheckForFormData(result) }
+                notifyObservers { onCheckForFormData(result, adjustPriority) }
                 GeckoResult<Boolean>()
             },
             { throwable ->
@@ -1465,10 +1465,6 @@ class GeckoEngineSession(
 
         override fun onCookieBannerHandled(session: GeckoSession) {
             notifyObservers { onCookieBannerChange(CookieBannerHandlingStatus.HANDLED) }
-        }
-
-        override fun onProductUrl(session: GeckoSession) {
-            notifyObservers { onProductUrlChange(true) }
         }
 
         override fun onFirstComposite(session: GeckoSession) = Unit

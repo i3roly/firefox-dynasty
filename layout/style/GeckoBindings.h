@@ -315,23 +315,6 @@ void Gecko_SetImageOrientationAsFromImage(nsStyleVisibility* aVisibility);
 void Gecko_CopyImageOrientationFrom(nsStyleVisibility* aDst,
                                     const nsStyleVisibility* aSrc);
 
-// Counter style.
-void Gecko_CounterStyle_ToPtr(const mozilla::StyleCounterStyle*,
-                              mozilla::CounterStylePtr*);
-
-void Gecko_SetCounterStyleToNone(mozilla::CounterStylePtr*);
-
-void Gecko_SetCounterStyleToString(mozilla::CounterStylePtr* ptr,
-                                   const nsACString* symbol);
-
-void Gecko_CopyCounterStyle(mozilla::CounterStylePtr* dst,
-                            const mozilla::CounterStylePtr* src);
-
-nsAtom* Gecko_CounterStyle_GetName(const mozilla::CounterStylePtr* ptr);
-
-const mozilla::AnonymousCounterStyle* Gecko_CounterStyle_GetAnonymous(
-    const mozilla::CounterStylePtr* ptr);
-
 // list-style-image style.
 void Gecko_SetListStyleImageNone(nsStyleList* style_struct);
 
@@ -499,6 +482,15 @@ mozilla::StyleSheet* Gecko_StyleSheet_Clone(
 
 void Gecko_StyleSheet_AddRef(const mozilla::StyleSheet* aSheet);
 void Gecko_StyleSheet_Release(const mozilla::StyleSheet* aSheet);
+
+struct GeckoImplicitScopeRoot {
+  const mozilla::dom::Element* mHost;
+  const mozilla::dom::Element* mRoot;
+  bool mConstructed;
+};
+GeckoImplicitScopeRoot Gecko_StyleSheet_ImplicitScopeRoot(
+    const mozilla::StyleSheet* aSheet);
+
 bool Gecko_IsDocumentBody(const mozilla::dom::Element* element);
 
 bool Gecko_IsDarkColorScheme(const mozilla::dom::Document*,

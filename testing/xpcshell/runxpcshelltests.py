@@ -93,7 +93,7 @@ from manifestparser.filters import chunk_by_slice, failures, pathprefix, tags
 from manifestparser.util import normsep
 from mozlog import commandline
 from mozprofile import Profile
-from mozprofile.cli import parse_preferences
+from mozprofile.cli import parse_key_value, parse_preferences
 from mozrunner.utils import get_stack_fixer_function
 
 # --------------------------------------------------------------
@@ -1855,6 +1855,13 @@ class XPCShellTests(object):
 
         # buildEnvironment() needs mozInfo, so we call it after mozInfo is initialized.
         self.buildEnvironment()
+        extraEnv = parse_key_value(options.get("extraEnv") or [], context="--setenv")
+        for k, v in extraEnv:
+            if k in self.env:
+                self.log.info(
+                    "Using environment variable %s instead of %s." % (v, self.env[k])
+                )
+            self.env[k] = v
 
         # The appDirKey is a optional entry in either the default or individual test
         # sections that defines a relative application directory for test runs. If
@@ -2029,7 +2036,7 @@ class XPCShellTests(object):
                 sequential_tests = []
                 self.env["MOZ_CHAOSMODE"] = "0xfb"
                 # chaosmode runs really slow, allow tests extra time to pass
-                self.harness_timeout = self.harness_timeout * 2
+                kwargs["harness_timeout"] = self.harness_timeout * 2
                 for i in range(VERIFY_REPEAT):
                     self.testCount += 1
                     test = testClass(
@@ -2039,7 +2046,7 @@ class XPCShellTests(object):
                 status = self.runTestList(
                     tests_queue, sequential_tests, testClass, mobileArgs, **kwargs
                 )
-                self.harness_timeout = self.harness_timeout / 2
+                kwargs["harness_timeout"] = self.harness_timeout
                 return status
 
             steps = [

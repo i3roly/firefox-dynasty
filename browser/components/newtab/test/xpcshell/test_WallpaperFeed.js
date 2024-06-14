@@ -73,15 +73,16 @@ add_task(async function test_onAction_INIT() {
     type: at.INIT,
   });
 
-  Assert.ok(feed.store.dispatch.calledOnce);
+  Assert.ok(feed.store.dispatch.calledThrice);
   Assert.ok(
-    feed.store.dispatch.calledWith(
+    feed.store.dispatch.firstCall.calledWith(
       ac.BroadcastToContent({
         type: at.WALLPAPERS_SET,
         data: [
           {
             ...attachment,
             wallpaperUrl: "http://localhost:8888/base_url/attachment",
+            category: "other",
           },
         ],
         meta: {

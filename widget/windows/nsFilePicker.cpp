@@ -153,12 +153,12 @@ static auto ShowRemote(ActionType&& action) -> RefPtr<FDPromise<ReturnType>> {
               return std::move(val);
             });
       },
-      [](nsresult error) -> RefPtr<RetPromise> {
+      [](mozilla::ipc::LaunchError const& error) {
         MOZ_LOG(sLogFileDialog, LogLevel::Error,
-                ("could not acquire WinFileDialog: %zu", size_t(error)));
-        // TODO: pipe more data up from utility-process creation
-        FAIL("UtilityProcessManager::CreateWinFileDialogActor",
-             (uint32_t)error);
+                ("could not acquire WinFileDialog: %s:%zu",
+                 error.FunctionName().get(), size_t(error.ErrorCode())));
+        return RetPromise::CreateAndReject(Error::From(error),
+                                           "nsFilePicker::ShowRemote");
       });
 
 #undef FAIL
@@ -302,39 +302,59 @@ static uint32_t Delta(uint64_t tb, uint64_t ta) {
   // (`u32::max()` milliseconds is roughly 47.91 days.)
   return uint32_t((tb - ta) / 10'000);
 };
-static nsCString HexString(HRESULT val) {
-  return nsPrintfCString("%08lX", val);
+static nsCString HexString(uint32_t val) {
+  return nsPrintfCString("%08" PRIX32, val);
 };
 
 static void RecordSuccess(uint64_t (&&time)[2]) {
   auto [t0, t1] = time;
 
   namespace glean_fd = mozilla::glean::file_dialog;
-  glean_fd::FallbackExtra extra{
-      .hresultLocal = Nothing(),
-      .hresultRemote = Nothing(),
+  glean_fd::FallbackV2Extra extra{
       .succeeded = Some(true),
       .timeLocal = Nothing(),
       .timeRemote = Some(Delta(t1, t0)),
+      .whereLocal = Nothing(),
+      .whereRemote = Nothing(),
+      .whyLocal = Nothing(),
+      .whyRemote = Nothing(),
   };
-  glean_fd::fallback.Record(Some(extra));
+  glean_fd::fallback_v2.Record(Some(extra));
 }
 
-static void RecordFailure(uint64_t (&&time)[3], HRESULT hrRemote,
-                          HRESULT hrLocal) {
+// for use when a local fallback is not attempted
+static void RecordFailure(uint64_t (&&time)[2], Error const& remote) {
+  auto [t0, t1] = time;
+
+  namespace glean_fd = mozilla::glean::file_dialog;
+  glean_fd::FallbackV2Extra extra{
+      .succeeded = Some(false),
+      .timeLocal = Nothing(),
+      .timeRemote = Some(Delta(t1, t0)),
+      .whereLocal = Nothing(),
+      .whereRemote = Some(remote.where.c_str()),
+      .whyLocal = Nothing(),
+      .whyRemote = Some(HexString(remote.why)),
+  };
+  glean_fd::fallback_v2.Record(Some(extra));
+}
+
+// for use when a local fallback is attempted
+static void RecordFailure(uint64_t (&&time)[3], Error const& remote,
+                          Maybe<Error> const& local) {
   auto [t0, t1, t2] = time;
 
-  {
-    namespace glean_fd = mozilla::glean::file_dialog;
-    glean_fd::FallbackExtra extra{
-        .hresultLocal = Some(HexString(hrLocal)),
-        .hresultRemote = Some(HexString(hrRemote)),
-        .succeeded = Some(false),
-        .timeLocal = Some(Delta(t2, t1)),
-        .timeRemote = Some(Delta(t1, t0)),
-    };
-    glean_fd::fallback.Record(Some(extra));
-  }
+  namespace glean_fd = mozilla::glean::file_dialog;
+  glean_fd::FallbackV2Extra extra{
+      .succeeded = Some(false),
+      .timeLocal = Some(Delta(t2, t1)),
+      .timeRemote = Some(Delta(t1, t0)),
+      .whereLocal = local.map([](auto const& e) { return e.where.c_str(); }),
+      .whereRemote = Some(remote.where.c_str()),
+      .whyLocal = local.map([](auto const& e) { return HexString(e.why); }),
+      .whyRemote = Some(HexString(remote.why)),
+  };
+  glean_fd::fallback_v2.Record(Some(extra));
 }
 
 }  // namespace telemetry
@@ -394,6 +414,14 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
 
   constexpr static char kFunctionName[] = "LocalAndOrRemote::AsyncExecute";
 
+  // capture time for telemetry
+  constexpr static const auto GetTime = []() -> uint64_t {
+    FILETIME t;
+    ::GetSystemTimeAsFileTime(&t);
+    return (uint64_t(t.dwHighDateTime) << 32) | t.dwLowDateTime;
+  };
+  uint64_t const t0 = GetTime();
+
   switch (GetStrategy()) {
     case Local: {
       return local(args...)->MapErr(
@@ -407,27 +435,31 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
     }
 
     case Remote:
-      return remote(args...)->MapErr(
-          NS_GetCurrentThread(), __func__, [](Error const& err) {
-            MOZ_LOG(
-                filedialog::sLogFileDialog, LogLevel::Info,
-                ("remote file-dialog failed: kind=%s, where=%s, why=%08" PRIX32,
-                 Error::KindName(err.kind), err.where.c_str(), err.why));
-            return Ok();
+      return remote(args...)->Then(
+          NS_GetCurrentThread(), __func__,
+          [t0](
+              typename RPromiseT::ResolveValueType result) -> RefPtr<PromiseT> {
+            // success; stop here
+            auto const t1 = GetTime();
+            // record success
+            telemetry::RecordSuccess({t0, t1});
+            return PromiseT::CreateAndResolve(std::move(result), kFunctionName);
+          },
+          [t0](Error const& err) {
+            auto const t1 = GetTime();
+            telemetry::RecordFailure({t0, t1}, err);
+
+            MOZ_LOG(filedialog::sLogFileDialog, LogLevel::Info,
+                    ("remote file-dialog failed: kind=%s, where=%s, "
+                     "why=%08" PRIX32,
+                     Error::KindName(err.kind), err.where.c_str(), err.why));
+            return PromiseT::CreateAndReject(Ok(), kFunctionName);
           });
 
     case RemoteWithFallback:
       // more complicated; continue below
       break;
   }
-
-  // capture time for telemetry
-  constexpr static const auto GetTime = []() -> uint64_t {
-    FILETIME t;
-    ::GetSystemTimeAsFileTime(&t);
-    return (uint64_t(t.dwHighDateTime) << 32) | t.dwLowDateTime;
-  };
-  uint64_t const t0 = GetTime();
 
   return remote(args...)->Then(
       NS_GetCurrentThread(), kFunctionName,
@@ -444,20 +476,19 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
           typename RPromiseT::RejectValueType err) mutable -> RefPtr<PromiseT> {
         // failure; record time
         auto const t1 = GetTime();
-        // TODO: also propagate `err.where` into telemetry
-        HRESULT const hrRemote = err.why;
 
         // retry locally...
         auto p0 = std::apply(local, std::move(tuple));
         // ...then record the telemetry event
         return p0->Then(
             NS_GetCurrentThread(), kFunctionName,
-            [t0, t1, hrRemote](typename LPromiseT::ResolveOrRejectValue&& val)
+            [t0, t1, errRemote = std::move(err)](
+                typename LPromiseT::ResolveOrRejectValue&& val)
                 -> RefPtr<PromiseT> {
               auto const t2 = GetTime();
-              HRESULT const hrLocal =
-                  val.IsReject() ? (HRESULT)val.RejectValue().why : S_OK;
-              telemetry::RecordFailure({t0, t1, t2}, hrRemote, hrLocal);
+              Maybe<Error> const errLocal =
+                  val.IsReject() ? Some(val.RejectValue()) : Nothing();
+              telemetry::RecordFailure({t0, t1, t2}, errRemote, errLocal);
 
               using V = typename PromiseT::ResolveOrRejectValue;
               return PromiseT::CreateAndResolveOrReject(
@@ -801,25 +832,47 @@ nsFilePicker::CheckContentAnalysisService() {
     return promise;
   };
 
-  nsCOMArray<nsIFile> files;
+  // Since getting the files to analyze might be asynchronous, use a MozPromise
+  // to unify the logic below.
+  RefPtr<mozilla::MozPromise<nsTArray<mozilla::PathString>, nsresult,
+                             true>::Private>
+      getFilesToAnalyzePromise = nullptr;
   if (mMode == modeGetFolder) {
     nsCOMPtr<nsIFile> file;
     nsresult rv = GetFile(getter_AddRefs(file));
+    if (NS_WARN_IF(NS_FAILED(rv) || !file)) {
+      return nsFilePicker::ContentAnalysisResponse::CreateAndReject(rv,
+                                                                    __func__);
+    }
+    // We just need to iterate over the directory, so use the junk scope
+    RefPtr<mozilla::dom::Directory> directory = mozilla::dom::Directory::Create(
+        xpc::NativeGlobal(xpc::PrivilegedJunkScope()), file);
+    if (!directory) {
+      // The directory may have been deleted
+      return nsFilePicker::ContentAnalysisResponse::CreateAndReject(rv,
+                                                                    __func__);
+    }
+    mozilla::dom::OwningFileOrDirectory owningDirectory;
+    owningDirectory.SetAsDirectory() = directory;
+    nsTArray<mozilla::dom::OwningFileOrDirectory> directoryArray{
+        std::move(owningDirectory)};
+
+    mozilla::ErrorResult error;
+    RefPtr<mozilla::dom::GetFilesHelper> helper =
+        mozilla::dom::GetFilesHelper::Create(directoryArray, true, error);
+    rv = error.StealNSResult();
     if (NS_WARN_IF(NS_FAILED(rv))) {
       return nsFilePicker::ContentAnalysisResponse::CreateAndReject(rv,
                                                                     __func__);
     }
-    nsCOMPtr<nsIDirectoryEnumerator> iter;
-    rv = file->GetDirectoryEntries(getter_AddRefs(iter));
-    if (NS_WARN_IF(NS_FAILED(rv))) {
-      return nsFilePicker::ContentAnalysisResponse::CreateAndReject(rv,
-                                                                    __func__);
-    }
-    nsCOMPtr<nsIFile> entry;
-    while (NS_SUCCEEDED(iter->GetNextFile(getter_AddRefs(entry))) && entry) {
-      files.AppendElement(entry);
-    }
+
+    getFilesToAnalyzePromise = mozilla::MakeRefPtr<mozilla::MozPromise<
+        nsTArray<mozilla::PathString>, nsresult, true>::Private>(__func__);
+    auto getFilesCallback = mozilla::MakeRefPtr<GetFilesInDirectoryCallback>(
+        getFilesToAnalyzePromise);
+    helper->AddCallback(getFilesCallback);
   } else {
+    nsCOMArray<nsIFile> files;
     if (!mUnicodeFile.IsEmpty()) {
       nsCOMPtr<nsIFile> file;
       rv = GetFile(getter_AddRefs(file));
@@ -831,13 +884,25 @@ nsFilePicker::CheckContentAnalysisService() {
     } else {
       files.AppendElements(mFiles);
     }
+    nsTArray<mozilla::PathString> paths(files.Length());
+    std::transform(files.begin(), files.end(), MakeBackInserter(paths),
+                   [](auto* entry) { return entry->NativePath(); });
+    getFilesToAnalyzePromise = mozilla::MakeRefPtr<mozilla::MozPromise<
+        nsTArray<mozilla::PathString>, nsresult, true>::Private>(__func__);
+    getFilesToAnalyzePromise->Resolve(std::move(paths), __func__);
   }
-  nsTArray<mozilla::PathString> paths(files.Length());
-  std::transform(files.begin(), files.end(), MakeBackInserter(paths),
-                 [](auto* entry) { return entry->NativePath(); });
 
-  return mozilla::detail::AsyncAll<mozilla::PathString>(std::move(paths),
-                                                        processOneItem);
+  MOZ_ASSERT(getFilesToAnalyzePromise);
+  return getFilesToAnalyzePromise->Then(
+      mozilla::GetMainThreadSerialEventTarget(), __func__,
+      [processOneItem](nsTArray<mozilla::PathString> aPaths) mutable {
+        return mozilla::detail::AsyncAll<mozilla::PathString>(std::move(aPaths),
+                                                              processOneItem);
+      },
+      [](nsresult aError) {
+        return nsFilePicker::ContentAnalysisResponse::CreateAndReject(aError,
+                                                                      __func__);
+      });
 };
 
 ///////////////////////////////////////////////////////////////////////////////

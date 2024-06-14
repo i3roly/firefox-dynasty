@@ -43,7 +43,7 @@ void nsLookAndFeel::RefreshImpl() {
   mInitialized = false;
 }
 
-nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme,
+nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aColorScheme,
                                        nscolor& aResult) {
   EnsureInit();
 
@@ -203,6 +203,10 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme,
       // Safari defaults to the MacOS color implementation for visited links,
       // which in turn uses systemPurpleColor, so we do the same here.
       aResult = GetColorFromUIColor([UIColor systemPurpleColor]);
+      break;
+    case ColorID::TargetTextBackground:
+    case ColorID::TargetTextForeground:
+      aResult = GetStandinForNativeColor(aID, aColorScheme);
       break;
     default:
       NS_WARNING("Someone asked nsILookAndFeel for a color I don't know about");

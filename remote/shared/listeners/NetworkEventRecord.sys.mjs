@@ -17,6 +17,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
  */
 export class NetworkEventRecord {
   #fromCache;
+  #networkEventsMap;
   #networkListener;
   #request;
   #response;
@@ -33,8 +34,17 @@ export class NetworkEventRecord {
    * @param {NavigationManager} navigationManager
    *     The NavigationManager which belongs to the same session as this
    *     NetworkEventRecord.
+   * @param {Map<string, NetworkEventRecord>} networkEventsMap
+   *     The map between request id and NetworkEventRecord instance to complete
+   *     the previous event in case of redirect.
    */
-  constructor(networkEvent, channel, networkListener, navigationManager) {
+  constructor(
+    networkEvent,
+    channel,
+    networkListener,
+    navigationManager,
+    networkEventsMap
+  ) {
     this.#request = new lazy.NetworkRequest(channel, {
       navigationManager,
       rawHeaders: networkEvent.rawHeaders,
@@ -44,6 +54,17 @@ export class NetworkEventRecord {
     this.#fromCache = networkEvent.fromCache;
 
     this.#networkListener = networkListener;
+    this.#networkEventsMap = networkEventsMap;
+
+    if (
+      this.#request.redirectCount &&
+      this.#networkEventsMap.has(this.#requestId)
+    ) {
+      const previousEvent = this.#networkEventsMap.get(this.#requestId);
+      previousEvent.notifyRedirect();
+    }
+
+    this.#networkEventsMap.set(this.#requestId, this);
 
     // NetworkObserver creates a network event when request headers have been
     // parsed.
@@ -60,17 +81,42 @@ export class NetworkEventRecord {
     }
   }
 
+  get #requestId() {
+    return this.#request.requestId;
+  }
+
+  /**
+   * Add network request cache details.
+   *
+   * Required API for a NetworkObserver event owner.
+   *
+   * @param {object} options
+   * @param {boolean} options.fromCache
+   */
+  addCacheDetails(options) {
+    const { fromCache } = options;
+    this.#fromCache = fromCache;
+  }
+
+  /**
+   * Add network request raw headers.
+   *
+   * Required API for a NetworkObserver event owner.
+   *
+   * @param {object} options
+   * @param {string} options.rawHeaders
+   */
+  addRawHeaders(options) {
+    const { rawHeaders } = options;
+    this.#request.addRawHeaders(rawHeaders);
+  }
+
   /**
    * Add network request POST data.
    *
    * Required API for a NetworkObserver event owner.
-   *
-   * @param {object} postData
-   *     The request POST data.
    */
-  addRequestPostData(postData) {
-    this.#request.setPostData(postData);
-  }
+  addRequestPostData() {}
 
   /**
    * Add the initial network response information.
@@ -136,12 +182,17 @@ export class NetworkEventRecord {
    *     Additional meta data about the response.
    */
   addResponseContent(responseContent, responseInfo) {
+    if (this.#request.alreadyCompleted) {
+      return;
+    }
     if (responseInfo.blockedReason) {
       this.#emitFetchError();
     } else {
       this.#response.addResponseContent(responseContent);
       this.#emitResponseCompleted();
     }
+
+    this.#markRequestComplete();
   }
 
   /**
@@ -161,6 +212,16 @@ export class NetworkEventRecord {
    * Not used for RemoteAgent.
    */
   addServiceWorkerTimings() {}
+
+  /**
+   * Complete response in case of redirect.
+   *
+   * This method is required to be called on the previous event.
+   */
+  notifyRedirect() {
+    this.#emitResponseCompleted();
+    this.#markRequestComplete();
+  }
 
   onAuthPrompt(authDetails, authCallbacks) {
     this.#emitAuthRequired(authCallbacks);
@@ -198,5 +259,10 @@ export class NetworkEventRecord {
       request: this.#request,
       response: this.#response,
     });
+  }
+
+  #markRequestComplete() {
+    this.#request.alreadyCompleted = true;
+    this.#networkEventsMap.delete(this.#requestId);
   }
 }

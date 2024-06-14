@@ -17,6 +17,7 @@
 #include "mozilla/layers/RenderRootStateManager.h"
 #include "mozilla/layers/StackingContextHelper.h"
 #include "mozilla/PresShell.h"
+#include "mozilla/ScrollContainerFrame.h"
 #include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "nsContainerFrame.h"
@@ -27,7 +28,6 @@
 #include "nsFrameManager.h"
 #include "nsGkAtoms.h"
 #include "nsIFrameInlines.h"
-#include "nsIScrollableFrame.h"
 #include "nsPresContext.h"
 
 using namespace mozilla;
@@ -196,8 +196,7 @@ void nsCanvasFrame::AppendAnonymousContentTo(nsTArray<nsIContent*>& aElements,
 }
 
 void nsCanvasFrame::Destroy(DestroyContext& aContext) {
-  nsIScrollableFrame* sf = PresShell()->GetRootScrollFrameAsScrollable();
-  if (sf) {
+  if (ScrollContainerFrame* sf = PresShell()->GetRootScrollContainerFrame()) {
     sf->RemoveScrollPositionListener(this);
   }
 
@@ -222,8 +221,8 @@ nsCanvasFrame::SetHasFocus(bool aHasFocus) {
     PresShell()->GetRootFrame()->InvalidateFrameSubtree();
 
     if (!mAddedScrollPositionListener) {
-      nsIScrollableFrame* sf = PresShell()->GetRootScrollFrameAsScrollable();
-      if (sf) {
+      if (ScrollContainerFrame* sf =
+              PresShell()->GetRootScrollContainerFrame()) {
         sf->AddScrollPositionListener(this);
         mAddedScrollPositionListener = true;
       }
@@ -279,9 +278,8 @@ nsRect nsCanvasFrame::CanvasArea() const {
   // matter.
   nsRect result(InkOverflowRect());
 
-  nsIScrollableFrame* scrollableFrame = do_QueryFrame(GetParent());
-  if (scrollableFrame) {
-    nsRect portRect = scrollableFrame->GetScrollPortRect();
+  if (ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(GetParent())) {
+    nsRect portRect = scrollContainerFrame->GetScrollPortRect();
     result.UnionRect(result, nsRect(nsPoint(0, 0), portRect.Size()));
   }
   return result;
@@ -588,12 +586,11 @@ void nsCanvasFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
 void nsCanvasFrame::PaintFocus(DrawTarget* aDrawTarget, nsPoint aPt) {
   nsRect focusRect(aPt, GetSize());
 
-  nsIScrollableFrame* scrollableFrame = do_QueryFrame(GetParent());
-  if (scrollableFrame) {
-    nsRect portRect = scrollableFrame->GetScrollPortRect();
+  if (ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(GetParent())) {
+    nsRect portRect = scrollContainerFrame->GetScrollPortRect();
     focusRect.width = portRect.width;
     focusRect.height = portRect.height;
-    focusRect.MoveBy(scrollableFrame->GetScrollPosition());
+    focusRect.MoveBy(scrollContainerFrame->GetScrollPosition());
   }
 
   // XXX use the root frame foreground color, but should we find BODY frame

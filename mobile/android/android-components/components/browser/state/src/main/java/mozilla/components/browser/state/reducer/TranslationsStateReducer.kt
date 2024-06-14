@@ -6,9 +6,13 @@ package mozilla.components.browser.state.reducer
 
 import mozilla.components.browser.state.action.TranslationsAction
 import mozilla.components.browser.state.selector.findTab
+import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.SessionState
 import mozilla.components.browser.state.state.TranslationsState
+import mozilla.components.concept.engine.translate.LanguageModel
+import mozilla.components.concept.engine.translate.ModelOperation
+import mozilla.components.concept.engine.translate.ModelState
 import mozilla.components.concept.engine.translate.TranslationError
 import mozilla.components.concept.engine.translate.TranslationOperation
 import mozilla.components.concept.engine.translate.TranslationPageSettingOperation
@@ -85,6 +89,7 @@ internal object TranslationsStateReducer {
                         isOfferTranslate = isOfferTranslate,
                         isExpectedTranslate = isExpectedTranslate,
                         isTranslated = true,
+                        isTranslateProcessing = false,
                         translationError = null,
                         translationEngineState = action.translationEngineState,
                     )
@@ -111,7 +116,6 @@ internal object TranslationsStateReducer {
                     // The isTranslated state will be identified on a translation state change.
                     state.copyWithTranslationsState(action.tabId) {
                         it.copy(
-                            isTranslateProcessing = false,
                             translationError = null,
                         )
                     }
@@ -334,10 +338,15 @@ internal object TranslationsStateReducer {
                 }
 
                 TranslationOperation.FETCH_PAGE_SETTINGS -> {
-                    state.copyWithTranslationsState(action.tabId) {
-                        it.copy(
-                            pageSettings = null,
-                        )
+                    val tabId = action.tabId ?: state.selectedTab?.id
+                    if (tabId != null) {
+                        state.copyWithTranslationsState(tabId) {
+                            it.copy(
+                                pageSettings = null,
+                            )
+                        }
+                    } else {
+                        state
                     }
                 }
 
@@ -482,6 +491,24 @@ internal object TranslationsStateReducer {
                 translationEngine = state.translationEngine.copy(
                     languageSettings = action.languageSettings,
                     engineError = null,
+                ),
+            )
+        }
+
+        is TranslationsAction.ManageLanguageModelsAction -> {
+            val processState = if (action.options.operation == ModelOperation.DOWNLOAD) {
+                ModelState.DOWNLOAD_IN_PROGRESS
+            } else {
+                ModelState.DELETION_IN_PROGRESS
+            }
+            val newModelState = LanguageModel.determineNewLanguageModelState(
+                currentLanguageModels = state.translationEngine.languageModels,
+                options = action.options,
+                newStatus = processState,
+            )
+            state.copy(
+                translationEngine = state.translationEngine.copy(
+                    languageModels = newModelState,
                 ),
             )
         }

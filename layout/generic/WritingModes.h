@@ -67,14 +67,9 @@ enum class LogicalCorner : uint8_t {
 // Physical axis constants.
 enum class PhysicalAxis : uint8_t { Vertical, Horizontal };
 
-// Represents zero or more physical axes.
-enum class PhysicalAxes : uint8_t {
-  None = 0x0,
-  Horizontal = 0x1,
-  Vertical = 0x2,
-  Both = Horizontal | Vertical,
-};
-MOZ_MAKE_ENUM_CLASS_BITWISE_OPERATORS(PhysicalAxes)
+using PhysicalAxes = EnumSet<PhysicalAxis>;
+static constexpr PhysicalAxes kPhysicalAxesBoth{PhysicalAxis::Vertical,
+                                                PhysicalAxis::Horizontal};
 
 inline LogicalAxis GetOrthogonalAxis(LogicalAxis aAxis) {
   return aAxis == LogicalAxis::Block ? LogicalAxis::Inline : LogicalAxis::Block;
@@ -2034,69 +2029,65 @@ class LogicalRect {
 };
 
 template <typename T>
-const T& StyleRect<T>::Get(WritingMode aWM, LogicalSide aSide) const {
+const T& StyleRect<T>::Get(LogicalSide aSide, WritingMode aWM) const {
   return Get(aWM.PhysicalSide(aSide));
 }
 
 template <typename T>
 const T& StyleRect<T>::GetIStart(WritingMode aWM) const {
-  return Get(aWM, LogicalSide::IStart);
+  return Get(LogicalSide::IStart, aWM);
 }
 
 template <typename T>
 const T& StyleRect<T>::GetBStart(WritingMode aWM) const {
-  return Get(aWM, LogicalSide::BStart);
+  return Get(LogicalSide::BStart, aWM);
 }
 
 template <typename T>
 const T& StyleRect<T>::GetIEnd(WritingMode aWM) const {
-  return Get(aWM, LogicalSide::IEnd);
+  return Get(LogicalSide::IEnd, aWM);
 }
 
 template <typename T>
 const T& StyleRect<T>::GetBEnd(WritingMode aWM) const {
-  return Get(aWM, LogicalSide::BEnd);
+  return Get(LogicalSide::BEnd, aWM);
 }
 
 template <typename T>
-T& StyleRect<T>::Get(WritingMode aWM, LogicalSide aSide) {
+T& StyleRect<T>::Get(LogicalSide aSide, WritingMode aWM) {
   return Get(aWM.PhysicalSide(aSide));
 }
 
 template <typename T>
 T& StyleRect<T>::GetIStart(WritingMode aWM) {
-  return Get(aWM, LogicalSide::IStart);
+  return Get(LogicalSide::IStart, aWM);
 }
 
 template <typename T>
 T& StyleRect<T>::GetBStart(WritingMode aWM) {
-  return Get(aWM, LogicalSide::BStart);
+  return Get(LogicalSide::BStart, aWM);
 }
 
 template <typename T>
 T& StyleRect<T>::GetIEnd(WritingMode aWM) {
-  return Get(aWM, LogicalSide::IEnd);
+  return Get(LogicalSide::IEnd, aWM);
 }
 
 template <typename T>
 T& StyleRect<T>::GetBEnd(WritingMode aWM) {
-  return Get(aWM, LogicalSide::BEnd);
+  return Get(LogicalSide::BEnd, aWM);
 }
 
 template <typename T>
 const T& StyleRect<T>::Start(mozilla::LogicalAxis aAxis,
                              mozilla::WritingMode aWM) const {
-  return Get(aWM, aAxis == mozilla::LogicalAxis::Inline
-                      ? mozilla::LogicalSide::IStart
-                      : mozilla::LogicalSide::BStart);
+  return aAxis == LogicalAxis::Inline ? GetIStart(aWM) : GetBStart(aWM);
 }
 
 template <typename T>
 const T& StyleRect<T>::End(mozilla::LogicalAxis aAxis,
                            mozilla::WritingMode aWM) const {
-  return Get(aWM, aAxis == mozilla::LogicalAxis::Inline
-                      ? mozilla::LogicalSide::IEnd
-                      : mozilla::LogicalSide::BEnd);
+  return aAxis == LogicalAxis::Inline ? GetIEnd(aWM) : GetBEnd(aWM);
 }
 
 inline AspectRatio AspectRatio::ConvertToWritingMode(
@@ -2203,27 +2194,6 @@ inline mozilla::StyleAlignFlags nsStylePosition::UsedSelfAlignment(
 inline mozilla::StyleContentDistribution nsStylePosition::UsedContentAlignment(
     mozilla::LogicalAxis aAxis) const {
   return aAxis == mozilla::LogicalAxis::Block ? mAlignContent : mJustifyContent;
-}
-
-inline mozilla::StyleContentDistribution nsStylePosition::UsedTracksAlignment(
-    mozilla::LogicalAxis aAxis, uint32_t aIndex) const {
-  using T = mozilla::StyleAlignFlags;
-  const auto& tracksAlignment =
-      aAxis == mozilla::LogicalAxis::Block ? mAlignTracks : mJustifyTracks;
-  if (MOZ_LIKELY(tracksAlignment.IsEmpty())) {
-    // An empty array encodes the initial value, 'normal', which behaves as
-    // 'start' for Grid containers.
-    return mozilla::StyleContentDistribution{T::START};
-  }
-
-  // If there are fewer values than tracks, then the last value is used for all
-  // the remaining tracks.
-  const auto& ta = tracksAlignment.AsSpan();
-  auto align = ta[std::min<size_t>(aIndex, ta.Length() - 1)];
-  if (align.primary == T::NORMAL) {
-    align = mozilla::StyleContentDistribution{T::START};
-  }
-  return align;
 }
 
 #endif  // WritingModes_h_
