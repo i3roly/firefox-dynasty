@@ -22,11 +22,43 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::os::raw::c_void;
+use std::str::*;
+
 
 // Normally we would generate this with a build script, but macos is
 // cross-compiled on linux, and we'd have to figure out e.g. include paths,
 // etc.. This is easier.
 include!("bindings_macos.rs");
+
+//rip cubeb-audio's macro check because we need to fallback on OS X < 10.12
+const MACOS_KERNEL_MAJOR_VERSION_MOJAVE: u32 = 18;
+// thanking the cubeb-coreaudio guy again
+
+#[derive(Debug, PartialOrd, PartialEq)]
+enum ParseMacOSKernelVersionError {
+    SysCtl,
+    Malformed,
+    Parsing,
+}
+
+//rip cubeb-audio's macro check because we need to fallback on OS X < 10.12
+fn macos_kernel_major_version() -> std::result::Result<u32, ParseMacOSKernelVersionError> {
+    let ver = whatsys::kernel_version();
+    if ver.is_none() {
+        return Err(ParseMacOSKernelVersionError::SysCtl);
+    }
+    let ver = ver.unwrap();
+    let major = ver.split('.').next();
+    if major.is_none() {
+        return Err(ParseMacOSKernelVersionError::Malformed);
+    }
+    let parsed_major = u32::from_str(major.unwrap());
+    if parsed_major.is_err() {
+        return Err(ParseMacOSKernelVersionError::Parsing);
+    }
+    Ok(parsed_major.unwrap())
+}
+
 
 #[repr(C)]
 pub struct __SecIdentity(c_void);
@@ -61,7 +93,8 @@ impl_TCFType!(SecTrust, SecTrustRef, SecTrustGetTypeID);
 type SecCertificateCopyKeyType = unsafe extern "C" fn(SecCertificateRef) -> SecKeyRef;
 type SecTrustEvaluateWithErrorType =
     unsafe extern "C" fn(trust: SecTrustRef, error: *mut CFErrorRef) -> bool;
-
+type SecTrustEvaluateType =
+    unsafe extern "C" fn(trust: SecTrustRef, error: *mut u32) -> OSStatus;
 #[derive(Ord, Eq, PartialOrd, PartialEq)]
 enum SecStringConstant {
     // These are available in macOS 10.13
@@ -80,6 +113,7 @@ enum SecStringConstant {
 struct SecurityFramework<'a> {
     sec_certificate_copy_key: Symbol<'a, SecCertificateCopyKeyType>,
     sec_trust_evaluate_with_error: Symbol<'a, SecTrustEvaluateWithErrorType>,
+    sec_trust_evaluate: Symbol<'a, SecTrustEvaluateType>,
     sec_string_constants: BTreeMap<SecStringConstant, String>,
 }
 
@@ -104,6 +138,11 @@ impl<'a> SecurityFramework<'a> {
         let sec_trust_evaluate_with_error = unsafe {
             library
                 .get::<SecTrustEvaluateWithErrorType>(b"SecTrustEvaluateWithError\0")
+                .map_err(|e| error_here!(ErrorType::ExternalError, e.to_string()))?
+        };
+        let sec_trust_evaluate = unsafe {
+            library
+                .get::<SecTrustEvaluateType>(b"SecTrustEvaluate\0")
                 .map_err(|e| error_here!(ErrorType::ExternalError, e.to_string()))?
         };
         let mut sec_string_constants = BTreeMap::new();
@@ -137,6 +176,7 @@ impl<'a> SecurityFramework<'a> {
         Ok(SecurityFramework {
             sec_certificate_copy_key,
             sec_trust_evaluate_with_error,
+            sec_trust_evaluate,
             sec_string_constants,
         })
     }
@@ -152,7 +192,6 @@ impl<'a> SecurityFrameworkHolder<'a> {
             framework: SecurityFramework::new(),
         }
     }
-
     /// SecCertificateCopyKey is available in macOS 10.14
     fn sec_certificate_copy_key(&self, certificate: &SecCertificate) -> Result<SecKey, Error> {
         match &self.framework {
@@ -180,7 +219,18 @@ impl<'a> SecurityFrameworkHolder<'a> {
             Err(e) => Err(e.clone()),
         }
     }
-
+    //fallback to deprecated api
+    fn sec_trust_evaluate(&self, trust: &SecTrust) -> Result<OSStatus, Error> {
+        match &self.framework {
+            Ok(framework) => unsafe {
+                Ok((framework.sec_trust_evaluate)(
+                    trust.as_concrete_TypeRef(),
+                    std::ptr::null_mut(),
+                ))
+            },
+            Err(e) => Err(e.clone()),
+        }
+    }
     fn get_sec_string_constant(
         &self,
         sec_string_constant: SecStringConstant,
@@ -772,7 +822,12 @@ fn get_issuers(identity: &SecIdentity) -> Result<Vec<SecCertificate>, Error> {
     }
     // We ignore the return value here because we don't care if the certificate is trusted or not -
     // we're only doing this to build its issuer chain as much as possible.
-    let _ = SECURITY_FRAMEWORK.sec_trust_evaluate_with_error(&trust)?;
+    
+    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MOJAVE) {
+        let _ = SECURITY_FRAMEWORK.sec_trust_evaluate_with_error(&trust)?;
+    } else {
+        let _ = SECURITY_FRAMEWORK.sec_trust_evaluate(&trust)?;
+    }
     let certificate_count = unsafe { SecTrustGetCertificateCount(trust.as_concrete_TypeRef()) };
     let mut certificates = Vec::with_capacity(
         certificate_count
