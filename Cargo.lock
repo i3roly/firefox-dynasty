@@ -4322,6 +4322,7 @@ dependencies = [
  "rsclientcerts",
  "sha2",
  "winapi",
+ "whatsys", #needed for version check and use of deprecated API sub-BROjave
 ]
 
 [[package]]

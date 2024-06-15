@@ -473,7 +473,7 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
     contentRect.origin.y -= (newWindowFrame.size.height - aRect.size.height);
 
     if (mWindowType != WindowType::Popup) {
-      contentRect.origin.y -= NSApp.mainMenu.menuBarHeight;
+      contentRect.origin.y -= [[NSApp mainMenu] menuBarHeight];
     }
   }
 
@@ -513,53 +513,55 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
 
   // setup our notification delegate. Note that setDelegate: does NOT retain.
   mDelegate = [[WindowDelegate alloc] initWithGeckoWindow:this];
-  mWindow.delegate = mDelegate;
+  [mWindow setDelegate:mDelegate];
 
   // Make sure that the content rect we gave has been honored.
   NSRect wantedFrame = [mWindow frameRectForChildViewRect:contentRect];
-  if (!NSEqualRects(mWindow.frame, wantedFrame)) {
+  if (!NSEqualRects([mWindow frame], wantedFrame)) {
     // This can happen when the window is not on the primary screen.
     [mWindow setFrame:wantedFrame display:NO];
   }
   UpdateBounds();
 
   if (mWindowType == WindowType::Invisible) {
-    mWindow.level = kCGDesktopWindowLevelKey;
+    [mWindow setLevel:kCGDesktopWindowLevelKey];
   }
 
   if (mWindowType == WindowType::Popup) {
     SetPopupWindowLevel();
-    mWindow.backgroundColor = NSColor.clearColor;
-    mWindow.opaque = NO;
+    [mWindow setBackgroundColor:[NSColor clearColor]];
+    [mWindow setOpaque:NO];
 
     // When multiple spaces are in use and the browser is assigned to a
     // particular space, override the "Assign To" space and display popups on
     // the active space. Does not work with multiple displays. See
     // NeedsRecreateToReshow() for multi-display with multi-space workaround.
-    mWindow.collectionBehavior = mWindow.collectionBehavior |
-                                 NSWindowCollectionBehaviorMoveToActiveSpace;
-  } else {
+    NSWindowCollectionBehavior behavior = [mWindow collectionBehavior];
+    behavior |= NSWindowCollectionBehaviorMoveToActiveSpace;
+    [mWindow setCollectionBehavior:behavior];
+   } else {
     // Non-popup windows are always opaque.
-    mWindow.opaque = YES;
+    [mWindow setOpaque:YES];
   }
-
+  NSWindowCollectionBehavior newBehavior = [mWindow collectionBehavior];
   if (mAlwaysOnTop || mIsAlert) {
-    mWindow.level = NSFloatingWindowLevel;
-    mWindow.collectionBehavior =
-        mWindow.collectionBehavior | NSWindowCollectionBehaviorCanJoinAllSpaces;
+   [mWindow setLevel:NSFloatingWindowLevel];
+   newBehavior |= NSWindowCollectionBehaviorCanJoinAllSpaces;
   }
-  mWindow.contentMinSize = NSMakeSize(60, 60);
+  [mWindow setCollectionBehavior:newBehavior];
+
+  [mWindow setContentMinSize:NSMakeSize(60, 60)];
   [mWindow disableCursorRects];
 
   // Make the window use CoreAnimation from the start, so that we don't
   // switch from a non-CA window to a CA-window in the middle.
-  mWindow.contentView.wantsLayer = YES;
+  [[mWindow contentView] setWantsLayer:YES];
 
   // Make sure the window starts out not draggable by the background.
   // We will turn it on as necessary.
-  mWindow.movableByWindowBackground = NO;
+  [mWindow setMovableByWindowBackground:NO]; 
 
-  [WindowDataMap.sharedWindowDataMap ensureDataForWindow:mWindow];
+  [[WindowDataMap sharedWindowDataMap] ensureDataForWindow:mWindow]; 
   mWindowMadeHere = true;
 
   return NS_OK;
@@ -2287,9 +2289,11 @@ LayoutDeviceIntMargin nsCocoaWindow::ClientToWindowMargin() {
 
     return frameRect - clientRect;
   }
-  /*else {
-   LayoutDeviceIntRect r(0, 0, .width, aClientSize.height);
-    NSRect rect = nsCocoaUtils::DevPixelsToCocoaPoints(r, backingScale);
+  else {
+   //LayoutDeviceIntRect r(0, 0, .width, aClientSize.height);
+   LayoutDeviceIntRect r = GetClientBounds(); //^is a proper restatement of the
+                                              //line commented out above?
+   NSRect rect = nsCocoaUtils::DevPixelsToCocoaPoints(r, backingScale);
 
   // Our caller expects the inflated rect for windows *with separate titlebars*,
   // i.e. for windows where [mWindow drawsContentsIntoWindowFrame] is NO.
@@ -2302,11 +2306,15 @@ LayoutDeviceIntMargin nsCocoaWindow::ClientToWindowMargin() {
   // that, see bug 1445738.
   NSUInteger styleMask = [mWindow styleMask];
   styleMask &= ~NSFullSizeContentViewWindowMask;
-  NSRect inflatedRect = [NSWindow frameRectForContentRect:rect styleMask:styleMask];
-  r = nsCocoaUtils::CocoaRectToGeckoRectDevPix(inflatedRect, backingScale);
-
-  return r.Size();
-  }*/
+  NSRect inflatedNSRect = [NSWindow frameRectForContentRect:rect styleMask:styleMask];
+  const auto inflatedRect = nsCocoaUtils::CocoaRectToGeckoRectDevPix(inflatedNSRect, backingScale);
+  const auto clientRect = nsCocoaUtils::CocoaRectToGeckoRectDevPix(rect, backingScale);
+  return inflatedRect - clientRect;
+  /* i don't know if the above is right for the overhauled code, but this is the
+   * original implementation (lines 2128 to 2153):
+   * https://hg.mozilla.org/mozilla-unified/file/b9f6138e55656ff6447de1b7c9cfab37906035db/widget/cocoa/nsCocoaWindow.mm#l2128
+   */
+  }
 
   NS_OBJC_END_TRY_BLOCK_RETURN({});
 }
