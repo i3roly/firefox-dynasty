@@ -5,10 +5,16 @@
 
 add_setup(() => SpecialPowers.pushPrefEnv({ set: [["sidebar.revamp", true]] }));
 
+registerCleanupFunction(() =>
+  Services.prefs.clearUserPref("sidebar.main.tools")
+);
+
 add_task(async function test_tools_prefs() {
   const win = await BrowserTestUtils.openNewBrowserWindow();
   const { document } = win;
   const sidebar = document.querySelector("sidebar-main");
+  ok(sidebar, "Sidebar is shown.");
+  await sidebar.updateComplete;
 
   is(
     Services.prefs.getStringPref("sidebar.main.tools"),
@@ -17,10 +23,7 @@ add_task(async function test_tools_prefs() {
   );
 
   // Open customize sidebar
-  let button = sidebar.customizeButton;
-  let promiseFocused = BrowserTestUtils.waitForEvent(win, "SidebarFocused");
-  button.click();
-  await promiseFocused;
+  await toggleSidebarPanel(win, "viewCustomizeSidebar");
 
   // Set tools
   let customizeDocument = win.SidebarController.browser.contentDocument;
@@ -74,16 +77,15 @@ add_task(async function test_tools_prefs() {
   //   Open a new window to check that it uses the pref
   const newWin = await BrowserTestUtils.openNewBrowserWindow();
   const newSidebar = newWin.document.querySelector("sidebar-main");
+  ok(newSidebar, "New Window sidebar is shown.");
+  await BrowserTestUtils.waitForCondition(
+    async () => (await newSidebar.updateComplete) && newSidebar.customizeButton,
+    `The sidebar-main component has fully rendered, and the customize button is present.`
+  );
 
   // TO DO: opening the customize category can be removed once bug 1898613 is resolved.
   // Open customize sidebar
-  let newbutton = newSidebar.customizeButton;
-  let newPromiseFocused = BrowserTestUtils.waitForEvent(
-    newWin,
-    "SidebarFocused"
-  );
-  newbutton.click();
-  await newPromiseFocused;
+  await toggleSidebarPanel(newWin, "viewCustomizeSidebar");
 
   let newCustomizeDocument = newWin.SidebarController.browser.contentDocument;
   let newCustomizeComponent =

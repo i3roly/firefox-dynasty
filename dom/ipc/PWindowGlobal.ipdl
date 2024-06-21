@@ -5,7 +5,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 include "mozilla/dom/DocShellMessageUtils.h";
-include "mozilla/dom/FeaturePolicyUtils.h";
 include "mozilla/dom/IdentityCredentialSerializationHelpers.h";
 include "mozilla/dom/PermissionMessageUtils.h";
 include "mozilla/dom/SessionStoreMessageUtils.h";
@@ -34,7 +33,6 @@ using mozilla::layers::LayersId from "mozilla/layers/LayersTypes.h";
 [RefCounted] using class nsITransportSecurityInfo from "nsITransportSecurityInfo.h";
 using mozilla::UseCounters from "mozilla/UseCounter.h";
 using mozilla::dom::MaybeDiscardedWindowContext from "mozilla/dom/WindowContext.h";
-[RefCounted] using mozilla::dom::FeaturePolicy from "mozilla/dom/FeaturePolicy.h";
 [RefCounted] using mozilla::dom::SessionStoreRestoreData from "mozilla/dom/SessionStoreRestoreData.h";
 using mozilla::dom::IdentityCredentialInit from "mozilla/dom/IdentityCredentialBinding.h";
 using mozilla::dom::IdentityCredentialRequestOptions from "mozilla/dom/IdentityCredentialBinding.h";
@@ -89,12 +87,15 @@ child:
    */
   async ResetScalingZoom();
 
-  async SetContainerFeaturePolicy(nullable FeaturePolicy aContainerFeaturePolicy);
-
   async RestoreDocShellState(DocShellRestoreState aState)
     returns (bool success);
 
   async RestoreTabContent(nullable SessionStoreRestoreData aData) returns (bool success);
+
+  // This notifies a window that a credential that is effective for its most recent
+  // call to NotifyPendingIdentityCredentialDiscovery has been stored, so it can
+  // resolve a pending Promise for getting that credential.
+  async NotifyStoredIdentityCredential(IPCIdentityCredential aIdentityCredential);
 
 both:
   async RawMessage(JSActorMessageMeta aMetadata, ClonedMessageData? aData,
@@ -213,6 +214,14 @@ parent:
   async CollectIdentityCredentialFromCredentialStore(IdentityCredentialRequestOptions aOptions)
       returns (IPCIdentityCredential[] identityCredential);
   async StoreIdentityCredential(IPCIdentityCredential aCredential)
+      returns (nsresult rv);
+
+  // This notifies the main process that this window is going to open a window to try to
+  // get the user logged into an account for this identity credential request.
+  // The main process only returns when it has stored this credential request information
+  // so that it can tell the client process when a credential that works for this request
+  // is stored via NotifyStoredIdentityCredential.
+  async NotifyPendingIdentityCredentialDiscovery(IdentityCredentialRequestOptions aOptions)
       returns (nsresult rv);
 
   async GetStorageAccessPermission() returns(uint32_t permission_action);

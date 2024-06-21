@@ -421,7 +421,7 @@ NS_IMETHODIMP EditorEventListener::HandleEvent(Event* aEvent) {
       // has not received the preceding mousedown event of this mouseup event.
       // So, mMouseDownOrUpConsumedByIME may be invalid here.  However,
       // this is not a matter because mMouseDownOrUpConsumedByIME is referred
-      // only by eMouseClick case but click event is fired only in case #1.
+      // only by ePointerClick case but click event is fired only in case #1.
       // So, before a click event is fired, mMouseDownOrUpConsumedByIME is
       // always initialized in the eMouseDown case if it's referred.
       if (NotifyIMEOfMouseButtonEvent(internalEvent->AsMouseEvent())) {
@@ -440,7 +440,7 @@ NS_IMETHODIMP EditorEventListener::HandleEvent(Event* aEvent) {
       return rv;
     }
     // click
-    case eMouseClick: {
+    case ePointerClick: {
       WidgetMouseEvent* widgetMouseEvent = internalEvent->AsMouseEvent();
       // Don't handle non-primary click events
       if (widgetMouseEvent->mButton != MouseButton::ePrimary) {
@@ -449,7 +449,7 @@ NS_IMETHODIMP EditorEventListener::HandleEvent(Event* aEvent) {
       [[fallthrough]];
     }
     // auxclick
-    case eMouseAuxClick: {
+    case ePointerAuxClick: {
       WidgetMouseEvent* widgetMouseEvent = internalEvent->AsMouseEvent();
       if (NS_WARN_IF(!widgetMouseEvent)) {
         return NS_OK;
@@ -461,9 +461,9 @@ NS_IMETHODIMP EditorEventListener::HandleEvent(Event* aEvent) {
         widgetMouseEvent->PreventDefault();
         return NS_OK;
       }
-      nsresult rv = MouseClick(widgetMouseEvent);
+      nsresult rv = PointerClick(widgetMouseEvent);
       NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
-                           "EditorEventListener::MouseClick() failed");
+                           "EditorEventListener::PointerClick() failed");
       return rv;
     }
     // focus
@@ -697,14 +697,15 @@ nsresult EditorEventListener::KeyPress(WidgetKeyboardEvent* aKeyboardEvent) {
   return NS_OK;
 }
 
-nsresult EditorEventListener::MouseClick(WidgetMouseEvent* aMouseClickEvent) {
-  if (NS_WARN_IF(!aMouseClickEvent) || DetachedFromEditor()) {
+nsresult EditorEventListener::PointerClick(
+    WidgetMouseEvent* aPointerClickEvent) {
+  if (NS_WARN_IF(!aPointerClickEvent) || DetachedFromEditor()) {
     return NS_OK;
   }
   // nothing to do if editor isn't editable or clicked on out of the editor.
   OwningNonNull<EditorBase> editorBase = *mEditorBase;
   if (editorBase->IsReadonly() ||
-      !editorBase->IsAcceptableInputEvent(aMouseClickEvent)) {
+      !editorBase->IsAcceptableInputEvent(aPointerClickEvent)) {
     return NS_OK;
   }
 
@@ -714,14 +715,14 @@ nsresult EditorEventListener::MouseClick(WidgetMouseEvent* aMouseClickEvent) {
     if (RefPtr<nsPresContext> presContext = GetPresContext()) {
       RefPtr<Element> focusedElement = mEditorBase->GetFocusedElement();
       IMEStateManager::OnClickInEditor(*presContext, focusedElement,
-                                       *aMouseClickEvent);
+                                       *aPointerClickEvent);
       if (DetachedFromEditor()) {
         return NS_OK;
       }
     }
   }
 
-  if (DetachedFromEditorOrDefaultPrevented(aMouseClickEvent)) {
+  if (DetachedFromEditorOrDefaultPrevented(aPointerClickEvent)) {
     // We're done if 'preventdefault' is true (see for example bug 70698).
     return NS_OK;
   }
@@ -742,7 +743,7 @@ nsresult EditorEventListener::MouseClick(WidgetMouseEvent* aMouseClickEvent) {
   //     though this makes web apps cannot prevent middle click paste with
   //     calling preventDefault() of "click" nor "auxclick".
 
-  if (aMouseClickEvent->mButton != MouseButton::eMiddle ||
+  if (aPointerClickEvent->mButton != MouseButton::eMiddle ||
       !WidgetMouseEvent::IsMiddleClickPasteEnabled()) {
     return NS_OK;
   }
@@ -755,11 +756,11 @@ nsresult EditorEventListener::MouseClick(WidgetMouseEvent* aMouseClickEvent) {
   if (NS_WARN_IF(!presContext)) {
     return NS_OK;
   }
-  MOZ_ASSERT(!aMouseClickEvent->DefaultPrevented());
+  MOZ_ASSERT(!aPointerClickEvent->DefaultPrevented());
   nsEventStatus status = nsEventStatus_eIgnore;
   RefPtr<EventStateManager> esm = presContext->EventStateManager();
   DebugOnly<nsresult> rvIgnored = esm->HandleMiddleClickPaste(
-      presShell, aMouseClickEvent, &status, editorBase);
+      presShell, aPointerClickEvent, &status, editorBase);
   NS_WARNING_ASSERTION(
       NS_SUCCEEDED(rvIgnored),
       "EventStateManager::HandleMiddleClickPaste() failed, but ignored");
@@ -767,7 +768,7 @@ nsresult EditorEventListener::MouseClick(WidgetMouseEvent* aMouseClickEvent) {
     // We no longer need to StopImmediatePropagation here since
     // ClickHandlerChild.sys.mjs checks for and ignores editables, so won't
     // re-handle the event
-    aMouseClickEvent->PreventDefault();
+    aPointerClickEvent->PreventDefault();
   }
   return NS_OK;
 }

@@ -8,6 +8,7 @@
 
 #include "nsCharTraits.h"
 #include "nsContentUtils.h"
+#include "mozilla/dom/Element.h"
 #include "mozilla/dom/nsCSPContext.h"
 
 #include <utility>
@@ -32,14 +33,23 @@ static nsString MaybeTruncateSample(const nsAString& aSample) {
 }
 
 CSPViolationData::CSPViolationData(uint32_t aViolatedPolicyIndex,
-                                   Resource&& aResource, uint32_t aLineNumber,
-                                   uint32_t aColumnNumber,
-                                   const nsAString& aSample)
+                                   Resource&& aResource,
+                                   const CSPDirective aEffectiveDirective,
+                                   const nsAString& aSourceFile,
+                                   uint32_t aLineNumber, uint32_t aColumnNumber,
+                                   Element* aElement, const nsAString& aSample)
     : mViolatedPolicyIndex{aViolatedPolicyIndex},
       mResource{std::move(aResource)},
+      mEffectiveDirective{aEffectiveDirective},
+      mSourceFile{aSourceFile},
       mLineNumber{aLineNumber},
       mColumnNumber{aColumnNumber},
+      mElement{aElement},
       mSample{MaybeTruncateSample(aSample)} {}
+
+// Required for `mElement`, since its destructor requires a definition of
+// `Element`.
+CSPViolationData::~CSPViolationData() = default;
 
 auto CSPViolationData::BlockedContentSourceOrUnknown() const
     -> BlockedContentSource {

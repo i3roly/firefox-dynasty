@@ -281,6 +281,13 @@ IndexedDatabaseManager* IndexedDatabaseManager::Get() {
   return gDBManager;
 }
 
+// static
+already_AddRefed<IndexedDatabaseManager>
+IndexedDatabaseManager::FactoryCreate() {
+  RefPtr<IndexedDatabaseManager> indexedDatabaseManager = GetOrCreate();
+  return indexedDatabaseManager.forget();
+}
+
 nsresult IndexedDatabaseManager::Init() {
   NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
 
@@ -342,6 +349,30 @@ void IndexedDatabaseManager::Destroy() {
                                   kPrefMaxSerilizedMsgSize);
 
   delete this;
+}
+
+nsresult IndexedDatabaseManager::EnsureBackgroundActor() {
+  if (mBackgroundActor) {
+    return NS_OK;
+  }
+
+  PBackgroundChild* bgActor = BackgroundChild::GetForCurrentThread();
+  if (NS_WARN_IF(!bgActor)) {
+    return NS_ERROR_FAILURE;
+  }
+
+  {
+    BackgroundUtilsChild* actor = new BackgroundUtilsChild(this);
+
+    mBackgroundActor = static_cast<BackgroundUtilsChild*>(
+        bgActor->SendPBackgroundIndexedDBUtilsConstructor(actor));
+
+    if (NS_WARN_IF(!mBackgroundActor)) {
+      return NS_ERROR_FAILURE;
+    }
+  }
+
+  return NS_OK;
 }
 
 // static
@@ -596,27 +627,7 @@ nsresult IndexedDatabaseManager::BlockAndGetFileReferences(
     return NS_ERROR_UNEXPECTED;
   }
 
-  if (!mBackgroundActor) {
-    PBackgroundChild* bgActor = BackgroundChild::GetForCurrentThread();
-    if (NS_WARN_IF(!bgActor)) {
-      return NS_ERROR_FAILURE;
-    }
-
-    BackgroundUtilsChild* actor = new BackgroundUtilsChild(this);
-
-    // We don't set event target for BackgroundUtilsChild because:
-    // 1. BackgroundUtilsChild is a singleton.
-    // 2. SendGetFileReferences is a sync operation to be returned asap if
-    // unlabeled.
-    // 3. The rest operations like DeleteMe/__delete__ only happens at shutdown.
-    // Hence, we should keep it unlabeled.
-    mBackgroundActor = static_cast<BackgroundUtilsChild*>(
-        bgActor->SendPBackgroundIndexedDBUtilsConstructor(actor));
-  }
-
-  if (NS_WARN_IF(!mBackgroundActor)) {
-    return NS_ERROR_FAILURE;
-  }
+  QM_TRY(MOZ_TO_RESULT(EnsureBackgroundActor()));
 
   if (!mBackgroundActor->SendGetFileReferences(
           aPersistenceType, nsCString(aOrigin), nsString(aDatabaseName),
@@ -645,6 +656,10 @@ nsresult IndexedDatabaseManager::FlushPendingFileDeletions() {
 
   return NS_OK;
 }
+
+NS_IMPL_ADDREF(IndexedDatabaseManager)
+NS_IMPL_RELEASE_WITH_DESTROY(IndexedDatabaseManager, Destroy())
+NS_IMPL_QUERY_INTERFACE(IndexedDatabaseManager, nsIIndexedDatabaseManager)
 
 // static
 void IndexedDatabaseManager::LoggingModePrefChangedCallback(

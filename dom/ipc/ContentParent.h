@@ -488,6 +488,7 @@ class ContentParent final : public PContentParent,
       const UserActivation::Modifiers& aModifiers,
       nsIPrincipal* aTriggeringPrincipal, nsIContentSecurityPolicy* aCsp,
       nsIReferrerInfo* aReferrerInfo, const OriginAttributes& aOriginAttributes,
+      bool aUserActivation, bool aTextDirectiveUserActivation,
       CreateWindowResolver&& aResolve);
 
   mozilla::ipc::IPCResult RecvCreateWindowInDifferentProcess(
@@ -497,7 +498,8 @@ class ContentParent final : public PContentParent,
       const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
       const nsAString& aName, nsIPrincipal* aTriggeringPrincipal,
       nsIContentSecurityPolicy* aCsp, nsIReferrerInfo* aReferrerInfo,
-      const OriginAttributes& aOriginAttributes);
+      const OriginAttributes& aOriginAttributes, bool aUserActivation,
+      bool aTextDirectiveUserActivation);
 
   static void BroadcastBlobURLRegistration(
       const nsACString& aURI, BlobImpl* aBlobImpl, nsIPrincipal* aPrincipal,
@@ -717,7 +719,8 @@ class ContentParent final : public PContentParent,
       bool* aWindowIsNew, int32_t& aOpenLocation,
       nsIPrincipal* aTriggeringPrincipal, nsIReferrerInfo* aReferrerInfo,
       bool aLoadUri, nsIContentSecurityPolicy* aCsp,
-      const OriginAttributes& aOriginAttributes);
+      const OriginAttributes& aOriginAttributes, bool aUserActivation,
+      bool aTextDirectiveUserActivation);
 
   explicit ContentParent(const nsACString& aRemoteType);
 
@@ -971,11 +974,11 @@ class ContentParent final : public PContentParent,
                                                const int32_t& aWhichClipboard,
                                                bool* aHasType);
 
-  mozilla::ipc::IPCResult RecvGetClipboardAsync(
+  mozilla::ipc::IPCResult RecvGetClipboardDataSnapshot(
       nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
       const MaybeDiscarded<WindowContext>& aRequestingWindowContext,
       mozilla::NotNull<nsIPrincipal*> aRequestingPrincipal,
-      GetClipboardAsyncResolver&& aResolver);
+      GetClipboardDataSnapshotResolver&& aResolver);
 
   mozilla::ipc::IPCResult RecvGetClipboardDataSnapshotSync(
       nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
@@ -1389,7 +1392,7 @@ class ContentParent final : public PContentParent,
 
   mozilla::ipc::IPCResult RecvSetContainerFeaturePolicy(
       const MaybeDiscardedBrowsingContext& aContainerContext,
-      FeaturePolicy* aContainerFeaturePolicy);
+      MaybeFeaturePolicyInfo&& aContainerFeaturePolicyInfo);
 
   mozilla::ipc::IPCResult RecvGetSystemIcon(nsIURI* aURI,
                                             GetSystemIconResolver&& aResolver);

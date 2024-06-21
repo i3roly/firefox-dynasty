@@ -56,6 +56,12 @@ function click(element, message) {
   });
 }
 
+function focusElementAndSynthesizeKey(element, key) {
+  assertVisibility({ visible: { element } });
+  element.focus();
+  EventUtils.synthesizeKey(key);
+}
+
 /**
  * Get all elements that match the l10n id.
  *
@@ -1614,6 +1620,7 @@ class SelectTranslationsTestUtils {
       await BrowserTestUtils.waitForEvent(
         document,
         "SelectTranslationsPanelStateChanged",
+        false,
         event => event.detail.phase === phase
       );
     }
@@ -2189,8 +2196,8 @@ class SelectTranslationsTestUtils {
     assertVisibility({ visible: { translateFullPageButton } });
     click(translateFullPageButton);
     await FullPageTranslationsTestUtils.assertTranslationsButton(
-      { button: true, circleArrows: true, locale: false, icon: true },
-      "The icon presents the loading indicator."
+      { button: true, circleArrows: false, locale: true, icon: true },
+      "The icon presents the locale."
     );
   }
 

@@ -646,51 +646,6 @@ void nsBaseWidget::RemoveChild(nsIWidget* aChild) {
   aChild->SetPrevSibling(nullptr);
 }
 
-//-------------------------------------------------------------------------
-//
-// Sets widget's position within its parent's child list.
-//
-//-------------------------------------------------------------------------
-void nsBaseWidget::SetZIndex(int32_t aZIndex) {
-  // Hold a ref to ourselves just in case, since we're going to remove
-  // from our parent.
-  nsCOMPtr<nsIWidget> kungFuDeathGrip(this);
-
-  mZIndex = aZIndex;
-
-  // reorder this child in its parent's list.
-  auto* parent = static_cast<nsBaseWidget*>(GetParent());
-  if (parent) {
-    parent->RemoveChild(this);
-    // Scope sib outside the for loop so we can check it afterward
-    nsIWidget* sib = parent->GetFirstChild();
-    for (; sib; sib = sib->GetNextSibling()) {
-      int32_t childZIndex = GetZIndex();
-      if (aZIndex < childZIndex) {
-        // Insert ourselves before sib
-        nsIWidget* prev = sib->GetPrevSibling();
-        mNextSibling = sib;
-        mPrevSibling = prev;
-        sib->SetPrevSibling(this);
-        if (prev) {
-          prev->SetNextSibling(this);
-        } else {
-          NS_ASSERTION(sib == parent->mFirstChild, "Broken child list");
-          // We've taken ownership of sib, so it's safe to have parent let
-          // go of it
-          parent->mFirstChild = this;
-        }
-        PlaceBehind(eZPlacementBelow, sib, false);
-        break;
-      }
-    }
-    // were we added to the list?
-    if (!sib) {
-      parent->AddChild(this);
-    }
-  }
-}
-
 void nsBaseWidget::GetWorkspaceID(nsAString& workspaceID) {
   workspaceID.Truncate();
 }
@@ -1177,6 +1132,26 @@ class DispatchEventOnMainThread : public Runnable {
   APZEventResult mAPZResult;
 };
 
+template <>
+NS_IMETHODIMP DispatchEventOnMainThread<MouseInput, WidgetMouseEvent>::Run() {
+  MOZ_ASSERT(
+      !mInput.IsPointerEventType(),
+      "Please use DispatchEventOnMainThread<MouseInput, WidgetPointerEvent>");
+  WidgetMouseEvent event = mInput.ToWidgetEvent<WidgetMouseEvent>(mWidget);
+  mWidget->ProcessUntransformedAPZEvent(&event, mAPZResult);
+  return NS_OK;
+}
+
+template <>
+NS_IMETHODIMP DispatchEventOnMainThread<MouseInput, WidgetPointerEvent>::Run() {
+  MOZ_ASSERT(
+      mInput.IsPointerEventType(),
+      "Please use DispatchEventOnMainThread<MouseInput, WidgetMouseEvent>");
+  WidgetPointerEvent event = mInput.ToWidgetEvent<WidgetPointerEvent>(mWidget);
+  mWidget->ProcessUntransformedAPZEvent(&event, mAPZResult);
+  return NS_OK;
+}
+
 template <class InputType, class EventType>
 class DispatchInputOnControllerThread : public Runnable {
  public:
@@ -1299,6 +1274,15 @@ nsIWidget::ContentAndAPZEventStatus nsBaseWidget::DispatchInputEvent(
             new DispatchInputOnControllerThread<ScrollWheelInput,
                                                 WidgetWheelEvent>(*wheelEvent,
                                                                   mAPZC, this);
+        APZThreadUtils::RunOnControllerThread(std::move(r));
+        status.mContentStatus = nsEventStatus_eConsumeDoDefault;
+        return status;
+      }
+      if (WidgetPointerEvent* pointerEvent = aEvent->AsPointerEvent()) {
+        MOZ_ASSERT(aEvent->mMessage == eContextMenu);
+        RefPtr<Runnable> r =
+            new DispatchInputOnControllerThread<MouseInput, WidgetPointerEvent>(
+                *pointerEvent, mAPZC, this);
         APZThreadUtils::RunOnControllerThread(std::move(r));
         status.mContentStatus = nsEventStatus_eConsumeDoDefault;
         return status;
@@ -3326,10 +3310,10 @@ nsAutoString nsBaseWidget::debug_GuiEventToString(WidgetGUIEvent* aGuiEvent) {
     _ASSIGN_eventName(eMouseExitFromWidget, "eMouseExitFromWidget");
     _ASSIGN_eventName(eMouseDown, "eMouseDown");
     _ASSIGN_eventName(eMouseUp, "eMouseUp");
-    _ASSIGN_eventName(eMouseClick, "eMouseClick");
-    _ASSIGN_eventName(eMouseAuxClick, "eMouseAuxClick");
     _ASSIGN_eventName(eMouseDoubleClick, "eMouseDoubleClick");
     _ASSIGN_eventName(eMouseMove, "eMouseMove");
+    _ASSIGN_eventName(ePointerClick, "ePointerClick");
+    _ASSIGN_eventName(ePointerAuxClick, "ePointerAuxClick");
     _ASSIGN_eventName(eLoad, "eLoad");
     _ASSIGN_eventName(ePopState, "ePopState");
     _ASSIGN_eventName(eBeforeScriptExecute, "eBeforeScriptExecute");

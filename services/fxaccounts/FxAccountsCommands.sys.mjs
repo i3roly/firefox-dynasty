@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import {
+  CLIENT_IS_THUNDERBIRD,
   COMMAND_SENDTAB,
   COMMAND_SENDTAB_TAIL,
   COMMAND_CLOSETAB,
@@ -49,26 +50,30 @@ export class FxAccountsCommands {
   }
 
   async availableCommands() {
-    // Invalid keys usually means the account is not verified yet.
-    const encryptedSendTabKeys = await this.sendTab.getEncryptedSendTabKeys();
     let commands = {};
 
-    if (encryptedSendTabKeys) {
-      commands[COMMAND_SENDTAB] = encryptedSendTabKeys;
-    }
+    if (!CLIENT_IS_THUNDERBIRD) {
+      // Invalid keys usually means the account is not verified yet.
+      const encryptedSendTabKeys = await this.sendTab.getEncryptedSendTabKeys();
 
-    // Close Tab is still a worked-on feature, so we should not broadcast it widely yet
-    let closeTabEnabled = Services.prefs.getBoolPref(
-      "identity.fxaccounts.commands.remoteTabManagement.enabled",
-      false
-    );
-    if (closeTabEnabled) {
-      const encryptedCloseTabKeys =
-        await this.closeTab.getEncryptedCloseTabKeys();
-      if (encryptedCloseTabKeys) {
-        commands[COMMAND_CLOSETAB] = encryptedCloseTabKeys;
+      if (encryptedSendTabKeys) {
+        commands[COMMAND_SENDTAB] = encryptedSendTabKeys;
+      }
+
+      // Close Tab is still a worked-on feature, so we should not broadcast it widely yet
+      let closeTabEnabled = Services.prefs.getBoolPref(
+        "identity.fxaccounts.commands.remoteTabManagement.enabled",
+        false
+      );
+      if (closeTabEnabled) {
+        const encryptedCloseTabKeys =
+          await this.closeTab.getEncryptedCloseTabKeys();
+        if (encryptedCloseTabKeys) {
+          commands[COMMAND_CLOSETAB] = encryptedCloseTabKeys;
+        }
       }
     }
+
     return commands;
   }
 
@@ -538,6 +543,13 @@ export class CloseRemoteTab {
 
   // The timer ID if we have one scheduled, otherwise null
   #timer = null;
+
+  // Since we only ever show one notification to the user
+  // we keep track of how many tabs have actually been closed
+  // and update the count, user dismissing the notification will
+  // reset the count
+  closeTabNotificationCount = 0;
+  hasPendingCloseTabNotification = false;
 
   constructor(commands, fxAccountsInternal) {
     this._commands = commands;

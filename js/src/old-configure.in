@@ -50,7 +50,11 @@ if test -z "$JS_STANDALONE"; then
 fi
 AC_SUBST(autoconfmk)
 
-jsconfdefs=$_objdir/js/src/js-confdefs.h
+if test -z "$JS_STANDALONE"; then
+    jsconfdefs=$_objdir/mozilla-config.h
+else
+    jsconfdefs=$_objdir/js/src/js-confdefs.h
+fi
 
 dnl ========================================================
 dnl Checks for compilers.
@@ -151,12 +155,6 @@ case "$target" in
     ;;
 esac
 
-if test -n "$_WIN32_MSVC"; then
-    SKIP_PATH_CHECKS=1
-    SKIP_COMPILER_CHECKS=1
-    SKIP_LIBRARY_CHECKS=1
-fi
-
 fi # COMPILE_ENVIRONMENT
 
 dnl ========================================================
@@ -167,8 +165,6 @@ MOZ_FIX_LINK_PATHS="-Wl,-rpath-link,${DIST}/bin -Wl,-rpath-link,${prefix}/lib"
 dnl Configure platform-specific CPU architecture compiler options.
 dnl ==============================================================
 MOZ_ARCH_OPTS
-
-MOZ_CONFIG_SANITIZE
 
 dnl ========================================================
 dnl GNU specific defaults
@@ -422,16 +418,8 @@ if test -z "$MOZ_OPTIMIZE_FLAGS"; then
 	MOZ_OPTIMIZE_FLAGS="-O"
 fi
 
-if test -z "$COMPILE_ENVIRONMENT"; then
-    SKIP_COMPILER_CHECKS=1
-    SKIP_LIBRARY_CHECKS=1
-fi
-
 if test -n "$COMPILE_ENVIRONMENT"; then
     MOZ_COMPILER_OPTS
-fi
-
-if test -z "$SKIP_COMPILER_CHECKS"; then
 
 dnl ========================================================
 dnl Put your C++ language/feature checks below
@@ -467,7 +455,7 @@ fi
 dnl End of C++ language/feature checks
 AC_LANG_C
 
-fi # ! SKIP_COMPILER_CHECKS
+fi # COMPILE_ENVIRONMENT
 
 TARGET_XPCOM_ABI=
 if test -n "${TARGET_CPU}" -a -n "${TARGET_COMPILER_ABI}"; then

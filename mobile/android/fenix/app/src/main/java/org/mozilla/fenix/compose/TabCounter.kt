@@ -4,8 +4,10 @@
 
 package org.mozilla.fenix.compose
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentAlpha
@@ -32,13 +34,13 @@ import org.mozilla.fenix.theme.FirefoxTheme
 
 private const val MAX_VISIBLE_TABS = 99
 private const val SO_MANY_TABS_OPEN = "∞"
-private val NORMAL_TABS_BOTTOM_PADDING = 0.5.dp
+private val NORMAL_TABS_BOTTOM_PADDING = 0.dp
 private const val ONE_DIGIT_SIZE_RATIO = 0.5f
 private const val TWO_DIGITS_SIZE_RATIO = 0.4f
 private const val MIN_SINGLE_DIGIT = 0
 private const val MAX_SINGLE_DIGIT = 9
 private const val TWO_DIGIT_THRESHOLD = 10
-private const val TAB_TEXT_BOTTOM_PADDING_RATIO = 4
+private const val TAB_TEXT_BOTTOM_PADDING_RATIO = 6
 
 /**
  * UI for displaying the number of opened tabs.
@@ -47,10 +49,11 @@ private const val TAB_TEXT_BOTTOM_PADDING_RATIO = 4
 * to set the color of its icons and text.
 *
 * @param tabCount the number to be displayed inside the counter.
+* @param showPrivacyBadge if true, show the privacy badge.
 */
 
 @Composable
-fun TabCounter(tabCount: Int) {
+fun TabCounter(tabCount: Int, showPrivacyBadge: Boolean = false) {
     val formattedTabCount = tabCount.toLocaleString()
     val normalTabCountText: String
     val tabCountTextRatio: Float
@@ -119,6 +122,17 @@ fun TabCounter(tabCount: Int) {
             fontWeight = FontWeight.W700,
             textAlign = TextAlign.Center,
         )
+
+        if (showPrivacyBadge) {
+            Image(
+                painter = painterResource(id = R.drawable.mozac_ic_private_mode_circle_fill_stroke_20),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(0.dp)
+                    .offset(x = 8.dp, y = (-8).dp),
+            )
+        }
     }
 }
 

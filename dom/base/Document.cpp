@@ -180,6 +180,7 @@
 #include "mozilla/dom/HTMLBodyElement.h"
 #include "mozilla/dom/HTMLCollectionBinding.h"
 #include "mozilla/dom/HTMLDialogElement.h"
+#include "mozilla/dom/HTMLEmbedElement.h"
 #include "mozilla/dom/HTMLFormElement.h"
 #include "mozilla/dom/HTMLIFrameElement.h"
 #include "mozilla/dom/HTMLImageElement.h"
@@ -187,6 +188,7 @@
 #include "mozilla/dom/HTMLLinkElement.h"
 #include "mozilla/dom/HTMLMediaElement.h"
 #include "mozilla/dom/HTMLMetaElement.h"
+#include "mozilla/dom/HTMLObjectElement.h"
 #include "mozilla/dom/HTMLSharedElement.h"
 #include "mozilla/dom/HTMLTextAreaElement.h"
 #include "mozilla/dom/ImageTracker.h"
@@ -1637,6 +1639,14 @@ void Document::GetNetErrorInfo(NetErrorInfo& aInfo, ErrorResult& aRv) {
     return;
   }
   aInfo.mErrorCodeString.Assign(errorCodeString);
+
+  nsresult channelStatus;
+  rv = mFailedChannel->GetStatus(&channelStatus);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aRv.Throw(rv);
+    return;
+  }
+  aInfo.mChannelStatus = static_cast<uint32_t>(channelStatus);
 }
 
 bool Document::CallerIsTrustedAboutCertError(JSContext* aCx,
@@ -1707,6 +1717,14 @@ void Document::GetFailedCertSecurityInfo(FailedCertSecurityInfo& aInfo,
     return;
   }
   aInfo.mErrorCodeString.Assign(errorCodeString);
+
+  nsresult channelStatus;
+  rv = mFailedChannel->GetStatus(&channelStatus);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aRv.Throw(rv);
+    return;
+  }
+  aInfo.mChannelStatus = static_cast<uint32_t>(channelStatus);
 
   nsITransportSecurityInfo::OverridableErrorCategory errorCategory;
   rv = tsi->GetOverridableErrorCategory(&errorCategory);
@@ -2005,6 +2023,56 @@ void Document::RecordPageLoadEventTelemetry(
   }
 }
 
+#ifndef ANDROID
+static void AccumulateHttp3FcpGleanPref(const nsCString& http3Key,
+                                        const TimeDuration& duration) {
+  if (http3Key == "http3"_ns) {
+    glean::performance_pageload::http3_fcp_http3.AccumulateRawDuration(
+        duration);
+  } else if (http3Key == "supports_http3"_ns) {
+    glean::performance_pageload::http3_fcp_supports_http3.AccumulateRawDuration(
+        duration);
+  } else {
+    MOZ_ASSERT_UNREACHABLE("Unknown value for http3Key");
+  }
+}
+
+static void AccumulatePriorityFcpGleanPref(
+    const nsCString& http3WithPriorityKey, const TimeDuration& duration) {
+  if (http3WithPriorityKey == "with_priority"_ns) {
+    glean::performance_pageload::h3p_fcp_with_priority.AccumulateRawDuration(
+        duration);
+  } else if (http3WithPriorityKey == "without_priority"_ns) {
+    glean::performance_pageload::http3_fcp_without_priority
+        .AccumulateRawDuration(duration);
+  } else {
+    MOZ_ASSERT_UNREACHABLE("Unknown value for http3WithPriorityKey");
+  }
+}
+
+static void AccumulateEarlyHintFcpGleanPref(const nsCString& earlyHintKey,
+                                            const TimeDuration& duration) {
+  if (earlyHintKey == "preload_1"_ns) {
+    glean::performance_pageload::eh_fcp_preload_with_eh.AccumulateRawDuration(
+        duration);
+  } else if (earlyHintKey == "preload_0"_ns) {
+    glean::performance_pageload::eh_fcp_preload_without_eh
+        .AccumulateRawDuration(duration);
+  } else if (earlyHintKey == "preconnect_"_ns) {
+    glean::performance_pageload::eh_fcp_preconnect.AccumulateRawDuration(
+        duration);
+  } else if (earlyHintKey == "preconnect_preload_1"_ns) {
+    glean::performance_pageload::eh_fcp_preconnect_preload_with_eh
+        .AccumulateRawDuration(duration);
+  } else if (earlyHintKey == "preconnect_preload_0"_ns) {
+    glean::performance_pageload::eh_fcp_preconnect_preload_without_eh
+        .AccumulateRawDuration(duration);
+  } else {
+    MOZ_ASSERT_UNREACHABLE("Unknown value for earlyHintKey");
+  }
+}
+#endif
+
 void Document::AccumulatePageLoadTelemetry(
     glean::perf::PageLoadExtra& aEventTelemetryDataOut) {
   // Interested only in top level documents for real websites that are in the
@@ -2144,18 +2212,30 @@ void Document::AccumulatePageLoadTelemetry(
       Telemetry::AccumulateTimeDelta(
           Telemetry::HTTP3_PERF_FIRST_CONTENTFUL_PAINT_MS, http3Key,
           navigationStart, firstContentfulComposite);
+#ifndef ANDROID
+      AccumulateHttp3FcpGleanPref(http3Key,
+                                  firstContentfulComposite - navigationStart);
+#endif
     }
 
     if (!http3WithPriorityKey.IsEmpty()) {
       Telemetry::AccumulateTimeDelta(
           Telemetry::H3P_PERF_FIRST_CONTENTFUL_PAINT_MS, http3WithPriorityKey,
           navigationStart, firstContentfulComposite);
+#ifndef ANDROID
+      AccumulatePriorityFcpGleanPref(
+          http3WithPriorityKey, firstContentfulComposite - navigationStart);
+#endif
     }
 
     if (!earlyHintKey.IsEmpty()) {
       Telemetry::AccumulateTimeDelta(
           Telemetry::EH_PERF_FIRST_CONTENTFUL_PAINT_MS, earlyHintKey,
           navigationStart, firstContentfulComposite);
+#ifndef ANDROID
+      AccumulateEarlyHintFcpGleanPref(
+          earlyHintKey, firstContentfulComposite - navigationStart);
+#endif
     }
 
     Telemetry::AccumulateTimeDelta(
@@ -3869,74 +3949,68 @@ nsresult Document::InitCSP(nsIChannel* aChannel) {
   return NS_OK;
 }
 
-static Document* GetInProcessParentDocumentFrom(BrowsingContext* aContext) {
-  BrowsingContext* parentContext = aContext->GetParent();
-  if (!parentContext) {
+static FeaturePolicy* GetFeaturePolicyFromElement(Element* aElement) {
+  if (auto* iframe = HTMLIFrameElement::FromNodeOrNull(aElement)) {
+    return iframe->FeaturePolicy();
+  }
+
+  if (!HTMLObjectElement::FromNodeOrNull(aElement) &&
+      !HTMLEmbedElement::FromNodeOrNull(aElement)) {
     return nullptr;
   }
 
-  WindowContext* windowContext = parentContext->GetCurrentWindowContext();
-  if (!windowContext) {
-    return nullptr;
-  }
-
-  return windowContext->GetDocument();
+  return aElement->OwnerDoc()->FeaturePolicy();
 }
 
-already_AddRefed<dom::FeaturePolicy> Document::GetParentFeaturePolicy() {
-  BrowsingContext* browsingContext = GetBrowsingContext();
-  if (!browsingContext) {
-    return nullptr;
-  }
-  if (!browsingContext->IsContentSubframe()) {
-    return nullptr;
-  }
-
-  HTMLIFrameElement* iframe =
-      HTMLIFrameElement::FromNodeOrNull(browsingContext->GetEmbedderElement());
-  if (iframe) {
-    return do_AddRef(iframe->FeaturePolicy());
-  }
-
-  if (XRE_IsParentProcess()) {
-    return do_AddRef(browsingContext->Canonical()->GetContainerFeaturePolicy());
-  }
-
-  if (Document* parentDocument =
-          GetInProcessParentDocumentFrom(browsingContext)) {
-    return do_AddRef(parentDocument->FeaturePolicy());
-  }
-
-  WindowContext* windowContext = browsingContext->GetCurrentWindowContext();
-  if (!windowContext) {
-    return nullptr;
-  }
-
-  WindowGlobalChild* child = windowContext->GetWindowGlobalChild();
-  if (!child) {
-    return nullptr;
-  }
-
-  return do_AddRef(child->GetContainerFeaturePolicy());
-}
-
-void Document::InitFeaturePolicy() {
+void Document::InitFeaturePolicy(
+    const Variant<Nothing, FeaturePolicyInfo, Element*>&
+        aContainerFeaturePolicy) {
   MOZ_ASSERT(mFeaturePolicy, "we should have FeaturePolicy created");
 
   mFeaturePolicy->ResetDeclaredPolicy();
 
   mFeaturePolicy->SetDefaultOrigin(NodePrincipal());
 
-  RefPtr<mozilla::dom::FeaturePolicy> parentPolicy = GetParentFeaturePolicy();
-  if (parentPolicy) {
-    // Let's inherit the policy from the parent HTMLIFrameElement if it exists.
-    mFeaturePolicy->InheritPolicy(parentPolicy);
-    mFeaturePolicy->SetSrcOrigin(parentPolicy->GetSrcOrigin());
+  RefPtr<dom::FeaturePolicy> featurePolicy = mFeaturePolicy;
+  aContainerFeaturePolicy.match(
+      [](const Nothing&) {},
+      [featurePolicy](const FeaturePolicyInfo& aContainerFeaturePolicy) {
+        // Let's inherit the policy from the possibly cross-origin container.
+        featurePolicy->InheritPolicy(aContainerFeaturePolicy);
+        featurePolicy->SetSrcOrigin(aContainerFeaturePolicy.mSrcOrigin);
+      },
+      [featurePolicy](Element* aContainer) {
+        // Let's inherit the policy from the parent container element if it
+        // exists.
+        if (RefPtr<dom::FeaturePolicy> containerFeaturePolicy =
+                GetFeaturePolicyFromElement(aContainer)) {
+          featurePolicy->InheritPolicy(containerFeaturePolicy);
+          featurePolicy->SetSrcOrigin(containerFeaturePolicy->GetSrcOrigin());
+        }
+      });
+}
+
+Element* GetEmbedderElementFrom(BrowsingContext* aBrowsingContext) {
+  if (!aBrowsingContext) {
+    return nullptr;
   }
+  if (!aBrowsingContext->IsContentSubframe()) {
+    return nullptr;
+  }
+
+  return aBrowsingContext->GetEmbedderElement();
 }
 
 nsresult Document::InitFeaturePolicy(nsIChannel* aChannel) {
-  InitFeaturePolicy();
+  nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
+  if (Element* embedderElement = GetEmbedderElementFrom(GetBrowsingContext())) {
+    InitFeaturePolicy(AsVariant(embedderElement));
+  } else if (Maybe<FeaturePolicyInfo> featurePolicyContainer =
+                 loadInfo->GetContainerFeaturePolicyInfo()) {
+    InitFeaturePolicy(AsVariant(*featurePolicyContainer));
+  } else {
+    InitFeaturePolicy(AsVariant(Nothing{}));
+  }
 
   // We don't want to parse the http Feature-Policy header if this pref is off.
   if (!StaticPrefs::dom_security_featurePolicy_header_enabled()) {
@@ -5407,9 +5481,20 @@ bool Document::ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
   // Next, consider context of command handling which is automatically resolved
   // by order of controllers in `nsCommandManager::GetControllerForCommand()`.
   AutoEditorCommandTarget editCommandTarget(*this, commandData);
-  if (commandData.IsAvailableOnlyWhenEditable() &&
-      !editCommandTarget.IsEditable(this)) {
-    return false;
+  if (commandData.IsAvailableOnlyWhenEditable()) {
+    if (!editCommandTarget.IsEditable(this)) {
+      return false;
+    }
+    // If currently the editor cannot dispatch `input` events, it means that the
+    // editor value is being set and that caused unexpected composition events.
+    // In this case, the value will be updated to the setting value soon and
+    // Chromium does not dispatch any events during the sequence but we dispatch
+    // `compositionupdate` and `compositionend` events to conform to the UI
+    // Events spec.  Therefore, this execCommand must be called accidentally.
+    EditorBase* targetEditor = editCommandTarget.GetTargetEditor();
+    if (targetEditor && targetEditor->IsSuppressingDispatchingInputEvent()) {
+      return false;
+    }
   }
 
   if (editCommandTarget.DoNothing()) {
@@ -13089,31 +13174,50 @@ void Document::ScrollToRef() {
   if (!presShell) {
     return;
   }
+
+  // https://wicg.github.io/scroll-to-text-fragment/#invoking-text-directives
+  // Monkeypatching HTML § 7.4.6.3 Scrolling to a fragment:
+  // 1. Let text directives be the document's pending text directives.
+  const RefPtr fragmentDirective = FragmentDirective();
+  const nsTArray<RefPtr<nsRange>> textDirectives =
+      fragmentDirective->FindTextFragmentsInDocument();
+  // 2. If ranges is non-empty, then:
+  // 2.1 Let firstRange be the first item of ranges
+  const RefPtr<nsRange> textDirectiveToScroll =
+      !textDirectives.IsEmpty() ? textDirectives[0] : nullptr;
+  // 2.2 Visually indicate each range in ranges in an implementation-defined
+  // way. The indication must not be observable from author script. See § 3.7
+  // Indicating The Text Match.
+  fragmentDirective->HighlightTextDirectives(textDirectives);
+
+  // In a subsequent call to `ScrollToRef()` during page load, `textDirectives`
+  // would only contain text directives that were not found in the previous
+  // runs. If an earlier call during the same page load already found a text
+  // directive to scroll to, only highlighting of the text directives needs to
+  // be done.
+  // This is indicated by `mScrolledToRefAlready`.
   if (mScrolledToRefAlready) {
     presShell->ScrollToAnchor();
     return;
   }
-
-  // If text directives is non-null, then highlight the text directives and
-  // scroll to the last one.
-  // XXX(:jjaschke): Document policy integration should happen here
-  // as soon as https://bugzil.la/1860915 lands.
-  // XXX(:jjaschke): Same goes for User Activation and security aspects,
-  // tracked in https://bugzil.la/1888756.
-  const bool didScrollToTextFragment =
-      presShell->HighlightAndGoToTextFragment(true);
-
-  FragmentDirective()->ClearUninvokedDirectives();
-
   // 2. If fragment is the empty string and no text directives have been
   // scrolled to, then return the special value top of the document.
-  if (didScrollToTextFragment || mScrollToRef.IsEmpty()) {
+  if (!textDirectiveToScroll && mScrollToRef.IsEmpty()) {
     return;
   }
   // 3. Let potentialIndicatedElement be the result of finding a potential
   // indicated element given document and fragment.
   NS_ConvertUTF8toUTF16 ref(mScrollToRef);
-  auto rv = presShell->GoToAnchor(ref, mChangeScrollPosWhenScrollingToRef);
+  // This also covers 2.3 of the Monkeypatch for text fragments mentioned above:
+  // 2.3 Set firstRange as document's indicated part, return.
+
+  const bool scrollToTextDirective =
+      textDirectiveToScroll
+          ? fragmentDirective->IsTextDirectiveAllowedToBeScrolledTo()
+          : mChangeScrollPosWhenScrollingToRef;
+
+  auto rv =
+      presShell->GoToAnchor(ref, textDirectiveToScroll, scrollToTextDirective);
 
   // 4. If potentialIndicatedElement is not null, then return
   // potentialIndicatedElement.
@@ -13141,7 +13245,7 @@ void Document::ScrollToRef() {
 
   // 7. Set potentialIndicatedElement to the result of finding a potential
   // indicated element given document and decodedFragment.
-  rv = presShell->GoToAnchor(decodedFragment,
+  rv = presShell->GoToAnchor(decodedFragment, nullptr,
                              mChangeScrollPosWhenScrollingToRef);
   if (NS_SUCCEEDED(rv)) {
     mScrolledToRefAlready = true;
@@ -13671,6 +13775,7 @@ void Document::DoUpdateSVGUseElementShadowTrees() {
   MOZ_ASSERT(!mSVGUseElementsNeedingShadowTreeUpdate.IsEmpty());
 
   MOZ_ASSERT(!mCloningForSVGUse);
+  nsAutoScriptBlockerSuppressNodeRemoved blocker;
   mCloningForSVGUse = true;
 
   do {
@@ -16855,6 +16960,20 @@ void Document::NotifyUserGestureActivation(
 bool Document::HasBeenUserGestureActivated() {
   RefPtr<WindowContext> wc = GetWindowContext();
   return wc && wc->HasBeenUserGestureActivated();
+}
+
+bool Document::ConsumeTextDirectiveUserActivation() {
+  if (!mChannel) {
+    return false;
+  }
+  nsCOMPtr<nsILoadInfo> loadInfo = mChannel->LoadInfo();
+  if (!loadInfo) {
+    return false;
+  }
+  const bool textDirectiveUserActivation =
+      loadInfo->GetTextDirectiveUserActivation();
+  loadInfo->SetTextDirectiveUserActivation(false);
+  return textDirectiveUserActivation;
 }
 
 DOMHighResTimeStamp Document::LastUserGestureTimeStamp() {

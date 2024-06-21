@@ -2641,7 +2641,7 @@
 # event as a default action of `beforeinput`.
 - name: dom.events.textevent.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Whether to expose test interfaces of various sorts
@@ -3351,12 +3351,6 @@
 - name: dom.push.enabled
   type: RelaxedAtomicBool
   value: true
-  mirror: always
-
-# This enables the SVGPathSeg APIs
-- name: dom.svg.pathSeg.enabled
-  type: bool
-  value: false
   mirror: always
 
 # Preference that is primarily used for testing of problematic file paths.
@@ -4602,6 +4596,13 @@
 - name: dom.w3c_pointer_events.getcoalescedevents_only_in_securecontext
   type: bool
   value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
+# Whether `click`, `auxclick` and `contextmenu` events are dispatched as a
+# PointerEvent or MouseEvent.
+- name: dom.w3c_pointer_events.dispatch_click_as_pointer_event
+  type: bool
+  value: true
   mirror: always
 
 # In case Touch API is enabled, this pref controls whether to support
@@ -5890,6 +5891,11 @@
   type: RelaxedAtomicBool
   value: true
   mirror: always
+
+- name: gfx.canvas.remote.use-canvas-translator-event
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: once
 
 - name: gfx.canvas.willreadfrequently.enabled
   type: bool
@@ -7696,39 +7702,46 @@
   set_spidermonkey_pref: startup
 
 # Support for Object.groupBy/Map.groupBy in JavaScript.
--  name: javascript.options.array_grouping
-   type: bool
-   value: true
-   mirror: always
-   set_spidermonkey_pref: startup
+- name: javascript.options.array_grouping
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
 
 # Experimental support for ArrayBuffer.prototype.transfer{,ToFixedLength}() in JavaScript.
--   name: javascript.options.arraybuffer_transfer
-    type: bool
-    value: true
-    mirror: always
-    set_spidermonkey_pref: startup
+- name: javascript.options.arraybuffer_transfer
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
 
 # Experimental support for New Set methods
--   name: javascript.options.experimental.new_set_methods
-    type: bool
-    value: true
-    mirror: always
-    set_spidermonkey_pref: startup
+- name: javascript.options.experimental.new_set_methods
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
 
-  # Experimental support for resizable ArrayBuffers in JavaScript.
--   name: javascript.options.experimental.arraybuffer_resizable
-    type: bool
-    value: true
-    mirror: always
-    set_spidermonkey_pref: startup
+# Experimental support for resizable ArrayBuffers in JavaScript.
+- name: javascript.options.experimental.arraybuffer_resizable
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
 
-  # Experimental support for growable SharedArrayBuffers in JavaScript.
--   name: javascript.options.experimental.sharedarraybuffer_growable
-    type: bool
-    value: true
-    mirror: always
-    set_spidermonkey_pref: startup
+# Experimental support for growable SharedArrayBuffers in JavaScript.
+- name: javascript.options.experimental.sharedarraybuffer_growable
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
+# Experimental support for Duplicate Named Capture Groups in JavaScript.
+- name: javascript.options.experimental.regexp_duplicate_named_groups
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
 
 #ifdef NIGHTLY_BUILD
   # Experimental support for Iterator Helpers in JavaScript.
@@ -7761,13 +7774,6 @@
 
   # Experimental support for Float16Array in JavaScript.
 -   name: javascript.options.experimental.float16array
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Duplicate Named Capture Groups in JavaScript.
--   name: javascript.options.experimental.regexp_duplicate_named_groups
     type: bool
     value: false
     mirror: always
@@ -10642,6 +10648,17 @@
     value: false
     mirror: always
 
+# Enable origin filter for MFCDM support
+# 0 : disabled, 1 : enabled allowed list, 2 : enabled blocked list
+-   name: media.eme.mfcdm.origin-filter.enabled
+    type: RelaxedAtomicUint32
+#if defined(NIGHTLY_BUILD)
+    value: 0
+#else
+    value: 1
+#endif
+    mirror: always
+
 #endif  # MOZ_WMF
 
 - name: media.decoder-doctor.testing
@@ -11087,10 +11104,9 @@
 # Tell the audio backend to create a voice stream for later re-use before asking
 # the user for microphone permissions, if approving those permissions would
 # result in a voice stream when created later on.
-# Disabled on macOS since it breaks VPIO's AEC. See bug 1895787.
 - name: media.getusermedia.microphone.voice_stream_priming.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_XP_MACOSX@
   mirror: always
 
 # This pref turns on legacy (non-spec) exposure of camera and microphone
@@ -13471,6 +13487,12 @@
   value: false
   mirror: always
 
+# Only used for testing
+- name: network.dns.mock_HTTPS_RR_domain
+  type: String
+  value: ""
+  mirror: never
+
 # Whether to add additional record IPs to the cache
 - name: network.trr.add_additional_records
   type: RelaxedAtomicBool
@@ -15134,6 +15156,12 @@
 #else
   value: @IS_NIGHTLY_BUILD@
 #endif
+  mirror: always
+  rust: true
+
+- name: security.tls.client_hello.send_p256_keyshare
+  type: RelaxedAtomicBool
+  value: true
   mirror: always
   rust: true
 

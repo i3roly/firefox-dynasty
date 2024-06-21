@@ -175,7 +175,7 @@ export const PREFS_CONFIG = new Map([
     "weather.temperatureUnits",
     {
       title: "Switch the temperature between Celsius and Fahrenheit",
-      value: "f",
+      getValue: args => (args.locale === "en-US" ? "f" : "c"),
     },
   ],
   [
@@ -360,9 +360,9 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
-    "newtabWallpapers.wallpaper-color",
+    "newtabWallpapers.wallpaper",
     {
-      title: "Currently set solid color wallpaper",
+      title: "Currently set wallpaper",
       value: "",
     },
   ],
@@ -413,21 +413,6 @@ export const PREFS_CONFIG = new Map([
       value: false,
     },
   ],
-  [
-    "asrouter.providers.onboarding",
-    {
-      title: "Configuration for onboarding provider",
-      value: JSON.stringify({
-        id: "onboarding",
-        type: "local",
-        localProvider: "OnboardingMessageProvider",
-        enabled: true,
-        // Block specific messages from this local provider
-        exclude: [],
-      }),
-    },
-  ],
-  // See browser/app/profile/firefox.js for other ASR preferences. They must be defined there to enable roll-outs.
   [
     "discoverystream.flight.blocks",
     {

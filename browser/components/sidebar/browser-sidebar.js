@@ -109,6 +109,20 @@ var SidebarController = {
       ],
     ]);
 
+    this.registerPrefSidebar(
+      "browser.ml.chat.enabled",
+      "viewGenaiChatSidebar",
+      {
+        elementId: "sidebar-switcher-genai-chat",
+        url: "chrome://browser/content/genai/chat.html",
+        menuId: "menu_genaiChatSidebar",
+        menuL10nId: "menu-view-genai-chat",
+        // Bug 1900915 to expose as conditional tool
+        revampL10nId: "sidebar-menu-genai-chat",
+        iconUrl: "chrome://mozapps/skin/extensions/category-discover.svg",
+      }
+    );
+
     if (!this.sidebarRevampEnabled) {
       this.registerPrefSidebar(
         "browser.megalist.enabled",
@@ -230,6 +244,10 @@ var SidebarController = {
       document.getElementById("sidebar-header").hidden = true;
       this._sidebarMain = document.querySelector("sidebar-main");
       mainResizeObserver.observe(this._sidebarMain);
+
+      if (this.sidebarVerticalTabsEnabled) {
+        this.toggleTabstrip();
+      }
     } else {
       this._switcherTarget.addEventListener("command", () => {
         this.toggleSwitcherPanel();
@@ -1046,6 +1064,43 @@ var SidebarController = {
       }
     }
   },
+
+  toggleTabstrip() {
+    let tabStrip = document.getElementById("tabbrowser-tabs");
+    let arrowScrollbox = document.getElementById("tabbrowser-arrowscrollbox");
+    let verticalTabs = document.getElementById("vertical-tabs");
+
+    let tabsToolbarWidgets = CustomizableUI.getWidgetIdsInArea("TabsToolbar");
+    let tabstripPlacement = tabsToolbarWidgets.findIndex(
+      item => item == "tabbrowser-tabs"
+    );
+
+    if (this.sidebarVerticalTabsEnabled) {
+      arrowScrollbox.setAttribute("orient", "vertical");
+      tabStrip.setAttribute("orient", "vertical");
+      tabStrip.removeAttribute("overflow");
+      tabStrip._positionPinnedTabs();
+      verticalTabs.append(tabStrip);
+    } else {
+      arrowScrollbox.setAttribute("orient", "horizontal");
+      tabStrip.removeAttribute("orient");
+
+      // make sure we put the tabstrip back in its original position in the TabsToolbar
+      if (tabstripPlacement < tabsToolbarWidgets.length) {
+        document
+          .getElementById("TabsToolbar-customization-target")
+          .insertBefore(
+            tabStrip,
+            document.getElementById(tabsToolbarWidgets[tabstripPlacement + 1])
+          );
+      } else {
+        document
+          .getElementById("TabsToolbar-customization-target")
+          .append(tabStrip);
+      }
+    }
+    verticalTabs.toggleAttribute("activated", this.sidebarVerticalTabsEnabled);
+  },
 };
 
 // Add getters related to the position here, since we will want them
@@ -1068,4 +1123,11 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "sidebarRevampTools",
   "sidebar.main.tools",
   "history, syncedtabs"
+);
+XPCOMUtils.defineLazyPreferenceGetter(
+  SidebarController,
+  "sidebarVerticalTabsEnabled",
+  "sidebar.verticalTabs",
+  false,
+  SidebarController.toggleTabstrip.bind(SidebarController)
 );

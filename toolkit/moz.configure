@@ -4,6 +4,100 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+# App-specific project settings
+
+
+project_flag(
+    env="MOZ_APP_ID",
+    nargs=1,
+    help='used for application.ini\'s "ID" field, and crash reporter server url',
+)
+
+
+@depends("MOZ_APP_ID", build_project)
+def check_moz_app_id(moz_app_id, build_project):
+    if not moz_app_id:
+        die(f"No value for MOZ_APP_ID in project '{build_project}'")
+
+
+project_flag(
+    env="MOZ_APP_VENDOR",
+    nargs=1,
+    help='used for application.ini\'s "Vendor" field, which also impacts profile location and user-visible fields',
+)
+
+project_flag(
+    env="MOZ_APP_UA_NAME",
+    default="",
+    nargs=1,
+    help="application name in the User Agent string",
+)
+
+project_flag(
+    env="MOZ_DEVTOOLS",
+    default="server",
+    choices=("all", "server"),
+    nargs=1,
+    help="which devtools version should be built",
+)
+
+
+option(
+    env="MOZ_STUB_INSTALLER",
+    help="produce a stub installer",
+)
+set_config("MOZ_STUB_INSTALLER", True, when="MOZ_STUB_INSTALLER")
+
+
+project_flag(
+    env="MOZ_PROFILE_MIGRATOR",
+    help="enable profile migrator",
+)
+
+project_flag(
+    env="BROWSER_CHROME_URL",
+    default="",
+    nargs=1,
+    set_as_define=True,
+    help="markup for a single browser window",
+)
+set_define(
+    "BROWSER_CHROME_URL_QUOTED",
+    depends("BROWSER_CHROME_URL")(lambda v: f'"{v[0]}"' if v else ""),
+)
+
+# External builds (specifically Ubuntu) may drop the hg repo information, so we allow to
+# explicitly set the repository and changeset information in.
+option(env="MOZ_SOURCE_REPO", nargs=1, help="project source repository")
+set_config("MOZ_SOURCE_REPO", depends_if("MOZ_SOURCE_REPO")(lambda src: src[0]))
+option(env="MOZ_SOURCE_CHANGESET", nargs=1, help="source changeset")
+set_config("MOZ_SOURCE_CHANGESET", depends_if("MOZ_SOURCE_CHANGESET")(lambda v: v[0]))
+
+option(
+    env="MOZ_INCLUDE_SOURCE_INFO",
+    # Build revisions should always be present in official builds
+    default=mozilla_official,
+    help="include build repository informations",
+)
+set_config("MOZ_INCLUDE_SOURCE_INFO", True, when="MOZ_INCLUDE_SOURCE_INFO")
+
+option(
+    "--with-distribution-id",
+    nargs=1,
+    default="org.mozilla",
+    help="Set distribution-specific id",
+)
+set_config("MOZ_DISTRIBUTION_ID", depends("--with-distribution-id")(lambda v: v[0]))
+add_old_configure_assignment(
+    "MOZ_DISTRIBUTION_ID", depends("--with-distribution-id")(lambda v: v[0])
+)
+
+
+@depends("MOZ_APP_VENDOR", build_project)
+def check_moz_app_vendor(moz_app_vendor, build_project):
+    if not moz_app_vendor:
+        die(f"No value for MOZ_APP_VENDOR in project '{build_project}'")
+
 
 # Set the MOZ_CONFIGURE_OPTIONS variable with all the options that
 # were passed somehow (environment, command line, mozconfig)
@@ -1455,7 +1549,6 @@ option(
     help="{Enable|Disable} support for RAW media",
 )
 
-set_config("MOZ_RAW", depends_if("--enable-raw")(lambda _: True))
 set_define("MOZ_RAW", depends_if("--enable-raw")(lambda _: True))
 
 

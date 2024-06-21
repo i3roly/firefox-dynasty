@@ -69,8 +69,6 @@ body {
   --tabs-navbar-separator-color: ThreeDShadow;
   --tabs-navbar-separator-style: solid;
 
-  --panelui-subview-transition-duration: 150ms;
-
   --short-notification-background: #0250BB;
   --short-notification-gradient: #9059FF;
 
@@ -491,9 +489,12 @@ toolbarpaletteitem > #personal-bookmarks > #PlacesToolbar,
 
 /* Bookmarks toolbar drop indicator */
 
-#PlacesToolbarDropIndicator {
+#PlacesToolbarDropIndicatorHolder {
   display: block;
   position: absolute;
+}
+
+#PlacesToolbarDropIndicator {
   list-style-image: url(chrome://browser/skin/toolbar-drag-indicator.svg);
   pointer-events: none;
 }
@@ -525,7 +526,11 @@ menupopup::part(drop-indicator) {
   pointer-events: none;
 }
 
-/* Back / Forward context menu */
+/* Back / Forward buttons context menu */
+
+.unified-nav-current {
+  font-weight: var(--font-weight-bold);
+}
 
 .unified-nav-back,
 .unified-nav-forward {

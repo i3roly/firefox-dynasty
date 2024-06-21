@@ -2548,14 +2548,8 @@ void SVGTextDrawPathCallbacks::SetupContext() {
   // XXX This is copied from nsSVGGlyphFrame::Render, but cairo doesn't actually
   // seem to do anything with the antialias mode.  So we can perhaps remove it,
   // or make SetAntialiasMode set cairo text antialiasing too.
-  switch (mFrame->StyleText()->mTextRendering) {
-    case StyleTextRendering::Optimizespeed:
-      mContext.SetAntialiasMode(AntialiasMode::NONE);
-      break;
-    default:
-      mContext.SetAntialiasMode(AntialiasMode::SUBPIXEL);
-      break;
-  }
+  mContext.SetAntialiasMode(
+      SVGUtils::ToAntialiasMode(mFrame->StyleText()->mTextRendering));
 }
 
 void SVGTextDrawPathCallbacks::HandleTextGeometry() {
@@ -4570,7 +4564,7 @@ gfxFloat SVGTextFrame::GetStartOffset(nsIFrame* aTextPathFrame) {
                       100.0
                 : 0.0;
   }
-  float lengthValue = length->GetAnimValue(tp);
+  float lengthValue = length->GetAnimValueWithZoom(tp);
   // If offsetScale is infinity we want to return 0 not NaN
   return lengthValue == 0 ? 0.0 : lengthValue * GetOffsetScale(aTextPathFrame);
 }
@@ -4808,7 +4802,7 @@ void SVGTextFrame::DoGlyphPositioning() {
       element->EnumAttributes()[SVGTextContentElement::LENGTHADJUST]
           .GetAnimValue();
   bool adjustingTextLength = textLengthAttr->IsExplicitlySet();
-  float expectedTextLength = textLengthAttr->GetAnimValue(element);
+  float expectedTextLength = textLengthAttr->GetAnimValueWithZoom(element);
 
   if (adjustingTextLength &&
       (expectedTextLength < 0.0f || lengthAdjust == LENGTHADJUST_UNKNOWN)) {

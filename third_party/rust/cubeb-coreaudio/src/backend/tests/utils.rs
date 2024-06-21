@@ -120,7 +120,7 @@ pub enum PropertyScope {
 }
 
 pub fn test_get_default_device(scope: Scope) -> Option<AudioObjectID> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     run_serially_forward_panics(|| {
         let address = AudioObjectPropertyAddress {
             mSelector: match scope {
@@ -186,7 +186,7 @@ impl Drop for TestAudioUnit {
 // TODO: 1. Return Result with custom errors.
 //       2. Allow to create a in-out unit.
 pub fn test_get_default_audiounit(scope: Scope) -> Option<TestAudioUnit> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let device = test_get_default_device(scope.clone());
     let unit = test_create_audiounit(ComponentSubType::HALOutput);
     if device.is_none() || unit.is_none() {
@@ -237,7 +237,7 @@ pub enum ComponentSubType {
 // Surprisingly the AudioUnit can be created even when there is no any device on the platform,
 // no matter its subtype is HALOutput or DefaultOutput.
 pub fn test_create_audiounit(unit_type: ComponentSubType) -> Option<TestAudioUnit> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let desc = AudioComponentDescription {
         componentType: kAudioUnitType_Output,
         componentSubType: match unit_type {
@@ -267,7 +267,7 @@ fn test_enable_audiounit_in_scope(
     scope: Scope,
     enable: bool,
 ) -> std::result::Result<(), OSStatus> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     assert!(!unit.is_null());
     let (scope, element) = match scope {
         Scope::Input => (kAudioUnitScope_Input, AU_IN_BUS),
@@ -297,7 +297,7 @@ pub enum DeviceFilter {
     IncludeAll,
 }
 pub fn test_get_all_devices(filter: DeviceFilter) -> Vec<AudioObjectID> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     // To avoid races, the devices getter and the device name filtering have
     // to run in the same serial task. If not, a device may exist when the
     // getter runs but not when getting its uid.
@@ -373,14 +373,14 @@ pub fn test_get_all_devices(filter: DeviceFilter) -> Vec<AudioObjectID> {
 }
 
 pub fn test_get_devices_in_scope(scope: Scope) -> Vec<AudioObjectID> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let mut devices = test_get_all_devices(DeviceFilter::ExcludeCubebAggregateAndVPIO);
     devices.retain(|device| test_device_in_scope(*device, scope.clone()));
     devices
 }
 
 pub fn get_devices_info_in_scope(scope: Scope) -> Vec<TestDeviceInfo> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     fn print_info(info: &TestDeviceInfo) {
         println!("{:>4}: {}\n\tuid: {}", info.id, info.label, info.uid);
     }
@@ -436,7 +436,7 @@ pub fn test_device_channels_in_scope(
     id: AudioObjectID,
     scope: Scope,
 ) -> std::result::Result<u32, OSStatus> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let address = AudioObjectPropertyAddress {
         mSelector: kAudioDevicePropertyStreams,
         mScope: match scope {
@@ -530,7 +530,7 @@ pub fn test_device_channels_in_scope(
 }
 
 pub fn test_device_in_scope(id: AudioObjectID, scope: Scope) -> bool {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let channels = test_device_channels_in_scope(id, scope);
     channels.is_ok() && channels.unwrap() > 0
 }
@@ -634,7 +634,7 @@ pub fn test_get_drift_compensations(id: AudioObjectID) -> std::result::Result<u3
 
 pub fn test_audiounit_scope_is_enabled(unit: AudioUnit, scope: Scope) -> bool {
     assert!(!unit.is_null());
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let mut has_io: UInt32 = 0;
     let (scope, element) = match scope {
         Scope::Input => (kAudioUnitScope_Input, AU_IN_BUS),
@@ -660,7 +660,7 @@ pub fn test_audiounit_get_buffer_frame_size(
     scope: Scope,
     prop_scope: PropertyScope,
 ) -> std::result::Result<u32, OSStatus> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let element = match scope {
         Scope::Input => AU_IN_BUS,
         Scope::Output => AU_OUT_BUS,
@@ -699,7 +699,7 @@ pub fn test_set_default_device(
     device: AudioObjectID,
     scope: Scope,
 ) -> std::result::Result<AudioObjectID, OSStatus> {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     assert!(test_device_in_scope(device, scope.clone()));
     let default = test_get_default_device(scope.clone()).unwrap();
     if default == device {
@@ -917,7 +917,7 @@ impl TestDevicePlugger {
     }
 
     fn destroy_aggregate_device(&mut self) -> std::result::Result<(), OSStatus> {
-        debug_assert_not_running_serially();
+        //debug_assert_not_running_serially();
         assert_ne!(self.plugin_id, kAudioObjectUnknown);
         assert_ne!(self.device_id, kAudioObjectUnknown);
 
@@ -962,7 +962,7 @@ impl TestDevicePlugger {
     }
 
     fn create_aggregate_device(&self) -> std::result::Result<AudioObjectID, OSStatus> {
-        debug_assert_not_running_serially();
+        //debug_assert_not_running_serially();
         use std::time::{SystemTime, UNIX_EPOCH};
 
         const TEST_AGGREGATE_DEVICE_NAME: &str = "TestAggregateDevice";
@@ -1091,7 +1091,7 @@ impl TestDevicePlugger {
     }
 
     fn get_system_plugin_id() -> std::result::Result<AudioObjectID, OSStatus> {
-        debug_assert_not_running_serially();
+        //debug_assert_not_running_serially();
         let address = AudioObjectPropertyAddress {
             mSelector: kAudioHardwarePropertyPlugInForBundleID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -1150,7 +1150,7 @@ impl TestDevicePlugger {
     //       them into the array, if the device is an aggregate device. See the code in
     //       AggregateDevice::get_sub_devices and audiounit_set_aggregate_sub_device_list.
     fn get_sub_devices(scope: Scope) -> Option<CFArrayRef> {
-        debug_assert_not_running_serially();
+        //debug_assert_not_running_serially();
         let device = test_get_default_device(scope);
         device?;
         let device = device.unwrap();
@@ -1193,7 +1193,7 @@ pub fn test_ops_context_operation<F>(name: &'static str, operation: F)
 where
     F: FnOnce(*mut ffi::cubeb),
 {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let name_c_string = CString::new(name).expect("Failed to create context name");
     let mut context = ptr::null_mut::<ffi::cubeb>();
     assert_eq!(
@@ -1345,7 +1345,7 @@ pub fn test_get_stream_with_default_data_callback_by_type<F>(
 ) where
     F: FnOnce(&mut AudioUnitStream),
 {
-    debug_assert_not_running_serially();
+    //debug_assert_not_running_serially();
     let mut input_params = get_dummy_stream_params(Scope::Input);
     let mut output_params = get_dummy_stream_params(Scope::Output);
 

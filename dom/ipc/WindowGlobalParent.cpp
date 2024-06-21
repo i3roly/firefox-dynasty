@@ -33,6 +33,7 @@
 #include "mozilla/dom/ipc/StructuredCloneData.h"
 #include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Components.h"
+#include "mozilla/IdentityCredentialRequestManager.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/ServoCSSParser.h"
 #include "mozilla/ServoStyleSet.h"
@@ -179,9 +180,6 @@ void WindowGlobalParent::Init() {
   if (!BrowsingContext()->IsDiscarded()) {
     MOZ_ALWAYS_SUCCEEDS(
         BrowsingContext()->SetCurrentInnerWindowId(InnerWindowId()));
-
-    Unused << SendSetContainerFeaturePolicy(
-        BrowsingContext()->GetContainerFeaturePolicy());
   }
 
   if (BrowsingContext()->IsTopContent()) {
@@ -1478,6 +1476,22 @@ IPCResult WindowGlobalParent::RecvStoreIdentityCredential(
           GetCurrentSerialEventTarget(), __func__,
           [aResolver](const bool& aResult) { aResolver(NS_OK); },
           [aResolver](nsresult aErr) { aResolver(aErr); });
+  return IPC_OK();
+}
+
+IPCResult WindowGlobalParent::RecvNotifyPendingIdentityCredentialDiscovery(
+    const IdentityCredentialRequestOptions& aOptions,
+    const NotifyPendingIdentityCredentialDiscoveryResolver& aResolver) {
+  IdentityCredentialRequestManager* icrm =
+      IdentityCredentialRequestManager::GetInstance();
+  if (!icrm) {
+    aResolver(NS_ERROR_NOT_AVAILABLE);
+    return IPC_OK();
+  }
+  nsresult rv =
+      icrm->StorePendingRequest(this->TopWindowContext()->DocumentPrincipal(),
+                                aOptions, this->InnerWindowId());
+  aResolver(rv);
   return IPC_OK();
 }
 

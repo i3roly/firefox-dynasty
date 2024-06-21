@@ -490,6 +490,7 @@ fn test_non_silent_duplicate_channels() {
         Channel::Silence,
     ];
     assert!(!Mixer::duplicate_channel_present(&non_duplicate));
+
     let duplicate = [
         Channel::FrontLeft,
         Channel::Discrete,

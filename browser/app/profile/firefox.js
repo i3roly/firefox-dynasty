@@ -822,6 +822,10 @@ pref("browser.dataFeatureRecommendations.enabled", false);
 // sets darkTheme data.
 pref("browser.theme.dark-private-windows", true);
 
+// Pref to control whether or not Private Browsing windows show up
+// as separate icons in the Windows taskbar.
+pref("browser.privateWindowSeparation.enabled", true);
+
 // Controls visibility of the privacy segmentation preferences section.
 pref("browser.privacySegmentation.preferences.show", false);
 
@@ -1704,7 +1708,6 @@ pref("browser.newtab.preload", true);
 pref("browser.newtabpage.activity-stream.showWeather", true);
 pref("browser.newtabpage.activity-stream.weather.query", "");
 pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", false);
-pref("browser.newtabpage.activity-stream.weather.temperatureUnits", "f");
 pref("browser.newtabpage.activity-stream.weather.display", "simple");
 // List of regions that get weather by default.
 #ifdef NIGHTLY_BUILD
@@ -1724,7 +1727,7 @@ pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-dark", "");
-pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-color", "");
+pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper", "");
 
 // Preference to show feature highlight about wallpaper on new tab page
 pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightEnabled", false);
@@ -1748,8 +1751,9 @@ pref("browser.newtabpage.activity-stream.fxaccounts.endpoint", "https://accounts
 pref("browser.newtabpage.activity-stream.improvesearch.topSiteSearchShortcuts", true);
 
 // ASRouter provider configuration
-pref("browser.newtabpage.activity-stream.asrouter.providers.cfr", "{\"id\":\"cfr\",\"enabled\":true,\"type\":\"remote-settings\",\"collection\":\"cfr\",\"updateCycleInMs\":3600000}");
 pref("browser.newtabpage.activity-stream.asrouter.providers.message-groups", "{\"id\":\"message-groups\",\"enabled\":true,\"type\":\"remote-settings\",\"collection\":\"message-groups\",\"updateCycleInMs\":3600000}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.onboarding", "{\"id\":\"onboarding\",\"type\":\"local\",\"localProvider\":\"OnboardingMessageProvider\",\"enabled\":true,\"exclude\":[]}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.cfr", "{\"id\":\"cfr\",\"enabled\":true,\"type\":\"remote-settings\",\"collection\":\"cfr\",\"updateCycleInMs\":3600000}");
 pref("browser.newtabpage.activity-stream.asrouter.providers.messaging-experiments", "{\"id\":\"messaging-experiments\",\"enabled\":true,\"type\":\"remote-experiments\",\"updateCycleInMs\":3600000}");
 
 // ASRouter user prefs
@@ -1898,13 +1902,15 @@ pref("pdfjs.handleOctetStream", true);
 pref("sidebar.position_start", true);
 pref("sidebar.revamp", false);
 pref("sidebar.main.tools", "history,syncedtabs");
+pref("sidebar.verticalTabs", false);
 
 pref("browser.ml.chat.enabled", false);
-pref("browser.ml.chat.prompt.prefix", 'I’m on page "%currentTabTitle%" with "%selection|12000%" selected. ');
+pref("browser.ml.chat.prompt.prefix", 'I’m on page "%tabTitle%" with "%selection|12000%" selected. ');
 pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Highlight the main themes and conclusions. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning of the selection."}');
 pref("browser.ml.chat.prompts.1", '{"label":"Simplify language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; examples where applicable to make explanations clearer; explanations for jargon and technical terms; headers and bulleted lists for scannability. Maintain factual accuracy while simplifying."}');
 pref("browser.ml.chat.prompts.2", '{"label":"Quiz me","value":"Please create questions related to the selection. Ask the questions one by one. Wait for my response before moving on to the next question. Evaluate each response. Ask a variety of types of questions, like multiple choice, true or false and short answer."}');
 pref("browser.ml.chat.provider", "");
+pref("browser.ml.chat.sidebar", true);
 
 pref("security.protectionspopup.recordEventTelemetry", true);
 pref("security.app_menu.recordEventTelemetry", true);
@@ -1988,6 +1994,10 @@ pref("identity.fxaccounts.commands.missed.fetch_interval", 86400);
 // Controls whether this client can send and receive "close tab"
 // commands from other FxA clients
 pref("identity.fxaccounts.commands.remoteTabManagement.enabled", false);
+
+// Controls whether or not the client association ping has values set on it
+// when the sync-ui-state:update notification fires.
+pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", false);
 
 // Note: when media.gmp-*.visible is true, provided we're running on a
 // supported platform/OS version, the corresponding CDM appears in the

@@ -85,8 +85,6 @@ class nsCSPContext : public nsIContentSecurityPolicy {
    *        The original URI if the blocked content is a redirect, else null
    * @param aViolatedDirective
    *        the directive that was violated (string).
-   * @param aSourceFile
-   *        name of the file containing the inline script violation
    * @param aScriptSample
    *        a sample of the violating inline script
    * @param aViolationEventInit
@@ -95,7 +93,7 @@ class nsCSPContext : public nsIContentSecurityPolicy {
   nsresult GatherSecurityPolicyViolationEventData(
       nsIURI* aOriginalURI, const nsAString& aEffectiveDirective,
       const mozilla::dom::CSPViolationData& aCSPViolationData,
-      const nsAString& aSourceFile, const nsAString& aScriptSample,
+      const nsAString& aScriptSample,
       mozilla::dom::SecurityPolicyViolationEventInit& aViolationEventInit);
 
   nsresult SendReports(
@@ -109,13 +107,11 @@ class nsCSPContext : public nsIContentSecurityPolicy {
           aViolationEventInit);
 
   nsresult AsyncReportViolation(
-      mozilla::dom::Element* aTriggeringElement,
       nsICSPEventListener* aCSPEventListener,
       mozilla::dom::CSPViolationData&& aCSPViolationData, nsIURI* aOriginalURI,
       const nsAString& aViolatedDirectiveName,
       const nsAString& aViolatedDirectiveNameAndValue,
-      const CSPDirective aEffectiveDirective, const nsAString& aObserverSubject,
-      const nsAString& aSourceFile, bool aReportSample);
+      const nsAString& aObserverSubject, bool aReportSample);
 
   // Hands off! Don't call this method unless you know what you
   // are doing. It's only supposed to be called from within

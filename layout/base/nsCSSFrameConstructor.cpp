@@ -7182,7 +7182,10 @@ static bool IsWhitespaceFrame(const nsIFrame* aFrame) {
 static bool IsOnlyNonWhitespaceFrameInList(const nsFrameList& aFrameList,
                                            const nsIFrame* aFrame) {
   for (const nsIFrame* f : aFrameList) {
-    if (f != aFrame && !IsWhitespaceFrame(f)) {
+    if (f == aFrame) {
+      // If we have continuations, ignore them too.
+      aFrame = aFrame->GetNextContinuation();
+    } else if (!IsWhitespaceFrame(f)) {
       return false;
     }
   }
@@ -9660,8 +9663,7 @@ void nsCSSFrameConstructor::ProcessChildren(
             }
           }
           listItem->SetMarkerFrameForListItem(childFrame);
-          MOZ_ASSERT(listItem->HasAnyStateBits(
-                         NS_BLOCK_FRAME_HAS_OUTSIDE_MARKER) == isOutsideMarker);
+          MOZ_ASSERT(listItem->HasOutsideMarker() == isOutsideMarker);
 #ifdef ACCESSIBILITY
           if (nsAccessibilityService* accService = GetAccService()) {
             auto* marker = markerFrame->GetContent();

@@ -521,6 +521,7 @@
 
 /* Page action panel */
 .pageAction-panel-button > .toolbarbutton-icon {
+  list-style-image: var(--pageAction-image, inherit);
   width: 16px;
   height: 16px;
 }
@@ -597,9 +598,13 @@
   }
 }
 
-.urlbar-page-action:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-inset);
+.urlbar-page-action {
+  list-style-image: var(--pageAction-image, inherit);
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-inset);
+  }
 }
 
 .urlbar-go-button,
@@ -1101,7 +1106,7 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
   border-radius: var(--toolbarbutton-border-radius);
 
   /* stylelint-disable-next-line media-query-no-invalid */
-  @media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") {
+  @media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") or (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
     #urlbar[focused] & {
       display: flex;
     }

@@ -360,13 +360,20 @@ export class ProtonScreen extends React.PureComponent {
   }
 
   renderStepsIndicator() {
-    const currentStep = (this.props.order ?? 0) + 1;
-    const previousStep = (this.props.previousOrder ?? -1) + 1;
-    const { content, totalNumberOfScreens: total } = this.props;
+    const {
+      order,
+      previousOrder,
+      content,
+      totalNumberOfScreens: total,
+      aboveButtonStepsIndicator,
+    } = this.props;
+    const currentStep = (order ?? 0) + 1;
+    const previousStep = (previousOrder ?? -1) + 1;
     return (
       <div
         id="steps"
         className={`steps${content.progress_bar ? " progress-bar" : ""}`}
+        above-button={aboveButtonStepsIndicator ? "" : null}
         data-l10n-id={
           content.steps_indicator?.string_id ||
           "onboarding-welcome-steps-indicator-label"
@@ -388,10 +395,7 @@ export class ProtonScreen extends React.PureComponent {
             totalNumberOfScreens={total}
           />
         ) : (
-          <StepsIndicator
-            order={this.props.order}
-            totalNumberOfScreens={total}
-          />
+          <StepsIndicator order={order} totalNumberOfScreens={total} />
         )}
       </div>
     );
@@ -413,6 +417,9 @@ export class ProtonScreen extends React.PureComponent {
             : {}
         }
       >
+        {content.dismiss_button && content.reverse_split
+          ? this.renderDismissButton()
+          : null}
         <Localized text={content.image_alt_text}>
           <div className="sr-only image-alt" role="img" />
         </Localized>
@@ -534,7 +541,9 @@ export class ProtonScreen extends React.PureComponent {
             />
           ) : null}
           {includeNoodles ? this.renderNoodles() : null}
-          {content.dismiss_button ? this.renderDismissButton() : null}
+          {content.dismiss_button && !content.reverse_split
+            ? this.renderDismissButton()
+            : null}
           <div
             className={`main-content ${hideStepsIndicator ? "no-steps" : ""}`}
             style={{

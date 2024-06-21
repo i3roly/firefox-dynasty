@@ -41,6 +41,8 @@
 #include "ProfilerCPUFreq.h"
 #include "ProfilerIOInterposeObserver.h"
 #include "ProfilerParent.h"
+#include "ProfilerNativeStack.h"
+#include "ProfilerStackWalk.h"
 #include "ProfilerRustBindings.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/Maybe.h"
@@ -2027,18 +2029,6 @@ class Registers {
 #endif
 };
 
-// Setting MAX_NATIVE_FRAMES too high risks the unwinder wasting a lot of time
-// looping on corrupted stacks.
-static const size_t MAX_NATIVE_FRAMES = 1024;
-
-struct NativeStack {
-  void* mPCs[MAX_NATIVE_FRAMES];
-  void* mSPs[MAX_NATIVE_FRAMES];
-  size_t mCount;  // Number of frames filled.
-
-  NativeStack() : mPCs(), mSPs(), mCount(0) {}
-};
-
 Atomic<bool> WALKING_JS_STACK(false);
 
 struct AutoWalkJSStack {
@@ -2846,6 +2836,66 @@ static void DoNativeBacktrace(
 #    error "Invalid configuration"
 #  endif
 }
+
+void DoNativeBacktraceDirect(const void* stackTop, NativeStack& aNativeStack,
+                             StackWalkControl* aStackWalkControlIfSupported) {
+#  if defined(MOZ_PROFILING)
+#    if defined(USE_FRAME_POINTER_STACK_WALK) || defined(USE_MOZ_STACK_WALK)
+  // StackWalkCallback(/* frameNum */ 0, aRegs.mPC, aRegs.mSP, &aNativeStack);
+  void* previousResumeSp = nullptr;
+  for (;;) {
+    MozStackWalk(StackWalkCallback, stackTop,
+                 uint32_t(MAX_NATIVE_FRAMES - aNativeStack.mCount),
+                 &aNativeStack);
+    if constexpr (!StackWalkControl::scIsSupported) {
+      break;
+    } else {
+      if (aNativeStack.mCount >= MAX_NATIVE_FRAMES) {
+        // No room to add more frames.
+        break;
+      }
+      if (!aStackWalkControlIfSupported ||
+          aStackWalkControlIfSupported->ResumePointCount() == 0) {
+        // No resume information.
+        break;
+      }
+      void* lastSP = aNativeStack.mSPs[aNativeStack.mCount - 1];
+      if (previousResumeSp &&
+          ((uintptr_t)lastSP <= (uintptr_t)previousResumeSp)) {
+        // No progress after the previous resume point.
+        break;
+      }
+      const StackWalkControl::ResumePoint* resumePoint =
+          aStackWalkControlIfSupported->GetResumePointCallingSp(lastSP);
+      if (!resumePoint) {
+        break;
+      }
+      void* sp = resumePoint->resumeSp;
+      if (!sp) {
+        // Null SP in a resume point means we stop here.
+        break;
+      }
+      void* pc = resumePoint->resumePc;
+      StackWalkCallback(/* frameNum */ aNativeStack.mCount, pc, sp,
+                        &aNativeStack);
+      ++aNativeStack.mCount;
+      if (aNativeStack.mCount >= MAX_NATIVE_FRAMES) {
+        break;
+      }
+      previousResumeSp = sp;
+    }
+  }
+#    else   // defined(USE_FRAME_POINTER_STACK_WALK) ||
+            // defined(USE_MOZ_STACK_WALK)
+  MOZ_CRASH(
+      "Cannot call DoNativeBacktraceDirect without either "
+      "USE_FRAME_POINTER_STACK_WALK USE_MOZ_STACK_WALK");
+#    endif  // defined(USE_FRAME_POINTER_STACK_WALK) ||
+            // defined(USE_MOZ_STACK_WALK)
+#  else
+  aNativeStack.mCount = 0;
+#  endif
+}
 #endif
 
 // Writes some components shared by periodic and synchronous profiles to
@@ -2881,7 +2931,7 @@ static inline void DoSharedSample(
       aJsFrames ? ExtractJsFrames(aIsSynchronous, aThreadData, aRegs, collector,
                                   aJsFrames, stackWalkControlIfSupported)
                 : 0;
-  NativeStack nativeStack;
+  NativeStack nativeStack{.mCount = 0};
 #if defined(HAVE_NATIVE_UNWIND)
   if (captureNative) {
     DoNativeBacktrace(aThreadData, aRegs, nativeStack,
@@ -7508,6 +7558,45 @@ bool profiler_capture_backtrace_into(ProfileChunkedBuffer& aChunkedBuffer,
       false);
 }
 
+bool profiler_backtrace_into_buffer(ProfileChunkedBuffer& aChunkedBuffer,
+                                    NativeStack& aNativeStack) {
+  MOZ_RELEASE_ASSERT(CorePS::Exists());
+
+  return ThreadRegistration::WithOnThreadRefOr(
+      [&](ThreadRegistration::OnThreadRef aOnThreadRef) {
+        mozilla::Maybe<uint32_t> maybeFeatures =
+            RacyFeatures::FeaturesIfActiveAndUnpaused();
+        if (!maybeFeatures) {
+          return false;
+        }
+
+        ProfileBuffer profileBuffer(aChunkedBuffer);
+        const uint64_t bufferRangeStart = profileBuffer.BufferRangeStart();
+        const uint64_t samplePos = profileBuffer.AddThreadIdEntry(
+            aOnThreadRef.UnlockedReaderAndAtomicRWOnThreadCRef()
+                .Info()
+                .ThreadId());
+
+        TimeDuration delta = TimeStamp::Now() - CorePS::ProcessStartTime();
+        profileBuffer.AddEntry(
+            ProfileBufferEntry::Time(delta.ToMilliseconds()));
+
+        ProfileBufferCollector collector(profileBuffer, samplePos,
+                                         bufferRangeStart);
+
+        for (int nativeIndex = (int)(aNativeStack.mCount); nativeIndex >= 0;
+             --nativeIndex) {
+          collector.CollectNativeLeafAddr(
+              (void*)aNativeStack.mPCs[nativeIndex]);
+        }
+
+        return true;
+      },
+      // If this was called from a non-registered thread, return false and do no
+      // more work. This can happen from a memory hook.
+      false);
+}
+
 UniquePtr<ProfileChunkedBuffer> profiler_capture_backtrace() {
   MOZ_RELEASE_ASSERT(CorePS::Exists());
   AUTO_PROFILER_LABEL_HOT("profiler_capture_backtrace", PROFILER);
@@ -7657,7 +7746,7 @@ static void profiler_suspend_and_sample_thread(
   }
 
   // Allocate the space for the native stack
-  NativeStack nativeStack;
+  NativeStack nativeStack{.mCount = 0};
 
   auto collectStack = [&](const Registers& aRegs, const TimeStamp& aNow) {
     // The target thread is now suspended. Collect a native backtrace,

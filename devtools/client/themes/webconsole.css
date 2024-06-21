@@ -360,7 +360,7 @@
 .message-location {
   max-width: 40%;
   flex-shrink: 0;
-  color: var(--frame-link-source);
+  color: var(--theme-internal-link-color);
   margin-left: 1ch;
   /* Makes the file name truncated (and ellipsis shown) on the left side */
   direction: rtl;
@@ -709,6 +709,15 @@ a.learn-more-link.webconsole-learn-more-link {
   /* It's important to keep this in px as it's used in JS to control the display mode
    * of the filter toolbar. */
   min-width: 150px;
+}
+
+/* We always render the "X hidden" element in the filter bar for accessibility.
+   But when the filter input is not focused, or empty, and there is no filtered messages,
+   we don't want to display it as it provides little value
+*/
+.webconsole-filterbar-primary[data-has-filtered-by-text="false"]
+  .devtools-searchbox input:is(:not(:focus),:empty) ~ #devtools-console-output-filter-summary {
+  display: none;
 }
 
 

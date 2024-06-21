@@ -8,8 +8,10 @@
 #define DOM_SECURITY_CSPVIOLATION_H_
 
 #include "nsCOMPtr.h"
+#include "nsIContentSecurityPolicy.h"
 #include "nsIURI.h"
 #include "nsString.h"
+#include "mozilla/RefPtr.h"
 #include "mozilla/Variant.h"
 
 #include <cstdint>
@@ -17,7 +19,10 @@
 class nsIURI;
 
 namespace mozilla::dom {
+class Element;
+
 // Represents parts of <https://w3c.github.io/webappsec-csp/#violation>.
+// The remaining parts can be deduced from the corresponding nsCSPContext.
 struct CSPViolationData {
   enum class BlockedContentSource {
     Unknown,
@@ -31,15 +36,23 @@ struct CSPViolationData {
 
   // @param aSample Will be truncated if necessary.
   CSPViolationData(uint32_t aViolatedPolicyIndex, Resource&& aResource,
-                   uint32_t aLineNumber, uint32_t aColumnNumber,
+                   const CSPDirective aEffectiveDirective,
+                   const nsAString& aSourceFile, uint32_t aLineNumber,
+                   uint32_t aColumnNumber, Element* aElement,
                    const nsAString& aSample);
+
+  ~CSPViolationData();
 
   BlockedContentSource BlockedContentSourceOrUnknown() const;
 
   const uint32_t mViolatedPolicyIndex;
   const Resource mResource;
+  const CSPDirective mEffectiveDirective;
+  // String representation of the URL. The empty string represents a null-URL.
+  const nsString mSourceFile;
   const uint32_t mLineNumber;
   const uint32_t mColumnNumber;
+  RefPtr<Element> mElement;
   const nsString mSample;
 };
 }  // namespace mozilla::dom

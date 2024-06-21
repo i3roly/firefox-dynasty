@@ -504,18 +504,17 @@ class WebConsoleUI {
       if (
         (this.isBrowserToolboxConsole || this.isBrowserConsole) &&
         resource.isAlreadyExistingResource &&
-        (resource.pageError?.private || resource.message?.private)
+        (resource.pageError?.private ||
+          // @backward-compat { version 129 } Once Fx129 is release, CONSOLE_MESSAGE resource
+          // are no longer encapsulated into a sub "message" attribute.
+          // (we can keep `resource?.private` and drop `resource.message?.private`)
+          (resource.message || resource)?.private)
       ) {
         continue;
       }
 
       if (resource.resourceType === TYPES.NETWORK_EVENT_STACKTRACE) {
         this.networkDataProvider?.onStackTraceAvailable(resource);
-        continue;
-      }
-
-      if (resource.resourceType === TYPES.JSTRACER_TRACE) {
-        this.wrapper.dispatchJsTraces(resource);
         continue;
       }
 

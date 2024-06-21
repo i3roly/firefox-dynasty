@@ -832,7 +832,6 @@ void nsCocoaWindow::Show(bool aState) {
         [mWindow orderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;
-      SendSetZLevelEvent();
       // If our popup window is a non-native context menu, tell the OS (and
       // other programs) that a menu has opened.  This is how the OS knows to
       // close other programs' context menus when ours open.
@@ -881,7 +880,6 @@ void nsCocoaWindow::Show(bool aState) {
         [mWindow makeKeyAndOrderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;
-      SendSetZLevelEvent();
     }
     SetSupportsNativeFullscreen(savedValueForSupportsNativeFullscreen);
   } else {
@@ -937,8 +935,8 @@ WindowRenderer* nsCocoaWindow::GetWindowRenderer() {
 TransparencyMode nsCocoaWindow::GetTransparencyMode() {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
-  return !mWindow || mWindow.isOpaque ? TransparencyMode::Opaque
-                                      : TransparencyMode::Transparent;
+  return mWindow.isOpaque ? TransparencyMode::Opaque
+                          : TransparencyMode::Transparent;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(TransparencyMode::Opaque);
 }
@@ -1588,6 +1586,11 @@ void nsCocoaWindow::ProcessTransitions() {
 
   mInProcessTransitions = true;
 
+  if (mProcessTransitionsPending) {
+    mProcessTransitionsPending->Cancel();
+    mProcessTransitionsPending = nullptr;
+  }
+
   // Start a loop that will continue as long as we have transitions to process
   // and we aren't waiting on an asynchronous transition to complete. Any
   // transition that starts something async will `continue` this loop to exit.
@@ -1767,6 +1770,10 @@ void nsCocoaWindow::CancelAllTransitions() {
   // ProcessTransitions().
   mTransitionCurrent.reset();
   mIsTransitionCurrentAdded = false;
+  if (mProcessTransitionsPending) {
+    mProcessTransitionsPending->Cancel();
+    mProcessTransitionsPending = nullptr;
+  }
   std::queue<TransitionType>().swap(mTransitionsPending);
 }
 
@@ -1792,9 +1799,11 @@ void nsCocoaWindow::FinishCurrentTransitionIfMatching(
     // ProcessTransitions on the next event loop. Doing this will ensure that
     // any async native transition methods we call (like toggleFullScreen) will
     // succeed.
-    if (!mTransitionsPending.empty()) {
-      NS_DispatchToCurrentThread(NewRunnableMethod(
-          "FinishCurrentTransition", this, &nsCocoaWindow::ProcessTransitions));
+    if (!mTransitionsPending.empty() && !mProcessTransitionsPending) {
+      mProcessTransitionsPending = NS_NewCancelableRunnableFunction(
+          "ProcessTransitionsPending",
+          [self = RefPtr{this}] { self->ProcessTransitions(); });
+      NS_DispatchToCurrentThread(mProcessTransitionsPending);
     }
   }
 }
@@ -2086,15 +2095,6 @@ bool nsCocoaWindow::DragEvent(unsigned int aMessage,
   return false;
 }
 
-void nsCocoaWindow::SendSetZLevelEvent() {
-  if (mWidgetListener) {
-    nsWindowZ placement = nsWindowZTop;
-    nsCOMPtr<nsIWidget> actualBelow;
-    mWidgetListener->ZLevelChanged(true, &placement, nullptr,
-                                   getter_AddRefs(actualBelow));
-  }
-}
-
 // Invokes callback and ProcessEvent methods on Event Listener object
 nsresult nsCocoaWindow::DispatchEvent(WidgetGUIEvent* event,
                                       nsEventStatus& aStatus) {
@@ -2245,7 +2245,6 @@ void nsCocoaWindow::SetFocus(Raise aRaise,
       [mWindow deminiaturize:nil];
     }
     [mWindow makeKeyAndOrderFront:nil];
-    SendSetZLevelEvent();
   }
 }
 
@@ -3267,6 +3266,7 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
   mState = nil;
   mDisabledNeedsDisplay = NO;
   mTrackingArea = nil;
+  mViewWithTrackingArea = nil;
   mDirtyRect = NSZeroRect;
   mBeingShown = NO;
   mDrawTitle = NO;
@@ -3476,25 +3476,28 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   return nil;
 }
 - (void)removeTrackingArea {
-  if (mTrackingArea) {
-    [self.trackingAreaView removeTrackingArea:mTrackingArea];
-    [mTrackingArea release];
-    mTrackingArea = nil;
-  }
+  [mViewWithTrackingArea removeTrackingArea:mTrackingArea];
+
+  [mTrackingArea release];
+  mTrackingArea = nil;
+
+  [mViewWithTrackingArea release];
+  mViewWithTrackingArea = nil;
 }
 
 - (void)updateTrackingArea {
   [self removeTrackingArea];
 
-  NSView* view = self.trackingAreaView;
+  mViewWithTrackingArea = [self.trackingAreaView retain];
   const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
                                         NSTrackingMouseMoved |
                                         NSTrackingActiveAlways;
-  mTrackingArea = [[NSTrackingArea alloc] initWithRect:[view bounds]
-                                               options:options
-                                                 owner:self
-                                              userInfo:nil];
-  [view addTrackingArea:mTrackingArea];
+  mTrackingArea =
+      [[NSTrackingArea alloc] initWithRect:[mViewWithTrackingArea bounds]
+                                   options:options
+                                     owner:self
+                                  userInfo:nil];
+  [mViewWithTrackingArea addTrackingArea:mTrackingArea];
 }
 
 - (void)mouseEntered:(NSEvent*)aEvent {

@@ -46,6 +46,7 @@
 #include "mozilla/layers/APZInputBridge.h"
 #include "mozilla/layers/IAPZCTreeManager.h"
 #include "mozilla/Likely.h"
+#include "mozilla/Maybe.h"
 #include "mozilla/MiscEvents.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/NativeKeyBindingsType.h"
@@ -54,6 +55,7 @@
 #include "mozilla/ProfilerLabels.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticPrefs_apz.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "mozilla/StaticPrefs_mozilla.h"
 #include "mozilla/StaticPrefs_ui.h"
@@ -2723,37 +2725,6 @@ void nsWindow::WaylandPopupMoveImpl() {
                        mPopupMoveToRectParams.mHints, offset.x, offset.y);
 }
 
-void nsWindow::SetZIndex(int32_t aZIndex) {
-  nsIWidget* oldPrev = GetPrevSibling();
-
-  nsBaseWidget::SetZIndex(aZIndex);
-
-  if (GetPrevSibling() == oldPrev) {
-    return;
-  }
-
-  // We skip the nsWindows that don't have mGdkWindows.
-  // These are probably in the process of being destroyed.
-  if (!mGdkWindow) {
-    return;
-  }
-
-  if (!GetNextSibling()) {
-    // We're to be on top.
-    if (mGdkWindow) {
-      gdk_window_raise(mGdkWindow);
-    }
-  } else {
-    // All the siblings before us need to be below our widget.
-    for (nsWindow* w = this; w;
-         w = static_cast<nsWindow*>(w->GetPrevSibling())) {
-      if (w->mGdkWindow) {
-        gdk_window_lower(w->mGdkWindow);
-      }
-    }
-  }
-}
-
 void nsWindow::SetSizeMode(nsSizeMode aMode) {
   LOG("nsWindow::SetSizeMode %d\n", aMode);
 
@@ -4617,8 +4588,15 @@ void nsWindow::DispatchContextMenuEventFromMouseEvent(
     uint16_t domButton, GdkEventButton* aEvent,
     const LayoutDeviceIntPoint& aRefPoint) {
   if (domButton == MouseButton::eSecondary && MOZ_LIKELY(!mIsDestroyed)) {
-    WidgetMouseEvent contextMenuEvent(true, eContextMenu, this,
-                                      WidgetMouseEvent::eReal);
+    Maybe<WidgetPointerEvent> pointerEvent;
+    Maybe<WidgetMouseEvent> mouseEvent;
+    if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
+      pointerEvent.emplace(true, eContextMenu, this);
+    } else {
+      mouseEvent.emplace(true, eContextMenu, this, WidgetMouseEvent::eReal);
+    }
+    WidgetMouseEvent& contextMenuEvent =
+        pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
     InitButtonEvent(contextMenuEvent, aEvent, aRefPoint);
     contextMenuEvent.mPressure = mLastMotionPressure;
     DispatchInputEvent(&contextMenuEvent);

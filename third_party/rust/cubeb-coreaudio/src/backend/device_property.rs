@@ -254,7 +254,11 @@ pub fn get_device_streams(
             );
             return Ok(sub_device_ids
                 .into_iter()
-                .filter_map(|sub_id| get_device_streams(sub_id, devtype).ok())
+                .filter_map(|sub_id| match sub_id {
+                    #[allow(non_upper_case_globals)]
+                    kAudioObjectUnknown => None,
+                    i => get_device_streams(i, devtype).ok(),
+                })
                 .flatten()
                 .collect());
         }
@@ -343,24 +347,6 @@ pub fn get_stream_latency(id: AudioStreamID) -> std::result::Result<u32, OSStatu
     let err = audio_object_get_property_data(id, &address, &mut size, &mut latency);
     if err == NO_ERR {
         Ok(latency)
-    } else {
-        Err(err)
-    }
-}
-
-pub fn get_stream_terminal_type(id: AudioStreamID) -> std::result::Result<u32, OSStatus> {
-    assert_ne!(id, kAudioObjectUnknown);
-    //debug_assert_running_serially();
-
-    let address = get_property_address(
-        Property::StreamTerminalType,
-        DeviceType::INPUT | DeviceType::OUTPUT,
-    );
-    let mut size = mem::size_of::<u32>();
-    let mut terminal_type: u32 = 0;
-    let err = audio_object_get_property_data(id, &address, &mut size, &mut terminal_type);
-    if err == NO_ERR {
-        Ok(terminal_type)
     } else {
         Err(err)
     }

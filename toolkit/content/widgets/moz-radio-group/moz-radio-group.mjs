@@ -49,7 +49,7 @@ export class MozRadioGroup extends MozLitElement {
 
   static properties = {
     disabled: { type: Boolean, reflect: true },
-    label: { type: String },
+    label: { type: String, fluent: true },
     name: { type: String },
   };
 
@@ -84,11 +84,6 @@ export class MozRadioGroup extends MozLitElement {
     super();
     this.disabled = false;
     this.addEventListener("keydown", e => this.handleKeydown(e));
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    this.dataset.l10nAttrs = "label";
   }
 
   firstUpdated() {
@@ -233,7 +228,7 @@ export class MozRadio extends MozLitElement {
     checked: { type: Boolean, reflect: true },
     disabled: { type: Boolean, reflect: true },
     iconSrc: { type: String },
-    label: { type: String },
+    label: { type: String, fluent: true },
     name: { type: String, attribute: false },
     inputTabIndex: { type: Number, state: true },
     value: { type: String },
@@ -253,7 +248,6 @@ export class MozRadio extends MozLitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.dataset.l10nAttrs = "label";
 
     let hostRadioGroup = this.parentElement || this.getRootNode().host;
     if (!(hostRadioGroup instanceof MozRadioGroup)) {
@@ -323,30 +317,35 @@ export class MozRadio extends MozLitElement {
     return "";
   }
 
+  inputTemplate() {
+    return html`<input
+      type="radio"
+      id="radio-button"
+      value=${this.value}
+      name=${this.name}
+      .checked=${this.checked}
+      aria-checked=${this.checked}
+      tabindex=${this.inputTabIndex}
+      ?disabled=${this.disabled || this.#controller.disabled}
+      @click=${this.handleClick}
+      @change=${this.handleChange}
+    />`;
+  }
+
+  labelTemplate() {
+    return html`<span class="label-content">
+      ${this.iconTemplate()}
+      <span class="text">${this.label}</span>
+    </span>`;
+  }
+
   render() {
     return html`
       <link
         rel="stylesheet"
         href="chrome://global/content/elements/moz-radio.css"
       />
-      <label is="moz-label" for="radio-button">
-        <input
-          type="radio"
-          id="radio-button"
-          value=${this.value}
-          name=${this.name}
-          .checked=${this.checked}
-          aria-checked=${this.checked}
-          tabindex=${this.inputTabIndex}
-          ?disabled=${this.disabled || this.#controller.disabled}
-          @click=${this.handleClick}
-          @change=${this.handleChange}
-        />
-        <span class="label-content">
-          ${this.iconTemplate()}
-          <span class="text"> ${this.label || html`<slot></slot>`} </span>
-        </span>
-      </label>
+      <label>${this.inputTemplate()}${this.labelTemplate()}</label>
     `;
   }
 }

@@ -800,7 +800,7 @@ def default_wasm_jspi(
     tail_calls,
     target,
 ):
-    if not jit_enabled or simulator:
+    if not jit_enabled:
         return
 
     if not gc or not tail_calls:
@@ -808,6 +808,9 @@ def default_wasm_jspi(
 
     if not is_nightly:
         return
+
+    if simulator and (simulator[0] == "arm64"):
+        return True
 
     if target.cpu in ("x86_64", "aarch64"):
         return True
@@ -842,8 +845,8 @@ def wasm_jspi(value, jit_enabled, simulator, gc, tail_calls, no_experimental, ta
     if not tail_calls:
         die("--enable-wasm-jspi requires --enable-wasm-tail-calls")
 
-    if simulator:
-        die("--enable-wasm-jspi is not supported for simulators")
+    if simulator and (simulator[0] != "arm64"):
+        die("--enable-wasm-jspi is only supported for arm64 simulator")
 
     if target.cpu in ("x86_64", "aarch64"):
         return True
@@ -1319,6 +1322,23 @@ set_config("MOZ_ICU_CFLAGS", [], when=in_tree_icu)
 
 set_config("MOZ_SYSTEM_ICU", True, when=system_icu)
 set_define("MOZ_SYSTEM_ICU", True, when=system_icu)
+
+option(
+    "--disable-icu4x",
+    help="Disable using ICU4X",
+    when=js_standalone,
+)
+
+
+@depends(
+    depends("--enable-icu4x", when=js_standalone)(lambda x: bool(x)), js_standalone
+)
+def enable_icu4x(enable, js_standalone):
+    return not js_standalone or enable
+
+
+set_config("MOZ_ICU4X", True, when=enable_icu4x)
+set_define("MOZ_ICU4X", True, when=enable_icu4x)
 
 option("--without-intl-api", help="Disable ECMAScript Internationalization API")
 

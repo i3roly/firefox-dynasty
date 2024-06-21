@@ -146,10 +146,6 @@ case "$target" in
 esac
 
 if test -n "$_WIN32_MSVC"; then
-    SKIP_PATH_CHECKS=1
-    SKIP_COMPILER_CHECKS=1
-    SKIP_LIBRARY_CHECKS=1
-
     # Since we're skipping compiler and library checks, hard-code
     # some facts here.
     AC_DEFINE(HAVE_IO_H)
@@ -167,10 +163,6 @@ dnl ==============================================================
 if test "$COMPILE_ENVIRONMENT"; then
     MOZ_ARCH_OPTS
 fi # COMPILE_ENVIRONMENT
-
-if test -n "$COMPILE_ENVIRONMENT"; then
-   MOZ_CONFIG_SANITIZE
-fi
 
 dnl ========================================================
 dnl GNU specific defaults
@@ -440,14 +432,8 @@ if test -z "$MOZ_OPTIMIZE_FLAGS"; then
 fi
 
 
-if test -z "$COMPILE_ENVIRONMENT"; then
-    SKIP_COMPILER_CHECKS=1
-    SKIP_LIBRARY_CHECKS=1
-else
+if test -n "$COMPILE_ENVIRONMENT"; then
     MOZ_COMPILER_OPTS
-fi # COMPILE_ENVIRONMENT
-
-if test -z "$SKIP_COMPILER_CHECKS"; then
 
 dnl ========================================================
 dnl Put your C++ language/feature checks below
@@ -483,7 +469,7 @@ fi
 dnl End of C++ language/feature checks
 AC_LANG_C
 
-fi # ! SKIP_COMPILER_CHECKS
+fi # COMPILE_ENVIRONMENT
 
 TARGET_XPCOM_ABI=
 if test -n "${TARGET_CPU}" -a -n "${TARGET_COMPILER_ABI}"; then
@@ -504,7 +490,6 @@ dnl ========================================================
 
 MOZ_BRANDING_DIRECTORY=
 MOZ_OFFICIAL_BRANDING=
-MOZ_DEVTOOLS=server
 
 dnl ========================================================
 dnl = Trademarked Branding
@@ -552,21 +537,6 @@ if test -f "${_topsrcdir}/$REAL_BRANDING_DIRECTORY/configure.sh"; then
 fi
 
 AC_SUBST(MOZ_BRANDING_DIRECTORY)
-
-dnl ========================================================
-dnl = Distribution ID
-dnl ========================================================
-MOZ_ARG_WITH_STRING(distribution-id,
-[  --with-distribution-id=ID
-                          Set distribution-specific id (default=org.mozilla)],
-[ val=`echo $withval`
-    MOZ_DISTRIBUTION_ID="$val"])
-
-if test -z "$MOZ_DISTRIBUTION_ID"; then
-   MOZ_DISTRIBUTION_ID="org.mozilla"
-fi
-
-AC_SUBST(MOZ_DISTRIBUTION_ID)
 
 dnl ========================================================
 dnl = Enable code optimization. ON by default.
@@ -640,8 +610,6 @@ dnl ========================================================
 
 AC_SUBST_LIST(ASFLAGS)
 AC_SUBST_LIST(MOZ_DEBUG_LDFLAGS)
-
-AC_SUBST(MOZ_STUB_INSTALLER)
 
 AC_SUBST_LIST(MOZ_FIX_LINK_PATHS)
 
@@ -718,16 +686,11 @@ AC_SUBST(MOZ_EME_PROCESS_BUNDLEID)
 
 # The following variables are available to branding and application
 # configuration ($BRANDING/configure.sh and $APPLICATION/confvars.sh):
-# - MOZ_APP_VENDOR: Used for application.ini's "Vendor" field, which also
-# impacts profile location and user-visible fields.
 # - MOZ_APP_DISPLAYNAME: Used in user-visible fields (DLL properties,
 # Mac Bundle name, Updater, Installer), it is typically used for nightly
 # builds (e.g. Aurora for Firefox).
 # - MOZ_APP_PROFILE: When set, used for application.ini's
 # "Profile" field, which controls profile location.
-# - MOZ_APP_ID: When set, used for application.ini's "ID" field, and
-# crash reporter server url.
-# - MOZ_PROFILE_MIGRATOR: When set, enables profile migrator.
 
 # The following environment variables used to have an effect, but don't anymore:
 # - MOZ_APP_VERSION: Defines the application version number. This was replaced with
@@ -757,30 +720,12 @@ else
 fi
 
 AC_SUBST(MOZ_APP_DISPLAYNAME)
-AC_SUBST(MOZ_APP_VENDOR)
 AC_SUBST(MOZ_APP_PROFILE)
-AC_SUBST(MOZ_APP_ID)
 AC_SUBST(MAR_CHANNEL_ID)
 AC_SUBST(ACCEPTED_MAR_CHANNEL_IDS)
-AC_SUBST(MOZ_PROFILE_MIGRATOR)
-AC_DEFINE_UNQUOTED(MOZ_APP_UA_NAME, "$MOZ_APP_UA_NAME")
-AC_SUBST(MOZ_APP_UA_NAME)
 AC_DEFINE_UNQUOTED(MOZ_APP_UA_VERSION, "$MOZ_APP_VERSION")
-AC_DEFINE_UNQUOTED(BROWSER_CHROME_URL, $BROWSER_CHROME_URL)
-AC_DEFINE_UNQUOTED(BROWSER_CHROME_URL_QUOTED, "$BROWSER_CHROME_URL")
 
 AC_SUBST(MOZ_APP_MAXVERSION)
-
-if test "$MOZILLA_OFFICIAL"; then
-    # Build revisions should always be present in official builds
-    MOZ_INCLUDE_SOURCE_INFO=1
-fi
-
-# External builds (specifically Ubuntu) may drop the hg repo information, so we allow to
-# explicitly set the repository and changeset information in.
-AC_SUBST(MOZ_SOURCE_REPO)
-AC_SUBST(MOZ_SOURCE_CHANGESET)
-AC_SUBST(MOZ_INCLUDE_SOURCE_INFO)
 
 dnl Echo the CFLAGS to remove extra whitespace.
 CFLAGS=`echo \
@@ -819,19 +764,6 @@ HOST_LDFLAGS=`echo \
     $HOST_LDFLAGS \
     $_COMPILATION_HOST_LDFLAGS`
 
-HOST_CMFLAGS="-x objective-c -fobjc-exceptions"
-HOST_CMMFLAGS="-x objective-c++ -fobjc-exceptions"
-OS_COMPILE_CMFLAGS="-x objective-c -fobjc-exceptions"
-OS_COMPILE_CMMFLAGS="-x objective-c++ -fobjc-exceptions"
-if test "$MOZ_WIDGET_TOOLKIT" = uikit; then
-  OS_COMPILE_CMFLAGS="$OS_COMPILE_CMFLAGS -fobjc-abi-version=2 -fobjc-legacy-dispatch"
-  OS_COMPILE_CMMFLAGS="$OS_COMPILE_CMMFLAGS -fobjc-abi-version=2 -fobjc-legacy-dispatch"
-fi
-AC_SUBST(HOST_CMFLAGS)
-AC_SUBST(HOST_CMMFLAGS)
-AC_SUBST(OS_COMPILE_CMFLAGS)
-AC_SUBST(OS_COMPILE_CMMFLAGS)
-
 OS_CFLAGS="$CFLAGS"
 OS_CXXFLAGS="$CXXFLAGS"
 OS_CPPFLAGS="$CPPFLAGS"
@@ -862,11 +794,6 @@ AC_SUBST(DSO_LDOPTS)
 AC_SUBST(BIN_SUFFIX)
 AC_SUBST(WIN32_CONSOLE_EXE_LDFLAGS)
 AC_SUBST(WIN32_GUI_EXE_LDFLAGS)
-
-AC_SUBST(MOZ_DEVTOOLS)
-
-dnl Used specifically by Thunderbird
-AC_SUBST(NSS_EXTRA_SYMBOLS_FILE)
 
 dnl Set various defines and substitutions
 dnl ========================================================

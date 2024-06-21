@@ -19,7 +19,7 @@ object Versions {
     const val serialization = "1.6.3"
     const val python_envs_plugin = "0.0.31"
 
-    const val mozilla_glean = "60.1.1"
+    const val mozilla_glean = "60.3.0"
 
     const val junit = "4.13.2"
     const val robolectric = "4.12.1"
@@ -38,7 +38,7 @@ object Versions {
     const val detekt = "1.23.6"
     const val ktlint = "0.49.1"
 
-    const val sentry = "7.9.0"
+    const val sentry = "7.10.0"
 
     const val zxing = "3.5.3"
 
@@ -62,7 +62,7 @@ object Versions {
         const val biometric = "1.1.0"
         const val cardview = "1.0.0"
         const val collection = "1.4.0"
-        const val compose_bom = "2024.05.00"
+        const val compose_bom = "2024.06.00"
         const val constraintlayout = "2.1.4"
         const val coordinatorlayout = "1.2.0"
         const val core = "1.13.1"
@@ -93,7 +93,10 @@ object Versions {
         const val messaging = "24.0.0"
     }
 
-    const val play_services = "18.4.0"
+    object Google {
+        const val play_review = "2.0.1"
+        const val play_services = "18.4.0"
+    }
 }
 
 // Synchronized dependencies used by (some) modules
@@ -218,5 +221,7 @@ object ComponentsDependencies {
 
     const val firebase_messaging = "com.google.firebase:firebase-messaging:${Versions.Firebase.messaging}"
 
-    const val play_services_base = "com.google.android.gms:play-services-base:${Versions.play_services}"
+    const val play_review = "com.google.android.play:review:${Versions.Google.play_review}"
+    const val play_review_ktx = "com.google.android.play:review-ktx:${Versions.Google.play_review}"
+    const val play_services_base = "com.google.android.gms:play-services-base:${Versions.Google.play_services}"
 }

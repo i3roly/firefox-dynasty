@@ -1695,6 +1695,7 @@ void CanonicalBrowsingContext::GoToIndex(
                                 aUserActivation);
   }
 }
+
 void CanonicalBrowsingContext::Reload(uint32_t aReloadFlags) {
   if (IsDiscarded()) {
     return;
@@ -2779,12 +2780,13 @@ void CanonicalBrowsingContext::CancelSessionStoreUpdate() {
 }
 
 void CanonicalBrowsingContext::SetContainerFeaturePolicy(
-    FeaturePolicy* aContainerFeaturePolicy) {
-  mContainerFeaturePolicy = aContainerFeaturePolicy;
+    Maybe<FeaturePolicyInfo>&& aContainerFeaturePolicyInfo) {
+  mContainerFeaturePolicyInfo = std::move(aContainerFeaturePolicyInfo);
+}
 
-  if (WindowGlobalParent* current = GetCurrentWindowGlobal()) {
-    Unused << current->SendSetContainerFeaturePolicy(mContainerFeaturePolicy);
-  }
+already_AddRefed<CanonicalBrowsingContext>
+CanonicalBrowsingContext::GetCrossGroupOpener() const {
+  return Get(mCrossGroupOpenerId);
 }
 
 void CanonicalBrowsingContext::SetCrossGroupOpenerId(uint64_t aOpenerId) {
@@ -2795,7 +2797,7 @@ void CanonicalBrowsingContext::SetCrossGroupOpenerId(uint64_t aOpenerId) {
 }
 
 void CanonicalBrowsingContext::SetCrossGroupOpener(
-    CanonicalBrowsingContext& aCrossGroupOpener, ErrorResult& aRv) {
+    CanonicalBrowsingContext* aCrossGroupOpener, ErrorResult& aRv) {
   if (!IsTopContent()) {
     aRv.ThrowNotAllowedError(
         "Can only set crossGroupOpener on toplevel content");
@@ -2805,8 +2807,12 @@ void CanonicalBrowsingContext::SetCrossGroupOpener(
     aRv.ThrowNotAllowedError("Can only set crossGroupOpener once");
     return;
   }
+  if (!aCrossGroupOpener) {
+    aRv.ThrowNotAllowedError("Can't set crossGroupOpener to null");
+    return;
+  }
 
-  SetCrossGroupOpenerId(aCrossGroupOpener.Id());
+  SetCrossGroupOpenerId(aCrossGroupOpener->Id());
 }
 
 auto CanonicalBrowsingContext::FindUnloadingHost(uint64_t aChildID)
@@ -3202,15 +3208,15 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(CanonicalBrowsingContext,
   if (tmp->mSessionHistory) {
     tmp->mSessionHistory->SetBrowsingContext(nullptr);
   }
-  NS_IMPL_CYCLE_COLLECTION_UNLINK(mSessionHistory, mContainerFeaturePolicy,
-                                  mCurrentBrowserParent, mWebProgress,
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mSessionHistory, mCurrentBrowserParent,
+                                  mWebProgress,
                                   mSessionStoreSessionStorageUpdateTimer)
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(CanonicalBrowsingContext,
                                                   BrowsingContext)
-  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mSessionHistory, mContainerFeaturePolicy,
-                                    mCurrentBrowserParent, mWebProgress,
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mSessionHistory, mCurrentBrowserParent,
+                                    mWebProgress,
                                     mSessionStoreSessionStorageUpdateTimer)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 

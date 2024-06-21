@@ -162,6 +162,19 @@ namespace {
 
 static NS_DEFINE_CID(kStreamListenerTeeCID, NS_STREAMLISTENERTEE_CID);
 
+enum ChannelDisposition {
+  kHttpCanceled = 0,
+  kHttpDisk = 1,
+  kHttpNetOK = 2,
+  kHttpNetEarlyFail = 3,
+  kHttpNetLateFail = 4,
+  kHttpsCanceled = 8,
+  kHttpsDisk = 9,
+  kHttpsNetOK = 10,
+  kHttpsNetEarlyFail = 11,
+  kHttpsNetLateFail = 12
+};
+
 void AccumulateCacheHitTelemetry(CacheDisposition hitOrMiss,
                                  nsIChannel* aChannel) {
   nsCString key("UNKNOWN");
@@ -643,6 +656,14 @@ nsresult nsHttpChannel::OnBeforeConnect() {
 // When TRR is enabled, we always return true, as resolving HTTPS
 // records don't depend on the network.
 static bool canUseHTTPSRRonNetwork(bool* aTRREnabled = nullptr) {
+  // Respect the pref.
+  if (StaticPrefs::network_dns_force_use_https_rr()) {
+    if (aTRREnabled) {
+      *aTRREnabled = true;
+    }
+    return true;
+  }
+
   if (nsCOMPtr<nsIDNSService> dns = mozilla::components::DNS::Service()) {
     nsIDNSService::ResolverMode mode;
     // If the browser is currently using TRR/DoH, then it can
@@ -6453,7 +6474,9 @@ uint16_t nsHttpChannel::GetProxyDNSStrategy() {
   // This function currently only supports returning DNS_PREFETCH_ORIGIN.
   // Support for the rest of the DNS_* flags will be added later.
 
-  if (!mProxyInfo) {
+  // When network_dns_force_use_https_rr is true, return DNS_PREFETCH_ORIGIN.
+  // This ensures that we always perform HTTPS RR query.
+  if (!mProxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
     return DNS_PREFETCH_ORIGIN;
   }
 
@@ -7368,6 +7391,10 @@ void nsHttpChannel::RecordOnStartTelemetry(nsresult aStatus,
   Telemetry::Accumulate(Telemetry::HTTP_CHANNEL_ONSTART_SUCCESS,
                         NS_SUCCEEDED(aStatus));
 
+  mozilla::glean::networking::http_channel_onstart_status
+      .Get(NS_SUCCEEDED(aStatus) ? "successful"_ns : "fail"_ns)
+      .Add(1);
+
   if (mTransaction) {
     Telemetry::Accumulate(
         Telemetry::HTTP3_CHANNEL_ONSTART_SUCCESS,
@@ -7714,98 +7741,84 @@ static void ReportHTTPSRRTelemetry(
   }
 }
 
-static nsLiteralCString ContentTypeToTelemetryLabel(nsHttpChannel* aChannel) {
-  nsAutoCString contentType;
-  aChannel->GetContentType(contentType);
+static void RecordHttpChanDispositionGlean(ChannelDisposition chanDisposition) {
+  switch (chanDisposition) {
+    case kHttpCanceled:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("http_cancelled"_ns)
+          .Add(1);
+      break;
+    case kHttpDisk:
+      mozilla::glean::networking::http_channel_disposition.Get("http_disk"_ns)
+          .Add(1);
+      break;
+    case kHttpNetOK:
+      mozilla::glean::networking::http_channel_disposition.Get("http_net_ok"_ns)
+          .Add(1);
+      break;
+    case kHttpNetEarlyFail:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("http_net_early_fail"_ns)
+          .Add(1);
+      break;
+    case kHttpNetLateFail:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("http_net_late_fail"_ns)
+          .Add(1);
+      break;
+    case kHttpsCanceled:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("https_cancelled"_ns)
+          .Add(1);
+      break;
+    case kHttpsDisk:
+      mozilla::glean::networking::http_channel_disposition.Get("http_disk"_ns)
+          .Add(1);
+      break;
+    case kHttpsNetOK:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("https_net_ok"_ns)
+          .Add(1);
+      break;
+    case kHttpsNetEarlyFail:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("https_net_early_fail"_ns)
+          .Add(1);
+      break;
+    case kHttpsNetLateFail:
+      mozilla::glean::networking::http_channel_disposition
+          .Get("https_net_late_fail"_ns)
+          .Add(1);
+      break;
+    default:
+      MOZ_ASSERT_UNREACHABLE("Unknown value for chanDisposition");
+  }
+}
 
-  if (StringBeginsWith(contentType, "text/"_ns)) {
-    if (contentType.EqualsLiteral(TEXT_HTML)) {
-      return "text_html"_ns;
-    }
-    if (contentType.EqualsLiteral(TEXT_CSS)) {
-      return "text_css"_ns;
-    }
-    if (contentType.EqualsLiteral(TEXT_JSON)) {
-      return "text_json"_ns;
-    }
-    if (contentType.EqualsLiteral(TEXT_PLAIN)) {
-      return "text_plain"_ns;
-    }
-    if (contentType.EqualsLiteral(TEXT_JAVASCRIPT)) {
-      return "text_javascript"_ns;
-    }
-    return "text_other"_ns;
+static nsLiteralCString HttpChanDispositionToTelemetryLabel(
+    Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE upgradeChanDisposition) {
+  if (upgradeChanDisposition ==
+      Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE::cancel) {
+    return "cancel"_ns;
+  }
+  if (upgradeChanDisposition ==
+      Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE::disk) {
+    return "disk"_ns;
+  }
+  if (upgradeChanDisposition ==
+      Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE::netOk) {
+    return "net_ok"_ns;
+  }
+  if (upgradeChanDisposition ==
+      Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE::netEarlyFail) {
+    return "net_early_fail"_ns;
+  }
+  if (upgradeChanDisposition ==
+      Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE::netLateFail) {
+    return "net_late_fail"_ns;
   }
 
-  if (StringBeginsWith(contentType, "audio/"_ns)) {
-    return "audio"_ns;
-  }
-
-  if (StringBeginsWith(contentType, "video/"_ns)) {
-    return "video"_ns;
-  }
-
-  if (StringBeginsWith(contentType, "multipart/"_ns)) {
-    return "multipart"_ns;
-  }
-
-  if (StringBeginsWith(contentType, "image/"_ns)) {
-    if (contentType.EqualsLiteral(IMAGE_ICO) ||
-        contentType.EqualsLiteral(IMAGE_ICO_MS) ||
-        contentType.EqualsLiteral(IMAGE_ICON_MS)) {
-      return "icon"_ns;
-    }
-    return "image"_ns;
-  }
-
-  if (StringBeginsWith(contentType, "application/"_ns)) {
-    if (contentType.EqualsLiteral(APPLICATION_JSON)) {
-      return "text_json"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_OGG)) {
-      return "video"_ns;
-    }
-    if (contentType.EqualsLiteral("application/ocsp-response")) {
-      return "ocsp"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_XPINSTALL)) {
-      return "xpinstall"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_WASM)) {
-      return "wasm"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_PDF) ||
-        contentType.EqualsLiteral(APPLICATION_POSTSCRIPT)) {
-      return "pdf"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_OCTET_STREAM)) {
-      return "octet_stream"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_ECMASCRIPT) ||
-        contentType.EqualsLiteral(APPLICATION_JAVASCRIPT) ||
-        contentType.EqualsLiteral(APPLICATION_XJAVASCRIPT)) {
-      return "text_javascript"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_NS_PROXY_AUTOCONFIG) ||
-        contentType.EqualsLiteral(APPLICATION_NS_JAVASCRIPT_AUTOCONFIG)) {
-      return "proxy"_ns;
-    }
-    if (contentType.EqualsLiteral(APPLICATION_BROTLI) ||
-        contentType.EqualsLiteral(APPLICATION_ZSTD) ||
-        contentType.Find("zip") != kNotFound ||
-        contentType.Find("compress") != kNotFound) {
-      return "compressed"_ns;
-    }
-    if (contentType.Find("x509") != kNotFound) {
-      return "x509"_ns;
-    }
-    return "application_other"_ns;
-  }
-
-  if (contentType.EqualsLiteral(BINARY_OCTET_STREAM)) {
-    return "octet_stream"_ns;
-  }
-
+  MOZ_ASSERT_UNREACHABLE("Unknown value for upgradeChanDecomposition");
   return "other"_ns;
 }
 
@@ -7975,19 +7988,6 @@ nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
     mTransferSize = mTransaction->GetTransferSize();
     mRequestSize = mTransaction->GetRequestSize();
 
-    // Make sure the size does not overflow.
-    int32_t totalSize = static_cast<int32_t>(
-        std::clamp<uint64_t>(mRequestSize + mTransferSize, 0LU,
-                             std::numeric_limits<int32_t>::max()));
-
-    // Record telemetry for transferred size keyed by contentType
-    nsLiteralCString label = ContentTypeToTelemetryLabel(this);
-    if (mPrivateBrowsing) {
-      mozilla::glean::network::data_size_pb_per_type.Get(label).Add(totalSize);
-    } else {
-      mozilla::glean::network::data_size_per_type.Get(label).Add(totalSize);
-    }
-
     // If we are using the transaction to serve content, we also save the
     // time since async open in the cache entry so we can compare telemetry
     // between cache and net response.
@@ -8145,18 +8145,7 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
        this, static_cast<uint32_t>(aStatus), aIsFromNet));
 
   // HTTP_CHANNEL_DISPOSITION TELEMETRY
-  enum ChannelDisposition {
-    kHttpCanceled = 0,
-    kHttpDisk = 1,
-    kHttpNetOK = 2,
-    kHttpNetEarlyFail = 3,
-    kHttpNetLateFail = 4,
-    kHttpsCanceled = 8,
-    kHttpsDisk = 9,
-    kHttpsNetOK = 10,
-    kHttpsNetEarlyFail = 11,
-    kHttpsNetLateFail = 12
-  } chanDisposition = kHttpCanceled;
+  ChannelDisposition chanDisposition = kHttpCanceled;
   // HTTP_CHANNEL_DISPOSITION_UPGRADE TELEMETRY
   Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE upgradeChanDisposition =
       Telemetry::LABELS_HTTP_CHANNEL_DISPOSITION_UPGRADE::cancel;
@@ -8190,6 +8179,8 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
   // Browser upgrading only happens on HTTPS pages for mixed passive content
   // when upgrading is enabled.
   nsCString upgradeKey;
+  nsLiteralCString upgradeChanDispositionLabel =
+      HttpChanDispositionToTelemetryLabel(upgradeChanDisposition);
   if (IsHTTPS()) {
     // Browser upgrading is disabled and the content is already HTTPS
     upgradeKey = "disabledNoReason"_ns;
@@ -8197,11 +8188,21 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
     if (StaticPrefs::security_mixed_content_upgrade_display_content()) {
       if (mLoadInfo->GetBrowserUpgradeInsecureRequests()) {
         // HTTP content the browser has upgraded to HTTPS
+        mozilla::glean::networking::http_channel_disposition_enabled_upgrade
+            .Get(upgradeChanDispositionLabel)
+            .Add(1);
         upgradeKey = "enabledUpgrade"_ns;
       } else {
         // Content wasn't upgraded but is already HTTPS
+        mozilla::glean::networking::http_channel_disposition_enabled_no_reason
+            .Get(upgradeChanDispositionLabel)
+            .Add(1);
         upgradeKey = "enabledNoReason"_ns;
       }
+    } else {
+      mozilla::glean::networking::http_channel_disposition_disabled_no_reason
+          .Get(upgradeChanDispositionLabel)
+          .Add(1);
     }
     // shift http to https disposition enums
     chanDisposition =
@@ -8209,17 +8210,29 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
   } else if (mLoadInfo->GetBrowserWouldUpgradeInsecureRequests()) {
     // HTTP content the browser would upgrade to HTTPS if upgrading was
     // enabled
+    mozilla::glean::networking::http_channel_disposition_disabled_upgrade
+        .Get(upgradeChanDispositionLabel)
+        .Add(1);
     upgradeKey = "disabledUpgrade"_ns;
-  } else {
+  } else if (StaticPrefs::security_mixed_content_upgrade_display_content()) {
     // HTTP content that wouldn't upgrade
-    upgradeKey = StaticPrefs::security_mixed_content_upgrade_display_content()
-                     ? "enabledWont"_ns
-                     : "disabledWont"_ns;
+    mozilla::glean::networking::http_channel_disposition_enabled_wont
+        .Get(upgradeChanDispositionLabel)
+        .Add(1);
+    upgradeKey = "enabledWont"_ns;
+  } else {
+    mozilla::glean::networking::http_channel_disposition_disabled_wont
+        .Get(upgradeChanDispositionLabel)
+        .Add(1);
+    upgradeKey = "disabledWont"_ns;
   }
+
   Telemetry::AccumulateCategoricalKeyed(upgradeKey, upgradeChanDisposition);
+
   LOG(("  nsHttpChannel::OnStopRequest ChannelDisposition %d\n",
        chanDisposition));
   Telemetry::Accumulate(Telemetry::HTTP_CHANNEL_DISPOSITION, chanDisposition);
+  RecordHttpChanDispositionGlean(chanDisposition);
 
   // Collect specific telemetry for measuring image, video, audio
   // success/failure rates in regular browsing mode and when auto upgrading of

@@ -2814,9 +2814,7 @@
           // but we were opened from another browser, set the cross group
           // opener ID:
           if (openerBrowser && !openWindowInfo) {
-            b.browsingContext.setCrossGroupOpener(
-              openerBrowser.browsingContext
-            );
+            b.browsingContext.crossGroupOpener = openerBrowser.browsingContext;
           }
         }
       } catch (e) {
@@ -2856,6 +2854,10 @@
           globalHistoryOptions,
           triggeringRemoteType,
           wasSchemelessInput,
+          hasValidUserGestureActivation:
+            !!openWindowInfo?.hasValidUserGestureActivation,
+          textDirectiveUserActivation:
+            !!openWindowInfo?.textDirectiveUserActivation,
         });
       }
 
@@ -3096,6 +3098,8 @@
         globalHistoryOptions,
         triggeringRemoteType,
         wasSchemelessInput,
+        hasValidUserGestureActivation,
+        textDirectiveUserActivation,
       }
     ) {
       if (
@@ -3160,6 +3164,8 @@
             globalHistoryOptions,
             triggeringRemoteType,
             wasSchemelessInput,
+            hasValidUserGestureActivation,
+            textDirectiveUserActivation,
           });
         } catch (ex) {
           console.error(ex);
@@ -6301,7 +6307,7 @@
         "DOMModalDialogClosed",
         event => {
           if (
-            !event.detail?.wasPermitUnload ||
+            event.detail?.promptType != "beforeunload" ||
             event.detail.areLeaving ||
             event.target.nodeName != "browser"
           ) {

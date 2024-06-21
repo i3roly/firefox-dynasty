@@ -103,10 +103,6 @@ for (const type of [
   "ADDONS_INFO_REQUEST",
   "ADDONS_INFO_RESPONSE",
   "ARCHIVE_FROM_POCKET",
-  "AS_ROUTER_INITIALIZED",
-  "AS_ROUTER_PREF_CHANGED",
-  "AS_ROUTER_TARGETING_UPDATE",
-  "AS_ROUTER_TELEMETRY_USER_EVENT",
   "BLOCK_URL",
   "BOOKMARK_URL",
   "CLEAR_PREF",
@@ -399,20 +395,6 @@ function DiscoveryStreamUserEvent(data) {
 }
 
 /**
- * ASRouterUserEvent - A telemetry ping indicating a user action from AS router. This should only
- *                     be sent from the UI during a user session.
- *
- * @param  {object} data Fields to include in the ping (source, etc.)
- * @return {object} An AlsoToMain action
- */
-function ASRouterUserEvent(data) {
-  return AlsoToMain({
-    type: actionTypes.AS_ROUTER_TELEMETRY_USER_EVENT,
-    data,
-  });
-}
-
-/**
  * ImpressionStats - A telemetry ping indicating an impression stats.
  *
  * @param  {object} data Fields to include in the ping
@@ -485,7 +467,6 @@ const actionCreators = {
   BroadcastToContent,
   UserEvent,
   DiscoveryStreamUserEvent,
-  ASRouterUserEvent,
   ImpressionStats,
   AlsoToOneContent,
   OnlyToOneContent,
@@ -5569,7 +5550,6 @@ const INITIAL_STATE = {
     isForStartupCache: false,
     customizeMenuVisible: false,
   },
-  ASRouter: { initialized: false },
   TopSites: {
     // Have we received real data from history yet?
     initialized: false,
@@ -5693,15 +5673,6 @@ function App(prevState = INITIAL_STATE.App, action) {
       return Object.assign({}, prevState, {
         customizeMenuVisible: false,
       });
-    default:
-      return prevState;
-  }
-}
-
-function ASRouter(prevState = INITIAL_STATE.ASRouter, action) {
-  switch (action.type) {
-    case actionTypes.AS_ROUTER_INITIALIZED:
-      return { ...action.data, initialized: true };
     default:
       return prevState;
   }
@@ -6459,7 +6430,6 @@ function Weather(prevState = INITIAL_STATE.Weather, action) {
 const reducers = {
   TopSites,
   App,
-  ASRouter,
   Prefs,
   Dialog,
   Sections,
@@ -9074,7 +9044,6 @@ class _WallpapersSection extends (external_React_default()).PureComponent {
     } else {
       this.props.setPref(`newtabWallpapers.wallpaper-${colorMode}`, "");
     }
-    this.props.setPref("newtabWallpapers.wallpaper-color", "");
     this.handleUserEvent({
       selected_wallpaper: "none",
       hadPreviousWallpaper: !!this.props.activeWallpaper
@@ -9153,7 +9122,8 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     this.prefersHighContrastQuery = null;
     this.prefersDarkQuery = null;
     this.state = {
-      activeCategory: null
+      activeCategory: null,
+      activeCategoryFluentID: null
     };
   }
   componentDidMount() {
@@ -9163,24 +9133,20 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     const {
       id
     } = event.target;
-    const prefs = this.props.Prefs.values;
-    const colorMode = this.prefersDarkQuery?.matches ? "dark" : "light";
-    this.props.setPref(`newtabWallpapers.wallpaper-${colorMode}`, id);
+    this.props.setPref("newtabWallpapers.wallpaper-light", id);
+    this.props.setPref("newtabWallpapers.wallpaper-dark", id);
+    // Setting this now so when we remove v1 we don't have to migrate v1 values.
+    this.props.setPref("newtabWallpapers.wallpaper", id);
     this.handleUserEvent(actionTypes.WALLPAPER_CLICK, {
       selected_wallpaper: id,
       hadPreviousWallpaper: !!this.props.activeWallpaper
     });
-    // bug 1892095
-    if (prefs["newtabWallpapers.wallpaper-dark"] === "" && colorMode === "light") {
-      this.props.setPref("newtabWallpapers.wallpaper-dark", id.replace("light", "dark"));
-    }
-    if (prefs["newtabWallpapers.wallpaper-light"] === "" && colorMode === "dark") {
-      this.props.setPref(`newtabWallpapers.wallpaper-light`, id.replace("dark", "light"));
-    }
   }
   handleReset() {
-    const colorMode = this.prefersDarkQuery?.matches ? "dark" : "light";
-    this.props.setPref(`newtabWallpapers.wallpaper-${colorMode}`, "");
+    this.props.setPref("newtabWallpapers.wallpaper-light", "");
+    this.props.setPref("newtabWallpapers.wallpaper-dark", "");
+    // Setting this now so when we remove v1 we don't have to migrate v1 values.
+    this.props.setPref("newtabWallpapers.wallpaper", "");
     this.handleUserEvent(actionTypes.WALLPAPER_CLICK, {
       selected_wallpaper: "none",
       hadPreviousWallpaper: !!this.props.activeWallpaper
@@ -9191,6 +9157,20 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       activeCategory: event.target.id
     });
     this.handleUserEvent(actionTypes.WALLPAPER_CATEGORY_CLICK, event.target.id);
+    let fluent_id;
+    switch (event.target.id) {
+      case "photographs":
+        fluent_id = "newtab-wallpaper-category-title-photographs";
+        break;
+      case "abstract":
+        fluent_id = "newtab-wallpaper-category-title-abstract";
+        break;
+      case "solid-colors":
+        fluent_id = "newtab-wallpaper-category-title-colors";
+    }
+    this.setState({
+      activeCategoryFluentID: fluent_id
+    });
   };
   handleBack() {
     this.setState({
@@ -9206,6 +9186,7 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     }));
   }
   render() {
+    const prefs = this.props.Prefs.values;
     const {
       wallpaperList,
       categories
@@ -9216,40 +9197,76 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     const {
       activeCategory
     } = this.state;
+    const {
+      activeCategoryFluentID
+    } = this.state;
     const filteredWallpapers = wallpaperList.filter(wallpaper => wallpaper.category === activeCategory);
-    return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("h2", {
+    let categorySectionClassname = "category wallpaper-list";
+    if (prefs["newtabWallpapers.v2.enabled"]) {
+      categorySectionClassname += " ignore-color-mode";
+    }
+    return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("div", {
+      className: "category-header"
+    }, /*#__PURE__*/external_React_default().createElement("h2", {
       "data-l10n-id": "newtab-wallpaper-title"
-    }, "Wallpapers"), /*#__PURE__*/external_React_default().createElement("button", {
+    }), /*#__PURE__*/external_React_default().createElement("button", {
       className: "wallpapers-reset",
       onClick: this.handleReset,
       "data-l10n-id": "newtab-wallpaper-reset"
-    }), /*#__PURE__*/external_React_default().createElement("fieldset", {
+    })), /*#__PURE__*/external_React_default().createElement("fieldset", {
       className: "category-list"
     }, categories.map(category => {
       const firstWallpaper = wallpaperList.find(wallpaper => wallpaper.category === category);
       const title = firstWallpaper ? firstWallpaper.title : "";
-      return /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("input", {
-        key: category,
+      const solid_color = firstWallpaper ? firstWallpaper.solid_color : "";
+      let fluent_id;
+      switch (category) {
+        case "photographs":
+          fluent_id = "newtab-wallpaper-category-title-photographs";
+          break;
+        case "abstract":
+          fluent_id = "newtab-wallpaper-category-title-abstract";
+          break;
+        case "solid-colors":
+          fluent_id = "newtab-wallpaper-category-title-colors";
+      }
+      const style = {
+        backgroundColor: solid_color || "transparent"
+      };
+      return /*#__PURE__*/external_React_default().createElement("div", {
+        key: category
+      }, /*#__PURE__*/external_React_default().createElement("input", {
         id: category,
+        style: style,
         onClick: this.handleCategory,
         className: `wallpaper-input ${title}`
-      }), /*#__PURE__*/external_React_default().createElement("label", null, category));
+      }), /*#__PURE__*/external_React_default().createElement("label", {
+        htmlFor: category,
+        "data-l10n-id": fluent_id
+      }, fluent_id));
     })), /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
       in: !!activeCategory,
       timeout: 300,
       classNames: "wallpaper-list",
       unmountOnExit: true
     }, /*#__PURE__*/external_React_default().createElement("section", {
-      className: "category wallpaper-list"
+      className: categorySectionClassname
     }, /*#__PURE__*/external_React_default().createElement("button", {
+      className: "arrow-button",
+      "data-l10n-id": activeCategoryFluentID,
       onClick: this.handleBack
-    }, "back arrow"), /*#__PURE__*/external_React_default().createElement("h2", null, activeCategory), /*#__PURE__*/external_React_default().createElement("fieldset", null, filteredWallpapers.map(({
+    }), /*#__PURE__*/external_React_default().createElement("fieldset", null, filteredWallpapers.map(({
       title,
       theme,
-      fluent_id
+      fluent_id,
+      solid_color
     }) => {
+      const style = {
+        backgroundColor: solid_color || "transparent"
+      };
       return /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("input", {
         onChange: this.handleChange,
+        style: style,
         type: "radio",
         name: `wallpaper-${title}`,
         id: title,
@@ -9378,7 +9395,7 @@ class ContentSection extends (external_React_default()).PureComponent {
     } = enabledSections;
     return /*#__PURE__*/external_React_default().createElement("div", {
       className: "home-section"
-    }, wallpapersEnabled && /*#__PURE__*/external_React_default().createElement("div", {
+    }, !wallpapersV2Enabled && wallpapersEnabled && /*#__PURE__*/external_React_default().createElement("div", {
       className: "wallpapers-section"
     }, /*#__PURE__*/external_React_default().createElement(WallpapersSection, {
       setPref: setPref,
@@ -10550,13 +10567,13 @@ class BaseContent extends (external_React_default()).PureComponent {
     const prefs = this.props.Prefs.values;
     const wallpaperLight = prefs["newtabWallpapers.wallpaper-light"];
     const wallpaperDark = prefs["newtabWallpapers.wallpaper-dark"];
-    const wallpaperColor = prefs["newtabWallpapers.wallpaper-color"];
     const {
       wallpaperList
     } = this.props.Wallpapers;
     if (wallpaperList) {
       const lightWallpaper = wallpaperList.find(wp => wp.title === wallpaperLight) || "";
       const darkWallpaper = wallpaperList.find(wp => wp.title === wallpaperDark) || "";
+      const wallpaperColor = darkWallpaper?.solid_color || lightWallpaper?.solid_color || "";
       __webpack_require__.g.document?.body.style.setProperty(`--newtab-wallpaper-light`, `url(${lightWallpaper?.wallpaperUrl || ""})`);
       __webpack_require__.g.document?.body.style.setProperty(`--newtab-wallpaper-dark`, `url(${darkWallpaper?.wallpaperUrl || ""})`);
       __webpack_require__.g.document?.body.style.setProperty(`--newtab-wallpaper-color`, wallpaperColor || "transparent");
@@ -10567,14 +10584,14 @@ class BaseContent extends (external_React_default()).PureComponent {
         const rgbColors = this.getRGBColors(wallpaperColor);
         const isColorDark = this.isWallpaperColorDark(rgbColors);
         wallpaperTheme = isColorDark ? "dark" : "light";
-      }
-
-      // Grab the contrast of the currently displayed wallpaper.
-      const {
-        theme
-      } = this.state.colorMode === "light" ? lightWallpaper : darkWallpaper;
-      if (theme) {
-        wallpaperTheme = theme;
+      } else {
+        // Grab the contrast of the currently displayed wallpaper.
+        const {
+          theme
+        } = this.state.colorMode === "light" ? lightWallpaper : darkWallpaper;
+        if (theme) {
+          wallpaperTheme = theme;
+        }
       }
 
       // Add helper class to body if user has a wallpaper selected

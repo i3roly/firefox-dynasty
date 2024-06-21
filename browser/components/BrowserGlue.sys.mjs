@@ -28,6 +28,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserUsageTelemetry: "resource:///modules/BrowserUsageTelemetry.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   BuiltInThemes: "resource:///modules/BuiltInThemes.sys.mjs",
+  ClientID: "resource://gre/modules/ClientID.sys.mjs",
+  CloseRemoteTab: "resource://gre/modules/FxAccountsCommands.sys.mjs",
   ContentRelevancyManager:
     "resource://gre/modules/ContentRelevancyManager.sys.mjs",
   ContextualIdentityService:
@@ -45,6 +47,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource:///modules/FirefoxBridgeExtensionUtils.sys.mjs",
   FormAutofillUtils: "resource://gre/modules/shared/FormAutofillUtils.sys.mjs",
   FxAccounts: "resource://gre/modules/FxAccounts.sys.mjs",
+  GenAI: "resource:///modules/GenAI.sys.mjs",
   HomePage: "resource:///modules/HomePage.sys.mjs",
   Integration: "resource://gre/modules/Integration.sys.mjs",
   Interactions: "resource:///modules/Interactions.sys.mjs",
@@ -135,7 +138,7 @@ XPCOMUtils.defineLazyServiceGetters(lazy, {
 ChromeUtils.defineLazyGetter(
   lazy,
   "accountsL10n",
-  () => new Localization(["browser/accounts.ftl"], true)
+  () => new Localization(["browser/accounts.ftl", "branding/brand.ftl"], true)
 );
 
 if (AppConstants.ENABLE_WEBDRIVER) {
@@ -156,6 +159,13 @@ if (AppConstants.ENABLE_WEBDRIVER) {
   lazy.Marionette = { running: false };
   lazy.RemoteAgent = { running: false };
 }
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "CLIENT_ASSOCIATION_PING_ENABLED",
+  "identity.fxaccounts.telemetry.clientAssociationPing.enabled",
+  false
+);
 
 const PREF_PDFJS_ISDEFAULT_CACHE_STATE = "pdfjs.enabledCache.state";
 
@@ -443,6 +453,10 @@ let JSWINDOWACTORS = {
         "BackupUI:InitWidget": { wantUntrusted: true },
         "BackupUI:ToggleScheduledBackups": { wantUntrusted: true },
         "BackupUI:ShowFilepicker": { wantUntrusted: true },
+        "BackupUI:GetBackupFileInfo": { wantUntrusted: true },
+        "BackupUI:RestoreFromBackupFile": { wantUntrusted: true },
+        "BackupUI:RestoreFromBackupChooseFile": { wantUntrusted: true },
+        "BackupUI:ToggleEncryption": { wantUntrusted: true },
       },
     },
     matches: ["about:preferences*", "about:settings*"],
@@ -857,13 +871,7 @@ let JSWINDOWACTORS = {
         DOMDocElementInserted: {},
       },
     },
-    matches: [
-      "about:asrouter*",
-      "about:home*",
-      "about:newtab*",
-      "about:welcome*",
-      "about:privatebrowsing*",
-    ],
+    matches: ["about:asrouter*", "about:welcome*", "about:privatebrowsing*"],
     remoteTypes: ["privilegedabout"],
   },
 
@@ -1276,9 +1284,20 @@ BrowserGlue.prototype = {
         }
         break;
       }
-      case "sync-ui-state:update":
+      case "sync-ui-state:update": {
         this._updateFxaBadges(lazy.BrowserWindowTracker.getTopWindow());
+
+        if (lazy.CLIENT_ASSOCIATION_PING_ENABLED) {
+          let fxaState = lazy.UIState.get();
+          if (fxaState.status == lazy.UIState.STATUS_SIGNED_IN) {
+            Glean.clientAssociation.uid.set(fxaState.uid);
+            Glean.clientAssociation.legacyClientId.set(
+              lazy.ClientID.getCachedClientID()
+            );
+          }
+        }
         break;
+      }
       case "handlersvc-store-initialized":
         // Initialize PdfJs when running in-process and remote. This only
         // happens once since PdfJs registers global hooks. If the PdfJs
@@ -1861,44 +1880,7 @@ BrowserGlue.prototype = {
       }
     });
 
-    // Offer to reset a user's profile if it hasn't been used for 60 days.
-    const OFFER_PROFILE_RESET_INTERVAL_MS = 60 * 24 * 60 * 60 * 1000;
-    let lastUse = Services.appinfo.replacedLockTime;
-    let disableResetPrompt = Services.prefs.getBoolPref(
-      "browser.disableResetPrompt",
-      false
-    );
-
-    if (
-      !disableResetPrompt &&
-      lastUse &&
-      Date.now() - lastUse >= OFFER_PROFILE_RESET_INTERVAL_MS
-    ) {
-      this._resetProfileNotification("unused");
-    } else if (AppConstants.platform == "win" && !disableResetPrompt) {
-      // Check if we were just re-installed and offer Firefox Reset
-      let updateChannel;
-      try {
-        updateChannel = ChromeUtils.importESModule(
-          "resource://gre/modules/UpdateUtils.sys.mjs"
-        ).UpdateUtils.UpdateChannel;
-      } catch (ex) {}
-      if (updateChannel) {
-        let uninstalledValue = lazy.WindowsRegistry.readRegKey(
-          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
-          "Software\\Mozilla\\Firefox",
-          `Uninstalled-${updateChannel}`
-        );
-        let removalSuccessful = lazy.WindowsRegistry.removeRegKey(
-          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
-          "Software\\Mozilla\\Firefox",
-          `Uninstalled-${updateChannel}`
-        );
-        if (removalSuccessful && uninstalledValue == "True") {
-          this._resetProfileNotification("uninstall");
-        }
-      }
-    }
+    this._maybeOfferProfileReset();
 
     this._checkForOldBuildUpdates();
 
@@ -1992,6 +1974,56 @@ BrowserGlue.prototype = {
       "browser.contentblocking.features.strict",
       this._setPrefExpectationsAndUpdate
     );
+  },
+
+  _maybeOfferProfileReset() {
+    // Offer to reset a user's profile if it hasn't been used for 60 days.
+    const OFFER_PROFILE_RESET_INTERVAL_MS = 60 * 24 * 60 * 60 * 1000;
+    let lastUse = Services.appinfo.replacedLockTime;
+    let disableResetPrompt = Services.prefs.getBoolPref(
+      "browser.disableResetPrompt",
+      false
+    );
+
+    // Also check prefs.js last modified timestamp as a backstop.
+    // This helps for cases where the lock file checks don't work,
+    // e.g. NFS or because the previous time Firefox ran, it ran
+    // for a very long time. See bug 1054947 and related bugs.
+    lastUse = Math.max(
+      lastUse,
+      Services.prefs.userPrefsFileLastModifiedAtStartup
+    );
+
+    if (
+      !disableResetPrompt &&
+      lastUse &&
+      Date.now() - lastUse >= OFFER_PROFILE_RESET_INTERVAL_MS
+    ) {
+      this._resetProfileNotification("unused");
+    } else if (AppConstants.platform == "win" && !disableResetPrompt) {
+      // Check if we were just re-installed and offer Firefox Reset
+      let updateChannel;
+      try {
+        updateChannel = ChromeUtils.importESModule(
+          "resource://gre/modules/UpdateUtils.sys.mjs"
+        ).UpdateUtils.UpdateChannel;
+      } catch (ex) {}
+      if (updateChannel) {
+        let uninstalledValue = lazy.WindowsRegistry.readRegKey(
+          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
+          "Software\\Mozilla\\Firefox",
+          `Uninstalled-${updateChannel}`
+        );
+        let removalSuccessful = lazy.WindowsRegistry.removeRegKey(
+          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
+          "Software\\Mozilla\\Firefox",
+          `Uninstalled-${updateChannel}`
+        );
+        if (removalSuccessful && uninstalledValue == "True") {
+          this._resetProfileNotification("uninstall");
+        }
+      }
+    }
   },
 
   _updateAutoplayPref() {
@@ -2756,6 +2788,10 @@ BrowserGlue.prototype = {
         name: "ensurePrivateBrowsingShortcutExists",
         condition:
           AppConstants.platform == "win" &&
+          Services.prefs.getBoolPref(
+            "browser.privateWindowSeparation.enabled",
+            true
+          ) &&
           // We don't want a shortcut if it's been disabled, eg: by enterprise policy.
           lazy.PrivateBrowsingUtils.enabled &&
           // Private Browsing shortcuts for packaged builds come with the package,
@@ -3121,6 +3157,13 @@ BrowserGlue.prototype = {
         condition: AppConstants.MOZ_UPDATER,
         task: () => {
           lazy.UpdateListener.maybeShowUnsupportedNotification();
+        },
+      },
+
+      {
+        name: "GenAI.init",
+        task() {
+          lazy.GenAI.init();
         },
       },
 
@@ -4978,6 +5021,64 @@ BrowserGlue.prototype = {
       if (!urisToClose.length) {
         break;
       }
+    }
+
+    let clickCallback = async (subject, topic) => {
+      if (topic == "alertshow") {
+        // Keep track of the fact that we showed the notification to
+        // the user at least once
+        lazy.CloseRemoteTab.hasPendingCloseTabNotification = true;
+      }
+
+      // The notification is either turned off or dismissed by user
+      if (topic == "alertfinished") {
+        // Reset the notification pending flag
+        lazy.CloseRemoteTab.hasPendingCloseTabNotification = false;
+      }
+
+      if (topic != "alertclickcallback") {
+        return;
+      }
+      let win =
+        lazy.BrowserWindowTracker.getTopWindow({ private: false }) ??
+        (await lazy.BrowserWindowTracker.promiseOpenWindow());
+      // We don't want to open a new tab, instead use the handler
+      // to switch to the existing view
+      if (win) {
+        win.FirefoxViewHandler.openTab("recentlyclosed");
+      }
+    };
+
+    let imageURL;
+    if (AppConstants.platform == "win") {
+      imageURL = "chrome://branding/content/icon64.png";
+    }
+
+    // Reset the count only if there are no pending notifications
+    if (!lazy.CloseRemoteTab.hasPendingCloseTabNotification) {
+      lazy.CloseRemoteTab.closeTabNotificationCount = 0;
+    }
+    lazy.CloseRemoteTab.closeTabNotificationCount += urls.length;
+    const [title, body] = await lazy.accountsL10n.formatValues([
+      {
+        id: "account-tabs-closed-remotely",
+        args: { closedCount: lazy.CloseRemoteTab.closeTabNotificationCount },
+      },
+      { id: "account-view-recently-closed-tabs" },
+    ]);
+
+    try {
+      this.AlertsService.showAlertNotification(
+        imageURL,
+        title,
+        body,
+        true,
+        null,
+        clickCallback,
+        "closed-tab-notification"
+      );
+    } catch (ex) {
+      console.error("Error notifying user of closed tab(s) ", ex);
     }
   },
 

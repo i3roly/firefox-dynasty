@@ -7,6 +7,7 @@
 #ifndef mozilla_LoadInfo_h
 #define mozilla_LoadInfo_h
 
+#include "mozilla/dom/FeaturePolicy.h"
 #include "nsIContentSecurityPolicy.h"
 #include "nsIInterceptionInfo.h"
 #include "nsILoadInfo.h"
@@ -195,6 +196,11 @@ class LoadInfo final : public nsILoadInfo {
     mIsThirdPartyContextToTopWindow.reset();
   }
 
+  void SetContinerFeaturePolicy(
+      const Maybe<dom::FeaturePolicyInfo>& aContainerFeaturePolicy) {
+    mContainerFeaturePolicyInfo = aContainerFeaturePolicy;
+  }
+
 #ifdef DEBUG
   void MarkOverriddenFingerprintingSettingsAsSet() {
     mOverriddenFingerprintingSettingsIsSet = true;
@@ -243,8 +249,9 @@ class LoadInfo final : public nsILoadInfo {
       bool aNeedForCheckingAntiTrackingHeuristic, const nsAString& aCspNonce,
       const nsAString& aIntegrityMetadata, bool aSkipContentSniffing,
       uint32_t aHttpsOnlyStatus, bool aHstsStatus,
-      bool aHasValidUserGestureActivation, bool aAllowDeprecatedSystemRequests,
-      bool aIsInDevToolsContext, bool aParserCreatedScript,
+      bool aHasValidUserGestureActivation, bool aTextDirectiveUserActivation,
+      bool aAllowDeprecatedSystemRequests, bool aIsInDevToolsContext,
+      bool aParserCreatedScript,
       nsILoadInfo::StoragePermissionState aStoragePermission,
       const Maybe<RFPTarget>& aOverriddenFingerprintingSettings,
       bool aIsMetaRefresh, uint32_t aRequestBlockingReason,
@@ -299,6 +306,7 @@ class LoadInfo final : public nsILoadInfo {
   nsCOMPtr<nsICSPEventListener> mCSPEventListener;
   nsCOMPtr<nsICookieJarSettings> mCookieJarSettings;
   nsCOMPtr<nsIContentSecurityPolicy> mCspToInherit;
+  Maybe<dom::FeaturePolicyInfo> mContainerFeaturePolicyInfo;
   nsCString mTriggeringRemoteType;
   nsID mSandboxedNullPrincipalID;
 
@@ -358,6 +366,7 @@ class LoadInfo final : public nsILoadInfo {
   uint32_t mHttpsOnlyStatus = nsILoadInfo::HTTPS_ONLY_UNINITIALIZED;
   bool mHstsStatus = false;
   bool mHasValidUserGestureActivation = false;
+  bool mTextDirectiveUserActivation = false;
   bool mAllowDeprecatedSystemRequests = false;
   bool mIsUserTriggeredSave = false;
   bool mIsInDevToolsContext = false;

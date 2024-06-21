@@ -665,7 +665,6 @@ static bool IsCloaked(HWND hwnd) {
 
 nsWindow::nsWindow(bool aIsChildWindow)
     : nsBaseWidget(BorderStyle::Default),
-      mBrush(::CreateSolidBrush(NSRGB_2_COLOREF(::GetSysColor(COLOR_BTNFACE)))),
       mFrameState(std::in_place, this),
       mIsChildWindow(aIsChildWindow),
       mLastPaintEndTime(TimeStamp::Now()),
@@ -993,7 +992,8 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
     }
   }
 
-  if (aInitData->mIsPrivate) {
+  if (Preferences::GetBool("browser.privateWindowSeparation.enabled", true) &&
+      (aInitData->mIsPrivate)) {
     // Although permanent Private Browsing mode is indeed Private Browsing,
     // we choose to make it look like regular Firefox in terms of the icon
     // it uses (which also means we shouldn't use the Private Browsing
@@ -1205,6 +1205,16 @@ static void RegisterWindowClass(const wchar_t* aClassName, UINT aExtraStyle,
   wc.hIcon =
       aIconID ? ::LoadIconW(::GetModuleHandleW(nullptr), aIconID) : nullptr;
   wc.lpszClassName = aClassName;
+
+  // Since we discard WM_ERASEBKGND events, the window-class background brush is
+  // mostly not used -- it shows up when resizing, but scarcely ever otherwise.
+  //
+  // In theory we could listen for theme changes and set this brush to an
+  // appropriate background color as needed; but given the hoops Win32 makes us
+  // jump through to change class data, it's probably not worth the trouble.
+  // (See bug 1901875.) Instead, we just make it dark grey, which is probably
+  // acceptable in either light or dark mode.
+  wc.hbrBackground = (HBRUSH)::GetStockObject(DKGRAY_BRUSH);
 
   // Failures are ignored as they are handled when ::CreateWindow fails
   ::RegisterClassW(&wc);
@@ -1584,6 +1594,57 @@ void nsWindow::Show(bool bState) {
         // top level windows:
         syncInvalidate = true;
 
+        // Cloak (or uncloak) the window.
+        //
+        // (DWMWA_CLOAK is effectively orthogonal to any cloaking done by the
+        // shell to implement virtual desktops; we don't have to worry about
+        // accidentally forcing something on another desktop to become visible.)
+        constexpr static const auto CloakWindow = [](HWND hwnd, BOOL state) {
+          ::DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &state, sizeof(state));
+        };
+
+        // Clear the window using a theme-appropriate color.
+        constexpr static const auto ClearWindow = [](HWND hwnd) {
+          // default background color from current theme
+          auto const bgcolor = LookAndFeel::Color(
+              StyleSystemColor::Window, PreferenceSheet::ColorSchemeForChrome(),
+              LookAndFeel::UseStandins::No, NS_RGB(0, 0, 0));
+
+          HBRUSH brush = ::CreateSolidBrush(NSRGB_2_COLOREF(bgcolor));
+          if (NS_WARN_IF(!brush)) {
+            // GDI object cap hit, possibly?
+            return;
+          }
+          auto const _releaseBrush =
+              MakeScopeExit([&] { ::DeleteObject(brush); });
+
+          HDC hdc = ::GetWindowDC(hwnd);
+          MOZ_ASSERT(hdc);
+          auto const _cleanupDC =
+              MakeScopeExit([&] { ::ReleaseDC(hwnd, hdc); });
+
+          RECT rect;
+          ::GetWindowRect(hwnd, &rect);  // includes non-client area
+          ::MapWindowPoints(HWND_DESKTOP, hwnd, (LPPOINT)&rect, 2);
+          ::FillRect(hdc, &rect, brush);
+        };
+
+        if (!mHasBeenShown) {
+          // On creation, the window's content is not specified; in practice,
+          // it's observed to usually be full of bright white, regardless of any
+          // window-class options. DWM will happily render that unspecified
+          // content to the screen before we get a chance to process a
+          // WM_ERASEBKGND event (or, indeed, anything else). To avoid dark-mode
+          // users being assaulted with a bright white flash, we need to draw
+          // something on top of that at least once before showing the window.
+          //
+          // Unfortunately, there's a bit of a catch-22 here: until the window
+          // has been set "visible" at least once, it doesn't have a backing
+          // surface, so we can't draw anything to it! To work around this, we
+          // cloak the window before "showing" it.
+          CloakWindow(mWnd, TRUE);
+        }
+
         // Set the cursor before showing the window to avoid the default wait
         // cursor.
         SetCursor(Cursor{eCursor_standard});
@@ -1610,6 +1671,16 @@ void nsWindow::Show(bool bState) {
             }
             break;
         }
+
+        if (!mHasBeenShown) {
+          // Now that ::ShowWindow() has been called once, the window surface
+          // actually exists, so we can draw to it. Fill it with the theme's
+          // background color before uncloaking it to complete the Show().
+          ClearWindow(mWnd);
+          CloakWindow(mWnd, FALSE);
+          mHasBeenShown = false;
+        }
+
       } else {
         DWORD flags = SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW;
         if (wasVisible) {
@@ -2032,39 +2103,13 @@ void nsWindow::Resize(double aX, double aY, double aWidth, double aHeight,
 
 /**************************************************************
  *
- * SECTION: Window Z-order and state.
+ * SECTION: Window state.
  *
- * nsIWidget::PlaceBehind, nsIWidget::SetSizeMode,
- * nsIWidget::ConstrainPosition
+ * nsIWidget::SetSizeMode, nsIWidget::ConstrainPosition
  *
- * Z-order, positioning, restore, minimize, and maximize.
+ * Positioning, restore, minimize, and maximize.
  *
  **************************************************************/
-
-// Position the window behind the given window
-void nsWindow::PlaceBehind(nsTopLevelWidgetZPlacement aPlacement,
-                           nsIWidget* aWidget, bool aActivate) {
-  HWND behind = HWND_TOP;
-  if (aPlacement == eZPlacementBottom)
-    behind = HWND_BOTTOM;
-  else if (aPlacement == eZPlacementBelow && aWidget)
-    behind = (HWND)aWidget->GetNativeData(NS_NATIVE_WINDOW);
-  UINT flags = SWP_NOMOVE | SWP_NOREPOSITION | SWP_NOSIZE;
-  if (!aActivate) flags |= SWP_NOACTIVATE;
-
-  if (!CanTakeFocus() && behind == HWND_TOP) {
-    // Can't place the window to top so place it behind the foreground window
-    // (as long as it is not topmost)
-    HWND wndAfter = ::GetForegroundWindow();
-    if (!wndAfter)
-      behind = HWND_BOTTOM;
-    else if (!(GetWindowLongPtrW(wndAfter, GWL_EXSTYLE) & WS_EX_TOPMOST))
-      behind = wndAfter;
-    flags |= SWP_NOACTIVATE;
-  }
-
-  ::SetWindowPos(mWnd, behind, 0, 0, 0, 0, flags);
-}
 
 static UINT GetCurrentShowCmd(HWND aWnd) {
   WINDOWPLACEMENT pl;
@@ -2746,23 +2791,6 @@ void nsWindow::InvalidateNonClientRegion() {
   // triggers ncpaint and paint events for the two areas
   RedrawWindow(mWnd, nullptr, winRgn, RDW_FRAME | RDW_INVALIDATE);
   DeleteObject(winRgn);
-}
-
-/**************************************************************
- *
- * SECTION: nsIWidget::SetBackgroundColor
- *
- * Sets the window background paint color.
- *
- **************************************************************/
-
-void nsWindow::SetBackgroundColor(const nscolor& aColor) {
-  if (mBrush) ::DeleteObject(mBrush);
-
-  mBrush = ::CreateSolidBrush(NSRGB_2_COLOREF(aColor));
-  if (mWnd != nullptr) {
-    ::SetClassLongPtrW(mWnd, GCLP_HBRBACKGROUND, (LONG_PTR)mBrush);
-  }
 }
 
 /**************************************************************
@@ -4221,18 +4249,29 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
 
   }  // switch
 
-  WidgetMouseEvent event(true, aEventMessage, this, WidgetMouseEvent::eReal,
+  Maybe<WidgetPointerEvent> pointerEvent;
+  Maybe<WidgetMouseEvent> mouseEvent;
+  if (IsPointerEventMessage(aEventMessage)) {
+    pointerEvent.emplace(true, aEventMessage, this,
                          aIsContextMenuKey ? WidgetMouseEvent::eContextMenuKey
                                            : WidgetMouseEvent::eNormal);
+  } else {
+    mouseEvent.emplace(true, aEventMessage, this, WidgetMouseEvent::eReal,
+                       aIsContextMenuKey ? WidgetMouseEvent::eContextMenuKey
+                                         : WidgetMouseEvent::eNormal);
+  }
+  WidgetMouseEvent& mouseOrPointerEvent =
+      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+
   if (aEventMessage == eContextMenu && aIsContextMenuKey) {
     LayoutDeviceIntPoint zero(0, 0);
-    InitEvent(event, &zero);
+    InitEvent(mouseOrPointerEvent, &zero);
   } else {
-    InitEvent(event, &eventPoint);
+    InitEvent(mouseOrPointerEvent, &eventPoint);
   }
 
   ModifierKeyState modifierKeyState;
-  modifierKeyState.InitInputEvent(event);
+  modifierKeyState.InitInputEvent(mouseOrPointerEvent);
 
   // eContextMenu with Shift state is special.  It won't fire "contextmenu"
   // event in the web content for blocking web content to prevent its default.
@@ -4241,25 +4280,26 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
   // behave same as ContextMenu key without Shift key.
   // XXX Should we allow to block web page to prevent its default with
   //     Ctrl+Shift+F10 or Alt+Shift+F10 instead?
-  if (aEventMessage == eContextMenu && aIsContextMenuKey && event.IsShift() &&
+  if (aEventMessage == eContextMenu && aIsContextMenuKey &&
+      mouseOrPointerEvent.IsShift() &&
       NativeKey::LastKeyOrCharMSG().message == WM_SYSKEYDOWN &&
       NativeKey::LastKeyOrCharMSG().wParam == VK_F10) {
-    event.mModifiers &= ~MODIFIER_SHIFT;
+    mouseOrPointerEvent.mModifiers &= ~MODIFIER_SHIFT;
   }
 
-  event.mButton = aButton;
-  event.mInputSource = aInputSource;
+  mouseOrPointerEvent.mButton = aButton;
+  mouseOrPointerEvent.mInputSource = aInputSource;
   if (aPointerInfo) {
     // Mouse events from Windows WM_POINTER*. Fill more information in
     // WidgetMouseEvent.
-    event.AssignPointerHelperData(*aPointerInfo);
-    event.mPressure = aPointerInfo->mPressure;
-    event.mButtons = aPointerInfo->mButtons;
+    mouseOrPointerEvent.AssignPointerHelperData(*aPointerInfo);
+    mouseOrPointerEvent.mPressure = aPointerInfo->mPressure;
+    mouseOrPointerEvent.mButtons = aPointerInfo->mButtons;
   } else {
     // If we get here the mouse events must be from non-touch sources, so
     // convert it to pointer events as well
-    event.convertToPointer = true;
-    event.pointerId = pointerId;
+    mouseOrPointerEvent.convertToPointer = true;
+    mouseOrPointerEvent.pointerId = pointerId;
   }
 
   // Static variables used to distinguish simple-, double- and triple-clicks.
@@ -4296,8 +4336,8 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
 
   switch (aEventMessage) {
     case eMouseDoubleClick:
-      event.mMessage = eMouseDown;
-      event.mButton = aButton;
+      mouseOrPointerEvent.mMessage = eMouseDown;
+      mouseOrPointerEvent.mButton = aButton;
       sLastClickCount = 2;
       sLastMouseDownTime = curMsgTime;
       break;
@@ -4325,18 +4365,19 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
       }
       break;
     case eMouseExitFromWidget:
-      event.mExitFrom =
+      mouseOrPointerEvent.mExitFrom =
           Some(IsTopLevelMouseExit(mWnd) ? WidgetMouseEvent::ePlatformTopLevel
                                          : WidgetMouseEvent::ePlatformChild);
       break;
     default:
       break;
   }
-  event.mClickCount = sLastClickCount;
+  mouseOrPointerEvent.mClickCount = sLastClickCount;
 
 #ifdef NS_DEBUG_XX
   MOZ_LOG(gWindowsLog, LogLevel::Info,
-          ("Msg Time: %d Click Count: %d\n", curMsgTime, event.mClickCount));
+          ("Msg Time: %d Click Count: %d\n", curMsgTime,
+           mouseOrPointerEvent.mClickCount));
 #endif
 
   // call the event callback
@@ -4345,7 +4386,7 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
       LayoutDeviceIntRect rect = GetBounds();
       rect.MoveTo(0, 0);
 
-      if (rect.Contains(event.mRefPoint)) {
+      if (rect.Contains(mouseOrPointerEvent.mRefPoint)) {
         if (sCurrentWindow == nullptr || sCurrentWindow != this) {
           if ((nullptr != sCurrentWindow) && (!sCurrentWindow->mInDtor)) {
             LPARAM pos = sCurrentWindow->lParamToClient(lParamToScreen(lParam));
@@ -4369,8 +4410,8 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
     }
 
     nsIWidget::ContentAndAPZEventStatus eventStatus =
-        DispatchInputEvent(&event);
-    contextMenuPreventer.Update(event, eventStatus);
+        DispatchInputEvent(&mouseOrPointerEvent);
+    contextMenuPreventer.Update(mouseOrPointerEvent, eventStatus);
     return ConvertStatus(eventStatus.mContentStatus);
   }
 
@@ -5238,7 +5279,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     } break;
 
     // Say we've dealt with erasing the background. (This is actually handled in
-    // WM_PAINT, where necessary.)
+    // WM_PAINT or at window-creation time, as necessary.)
     case WM_ERASEBKGND: {
       *aRetValue = 1;
       result = true;
@@ -6628,40 +6669,10 @@ void nsWindow::OnWindowPosChanging(WINDOWPOS* info) {
     }
   }
 
-  // enforce local z-order rules
-  if (!(info->flags & SWP_NOZORDER)) {
-    HWND hwndAfter = info->hwndInsertAfter;
-
-    nsWindow* aboveWindow = 0;
-    nsWindowZ placement;
-
-    if (hwndAfter == HWND_BOTTOM)
-      placement = nsWindowZBottom;
-    else if (hwndAfter == HWND_TOP || hwndAfter == HWND_TOPMOST ||
-             hwndAfter == HWND_NOTOPMOST)
-      placement = nsWindowZTop;
-    else {
-      placement = nsWindowZRelative;
-      aboveWindow = WinUtils::GetNSWindowPtr(hwndAfter);
-    }
-
-    if (mWidgetListener) {
-      nsCOMPtr<nsIWidget> actualBelow = nullptr;
-      if (mWidgetListener->ZLevelChanged(false, &placement, aboveWindow,
-                                         getter_AddRefs(actualBelow))) {
-        if (placement == nsWindowZBottom)
-          info->hwndInsertAfter = HWND_BOTTOM;
-        else if (placement == nsWindowZTop)
-          info->hwndInsertAfter = HWND_TOP;
-        else {
-          info->hwndInsertAfter =
-              (HWND)actualBelow->GetNativeData(NS_NATIVE_WINDOW);
-        }
-      }
-    }
-  }
   // prevent rude external programs from making hidden window visible
-  if (mWindowType == WindowType::Invisible) info->flags &= ~SWP_SHOWWINDOW;
+  if (mWindowType == WindowType::Invisible) {
+    info->flags &= ~SWP_SHOWWINDOW;
+  }
 
   // When waking from sleep or switching out of tablet mode, Windows 10
   // Version 1809 will reopen popup windows that should be hidden. Detect
@@ -7047,12 +7058,6 @@ void nsWindow::OnDestroy() {
   }
 
   IMEHandler::OnDestroyWindow(this);
-
-  // Free GDI window class objects
-  if (mBrush) {
-    VERIFY(::DeleteObject(mBrush));
-    mBrush = nullptr;
-  }
 
   // Destroy any custom cursor resources.
   if (mCursor.IsCustom()) {

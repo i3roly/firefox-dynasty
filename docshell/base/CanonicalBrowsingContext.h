@@ -10,6 +10,7 @@
 #include "mozilla/dom/BrowsingContext.h"
 #include "mozilla/dom/MediaControlKeySource.h"
 #include "mozilla/dom/BrowsingContextWebProgress.h"
+#include "mozilla/dom/FeaturePolicy.h"
 #include "mozilla/dom/ProcessIsolation.h"
 #include "mozilla/dom/Promise.h"
 #include "mozilla/dom/SessionHistoryEntry.h"
@@ -94,8 +95,9 @@ class CanonicalBrowsingContext final : public BrowsingContext {
   // Only set for toplevel content BrowsingContexts, and may be from a different
   // BrowsingContextGroup.
   uint64_t GetCrossGroupOpenerId() const { return mCrossGroupOpenerId; }
+  already_AddRefed<CanonicalBrowsingContext> GetCrossGroupOpener() const;
   void SetCrossGroupOpenerId(uint64_t aOpenerId);
-  void SetCrossGroupOpener(CanonicalBrowsingContext& aCrossGroupOpener,
+  void SetCrossGroupOpener(CanonicalBrowsingContext* aCrossGroupOpener,
                            ErrorResult& aRv);
 
   void GetWindowGlobals(nsTArray<RefPtr<WindowGlobalParent>>& aWindows);
@@ -314,9 +316,10 @@ class CanonicalBrowsingContext final : public BrowsingContext {
 
   void ResetScalingZoom();
 
-  void SetContainerFeaturePolicy(FeaturePolicy* aContainerFeaturePolicy);
-  FeaturePolicy* GetContainerFeaturePolicy() const {
-    return mContainerFeaturePolicy;
+  void SetContainerFeaturePolicy(
+      Maybe<FeaturePolicyInfo>&& aContainerFeaturePolicyInfo);
+  const Maybe<FeaturePolicyInfo>& GetContainerFeaturePolicy() const {
+    return mContainerFeaturePolicyInfo;
   }
 
   void SetRestoreData(SessionStoreRestoreData* aData, ErrorResult& aError);
@@ -581,7 +584,7 @@ class CanonicalBrowsingContext final : public BrowsingContext {
   nsCOMPtr<nsIWebProgressListener> mDocShellProgressBridge;
   RefPtr<nsBrowserStatusFilter> mStatusFilter;
 
-  RefPtr<FeaturePolicy> mContainerFeaturePolicy;
+  Maybe<FeaturePolicyInfo> mContainerFeaturePolicyInfo;
 
   friend class BrowserSessionStore;
   WeakPtr<SessionStoreFormData>& GetSessionStoreFormDataRef() {

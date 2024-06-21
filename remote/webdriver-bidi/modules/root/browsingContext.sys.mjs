@@ -17,6 +17,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   error: "chrome://remote/content/shared/webdriver/Errors.sys.mjs",
   EventPromise: "chrome://remote/content/shared/Sync.sys.mjs",
   getTimeoutMultiplier: "chrome://remote/content/shared/AppInfo.sys.mjs",
+  Log: "chrome://remote/content/shared/Log.sys.mjs",
   modal: "chrome://remote/content/shared/Prompt.sys.mjs",
   registerNavigationId:
     "chrome://remote/content/shared/NavigationManager.sys.mjs",
@@ -39,6 +40,10 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "chrome://remote/content/shared/messagehandler/WindowGlobalMessageHandler.sys.mjs",
   windowManager: "chrome://remote/content/shared/WindowManager.sys.mjs",
 });
+
+ChromeUtils.defineLazyGetter(lazy, "logger", () =>
+  lazy.Log.get(lazy.Log.TYPES.WEBDRIVER_BIDI)
+);
 
 // Maximal window dimension allowed when emulating a viewport.
 const MAX_WINDOW_SIZE = 10000000;
@@ -400,6 +405,9 @@ class BrowsingContextModule extends Module {
    * @param {object=} options
    * @param {string} options.context
    *     Id of the browsing context to close.
+   * @param {boolean=} options.promptUnload
+   *     Flag to indicate if a potential beforeunload prompt should be shown
+   *     when closing the browsing context. Defaults to false.
    *
    * @throws {NoSuchFrameError}
    *     If the browsing context cannot be found.
@@ -407,11 +415,16 @@ class BrowsingContextModule extends Module {
    *     If the browsing context is not a top-level one.
    */
   async close(options = {}) {
-    const { context: contextId } = options;
+    const { context: contextId, promptUnload = false } = options;
 
     lazy.assert.string(
       contextId,
       `Expected "context" to be a string, got ${contextId}`
+    );
+
+    lazy.assert.boolean(
+      promptUnload,
+      `Expected "promptUnload" to be a boolean, got ${promptUnload}`
     );
 
     const context = lazy.TabManager.getBrowsingContextById(contextId);
@@ -435,7 +448,7 @@ class BrowsingContextModule extends Module {
     }
 
     const tab = lazy.TabManager.getTabForBrowsingContext(context);
-    await lazy.TabManager.removeTab(tab);
+    await lazy.TabManager.removeTab(tab, { skipPermitUnload: !promptUnload });
   }
 
   /**
@@ -763,11 +776,12 @@ class BrowsingContextModule extends Module {
 
     if (dialog && dialog.isOpen) {
       switch (dialog.promptType) {
-        case UserPromptType.alert: {
+        case UserPromptType.alert:
           await closePrompt(() => dialog.accept());
           return;
-        }
-        case UserPromptType.confirm: {
+
+        case UserPromptType.beforeunload:
+        case UserPromptType.confirm:
           await closePrompt(() => {
             if (accept) {
               dialog.accept();
@@ -777,8 +791,8 @@ class BrowsingContextModule extends Module {
           });
 
           return;
-        }
-        case UserPromptType.prompt: {
+
+        case UserPromptType.prompt:
           await closePrompt(() => {
             if (accept) {
               dialog.text = userText;
@@ -789,13 +803,11 @@ class BrowsingContextModule extends Module {
           });
 
           return;
-        }
-        case UserPromptType.beforeunload: {
-          // TODO: Bug 1824220. Implement support for "beforeunload" prompts.
+
+        default:
           throw new lazy.error.UnsupportedOperationError(
-            '"beforeunload" prompts are not supported yet.'
+            `Prompts of type "${dialog.promptType}" are not supported`
           );
-        }
       }
     }
 
@@ -1851,7 +1863,9 @@ class BrowsingContextModule extends Module {
 
       const params = {
         context: contextId,
-        ...detail,
+        accepted: detail.accepted,
+        type: detail.promptType,
+        userText: detail.userText,
       };
 
       this.emitEvent("browsingContext.userPromptClosed", params, contextInfo);
@@ -1864,6 +1878,7 @@ class BrowsingContextModule extends Module {
 
       // Do not send opened event for unsupported prompt types.
       if (!(prompt.promptType in UserPromptType)) {
+        lazy.logger.trace(`Prompt type "${prompt.promptType}" not supported`);
         return;
       }
 

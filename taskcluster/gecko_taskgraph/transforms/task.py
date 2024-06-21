@@ -1268,6 +1268,23 @@ def build_push_msix_payload(config, task, task_def):
 
 
 @payload_builder(
+    "shipit-update-product-channel-version",
+    schema={
+        Required("product"): str,
+        Required("channel"): str,
+        Required("version"): str,
+    },
+)
+def build_ship_it_update_product_channel_version_payload(config, task, task_def):
+    worker = task["worker"]
+    task_def["payload"] = {
+        "product": worker["product"],
+        "version": worker["version"],
+        "channel": worker["channel"],
+    }
+
+
+@payload_builder(
     "shipit-shipped",
     schema={
         Required("release-name"): str,
@@ -1578,10 +1595,13 @@ def set_defaults(config, tasks):
         elif worker["implementation"] == "generic-worker":
             worker.setdefault("env", {})
             worker.setdefault("os-groups", [])
-            if worker["os-groups"] and worker["os"] != "windows":
+            if worker["os-groups"] and worker["os"] not in (
+                "windows",
+                "linux",
+            ):
                 raise Exception(
                     "os-groups feature of generic-worker is only supported on "
-                    "Windows, not on {}".format(worker["os"])
+                    "Windows and Linux, not on {}".format(worker["os"])
                 )
             worker.setdefault("chain-of-trust", False)
         elif worker["implementation"] in (
