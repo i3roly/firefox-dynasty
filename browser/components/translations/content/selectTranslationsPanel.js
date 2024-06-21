@@ -234,15 +234,11 @@ var SelectTranslationsPanel = new (class {
       );
 
       const panel = wrapper.content.firstElementChild;
-      const settingsButton = document.getElementById(
-        "translations-panel-settings"
-      );
       wrapper.replaceWith(wrapper.content);
 
       // Lazily select the elements.
       this.#lazyElements = {
         panel,
-        settingsButton,
       };
 
       TranslationsPanelShared.defineLazyElements(document, this.#lazyElements, {
@@ -293,6 +289,13 @@ var SelectTranslationsPanel = new (class {
    * @returns {Promise<string>} - The code of a supported language, a supported document language, or the top detected language.
    */
   async getTopSupportedDetectedLanguage(textToTranslate) {
+    // We want to refresh our cache every time we make a determination about the detected source language,
+    // even if we never make it to the section of the logic below where we consider the document language,
+    // otherwise the incorrect, cached document language may be reported to telemetry.
+    const { docLangTag, isDocLangTagSupported } = this.#getLanguageInfo(
+      /* forceFetch */ true
+    );
+
     // First see if any of the detected languages are supported and return it if so.
     const { language, languages } = await LanguageDetector.detectLanguage(
       textToTranslate
@@ -308,9 +311,6 @@ var SelectTranslationsPanel = new (class {
 
     // Since none of the detected languages were supported, check to see if the
     // document has a specified language tag that is supported.
-    const { docLangTag, isDocLangTagSupported } = this.#getLanguageInfo(
-      /* forceFetch */ true
-    );
     if (isDocLangTagSupported) {
       return docLangTag;
     }
@@ -494,6 +494,12 @@ var SelectTranslationsPanel = new (class {
     const { panel, fromMenuList, toMenuList, tryAnotherSourceMenuList } =
       this.elements;
 
+    // XUL buttons on macOS do not handle the Enter key by default for
+    // the focused element, so we must listen for the Enter key manually:
+    // https://searchfox.org/mozilla-central/rev/4c8627a76e2e0a9b49c2b673424da478e08715ad/dom/xul/XULButtonElement.cpp#563-579
+    if (AppConstants.platform === "macosx") {
+      panel.addEventListener("keypress", this);
+    }
     panel.addEventListener("popupshown", this);
     panel.addEventListener("popuphidden", this);
 
@@ -512,6 +518,7 @@ var SelectTranslationsPanel = new (class {
    * @param {number} screenX - The x-axis location of the screen at which to open the popup.
    * @param {number} screenY - The y-axis location of the screen at which to open the popup.
    * @param {string} sourceText - The text to translate.
+   * @param {boolean} isTextSelected - True if the text comes from a selection, false if it comes from a hyperlink.
    * @param {Promise} langPairPromise - Promise resolving to language pair data for initializing dropdowns.
    * @param {boolean} maintainFlow - Whether the telemetry flow-id should be persisted or assigned a new id.
    *
@@ -522,6 +529,7 @@ var SelectTranslationsPanel = new (class {
     screenX,
     screenY,
     sourceText,
+    isTextSelected,
     langPairPromise,
     maintainFlow = false
   ) {
@@ -531,6 +539,7 @@ var SelectTranslationsPanel = new (class {
         screenX,
         screenY,
         sourceText,
+        isTextSelected,
         langPairPromise
       );
       return;
@@ -539,13 +548,16 @@ var SelectTranslationsPanel = new (class {
     const { fromLanguage, toLanguage } = await langPairPromise;
     const { docLangTag, topPreferredLanguage } = this.#getLanguageInfo();
 
-    TranslationsParent.telemetry().selectTranslationsPanel().onOpen({
-      maintainFlow,
-      docLangTag,
-      fromLanguage,
-      toLanguage,
-      topPreferredLanguage,
-    });
+    TranslationsParent.telemetry()
+      .selectTranslationsPanel()
+      .onOpen({
+        maintainFlow,
+        docLangTag,
+        fromLanguage,
+        toLanguage,
+        topPreferredLanguage,
+        textSource: isTextSelected ? "selection" : "hyperlink",
+      });
 
     try {
       this.#sourceTextWordCount = undefined;
@@ -566,6 +578,7 @@ var SelectTranslationsPanel = new (class {
         screenX,
         screenY,
         sourceText,
+        isTextSelected,
         langPairPromise
       );
     }
@@ -583,15 +596,30 @@ var SelectTranslationsPanel = new (class {
    * @param {number} screenX - The x-axis location of the screen at which to open the popup.
    * @param {number} screenY - The y-axis location of the screen at which to open the popup.
    * @param {string} sourceText - The text to translate.
+   * @param {boolean} isTextSelected - True if the text comes from a selection, false if it comes from a hyperlink.
    * @param {Promise} langPairPromise - Promise resolving to language pair data for initializing dropdowns.
    *
    * @returns {Promise<void>}
    */
-  async #forceReopen(event, screenX, screenY, sourceText, langPairPromise) {
+  async #forceReopen(
+    event,
+    screenX,
+    screenY,
+    sourceText,
+    isTextSelected,
+    langPairPromise
+  ) {
     this.console?.warn("The SelectTranslationsPanel was forced to reopen.");
     this.close();
     this.#changeStateToClosed();
-    await this.open(event, screenX, screenY, sourceText, langPairPromise);
+    await this.open(
+      event,
+      screenX,
+      screenY,
+      sourceText,
+      isTextSelected,
+      langPairPromise
+    );
   }
 
   /**
@@ -814,6 +842,56 @@ var SelectTranslationsPanel = new (class {
   }
 
   /**
+   * Handles events when the Enter key is pressed within the panel.
+   *
+   * @param {Element} target - The event target
+   */
+  #handleEnterKeyPressed(target) {
+    const {
+      cancelButton,
+      copyButton,
+      doneButtonPrimary,
+      doneButtonSecondary,
+      settingsButton,
+      translateButton,
+      translateFullPageButton,
+      tryAgainButton,
+    } = this.elements;
+
+    switch (target.id) {
+      case cancelButton.id: {
+        this.onClickCancelButton();
+        break;
+      }
+      case copyButton.id: {
+        this.onClickCopyButton();
+        break;
+      }
+      case doneButtonPrimary.id:
+      case doneButtonSecondary.id: {
+        this.onClickDoneButton();
+        break;
+      }
+      case settingsButton.id: {
+        this.#openSettingsPopup();
+        break;
+      }
+      case translateButton.id: {
+        this.onClickTranslateButton();
+        break;
+      }
+      case translateFullPageButton.id: {
+        this.onClickTranslateFullPageButton();
+        break;
+      }
+      case tryAgainButton.id: {
+        this.onClickTryAgainButton();
+        break;
+      }
+    }
+  }
+
+  /**
    * Conditionally enables the resizer component at the bottom corner of the text area,
    * and limits the maximum height that the textarea can be resized.
    *
@@ -997,7 +1075,7 @@ var SelectTranslationsPanel = new (class {
     // We want to maintain some buffer of pixels between the panel's bottom edge
     // and the bottom edge of our available space, because if they touch, it can
     // cause visual glitching to occur.
-    const BOTTOM_EDGE_PIXEL_BUFFER = 20;
+    const BOTTOM_EDGE_PIXEL_BUFFER = Math.abs(panelBottom - panelTop) / 5;
 
     if (panelBottomToBottomEdge < BOTTOM_EDGE_PIXEL_BUFFER) {
       this.console?.debug(
@@ -1082,6 +1160,12 @@ var SelectTranslationsPanel = new (class {
         this.#handleCommandEvent(target);
         break;
       }
+      case "keypress": {
+        if (event.key === "Enter") {
+          this.#handleEnterKeyPressed(target);
+        }
+        break;
+      }
       case "popupshown": {
         this.#handlePopupShownEvent(target);
         break;
@@ -1154,13 +1238,17 @@ var SelectTranslationsPanel = new (class {
    * Handles events when the panel's translate button is clicked.
    */
   onClickTranslateButton() {
-    TranslationsParent.telemetry()
-      .selectTranslationsPanel()
-      .onTranslateButton();
-
     const { fromMenuList, tryAnotherSourceMenuList } = this.elements;
+    const { detectedLanguage, toLanguage } = this.#translationState;
 
     fromMenuList.value = tryAnotherSourceMenuList.value;
+
+    TranslationsParent.telemetry().selectTranslationsPanel().onTranslateButton({
+      detectedLanguage,
+      fromLanguage: fromMenuList.value,
+      toLanguage,
+    });
+
     this.#maybeRequestTranslation();
   }
 
@@ -1217,8 +1305,14 @@ var SelectTranslationsPanel = new (class {
         // If the initialization failed, we need to close the panel and try reopening it
         // which will attempt to initialize everything again after failure.
         const { panel } = this.elements;
-        const { event, screenX, screenY, sourceText, langPairPromise } =
-          this.#translationState;
+        const {
+          event,
+          screenX,
+          screenY,
+          sourceText,
+          isTextSelected,
+          langPairPromise,
+        } = this.#translationState;
 
         panel.addEventListener(
           "popuphidden",
@@ -1228,6 +1322,7 @@ var SelectTranslationsPanel = new (class {
               screenX,
               screenY,
               sourceText,
+              isTextSelected,
               langPairPromise,
               /* maintainFlow */ true
             ),
@@ -1493,12 +1588,20 @@ var SelectTranslationsPanel = new (class {
 
   /**
    * Changes the phase to "init-failure".
+   *
+   * @param {Event} event - The triggering event for opening the panel.
+   * @param {number} screenX - The x-axis location of the screen at which to open the popup.
+   * @param {number} screenY - The y-axis location of the screen at which to open the popup.
+   * @param {string} sourceText - The text to translate.
+   * @param {boolean} isTextSelected - True if the text comes from a hyperlink, false if it is from a selection.
+   * @param {Promise} langPairPromise - Promise resolving to language pair data for initializing dropdowns.
    */
   #changeStateToInitFailure(
     event,
     screenX,
     screenY,
     sourceText,
+    isTextSelected,
     langPairPromise
   ) {
     this.#changeStateTo("init-failure", /* retainEntries */ true, {
@@ -1506,6 +1609,7 @@ var SelectTranslationsPanel = new (class {
       screenX,
       screenY,
       sourceText,
+      isTextSelected,
       langPairPromise,
     });
   }
@@ -2135,6 +2239,37 @@ var SelectTranslationsPanel = new (class {
   }
 
   /**
+   * Reports to telemetry whether the from-language or the to-language has
+   * changed based on whether the currently selected language is different
+   * than the corresponding language that is stored in the panel's state.
+   */
+  #maybeReportLanguageChangeToTelemetry() {
+    const {
+      fromLanguage: previousFromLanguage,
+      toLanguage: previousToLanguage,
+    } = this.#translationState;
+    const {
+      fromLanguage: selectedFromLanguage,
+      toLanguage: selectedToLanguage,
+    } = this.#getSelectedLanguagePair();
+
+    if (selectedFromLanguage !== previousFromLanguage) {
+      const { docLangTag } = this.#getLanguageInfo();
+      TranslationsParent.telemetry()
+        .selectTranslationsPanel()
+        .onChangeFromLanguage({
+          previousLangTag: previousFromLanguage,
+          currentLangTag: selectedFromLanguage,
+          docLangTag,
+        });
+    } else if (selectedToLanguage !== previousToLanguage) {
+      TranslationsParent.telemetry()
+        .selectTranslationsPanel()
+        .onChangeToLanguage(selectedToLanguage);
+    }
+  }
+
+  /**
    * Attaches event listeners to the target element for initiating translation on specified event types.
    *
    * @param {string[]} eventTypes - An array of event types to listen for.
@@ -2152,6 +2287,7 @@ var SelectTranslationsPanel = new (class {
           case "focus":
           case "popuphidden": {
             callback = () => {
+              this.#maybeReportLanguageChangeToTelemetry();
               this.#maybeRequestTranslation();
             };
             break;
@@ -2159,6 +2295,7 @@ var SelectTranslationsPanel = new (class {
           case "keypress": {
             callback = event => {
               if (event.key === "Enter") {
+                this.#maybeReportLanguageChangeToTelemetry();
                 this.#maybeRequestTranslation();
               }
             };

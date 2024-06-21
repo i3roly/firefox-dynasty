@@ -822,6 +822,10 @@ pref("browser.dataFeatureRecommendations.enabled", false);
 // sets darkTheme data.
 pref("browser.theme.dark-private-windows", true);
 
+// Pref to control whether or not Private Browsing windows show up
+// as separate icons in the Windows taskbar.
+pref("browser.privateWindowSeparation.enabled", true);
+
 // Controls visibility of the privacy segmentation preferences section.
 pref("browser.privacySegmentation.preferences.show", false);
 
@@ -1726,7 +1730,7 @@ pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-dark", "");
-pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-color", "");
+pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper", "");
 
 // Preference to show feature highlight about wallpaper on new tab page
 pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightEnabled", false);
