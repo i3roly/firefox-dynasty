@@ -6,8 +6,8 @@ https://creativecommons.org/publicdomain/zero/1.0/ */
 const { AppConstants } = ChromeUtils.importESModule(
   "resource://gre/modules/AppConstants.sys.mjs"
 );
-const { JsonSchemaValidator } = ChromeUtils.importESModule(
-  "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs"
+const { JsonSchema } = ChromeUtils.importESModule(
+  "resource://gre/modules/JsonSchema.sys.mjs"
 );
 const { UIState } = ChromeUtils.importESModule(
   "resource://services-sync/UIState.sys.mjs"
@@ -113,7 +113,8 @@ async function testCreateBackupHelper(sandbox, taskFn) {
   // We should also find a folder for each fake BackupResource.
   let backupsFolderPath = PathUtils.join(
     fakeProfilePath,
-    BackupService.PROFILE_FOLDER_NAME
+    BackupService.PROFILE_FOLDER_NAME,
+    BackupService.SNAPSHOTS_FOLDER_NAME
   );
   let stagingPath = PathUtils.join(backupsFolderPath, "staging");
 
@@ -198,7 +199,7 @@ async function testCreateBackupHelper(sandbox, taskFn) {
   let manifest = await IOUtils.readJSON(manifestPath);
 
   let schema = await BackupService.MANIFEST_SCHEMA;
-  let validationResult = JsonSchemaValidator.validate(manifest, schema);
+  let validationResult = JsonSchema.validate(manifest, schema);
   Assert.ok(validationResult.valid, "Schema matches manifest");
   Assert.deepEqual(
     Object.keys(manifest.resources).sort(),
@@ -292,10 +293,10 @@ add_task(async function test_createBackup_signed_in() {
 
 /**
  * Creates a directory that looks a lot like a decompressed backup archive,
- * and then tests that BackupService.recoverFromBackup can create a new profile
- * and recover into it.
+ * and then tests that BackupService.recoverFromSnapshotFolder can create a new
+ * profile and recover into it.
  */
-add_task(async function test_recoverFromBackup() {
+add_task(async function test_recoverFromSnapshotFolder() {
   let sandbox = sinon.createSandbox();
   let fakeEntryMap = new Map();
   let backupResourceClasses = [
@@ -332,11 +333,11 @@ add_task(async function test_recoverFromBackup() {
 
   let oldProfilePath = await IOUtils.createUniqueDirectory(
     PathUtils.tempDir,
-    "recoverFromBackupTest"
+    "recoverFromSnapshotFolderTest"
   );
   let newProfileRootPath = await IOUtils.createUniqueDirectory(
     PathUtils.tempDir,
-    "recoverFromBackupTest-newProfileRoot"
+    "recoverFromSnapshotFolderTest-newProfileRoot"
   );
 
   let { stagingPath } = await bs.createBackup({ profilePath: oldProfilePath });
@@ -349,7 +350,7 @@ add_task(async function test_recoverFromBackup() {
     testTelemetryStateObject
   );
 
-  let profile = await bs.recoverFromBackup(
+  let profile = await bs.recoverFromSnapshotFolder(
     stagingPath,
     false /* shouldLaunch */,
     newProfileRootPath

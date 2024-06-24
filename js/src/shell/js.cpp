@@ -911,7 +911,7 @@ static void TraceBlackRoots(JSTracer* trc, void* data) {
   TraceRootArrays(trc, gc::MarkColor::Black);
 }
 
-static bool TraceGrayRoots(JSTracer* trc, SliceBudget& budget, void* data) {
+static bool TraceGrayRoots(JSTracer* trc, JS::SliceBudget& budget, void* data) {
   TraceRootArrays(trc, gc::MarkColor::Gray);
   return true;
 }
@@ -12556,6 +12556,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-regexp-duplicate-named-groups")) {
     JS::Prefs::setAtStartup_experimental_regexp_duplicate_named_groups(true);
   }
+  if (op.getBoolOption("enable-float16array")) {
+    JS::Prefs::setAtStartup_experimental_float16array(true);
+  }
 #ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_iterator_helpers(true);
@@ -12571,9 +12574,6 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-uint8array-base64")) {
     JS::Prefs::setAtStartup_experimental_uint8array_base64(true);
-  }
-  if (op.getBoolOption("enable-float16array")) {
-    JS::Prefs::setAtStartup_experimental_float16array(true);
   }
 #endif
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE

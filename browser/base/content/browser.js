@@ -1703,7 +1703,7 @@ function UpdateUrlbarSearchSplitterState() {
   var urlbar = document.getElementById("urlbar-container");
   var searchbar = document.getElementById("search-container");
 
-  if (document.documentElement.getAttribute("customizing") == "true") {
+  if (document.documentElement.hasAttribute("customizing")) {
     if (splitter) {
       splitter.remove();
     }
@@ -4800,9 +4800,6 @@ function showFullScreenViewContextMenuItems(popup) {
 
 function onViewToolbarsPopupShowing(aEvent, aInsertPoint) {
   var popup = aEvent.target;
-  if (popup != aEvent.currentTarget) {
-    return;
-  }
 
   // triggerNode can be a nested child element of a toolbaritem.
   let toolbarItem = popup.triggerNode;

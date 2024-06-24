@@ -502,8 +502,8 @@ pref("browser.urlbar.quicksuggest.showOnboardingDialogAfterNRestarts", 0);
 
 // The indexes of the sponsored and non-sponsored quick suggest results within
 // the general results group.
-pref("browser.urlbar.quicksuggest.sponsoredIndex", -1);
-pref("browser.urlbar.quicksuggest.nonSponsoredIndex", -1);
+pref("browser.urlbar.quicksuggest.sponsoredIndex", 0);
+pref("browser.urlbar.quicksuggest.nonSponsoredIndex", 0);
 
 // Whether quick suggest results can be shown in position specified in the
 // suggestions.
@@ -655,6 +655,10 @@ pref("browser.urlbar.addons.minKeywordLength", 0);
 
 // Feature gate pref for Pocket suggestions in the urlbar.
 pref("browser.urlbar.pocket.featureGate", false);
+
+// The group-relative suggestedIndex of Pocket suggestions within the Firefox
+// Suggest section.
+pref("browser.urlbar.pocket.suggestedIndex", 0);
 
 // If `browser.urlbar.pocket.featureGate` is true, this controls whether Pocket
 // suggestions are turned on.
@@ -1905,10 +1909,11 @@ pref("sidebar.main.tools", "history,syncedtabs");
 pref("sidebar.verticalTabs", false);
 
 pref("browser.ml.chat.enabled", false);
+pref("browser.ml.chat.hideLocalhost", true);
 pref("browser.ml.chat.prompt.prefix", 'I’m on page "%tabTitle%" with "%selection|12000%" selected. ');
-pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Highlight the main themes and conclusions. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning of the selection."}');
-pref("browser.ml.chat.prompts.1", '{"label":"Simplify language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; examples where applicable to make explanations clearer; explanations for jargon and technical terms; headers and bulleted lists for scannability. Maintain factual accuracy while simplifying."}');
-pref("browser.ml.chat.prompts.2", '{"label":"Quiz me","value":"Please create questions related to the selection. Ask the questions one by one. Wait for my response before moving on to the next question. Evaluate each response. Ask a variety of types of questions, like multiple choice, true or false and short answer."}');
+pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning and factual accuracy.","id":"summarize"}');
+pref("browser.ml.chat.prompts.1", '{"label":"Simplify Language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; headers and bulleted lists for scannability. Maintain meaning and factual accuracy.","id":"simplify"}');
+pref("browser.ml.chat.prompts.2", '{"label":"Quiz Me","value":"Please quiz me on this selection. Ask me a variety of types of questions, for example multiple choice, true or false, and short answer. Wait for my response before moving on to the next question.","id":"quiz"}');
 pref("browser.ml.chat.provider", "");
 pref("browser.ml.chat.sidebar", true);
 

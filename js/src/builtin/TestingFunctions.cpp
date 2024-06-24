@@ -16,9 +16,11 @@
 #  include "mozilla/intl/TimeZone.h"
 #endif
 #include "mozilla/Maybe.h"
+#include "mozilla/RefPtr.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Span.h"
 #include "mozilla/Sprintf.h"
+#include "mozilla/StringBuffer.h"
 #include "mozilla/TextUtils.h"
 #include "mozilla/ThreadLocal.h"
 
@@ -161,8 +163,10 @@ using mozilla::Span;
 
 using JS::AutoStableStringChars;
 using JS::CompileOptions;
+using JS::SliceBudget;
 using JS::SourceOwnership;
 using JS::SourceText;
+using JS::WorkBudget;
 
 // If fuzzingSafe is set, remove functionality that could cause problems with
 // fuzzers. Set this via the environment variable MOZ_FUZZING_SAFE.
@@ -2165,7 +2169,7 @@ static bool WasmReturnFlag(JSContext* cx, unsigned argc, Value* vp, Flag flag) {
       b = module->module().loggingDeserialized();
       break;
     case Flag::ParsedBranchHints:
-      b = module->module().metadata().parsedBranchHints;
+      b = module->module().codeMeta().parsedBranchHints;
       break;
   }
 
@@ -3586,6 +3590,8 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
   bool wantTwoByte = false;
   bool forceExternal = false;
   bool maybeExternal = false;
+  bool newStringBuffer = false;
+  bool shareStringBuffer = false;
   uint32_t capacity = 0;
 
   if (args.get(1).isObject()) {
@@ -3600,7 +3606,9 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
          {BoolSetting{"tenured", &requestTenured},
           BoolSetting{"twoByte", &wantTwoByte},
           BoolSetting{"external", &forceExternal},
-          BoolSetting{"maybeExternal", &maybeExternal}}) {
+          BoolSetting{"maybeExternal", &maybeExternal},
+          BoolSetting{"newStringBuffer", &newStringBuffer},
+          BoolSetting{"shareStringBuffer", &shareStringBuffer}}) {
       if (!JS_GetProperty(cx, options, name, &v)) {
         return false;
       }
@@ -3628,11 +3636,14 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
     heap = requestTenured ? gc::Heap::Tenured : gc::Heap::Default;
     if (forceExternal || maybeExternal) {
       wantTwoByte = true;
-      if (capacity != 0) {
-        JS_ReportErrorASCII(cx,
-                            "strings cannot be both external and extensible");
-        return false;
-      }
+    }
+    unsigned kinds = forceExternal + maybeExternal + (capacity != 0) +
+                     newStringBuffer + shareStringBuffer;
+    if (kinds > 1) {
+      JS_ReportErrorASCII(cx,
+                          "external, capacity, and stringBuffer options can "
+                          "not be used at the same time");
+      return false;
     }
   }
 
@@ -3661,6 +3672,21 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
     if (dest && isExternal) {
       (void)buf.release();  // Ownership was transferred.
     }
+  } else if (shareStringBuffer) {
+    if (!src->isLinear() || !src->asLinear().hasStringBuffer()) {
+      JS_ReportErrorASCII(cx, "source string must have a string buffer");
+      return false;
+    }
+    RefPtr<mozilla::StringBuffer> buffer = src->asLinear().stringBuffer();
+    if (src->hasLatin1Chars()) {
+      auto* bufferChars = static_cast<const Latin1Char*>(buffer->Data());
+      dest = JSLinearString::newValidLength<CanGC>(cx, std::move(buffer),
+                                                   bufferChars, len, heap);
+    } else {
+      auto* bufferChars = static_cast<const char16_t*>(buffer->Data());
+      dest = JSLinearString::newValidLength<CanGC>(cx, std::move(buffer),
+                                                   bufferChars, len, heap);
+    }
   } else {
     AutoStableStringChars stable(cx);
     if (!wantTwoByte && src->hasLatin1Chars()) {
@@ -3672,7 +3698,33 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
         return false;
       }
     }
-    if (capacity) {
+    if (newStringBuffer) {
+      auto allocString = [&](const auto* chars) -> JSLinearString* {
+        using CharT =
+            std::remove_const_t<std::remove_pointer_t<decltype(chars)>>;
+
+        if (JSInlineString::lengthFits<CharT>(len)) {
+          JS_ReportErrorASCII(cx, "Cannot create small non-inline strings");
+          return nullptr;
+        }
+
+        RefPtr<mozilla::StringBuffer> buffer =
+            mozilla::StringBuffer::Create(chars, len);
+        if (!buffer) {
+          ReportOutOfMemory(cx);
+          return nullptr;
+        }
+
+        auto* bufferChars = static_cast<const CharT*>(buffer->Data());
+        return JSLinearString::newValidLength<CanGC, CharT>(
+            cx, std::move(buffer), bufferChars, len, heap);
+      };
+      if (stable.isLatin1()) {
+        dest = allocString(stable.latin1Chars());
+      } else {
+        dest = allocString(stable.twoByteChars());
+      }
+    } else if (capacity) {
       if (capacity < len) {
         capacity = len;
       }
@@ -9351,6 +9403,19 @@ static bool NukeCCW(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static bool IsCCW(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  if (args.length() != 1 || !args[0].isObject()) {
+    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr, JSMSG_INVALID_ARGS,
+                              "IsCCW");
+    return false;
+  }
+
+  args.rval().setBoolean(IsCrossCompartmentWrapper(&args[0].toObject()));
+  return true;
+}
+
 static bool FdLibM_Pow(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -9532,6 +9597,11 @@ static const JSFunctionSpecWithHelp TestingFunctions[] = {
 "   - twoByte: create a \"two byte\" string, not a latin1 string, regardless of the\n"
 "      input string's characters. Latin1 will be used by default if possible\n"
 "      (again regardless of the input string.)\n"
+"  \n"
+"   - newStringBuffer: create a new string that uses a refcounted StringBuffer for\n"
+"     the characters.\n"
+"  \n"
+"   - shareStringBuffer: create a new string that shares str's StringBuffer.\n"
 "  \n"
 "   - external: create an external string. External strings are always twoByte and\n"
 "     tenured.\n"
@@ -10453,6 +10523,10 @@ JS_FN_HELP("isSmallFunction", IsSmallFunction, 1, 0,
   "assertRealmFuseInvariants()",
   " Runs the realm's fuse invariant checks -- these will crash on failure. "
   " Only available in fuzzing or debug builds, so usage should be guarded. "),
+
+    JS_FN_HELP("isCCW", IsCCW, 1, 0,
+"isCCW(object)",
+"  Return true if an object is a CCW."),
 
   JS_FN_HELP("popAllFusesInRealm", PopAllFusesInRealm, 0, 0,
   "popAllFusesInRealm()",

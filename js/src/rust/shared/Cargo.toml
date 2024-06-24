@@ -21,6 +21,7 @@ unicode-bidi-ffi = { path = "../../../../intl/bidi/rust/unicode-bidi-ffi" }
 [features]
 simd-accel = ['encoding_c/simd-accel']
 icu4x = ['icu_capi']
+icu4x_calendar = ['icu_capi?/icu_calendar']
 
 # Uncomment this to enable perf support in release mode.
 #[profile.release]

@@ -70,7 +70,7 @@ static const unsigned COMPILATION_LIFO_DEFAULT_CHUNK_SIZE = 64 * 1024;
 static const uint32_t BAD_CODE_RANGE = UINT32_MAX;
 
 ModuleGenerator::ModuleGenerator(const CompileArgs& args,
-                                 ModuleEnvironment* moduleEnv,
+                                 CodeMetadata* codeMeta,
                                  CompilerEnvironment* compilerEnv,
                                  const Atomic<bool>* cancelled,
                                  UniqueChars* error,
@@ -79,13 +79,13 @@ ModuleGenerator::ModuleGenerator(const CompileArgs& args,
       error_(error),
       warnings_(warnings),
       cancelled_(cancelled),
-      moduleEnv_(moduleEnv),
+      codeMeta_(codeMeta),
       compilerEnv_(compilerEnv),
       linkData_(nullptr),
       metadataTier_(nullptr),
       lifo_(GENERATOR_LIFO_DEFAULT_CHUNK_SIZE),
       masmAlloc_(&lifo_),
-      masm_(masmAlloc_, *moduleEnv, /* limitedSize= */ false),
+      masm_(masmAlloc_, /* limitedSize= */ false),
       debugTrapCodeOffset_(),
       lastPatchedCallSite_(0),
       startOfUnpatchedCallsites_(0),
@@ -136,88 +136,30 @@ ModuleGenerator::~ModuleGenerator() {
   }
 }
 
-// This is the highest offset into Instance::globalArea that will not overflow
-// a signed 32-bit integer.
-static const uint32_t MaxInstanceDataOffset =
-    INT32_MAX - Instance::offsetOfData();
-
-bool ModuleGenerator::allocateInstanceDataBytes(uint32_t bytes, uint32_t align,
-                                                uint32_t* instanceDataOffset) {
-  CheckedInt<uint32_t> newInstanceDataLength(metadata_->instanceDataLength);
-
-  // Adjust the current global data length so that it's aligned to `align`
-  newInstanceDataLength +=
-      ComputeByteAlignment(newInstanceDataLength.value(), align);
-  if (!newInstanceDataLength.isValid()) {
-    return false;
-  }
-
-  // The allocated data is given by the aligned length
-  *instanceDataOffset = newInstanceDataLength.value();
-
-  // Advance the length for `bytes` being allocated
-  newInstanceDataLength += bytes;
-  if (!newInstanceDataLength.isValid()) {
-    return false;
-  }
-
-  // Check that the highest offset into this allocated space would not overflow
-  // a signed 32-bit integer.
-  if (newInstanceDataLength.value() > MaxInstanceDataOffset + 1) {
-    return false;
-  }
-
-  metadata_->instanceDataLength = newInstanceDataLength.value();
-  return true;
-}
-
-bool ModuleGenerator::allocateInstanceDataBytesN(uint32_t bytes, uint32_t align,
-                                                 uint32_t count,
-                                                 uint32_t* instanceDataOffset) {
-  // The size of each allocation should be a multiple of alignment so that a
-  // contiguous array of allocations will be aligned
-  MOZ_ASSERT(bytes % align == 0);
-
-  // Compute the total bytes being allocated
-  CheckedInt<uint32_t> totalBytes = bytes;
-  totalBytes *= count;
-  if (!totalBytes.isValid()) {
-    return false;
-  }
-
-  // Allocate the bytes
-  return allocateInstanceDataBytes(totalBytes.value(), align,
-                                   instanceDataOffset);
-}
-
-bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
+bool ModuleGenerator::init(CodeMetadataForAsmJS* codeMetaForAsmJS) {
   // Perform fallible metadata, linkdata, assumption allocations.
 
-  MOZ_ASSERT(isAsmJS() == !!maybeAsmJSMetadata);
-  if (maybeAsmJSMetadata) {
-    metadata_ = maybeAsmJSMetadata;
-  } else {
-    metadata_ = js_new<Metadata>();
-    if (!metadata_) {
-      return false;
-    }
-  }
+  // If codeMetaForAsmJS is null, we're compiling wasm; else we're compiling
+  // asm.js, in whih case it contains wasm::Code-lifetime asm.js-specific
+  // information.
+  MOZ_ASSERT(isAsmJS() == !!codeMetaForAsmJS);
+  codeMetaForAsmJS_ = codeMetaForAsmJS;
 
   if (compileArgs_->scriptedCaller.filename) {
-    metadata_->filename =
+    codeMeta_->filename =
         DuplicateString(compileArgs_->scriptedCaller.filename.get());
-    if (!metadata_->filename) {
+    if (!codeMeta_->filename) {
       return false;
     }
 
-    metadata_->filenameIsURL = compileArgs_->scriptedCaller.filenameIsURL;
+    codeMeta_->filenameIsURL = compileArgs_->scriptedCaller.filenameIsURL;
   } else {
     MOZ_ASSERT(!compileArgs_->scriptedCaller.filenameIsURL);
   }
 
   if (compileArgs_->sourceMapURL) {
-    metadata_->sourceMapURL = DuplicateString(compileArgs_->sourceMapURL.get());
-    if (!metadata_->sourceMapURL) {
+    codeMeta_->sourceMapURL = DuplicateString(compileArgs_->sourceMapURL.get());
+    if (!codeMeta_->sourceMapURL) {
       return false;
     }
   }
@@ -236,7 +178,7 @@ bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
   // elements will be initialized by the time module generation is finished.
 
   if (!metadataTier_->funcToCodeRange.appendN(BAD_CODE_RANGE,
-                                              moduleEnv_->funcs.length())) {
+                                              codeMeta_->funcs.length())) {
     return false;
   }
 
@@ -247,13 +189,13 @@ bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
   // shrinkStorageToFit calls at the end will trim off unneeded capacity.
 
   size_t codeSectionSize =
-      moduleEnv_->codeSection ? moduleEnv_->codeSection->size : 0;
+      codeMeta_->codeSection ? codeMeta_->codeSection->size : 0;
 
   size_t estimatedCodeSize =
       size_t(1.2 * EstimateCompiledCodeSize(tier(), codeSectionSize));
   (void)masm_.reserve(std::min(estimatedCodeSize, MaxCodeBytesPerProcess));
 
-  (void)metadataTier_->codeRanges.reserve(2 * moduleEnv_->numFuncDefs());
+  (void)metadataTier_->codeRanges.reserve(2 * codeMeta_->numFuncDefs());
 
   const size_t ByteCodesPerCallSite = 50;
   (void)metadataTier_->callSites.reserve(codeSectionSize /
@@ -263,88 +205,34 @@ bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
   (void)metadataTier_->trapSites[Trap::OutOfBounds].reserve(
       codeSectionSize / ByteCodesPerOOBTrap);
 
-  // Allocate space in instance for declarations that need it
-  MOZ_ASSERT(metadata_->instanceDataLength == 0);
-
-  // Allocate space for type definitions
-  if (!allocateInstanceDataBytesN(
-          sizeof(TypeDefInstanceData), alignof(TypeDefInstanceData),
-          moduleEnv_->types->length(), &moduleEnv_->typeDefsOffsetStart)) {
+  // Allocate space in instance for declarations that need it.  This sets
+  // various fields in `codeMeta_` and leaves the total length in
+  // `codeMeta_->instanceDataLength`.
+  MOZ_ASSERT(codeMeta_->instanceDataLength == 0);
+  if (!codeMeta_->initInstanceLayout()) {
     return false;
-  }
-  metadata_->typeDefsOffsetStart = moduleEnv_->typeDefsOffsetStart;
-
-  // Allocate space for every function import
-  if (!allocateInstanceDataBytesN(
-          sizeof(FuncImportInstanceData), alignof(FuncImportInstanceData),
-          moduleEnv_->numFuncImports, &moduleEnv_->funcImportsOffsetStart)) {
-    return false;
-  }
-
-  // Allocate space for every memory
-  if (!allocateInstanceDataBytesN(
-          sizeof(MemoryInstanceData), alignof(MemoryInstanceData),
-          moduleEnv_->memories.length(), &moduleEnv_->memoriesOffsetStart)) {
-    return false;
-  }
-  metadata_->memoriesOffsetStart = moduleEnv_->memoriesOffsetStart;
-
-  // Allocate space for every table
-  if (!allocateInstanceDataBytesN(
-          sizeof(TableInstanceData), alignof(TableInstanceData),
-          moduleEnv_->tables.length(), &moduleEnv_->tablesOffsetStart)) {
-    return false;
-  }
-  metadata_->tablesOffsetStart = moduleEnv_->tablesOffsetStart;
-
-  // Allocate space for every tag
-  if (!allocateInstanceDataBytesN(
-          sizeof(TagInstanceData), alignof(TagInstanceData),
-          moduleEnv_->tags.length(), &moduleEnv_->tagsOffsetStart)) {
-    return false;
-  }
-  metadata_->tagsOffsetStart = moduleEnv_->tagsOffsetStart;
-
-  // Allocate space for every global that requires it
-  for (GlobalDesc& global : moduleEnv_->globals) {
-    if (global.isConstant()) {
-      continue;
-    }
-
-    uint32_t width = global.isIndirect() ? sizeof(void*) : global.type().size();
-
-    uint32_t instanceDataOffset;
-    if (!allocateInstanceDataBytes(width, width, &instanceDataOffset)) {
-      return false;
-    }
-
-    global.setOffset(instanceDataOffset);
   }
 
   // Initialize function import metadata
-  if (!metadataTier_->funcImports.resize(moduleEnv_->numFuncImports)) {
+  if (!metadataTier_->funcImports.resize(codeMeta_->numFuncImports)) {
     return false;
   }
 
-  for (size_t i = 0; i < moduleEnv_->numFuncImports; i++) {
+  for (size_t i = 0; i < codeMeta_->numFuncImports; i++) {
     metadataTier_->funcImports[i] =
-        FuncImport(moduleEnv_->funcs[i].typeIndex,
-                   moduleEnv_->offsetOfFuncImportInstanceData(i));
+        FuncImport(codeMeta_->funcs[i].typeIndex,
+                   codeMeta_->offsetOfFuncImportInstanceData(i));
   }
-
-  // Share type definitions with metadata
-  metadata_->types = moduleEnv_->types;
 
   // Accumulate all exported functions:
   // - explicitly marked as such;
   // - implicitly exported by being an element of function tables;
   // - implicitly exported by being the start function;
   // - implicitly exported by being used in global ref.func initializer
-  // ModuleEnvironment accumulates this information for us during decoding,
-  // transfer it to the FuncExportVector stored in Metadata.
+  // ModuleMetadata accumulates this information for us during decoding.
 
   uint32_t exportedFuncCount = 0;
-  for (const FuncDesc& func : moduleEnv_->funcs) {
+  for (const FuncDesc& func : codeMeta_->funcs) {
     if (func.isExported()) {
       exportedFuncCount++;
     }
@@ -353,9 +241,9 @@ bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
     return false;
   }
 
-  for (uint32_t funcIndex = 0; funcIndex < moduleEnv_->funcs.length();
+  for (uint32_t funcIndex = 0; funcIndex < codeMeta_->funcs.length();
        funcIndex++) {
-    const FuncDesc& func = moduleEnv_->funcs[funcIndex];
+    const FuncDesc& func = codeMeta_->funcs[funcIndex];
 
     if (!func.isExported()) {
       continue;
@@ -382,7 +270,7 @@ bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
     return false;
   }
   for (size_t i = 0; i < numTasks; i++) {
-    tasks_.infallibleEmplaceBack(*moduleEnv_, *compilerEnv_, taskState_,
+    tasks_.infallibleEmplaceBack(*codeMeta_, *compilerEnv_, taskState_,
                                  COMPILATION_LIFO_DEFAULT_CHUNK_SIZE);
   }
 
@@ -400,7 +288,7 @@ bool ModuleGenerator::init(Metadata* maybeAsmJSMetadata) {
   CompiledCode& importCode = tasks_[0].output;
   MOZ_ASSERT(importCode.empty());
 
-  if (!GenerateImportFunctions(*moduleEnv_, metadataTier_->funcImports,
+  if (!GenerateImportFunctions(*codeMeta_, metadataTier_->funcImports,
                                &importCode)) {
     return false;
   }
@@ -620,7 +508,7 @@ bool ModuleGenerator::linkCompiledCode(CompiledCode& code) {
   JitContext jcx;
 
   // Combine observed features from the compiled code into the metadata
-  metadata_->featureUsage |= code.featureUsage;
+  codeMeta_->featureUsage |= code.featureUsage;
 
   // Before merging in new code, if calls in a prior code range might go out of
   // range, insert far jumps to extend the range.
@@ -727,13 +615,13 @@ static bool ExecuteCompileTask(CompileTask* task, UniqueChars* error) {
 
   switch (task->compilerEnv.tier()) {
     case Tier::Optimized:
-      if (!IonCompileFunctions(task->moduleEnv, task->compilerEnv, task->lifo,
+      if (!IonCompileFunctions(task->codeMeta, task->compilerEnv, task->lifo,
                                task->inputs, &task->output, error)) {
         return false;
       }
       break;
     case Tier::Baseline:
-      if (!BaselineCompileFunctions(task->moduleEnv, task->compilerEnv,
+      if (!BaselineCompileFunctions(task->codeMeta, task->compilerEnv,
                                     task->lifo, task->inputs, &task->output,
                                     error)) {
         return false;
@@ -863,7 +751,7 @@ bool ModuleGenerator::compileFuncDef(uint32_t funcIndex,
                                      const uint8_t* begin, const uint8_t* end,
                                      Uint32Vector&& lineNums) {
   MOZ_ASSERT(!finishedFuncDefs_);
-  MOZ_ASSERT(funcIndex < moduleEnv_->numFuncs());
+  MOZ_ASSERT(funcIndex < codeMeta_->numFuncs());
 
   uint32_t threshold;
   switch (tier()) {
@@ -1042,7 +930,7 @@ UniqueCodeTier ModuleGenerator::finishCodeTier() {
   CompiledCode& stubCode = tasks_[0].output;
   MOZ_ASSERT(stubCode.empty());
 
-  if (!GenerateStubs(*moduleEnv_, metadataTier_->funcImports,
+  if (!GenerateStubs(*codeMeta_, metadataTier_->funcImports,
                      metadataTier_->funcExports, &stubCode)) {
     return nullptr;
   }
@@ -1120,35 +1008,24 @@ UniqueCodeTier ModuleGenerator::finishCodeTier() {
   return js::MakeUnique<CodeTier>(std::move(metadataTier_), std::move(segment));
 }
 
-SharedMetadata ModuleGenerator::finishMetadata(const Bytes& bytecode) {
+bool ModuleGenerator::finishCodeMetadata(const Bytes& bytecode) {
+  // FIXME: this comment seems wrong.
   // Finish initialization of Metadata, which is only needed for constructing
   // the initial Module, not for tier-2 compilation.
   MOZ_ASSERT(mode() != CompileMode::Tier2);
 
-  // Copy over data from the ModuleEnvironment.
-
-  metadata_->startFuncIndex = moduleEnv_->startFuncIndex;
-  metadata_->builtinModules = moduleEnv_->features.builtinModules;
-  metadata_->memories = std::move(moduleEnv_->memories);
-  metadata_->tables = std::move(moduleEnv_->tables);
-  metadata_->globals = std::move(moduleEnv_->globals);
-  metadata_->tags = std::move(moduleEnv_->tags);
-  metadata_->nameCustomSectionIndex = moduleEnv_->nameCustomSectionIndex;
-  metadata_->moduleName = moduleEnv_->moduleName;
-  metadata_->funcNames = std::move(moduleEnv_->funcNames);
-  metadata_->parsedBranchHints = moduleEnv_->parsedBranchHints;
-
   // Copy over additional debug information.
 
   if (compilerEnv_->debugEnabled()) {
-    metadata_->debugEnabled = true;
+    codeMeta_->debugEnabled = true;
 
-    const size_t numFuncs = moduleEnv_->funcs.length();
-    if (!metadata_->debugFuncTypeIndices.resize(numFuncs)) {
-      return nullptr;
+    const size_t numFuncs = codeMeta_->funcs.length();
+    if (!codeMeta_->debugFuncTypeIndices.resize(numFuncs)) {
+      return false;
     }
     for (size_t i = 0; i < numFuncs; i++) {
-      metadata_->debugFuncTypeIndices[i] = moduleEnv_->funcs[i].typeIndex;
+      // FIXME: this seems pretty strange.  Do we need both?
+      codeMeta_->debugFuncTypeIndices[i] = codeMeta_->funcs[i].typeIndex;
     }
 
     static_assert(sizeof(ModuleHash) <= sizeof(mozilla::SHA1Sum::Hash),
@@ -1157,19 +1034,20 @@ SharedMetadata ModuleGenerator::finishMetadata(const Bytes& bytecode) {
     mozilla::SHA1Sum sha1Sum;
     sha1Sum.update(bytecode.begin(), bytecode.length());
     sha1Sum.finish(hash);
-    memcpy(metadata_->debugHash, hash, sizeof(ModuleHash));
+    memcpy(codeMeta_->debugHash, hash, sizeof(ModuleHash));
   }
 
-  MOZ_ASSERT_IF(moduleEnv_->nameCustomSectionIndex, !!metadata_->namePayload);
+  MOZ_ASSERT_IF(codeMeta_->nameCustomSectionIndex, !!codeMeta_->namePayload);
 
-  // Metadata shouldn't be mutably modified after finishMetadata().
-  SharedMetadata metadata = metadata_;
-  metadata_ = nullptr;
-  return metadata;
+  // FIXME: does this comment make sense any more?
+  // Metadata shouldn't be mutably modified after finishCodeMetadata().
+  return true;
 }
 
+// Complete all tier-1 construction and return the resulting Module.  For this
+// we will need both codeMeta_ (and maybe codeMetaForAsmJS_) and moduleMeta_.
 SharedModule ModuleGenerator::finishModule(
-    const ShareableBytes& bytecode,
+    const ShareableBytes& bytecode, MutableModuleMetadata moduleMeta,
     JS::OptimizedEncodingListener* maybeTier2Listener) {
   MOZ_ASSERT(mode() == CompileMode::Once || mode() == CompileMode::Tier1);
 
@@ -1186,56 +1064,59 @@ SharedModule ModuleGenerator::finishModule(
 
   // Copy over data from the Bytecode, which is going away at the end of
   // compilation.
+  //
+  // In particular, convert the data- and custom-section ranges in the
+  // ModuleMetadata into their full-fat versions by copying the underlying
+  // data blocks, and store them in the resulting Module.
 
   DataSegmentVector dataSegments;
-  if (!dataSegments.reserve(moduleEnv_->dataSegments.length())) {
+  if (!dataSegments.reserve(moduleMeta->dataSegmentRanges.length())) {
     return nullptr;
   }
-  for (const DataSegmentEnv& srcSeg : moduleEnv_->dataSegments) {
+  for (const DataSegmentRange& srcRange : moduleMeta->dataSegmentRanges) {
     MutableDataSegment dstSeg = js_new<DataSegment>();
     if (!dstSeg) {
       return nullptr;
     }
-    if (!dstSeg->init(bytecode, srcSeg)) {
+    if (!dstSeg->init(bytecode, srcRange)) {
       return nullptr;
     }
     dataSegments.infallibleAppend(std::move(dstSeg));
   }
 
   CustomSectionVector customSections;
-  if (!customSections.reserve(moduleEnv_->customSections.length())) {
+  if (!customSections.reserve(codeMeta_->customSectionRanges.length())) {
     return nullptr;
   }
-  for (const CustomSectionEnv& srcSec : moduleEnv_->customSections) {
+  for (const CustomSectionRange& srcRange : codeMeta_->customSectionRanges) {
     CustomSection sec;
-    if (!sec.name.append(bytecode.begin() + srcSec.nameOffset,
-                         srcSec.nameLength)) {
+    if (!sec.name.append(bytecode.begin() + srcRange.nameOffset,
+                         srcRange.nameLength)) {
       return nullptr;
     }
     MutableBytes payload = js_new<ShareableBytes>();
     if (!payload) {
       return nullptr;
     }
-    if (!payload->append(bytecode.begin() + srcSec.payloadOffset,
-                         srcSec.payloadLength)) {
+    if (!payload->append(bytecode.begin() + srcRange.payloadOffset,
+                         srcRange.payloadLength)) {
       return nullptr;
     }
     sec.payload = std::move(payload);
     customSections.infallibleAppend(std::move(sec));
   }
 
-  if (moduleEnv_->nameCustomSectionIndex) {
-    metadata_->namePayload =
-        customSections[*moduleEnv_->nameCustomSectionIndex].payload;
+  if (codeMeta_->nameCustomSectionIndex) {
+    codeMeta_->namePayload =
+        customSections[*codeMeta_->nameCustomSectionIndex].payload;
   }
 
-  SharedMetadata metadata = finishMetadata(bytecode.bytes);
-  if (!metadata) {
+  if (!finishCodeMetadata(bytecode.bytes)) {
     return nullptr;
   }
 
-  MutableCode code =
-      js_new<Code>(std::move(codeTier), *metadata, std::move(jumpTables));
+  MutableCode code = js_new<Code>(*codeMeta_, codeMetaForAsmJS_,
+                                  std::move(codeTier), std::move(jumpTables));
   if (!code || !code->initialize(*linkData_)) {
     return nullptr;
   }
@@ -1250,10 +1131,10 @@ SharedModule ModuleGenerator::finishModule(
   // All the components are finished, so create the complete Module and start
   // tier-2 compilation if requested.
 
-  MutableModule module = js_new<Module>(
-      *code, std::move(moduleEnv_->imports), std::move(moduleEnv_->exports),
-      std::move(dataSegments), std::move(moduleEnv_->elemSegments),
-      std::move(customSections), debugBytecode);
+  MutableModule module =
+      js_new<Module>(*moduleMeta, *code, std::move(dataSegments),
+                     std::move(moduleMeta->elemSegments),
+                     std::move(customSections), debugBytecode);
   if (!module) {
     return nullptr;
   }
@@ -1295,6 +1176,8 @@ SharedModule ModuleGenerator::finishModule(
   return module;
 }
 
+// Complete all tier-2 construction.  This merely augments the existing Code
+// and does not require moduleMeta_.
 bool ModuleGenerator::finishTier2(const Module& module) {
   MOZ_ASSERT(mode() == CompileMode::Tier2);
   MOZ_ASSERT(tier() == Tier::Optimized);

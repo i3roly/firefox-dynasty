@@ -3794,7 +3794,7 @@
 # downgraded again if the request failed.
 - name: dom.security.https_first
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # If true, top-level requests in Private Browsing Mode will get
@@ -7743,6 +7743,13 @@
   mirror: always
   set_spidermonkey_pref: startup
 
+# Experimental support for Float16Array in JavaScript.
+- name: javascript.options.experimental.float16array
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
 #ifdef NIGHTLY_BUILD
   # Experimental support for Iterator Helpers in JavaScript.
 -   name: javascript.options.experimental.iterator_helpers
@@ -7767,13 +7774,6 @@
 
   # Experimental support for Uint8Array base64/hex in JavaScript.
 -   name: javascript.options.experimental.uint8array_base64
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Float16Array in JavaScript.
--   name: javascript.options.experimental.float16array
     type: bool
     value: false
     mirror: always
@@ -10934,8 +10934,8 @@
 # Hls
 - name: media.hls.enabled
   type: RelaxedAtomicBool
-#if defined(ANDROID) && !defined(NIGHTLY_BUILD)
-  value: true
+#if defined(ANDROID)
+  value: @IS_NOT_EARLY_BETA_OR_EARLIER@
 #else
   value: false
 #endif

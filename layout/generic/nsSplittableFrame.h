@@ -83,10 +83,6 @@ class nsSplittableFrame : public nsIFrame {
   nsIFrame* FirstInFlow() const final;
   nsIFrame* LastInFlow() const final;
 
-  // See their counterparts in nsIFrame.h for the purpose of these two methods.
-  void SetPrevContinuationWithoutUpdatingCache(nsIFrame*) final;
-  void SetPrevInFlowWithoutUpdatingCache(nsIFrame*) final;
-
   // Remove the frame from the flow. Connects the frame's prev-in-flow and its
   // next-in-flow. This should only be called during frame destruction, e.g. in
   // frame's Destroy() method.
@@ -96,6 +92,16 @@ class nsSplittableFrame : public nsIFrame {
   nsSplittableFrame(ComputedStyle* aStyle, nsPresContext* aPresContext,
                     ClassID aID)
       : nsIFrame(aStyle, aPresContext, aID) {}
+
+  // Return the first-continuation for this frame if this frame is the
+  // first-continuation in the chain or if it has a cached first-continuation.
+  // Otherwise, return nullptr.
+  nsIFrame* GetFirstContinuationIfCached() const;
+
+  // Return the first-in-flow for this frame if this frame is the first-in-flow
+  // in the chain or if it has a cached first-in-flow. Otherwise, return
+  // nullptr.
+  nsIFrame* GetFirstInFlowIfCached() const;
 
   // Update the first-continuation and first-in-flow cache for this frame and
   // the next-continuations in the chain.

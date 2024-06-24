@@ -797,6 +797,7 @@ sidebar-main[expanded] > #vertical-tabs > #tabbrowser-tabs[orient="vertical"] .t
   margin-inline-start: 2px;
 }
 
+:root[firefoxviewhidden] :is(#firefox-view-button, #wrapper-firefox-view-button),
 :root[privatebrowsingmode] :is(#firefox-view-button, #menu_openFirefoxView) {
   display: none;
 }
@@ -828,7 +829,7 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
 #tabbrowser-tabs[hasadjacentnewtabbutton]:not([overflow]) ~ #new-tab-button,
 #tabbrowser-tabs[overflow] > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
 #tabbrowser-tabs:not([hasadjacentnewtabbutton]) > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
-#TabsToolbar[customizing="true"] #tabs-newtab-button {
+#TabsToolbar[customizing] #tabs-newtab-button {
   display: none;
 }
 

@@ -2268,11 +2268,17 @@ void QuotaManager::Shutdown() {
     if (gNormalOriginOps) {
       annotation.AppendPrintf("QM: %zu normal origin ops pending\n",
                               gNormalOriginOps->Length());
-#ifdef QM_COLLECTING_OPERATION_TELEMETRY
+
       for (const auto& op : *gNormalOriginOps) {
+#ifdef QM_COLLECTING_OPERATION_TELEMETRY
         annotation.AppendPrintf("Op: %s pending\n", op->Name());
-      }
 #endif
+
+        nsCString data;
+        op->Stringify(data);
+
+        annotation.AppendPrintf("Op details:\n%s\n", data.get());
+      }
     }
     {
       MutexAutoLock lock(quotaManager->mQuotaMutex);
@@ -5906,6 +5912,20 @@ void QuotaManager::NotifyStoragePressure(uint64_t aUsage) {
       new StoragePressureRunnable(aUsage);
 
   MOZ_ALWAYS_SUCCEEDS(NS_DispatchToMainThread(storagePressureRunnable));
+}
+
+void QuotaManager::NotifyMaintenanceStarted() {
+  AssertIsOnOwningThread();
+
+  MOZ_ALWAYS_SUCCEEDS(NS_DispatchToMainThread(NS_NewRunnableFunction(
+      "dom::quota::QuotaManager::NotifyMaintenanceStarted", []() {
+        nsCOMPtr<nsIObserverService> observerService =
+            mozilla::services::GetObserverService();
+        QM_TRY(MOZ_TO_RESULT(observerService), QM_VOID);
+
+        observerService->NotifyObservers(
+            nullptr, "QuotaManager::MaintenanceStarted", u"");
+      })));
 }
 
 // static

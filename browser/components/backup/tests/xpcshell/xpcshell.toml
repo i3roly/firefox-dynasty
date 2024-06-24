@@ -8,8 +8,13 @@ prefs = [
 
 ["test_AddonsBackupResource.js"]
 
+["test_ArchiveEncryption.js"]
+skip-if = ["apple_silicon && automation"] # bug 1729538
+
 ["test_ArchiveEncryptionState.js"]
 skip-if = ["apple_silicon && automation"] # bug 1729538
+
+["test_ArchiveEncryption_nonce.js"]
 
 ["test_BackupResource.js"]
 support-files = ["data/test_xulstore.json"]
@@ -18,9 +23,13 @@ support-files = ["data/test_xulstore.json"]
 support-files = ["data/test_archive.template.html"]
 
 ["test_BackupService_archive.js"]
+support-files = ["data/corrupt.zip"]
+skip-if = ["apple_silicon && automation"] # bug 1729538
 
 ["test_BackupService_enable_disable_encryption.js"]
 skip-if = ["apple_silicon && automation"] # bug 1729538
+
+["test_BackupService_schema_versions.js"]
 
 ["test_BackupService_takeMeasurements.js"]
 

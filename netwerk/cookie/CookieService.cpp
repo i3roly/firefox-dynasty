@@ -669,9 +669,9 @@ CookieService::SetCookieStringFromDocument(Document* aDocument,
       do_QueryInterface(aDocument->GetChannel());
 
   // add the cookie to the list. AddCookie() takes care of logging.
-  PickStorage(attrs)->AddCookie(crc, baseDomain, attrs, cookie,
-                                currentTimeInUsec, documentURI, aCookieString,
-                                false, aDocument->GetBrowsingContext());
+  PickStorage(attrs)->AddCookie(
+      crc, baseDomain, attrs, cookie, currentTimeInUsec, documentURI,
+      aCookieString, false, thirdParty, aDocument->GetBrowsingContext());
   return NS_OK;
 }
 
@@ -870,11 +870,13 @@ CookieService::SetCookieStringFromHttp(nsIURI* aHostURI,
     cookie->SetCreationTime(
         Cookie::GenerateUniqueCreationTime(currentTimeInUsec));
 
-    RefPtr<BrowsingContext> bc = loadInfo->GetBrowsingContext();
+    // Use TargetBrowsingContext to also take frame loads into account.
+    RefPtr<BrowsingContext> bc = loadInfo->GetTargetBrowsingContext();
 
     // add the cookie to the list. AddCookie() takes care of logging.
     storage->AddCookie(crc, baseDomain, cookieOriginAttributes, cookie,
-                       currentTimeInUsec, aHostURI, aCookieHeader, true, bc);
+                       currentTimeInUsec, aHostURI, aCookieHeader, true,
+                       isForeignAndNotAddon, bc);
   }
 
   return NS_OK;
@@ -1002,7 +1004,8 @@ CookieService::AddNative(const nsACString& aHost, const nsACString& aPath,
 
   CookieStorage* storage = PickStorage(*aOriginAttributes);
   storage->AddCookie(nullptr, baseDomain, *aOriginAttributes, cookie,
-                     currentTimeInUsec, nullptr, VoidCString(), true, nullptr);
+                     currentTimeInUsec, nullptr, VoidCString(), true,
+                     !aOriginAttributes->mPartitionKey.IsEmpty(), nullptr);
   return NS_OK;
 }
 
@@ -1366,6 +1369,17 @@ bool CookieService::CanSetCookie(
     // force lifetime to session. note that the expiration time, if set above,
     // will still apply.
     aCookieData.isSession() = true;
+  }
+
+  // reject cookie if name and value are empty, per RFC6265bis
+  if (aCookieData.name().IsEmpty() && aCookieData.value().IsEmpty()) {
+    COOKIE_LOGFAILURE(SET_COOKIE, aHostURI, savedCookieHeader,
+                      "cookie name and value are empty");
+
+    CookieLogging::LogMessageToConsole(
+        aCRC, aHostURI, nsIScriptError::warningFlag, CONSOLE_REJECTION_CATEGORY,
+        "CookieRejectedEmptyNameAndValue"_ns, nsTArray<nsString>());
+    return newCookie;
   }
 
   // reject cookie if it's over the size limit, per RFC2109
@@ -2703,6 +2717,7 @@ CookieStorage* CookieService::PickStorage(
 bool CookieService::SetCookiesFromIPC(const nsACString& aBaseDomain,
                                       const OriginAttributes& aAttrs,
                                       nsIURI* aHostURI, bool aFromHttp,
+                                      bool aIsThirdParty,
                                       const nsTArray<CookieStruct>& aCookies,
                                       BrowsingContext* aBrowsingContext) {
   if (!IsInitialized()) {
@@ -2744,7 +2759,8 @@ bool CookieService::SetCookiesFromIPC(const nsACString& aBaseDomain,
         Cookie::GenerateUniqueCreationTime(currentTimeInUsec));
 
     storage->AddCookie(nullptr, aBaseDomain, aAttrs, cookie, currentTimeInUsec,
-                       aHostURI, ""_ns, aFromHttp, aBrowsingContext);
+                       aHostURI, ""_ns, aFromHttp, aIsThirdParty,
+                       aBrowsingContext);
   }
 
   return true;

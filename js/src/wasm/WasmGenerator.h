@@ -26,8 +26,8 @@
 #include "threading/ProtectedData.h"
 #include "vm/HelperThreadTask.h"
 #include "wasm/WasmCompile.h"
+#include "wasm/WasmMetadata.h"
 #include "wasm/WasmModule.h"
-#include "wasm/WasmValidate.h"
 
 namespace JS {
 class OptimizedEncodingListener;
@@ -35,6 +35,8 @@ class OptimizedEncodingListener;
 
 namespace js {
 namespace wasm {
+
+using mozilla::DebugOnly;
 
 struct CompileTask;
 using CompileTaskPtrVector = Vector<CompileTask*, 0, SystemAllocPolicy>;
@@ -133,7 +135,7 @@ struct CompileTaskState {
 // helper thread as well as, eventually, the results of compilation.
 
 struct CompileTask : public HelperThreadTask {
-  const ModuleEnvironment& moduleEnv;
+  const CodeMetadata& codeMeta;
   const CompilerEnvironment& compilerEnv;
 
   CompileTaskState& state;
@@ -141,10 +143,10 @@ struct CompileTask : public HelperThreadTask {
   FuncCompileInputVector inputs;
   CompiledCode output;
 
-  CompileTask(const ModuleEnvironment& moduleEnv,
+  CompileTask(const CodeMetadata& codeMeta,
               const CompilerEnvironment& compilerEnv, CompileTaskState& state,
               size_t defaultChunkSize)
-      : moduleEnv(moduleEnv),
+      : codeMeta(codeMeta),
         compilerEnv(compilerEnv),
         state(state),
         lifo(defaultChunkSize) {}
@@ -178,13 +180,13 @@ class MOZ_STACK_CLASS ModuleGenerator {
   UniqueChars* const error_;
   UniqueCharsVector* const warnings_;
   const Atomic<bool>* const cancelled_;
-  ModuleEnvironment* const moduleEnv_;
+  CodeMetadata* const codeMeta_;
   CompilerEnvironment* const compilerEnv_;
 
   // Data that is moved into the result of finish()
   UniqueLinkData linkData_;
   UniqueMetadataTier metadataTier_;
-  MutableMetadata metadata_;
+  MutableCodeMetadataForAsmJS codeMetaForAsmJS_;
 
   // Data scoped to the ModuleGenerator's lifetime
   CompileTaskState taskState_;
@@ -209,11 +211,6 @@ class MOZ_STACK_CLASS ModuleGenerator {
   // Assertions
   DebugOnly<bool> finishedFuncDefs_;
 
-  bool allocateInstanceDataBytes(uint32_t bytes, uint32_t align,
-                                 uint32_t* instanceDataOffset);
-  bool allocateInstanceDataBytesN(uint32_t bytes, uint32_t align,
-                                  uint32_t count, uint32_t* instanceDataOffset);
-
   bool funcIsCompiled(uint32_t funcIndex) const;
   const CodeRange& funcCodeRange(uint32_t funcIndex) const;
   bool linkCallSites();
@@ -226,9 +223,9 @@ class MOZ_STACK_CLASS ModuleGenerator {
   bool finishCodegen();
   bool finishMetadataTier();
   UniqueCodeTier finishCodeTier();
-  SharedMetadata finishMetadata(const Bytes& bytecode);
+  bool finishCodeMetadata(const Bytes& bytecode);
 
-  bool isAsmJS() const { return moduleEnv_->isAsmJS(); }
+  bool isAsmJS() const { return codeMeta_->isAsmJS(); }
   Tier tier() const { return compilerEnv_->tier(); }
   CompileMode mode() const { return compilerEnv_->mode(); }
   bool debugEnabled() const { return compilerEnv_->debugEnabled(); }
@@ -236,12 +233,12 @@ class MOZ_STACK_CLASS ModuleGenerator {
   void warnf(const char* msg, ...) MOZ_FORMAT_PRINTF(2, 3);
 
  public:
-  ModuleGenerator(const CompileArgs& args, ModuleEnvironment* moduleEnv,
+  ModuleGenerator(const CompileArgs& args, CodeMetadata* codeMeta,
                   CompilerEnvironment* compilerEnv,
                   const Atomic<bool>* cancelled, UniqueChars* error,
                   UniqueCharsVector* warnings);
   ~ModuleGenerator();
-  [[nodiscard]] bool init(Metadata* maybeAsmJSMetadata = nullptr);
+  [[nodiscard]] bool init(CodeMetadataForAsmJS* codeMetaForAsmJS);
 
   // Before finishFuncDefs() is called, compileFuncDef() must be called once
   // for each funcIndex in the range [0, env->numFuncDefs()).
@@ -257,11 +254,14 @@ class MOZ_STACK_CLASS ModuleGenerator {
 
   // If env->mode is Once or Tier1, finishModule() must be called to generate
   // a new Module. Otherwise, if env->mode is Tier2, finishTier2() must be
-  // called to augment the given Module with tier 2 code.
+  // called to augment the given Module with tier 2 code.  `moduleMeta`
+  // is passed as mutable only because we have to std::move field(s) out of
+  // it; if that in future gets cleaned up, the parameter should be changed
+  // to being SharedModuleMetadata.
 
-  SharedModule finishModule(
-      const ShareableBytes& bytecode,
-      JS::OptimizedEncodingListener* maybeTier2Listener = nullptr);
+  SharedModule finishModule(const ShareableBytes& bytecode,
+                            MutableModuleMetadata moduleMeta,
+                            JS::OptimizedEncodingListener* maybeTier2Listener);
   [[nodiscard]] bool finishTier2(const Module& module);
 };
 

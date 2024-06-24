@@ -8,6 +8,10 @@ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
 const BACKUP_DIR_PREF_NAME = "browser.backup.location";
 const SCHEDULED_BACKUPS_ENABLED_PREF_NAME = "browser.backup.scheduled.enabled";
+const SCHEMAS = Object.freeze({
+  BACKUP_MANIFEST: 1,
+  ARCHIVE_JSON_BLOCK: 2,
+});
 
 const lazy = {};
 
@@ -27,20 +31,27 @@ ChromeUtils.defineLazyGetter(lazy, "fxAccounts", () => {
 });
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  ArchiveDecryptor: "resource:///modules/backup/ArchiveEncryption.sys.mjs",
   ArchiveEncryptionState:
     "resource:///modules/backup/ArchiveEncryptionState.sys.mjs",
   ArchiveUtils: "resource:///modules/backup/ArchiveUtils.sys.mjs",
   BasePromiseWorker: "resource://gre/modules/PromiseWorker.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
   FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
-  JsonSchemaValidator:
-    "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs",
+  JsonSchema: "resource://gre/modules/JsonSchema.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
   UIState: "resource://services-sync/UIState.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "ZipWriter", () =>
   Components.Constructor("@mozilla.org/zipwriter;1", "nsIZipWriter", "open")
+);
+ChromeUtils.defineLazyGetter(lazy, "ZipReader", () =>
+  Components.Constructor(
+    "@mozilla.org/libjar/zip-reader;1",
+    "nsIZipReader",
+    "open"
+  )
 );
 ChromeUtils.defineLazyGetter(lazy, "BinaryInputStream", () =>
   Components.Constructor(
@@ -249,33 +260,52 @@ class BinaryReadableStream {
  * newlines to indicate when a break between full blocks is, and buffer chunks
  * until we see those breaks - only decoding once we have a full block.
  */
-class DecoderDecryptorTransformer {
+export class DecoderDecryptorTransformer {
   #buffer = "";
+  #decryptor = null;
+
+  /**
+   * Constructs the DecoderDecryptorTransformer.
+   *
+   * @param {ArchiveDecryptor|null} decryptor
+   *   An initialized ArchiveDecryptor, if this stream of bytes is presumed to
+   *   be encrypted.
+   */
+  constructor(decryptor) {
+    this.#decryptor = decryptor;
+  }
 
   /**
    * Consumes a single chunk of a base64 encoded string sent by
    * BinaryReadableStream.
    *
-   * @param {string} chunk
-   *   A chunk of a base64 encoded string sent by BinaryReadableStream.
+   * @param {string} chunkPart
+   *   A part of a chunk of a base64 encoded string sent by
+   *   BinaryReadableStream.
    * @param {TransformStreamDefaultController} controller
    *   The controller to send decoded bytes to.
+   * @returns {Promise<undefined>}
    */
-  async transform(chunk, controller) {
+  async transform(chunkPart, controller) {
     // A small optimization, but considering the size of these strings, it's
     // likely worth it.
     if (this.#buffer) {
-      this.#buffer += chunk;
+      this.#buffer += chunkPart;
     } else {
-      this.#buffer = chunk;
+      this.#buffer = chunkPart;
     }
 
-    let parts = this.#buffer.split("\n");
-    this.#buffer = parts.pop();
+    // If the compressed archive was large enough, then it got split up over
+    // several chunks. In that case, each chunk is separated by a newline. We
+    // also filter out any extraneous newlines that might have been included
+    // at the end.
+    let chunks = this.#buffer.split("\n").filter(chunk => chunk != "");
+
+    this.#buffer = chunks.pop();
     // If there were any remaining parts that we split out from the buffer,
     // they must constitute full blocks that we can decode.
-    for (let part of parts) {
-      this.#processPart(controller, part);
+    for (let chunk of chunks) {
+      await this.#processChunk(controller, chunk);
     }
   }
 
@@ -286,26 +316,41 @@ class DecoderDecryptorTransformer {
    *
    * @param {TransformStreamDefaultController} controller
    *   The controller to send decoded bytes to.
+   * @returns {Promise<undefined>}
    */
-  flush(controller) {
-    this.#processPart(controller, this.#buffer);
+  async flush(controller) {
+    await this.#processChunk(controller, this.#buffer, true);
     this.#buffer = "";
   }
 
   /**
-   * Decodes (and potentially decrypts) a valid base64 encoded block into a
+   * Decodes (and potentially decrypts) a valid base64 encoded chunk into a
    * Uint8Array and sends it to the next step in the pipe.
    *
    * @param {TransformStreamDefaultController} controller
    *   The controller to send decoded bytes to.
-   * @param {string} part
+   * @param {string} chunk
    *   The base64 encoded string to decode and potentially decrypt.
+   * @param {boolean} [isLastChunk=false]
+   *   True if this is the last chunk to be processed.
+   * @returns {Promise<undefined>}
    */
-  #processPart(controller, part) {
-    let bytes = lazy.ArchiveUtils.stringToArray(part);
-    // When we start working on the encryption bits, this is where the
-    // decryption step will go.
-    controller.enqueue(bytes);
+  async #processChunk(controller, chunk, isLastChunk = false) {
+    try {
+      let bytes = lazy.ArchiveUtils.stringToArray(chunk);
+
+      if (this.#decryptor) {
+        let plaintextBytes = await this.#decryptor.decrypt(bytes, isLastChunk);
+        controller.enqueue(plaintextBytes);
+      } else {
+        controller.enqueue(bytes);
+      }
+    } catch (e) {
+      // Something went wrong base64 decoding or decrypting. Tell the controller
+      // that we're done, so that it can destroy anything that was decoded /
+      // decrypted already.
+      controller.error("Corrupted archive.");
+    }
   }
 }
 
@@ -313,7 +358,7 @@ class DecoderDecryptorTransformer {
  * A class that lets us construct a WritableStream that writes bytes to a file
  * on disk somewhere.
  */
-class FileWriterStream {
+export class FileWriterStream {
   /**
    * @type {string}
    */
@@ -330,13 +375,22 @@ class FileWriterStream {
   #binStream = null;
 
   /**
+   * @type {ArchiveDecryptor}
+   */
+  #decryptor = null;
+
+  /**
    * Constructor for FileWriterStream.
    *
    * @param {string} destPath
    *   The path to write the incoming bytes to.
+   * @param {ArchiveDecryptor|null} decryptor
+   *   An initialized ArchiveDecryptor, if this stream of bytes is presumed to
+   *   be encrypted.
    */
-  constructor(destPath) {
+  constructor(destPath, decryptor) {
     this.#destPath = destPath;
+    this.#decryptor = decryptor;
   }
 
   /**
@@ -366,9 +420,35 @@ class FileWriterStream {
 
   /**
    * Called once the stream of bytes finishes flowing in and closes the stream.
+   *
+   * @param {WritableStreamDefaultController} controller
+   *   The controller for the WritableStream.
    */
-  close() {
+  close(controller) {
     lazy.FileUtils.closeSafeFileOutputStream(this.#outStream);
+    if (this.#decryptor && !this.#decryptor.isDone()) {
+      lazy.logConsole.error(
+        "Decryptor was not done when the stream was closed."
+      );
+      controller.error("Corrupted archive.");
+    }
+  }
+
+  /**
+   * Called if something went wrong while decoding / decrypting the stream of
+   * bytes. This destroys any bytes that may have been decoded / decrypted
+   * prior to the error.
+   *
+   * @param {string} reason
+   *   The reported reason for aborting the decoding / decrpytion.
+   */
+  async abort(reason) {
+    lazy.logConsole.error(`Writing to ${this.#destPath} failed: `, reason);
+    lazy.FileUtils.closeSafeFileOutputStream(this.#outStream);
+    await IOUtils.remove(this.#destPath, {
+      ignoreAbsent: true,
+      retryReadonly: true,
+    });
   }
 }
 
@@ -518,22 +598,22 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * The name of the folder within the PROFILE_FOLDER_NAME where the staging
+   * folder / prior backups will be stored.
+   *
+   * @type {string}
+   */
+  static get SNAPSHOTS_FOLDER_NAME() {
+    return "snapshots";
+  }
+
+  /**
    * The name of the backup manifest file.
    *
    * @type {string}
    */
   static get MANIFEST_FILE_NAME() {
     return "backup-manifest.json";
-  }
-
-  /**
-   * The current schema version of the backup manifest that this BackupService
-   * uses when creating a backup.
-   *
-   * @type {number}
-   */
-  static get MANIFEST_SCHEMA_VERSION() {
-    return 1;
   }
 
   /**
@@ -553,8 +633,9 @@ export class BackupService extends EventTarget {
    */
   static get MANIFEST_SCHEMA() {
     if (!BackupService.#manifestSchemaPromise) {
-      BackupService.#manifestSchemaPromise = BackupService._getSchemaForVersion(
-        BackupService.MANIFEST_SCHEMA_VERSION
+      BackupService.#manifestSchemaPromise = BackupService.getSchemaForVersion(
+        SCHEMAS.BACKUP_MANIFEST,
+        lazy.ArchiveUtils.SCHEMA_VERSION
       );
     }
 
@@ -582,22 +663,44 @@ export class BackupService extends EventTarget {
   }
 
   /**
-   * Returns the schema for the backup manifest for a given version.
+   * Returns the SCHEMAS constants, which is a key/value store of constants.
    *
-   * This should really be #getSchemaForVersion, but for some reason,
-   * sphinx-js seems to choke on static async private methods (bug 1893362).
-   * We workaround this breakage by using the `_` prefix to indicate that this
-   * method should be _considered_ private, and ask that you not use this method
-   * outside of this class. The sphinx-js issue is tracked at
-   * https://github.com/mozilla/sphinx-js/issues/240.
+   * @type {object}
+   */
+  static get SCHEMAS() {
+    return SCHEMAS;
+  }
+
+  /**
+   * Returns the filename used for the intermediary compressed ZIP file that
+   * is extracted from archives during recovery.
    *
-   * @private
+   * @type {string}
+   */
+  static get RECOVERY_ZIP_FILE_NAME() {
+    return "recovery.zip";
+  }
+
+  /**
+   * Returns the schema for the schemaType for a given version.
+   *
+   * @param {number} schemaType
+   *   One of the constants from SCHEMAS.
    * @param {number} version
    *   The version of the schema to return.
    * @returns {Promise<object>}
    */
-  static async _getSchemaForVersion(version) {
-    let schemaURL = `chrome://browser/content/backup/BackupManifest.${version}.schema.json`;
+  static async getSchemaForVersion(schemaType, version) {
+    let schemaURL;
+
+    if (schemaType == SCHEMAS.BACKUP_MANIFEST) {
+      schemaURL = `chrome://browser/content/backup/BackupManifest.${version}.schema.json`;
+    } else if (schemaType == SCHEMAS.ARCHIVE_JSON_BLOCK) {
+      schemaURL = `chrome://browser/content/backup/ArchiveJSONBlock.${version}.schema.json`;
+    } else {
+      throw new Error(`Did not recognize SCHEMAS constant: ${schemaType}`);
+    }
+
     let response = await fetch(schemaURL);
     return response.json();
   }
@@ -702,6 +805,10 @@ export class BackupService extends EventTarget {
    * @typedef {object} CreateBackupResult
    * @property {string} stagingPath
    *   The staging path for where the backup was created.
+   * @property {string} compressedStagingPath
+   *   The path to the file containing the compressed staging path.
+   * @property {string} archivePath
+   *   The path to the single file archive that was created.
    */
 
   /**
@@ -733,13 +840,17 @@ export class BackupService extends EventTarget {
       // profile.
       let backupDirPath = PathUtils.join(
         profilePath,
-        BackupService.PROFILE_FOLDER_NAME
+        BackupService.PROFILE_FOLDER_NAME,
+        BackupService.SNAPSHOTS_FOLDER_NAME
       );
       lazy.logConsole.debug("Creating backups folder");
 
       // ignoreExisting: true is the default, but we're being explicit that it's
       // okay if this folder already exists.
-      await IOUtils.makeDirectory(backupDirPath, { ignoreExisting: true });
+      await IOUtils.makeDirectory(backupDirPath, {
+        ignoreExisting: true,
+        createAncestors: true,
+      });
 
       let stagingPath = await this.#prepareStagingFolder(backupDirPath);
 
@@ -808,7 +919,7 @@ export class BackupService extends EventTarget {
       // case, a user so-inclined could theoretically repair the manifest
       // to make it valid.
       let manifestSchema = await BackupService.MANIFEST_SCHEMA;
-      let schemaValidationResult = lazy.JsonSchemaValidator.validate(
+      let schemaValidationResult = lazy.JsonSchema.validate(
         manifest,
         manifestSchema
       );
@@ -849,7 +960,7 @@ export class BackupService extends EventTarget {
         archivePath,
         "chrome://browser/content/backup/archive.template.html",
         compressedStagingPath,
-        null /* ArchiveEncryptionState */,
+        this.#encState,
         manifest.meta
       );
 
@@ -971,6 +1082,96 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * Decompressed a compressed recovery file into recoveryFolderDestPath.
+   *
+   * @param {string} recoveryFilePath
+   *   The path to the compressed recovery file to decompress.
+   * @param {string} recoveryFolderDestPath
+   *   The path to the folder that the compressed recovery file should be
+   *   decompressed within.
+   * @returns {Promise<undefined>}
+   */
+  async decompressRecoveryFile(recoveryFilePath, recoveryFolderDestPath) {
+    let recoveryFile = await IOUtils.getFile(recoveryFilePath);
+    let recoveryArchive = new lazy.ZipReader(recoveryFile);
+    lazy.logConsole.log(
+      "Decompressing recovery folder to ",
+      recoveryFolderDestPath
+    );
+    try {
+      // null is passed to test if we're meant to CRC test the entire
+      // ZIP file. If an exception is thrown, this means we failed the CRC
+      // check. See the nsIZipReader.idl documentation for details.
+      recoveryArchive.test(null);
+    } catch (e) {
+      recoveryArchive.close();
+      lazy.logConsole.error("Compressed recovery file was corrupt.");
+      await IOUtils.remove(recoveryFilePath, {
+        retryReadonly: true,
+      });
+      throw new Error("Corrupt archive.");
+    }
+
+    await this.#decompressChildren(recoveryFolderDestPath, "", recoveryArchive);
+    recoveryArchive.close();
+  }
+
+  /**
+   * A helper method that recursively decompresses any children within a folder
+   * within a compressed archive.
+   *
+   * @param {string} rootPath
+   *   The path to the root folder that is being decompressed into.
+   * @param {string} parentEntryName
+   *   The name of the parent folder within the compressed archive that is
+   *   having its children decompressed.
+   * @param {nsIZipReader} reader
+   *   The nsIZipReader for the compressed archive.
+   * @returns {Promise<undefined>}
+   */
+  async #decompressChildren(rootPath, parentEntryName, reader) {
+    // nsIZipReader.findEntries has an interesting querying language that is
+    // documented in the nsIZipReader IDL file, in case you're curious about
+    // what these symbols mean.
+    let childEntryNames = reader.findEntries(
+      parentEntryName + "?*~" + parentEntryName + "?*/?*"
+    );
+
+    for (let childEntryName of childEntryNames) {
+      let childEntry = reader.getEntry(childEntryName);
+      if (childEntry.isDirectory) {
+        await this.#decompressChildren(rootPath, childEntryName, reader);
+      } else {
+        let inputStream = reader.getInputStream(childEntryName);
+        // ZIP files all use `/` as their path separators, regardless of
+        // platform.
+        let fileNameParts = childEntryName.split("/");
+        let outputFilePath = PathUtils.join(rootPath, ...fileNameParts);
+        let outputFile = await IOUtils.getFile(outputFilePath);
+        let outputStream = Cc[
+          "@mozilla.org/network/file-output-stream;1"
+        ].createInstance(Ci.nsIFileOutputStream);
+
+        outputStream.init(
+          outputFile,
+          -1,
+          -1,
+          Ci.nsIFileOutputStream.DEFER_OPEN
+        );
+
+        await new Promise(resolve => {
+          lazy.logConsole.debug("Writing ", outputFilePath);
+          lazy.NetUtil.asyncCopy(inputStream, outputStream, () => {
+            lazy.logConsole.debug("Done writing ", outputFilePath);
+            outputStream.close();
+            resolve();
+          });
+        });
+      }
+    }
+  }
+
+  /**
    * Creates a portable, potentially encrypted single-file archive containing
    * a compressed backup snapshot. The single-file archive is a specially
    * crafted HTML file that embeds the compressed backup snapshot and
@@ -989,25 +1190,34 @@ export class BackupService extends EventTarget {
    * @param {object} backupMetadata
    *   The metadata for the backup, which is also stored in the backup manifest
    *   of the compressed backup snapshot.
+   * @param {object} options
+   *   Options to pass to the worker, mainly for testing.
+   * @param {object} [options.chunkSize=ArchiveUtils.ARCHIVE_CHUNK_MAX_BYTES_SIZE]
+   *   The chunk size to break the bytes into.
    */
   async createArchive(
     archivePath,
     templateURI,
     compressedBackupSnapshotPath,
     encState,
-    backupMetadata
+    backupMetadata,
+    options = {}
   ) {
     let worker = new lazy.BasePromiseWorker(
       "resource:///modules/backup/Archive.worker.mjs",
       { type: "module" }
     );
 
+    let chunkSize =
+      options.chunkSize || lazy.ArchiveUtils.ARCHIVE_CHUNK_MAX_BYTES_SIZE;
+
     try {
       let encryptionArgs = encState
         ? {
             publicKey: encState.publicKey,
             salt: encState.salt,
-            authKey: encState.authKey,
+            nonce: encState.nonce,
+            backupAuthKey: encState.backupAuthKey,
             wrappedSecrets: encState.wrappedSecrets,
           }
         : null;
@@ -1019,6 +1229,7 @@ export class BackupService extends EventTarget {
           backupMetadata,
           compressedBackupSnapshotPath,
           encryptionArgs,
+          chunkSize,
         },
       ]);
     } finally {
@@ -1069,6 +1280,7 @@ export class BackupService extends EventTarget {
    *   The start byte offset of the MIME message.
    * @param {string} contentType
    *   The Content-Type of the MIME message.
+   * @returns {Promise<object>}
    */
   async #extractJSONFromArchive(archiveFile, startByteOffset, contentType) {
     let fileInputStream = Cc[
@@ -1216,7 +1428,7 @@ export class BackupService extends EventTarget {
    *   The Content-Type of the MIME message.
    * @returns {ReadableStream}
    */
-  async #createBinaryReadableStream(archiveFile, startByteOffset, contentType) {
+  async createBinaryReadableStream(archiveFile, startByteOffset, contentType) {
     let fileInputStream = Cc[
       "@mozilla.org/network/file-input-stream;1"
     ].createInstance(Ci.nsIFileInputStream);
@@ -1237,22 +1449,31 @@ export class BackupService extends EventTarget {
   }
 
   /**
-   * Attempts to extract the compressed backup snapshot from a single-file
-   * archive, and write the extracted file to extractionDestPath. This may
-   * reject if the single-file archive appears malformed or cannot be
-   * properly decrypted.
-   *
-   * NOTE: Currently, this base64 decoding currently occurs on the main thread.
-   * We may end up moving all of this into the Archive Worker if we can modify
-   * IOUtils to allow writing via a stream.
+   * @typedef {object} SampleArchiveResult
+   * @property {boolean} isEncrypted
+   *   True if the archive claims to be encrypted, and has the necessary data
+   *   within the JSON block to attempt to initialize an ArchiveDecryptor.
+   * @property {number} startByteOffset
+   *   The start byte offset of the MIME message.
+   * @property {string} contentType
+   *   The Content-Type of the MIME message.
+   * @property {object} archiveJSON
+   *   The deserialized JSON block from the archive. See the ArchiveJSONBlock
+   *   schema for details of its structure.
+   */
+
+  /**
+   * Reads from a file to determine if it seems to be a backup archive, and if
+   * so, resolves with some information about the archive without actually
+   * unpacking it. The returned Promise may reject if the file does not appear
+   * to be a backup archive, or the backup archive appears to have been
+   * corrupted somehow.
    *
    * @param {string} archivePath
-   *   The single-file archive that contains the backup.
-   * @param {string} extractionDestPath
-   *   The path to write the extracted file to.
-   * @returns {Promise<undefined, Error>}
+   *   The path to the archive file to sample.
+   * @returns {Promise<SampleArchiveResult, Error>}
    */
-  async extractCompressedSnapshotFromArchive(archivePath, extractionDestPath) {
+  async sampleArchive(archivePath) {
     let worker = new lazy.BasePromiseWorker(
       "resource:///modules/backup/Archive.worker.mjs",
       { type: "module" }
@@ -1261,8 +1482,6 @@ export class BackupService extends EventTarget {
     if (!(await IOUtils.exists(archivePath))) {
       throw new Error("Archive file does not exist at path " + archivePath);
     }
-
-    await IOUtils.remove(extractionDestPath, { ignoreAbsent: true });
 
     try {
       let { startByteOffset, contentType } = await worker.post(
@@ -1277,6 +1496,43 @@ export class BackupService extends EventTarget {
           startByteOffset,
           contentType
         );
+
+        if (!archiveJSON.version) {
+          throw new Error("Missing version in the archive JSON block.");
+        }
+        if (archiveJSON.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
+          throw new Error(
+            `Archive JSON block is a version newer than we can interpret: ${archiveJSON.version}`
+          );
+        }
+
+        let archiveJSONSchema = await BackupService.getSchemaForVersion(
+          SCHEMAS.ARCHIVE_JSON_BLOCK,
+          archiveJSON.version
+        );
+
+        let manifestSchema = await BackupService.getSchemaForVersion(
+          SCHEMAS.BACKUP_MANIFEST,
+          archiveJSON.version
+        );
+
+        let validator = new lazy.JsonSchema.Validator(archiveJSONSchema);
+        validator.addSchema(manifestSchema);
+
+        let schemaValidationResult = validator.validate(archiveJSON);
+        if (!schemaValidationResult.valid) {
+          lazy.logConsole.error(
+            "Archive JSON block does not conform to schema:",
+            archiveJSON,
+            archiveJSONSchema,
+            schemaValidationResult
+          );
+
+          // TODO: Collect telemetry for this case. (bug 1891817)
+          throw new Error(
+            `Archive JSON block does not conform to schema version ${archiveJSON.version}`
+          );
+        }
       } catch (e) {
         lazy.logConsole.error(e);
         throw new Error("Backup archive is corrupted.");
@@ -1284,22 +1540,70 @@ export class BackupService extends EventTarget {
 
       lazy.logConsole.debug("Read out archive JSON: ", archiveJSON);
 
-      let archiveStream = await this.#createBinaryReadableStream(
-        archiveFile,
+      return {
+        isEncrypted: !!archiveJSON.encConfig,
         startByteOffset,
-        contentType
-      );
-
-      let binaryDecoder = new TransformStream(
-        new DecoderDecryptorTransformer()
-      );
-      let fileWriter = new WritableStream(
-        new FileWriterStream(extractionDestPath)
-      );
-      await archiveStream.pipeThrough(binaryDecoder).pipeTo(fileWriter);
+        contentType,
+        archiveJSON,
+      };
     } finally {
       worker.terminate();
     }
+  }
+
+  /**
+   * Attempts to extract the compressed backup snapshot from a single-file
+   * archive, and write the extracted file to extractionDestPath. This may
+   * reject if the single-file archive appears malformed or cannot be
+   * properly decrypted.
+   *
+   * NOTE: Currently, this base64 decoding currently occurs on the main thread.
+   * We may end up moving all of this into the Archive Worker if we can modify
+   * IOUtils to allow writing via a stream.
+   *
+   * @param {string} archivePath
+   *   The single-file archive that contains the backup.
+   * @param {string} extractionDestPath
+   *   The path to write the extracted file to.
+   * @param {string} [recoveryCode=null]
+   *   The recovery code to decrypt an encrypted backup with.
+   * @returns {Promise<undefined, Error>}
+   */
+  async extractCompressedSnapshotFromArchive(
+    archivePath,
+    extractionDestPath,
+    recoveryCode = null
+  ) {
+    let { isEncrypted, startByteOffset, contentType, archiveJSON } =
+      await this.sampleArchive(archivePath);
+
+    let decryptor = null;
+    if (isEncrypted) {
+      if (!recoveryCode) {
+        throw new Error("A recovery code is required to decrypt this archive.");
+      }
+      decryptor = await lazy.ArchiveDecryptor.initialize(
+        recoveryCode,
+        archiveJSON
+      );
+    }
+
+    await IOUtils.remove(extractionDestPath, { ignoreAbsent: true });
+
+    let archiveFile = await IOUtils.getFile(archivePath);
+    let archiveStream = await this.createBinaryReadableStream(
+      archiveFile,
+      startByteOffset,
+      contentType
+    );
+
+    let binaryDecoder = new TransformStream(
+      new DecoderDecryptorTransformer(decryptor)
+    );
+    let fileWriter = new WritableStream(
+      new FileWriterStream(extractionDestPath, decryptor)
+    );
+    await archiveStream.pipeThrough(binaryDecoder).pipeTo(fileWriter);
   }
 
   /**
@@ -1402,10 +1706,92 @@ export class BackupService extends EventTarget {
     }
 
     return {
-      version: BackupService.MANIFEST_SCHEMA_VERSION,
+      version: lazy.ArchiveUtils.SCHEMA_VERSION,
       meta,
       resources: {},
     };
+  }
+
+  /**
+   * Given a backup archive at archivePath, this method does the
+   * following:
+   *
+   * 1. Potentially decrypts, and then extracts the compressed backup snapshot
+   *    from the archive to a file named BackupService.RECOVERY_ZIP_FILE_NAME in
+   *    the PROFILE_FOLDER_NAME folder.
+   * 2. Decompresses that file into a subdirectory of PROFILE_FOLDER_NAME named
+   *    "recovery".
+   * 3. Deletes the BackupService.RECOVERY_ZIP_FILE_NAME file.
+   * 4. Calls into recoverFromSnapshotFolder on the decompressed "recovery"
+   *    folder.
+   * 5. Optionally launches the newly created profile.
+   * 6. Returns the name of the newly created profile directory.
+   *
+   * @see BackupService.recoverFromSnapshotFolder
+   * @param {string} archivePath
+   *   The path to the single-file backup archive on the file system.
+   * @param {string|null} recoveryCode
+   *   The recovery code to use to attempt to decrypt the archive if it was
+   *   encrypted.
+   * @param {boolean} [shouldLaunch=false]
+   *   An optional argument that specifies whether an instance of the app
+   *   should be launched with the newly recovered profile after recovery is
+   *   complete.
+   * @param {boolean} [profilePath=PathUtils.profileDir]
+   *   The profile path where the recovery files will be written to within the
+   *   PROFILE_FOLDER_NAME. This is only used for testing.
+   * @param {string} [profileRootPath=null]
+   *   An optional argument that specifies the root directory where the new
+   *   profile directory should be created. If not provided, the default
+   *   profile root directory will be used. This is primarily meant for
+   *   testing.
+   * @returns {Promise<nsIToolkitProfile>}
+   *   The nsIToolkitProfile that was created for the recovered profile.
+   * @throws {Exception}
+   *   In the event that unpacking the archive, decompressing the snapshot, or
+   *   recovery from the snapshot somehow failed.
+   */
+  async recoverFromBackupArchive(
+    archivePath,
+    recoveryCode = null,
+    shouldLaunch = false,
+    profilePath = PathUtils.profileDir,
+    profileRootPath = null
+  ) {
+    const RECOVERY_FILE_DEST_PATH = PathUtils.join(
+      profilePath,
+      BackupService.PROFILE_FOLDER_NAME,
+      BackupService.RECOVERY_ZIP_FILE_NAME
+    );
+    await this.extractCompressedSnapshotFromArchive(
+      archivePath,
+      RECOVERY_FILE_DEST_PATH,
+      recoveryCode
+    );
+
+    const RECOVERY_FOLDER_DEST_PATH = PathUtils.join(
+      profilePath,
+      BackupService.PROFILE_FOLDER_NAME,
+      "recovery"
+    );
+    await this.decompressRecoveryFile(
+      RECOVERY_FILE_DEST_PATH,
+      RECOVERY_FOLDER_DEST_PATH
+    );
+
+    // Now that we've decompressed it, reclaim some disk space by getting rid of
+    // the ZIP file.
+    try {
+      await IOUtils.remove(RECOVERY_FILE_DEST_PATH);
+    } catch (_) {
+      lazy.logConsole.warn("Could not remove ", RECOVERY_FILE_DEST_PATH);
+    }
+
+    return this.recoverFromSnapshotFolder(
+      RECOVERY_FOLDER_DEST_PATH,
+      shouldLaunch,
+      profileRootPath
+    );
   }
 
   /**
@@ -1440,7 +1826,7 @@ export class BackupService extends EventTarget {
    * @throws {Exception}
    *   In the event that recovery somehow failed.
    */
-  async recoverFromBackup(
+  async recoverFromSnapshotFolder(
     recoveryPath,
     shouldLaunch = false,
     profileRootPath = null
@@ -1458,17 +1844,18 @@ export class BackupService extends EventTarget {
         throw new Error("Backup manifest version not found");
       }
 
-      if (manifest.version > BackupService.MANIFEST_SCHEMA_VERSION) {
+      if (manifest.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
         throw new Error(
           "Cannot recover from a manifest newer than the current schema version"
         );
       }
 
       // Make sure that it conforms to the schema.
-      let manifestSchema = await BackupService._getSchemaForVersion(
+      let manifestSchema = await BackupService.getSchemaForVersion(
+        SCHEMAS.BACKUP_MANIFEST,
         manifest.version
       );
-      let schemaValidationResult = lazy.JsonSchemaValidator.validate(
+      let schemaValidationResult = lazy.JsonSchema.validate(
         manifest,
         manifestSchema
       );
@@ -1483,9 +1870,9 @@ export class BackupService extends EventTarget {
         throw new Error("Cannot recover from an invalid backup manifest");
       }
 
-      // In the future, if we ever bump the MANIFEST_SCHEMA_VERSION and need to
-      // do any special behaviours to interpret older schemas, this is where we
-      // can do that, and we can remove this comment.
+      // In the future, if we ever bump the ArchiveUtils.SCHEMA_VERSION and need
+      // to do any special behaviours to interpret older schemas, this is where
+      // we can do that, and we can remove this comment.
 
       let meta = manifest.meta;
 

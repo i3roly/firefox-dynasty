@@ -98,6 +98,12 @@ add_task(
         },
       }
     );
+    await TestTranslationsTelemetry.assertEvent(
+      Glean.translationsSelectTranslationsPanel.changeToLanguage,
+      {
+        expectedEventCount: 0,
+      }
+    );
     await TestTranslationsTelemetry.assertLabeledCounter(
       Glean.translations.requestCount,
       [
@@ -196,6 +202,17 @@ add_task(
       downloadHandler: resolveDownloads,
       onChangeLanguage: SelectTranslationsTestUtils.assertPanelViewTranslated,
     });
+    await TestTranslationsTelemetry.assertEvent(
+      Glean.translationsSelectTranslationsPanel.changeFromLanguage,
+      {
+        expectedEventCount: 1,
+        assertForMostRecentEvent: {
+          language: "fi",
+          previous_language: "es",
+          document_language: "es",
+        },
+      }
+    );
     await TestTranslationsTelemetry.assertEvent(
       Glean.translationsSelectTranslationsPanel.changeToLanguage,
       {

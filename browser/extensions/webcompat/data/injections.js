@@ -290,6 +290,8 @@ const AVAILABLE_INJECTIONS = [
         "*://www.facebook.com/*", // Bug 1739489
         "*://twitter.com/*", // Bug 1776229
         "*://mobile.twitter.com/*", // Bug 1776229
+        "*://x.com/*", // Bug 1776229
+        "*://mobile.x.com/*", // Bug 1776229
         "*://*.reddit.com/*", // Bug 1829755
       ],
       js: [
@@ -1056,6 +1058,43 @@ const AVAILABLE_INJECTIONS = [
           file: "injections/js/bug1896383-error-capturestacktrace-shim.js",
         },
       ],
+    },
+  },
+  {
+    id: "1882040",
+    platform: "android",
+    domain: "YouTube Shorts",
+    bug: "1882040",
+    contentScripts: {
+      matches: ["*://m.youtube.com/shorts/*"],
+      css: [
+        {
+          file: "injections/css/bug1882040-disable-pull-to-refresh.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1889326",
+    platform: "desktop",
+    domain: "Office 365 email handling prompt",
+    bug: "1889326",
+    contentScripts: {
+      matches: [
+        "*://*.live.com/*",
+        "*://*.office.com/*",
+        "*://*.office365.com/*",
+        "*://*.office365.us/*",
+        "*://*.outlook.cn/*",
+        "*://*.outlook.com/*",
+        "*://*.sharepoint.com/*",
+      ],
+      js: [
+        {
+          file: "injections/js/bug1889326-office365-email-handling-prompt-autohide.js",
+        },
+      ],
+      allFrames: true,
     },
   },
 ];

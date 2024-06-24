@@ -26,6 +26,20 @@ const { sinon } = ChromeUtils.importESModule(
 
 const BYTES_IN_KB = 1000;
 
+const FAKE_METADATA = {
+  date: "2024-06-07T00:00:00+00:00",
+  appName: "firefox",
+  appVersion: "128.0",
+  buildID: "20240604133346",
+  profileName: "profile-default",
+  machineName: "A super cool machine",
+  osName: "Windows_NT",
+  osVersion: "10.0",
+  legacyClientID: "decafbad-0cd1-0cd2-0cd3-decafbad1000",
+  accountID: "",
+  accountEmail: "",
+};
+
 do_get_profile();
 
 /**
@@ -213,5 +227,57 @@ function* seededRandomNumberGenerator() {
 
   while (true) {
     yield Math.round(generator() * 1000) % 255;
+  }
+}
+
+/**
+ * Compares 2 Uint8Arrays and checks their similarity. This is mainly used to
+ * test that the encrypted bytes passed through ArchiveEncryptor actually get
+ * changed, and that the bytes that come out of ArchiveDecryptor match the
+ * source bytes. This doesn't test that the resulting bytes have gone through
+ * the Web Crypto API.
+ *
+ * When expecting similar arrays, we expect the byte lengths to be the same, and
+ * for the bytes to match. When expecting dissimilar arrays, we expect the byte
+ * lengths to be different and for at least one byte to be dissimilar between
+ * the two arrays.
+ *
+ * @param {Uint8Array} uint8ArrayA
+ *   The left-side of the Uint8Array comparison.
+ * @param {Uint8Array} uint8ArrayB
+ *   The right-side fo the Uint8Array comparison.
+ * @param {boolean} expectSimilar
+ *   True if the caller expects the two arrays to be similar, false otherwise.
+ */
+function assertUint8ArraysSimilarity(uint8ArrayA, uint8ArrayB, expectSimilar) {
+  let lengthToCheck;
+  if (expectSimilar) {
+    Assert.equal(
+      uint8ArrayA.byteLength,
+      uint8ArrayB.byteLength,
+      "Uint8Arrays have the same byteLength"
+    );
+    lengthToCheck = uint8ArrayA.byteLength;
+  } else {
+    Assert.notEqual(
+      uint8ArrayA.byteLength,
+      uint8ArrayB.byteLength,
+      "Uint8Arrays have differing byteLength"
+    );
+    lengthToCheck = Math.min(uint8ArrayA.byteLength, uint8ArrayB.byteLength);
+  }
+
+  let foundDifference = false;
+  for (let i = 0; i < lengthToCheck; ++i) {
+    if (uint8ArrayA[i] != uint8ArrayB[i]) {
+      foundDifference = true;
+      break;
+    }
+  }
+
+  if (expectSimilar) {
+    Assert.ok(!foundDifference, "Arrays contain the same bytes.");
+  } else {
+    Assert.ok(foundDifference, "Arrays contain different bytes.");
   }
 }
