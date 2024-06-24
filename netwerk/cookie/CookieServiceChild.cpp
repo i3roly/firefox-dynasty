@@ -300,9 +300,7 @@ uint32_t CookieServiceChild::CountCookiesFromHashTable(
          cookieBehavior == nsICookieService::BEHAVIOR_LIMIT_FOREIGN ||
          cookieBehavior == nsICookieService::BEHAVIOR_REJECT_TRACKER ||
          cookieBehavior ==
-             nsICookieService::BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN ||
-         StaticPrefs::network_cookie_thirdparty_sessionOnly() ||
-         StaticPrefs::network_cookie_thirdparty_nonsecureSessionOnly();
+             nsICookieService::BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN;
 }
 
 void CookieServiceChild::RecordDocumentCookie(Cookie* aCookie,
@@ -702,9 +700,8 @@ CookieServiceChild::SetCookieStringFromHttp(nsIURI* aHostURI,
     moreCookies = CookieService::CanSetCookie(
         aHostURI, baseDomain, cookieData, requireHostMatch, cookieStatus,
         cookieString, true, isForeignAndNotAddon, mustBePartitioned,
-        storagePrincipalOriginAttributes.mPrivateBrowsingId !=
-            nsIScriptSecurityManager::DEFAULT_PRIVATE_BROWSING_ID,
-        crc, canSetCookie);
+        storagePrincipalOriginAttributes.IsPrivateBrowsing(), crc,
+        canSetCookie);
     if (!canSetCookie) {
       continue;
     }

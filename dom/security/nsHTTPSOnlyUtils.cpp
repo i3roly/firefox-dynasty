@@ -80,7 +80,7 @@ void nsHTTPSOnlyUtils::PotentiallyFireHttpRequestToShortenTimout(
   }
 
   nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
-  bool isPrivateWin = loadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = loadInfo->GetOriginAttributes().IsPrivateBrowsing();
 
   // if neither HTTPS-Only nor HTTPS-First mode is enabled, then there is
   // nothing to do here.
@@ -153,7 +153,7 @@ void nsHTTPSOnlyUtils::PotentiallyFireHttpRequestToShortenTimout(
 bool nsHTTPSOnlyUtils::ShouldUpgradeRequest(nsIURI* aURI,
                                             nsILoadInfo* aLoadInfo) {
   // 1. Check if the HTTPS-Only Mode is even enabled, before we do anything else
-  bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
   if (!IsHttpsOnlyModeEnabled(isPrivateWin)) {
     return false;
   }
@@ -221,7 +221,7 @@ bool nsHTTPSOnlyUtils::ShouldUpgradeRequest(nsIURI* aURI,
 bool nsHTTPSOnlyUtils::ShouldUpgradeWebSocket(nsIURI* aURI,
                                               nsILoadInfo* aLoadInfo) {
   // 1. Check if the HTTPS-Only Mode is even enabled, before we do anything else
-  bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
   if (!IsHttpsOnlyModeEnabled(isPrivateWin)) {
     return false;
   }
@@ -270,7 +270,7 @@ bool nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
     const mozilla::EnumSet<UpgradeDowngradeEndlessLoopOptions>& aOptions) {
   // 1. Check if the HTTPS-Only/HTTPS-First is even enabled, before doing
   // anything else
-  bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
   bool enforceForHTTPSOnlyMode =
       IsHttpsOnlyModeEnabled(isPrivateWin) &&
       aOptions.contains(
@@ -355,7 +355,7 @@ bool nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
 bool nsHTTPSOnlyUtils::ShouldUpgradeHttpsFirstRequest(nsIURI* aURI,
                                                       nsILoadInfo* aLoadInfo) {
   // 1. Check if HTTPS-First Mode is enabled
-  bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
   if (!IsHttpsFirstModeEnabled(isPrivateWin) &&
       !(aLoadInfo->GetWasSchemelessInput() &&
         mozilla::StaticPrefs::dom_security_https_first_schemeless())) {
@@ -589,6 +589,19 @@ void nsHTTPSOnlyUtils::UpdateLoadStateAfterHTTPSFirstDowngrade(
   // loop
   aLoadState->SetIsExemptFromHTTPSFirstMode(true);
 
+  // we can safely set the flag to indicate the downgrade here and it will be
+  // propagated all the way to nsHttpChannel::OnStopRequest() where we collect
+  // the telemetry.
+  nsCOMPtr<nsIChannel> channel = aDocumentLoadListener->GetChannel();
+  nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
+  if (loadInfo->GetWasSchemelessInput()) {
+    aLoadState->SetHttpsUpgradeTelemetry(
+        nsILoadInfo::HTTPS_FIRST_SCHEMELESS_UPGRADE_DOWNGRADE);
+  } else {
+    aLoadState->SetHttpsUpgradeTelemetry(
+        nsILoadInfo::HTTPS_FIRST_UPGRADE_DOWNGRADE);
+  }
+
   // Add downgrade data for later telemetry usage to load state
   nsDOMNavigationTiming* timing = aDocumentLoadListener->GetTiming();
   if (timing) {
@@ -597,11 +610,7 @@ void nsHTTPSOnlyUtils::UpdateLoadStateAfterHTTPSFirstDowngrade(
       mozilla::TimeDuration duration =
           mozilla::TimeStamp::Now() - navigationStart;
 
-      nsCOMPtr<nsIChannel> channel = aDocumentLoadListener->GetChannel();
-      nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
-
-      bool isPrivateWin =
-          loadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+      bool isPrivateWin = loadInfo->GetOriginAttributes().IsPrivateBrowsing();
       bool isSchemeless =
           loadInfo->GetWasSchemelessInput() &&
           !nsHTTPSOnlyUtils::IsHttpsFirstModeEnabled(isPrivateWin);
@@ -663,7 +672,7 @@ bool nsHTTPSOnlyUtils::CouldBeHttpsOnlyError(nsIChannel* aChannel,
 
   // If HTTPS-Only Mode is not enabled, then there is nothing to do here.
   nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
-  bool isPrivateWin = loadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = loadInfo->GetOriginAttributes().IsPrivateBrowsing();
   if (!IsHttpsOnlyModeEnabled(isPrivateWin)) {
     return false;
   }
@@ -712,7 +721,7 @@ void nsHTTPSOnlyUtils::TestSitePermissionAndPotentiallyAddExemption(
   // If HTTPS-Only or HTTPS-First Mode is not enabled, then there is nothing to
   // do here.
   nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
-  bool isPrivateWin = loadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = loadInfo->GetOriginAttributes().IsPrivateBrowsing();
   bool isHttpsOnly = IsHttpsOnlyModeEnabled(isPrivateWin);
   bool isHttpsFirst = IsHttpsFirstModeEnabled(isPrivateWin);
   bool isSchemelessHttpsFirst =
@@ -765,7 +774,7 @@ bool nsHTTPSOnlyUtils::IsSafeToAcceptCORSOrMixedContent(
     return false;
   }
   // Check if HTTPS-Only Mode is enabled for this request
-  bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
   return nsHTTPSOnlyUtils::IsHttpsOnlyModeEnabled(isPrivateWin);
 }
 
@@ -823,7 +832,7 @@ void nsHTTPSOnlyUtils::LogMessage(const nsAString& aMessage, uint32_t aFlags,
                                               windowId, aURI);
   } else {
     // Send to browser console
-    bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+    bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
     nsContentUtils::LogSimpleConsoleError(message, category, isPrivateWin,
                                           true /* from chrome context */,
                                           aFlags);
@@ -892,7 +901,7 @@ bool nsHTTPSOnlyUtils::ShouldUpgradeConnection(nsILoadInfo* aLoadInfo) {
   }
 
   // Check if the HTTPS-Only Mode is even enabled, before we do anything else
-  bool isPrivateWin = aLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+  bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
   if (!IsHttpsOnlyModeEnabled(isPrivateWin) &&
       !IsHttpsFirstModeEnabled(isPrivateWin)) {
     return false;

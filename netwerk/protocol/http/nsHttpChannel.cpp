@@ -794,9 +794,12 @@ nsresult nsHttpChannel::ContinueOnBeforeConnect(bool aShouldUpgrade,
   }
 
   if (aShouldUpgrade && !mURI->SchemeIs("https")) {
-    mozilla::glean::networking::https_upgrade_with_https_rr
-        .Get(aUpgradeWithHTTPSRR ? "https_rr"_ns : "others"_ns)
-        .Add(1);
+    // only set HTTPS_RR to be responsbile for the upgrade in the loadinfo
+    // if it actually was responsible, otherwise the correct flag is
+    // already present in the loadinfo.
+    if (aUpgradeWithHTTPSRR) {
+      mLoadInfo->SetHttpsUpgradeTelemetry(nsILoadInfo::HTTPS_RR);
+    }
     return AsyncCall(&nsHttpChannel::HandleAsyncRedirectChannelToHttps);
   }
 
@@ -2267,39 +2270,101 @@ nsresult nsHttpChannel::ProcessResponse() {
     switch (httpStatus) {
       case 200:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 0);
+        mozilla::glean::networking::http_response_status_code.Get("200_ok"_ns)
+            .Add(1);
         break;
       case 301:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 1);
+        mozilla::glean::networking::http_response_status_code
+            .Get("301_moved_permanently"_ns)
+            .Add(1);
         break;
       case 302:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 2);
+        mozilla::glean::networking::http_response_status_code
+            .Get("302_found"_ns)
+            .Add(1);
         break;
       case 304:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 3);
+        mozilla::glean::networking::http_response_status_code
+            .Get("304_not_modified"_ns)
+            .Add(1);
         break;
       case 307:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 4);
+        mozilla::glean::networking::http_response_status_code
+            .Get("307_temporary_redirect"_ns)
+            .Add(1);
         break;
       case 308:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 5);
+        mozilla::glean::networking::http_response_status_code
+            .Get("308_permanent_redirect"_ns)
+            .Add(1);
         break;
       case 400:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 6);
+        mozilla::glean::networking::http_response_status_code
+            .Get("400_bad_request"_ns)
+            .Add(1);
         break;
       case 401:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 7);
+        mozilla::glean::networking::http_response_status_code
+            .Get("401_unauthorized"_ns)
+            .Add(1);
         break;
       case 403:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 8);
+        mozilla::glean::networking::http_response_status_code
+            .Get("403_forbidden"_ns)
+            .Add(1);
         break;
       case 404:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 9);
+        mozilla::glean::networking::http_response_status_code
+            .Get("404_not_found"_ns)
+            .Add(1);
+        break;
+      case 421:
+        Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 11);
+        mozilla::glean::networking::http_response_status_code
+            .Get("421_misdirected_request"_ns)
+            .Add(1);
+        break;
+      case 425:
+        Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 11);
+        mozilla::glean::networking::http_response_status_code
+            .Get("425_too_early"_ns)
+            .Add(1);
+        break;
+      case 429:
+        Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 11);
+        mozilla::glean::networking::http_response_status_code
+            .Get("429_too_many_requests"_ns)
+            .Add(1);
         break;
       case 500:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 10);
+        mozilla::glean::networking::http_response_status_code
+            .Get("other_5xx"_ns)
+            .Add(1);
         break;
       default:
         Telemetry::Accumulate(Telemetry::HTTP_RESPONSE_STATUS_CODE, 11);
+        if (httpStatus >= 400 && httpStatus < 500) {
+          mozilla::glean::networking::http_response_status_code
+              .Get("other_4xx"_ns)
+              .Add(1);
+        } else if (httpStatus > 500) {
+          mozilla::glean::networking::http_response_status_code
+              .Get("other_5xx"_ns)
+              .Add(1);
+        } else {
+          mozilla::glean::networking::http_response_status_code.Get("other"_ns)
+              .Add(1);
+        }
         break;
     }
   }
@@ -5419,7 +5484,7 @@ nsresult nsHttpChannel::SetupReplacementChannel(nsIURI* newURI,
         mURI, requestMethod, priority, mChannelId,
         NetworkLoadType::LOAD_REDIRECT, mLastStatusReported, TimeStamp::Now(),
         size, mCacheDisposition, mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0, &timings,
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(), &timings,
         std::move(mSource), Some(nsDependentCString(contentType.get())), newURI,
         redirectFlags, channelId);
   }
@@ -6028,7 +6093,7 @@ nsresult nsHttpChannel::CancelInternal(nsresult status) {
         mURI, requestMethod, priority, mChannelId, NetworkLoadType::LOAD_CANCEL,
         mLastStatusReported, TimeStamp::Now(), size, mCacheDisposition,
         mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0,
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
         &mTransactionTimings, std::move(mSource));
   }
 
@@ -6377,7 +6442,7 @@ void nsHttpChannel::AsyncOpenFinal(TimeStamp aTimeStamp) {
         mURI, requestMethod, mPriority, mChannelId, NetworkLoadType::LOAD_START,
         mChannelCreationTimestamp, mLastStatusReported, 0, mCacheDisposition,
         mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0);
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing());
   }
 
   // Added due to PauseTask/DelayHttpChannel
@@ -7846,6 +7911,71 @@ nsresult nsHttpChannel::LogConsoleError(const char* aTag) {
   return NS_OK;
 }
 
+static void RecordHTTPSUpgradeTelemetry(nsILoadInfo* aLoadInfo) {
+  // we record https telemetry only for top-level loads
+  if (aLoadInfo->GetExternalContentPolicyType() !=
+      ExtContentPolicy::TYPE_DOCUMENT) {
+    return;
+  }
+
+  nsILoadInfo::HTTPSUpgradeTelemetryType httpsTelemetry =
+      nsILoadInfo::NO_UPGRADE;
+  aLoadInfo->GetHttpsUpgradeTelemetry(&httpsTelemetry);
+  switch (httpsTelemetry) {
+    case nsILoadInfo::NO_UPGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("no_upgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::ALREADY_HTTPS:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("already_https"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HSTS:
+      mozilla::glean::networking::http_to_https_upgrade_reason.Get("hsts"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_ONLY_UPGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_only_upgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_ONLY_UPGRADE_DOWNGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_only_upgrade_downgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_FIRST_UPGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_first_upgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_FIRST_UPGRADE_DOWNGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_first_upgrade_downgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_FIRST_SCHEMELESS_UPGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_first_schemeless_upgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_FIRST_SCHEMELESS_UPGRADE_DOWNGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_first_schemeless_upgrade_downgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::HTTPS_RR:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("https_rr"_ns)
+          .Add(1);
+      break;
+    default:
+      MOZ_ASSERT(false, "what telemetry flag is set to end up here?");
+  }
+}
+
 NS_IMETHODIMP
 nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
   AUTO_PROFILER_LABEL("nsHttpChannel::OnStopRequest", NETWORK);
@@ -7987,6 +8117,8 @@ nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
 
     mTransferSize = mTransaction->GetTransferSize();
     mRequestSize = mTransaction->GetRequestSize();
+
+    RecordHTTPSUpgradeTelemetry(mLoadInfo);
 
     // If we are using the transaction to serve content, we also save the
     // time since async open in the cache entry so we can compare telemetry
@@ -8376,7 +8508,7 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
         mURI, requestMethod, priority, mChannelId, NetworkLoadType::LOAD_STOP,
         mLastStatusReported, TimeStamp::Now(), size, mCacheDisposition,
         mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0,
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
         &mTransactionTimings, std::move(mSource),
         Some(nsDependentCString(contentType.get())));
   }
@@ -10454,7 +10586,7 @@ void nsHttpChannel::ReEvaluateReferrerAfterTrackingStatusIsKnown() {
     cjs = net::CookieJarSettings::Create(mLoadInfo->GetLoadingPrincipal());
   }
   if (cjs->GetRejectThirdPartyContexts()) {
-    bool isPrivate = mLoadInfo->GetOriginAttributes().mPrivateBrowsingId > 0;
+    bool isPrivate = mLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
     // If our referrer has been set before, and our referrer policy is unset
     // (default policy) if we thought the channel wasn't a third-party
     // tracking channel, we may need to set our referrer with referrer policy

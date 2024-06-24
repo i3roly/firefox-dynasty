@@ -916,6 +916,37 @@ networking:
       - http_2
       - http_3
 
+  http_response_status_code:
+    type: labeled_counter
+    description: >
+      HTTP Response Status Code (200, 301, 302, 304, 307, 308, 400, 401, 403, 404, 421, 425, 429, other 400 and 500)
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1896350
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1903410
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1896350
+    notification_emails:
+      - necko@mozilla.com
+      - smayya@mozilla.com
+    expires: never
+    labels:
+      - 200_ok
+      - 301_moved_permanently
+      - 302_found
+      - 304_not_modified
+      - 307_temporary_redirect
+      - 308_permanent_redirect
+      - 400_bad_request
+      - 401_unauthorized
+      - 403_forbidden
+      - 404_not_found
+      - 421_misdirected_request
+      - 425_too_early
+      - 429_too_many_requests
+      - other_4xx
+      - other_5xx
+      - other
+
   https_rr_presented:
     type: labeled_counter
     description: >
@@ -932,22 +963,6 @@ networking:
       - presented
       - presented_with_http3
       - none
-
-  https_upgrade_with_https_rr:
-    type: labeled_counter
-    description: >
-      Whether an HTTP request gets upgraded to HTTPS because of HTTPS RR
-    bugs:
-      - https://bugzilla.mozilla.org/1686421
-    data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1686421
-    notification_emails:
-      - necko@mozilla.com
-      - kershaw@mozilla.com
-    expires: never
-    labels:
-      - https_rr
-      - others
 
   http_channel_onstart_success_https_rr:
     type: labeled_counter
@@ -1104,6 +1119,33 @@ networking:
       - necko@mozilla.com
       - kershaw@mozilla.com
     expires: never
+
+  http_to_https_upgrade_reason:
+    type: labeled_counter
+    description: >
+      Whether a top-level HTTP request gets upgraded to HTTPS and the reason for it
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1883954
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1883954
+    notification_emails:
+      - ckerschb@mozilla.com
+      - freddyb@mozilla.com
+      - kershaw@mozilla.com
+      - necko@mozilla.com
+      - seceng-telemetry@mozilla.com
+    expires: never
+    labels:
+      - no_upgrade
+      - already_https
+      - hsts
+      - https_only_upgrade
+      - https_only_upgrade_downgrade
+      - https_first_upgrade
+      - https_first_upgrade_downgrade
+      - https_first_schemeless_upgrade
+      - https_first_schemeless_upgrade_downgrade
+      - https_rr
 
   http_channel_sub_open_to_first_sent_https_rr:
     type: timing_distribution
