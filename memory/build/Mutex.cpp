@@ -9,7 +9,12 @@
 #include "mozilla/Assertions.h"
 
 bool Mutex::SpinInKernelSpace() {
-    if (__builtin_available(macOS 10.15, *)) {
+    //modify the condition to 10.12 so we use os_unfair_lock
+    //for all >10.12 systems. glandium used 10.15 because he
+    //attached another flag that is specific to 10.15.
+    //this change keeps everything simple and is a faithful
+    //rendition of the original author's implementation
+    if (__builtin_available(macOS 10.12 , *)) {
         return true;
     }
 
