@@ -107,15 +107,6 @@ bitflags! {
     }
 }
 
-lazy_static! {
-    static ref HOST_TIME_TO_NS_RATIO: (u32, u32) = {
-        let mut timebase_info = mach_timebase_info { numer: 0, denom: 0 };
-        unsafe {
-            mach_timebase_info(&mut timebase_info);
-        }
-        (timebase_info.numer, timebase_info.denom)
-    };
-}
 
 #[cfg(feature = "audio-dump")]
 fn dump_audio(stream: cubeb_audio_dump_stream_t, audio_samples: *mut c_void, count: u32) {
@@ -679,10 +670,10 @@ extern "C" fn audiounit_input_callback(
     }
 }
 
-fn host_time_to_ns(host_time: u64) -> u64 {
+fn host_time_to_ns(ctx: &AudioUnitContext, host_time: u64) -> u64 {
     let mut rv: f64 = host_time as f64;
-    rv *= HOST_TIME_TO_NS_RATIO.0 as f64;
-    rv /= HOST_TIME_TO_NS_RATIO.1 as f64;
+    rv *= ctx.host_time_to_ns_ratio.0 as f64;
+    rv /= ctx.host_time_to_ns_ratio.1 as f64;
     rv as u64
 }
 
@@ -694,7 +685,7 @@ fn compute_output_latency(stm: &AudioUnitStream, audio_output_time: u64, now: u6
     // The total output latency is the timestamp difference + the stream latency + the hardware
     // latency.
     let total_output_latency_ns =
-        fixed_latency_ns + host_time_to_ns(audio_output_time.saturating_sub(now));
+        fixed_latency_ns + host_time_to_ns(stm.context, audio_output_time.saturating_sub(now));
 
     (total_output_latency_ns * output_hw_rate / NS2S) as u32
 }
@@ -707,7 +698,7 @@ fn compute_input_latency(stm: &AudioUnitStream, audio_input_time: u64, now: u64)
     // The total input latency is the timestamp difference + the stream latency +
     // the hardware latency.
     let total_input_latency_ns =
-        host_time_to_ns(now.saturating_sub(audio_input_time)) + fixed_latency_ns;
+        host_time_to_ns(stm.context, now.saturating_sub(audio_input_time)) + fixed_latency_ns;
 
     (total_input_latency_ns * input_hw_rate / NS2S) as u32
 }
@@ -725,6 +716,14 @@ extern "C" fn audiounit_output_callback(
 
     assert!(!user_ptr.is_null());
     let stm = unsafe { &mut *(user_ptr as *mut AudioUnitStream) };
+
+    if output_frames == 0 {
+        cubeb_alog!(
+            "({:p}) output callback empty.",
+            stm as *const AudioUnitStream
+        );
+        return NO_ERR;
+    }
 
     let out_buffer_list_ref = unsafe { &mut (*out_buffer_list) };
     assert_eq!(out_buffer_list_ref.mNumberBuffers, 1);
@@ -876,6 +875,7 @@ extern "C" fn audiounit_output_callback(
         output_frames
     );
 
+    assert_ne!(output_frames, 0);
     let outframes = stm.core_stream_data.resampler.fill(
         input_buffer,
         if input_buffer.is_null() {
@@ -2472,6 +2472,7 @@ pub struct AudioUnitContext {
     serial_queue: Queue,
     latency_controller: Mutex<LatencyController>,
     devices: Mutex<SharedDevices>,
+    host_time_to_ns_ratio: (u32, u32),
     // Storage for a context-global vpio unit. Duplex streams that need one will take this
     // and return it when done.
     shared_voice_processing_unit: SharedVoiceProcessingUnitManager,
@@ -2481,11 +2482,19 @@ impl AudioUnitContext {
     fn new() -> Self {
 
         let serial_queue = Queue::new(DISPATCH_QUEUE_LABEL);
+        let host_time_to_ns_ratio = {
+            let mut timebase_info = mach_timebase_info { numer: 0, denom: 0 };
+            unsafe {
+                mach_timebase_info(&mut timebase_info);
+            }
+            (timebase_info.numer, timebase_info.denom)
+        };
         Self {
             _ops: &OPS as *const _,
             latency_controller: Mutex::new(LatencyController::default()),
             serial_queue: Queue::new(DISPATCH_QUEUE_LABEL),
             devices: Mutex::new(SharedDevices::default()),
+            host_time_to_ns_ratio,
             shared_voice_processing_unit: SharedVoiceProcessingUnitManager::new(serial_queue),
         }
 
@@ -4851,7 +4860,7 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
                 let now = unsafe { mach_absolute_time() };
                 let diff = now - timestamp;
                 let interpolated_frames = cmp::min(
-                    host_time_to_ns(diff)
+                    host_time_to_ns(self.context, diff)
                         * self.core_stream_data.output_stream_params.rate() as u64
                         / NS2S,
                     buffer_size,

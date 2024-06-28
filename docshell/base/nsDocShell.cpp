@@ -6586,8 +6586,6 @@ nsresult nsDocShell::CreateAboutBlankDocumentViewer(
       // after being set here.
       blankDoc->SetSandboxFlags(sandboxFlags);
 
-      blankDoc->InitFeaturePolicy();
-
       // create a content viewer for us and the new document
       docFactory->CreateInstanceForDocument(
           NS_ISUPPORTS_CAST(nsIDocShell*, this), blankDoc, "view",
@@ -6604,6 +6602,12 @@ nsresult nsDocShell::CreateAboutBlankDocumentViewer(
                       /* aIsInitialAboutBlank */ true,
                       /* aLocationFlags */ 0);
         rv = mIsBeingDestroyed ? NS_ERROR_NOT_AVAILABLE : NS_OK;
+      }
+
+      if (Element* embedderElement = blankDoc->GetEmbedderElement()) {
+        blankDoc->InitFeaturePolicy(AsVariant(embedderElement));
+      } else {
+        blankDoc->InitFeaturePolicy(AsVariant(Nothing{}));
       }
     }
   }
@@ -8533,8 +8537,9 @@ bool nsDocShell::IsSameDocumentNavigation(nsDocShellLoadState* aLoadState,
         if (nsCOMPtr<nsIChannel> docChannel = GetCurrentDocChannel()) {
           nsCOMPtr<nsILoadInfo> docLoadInfo = docChannel->LoadInfo();
           if (!docLoadInfo->GetLoadErrorPage() &&
-              nsHTTPSOnlyUtils::IsEqualURIExceptSchemeAndRef(
-                  currentExposableURI, aLoadState->URI(), docLoadInfo)) {
+              nsHTTPSOnlyUtils::ShouldUpgradeConnection(docLoadInfo) &&
+              nsHTTPSOnlyUtils::IsHttpDowngrade(currentExposableURI,
+                                                aLoadState->URI())) {
             uint32_t status = docLoadInfo->GetHttpsOnlyStatus();
             if (status & (nsILoadInfo::HTTPS_ONLY_UPGRADED_LISTENER_REGISTERED |
                           nsILoadInfo::HTTPS_ONLY_UPGRADED_HTTPS_FIRST)) {
