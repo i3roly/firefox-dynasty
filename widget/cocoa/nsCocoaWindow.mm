@@ -3672,7 +3672,7 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
 @implementation FullscreenTitlebarTracker
 - (FullscreenTitlebarTracker*)init {
   [super init];
-  if(@available(macOS 10.11, *))
+  if(@available(macOS 10.12, *))
   self.hidden = YES;
   return self;
 }
@@ -3767,27 +3767,29 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
 
     if ([self respondsToSelector:@selector(setTitlebarAppearsTransparent:)]) 
       self.titlebarAppearsTransparent = YES;
-    
+
     if (@available(macOS 11.0, *)) {
       self.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
     [self updateTitlebarView];
 
-    mFullscreenTitlebarTracker = [[FullscreenTitlebarTracker alloc] init];
-    // revealAmount is an undocumented property of
-    // NSTitlebarAccessoryViewController that updates whenever the menubar
-    // slides down in fullscreen mode.
-    [mFullscreenTitlebarTracker addObserver:self
-                                 forKeyPath:@"revealAmount"
-                                    options:NSKeyValueObservingOptionNew
-                                    context:nil];
-    // Adding this accessory view controller allows us to shift the toolbar down
-    // when the user mouses to the top of the screen in fullscreen.
-    if (@available(macOS 10.10, *))
-    [(NSWindow*)self
+    if(@available(macOS 10.10, *)) {
+      mFullscreenTitlebarTracker = [[FullscreenTitlebarTracker alloc] init];
+      // revealAmount is an undocumented property of
+      // NSTitlebarAccessoryViewController that updates whenever the menubar
+      // slides down in fullscreen mode.
+      [mFullscreenTitlebarTracker addObserver:self
+        forKeyPath:@"revealAmount"
+          options:NSKeyValueObservingOptionNew
+          context:nil];
+      // Adding this accessory view controller allows us to shift the toolbar down
+      // when the user mouses to the top of the screen in fullscreen.
+      [(NSWindow*)self
         addTitlebarAccessoryViewController:mFullscreenTitlebarTracker];
-  }
-  return self;
+
+    }
+  
+  }return self;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
 }

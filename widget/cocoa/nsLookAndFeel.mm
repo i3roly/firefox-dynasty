@@ -69,7 +69,7 @@ void nsLookAndFeel::EnsureInit() {
                                       defer:NO];
   auto release = MakeScopeExit([&] { [window release]; });
 
-  if(@available(macOS 10.11, *)) 
+  if(@available(macOS 10.12, *)) 
   mRtl = window.windowTitlebarLayoutDirection ==
          NSUserInterfaceLayoutDirectionRightToLeft;
   mTitlebarHeight = std::ceil(window.frame.size.height);
