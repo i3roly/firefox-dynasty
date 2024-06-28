@@ -1896,33 +1896,6 @@ FaultingCodeOffset MacroAssemblerARMCompat::loadDouble(const BaseIndex& src,
   return FaultingCodeOffset(boffset.getOffset());
 }
 
-void MacroAssemblerARMCompat::loadFloatAsDouble(const Address& address,
-                                                FloatRegister dest) {
-  ScratchRegisterScope scratch(asMasm());
-
-  VFPRegister rt = dest;
-  ma_vldr(address, rt.singleOverlay(), scratch);
-  as_vcvt(rt, rt.singleOverlay());
-}
-
-void MacroAssemblerARMCompat::loadFloatAsDouble(const BaseIndex& src,
-                                                FloatRegister dest) {
-  // VFP instructions don't even support register Base + register Index modes,
-  // so just add the index, then handle the offset like normal.
-  Register base = src.base;
-  Register index = src.index;
-  uint32_t scale = Imm32::ShiftOf(src.scale).value;
-  int32_t offset = src.offset;
-  VFPRegister rt = dest;
-
-  ScratchRegisterScope scratch(asMasm());
-  SecondScratchRegisterScope scratch2(asMasm());
-
-  as_add(scratch, base, lsl(index, scale));
-  ma_vldr(Address(scratch, offset), rt.singleOverlay(), scratch2);
-  as_vcvt(rt, rt.singleOverlay());
-}
-
 FaultingCodeOffset MacroAssemblerARMCompat::loadFloat32(const Address& address,
                                                         FloatRegister dest) {
   ScratchRegisterScope scratch(asMasm());
@@ -6295,8 +6268,7 @@ void MacroAssemblerARM::wasmLoadImpl(const wasm::MemoryAccessDesc& access,
     }
   }
 
-  bool isSigned = type == Scalar::Int8 || type == Scalar::Int16 ||
-                  type == Scalar::Int32 || type == Scalar::Int64;
+  bool isSigned = Scalar::isSignedIntType(type);
   unsigned byteSize = access.byteSize();
 
   // NOTE: the generated code must match the assembly code in gen_load in

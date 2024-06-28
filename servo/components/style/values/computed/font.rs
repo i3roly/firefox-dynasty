@@ -62,12 +62,14 @@ pub use crate::values::specified::Number as SpecifiedNumber;
     ComputeSquaredDistance,
     Copy,
     Debug,
+    Eq,
     Hash,
     MallocSizeOf,
     PartialEq,
     PartialOrd,
     ToResolvedValue,
 )]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 pub struct FixedPoint<T, const FRACTION_BITS: u16> {
     /// The actual representation.
     pub value: T,
@@ -682,37 +684,6 @@ impl Parse for SingleFontFamily {
     }
 }
 
-#[cfg(feature = "servo")]
-impl SingleFontFamily {
-    /// Get the corresponding font-family with Atom
-    pub fn from_atom(input: Atom) -> SingleFontFamily {
-        match input {
-            atom!("serif") => return SingleFontFamily::Generic(GenericFontFamily::Serif),
-            atom!("sans-serif") => return SingleFontFamily::Generic(GenericFontFamily::SansSerif),
-            atom!("cursive") => return SingleFontFamily::Generic(GenericFontFamily::Cursive),
-            atom!("fantasy") => return SingleFontFamily::Generic(GenericFontFamily::Fantasy),
-            atom!("monospace") => return SingleFontFamily::Generic(GenericFontFamily::Monospace),
-            _ => {},
-        }
-
-        match_ignore_ascii_case! { &input,
-            "serif" => return SingleFontFamily::Generic(GenericFontFamily::Serif),
-            "sans-serif" => return SingleFontFamily::Generic(GenericFontFamily::SansSerif),
-            "cursive" => return SingleFontFamily::Generic(GenericFontFamily::Cursive),
-            "fantasy" => return SingleFontFamily::Generic(GenericFontFamily::Fantasy),
-            "monospace" => return SingleFontFamily::Generic(GenericFontFamily::Monospace),
-            _ => {}
-        }
-
-        // We don't know if it's quoted or not. So we set it to
-        // quoted by default.
-        SingleFontFamily::FamilyName(FamilyName {
-            name: input,
-            syntax: FontFamilyNameSyntax::Quoted,
-        })
-    }
-}
-
 /// A list of font families.
 #[derive(Clone, Debug, ToComputedValue, ToResolvedValue, ToShmem, PartialEq, Eq)]
 #[repr(C)]
@@ -960,6 +931,7 @@ where
     ToShmem,
 )]
 #[repr(C)]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[value_info(other_values = "normal")]
 pub struct FontLanguageOverride(pub u32);
 
@@ -1089,12 +1061,14 @@ pub type FontStyleFixedPoint = FixedPoint<i16, FONT_STYLE_FRACTION_BITS>;
     ComputeSquaredDistance,
     Copy,
     Debug,
+    Eq,
     Hash,
     MallocSizeOf,
     PartialEq,
     PartialOrd,
     ToResolvedValue,
 )]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 pub struct FontStyle(FontStyleFixedPoint);
 
@@ -1218,6 +1192,7 @@ pub type FontStretchFixedPoint = FixedPoint<u16, FONT_STRETCH_FRACTION_BITS>;
 #[derive(
     Clone, ComputeSquaredDistance, Copy, Debug, MallocSizeOf, PartialEq, PartialOrd, ToResolvedValue,
 )]
+#[cfg_attr(feature = "servo", derive(Deserialize, Serialize))]
 #[repr(C)]
 pub struct FontStretch(pub FontStretchFixedPoint);
 

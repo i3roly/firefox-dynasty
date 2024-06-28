@@ -3,6 +3,10 @@
 
 "use strict";
 
+requestLongerTimeout(2);
+
+const SIDEBAR_VISIBILITY_PREF = "sidebar.visibility";
+
 add_setup(() => SpecialPowers.pushPrefEnv({ set: [["sidebar.revamp", true]] }));
 
 async function showCustomizePanel(win) {
@@ -10,7 +14,7 @@ async function showCustomizePanel(win) {
   const document = win.SidebarController.browser.contentDocument;
   return TestUtils.waitForCondition(async () => {
     const component = document.querySelector("sidebar-customize");
-    if (!component?.positionInputs) {
+    if (!component?.positionInputs || !component?.visibilityInputs) {
       return false;
     }
     return component;
@@ -188,4 +192,37 @@ add_task(async function test_customize_position_setting() {
   await BrowserTestUtils.closeWindow(win);
   await BrowserTestUtils.closeWindow(newWin);
   Services.prefs.clearUserPref("sidebar.position_start");
+});
+
+add_task(async function test_customize_visibility_setting() {
+  const deferredPrefChange = Promise.withResolvers();
+  const prefObserver = () => deferredPrefChange.resolve();
+  Services.prefs.addObserver(SIDEBAR_VISIBILITY_PREF, prefObserver);
+  registerCleanupFunction(() =>
+    Services.prefs.removeObserver(SIDEBAR_VISIBILITY_PREF, prefObserver)
+  );
+
+  const win = await BrowserTestUtils.openNewBrowserWindow();
+  const panel = await showCustomizePanel(win);
+  const [showInput, hideInput] = panel.visibilityInputs;
+  ok(showInput.checked, "Always show is enabled by default.");
+  EventUtils.synthesizeMouseAtCenter(
+    hideInput,
+    {},
+    win.SidebarController.browser.contentWindow
+  );
+  ok(hideInput.checked, "Hide sidebar is enabled.");
+  await deferredPrefChange.promise;
+  const newPrefValue = Services.prefs.getStringPref(SIDEBAR_VISIBILITY_PREF);
+  is(newPrefValue, "hide-sidebar", "Visibility preference updated.");
+
+  const newWin = await BrowserTestUtils.openNewBrowserWindow();
+  const newPanel = await showCustomizePanel(newWin);
+  const [, newHideInput] = newPanel.visibilityInputs;
+  ok(newHideInput.checked, "Visibility setting persists.");
+
+  await BrowserTestUtils.closeWindow(win);
+  await BrowserTestUtils.closeWindow(newWin);
+
+  Services.prefs.clearUserPref(SIDEBAR_VISIBILITY_PREF);
 });

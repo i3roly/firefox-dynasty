@@ -180,6 +180,7 @@ export const presets = {
       "Renderer",
       "SwComposite",
       "RenderBackend",
+      "GlyphRasterizer",
       "SceneBuilder",
       "WrWorker",
       "CanvasWorkers",
@@ -416,7 +417,7 @@ export async function captureProfile(pageContext) {
   );
 
   const { openProfilerTab } = lazy.BrowserModule();
-  const browser = await openProfilerTab(profilerViewMode);
+  const browser = await openProfilerTab({ profilerViewMode });
   registerProfileCaptureForBrowser(
     browser,
     profileCaptureResult,

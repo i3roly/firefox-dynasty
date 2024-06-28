@@ -7,14 +7,19 @@ package org.mozilla.fenix.components.menu
 import mozilla.appservices.places.BookmarkRoot
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.concept.storage.BookmarksStorage
+import mozilla.components.feature.top.sites.PinnedSiteStorage
+import mozilla.components.feature.top.sites.TopSite
+import mozilla.components.feature.top.sites.TopSitesUseCases
 import mozilla.components.support.test.libstate.ext.waitUntilIdle
 import mozilla.components.support.test.mock
 import mozilla.components.support.test.rule.MainCoroutineRule
 import mozilla.components.support.test.rule.runTestOnMain
+import mozilla.components.support.test.whenever
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mockito.never
@@ -38,6 +43,21 @@ class MenuDialogMiddlewareTest {
     private val addBookmarkUseCase: AddBookmarksUseCase =
         spy(AddBookmarksUseCase(storage = bookmarksStorage))
     private val onDeleteAndQuit: () -> Unit = mock()
+
+    private lateinit var pinnedSiteStorage: PinnedSiteStorage
+    private lateinit var addPinnedSiteUseCase: TopSitesUseCases.AddPinnedSiteUseCase
+    private lateinit var removePinnedSiteUseCase: TopSitesUseCases.RemoveTopSiteUseCase
+
+    companion object {
+        const val TOP_SITES_MAX_COUNT = 16
+    }
+
+    @Before
+    fun setup() {
+        pinnedSiteStorage = mock()
+        addPinnedSiteUseCase = mock()
+        removePinnedSiteUseCase = mock()
+    }
 
     @Test
     fun `GIVEN no selected tab WHEN init action is dispatched THEN browser state is not updated`() = runTestOnMain {
@@ -119,6 +139,9 @@ class MenuDialogMiddlewareTest {
     fun `WHEN add bookmark action is dispatched for a selected tab THEN bookmark is added`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(emptyList())
+
         val browserMenuState = BrowserMenuState(
             selectedTab = createTab(
                 url = url,
@@ -141,6 +164,8 @@ class MenuDialogMiddlewareTest {
     fun `GIVEN selected tab is bookmarked WHEN add bookmark action is dispatched THEN add bookmark use case is never called`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(emptyList())
 
         val guid = bookmarksStorage.addItem(
             parentGuid = BookmarkRoot.Mobile.id,
@@ -177,6 +202,263 @@ class MenuDialogMiddlewareTest {
     }
 
     @Test
+    fun `GIVEN selected tab is pinned WHEN init action is dispatched THEN initial pinned state is updated`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(
+            listOf(
+                TopSite.Pinned(
+                    id = 0,
+                    title = title,
+                    url = url,
+                    createdAt = 0,
+                ),
+            ),
+        )
+
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        // Wait for InitAction and middleware
+        store.waitUntilIdle()
+
+        // Wait for UpdatePinnedState and middleware
+        store.waitUntilIdle()
+
+        assertTrue(store.state.browserMenuState!!.isPinned)
+    }
+
+    @Test
+    fun `GIVEN selected tab is not pinned WHEN init action is dispatched THEN initial pinned state is not updated`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(emptyList())
+
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        assertFalse(store.state.browserMenuState!!.isPinned)
+
+        // Wait for InitAction and middleware
+        store.waitUntilIdle()
+
+        assertFalse(store.state.browserMenuState!!.isPinned)
+    }
+
+    @Test
+    fun `WHEN add to shortcuts action is dispatched for a selected tab THEN the site is pinned`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(emptyList())
+
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        store.dispatch(MenuAction.AddShortcut)
+        store.waitUntilIdle()
+
+        verify(addPinnedSiteUseCase).invoke(url = url, title = title)
+    }
+
+    @Test
+    fun `GIVEN selected tab is pinned WHEN add to shortcuts action is dispatched THEN add pinned site use case is never called`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(
+            listOf(
+                TopSite.Pinned(
+                    id = 0,
+                    title = title,
+                    url = url,
+                    createdAt = 0,
+                ),
+            ),
+        )
+
+        pinnedSiteStorage.addPinnedSite(
+            url = url,
+            title = title,
+        )
+
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        // Wait for InitAction and middleware
+        store.waitUntilIdle()
+
+        // Wait for UpdatePinnedState and middleware
+        store.waitUntilIdle()
+
+        assertTrue(store.state.browserMenuState!!.isPinned)
+
+        store.dispatch(MenuAction.AddShortcut)
+        store.waitUntilIdle()
+
+        verify(addPinnedSiteUseCase, never()).invoke(url = url, title = title)
+    }
+
+    @Test
+    fun `WHEN remove from shortcuts action is dispatched for a selected tab THEN remove pinned site use case is never called`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(emptyList())
+
+        val topSite = TopSite.Pinned(
+            id = 0,
+            title = title,
+            url = url,
+            createdAt = 0,
+        )
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        // Wait for InitAction and middleware
+        store.waitUntilIdle()
+
+        assertFalse(store.state.browserMenuState!!.isPinned)
+
+        store.dispatch(MenuAction.RemoveShortcut)
+        store.waitUntilIdle()
+
+        verify(removePinnedSiteUseCase, never()).invoke(topSite = topSite)
+    }
+
+    @Test
+    fun `GIVEN selected tab is pinned WHEN remove from shortcuts action is dispatched THEN pinned state is updated`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+        val topSite = TopSite.Pinned(
+            id = 0,
+            title = title,
+            url = url,
+            createdAt = 0,
+        )
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(listOf(topSite))
+
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        // Wait for InitAction and middleware
+        store.waitUntilIdle()
+
+        // Wait for UpdatePinnedState and middleware
+        store.waitUntilIdle()
+
+        assertTrue(store.state.browserMenuState!!.isPinned)
+
+        store.dispatch(MenuAction.RemoveShortcut)
+        store.waitUntilIdle()
+
+        verify(removePinnedSiteUseCase).invoke(topSite = topSite)
+    }
+
+    @Test
+    fun `GIVEN maximum number of top sites is reached WHEN add to shortcuts action is dispatched THEN add pinned site use case is never called`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+
+        val pinnedSitesList = mutableListOf<TopSite>()
+
+        repeat(TOP_SITES_MAX_COUNT) {
+            pinnedSitesList.add(
+                TopSite.Pinned(
+                    id = 0,
+                    title = title,
+                    url = "$url/1",
+                    createdAt = 0,
+                ),
+            )
+        }
+
+        whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(pinnedSitesList)
+
+        val browserMenuState = BrowserMenuState(
+            selectedTab = createTab(
+                url = url,
+                title = title,
+            ),
+        )
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = browserMenuState,
+            ),
+        )
+
+        // Wait for InitAction and middleware
+        store.waitUntilIdle()
+
+        // Wait for UpdatePinnedState and middleware
+        store.waitUntilIdle()
+
+        assertFalse(store.state.browserMenuState!!.isPinned)
+
+        store.dispatch(MenuAction.AddShortcut)
+        store.waitUntilIdle()
+
+        verify(addPinnedSiteUseCase, never()).invoke(url = url, title = title)
+    }
+
+    @Test
     fun `WHEN delete browsing data and quit action is dispatched THEN onDeleteAndQuit is invoked`() = runTestOnMain {
         val store = createStore(
             menuState = MenuState(
@@ -197,7 +479,11 @@ class MenuDialogMiddlewareTest {
         middleware = listOf(
             MenuDialogMiddleware(
                 bookmarksStorage = bookmarksStorage,
+                pinnedSiteStorage = pinnedSiteStorage,
                 addBookmarkUseCase = addBookmarkUseCase,
+                addPinnedSiteUseCase = addPinnedSiteUseCase,
+                removePinnedSitesUseCase = removePinnedSiteUseCase,
+                topSitesMaxLimit = TOP_SITES_MAX_COUNT,
                 onDeleteAndQuit = onDeleteAndQuit,
                 scope = scope,
             ),

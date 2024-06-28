@@ -15,6 +15,8 @@ struct already_AddRefed;
 
 #include <cstdint>
 #include "mozilla/Attributes.h"
+#include "mozilla/TimeStamp.h"
+#include "nsCycleCollectionParticipant.h"
 
 namespace JS {
 class SliceBudget;
@@ -35,7 +37,8 @@ typedef void (*CC_ForgetSkippableCallback)(void);
 void nsCycleCollector_setForgetSkippableCallback(
     CC_ForgetSkippableCallback aCB);
 
-void nsCycleCollector_forgetSkippable(JS::SliceBudget& aBudget,
+void nsCycleCollector_forgetSkippable(mozilla::TimeStamp aStartTime,
+                                      JS::SliceBudget& aBudget, bool aInIdle,
                                       bool aRemoveChildlessNodes = false,
                                       bool aAsyncSnowWhiteFreeing = false);
 

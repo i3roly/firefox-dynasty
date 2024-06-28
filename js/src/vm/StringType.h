@@ -1058,14 +1058,19 @@ class JSLinearString : public JSString {
                                      js::gc::Heap heap);
 
   template <js::AllowGC allowGC, typename CharT>
+  static inline JSLinearString* new_(JSContext* cx,
+                                     RefPtr<mozilla::StringBuffer>&& buffer,
+                                     size_t length, js::gc::Heap heap);
+
+  template <js::AllowGC allowGC, typename CharT>
   static inline JSLinearString* newValidLength(
       JSContext* cx, JS::MutableHandle<OwnedChars<CharT>> chars,
       js::gc::Heap heap);
 
   template <js::AllowGC allowGC, typename CharT>
   static inline JSLinearString* newValidLength(
-      JSContext* cx, RefPtr<mozilla::StringBuffer>&& buffer, const CharT* chars,
-      size_t length, js::gc::Heap heap);
+      JSContext* cx, RefPtr<mozilla::StringBuffer>&& buffer, size_t length,
+      js::gc::Heap heap);
 
   // Convert a plain linear string to an extensible string. For testing. The
   // caller must ensure that it is a plain or extensible string already, and

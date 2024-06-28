@@ -249,7 +249,8 @@ class LoadInfo final : public nsILoadInfo {
       bool aNeedForCheckingAntiTrackingHeuristic, const nsAString& aCspNonce,
       const nsAString& aIntegrityMetadata, bool aSkipContentSniffing,
       uint32_t aHttpsOnlyStatus, bool aHstsStatus,
-      bool aHasValidUserGestureActivation, bool aAllowDeprecatedSystemRequests,
+      bool aHasValidUserGestureActivation, bool aTextDirectiveUserActivation,
+      bool aIsSameDocumentNavigation, bool aAllowDeprecatedSystemRequests,
       bool aIsInDevToolsContext, bool aParserCreatedScript,
       nsILoadInfo::StoragePermissionState aStoragePermission,
       const Maybe<RFPTarget>& aOverriddenFingerprintingSettings,
@@ -367,6 +368,8 @@ class LoadInfo final : public nsILoadInfo {
   uint32_t mHttpsOnlyStatus = nsILoadInfo::HTTPS_ONLY_UNINITIALIZED;
   bool mHstsStatus = false;
   bool mHasValidUserGestureActivation = false;
+  bool mTextDirectiveUserActivation = false;
+  bool mIsSameDocumentNavigation = false;
   bool mAllowDeprecatedSystemRequests = false;
   bool mIsUserTriggeredSave = false;
   bool mIsInDevToolsContext = false;

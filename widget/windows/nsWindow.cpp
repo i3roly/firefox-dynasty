@@ -1550,8 +1550,8 @@ nsWindow* nsWindow::GetParentWindowBase(bool aIncludeOwner) {
  *
  **************************************************************/
 
-void nsWindow::Show(bool bState) {
-  if (bState && mIsShowingPreXULSkeletonUI) {
+void nsWindow::Show(bool aState) {
+  if (aState && mIsShowingPreXULSkeletonUI) {
     // The first time we decide to actually show the window is when we decide
     // that we've taken over the window from the skeleton UI, and we should
     // no longer treat resizes / moves specially.
@@ -1585,10 +1585,10 @@ void nsWindow::Show(bool bState) {
   bool wasVisible = mIsVisible;
   // Set the status now so that anyone asking during ShowWindow or
   // SetWindowPos would get the correct answer.
-  mIsVisible = bState;
+  mIsVisible = aState;
 
   if (mWnd) {
-    if (bState) {
+    if (aState) {
       if (!wasVisible && mWindowType == WindowType::TopLevel) {
         // speed up the initial paint after show for
         // top level windows:
@@ -1625,7 +1625,14 @@ void nsWindow::Show(bool bState) {
 
           RECT rect;
           ::GetWindowRect(hwnd, &rect);  // includes non-client area
+
+          // Convert from screen- to client-coordinates, accounting for the
+          // desktop (or, in theory, us) possibly being WS_EX_LAYOUTRTL...
           ::MapWindowPoints(HWND_DESKTOP, hwnd, (LPPOINT)&rect, 2);
+          // ... then convert from client- to window- coordinates, with no
+          // separate RTL-handling needed.
+          ::OffsetRect(&rect, -rect.left, -rect.top);
+
           ::FillRect(hdc, &rect, brush);
         };
 
@@ -1736,7 +1743,7 @@ void nsWindow::Show(bool bState) {
     }
   }
 
-  if (!wasVisible && bState) {
+  if (!wasVisible && aState) {
     Invalidate();
     if (syncInvalidate && !mInDtor && !mOnDestroyCalled) {
       ::UpdateWindow(mWnd);
@@ -2291,9 +2298,9 @@ void nsWindow::ConstrainPosition(DesktopIntPoint& aPoint) {
  **************************************************************/
 
 // Enable/disable this component
-void nsWindow::Enable(bool bState) {
+void nsWindow::Enable(bool aState) {
   if (mWnd) {
-    ::EnableWindow(mWnd, bState);
+    ::EnableWindow(mWnd, aState);
   }
 }
 

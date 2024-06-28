@@ -168,6 +168,8 @@ static auto CreateDocumentLoadInfo(CanonicalBrowsingContext* aBrowsingContext,
   loadInfo->SetTriggeringStorageAccess(aLoadState->TriggeringStorageAccess());
   loadInfo->SetHasValidUserGestureActivation(
       aLoadState->HasValidUserGestureActivation());
+  loadInfo->SetTextDirectiveUserActivation(
+      aLoadState->GetTextDirectiveUserActivation());
   loadInfo->SetIsMetaRefresh(aLoadState->IsMetaRefresh());
 
   return loadInfo.forget();
@@ -191,6 +193,8 @@ static auto CreateObjectLoadInfo(
 
   loadInfo->SetHasValidUserGestureActivation(
       aLoadState->HasValidUserGestureActivation());
+  loadInfo->SetTextDirectiveUserActivation(
+      aLoadState->GetTextDirectiveUserActivation());
   loadInfo->SetTriggeringSandboxFlags(aLoadState->TriggeringSandboxFlags());
   loadInfo->SetTriggeringWindowId(aLoadState->TriggeringWindowId());
   loadInfo->SetTriggeringStorageAccess(aLoadState->TriggeringStorageAccess());
@@ -2673,8 +2677,10 @@ DocumentLoadListener::OnStartRequest(nsIRequest* aRequest) {
 
   if (httpChannel) {
     uint32_t responseStatus = 0;
+    nsAutoCString protocol;
     Unused << httpChannel->GetResponseStatus(&responseStatus);
-    mEarlyHintsService.FinalResponse(responseStatus);
+    Unused << httpChannel->GetProtocolVersion(protocol);
+    mEarlyHintsService.FinalResponse(responseStatus, protocol);
   } else {
     mEarlyHintsService.Cancel(
         "DocumentLoadListener::OnStartRequest: no httpChannel"_ns);

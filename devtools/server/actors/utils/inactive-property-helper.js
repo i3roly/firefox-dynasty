@@ -470,13 +470,24 @@ class InactivePropertyHelper {
         msgId:
           "inactive-css-not-for-internal-table-elements-except-table-cells",
       },
-      // table-layout used on non-table elements.
+      // table-related properties used on non-table elements.
       {
-        invalidProperties: ["table-layout"],
+        invalidProperties: [
+          "border-collapse",
+          "border-spacing",
+          "table-layout",
+        ],
         when: () =>
           !this.checkComputedStyle("display", ["table", "inline-table"]),
         fixId: "inactive-css-not-table-fix",
         msgId: "inactive-css-not-table",
+      },
+      // border-spacing property used on collapsed table borders.
+      {
+        invalidProperties: ["border-spacing"],
+        when: () => this.checkComputedStyle("border-collapse", ["collapse"]),
+        fixId: "inactive-css-collapsed-table-borders-fix",
+        msgId: "inactive-css-collapsed-table-borders",
       },
       // empty-cells property used on non-table-cell elements.
       {
@@ -782,7 +793,10 @@ class InactivePropertyHelper {
       if (validator.invalidProperties) {
         isRuleConcerned = validator.invalidProperties.includes(property);
       } else if (validator.acceptedProperties) {
-        isRuleConcerned = !validator.acceptedProperties.has(property);
+        isRuleConcerned =
+          !validator.acceptedProperties.has(property) &&
+          // custom properties can always be set
+          !property.startsWith("--");
       }
 
       if (!isRuleConcerned) {

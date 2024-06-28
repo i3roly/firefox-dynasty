@@ -283,16 +283,13 @@ class CCGCScheduler {
 
   // This is invoked when we reach the actual cycle collection portion of the
   // overall cycle collection.
-  void NoteCCBegin(CCReason aReason, TimeStamp aWhen,
-                   uint32_t aNumForgetSkippables, uint32_t aSuspected,
-                   uint32_t aRemovedPurples);
+  void NoteCCBegin();
 
   // This is invoked when the whole process of collection is done -- i.e., CC
   // preparation (eg ForgetSkippables) in addition to the CC itself. There
   // really ought to be a separate name for the overall CC as opposed to the
   // actual cycle collection portion.
-  void NoteCCEnd(const CycleCollectorResults& aResults, TimeStamp aWhen,
-                 mozilla::TimeDuration aMaxSliceTime);
+  void NoteCCEnd(const CycleCollectorResults& aResults, TimeStamp aWhen);
 
   // A single slice has completed.
   void NoteGCSliceEnd(TimeStamp aStart, TimeStamp aEnd);
@@ -324,13 +321,11 @@ class CCGCScheduler {
   void UnblockCC() { mCCBlockStart = TimeStamp(); }
 
   // Returns the number of purple buffer items that were processed and removed.
-  uint32_t NoteForgetSkippableComplete(TimeStamp aNow,
-                                       uint32_t aSuspectedBeforeForgetSkippable,
-                                       uint32_t aSuspectedCCObjects) {
+  void NoteForgetSkippableComplete(TimeStamp aNow,
+                                   uint32_t aSuspectedCCObjects) {
     mLastForgetSkippableEndTime = aNow;
     mPreviousSuspectedCount = aSuspectedCCObjects;
     mCleanupsSinceLastGC++;
-    return aSuspectedBeforeForgetSkippable - aSuspectedCCObjects;
   }
 
   // Test if we are in the NoteCCBegin .. NoteCCEnd interval.

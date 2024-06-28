@@ -1713,8 +1713,15 @@ pref("browser.newtab.preload", true);
 // Weather widget for newtab
 pref("browser.newtabpage.activity-stream.showWeather", true);
 pref("browser.newtabpage.activity-stream.weather.query", "");
-pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", false);
 pref("browser.newtabpage.activity-stream.weather.display", "simple");
+
+// enable location search for newtab weather widget
+#ifdef NIGHTLY_BUILD
+  pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
+#else
+  pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
+#endif
+
 // List of regions that get weather by default.
 #ifdef NIGHTLY_BUILD
   pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "US,CA");
@@ -1846,6 +1853,9 @@ pref("browser.newtabpage.activity-stream.discoverystream.recs.personalized", fal
 // System pref to allow Pocket sponsored content personalization to be turned on/off.
 pref("browser.newtabpage.activity-stream.discoverystream.spocs.personalized", true);
 
+// System pref to enable topic selection for pocket feed
+pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.enabled", false);
+
 // Flip this once the user has dismissed the Pocket onboarding experience,
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.dismissed", false);
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.enabled", false);
@@ -1909,6 +1919,7 @@ pref("sidebar.position_start", true);
 pref("sidebar.revamp", false);
 pref("sidebar.main.tools", "history,syncedtabs");
 pref("sidebar.verticalTabs", false);
+pref("sidebar.visibility", "always-show");
 
 pref("browser.ml.chat.enabled", false);
 pref("browser.ml.chat.hideLocalhost", true);
@@ -2948,6 +2959,9 @@ pref("devtools.debugger.hide-ignored-sources", false);
 // about:devtools-toolbox tabs unusable by mistake.
 pref("devtools.popup.disable_autohide", false);
 
+// Add support for high contrast mode
+pref("devtools.high-contrast-mode-support", false);
+
 // FirstStartup service time-out in ms
 pref("first-startup.timeout", 30000);
 
@@ -3109,6 +3123,8 @@ pref("browser.backup.preferences.ui.enabled", false);
 pref("browser.backup.sqlite.pages_per_step", 5);
 // The delay between SQLite database backup steps in milliseconds.
 pref("browser.backup.sqlite.step_delay_ms", 250);
+pref("browser.backup.scheduled.idle-threshold-seconds", 300);
+pref("browser.backup.scheduled.minimum-time-between-backups-seconds", 3600);
 
 // Pref to enable the new profiles
 pref("browser.profiles.enabled", false);

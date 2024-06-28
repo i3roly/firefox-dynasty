@@ -4110,6 +4110,11 @@ nsresult nsDocShell::ReloadDocument(nsDocShell* aDocShell, Document* aDocument,
   loadState->SetBaseURI(baseURI);
   loadState->SetHasValidUserGestureActivation(
       context && context->HasValidTransientUserGestureActivation());
+
+  loadState->SetTextDirectiveUserActivation(
+      aDocument->ConsumeTextDirectiveUserActivation() ||
+      loadState->HasValidUserGestureActivation());
+
   loadState->SetNotifiedBeforeUnloadListeners(aNotifiedBeforeUnloadListeners);
   return aDocShell->InternalLoad(loadState);
 }
@@ -5082,6 +5087,10 @@ nsDocShell::ForceRefreshURI(nsIURI* aURI, nsIPrincipal* aPrincipal,
     loadState->SetCsp(doc->GetCsp());
     loadState->SetHasValidUserGestureActivation(
         doc->HasValidTransientUserGestureActivation());
+
+    loadState->SetTextDirectiveUserActivation(
+        doc->ConsumeTextDirectiveUserActivation() ||
+        loadState->HasValidUserGestureActivation());
     loadState->SetTriggeringSandboxFlags(doc->GetSandboxFlags());
     loadState->SetTriggeringWindowId(doc->InnerWindowID());
     loadState->SetTriggeringStorageAccess(doc->UsingStorageAccess());
@@ -8390,6 +8399,9 @@ nsresult nsDocShell::PerformRetargeting(nsDocShellLoadState* aLoadState) {
       loadState->SetHasValidUserGestureActivation(
           aLoadState->HasValidUserGestureActivation());
 
+      loadState->SetTextDirectiveUserActivation(
+          aLoadState->GetTextDirectiveUserActivation());
+
       // Propagate POST data to the new load.
       loadState->SetPostDataStream(aLoadState->PostDataStream());
       loadState->SetIsFormSubmission(aLoadState->IsFormSubmission());
@@ -8496,7 +8508,7 @@ bool nsDocShell::IsSameDocumentNavigation(nsDocShellLoadState* aLoadState,
   // directives need to be stored for further use.
   nsTArray<TextDirective> textDirectives;
   if (FragmentDirective::ParseAndRemoveFragmentDirectiveFromFragmentString(
-          aState.mNewHash, &textDirectives)) {
+          aState.mNewHash, &textDirectives, aLoadState->URI())) {
     if (Document* doc = GetDocument()) {
       doc->FragmentDirective()->SetTextDirectives(std::move(textDirectives));
     }
@@ -8681,7 +8693,11 @@ nsresult nsDocShell::HandleSameDocumentNavigation(
     MOZ_ASSERT(sameExceptHashes);
   }
 #endif
-
+  const nsCOMPtr<nsILoadInfo> loadInfo =
+      doc->GetChannel() ? doc->GetChannel()->LoadInfo() : nullptr;
+  if (loadInfo) {
+    loadInfo->SetIsSameDocumentNavigation(true);
+  }
   // Save the position of the scrollers.
   nsPoint scrollPos = GetCurScrollPos();
 
@@ -10377,6 +10393,7 @@ nsresult nsDocShell::DoURILoad(nsDocShellLoadState* aLoadState,
   if (mLoadType != LOAD_ERROR_PAGE && context && context->IsInProcess()) {
     if (context->HasValidTransientUserGestureActivation()) {
       aLoadState->SetHasValidUserGestureActivation(true);
+      aLoadState->SetTextDirectiveUserActivation(true);
     }
     if (!aLoadState->TriggeringWindowId()) {
       aLoadState->SetTriggeringWindowId(context->Id());
@@ -10396,7 +10413,11 @@ nsresult nsDocShell::DoURILoad(nsDocShellLoadState* aLoadState,
   if (aLoadState->HasValidUserGestureActivation() ||
       aLoadState->HasLoadFlags(LOAD_FLAGS_FROM_EXTERNAL)) {
     loadInfo->SetHasValidUserGestureActivation(true);
+    aLoadState->SetTextDirectiveUserActivation(true);
   }
+
+  loadInfo->SetTextDirectiveUserActivation(
+      aLoadState->GetTextDirectiveUserActivation());
 
   loadInfo->SetTriggeringWindowId(aLoadState->TriggeringWindowId());
   loadInfo->SetTriggeringStorageAccess(aLoadState->TriggeringStorageAccess());
@@ -10742,23 +10763,28 @@ nsresult nsDocShell::ScrollToAnchor(bool aCurHasRef, bool aNewHasRef,
   // https://html.spec.whatwg.org/#scroll-to-fragid:~:text=This%20algorithm%20will%20be%20called%20twice
 
   const RefPtr fragmentDirective = GetDocument()->FragmentDirective();
-  const nsTArray<RefPtr<nsRange>> textDirectives =
+  const nsTArray<RefPtr<nsRange>> textDirectiveRanges =
       fragmentDirective->FindTextFragmentsInDocument();
-  const bool hasTextDirectives = !textDirectives.IsEmpty();
-  fragmentDirective->HighlightTextDirectives(textDirectives);
+  fragmentDirective->HighlightTextDirectives(textDirectiveRanges);
+  const bool scrollToTextDirective =
+      !textDirectiveRanges.IsEmpty() &&
+      fragmentDirective->IsTextDirectiveAllowedToBeScrolledTo();
+  const RefPtr<nsRange> textDirectiveToScroll =
+      scrollToTextDirective ? textDirectiveRanges[0] : nullptr;
 
   // If we have no new anchor, we do not want to scroll, unless there is a
   // current anchor and we are doing a history load.  So return if we have no
   // new anchor, and there is no current anchor or the load is not a history
   // load.
-  if ((!aCurHasRef || aLoadType != LOAD_HISTORY) && !aNewHasRef) {
+  if ((!aCurHasRef || aLoadType != LOAD_HISTORY) && !aNewHasRef &&
+      !scrollToTextDirective) {
     return NS_OK;
   }
 
   // Both the new and current URIs refer to the same page. We can now
   // browse to the hash stored in the new URI.
 
-  if (aNewHash.IsEmpty() && !hasTextDirectives) {
+  if (aNewHash.IsEmpty() && !scrollToTextDirective) {
     // 2. If fragment is the empty string, then return the special value top of
     // the document.
     //
@@ -10778,10 +10804,11 @@ nsresult nsDocShell::ScrollToAnchor(bool aCurHasRef, bool aNewHasRef,
   // 3. Let potentialIndicatedElement be the result of finding a potential
   // indicated element given document and fragment.
   NS_ConvertUTF8toUTF16 uStr(aNewHash);
-  RefPtr<nsRange> range =
-      !textDirectives.IsEmpty() ? textDirectives[0] : nullptr;
-  auto rv =
-      presShell->GoToAnchor(uStr, range, scroll, ScrollFlags::ScrollSmoothAuto);
+
+  MOZ_ASSERT(!uStr.IsEmpty() || scrollToTextDirective);
+
+  auto rv = presShell->GoToAnchor(uStr, textDirectiveToScroll, scroll,
+                                  ScrollFlags::ScrollSmoothAuto);
 
   // 4. If potentialIndicatedElement is not null, then return
   // potentialIndicatedElement.
@@ -11938,6 +11965,9 @@ nsresult nsDocShell::LoadHistoryEntry(nsISHEntry* aEntry, uint32_t aLoadType,
   loadState->SetHasValidUserGestureActivation(
       loadState->HasValidUserGestureActivation() || aUserActivation);
 
+  loadState->SetTextDirectiveUserActivation(
+      loadState->GetTextDirectiveUserActivation() || aUserActivation);
+
   return LoadHistoryEntry(loadState, aLoadType, aEntry == mOSHE);
 }
 
@@ -11947,6 +11977,9 @@ nsresult nsDocShell::LoadHistoryEntry(const LoadingSessionHistoryInfo& aEntry,
   RefPtr<nsDocShellLoadState> loadState = aEntry.CreateLoadInfo();
   loadState->SetHasValidUserGestureActivation(
       loadState->HasValidUserGestureActivation() || aUserActivation);
+
+  loadState->SetTextDirectiveUserActivation(
+      loadState->GetTextDirectiveUserActivation() || aUserActivation);
 
   return LoadHistoryEntry(loadState, aLoadType, aEntry.mLoadingCurrentEntry);
 }
@@ -12793,6 +12826,13 @@ nsresult nsDocShell::OnLinkClick(
   loadState->SetCsp(aCsp ? aCsp : aContent->GetCsp());
   loadState->SetAllowFocusMove(UserActivation::IsHandlingUserInput());
 
+  const bool hasValidUserGestureActivation =
+      ownerDoc->HasValidTransientUserGestureActivation();
+  loadState->SetHasValidUserGestureActivation(hasValidUserGestureActivation);
+  loadState->SetTextDirectiveUserActivation(
+      ownerDoc->ConsumeTextDirectiveUserActivation() ||
+      hasValidUserGestureActivation);
+
   nsCOMPtr<nsIRunnable> ev =
       new OnLinkClickEvent(this, aContent, loadState, noOpenerImplied,
                            aIsTrusted, aTriggeringPrincipal);
@@ -13028,7 +13068,6 @@ nsresult nsDocShell::OnLinkClickSync(nsIContent* aContent,
   nsCOMPtr<nsIReferrerInfo> referrerInfo =
       elementCanHaveNoopener ? new ReferrerInfo(*aContent->AsElement())
                              : new ReferrerInfo(*referrerDoc);
-  RefPtr<WindowContext> context = mBrowsingContext->GetCurrentWindowContext();
 
   aLoadState->SetTriggeringSandboxFlags(triggeringSandboxFlags);
   aLoadState->SetTriggeringWindowId(triggeringWindowId);
@@ -13038,8 +13077,6 @@ nsresult nsDocShell::OnLinkClickSync(nsIContent* aContent,
   aLoadState->SetTypeHint(NS_ConvertUTF16toUTF8(typeHint));
   aLoadState->SetLoadType(loadType);
   aLoadState->SetSourceBrowsingContext(mBrowsingContext);
-  aLoadState->SetHasValidUserGestureActivation(
-      context && context->HasValidTransientUserGestureActivation());
 
   nsresult rv = InternalLoad(aLoadState);
 

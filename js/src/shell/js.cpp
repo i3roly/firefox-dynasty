@@ -5448,20 +5448,24 @@ static bool RegisterModule(JSContext* cx, unsigned argc, Value* vp) {
 
   if (!args[0].isString()) {
     const char* typeName = InformalValueTypeName(args[0]);
-    JS_ReportErrorASCII(cx, "expected string, got %s", typeName);
+    JS_ReportErrorASCII(cx, "Expected string, got %s", typeName);
     return false;
   }
 
   if (!args[1].isObject() ||
       !args[1].toObject().is<ShellModuleObjectWrapper>()) {
     const char* typeName = InformalValueTypeName(args[1]);
-    JS_ReportErrorASCII(cx, "expected module, got %s", typeName);
+    JS_ReportErrorASCII(cx, "Expected module, got %s", typeName);
     return false;
   }
 
   ShellContext* sc = GetShellContext(cx);
   Rooted<ModuleObject*> module(
       cx, args[1].toObject().as<ShellModuleObjectWrapper>().get());
+  if (module->realm() != cx->realm()) {
+    JS_ReportErrorASCII(cx, "Module is in a different realm");
+    return false;
+  }
 
   Rooted<JSAtom*> specifier(cx, AtomizeString(cx, args[0].toString()));
   if (!specifier) {
@@ -7335,7 +7339,11 @@ static void SingleStepCallback(void* arg, jit::Simulator* sim, void* pc) {
   AutoEnterOOMUnsafeRegion oomUnsafe;
   for (JS::ProfilingFrameIterator i(cx, state); !i.done(); ++i) {
     MOZ_ASSERT(i.stackAddress() != nullptr);
+#  ifndef ENABLE_WASM_JSPI
+    // The stack addresses are monotonically increasing, except when
+    // suspendable stacks are present (e.g. when JS PI is enabled).
     MOZ_ASSERT(lastStackAddress <= i.stackAddress());
+#  endif
     lastStackAddress = i.stackAddress();
     JS::ProfilingFrameIterator::Frame frames[16];
     uint32_t nframes = i.extractStack(frames, 0, 16);
@@ -12582,8 +12590,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
 #endif
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE
-  JS::Prefs::setAtStartup_experimental_json_parse_with_source(
-      op.getBoolOption("enable-json-parse-with-source"));
+  if (op.getBoolOption("enable-json-parse-with-source")) {
+    JS::Prefs::set_experimental_json_parse_with_source(true);
+  }
 #else
   if (op.getBoolOption("enable-json-parse-with-source")) {
     fprintf(stderr, "JSON.parse with source is not enabled on this build.\n");
