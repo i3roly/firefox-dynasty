@@ -177,8 +177,7 @@ class MinidumpGenerator {
   bool WriteContext(breakpad_thread_state_data_t state,
                     MDLocationDescriptor *register_location);
   bool WriteCVRecord(MDRawModule *module, int cpu_type, int cpu_subtype,
-                     const char *module_path, bool in_memory,
-                     bool out_of_process, bool dyld_or_in_dyld_shared_cache);
+                     const char *module_path, bool in_memory);
   bool WriteModuleStream(unsigned int index, MDRawModule *module);
   bool WriteCrashInfoRecord(MDLocationDescriptor *location,
                             const char *module_path,
