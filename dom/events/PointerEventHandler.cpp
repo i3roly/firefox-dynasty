@@ -17,6 +17,7 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/DocumentInlines.h"
 #include "mozilla/dom/MouseEventBinding.h"
+#include "nsUserCharacteristics.h"
 
 namespace mozilla {
 
@@ -725,6 +726,7 @@ void PointerEventHandler::DispatchPointerFromMouseOrTouch(
       }
     }
   }
+  nsUserCharacteristics::StealPointerEvent(aMouseOrTouchEvent);
 }
 
 /* static */
