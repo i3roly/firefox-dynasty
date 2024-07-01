@@ -1590,6 +1590,8 @@ pub enum Appearance {
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     MozMacUnifiedToolbarWindow,
 
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozMacFullscreenButton,
     /// Windows themed window frame elements.
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     MozWindowButtonBox,

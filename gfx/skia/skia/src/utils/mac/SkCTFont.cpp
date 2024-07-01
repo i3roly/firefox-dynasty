@@ -29,6 +29,50 @@
 #endif
 
 #include <dlfcn.h>
+template <typename T, size_t N> char (&SkArrayCountHelper(T (&array)[N]))[N];
+#define SK_ARRAY_COUNT(array) (sizeof(SkArrayCountHelper(array)))
+
+#include <sys/utsname.h>
+
+// i'm blue--da ba dee, da ba dai, daba dee daba dai--box
+// See Source/WebKit/chromium/base/mac/mac_util.mm DarwinMajorVersionInternal for original source.
+static int readVersion() {
+    struct utsname info;
+    if (uname(&info) != 0) {
+        SkDebugf("uname failed\n");
+        return 0;
+    }
+    if (strcmp(info.sysname, "Darwin") != 0) {
+        SkDebugf("unexpected uname sysname %s\n", info.sysname);
+        return 0;
+    }
+    char* dot = strchr(info.release, '.');
+    if (!dot) {
+        SkDebugf("expected dot in uname release %s\n", info.release);
+        return 0;
+    }
+    int version = atoi(info.release);
+    if (version == 0) {
+        SkDebugf("could not parse uname release %s\n", info.release);
+    }
+    return version;
+}
+static int darwinVersion() {
+    static int darwin_version = readVersion();
+    return darwin_version;
+}
+static bool isLion() {
+    return darwinVersion() == 11;
+}
+static bool isMountainLion() {
+    return darwinVersion() == 12;
+}
+static bool isMavericks() {
+    return darwinVersion() == 13;
+}
+
+
+
 
 static constexpr CGBitmapInfo kBitmapInfoRGB = ((CGBitmapInfo)kCGImageAlphaNoneSkipFirst |
                                                 kCGBitmapByteOrder32Host);
@@ -228,14 +272,28 @@ SkCTFontSmoothBehavior SkCTFontGetSmoothBehavior() {
                 CGBitmapContextCreate(&smoothBitmap, 16, 16, 8, 16*4,
                                       colorspace.get(), kBitmapInfoRGB));
 
-        SkUniqueCFRef<CFDataRef> data(CFDataCreateWithBytesNoCopy(
-                kCFAllocatorDefault, kSpiderSymbol_ttf, std::size(kSpiderSymbol_ttf),
-                kCFAllocatorNull));
-        SkUniqueCFRef<CTFontDescriptorRef> desc(
-                CTFontManagerCreateFontDescriptorFromData(data.get()));
-        SkUniqueCFRef<CTFontRef> ctFont(CTFontCreateWithFontDescriptor(desc.get(), 16, nullptr));
-        SkASSERT(ctFont);
-
+        SkUniqueCFRef<CTFontRef> ctFont;
+        if(isMavericks())
+        {
+            SkUniqueCFRef<CGDataProviderRef> data(
+                    CGDataProviderCreateWithData(nullptr, kSpiderSymbol_ttf,
+                        SK_ARRAY_COUNT(kSpiderSymbol_ttf), nullptr));
+            SkUniqueCFRef<CGFontRef> cgFont(CGFontCreateWithDataProvider(data.get()));
+            SkASSERT(cgFont);
+            SkUniqueCFRef<CTFontRef> tmp(
+                    CTFontCreateWithGraphicsFont(cgFont.get(), 16, nullptr, nullptr));
+            SkASSERT(tmp);
+            ctFont = std::move(tmp);
+        } else {
+            SkUniqueCFRef<CFDataRef> data(CFDataCreateWithBytesNoCopy(
+                        kCFAllocatorDefault, kSpiderSymbol_ttf, SK_ARRAY_COUNT(kSpiderSymbol_ttf),
+                        kCFAllocatorNull));
+            SkUniqueCFRef<CTFontDescriptorRef> desc(
+                    CTFontManagerCreateFontDescriptorFromData(data.get()));
+            SkUniqueCFRef<CTFontRef> tmp(CTFontCreateWithFontDescriptor(desc.get(), 16, nullptr));
+            SkASSERT(tmp);
+            ctFont = std::move(tmp);
+        }
         CGContextSetShouldSmoothFonts(noSmoothContext.get(), false);
         CGContextSetShouldAntialias(noSmoothContext.get(), true);
         CGContextSetTextDrawingMode(noSmoothContext.get(), kCGTextFill);
@@ -353,30 +411,44 @@ SkCTFontWeightMapping& SkCTFontGetDataFontWeightMapping() {
         CGFloat previousWeight = -CGFLOAT_MAX;
         for (int i = 0; i < 11; ++i) {
             os2Table->usWeightClass.value = SkEndian_SwapBE16(i * 100);
+            SkUniqueCFRef<CTFontRef> ctFont;
+            if(isMavericks()){
+                SkUniqueCFRef<CGDataProviderRef> cgdata(
+                        CGDataProviderCreateWithData(nullptr, data->data(),
+                            data->size(), nullptr));
+                SkUniqueCFRef<CGFontRef> cgFont(CGFontCreateWithDataProvider(cgdata.get()));
+                SkASSERT(cgFont);
+                SkUniqueCFRef<CTFontRef> tmp(
+                        CTFontCreateWithGraphicsFont(cgFont.get(), 16, nullptr, nullptr));
+                SkASSERT(tmp);
+                ctFont = std::move(tmp);
+            } else {      
+                // On macOS 10.14 and earlier it appears that the CFDataGetBytePtr is used somehow in
+                // font caching. Creating a slightly modified font with data at the same address seems
+                // to in some ways act like a font previously created at that address. As a result,
+                // always make a copy of the data.
+                SkUniqueCFRef<CFDataRef> cfData(
+                        CFDataCreate(kCFAllocatorDefault, (const UInt8 *)data->data(), data->size()));
+                if (!cfData) {
+                    return;
+                }
+                SkUniqueCFRef<CTFontDescriptorRef> desc(
+                        CTFontManagerCreateFontDescriptorFromData(cfData.get()));
+                if (!desc) {
+                    return;
+                }
 
-            // On macOS 10.14 and earlier it appears that the CFDataGetBytePtr is used somehow in
-            // font caching. Creating a slightly modified font with data at the same address seems
-            // to in some ways act like a font previously created at that address. As a result,
-            // always make a copy of the data.
-            SkUniqueCFRef<CFDataRef> cfData(
-                    CFDataCreate(kCFAllocatorDefault, (const UInt8 *)data->data(), data->size()));
-            if (!cfData) {
-                return;
-            }
-            SkUniqueCFRef<CTFontDescriptorRef> desc(
-                    CTFontManagerCreateFontDescriptorFromData(cfData.get()));
-            if (!desc) {
-                return;
+                // On macOS 10.14 and earlier, the CTFontDescriptorRef returned from
+                // CTFontManagerCreateFontDescriptorFromData is incomplete and does not have the
+                // correct traits. It is necessary to create the CTFont and then get the descriptor
+                // off of it.
+                SkUniqueCFRef<CTFontRef> tmp(CTFontCreateWithFontDescriptor(desc.get(), 9, nullptr));
+                if (!ctFont) {
+                    return;
+                }
+                ctFont = std::move(tmp);
             }
 
-            // On macOS 10.14 and earlier, the CTFontDescriptorRef returned from
-            // CTFontManagerCreateFontDescriptorFromData is incomplete and does not have the
-            // correct traits. It is necessary to create the CTFont and then get the descriptor
-            // off of it.
-            SkUniqueCFRef<CTFontRef> ctFont(CTFontCreateWithFontDescriptor(desc.get(), 9, nullptr));
-            if (!ctFont) {
-                return;
-            }
             SkUniqueCFRef<CTFontDescriptorRef> desc2(CTFontCopyFontDescriptor(ctFont.get()));
             if (!desc2) {
                 return;
