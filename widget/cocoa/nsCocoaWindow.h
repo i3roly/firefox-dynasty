@@ -163,11 +163,11 @@ enum class NativeKeyBindingsType : uint8_t;
 - (void)sendToplevelDeactivateEvents;
 @end
 
-@interface MOZTitlebarView : NSVisualEffectView
-@end
-
 @interface FullscreenTitlebarTracker : NSTitlebarAccessoryViewController
 - (FullscreenTitlebarTracker*)init;
+@end
+
+@interface TitlebarGradientView : NSView
 @end
 
 // NSWindow subclass for handling windows with toolbars.
@@ -176,7 +176,7 @@ enum class NativeKeyBindingsType : uint8_t;
   // Will be nil if the window has neither a titlebar nor a unified toolbar.
   // This view is a subview of the window's content view and gets created and
   // destroyed by updateTitlebarView.
-  MOZTitlebarView* mTitlebarView;  // [STRONG]
+  TitlebarGradientView* mTitlebarGradientView;  // [STRONG]
   // mFullscreenTitlebarTracker attaches an invisible rectangle to the system
   // title bar. This allows us to detect when the title bar is showing in
   // fullscreen.
@@ -191,9 +191,17 @@ enum class NativeKeyBindingsType : uint8_t;
   CGFloat mInitialTitlebarHeight; 
   CGFloat mMenuBarHeight;
   NSRect mWindowButtonsRect;
+  NSRect mFullScreenButtonRect;
 }
+- (void)setUnifiedToolbarHeight:(CGFloat)aHeight;
+- (CGFloat)unifiedToolbarHeight;
+- (CGFloat)titlebarHeight;
+- (NSRect)titlebarRect;
+- (void)setTitlebarNeedsDisplay;
 - (void)setDrawsContentsIntoWindowFrame:(BOOL)aState;
 - (void)placeWindowButtons:(NSRect)aRect;
+- (void)placeFullScreenButton:(NSRect)aRect;
+- (NSPoint)fullScreenButtonPositionWithDefaultPosition:(NSPoint)aDefaultPosition;
 - (NSRect)windowButtonsRect;
 - (void)windowMainStateChanged;
 @end

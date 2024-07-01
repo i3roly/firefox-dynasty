@@ -22,10 +22,29 @@
   flex: 1;
 }
 
+@media (-moz-platform: macos) {
+  :root[inFullscreen] {
+    padding-top: 0; /* override drawintitlebar="true" */
+  }
+}
+
+%ifdef XP_MACOSX
+:root[inFullscreen="true"] {
+  padding-top: 0; /* override drawintitlebar="true" */
+}
+%endif
+
 /* Hide menu elements intended for keyboard access support */
 #main-menubar[openedwithkey=false] .show-only-for-keyboard {
   display: none;
 }
+
+%ifdef XP_MACOSX
+#titlebar-fullscreen-button {
+  appearance: auto;
+  -moz-default-appearance: -moz-mac-fullscreen-button;
+}
+%endif
 
 #navigator-toolbox ,
 #mainPopupSet {

@@ -53,6 +53,30 @@
 #  include "GLLibraryEGL.h"
 #endif
 
+#include <sys/utsname.h>
+
+//mavericks needs a bigger stack, optimised or not. so let's sing it one more
+//time.. i'm blue--da ba dee, da ba dai, da ba dee daba dai--box
+// See Source/WebKit/chromium/base/mac/mac_util.mm DarwinMajorVersionInternal for original source.
+static int readVersion() {
+    struct utsname info;
+    if (uname(&info) != 0) {
+        return 0;
+    }
+    if (strcmp(info.sysname, "Darwin") != 0) {
+        return 0;
+    }
+    char* dot = strchr(info.release, '.');
+    if (!dot) {
+        return 0;
+    }
+    int version = atoi(info.release);
+    return version;
+}
+static int darwinVersion() {
+    static int darwin_version = readVersion();
+    return darwin_version;
+}
 using namespace mozilla;
 
 static already_AddRefed<gl::GLContext> CreateGLContext(nsACString& aError);
@@ -128,6 +152,15 @@ void RenderThread::Start(uint32_t aNamespace) {
     stackSize = std::max(stackSize, 4096U << 10);
   }
 
+#if !defined(__OPTIMIZE__)
+  // swgl's draw_quad_spans will allocate ~1.5MB in no-opt builds
+  stackSize = std::max(stackSize, 4*1024*1024U);
+#endif
+
+  //optimised or not, mavericks needs a bigger stack
+  if(darwinVersion() <=13) {
+    stackSize = std::max(stackSize, 4*1024*1024U);
+  }
   RefPtr<nsIThread> thread;
   nsresult rv = NS_NewNamedThread(
       "Renderer", getter_AddRefs(thread),

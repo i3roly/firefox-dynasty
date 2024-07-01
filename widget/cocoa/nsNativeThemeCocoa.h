@@ -101,6 +101,11 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     bool rtl = false;
   };
 
+  struct UnifiedToolbarParams {
+    float unifiedHeight = 0.0f;
+    bool isMain = false;
+  };
+
   struct TextFieldParams {
     float verticalAlignFactor = 0.5f;
     bool insideToolbar = false;
@@ -151,6 +156,7 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     eSpinButtonDown,  // SpinButtonParams
     eSegment,         // SegmentParams
     eSeparator,
+    eNativeTitlebar,  // UnifiedToolbarParams
     eStatusBar,  // bool
     eGroupBox,
     eTextField,           // TextFieldParams
@@ -194,6 +200,10 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     static WidgetInfo Separator() {
       return WidgetInfo(Widget::eSeparator, false);
     }
+    static WidgetInfo NativeTitlebar(const UnifiedToolbarParams& aParams) {
+      return WidgetInfo(Widget::eNativeTitlebar, aParams);
+
+    }  
     static WidgetInfo StatusBar(bool aParams) {
       return WidgetInfo(Widget::eStatusBar, aParams);
     }
@@ -238,7 +248,7 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
 
     mozilla::Variant<mozilla::gfx::sRGBColor, CheckboxOrRadioParams,
                      ButtonParams, DropdownParams, SpinButtonParams,
-                     SegmentParams, TextFieldParams, ProgressParams,
+                     SegmentParams, UnifiedToolbarParams, TextFieldParams, ProgressParams,
                      MeterParams, ScaleParams, bool>
         mVariant;
 
@@ -289,7 +299,8 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
                                                const nsRect& aRect);
   void DrawProgress(CGContextRef context, const HIRect& inBoxRect,
                     const ProgressParams& aParams);
-
+  static void DrawNativeTitlebar(CGContextRef aContext, CGRect aTitlebarRect,
+                                 CGFloat aUnifiedHeight, BOOL aIsMain, BOOL aIsFlipped);
  protected:
   virtual ~nsNativeThemeCocoa();
 
@@ -350,6 +361,10 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
                       SpinButton aDrawnButton, const SpinButtonParams& aParams);
   void DrawToolbar(CGContextRef cgContext, const CGRect& inBoxRect,
                    bool aIsMain);
+  void DrawUnifiedToolbar(CGContextRef cgContext, const HIRect& inBoxRect,
+                          const UnifiedToolbarParams& aParams);
+  void DrawNativeTitlebar(CGContextRef aContext, CGRect aTitlebarRect,
+                          const UnifiedToolbarParams& aParams);
   void DrawStatusBar(CGContextRef cgContext, const HIRect& inBoxRect,
                      bool aIsMain);
   void DrawMultilineTextField(CGContextRef cgContext, const CGRect& inBoxRect,

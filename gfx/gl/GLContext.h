@@ -55,6 +55,10 @@ constexpr inline std::array<ElemT, 1 + sizeof...(More)> make_array(
 #  include "mozilla/ProfilerLabels.h"
 #endif
 
+#if defined(MOZ_WIDGET_COCOA)
+#  include "nsCocoaFeatures.h"
+#endif
+
 namespace mozilla {
 
 namespace gl {
