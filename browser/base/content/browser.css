@@ -4,6 +4,12 @@
 
 @namespace html url("http://www.w3.org/1999/xhtml");
 
+%ifdef XP_MACOSX
+#toolbar-menubar {
+  visibility: collapse;
+}
+%endif
+
 panelmultiview {
   align-items: flex-start;
   min-width: 0;
@@ -117,6 +123,18 @@ toolbar[overflowable][customizing] > .customization-target {
   flex: 1;
 }
 
+@media (-moz-platform: macos) {
+  :root[inFullscreen] {
+    padding-top: 0; /* override drawintitlebar="true" */
+  }
+}
+
+%ifdef XP_MACOSX
+:root[inFullscreen="true"] {
+  padding-top: 0; /* override drawintitlebar="true" */
+}
+%endif
+
 /* Hide menu elements intended for keyboard access support */
 #main-menubar[openedwithkey=false] .show-only-for-keyboard {
   display: none;
@@ -222,6 +240,13 @@ menupopup[emptyplacesresult="true"] > .hide-if-empty-places-result {
 :root[chromehidden~="location"][chromehidden~="toolbar"] toolbar:not(.chromeclass-menubar) {
   display: none;
 }
+
+%ifdef XP_MACOSX
+#titlebar-fullscreen-button {
+  appearance: auto;
+  -moz-default-appearance: -moz-mac-fullscreen-button;
+}
+%endif
 
 #navigator-toolbox ,
 #mainPopupSet {

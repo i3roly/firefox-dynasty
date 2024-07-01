@@ -1721,6 +1721,10 @@ void nsChildView::UpdateThemeGeometries(
   [win placeWindowButtons:[mView convertRect:DevPixelsToCocoaPoints(
                                                  windowButtonRect)
                                       toView:nil]];
+  LayoutDeviceIntRect fullScreenButtonRect =
+      FindFirstRectOfType(aThemeGeometries, eThemeGeometryTypeFullscreenButton);
+  [win placeFullScreenButton:[mView convertRect:DevPixelsToCocoaPoints(fullScreenButtonRect)
+                                         toView:nil]];
 }
 
 static Maybe<VibrancyType> ThemeGeometryTypeToVibrancyType(

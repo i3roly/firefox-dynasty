@@ -885,12 +885,23 @@ bool GLContext::InitImpl() {
     int maxTexSize = INT32_MAX;
     int maxCubeSize = INT32_MAX;
 #ifdef XP_MACOSX
-    // https://bugzilla.mozilla.org/show_bug.cgi?id=1544446
-    // Mojave exposes 16k textures, but gives FRAMEBUFFER_UNSUPPORTED for any
-    // 16k*16k FB except rgba8 without depth/stencil.
-    // The max supported sizes changes based on involved formats.
-    // (RGBA32F more restrictive than RGBA16F)
-    maxTexSize = 8192;
+    if (!nsCocoaFeatures::IsAtLeastVersion(10, 12)) {
+      if (mVendor == GLVendor::Intel) {
+        // see bug 737182 for 2D textures, bug 684882 for cube map textures.
+        maxTexSize = 4096;
+        maxCubeSize = 512;
+      } else if (mVendor == GLVendor::NVIDIA) {
+        // See bug 879656.  8192 fails, 8191 works.
+        maxTexSize = 8191;
+      }
+    } else {
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=1544446
+      // Mojave exposes 16k textures, but gives FRAMEBUFFER_UNSUPPORTED for any
+      // 16k*16k FB except rgba8 without depth/stencil.
+      // The max supported sizes changes based on involved formats.
+      // (RGBA32F more restrictive than RGBA16F)
+      maxTexSize = 8192;
+    }
 #endif
 #ifdef MOZ_X11
     if (mVendor == GLVendor::Nouveau) {

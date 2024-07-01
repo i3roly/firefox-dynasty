@@ -334,7 +334,7 @@ static void InflateControlRect(NSRect* rect, NSControlSize cocoaControlSize,
                                const float marginSet[][3][4]) {
   if (!marginSet) return;
 
-  static int osIndex = yosemiteOSorlater;
+  static int osIndex = nsCocoaFeatures::OnYosemiteOrLater() ? yosemiteOSorlater : leopardOSorlater;
   size_t controlSize = EnumSizeForCocoaSize(cocoaControlSize);
   const float* buttonMargins = marginSet[osIndex][controlSize];
   rect->origin.x -= buttonMargins[leftMargin];
@@ -835,6 +835,7 @@ static void DrawCellWithSnapping(NSCell* cell, CGContextRef cgContext,
 static void RenderWithCoreUI(CGRect aRect, CGContextRef cgContext,
                              NSDictionary* aOptions,
                              bool aSkipAreaCheck = false) {
+  
   if (!aSkipAreaCheck &&
       aRect.size.width * aRect.size.height > BITMAP_MAX_AREA) {
     return;
@@ -1971,6 +1972,74 @@ void nsNativeThemeCocoa::DrawSegment(CGContextRef cgContext,
   RenderWithCoreUI(drawRect, cgContext, dict);
 }
 
+void nsNativeThemeCocoa::DrawToolbar(CGContextRef cgContext, const CGRect& inBoxRect,
+                                     bool aIsMain) {
+  CGRect drawRect = inBoxRect;
+
+  // top border
+  drawRect.size.height = 1.0f;
+  DrawNativeGreyColorInRect(cgContext, toolbarTopBorderGrey, drawRect, aIsMain);
+
+  // background
+  drawRect.origin.y += drawRect.size.height;
+  drawRect.size.height = inBoxRect.size.height - 2.0f;
+  DrawNativeGreyColorInRect(cgContext, toolbarFillGrey, drawRect, aIsMain);
+
+  // bottom border
+  drawRect.origin.y += drawRect.size.height;
+  drawRect.size.height = 1.0f;
+  DrawNativeGreyColorInRect(cgContext, toolbarBottomBorderGrey, drawRect, aIsMain);
+}
+
+
+// By default, kCUIWidgetWindowFrame drawing draws rounded corners in the
+// upper corners. Depending on the context type, it fills the background in
+// the corners with black or leaves it transparent. Unfortunately, this corner
+// rounding interacts poorly with the window corner masking we apply during
+// titlebar drawing and results in small remnants of the corner background
+// appearing at the rounded edge.
+// So we draw square corners.
+static void DrawNativeTitlebarToolbarWithSquareCorners(CGContextRef aContext, const CGRect& aRect,
+                                                       CGFloat aUnifiedHeight, BOOL aIsMain,
+                                                       BOOL aIsFlipped) {
+  // We extend the draw rect horizontally and clip away the rounded corners.
+  const CGFloat extendHorizontal = 10;
+  CGRect drawRect = CGRectInset(aRect, -extendHorizontal, 0);
+  CGContextSaveGState(aContext);
+  CGContextClipToRect(aContext, aRect);
+
+  RenderWithCoreUI(
+      drawRect, aContext,
+      [NSDictionary
+          dictionaryWithObjectsAndKeys:@"kCUIWidgetWindowFrame", @"widget", @"regularwin",
+                                       @"windowtype", (aIsMain ? @"normal" : @"inactive"), @"state",
+                                       [NSNumber numberWithDouble:aUnifiedHeight],
+                                       @"kCUIWindowFrameUnifiedTitleBarHeightKey",
+                                       [NSNumber numberWithBool:YES],
+                                       @"kCUIWindowFrameDrawTitleSeparatorKey",
+                                       [NSNumber numberWithBool:aIsFlipped], @"is.flipped", nil]);
+
+  CGContextRestoreGState(aContext);
+}
+
+void nsNativeThemeCocoa::DrawUnifiedToolbar(CGContextRef cgContext, const HIRect& inBoxRect,
+                                            const UnifiedToolbarParams& aParams) {
+  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+
+  CGContextSaveGState(cgContext);
+  CGContextClipToRect(cgContext, inBoxRect);
+
+  CGFloat titlebarHeight = aParams.unifiedHeight - inBoxRect.size.height;
+  CGRect drawRect = CGRectMake(inBoxRect.origin.x, inBoxRect.origin.y - titlebarHeight,
+                               inBoxRect.size.width, inBoxRect.size.height + titlebarHeight);
+  DrawNativeTitlebarToolbarWithSquareCorners(cgContext, drawRect, aParams.unifiedHeight,
+                                             aParams.isMain, YES);
+
+  CGContextRestoreGState(cgContext);
+
+  NS_OBJC_END_TRY_ABORT_BLOCK;
+}
+
 void nsNativeThemeCocoa::DrawStatusBar(CGContextRef cgContext,
                                        const HIRect& inBoxRect, bool aIsMain) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
@@ -2002,6 +2071,18 @@ void nsNativeThemeCocoa::DrawStatusBar(CGContextRef cgContext,
   CGContextRestoreGState(cgContext);
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+void nsNativeThemeCocoa::DrawNativeTitlebar(CGContextRef aContext, CGRect aTitlebarRect,
+                                            CGFloat aUnifiedHeight, BOOL aIsMain, BOOL aIsFlipped) {
+  CGFloat unifiedHeight = std::max(aUnifiedHeight, aTitlebarRect.size.height);
+  DrawNativeTitlebarToolbarWithSquareCorners(aContext, aTitlebarRect, unifiedHeight, aIsMain,
+                                             aIsFlipped);
+}
+
+void nsNativeThemeCocoa::DrawNativeTitlebar(CGContextRef aContext, CGRect aTitlebarRect,
+                                            const UnifiedToolbarParams& aParams) {
+  DrawNativeTitlebar(aContext, aTitlebarRect, aParams.unifiedHeight, aParams.isMain, YES);
 }
 
 void nsNativeThemeCocoa::DrawMultilineTextField(CGContextRef cgContext,
@@ -2192,7 +2273,12 @@ Maybe<nsNativeThemeCocoa::WidgetInfo> nsNativeThemeCocoa::ComputeWidgetInfo(
       return Some(WidgetInfo::Separator());
 
     case StyleAppearance::MozWindowTitlebar: {
-      return Nothing();
+      NSWindow* win = NativeWindowForFrame(aFrame);
+      bool isMain = [win isMainWindow];
+      float unifiedToolbarHeight = [win isKindOfClass:[ToolbarWindow class]]
+                                       ? [(ToolbarWindow*)win unifiedToolbarHeight]
+                                       : nativeWidgetRect.Height();
+      return Some(WidgetInfo::NativeTitlebar(UnifiedToolbarParams{unifiedToolbarHeight, isMain}));
     }
 
     case StyleAppearance::Statusbar:
@@ -2419,6 +2505,12 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
           HIThemeSeparatorDrawInfo sdi = {0, kThemeStateActive};
           HIThemeDrawSeparator(&macRect, &sdi, cgContext, HITHEME_ORIENTATION);
           break;
+        }
+        case Widget::eNativeTitlebar: {
+          UnifiedToolbarParams params = aWidgetInfo.Params<UnifiedToolbarParams>();
+          DrawNativeTitlebar(cgContext, macRect, params);
+          break;
+
         }
         case Widget::eStatusBar: {
           bool isMain = aWidgetInfo.Params<bool>();
@@ -2835,6 +2927,15 @@ LayoutDeviceIntSize nsNativeThemeCocoa::GetMinimumWidgetSize(
       result.SizeTo(size.width, size.height);
       break;
     }
+    case StyleAppearance::MozMacFullscreenButton: {
+      if ([NativeWindowForFrame(aFrame) respondsToSelector:@selector(toggleFullScreen:)] &&
+          !nsCocoaFeatures::OnYosemiteOrLater()) {
+        // This value is hardcoded because it's needed before we can measure the
+        // position and size of the fullscreen button.
+        result.SizeTo(16, 17);
+      }
+      break;
+    }
 
     case StyleAppearance::ProgressBar: {
       SInt32 barHeight = 0;
@@ -2960,7 +3061,7 @@ bool nsNativeThemeCocoa::ThemeSupportsWidget(nsPresContext* aPresContext,
     case StyleAppearance::MozWindowTitlebar:
     case StyleAppearance::Menupopup:
     case StyleAppearance::Tooltip:
-
+    case StyleAppearance::MozMacFullscreenButton:
     case StyleAppearance::Checkbox:
     case StyleAppearance::Radio:
     case StyleAppearance::MozMacHelpButton:
@@ -3069,6 +3170,8 @@ nsITheme::ThemeGeometryType nsNativeThemeCocoa::ThemeGeometryTypeForWidget(
       return eThemeGeometryTypeTitlebar;
     case StyleAppearance::MozWindowButtonBox:
       return eThemeGeometryTypeWindowButtons;
+    case StyleAppearance::MozMacFullscreenButton:
+      return eThemeGeometryTypeFullscreenButton;
     default:
       return eThemeGeometryTypeUnknown;
   }

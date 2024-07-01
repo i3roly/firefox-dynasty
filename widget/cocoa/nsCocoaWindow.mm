@@ -3099,6 +3099,7 @@ void nsCocoaWindow::CocoaWindowDidResize() {
 
 @interface NSView (FrameViewMethodSwizzling)
 - (NSPoint)FrameView__closeButtonOrigin;
+- (NSPoint)FrameView__fullScreenButtonOrigin;
 - (CGFloat)FrameView__titlebarHeight;
 @end
 
@@ -3135,6 +3136,16 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   return self.FrameView__closeButtonOrigin;
 }
 
+- (NSPoint)FrameView__fullScreenButtonOrigin {
+  NSPoint defaultPosition = [self FrameView__fullScreenButtonOrigin];
+  if ([[self window] isKindOfClass:[ToolbarWindow class]]) {
+    return
+        [(ToolbarWindow*)[self window] fullScreenButtonPositionWithDefaultPosition:defaultPosition];
+  }
+  return defaultPosition;
+
+}
+
 - (CGFloat)FrameView__titlebarHeight {
   // XXX: Shouldn't this be [super FrameView__titlebarHeight]?
   CGFloat height = [self FrameView__titlebarHeight];
@@ -3144,6 +3155,7 @@ void nsCocoaWindow::CocoaWindowDidResize() {
     // the bottom left corner of the window.
     auto* win = static_cast<ToolbarWindow*>(self.window);
     CGFloat frameHeight = self.frame.size.height;
+    NSPoint pointAboveWindow = {0.0, frameHeight};
     CGFloat windowButtonY = frameHeight;
     if (!NSIsEmptyRect(win.windowButtonsRect) &&
         win.drawsContentsIntoWindowFrame &&
@@ -3151,11 +3163,14 @@ void nsCocoaWindow::CocoaWindowDidResize() {
         (win.styleMask & NSWindowStyleMaskTitled)) {
       windowButtonY = win.windowButtonsRect.origin.y;
     }
-    height = std::max(height, frameHeight - windowButtonY);
+    CGFloat fullScreenButtonY =
+      [win fullScreenButtonPositionWithDefaultPosition:pointAboveWindow].y;
+    CGFloat maxDistanceFromWindowTopToButtonBottom =
+      std::max(frameHeight - windowButtonY, frameHeight - fullScreenButtonY);
+  height = std::max(height, maxDistanceFromWindowTopToButtonBottom);
   }
   return height;
 }
-
 @end
 
 static NSMutableSet* gSwizzledFrameViewClasses = nil;
@@ -3223,6 +3238,8 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 
   static IMP our_closeButtonOrigin = class_getMethodImplementation(
       [NSView class], @selector(FrameView__closeButtonOrigin));
+  static IMP our_fullScreenButtonOrigin =
+    class_getMethodImplementation([NSView class], @selector(FrameView__fullScreenButtonOrigin)); 
   static IMP our_titlebarHeight = class_getMethodImplementation(
       [NSView class], @selector(FrameView__titlebarHeight));
 
@@ -3238,7 +3255,14 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
       nsToolkit::SwizzleMethods(frameViewClass, @selector(_closeButtonOrigin),
                                 @selector(FrameView__closeButtonOrigin));
     }
+    
+    IMP _fullScreenButtonOrigin =
+        class_getMethodImplementation(frameViewClass, @selector(_fullScreenButtonOrigin));
+    if (_fullScreenButtonOrigin && _fullScreenButtonOrigin != our_fullScreenButtonOrigin) {
+      nsToolkit::SwizzleMethods(frameViewClass, @selector(_fullScreenButtonOrigin),
+                                @selector(FrameView__fullScreenButtonOrigin));
 
+    }
     // Override _titlebarHeight so that the floating titlebar doesn't clip the
     // bottom of the window buttons which we move down with our override of
     // _closeButtonOrigin.
@@ -3424,7 +3448,7 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
     return aFrameRect;
   }
   NSUInteger styleMask = [self styleMask];
-  styleMask &= ~NSWindowStyleMaskFullSizeContentView;
+  styleMask &= ~NSFullSizeContentViewWindowMask;
   return [NSWindow contentRectForFrameRect:aFrameRect styleMask:styleMask];
 }
 
@@ -3433,7 +3457,7 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
     return aChildViewRect;
   }
   NSUInteger styleMask = [self styleMask];
-  styleMask &= ~NSWindowStyleMaskFullSizeContentView;
+  styleMask &= ~NSFullSizeContentViewWindowMask;
   return [NSWindow frameRectForContentRect:aChildViewRect styleMask:styleMask];
 }
 
@@ -3610,45 +3634,6 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
 }
 
 @end
-@implementation MOZTitlebarView
-
-- (instancetype)initWithFrame:(NSRect)aFrame {
-  self = [super initWithFrame:aFrame];
-
-  self.material = NSVisualEffectMaterialTitlebar;
-  self.blendingMode = NSVisualEffectBlendingModeWithinWindow;
-
-  // Add a separator line at the bottom of the titlebar. NSBoxSeparator isn't a perfect match for
-  // a native titlebar separator, but it's better than nothing.
-  // We really want the appearance that _NSTitlebarDecorationView creates with the help of CoreUI,
-  // but there's no public API for that.
-  NSBox* separatorLine = [[NSBox alloc] initWithFrame:NSMakeRect(0, 0, aFrame.size.width, 1)];
-  separatorLine.autoresizingMask = NSViewWidthSizable | NSViewMaxYMargin;
-  separatorLine.boxType = NSBoxSeparator;
-  [self addSubview:separatorLine];
-  [separatorLine release];
-
-  return self;
-}
-
-- (BOOL)mouseDownCanMoveWindow {
-  return YES;
-}
-
-- (void)mouseUp:(NSEvent*)event {
-  if ([event clickCount] == 2) {
-    // Handle titlebar double click. We don't get the window's default behavior here because the
-    // window uses NSWindowStyleMaskFullSizeContentView, and this view (the titlebar gradient view)
-    // is technically part of the window "contents" (it's a subview of the content view).
-    if (nsCocoaUtils::ShouldZoomOnTitlebarDoubleClick()) {
-      [[self window] performZoom:nil];
-    } else if (nsCocoaUtils::ShouldMinimizeOnTitlebarDoubleClick()) {
-      [[self window] performMiniaturize:nil];
-    }
-  }
-}
-
-@end
 @interface MOZTitlebarAccessoryView : NSView
 @end
 
@@ -3718,6 +3703,38 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   return false;
 }
 
+@implementation TitlebarGradientView
+
+- (void)drawRect:(NSRect)aRect {
+  CGContextRef ctx = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+  ToolbarWindow* window = (ToolbarWindow*)[self window];
+  nsNativeThemeCocoa::DrawNativeTitlebar(ctx, NSRectToCGRect([self bounds]),
+                                         [window unifiedToolbarHeight], [window isMainWindow], NO);
+}
+
+- (BOOL)isOpaque {
+  return YES;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+  return YES;
+}
+
+- (void)mouseUp:(NSEvent*)event {
+  if ([event clickCount] == 2) {
+    // Handle titlebar double click. We don't get the window's default behavior here because the
+    // window uses NSWindowStyleMaskFullSizeContentView, and this view (the titlebar gradient view)
+    // is technically part of the window "contents" (it's a subview of the content view).
+    if (nsCocoaUtils::ShouldZoomOnTitlebarDoubleClick()) {
+      [[self window] performZoom:nil];
+    } else if (nsCocoaUtils::ShouldMinimizeOnTitlebarDoubleClick()) {
+      [[self window] performMiniaturize:nil];
+    }
+  }
+}
+
+@end
+
 @implementation ToolbarWindow
 
 - (id)initWithContentRect:(NSRect)aChildViewRect
@@ -3745,7 +3762,7 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   // lets us toggle the titlebar on and off without changing the window's style
   // mask (which would have other subtle effects, for example on keyboard
   // focus).
-     aStyle |= NSWindowStyleMaskFullSizeContentView;
+     aStyle |= NSFullSizeContentViewWindowMask;
   }
   // -[NSWindow initWithContentRect:styleMask:backing:defer:] calls
   // [self frameRectForContentRect:styleMask:] to convert the supplied content
@@ -3758,12 +3775,11 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
                                styleMask:aStyle
                                  backing:aBufferingType
                                    defer:aFlag])) {
-    mWindowButtonsRect = NSZeroRect;
-    
-    mTitlebarView = nil;
+    mTitlebarGradientView = nil;
     mUnifiedToolbarHeight = 22.0f;
     mSheetAttachmentPosition = aChildViewRect.size.height;
-    mInitialTitlebarHeight = [self titlebarHeight];
+    mWindowButtonsRect = NSZeroRect;
+    mFullScreenButtonRect = NSZeroRect;
 
     if ([self respondsToSelector:@selector(setTitlebarAppearsTransparent:)]) 
       self.titlebarAppearsTransparent = YES;
@@ -3771,7 +3787,6 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
     if (@available(macOS 11.0, *)) {
       self.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
-    [self updateTitlebarView];
 
     if(@available(macOS 10.10, *)) {
       mFullscreenTitlebarTracker = [[FullscreenTitlebarTracker alloc] init];
@@ -3788,10 +3803,25 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
         addTitlebarAccessoryViewController:mFullscreenTitlebarTracker];
 
     }
-  
-  }return self;
+  [self updateTitlebarGradientViewPresence];
+  }
+  return self;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
+}
+
+
+- (void)updateTitlebarGradientViewPresence {
+  BOOL needTitlebarView = ![self drawsContentsIntoWindowFrame];
+  if (needTitlebarView && !mTitlebarGradientView) {
+    mTitlebarGradientView = [[TitlebarGradientView alloc] initWithFrame:[self titlebarRect]];
+    mTitlebarGradientView.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
+    [self.contentView addSubview:mTitlebarGradientView positioned:NSWindowBelow relativeTo:nil];
+  } else if (!needTitlebarView && mTitlebarGradientView) {
+    [mTitlebarGradientView removeFromSuperview];
+    [mTitlebarGradientView release];
+    mTitlebarGradientView = nil;
+  }
 }
 
 - (void)observeValueForKeyPath:(NSString*)keyPath
@@ -3882,13 +3912,19 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 - (void)dealloc {
   [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
   [mFullscreenTitlebarTracker removeFromParentViewController];
+  [mTitlebarGradientView release];
   [mFullscreenTitlebarTracker release];
 
   [super dealloc];
 }
 
 - (NSArray<NSView*>*)contentViewContents {
-  return [[self.contentView.subviews copy] autorelease];
+  NSMutableArray<NSView*>* contents = [[[self contentView] subviews] mutableCopy];
+  if (mTitlebarGradientView) {
+    // Do not include the titlebar gradient view in the returned array.
+    [contents removeObject:mTitlebarGradientView];
+  }
+  return [contents autorelease];
 }
 
 // Override methods that translate between content rect and frame rect.
@@ -3914,7 +3950,7 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 - (void)setContentView:(NSView*)aView {
   [super setContentView:aView];
 
-  if (!([self styleMask] & NSWindowStyleMaskFullSizeContentView)) {
+  if (!([self styleMask] & NSFullSizeContentViewWindowMask)) {
     // Move the contentView to the bottommost layer so that it's guaranteed
     // to be under the window buttons.
     // When the window uses the NSFullSizeContentViewMask, this manual
@@ -3937,8 +3973,9 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 }
 
 - (void)setTitlebarNeedsDisplay {
-  [mTitlebarView setNeedsDisplay:YES];
+  [mTitlebarGradientView setNeedsDisplay:YES];
 }
+
 
 - (NSRect)titlebarRect {
   CGFloat titlebarHeight = [self titlebarHeight];
@@ -3963,10 +4000,12 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   // titlebarHeight of zero.
   NSRect frameRect = [self frame];
   NSUInteger styleMask = [self styleMask];
-  styleMask &= ~NSWindowStyleMaskFullSizeContentView;
+  styleMask &= ~NSFullSizeContentViewWindowMask;
   NSRect originalContentRect = [NSWindow contentRectForFrameRect:frameRect styleMask:styleMask];
   return NSMaxY(frameRect) - NSMaxY(originalContentRect);
+
 }
+
 
 // Stores the complete height of titlebar + toolbar.
 - (void)setUnifiedToolbarHeight:(CGFloat)aHeight {
@@ -3974,24 +4013,9 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 
   mUnifiedToolbarHeight = aHeight;
 
-  [self updateTitlebarView];
 
 }
 
-- (void)updateTitlebarView {
-  BOOL needTitlebarView = ![self drawsContentsIntoWindowFrame] || mUnifiedToolbarHeight > 0;
-  if (needTitlebarView && !mTitlebarView) {
-    mTitlebarView = [[MOZTitlebarView alloc] initWithFrame:[self unifiedToolbarRect]];
-    mTitlebarView.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
-    [self.contentView addSubview:mTitlebarView positioned:NSWindowBelow relativeTo:nil];
-  } else if (needTitlebarView && mTitlebarView) {
-    mTitlebarView.frame = [self unifiedToolbarRect];
-  } else if (!needTitlebarView && mTitlebarView) {
-    [mTitlebarView removeFromSuperview];
-    [mTitlebarView release];
-    mTitlebarView = nil;
-  }
-}
 
 // Extending the content area into the title bar works by resizing the
 // mainChildView so that it covers the titlebar.
@@ -4016,6 +4040,23 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
     // we'll send a mouse move event with the correct new position.
     ChildViewMouseTracker::ResendLastMouseMoveEvent();
   }
+  [self updateTitlebarGradientViewPresence];
+}
+
+- (void)placeFullScreenButton:(NSRect)aRect {
+  if (!NSEqualRects(mFullScreenButtonRect, aRect)) {
+    mFullScreenButtonRect = aRect;
+    [self reflowTitlebarElements];
+  }
+}
+
+- (NSPoint)fullScreenButtonPositionWithDefaultPosition:(NSPoint)aDefaultPosition {
+  if ([self drawsContentsIntoWindowFrame] && !NSIsEmptyRect(mFullScreenButtonRect)) {
+    return NSMakePoint(std::min(mFullScreenButtonRect.origin.x, aDefaultPosition.x),
+                       std::min(mFullScreenButtonRect.origin.y, aDefaultPosition.y));
+  }
+  return aDefaultPosition;
+
 }
 
 - (void)placeWindowButtons:(NSRect)aRect {
@@ -4023,6 +4064,23 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
     mWindowButtonsRect = aRect;
     [self reflowTitlebarElements];
   }
+}
+
+- (NSPoint)windowButtonsPositionWithDefaultPosition:(NSPoint)aDefaultPosition {
+  NSInteger styleMask = [self styleMask];
+  if ([self drawsContentsIntoWindowFrame] && !(styleMask & NSFullScreenWindowMask) &&
+      (styleMask & NSTitledWindowMask)) {
+    if (NSIsEmptyRect(mWindowButtonsRect)) {
+      // Empty rect. Let's hide the buttons.
+      // Position is in non-flipped window coordinates. Using frame's height
+      // for the vertical coordinate will move the buttons above the window,
+      // making them invisible.
+      return NSMakePoint(0, [self frame].size.height);
+    }
+    return NSMakePoint(mWindowButtonsRect.origin.x, mWindowButtonsRect.origin.y);
+  }
+  return aDefaultPosition;
+
 }
 
 - (NSRect)windowButtonsRect {
