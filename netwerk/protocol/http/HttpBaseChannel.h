@@ -356,8 +356,6 @@ class HttpBaseChannel : public nsHashPropertyBag,
                          nsIHttpUpgradeListener* aListener) override;
   void DoDiagnosticAssertWhenOnStopNotCalledOnDestroy() override;
 
-  NS_IMETHOD SetWaitForHTTPSSVCRecord() override;
-
   NS_IMETHOD SetEarlyHintPreloaderId(uint64_t aEarlyHintPreloaderId) override;
   NS_IMETHOD GetEarlyHintPreloaderId(uint64_t* aEarlyHintPreloaderId) override;
 
@@ -653,7 +651,7 @@ class HttpBaseChannel : public nsHashPropertyBag,
   static void CallTypeSniffers(void* aClosure, const uint8_t* aData,
                                uint32_t aCount);
 
-  nsresult CheckRedirectLimit(uint32_t aRedirectFlags) const;
+  nsresult CheckRedirectLimit(nsIURI* aNewURI, uint32_t aRedirectFlags) const;
 
   bool MaybeWaitForUploadStreamNormalization(nsIStreamListener* aListener,
                                              nsISupports* aContext);
@@ -1016,6 +1014,9 @@ class HttpBaseChannel : public nsHashPropertyBag,
   bool mDummyChannelForImageCache;
 
   bool mHasContentDecompressed;
+
+  // A flag that should be false if render-blocking is not stated
+  bool mRenderBlocking;
 
   // clang-format off
   MOZ_ATOMIC_BITFIELDS(mAtomicBitfields3, 8, (

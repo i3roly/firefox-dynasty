@@ -21,6 +21,7 @@ import mozilla.telemetry.glean.config.Configuration as GleanCoreConfiguration
  * @property maxEvents (optional) the number of events to store before the events ping is sent
  * @property enableEventTimestamps (Experimental) Whether to add a wallclock timestamp to all events.
  * @property delayPingLifetimeIo Whether Glean should delay persistence of data from metrics with ping lifetime.
+ *
  */
 data class Configuration @JvmOverloads constructor(
     val httpClient: PingUploader,

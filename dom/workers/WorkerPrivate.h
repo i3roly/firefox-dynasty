@@ -355,7 +355,7 @@ class WorkerPrivate final
 
   void UnrootGlobalScopes();
 
-  bool InterruptCallback(JSContext* aCx);
+  MOZ_CAN_RUN_SCRIPT bool InterruptCallback(JSContext* aCx);
 
   bool IsOnCurrentThread();
 
@@ -536,6 +536,7 @@ class WorkerPrivate final
 
   void ClearPreStartRunnables();
 
+  MOZ_CAN_RUN_SCRIPT void ProcessSingleDebuggerRunnable();
   void ClearDebuggerEventQueue();
 
   void OnProcessNextEvent();
@@ -629,6 +630,13 @@ class WorkerPrivate final
 
     MutexAutoLock lock(mMutex);
     return mParentStatus < Canceling;
+  }
+
+  // This method helps know if the Worker is already at Dead status.
+  // Note that it is racy. The status may change after the function returns.
+  bool IsDead() MOZ_EXCLUDES(mMutex) {
+    MutexAutoLock lock(mMutex);
+    return mStatus == Dead;
   }
 
   WorkerStatus ParentStatusProtected() {
@@ -1059,6 +1067,7 @@ class WorkerPrivate final
   nsresult DispatchToParent(already_AddRefed<WorkerRunnable> aRunnable);
 
   bool IsOnParentThread() const;
+  void DebuggerInterruptRequest();
 
 #ifdef DEBUG
   void AssertIsOnParentThread() const;
@@ -1374,7 +1383,8 @@ class WorkerPrivate final
   WorkerDebugger* mDebugger;
 
   workerinternals::Queue<WorkerRunnable*, 4> mControlQueue;
-  workerinternals::Queue<WorkerRunnable*, 4> mDebuggerQueue;
+  workerinternals::Queue<WorkerRunnable*, 4> mDebuggerQueue
+      MOZ_GUARDED_BY(mMutex);
 
   // Touched on multiple threads, protected with mMutex. Only modified on the
   // worker thread
@@ -1517,6 +1527,13 @@ class WorkerPrivate final
     uint32_t mCurrentTimerNestingLevel;
 
     bool mFrozen;
+
+    // This flag is set by the debugger interrupt control runnable to indicate
+    // that we want to process debugger runnables as part of control runnable
+    // processing, which is something we don't normally want to do. The flag is
+    // cleared after processing the debugger runnables.
+    bool mDebuggerInterruptRequested;
+
     bool mTimerRunning;
     bool mRunningExpiredTimeouts;
     bool mPeriodicGCTimerRunning;
@@ -1560,6 +1577,16 @@ class WorkerPrivate final
   bool mMainThreadObjectsForgotten;
   bool mIsChromeWorker;
   bool mParentFrozen;
+
+  // In order to ensure that the debugger can interrupt a busy worker,
+  // including when atomics are used, we reuse the worker's existing
+  // JS Interrupt facility used by control runnables.
+  // Rather that triggering an interrupt immediately when a debugger runnable
+  // is dispatched, we instead start a timer that will fire if we haven't
+  // already processed the runnable, targeting the timer's callback at the
+  // control event target. This allows existing runnables that were going to
+  // finish in a timely fashion to finish.
+  nsCOMPtr<nsITimer> mDebuggerInterruptTimer MOZ_GUARDED_BY(mMutex);
 
   // mIsSecureContext is set once in our constructor; after that it can be read
   // from various threads.

@@ -594,8 +594,8 @@ def target_tasks_mozilla_release(full_task_graph, parameters, graph_config):
     ]
 
 
-@register_target_task("mozilla_esr115_tasks")
-def target_tasks_mozilla_esr115(full_task_graph, parameters, graph_config):
+@register_target_task("mozilla_esr128_tasks")
+def target_tasks_mozilla_esr128(full_task_graph, parameters, graph_config):
     """Select the set of tasks required for a promotable beta or release build
     of desktop, without android CI. The candidates build process involves a pipeline
     of builds and signing, but does not include beetmover or balrog jobs."""
@@ -609,7 +609,7 @@ def target_tasks_mozilla_esr115(full_task_graph, parameters, graph_config):
 
         platform = task.attributes.get("build_platform")
 
-        # Android is not built on esr115.
+        # Android is not built on esr.
         if platform and "android" in platform:
             return False
 
@@ -707,6 +707,21 @@ def target_tasks_ship_desktop(full_task_graph, parameters, graph_config):
         return not is_rc
 
     return [l for l, t in full_task_graph.tasks.items() if filter(t)]
+
+
+@register_target_task("cypress_tasks")
+def target_tasks_cypress(full_task_graph, parameters, graph_config):
+    filtered_for_project = target_tasks_default(
+        full_task_graph, parameters, graph_config
+    )
+
+    def filter(task):
+        # bug 1899403: no need for android tasks
+        if "android" in task.attributes.get("build_platform", ""):
+            return False
+        return True
+
+    return [l for l in filtered_for_project if filter(full_task_graph[l])]
 
 
 @register_target_task("pine_tasks")
@@ -816,6 +831,10 @@ def target_tasks_general_perf_testing(full_task_graph, parameters, graph_config)
         # Desktop selection
         if accept_raptor_desktop_build(platform):
             # Select some browsertime tasks as desktop smoke-tests
+            if "responsiveness" in try_name and "chrome" in try_name:
+                # Disabled chrome responsiveness tests temporarily in bug 1898351
+                # due to frequent failures
+                return False
             if "browsertime" in try_name:
                 if "chrome" in try_name:
                     if "tp6" in try_name and "essential" not in try_name:
@@ -837,6 +856,8 @@ def target_tasks_general_perf_testing(full_task_graph, parameters, graph_config)
         elif accept_raptor_android_build(platform):
             if "hw-s21" in platform and "speedometer3" not in try_name:
                 return False
+            if "chrome-m" in try_name and "essential" in try_name:
+                return True
             if "chrome-m" in try_name and (
                 ("ebay" in try_name and "live" not in try_name)
                 or (
@@ -1010,18 +1031,19 @@ def target_tasks_daily_releases(full_task_graph, parameters, graph_config):
 def target_tasks_nightly_desktop(full_task_graph, parameters, graph_config):
     """Select the set of tasks required for a nightly build of linux, mac,
     windows."""
-    index_path = (
-        f"{graph_config['trust-domain']}.v2.{parameters['project']}.revision."
-        f"{parameters['head_rev']}.taskgraph.decision-nightly-desktop"
-    )
-    if os.environ.get("MOZ_AUTOMATION") and retry(
-        index_exists,
-        args=(index_path,),
-        kwargs={
-            "reason": "to avoid triggering multiple nightlies off the same revision",
-        },
-    ):
-        return []
+    for platform in ("desktop", "all"):
+        index_path = (
+            f"{graph_config['trust-domain']}.v2.{parameters['project']}.revision."
+            f"{parameters['head_rev']}.taskgraph.decision-nightly-{platform}"
+        )
+        if os.environ.get("MOZ_AUTOMATION") and retry(
+            index_exists,
+            args=(index_path,),
+            kwargs={
+                "reason": "to avoid triggering multiple nightlies off the same revision",
+            },
+        ):
+            return []
 
     # Tasks that aren't platform specific
     release_filter = make_desktop_nightly_filter({None})
@@ -1073,6 +1095,7 @@ def target_tasks_searchfox(full_task_graph, parameters, graph_config):
     return [
         "searchfox-linux64-searchfox/debug",
         "searchfox-macosx64-searchfox/debug",
+        "searchfox-macosx64-aarch64-searchfox/debug",
         "searchfox-win64-searchfox/debug",
         "searchfox-android-armv7-searchfox/debug",
         "searchfox-ios-searchfox/debug",
@@ -1201,7 +1224,7 @@ def target_tasks_release_simulation(full_task_graph, parameters, graph_config):
         "nightly": "mozilla-central",
         "beta": "mozilla-beta",
         "release": "mozilla-release",
-        "esr115": "mozilla-esr115",
+        "esr128": "mozilla-esr128",
     }
     target_project = project_by_release.get(parameters["release_type"])
     if target_project is None:
@@ -1614,6 +1637,10 @@ def target_tasks_snap_upstream_tests(full_task_graph, parameters, graph_config):
 @register_target_task("nightly-android")
 def target_tasks_nightly_android(full_task_graph, parameters, graph_config):
     def filter(task, parameters):
+        # bug 1899553: don't automatically schedule uploads to google play
+        if task.kind == "push-bundle":
+            return False
+
         # geckoview
         if task.attributes.get("shipping_product") == "fennec" and task.kind in (
             "beetmover-geckoview",
@@ -1631,18 +1658,19 @@ def target_tasks_nightly_android(full_task_graph, parameters, graph_config):
             "focus-nightly-firebase",
         )
 
-    index_path = (
-        f"{graph_config['trust-domain']}.v2.{parameters['project']}.branch."
-        f"{parameters['head_ref']}.revision.{parameters['head_rev']}.taskgraph.decision-nightly-android"
-    )
-    if os.environ.get("MOZ_AUTOMATION") and retry(
-        index_exists,
-        args=(index_path,),
-        kwargs={
-            "reason": "to avoid triggering multiple nightlies off the same revision",
-        },
-    ):
-        return []
+    for platform in ("android", "all"):
+        index_path = (
+            f"{graph_config['trust-domain']}.v2.{parameters['project']}.revision."
+            f"{parameters['head_rev']}.taskgraph.decision-nightly-{platform}"
+        )
+        if os.environ.get("MOZ_AUTOMATION") and retry(
+            index_exists,
+            args=(index_path,),
+            kwargs={
+                "reason": "to avoid triggering multiple nightlies off the same revision",
+            },
+        ):
+            return []
 
     return [l for l, t in full_task_graph.tasks.items() if filter(t, parameters)]
 

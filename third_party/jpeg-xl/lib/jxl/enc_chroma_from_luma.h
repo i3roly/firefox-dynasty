@@ -9,6 +9,8 @@
 // Chroma-from-luma, computed using heuristics to determine the best linear
 // model for the X and B channels from the Y channel.
 
+#include <jxl/memory_manager.h>
+
 #include <cstddef>
 #include <hwy/aligned_allocator.h>
 
@@ -26,12 +28,11 @@ namespace jxl {
 struct AuxOut;
 class Quantizer;
 
-void ColorCorrelationMapEncodeDC(const ColorCorrelationMap& map,
-                                 BitWriter* writer, size_t layer,
-                                 AuxOut* aux_out);
+void ColorCorrelationEncodeDC(const ColorCorrelation& color_correlation,
+                              BitWriter* writer, size_t layer, AuxOut* aux_out);
 
 struct CfLHeuristics {
-  Status Init(const Rect& rect);
+  Status Init(JxlMemoryManager* memory_manager, const Rect& rect);
 
   void PrepareForThreads(size_t num_threads) {
     mem = hwy::AllocateAligned<float>(num_threads * ItemsPerThread());

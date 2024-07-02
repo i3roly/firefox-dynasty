@@ -31,6 +31,7 @@ WPT_SUBSUITES = {
     "canvas": "html/canvas",
     "webgpu": "_mozilla/webgpu",
     "privatebrowsing": "/service-workers/cache-storage",
+    "webcodecs": "webcodecs",
 }
 
 
@@ -135,6 +136,8 @@ def guess_mozinfo_from_task(task, repo=""):
             info[tag] = True
         else:
             info[tag] = False
+
+    info["automation"] = True
     return info
 
 

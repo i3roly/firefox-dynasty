@@ -73,7 +73,6 @@
 #include "nsGenericHTMLElement.h"
 #include "nsContentCreatorFunctions.h"
 #include "nsView.h"
-#include "nsIScrollableFrame.h"
 #include "ChildIterator.h"
 #include "mozilla/dom/NodeListBinding.h"
 #include "mozilla/dom/MutationObservers.h"
@@ -1870,7 +1869,8 @@ void FragmentOrElement::GetMarkup(bool aIncludeSelf, nsAString& aMarkup) {
 
   Document* doc = OwnerDoc();
   if (IsInHTMLDocument()) {
-    nsContentUtils::SerializeNodeToMarkup(this, !aIncludeSelf, aMarkup);
+    nsContentUtils::SerializeNodeToMarkup(this, !aIncludeSelf, aMarkup, false,
+                                          {});
     return;
   }
 

@@ -24,11 +24,13 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.browser.browsingmode.SimpleBrowsingModeManager
+import org.mozilla.fenix.collections.SaveCollectionStep
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.components.menu.compose.EXTENSIONS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.SAVE_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.TOOLS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.middleware.MenuNavigationMiddleware
+import org.mozilla.fenix.components.menu.store.BookmarkState
 import org.mozilla.fenix.components.menu.store.BrowserMenuState
 import org.mozilla.fenix.components.menu.store.MenuAction
 import org.mozilla.fenix.components.menu.store.MenuState
@@ -256,6 +258,84 @@ class MenuNavigationMiddlewareTest {
         store.dispatch(MenuAction.Navigate.Back).join()
 
         verify { navHostController.popBackStack() }
+    }
+
+    @Test
+    fun `GIVEN there are existing tab collections WHEN navigate to save to collection action is dispatched THEN navigate to select collection creation`() = runTest {
+        val tab = createTab(url = "https://www.mozilla.org")
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = BrowserMenuState(
+                    selectedTab = tab,
+                ),
+            ),
+        )
+
+        store.dispatch(MenuAction.Navigate.SaveToCollection(hasCollection = true)).join()
+
+        verify {
+            navController.nav(
+                R.id.menuDialogFragment,
+                MenuDialogFragmentDirections.actionGlobalCollectionCreationFragment(
+                    tabIds = arrayOf(tab.id),
+                    selectedTabIds = arrayOf(tab.id),
+                    saveCollectionStep = SaveCollectionStep.SelectCollection,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `GIVEN there are no existing tab collections WHEN navigate to save to collection action is dispatched THEN navigate to new collection creation`() = runTest {
+        val tab = createTab(url = "https://www.mozilla.org")
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = BrowserMenuState(
+                    selectedTab = tab,
+                ),
+            ),
+        )
+
+        store.dispatch(MenuAction.Navigate.SaveToCollection(hasCollection = false)).join()
+
+        verify {
+            navController.nav(
+                R.id.menuDialogFragment,
+                MenuDialogFragmentDirections.actionGlobalCollectionCreationFragment(
+                    tabIds = arrayOf(tab.id),
+                    selectedTabIds = arrayOf(tab.id),
+                    saveCollectionStep = SaveCollectionStep.NameCollection,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `WHEN navigate to edit bookmark action is dispatched THEN navigate to bookmark edit fragment`() = runTest {
+        val tab = createTab(url = "https://www.mozilla.org")
+        val store = createStore(
+            menuState = MenuState(
+                browserMenuState = BrowserMenuState(
+                    selectedTab = tab,
+                    bookmarkState = BookmarkState(
+                        guid = BookmarkRoot.Mobile.id,
+                        isBookmarked = true,
+                    ),
+                ),
+            ),
+        )
+
+        store.dispatch(MenuAction.Navigate.EditBookmark).join()
+
+        verify {
+            navController.nav(
+                R.id.menuDialogFragment,
+                MenuDialogFragmentDirections.actionGlobalBookmarkEditFragment(
+                    guidToEdit = BookmarkRoot.Mobile.id,
+                    requiresSnackbarPaddingForToolbar = true,
+                ),
+            )
+        }
     }
 
     @Test

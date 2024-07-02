@@ -175,6 +175,8 @@ support-files = [
 
 ["browser_closePanelOnClick.js"]
 
+["browser_close_other_panels.js"]
+
 ["browser_content_opener.js"]
 
 ["browser_contextualsearch.js"]
@@ -617,6 +619,7 @@ https_first_disabled = true
 https_first_disabled = true
 
 ["browser_url_formatted_correctly_on_load.js"]
+https_first_disabled = true
 
 ["browser_urlbar_annotation.js"]
 support-files = ["redirect_to.sjs"]

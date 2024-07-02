@@ -442,6 +442,33 @@ void Gecko_StyleSheet_Release(const StyleSheet* aSheet) {
   const_cast<StyleSheet*>(aSheet)->Release();
 }
 
+GeckoImplicitScopeRoot Gecko_StyleSheet_ImplicitScopeRoot(
+    const mozilla::StyleSheet* aSheet) {
+  if (aSheet->IsConstructed()) {
+    return GeckoImplicitScopeRoot{
+        .mHost = nullptr, .mRoot = nullptr, .mConstructed = true};
+  }
+  // https://drafts.csswg.org/css-cascade-6/#scope-limits
+  // "If no <scope-start> is specified, the scoping root is the parent element
+  // of the owner node of the stylesheet where the @scope rule is defined."
+  const auto* node = aSheet->GetOwnerNodeOfOutermostSheet();
+  if (!node) {
+    return GeckoImplicitScopeRoot{
+        .mHost = nullptr, .mRoot = nullptr, .mConstructed = false};
+  }
+  const auto* host = node->GetContainingShadowHost();
+
+  if (auto* aElement = node->GetParentElement()) {
+    return GeckoImplicitScopeRoot{
+        .mHost = host, .mRoot = aElement, .mConstructed = false};
+  }
+  // "[...] If no such element exists, then the scoping root is the root of the
+  // containing node tree." This really should only happen for stylesheets
+  // defined at the edge of the shadow root.
+  return GeckoImplicitScopeRoot{
+      .mHost = host, .mRoot = host, .mConstructed = false};
+}
+
 const StyleLockedDeclarationBlock* Gecko_GetVisitedLinkAttrDeclarationBlock(
     const Element* aElement) {
   AttributeStyles* attrStyles = aElement->OwnerDoc()->GetAttributeStyles();
@@ -960,34 +987,6 @@ void Gecko_SetFontPaletteOverride(
       uint32_t(aIndex), gfx::sRGBColor::FromABGR(aColor->ToColor())});
 }
 
-void Gecko_CounterStyle_ToPtr(const StyleCounterStyle* aStyle,
-                              CounterStylePtr* aPtr) {
-  *aPtr = CounterStylePtr::FromStyle(*aStyle);
-}
-
-void Gecko_SetCounterStyleToNone(CounterStylePtr* aPtr) {
-  *aPtr = nsGkAtoms::none;
-}
-
-void Gecko_SetCounterStyleToString(CounterStylePtr* aPtr,
-                                   const nsACString* aSymbol) {
-  *aPtr = new AnonymousCounterStyle(NS_ConvertUTF8toUTF16(*aSymbol));
-}
-
-void Gecko_CopyCounterStyle(CounterStylePtr* aDst,
-                            const CounterStylePtr* aSrc) {
-  *aDst = *aSrc;
-}
-
-nsAtom* Gecko_CounterStyle_GetName(const CounterStylePtr* aPtr) {
-  return aPtr->IsAtom() ? aPtr->AsAtom() : nullptr;
-}
-
-const AnonymousCounterStyle* Gecko_CounterStyle_GetAnonymous(
-    const CounterStylePtr* aPtr) {
-  return aPtr->AsAnonymous();
-}
-
 void Gecko_EnsureImageLayersLength(nsStyleImageLayers* aLayers, size_t aLen,
                                    nsStyleImageLayers::LayerType aLayerType) {
   size_t oldLength = aLayers->mLayers.Length();
@@ -1251,8 +1250,7 @@ Length Gecko_nsStyleFont_ComputeMinSize(const nsStyleFont* aFont,
     return {0};
   }
 
-  minFontSize.ScaleBy(aFont->mMinFontSizeRatio);
-  minFontSize.ScaleBy(1.0f / 100.0f);
+  minFontSize.ScaleBy(aFont->mMinFontSizeRatio._0);
   return minFontSize;
 }
 
@@ -1372,7 +1370,7 @@ static already_AddRefed<StyleSheet> LoadImportSheet(
   MOZ_ASSERT(aLoader, "Should've catched this before");
   MOZ_ASSERT(aParent, "Only used for @import, so parent should exist!");
 
-  RefPtr<MediaList> media = new MediaList(std::move(aMediaList));
+  auto media = MakeRefPtr<MediaList>(std::move(aMediaList));
   nsCOMPtr<nsIURI> uri = aURL.GetURI();
   nsresult rv = uri ? NS_OK : NS_ERROR_FAILURE;
 

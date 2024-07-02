@@ -21,6 +21,8 @@
 #include "nsIChannel.h"
 #include "nsIEffectiveTLDService.h"
 #include "nsIRedirectHistoryEntry.h"
+#include "nsICookieManager.h"
+#include "nsICookieService.h"
 #include "nsIURI.h"
 #include "nsIWebProgressListener.h"
 #include "nsIPrincipal.h"
@@ -219,6 +221,15 @@ bool BounceTrackingState::ShouldCreateBounceTrackingStateForWebProgress(
   if (!browsingContext || !browsingContext->IsTopContent()) {
     MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Verbose,
             ("%s: Skip non top-content.", __FUNCTION__));
+    return false;
+  }
+
+  bool isPrivate = browsingContext->UsePrivateBrowsing();
+  uint32_t cookieBehavior = nsICookieManager::GetCookieBehavior(isPrivate);
+  if (cookieBehavior == nsICookieService::BEHAVIOR_ACCEPT ||
+      cookieBehavior == nsICookieService::BEHAVIOR_REJECT) {
+    MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Verbose,
+            ("%s: Skip on cookie behavior %i", __FUNCTION__, cookieBehavior));
     return false;
   }
 
@@ -582,11 +593,15 @@ nsresult BounceTrackingState::OnResponseReceived(
   }
 
   // Record should exist by now. It gets created in OnStartNavigation.
-  NS_ENSURE_TRUE(mBounceTrackingRecord, NS_ERROR_FAILURE);
+  // TODO: Bug 1894936
+  if (!mBounceTrackingRecord) {
+    return NS_ERROR_FAILURE;
+  }
 
   // Check if there is still an active timeout. This shouldn't happen since
   // OnStartNavigation already cancels it.
-  if (NS_WARN_IF(mClientBounceDetectionTimeout)) {
+  // TODO: Bug 1894936
+  if (mClientBounceDetectionTimeout) {
     MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Debug,
             ("%s: mClientBounceDetectionTimeout->Cancel()", __FUNCTION__));
     mClientBounceDetectionTimeout->Cancel();
@@ -654,7 +669,10 @@ nsresult BounceTrackingState::OnDocumentLoaded(
   }
 
   // Assert: navigable’s bounce tracking record is not null.
-  NS_ENSURE_TRUE(mBounceTrackingRecord, NS_ERROR_FAILURE);
+  // TODO: Bug 1894936
+  if (!mBounceTrackingRecord) {
+    return NS_ERROR_FAILURE;
+  }
 
   nsAutoCString siteHost;
   if (!BounceTrackingState::ShouldTrackPrincipal(aDocumentPrincipal)) {

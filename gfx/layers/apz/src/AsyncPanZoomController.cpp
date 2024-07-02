@@ -581,7 +581,7 @@ bool AsyncPanZoomController::FuzzyGreater(ParentLayerCoord aCoord1,
   return (aCoord1 - aCoord2) / zoom > COORDINATE_EPSILON;
 }
 
-class MOZ_STACK_CLASS StateChangeNotificationBlocker final {
+class StateChangeNotificationBlocker final {
  public:
   explicit StateChangeNotificationBlocker(AsyncPanZoomController* aApzc)
       : mApzc(aApzc) {
@@ -590,7 +590,17 @@ class MOZ_STACK_CLASS StateChangeNotificationBlocker final {
     mApzc->mNotificationBlockers++;
   }
 
+  StateChangeNotificationBlocker(const StateChangeNotificationBlocker&) =
+      delete;
+  StateChangeNotificationBlocker(StateChangeNotificationBlocker&& aOther)
+      : mApzc(aOther.mApzc), mInitialState(aOther.mInitialState) {
+    aOther.mApzc = nullptr;
+  }
+
   ~StateChangeNotificationBlocker() {
+    if (!mApzc) {  // moved-from
+      return;
+    }
     AsyncPanZoomController::PanZoomState newState;
     {
       RecursiveMutexAutoLock lock(mApzc->mRecursiveMutex);
@@ -866,7 +876,7 @@ AsyncPanZoomController::GetPinchLockMode() {
 }
 
 PointerEventsConsumableFlags AsyncPanZoomController::ArePointerEventsConsumable(
-    TouchBlockState* aBlock, const MultiTouchInput& aInput) {
+    TouchBlockState* aBlock, const MultiTouchInput& aInput) const {
   uint32_t touchPoints = aInput.mTouches.Length();
   if (touchPoints == 0) {
     // Cant' do anything with zero touch points
@@ -4001,10 +4011,21 @@ void AsyncPanZoomController::HandleFlingOverscroll(
         residualVelocity.y = 0;
       }
 
+      // If there is velocity left over from the fling which could not
+      // be handed off to another other APZC in the handoff chain,
+      // start an overscroll animation which will enter overscroll
+      // and then relieve it.
       if (!IsZero(residualVelocity)) {
         mOverscrollEffect->RelieveOverscroll(residualVelocity,
                                              aOverscrollSideBits);
       }
+
+      // Additionally snap back any other APZC in the handoff chain
+      // which may be overscrolled (e.g. an ancestor whose overscroll
+      // animation may have been interrupted by the input gesture which
+      // triggered the fling).
+      aOverscrollHandoffChain->SnapBackOverscrolledApzcForMomentum(
+          this, residualVelocity);
     }
   }
 }
@@ -4886,8 +4907,19 @@ bool AsyncPanZoomController::AdvanceAnimations(const SampleTime& aSampleTime) {
   // UpdateAnimation()). This needs to be done after the monitor is released
   // since the tasks are allowed to call APZCTreeManager methods which can grab
   // the tree lock.
-  for (uint32_t i = 0; i < deferredTasks.Length(); ++i) {
-    APZThreadUtils::RunOnControllerThread(std::move(deferredTasks[i]));
+  // Move the StateChangeNotificationBlocker into the task so that notifications
+  // continue to be blocked until the deferred tasks have run.
+  // Additionally store a RefPtr(this) in the lambda since
+  // StateChangeNotificationBlocker keeps a raw pointer to the APZC.
+  if (!deferredTasks.IsEmpty()) {
+    APZThreadUtils::RunOnControllerThread(NS_NewRunnableFunction(
+        "AsyncPanZoomController::AdvanceAnimations deferred tasks",
+        [keepApzcAlive = RefPtr(this), blocker = std::move(blocker),
+         deferredTasks = std::move(deferredTasks)]() {
+          for (uint32_t i = 0; i < deferredTasks.Length(); ++i) {
+            deferredTasks[i]->Run();
+          }
+        }));
   }
 
   // If any of the deferred tasks starts a new animation, it will request a
@@ -5809,6 +5841,29 @@ void AsyncPanZoomController::NotifyLayersUpdated(
     }
   }
 
+  // If our scroll range changed (for example, because the page dynamically
+  // loaded new content, thereby increasing the size of the scrollable rect),
+  // and we're overscrolled, being overscrolled may no longer be a valid
+  // state (for example, we may no longer be at the edge of our scroll range),
+  // then try to fill it out with the new content if the overscroll amount is
+  // inside the new scroll range.
+  if (needToReclampScroll && IsInInvalidOverscroll()) {
+    if (!cumulativeRelativeDelta) {
+      // TODO: If we have a cumulative delta, can we combine the overscroll
+      //  change with it?
+      CSSPoint scrollPositionChange = MaybeFillOutOverscrollGutter(lock);
+      if (scrollPositionChange != CSSPoint()) {
+        cumulativeRelativeDelta = Some(scrollPositionChange);
+      }
+    }
+    if (mState == OVERSCROLL_ANIMATION) {
+      CancelAnimation();
+      didCancelAnimation = true;
+    } else if (IsOverscrolled()) {
+      ClearOverscroll();
+    }
+  }
+
   if (scrollOffsetUpdated) {
     for (auto& sampledState : mSampledState) {
       if (!didCancelAnimation && cumulativeRelativeDelta.isSome()) {
@@ -5845,27 +5900,6 @@ void AsyncPanZoomController::NotifyLayersUpdated(
         cumulativeRelativeDelta && *cumulativeRelativeDelta != CSSPoint() &&
         !didCancelAnimation) {
       SendTransformBeginAndEnd();
-    }
-  }
-
-  // If our scroll range changed (for example, because the page dynamically
-  // loaded new content, thereby increasing the size of the scrollable rect),
-  // and we're overscrolled, being overscrolled may no longer be a valid
-  // state (for example, we may no longer be at the edge of our scroll range),
-  // so clear overscroll and discontinue any overscroll animation.
-  // Ideas for improvements here:
-  //    - Instead of collapsing the overscroll gutter, try to "fill it"
-  //      with newly loaded content. This would basically entail checking
-  //      if (GetVisualScrollOffset() + GetOverscrollAmount()) is a valid
-  //      visual scroll offset in our new scroll range, and if so, scrolling
-  //      there.
-  if (needToReclampScroll) {
-    if (IsInInvalidOverscroll()) {
-      if (mState == OVERSCROLL_ANIMATION) {
-        CancelAnimation();
-      } else if (IsOverscrolled()) {
-        ClearOverscroll();
-      }
     }
   }
 
@@ -6543,7 +6577,7 @@ Maybe<CSSSnapDestination> AsyncPanZoomController::FindSnapPointNear(
     // GetSnapPointForDestination() can produce a destination that's outside
     // of the scroll frame's scroll range. Clamp it here (this matches the
     // behaviour of the main-thread code path, which clamps it in
-    // nsGfxScrollFrame::ScrollTo()).
+    // ScrollContainerFrame::ScrollTo()).
     return Some(CSSSnapDestination{scrollRange.ClampPoint(cssSnapPoint),
                                    snapDestination->mTargetIds});
   }
@@ -6792,6 +6826,20 @@ void AsyncPanZoomController::SetZoomAnimationId(
 Maybe<uint64_t> AsyncPanZoomController::GetZoomAnimationId() const {
   RecursiveMutexAutoLock lock(mRecursiveMutex);
   return mZoomAnimationId;
+}
+
+CSSPoint AsyncPanZoomController::MaybeFillOutOverscrollGutter(
+    const RecursiveMutexAutoLock& aProofOfLock) {
+  const auto zoom = Metrics().GetZoom();
+  CSSPoint delta = GetOverscrollAmount() / zoom;
+  CSSPoint origin = Metrics().GetVisualScrollOffset();
+  CSSRect scrollRange = Metrics().CalculateScrollRange();
+  if (!scrollRange.ContainsInclusively(origin + delta)) {
+    return CSSPoint();
+  }
+  SetVisualScrollOffset(origin + delta);
+  Metrics().RecalculateLayoutViewportOffset();
+  return Metrics().GetVisualScrollOffset() - origin;
 }
 
 std::ostream& operator<<(std::ostream& aOut,

@@ -8,6 +8,8 @@ Releases
    :glob:
    :hidden:
 
+   nss_3_101_1.rst
+   nss_3_101.rst
    nss_3_100.rst
    nss_3_99.rst
    nss_3_98.rst
@@ -65,24 +67,12 @@ Releases
 
 .. note::
 
-   **NSS 3.100** is the latest version of NSS.
-   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_100_release_notes`
-
-   **NSS 3.90.2 (ESR)** is the latest version of NSS.
-   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_90_2_release_notes`
+   **NSS 3.101.1 (ESR)** is the latest ESR version of NSS.
+   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_101_1_release_notes`
 
 .. container::
 
-   Changes in 3.100 included in this release:
+   Changes in 3.101.1 included in this release:
 
- - Bug 1893029 - merge pk11_kyberSlotList into pk11_ecSlotList for faster Xyber operations.
- - Bug 1893752 - remove ckcapi.
- - Bug 1893162 - avoid a potential PK11GenericObject memory leak.
- - Bug 671060 - Remove incomplete ESDH code.
- - Bug 215997 - Decrypt RSA OAEP encrypted messages.
- - Bug 1887996 - Fix certutil CRLDP URI code.
- - Bug 1890069 - Don't set CKA_DERIVE for CKK_EC_EDWARDS private keys.
- - Bug 676118: Add ability to encrypt and decrypt CMS messages using ECDH.
- - Bug 676100 - Correct Templates for key agreement in smime/cmsasn.c.
- - Bug 1548723 - Moving the decodedCert allocation to NSS.
- - Bug 1885404 - Allow developers to speed up repeated local execution of NSS tests that depend on certificates.
+   - Bug 1901932 - missing sqlite header.
+   - Bug 1901080 - GLOBALTRUST 2020: Set Distrust After for TLS and S/MIME.

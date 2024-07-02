@@ -143,22 +143,29 @@ void CookieServiceParent::TrackCookieLoad(nsIChannel* aChannel) {
   // (and therefore the partitioned OriginAttributes), the unpartitioned cookie
   // jar is only available in first-party or third-party with storageAccess
   // contexts.
-  bool isCHIPS = StaticPrefs::network_cookie_cookieBehavior_optInPartitioning();
-  bool isUnpartitioned = storageOriginAttributes.mPartitionKey.IsEmpty();
+  nsCOMPtr<nsICookieJarSettings> cookieJarSettings =
+      CookieCommons::GetCookieJarSettings(aChannel);
+  bool isCHIPS = StaticPrefs::network_cookie_CHIPS_enabled() &&
+                 cookieJarSettings->GetPartitionForeign();
+  bool isUnpartitioned =
+      !result.contains(ThirdPartyAnalysis::IsForeign) ||
+      result.contains(ThirdPartyAnalysis::IsStorageAccessPermissionGranted);
   if (isCHIPS && isUnpartitioned) {
-    // Assert that we are only doing this if we are first-party or third-party
-    // with storageAccess.
-    MOZ_ASSERT(
-        !result.contains(ThirdPartyAnalysis::IsForeign) ||
-        result.contains(ThirdPartyAnalysis::IsStorageAccessPermissionGranted));
+    // Assert that the storage originAttributes is empty. In other words,
+    // it's unpartitioned.
+    MOZ_ASSERT(storageOriginAttributes.mPartitionKey.IsEmpty());
     // Add the partitioned principal to principals
     OriginAttributes partitionedOriginAttributes;
     StoragePrincipalHelper::GetOriginAttributes(
         aChannel, partitionedOriginAttributes,
         StoragePrincipalHelper::ePartitionedPrincipal);
-    originAttributesList.AppendElement(partitionedOriginAttributes);
-    // Assert partitionedOAs have partitioneKey set.
-    MOZ_ASSERT(!partitionedOriginAttributes.mPartitionKey.IsEmpty());
+    // Only append the partitioned originAttributes if the partitionKey is set.
+    // The partitionKey could be empty for partitionKey in partitioned
+    // originAttributes if the channel is for privilege request, such as
+    // extension's requests.
+    if (!partitionedOriginAttributes.mPartitionKey.IsEmpty()) {
+      originAttributesList.AppendElement(partitionedOriginAttributes);
+    }
   }
 
   for (auto& originAttributes : originAttributesList) {
@@ -166,7 +173,7 @@ void CookieServiceParent::TrackCookieLoad(nsIChannel* aChannel) {
   }
 
   // Send matching cookies to Child.
-  nsTArray<Cookie*> foundCookieList;
+  nsTArray<RefPtr<Cookie>> foundCookieList;
   mCookieService->GetCookiesForURI(
       uri, aChannel, result.contains(ThirdPartyAnalysis::IsForeign),
       result.contains(ThirdPartyAnalysis::IsThirdPartyTrackingResource),
@@ -201,21 +208,23 @@ void CookieServiceParent::UpdateCookieInContentList(
 
 // static
 void CookieServiceParent::SerializeCookieListTable(
-    const nsTArray<Cookie*>& aFoundCookieList,
+    const nsTArray<RefPtr<Cookie>>& aFoundCookieList,
     nsTArray<CookieStructTable>& aCookiesListTable, nsIURI* aHostURI) {
-  nsTHashMap<nsCStringHashKey, CookieStructTable*> cookieListTable;
+  // Stores the index in aCookiesListTable by origin attributes suffix.
+  nsTHashMap<nsCStringHashKey, size_t> cookieListTable;
 
   for (Cookie* cookie : aFoundCookieList) {
     nsAutoCString attrsSuffix;
     cookie->OriginAttributesRef().CreateSuffix(attrsSuffix);
-    CookieStructTable* table =
-        cookieListTable.LookupOrInsertWith(attrsSuffix, [&] {
-          CookieStructTable* newTable = aCookiesListTable.AppendElement();
-          newTable->attrs() = cookie->OriginAttributesRef();
-          return newTable;
-        });
+    size_t tableIndex = cookieListTable.LookupOrInsertWith(attrsSuffix, [&] {
+      size_t index = aCookiesListTable.Length();
+      CookieStructTable* newTable = aCookiesListTable.AppendElement();
+      newTable->attrs() = cookie->OriginAttributesRef();
+      return index;
+    });
 
-    CookieStruct* cookieStruct = table->cookies().AppendElement();
+    CookieStruct* cookieStruct =
+        aCookiesListTable[tableIndex].cookies().AppendElement();
     *cookieStruct = cookie->ToIPC();
 
     // clear http-only cookie values
@@ -252,7 +261,7 @@ IPCResult CookieServiceParent::RecvGetCookieList(
     UpdateCookieInContentList(aHost, attrs);
   }
 
-  nsTArray<Cookie*> foundCookieList;
+  nsTArray<RefPtr<Cookie>> foundCookieList;
   // Note: passing nullptr as aChannel to GetCookiesForURI() here is fine since
   // this argument is only used for proper reporting of cookie loads, but the
   // child process already does the necessary reporting in this case for us.

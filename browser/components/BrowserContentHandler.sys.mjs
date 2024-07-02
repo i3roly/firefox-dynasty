@@ -745,7 +745,7 @@ nsBrowserContentHandler.prototype = {
             overridePage = Services.urlFormatter.formatURLPref(
               "startup.homepage_override_url"
             );
-            let update = lazy.UpdateManager.readyUpdate;
+            let update = lazy.UpdateManager.updateInstalledAtStartup;
 
             /** If the override URL is provided by an experiment, is a valid
              * Firefox What's New Page URL, and the update version is less than
@@ -756,17 +756,28 @@ nsBrowserContentHandler.prototype = {
             const nimbusOverrideUrl = Services.urlFormatter.formatURLPref(
               "startup.homepage_override_url_nimbus"
             );
+            // This defines the maximum allowed Fx update version to see the
+            // nimbus WNP. For ex, if maxVersion is set to 127 but user updates
+            // to 128, they will not qualify.
             const maxVersion = Services.prefs.getCharPref(
               "startup.homepage_override_nimbus_maxVersion",
               ""
             );
+            // This defines the minimum allowed Fx update version to see the
+            // nimbus WNP. For ex, if minVersion is set to 126 but user updates
+            // to 124, they will not qualify.
+            const minVersion = Services.prefs.getCharPref(
+              "startup.homepage_override_nimbus_minVersion",
+              ""
+            );
             let nimbusWNP;
 
-            // Update version should be less than or equal to maxVersion set by
-            // the experiment
+            // The update version should be less than or equal to maxVersion and
+            // greater or equal to minVersion set by the experiment.
             if (
               nimbusOverrideUrl &&
-              Services.vc.compare(update.appVersion, maxVersion) <= 0
+              Services.vc.compare(update.appVersion, maxVersion) <= 0 &&
+              Services.vc.compare(update.appVersion, minVersion) >= 0
             ) {
               try {
                 let uri = Services.io.newURI(nimbusOverrideUrl);
@@ -819,7 +830,7 @@ nsBrowserContentHandler.prototype = {
             break;
           }
           case OVERRIDE_NEW_BUILD_ID:
-            if (lazy.UpdateManager.readyUpdate) {
+            if (lazy.UpdateManager.updateInstalledAtStartup) {
               // Send the update ping to signal that the update was successful.
               lazy.UpdatePing.handleUpdateSuccess(old_mstone, old_buildId);
               lazy.LaterRun.enable(lazy.LaterRun.ENABLE_REASON_UPDATE_APPLIED);
@@ -1135,6 +1146,14 @@ nsDefaultCommandLineHandler.prototype = {
   handle: function dch_handle(cmdLine) {
     var urilist = [];
     var principalList = [];
+
+    if (
+      cmdLine.state != Ci.nsICommandLine.STATE_INITIAL_LAUNCH &&
+      cmdLine.findFlag("os-autostart", true) != -1
+    ) {
+      // Relaunching after reboot (or quickly opening the application on reboot) and launch-on-login interact.  If we see an after reboot command line while already running, ignore it.
+      return;
+    }
 
     if (AppConstants.platform == "win") {
       // Windows itself does disk I/O when the notification service is

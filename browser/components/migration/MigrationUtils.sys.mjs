@@ -156,6 +156,7 @@ class MigrationUtils {
           "MigrationWizard:OpenAboutAddons": { wantUntrusted: true },
           "MigrationWizard:PermissionsNeeded": { wantUntrusted: true },
           "MigrationWizard:GetPermissions": { wantUntrusted: true },
+          "MigrationWizard:OpenURL": { wantUntrusted: true },
         },
       },
 
@@ -904,20 +905,20 @@ class MigrationUtils {
           reader.addEventListener("error", reject);
           reader.readAsDataURL(blob);
         });
+
+        let fakeFaviconURI = Services.io.newURI(
+          "fake-favicon-uri:" + faviconDataItem.uri.spec
+        );
+        lazy.PlacesUtils.favicons.setFaviconForPage(
+          faviconDataItem.uri,
+          fakeFaviconURI,
+          Services.io.newURI(dataURL)
+        );
       } catch (e) {
         // Even if error happens for favicon, continue the process.
         console.warn(e);
         continue;
       }
-
-      let fakeFaviconURI = Services.io.newURI(
-        "fake-favicon-uri:" + faviconDataItem.uri.spec
-      );
-      lazy.PlacesUtils.favicons.setFaviconForPage(
-        faviconDataItem.uri,
-        fakeFaviconURI,
-        Services.io.newURI(dataURL)
-      );
     }
   }
 

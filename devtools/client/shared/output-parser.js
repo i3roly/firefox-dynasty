@@ -21,7 +21,7 @@ const { LocalizationHelper } = require("resource://devtools/shared/l10n.js");
 const STYLE_INSPECTOR_L10N = new LocalizationHelper(STYLE_INSPECTOR_PROPERTIES);
 
 // Functions that accept an angle argument.
-const ANGLE_TAKING_FUNCTIONS = [
+const ANGLE_TAKING_FUNCTIONS = new Set([
   "linear-gradient",
   "-moz-linear-gradient",
   "repeating-linear-gradient",
@@ -37,17 +37,17 @@ const ANGLE_TAKING_FUNCTIONS = [
   "skewX",
   "skewY",
   "hue-rotate",
-];
+]);
 // All cubic-bezier CSS timing-function names.
-const BEZIER_KEYWORDS = [
+const BEZIER_KEYWORDS = new Set([
   "linear",
   "ease-in-out",
   "ease-in",
   "ease-out",
   "ease",
-];
+]);
 // Functions that accept a color argument.
-const COLOR_TAKING_FUNCTIONS = [
+const COLOR_TAKING_FUNCTIONS = new Set([
   "linear-gradient",
   "-moz-linear-gradient",
   "repeating-linear-gradient",
@@ -60,9 +60,15 @@ const COLOR_TAKING_FUNCTIONS = [
   "repeating-conic-gradient",
   "drop-shadow",
   "color-mix",
-];
+  "light-dark",
+]);
 // Functions that accept a shape argument.
-const BASIC_SHAPE_FUNCTIONS = ["polygon", "circle", "ellipse", "inset"];
+const BASIC_SHAPE_FUNCTIONS = new Set([
+  "polygon",
+  "circle",
+  "ellipse",
+  "inset",
+]);
 
 const BACKDROP_FILTER_ENABLED = Services.prefs.getBoolPref(
   "layout.css.backdrop-filter.enabled"
@@ -222,7 +228,7 @@ class OutputParser {
       } else if (
         token.tokenType === "Function" &&
         token.value === "var" &&
-        options.getVariableValue
+        options.getVariableData
       ) {
         sawVariable = true;
         const { node, value, fallbackValue } = this.#parseVariable(
@@ -239,7 +245,7 @@ class OutputParser {
       if (
         token.tokenType !== "Function" ||
         token.value !== "var" ||
-        !options.getVariableValue
+        !options.getVariableData
       ) {
         functionData.push(text.substring(token.startOffset, token.endOffset));
       }
@@ -290,12 +296,17 @@ class OutputParser {
     const firstOpts = {};
     const secondOpts = {};
 
+    let varData;
     let varValue;
     let varFallbackValue;
 
     // Get the variable value if it is in use.
     if (tokens && tokens.length === 1) {
-      varValue = options.getVariableValue(tokens[0].text);
+      varData = options.getVariableData(tokens[0].text);
+      varValue =
+        typeof varData.value === "string"
+          ? varData.value
+          : varData.registeredProperty?.initialValue;
     }
 
     // Get the variable name.
@@ -311,8 +322,15 @@ class OutputParser {
       );
       firstOpts.class = options.matchedVariableClass;
       secondOpts.class = options.unmatchedVariableClass;
+      if (varData.registeredProperty) {
+        const { initialValue, syntax, inherits } = varData.registeredProperty;
+        firstOpts["data-registered-property-initial-value"] = initialValue;
+        firstOpts["data-registered-property-syntax"] = syntax;
+        // createNode does not handle `false`, let's stringify the boolean.
+        firstOpts["data-registered-property-inherits"] = `${inherits}`;
+      }
     } else {
-      // The variable name is not valid, mark it unmatched.
+      // The variable is not set and does not have an initial value, mark it unmatched.
       firstOpts.class = options.unmatchedVariableClass;
       firstOpts["data-variable"] = STYLE_INSPECTOR_L10N.getFormatStr(
         "rule.variableUnset",
@@ -408,12 +426,12 @@ class OutputParser {
           const functionName = token.value;
           const lowerCaseFunctionName = functionName.toLowerCase();
 
-          const isColorTakingFunction = COLOR_TAKING_FUNCTIONS.includes(
+          const isColorTakingFunction = COLOR_TAKING_FUNCTIONS.has(
             lowerCaseFunctionName
           );
           if (
             isColorTakingFunction ||
-            ANGLE_TAKING_FUNCTIONS.includes(lowerCaseFunctionName)
+            ANGLE_TAKING_FUNCTIONS.has(lowerCaseFunctionName)
           ) {
             // The function can accept a color or an angle argument, and we know
             // it isn't special in some other way. So, we let it
@@ -431,7 +449,7 @@ class OutputParser {
             ++parenDepth;
           } else if (
             lowerCaseFunctionName === "var" &&
-            options.getVariableValue
+            options.getVariableData
           ) {
             const { node: variableNode, value } = this.#parseVariable(
               token,
@@ -545,7 +563,7 @@ class OutputParser {
                 });
               } else if (
                 options.expectShape &&
-                BASIC_SHAPE_FUNCTIONS.includes(lowerCaseFunctionName)
+                BASIC_SHAPE_FUNCTIONS.has(lowerCaseFunctionName)
               ) {
                 this.#appendShape(functionText, options);
               } else {
@@ -559,7 +577,7 @@ class OutputParser {
         case "Ident":
           if (
             options.expectCubicBezier &&
-            BEZIER_KEYWORDS.includes(lowerCaseTokenText)
+            BEZIER_KEYWORDS.has(lowerCaseTokenText)
           ) {
             this.#appendCubicBezier(token.text, options);
           } else if (
@@ -2001,37 +2019,34 @@ class OutputParser {
    * @param {String} overrides.angleClass: The class to use for the angle value that follows
    *                                       the swatch.
    * @param {String} overrides.angleSwatchClass: The class to use for angle swatches.
-   * @param {} overrides.bezierClass: ""        // The class to use for the bezier value
-   *                                    // that follows the swatch.
-   * @param {} overrides.bezierSwatchClass: ""  // The class to use for bezier swatches.
-   * @param {} overrides.colorClass: ""         // The class to use for the color value
-   *                                    // that follows the swatch.
-   * @param {} overrides.colorSwatchClass: ""   // The class to use for color swatches.
-   * @param {} overrides.filterSwatch: false    // A special case for parsing a
-   *                                    // "filter" property, causing the
-   *                                    // parser to skip the call to
-   *                                    // #wrapFilter.  Used only for
-   *                                    // previewing with the filter swatch.
-   * @param {} overrides.flexClass: ""          // The class to use for the flex icon.
-   * @param {} overrides.gridClass: ""          // The class to use for the grid icon.
-   * @param {} overrides.shapeClass: ""         // The class to use for the shape value
-   *                                    // that follows the swatch.
-   * @param {} overrides.shapeSwatchClass: ""   // The class to use for the shape swatch.
-   * @param {} overrides.supportsColor: false   // Does the CSS property support colors?
-   * @param {} overrides.urlClass: ""           // The class to be used for url() links.
-   * @param {} overrides.fontFamilyClass: ""    // The class to be used for font families.
-   * @param {} overrides.baseURI: undefined     // A string used to resolve
-   *                                    // relative links.
-   * @param {} overrides.getVariableValue       // A function taking a single
-   *                                    // argument, the name of a variable.
-   *                                    // This should return the variable's
-   *                                    // value, if it is in use; or null.
-   *           - unmatchedVariableClass: ""
-   *                                    // The class to use for a component
-   *                                    // of a "var(...)" that is not in
-   *                                    // use.
-   * @return {Object}
-   *         Overridden options object
+   * @param {String} overrides.bezierClass: The class to use for the bezier value that
+   *        follows the swatch.
+   * @param {String} overrides.bezierSwatchClass: The class to use for bezier swatches.
+   * @param {String} overrides.colorClass: The class to use for the color value that
+   *        follows the swatch.
+   * @param {String} overrides.colorSwatchClass: The class to use for color swatches.
+   * @param {Boolean} overrides.filterSwatch: A special case for parsing a "filter" property,
+   *        causing the parser to skip the call to #wrapFilter. Used only for previewing
+   *        with the filter swatch.
+   * @param {String} overrides.flexClass: The class to use for the flex icon.
+   * @param {String} overrides.gridClass: The class to use for the grid icon.
+   * @param {String} overrides.shapeClass: The class to use for the shape value that
+   *         follows the swatch.
+   * @param {String} overrides.shapeSwatchClass: The class to use for the shape swatch.
+   * @param {String} overrides.urlClass: The class to be used for url() links.
+   * @param {String} overrides.fontFamilyClass: The class to be used for font families.
+   * @param {String} overrides.unmatchedVariableClass: The class to use for a component of
+   *        a `var(…)` that is not in use.
+   * @param {Boolean} overrides.supportsColor: Does the CSS property support colors?
+   * @param {String} overrides.baseURI: A string used to resolve relative links.
+   * @param {Function} overrides.getVariableData: A function taking a single argument,
+   *        the name of a variable. This should return an object with the following properties:
+   *          - {String|undefined} value: The variable's value. Undefined if variable is
+   *            not set.
+   *          - {RegisteredPropertyResource|undefined} registeredProperty: The registered
+   *            property data (syntax, initial value, inherits). Undefined if the variable
+   *            is not a registered property.
+   * @return {Object} Overridden options object
    */
   #mergeOptions(overrides) {
     const defaults = {
@@ -2052,7 +2067,7 @@ class OutputParser {
       urlClass: "",
       fontFamilyClass: "",
       baseURI: undefined,
-      getVariableValue: null,
+      getVariableData: null,
       unmatchedVariableClass: null,
     };
 

@@ -107,16 +107,6 @@ bitflags! {
     }
 }
 
-lazy_static! {
-    static ref HOST_TIME_TO_NS_RATIO: (u32, u32) = {
-        let mut timebase_info = mach_timebase_info { numer: 0, denom: 0 };
-        unsafe {
-            mach_timebase_info(&mut timebase_info);
-        }
-        (timebase_info.numer, timebase_info.denom)
-    };
-}
-
 #[cfg(feature = "audio_dump")]
 fn dump_audio(stream: cubeb_audio_dump_stream_t, audio_samples: *mut c_void, count: u32) {
     unsafe {
@@ -678,10 +668,10 @@ extern "C" fn audiounit_input_callback(
     }
 }
 
-fn host_time_to_ns(host_time: u64) -> u64 {
+fn host_time_to_ns(ctx: &AudioUnitContext, host_time: u64) -> u64 {
     let mut rv: f64 = host_time as f64;
-    rv *= HOST_TIME_TO_NS_RATIO.0 as f64;
-    rv /= HOST_TIME_TO_NS_RATIO.1 as f64;
+    rv *= ctx.host_time_to_ns_ratio.0 as f64;
+    rv /= ctx.host_time_to_ns_ratio.1 as f64;
     rv as u64
 }
 
@@ -693,7 +683,7 @@ fn compute_output_latency(stm: &AudioUnitStream, audio_output_time: u64, now: u6
     // The total output latency is the timestamp difference + the stream latency + the hardware
     // latency.
     let total_output_latency_ns =
-        fixed_latency_ns + host_time_to_ns(audio_output_time.saturating_sub(now));
+        fixed_latency_ns + host_time_to_ns(stm.context, audio_output_time.saturating_sub(now));
 
     (total_output_latency_ns * output_hw_rate / NS2S) as u32
 }
@@ -706,7 +696,7 @@ fn compute_input_latency(stm: &AudioUnitStream, audio_input_time: u64, now: u64)
     // The total input latency is the timestamp difference + the stream latency +
     // the hardware latency.
     let total_input_latency_ns =
-        host_time_to_ns(now.saturating_sub(audio_input_time)) + fixed_latency_ns;
+        host_time_to_ns(stm.context, now.saturating_sub(audio_input_time)) + fixed_latency_ns;
 
     (total_input_latency_ns * input_hw_rate / NS2S) as u32
 }
@@ -1611,81 +1601,23 @@ fn get_channel_count(
     devtype: DeviceType,
 ) -> std::result::Result<u32, OSStatus> {
     assert_ne!(devid, kAudioObjectUnknown);
+    //debug_assert_running_serially();
 
-    let mut streams = get_device_streams(devid, devtype)?;
-    let model_uid =
-        get_device_model_uid(devid, devtype).map_or_else(|_| String::new(), |s| s.into_string());
-
-    if devtype == DeviceType::INPUT {
-        // With VPIO, output devices will/may get a Tap that appears as input channels on the
-        // output device id. One could check for whether the output device has a tap enabled,
-        // but it is impossible to distinguish an output-only device from an input+output
-        // device. There have also been corner cases observed, where the device does NOT have
-        // a Tap enabled, but it still has the extra input channels from the Tap.
-        // We can check the terminal type of the input stream instead, the VPIO type is
-        // INPUT_UNDEFINED or an output type, we explicitly ignore those and keep all other cases.
-        streams.retain(|stream| {
-            let terminal_type = get_stream_terminal_type(*stream);
-            if terminal_type.is_err() {
-                return true;
-            }
-
-            #[allow(non_upper_case_globals)]
-            match terminal_type.unwrap() {
-                kAudioStreamTerminalTypeMicrophone
-                | kAudioStreamTerminalTypeHeadsetMicrophone
-                | kAudioStreamTerminalTypeReceiverMicrophone => true,
-                kAudioStreamTerminalTypeUnknown => {
-                    cubeb_log!("Unknown TerminalType for input stream. Ignoring its channels.");
-                    false
-                }
-                t if [
-                    kAudioStreamTerminalTypeSpeaker,
-                    kAudioStreamTerminalTypeHeadphones,
-                    kAudioStreamTerminalTypeLFESpeaker,
-                    kAudioStreamTerminalTypeReceiverSpeaker,
-                ]
-                .contains(&t) =>
-                {
-                    cubeb_log!(
-                        "Output TerminalType {:#06X} for input stream. Ignoring its channels.",
-                        t
-                    );
-                    false
-                }
-                INPUT_UNDEFINED => {
-                    cubeb_log!(
-                        "INPUT_UNDEFINED TerminalType for input stream. Ignoring its channels."
-                    );
-                    false
-                }
-                // The input tap stream on the Studio Display Speakers has a terminal type that
-                // is not clearly output-specific. We special-case it here.
-                EXTERNAL_DIGITAL_AUDIO_INTERFACE
-                    if model_uid.contains(APPLE_STUDIO_DISPLAY_USB_ID) =>
-                {
-                    false
-                }
-                // Note INPUT_UNDEFINED is 0x200 and INPUT_MICROPHONE is 0x201
-                t if (INPUT_MICROPHONE..OUTPUT_UNDEFINED).contains(&t) => true,
-                t if (OUTPUT_UNDEFINED..BIDIRECTIONAL_UNDEFINED).contains(&t) => false,
-                t if (BIDIRECTIONAL_UNDEFINED..TELEPHONY_UNDEFINED).contains(&t) => true,
-                t if (TELEPHONY_UNDEFINED..EXTERNAL_UNDEFINED).contains(&t) => true,
-                t => {
-                    cubeb_log!("Unknown TerminalType {:#06X} for input stream.", t);
-                    true
-                }
-            }
-        });
-    }
-
-    let mut count = 0;
-    for stream in streams {
-        if let Ok(format) = get_stream_virtual_format(stream) {
-            count += format.mChannelsPerFrame;
+    let devstreams = get_device_streams(devid, devtype)?;
+    let mut count: u32 = 0;
+    for ds in devstreams {
+        if devtype == DeviceType::INPUT
+            && CoreStreamData::should_force_vpio_for_input_device(ds.device)
+        {
+            count += 1;
+        } else {
+            count += get_stream_virtual_format(ds.stream)
+                .map(|f| f.mChannelsPerFrame)
+                .unwrap_or(0);
         }
     }
     Ok(count)
+
 }
 
 fn get_range_of_sample_rates(
@@ -1726,8 +1658,8 @@ fn get_fixed_latency(devid: AudioObjectID, devtype: DeviceType) -> u32 {
         }
     };
 
-    let stream_latency = get_device_streams(devid, devtype).and_then(|streams| {
-        if streams.is_empty() {
+    let stream_latency = get_device_streams(devid, devtype).and_then(|devstreams| {
+        if devstreams.is_empty() {
             cubeb_log!(
                 "No stream on device {} in {:?} scope!",
                 devid,
@@ -1735,7 +1667,7 @@ fn get_fixed_latency(devid: AudioObjectID, devtype: DeviceType) -> u32 {
             );
             Ok(0) // default stream latency
         } else {
-            get_stream_latency(streams[0])
+            get_stream_latency(devstreams[0].stream)
         }
     }).map_err(|e| {
         cubeb_log!(
@@ -2540,6 +2472,7 @@ pub struct AudioUnitContext {
     serial_queue: Queue,
     latency_controller: Mutex<LatencyController>,
     devices: Mutex<SharedDevices>,
+    host_time_to_ns_ratio: (u32, u32),
     // Storage for a context-global vpio unit. Duplex streams that need one will take this
     // and return it when done.
     shared_voice_processing_unit: SharedVoiceProcessingUnitManager,
@@ -2549,11 +2482,20 @@ impl AudioUnitContext {
     fn new() -> Self {
 
         let serial_queue = Queue::new(DISPATCH_QUEUE_LABEL);
+        let host_time_to_ns_ratio = {
+             let mut timebase_info = mach_timebase_info { numer: 0, denom: 0 };
+             unsafe {
+                 mach_timebase_info(&mut timebase_info);
+             }
+             (timebase_info.numer, timebase_info.denom)
+
+         };
         Self {
             _ops: &OPS as *const _,
             serial_queue: Queue::new(DISPATCH_QUEUE_LABEL),
             latency_controller: Mutex::new(LatencyController::default()),
             devices: Mutex::new(SharedDevices::default()),
+            host_time_to_ns_ratio,
             shared_voice_processing_unit: SharedVoiceProcessingUnitManager::new(serial_queue),
         }
 
@@ -3231,21 +3173,22 @@ impl<'ctx> CoreStreamData<'ctx> {
     }
 
     #[allow(non_upper_case_globals)]
-    fn should_force_vpio_for_input_device(&self, in_device: &device_info) -> bool {
-        assert!(in_device.id != kAudioObjectUnknown);
-        self.debug_assert_is_on_stream_queue();
-        match get_device_transport_type(in_device.id, DeviceType::INPUT) {
+    fn should_force_vpio_for_input_device(id: AudioDeviceID) -> bool {
+        assert!(id != kAudioObjectUnknown);
+        //debug_assert_running_serially();
+        match get_device_transport_type(id, DeviceType::INPUT) {
             Ok(kAudioDeviceTransportTypeBuiltIn) => {
                 cubeb_log!(
-                    "Forcing VPIO because input device is built in, and its volume \
-                     is known to be very low without VPIO whenever VPIO is hooked up to it elsewhere."
+                    "Input device {} is on the VPIO force list because it is built in, \
+                     and its volume is known to be very low without VPIO whenever VPIO \
+                     is hooked up to it elsewhere."
                 );
                 true
             }
             _ => false,
         }
-    }
 
+    }
     fn should_block_vpio_for_device_pair(
         &self,
         in_device: &device_info,
@@ -3315,7 +3258,7 @@ impl<'ctx> CoreStreamData<'ctx> {
                 .input_stream_params
                 .prefs()
                 .contains(StreamPrefs::VOICE)
-                || self.should_force_vpio_for_input_device(&self.input_device))
+                || CoreStreamData::should_force_vpio_for_input_device(self.input_device.id))
             && !self.should_block_vpio_for_device_pair(&self.input_device, &self.output_device)
             && macos_kernel_major_version() != Ok(MACOS_KERNEL_MAJOR_VERSION_MONTEREY);
 
@@ -4885,7 +4828,7 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
                 let now = unsafe { mach_absolute_time() };
                 let diff = now - timestamp;
                 let interpolated_frames = cmp::min(
-                    host_time_to_ns(diff)
+                    host_time_to_ns(self.context, diff)
                         * self.core_stream_data.output_stream_params.rate() as u64
                         / NS2S,
                     buffer_size,

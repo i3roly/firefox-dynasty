@@ -11,6 +11,7 @@
 #include "mozilla/AntiTrackingUtils.h"
 #include "mozilla/AsyncEventDispatcher.h"
 #include "mozilla/BounceTrackingStorageObserver.h"
+#include "mozilla/BounceTrackingProtection.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/ContentBlockingAllowList.h"
 #include "mozilla/dom/InProcessParent.h"
@@ -178,9 +179,6 @@ void WindowGlobalParent::Init() {
   if (!BrowsingContext()->IsDiscarded()) {
     MOZ_ALWAYS_SUCCEEDS(
         BrowsingContext()->SetCurrentInnerWindowId(InnerWindowId()));
-
-    Unused << SendSetContainerFeaturePolicy(
-        BrowsingContext()->GetContainerFeaturePolicy());
   }
 
   if (BrowsingContext()->IsTopContent()) {
@@ -1453,6 +1451,33 @@ IPCResult WindowGlobalParent::RecvDiscoverIdentityCredentialFromExternalSource(
   return IPC_OK();
 }
 
+IPCResult WindowGlobalParent::RecvCollectIdentityCredentialFromCredentialStore(
+    const IdentityCredentialRequestOptions& aOptions,
+    const CollectIdentityCredentialFromCredentialStoreResolver& aResolver) {
+  IdentityCredential::CollectFromCredentialStoreInMainProcess(
+      DocumentPrincipal(), BrowsingContext(), aOptions)
+      ->Then(
+          GetCurrentSerialEventTarget(), __func__,
+          [aResolver](const nsTArray<IPCIdentityCredential>& aResult) {
+            aResolver(aResult);
+          },
+          [aResolver](nsresult aErr) {
+            aResolver(nsTArray<IPCIdentityCredential>());
+          });
+  return IPC_OK();
+}
+
+IPCResult WindowGlobalParent::RecvStoreIdentityCredential(
+    const IPCIdentityCredential& aCredential,
+    const StoreIdentityCredentialResolver& aResolver) {
+  IdentityCredential::StoreInMainProcess(DocumentPrincipal(), aCredential)
+      ->Then(
+          GetCurrentSerialEventTarget(), __func__,
+          [aResolver](const bool& aResult) { aResolver(NS_OK); },
+          [aResolver](nsresult aErr) { aResolver(aErr); });
+  return IPC_OK();
+}
+
 IPCResult WindowGlobalParent::RecvGetStorageAccessPermission(
     GetStorageAccessPermissionResolver&& aResolve) {
   WindowGlobalParent* top = TopWindowContext();
@@ -1710,6 +1735,24 @@ IPCResult WindowGlobalParent::RecvOnInitialStorageAccess() {
   DebugOnly<nsresult> rv =
       BounceTrackingStorageObserver::OnInitialStorageAccess(this);
   NS_WARNING_ASSERTION(NS_SUCCEEDED(rv), "Failed to notify storage access");
+  return IPC_OK();
+}
+
+IPCResult WindowGlobalParent::RecvRecordUserActivationForBTP() {
+  WindowGlobalParent* top = TopWindowContext();
+  if (!top) {
+    return IPC_OK();
+  }
+  nsIPrincipal* principal = top->DocumentPrincipal();
+  if (!principal) {
+    return IPC_OK();
+  }
+
+  DebugOnly<nsresult> rv =
+      BounceTrackingProtection::RecordUserActivation(principal, Some(PR_Now()));
+  NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
+                       "Failed to record BTP user activation.");
+
   return IPC_OK();
 }
 

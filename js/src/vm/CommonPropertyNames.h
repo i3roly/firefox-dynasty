@@ -308,7 +308,8 @@
   MACRO_(InterpretGeneratorResume, "InterpretGeneratorResume")                 \
   MACRO_(Invalid_Date_, "Invalid Date")                                        \
   MACRO_(isBreakpoint, "isBreakpoint")                                         \
-  IF_DECORATORS(MACRO_(IsCallable, "IsCallable"))                              \
+  IF_EXPLICIT_RESOURCE_MANAGEMENT_OR_DECORATORS(                               \
+      MACRO_(IsCallable, "IsCallable"))                                        \
   MACRO_(isDisjointFrom, "isDisjointFrom")                                     \
   MACRO_(isEntryPoint, "isEntryPoint")                                         \
   MACRO_(isExtensible, "isExtensible")                                         \
@@ -605,6 +606,7 @@
   MACRO_(use_asm_, "use asm")                                                  \
   MACRO_(use_strict_, "use strict")                                            \
   MACRO_(useGrouping, "useGrouping")                                           \
+  IF_EXPLICIT_RESOURCE_MANAGEMENT(MACRO_(using_, "using"))                     \
   MACRO_(UTC, "UTC")                                                           \
   MACRO_(value, "value")                                                       \
   MACRO_(valueOf, "valueOf")                                                   \

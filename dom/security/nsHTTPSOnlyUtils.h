@@ -77,7 +77,7 @@ class nsHTTPSOnlyUtils {
     EnforceForHTTPSRR,
   };
   static bool IsUpgradeDowngradeEndlessLoop(
-      nsIURI* aURI, nsILoadInfo* aLoadInfo,
+      nsIURI* aOldURI, nsIURI* aNewURI, nsILoadInfo* aLoadInfo,
       const mozilla::EnumSet<UpgradeDowngradeEndlessLoopOptions>& aOptions =
           {});
 
@@ -132,7 +132,8 @@ class nsHTTPSOnlyUtils {
    * @param  aPrincipal The principal for whom the exception should be checked
    * @return            True if exempt
    */
-  static bool TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal);
+  static bool TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal,
+                                      bool aCheckForHTTPSFirst = false);
 
   /**
    * Tests if the HTTPS-Only Mode upgrade exception is set for channel result
@@ -153,16 +154,30 @@ class nsHTTPSOnlyUtils {
   static bool IsSafeToAcceptCORSOrMixedContent(nsILoadInfo* aLoadInfo);
 
   /**
-   * Checks if two URIs are same origin modulo the difference that
-   * aHTTPSchemeURI uses an http scheme.
-   * @param aHTTPSSchemeURI nsIURI using scheme of https
-   * @param aOtherURI nsIURI using scheme of http
+   * Checks if https only or https first mode is enabled for this load
    * @param aLoadInfo nsILoadInfo of the request
+   */
+  static bool ShouldUpgradeConnection(nsILoadInfo* aLoadInfo);
+
+  /**
+   * Checks if two URIs are same origin modulo the difference that
+   * aToURI scheme is downgraded to http from https aFromURI.
+   * @param aFromURI nsIURI using scheme of https
+   * @param aToURI nsIURI using scheme of http
    * @return true, if URIs are equal except scheme and ref
    */
-  static bool IsEqualURIExceptSchemeAndRef(nsIURI* aHTTPSSchemeURI,
-                                           nsIURI* aOtherURI,
-                                           nsILoadInfo* aLoadInfo);
+  static bool IsHttpDowngrade(nsIURI* aFromURI, nsIURI* aToURI);
+
+  /**
+   * Will add a special temporary HTTPS-Only exception that only applies to
+   * HTTPS-First, and is not exposed in the UI.
+   * @param aURI      The URL for whose HTTP principal the exception should be
+   *                  added
+   * @param aLoadInfo The loadinfo of the request triggering this exception to
+   *                  be added (needs to match aURI)
+   */
+  static nsresult AddHTTPSFirstExceptionForSession(
+      nsCOMPtr<nsIURI> aURI, nsILoadInfo* const aLoadInfo);
 
   /**
    * Determines which HTTPS-Only status flags should get propagated to

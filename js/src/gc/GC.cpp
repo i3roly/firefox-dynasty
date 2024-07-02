@@ -251,6 +251,7 @@
 using namespace js;
 using namespace js::gc;
 
+using mozilla::EnumSet;
 using mozilla::MakeScopeExit;
 using mozilla::Maybe;
 using mozilla::Nothing;
@@ -498,11 +499,13 @@ GCRuntime::GCRuntime(JSRuntime* rt)
       lastAllocRateUpdateTime(TimeStamp::Now()) {
 }
 
-using CharRange = mozilla::Range<const char>;
-using CharRangeVector = Vector<CharRange, 0, SystemAllocPolicy>;
+bool js::gc::SplitStringBy(const char* text, char delimiter,
+                           CharRangeVector* result) {
+  return SplitStringBy(CharRange(text, strlen(text)), delimiter, result);
+}
 
-static bool SplitStringBy(const CharRange& text, char delimiter,
-                          CharRangeVector* result) {
+bool js::gc::SplitStringBy(const CharRange& text, char delimiter,
+                           CharRangeVector* result) {
   auto start = text.begin();
   for (auto ptr = start; ptr != text.end(); ptr++) {
     if (*ptr == delimiter) {
@@ -548,8 +551,7 @@ void js::gc::ReadProfileEnv(const char* envName, const char* helpText,
   }
 
   CharRangeVector parts;
-  auto text = CharRange(env, strlen(env));
-  if (!SplitStringBy(text, ',', &parts)) {
+  if (!SplitStringBy(env, ',', &parts)) {
     MOZ_CRASH("OOM parsing environment variable");
   }
 
@@ -589,69 +591,78 @@ void GCRuntime::getZealBits(uint32_t* zealBits, uint32_t* frequency,
   *scheduled = nextScheduled;
 }
 
+// Please also update jit-test/tests/gc/gczeal.js when updating this help text.
+// clang-format off
 const char gc::ZealModeHelpText[] =
-    "  Specifies how zealous the garbage collector should be. Some of these "
-    "modes can\n"
-    "  be set simultaneously, by passing multiple level options, e.g. \"2;4\" "
-    "will activate\n"
-    "  both modes 2 and 4. Modes can be specified by name or number.\n"
-    "  \n"
-    "  Values:\n"
-    "    0:  (None) Normal amount of collection (resets all modes)\n"
-    "    1:  (RootsChange) Collect when roots are added or removed\n"
-    "    2:  (Alloc) Collect when every N allocations (default: 100)\n"
-    "    4:  (VerifierPre) Verify pre write barriers between instructions\n"
-    "    6:  (YieldBeforeRootMarking) Incremental GC in two slices that yields "
-    "before root marking\n"
-    "    7:  (GenerationalGC) Collect the nursery every N nursery allocations\n"
-    "    8:  (YieldBeforeMarking) Incremental GC in two slices that yields "
-    "between\n"
-    "        the root marking and marking phases\n"
-    "    9:  (YieldBeforeSweeping) Incremental GC in two slices that yields "
-    "between\n"
-    "        the marking and sweeping phases\n"
-    "    10: (IncrementalMultipleSlices) Incremental GC in many slices\n"
-    "    11: (IncrementalMarkingValidator) Verify incremental marking\n"
-    "    12: (ElementsBarrier) Use the individual element post-write barrier\n"
-    "        regardless of elements size\n"
-    "    13: (CheckHashTablesOnMinorGC) Check internal hashtables on minor GC\n"
-    "    14: (Compact) Perform a shrinking collection every N allocations\n"
-    "    15: (CheckHeapAfterGC) Walk the heap to check its integrity after "
-    "every GC\n"
-    "    17: (YieldBeforeSweepingAtoms) Incremental GC in two slices that "
-    "yields\n"
-    "        before sweeping the atoms table\n"
-    "    18: (CheckGrayMarking) Check gray marking invariants after every GC\n"
-    "    19: (YieldBeforeSweepingCaches) Incremental GC in two slices that "
-    "yields\n"
-    "        before sweeping weak caches\n"
-    "    21: (YieldBeforeSweepingObjects) Incremental GC in two slices that "
-    "yields\n"
-    "        before sweeping foreground finalized objects\n"
-    "    22: (YieldBeforeSweepingNonObjects) Incremental GC in two slices that "
-    "yields\n"
-    "        before sweeping non-object GC things\n"
-    "    23: (YieldBeforeSweepingPropMapTrees) Incremental GC in two slices "
-    "that "
-    "yields\n"
-    "        before sweeping shape trees\n"
-    "    24: (CheckWeakMapMarking) Check weak map marking invariants after "
-    "every GC\n"
-    "    25: (YieldWhileGrayMarking) Incremental GC in two slices that yields\n"
-    "        during gray marking\n";
+"  Specifies how zealous the garbage collector should be. Some of these modes\n"
+"  can be set simultaneously, by passing multiple level options, e.g. \"2;4\"\n"
+"  will activate both modes 2 and 4. Modes can be specified by name or\n"
+"  number.\n"
+"  \n"
+"  Values:\n"
+"    0:  (None) Normal amount of collection (resets all modes)\n"
+"    1:  (RootsChange) Collect when roots are added or removed\n"
+"    2:  (Alloc) Collect when every N allocations (default: 100)\n"
+"    4:  (VerifierPre) Verify pre write barriers between instructions\n"
+"    6:  (YieldBeforeRootMarking) Incremental GC in two slices that yields\n"
+"        before root marking\n"
+"    7:  (GenerationalGC) Collect the nursery every N nursery allocations\n"
+"    8:  (YieldBeforeMarking) Incremental GC in two slices that yields\n"
+"        between the root marking and marking phases\n"
+"    9:  (YieldBeforeSweeping) Incremental GC in two slices that yields\n"
+"        between the marking and sweeping phases\n"
+"    10: (IncrementalMultipleSlices) Incremental GC in many slices\n"
+"    11: (IncrementalMarkingValidator) Verify incremental marking\n"
+"    12: (ElementsBarrier) Use the individual element post-write barrier\n"
+"        regardless of elements size\n"
+"    13: (CheckHashTablesOnMinorGC) Check internal hashtables on minor GC\n"
+"    14: (Compact) Perform a shrinking collection every N allocations\n"
+"    15: (CheckHeapAfterGC) Walk the heap to check its integrity after every\n"
+"        GC\n"
+"    17: (YieldBeforeSweepingAtoms) Incremental GC in two slices that yields\n"
+"        before sweeping the atoms table\n"
+"    18: (CheckGrayMarking) Check gray marking invariants after every GC\n"
+"    19: (YieldBeforeSweepingCaches) Incremental GC in two slices that yields\n"
+"        before sweeping weak caches\n"
+"    21: (YieldBeforeSweepingObjects) Incremental GC that yields once per\n"
+"        zone before sweeping foreground finalized objects\n"
+"    22: (YieldBeforeSweepingNonObjects) Incremental GC that yields once per\n"
+"        zone before sweeping non-object GC things\n"
+"    23: (YieldBeforeSweepingPropMapTrees) Incremental GC that yields once\n"
+"        per zone before sweeping shape trees\n"
+"    24: (CheckWeakMapMarking) Check weak map marking invariants after every\n"
+"        GC\n"
+"    25: (YieldWhileGrayMarking) Incremental GC in two slices that yields\n"
+"        during gray marking\n";
+// clang-format on
 
-// The set of zeal modes that control incremental slices. These modes are
-// mutually exclusive.
-static const mozilla::EnumSet<ZealMode> IncrementalSliceZealModes = {
+// The set of zeal modes that yield at specific points in collection.
+static const EnumSet<ZealMode> YieldPointZealModes = {
     ZealMode::YieldBeforeRootMarking,
     ZealMode::YieldBeforeMarking,
     ZealMode::YieldBeforeSweeping,
-    ZealMode::IncrementalMultipleSlices,
     ZealMode::YieldBeforeSweepingAtoms,
     ZealMode::YieldBeforeSweepingCaches,
     ZealMode::YieldBeforeSweepingObjects,
     ZealMode::YieldBeforeSweepingNonObjects,
-    ZealMode::YieldBeforeSweepingPropMapTrees};
+    ZealMode::YieldBeforeSweepingPropMapTrees,
+    ZealMode::YieldWhileGrayMarking};
+
+// The set of zeal modes that control incremental slices.
+static const EnumSet<ZealMode> IncrementalSliceZealModes =
+    YieldPointZealModes +
+    EnumSet<ZealMode>{ZealMode::IncrementalMultipleSlices};
+
+// The set of zeal modes that trigger GC periodically.
+static const EnumSet<ZealMode> PeriodicGCZealModes =
+    IncrementalSliceZealModes + EnumSet<ZealMode>{ZealMode::Alloc,
+                                                  ZealMode::GenerationalGC,
+                                                  ZealMode::Compact};
+
+// The set of zeal modes that are mutually exclusive. All of these trigger GC
+// except VerifierPre.
+static const EnumSet<ZealMode> ExclusiveZealModes =
+    PeriodicGCZealModes + EnumSet<ZealMode>{ZealMode::VerifierPre};
 
 void GCRuntime::setZeal(uint8_t zeal, uint32_t frequency) {
   MOZ_ASSERT(zeal <= unsigned(ZealMode::Limit));
@@ -662,37 +673,41 @@ void GCRuntime::setZeal(uint8_t zeal, uint32_t frequency) {
 
   if (zeal == 0) {
     if (hasZealMode(ZealMode::GenerationalGC)) {
-      evictNursery();
-      nursery().leaveZealMode();
+      clearZealMode(ZealMode::GenerationalGC);
     }
 
     if (isIncrementalGCInProgress()) {
       finishGC(JS::GCReason::DEBUG_GC);
     }
+
+    zealModeBits = 0;
+    zealFrequency = 0;
+    nextScheduled = 0;
+    return;
   }
 
+  // Modes that trigger periodically are mutually exclusive. If we're setting
+  // one of those, we first reset all of them.
   ZealMode zealMode = ZealMode(zeal);
+  if (ExclusiveZealModes.contains(zealMode)) {
+    for (auto mode : ExclusiveZealModes) {
+      if (hasZealMode(mode)) {
+        clearZealMode(mode);
+      }
+    }
+  }
+
   if (zealMode == ZealMode::GenerationalGC) {
     evictNursery(JS::GCReason::EVICT_NURSERY);
     nursery().enterZealMode();
   }
 
-  // Some modes are mutually exclusive. If we're setting one of those, we
-  // first reset all of them.
-  if (IncrementalSliceZealModes.contains(zealMode)) {
-    for (auto mode : IncrementalSliceZealModes) {
-      clearZealMode(mode);
-    }
-  }
-
-  bool schedule = zealMode >= ZealMode::Alloc;
-  if (zeal != 0) {
-    zealModeBits |= 1 << unsigned(zeal);
-  } else {
-    zealModeBits = 0;
-  }
+  zealModeBits |= 1 << zeal;
   zealFrequency = frequency;
-  nextScheduled = schedule ? frequency : 0;
+
+  if (PeriodicGCZealModes.contains(zealMode)) {
+    nextScheduled = frequency;
+  }
 }
 
 void GCRuntime::unsetZeal(uint8_t zeal) {
@@ -705,11 +720,6 @@ void GCRuntime::unsetZeal(uint8_t zeal) {
 
   if (verifyPreData) {
     VerifyBarriers(rt, PreBarrierVerifier);
-  }
-
-  if (zealMode == ZealMode::GenerationalGC) {
-    evictNursery();
-    nursery().leaveZealMode();
   }
 
   clearZealMode(zealMode);
@@ -788,7 +798,7 @@ bool GCRuntime::parseAndSetZeal(const char* str) {
     return PrintZealHelpAndFail();
   }
 
-  uint32_t frequency = JS_DEFAULT_ZEAL_FREQ;
+  uint32_t frequency = JS::ShellDefaultGCZealFrequency;
   if (parts.length() == 2 && !ParseZealModeNumericParam(parts[1], &frequency)) {
     return PrintZealHelpAndFail();
   }
@@ -810,6 +820,45 @@ bool GCRuntime::parseAndSetZeal(const char* str) {
   }
 
   return true;
+}
+
+bool GCRuntime::needZealousGC() {
+  if (nextScheduled > 0 && --nextScheduled == 0) {
+    if (hasAnyZealModeOf(PeriodicGCZealModes)) {
+      nextScheduled = zealFrequency;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool GCRuntime::zealModeControlsYieldPoint() const {
+  // Indicates whether a zeal mode is enabled that controls the point at which
+  // the collector yields to the mutator. Yield can happen once per collection
+  // or once per zone depending on the mode.
+  return hasAnyZealModeOf(YieldPointZealModes);
+}
+
+bool GCRuntime::hasZealMode(ZealMode mode) const {
+  static_assert(size_t(ZealMode::Limit) < sizeof(zealModeBits) * 8,
+                "Zeal modes must fit in zealModeBits");
+  return zealModeBits & (1 << uint32_t(mode));
+}
+
+bool GCRuntime::hasAnyZealModeOf(EnumSet<ZealMode> modes) const {
+  return zealModeBits & modes.serialize();
+}
+
+void GCRuntime::clearZealMode(ZealMode mode) {
+  MOZ_ASSERT(hasZealMode(mode));
+
+  if (mode == ZealMode::GenerationalGC) {
+    evictNursery();
+    nursery().leaveZealMode();
+  }
+
+  zealModeBits &= ~(1 << uint32_t(mode));
+  MOZ_ASSERT(!hasZealMode(mode));
 }
 
 const char* js::gc::AllocKindName(AllocKind kind) {
@@ -1232,6 +1281,8 @@ uint32_t GCRuntime::getParameter(JSGCParamKey key, const AutoLockGC& lock) {
       return uint32_t(majorGCNumber);
     case JSGC_MINOR_GC_NUMBER:
       return uint32_t(minorGCNumber);
+    case JSGC_SLICE_NUMBER:
+      return uint32_t(sliceNumber);
     case JSGC_INCREMENTAL_GC_ENABLED:
       return incrementalGCEnabled;
     case JSGC_PER_ZONE_GC_ENABLED:
@@ -1546,7 +1597,7 @@ void GCRuntime::callObjectsTenuredCallback() {
   JS::AutoSuppressGCAnalysis nogc;
   const auto& callback = tenuredCallback.ref();
   if (callback.op) {
-    callback.op(rt->mainContextFromOwnThread(), callback.data);
+    callback.op(&mainThreadContext.ref(), callback.data);
   }
 }
 
@@ -3710,7 +3761,7 @@ void GCRuntime::incrementalSlice(SliceBudget& budget, JS::GCReason reason,
       DescribeBudget(budget), budgetWasIncreased);
 #endif
 
-  if (useZeal && hasIncrementalTwoSliceZealMode()) {
+  if (useZeal && zealModeControlsYieldPoint()) {
     // Yields between slices occurs at predetermined points in these modes; the
     // budget is not used. |isIncremental| is still true.
     stats().log("Using unlimited budget for two-slice zeal mode");
@@ -3764,6 +3815,14 @@ void GCRuntime::incrementalSlice(SliceBudget& budget, JS::GCReason reason,
         // this slice.
         rt->mainContextFromOwnThread()->traceWrapperGCRooters(
             marker().tracer());
+
+        // Incremental marking validation re-runs all marking non-incrementally,
+        // which requires collecting the nursery. If that might happen in this
+        // slice, do it now while it's safe to do so.
+        if (isIncremental &&
+            hasZealMode(ZealMode::IncrementalMarkingValidator)) {
+          collectNurseryFromMajorGC(JS::GCReason::EVICT_NURSERY);
+        }
       }
 
       {
@@ -4345,7 +4404,7 @@ MOZ_NEVER_INLINE GCRuntime::IncrementalResult GCRuntime::gcCycle(
 
 inline bool GCRuntime::mightSweepInThisSlice(bool nonIncremental) {
   MOZ_ASSERT(incrementalState < State::Sweep);
-  return nonIncremental || lastMarkSlice || hasIncrementalTwoSliceZealMode();
+  return nonIncremental || lastMarkSlice || zealModeControlsYieldPoint();
 }
 
 #ifdef JS_GC_ZEAL
@@ -4996,7 +5055,7 @@ void GCRuntime::runDebugGC() {
         (initialState == State::Sweep && incrementalState == State::Compact)) {
       zealSliceBudget = zealFrequency / 2;
     }
-  } else if (hasIncrementalTwoSliceZealMode()) {
+  } else if (zealModeControlsYieldPoint()) {
     // These modes trigger incremental GC that happens in two slices and the
     // supplied budget is ignored by incrementalSlice.
     budget = SliceBudget(WorkBudget(1));

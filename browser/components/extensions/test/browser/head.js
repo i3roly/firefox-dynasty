@@ -347,12 +347,9 @@ function alterContent(browser, task, arg = null) {
 }
 
 async function focusButtonAndPressKey(key, elem, modifiers) {
-  let focused = BrowserTestUtils.waitForEvent(elem, "focus", true);
-
   elem.setAttribute("tabindex", "-1");
   elem.focus();
   elem.removeAttribute("tabindex");
-  await focused;
 
   EventUtils.synthesizeKey(key, modifiers);
   elem.blur();

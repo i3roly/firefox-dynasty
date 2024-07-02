@@ -17,9 +17,11 @@
 
 #include "chrome/common/process_watcher.h"
 #include "mozilla/Result.h"
+#include "mozilla/Services.h"
 #include "mozilla/XREAppData.h"
 #include "nsComponentManagerUtils.h"
 #include "nsIBrowserDOMWindow.h"
+#include "nsIPrivateAttributionService.h"
 
 #include "GMPServiceParent.h"
 #include "HandlerServiceParent.h"
@@ -1244,6 +1246,35 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateGMPService() {
   return IPC_OK();
 }
 
+IPCResult ContentParent::RecvAttributionEvent(
+    const nsACString& aHost, PrivateAttributionImpressionType aType,
+    uint32_t aIndex, const nsAString& aAd, const nsACString& aTargetHost) {
+  nsCOMPtr<nsIPrivateAttributionService> pa =
+      components::PrivateAttribution::Service();
+  if (NS_WARN_IF(!pa)) {
+    return IPC_OK();
+  }
+  pa->OnAttributionEvent(aHost, GetEnumString(aType), aIndex, aAd, aTargetHost);
+  return IPC_OK();
+}
+
+IPCResult ContentParent::RecvAttributionConversion(
+    const nsACString& aHost, const nsAString& aTask, uint32_t aHistogramSize,
+    const Maybe<uint32_t>& aLoopbackDays,
+    const Maybe<PrivateAttributionImpressionType>& aImpressionType,
+    const nsTArray<nsString>& aAds, const nsTArray<nsCString>& aSourceHosts) {
+  nsCOMPtr<nsIPrivateAttributionService> pa =
+      components::PrivateAttribution::Service();
+  if (NS_WARN_IF(!pa)) {
+    return IPC_OK();
+  }
+  pa->OnAttributionConversion(
+      aHost, aTask, aHistogramSize, aLoopbackDays.valueOr(0),
+      aImpressionType ? GetEnumString(*aImpressionType) : EmptyCString(), aAds,
+      aSourceHosts);
+  return IPC_OK();
+}
+
 Atomic<bool, mozilla::Relaxed> sContentParentTelemetryEventEnabled(false);
 
 /*static*/
@@ -2038,6 +2069,14 @@ void ContentParent::ActorDestroy(ActorDestroyReason why) {
 #ifdef FUZZING_SNAPSHOT
   MOZ_FUZZING_IPC_DROP_PEER("ContentParent::ActorDestroy");
 #endif
+
+  // Gather process lifetime telemetry.
+  if (StringBeginsWith(mRemoteType, WEB_REMOTE_TYPE) ||
+      mRemoteType == FILE_REMOTE_TYPE || mRemoteType == EXTENSION_REMOTE_TYPE) {
+    TimeDuration runtime = TimeStamp::Now() - mActivateTS;
+    Telemetry::Accumulate(Telemetry::PROCESS_LIFETIME,
+                          uint64_t(runtime.ToSeconds()));
+  }
 
   if (mSendShutdownTimer) {
     mSendShutdownTimer->Cancel();
@@ -4513,7 +4552,7 @@ void ContentParent::GeneratePairedMinidump(const char* aReason) {
         CrashReporter::Annotation::ipc_channel_error, reason);
 
     // Generate the report and insert into the queue for submittal.
-    if (mCrashReporter->GenerateMinidumpAndPair(this, "browser"_ns)) {
+    if (mCrashReporter->GenerateMinidumpAndPair(mSubprocess, "browser"_ns)) {
       mCrashReporter->FinalizeCrashReport();
       mCreatedPairedMinidumps = true;
     }
@@ -5559,8 +5598,8 @@ mozilla::ipc::IPCResult ContentParent::CommonCreateWindow(
     PBrowserParent* aThisTab, BrowsingContext& aParent, bool aSetOpener,
     const uint32_t& aChromeFlags, const bool& aCalledFromJS,
     const bool& aForPrinting, const bool& aForWindowDotPrint,
-    nsIURI* aURIToLoad, const nsACString& aFeatures,
-    const UserActivation::Modifiers& aModifiers,
+    const bool& aIsTopLevelCreatedByWebContent, nsIURI* aURIToLoad,
+    const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
     BrowserParent* aNextRemoteBrowser, const nsAString& aName,
     nsresult& aResult, nsCOMPtr<nsIRemoteTab>& aNewRemoteTab,
     bool* aWindowIsNew, int32_t& aOpenLocation,
@@ -5584,6 +5623,7 @@ mozilla::ipc::IPCResult ContentParent::CommonCreateWindow(
   openInfo->mIsForWindowDotPrint = aForWindowDotPrint;
   openInfo->mNextRemoteBrowser = aNextRemoteBrowser;
   openInfo->mOriginAttributes = aOriginAttributes;
+  openInfo->mIsTopLevelCreatedByWebContent = aIsTopLevelCreatedByWebContent;
 
   MOZ_ASSERT_IF(aForWindowDotPrint, aForPrinting);
 
@@ -5786,8 +5826,9 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindow(
     PBrowserParent* aThisTab, const MaybeDiscarded<BrowsingContext>& aParent,
     PBrowserParent* aNewTab, const uint32_t& aChromeFlags,
     const bool& aCalledFromJS, const bool& aForPrinting,
-    const bool& aForWindowDotPrint, nsIURI* aURIToLoad,
-    const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
+    const bool& aForWindowDotPrint, const bool& aIsTopLevelCreatedByWebContent,
+    nsIURI* aURIToLoad, const nsACString& aFeatures,
+    const UserActivation::Modifiers& aModifiers,
     nsIPrincipal* aTriggeringPrincipal, nsIContentSecurityPolicy* aCsp,
     nsIReferrerInfo* aReferrerInfo, const OriginAttributes& aOriginAttributes,
     CreateWindowResolver&& aResolve) {
@@ -5872,10 +5913,10 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindow(
   int32_t openLocation = nsIBrowserDOMWindow::OPEN_NEWWINDOW;
   mozilla::ipc::IPCResult ipcResult = CommonCreateWindow(
       aThisTab, *parent, newBCOpenerId != 0, aChromeFlags, aCalledFromJS,
-      aForPrinting, aForWindowDotPrint, aURIToLoad, aFeatures, aModifiers,
-      newTab, VoidString(), rv, newRemoteTab, &cwi.windowOpened(), openLocation,
-      aTriggeringPrincipal, aReferrerInfo, /* aLoadUri = */ false, aCsp,
-      aOriginAttributes);
+      aForPrinting, aForWindowDotPrint, aIsTopLevelCreatedByWebContent,
+      aURIToLoad, aFeatures, aModifiers, newTab, VoidString(), rv, newRemoteTab,
+      &cwi.windowOpened(), openLocation, aTriggeringPrincipal, aReferrerInfo,
+      /* aLoadUri = */ false, aCsp, aOriginAttributes);
   if (!ipcResult) {
     return ipcResult;
   }
@@ -5908,7 +5949,8 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindow(
 
 mozilla::ipc::IPCResult ContentParent::RecvCreateWindowInDifferentProcess(
     PBrowserParent* aThisTab, const MaybeDiscarded<BrowsingContext>& aParent,
-    const uint32_t& aChromeFlags, const bool& aCalledFromJS, nsIURI* aURIToLoad,
+    const uint32_t& aChromeFlags, const bool& aCalledFromJS,
+    const bool& aIsTopLevelCreatedByWebContent, nsIURI* aURIToLoad,
     const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
     const nsAString& aName, nsIPrincipal* aTriggeringPrincipal,
     nsIContentSecurityPolicy* aCsp, nsIReferrerInfo* aReferrerInfo,
@@ -5954,7 +5996,8 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindowInDifferentProcess(
   mozilla::ipc::IPCResult ipcResult = CommonCreateWindow(
       aThisTab, *parent, /* aSetOpener = */ false, aChromeFlags, aCalledFromJS,
       /* aForPrinting = */ false,
-      /* aForPrintPreview = */ false, aURIToLoad, aFeatures, aModifiers,
+      /* aForWindowDotPrint = */ false, aIsTopLevelCreatedByWebContent,
+      aURIToLoad, aFeatures, aModifiers,
       /* aNextRemoteBrowser = */ nullptr, aName, rv, newRemoteTab, &windowIsNew,
       openLocation, aTriggeringPrincipal, aReferrerInfo,
       /* aLoadUri = */ true, aCsp, aOriginAttributes);
@@ -7262,11 +7305,16 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateBrowsingContext(
   // Ensure that the passed-in BrowsingContextGroup is valid.
   RefPtr<BrowsingContextGroup> group =
       BrowsingContextGroup::GetOrCreate(aGroupId);
-  if (parent && parent->Group() != group) {
+  if (parent) {
     if (parent->Group()->Id() != aGroupId) {
       return IPC_FAIL(this, "Parent has different group ID");
     }
-    return IPC_FAIL(this, "Parent has different group object");
+    if (parent->IsDiscarded()) {
+      return IPC_FAIL(this, "Parent is discarded");
+    }
+    if (parent->Group() != group) {
+      return IPC_FAIL(this, "Parent has different group object");
+    }
   }
   if (opener && opener->Group() != group) {
     if (opener->Group()->Id() != aGroupId) {
@@ -8190,13 +8238,13 @@ IPCResult ContentParent::RecvFOGData(ByteBuf&& buf) {
 
 mozilla::ipc::IPCResult ContentParent::RecvSetContainerFeaturePolicy(
     const MaybeDiscardedBrowsingContext& aContainerContext,
-    FeaturePolicy* aContainerFeaturePolicy) {
+    MaybeFeaturePolicyInfo&& aContainerFeaturePolicyInfo) {
   if (aContainerContext.IsNullOrDiscarded()) {
     return IPC_OK();
   }
 
   auto* context = aContainerContext.get_canonical();
-  context->SetContainerFeaturePolicy(aContainerFeaturePolicy);
+  context->SetContainerFeaturePolicy(std::move(aContainerFeaturePolicyInfo));
 
   return IPC_OK();
 }

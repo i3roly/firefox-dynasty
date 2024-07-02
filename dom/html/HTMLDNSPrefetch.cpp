@@ -180,6 +180,13 @@ static bool EnsureDNSService() {
 }
 
 bool HTMLDNSPrefetch::IsAllowed(Document* aDocument) {
+  // Do not use prefetch if the document's node principal is the system
+  // principal.
+  nsCOMPtr<nsIPrincipal> principal = aDocument->NodePrincipal();
+  if (principal->IsSystemPrincipal()) {
+    return false;
+  }
+
   // There is no need to do prefetch on non UI scenarios such as XMLHttpRequest.
   return aDocument->IsDNSPrefetchAllowed() && aDocument->GetWindow();
 }
@@ -310,7 +317,7 @@ nsresult HTMLDNSPrefetch::CancelPrefetch(
     if (!hostname.IsEmpty() &&
         net_IsValidHostName(NS_ConvertUTF16toUTF8(hostname))) {
       // during shutdown gNeckoChild might be null
-      if (gNeckoChild) {
+      if (gNeckoChild && gNeckoChild->CanSend()) {
         gNeckoChild->SendCancelHTMLDNSPrefetch(
             hostname, isHttps, aPartitionedPrincipalOriginAttributes, flags,
             aReason);

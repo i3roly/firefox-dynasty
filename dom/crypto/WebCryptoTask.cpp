@@ -1502,7 +1502,6 @@ class ImportSymmetricKeyTask : public ImportKeyTask {
 
   virtual nsresult BeforeCrypto() override {
     nsresult rv;
-
     // If we're doing a JWK import, import the key data
     if (mDataIsJwk) {
       if (!mJwk.mK.WasPassed()) {
@@ -1517,11 +1516,12 @@ class ImportSymmetricKeyTask : public ImportKeyTask {
     }
     // Check that we have valid key data.
     if (mKeyData.Length() == 0 &&
-        !mAlgName.EqualsLiteral(WEBCRYPTO_ALG_PBKDF2)) {
+        (!mAlgName.EqualsLiteral(WEBCRYPTO_ALG_PBKDF2) &&
+         !mAlgName.EqualsLiteral(WEBCRYPTO_ALG_HKDF))) {
       return NS_ERROR_DOM_DATA_ERR;
     }
 
-    // Construct an appropriate KeyAlorithm,
+    // Construct an appropriate KeyAlgorithm,
     // and verify that usages are appropriate
     if (mKeyData.Length() > UINT32_MAX / 8) {
       return NS_ERROR_DOM_DATA_ERR;
@@ -1556,7 +1556,7 @@ class ImportSymmetricKeyTask : public ImportKeyTask {
                                   CryptoKey::DERIVEBITS)) {
         return NS_ERROR_DOM_DATA_ERR;
       }
-      mKey->Algorithm().MakeAes(mAlgName, length);
+      mKey->Algorithm().MakeKDF(mAlgName);
 
       if (mDataIsJwk && mJwk.mUse.WasPassed()) {
         // There is not a 'use' value consistent with PBKDF or HKDF
@@ -2414,16 +2414,10 @@ class DeriveHkdfBitsTask : public ReturnArrayBufferViewTask {
       return;
     }
 
-    // Check that we have a key.
-    if (mSymKey.Length() == 0) {
-      mEarlyRv = NS_ERROR_DOM_INVALID_ACCESS_ERR;
-      return;
-    }
-
     RootedDictionary<HkdfParams> params(aCx);
     mEarlyRv = Coerce(aCx, params, aAlgorithm);
     if (NS_FAILED(mEarlyRv)) {
-      mEarlyRv = NS_ERROR_DOM_SYNTAX_ERR;
+      mEarlyRv = NS_ERROR_DOM_TYPE_MISMATCH_ERR;
       return;
     }
 
@@ -2807,7 +2801,7 @@ class DeriveEcdhBitsTask : public ReturnArrayBufferViewTask {
 
     if (mLength) {
       if (*mLength > mResult.Length()) {
-        return NS_ERROR_DOM_DATA_ERR;
+        return NS_ERROR_DOM_OPERATION_ERR;
       }
       if (!mResult.SetLength(*mLength, fallible)) {
         return NS_ERROR_DOM_UNKNOWN_ERR;

@@ -6,6 +6,8 @@
 #ifndef LIB_JXL_SPLINES_H_
 #define LIB_JXL_SPLINES_H_
 
+#include <jxl/memory_manager.h>
+
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -108,7 +110,8 @@ class Splines {
 
   void Clear();
 
-  Status Decode(BitReader* br, size_t num_pixels);
+  Status Decode(JxlMemoryManager* memory_manager, BitReader* br,
+                size_t num_pixels);
 
   void AddTo(Image3F* opsin, const Rect& opsin_rect,
              const Rect& image_rect) const;
@@ -126,7 +129,7 @@ class Splines {
   int32_t GetQuantizationAdjustment() const { return quantization_adjustment_; }
 
   Status InitializeDrawCache(size_t image_xsize, size_t image_ysize,
-                             const ColorCorrelationMap& cmap);
+                             const ColorCorrelation& color_correlation);
 
  private:
   template <bool>

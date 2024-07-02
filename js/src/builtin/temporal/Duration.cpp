@@ -1701,7 +1701,7 @@ static bool BalanceTimeDurationRelative(
     }
 
     // Steps 4.b-c.
-    Rooted<CalendarValue> isoCalendar(cx, CalendarValue(cx->names().iso8601));
+    Rooted<CalendarValue> isoCalendar(cx, CalendarValue(CalendarId::ISO8601));
     if (!AddDaysToZonedDateTime(cx, startInstant, *precalculatedPlainDateTime,
                                 timeZone, isoCalendar, duration.date.days,
                                 &intermediateNs)) {
@@ -2764,9 +2764,9 @@ static JSString* TemporalDurationToString(JSContext* cx,
 }
 
 /**
- * ToRelativeTemporalObject ( options )
+ * GetTemporalRelativeToOption ( options )
  */
-static bool ToRelativeTemporalObject(
+static bool GetTemporalRelativeToOption(
     JSContext* cx, Handle<JSObject*> options,
     MutableHandle<Wrapped<PlainDateObject*>> plainRelativeTo,
     MutableHandle<ZonedDateTime> zonedRelativeTo,
@@ -2878,74 +2878,67 @@ static bool ToRelativeTemporalObject(
     }
 
     // Step 5.f.
-    JS::RootedVector<PropertyKey> fieldNames(cx);
-    if (!CalendarFields(cx, calendarRec,
-                        {CalendarField::Day, CalendarField::Month,
-                         CalendarField::MonthCode, CalendarField::Year},
-                        &fieldNames)) {
-      return false;
-    }
-
-    // Step 5.g.
-    if (!AppendSorted(cx, fieldNames.get(),
-                      {
-                          TemporalField::Hour,
-                          TemporalField::Microsecond,
-                          TemporalField::Millisecond,
-                          TemporalField::Minute,
-                          TemporalField::Nanosecond,
-                          TemporalField::Offset,
-                          TemporalField::Second,
-                          TemporalField::TimeZone,
-                      })) {
-      return false;
-    }
-
-    // Step 5.h.
-    Rooted<PlainObject*> fields(cx, PrepareTemporalFields(cx, obj, fieldNames));
+    Rooted<PlainObject*> fields(
+        cx, PrepareCalendarFields(cx, calendarRec, obj,
+                                  {
+                                      CalendarField::Day,
+                                      CalendarField::Month,
+                                      CalendarField::MonthCode,
+                                      CalendarField::Year,
+                                  },
+                                  {
+                                      TemporalField::Hour,
+                                      TemporalField::Microsecond,
+                                      TemporalField::Millisecond,
+                                      TemporalField::Minute,
+                                      TemporalField::Nanosecond,
+                                      TemporalField::Offset,
+                                      TemporalField::Second,
+                                      TemporalField::TimeZone,
+                                  }));
     if (!fields) {
       return false;
     }
 
-    // Step 5.i.
+    // Step 5.g.
     Rooted<PlainObject*> dateOptions(cx, NewPlainObjectWithProto(cx, nullptr));
     if (!dateOptions) {
       return false;
     }
 
-    // Step 5.j.
+    // Step 5.h.
     Rooted<Value> overflow(cx, StringValue(cx->names().constrain));
     if (!DefineDataProperty(cx, dateOptions, cx->names().overflow, overflow)) {
       return false;
     }
 
-    // Step 5.k.
+    // Step 5.i.
     if (!InterpretTemporalDateTimeFields(cx, calendarRec, fields, dateOptions,
                                          &dateTime)) {
       return false;
     }
 
-    // Step 5.l.
+    // Step 5.j.
     Rooted<Value> offset(cx);
     if (!GetProperty(cx, fields, fields, cx->names().offset, &offset)) {
       return false;
     }
 
-    // Step 5.m.
+    // Step 5.k.
     Rooted<Value> timeZoneValue(cx);
     if (!GetProperty(cx, fields, fields, cx->names().timeZone,
                      &timeZoneValue)) {
       return false;
     }
 
-    // Step 5.n.
+    // Step 5.l.
     if (!timeZoneValue.isUndefined()) {
       if (!ToTemporalTimeZone(cx, timeZoneValue, &timeZone)) {
         return false;
       }
     }
 
-    // Step 5.o.
+    // Step 5.m.
     if (offset.isUndefined()) {
       offsetBehaviour = OffsetBehaviour::Wall;
     }
@@ -3020,7 +3013,7 @@ static bool ToRelativeTemporalObject(
         return false;
       }
     } else {
-      calendar.set(CalendarValue(cx->names().iso8601));
+      calendar.set(CalendarValue(CalendarId::ISO8601));
     }
 
     // Steps 8-9.
@@ -3191,12 +3184,12 @@ NormalizedTimeDuration js::temporal::RoundDuration(
 
   // Steps 1-12. (Not applicable)
 
-  // Steps 13-18.
+  // Step 13.
   auto rounded = RoundNormalizedTimeDurationToIncrement(
       duration, unit, increment, roundingMode);
   MOZ_ASSERT(IsValidNormalizedTimeDuration(rounded));
 
-  // Step 19.
+  // Step 14.
   return rounded;
 }
 
@@ -3215,7 +3208,7 @@ bool js::temporal::RoundDuration(JSContext* cx,
 
   // Steps 1-12. (Not applicable)
 
-  // Steps 13-19.
+  // Steps 13-14.
   return RoundNormalizedTimeDurationToIncrement(cx, duration, unit, increment,
                                                 roundingMode, result);
 }
@@ -3630,7 +3623,7 @@ static bool RoundDurationYear(JSContext* cx, const NormalizedDuration& duration,
   // Step 9.ac.
   constexpr auto time = NormalizedTimeDuration{};
 
-  // Step 19.
+  // Step 14.
   if (numYears.abs() >= (Uint128{1} << 32)) {
     return ThrowInvalidDurationPart(cx, double(numYears), "years",
                                     JSMSG_TEMPORAL_DURATION_INVALID_NON_FINITE);
@@ -3767,7 +3760,7 @@ static bool RoundDurationMonth(JSContext* cx,
   // Step 10.ac.
   constexpr auto time = NormalizedTimeDuration{};
 
-  // Step 19.
+  // Step 14.
   if (numMonths.abs() >= (Uint128{1} << 32)) {
     return ThrowInvalidDurationPart(cx, double(numMonths), "months",
                                     JSMSG_TEMPORAL_DURATION_INVALID_NON_FINITE);
@@ -3872,7 +3865,7 @@ static bool RoundDurationWeek(JSContext* cx, const NormalizedDuration& duration,
   // Step 11.u.
   constexpr auto time = NormalizedTimeDuration{};
 
-  // Step 19.
+  // Step 14.
   if (numWeeks.abs() >= (Uint128{1} << 32)) {
     return ThrowInvalidDurationPart(cx, double(numWeeks), "weeks",
                                     JSMSG_TEMPORAL_DURATION_INVALID_NON_FINITE);
@@ -3908,7 +3901,7 @@ static bool RoundDurationDay(JSContext* cx, const NormalizedDuration& duration,
   // Step 12.c.
   constexpr auto time = NormalizedTimeDuration{};
 
-  // Step 19.
+  // Step 14.
   auto resultDuration = DateDuration{years, months, weeks, int64_t(numDays)};
   if (!ThrowIfInvalidDuration(cx, resultDuration)) {
     return false;
@@ -3976,7 +3969,7 @@ static bool RoundDuration(JSContext* cx, const NormalizedDuration& duration,
 
   MOZ_ASSERT(TemporalUnit::Hour <= unit && unit <= TemporalUnit::Nanosecond);
 
-  // Steps 13-18.
+  // Step 13.
   auto time = duration.time;
   double total = 0;
   if (computeRemainder == ComputeRemainder::No) {
@@ -3992,7 +3985,7 @@ static bool RoundDuration(JSContext* cx, const NormalizedDuration& duration,
   }
   MOZ_ASSERT(IsValidNormalizedTimeDuration(time));
 
-  // Step 19.
+  // Step 14.
   MOZ_ASSERT(IsValidDuration(duration.date));
   *result = {{duration.date, time}, total};
   return true;
@@ -4062,7 +4055,7 @@ static bool RoundDuration(
     case TemporalUnit::Millisecond:
     case TemporalUnit::Microsecond:
     case TemporalUnit::Nanosecond:
-      // Steps 7-9 and 13-21.
+      // Steps 7-9 and 13-14.
       return ::RoundDuration(cx, duration, increment, unit, roundingMode,
                              computeRemainder, result);
     case TemporalUnit::Auto:
@@ -4102,32 +4095,32 @@ static bool RoundDuration(
 
   // Step 8. (Not applicable)
 
-  // Steps 9-19.
+  // Steps 9-14.
   switch (unit) {
-    // Steps 9 and 19.
+    // Steps 9 and 14.
     case TemporalUnit::Year:
       return RoundDurationYear(cx, duration, fractionalDays, increment,
                                roundingMode, plainRelativeTo, calendar,
                                computeRemainder, result);
 
-    // Steps 10 and 19.
+    // Steps 10 and 14.
     case TemporalUnit::Month:
       return RoundDurationMonth(cx, duration, fractionalDays, increment,
                                 roundingMode, plainRelativeTo, calendar,
                                 computeRemainder, result);
 
-    // Steps 11 and 19.
+    // Steps 11 and 14.
     case TemporalUnit::Week:
       return RoundDurationWeek(cx, duration, fractionalDays, increment,
                                roundingMode, plainRelativeTo, calendar,
                                computeRemainder, result);
 
-    // Steps 12 and 19.
+    // Steps 12 and 14.
     case TemporalUnit::Day:
       return RoundDurationDay(cx, duration, fractionalDays, increment,
                               roundingMode, computeRemainder, result);
 
-    // Steps 13-18. (Handled elsewhere)
+    // Steps 13-14. (Handled elsewhere)
     case TemporalUnit::Auto:
     case TemporalUnit::Hour:
     case TemporalUnit::Minute:
@@ -4227,8 +4220,8 @@ static bool AddDurationToOrSubtractDurationFromDuration(
     }
 
     // Steps 4-7.
-    if (!ToRelativeTemporalObject(cx, options, &plainRelativeTo,
-                                  &zonedRelativeTo, &timeZone)) {
+    if (!GetTemporalRelativeToOption(cx, options, &plainRelativeTo,
+                                     &zonedRelativeTo, &timeZone)) {
       return false;
     }
     MOZ_ASSERT(!plainRelativeTo || !zonedRelativeTo);
@@ -4442,8 +4435,8 @@ static bool Duration_compare(JSContext* cx, unsigned argc, Value* vp) {
   Rooted<ZonedDateTime> zonedRelativeTo(cx);
   Rooted<TimeZoneRecord> timeZone(cx);
   if (options) {
-    if (!ToRelativeTemporalObject(cx, options, &plainRelativeTo,
-                                  &zonedRelativeTo, &timeZone)) {
+    if (!GetTemporalRelativeToOption(cx, options, &plainRelativeTo,
+                                     &zonedRelativeTo, &timeZone)) {
       return false;
     }
     MOZ_ASSERT(!plainRelativeTo || !zonedRelativeTo);
@@ -4954,8 +4947,9 @@ static bool Duration_round(JSContext* cx, const CallArgs& args) {
 
     // Step 16.
     Rooted<JSString*> paramString(cx, args[0].toString());
-    if (!GetTemporalUnit(cx, paramString, TemporalUnitKey::SmallestUnit,
-                         TemporalUnitGroup::DateTime, &smallestUnit)) {
+    if (!GetTemporalUnitValuedOption(
+            cx, paramString, TemporalUnitKey::SmallestUnit,
+            TemporalUnitGroup::DateTime, &smallestUnit)) {
       return false;
     }
 
@@ -4990,8 +4984,8 @@ static bool Duration_round(JSContext* cx, const CallArgs& args) {
 
     // Steps 8-9.
     //
-    // Inlined GetTemporalUnit and GetOption so we can more easily detect an
-    // absent "largestUnit" value.
+    // Inlined GetTemporalUnitValuedOption and GetOption so we can more easily
+    // detect an absent "largestUnit" value.
     Rooted<Value> largestUnitValue(cx);
     if (!GetProperty(cx, options, options, cx->names().largestUnit,
                      &largestUnitValue)) {
@@ -5005,33 +4999,35 @@ static bool Duration_round(JSContext* cx, const CallArgs& args) {
       }
 
       largestUnit = TemporalUnit::Auto;
-      if (!GetTemporalUnit(cx, largestUnitStr, TemporalUnitKey::LargestUnit,
-                           TemporalUnitGroup::DateTime, &largestUnit)) {
+      if (!GetTemporalUnitValuedOption(
+              cx, largestUnitStr, TemporalUnitKey::LargestUnit,
+              TemporalUnitGroup::DateTime, &largestUnit)) {
         return false;
       }
     }
 
     // Steps 10-13.
-    if (!ToRelativeTemporalObject(cx, options, &plainRelativeTo,
-                                  &zonedRelativeTo, &timeZone)) {
+    if (!GetTemporalRelativeToOption(cx, options, &plainRelativeTo,
+                                     &zonedRelativeTo, &timeZone)) {
       return false;
     }
     MOZ_ASSERT(!plainRelativeTo || !zonedRelativeTo);
     MOZ_ASSERT_IF(zonedRelativeTo, timeZone.receiver());
 
     // Step 14.
-    if (!ToTemporalRoundingIncrement(cx, options, &roundingIncrement)) {
+    if (!GetRoundingIncrementOption(cx, options, &roundingIncrement)) {
       return false;
     }
 
     // Step 15.
-    if (!ToTemporalRoundingMode(cx, options, &roundingMode)) {
+    if (!GetRoundingModeOption(cx, options, &roundingMode)) {
       return false;
     }
 
     // Step 16.
-    if (!GetTemporalUnit(cx, options, TemporalUnitKey::SmallestUnit,
-                         TemporalUnitGroup::DateTime, &smallestUnit)) {
+    if (!GetTemporalUnitValuedOption(cx, options, TemporalUnitKey::SmallestUnit,
+                                     TemporalUnitGroup::DateTime,
+                                     &smallestUnit)) {
       return false;
     }
 
@@ -5303,8 +5299,8 @@ static bool Duration_total(JSContext* cx, const CallArgs& args) {
 
     // Step 11.
     Rooted<JSString*> paramString(cx, args[0].toString());
-    if (!GetTemporalUnit(cx, paramString, TemporalUnitKey::Unit,
-                         TemporalUnitGroup::DateTime, &unit)) {
+    if (!GetTemporalUnitValuedOption(cx, paramString, TemporalUnitKey::Unit,
+                                     TemporalUnitGroup::DateTime, &unit)) {
       return false;
     }
   } else {
@@ -5316,16 +5312,16 @@ static bool Duration_total(JSContext* cx, const CallArgs& args) {
     }
 
     // Steps 6-10.
-    if (!ToRelativeTemporalObject(cx, totalOf, &plainRelativeTo,
-                                  &zonedRelativeTo, &timeZone)) {
+    if (!GetTemporalRelativeToOption(cx, totalOf, &plainRelativeTo,
+                                     &zonedRelativeTo, &timeZone)) {
       return false;
     }
     MOZ_ASSERT(!plainRelativeTo || !zonedRelativeTo);
     MOZ_ASSERT_IF(zonedRelativeTo, timeZone.receiver());
 
     // Step 11.
-    if (!GetTemporalUnit(cx, totalOf, TemporalUnitKey::Unit,
-                         TemporalUnitGroup::DateTime, &unit)) {
+    if (!GetTemporalUnitValuedOption(cx, totalOf, TemporalUnitKey::Unit,
+                                     TemporalUnitGroup::DateTime, &unit)) {
       return false;
     }
 
@@ -5432,7 +5428,7 @@ static bool Duration_total(JSContext* cx, const CallArgs& args) {
       startDateTime = mozilla::Some(dateTime);
 
       // Step 18.f.ii.
-      Rooted<CalendarValue> isoCalendar(cx, CalendarValue(cx->names().iso8601));
+      Rooted<CalendarValue> isoCalendar(cx, CalendarValue(CalendarId::ISO8601));
       Instant addResult;
       if (!AddDaysToZonedDateTime(cx, startInstant, dateTime, timeZone,
                                   isoCalendar, unbalancedDays, &addResult)) {
@@ -5566,19 +5562,19 @@ static bool Duration_toString(JSContext* cx, const CallArgs& args) {
 
     // Steps 4-5.
     auto digits = Precision::Auto();
-    if (!ToFractionalSecondDigits(cx, options, &digits)) {
+    if (!GetTemporalFractionalSecondDigitsOption(cx, options, &digits)) {
       return false;
     }
 
     // Step 6.
-    if (!ToTemporalRoundingMode(cx, options, &roundingMode)) {
+    if (!GetRoundingModeOption(cx, options, &roundingMode)) {
       return false;
     }
 
     // Step 7.
     auto smallestUnit = TemporalUnit::Auto;
-    if (!GetTemporalUnit(cx, options, TemporalUnitKey::SmallestUnit,
-                         TemporalUnitGroup::Time, &smallestUnit)) {
+    if (!GetTemporalUnitValuedOption(cx, options, TemporalUnitKey::SmallestUnit,
+                                     TemporalUnitGroup::Time, &smallestUnit)) {
       return false;
     }
 

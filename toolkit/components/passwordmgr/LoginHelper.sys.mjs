@@ -27,15 +27,15 @@ XPCOMUtils.defineLazyServiceGetter(
 
 export class ParentAutocompleteOption {
   image;
-  title;
-  subtitle;
+  label;
+  secondary;
   fillMessageName;
   fillMessageData;
 
-  constructor(image, title, subtitle, fillMessageName, fillMessageData) {
+  constructor(image, label, secondary, fillMessageName, fillMessageData) {
     this.image = image;
-    this.title = title;
-    this.subtitle = subtitle;
+    this.label = label;
+    this.secondary = secondary;
     this.fillMessageName = fillMessageName;
     this.fillMessageData = fillMessageData;
   }
@@ -1598,6 +1598,9 @@ export const LoginHelper = {
    * @returns {string}
    */
   getSecurePref(prefName, safeDefaultValue) {
+    if (Services.prefs.getBoolPref("security.nocertdb", false)) {
+      return false;
+    }
     try {
       const encryptedValue = Services.prefs.getStringPref(prefName, "");
       return encryptedValue === ""
@@ -1615,6 +1618,9 @@ export const LoginHelper = {
    * @param {string} value -> The value to be set in its encrypted form.
    */
   setSecurePref(prefName, value) {
+    if (Services.prefs.getBoolPref("security.nocertdb", false)) {
+      return;
+    }
     if (value) {
       const encryptedValue = lazy.Crypto.encrypt(value);
       Services.prefs.setStringPref(prefName, encryptedValue);

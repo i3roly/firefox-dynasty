@@ -5,6 +5,7 @@
 package org.mozilla.fenix.settings
 
 import android.os.Bundle
+import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.EditTextPreference
@@ -15,8 +16,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.Config
+import org.mozilla.fenix.FeatureFlags
 import org.mozilla.fenix.R
-import org.mozilla.fenix.browser.tabstrip.isTabStripEligible
 import org.mozilla.fenix.debugsettings.data.DefaultDebugSettingsRepository
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.nav
@@ -31,6 +32,7 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
         showToolbar(getString(R.string.preferences_debug_settings))
     }
 
+    @Suppress("LongMethod")
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         val debugSettingsRepository = DefaultDebugSettingsRepository(
             context = requireContext(),
@@ -81,6 +83,27 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 
+        requirePreference<SwitchPreference>(R.string.pref_key_enable_fxsuggest).apply {
+            isVisible = FeatureFlags.fxSuggest
+            isChecked = context.settings().enableFxSuggest
+            onPreferenceChangeListener = object : Preference.OnPreferenceChangeListener {
+                override fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean {
+                    val newBooleanValue = newValue as? Boolean ?: return false
+                    val ingestionScheduler =
+                        requireContext().components.fxSuggest.ingestionScheduler
+                    if (newBooleanValue) {
+                        ingestionScheduler.startPeriodicIngestion()
+                    } else {
+                        ingestionScheduler.stopPeriodicIngestion()
+                    }
+                    requireContext().settings().preferences.edit {
+                        putBoolean(preference.key, newBooleanValue)
+                    }
+                    return true
+                }
+            }
+        }
+
         requirePreference<SwitchPreference>(R.string.pref_key_should_enable_felt_privacy).apply {
             isVisible = true
             isChecked = context.settings().feltPrivateBrowsingEnabled
@@ -100,8 +123,6 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
-        setupTabStripPreference()
-
         // for performance reasons, this is only available in Nightly or Debug builds
         requirePreference<EditTextPreference>(R.string.pref_key_custom_glean_server_url).apply {
             isVisible = Config.channel.isNightlyOrDebug && BuildConfig.GLEAN_CUSTOM_URL.isNullOrEmpty()
@@ -114,14 +135,6 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
         requirePreference<SwitchPreference>(R.string.pref_key_remote_server_prod).apply {
             isVisible = true
             isChecked = context.settings().useProductionRemoteSettingsServer
-            onPreferenceChangeListener = SharedPreferenceUpdater()
-        }
-    }
-
-    private fun setupTabStripPreference() {
-        requirePreference<SwitchPreference>(R.string.pref_key_enable_tab_strip).apply {
-            isVisible = context.isTabStripEligible()
-            isChecked = context.settings().isTabStripEnabled
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
     }

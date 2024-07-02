@@ -145,6 +145,7 @@ async function test_permissions({
   granted_host_permissions,
   useAddonManager,
   expectAllGranted,
+  useOptionalHostPermissions,
 }) {
   const REQUIRED_PERMISSIONS = ["downloads"];
   const REQUIRED_ORIGINS = ["*://site.com/", "*://*.domain.com/"];
@@ -192,13 +193,22 @@ async function test_permissions({
     });
   }
 
+  let optional_permissions = OPTIONAL_PERMISSIONS;
+  let optional_host_permissions = undefined;
+  if (useOptionalHostPermissions) {
+    optional_host_permissions = OPTIONAL_ORIGINS;
+  } else {
+    optional_permissions = optional_permissions.concat(OPTIONAL_ORIGINS);
+  }
+
   let extension = ExtensionTestUtils.loadExtension({
     background,
     manifest: {
       manifest_version,
       permissions: REQUIRED_PERMISSIONS,
       host_permissions: REQUIRED_ORIGINS,
-      optional_permissions: [...OPTIONAL_PERMISSIONS, ...OPTIONAL_ORIGINS],
+      optional_permissions,
+      optional_host_permissions,
       granted_host_permissions,
     },
     useAddonManager,
@@ -485,6 +495,17 @@ add_task(function test_granted_only_for_privileged_mv3() {
       AddonTestUtils.usePrivilegedSignatures = false;
     }
   });
+});
+
+add_task(function test_mv3_optional_host_permissions() {
+  return runWithPrefs(WITH_INSTALL_PROMPT, () =>
+    test_permissions({
+      manifest_version: 3,
+      useAddonManager: "permanent",
+      useOptionalHostPermissions: true,
+      expectAllGranted: true,
+    })
+  );
 });
 
 add_task(async function test_startup() {
@@ -1172,4 +1193,41 @@ add_task(function test_normalizeOptional() {
     optional2.origins.sort().join(),
     `Expect both "all sites" permissions`
   );
+});
+
+add_task(async function test_onAdded_all_urls() {
+  let extension = ExtensionTestUtils.loadExtension({
+    background() {
+      browser.test.onMessage.addListener(async () => {
+        let result = await browser.permissions.request({
+          permissions: [],
+          origins: ["<all_urls>"],
+        });
+        browser.test.sendMessage("result", result);
+      });
+      browser.permissions.onAdded.addListener(async permissions => {
+        browser.test.sendMessage("onAdded", permissions);
+      });
+      browser.test.sendMessage("ready");
+    },
+    manifest: {
+      optional_permissions: ["<all_urls>"],
+    },
+  });
+
+  await extension.startup();
+  await extension.awaitMessage("ready");
+
+  await withHandlingUserInput(extension, async () => {
+    optionalPermissionsPromptHandler.acceptPrompt = true;
+    extension.sendMessage("request");
+    let result = await extension.awaitMessage("result");
+    equal(result, true, "request() for optional permissions succeeded");
+  });
+
+  let perms = await extension.awaitMessage("onAdded");
+  equal(perms.origins.join(), "<all_urls>", "Got expected origins.");
+  equal(perms.permissions.join(), "", "Not expecting api permissions.");
+
+  await extension.unload();
 });

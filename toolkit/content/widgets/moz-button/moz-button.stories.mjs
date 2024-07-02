@@ -3,7 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { html, ifDefined } from "../vendor/lit.all.mjs";
-// eslint-disable-next-line import/no-unassigned-import
 import "./moz-button.mjs";
 
 export default {
@@ -33,7 +32,8 @@ export default {
     },
     status: "in-development",
     fluent: `
-moz-button-labelled = Button
+moz-button-labelled =
+  .label = Button
 moz-button-primary = Primary
 moz-button-destructive = Destructive
 moz-button-titled =
@@ -47,6 +47,7 @@ moz-button-aria-labelled =
 const Template = ({ type, size, l10nId, iconSrc, disabled }) => html`
   <moz-button
     data-l10n-id=${l10nId}
+    data-l10n-attrs="label"
     type=${type}
     size=${size}
     ?disabled=${disabled}

@@ -147,7 +147,7 @@
 #  include "mozilla/a11y/nsWinUtils.h"
 #endif
 
-#ifdef MOZ_ANDROID_HISTORY
+#ifdef MOZ_GECKOVIEW_HISTORY
 #  include "GeckoViewHistory.h"
 #endif
 
@@ -1456,8 +1456,10 @@ void BrowserParent::MouseEnterIntoWidget() {
     // When we mouseenter the remote target, the remote target's cursor should
     // become the current cursor.  When we mouseexit, we stop.
     mRemoteTargetSetsCursor = true;
-    widget->SetCursor(mCursor);
-    EventStateManager::ClearCursorSettingManager();
+    if (!EventStateManager::CursorSettingManagerHasLockedCursor()) {
+      widget->SetCursor(mCursor);
+      EventStateManager::ClearCursorSettingManager();
+    }
   }
 
   // Mark that we have missed a mouse enter event, so that
@@ -1495,8 +1497,10 @@ void BrowserParent::SendRealMouseEvent(WidgetMouseEvent& aEvent) {
     // become the current cursor.  When we mouseexit, we stop.
     if (eMouseEnterIntoWidget == aEvent.mMessage) {
       mRemoteTargetSetsCursor = true;
-      widget->SetCursor(mCursor);
-      EventStateManager::ClearCursorSettingManager();
+      if (!EventStateManager::CursorSettingManagerHasLockedCursor()) {
+        widget->SetCursor(mCursor);
+        EventStateManager::ClearCursorSettingManager();
+      }
     } else if (eMouseExitFromWidget == aEvent.mMessage) {
       mRemoteTargetSetsCursor = false;
     }
@@ -2351,6 +2355,10 @@ mozilla::ipc::IPCResult BrowserParent::RecvSetCursor(
                               aHotspotY,
                               {aResolutionX, aResolutionY}};
   if (!mRemoteTargetSetsCursor) {
+    return IPC_OK();
+  }
+
+  if (EventStateManager::CursorSettingManagerHasLockedCursor()) {
     return IPC_OK();
   }
 
@@ -3947,7 +3955,7 @@ mozilla::ipc::IPCResult BrowserParent::RecvVisitURI(
 
 mozilla::ipc::IPCResult BrowserParent::RecvQueryVisitedState(
     nsTArray<RefPtr<nsIURI>>&& aURIs) {
-#ifdef MOZ_ANDROID_HISTORY
+#ifdef MOZ_GECKOVIEW_HISTORY
   nsCOMPtr<IHistory> history = components::History::Service();
   if (NS_WARN_IF(!history)) {
     return IPC_OK();
@@ -4078,15 +4086,14 @@ static BrowserParent* GetTopLevelBrowserParent(BrowserParent* aBrowserParent) {
 
 mozilla::ipc::IPCResult BrowserParent::RecvRequestPointerLock(
     RequestPointerLockResolver&& aResolve) {
-  nsCString error;
   if (sTopLevelWebFocus != GetTopLevelBrowserParent(this)) {
-    error = "PointerLockDeniedNotFocused";
-  } else if (!PointerLockManager::SetLockedRemoteTarget(this)) {
-    error = "PointerLockDeniedInUse";
-  } else {
-    PointerEventHandler::ReleaseAllPointerCaptureRemoteTarget();
+    aResolve("PointerLockDeniedNotFocused"_ns);
+    return IPC_OK();
   }
-  aResolve(error);
+
+  nsCString error;
+  PointerLockManager::SetLockedRemoteTarget(this, error);
+  aResolve(std::move(error));
   return IPC_OK();
 }
 

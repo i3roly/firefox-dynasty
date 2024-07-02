@@ -102,6 +102,7 @@ class ArtifactJob(object):
     # The list below list should be updated when we have new ESRs.
     esr_candidate_trees = [
         "releases/mozilla-esr115",
+        "releases/mozilla-esr128",
     ]
     try_tree = "try"
 
@@ -561,7 +562,6 @@ class LinuxArtifactJob(ArtifactJob):
         "{product}/{product}-bin",
         "{product}/minidump-analyzer",
         "{product}/pingsender",
-        "{product}/platform.ini",
         "{product}/plugin-container",
         "{product}/updater",
         "{product}/glxtest",
@@ -745,7 +745,6 @@ class MacArtifactJob(ArtifactJob):
                         "gmp-clearkey/0.1/libclearkey.dylib",
                         # 'gmp-fake/1.0/libfake.dylib',
                         # 'gmp-fakeopenh264/1.0/libfakeopenh264.dylib',
-                        "platform.ini",
                     ],
                 )
             ]
@@ -797,7 +796,6 @@ class WinArtifactJob(ArtifactJob):
 
     _package_artifact_patterns = {
         "{product}/dependentlibs.list",
-        "{product}/platform.ini",
         "{product}/**/*.dll",
         "{product}/*.exe",
         "{product}/*.tlb",
@@ -874,6 +872,7 @@ class ThunderbirdMixin(object):
     # The list below list should be updated when we have new ESRs.
     esr_candidate_trees = [
         "releases/comm-esr115",
+        "releases/comm-esr128",
     ]
 
 

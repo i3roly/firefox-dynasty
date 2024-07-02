@@ -68,7 +68,9 @@ this.declarativeNetRequest = class extends ExtensionAPI {
             throw new ExtensionError(failures[0].message);
           }
           let validatedRules = ruleValidator.getValidatedRules();
-          let ruleQuotaCounter = new ExtensionDNR.RuleQuotaCounter();
+          let ruleQuotaCounter = new ExtensionDNR.RuleQuotaCounter(
+            "MAX_NUMBER_OF_SESSION_RULES"
+          );
           ruleQuotaCounter.tryAddRules("_session", validatedRules);
           ruleManager.setSessionRules(validatedRules);
         },
@@ -90,6 +92,18 @@ this.declarativeNetRequest = class extends ExtensionAPI {
             disableRulesetIds,
             enableRulesetIds,
           });
+        },
+
+        updateStaticRules({ rulesetId, disableRuleIds, enableRuleIds }) {
+          return ExtensionDNR.updateStaticRules(extension, {
+            rulesetId,
+            disableRuleIds,
+            enableRuleIds,
+          });
+        },
+
+        async getDisabledRuleIds({ rulesetId }) {
+          return ExtensionDNR.getDisabledRuleIds(extension, rulesetId);
         },
 
         async getDynamicRules(details) {

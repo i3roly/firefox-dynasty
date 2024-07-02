@@ -56,7 +56,6 @@ fun MicrosurveyBottomSheet(
     ) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
                 .padding(
                     vertical = 8.dp,
                     horizontal = 16.dp,
@@ -73,26 +72,32 @@ fun MicrosurveyBottomSheet(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            MicroSurveyHeader(title = stringResource(id = R.string.micro_survey_survey_header)) {}
+            MicroSurveyHeader(title = stringResource(id = R.string.micro_survey_survey_header_2)) {}
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            MicroSurveyContent(
-                question = question,
-                icon = icon,
-                answers = answers,
-                selectedAnswer = selectedAnswer,
-                onSelectionChange = { selectedAnswer = it },
-            )
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (isSubmitted) {
+                    MicrosurveyCompleted()
+                } else {
+                    MicroSurveyContent(
+                        question = question,
+                        icon = icon,
+                        answers = answers,
+                        selectedAnswer = selectedAnswer,
+                        onSelectionChange = { selectedAnswer = it },
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            MicroSurveyFooter(
-                isSubmitted = isSubmitted,
-                isContentAnswerSelected = selectedAnswer != null,
-                onLinkClick = {}, // todo add privacy policy link and open new tab FXDROID-1876.
-                onButtonClick = { isSubmitted = true },
-            )
+                MicroSurveyFooter(
+                    isSubmitted = isSubmitted,
+                    isContentAnswerSelected = selectedAnswer != null,
+                    onLinkClick = {}, // todo add privacy policy link and open new tab FXDROID-1876.
+                    onButtonClick = { isSubmitted = true },
+                )
+            }
         }
     }
 }

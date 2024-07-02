@@ -795,6 +795,20 @@
           this.textbox.selectedButton.open = !this.textbox.selectedButton.open;
           return true;
         }
+        // Ignore blank search unless add search engine or
+        // settings button is selected, see bugs 1894910 and 1903608.
+        if (
+          !this.textbox.value &&
+          !(
+            this.textbox.selectedButton?.getAttribute("id") ==
+              "searchbar-anon-search-settings" ||
+            this.textbox.selectedButton?.classList.contains(
+              "searchbar-engine-one-off-add-engine"
+            )
+          )
+        ) {
+          return true;
+        }
         // Otherwise, "call super": do what the autocomplete binding's
         // handleEnter implementation does.
         return this.textbox.mController.handleEnter(false, event || null);

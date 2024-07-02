@@ -443,6 +443,15 @@ class ContentParent final : public PContentParent,
     return PContentParent::RecvPHalConstructor(aActor);
   }
 
+  mozilla::ipc::IPCResult RecvAttributionEvent(
+      const nsACString& aHost, PrivateAttributionImpressionType aType,
+      uint32_t aIndex, const nsAString& aAd, const nsACString& aTargetHost);
+  mozilla::ipc::IPCResult RecvAttributionConversion(
+      const nsACString& aHost, const nsAString& aTask, uint32_t aHistogramSize,
+      const Maybe<uint32_t>& aLoopbackDays,
+      const Maybe<PrivateAttributionImpressionType>& aImpressionType,
+      const nsTArray<nsString>& aAds, const nsTArray<nsCString>& aSourceHosts);
+
   PHeapSnapshotTempFileHelperParent* AllocPHeapSnapshotTempFileHelperParent();
 
   PRemoteSpellcheckEngineParent* AllocPRemoteSpellcheckEngineParent();
@@ -474,8 +483,9 @@ class ContentParent final : public PContentParent,
       PBrowserParent* aThisTab, const MaybeDiscarded<BrowsingContext>& aParent,
       PBrowserParent* aNewTab, const uint32_t& aChromeFlags,
       const bool& aCalledFromJS, const bool& aForPrinting,
-      const bool& aForWindowDotPrint, nsIURI* aURIToLoad,
-      const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
+      const bool& aForWindowDotPrint, const bool& aTopLevelCreatedByWebContent,
+      nsIURI* aURIToLoad, const nsACString& aFeatures,
+      const UserActivation::Modifiers& aModifiers,
       nsIPrincipal* aTriggeringPrincipal, nsIContentSecurityPolicy* aCsp,
       nsIReferrerInfo* aReferrerInfo, const OriginAttributes& aOriginAttributes,
       CreateWindowResolver&& aResolve);
@@ -483,10 +493,10 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvCreateWindowInDifferentProcess(
       PBrowserParent* aThisTab, const MaybeDiscarded<BrowsingContext>& aParent,
       const uint32_t& aChromeFlags, const bool& aCalledFromJS,
-      nsIURI* aURIToLoad, const nsACString& aFeatures,
-      const UserActivation::Modifiers& aModifiers, const nsAString& aName,
-      nsIPrincipal* aTriggeringPrincipal, nsIContentSecurityPolicy* aCsp,
-      nsIReferrerInfo* aReferrerInfo,
+      const bool& aTopLevelCreatedByWebContent, nsIURI* aURIToLoad,
+      const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
+      const nsAString& aName, nsIPrincipal* aTriggeringPrincipal,
+      nsIContentSecurityPolicy* aCsp, nsIReferrerInfo* aReferrerInfo,
       const OriginAttributes& aOriginAttributes);
 
   static void BroadcastBlobURLRegistration(
@@ -700,8 +710,8 @@ class ContentParent final : public PContentParent,
       PBrowserParent* aThisTab, BrowsingContext& aParent, bool aSetOpener,
       const uint32_t& aChromeFlags, const bool& aCalledFromJS,
       const bool& aForPrinting, const bool& aForWindowDotPrint,
-      nsIURI* aURIToLoad, const nsACString& aFeatures,
-      const UserActivation::Modifiers& aModifiers,
+      const bool& aIsTopLevelCreatedByWebContent, nsIURI* aURIToLoad,
+      const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
       BrowserParent* aNextRemoteBrowser, const nsAString& aName,
       nsresult& aResult, nsCOMPtr<nsIRemoteTab>& aNewRemoteTab,
       bool* aWindowIsNew, int32_t& aOpenLocation,
@@ -1379,7 +1389,7 @@ class ContentParent final : public PContentParent,
 
   mozilla::ipc::IPCResult RecvSetContainerFeaturePolicy(
       const MaybeDiscardedBrowsingContext& aContainerContext,
-      FeaturePolicy* aContainerFeaturePolicy);
+      MaybeFeaturePolicyInfo&& aContainerFeaturePolicyInfo);
 
   mozilla::ipc::IPCResult RecvGetSystemIcon(nsIURI* aURI,
                                             GetSystemIconResolver&& aResolver);

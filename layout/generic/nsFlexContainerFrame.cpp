@@ -1103,17 +1103,6 @@ class nsFlexContainerFrame::FlexLine final {
   void FreezeOrRestoreEachFlexibleSize(const nscoord aTotalViolation,
                                        bool aIsFinalIteration);
 
-  // Stores this line's flex items.
-  nsTArray<FlexItem> mItems;
-
-  // Number of *frozen* FlexItems in this line, based on FlexItem::IsFrozen().
-  // Mostly used for optimization purposes, e.g. to bail out early from loops
-  // when we can tell they have nothing left to do.
-  uint32_t mNumFrozenItems = 0;
-
-  // Sum of margin/border/padding for the FlexItems in this FlexLine.
-  nscoord mTotalItemMBP = 0;
-
   // Sum of FlexItems' outer hypothetical main sizes and all main-axis
   // {row,columnm}-gaps between items.
   // (i.e. their flex base sizes, clamped via their min/max-size properties,
@@ -1124,6 +1113,17 @@ class nsFlexContainerFrame::FlexLine final {
   // can happen with percent-width table-layout:fixed descendants. We have to
   // avoid integer overflow in order to shrink items properly in that scenario.
   AuCoord64 mTotalOuterHypotheticalMainSize = 0;
+
+  // Stores this line's flex items.
+  nsTArray<FlexItem> mItems;
+
+  // Number of *frozen* FlexItems in this line, based on FlexItem::IsFrozen().
+  // Mostly used for optimization purposes, e.g. to bail out early from loops
+  // when we can tell they have nothing left to do.
+  uint32_t mNumFrozenItems = 0;
+
+  // Sum of margin/border/padding for the FlexItems in this FlexLine.
+  nscoord mTotalItemMBP = 0;
 
   nscoord mLineCrossSize = 0;
   nscoord mFirstBaselineOffset = nscoord_MIN;
@@ -2228,7 +2228,7 @@ FlexItem::FlexItem(ReflowInput& aFlexItemReflowInput, float aFlexGrow,
 #ifdef DEBUG
   {
     for (const auto side : LogicalSides::All) {
-      if (styleMargin->mMargin.Get(mCBWM, side).IsAuto()) {
+      if (styleMargin->mMargin.Get(side, mCBWM).IsAuto()) {
         MOZ_ASSERT(GetMarginComponentForSide(side) == 0,
                    "Someone else tried to resolve our auto margin");
       }
@@ -2450,7 +2450,7 @@ uint32_t FlexItem::NumAutoMarginsInAxis(LogicalAxis aAxis) const {
   const auto& styleMargin = mFrame->StyleMargin()->mMargin;
   for (const auto edge : {LogicalEdge::Start, LogicalEdge::End}) {
     const auto side = MakeLogicalSide(aAxis, edge);
-    if (styleMargin.Get(mCBWM, side).IsAuto()) {
+    if (styleMargin.Get(side, mCBWM).IsAuto()) {
       numAutoMargins++;
     }
   }
@@ -3531,7 +3531,7 @@ void MainAxisPositionTracker::ResolveAutoMarginsInMainAxis(FlexItem& aItem) {
   if (mNumAutoMarginsInMainAxis) {
     const auto& styleMargin = aItem.Frame()->StyleMargin()->mMargin;
     for (const auto side : {StartSide(), EndSide()}) {
-      if (styleMargin.Get(mWM, side).IsAuto()) {
+      if (styleMargin.Get(side, mWM).IsAuto()) {
         // NOTE: This integer math will skew the distribution of remainder
         // app-units towards the end, which is fine.
         nscoord curAutoMarginSize =
@@ -3926,7 +3926,7 @@ void SingleLineCrossAxisPositionTracker::ResolveAutoMarginsInCrossAxis(
   // Give each auto margin a share of the space.
   const auto& styleMargin = aItem.Frame()->StyleMargin()->mMargin;
   for (const auto side : {StartSide(), EndSide()}) {
-    if (styleMargin.Get(mWM, side).IsAuto()) {
+    if (styleMargin.Get(side, mWM).IsAuto()) {
       MOZ_ASSERT(aItem.GetMarginComponentForSide(side) == 0,
                  "Expecting auto margins to have value '0' before we "
                  "update them");
@@ -5031,8 +5031,11 @@ void nsFlexContainerFrame::CreateFlexLineAndFlexItemInfo(
       // anonymous flex item, e.g. wrapping one or more text nodes.
       // DevTools wants the content node for the actual child in
       // the DOM tree, so we descend through anonymous boxes.
+      nsIContent* content = nullptr;
       nsIFrame* targetFrame = GetFirstNonAnonBoxInSubtree(frame);
-      nsIContent* content = targetFrame->GetContent();
+      if (targetFrame) {
+        content = targetFrame->GetContent();
+      }
 
       // Skip over content that is only whitespace, which might
       // have been broken off from a text node which is our real

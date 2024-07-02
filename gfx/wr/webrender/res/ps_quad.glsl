@@ -37,9 +37,13 @@
 #include shared,rect,transform,render_task,gpu_buffer
 
 flat varying mediump vec4 v_color;
+// z: is_mask
 // w: has edge flags
-// x,y,z are avaible for patterns to use.
+// x,y are avaible for patterns to use.
 flat varying lowp ivec4 v_flags;
+#define v_flags_is_mask v_flags.z
+#define v_flags_has_edge_mask v_flags.w
+
 
 #ifndef SWGL_ANTIALIAS
 varying highp vec2 vLocalPos;
@@ -63,7 +67,7 @@ varying highp vec2 vLocalPos;
 #define QF_APPLY_DEVICE_CLIP    2
 #define QF_IGNORE_DEVICE_SCALE  4
 #define QF_USE_AA_SEGMENTS      8
-#define QF_SAMPLE_AS_MASK       16
+#define QF_IS_MASK              16
 
 #define INVALID_SEGMENT_INDEX   0xff
 
@@ -92,13 +96,14 @@ struct PrimitiveInfo {
 struct QuadPrimitive {
     RectWithEndpoint bounds;
     RectWithEndpoint clip;
+    vec4 pattern_scale_offset;
     vec4 color;
 };
 
 QuadSegment fetch_segment(int base, int index) {
     QuadSegment seg;
 
-    vec4 texels[2] = fetch_from_gpu_buffer_2f(base + 3 + index * 2);
+    vec4 texels[2] = fetch_from_gpu_buffer_2f(base + 4 + index * 2);
 
     seg.rect = RectWithEndpoint(texels[0].xy, texels[0].zw);
     seg.uv_rect = RectWithEndpoint(texels[1].xy, texels[1].zw);
@@ -109,11 +114,12 @@ QuadSegment fetch_segment(int base, int index) {
 QuadPrimitive fetch_primitive(int index) {
     QuadPrimitive prim;
 
-    vec4 texels[3] = fetch_from_gpu_buffer_3f(index);
+    vec4 texels[4] = fetch_from_gpu_buffer_4f(index);
 
     prim.bounds = RectWithEndpoint(texels[0].xy, texels[0].zw);
     prim.clip = RectWithEndpoint(texels[1].xy, texels[1].zw);
-    prim.color = texels[2];
+    prim.pattern_scale_offset = texels[2];
+    prim.color = texels[3];
 
     return prim;
 }
@@ -215,9 +221,18 @@ float edge_aa_offset(int edge, int flags) {
     return ((flags & edge) != 0) ? AA_PIXEL_RADIUS : 0.0;
 }
 
-#ifdef WR_VERTEX_SHADER
 void pattern_vertex(PrimitiveInfo prim);
-#endif
+
+vec2 scale_offset_map_point(vec4 scale_offset, vec2 p) {
+    return p * scale_offset.xy + scale_offset.zw;
+}
+
+RectWithEndpoint scale_offset_map_rect(vec4 scale_offset, RectWithEndpoint r) {
+    return RectWithEndpoint(
+        scale_offset_map_point(scale_offset, r.p0),
+        scale_offset_map_point(scale_offset, r.p1)
+    );
+}
 
 PrimitiveInfo quad_primive_info(void) {
     QuadInstance qi = decode_instance();
@@ -326,10 +341,13 @@ PrimitiveInfo quad_primive_info(void) {
 
     v_color = prim.color;
 
+    vec4 pattern_tx = prim.pattern_scale_offset;
+    seg.rect = scale_offset_map_rect(pattern_tx, seg.rect);
+
     return PrimitiveInfo(
-        vi.local_pos,
-        prim.bounds,
-        prim.clip,
+        scale_offset_map_point(pattern_tx, vi.local_pos),
+        scale_offset_map_rect(pattern_tx, prim.bounds),
+        scale_offset_map_rect(pattern_tx, prim.clip),
         seg,
         qi.edge_flags,
         qi.quad_flags,
@@ -349,15 +367,22 @@ void antialiasing_vertex(PrimitiveInfo prim) {
     vLocalPos = prim.local_pos;
 
     if (prim.edge_flags == 0) {
-        v_flags.w = 0;
+        v_flags_has_edge_mask = 0;
     } else {
-        v_flags.w = 1;
+        v_flags_has_edge_mask = 1;
     }
 #endif
 }
 
 void main() {
     PrimitiveInfo prim = quad_primive_info();
+
+    if ((prim.quad_flags & QF_IS_MASK) != 0) {
+        v_flags_is_mask = 1;
+    } else {
+        v_flags_is_mask = 0;
+    }
+
     antialiasing_vertex(prim);
     pattern_vertex(prim);
 }
@@ -369,8 +394,8 @@ vec4 pattern_fragment(vec4 base_color);
 float antialiasing_fragment() {
     float alpha = 1.0;
 #ifndef SWGL_ANTIALIAS
-    if (v_flags.w != 0) {
-        alpha = init_transform_fs(vLocalPos);
+    if (v_flags_has_edge_mask != 0) {
+        alpha = rectangle_aa_fragment(vLocalPos);
     }
 #endif
     return alpha;
@@ -379,7 +404,13 @@ float antialiasing_fragment() {
 void main() {
     vec4 base_color = v_color;
     base_color *= antialiasing_fragment();
-    oFragColor = pattern_fragment(base_color);
+    vec4 output_color = pattern_fragment(base_color);
+
+    if (v_flags_is_mask != 0) {
+        output_color = output_color.rrrr;
+    }
+
+    oFragColor = output_color;
 }
 
 #endif

@@ -265,9 +265,6 @@
               data-l10n-id="sidebar-menu-synced-tabs"
               class="sync-ui-item"
               oncommand="SidebarController.show('viewTabsSidebar');"/>
-    <menuitem id="sidebar-switcher-megalist"
-              data-l10n-id="sidebar-menu-megalist"
-              oncommand="SidebarController.show('viewMegalistSidebar');"/>
     <menuseparator/>
     <!-- Extension toolbarbuttons go here. -->
     <menuseparator id="sidebar-extensions-separator"/>
@@ -276,6 +273,18 @@
     <menuseparator/>
     <menuitem data-l10n-id="sidebar-menu-close"
               oncommand="SidebarController.hide()"/>
+  </menupopup>
+
+  <menupopup id="sidebar-context-menu">
+    <menuitem data-l10n-id="sidebar-context-menu-manage-extension"
+              id="sidebar-context-menu-manage-extension"
+              contexttype="extension-action"/>
+    <menuitem data-l10n-id="sidebar-context-menu-remove-extension"
+              id="sidebar-context-menu-remove-extension"
+              contexttype="extension-action"/>
+    <menuitem data-l10n-id="sidebar-context-menu-report-extension"
+              id="sidebar-context-menu-report-extension"
+              contexttype="extension-action"/>
   </menupopup>
 
   <menupopup id="toolbar-context-menu"
@@ -521,7 +530,7 @@
 #include ../../components/downloads/content/downloadsPanel.inc.xhtml
 #include ../../components/translations/content/selectTranslationsPanel.inc.xhtml
 #include ../../components/translations/content/fullPageTranslationsPanel.inc.xhtml
-#include browser-allTabsMenu.inc.xhtml
+#include ../../components/tabbrowser/content/browser-allTabsMenu.inc.xhtml
 
   <tooltip id="dynamic-shortcut-tooltip"
            onpopupshowing="UpdateDynamicShortcutTooltipText(this);"/>

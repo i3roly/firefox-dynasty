@@ -192,6 +192,7 @@ static const char sIntPrefs[][45] = {
     "ui.panelAnimations",
     "ui.hideCursorWhileTyping",
     "ui.gtkThemeFamily",
+    "ui.fullKeyboardAccess",
 };
 
 static_assert(ArrayLength(sIntPrefs) == size_t(LookAndFeel::IntID::End),
@@ -299,6 +300,8 @@ static const char sColorPrefs[][41] = {
     "ui.textSelectAttentionForeground",
     "ui.textHighlightBackground",
     "ui.textHighlightForeground",
+    "ui.targetTextBackground",
+    "ui.targetTextForeground",
     "ui.IMERawInputBackground",
     "ui.IMERawInputForeground",
     "ui.IMERawInputUnderline",
@@ -711,6 +714,8 @@ nscolor nsXPLookAndFeel::GetStandinForNativeColor(ColorID aID,
       COLOR(MozNativehyperlinktext, 0x00, 0x66, 0xCC)
       COLOR(MozNativevisitedhyperlinktext, 0x55, 0x1A, 0x8B)
       COLOR(MozAutofillBackground, 0xff, 0xfc, 0xc8)
+      COLOR(TargetTextBackground, 0xff, 0xeb, 0xcd)
+      COLOR(TargetTextForeground, 0x00, 0x00, 0x00)
     default:
       break;
   }

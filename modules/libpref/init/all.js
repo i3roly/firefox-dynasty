@@ -286,6 +286,11 @@ pref("media.videocontrols.keyboard-tab-to-all-controls", true);
   pref("media.navigator.video.default_height",0); // adaptive default
   pref("media.navigator.video.max_fs", 12288); // Enough for 2048x1536
   pref("media.navigator.video.max_fr", 60);
+  #ifdef NIGHTLY_BUILD
+    pref("media.navigator.video.disable_h264_baseline", false);
+  #else
+    pref("media.navigator.video.disable_h264_baseline", true);
+  #endif
   pref("media.navigator.video.h264.level", 31); // 0x42E01f - level 3.1
   pref("media.navigator.video.h264.max_br", 0);
   pref("media.navigator.video.h264.max_mbps", 0);
@@ -349,8 +354,7 @@ pref("media.videocontrols.keyboard-tab-to-all-controls", true);
   pref("media.peerconnection.dtls.version.max", 772);
 
 #if defined(XP_MACOSX)
-  // Disabled on macOS until we can address bug 1895787.
-  pref("media.getusermedia.audio.processing.platform.enabled", false);
+  pref("media.getusermedia.audio.processing.platform.enabled", true);
 #else
   pref("media.getusermedia.audio.processing.platform.enabled", false);
 #endif
@@ -592,13 +596,16 @@ pref("toolkit.telemetry.dap_visit_counting_enabled", false);
 // See https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns
 pref("toolkit.telemetry.dap_visit_counting_experiment_list", "[]");
 // Leader endpoint for the DAP protocol
-pref("toolkit.telemetry.dap_leader", "https://dap-07-1.api.divviup.org/");
+pref("toolkit.telemetry.dap_leader", "https://dap-09-3.api.divviup.org/");
 // Not used for anything. Just additional information.
 pref("toolkit.telemetry.dap_leader_owner", "ISRG");
 // Second DAP server. Only two are currently supported.
 pref("toolkit.telemetry.dap_helper", "https://dap.services.mozilla.com");
 pref("toolkit.telemetry.dap_helper_owner", "Mozilla");
 pref("toolkit.telemetry.dap.logLevel", "Warn");
+
+// Controls telemetry logs for the Translations feature throughout Firefox.
+pref("toolkit.telemetry.translations.logLevel", "Error");
 
 // pref for mozilla to induce a new ping from users. This value should only ever be increased
 // and doing so will induce a new data ping from all users, so be careful. Mozilla may edit
@@ -677,13 +684,9 @@ pref("devtools.performance.recording.child.timeout_s", 0);
   pref("devtools.performance.recording.preset", "web-developer");
   pref("devtools.performance.recording.preset.remote", "web-developer");
 #endif
-// The profiler's active tab view has a few issues. Disable it in most
-// environments until the issues are ironed out.
-#if defined(NIGHTLY_BUILD)
-  pref("devtools.performance.recording.active-tab-view.enabled", true);
-#else
-  pref("devtools.performance.recording.active-tab-view.enabled", false);
-#endif
+// The profiler's active tab view has a few issues. Disable it until the issues
+// are ironed out.
+pref("devtools.performance.recording.active-tab-view.enabled", false);
 // Profiler buffer size. It is the maximum number of 8-bytes entries in the
 // profiler's buffer. 10000000 is ~80mb.
 pref("devtools.performance.recording.entries", 10000000);
@@ -928,7 +931,9 @@ pref("javascript.options.mem.incremental_weakmap", true);
 
 // JSGC_SLICE_TIME_BUDGET_MS
 // Override the shell's default of unlimited slice time.
-pref("javascript.options.mem.gc_incremental_slice_ms", 5);
+// Note that this only applies to non-idle slices, which
+// should be the minority.
+pref("javascript.options.mem.gc_incremental_slice_ms", 10);
 
 // JSGC_COMPACTING_ENABLED
 pref("javascript.options.mem.gc_compacting", true);
@@ -1020,6 +1025,11 @@ pref("javascript.options.mem.nursery_eager_collection_threshold_percent", 25);
 // JSGC_NURSERY_EAGER_COLLECTION_TIMEOUT_MS
 pref("javascript.options.mem.nursery_eager_collection_timeout_ms", 5000);
 
+#ifdef JS_GC_ZEAL
+pref("javascript.options.mem.gc_zeal.mode", 0);
+pref("javascript.options.mem.gc_zeal.frequency", 5000);
+#endif
+
 pref("javascript.options.shared_memory", true);
 
 pref("javascript.options.throw_on_debuggee_would_run", false);
@@ -1027,11 +1037,6 @@ pref("javascript.options.dump_stack_on_debuggee_would_run", false);
 
 // advanced prefs
 pref("image.animation_mode",                "normal");
-
-// If this pref is true, prefs in the logging.config branch will be cleared on
-// startup. This is done so that setting a log-file and log-modules at runtime
-// doesn't persist across restarts leading to huge logfile and low disk space.
-pref("logging.config.clear_on_startup", true);
 
 // If there is ever a security firedrill that requires
 // us to block certian ports global, this is the pref
@@ -1251,9 +1256,6 @@ pref("network.http.http3.alt-svc-mapping-for-testing", "");
 // the origin host without using a proxy.
 pref("network.http.altsvc.enabled", true);
 pref("network.http.altsvc.oe", false);
-
-// the origin extension impacts h2 coalescing
-pref("network.http.originextension", true);
 
 pref("network.http.diagnostics", false);
 
@@ -1863,13 +1865,14 @@ pref("services.common.uptake.sampleRate", 1);   // 1%
 
 pref("extensions.abuseReport.enabled", false);
 // Whether Firefox integrated abuse reporting feature should be opening the new abuse report form hosted on AMO.
-pref("extensions.abuseReport.amoFormURL", "https://addons.mozilla.org/%LOCALE%/%APP%/feedback/addon/%addonID%/");
+pref("extensions.abuseReport.amoFormURL", "https://addons.mozilla.org/%LOCALE%/firefox/feedback/addon/%addonID%/");
+pref("extensions.addonAbuseReport.url", "https://services.addons.mozilla.org/api/v5/abuse/report/addon/");
 
 // Blocklist preferences
 pref("extensions.blocklist.enabled", true);
 pref("extensions.blocklist.detailsURL", "https://blocked.cdn.mozilla.net/");
 pref("extensions.blocklist.itemURL", "https://blocked.cdn.mozilla.net/%blockID%.html");
-pref("extensions.blocklist.addonItemURL", "https://addons.mozilla.org/%LOCALE%/%APP%/blocked-addon/%addonID%/%addonVersion%/");
+pref("extensions.blocklist.addonItemURL", "https://addons.mozilla.org/%LOCALE%/firefox/blocked-addon/%addonID%/%addonVersion%/");
 // Controls what level the blocklist switches from warning about items to forcibly
 // blocking them.
 pref("extensions.blocklist.level", 2);
@@ -2644,6 +2647,139 @@ pref("font.size.monospace.x-math", 13);
 
 #endif // XP_MACOSX
 
+#ifdef XP_IOS
+  // For many scripts there is no standard "monospaced" font, so we just use
+  // the same as serif/sans-serif, but we prefix the list with Menlo so that at
+  // least any runs of Latin text found when that lang code is in effect will be
+  // monospaced, even if the "native" script can't be.
+
+  // For non-Latin/Greek/Cyrillic scripts, there may not be any serif/sans-serif
+  // distinction available, so both generics resolve to the same font.
+
+  pref("font.name-list.emoji", "Apple Color Emoji");
+
+  pref("font.name-list.serif.ar", "Al Nile");
+  pref("font.name-list.sans-serif.ar", "Geeza Pro");
+  pref("font.name-list.monospace.ar", "Menlo, Geeza Pro");
+
+  pref("font.name-list.serif.el", "Times New Roman");
+  pref("font.name-list.sans-serif.el", "Arial");
+  pref("font.name-list.monospace.el", "Menlo");
+
+  pref("font.name-list.serif.he", "Times New Roman");
+  pref("font.name-list.sans-serif.he", "Arial");
+  pref("font.name-list.monospace.he", "Menlo");
+
+  pref("font.name-list.serif.ja", "Hiragino Mincho ProN");
+  pref("font.name-list.sans-serif.ja", "Hiragino Sans");
+  pref("font.name-list.monospace.ja", "Menlo, Hiragino Sans");
+
+  pref("font.name-list.serif.ko", "Apple SD Gothic Neo");
+  pref("font.name-list.sans-serif.ko", "Apple SD Gothic Neo");
+  pref("font.name-list.monospace.ko", "Menlo, Apple SD Gothic Neo");
+
+  pref("font.name-list.serif.th", "Thonburi");
+  pref("font.name-list.sans-serif.th", "Thonburi");
+  pref("font.name-list.monospace.th", "Menlo, Thonburi");
+
+  // XXX Unsure if the "SF Armenian" font is present/visible as standard?
+  pref("font.name-list.serif.x-armn", "SF Armenian");
+  pref("font.name-list.sans-serif.x-armn", "SF Armenian");
+  pref("font.name-list.monospace.x-armn", "Menlo, SF Armenian");
+
+  pref("font.name-list.serif.x-beng", "Kohinoor Bangla");
+  pref("font.name-list.sans-serif.x-beng", "Kohinoor Bangla");
+  pref("font.name-list.monospace.x-beng", "Menlo, Kohinoor Bangla");
+
+  pref("font.name-list.serif.x-cans", "Euphemia UCAS");
+  pref("font.name-list.sans-serif.x-cans", "Euphemia UCAS");
+  pref("font.name-list.monospace.x-cans", "Menlo, Euphemia UCAS");
+
+  pref("font.name-list.serif.x-cyrillic", "Times New Roman");
+  pref("font.name-list.sans-serif.x-cyrillic", "Arial");
+  pref("font.name-list.monospace.x-cyrillic", "Menlo");
+
+  pref("font.name-list.serif.x-devanagari", "Devanagari Sangam MN");
+  pref("font.name-list.sans-serif.x-devanagari", "Devanagari Sangam MN");
+  pref("font.name-list.monospace.x-devanagari", "Menlo, Devanagari Sangam MN");
+
+  pref("font.name-list.serif.x-ethi", "Kefa");
+  pref("font.name-list.sans-serif.x-ethi", "Kefa");
+  pref("font.name-list.monospace.x-ethi", "Menlo, Kefa");
+
+  // XXX Is "SF Georgian" present/visible as standard?
+  pref("font.name-list.serif.x-geor", "SF Georgian");
+  pref("font.name-list.sans-serif.x-geor", "SF Georgian");
+  pref("font.name-list.monospace.x-geor", "Menlo, SF Georgian");
+
+  pref("font.name-list.serif.x-gujr", "Kohinoor Gujarati");
+  pref("font.name-list.sans-serif.x-gujr", "Kohinoor Gujarati");
+  pref("font.name-list.monospace.x-gujr", "Menlo, Kohinoor Gujarati");
+
+  // XXX Check spelling: "Mukta Mahee" or "MuktaMahee"?
+  pref("font.name-list.serif.x-guru", "Mukta Mahee");
+  pref("font.name-list.sans-serif.x-guru", "Mukta Mahee");
+  pref("font.name-list.monospace.x-guru", "Menlo, Mukta Mahee");
+
+  pref("font.name-list.serif.x-khmr", "Khmer Sangam MN");
+  pref("font.name-list.sans-serif.x-khmr", "Khmer Sangam MN");
+  pref("font.name-list.monospace.x-khmr", "Menlo, Khmer Sangam MN");
+
+  pref("font.name-list.serif.x-mlym", "Malayalam Sangam MN");
+  pref("font.name-list.sans-serif.x-mlym", "Malayalam Sangam MN");
+  pref("font.name-list.monospace.x-mlym", "Menlo, Malayalam Sangam MN");
+
+  pref("font.name-list.serif.x-orya", "Noto Sans Oriya");
+  pref("font.name-list.sans-serif.x-orya", "Noto Sans Oriya");
+  pref("font.name-list.monospace.x-orya", "Menlo, Noto Sans Oriya");
+
+  pref("font.name-list.serif.x-telu", "Kohinoor Telugu");
+  pref("font.name-list.sans-serif.x-telu", "Kohinoor Telugu");
+  pref("font.name-list.monospace.x-telu", "Menlo, Kohinoor Telugu");
+
+  pref("font.name-list.serif.x-knda", "Noto Sans Kannada");
+  pref("font.name-list.sans-serif.x-knda", "Noto Sans Kannada");
+  pref("font.name-list.monospace.x-knda", "Menlo, Noto Sans Kannada");
+
+  pref("font.name-list.serif.x-sinh", "Sinhala Sangam MN");
+  pref("font.name-list.sans-serif.x-sinh", "Sinhala Sangam MN");
+  pref("font.name-list.monospace.x-sinh", "Menlo, Sinhala Sangam MN");
+
+  pref("font.name-list.serif.x-tamil", "Tamil Sangam MN");
+  pref("font.name-list.sans-serif.x-tamil", "Tamil Sangam MN");
+  pref("font.name-list.monospace.x-tamil", "Menlo, Tamil Sangam MN");
+
+  pref("font.name-list.serif.x-tibt", "Kailasa");
+  pref("font.name-list.sans-serif.x-tibt", "Kailasa");
+  pref("font.name-list.monospace.x-tibt", "Menlo, Kailasa");
+
+  pref("font.name-list.serif.x-unicode", "Times New Roman");
+  pref("font.name-list.sans-serif.x-unicode", "Arial");
+  pref("font.name-list.monospace.x-unicode", "Menlo");
+
+  pref("font.name-list.serif.x-western", "Times New Roman");
+  pref("font.name-list.sans-serif.x-western", "Arial");
+  pref("font.name-list.monospace.x-western", "Menlo");
+
+  // XXX Is there an alternative that would be better for 'serif'?
+  pref("font.name-list.serif.zh-CN", "Times New Roman, PingFang SC");
+  pref("font.name-list.sans-serif.zh-CN", "Arial, PingFang SC");
+  pref("font.name-list.monospace.zh-CN", "Menlo, PingFang SC");
+
+  pref("font.name-list.serif.zh-TW", "Times New Roman, PingFang TC");
+  pref("font.name-list.sans-serif.zh-TW", "Arial, PingFang TC");
+  pref("font.name-list.monospace.zh-TW", "Menlo, PingFang TC");
+
+  pref("font.name-list.serif.zh-HK", "Times New Roman, PingFang HK");
+  pref("font.name-list.sans-serif.zh-HK", "Arial, PingFang HK");
+  pref("font.name-list.monospace.zh-HK", "Menlo, PingFang HK");
+
+  pref("font.name-list.serif.x-math", "STIX Two Math, Symbol, Apple Symbols");
+  pref("font.name-list.sans-serif.x-math", "Arial");
+  pref("font.name-list.monospace.x-math", "Menlo");
+
+#endif // XP_IOS
+
 #ifdef ANDROID
   // Handled differently under Mac/Windows
   pref("network.protocol-handler.warn-external.file", false);
@@ -3265,9 +3401,6 @@ pref("memory.dump_reports_on_oom", false);
 // Number of stack frames to capture in createObjectURL for about:memory.
 pref("memory.blob_report.stack_frames", 0);
 
-// Activates the activity monitor
-pref("io.activity.enabled", false);
-
 // path to OSVR DLLs
 pref("gfx.vr.osvr.utilLibPath", "");
 pref("gfx.vr.osvr.commonLibPath", "");
@@ -3456,16 +3589,6 @@ pref("browser.search.separatePrivateDefault", true);
 pref("browser.search.separatePrivateDefault.ui.enabled", false);
 pref("browser.search.removeEngineInfobar.enabled", true);
 
-// Enables a new search configuration style with no functional changes for the
-// user. This is solely intended as a rollout button - it will go away once the
-// new configuration has been rolled out.
-// Whether search-config-v2 is enabled.
-#ifdef NIGHTLY_BUILD
-pref("browser.search.newSearchConfig.enabled", true);
-#else
-pref("browser.search.newSearchConfig.enabled", false);
-#endif
-
 // GMPInstallManager prefs
 
 // User-settable override to media.gmp-manager.url for testing purposes.
@@ -3538,6 +3661,18 @@ pref("reader.errors.includeURLs", false);
 // The default relative font size in reader mode (1-9)
 pref("reader.font_size", 5);
 
+// The font type in reader (sans-serif, serif, monospace)
+pref("reader.font_type", "sans-serif");
+
+// Default font types available in reader mode.
+pref("reader.font_type.values", "[\"sans-serif\",\"serif\",\"monospace\"]");
+
+// The default font weight in reader mode (regular, light, bold)
+pref("reader.font_weight", "regular");
+
+// Font weight values available in reader mode.
+pref("reader.font_weight.values", "[\"regular\",\"light\",\"bold\"]");
+
 // The default relative content width in reader mode (1-9)
 pref("reader.content_width", 3);
 
@@ -3548,15 +3683,15 @@ pref("reader.line_height", 4);
 pref("reader.improved_text_menu.enabled", false);
 
 // The default character spacing in reader mode (1-9)
-pref("reader.character_spacing", "");
+pref("reader.character_spacing", 0);
 
 // The default word spacing in reader mode (1-9)
-pref("reader.word_spacing", "");
+pref("reader.word_spacing", 0);
 
 // The default text alignment direction in reader mode
 pref("reader.text_alignment", "start");
 
-// The default color scheme in reader mode (light, dark, sepia, auto)
+// The default color scheme in reader mode (light, dark, sepia, auto, contrast, gray)
 // auto = color automatically adjusts according to ambient light level
 // (auto only works on platforms where the 'devicelight' event is enabled)
 pref("reader.color_scheme", "auto");
@@ -3575,9 +3710,6 @@ pref("reader.custom_colors.unvisited-links", "");
 pref("reader.custom_colors.visited-links", "");
 
 pref("reader.custom_colors.selection-highlight", "");
-
-// The font type in reader (sans-serif, serif)
-pref("reader.font_type", "sans-serif");
 
 // Whether to use a vertical or horizontal toolbar.
 pref("reader.toolbar.vertical", true);
@@ -4025,9 +4157,6 @@ pref("extensions.formautofill.loglevel", "Warn");
 // Temporary prefs that we will be removed if the telemetry data (added in Fx123) does not show any problems with the new heuristics.
 pref("extensions.formautofill.heuristics.captureOnFormRemoval", true);
 pref("extensions.formautofill.heuristics.captureOnPageNavigation", true);
-// The interactivityCheckMode pref is only temporary.
-// It will be removed when we decide to only support the `focusability` mode
-pref("extensions.formautofill.heuristics.interactivityCheckMode", "focusability");
 
 pref("toolkit.osKeyStore.loglevel", "Warn");
 

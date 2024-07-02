@@ -279,6 +279,9 @@ pref("browser.shell.defaultBrowserCheckCount", 0);
 // Attempt to set the default browser on Windows 10 using the UserChoice registry keys,
 // before falling back to launching the modern Settings dialog.
 pref("browser.shell.setDefaultBrowserUserChoice", true);
+// When setting default via UserChoice, temporarily rename an ancestor registry key to
+// prevent kernel drivers from locking the UserChoice subkeys.
+pref("browser.shell.setDefaultBrowserUserChoice.regRename", false);
 // When setting the default browser on Windows 10 using the UserChoice
 // registry keys, also try to set Firefox as the default PDF handler.
 pref("browser.shell.setDefaultPDFHandler", true);
@@ -293,6 +296,9 @@ pref("browser.shell.checkDefaultPDF", true);
 // Will be set to `true` if the user indicates that they don't want to be asked
 // again about Firefox being their default PDF handler any more.
 pref("browser.shell.checkDefaultPDF.silencedByUser", false);
+// Whether or not the user should be shown the guidance notifications when
+// setting Firefox as their default browser.
+pref("browser.shell.setDefaultGuidanceNotifications", true);
 #endif
 
 
@@ -420,12 +426,12 @@ pref("browser.urlbar.suggest.engines",              true);
 pref("browser.urlbar.suggest.calculator",           false);
 pref("browser.urlbar.suggest.recentsearches",       true);
 
-pref("browser.urlbar.secondaryActions.featureGate", false);
+pref("browser.urlbar.scotchBonnet.enableOverride", false);
 
-#if defined(EARLY_BETA_OR_EARLIER)
-  // Enable Trending suggestions.
-  pref("browser.urlbar.trending.featureGate", true);
-#endif
+// Enable trending suggestions and recent searches.
+pref("browser.urlbar.trending.featureGate", true);
+pref("browser.urlbar.trending.requireSearchMode", false);
+pref("browser.urlbar.recentsearches.featureGate", true);
 
 // Enable Rich Entities.
 pref("browser.urlbar.richSuggestions.featureGate", true);
@@ -576,12 +582,6 @@ pref("browser.urlbar.showSearchTerms.featureGate", false);
 // a default search engine results page.
 pref("browser.urlbar.showSearchTerms.enabled", true);
 
-// Controls the empty search behavior in Search Mode:
-//  0 - Show nothing
-//  1 - Show search history
-//  2 - Show search and browsing history
-pref("browser.urlbar.update2.emptySearchBehavior", 0);
-
 // Whether the urlbar displays one-offs to filter searches to history,
 // bookmarks, or tabs.
 pref("browser.urlbar.shortcuts.bookmarks", true);
@@ -621,7 +621,7 @@ pref("browser.urlbar.merino.providers", "");
 pref("browser.urlbar.merino.clientVariants", "");
 
 // Enable site specific search result.
-pref("browser.urlbar.contextualSearch.enabled", false);
+pref("browser.urlbar.contextualSearch.enabled", true);
 
 // Feature gate pref for addon suggestions in the urlbar.
 pref("browser.urlbar.addons.featureGate", true);
@@ -808,6 +808,9 @@ pref("browser.shopping.experience2023.sidebarClosedCount", 0);
 // When conditions are met, shows a prompt on the shopping sidebar asking users if they want to disable auto-open behavior
 pref("browser.shopping.experience2023.showKeepSidebarClosedMessage", true);
 
+// Spin the cursor while the page is loading
+pref("browser.spin_cursor_while_busy", false);
+
 // Enable display of megalist option in browser sidebar
 // Keep it hidden from about:config for now.
 // pref("browser.megalist.enabled", false);
@@ -942,8 +945,12 @@ pref("browser.tabs.tooltipsShowPidAndActiveness", true);
 pref("browser.tabs.tooltipsShowPidAndActiveness", false);
 #endif
 
-pref("browser.tabs.cardPreview.enabled", false);
-pref("browser.tabs.cardPreview.showThumbnails", true);
+#ifdef NIGHTLY_BUILD
+pref("browser.tabs.hoverPreview.enabled", true);
+#else
+pref("browser.tabs.hoverPreview.enabled", false);
+#endif
+pref("browser.tabs.hoverPreview.showThumbnails", true);
 
 pref("browser.tabs.firefox-view.logLevel", "Warn");
 
@@ -1032,6 +1039,8 @@ pref("browser.bookmarks.openInTabClosesMenu", true);
 // the bookmarks toolbar as a default.
 pref("browser.bookmarks.defaultLocation", "toolbar");
 
+pref("browser.tabs.allow_transparent_browser", false);
+
 // Scripts & Windows prefs
 pref("dom.disable_open_during_load",              true);
 
@@ -1091,12 +1100,12 @@ pref("privacy.history.custom",              false);
 // 6 - Last 24 hours
 pref("privacy.sanitize.timeSpan", 1);
 
-pref("privacy.sanitize.useOldClearHistoryDialog", true);
+pref("privacy.sanitize.useOldClearHistoryDialog", false);
 
-pref("privacy.sanitize.clearOnShutdown.hasMigratedToNewPrefs", false);
+pref("privacy.sanitize.clearOnShutdown.hasMigratedToNewPrefs2", false);
 // flag to track migration of clear history dialog prefs, where cpd stands for
 // clear private data
-pref("privacy.sanitize.cpd.hasMigratedToNewPrefs", false);
+pref("privacy.sanitize.cpd.hasMigratedToNewPrefs2", false);
 
 pref("privacy.panicButton.enabled",         true);
 
@@ -1437,7 +1446,7 @@ pref("browser.bookmarks.editDialog.maxRecentFolders", 7);
   #if defined(NIGHTLY_BUILD)
     pref("security.sandbox.content.level", 7);
   #else
-    pref("security.sandbox.content.level", 6);
+    pref("security.sandbox.content.level", 7);
   #endif
 
   // Pref controlling if messages relevant to sandbox violations are logged.
@@ -1681,6 +1690,9 @@ pref("browser.menu.showCharacterEncoding", "chrome://browser/locale/browser.prop
 // This is a fallback value for when prompt callers do not specify a modalType.
 pref("prompts.defaultModalType", 3);
 
+// Whether to use the discrete Top Sites component.
+pref("browser.topsites.component.enabled", false);
+
 pref("browser.topsites.useRemoteSetting", true);
 // Fetch sponsored Top Sites from Mozilla Tiles Service (Contile)
 pref("browser.topsites.contile.enabled", true);
@@ -1701,17 +1713,34 @@ pref("browser.newtab.preload", true);
 pref("browser.newtabpage.activity-stream.showWeather", true);
 pref("browser.newtabpage.activity-stream.weather.query", "");
 pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", false);
-pref("browser.newtabpage.activity-stream.weather.temperatureUnits", "f");
 pref("browser.newtabpage.activity-stream.weather.display", "simple");
 // List of regions that get weather by default.
-pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "");
+#ifdef NIGHTLY_BUILD
+  pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "US,CA");
+#else
+  pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "");
+#endif
 
 // Preference to enable wallpaper selection in the Customize Menu of new tab page
-pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", false);
+#ifdef NIGHTLY_BUILD
+  pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
+#else
+  pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", false);
+#endif
+pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
 
-// Current new tab page background image.
+// Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-dark", "");
+pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper", "");
+
+// Preference to show feature highlight about wallpaper on new tab page
+pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightEnabled", false);
+pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightDismissed", false);
+pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightSeenCounter", 0);
+pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightHeaderText", "");
+pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightContentText", "");
+pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightCtaText", "");
 
 pref("browser.newtabpage.activity-stream.newNewtabExperience.colors", "#0090ED,#FF4F5F,#2AC3A2,#FF7139,#A172FF,#FFA437,#FF2A8A");
 
@@ -1877,6 +1906,13 @@ pref("pdfjs.handleOctetStream", true);
 pref("sidebar.position_start", true);
 pref("sidebar.revamp", false);
 
+pref("browser.ml.chat.enabled", false);
+pref("browser.ml.chat.prompt.prefix", 'I’m on page "%currentTabTitle%" with "%selection|12000%" selected. ');
+pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Highlight the main themes and conclusions. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning of the selection."}');
+pref("browser.ml.chat.prompts.1", '{"label":"Simplify language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; examples where applicable to make explanations clearer; explanations for jargon and technical terms; headers and bulleted lists for scannability. Maintain factual accuracy while simplifying."}');
+pref("browser.ml.chat.prompts.2", '{"label":"Quiz me","value":"Please create questions related to the selection. Ask the questions one by one. Wait for my response before moving on to the next question. Evaluate each response. Ask a variety of types of questions, like multiple choice, true or false and short answer."}');
+pref("browser.ml.chat.provider", "");
+
 pref("security.protectionspopup.recordEventTelemetry", true);
 pref("security.app_menu.recordEventTelemetry", true);
 
@@ -2007,13 +2043,7 @@ pref("browser.translations.newSettingsUI.enable", false);
 
 // Enable Firefox Select translations powered by Bergamot translations
 // engine https://browser.mt/.
-#if defined(EARLY_BETA_OR_EARLIER)
-  // Enables Select Translations for Early Beta and Nightly.
-  pref("browser.translations.select.enable", true);
-#else
-  // Disables Select Translations for Late Beta and Release.
-  pref("browser.translations.select.enable", false);
-#endif
+pref("browser.translations.select.enable", true);
 
 // Telemetry settings.
 // Determines if Telemetry pings can be archived locally.
@@ -2434,6 +2464,9 @@ pref("screenshots.browser.component.enabled", true);
 // Preference that determines what button to focus
 pref("screenshots.browser.component.last-saved-method", "download");
 
+// Preference that prevents events from reaching the content page.
+pref("screenshots.browser.component.preventContentEvents", true);
+
 // DoH Rollout: whether to clear the mode value at shutdown.
 pref("doh-rollout.clearModeOnShutdown", false);
 
@@ -2524,7 +2557,7 @@ pref("identity.fxaccounts.toolbar.defaultVisible", true);
 
 // Prefs to control Firefox Account panels that shows call to actions
 // for other supported Mozilla products
-pref("identity.fxaccounts.toolbar.pxiToolbarEnabled", false);
+pref("identity.fxaccounts.toolbar.pxiToolbarEnabled", true);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.monitorEnabled", true);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.relayEnabled", true);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.vpnEnabled", true);
@@ -2956,8 +2989,6 @@ pref("browser.firefox-view.feature-tour", "{\"screen\":\"FIREFOX_VIEW_SPOTLIGHT\
 pref("browser.firefox-view.view-count", 0);
 // Maximum number of rows to show on the "History" page.
 pref("browser.firefox-view.max-history-rows", 300);
-// Enables search functionality in Firefox View.
-pref("browser.firefox-view.search.enabled", true);
 // Enables virtual list functionality in Firefox View.
 pref("browser.firefox-view.virtual-list.enabled", true);
 
@@ -3014,6 +3045,7 @@ pref("cookiebanners.ui.desktop.cfrVariant", 0);
 
 #ifdef NIGHTLY_BUILD
   pref("dom.security.credentialmanagement.identity.enabled", true);
+  pref("dom.security.credentialmanagement.identity.heavyweight.enabled", true);
 #endif
 
 pref("ui.new-webcompat-reporter.enabled", true);
@@ -3042,12 +3074,18 @@ pref("browser.privatebrowsing.resetPBM.showConfirmationDialog", true);
 // the preferences related to the Nimbus experiment, to activate and deactivate
 // the the entire rollout (see: bug 1864216 - two prompts, 1877500 - set two in one prompt)
 pref("browser.mailto.dualPrompt", false);
-// When visiting a site which uses registerProtocolHandler: Ask the user to set Firefox as
-// default mailto handler.
-pref("browser.mailto.prompt.os", true);
+// Display a reminder prompt for known webmailers if the prompt was not
+// dismissed before the next visit of that webmailer.
+pref("browser.mailto.dualPrompt.onLocationChange", false);
+// configures after how many minutes is the prompt shown again after it was
+// dismissed. This differs from clicking the 'x' button and 'not now' (forever=0)
+pref("browser.mailto.dualPrompt.dismissNotNowMinutes", 525600); // one year
+pref("browser.mailto.dualPrompt.dismissXClickMinutes", 1440); // one day
 
 // Pref to initialize the BackupService soon after startup.
 pref("browser.backup.enabled", true);
+// Pref to control whether scheduled backups run or not.
+pref("browser.backup.scheduled.enabled", false);
 // Pref to control the visibility of the backup section in about:preferences
 pref("browser.backup.preferences.ui.enabled", false);
 // The number of SQLite database pages to backup per step.
@@ -3059,9 +3097,13 @@ pref("browser.backup.sqlite.step_delay_ms", 250);
 pref("browser.profiles.enabled", false);
 
 pref("startup.homepage_override_url_nimbus", "");
+// These prefs are referring to the Fx update version
 pref("startup.homepage_override_nimbus_maxVersion", "");
+pref("startup.homepage_override_nimbus_minVersion", "");
 
 // Pref to enable the content relevancy feature.
 pref("toolkit.contentRelevancy.enabled", false);
 // Pref to enable the ingestion through the Rust component.
 pref("toolkit.contentRelevancy.ingestEnabled", false);
+// Pref to enable extra logging for the content relevancy feature
+pref("toolkit.contentRelevancy.log", false);

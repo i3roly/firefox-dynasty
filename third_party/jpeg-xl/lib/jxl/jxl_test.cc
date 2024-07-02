@@ -8,6 +8,7 @@
 #include <jxl/cms.h>
 #include <jxl/color_encoding.h>
 #include <jxl/encode.h>
+#include <jxl/memory_manager.h>
 #include <jxl/types.h>
 
 #include <algorithm>
@@ -28,6 +29,7 @@
 #include "lib/extras/packed_image.h"
 #include "lib/jxl/alpha.h"
 #include "lib/jxl/base/data_parallel.h"
+#include "lib/jxl/base/sanitizer_definitions.h"  // JXL_MEMORY_SANITIZER
 #include "lib/jxl/base/span.h"
 #include "lib/jxl/base/status.h"
 #include "lib/jxl/codec_in_out.h"
@@ -40,6 +42,7 @@
 #include "lib/jxl/image_metadata.h"
 #include "lib/jxl/jpeg/enc_jpeg_data.h"
 #include "lib/jxl/test_image.h"
+#include "lib/jxl/test_memory_manager.h"
 #include "lib/jxl/test_utils.h"
 #include "lib/jxl/testing.h"
 
@@ -64,14 +67,14 @@ TEST(JxlTest, RoundtripSinglePixel) {
   TestImage t;
   t.SetDimensions(1, 1).AddFrame().ZeroFill();
   PackedPixelFile ppf_out;
-  EXPECT_EQ(Roundtrip(t.ppf(), {}, {}, nullptr, &ppf_out), 55);
+  EXPECT_NEAR(Roundtrip(t.ppf(), {}, {}, nullptr, &ppf_out), 54, 10);
 }
 
 TEST(JxlTest, RoundtripSinglePixelWithAlpha) {
   TestImage t;
   t.SetDimensions(1, 1).SetChannels(4).AddFrame().ZeroFill();
   PackedPixelFile ppf_out;
-  EXPECT_EQ(Roundtrip(t.ppf(), {}, {}, nullptr, &ppf_out), 58);
+  EXPECT_NEAR(Roundtrip(t.ppf(), {}, {}, nullptr, &ppf_out), 57, 10);
 }
 
 // Changing serialized signature causes Decode to fail.
@@ -129,7 +132,7 @@ TEST(JxlTest, RoundtripSmallD1) {
 
   {
     PackedPixelFile ppf_out;
-    EXPECT_NEAR(Roundtrip(t.ppf(), {}, {}, pool, &ppf_out), 745, 20);
+    EXPECT_NEAR(Roundtrip(t.ppf(), {}, {}, pool, &ppf_out), 723, 20);
     EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.3);
     EXPECT_EQ(ppf_out.info.intensity_target, t.ppf().info.intensity_target);
   }
@@ -164,7 +167,7 @@ TEST(JxlTest, RoundtripResample2Slow) {
 
   PackedPixelFile ppf_out;
   EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 3888, 200);
-  EXPECT_SLIGHTLY_BELOW(ComputeDistance2(t.ppf(), ppf_out), 250);
+  EXPECT_SLIGHTLY_BELOW(ComputeDistance2(t.ppf(), ppf_out), 270);
 }
 
 TEST(JxlTest, RoundtripResample2MT) {
@@ -296,13 +299,14 @@ TEST(JxlTest, RoundtripMultiGroup) {
   auto run_kitten = std::async(std::launch::async, test, SpeedTier::kKitten,
                                1.0f, 63624u, 8.5);
   auto run_wombat = std::async(std::launch::async, test, SpeedTier::kWombat,
-                               2.0f, 38536u, 15.7);
+                               2.0f, 38887u, 15.5);
 }
 
 TEST(JxlTest, RoundtripRGBToGrayscale) {
+  JxlMemoryManager* memory_manager = jxl::test::MemoryManager();
   ThreadPoolForTests pool(4);
   const std::vector<uint8_t> orig = ReadTestData("jxl/flower/flower.png");
-  CodecInOut io;
+  CodecInOut io{memory_manager};
   ASSERT_TRUE(SetFromBytes(Bytes(orig), &io, pool.get()));
   io.ShrinkTo(600, 1024);
 
@@ -313,7 +317,7 @@ TEST(JxlTest, RoundtripRGBToGrayscale) {
   JXLDecompressParams dparams;
   dparams.color_space = "Gra_D65_Rel_SRG";
 
-  CodecInOut io2;
+  CodecInOut io2{memory_manager};
   EXPECT_FALSE(io.Main().IsGray());
   size_t compressed_size;
   JXL_EXPECT_OK(
@@ -382,15 +386,9 @@ JXL_X86_64_TEST(JxlTest, RoundtripLargeEmptyModular) {
   cparams.AddOption(JXL_ENC_FRAME_SETTING_DECODING_SPEED, 2);
 
   PackedPixelFile ppf_out;
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool.get(), &ppf_out), 3474795,
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool.get(), &ppf_out), 669009,
               100000);
-  EXPECT_SLIGHTLY_BELOW(ComputeDistance2(t.ppf(), ppf_out),
-#if JXL_HIGH_PRECISION
-                        2050
-#else
-                        12100
-#endif
-  );
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.19);
 }
 
 TEST(JxlTest, RoundtripOutputColorSpace) {
@@ -423,7 +421,7 @@ TEST(JxlTest, RoundtripDotsForceEpf) {
   cparams.AddOption(JXL_ENC_FRAME_SETTING_DOTS, 1);
 
   PackedPixelFile ppf_out;
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool.get(), &ppf_out), 41355,
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool.get(), &ppf_out), 40999,
               300);
   EXPECT_SLIGHTLY_BELOW(ComputeDistance2(t.ppf(), ppf_out), 18);
 }
@@ -520,8 +518,8 @@ TEST(JxlTest, RoundtripNoGaborishNoAR) {
   cparams.AddOption(JXL_ENC_FRAME_SETTING_GABORISH, 0);
 
   PackedPixelFile ppf_out;
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 41142, 400);
-  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.8);
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 45241, 400);
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.55);
 }
 
 TEST(JxlTest, RoundtripSmallNoGaborish) {
@@ -538,8 +536,8 @@ TEST(JxlTest, RoundtripSmallNoGaborish) {
   cparams.AddOption(JXL_ENC_FRAME_SETTING_GABORISH, 0);
 
   PackedPixelFile ppf_out;
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 1006, 20);
-  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.2);
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 1042, 20);
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.0);
 }
 
 TEST(JxlTest, RoundtripSmallPatchesAlpha) {
@@ -564,8 +562,8 @@ TEST(JxlTest, RoundtripSmallPatchesAlpha) {
   cparams.distance = 0.1f;
 
   PackedPixelFile ppf_out;
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 597, 100);
-  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.018f);
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 462, 100);
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.016f);
 }
 
 TEST(JxlTest, RoundtripSmallPatches) {
@@ -599,10 +597,11 @@ TEST(JxlTest, RoundtripSmallPatches) {
 // are preserved.
 #if JXL_FALSE
 TEST(JxlTest, RoundtripImageBundleOriginalBits) {
+  JxlMemoryManager* memory_manager = jxl::test::MemoryManager();
   // Image does not matter, only io.metadata.m and io2.metadata.m are tested.
-  JXL_ASSIGN_OR_DIE(Image3F image, Image3F::Create(1, 1));
+  JXL_ASSIGN_OR_DIE(Image3F image, Image3F::Create(memory_manager, 1, 1));
   ZeroFillImage(&image);
-  CodecInOut io;
+  CodecInOut io{memory_manager};
   io.metadata.m.color_encoding = ColorEncoding::LinearSRGB();
   io.SetFromImage(std::move(image), ColorEncoding::LinearSRGB());
 
@@ -618,7 +617,7 @@ TEST(JxlTest, RoundtripImageBundleOriginalBits) {
     }
 
     io.metadata.m.SetUintSamples(bit_depth);
-    CodecInOut io2;
+    CodecInOut io2{memory_manager};
     JXL_EXPECT_OK(Roundtrip(&io, cparams, {}, &io2, _));
 
     EXPECT_EQ(bit_depth, io2.metadata.m.bit_depth.bits_per_sample);
@@ -655,7 +654,7 @@ TEST(JxlTest, RoundtripImageBundleOriginalBits) {
     io.metadata.m.bit_depth.floating_point_sample = true;
     io.metadata.m.bit_depth.exponent_bits_per_sample = exponent_bit_depth;
 
-    CodecInOut io2;
+    CodecInOut io2{memory_manager};
     JXL_EXPECT_OK(Roundtrip(&io, cparams, {}, &io2));
 
     EXPECT_EQ(bit_depth, io2.metadata.m.bit_depth.bits_per_sample);
@@ -668,9 +667,10 @@ TEST(JxlTest, RoundtripImageBundleOriginalBits) {
 #endif
 
 TEST(JxlTest, RoundtripGrayscale) {
+  JxlMemoryManager* memory_manager = jxl::test::MemoryManager();
   const std::vector<uint8_t> orig = ReadTestData(
       "external/wesaturate/500px/cvo9xd_keong_macan_grayscale.png");
-  CodecInOut io;
+  CodecInOut io{memory_manager};
   ASSERT_TRUE(SetFromBytes(Bytes(orig), &io));
   ASSERT_NE(io.xsize(), 0u);
   io.ShrinkTo(128, 128);
@@ -686,7 +686,7 @@ TEST(JxlTest, RoundtripGrayscale) {
 
     std::vector<uint8_t> compressed;
     EXPECT_TRUE(test::EncodeFile(cparams, &io, &compressed));
-    CodecInOut io2;
+    CodecInOut io2{memory_manager};
     EXPECT_TRUE(test::DecodeFile({}, Bytes(compressed), &io2));
     EXPECT_TRUE(io2.Main().IsGray());
 
@@ -706,7 +706,7 @@ TEST(JxlTest, RoundtripGrayscale) {
 
     std::vector<uint8_t> compressed;
     EXPECT_TRUE(test::EncodeFile(cparams, &io, &compressed));
-    CodecInOut io2;
+    CodecInOut io2{memory_manager};
     EXPECT_TRUE(test::DecodeFile({}, Bytes(compressed), &io2));
     EXPECT_TRUE(io2.Main().IsGray());
 
@@ -725,7 +725,7 @@ TEST(JxlTest, RoundtripGrayscale) {
     std::vector<uint8_t> compressed;
     EXPECT_TRUE(test::EncodeFile(cparams, &io, &compressed));
 
-    CodecInOut io2;
+    CodecInOut io2{memory_manager};
     JXLDecompressParams dparams;
     dparams.color_space = "RGB_D65_SRG_Rel_SRG";
     EXPECT_TRUE(test::DecodeFile(dparams, Bytes(compressed), &io2));
@@ -741,9 +741,10 @@ TEST(JxlTest, RoundtripGrayscale) {
 }
 
 TEST(JxlTest, RoundtripAlpha) {
+  JxlMemoryManager* memory_manager = jxl::test::MemoryManager();
   const std::vector<uint8_t> orig =
       ReadTestData("external/wesaturate/500px/tmshre_riaphotographs_alpha.png");
-  CodecInOut io;
+  CodecInOut io{memory_manager};
   ASSERT_TRUE(SetFromBytes(Bytes(orig), &io));
 
   ASSERT_NE(io.xsize(), 0u);
@@ -765,7 +766,7 @@ TEST(JxlTest, RoundtripAlpha) {
 
   for (bool use_image_callback : {false, true}) {
     for (bool unpremul_alpha : {false, true}) {
-      CodecInOut io2;
+      CodecInOut io2{memory_manager};
       JXLDecompressParams dparams;
       dparams.use_image_callback = use_image_callback;
       dparams.unpremultiply_alpha = unpremul_alpha;
@@ -835,10 +836,11 @@ bool UnpremultiplyAlpha(CodecInOut& io) {
 }  // namespace
 
 TEST(JxlTest, RoundtripAlphaPremultiplied) {
+  JxlMemoryManager* memory_manager = jxl::test::MemoryManager();
   const std::vector<uint8_t> orig =
       ReadTestData("external/wesaturate/500px/tmshre_riaphotographs_alpha.png");
-  CodecInOut io;
-  CodecInOut io_nopremul;
+  CodecInOut io{memory_manager};
+  CodecInOut io_nopremul{memory_manager};
   ASSERT_TRUE(SetFromBytes(Bytes(orig), &io));
   ASSERT_TRUE(SetFromBytes(Bytes(orig), &io_nopremul));
 
@@ -871,7 +873,7 @@ TEST(JxlTest, RoundtripAlphaPremultiplied) {
             use_uint8 ? "uint8" : "float",
             use_image_callback ? "image callback" : "image_buffer",
             unpremul_alpha ? "un" : "");
-        CodecInOut io2;
+        CodecInOut io2{memory_manager};
         JXLDecompressParams dparams;
         dparams.use_image_callback = use_image_callback;
         dparams.unpremultiply_alpha = unpremul_alpha;
@@ -988,8 +990,8 @@ TEST(JxlTest, RoundtripAlpha16) {
   PackedPixelFile ppf_out;
   // TODO(szabadka) Investigate big size difference on i686
   // This still keeps happening (2023-04-18).
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool.get(), &ppf_out), 3666, 120);
-  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.65);
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool.get(), &ppf_out), 4013, 120);
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.6);
 }
 
 namespace {
@@ -1180,13 +1182,38 @@ TEST(JxlTest, RoundtripDots) {
             JXL_TRANSFER_FUNCTION_SRGB);
 
   JXLCompressParams cparams;
-  cparams.AddOption(JXL_ENC_FRAME_SETTING_EFFORT, 7);  // kSkirrel
+  cparams.AddOption(JXL_ENC_FRAME_SETTING_EFFORT, 7);  // kSquirrel
   cparams.AddOption(JXL_ENC_FRAME_SETTING_DOTS, 1);
   cparams.distance = 0.04;
 
   PackedPixelFile ppf_out;
-  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 280333, 4000);
-  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.35);
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), 276166, 4000);
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 0.14);
+}
+
+TEST(JxlTest, RoundtripDisablePerceptual) {
+  ThreadPool* pool = nullptr;
+  const std::vector<uint8_t> orig = ReadTestData("jxl/flower/flower.png");
+  TestImage t;
+  t.DecodeFromBytes(orig).ClearMetadata();
+  ASSERT_NE(t.ppf().info.xsize, 0);
+  EXPECT_EQ(t.ppf().info.bits_per_sample, 8);
+  EXPECT_EQ(t.ppf().color_encoding.transfer_function,
+            JXL_TRANSFER_FUNCTION_SRGB);
+
+  JXLCompressParams cparams;
+  cparams.AddOption(JXL_ENC_FRAME_SETTING_EFFORT, 7);  // kSquirrel
+  cparams.AddOption(JXL_ENC_FRAME_SETTING_DISABLE_PERCEPTUAL_HEURISTICS, 1);
+  cparams.distance = 1.0;
+
+  PackedPixelFile ppf_out;
+
+  // TODO(eustas): fix or explain why
+  size_t expected_size = JXL_MEMORY_SANITIZER ? 501875 : 477778;
+  EXPECT_NEAR(Roundtrip(t.ppf(), cparams, {}, pool, &ppf_out), expected_size,
+              4000);
+  // TODO(veluca): figure out why we can't get below this value.
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 11.0);
 }
 
 TEST(JxlTest, RoundtripNoise) {
@@ -1201,7 +1228,7 @@ TEST(JxlTest, RoundtripNoise) {
             JXL_TRANSFER_FUNCTION_SRGB);
 
   JXLCompressParams cparams;
-  cparams.AddOption(JXL_ENC_FRAME_SETTING_EFFORT, 7);  // kSkirrel
+  cparams.AddOption(JXL_ENC_FRAME_SETTING_EFFORT, 7);  // kSquirrel
   cparams.AddOption(JXL_ENC_FRAME_SETTING_NOISE, 1);
 
   PackedPixelFile ppf_out;
@@ -1245,7 +1272,7 @@ TEST(JxlTest, RoundtripAnimation) {
   dparams.accepted_formats.push_back(t.ppf().frames[0].color.format);
 
   PackedPixelFile ppf_out;
-  EXPECT_SLIGHTLY_BELOW(Roundtrip(t.ppf(), {}, dparams, pool, &ppf_out), 3350);
+  EXPECT_SLIGHTLY_BELOW(Roundtrip(t.ppf(), {}, dparams, pool, &ppf_out), 3370);
 
   t.CoalesceGIFAnimationWithAlpha();
   ASSERT_EQ(ppf_out.frames.size(), t.ppf().frames.size());
@@ -1304,10 +1331,10 @@ TEST(JxlTest, RoundtripAnimationPatches) {
   PackedPixelFile ppf_out;
   // 40k with no patches, 27k with patch frames encoded multiple times.
   EXPECT_SLIGHTLY_BELOW(Roundtrip(t.ppf(), cparams, dparams, pool, &ppf_out),
-                        19300);
+                        21113);
   EXPECT_EQ(ppf_out.frames.size(), t.ppf().frames.size());
   // >10 with broken patches; not all patches are detected on borders.
-  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.9);
+  EXPECT_SLIGHTLY_BELOW(ButteraugliDistance(t.ppf(), ppf_out), 1.85);
 }
 
 size_t RoundtripJpeg(const std::vector<uint8_t>& jpeg_in, ThreadPool* pool) {

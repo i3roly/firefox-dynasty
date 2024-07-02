@@ -7,7 +7,7 @@
 .weather {
   font-size: var(--font-size-root);
   position: absolute;
-  left: var(--space-xlarge);
+  inset-inline-start: var(--space-xlarge);
   top: var(--space-xlarge);
   z-index: 1;
 }
@@ -57,7 +57,14 @@
 .weatherSponsorText {
   visibility: hidden;
   font-size: var(--newtab-weather-sponsor-font-size);
-  color: var(--text-color-deemphasized);
+  color: var(--newtab-contextual-text-primary-color);
+
+  // Contrast fix for users who have wallpapers set
+  @include wallpaper-contrast-fix;
+
+  span {
+    color: var(--text-color-deemphasized);
+  }
 }
 
 .weatherInfoLink, .weatherButtonContextMenuWrapper {
@@ -86,51 +93,32 @@
   }
 
   // Contrast fix for users who have wallpapers set
-  .hasWallpaperDark & {
-    @media (prefers-color-scheme: dark) {
-      // TODO: Replace with token
-      background-color: rgba(35, 34, 43, 70%);
+  .lightWallpaper &,
+  .darkWallpaper & {
+    background-color: var(--newtab-weather-background-color);
 
-      &:hover {
-        background-color: var(--newtab-button-static-hover-background);
-      }
-
-      &:hover:active {
-        background-color: var(--newtab-button-static-active-background);
-      }
+    &:hover {
+      background-color: var(--newtab-button-static-hover-background);
     }
 
-    @media (prefers-contrast) and (prefers-color-scheme: dark) {
+    &:hover:active {
+      background-color: var(--newtab-button-static-active-background);
+    }
+
+    @media (prefers-contrast) {
       background-color: var(--background-color-box);
     }
   }
-
-  .hasWallpaperLight & {
-    @media (prefers-color-scheme: light) {
-      // TODO: Replace with token
-      background-color: rgba(255, 255, 255, 70%);
-
-      &:hover {
-        background-color: var(--newtab-button-static-hover-background);
-      }
-
-      &:hover:active {
-        background-color: var(--newtab-button-static-active-background);
-      }
-    }
-
-    @media (prefers-contrast) and (prefers-color-scheme: light) {
-      background-color: var(--background-color-box);
-    }
-  }
-
 }
 
 .weatherInfoLink {
   display: flex;
   gap: var(--space-medium);
   padding: var(--space-small) var(--space-medium);
-  border-radius: var(--border-radius-medium) 0 0 var(--border-radius-medium);
+  border-start-start-radius: var(--border-radius-medium);
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-end-start-radius: var(--border-radius-medium);
   text-decoration: none;
   color: var(--text-color);;
   min-width: 130px;
@@ -161,7 +149,10 @@
 .weatherButtonContextMenuWrapper {
   position: relative;
   cursor: pointer;
-  border-radius: 0 var(--border-radius-medium) var(--border-radius-medium) 0;
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--border-radius-medium);
+  border-end-end-radius: var(--border-radius-medium);
+  border-end-start-radius: 0;
   display: flex;
   align-items: stretch;
   width: 50px;
@@ -169,7 +160,7 @@
 
   &::after {
     content: '';
-    left: 0;
+    inset-inline-start: 0;
     top: 10px;
     height: calc(100% - 20px);
     width: 1px;
@@ -177,12 +168,6 @@
     display: block;
     position: absolute;
     z-index: 0;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    &::after {
-      background-color: var(--color-gray-70);
-    }
   }
 
   &:hover {
@@ -266,6 +251,7 @@
 .weatherTemperature {
   font-size: var(--font-size-large);
 }
+
 
 // Weather Symbol Icons
 .weatherIconCol {
@@ -391,3 +377,70 @@
     content: url('chrome://browser/skin/weather/night-mostly-cloudy-with-flurries.svg');
   }
 }
+
+.location-input-wrapper {
+  background-color: light-dark(var(--color-white), var(--newtab-background-color-secondary));
+  color: var(--newtab-text-primary-color);
+  border-radius: var(--border-radius-medium);
+  padding: 8px;
+  position: relative;
+
+  // Contrast fix for users who have wallpapers set
+  .lightWallpaper &,
+  .darkWallpaper & {
+    background-color: var(--newtab-weather-background-color);
+
+    &:hover {
+      background-color: var(--newtab-button-static-hover-background);
+    }
+
+    &:hover:active {
+      background-color: var(--newtab-button-static-active-background);
+    }
+
+    @media (prefers-contrast) {
+      background-color: var(--background-color-box);
+    }
+  }
+
+  .search-icon {
+    content: url('chrome://global/skin/icons/search-glass.svg');
+    -moz-context-properties: fill;
+    fill: light-dark(var(--color-gray-70), var(--color-gray-05));
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    inset-inline-start: 18px;
+  }
+
+  .close-icon {
+    background-image: url('chrome://global/skin/icons/close.svg');
+    -moz-context-properties: fill;
+    fill: light-dark(var(--color-gray-70), var(--color-gray-05));
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    inset-inline-end: 18px;
+    width: var(--size-item-small);
+    height: var(--size-item-small);
+    appearance: none;
+    border: none;
+
+    &:focus-visible {
+      outline: 1px solid var(--focus-outline-color);
+    }
+  }
+
+  input {
+    border-radius: var(--border-radius-medium);
+    background-color: light-dark(var(--color-white), var(--newtab-background-color-secondary));
+    padding-block: 8px;
+    padding-inline: 30px;
+    border: $border-primary;
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-outline-color);
+    }
+  }
+}
+

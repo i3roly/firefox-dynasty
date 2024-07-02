@@ -155,8 +155,6 @@
 
     <!-- Shortcut action to open Passwords screen -->
     <string name="home_screen_shortcut_passwords">Salasanat</string>
-    <!-- Shortcut action to open Passwords screen -->
-    <string name="home_screen_shortcut_open_password_screen" moz:removedIn="126" tools:ignore="UnusedResources">Salasanojen pikakuvake</string>
 
     <!-- Recent Tabs -->
     <!-- Header text for jumping back into the recent tab in the home screen -->
@@ -197,8 +195,6 @@
     <string name="browser_menu_refresh">Päivitä</string>
     <!-- Content description (not visible, for screen readers etc.): Stop loading current website -->
     <string name="browser_menu_stop">Pysäytä</string>
-    <!-- Browser menu button that opens the addon manager -->
-    <string name="browser_menu_add_ons" moz:removedIn="126" tools:ignore="UnusedResources">Lisäosat</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Laajennukset</string>
     <!-- Browser menu button that opens the extensions manager -->
@@ -207,8 +203,6 @@
     <string name="browser_menu_discover_more_extensions">Löydä lisää laajennuksia</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Tilin tiedot</string>
-    <!-- Text displayed when there are no add-ons to be shown -->
-    <string name="no_add_ons" moz:removedIn="126" tools:ignore="UnusedResources">Ei lisäosia täällä</string>
     <!-- Browser menu button that sends a user to help articles -->
     <string name="browser_menu_help">Ohje</string>
     <!-- Browser menu button that sends a to a the what's new article -->
@@ -225,8 +219,6 @@
     <string name="browser_menu_add_to_homescreen">Lisää aloitusnäytölle</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Lisää aloitusnäytölle…</string>
-    <!-- Browser menu toggle that installs a Progressive Web App shortcut to the site on the device home screen. -->
-    <string name="browser_menu_install_on_homescreen" moz:removedIn="126" tools:ignore="UnusedResources">Asenna</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Synkronoi uudelleen</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -604,7 +596,9 @@
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Tili</string>
     <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar">Työkalupalkki</string>
+    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Työkalupalkki</string>
+    <!-- Preference for changing where the AddressBar is positioned -->
+    <string name="preferences_toolbar_2">Osoitepalkin sijainti</string>
     <!-- Preference for changing default theme to dark or light mode -->
     <string name="preferences_theme">Teema</string>
     <!-- Preference for customizing the home screen -->
@@ -676,13 +670,8 @@
     <!-- Message to indicate users that we are quitting the application to apply the changes -->
     <string name="quit_application">Lopetetaan sovellus, jotta muutokset tulevat voimaan…</string>
 
-    <!-- Preference for add_ons -->
-    <string name="preferences_addons" moz:removedIn="126" tools:ignore="UnusedResources">Lisäosat</string>
-
     <!-- Preference for extensions -->
     <string name="preferences_extensions">Laajennukset</string>
-    <!-- Preference for installing a local add-on -->
-    <string name="preferences_install_local_addon" moz:removedIn="126" tools:ignore="UnusedResources">Asenna lisäosa tiedostosta</string>
     <!-- Preference for installing a local extension -->
     <string name="preferences_install_local_extension">Asenna laajennus tiedostosta</string>
     <!-- Preference for notifications -->
@@ -703,9 +692,10 @@
     <!-- The subtitle for the allow for all sites preference toggle -->
     <string name="addons_permissions_allow_for_all_sites_subtitle" tools:ignore="UnusedResources">Jos luotat tähän laajennukseen, voit antaa sille luvan jokaisella verkkosivustolla.</string>
 
+    <!-- The text shown when an extension does not require permissions -->
+    <string name="addons_does_not_require_permissions">Tämä laajennus ei vaadi mitään oikeuksia.</string>
+
     <!-- Add-on Preferences -->
-    <!-- Preference to customize the configured AMO (addons.mozilla.org) collection -->
-    <string name="preferences_customize_amo_collection" moz:removedIn="126" tools:ignore="UnusedResources">Mukautettu lisäosakokoelma</string>
     <!-- Preference to customize the configured AMO (addons.mozilla.org) collection -->
     <string name="preferences_customize_extension_collection">Mukautettu laajennuskokoelma</string>
     <!-- Button caption to confirm the add-on collection configuration -->
@@ -716,8 +706,6 @@
     <string name="customize_addon_collection_hint">Kokoelman nimi</string>
     <!-- Hint displayed on input field for custom collection user ID-->
     <string name="customize_addon_collection_user_hint">Kokoelman omistaja (käyttäjätunniste)</string>
-    <!-- Toast shown after confirming the custom add-on collection configuration -->
-    <string name="toast_customize_addon_collection_done" moz:removedIn="126" tools:ignore="UnusedResources">Lisäosakokoelmaa muokattu. Lopetetaan sovellus, jotta muutokset tulevat voimaan…</string>
 
     <!-- Toast shown after confirming the custom extension collection configuration -->
     <string name="toast_customize_extension_collection_done">Laajennuskokoelmaa muokattu. Suljetaan sovellus, jotta muutokset tulevat käyttöön…</string>
@@ -777,35 +765,23 @@
     <string name="wallpapers_onboarding_dialog_explore_more_button_text">Tutustu muihin taustakuviin</string>
 
     <!-- Add-ons general availability nimbus message-->
-    <!-- Title of the Nimbus message for add-ons general availability-->
-    <string name="addon_ga_message_title" moz:removedIn="126" tools:ignore="UnusedResources">Uusia lisäosia nyt saatavilla</string>
     <!-- Title of the Nimbus message for extension general availability-->
     <string name="addon_ga_message_title_2" tools:ignore="UnusedResources">Uusia laajennuksia nyt saatavilla</string>
     <!-- Body of the Nimbus message for add-ons general availability. 'Firefox' intentionally hardcoded here-->
     <string name="addon_ga_message_body" tools:ignore="UnusedResources">Tutustu yli 100 uuteen laajennukseen, joiden avulla voit tehdä Firefoxista omasi.</string>
-    <!-- Button text of the Nimbus message for add-ons general availability. -->
-    <string name="addon_ga_message_button" moz:removedIn="126" tools:ignore="UnusedResources">Tutustu lisäosiin</string>
 
     <!-- Button text of the Nimbus message for extensions general availability. -->
     <string name="addon_ga_message_button_2" tools:ignore="UnusedResources">Selaa laajennuksia</string>
 
     <!-- Extension process crash dialog to user -->
-    <!-- Title of a dialog shown to the user when enough errors have occurred with addons and they need to be temporarily disabled -->
-    <string name="addon_process_crash_dialog_title" moz:removedIn="126" tools:ignore="UnusedResources">Lisäosat on väliaikaisesti poistettu käytöstä</string>
     <!-- Title of the extension crash dialog shown to the user when enough errors have occurred with extensions and they need to be temporarily disabled -->
     <string name="extension_process_crash_dialog_title">Laajennukset on väliaikaisesti poistettu käytöstä</string>
-    <!-- The first parameter is the application name. This is a message shown to the user when too many errors have occurred with the addons process and they have been disabled. The user can decide if they would like to continue trying to start add-ons or if they'd rather continue without them. -->
-    <string name="addon_process_crash_dialog_message" moz:removedIn="126" tools:ignore="UnusedResources">Yksi tai useampi lisäosa lakkasi toimimasta, mikä teki järjestelmästä epävakaan. %1$s ei onnistunut käynnistämään lisäosia uudelleen.\n\nLisäosia ei käynnistetä uudelleen nykyisen istunnon aikana.\n\nLisäosien poistaminen tai poistaminen käytöstä saattaa korjata tämän ongelman.</string>
     <!-- This is a message shown to the user when too many errors have occurred with the extensions process and they have been disabled.
     The user can decide if they would like to continue trying to start extensions or if they'd rather continue without them.
     The first parameter is the application name. -->
     <string name="extension_process_crash_dialog_message">Yksi tai useampi laajennus lakkasi toimimasta, mikä teki järjestelmästä epävakaan. %1$s ei onnistunut käynnistämään laajennuksia uudelleen.\n\nLaajennuksia ei käynnistetä uudelleen nykyisen istunnon aikana.\n\nLaajennuksien poistaminen tai poistaminen käytöstä saattaa korjata tämän ongelman.</string>
-    <!-- This will cause the add-ons to try restarting but the dialog will reappear if it is unsuccessful again -->
-    <string name="addon_process_crash_dialog_retry_button_text" moz:removedIn="126" tools:ignore="UnusedResources">Yritä käynnistää lisäosat uudelleen</string>
     <!-- Button text on the extension crash dialog to prompt the user to try restarting the extensions but the dialog will reappear if it is unsuccessful again -->
     <string name="extension_process_crash_dialog_retry_button_text" tools:ignore="UnusedResources">Yritä käynnistää laajennukset uudelleen</string>
-    <!-- The user will continue with all add-ons disabled -->
-    <string name="addon_process_crash_dialog_disable_addons_button_text" moz:removedIn="126" tools:ignore="UnusedResources">Jatka lisäosien ollessa poistettu käytöstä</string>
 
     <!-- Button text on the extension crash dialog to prompt the user to continue with all extensions disabled. -->
     <string name="extension_process_crash_dialog_disable_extensions_button_text">Jatka pitäen laajennukset pois käytöstä</string>
@@ -932,9 +908,14 @@
     <string name="preference_gestures_dynamic_toolbar">Vieritä piilottaaksesi työkalurivin</string>
 
     <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs">Pyyhkäise työkaluriviä sivuttain vaihtaaksesi välilehtiä</string>
+    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Pyyhkäise työkaluriviä sivuttain vaihtaaksesi välilehtiä</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Pyyhkäise työkaluriviä ylös avataksesi välilehdet</string>
+
+    <!-- Preference for using the dynamic toolbars -->
+    <string name="preference_gestures_dynamic_toolbar_2">Vieritä piilottaaksesi osoite- ja työkalupalkin</string>
+    <!-- Preference for switching tabs by swiping horizontally on the addressbar -->
+    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">Vaihda välilehtiä pyyhkäisemällä osoitepalkkia sivuttain</string>
 
     <!-- Library -->
     <!-- Option in Library to open Downloads page -->
@@ -1448,6 +1429,23 @@
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active. -->
     <string name="notification_pbm_delete_text_2">Sulje yksityiset välilehdet</string>
 
+    <!-- Microsuverys -->
+    <!-- Text shown in prompt for printing microsurvey. "sec" It's an abrevation for "second". -->
+    <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Auta parantamaan tulostamista Firefoxissa. Se kestää vain sekunnin</string>
+    <!-- Text shown in prompt for printing microsurvey. 'Firefox' intentionally hardcoded here--> --&gt;
+    <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Kuinka tyytyväinen olet tulostamiseen Firefoxissa?</string>
+    <!-- Text for option one, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_0" tools:ignore="UnusedResources">Neutraali</string>
+    <!-- Text for option two, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_1" tools:ignore="UnusedResources">Hyvin tyytymätön</string>
+    <!-- Text for option three, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_2" tools:ignore="UnusedResources">Tyytymätön</string>
+    <!-- Text for option four, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_3" tools:ignore="UnusedResources">Tyytyväinen</string>
+    <!-- Text for option five, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_4" tools:ignore="UnusedResources">Hyvin tyytyväinen</string>
+
+
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active for Android 14+ -->
     <string name="notification_erase_title_android_14">Suljetaanko yksityiset välilehdet?</string>
     <string name="notification_erase_text_android_14">Sulje yksityiset välilehdet napauttamalla tai pyyhkäisemällä tätä ilmoitusta.</string>
@@ -1523,10 +1521,6 @@
     <string name="qr_scanner_dialog_invalid_ok">OK</string>
     <!-- Tab collection deletion prompt dialog message. Placeholder will be replaced with the collection name -->
     <string name="tab_collection_dialog_message">Poistetaanko %1$s?</string>
-    <!-- Collection and tab deletion prompt dialog message. This will show when the last tab from a collection is deleted -->
-    <string name="delete_tab_and_collection_dialog_message">Tämän välilehden poistaminen poistaa koko kokoelman. Voit luoda uusia kokoelmia milloin tahansa.</string>
-    <!-- Collection and tab deletion prompt dialog title. Placeholder will be replaced with the collection name. This will show when the last tab from a collection is deleted -->
-    <string name="delete_tab_and_collection_dialog_title">Poistetaanko %1$s?</string>
     <!-- Tab collection deletion prompt dialog option to delete the collection -->
     <string name="tab_collection_dialog_positive">Poista</string>
 
@@ -2378,6 +2372,10 @@
     <string name="review_quality_check_no_analysis_link">Tarkista arvostelun laatu</string>
     <!-- Headline for review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_title">Kokeile luotettavaa tuotearvosteluopastamme</string>
+    <!-- Description for review quality check contextual onboarding card. The first parameters is for retailer name (e.g. Amazon). The second parameter is for the name of the application (e.g. Firefox). -->
+    <string name="review_quality_check_contextual_onboarding_description_one_vendor">Katso, kuinka luotettavia tuotearvostelut ovat palvelussa %1$s, ennen kuin ostat. Arvostelujen tarkistin, %2$sin kokeellinen ominaisuus, on sisäänrakennettu suoraan selaimeen.</string>
+    <!-- Paragraph presenting review quality check feature. First parameter is the Fakespot product name. Second parameter is for clickable text defined in review_quality_check_contextual_onboarding_learn_more_link. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
+    <string name="review_quality_check_contextual_onboarding_learn_more">Mozillan %1$s auttaa välttämään puolueellisia ja epäaitoja arvosteluja. Tekoälymallimme kehittyy jatkuvasti suojatakseen sinua, kun teet ostoksia. %2$s</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
     <string name="review_quality_check_contextual_onboarding_learn_more_link">Lue lisää</string>
     <!-- Text for opt-in button from the review quality check contextual onboarding card. -->
@@ -2487,8 +2485,6 @@
     <string name="translation_error_could_not_load_languages_warning_text">Kieliä ei voitu ladata. Tarkista internetyhteytesi ja yritä uudelleen.</string>
     <!-- The title of the warning card informs the user that a language is not supported. The first parameter is the name of the language that is not supported. -->
     <string name="translation_error_language_not_supported_warning_text">Valitettavasti kieltä %1$s ei tueta vielä.</string>
-    <!-- Button text on the warning card when a language is not supported. The link will take the user to a page to a support page about translations. -->
-    <string name="translation_error_language_not_supported_learn_more" moz:removedIn="126" tools:ignore="UnusedResources">Lue lisää</string>
 
     <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
     <string name="translation_in_progress_snackbar">Käännetään…</string>
@@ -2501,8 +2497,6 @@
 
 
     <!-- Translations options dialog -->
-    <!-- Title of the translation options dialog that allows a user to set their translation options for the site the user is currently on. -->
-    <string name="translation_option_bottom_sheet_title" moz:removedIn="126" tools:ignore="UnusedResources">Käännösasetukset</string>
     <!-- Title of the translation options dialog that allows a user to set their translation options for the site the user is currently on. -->
     <string name="translation_option_bottom_sheet_title_heading">Käännösasetukset</string>
     <!-- Toggle switch label that allows a user to set the setting if they would like the browser to always offer or suggest translations when available. -->
@@ -2605,8 +2599,10 @@
     <string name="download_languages_language_item_preference">%1$s (%2$s)</string>
     <!-- The subhead of the download language preference screen will appear above the items that were not downloaded. -->
     <string name="download_language_header_preference">Lataa kielet</string>
-    <!-- All languages list item. When the user presses this item, they can download or delete all languages. -->
+    <!-- All languages list item. When the user presses this item, they can download all languages. -->
     <string name="download_language_all_languages_item_preference">Kaikki kielet</string>
+    <!-- All languages list item. When the user presses this item, they can delete all languages that were downloaded. -->
+    <string name="download_language_all_languages_item_preference_to_delete">Poista kaikki kielet</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">Poista</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
@@ -2614,7 +2610,16 @@
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was not downloaded. -->
     <string name="download_languages_item_content_description_not_downloaded_state">Lataa</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that is selected. -->
-    <string name="download_languages_item_content_description_selected_state">Valittu</string>
+    <string name="download_languages_item_content_description_selected_state" moz:removedIn="127" tools:ignore="UnusedResources">Valittu</string>
+
+    <!-- The title of the warning card informs the user that an error has occurred when fetching the list of languages. -->
+    <string name="download_languages_fetch_error_warning_text">Kieliä ei voitu ladata. Tarkista myöhemmin uudelleen.</string>
+    <!-- The title of the warning card informs the user that an error has occurred at downloading a language.
+      The first parameter is the language name, for example, "Spanish". -->
+    <string name="download_languages_error_warning_text"><![CDATA[Kieltä <b>%1$s</b> ei voitu ladata. Yritä uudelleen.]]></string>
+    <!-- The title of the warning card informs the user that an error has occurred at deleting a language.
+          The first parameter is the language name, for example, "Spanish". -->
+    <string name="download_languages_delete_error_warning_text"><![CDATA[Kieltä <b>%1$s</b> ei voitu poistaa. Yritä uudelleen.]]></string>
 
     <!-- Title for the dialog used by the translations feature to confirm deleting a language.
     The dialog will be presented when the user requests deletion of a language.
@@ -2641,7 +2646,7 @@
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">Lataamme osittaiset kielet välimuistiin pitääksemme käännökset yksityisinä.</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache">Lataamme osittaisia kieliä pitääksemme käännökset yksityisinä.</string>
+    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">Lataamme osittaisia kieliä pitääksemme käännökset yksityisinä.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Lataa aina datansäästötilassa</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2698,16 +2703,27 @@
 
     <!-- Micro survey -->
 
+    <!-- Microsurvey -->
+    <!-- Prompt view -->
+    <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
+    <string name="micro_survey_prompt_title" tools:ignore="UnusedResources">Auta tekemään Firefoxista entistä parempi. Se kestää vain minuutin.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Jatka</string>
+    <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header">Täytä tämä kysely</string>
+    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Täytä tämä kysely</string>
+    <!-- The survey header -->
+    <string name="micro_survey_survey_header_2">Ole hyvä ja täytä kysely</string>
     <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice">Tietosuojakäytäntö</string>
+    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Tietosuojakäytäntö</string>
+    <!-- The privacy notice link -->
+    <string name="micro_survey_privacy_notice_2">Tietosuojakäytäntö</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Lähetä</string>
     <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" tools:ignore="UnusedResources">Sulje</string>
+    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Sulje</string>
+    <!-- The survey completion header -->
+    <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Kysely valmis</string>
     <!-- The survey completion confirmation text -->
     <string name="micro_survey_feedback_confirmation">Kiitos palautteestasi!</string>
     <!-- Option for likert scale -->
@@ -2721,7 +2737,11 @@
     <!-- Option for likert scale -->
     <string name="likert_scale_option_5" tools:ignore="UnusedResources">Hyvin tyytymätön</string>
 
-    <!-- Microsurvey accessibility -->
+    <!-- Option for likert scale -->
+    <string name="likert_scale_option_6" tools:ignore="UnusedResources">En käytä sitä</string>
+    <!-- Text shown in prompt for homepage microsurvey. 'Firefox' intentionally hardcoded here- -->
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources">Kuinka tyytyväinen olet Firefox-etusivuusi?</string>
+    <!-- Accessibility -->
     <!-- Content description (not visible, for screen readers etc.) for opening microsurvey bottom sheet. -->
     <string name="microsurvey_open_handle_content_description" tools:ignore="UnusedResources">Avaa kysely</string>
     <!-- Content description (not visible, for screen readers etc.) for closing microsurvey bottom sheet. -->

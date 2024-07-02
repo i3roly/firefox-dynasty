@@ -80,6 +80,7 @@ var AsyncShutdown = realAsyncShutdown;
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  AbuseReporter: "resource://gre/modules/AbuseReporter.sys.mjs",
   AddonRepository: "resource://gre/modules/addons/AddonRepository.sys.mjs",
   Extension: "resource://gre/modules/Extension.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
@@ -3553,6 +3554,10 @@ var AddonManagerInternal = {
       });
     },
 
+    async sendAbuseReport(target, addonId, data, options) {
+      return lazy.AbuseReporter.sendAbuseReport(addonId, data, options);
+    },
+
     async addonUninstall(target, id) {
       let addon = await AddonManager.getAddonByID(id);
       if (!addon) {
@@ -4001,6 +4006,8 @@ export var AddonManager = {
     ["ERROR_INCOMPATIBLE", -11],
     // The add-on type is not supported by the platform.
     ["ERROR_UNSUPPORTED_ADDON_TYPE", -12],
+    // The add-on can only be installed via enterprise policy.
+    ["ERROR_ADMIN_INSTALL_ONLY", -13],
   ]),
   // The update check timed out
   ERROR_TIMEOUT: -1,

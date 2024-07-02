@@ -406,10 +406,10 @@ already_AddRefed<Cookie> CookieCommons::CreateCookieFromDocument(
   CookieStruct cookieData;
   MOZ_ASSERT(cookieData.creationTime() == 0, "Must be initialized to 0");
   bool canSetCookie = false;
-  CookieService::CanSetCookie(principalURI, baseDomain, cookieData,
-                              requireHostMatch, cookieStatus, cookieString,
-                              false, isForeignAndNotAddon, mustBePartitioned,
-                              crc, canSetCookie);
+  CookieService::CanSetCookie(
+      principalURI, baseDomain, cookieData, requireHostMatch, cookieStatus,
+      cookieString, false, isForeignAndNotAddon, mustBePartitioned,
+      aDocument->IsInPrivateBrowsing(), crc, canSetCookie);
 
   if (!canSetCookie) {
     return nullptr;
@@ -431,8 +431,7 @@ already_AddRefed<Cookie> CookieCommons::CreateCookieFromDocument(
   // partitioned cookie jar anyway no special treatment of CHIPS cookies
   // necessary.
   bool needPartitioned =
-      StaticPrefs::network_cookie_cookieBehavior_optInPartitioning() &&
-      cookieData.isPartitioned();
+      StaticPrefs::network_cookie_CHIPS_enabled() && cookieData.isPartitioned();
   nsCOMPtr<nsIPrincipal> cookiePrincipal =
       needPartitioned ? aDocument->PartitionedPrincipal()
                       : aDocument->EffectiveCookiePrincipal();
@@ -496,9 +495,16 @@ bool CookieCommons::ShouldIncludeCrossSiteCookieForDocument(
 
   // CHIPS - If a third-party has storage access it can access both it's
   // partitioned and unpartitioned cookie jars, else its cookies are blocked.
+  //
+  // Note that we will only include partitioned cookies that have "partitioned"
+  // attribution if we enable opt-in partitioning.
   if (aDocument->CookieJarSettings()->GetPartitionForeign() &&
-      StaticPrefs::network_cookie_cookieBehavior_optInPartitioning() &&
-      !aCookie->IsPartitioned() && !aDocument->UsingStorageAccess()) {
+      (StaticPrefs::network_cookie_cookieBehavior_optInPartitioning() ||
+       (aDocument->IsInPrivateBrowsing() &&
+        StaticPrefs::
+            network_cookie_cookieBehavior_optInPartitioning_pbmode())) &&
+      !(aCookie->IsPartitioned() && aCookie->RawIsPartitioned()) &&
+      !aDocument->UsingStorageAccess()) {
     return false;
   }
 

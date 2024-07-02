@@ -271,18 +271,14 @@ class SettingsSearchTest : TestSetup() {
             openDefaultSearchEngineMenu()
             openAddSearchEngineMenu()
         }.clickCustomSearchStringLearnMoreLink {
-            verifyUrl(
-                "support.mozilla.org/en-US/kb/manage-my-default-search-engines-firefox-android?as=u&utm_source=inproduct",
-            )
+            verifyCustomSearchEngineLearnMoreURL()
         }.openThreeDotMenu {
         }.openSettings {
         }.openSearchSubMenu {
             openDefaultSearchEngineMenu()
             openAddSearchEngineMenu()
         }.clickCustomSearchSuggestionsLearnMoreLink {
-            verifyUrl(
-                "support.mozilla.org/en-US/kb/manage-my-default-search-engines-firefox-android?as=u&utm_source=inproduct",
-            )
+            verifyCustomSearchEngineLearnMoreURL()
         }
     }
 
@@ -520,7 +516,7 @@ class SettingsSearchTest : TestSetup() {
             verifyClipboardSuggestionsAreDisplayed(link, true)
         }.visitLinkFromClipboard {
             waitForPageToLoad()
-        }.openTabDrawer {
+        }.openTabDrawer(activityTestRule) {
         }.openNewTab {
         }
         navigationToolbar {
@@ -528,7 +524,7 @@ class SettingsSearchTest : TestSetup() {
             verifyClipboardSuggestionsAreDisplayed(shouldBeDisplayed = false)
         }.goBackToHomeScreen {
             setTextToClipBoard(appContext, link)
-        }.openTabDrawer {
+        }.openTabDrawer(activityTestRule) {
         }.openNewTab {
         }
         navigationToolbar {
@@ -543,7 +539,7 @@ class SettingsSearchTest : TestSetup() {
             exitMenu()
         }
         homeScreen {
-        }.openTabDrawer {
+        }.openTabDrawer(activityTestRule) {
         }.openNewTab {
         }
         navigationToolbar {

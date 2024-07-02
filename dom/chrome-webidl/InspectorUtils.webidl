@@ -17,7 +17,8 @@ namespace InspectorUtils {
   sequence<CSSStyleRule> getCSSStyleRules(
     Element element,
     optional [LegacyNullToEmptyString] DOMString pseudo = "",
-    optional boolean relevantLinkVisited = false);
+    optional boolean relevantLinkVisited = false,
+    optional boolean withStartingStyle = false);
   unsigned long getRuleLine(CSSRule rule);
   unsigned long getRuleColumn(CSSRule rule);
   unsigned long getRelativeRuleLine(CSSRule rule);
@@ -78,6 +79,8 @@ namespace InspectorUtils {
 
   boolean isElementThemed(Element element);
 
+  boolean isUsedColorSchemeDark(Element element);
+
   Element? containingBlockOf(Element element);
 
   // If the element is styled as display:block, returns an array of numbers giving
@@ -88,6 +91,7 @@ namespace InspectorUtils {
   [NewObject] NodeList getOverflowingChildrenOfElement(Element element);
   sequence<DOMString> getRegisteredCssHighlights(Document document, optional boolean activeOnly = false);
   sequence<InspectorCSSPropertyDefinition> getCSSRegisteredProperties(Document document);
+  boolean valueMatchesSyntax(Document document, UTF8String value, UTF8String syntax);
 
   // Get the first rule body text within initialText
   // Consider the following example:

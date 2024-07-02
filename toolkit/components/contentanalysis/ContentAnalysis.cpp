@@ -62,8 +62,6 @@ LazyLogModule gContentAnalysisLog("contentanalysis");
 
 namespace {
 
-const char* kIsDLPEnabledPref = "browser.contentanalysis.enabled";
-const char* kIsPerUserPref = "browser.contentanalysis.is_per_user";
 const char* kPipePathNamePref = "browser.contentanalysis.pipe_path_name";
 const char* kClientSignature = "browser.contentanalysis.client_signature";
 const char* kAllowUrlPref = "browser.contentanalysis.allow_url_regex_list";
@@ -883,7 +881,7 @@ ContentAnalysis::UrlFilterResult ContentAnalysis::FilterByUrlLists(
   std::string url = urlString.BeginReading();
   size_t count = 0;
   for (const auto& denyFilter : mDenyUrlList) {
-    if (std::regex_search(url, denyFilter)) {
+    if (std::regex_match(url, denyFilter)) {
       LOGD("Denying CA request : Deny filter %zu matched url %s", count,
            url.c_str());
       return UrlFilterResult::eDeny;
@@ -923,7 +921,7 @@ ContentAnalysis::UrlFilterResult ContentAnalysis::FilterByUrlLists(
     std::string url = NS_ConvertUTF16toUTF8(nsUrl).get();
     count = 0;
     for (auto& denyFilter : mDenyUrlList) {
-      if (std::regex_search(url, denyFilter)) {
+      if (std::regex_match(url, denyFilter)) {
         LOGD(
             "Denying CA request : Deny filter %zu matched download resource "
             "at url %s",
@@ -936,7 +934,7 @@ ContentAnalysis::UrlFilterResult ContentAnalysis::FilterByUrlLists(
     count = 0;
     bool removed = false;
     for (auto& allowFilter : mAllowUrlList) {
-      if (std::regex_search(url, allowFilter)) {
+      if (std::regex_match(url, allowFilter)) {
         LOGD(
             "CA request : Allow filter %zu matched download resource "
             "at url %s",
@@ -990,14 +988,15 @@ ContentAnalysis::~ContentAnalysis() {
 NS_IMETHODIMP
 ContentAnalysis::GetIsActive(bool* aIsActive) {
   *aIsActive = false;
-  // Need to be on the main thread to read prefs
-  MOZ_ASSERT(NS_IsMainThread());
-  // gAllowContentAnalysisArgPresent is only set in the parent process
-  MOZ_ASSERT(XRE_IsParentProcess());
-  if (!Preferences::GetBool(kIsDLPEnabledPref)) {
+  if (!StaticPrefs::browser_contentanalysis_enabled()) {
     LOGD("Local DLP Content Analysis is not active");
     return NS_OK;
   }
+  // Accessing mClientCreationAttempted, mSetByEnterprise and non-static prefs
+  // so need to be on the main thread
+  MOZ_ASSERT(NS_IsMainThread());
+  // gAllowContentAnalysisArgPresent is only set in the parent process
+  MOZ_ASSERT(XRE_IsParentProcess());
   if (!gAllowContentAnalysisArgPresent && !mSetByEnterprise) {
     LOGE(
         "The content analysis pref is enabled but not by an enterprise "
@@ -1008,8 +1007,7 @@ ContentAnalysis::GetIsActive(bool* aIsActive) {
 
   *aIsActive = true;
   LOGD("Local DLP Content Analysis is active");
-  // mClientCreationAttempted is only accessed on the main thread,
-  // so no need for synchronization here.
+  // On the main thread so no need for synchronization here.
   if (!mClientCreationAttempted) {
     mClientCreationAttempted = true;
     LOGD("Dispatching background task to create Content Analysis client");
@@ -1020,7 +1018,7 @@ ContentAnalysis::GetIsActive(bool* aIsActive) {
       mCaClientPromise->Reject(rv, __func__);
       return rv;
     }
-    bool isPerUser = Preferences::GetBool(kIsPerUserPref);
+    bool isPerUser = StaticPrefs::browser_contentanalysis_is_per_user();
     nsString clientSignature;
     // It's OK if this fails, we will default to the empty string
     Preferences::GetString(kClientSignature, clientSignature);
@@ -1043,7 +1041,7 @@ NS_IMETHODIMP
 ContentAnalysis::GetMightBeActive(bool* aMightBeActive) {
   // A DLP connection is not permitted to be added/removed while the
   // browser is running, so we can cache this.
-  static bool sIsEnabled = Preferences::GetBool(kIsDLPEnabledPref);
+  static bool sIsEnabled = StaticPrefs::browser_contentanalysis_enabled();
   // Note that we can't check gAllowContentAnalysis here because it
   // only gets set in the parent process.
   *aMightBeActive = sIsEnabled;
@@ -1502,6 +1500,7 @@ ContentAnalysis::CancelContentAnalysisRequest(const nsACString& aRequestToken) {
 
 NS_IMETHODIMP
 ContentAnalysis::CancelAllRequests() {
+  LOGD("CancelAllRequests running");
   mCaClientPromise->Then(
       GetCurrentSerialEventTarget(), __func__,
       [&](std::shared_ptr<content_analysis::sdk::Client> client) {
@@ -1509,6 +1508,31 @@ ContentAnalysis::CancelAllRequests() {
         if (!owner) {
           // May be shutting down
           return;
+        }
+        NS_DispatchToMainThread(NS_NewCancelableRunnableFunction(
+            "ContentAnalysis::CancelAllRequests", []() {
+              auto owner = GetContentAnalysisFromService();
+              if (!owner) {
+                // May be shutting down
+                return;
+              }
+              {
+                auto callbackMap = owner->mCallbackMap.Lock();
+                auto keys = callbackMap->Keys();
+                for (const auto& key : keys) {
+                  owner->CancelWithError(nsCString(key),
+                                         NS_ERROR_ILLEGAL_DURING_SHUTDOWN);
+                }
+              }
+            }));
+        {
+          auto warnResponseDataMap = owner->mWarnResponseDataMap.Lock();
+          auto keys = warnResponseDataMap->Keys();
+          for (const auto& key : keys) {
+            LOGD("Responding to warn dialog for request %s",
+                 nsCString(key).get());
+            owner->RespondToWarnDialog(key, false);
+          }
         }
         if (!client) {
           LOGE("CancelAllRequests got a null client");

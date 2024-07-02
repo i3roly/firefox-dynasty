@@ -56,6 +56,12 @@ function click(element, message) {
   });
 }
 
+function focusElementAndSynthesizeKey(element, key) {
+  assertVisibility({ visible: { element } });
+  element.focus();
+  EventUtils.synthesizeKey(key);
+}
+
 /**
  * Get all elements that match the l10n id.
  *
@@ -755,6 +761,13 @@ class FullPageTranslationsTestUtils {
       FullPageTranslationsPanel,
       expectedId
     );
+
+    const panelView = document.getElementById(expectedId);
+    const label = document.getElementById(
+      panelView.getAttribute("aria-labelledby")
+    );
+    ok(label, "The a11y label for the panel view can be found.");
+    assertVisibility({ visible: { label } });
   }
 
   /**
@@ -1419,8 +1432,9 @@ class SelectTranslationsTestUtils {
    * @param {boolean} options.openAtEnglishSentence - Opens the context menu at an English sentence.
    * @param {boolean} options.openAtSpanishSentence - Opens the context menu at a Spanish sentence.
    * @param {boolean} options.openAtFrenchHyperlink - Opens the context menu at a hyperlinked French text.
-   * @param {boolean} options.openAtEnglishHyperlink - Opens the context menu at an hyperlinked English text.
+   * @param {boolean} options.openAtEnglishHyperlink - Opens the context menu at a hyperlinked English text.
    * @param {boolean} options.openAtSpanishHyperlink - Opens the context menu at a hyperlinked Spanish text.
+   * @param {boolean} options.openAtURLHyperlink - Opens the context menu at a hyperlinked URL text.
    * @param {string} [message] - A message to log to info.
    * @throws Throws an error if the properties of the translate-selection item do not match the expected options.
    */
@@ -1448,6 +1462,7 @@ class SelectTranslationsTestUtils {
       openAtFrenchHyperlink,
       openAtEnglishHyperlink,
       openAtSpanishHyperlink,
+      openAtURLHyperlink,
     },
     message
   ) {
@@ -1481,6 +1496,7 @@ class SelectTranslationsTestUtils {
       openAtFrenchHyperlink,
       openAtEnglishHyperlink,
       openAtSpanishHyperlink,
+      openAtURLHyperlink,
     });
 
     const menuItem = maybeGetById(
@@ -1604,6 +1620,7 @@ class SelectTranslationsTestUtils {
       await BrowserTestUtils.waitForEvent(
         document,
         "SelectTranslationsPanelStateChanged",
+        false,
         event => event.detail.phase === phase
       );
     }
@@ -1689,8 +1706,12 @@ class SelectTranslationsTestUtils {
    * state when the language lists fail to initialize upon opening the panel.
    */
   static async assertPanelViewInitFailure() {
-    const { cancelButton, settingsButton, tryAgainButton } =
-      SelectTranslationsPanel.elements;
+    const {
+      cancelButton,
+      initFailureMessageBar,
+      settingsButton,
+      tryAgainButton,
+    } = SelectTranslationsPanel.elements;
     await SelectTranslationsTestUtils.waitForPanelState("init-failure");
     SelectTranslationsTestUtils.#assertPanelElementVisibility({
       header: true,
@@ -1708,6 +1729,8 @@ class SelectTranslationsTestUtils {
         : [cancelButton, tryAgainButton]),
     ]);
     SharedTranslationsTestUtils._assertHasFocus(tryAgainButton);
+    const ariaDescribedBy = tryAgainButton.getAttribute("aria-describedby");
+    ok(ariaDescribedBy.includes(initFailureMessageBar.id));
   }
 
   /**
@@ -1756,6 +1779,8 @@ class SelectTranslationsTestUtils {
         : [cancelButton, tryAgainButton]),
     ]);
     SharedTranslationsTestUtils._assertHasFocus(tryAgainButton);
+    const ariaDescribedBy = tryAgainButton.getAttribute("aria-describedby");
+    ok(ariaDescribedBy.includes(translationFailureMessageBar.id));
   }
 
   static #assertPanelTextAreaDirection(langTag = null) {
@@ -1831,6 +1856,11 @@ class SelectTranslationsTestUtils {
     if (textArea.scrollHeight > textArea.clientHeight) {
       info("Ensuring that the textarea is scrolled to the top.");
       await waitForCondition(() => textArea.scrollTop === 0);
+
+      info("Ensuring that the textarea cursor is at the beginning.");
+      await waitForCondition(
+        () => textArea.selectionStart === 0 && textArea.selectionEnd === 0
+      );
     }
   }
 
@@ -2144,8 +2174,11 @@ class SelectTranslationsTestUtils {
         : [doneButtonSecondary, translateButton]),
     ]);
 
+    const translatablePhasePromise =
+      SelectTranslationsTestUtils.waitForPanelState("translatable");
     click(translateButton);
-    await SelectTranslationsTestUtils.waitForPanelState("translatable");
+    await translatablePhasePromise;
+
     if (downloadHandler) {
       await this.handleDownloads({ downloadHandler, pivotTranslation });
     }
@@ -2163,8 +2196,8 @@ class SelectTranslationsTestUtils {
     assertVisibility({ visible: { translateFullPageButton } });
     click(translateFullPageButton);
     await FullPageTranslationsTestUtils.assertTranslationsButton(
-      { button: true, circleArrows: true, locale: false, icon: true },
-      "The icon presents the loading indicator."
+      { button: true, circleArrows: false, locale: true, icon: true },
+      "The icon presents the locale."
     );
   }
 
@@ -2190,11 +2223,27 @@ class SelectTranslationsTestUtils {
     logAction();
     const { tryAgainButton } = SelectTranslationsPanel.elements;
     assertVisibility({ visible: { tryAgainButton } });
-    click(tryAgainButton, "Clicking the try-again button");
-    await SelectTranslationsTestUtils.waitForPanelState("translatable");
+
+    const translatablePhasePromise = downloadHandler
+      ? SelectTranslationsTestUtils.waitForPanelState("translatable")
+      : Promise.resolve();
+
+    if (SelectTranslationsPanel.phase() === "init-failure") {
+      // The try-again button reopens the panel from the "init-failure" phase.
+      await SelectTranslationsTestUtils.waitForPanelPopupEvent(
+        "popupshown",
+        () => click(tryAgainButton, "Clicking the try-again button")
+      );
+    } else {
+      // Otherwise the try-again button just attempts to re-translate.
+      click(tryAgainButton, "Clicking the try-again button");
+    }
+
     if (downloadHandler) {
+      await translatablePhasePromise;
       await this.handleDownloads({ downloadHandler, pivotTranslation });
     }
+
     if (viewAssertion) {
       await viewAssertion();
     }
@@ -2275,8 +2324,9 @@ class SelectTranslationsTestUtils {
    * @param {boolean} options.openAtEnglishSentence - Opens the context menu at an English sentence.
    * @param {boolean} options.openAtSpanishSentence - Opens the context menu at a Spanish sentence.
    * @param {boolean} options.openAtFrenchHyperlink - Opens the context menu at a hyperlinked French text.
-   * @param {boolean} options.openAtEnglishHyperlink - Opens the context menu at an hyperlinked English text.
+   * @param {boolean} options.openAtEnglishHyperlink - Opens the context menu at a hyperlinked English text.
    * @param {boolean} options.openAtSpanishHyperlink - Opens the context menu at a hyperlinked Spanish text.
+   * @param {boolean} options.openAtURLHyperlink - Opens the context menu at a hyperlinked URL text.
    * @throws Throws an error if no valid option was provided for opening the menu.
    */
   static async openContextMenu(runInPage, options) {
@@ -2346,6 +2396,7 @@ class SelectTranslationsTestUtils {
     await maybeOpenContextMenuAt("FrenchHyperlink");
     await maybeOpenContextMenuAt("EnglishHyperlink");
     await maybeOpenContextMenuAt("SpanishHyperlink");
+    await maybeOpenContextMenuAt("URLHyperlink");
   }
 
   /**
@@ -2556,8 +2607,9 @@ class SelectTranslationsTestUtils {
    * @param {boolean} options.openAtEnglishSentence - Opens the context menu at an English sentence.
    * @param {boolean} options.openAtSpanishSentence - Opens the context menu at a Spanish sentence.
    * @param {boolean} options.openAtFrenchHyperlink - Opens the context menu at a hyperlinked French text.
-   * @param {boolean} options.openAtEnglishHyperlink - Opens the context menu at an hyperlinked English text.
+   * @param {boolean} options.openAtEnglishHyperlink - Opens the context menu at a hyperlinked English text.
    * @param {boolean} options.openAtSpanishHyperlink - Opens the context menu at a hyperlinked Spanish text.
+   * @param {boolean} options.openAtURLHyperlink - Opens the context menu at a hyperlinked URL text.
    * @param {Function} [options.onOpenPanel] - An optional callback function to execute after the panel opens.
    * @param {string|null} [message] - An optional message to log to info.
    * @throws Throws an error if the context menu could not be opened with the provided options.
@@ -2601,6 +2653,25 @@ class SelectTranslationsTestUtils {
     }
     if (expectedToLanguage !== undefined) {
       SelectTranslationsTestUtils.assertSelectedToLanguage(expectedToLanguage);
+    }
+
+    const { panel } = SelectTranslationsPanel.elements;
+
+    const documentRoleElement = panel.querySelector('[role="document"]');
+    ok(documentRoleElement, "The document-role element can be found.");
+
+    const ariaDescription = document.getElementById(
+      documentRoleElement.getAttribute("aria-describedby")
+    );
+    ok(ariaDescription, "The a11y description for the panel can be found.");
+
+    const ariaLabelIds = documentRoleElement
+      .getAttribute("aria-labelledby")
+      .split(" ");
+    for (const id of ariaLabelIds) {
+      const ariaLabel = document.getElementById(id);
+      ok(ariaLabel, `The a11y label element '${id}' can be found.`);
+      assertVisibility({ visible: { ariaLabel } });
     }
   }
 

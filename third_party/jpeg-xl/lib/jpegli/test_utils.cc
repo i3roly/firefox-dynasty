@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -14,8 +15,8 @@
 #include "lib/jpegli/encode.h"
 #include "lib/jxl/base/byte_order.h"
 #include "lib/jxl/base/printf_macros.h"
+#include "lib/jxl/base/sanitizers.h"
 #include "lib/jxl/base/status.h"
-#include "lib/jxl/sanitizers.h"
 
 #if !defined(TEST_DATA_PATH)
 #include "tools/cpp/runfiles/runfiles.h"
@@ -701,11 +702,11 @@ void EncodeWithJpegli(const TestImage& input, const CompressParams& jparams,
     for (int c = 0; c < cinfo->num_components; ++c) {
       jpeg_component_info* comp = &cinfo->comp_info[c];
       for (size_t by = 0; by < comp->height_in_blocks; ++by) {
-        JBLOCKARRAY ba = (*cinfo->mem->access_virt_barray)(
+        JBLOCKARRAY blocks = (*cinfo->mem->access_virt_barray)(
             comptr, coef_arrays[c], by, 1, TRUE);
         size_t stride = comp->width_in_blocks * sizeof(JBLOCK);
         size_t offset = by * comp->width_in_blocks * DCTSIZE2;
-        memcpy(ba[0], &input.coeffs[c][offset], stride);
+        memcpy(blocks[0], &input.coeffs[c][offset], stride);
       }
     }
   } else {

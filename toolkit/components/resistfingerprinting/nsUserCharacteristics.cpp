@@ -33,15 +33,32 @@
 #include "mozilla/intl/OSPreferences.h"
 #include "mozilla/intl/TimeZone.h"
 #include "mozilla/widget/ScreenManager.h"
+#include "mozilla/dom/BrowsingContext.h"
+#include "mozilla/dom/Document.h"
+#include "nsPIDOMWindow.h"
+#include "nsIAppWindow.h"
+#include "nsIDocShellTreeOwner.h"
+#include "nsIBaseWindow.h"
+#include "mozilla/MediaManager.h"
+#include "mozilla/dom/MediaDeviceInfoBinding.h"
+#include "mozilla/MozPromise.h"
+#include "nsThreadUtils.h"
+#include "CubebDeviceEnumerator.h"
+#include "mozilla/media/MediaUtils.h"
+#include "mozilla/dom/Navigator.h"
+#include "nsIGSettingsService.h"
 
 #include "gfxPlatformFontList.h"
 #include "prsystem.h"
 #if defined(XP_WIN)
 #  include "WinUtils.h"
+#  include "mozilla/gfx/DisplayConfigWindows.h"
+#  include "gfxWindowsPlatform.h"
 #elif defined(MOZ_WIDGET_ANDROID)
 #  include "mozilla/java/GeckoAppShellWrappers.h"
 #elif defined(XP_MACOSX)
 #  include "nsMacUtilsImpl.h"
+#  include <CoreFoundation/CoreFoundation.h>
 #endif
 
 using namespace mozilla;
@@ -65,13 +82,16 @@ int MaxTouchPoints() {
 }  // extern "C"
 };  // namespace testing
 
+using VoidPromise = MozPromise<void_t, void_t, true>::Private;
+
 // ==================================================================
 // ==================================================================
-already_AddRefed<mozilla::dom::Promise> ContentPageStuff() {
+RefPtr<VoidPromise> ContentPageStuff() {
   nsCOMPtr<nsIUserCharacteristicsPageService> ucp =
       do_GetService("@mozilla.org/user-characteristics-page;1");
   MOZ_ASSERT(ucp);
 
+  RefPtr<VoidPromise> voidPromise = new VoidPromise(__func__);
   RefPtr<mozilla::dom::Promise> promise;
   nsresult rv = ucp->CreateContentPage(getter_AddRefs(promise));
   if (NS_FAILED(rv)) {
@@ -82,7 +102,21 @@ already_AddRefed<mozilla::dom::Promise> ContentPageStuff() {
   MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Debug,
           ("Created Content Page"));
 
-  return promise.forget();
+  if (promise) {
+    promise->AddCallbacksWithCycleCollectedArgs(
+        [=](JSContext*, JS::Handle<JS::Value>, mozilla::ErrorResult&) {
+          voidPromise->Resolve(void_t(), __func__);
+        },
+        [=](JSContext*, JS::Handle<JS::Value>, mozilla::ErrorResult&) {
+          voidPromise->Reject(void_t(), __func__);
+        });
+  } else {
+    MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Error,
+            ("Did not get a Promise back from ContentPageStuff"));
+    voidPromise->Reject(void_t(), __func__);
+  }
+
+  return voidPromise;
 }
 
 void PopulateCSSProperties() {
@@ -95,15 +129,16 @@ void PopulateCSSProperties() {
   glean::characteristics::color_scheme.Set(
       (int)PreferenceSheet::ContentPrefs().mColorScheme);
 
-  StylePrefersContrast prefersContrast = [] {
+  const auto& colors =
+      PreferenceSheet::ContentPrefs().ColorsFor(ColorScheme::Light);
+
+  StylePrefersContrast prefersContrast = [&colors] {
     // Replicates Gecko_MediaFeatures_PrefersContrast but without a Document
     if (!PreferenceSheet::ContentPrefs().mUseAccessibilityTheme &&
         PreferenceSheet::ContentPrefs().mUseDocumentColors) {
       return StylePrefersContrast::NoPreference;
     }
 
-    const auto& colors =
-        PreferenceSheet::ContentPrefs().ColorsFor(ColorScheme::Light);
     float ratio = RelativeLuminanceUtils::ContrastRatio(
         colors.mDefaultBackground, colors.mDefault);
     // https://www.w3.org/TR/WCAG21/#contrast-minimum
@@ -117,6 +152,31 @@ void PopulateCSSProperties() {
     return StylePrefersContrast::Custom;
   }();
   glean::characteristics::prefers_contrast.Set((int)prefersContrast);
+
+  glean::characteristics::use_document_colors.Set(
+      PreferenceSheet::ContentPrefs().mUseDocumentColors);
+
+  // These colors aren't using LookAndFeel, see Gecko_ComputeSystemColor.
+  glean::characteristics::color_canvas.Set(colors.mDefaultBackground);
+  glean::characteristics::color_canvastext.Set(colors.mDefault);
+
+  // Similar to NS_TRANSPARENT and other special colors.
+  constexpr nscolor kMissingColor = NS_RGBA(0x42, 0x00, 0x00, 0x00);
+
+#define SYSTEM_COLOR(METRIC_NAME, COLOR_NAME)                                 \
+  glean::characteristics::color_##METRIC_NAME.Set(                            \
+      LookAndFeel::GetColor(LookAndFeel::ColorID::COLOR_NAME,                 \
+                            ColorScheme::Light, LookAndFeel::UseStandins::No) \
+          .valueOr(kMissingColor))
+
+  SYSTEM_COLOR(accentcolor, Accentcolor);
+  SYSTEM_COLOR(accentcolortext, Accentcolortext);
+  SYSTEM_COLOR(highlight, Highlight);
+  SYSTEM_COLOR(highlighttext, Highlighttext);
+  SYSTEM_COLOR(selecteditem, Selecteditem);
+  SYSTEM_COLOR(selecteditemtext, Selecteditemtext);
+
+#undef SYSTEM_COLOR
 }
 
 void PopulateScreenProperties() {
@@ -131,6 +191,12 @@ void PopulateScreenProperties() {
   int32_t colorDepth;
   screen->GetColorDepth(&colorDepth);
   glean::characteristics::color_depth.Set(colorDepth);
+  glean::characteristics::pixel_depth.Set(screen->GetPixelDepth());
+
+  LayoutDeviceIntRect availRect = screen->GetAvailRect();
+  glean::characteristics::avail_height.Set(availRect.Height());
+  glean::characteristics::avail_width.Set(availRect.Width());
+  glean::characteristics::orientation_angle.Set(screen->GetOrientationAngle());
 
   glean::characteristics::color_gamut.Set((int)colorGamut);
   glean::characteristics::color_depth.Set(colorDepth);
@@ -138,7 +204,41 @@ void PopulateScreenProperties() {
   glean::characteristics::screen_height.Set(rect.Height());
   glean::characteristics::screen_width.Set(rect.Width());
 
+  nsCOMPtr<nsPIDOMWindowInner> innerWindow =
+      do_QueryInterface(dom::GetEntryGlobal());
+
+  double outerHeight, outerWidth;
+  innerWindow->GetInnerHeight(&outerHeight);
+
+  innerWindow->GetInnerWidth(&outerWidth);
+  glean::characteristics::outer_height.Set(static_cast<int64_t>(outerHeight));
+  glean::characteristics::outer_width.Set(static_cast<int64_t>(outerWidth));
+
+  nsCOMPtr<nsIDocShellTreeOwner> treeOwner;
+  innerWindow->GetDocShell()->GetTreeOwner(getter_AddRefs(treeOwner));
+  nsCOMPtr<nsIBaseWindow> treeOwnerAsWin(do_QueryInterface(treeOwner));
+
+  LayoutDeviceIntSize contentSize;
+  treeOwner->GetPrimaryContentSize(&contentSize.width, &contentSize.height);
+
+  CSSToLayoutDeviceScale cssToDevScale =
+      treeOwnerAsWin->UnscaledDevicePixelsPerCSSPixel();
+  CSSIntSize contentSizeCSS = RoundedToInt(contentSize / cssToDevScale);
+  glean::characteristics::inner_height.Set(contentSizeCSS.height);
+  glean::characteristics::inner_width.Set(contentSizeCSS.width);
+
   glean::characteristics::video_dynamic_range.Set(screen->GetIsHDR());
+
+  glean::characteristics::posx.Set(rect.X());
+  glean::characteristics::posy.Set(rect.Y());
+
+  nsCOMPtr<nsIWidget> mainWidget;
+  treeOwnerAsWin->GetMainWidget(getter_AddRefs(mainWidget));
+  nsSizeMode sizeMode = mainWidget ? mainWidget->SizeMode() : nsSizeMode_Normal;
+  glean::characteristics::size_mode.Set(sizeMode);
+
+  mozilla::glean::characteristics::screen_orientation.Set(
+      (int)screen->GetOrientationType());
 }
 
 void PopulateMissingFonts() {
@@ -291,12 +391,217 @@ void PopulateFontPrefs() {
       Preferences::HasUserValue("font.name-list.emoji"));
 }
 
+void PopulateScaling() {
+  nsCString output = "["_ns;
+
+  auto& screenManager = widget::ScreenManager::GetSingleton();
+  const auto& screens = screenManager.CurrentScreenList();
+  for (const auto& screen : screens) {
+    // Technically, not the same as (display resolution / shown resolution), but
+    // this is the value the fingerprinters can access/compute.
+    output.Append(std::to_string(screen->GetContentsScaleFactor()));
+    if (&screen != &screens.LastElement()) {
+      output.Append(",");
+    }
+  }
+
+  output.Append("]");
+
+  glean::characteristics::scalings.Set(output);
+}
+
+RefPtr<VoidPromise> PopulateMediaDevices() {
+  RefPtr<VoidPromise> voidPromise = new VoidPromise(__func__);
+  MediaManager::Get()->GetPhysicalDevices()->Then(
+      GetCurrentSerialEventTarget(), __func__,
+      [=](const RefPtr<const MediaManager::MediaDeviceSetRefCnt>& aDevices) {
+        uint32_t cameraCount = 0;
+        uint32_t microphoneCount = 0;
+        uint32_t speakerCount = 0;
+        std::set<nsString> groupIds;
+        std::set<nsString> groupIdsWoSpeakers;
+
+        for (const auto& device : *aDevices) {
+          if (device->mKind == dom::MediaDeviceKind::Videoinput) {
+            cameraCount++;
+          } else if (device->mKind == dom::MediaDeviceKind::Audioinput) {
+            microphoneCount++;
+          } else if (device->mKind == dom::MediaDeviceKind::Audiooutput) {
+            speakerCount++;
+          }
+          if (groupIds.find(device->mRawGroupID) == groupIds.end()) {
+            groupIds.insert(device->mRawGroupID);
+            if (device->mKind != dom::MediaDeviceKind::Audiooutput) {
+              groupIdsWoSpeakers.insert(device->mRawGroupID);
+            }
+          }
+        }
+
+        nsCString json;
+        json.AppendPrintf(
+            R"({"cameraCount": %u, "microphoneCount": %u, "speakerCount": %u, "groupCount": %zu, "groupCountWoSpeakers": %zu})",
+            cameraCount, microphoneCount, speakerCount, groupIds.size(),
+            groupIdsWoSpeakers.size());
+        glean::characteristics::media_devices.Set(json);
+        voidPromise->Resolve(void_t(), __func__);
+      },
+      [=](RefPtr<MediaMgrError>&& reason) {
+        voidPromise->Reject(void_t(), __func__);
+      });
+  return voidPromise;
+}
+
+RefPtr<VoidPromise> PopulateAudioDeviceProperties() {
+  RefPtr<VoidPromise> voidPromise = new VoidPromise(__func__);
+
+  NS_DispatchBackgroundTask(
+      NS_NewRunnableFunction("PopulateAudioDeviceProperties", [=]() {
+        RefPtr<CubebDeviceEnumerator> enumerator =
+            CubebDeviceEnumerator::GetInstance();
+        RefPtr<const CubebDeviceEnumerator::AudioDeviceSet> devices;
+
+        nsCString output = "{"_ns;
+
+        nsCString list = "["_ns;
+        devices = enumerator->EnumerateAudioInputDevices();
+        for (const auto& deviceInfo : *devices) {
+          uint32_t maxChannels;
+          deviceInfo->GetMaxChannels(&maxChannels);
+
+          list.AppendPrintf(R"({"rate":%d,"channels":%d)",
+                            deviceInfo->DefaultRate(), maxChannels);
+          if (deviceInfo->Preferred()) {
+            list.Append(",\"default\":1");
+          }
+          list.Append("}");
+
+          if (&deviceInfo != &devices->LastElement()) {
+            list.Append(',');
+          }
+        }
+        list.Append(']');
+
+        output.AppendPrintf(R"("devices":%s,)", list.get());
+
+        double inputMean, inputStdDev, outputMean, outputStdDev;
+        CubebUtils::EstimatedLatencyDefaultDevices(&inputMean, &inputStdDev,
+                                                   CubebUtils::Side::Input);
+        CubebUtils::EstimatedLatencyDefaultDevices(&outputMean, &outputStdDev,
+                                                   CubebUtils::Side::Output);
+
+        cubeb_stream_params output_params;
+        output_params.format = CUBEB_SAMPLE_FLOAT32NE;
+        output_params.rate = CubebUtils::PreferredSampleRate(false);
+        output_params.channels = 2;
+        output_params.layout = CUBEB_LAYOUT_UNDEFINED;
+        output_params.prefs =
+            CubebUtils::GetDefaultStreamPrefs(CUBEB_DEVICE_TYPE_OUTPUT);
+
+        uint32_t latencyFrames =
+            CubebUtils::GetCubebMTGLatencyInFrames(&output_params);
+        RefPtr<AudioDeviceInfo> defaultOutputDevice =
+            enumerator->DefaultDevice(CubebDeviceEnumerator::Side::OUTPUT);
+        output.AppendPrintf(
+            R"("latency":[%f,%f,%f,%f],"latFrames":%d,"rate":%u,"channels":%u)",
+            inputMean, inputStdDev, outputMean, outputStdDev, latencyFrames,
+            defaultOutputDevice->DefaultRate(),
+            defaultOutputDevice->MaxChannels());
+
+        output.Append("}");
+
+        glean::characteristics::audio_devices.Set(output);
+
+        NS_DispatchToMainThread(NS_NewRunnableFunction(
+            "PopulateAudioDeviceProperties",
+            [=]() { voidPromise->Resolve(void_t(), __func__); }));
+      }));
+
+  return voidPromise;
+}
+
+void PopulateLanguages() {
+  // All navigator.languages, navigator.language, and Accept-Languages header
+  // use Navigator::GetAcceptLanguages to create a language list. It is
+  // sufficient to only collect this information as the other properties are
+  // just reformats of Navigator::GetAcceptLanguages.
+  nsTArray<nsString> languages;
+  dom::Navigator::GetAcceptLanguages(languages);
+  nsCString output = "["_ns;
+
+  for (const auto& language : languages) {
+    output.AppendPrintf(R"("%s")", NS_ConvertUTF16toUTF8(language).get());
+
+    if (&language != &languages.LastElement()) {
+      output.Append(",");
+    }
+  }
+
+  output.Append("]");
+
+  glean::characteristics::languages.Set(output);
+}
+
+void PopulateTextAntiAliasing() {
+  nsCString output = "["_ns;
+  nsTArray<int32_t> levels;
+
+#if defined(XP_WIN)
+  nsTArray<ClearTypeParameterInfo> params;
+  gfxWindowsPlatform::GetCleartypeParams(params);
+  for (const auto& param : params) {
+    levels.AppendElement(param.clearTypeLevel);
+  }
+#elif defined(XP_MACOSX)
+  uint32_t value = 2;  // default = medium
+  CFNumberRef prefValue = (CFNumberRef)CFPreferencesCopyAppValue(
+      CFSTR("AppleFontSmoothing"), kCFPreferencesAnyApplication);
+  if (prefValue) {
+    if (!CFNumberGetValue(prefValue, kCFNumberIntType, &value)) {
+      value = 2;
+    }
+    CFRelease(prefValue);
+  }
+  levels.AppendElement(value);
+#elif defined(XP_LINUX)
+  nsAutoCString level;
+  nsCOMPtr<nsIGSettingsService> gsettings =
+      do_GetService("@mozilla.org/gsettings-service;1");
+  if (gsettings) {
+    nsCOMPtr<nsIGSettingsCollection> antiAliasing;
+    gsettings->GetCollectionForSchema("org.gnome.desktop.interface"_ns,
+                                      getter_AddRefs(antiAliasing));
+    if (antiAliasing) {
+      antiAliasing->GetString("font-antialiasing"_ns, level);
+      if (level == "rgba") {  // Subpixel
+        levels.AppendElement(2);
+      } else if (level == "grayscale") {  // Standard
+        levels.AppendElement(1);
+      } else if (level == "none") {
+        levels.AppendElement(0);
+      }
+    }
+  }
+#endif
+
+  for (const auto& level : levels) {
+    output.Append(std::to_string(level));
+
+    if (&level != &levels.LastElement()) {
+      output.Append(",");
+    }
+  }
+
+  output.Append("]");
+
+  glean::characteristics::text_anti_aliasing.Set(output);
+}
+
 // ==================================================================
 // The current schema of the data. Anytime you add a metric, or change how a
 // metric is set, this variable should be incremented. It'll be a lot. It's
 // okay. We're going to need it to know (including during development) what is
 // the source of the data we are looking at.
-const int kSubmissionSchema = 2;
+const int kSubmissionSchema = 3;
 
 const auto* const kLastVersionPref =
     "toolkit.telemetry.user_characteristics_ping.last_version_sent";
@@ -365,7 +670,8 @@ void nsUserCharacteristics::MaybeSubmitPing() {
     return;
   }
   if (lastSubmissionVersion < currentVersion) {
-    PopulateDataAndEventuallySubmit(false);
+    MOZ_LOG(gUserCharacteristicsLog, LogLevel::Warning, ("Ping requested"));
+    PopulateDataAndEventuallySubmit(true);
   } else {
     MOZ_ASSERT_UNREACHABLE("Should never reach here");
   }
@@ -412,6 +718,7 @@ void nsUserCharacteristics::PopulateDataAndEventuallySubmit(
 
   // ------------------------------------------------------------------------
 
+  nsTArray<RefPtr<MozPromise<mozilla::void_t, mozilla::void_t, true>>> promises;
   if (!aTesting) {
     // Many of the later peices of data do not work in a gtest
     // so skip populating them
@@ -423,6 +730,11 @@ void nsUserCharacteristics::PopulateDataAndEventuallySubmit(
     PopulateScreenProperties();
     PopulatePrefs();
     PopulateFontPrefs();
+    PopulateScaling();
+    promises.AppendElement(PopulateMediaDevices());
+    promises.AppendElement(PopulateAudioDeviceProperties());
+    PopulateLanguages();
+    PopulateTextAntiAliasing();
 
     glean::characteristics::target_frame_rate.Set(
         gfxPlatform::TargetFrameRate());
@@ -455,14 +767,11 @@ void nsUserCharacteristics::PopulateDataAndEventuallySubmit(
     glean::characteristics::system_locale.Set(locale);
   }
 
-  // When this promise resolves, everything succeeded and we can submit.
-  RefPtr<mozilla::dom::Promise> promise = ContentPageStuff();
+  promises.AppendElement(ContentPageStuff());
 
   // ------------------------------------------------------------------------
 
-  auto fulfillSteps = [aUpdatePref, aTesting](
-                          JSContext* aCx, JS::Handle<JS::Value> aPromiseResult,
-                          mozilla::ErrorResult& aRv) {
+  auto fulfillSteps = [aUpdatePref, aTesting]() {
     MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Debug,
             ("ContentPageStuff Promise Resolved"));
 
@@ -479,20 +788,13 @@ void nsUserCharacteristics::PopulateDataAndEventuallySubmit(
     }
   };
 
-  // Something failed in the Content Page...
-  auto rejectSteps = [](JSContext* aCx, JS::Handle<JS::Value> aReason,
-                        mozilla::ErrorResult& aRv) {
-    MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Error,
-            ("ContentPageStuff Promise Rejected"));
-  };
-
-  if (promise) {
-    promise->AddCallbacksWithCycleCollectedArgs(std::move(fulfillSteps),
-                                                std::move(rejectSteps));
-  } else {
-    MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Error,
-            ("Did not get a Promise back from ContentPageStuff"));
-  }
+  VoidPromise::All(GetCurrentSerialEventTarget(), promises)
+      ->Then(
+          GetCurrentSerialEventTarget(), __func__, [=]() { fulfillSteps(); },
+          []() {
+            MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Error,
+                    ("One of the promises rejected."));
+          });
 }
 
 /* static */

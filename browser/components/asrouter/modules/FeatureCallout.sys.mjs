@@ -556,7 +556,10 @@ export class FeatureCallout {
         );
         continue;
       }
-      const { selector, arrow_position, panel_position } = anchor;
+      let { selector, arrow_position, panel_position } = anchor;
+      if (!selector) {
+        continue; // No selector provided.
+      }
       if (panel_position) {
         let panel_position_string =
           this._getPanelPositionString(panel_position);
@@ -587,7 +590,28 @@ export class FeatureCallout {
         );
         continue;
       }
-      const element = selector && this.doc.querySelector(selector);
+      let scope = this.doc.documentElement;
+      // %triggerTab% is a special token that gets replaced with :scope, and
+      // instructs us to look for the anchor element within the trigger tab.
+      if (this.browser && selector.includes("%triggerTab%")) {
+        let triggerTab = this.browser.ownerGlobal.gBrowser?.getTabForBrowser(
+          this.browser
+        );
+        if (triggerTab) {
+          selector = selector.replace("%triggerTab%", ":scope");
+          scope = triggerTab;
+        } else {
+          continue;
+        }
+      }
+      let element = scope.querySelector(selector);
+      // The element may not be a child of the scope, but the scope itself. For
+      // example, if we're anchoring directly to the trigger tab, our selector
+      // might look like `%triggerTab%[visuallyselected]`. In this case,
+      // querySelector() will return nothing, but matches() will return true.
+      if (!element && scope.matches(selector)) {
+        element = scope;
+      }
       if (!element) {
         continue; // Element doesn't exist at all.
       }
@@ -614,7 +638,7 @@ export class FeatureCallout {
       if (
         this.context === "chrome" &&
         element.id &&
-        anchor.selector.includes(`#${element.id}`)
+        selector.includes(`#${element.id}`)
       ) {
         let widget = lazy.CustomizableUI.getWidget(element.id);
         if (
@@ -787,7 +811,6 @@ export class FeatureCallout {
         "aria-describedby",
         `#${CONTAINER_ID} .welcome-text`
       );
-      this._container.tabIndex = 0;
       if (arrow_width) {
         this._container.style.setProperty("--arrow-width", `${arrow_width}px`);
       } else {
@@ -1672,8 +1695,7 @@ export class FeatureCallout {
       this._container.querySelector("input:not(:disabled, [hidden])") ||
       this._container.querySelector(
         "button:not(:disabled, [hidden], .text-link, .cta-link)"
-      ) ||
-      this._container
+      )
     );
   }
 
@@ -1896,7 +1918,8 @@ export class FeatureCallout {
     // colors inherit from the user's theme through contentTheme.js.
     "themed-content": {
       all: {
-        background: "var(--newtab-background-color-secondary)",
+        background:
+          "var(--newtab-background-color, var(--in-content-page-background)) linear-gradient(var(--newtab-background-color-secondary), var(--newtab-background-color-secondary))",
         color: "var(--newtab-text-primary-color, var(--in-content-page-color))",
         border:
           "color-mix(in srgb, var(--newtab-background-color-secondary) 80%, #000)",
@@ -2009,7 +2032,8 @@ export class FeatureCallout {
     },
     newtab: {
       all: {
-        background: "var(--newtab-background-color-secondary, #FFF)",
+        background:
+          "var(--newtab-background-color, #F9F9FB) linear-gradient(var(--newtab-background-color-secondary, #FFF), var(--newtab-background-color-secondary, #FFF))",
         color: "var(--newtab-text-primary-color, WindowText)",
         border:
           "color-mix(in srgb, var(--newtab-background-color-secondary, #FFF) 80%, #000)",
@@ -2031,7 +2055,8 @@ export class FeatureCallout {
       },
       dark: {
         "accent-color": "rgb(0, 221, 255)",
-        background: "var(--newtab-background-color-secondary, #42414D)",
+        background:
+          "var(--newtab-background-color, #2B2A33) linear-gradient(var(--newtab-background-color-secondary, #42414D), var(--newtab-background-color-secondary, #42414D))",
         border:
           "color-mix(in srgb, var(--newtab-background-color-secondary, #42414D) 80%, #FFF)",
         "button-background": "color-mix(in srgb, transparent 80%, #000)",
@@ -2068,7 +2093,12 @@ export class FeatureCallout {
     // stylesheets handle these variables' values.
     chrome: {
       all: {
-        background: "var(--arrowpanel-background)",
+        // Use a gradient because it's possible (due to custom themes) that the
+        // arrowpanel-background will be semi-transparent, causing the arrow to
+        // show through the callout background. Put the Menu color behind the
+        // arrowpanel-background.
+        background:
+          "Menu linear-gradient(var(--arrowpanel-background), var(--arrowpanel-background))",
         color: "var(--arrowpanel-color)",
         border: "var(--arrowpanel-border-color)",
         "accent-color": "var(--focus-outline-color)",
@@ -2096,6 +2126,9 @@ export class FeatureCallout {
         "link-color-hover": "LinkText",
         "link-color-active": "ActiveText",
         "link-color-visited": "VisitedText",
+      },
+      hcm: {
+        background: "var(--arrowpanel-background)",
       },
     },
   };

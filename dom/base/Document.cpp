@@ -180,6 +180,7 @@
 #include "mozilla/dom/HTMLBodyElement.h"
 #include "mozilla/dom/HTMLCollectionBinding.h"
 #include "mozilla/dom/HTMLDialogElement.h"
+#include "mozilla/dom/HTMLEmbedElement.h"
 #include "mozilla/dom/HTMLFormElement.h"
 #include "mozilla/dom/HTMLIFrameElement.h"
 #include "mozilla/dom/HTMLImageElement.h"
@@ -187,6 +188,7 @@
 #include "mozilla/dom/HTMLLinkElement.h"
 #include "mozilla/dom/HTMLMediaElement.h"
 #include "mozilla/dom/HTMLMetaElement.h"
+#include "mozilla/dom/HTMLObjectElement.h"
 #include "mozilla/dom/HTMLSharedElement.h"
 #include "mozilla/dom/HTMLTextAreaElement.h"
 #include "mozilla/dom/ImageTracker.h"
@@ -1081,21 +1083,13 @@ nsresult ExternalResourceMap::PendingLoad::SetupViewer(
       new LoadgroupCallbacks(callbacks);
   newLoadGroup->SetNotificationCallbacks(newCallbacks);
 
-  // This is some serious hackery cribbed from docshell
-  nsCOMPtr<nsICategoryManager> catMan =
-      do_GetService(NS_CATEGORYMANAGER_CONTRACTID);
-  NS_ENSURE_TRUE(catMan, NS_ERROR_NOT_AVAILABLE);
-  nsCString contractId;
-  nsresult rv =
-      catMan->GetCategoryEntry("Gecko-Content-Viewers", type, contractId);
-  NS_ENSURE_SUCCESS(rv, rv);
   nsCOMPtr<nsIDocumentLoaderFactory> docLoaderFactory =
-      do_GetService(contractId.get());
+      nsContentUtils::FindInternalDocumentViewer(type);
   NS_ENSURE_TRUE(docLoaderFactory, NS_ERROR_NOT_AVAILABLE);
 
   nsCOMPtr<nsIDocumentViewer> viewer;
   nsCOMPtr<nsIStreamListener> listener;
-  rv = docLoaderFactory->CreateInstance(
+  nsresult rv = docLoaderFactory->CreateInstance(
       "external-resource", chan, newLoadGroup, type, nullptr, nullptr,
       getter_AddRefs(listener), getter_AddRefs(viewer));
   NS_ENSURE_SUCCESS(rv, rv);
@@ -3877,74 +3871,68 @@ nsresult Document::InitCSP(nsIChannel* aChannel) {
   return NS_OK;
 }
 
-static Document* GetInProcessParentDocumentFrom(BrowsingContext* aContext) {
-  BrowsingContext* parentContext = aContext->GetParent();
-  if (!parentContext) {
+static FeaturePolicy* GetFeaturePolicyFromElement(Element* aElement) {
+  if (auto* iframe = HTMLIFrameElement::FromNodeOrNull(aElement)) {
+    return iframe->FeaturePolicy();
+  }
+
+  if (!HTMLObjectElement::FromNodeOrNull(aElement) &&
+      !HTMLEmbedElement::FromNodeOrNull(aElement)) {
     return nullptr;
   }
 
-  WindowContext* windowContext = parentContext->GetCurrentWindowContext();
-  if (!windowContext) {
-    return nullptr;
-  }
-
-  return windowContext->GetDocument();
+  return aElement->OwnerDoc()->FeaturePolicy();
 }
 
-already_AddRefed<dom::FeaturePolicy> Document::GetParentFeaturePolicy() {
-  BrowsingContext* browsingContext = GetBrowsingContext();
-  if (!browsingContext) {
-    return nullptr;
-  }
-  if (!browsingContext->IsContentSubframe()) {
-    return nullptr;
-  }
-
-  HTMLIFrameElement* iframe =
-      HTMLIFrameElement::FromNodeOrNull(browsingContext->GetEmbedderElement());
-  if (iframe) {
-    return do_AddRef(iframe->FeaturePolicy());
-  }
-
-  if (XRE_IsParentProcess()) {
-    return do_AddRef(browsingContext->Canonical()->GetContainerFeaturePolicy());
-  }
-
-  if (Document* parentDocument =
-          GetInProcessParentDocumentFrom(browsingContext)) {
-    return do_AddRef(parentDocument->FeaturePolicy());
-  }
-
-  WindowContext* windowContext = browsingContext->GetCurrentWindowContext();
-  if (!windowContext) {
-    return nullptr;
-  }
-
-  WindowGlobalChild* child = windowContext->GetWindowGlobalChild();
-  if (!child) {
-    return nullptr;
-  }
-
-  return do_AddRef(child->GetContainerFeaturePolicy());
-}
-
-void Document::InitFeaturePolicy() {
+void Document::InitFeaturePolicy(
+    const Variant<Nothing, FeaturePolicyInfo, Element*>&
+        aContainerFeaturePolicy) {
   MOZ_ASSERT(mFeaturePolicy, "we should have FeaturePolicy created");
 
   mFeaturePolicy->ResetDeclaredPolicy();
 
   mFeaturePolicy->SetDefaultOrigin(NodePrincipal());
 
-  RefPtr<mozilla::dom::FeaturePolicy> parentPolicy = GetParentFeaturePolicy();
-  if (parentPolicy) {
-    // Let's inherit the policy from the parent HTMLIFrameElement if it exists.
-    mFeaturePolicy->InheritPolicy(parentPolicy);
-    mFeaturePolicy->SetSrcOrigin(parentPolicy->GetSrcOrigin());
+  RefPtr<dom::FeaturePolicy> featurePolicy = mFeaturePolicy;
+  aContainerFeaturePolicy.match(
+      [](const Nothing&) {},
+      [featurePolicy](const FeaturePolicyInfo& aContainerFeaturePolicy) {
+        // Let's inherit the policy from the possibly cross-origin container.
+        featurePolicy->InheritPolicy(aContainerFeaturePolicy);
+        featurePolicy->SetSrcOrigin(aContainerFeaturePolicy.mSrcOrigin);
+      },
+      [featurePolicy](Element* aContainer) {
+        // Let's inherit the policy from the parent container element if it
+        // exists.
+        if (RefPtr<dom::FeaturePolicy> containerFeaturePolicy =
+                GetFeaturePolicyFromElement(aContainer)) {
+          featurePolicy->InheritPolicy(containerFeaturePolicy);
+          featurePolicy->SetSrcOrigin(containerFeaturePolicy->GetSrcOrigin());
+        }
+      });
+}
+
+Element* GetEmbedderElementFrom(BrowsingContext* aBrowsingContext) {
+  if (!aBrowsingContext) {
+    return nullptr;
   }
+  if (!aBrowsingContext->IsContentSubframe()) {
+    return nullptr;
+  }
+
+  return aBrowsingContext->GetEmbedderElement();
 }
 
 nsresult Document::InitFeaturePolicy(nsIChannel* aChannel) {
-  InitFeaturePolicy();
+  nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
+  if (Element* embedderElement = GetEmbedderElementFrom(GetBrowsingContext())) {
+    InitFeaturePolicy(AsVariant(embedderElement));
+  } else if (Maybe<FeaturePolicyInfo> featurePolicyContainer =
+                 loadInfo->GetContainerFeaturePolicyInfo()) {
+    InitFeaturePolicy(AsVariant(*featurePolicyContainer));
+  } else {
+    InitFeaturePolicy(AsVariant(Nothing{}));
+  }
 
   // We don't want to parse the http Feature-Policy header if this pref is off.
   if (!StaticPrefs::dom_security_featurePolicy_header_enabled()) {
@@ -4481,15 +4469,6 @@ bool Document::AllowsL10n() const {
   bool allowed = false;
   NodePrincipal()->IsL10nAllowed(GetDocumentURI(), &allowed);
   return allowed;
-}
-
-bool Document::AreWebAnimationsTimelinesEnabled(JSContext* aCx,
-                                                JSObject* /*unused*/
-) {
-  MOZ_ASSERT(NS_IsMainThread());
-
-  return nsContentUtils::IsSystemCaller(aCx) ||
-         StaticPrefs::dom_animations_api_timelines_enabled();
 }
 
 DocumentTimeline* Document::Timeline() {
@@ -5400,8 +5379,7 @@ bool Document::ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
 
   // If we're running an execCommand, we should just return false.
   // https://github.com/w3c/editing/issues/200#issuecomment-575241816
-  if (!StaticPrefs::dom_document_exec_command_nested_calls_allowed() &&
-      !markRunningExecCommand.IsSafeToRun()) {
+  if (!markRunningExecCommand.IsSafeToRun()) {
     return false;
   }
 
@@ -7110,7 +7088,7 @@ void Document::DeletePresShell() {
   // objects for @font-face rules that came from the style set. There's no need
   // to call EnsureStyleFlush either, the shell is going away anyway, so there's
   // no point on it.
-  MarkUserFontSetDirty();
+  mFontFaceSetDirty = true;
 
   if (IsEditingOn()) {
     TurnEditingOff();
@@ -13121,6 +13099,8 @@ void Document::ScrollToRef() {
   const bool didScrollToTextFragment =
       presShell->HighlightAndGoToTextFragment(true);
 
+  FragmentDirective()->ClearUninvokedDirectives();
+
   // 2. If fragment is the empty string and no text directives have been
   // scrolled to, then return the special value top of the document.
   if (didScrollToTextFragment || mScrollToRef.IsEmpty()) {
@@ -16200,7 +16180,8 @@ void Document::ReportDocumentUseCounters() {
 void Document::ReportLCP() {
   const nsDOMNavigationTiming* timing = GetNavigationTiming();
 
-  if (!timing) {
+  if (!ShouldIncludeInTelemetry() || !IsTopLevelContentDocument() || !timing ||
+      !timing->DocShellHasBeenActiveSinceNavigationStart()) {
     return;
   }
 
@@ -18985,7 +18966,7 @@ bool Document::IsLikelyContentInaccessibleTopLevelAboutBlank() const {
   // really reliable but doesn't affect the correctness of our page probes, so
   // it's not too terrible.
   BrowsingContext* bc = GetBrowsingContext();
-  return bc && bc->IsTop() && !bc->HadOriginalOpener();
+  return bc && bc->IsTop() && !bc->GetTopLevelCreatedByWebContent();
 }
 
 bool Document::ShouldIncludeInTelemetry() const {
@@ -19137,6 +19118,11 @@ already_AddRefed<Document> Document::ParseHTMLUnsafe(GlobalObject& aGlobal,
 
   doc->SetAllowDeclarativeShadowRoots(true);
   doc->SetDocumentURI(uri);
+
+  nsCOMPtr<nsIScriptGlobalObject> scriptHandlingObject =
+      do_QueryInterface(aGlobal.GetAsSupports());
+  doc->SetScriptHandlingObject(scriptHandlingObject);
+  doc->SetDocumentCharacterSet(UTF_8_ENCODING);
   rv = nsContentUtils::ParseDocumentHTML(aHTML, doc, false);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return nullptr;

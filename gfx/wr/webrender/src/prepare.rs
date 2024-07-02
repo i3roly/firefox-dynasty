@@ -35,7 +35,7 @@ use crate::render_task_cache::RenderTaskCacheKeyKind;
 use crate::render_task_cache::{RenderTaskCacheKey, to_cache_size, RenderTaskParent};
 use crate::render_task::{RenderTaskKind, RenderTask, SubPass, MaskSubPass, EmptyTask};
 use crate::segment::SegmentBuilder;
-use crate::util::{clamp_to_scale_factor, pack_as_float};
+use crate::util::{clamp_to_scale_factor, pack_as_float, ScaleOffset};
 use crate::visibility::{compute_conservative_visible_rect, PrimitiveVisibility, VisibilityState};
 
 
@@ -231,12 +231,11 @@ fn prepare_prim_for_render(
                 !prim_data.brush_segments.is_empty() ||
                     may_need_repetition(prim_data.stretch_size, prim_data.common.prim_rect)
             }
-            PrimitiveInstanceKind::ConicGradient { .. } => {
-                // TODO(nical) Enable quad conic gradients.
-                true
-                // let prim_data = &data_stores.conic_grad[*data_handle];
-                // !prim_data.brush_segments.is_empty() ||
-                //     may_need_repetition(prim_data.stretch_size, prim_data.common.prim_rect)
+            // TODO(bug 1899546) Enable quad conic gradients with SWGL.
+            PrimitiveInstanceKind::ConicGradient { data_handle, .. } if !frame_context.fb_config.is_software => {
+                let prim_data = &data_stores.conic_grad[*data_handle];
+                !prim_data.brush_segments.is_empty() ||
+                    may_need_repetition(prim_data.stretch_size, prim_data.common.prim_rect)
             }
             _ => true,
         };
@@ -645,7 +644,7 @@ fn prepare_interned_prim_for_render(
                     }
                 };
 
-                quad::push_quad(
+                quad::prepare_quad(
                     &pattern,
                     &prim_data.common.prim_rect,
                     prim_instance_index,
@@ -827,7 +826,7 @@ fn prepare_interned_prim_for_render(
                     &mut frame_state.frame_gpu_data,
                 );
 
-                quad::push_quad(
+                quad::prepare_quad(
                     &pattern,
                     &prim_data.common.prim_rect,
                     prim_instance_index,
@@ -891,7 +890,7 @@ fn prepare_interned_prim_for_render(
                     &mut frame_state.frame_gpu_data,
                 );
 
-                quad::push_quad(
+                quad::prepare_quad(
                     &pattern,
                     &prim_data.common.prim_rect,
                     prim_instance_index,
@@ -994,6 +993,7 @@ fn prepare_interned_prim_for_render(
                     prim_instance.vis.clip_chain.local_clip_rect,
                     PremultipliedColorF::WHITE,
                     &[],
+                    ScaleOffset::identity(),
                 );
 
                 // Handle masks on the source. This is the common case, and occurs for:

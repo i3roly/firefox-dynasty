@@ -34,6 +34,11 @@ sealed class MenuAction : Action {
     data class UpdateBookmarkState(val bookmarkState: BookmarkState) : MenuAction()
 
     /**
+     * [MenuAction] dispatched to delete browsing data and quit the browser.
+     */
+    data object DeleteBrowsingDataAndQuit : MenuAction()
+
+    /**
      * [MenuAction] dispatched when a navigation event occurs for a specific destination.
      */
     sealed class Navigate : MenuAction() {
@@ -113,6 +118,15 @@ sealed class MenuAction : Action {
          * [Navigate] action dispatched when navigating to edit the existing bookmark.
          */
         data object EditBookmark : Navigate()
+
+        /**
+         * [Navigate] action dispatched when navigating to save a site to a collection.
+         *
+         * @property hasCollection Whether or not there are any existing tab collections.
+         */
+        data class SaveToCollection(
+            val hasCollection: Boolean,
+        ) : Navigate()
 
         /**
          * [Navigate] action dispatched when navigating to translations dialog.

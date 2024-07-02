@@ -52,7 +52,7 @@ android {
 
         // Keep in sync with actual user agent in nsHttpHandler::BuildUserAgent
         buildConfigField 'String', "USER_AGENT_GECKOVIEW_MOBILE", "\"Mozilla/5.0 (Android \" + android.os.Build.VERSION.RELEASE + \"; Mobile; rv:\" + ${mozconfig.defines.MOZILLA_UAVERSION} + \") Gecko/\" + ${mozconfig.defines.MOZILLA_UAVERSION} + \" Firefox/\" + ${mozconfig.defines.MOZILLA_UAVERSION}";
-        buildConfigField 'String', "USER_AGENT_GECKOVIEW_TABLET", "\"Mozilla/5.0 (Android \" + android.os.Build.VERSION.RELEASE + \"; Tablet; rv:\" + ${mozconfig.defines.MOZILLA_UAVERSION} + \") Gecko/\" + ${mozconfig.defines.MOZILLA_UAVERSION} + \" Firefox/\" + ${mozconfig.defines.MOZILLA_UAVERSION}";
+        buildConfigField 'String', "USER_AGENT_GECKOVIEW_MOBILE_ANDROID_10", "\"Mozilla/5.0 (Android 10; Mobile; rv:\" + ${mozconfig.defines.MOZILLA_UAVERSION} + \") Gecko/\" + ${mozconfig.defines.MOZILLA_UAVERSION} + \" Firefox/\" + ${mozconfig.defines.MOZILLA_UAVERSION}";
 
         buildConfigField 'int', 'MIN_SDK_VERSION', mozconfig.substs.MOZ_ANDROID_MIN_SDK_VERSION;
 
@@ -232,7 +232,7 @@ dependencies {
     implementation ComponentsDependencies.androidx_collection
     implementation ComponentsDependencies.androidx_core
 
-    implementation "com.google.android.gms:play-services-fido:20.0.1"
+    implementation "com.google.android.gms:play-services-fido:21.1.0"
     implementation "org.yaml:snakeyaml:2.2"
 
     implementation ComponentsDependencies.androidx_lifecycle_common

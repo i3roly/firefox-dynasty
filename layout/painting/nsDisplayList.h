@@ -65,7 +65,6 @@
 
 class gfxContext;
 class nsIContent;
-class nsIScrollableFrame;
 class nsSubDocumentFrame;
 class nsCaret;
 struct WrFiltersHolder;
@@ -80,6 +79,7 @@ enum class nsDisplayOwnLayerFlags;
 class nsDisplayCompositorHitTestInfo;
 class nsDisplayScrollInfoLayer;
 class PresShell;
+class ScrollContainerFrame;
 class StickyScrollContainer;
 
 namespace layers {
@@ -189,8 +189,8 @@ LazyLogModule& GetLoggerByProcess();
  */
 struct ActiveScrolledRoot {
   static already_AddRefed<ActiveScrolledRoot> CreateASRForFrame(
-      const ActiveScrolledRoot* aParent, nsIScrollableFrame* aScrollableFrame,
-      bool aIsRetained);
+      const ActiveScrolledRoot* aParent,
+      ScrollContainerFrame* aScrollContainerFrame, bool aIsRetained);
 
   static const ActiveScrolledRoot* PickAncestor(
       const ActiveScrolledRoot* aOne, const ActiveScrolledRoot* aTwo) {
@@ -226,19 +226,18 @@ struct ActiveScrolledRoot {
   }
 
   RefPtr<const ActiveScrolledRoot> mParent;
-  nsIScrollableFrame* mScrollableFrame;
+  ScrollContainerFrame* mScrollContainerFrame = nullptr;
 
   NS_INLINE_DECL_REFCOUNTING(ActiveScrolledRoot)
 
  private:
-  ActiveScrolledRoot()
-      : mScrollableFrame(nullptr), mDepth(0), mRetained(false) {}
+  ActiveScrolledRoot() : mDepth(0), mRetained(false) {}
 
   ~ActiveScrolledRoot();
 
   static void DetachASR(ActiveScrolledRoot* aASR) {
     aASR->mParent = nullptr;
-    aASR->mScrollableFrame = nullptr;
+    aASR->mScrollContainerFrame = nullptr;
     NS_RELEASE(aASR);
   }
   NS_DECLARE_FRAME_PROPERTY_WITH_DTOR(ActiveScrolledRootCache,
@@ -637,13 +636,6 @@ class nsDisplayListBuilder {
   void SetHaveScrollableDisplayPort() { mHaveScrollableDisplayPort = true; }
   void ClearHaveScrollableDisplayPort() { mHaveScrollableDisplayPort = false; }
 
-  bool SetIsCompositingCheap(bool aCompositingCheap) {
-    bool temp = mIsCompositingCheap;
-    mIsCompositingCheap = aCompositingCheap;
-    return temp;
-  }
-
-  bool IsCompositingCheap() const { return mIsCompositingCheap; }
   /**
    * Display the caret if needed.
    */
@@ -946,7 +938,8 @@ class nsDisplayListBuilder {
    * automatically when the arena goes away.
    */
   ActiveScrolledRoot* AllocateActiveScrolledRoot(
-      const ActiveScrolledRoot* aParent, nsIScrollableFrame* aScrollableFrame);
+      const ActiveScrolledRoot* aParent,
+      ScrollContainerFrame* aScrollContainerFrame);
 
   /**
    * Allocate a new DisplayItemClipChain object in the arena. Will be cleaned
@@ -1178,15 +1171,15 @@ class nsDisplayListBuilder {
     void SetCurrentActiveScrolledRoot(
         const ActiveScrolledRoot* aActiveScrolledRoot);
 
-    void EnterScrollFrame(nsIScrollableFrame* aScrollableFrame) {
+    void EnterScrollFrame(ScrollContainerFrame* aScrollContainerFrame) {
       MOZ_ASSERT(!mUsed);
       ActiveScrolledRoot* asr = mBuilder->AllocateActiveScrolledRoot(
-          mBuilder->mCurrentActiveScrolledRoot, aScrollableFrame);
+          mBuilder->mCurrentActiveScrolledRoot, aScrollContainerFrame);
       mBuilder->mCurrentActiveScrolledRoot = asr;
       mUsed = true;
     }
 
-    void InsertScrollFrame(nsIScrollableFrame* aScrollableFrame);
+    void InsertScrollFrame(ScrollContainerFrame* aScrollContainerFrame);
 
    private:
     nsDisplayListBuilder* mBuilder;
@@ -1642,8 +1635,9 @@ class nsDisplayListBuilder {
     }
   };
 
-  void AddScrollFrameToNotify(nsIScrollableFrame* aScrollFrame);
-  void NotifyAndClearScrollFrames();
+  void AddScrollContainerFrameToNotify(
+      ScrollContainerFrame* aScrollContainerFrame);
+  void NotifyAndClearScrollContainerFrames();
 
   // Helper class to find what link spec (if any) to associate with a frame,
   // recording it in the builder, and generate the corresponding DisplayItem.
@@ -1656,7 +1650,8 @@ class nsDisplayListBuilder {
 
     ~Linkifier() {
       if (mBuilderToReset) {
-        mBuilderToReset->mLinkSpec.Truncate(0);
+        mBuilderToReset->mLinkURI.Truncate(0);
+        mBuilderToReset->mLinkDest.Truncate(0);
       }
     }
 
@@ -1786,7 +1781,8 @@ class nsDisplayListBuilder {
   // When we are inside a filter, the current ASR at the time we entered the
   // filter. Otherwise nullptr.
   const ActiveScrolledRoot* mFilterASR;
-  nsCString mLinkSpec;  // Destination of link currently being emitted, if any.
+  nsCString mLinkURI;   // URI of link currently being emitted, if any.
+  nsCString mLinkDest;  // Local destination name of link, if any.
 
   // Optimized versions for non-retained display list.
   LayoutDeviceIntRegion mWindowDraggingRegion;
@@ -1826,7 +1822,7 @@ class nsDisplayListBuilder {
   std::unordered_set<const DisplayItemClipChain*, DisplayItemClipChainHasher,
                      DisplayItemClipChainEqualer>
       mClipDeduplicator;
-  std::unordered_set<nsIScrollableFrame*> mScrollFramesToNotify;
+  std::unordered_set<ScrollContainerFrame*> mScrollContainerFramesToNotify;
 
   AutoTArray<nsIFrame*, 20> mFramesWithOOFData;
   AutoTArray<nsIFrame*, 40> mFramesMarkedForDisplayIfVisible;
@@ -1883,7 +1879,6 @@ class nsDisplayListBuilder {
   bool mIsPaintingToWindow;
   bool mUseHighQualityScaling;
   bool mIsPaintingForWebRender;
-  bool mIsCompositingCheap;
   bool mAncestorHasApzAwareEventHandler;
   // True when the first async-scrollable scroll frame for which we build a
   // display list has a display port. An async-scrollable scroll frame is one
@@ -6713,9 +6708,11 @@ class nsDisplayForeignObject : public nsDisplayWrapList {
 class nsDisplayLink : public nsPaintedDisplayItem {
  public:
   nsDisplayLink(nsDisplayListBuilder* aBuilder, nsIFrame* aFrame,
-                const char* aLinkSpec, const nsRect& aRect)
+                const char* aLinkURI, const char* aLinkDest,
+                const nsRect& aRect)
       : nsPaintedDisplayItem(aBuilder, aFrame),
-        mLinkSpec(aLinkSpec),
+        mLinkURI(aLinkURI),
+        mLinkDest(aLinkDest),
         mRect(aRect) {}
 
   NS_DISPLAY_DECL_NAME("Link", TYPE_LINK)
@@ -6723,7 +6720,8 @@ class nsDisplayLink : public nsPaintedDisplayItem {
   void Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) override;
 
  private:
-  nsCString mLinkSpec;
+  nsCString mLinkURI;
+  nsCString mLinkDest;
   nsRect mRect;
 };
 

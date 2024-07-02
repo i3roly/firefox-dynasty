@@ -175,7 +175,7 @@ export const PREFS_CONFIG = new Map([
     "weather.temperatureUnits",
     {
       title: "Switch the temperature between Celsius and Fahrenheit",
-      value: "f",
+      getValue: args => (args.locale === "en-US" ? "f" : "c"),
     },
   ],
   [
@@ -292,7 +292,57 @@ export const PREFS_CONFIG = new Map([
     "newtabWallpapers.enabled",
     {
       title: "Boolean flag to turn wallpaper functionality on and off",
-      value: true,
+      value: false,
+    },
+  ],
+  [
+    "newtabWallpapers.v2.enabled",
+    {
+      title: "Boolean flag to turn wallpaper v2 functionality on and off",
+      value: false,
+    },
+  ],
+  [
+    "newtabWallpapers.highlightEnabled",
+    {
+      title: "Boolean flag to show the highlight about the Wallpaper feature",
+      value: false,
+    },
+  ],
+  [
+    "newtabWallpapers.highlightDismissed",
+    {
+      title:
+        "Boolean flag to remember if the user has seen the feature highlight",
+      value: false,
+    },
+  ],
+  [
+    "newtabWallpapers.highlightSeenCounter",
+    {
+      title: "Count the number of times a user has seen the feature highlight",
+      value: 0,
+    },
+  ],
+  [
+    "newtabWallpapers.highlightHeaderText",
+    {
+      title: "Changes the wallpaper feature highlight header text",
+      value: "",
+    },
+  ],
+  [
+    "newtabWallpapers.highlightContentText",
+    {
+      title: "Changes the wallpaper feature highlight content text",
+      value: "",
+    },
+  ],
+  [
+    "newtabWallpapers.highlightCtaText",
+    {
+      title: "Changes the wallpaper feature highlight cta text",
+      value: "",
     },
   ],
   [
@@ -306,6 +356,13 @@ export const PREFS_CONFIG = new Map([
     "newtabWallpapers.wallpaper-dark",
     {
       title: "Currently set dark wallpaper",
+      value: "",
+    },
+  ],
+  [
+    "newtabWallpapers.wallpaper",
+    {
+      title: "Currently set wallpaper",
       value: "",
     },
   ],

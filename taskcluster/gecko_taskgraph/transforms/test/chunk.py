@@ -11,6 +11,7 @@ from taskgraph.util.treeherder import join_symbol, split_symbol
 
 from gecko_taskgraph.util.attributes import is_try
 from gecko_taskgraph.util.chunking import (
+    WPT_SUBSUITES,
     DefaultLoader,
     chunk_manifests,
     get_manifest_loader,
@@ -122,9 +123,16 @@ def set_test_manifests(config, tasks):
             # if we have web-platform tests incoming, just yield task
             for m in input_paths:
                 if m.startswith("testing/web-platform/tests/"):
-                    if not isinstance(loader, DefaultLoader):
-                        task["chunks"] = "dynamic"
-                    yield task
+                    found_subsuite = [
+                        key for key in WPT_SUBSUITES if key in task["test-name"]
+                    ]
+                    if found_subsuite:
+                        if WPT_SUBSUITES[found_subsuite[0]] in m:
+                            yield task
+                    else:
+                        if not isinstance(loader, DefaultLoader):
+                            task["chunks"] = "dynamic"
+                        yield task
                     break
 
             # input paths can exist in other directories (i.e. [../../dir/test.js])
@@ -246,7 +254,11 @@ def split_chunks(config, tasks):
             # so they still show up in the logs. They won't impact runtime much
             # and this way tools like ActiveData are still aware that they
             # exist.
-            if config.params["backstop"] and manifests["active"]:
+            if (
+                config.params["backstop"]
+                and manifests["active"]
+                and "skipped" in manifests
+            ):
                 chunked_manifests[0].extend(manifests["skipped"])
 
         for i in range(task["chunks"]):

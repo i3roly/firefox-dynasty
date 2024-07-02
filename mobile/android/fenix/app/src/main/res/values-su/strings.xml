@@ -151,8 +151,6 @@
 
     <!-- Shortcut action to open Passwords screen -->
     <string name="home_screen_shortcut_passwords">Kecap sandi</string>
-    <!-- Shortcut action to open Passwords screen -->
-    <string name="home_screen_shortcut_open_password_screen" moz:removedIn="126" tools:ignore="UnusedResources">Takulan kecap sandi</string>
 
     <!-- Recent Tabs -->
     <!-- Header text for jumping back into the recent tab in the home screen -->
@@ -194,8 +192,6 @@
     <!-- Content description (not visible, for screen readers etc.): Stop loading current website -->
     <string name="browser_menu_stop">Eureun</string>
 
-    <!-- Browser menu button that opens the addon manager -->
-    <string name="browser_menu_add_ons" moz:removedIn="126" tools:ignore="UnusedResources">Émboh</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Éksténsi</string>
     <!-- Browser menu button that opens the extensions manager -->
@@ -204,8 +200,6 @@
     <string name="browser_menu_discover_more_extensions">Singraykeun émbohan leuwih loba</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Iber akun</string>
-    <!-- Text displayed when there are no add-ons to be shown -->
-    <string name="no_add_ons" moz:removedIn="126" tools:ignore="UnusedResources">Teu aya add-on di dieu</string>
     <!-- Browser menu button that sends a user to help articles -->
     <string name="browser_menu_help">Pitulung</string>
     <!-- Browser menu button that sends a to a the what's new article -->
@@ -222,8 +216,6 @@
     <string name="browser_menu_add_to_homescreen">Tambahkeun ka layar Tepas</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Tambahkeun ka layar Tepas…</string>
-    <!-- Browser menu toggle that installs a Progressive Web App shortcut to the site on the device home screen. -->
-    <string name="browser_menu_install_on_homescreen" moz:removedIn="126" tools:ignore="UnusedResources">Pasang</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Singkronkeun deui</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -600,7 +592,9 @@
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Akun</string>
     <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar">Tulbar</string>
+    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Tulbar</string>
+    <!-- Preference for changing where the AddressBar is positioned -->
+    <string name="preferences_toolbar_2">Tempat papan alamat</string>
     <!-- Preference for changing default theme to dark or light mode -->
     <string name="preferences_theme">Téma</string>
     <!-- Preference for customizing the home screen -->
@@ -674,13 +668,8 @@
     <!-- Message to indicate users that we are quitting the application to apply the changes -->
     <string name="quit_application">Ninggalkeun aplikasi pikeun nerapkeun parobahan…</string>
 
-    <!-- Preference for add_ons -->
-    <string name="preferences_addons" moz:removedIn="126" tools:ignore="UnusedResources">Émbohan</string>
-
     <!-- Preference for extensions -->
     <string name="preferences_extensions">Éksténsi</string>
-    <!-- Preference for installing a local add-on -->
-    <string name="preferences_install_local_addon" moz:removedIn="126" tools:ignore="UnusedResources">Pasang panambah tina berkas</string>
     <!-- Preference for installing a local extension -->
     <string name="preferences_install_local_extension">Pasang pangémboh tina berkas</string>
     <!-- Preference for notifications -->
@@ -702,9 +691,10 @@
     <!-- The subtitle for the allow for all sites preference toggle -->
     <string name="addons_permissions_allow_for_all_sites_subtitle" tools:ignore="UnusedResources">Lamun anjeun percaya pangémboh ieu, anjeun bisa méré idin dina unggal situs.</string>
 
+    <!-- The text shown when an extension does not require permissions -->
+    <string name="addons_does_not_require_permissions">Ieu émbohan henteu perlu idin.</string>
+
     <!-- Add-on Preferences -->
-    <!-- Preference to customize the configured AMO (addons.mozilla.org) collection -->
-    <string name="preferences_customize_amo_collection" moz:removedIn="126" tools:ignore="UnusedResources">Koléksi Émboh sakahayang</string>
     <!-- Preference to customize the configured AMO (addons.mozilla.org) collection -->
     <string name="preferences_customize_extension_collection">Koléksi Émboh sakahayang</string>
     <!-- Button caption to confirm the add-on collection configuration -->
@@ -715,9 +705,6 @@
     <string name="customize_addon_collection_hint">Ngaran koléksi</string>
     <!-- Hint displayed on input field for custom collection user ID-->
     <string name="customize_addon_collection_user_hint">Pamilik koléksi (Sandiasma)</string>
-
-    <!-- Toast shown after confirming the custom add-on collection configuration -->
-    <string name="toast_customize_addon_collection_done" moz:removedIn="126" tools:ignore="UnusedResources">Koléksi Émboh geus dirobah. Kaluar ti aplikasi pikeun nerapkeun parobahan…</string>
 
     <!-- Toast shown after confirming the custom extension collection configuration -->
     <string name="toast_customize_extension_collection_done">Koléksi Émboh geus dirobah. Kaluar ti aplikasi pikeun nerapkeun parobahan…</string>
@@ -778,31 +765,22 @@
     <string name="wallpapers_onboarding_dialog_explore_more_button_text">Langlang latar lianna</string>
 
     <!-- Add-ons general availability nimbus message-->
-    <!-- Title of the Nimbus message for add-ons general availability-->
-    <string name="addon_ga_message_title" moz:removedIn="126" tools:ignore="UnusedResources">Aya add-on anyar</string>
-
     <!-- Title of the Nimbus message for extension general availability-->
     <string name="addon_ga_message_title_2" tools:ignore="UnusedResources">Aya add-on anyar yeuh</string>
     <!-- Body of the Nimbus message for add-ons general availability. 'Firefox' intentionally hardcoded here-->
     <string name="addon_ga_message_body" tools:ignore="UnusedResources">Pariksa 100+ pangémboh anyar anu ngamungkinkeun anjeun ngajadikeun Firefox sorangan.</string>
-    <!-- Button text of the Nimbus message for add-ons general availability. -->
-    <string name="addon_ga_message_button" moz:removedIn="126" tools:ignore="UnusedResources">Paluruh add-ons</string>
     <!-- Button text of the Nimbus message for extensions general availability. -->
     <string name="addon_ga_message_button_2" tools:ignore="UnusedResources">Paluruh pangémboh</string>
 
     <!-- Extension process crash dialog to user -->
-    <!-- Title of a dialog shown to the user when enough errors have occurred with addons and they need to be temporarily disabled -->
-    <string name="addon_process_crash_dialog_title" moz:removedIn="126" tools:ignore="UnusedResources">Add-on tumpur saheulaanan</string>
     <!-- Title of the extension crash dialog shown to the user when enough errors have occurred with extensions and they need to be temporarily disabled -->
     <string name="extension_process_crash_dialog_title">Éksténsi saheulanaan dipareuman</string>
-    <!-- The first parameter is the application name. This is a message shown to the user when too many errors have occurred with the addons process and they have been disabled. The user can decide if they would like to continue trying to start add-ons or if they'd rather continue without them. -->
-    <string name="addon_process_crash_dialog_message" moz:removedIn="126" tools:ignore="UnusedResources">Aya add-on anu mugen, matak teu stabil kana sistem. %1$s gagal nyobaan malikan deui add-onna.\n\nAdd-on moal dimimitian ulang dina rintakan anu ayeuna.\n\nMiceun atawa numpurkeun add-on bisa jadi menerkeun ieu masalah.</string>
-    <!-- This will cause the add-ons to try restarting but the dialog will reappear if it is unsuccessful again -->
-    <string name="addon_process_crash_dialog_retry_button_text" moz:removedIn="126" tools:ignore="UnusedResources">Coba balikan deui add-on</string>
+    <!-- This is a message shown to the user when too many errors have occurred with the extensions process and they have been disabled.
+    The user can decide if they would like to continue trying to start extensions or if they'd rather continue without them.
+    The first parameter is the application name. -->
+    <string name="extension_process_crash_dialog_message">Aya émbohan anu mugen, matak teu stabil kana sistem. %1$s gagal nyobaan malikan deui émbohanana.\n\n Émbohan moal dimimitian deui dina rintakan anu ayeuna.\n\n Miceun atawa numpurkeun émbohan bisa jadi menerkeun ieu masalah.</string>
     <!-- Button text on the extension crash dialog to prompt the user to try restarting the extensions but the dialog will reappear if it is unsuccessful again -->
     <string name="extension_process_crash_dialog_retry_button_text" tools:ignore="UnusedResources">Jalankeun deui éksténsi</string>
-    <!-- The user will continue with all add-ons disabled -->
-    <string name="addon_process_crash_dialog_disable_addons_button_text" moz:removedIn="126" tools:ignore="UnusedResources">Tuluykeun bari add-on tumpur</string>
 
     <!-- Button text on the extension crash dialog to prompt the user to continue with all extensions disabled. -->
     <string name="extension_process_crash_dialog_disable_extensions_button_text">Tuluykeun bari add-on tumpur</string>
@@ -930,9 +908,14 @@
     <string name="preference_gestures_dynamic_toolbar">Gorolongkeun pikeun nyumputkeun tulbar</string>
 
     <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs">Gilerkeun tulbar ka gigir pikeun pindah tab</string>
+    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Gilerkeun tulbar ka gigir pikeun pindah tab</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Gilerkeun tulbar ka luhur pikeun muka tab</string>
+
+    <!-- Preference for using the dynamic toolbars -->
+    <string name="preference_gestures_dynamic_toolbar_2">Gulirkeun pikeun nyumputkeun wilah alamat jeung wilah parabot</string>
+    <!-- Preference for switching tabs by swiping horizontally on the addressbar -->
+    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">Toel wilah alamat ka sisi pikeun mindahkeun tab</string>
 
     <!-- Library -->
     <!-- Option in Library to open Downloads page -->
@@ -1442,6 +1425,23 @@
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active. -->
     <string name="notification_pbm_delete_text_2">Tutup tab nyamuni</string>
 
+    <!-- Microsuverys -->
+    <!-- Text shown in prompt for printing microsurvey. "sec" It's an abrevation for "second". -->
+    <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Bantuan sangkan Firefox bisa nyitak leuwih hadé. Ngan perlu sakolépat</string>
+    <!-- Text shown in prompt for printing microsurvey. 'Firefox' intentionally hardcoded here--> --&gt;
+    <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Sakumaha puasna anjeun kana panyitakan dina Firefox?</string>
+    <!-- Text for option one, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_0" tools:ignore="UnusedResources">Nétral</string>
+    <!-- Text for option two, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_1" tools:ignore="UnusedResources">Kacida teu sugema</string>
+    <!-- Text for option three, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_2" tools:ignore="UnusedResources">Teu sugema</string>
+    <!-- Text for option four, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_3" tools:ignore="UnusedResources">Sugema</string>
+    <!-- Text for option five, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_4" tools:ignore="UnusedResources">Puas pisan</string>
+
+
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active for Android 14+ -->
     <string name="notification_erase_title_android_14">Tutup tab pribadi?</string>
 
@@ -1518,10 +1518,6 @@
     <string name="qr_scanner_dialog_invalid_ok">HEUG</string>
     <!-- Tab collection deletion prompt dialog message. Placeholder will be replaced with the collection name -->
     <string name="tab_collection_dialog_message">Anjeun yakin rék mupus %1$s?</string>
-    <!-- Collection and tab deletion prompt dialog message. This will show when the last tab from a collection is deleted -->
-    <string name="delete_tab_and_collection_dialog_message">Mupus ieu tab bakal mupus sakabéh koléksi. Anjeun bisa nyieun koléksi anyar iraha baé.</string>
-    <!-- Collection and tab deletion prompt dialog title. Placeholder will be replaced with the collection name. This will show when the last tab from a collection is deleted -->
-    <string name="delete_tab_and_collection_dialog_title">Pupus %1$s?</string>
     <!-- Tab collection deletion prompt dialog option to delete the collection -->
     <string name="tab_collection_dialog_positive">Pupus</string>
 
@@ -1883,6 +1879,8 @@
     <string name="logins_biometric_prompt_message_2">Buka konci pikeun nempo sandi anu diteundeun</string>
     <!-- Title of warning dialog if users have no device authentication set up -->
     <string name="logins_warning_dialog_title_2">Amankeun kecap sandi anjeun nu disimpen</string>
+    <!-- Message of warning dialog if users have no device authentication set up -->
+    <string name="logins_warning_dialog_message_2">Jieun pola konci paranti, PIN, atawa kecap sandi pikeun ngajaga kartu kiridit anu diteundeun bisi paranti anjeun dipaké batur.</string>
     <!-- Negative button to ignore warning dialog if users have no device authentication set up -->
     <string name="logins_warning_dialog_later">Engké</string>
     <!-- Positive button to send users to set up a pin of warning dialog if users have no device authentication set up -->
@@ -1971,6 +1969,8 @@
     <string name="credit_cards_biometric_prompt_message">Buka konci pikeun nempo kartu anu diteundeun</string>
     <!-- Title of warning dialog if users have no device authentication set up -->
     <string name="credit_cards_warning_dialog_title_2">Amankeun metode mayar anjeun anu disimpen</string>
+    <!-- Message of warning dialog if users have no device authentication set up -->
+    <string name="credit_cards_warning_dialog_message_3">Jieun pola konci paranti, PIN, atawa kecap sandi pikeun ngajaga cara mayar anu diteundeun bisi paranti anjeun dipaké batur.</string>
     <!-- Positive button to send users to set up a pin of warning dialog if users have no device authentication set up -->
     <string name="credit_cards_warning_dialog_set_up_now">Setél ayeuna</string>
     <!-- Negative button to ignore warning dialog if users have no device authentication set up -->
@@ -2291,6 +2291,20 @@
     <string name="review_quality_check_highlights_title">Sorot tina ulasan cikénéh</string>
     <!-- Title for section explaining how we analyze the reliability of a product's reviews. -->
     <string name="review_quality_check_explanation_title">Kumaha urang nangtukeun kualitas ulasan</string>
+    <!-- Paragraph explaining how we analyze the reliability of a product's reviews. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
+    <string name="review_quality_check_explanation_body_reliability">Kami maké téknologi AI ti %s ku Mozilla pikeun mariksa kaandelan ulasan produk. Ieu ngan bakal nulungan Anjeun mariksa kualitas ulasan, lain kualitas produk. </string>
+    <!-- Paragraph explaining the grading system we use to classify the reliability of a product's reviews. -->
+    <string name="review_quality_check_info_review_grade_header"><![CDATA[Kami méré ulasan unggal produk <b>kelas hurup</b> ti A nepi ka F.]]></string>
+    <!-- Description explaining grades A and B for review quality check adjusted grading. -->
+    <string name="review_quality_check_info_grade_info_AB">Ulasan dipercaya. Kami yakin ulasan téh mungkin ti para nasabah nyata anu neundeun ulasan jujur, teu bias.</string>
+    <!-- Description explaining grade C for review quality check adjusted grading. -->
+    <string name="review_quality_check_info_grade_info_C">Kami yakin yén ulasan anu bisa dipercaya jeung teu tiasa dipercaya téh pacampur.</string>
+    <!-- Description explaining grades D and F for review quality check adjusted grading. -->
+    <string name="review_quality_check_info_grade_info_DF">Ulasan teu dipercaya. Kami yakin yén ulasan éta sigana palsu atawa tina ulasan anu bias.</string>
+    <!-- Paragraph explaining how a product's adjusted grading is calculated. -->
+    <string name="review_quality_check_explanation_body_adjusted_grading"><![CDATA[<b>Peunteun anu disaluyukeun</b> ngan ukur dumasar kana ulasan anu bener-bener bisa dipercaya.]]></string>
+    <!-- Paragraph explaining product review highlights. First parameter is the name of the retailer (e.g. Amazon). -->
+    <string name="review_quality_check_explanation_body_highlights"><![CDATA[<b>Sorotan</b> asalna tina %s ulasan dina 80 poé ka tukang anu ku urang yakin bisa dipercaya.]]></string>
     <!-- Text for learn more caption presenting a link with information about review quality. First parameter is for clickable text defined in review_quality_check_info_learn_more_link. -->
     <string name="review_quality_check_info_learn_more">Leuwih jéntré ngeunaan %s.</string>
     <!-- Clickable text that links to review quality check SuMo page. First parameter is the Fakespot product name. -->
@@ -2299,6 +2313,8 @@
     <string name="review_quality_check_settings_title">Setélan</string>
     <!-- Text for label for switch preference to show recommended products from review quality check settings section. -->
     <string name="review_quality_check_settings_recommended_products">Témbongkeun iklan dina pamariksa ténjoan</string>
+    <!-- Description for switch preference to show recommended products from review quality check settings section. First parameter is for clickable text defined in review_quality_check_settings_recommended_products_learn_more.-->
+    <string name="review_quality_check_settings_recommended_products_description_2" tools:ignore="UnusedResources">Anjeun bakal sakali-sakali ningali iklan pikeun produk anu luyu. Urang ngan méré iklan produk kalawan ulasan nu dipercaya. %s</string>
     <!-- Clickable text that links to review quality check recommended products support article. -->
     <string name="review_quality_check_settings_recommended_products_learn_more" tools:ignore="UnusedResources">Lenyepan</string>
     <!-- Text for turning sidebar off button from review quality check settings section. -->
@@ -2322,6 +2338,8 @@
     <string name="review_quality_check_no_reviews_warning_body">Lamun produk ieu leuwih loba ulasanana, urang bisa mariksa kualitasna.</string>
     <!-- Title for warning card informing the user that the current product is currently not available. -->
     <string name="review_quality_check_product_availability_warning_title">Produk teu sadia</string>
+    <!-- Text for the body of warning card informing the user that the current product is currently not available. -->
+    <string name="review_quality_check_product_availability_warning_body">Lamun anjeun ningali produk ieu aya deui dina stok, laporkeun sarta kami bakal ngusahakeun mariksa ulasanana.</string>
     <!-- Clickable text for warning card informing the user that the current product is currently not available. Clicking this should inform the server that the product is available. -->
     <string name="review_quality_check_product_availability_warning_action_2">Laporan produk aya dina stok</string>
     <!-- Title for warning card informing the user that the current product's analysis is still processing. The parameter is the percentage progress (0-100%) of the analysis process (e.g. 56%). -->
@@ -2330,10 +2348,16 @@
     <string name="review_quality_check_analysis_in_progress_warning_body">Lilana ieu kira-kira 60 detik.</string>
     <!-- Title for info card displayed after the user reports a product is back in stock. -->
     <string name="review_quality_check_analysis_requested_info_title">Hatur nuhun geus ngalaporkeun!</string>
+    <!-- Text for body of info card displayed after the user reports a product is back in stock. -->
+    <string name="review_quality_check_analysis_requested_info_body">Urang kudu mibanda inpormasi ngeunaan ulasan produk ieu dina 24 jam. Mangga pariksa deui.</string>
     <!-- Title for info card displayed when the user review checker while on a product that Fakespot does not analyze (e.g. gift cards, music). -->
     <string name="review_quality_check_not_analyzable_info_title">Urang henteu bisa mariksa ulasan ieu</string>
+    <!-- Text for body of info card displayed when the user review checker while on a product that Fakespot does not analyze (e.g. gift cards, music). -->
+    <string name="review_quality_check_not_analyzable_info_body">Hanjakalna, kami teu bisa mariksa kualitas ulasan pikeun sababaraha jinis produk. Contona, kartu kado jeung streaming video, musik, jeung kaulinan.</string>
     <!-- Title for info card displayed when another user reported the displayed product is back in stock. -->
     <string name="review_quality_check_analysis_requested_other_user_info_title" tools:ignore="UnusedResources">béja nu arék datang</string>
+    <!-- Text for body of info card displayed when another user reported the displayed product is back in stock. -->
+    <string name="review_quality_check_analysis_requested_other_user_info_body" tools:ignore="UnusedResources">Urang kudu mibanda inpormasi ngeunaan ulasan produk ieu dina 24 jam. Mangga pariksa deui.</string>
     <!-- Title for info card displayed to the user when analysis finished updating. -->
     <string name="review_quality_check_analysis_updated_confirmation_title" tools:ignore="UnusedResources">Analisis geus luyu nu jeung panganyarna</string>
     <!-- Text for the action button from info card displayed to the user when analysis finished updating. -->
@@ -2348,12 +2372,24 @@
     <string name="review_quality_check_no_connection_body">Pariksa sambungan jaringan anjeun terus cobaan muatkeun deui kacana.</string>
     <!-- Title for card displayed to the user for products whose reviews were not analyzed yet. -->
     <string name="review_quality_check_no_analysis_title">Euweuh inpormasi ngeunaan ulasan ieu</string>
+    <!-- Text for the body of card displayed to the user for products whose reviews were not analyzed yet. -->
+    <string name="review_quality_check_no_analysis_body">Sangkan mikanyaho naha ulasan produk ieu bisa dipercaya, pariksa kualitas ulasanana. Éta ngan  perlu kira-kira 60 detik.</string>
     <!-- Text for button from body of card displayed to the user for products whose reviews were not analyzed yet. Clicking this should trigger a product analysis. -->
     <string name="review_quality_check_no_analysis_link">Pariksa kualitas review</string>
     <!-- Headline for review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_title">Cobaan pituduh ulasan produk urang nu dipercaya </string>
+    <!-- Description for review quality check contextual onboarding card. The first and last two parameters are for retailer names (e.g. Amazon, Walmart). The second parameter is for the name of the application (e.g. Firefox). -->
+    <string name="review_quality_check_contextual_onboarding_description">Tingali kumaha resénsi produk dipercaya dina %1$s saméméh anjeun meuli. Pamariksa ulasan, fitur ékspérimén ti %2$s, diwangun langsung kana browser. Éta ogé dilarapkeun dina %3$s sarta  %4$s.</string>
+    <!-- Description for review quality check contextual onboarding card. The first parameters is for retailer name (e.g. Amazon). The second parameter is for the name of the application (e.g. Firefox). -->
+    <string name="review_quality_check_contextual_onboarding_description_one_vendor">Tingali kumaha resénsi produk dipercaya dina %1$s saméméh anjeun meuli. Pamariksa Ulasan, fitur ékspérimén ti %2$s, diwangun langsung kana browser.</string>
+    <!-- Paragraph presenting review quality check feature. First parameter is the Fakespot product name. Second parameter is for clickable text defined in review_quality_check_contextual_onboarding_learn_more_link. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
+    <string name="review_quality_check_contextual_onboarding_learn_more">Ngagunakeun kakuatan %1$s ku Mozilla, kami mantuan anjeun nyingkahkeun ulasan anu bias jeung teu oténtik. Modél AI kami salawasna ningkatkeun pikeun ngajaga anjeun nalika anjeun balanja. %2$s</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
     <string name="review_quality_check_contextual_onboarding_learn_more_link">Leuwih teleb</string>
+    <!-- Caption text to be displayed in review quality check contextual onboarding card above the opt-in button. First parameter is Firefox app name, third parameter is the Fakespot product name. Second & fourth are for clickable texts defined in review_quality_check_contextual_onboarding_privacy_policy_3 and review_quality_check_contextual_onboarding_terms_use. -->
+    <string name="review_quality_check_contextual_onboarding_caption_3" moz:RemovedIn="124" tools:ignore="UnusedResources">Ku milih “Enya, cobaan” anjeun satuju kana %2$s %1$s jeung %4$s %3$s.</string>
+    <!-- Caption text to be displayed in review quality check contextual onboarding card above the opt-in button. First parameter is Firefox app name, third parameter is the Fakespot product name. Second & fourth are for clickable texts defined in review_quality_check_contextual_onboarding_privacy_policy_3 and review_quality_check_contextual_onboarding_terms_use. -->
+    <string name="review_quality_check_contextual_onboarding_caption_4">Ku milih “Enya, cobaan” anjeun satuju kana %2$s %1$s jeung %4$s %3$s.</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot privacy notice. -->
     <string name="review_quality_check_contextual_onboarding_privacy_policy_3">wawar pripasi</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot terms of use. -->
@@ -2362,8 +2398,12 @@
     <string name="review_quality_check_contextual_onboarding_primary_button_text">Enya, cobaan</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">Moal waka</string>
+    <!-- Text for the first CFR presenting the review quality check feature. -->
+    <string name="review_quality_check_first_cfr_message">Ilikan lamun anjeun bisa percaya kana ulasan produk ieu — saméméh anjeun meuli.</string>
     <!-- Text displayed in the first CFR presenting the review quality check feature that opens the review checker when clicked. -->
     <string name="review_quality_check_first_cfr_action" tools:ignore="UnusedResources">Cobaan pamariksa ténjoan</string>
+    <!-- Text for the second CFR presenting the review quality check feature. -->
+    <string name="review_quality_check_second_cfr_message">Ari ulasan ieu dipercaya? Pariksa ayeuna pikeun ningali rating anu disaluyukeun.</string>
     <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
     <string name="review_quality_check_second_cfr_action" tools:ignore="UnusedResources">Buka pamariksa ténjoan</string>
 
@@ -2464,8 +2504,6 @@
     <string name="translation_error_could_not_load_languages_warning_text">Teu bisa ngamuat basa. Pariksa sambungan internét anjeun sarta cobaan deui.</string>
     <!-- The title of the warning card informs the user that a language is not supported. The first parameter is the name of the language that is not supported. -->
     <string name="translation_error_language_not_supported_warning_text">Hampura, urang acan ngadukung %1$s.</string>
-    <!-- Button text on the warning card when a language is not supported. The link will take the user to a page to a support page about translations. -->
-    <string name="translation_error_language_not_supported_learn_more" moz:removedIn="126" tools:ignore="UnusedResources">Lenyepan</string>
     <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
     <string name="translation_in_progress_snackbar">Narjamahkeun…</string>
     <!-- Title for the data saving mode warning dialog used in the translation request dialog.
@@ -2476,8 +2514,6 @@
 
 
     <!-- Translations options dialog -->
-    <!-- Title of the translation options dialog that allows a user to set their translation options for the site the user is currently on. -->
-    <string name="translation_option_bottom_sheet_title" moz:removedIn="126" tools:ignore="UnusedResources">Pilihan Tarjamahan</string>
     <!-- Title of the translation options dialog that allows a user to set their translation options for the site the user is currently on. -->
     <string name="translation_option_bottom_sheet_title_heading">Pilihan tarjamahan</string>
     <!-- Toggle switch label that allows a user to set the setting if they would like the browser to always offer or suggest translations when available. -->
@@ -2526,14 +2562,31 @@
     <!-- The title of the warning card informs the user that the system could not load languages for translation settings. -->
     <string name="automatic_translation_error_warning_text">Teu bisa ngamuat basa. Mangga pariksa engké deui.</string>
 
+    <!-- Automatic translation options preference screen -->
+    <!-- Preference option for offering to translate. Radio button title text.-->
+    <string name="automatic_translation_option_offer_to_translate_title_preference">Tawarkeun pikeun narjamahkeun (standar)</string>
+    <!-- Preference option for offering to translate. Radio button summary text. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
+    <string name="automatic_translation_option_offer_to_translate_summary_preference">%1$s bakal nawarkeun narjamahkeun situs dina basa ieu.</string>
     <!-- Preference option for always translate. Radio button title text. -->
     <string name="automatic_translation_option_always_translate_title_preference">Salawasna tarjamahkeun</string>
+    <!-- Preference option for always translate. Radio button summary text. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
+    <string name="automatic_translation_option_always_translate_summary_preference">%1$s bakal narjamahkeun basa ieu sacara otomatis nalika kaca dimuat.</string>
     <!-- Preference option for never translate. Radio button title text.-->
     <string name="automatic_translation_option_never_translate_title_preference">Ulah narjamahkeun deui</string>
 
+    <!-- Preference option for never translate. Radio button summary text. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
+    <string name="automatic_translation_option_never_translate_summary_preference">%1$s moal pernah nawarkeun narjamahkeun situs dina basa ieu.</string>
+
+    <!-- Never translate site preference screen -->
+    <!-- Title of the never translate site preference screen that will appear on the toolbar.-->
+    <string name="never_translate_site_toolbar_title_preference">Ulah narjamahkeun situs-situs ieu</string>
+    <!-- Screen header presenting the never translate site preference feature. It will appear under the toolbar. -->
+    <string name="never_translate_site_header_preference">Pikeun nambahkeun loka anyar: Buka éta jeung pilih “Ulah narjamahkeun situs ieu” tina menu tarjamah.</string>
     <!-- Content description (not visible, for screen readers etc.): For a never-translated site list item that is selected.
              The first parameter is web site url (for example:"wikipedia.com") -->
     <string name="never_translate_site_item_list_content_description_preference">Piceun %1$s</string>
+    <!-- The title of the warning card informs the user that an error has occurred at the never translate sites list. -->
+    <string name="never_translate_site_error_warning_text">Teu tiasa ngamuat situs. Mangga pariksa deui engké.</string>
     <!-- The Delete site dialogue title will appear when the user clicks on a list item.
              The first parameter is web site url (for example:"wikipedia.com") -->
     <string name="never_translate_site_dialog_title_preference">Pupus %1$s?</string>
@@ -2545,6 +2598,8 @@
     <!-- Download languages preference screen -->
     <!-- Title of the download languages preference screen toolbar.-->
     <string name="download_languages_toolbar_title_preference">Undeur Basa-basa</string>
+    <!-- Screen header presenting the download language preference feature. It will appear under the toolbar.The first parameter is "Learn More," a clickable text with a link. Talkback will append this to say "Double tap to open link to learn more". -->
+    <string name="download_languages_header_preference">Undeur basa lengkep pikeun tarjamahan anu leuwih gancang jeung narjamahkeun offline. %1$s</string>
     <!-- Clickable text from the screen header that links to a website. -->
     <string name="download_languages_header_learn_more_preference">Lenyepan</string>
     <!-- The subhead of the download language preference screen will appear above the pivot language. -->
@@ -2556,6 +2611,33 @@
     The second parameter is the language file size, for example, "(3.91 KB)" or, if the language package name is a pivot language, "(required)". -->
     <string name="download_languages_language_item_preference">%1$s (%2$s)</string>
 
+    <!-- The subhead of the download language preference screen will appear above the items that were not downloaded. -->
+    <string name="download_language_header_preference">Undeur Basa-basa</string>
+    <!-- All languages list item. When the user presses this item, they can download all languages. -->
+    <string name="download_language_all_languages_item_preference">Sadaya basa</string>
+    <!-- All languages list item. When the user presses this item, they can delete all languages that were downloaded. -->
+    <string name="download_language_all_languages_item_preference_to_delete">Pupus sakabéh basa</string>
+    <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
+    <string name="download_languages_item_content_description_downloaded_state">Pupus</string>
+    <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
+    <string name="download_languages_item_content_description_in_progress_state">Keur prosés</string>
+    <!-- Content description (not visible, for screen readers etc.): For a language list item that was not downloaded. -->
+    <string name="download_languages_item_content_description_not_downloaded_state">Undeur</string>
+    <!-- Content description (not visible, for screen readers etc.): For a language list item that is selected. -->
+    <string name="download_languages_item_content_description_selected_state" moz:removedIn="127" tools:ignore="UnusedResources">Dipilih</string>
+
+    <!-- Title for the dialog used by the translations feature to confirm deleting a language.
+    The dialog will be presented when the user requests deletion of a language.
+    The first parameter is the name of the language, for example, "Spanish" and the second parameter is the size in kilobytes or megabytes of the language file. -->
+    <string name="delete_language_file_dialog_title">Pupus %1$s (%2$s)?</string>
+    <!-- Additional information for the dialog used by the translations feature to confirm deleting a language. The first parameter is the name of the application, for example, "Fenix". -->
+    <string name="delete_language_file_dialog_message">Lamun anjeun mupus basa ieu, %1$s bakal ngundeur sawaréh basa kana cache anjeun nalika anjeun narjamahkeun.</string>
+    <!-- Title for the dialog used by the translations feature to confirm deleting all languages file.
+    The dialog will be presented when the user requests deletion of all languages file.
+    The first parameter is the size in kilobytes or megabytes of the language file. -->
+    <string name="delete_language_all_languages_file_dialog_title">Pupus sadaya basa (%1$s)?</string>
+    <!-- Additional information for the dialog used by the translations feature to confirm deleting all languages file. The first parameter is the name of the application, for example, "Fenix". -->
+    <string name="delete_language_all_languages_file_dialog_message">Lamun anjeun mupus sakabéh basa, %1$s bakal ngundeur sawaréh basa kana cache anjeun nalika anjeun narjamahkeun.</string>
     <!-- Button text on the dialog used by the translations feature to confirm deleting a language. -->
     <string name="delete_language_file_dialog_positive_button_text">Pupus</string>
     <!-- Button text on the dialog used by the translations feature to cancel deleting a language. -->
@@ -2566,6 +2648,10 @@
     a translation without the necessary language files downloaded first when Android's data saver mode is enabled and the user is not using WiFi.
     The first parameter is the size in kilobytes or megabytes of the language file.-->
     <string name="download_language_file_dialog_title">Unduh sabot dina modeu irit data (%1$s)?</string>
+    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
+    <string name="download_language_file_dialog_message_all_languages">Kami ngundeur sebagian basa kana cache anjeun pikeun ngajaga tarjamahan pribadi.</string>
+    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
+    <string name="download_language_file_dialog_message_all_languages_no_cache">Kami ngundeur sawaréh basa kana cache anjeun pikeun ngajaga tarjamahan pribadi.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Salawasna unduh dina modeu irit data</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2580,6 +2666,9 @@
     <string name="debug_drawer_title">Parabot Debug</string>
     <!-- Content description (not visible, for screen readers etc.): Navigate back within the debug drawer. -->
     <string name="debug_drawer_back_button_content_description">Mundur</string>
+
+    <!-- Content description (not visible, for screen readers etc.): Open debug drawer. -->
+    <string name="debug_drawer_fab_content_description">Buka laci debug</string>
 
     <!-- Debug drawer tabs tools -->
     <!-- The title of the Tab Tools feature in the Debug Drawer. -->
@@ -2600,6 +2689,16 @@
     <string name="debug_drawer_tab_tools_tab_creation_tool_title">Alat nyieun tab</string>
     <!-- The label of the text field in the tab creation tool. -->
     <string name="debug_drawer_tab_tools_tab_creation_tool_text_field_label">Tab kuantitas pikeun nyieun</string>
+    <!-- The error message of the text field in the tab creation tool when the text field is empty -->
+    <string name="debug_drawer_tab_tools_tab_quantity_empty_error">Widang téks kosong</string>
+    <!-- The error message of the text field in the tab creation tool when the text field has characters other than digits -->
+    <string name="debug_drawer_tab_tools_tab_quantity_non_digits_error">Mangga asupkeun wilangan buleud positif wungkul</string>
+    <!-- The error message of the text field in the tab creation tool when the text field is a zero -->
+    <string name="debug_drawer_tab_tools_tab_quantity_non_zero_error">Mangga asupkeun angka nu leuwih gedé ti enol</string>
+    <!-- The error message of the text field in the tab creation tool when the text field is a
+        quantity greater than the max tabs. The first parameter is the maximum number of tabs
+        that can be generated in one operation.-->
+    <string name="debug_drawer_tab_tools_tab_quantity_exceed_max_error">Ngaleuwihan jumlah maksimum tab (%1$s) nu bisa dihasilkeun dina hiji operasi</string>
     <!-- The button text to add tabs to the active tab group in the tab creation tool. -->
     <string name="debug_drawer_tab_tools_tab_creation_tool_button_text_active">Tambahkeun kana tab aktip</string>
     <!-- The button text to add tabs to the inactive tab group in the tab creation tool. -->
@@ -2609,16 +2708,27 @@
 
     <!-- Micro survey -->
 
+    <!-- Microsurvey -->
+    <!-- Prompt view -->
+    <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
+    <string name="micro_survey_prompt_title" tools:ignore="UnusedResources">Bantuan urang ngoméan Firebox sangkan leuwih hadé. Cukup ngan samenit baé.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Tuluykeun</string>
+    <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header">Lengkepan survéy ieu</string>
+    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Lengkepan survéy ieu</string>
+    <!-- The survey header -->
+    <string name="micro_survey_survey_header_2">Prak lengkepan survéy</string>
     <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice">Wawar Privasi</string>
+    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Wawar Privasi</string>
+    <!-- The privacy notice link -->
+    <string name="micro_survey_privacy_notice_2">Wawar privasi</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Kirimkeun</string>
     <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" tools:ignore="UnusedResources">Tutup</string>
+    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Tutup</string>
+    <!-- The survey completion header -->
+    <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Survéy cacap</string>
     <!-- The survey completion confirmation text -->
     <string name="micro_survey_feedback_confirmation">Hatur nuhun pikeun jawaban anjeun!</string>
     <!-- Option for likert scale -->
@@ -2633,7 +2743,11 @@
     <!-- Option for likert scale -->
     <string name="likert_scale_option_5" tools:ignore="UnusedResources">Kacida teu sugema</string>
 
-    <!-- Microsurvey accessibility -->
+    <!-- Option for likert scale -->
+    <string name="likert_scale_option_6" tools:ignore="UnusedResources">Kuring teu maké éta</string>
+    <!-- Text shown in prompt for homepage microsurvey. 'Firefox' intentionally hardcoded here- -->
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources">Kumaha kasugemaan anjeun kana kaca utama Firefox?</string>
+    <!-- Accessibility -->
     <!-- Content description (not visible, for screen readers etc.) for opening microsurvey bottom sheet. -->
     <string name="microsurvey_open_handle_content_description" tools:ignore="UnusedResources">Buka survéy</string>
     <!-- Content description (not visible, for screen readers etc.) for closing microsurvey bottom sheet. -->

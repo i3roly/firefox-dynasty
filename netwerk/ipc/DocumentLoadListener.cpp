@@ -10,6 +10,7 @@
 #include "NeckoCommon.h"
 #include "mozilla/AntiTrackingUtils.h"
 #include "mozilla/DebugOnly.h"
+#include "mozilla/Components.h"
 #include "mozilla/LoadInfo.h"
 #include "mozilla/NullPrincipal.h"
 #include "mozilla/RefPtr.h"
@@ -173,11 +174,10 @@ static auto CreateDocumentLoadInfo(CanonicalBrowsingContext* aBrowsingContext,
 
 // Construct a LoadInfo object to use when creating the internal channel for an
 // Object/Embed load.
-static auto CreateObjectLoadInfo(nsDocShellLoadState* aLoadState,
-                                 uint64_t aInnerWindowId,
-                                 nsContentPolicyType aContentPolicyType,
-                                 uint32_t aSandboxFlags)
-    -> already_AddRefed<LoadInfo> {
+static auto CreateObjectLoadInfo(
+    nsDocShellLoadState* aLoadState, uint64_t aInnerWindowId,
+    nsContentPolicyType aContentPolicyType,
+    uint32_t aSandboxFlags) -> already_AddRefed<LoadInfo> {
   RefPtr<WindowGlobalParent> wgp =
       WindowGlobalParent::GetByInnerWindowId(aInnerWindowId);
   MOZ_RELEASE_ASSERT(wgp);
@@ -262,9 +262,9 @@ class ParentProcessDocumentOpenInfo final : public nsDocumentOpenInfo,
     }
 
     nsresult rv;
-    nsCOMPtr<nsIStreamConverterService> streamConvService =
-        do_GetService(NS_STREAMCONVERTERSERVICE_CONTRACTID, &rv);
+    nsCOMPtr<nsIStreamConverterService> streamConvService;
     nsAutoCString str;
+    streamConvService = mozilla::components::StreamConverter::Service(&rv);
     rv = streamConvService->ConvertedType(mContentType, aChannel, str);
     NS_ENSURE_SUCCESS(rv, rv);
 
@@ -640,6 +640,9 @@ auto DocumentLoadListener::Open(nsDocShellLoadState* aLoadState,
   OriginAttributes attrs;
   loadingContext->GetOriginAttributes(attrs);
 
+  aLoadInfo->SetContinerFeaturePolicy(
+      loadingContext->GetContainerFeaturePolicy());
+
   mLoadIdentifier = aLoadState->GetLoadIdentifier();
   // See description of  mFileName in nsDocShellLoadState.h
   mIsDownload = !aLoadState->FileName().IsVoid();
@@ -1014,8 +1017,8 @@ auto DocumentLoadListener::OpenObject(
     uint64_t aInnerWindowId, nsLoadFlags aLoadFlags,
     nsContentPolicyType aContentPolicyType, bool aUrgentStart,
     dom::ContentParent* aContentParent,
-    ObjectUpgradeHandler* aObjectUpgradeHandler, nsresult* aRv)
-    -> RefPtr<OpenPromise> {
+    ObjectUpgradeHandler* aObjectUpgradeHandler,
+    nsresult* aRv) -> RefPtr<OpenPromise> {
   LOG(("DocumentLoadListener [%p] OpenObject [uri=%s]", this,
        aLoadState->URI()->GetSpecOrDefault().get()));
 
@@ -1222,10 +1225,9 @@ void DocumentLoadListener::CleanupParentLoadAttempt(uint64_t aLoadIdent) {
   registrar->DeregisterChannels(aLoadIdent);
 }
 
-auto DocumentLoadListener::ClaimParentLoad(DocumentLoadListener** aListener,
-                                           uint64_t aLoadIdent,
-                                           Maybe<uint64_t> aChannelId)
-    -> RefPtr<OpenPromise> {
+auto DocumentLoadListener::ClaimParentLoad(
+    DocumentLoadListener** aListener, uint64_t aLoadIdent,
+    Maybe<uint64_t> aChannelId) -> RefPtr<OpenPromise> {
   nsCOMPtr<nsIRedirectChannelRegistrar> registrar =
       RedirectChannelRegistrar::GetOrCreate();
 

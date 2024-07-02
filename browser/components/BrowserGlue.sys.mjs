@@ -100,6 +100,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UIState: "resource://services-sync/UIState.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   WebChannel: "resource://gre/modules/WebChannel.sys.mjs",
+  WebProtocolHandlerRegistrar:
+    "resource:///modules/WebProtocolHandlerRegistrar.sys.mjs",
   WindowsLaunchOnLogin: "resource://gre/modules/WindowsLaunchOnLogin.sys.mjs",
   WindowsRegistry: "resource://gre/modules/WindowsRegistry.sys.mjs",
   WindowsGPOParser: "resource://gre/modules/policies/WindowsGPOParser.sys.mjs",
@@ -110,6 +112,12 @@ ChromeUtils.defineESModuleGetters(lazy, {
 if (AppConstants.MOZ_UPDATER) {
   ChromeUtils.defineESModuleGetters(lazy, {
     UpdateListener: "resource://gre/modules/UpdateListener.sys.mjs",
+  });
+  XPCOMUtils.defineLazyServiceGetters(lazy, {
+    UpdateServiceStub: [
+      "@mozilla.org/updates/update-service-stub;1",
+      "nsIApplicationUpdateServiceStub",
+    ],
   });
 }
 if (AppConstants.MOZ_UPDATE_AGENT) {
@@ -433,6 +441,7 @@ let JSWINDOWACTORS = {
       esModuleURI: "resource:///actors/BackupUIChild.sys.mjs",
       events: {
         "BackupUI:InitWidget": { wantUntrusted: true },
+        "BackupUI:ScheduledBackupsConfirm": { wantUntrusted: true },
       },
     },
     matches: ["about:preferences*", "about:settings*"],
@@ -1312,9 +1321,11 @@ BrowserGlue.prototype = {
             );
           }
           Services.prefs.setBoolPref(launchOnLoginPref, false);
-          // Only remove registry key, not shortcut here as we can assume
-          // if a user manually created a shortcut they want this behavior.
-          await lazy.WindowsLaunchOnLogin.removeLaunchOnLoginRegistryKey();
+          // To reduce confusion when running multiple Gecko profiles,
+          // delete launch on login shortcuts and registry keys so that
+          // users are not presented with the outdated profile selector
+          // dialog.
+          lazy.WindowsLaunchOnLogin.removeLaunchOnLogin();
         }
         break;
       }
@@ -1524,6 +1535,7 @@ BrowserGlue.prototype = {
         millisecondsIn24Hours;
 
       if (buildDate + acceptableAge < today) {
+        // This is asynchronous, but just kick it off rather than waiting.
         Cc["@mozilla.org/updates/update-service;1"]
           .getService(Ci.nsIApplicationUpdateService)
           .checkForBackgroundUpdates();
@@ -1848,44 +1860,7 @@ BrowserGlue.prototype = {
       }
     });
 
-    // Offer to reset a user's profile if it hasn't been used for 60 days.
-    const OFFER_PROFILE_RESET_INTERVAL_MS = 60 * 24 * 60 * 60 * 1000;
-    let lastUse = Services.appinfo.replacedLockTime;
-    let disableResetPrompt = Services.prefs.getBoolPref(
-      "browser.disableResetPrompt",
-      false
-    );
-
-    if (
-      !disableResetPrompt &&
-      lastUse &&
-      Date.now() - lastUse >= OFFER_PROFILE_RESET_INTERVAL_MS
-    ) {
-      this._resetProfileNotification("unused");
-    } else if (AppConstants.platform == "win" && !disableResetPrompt) {
-      // Check if we were just re-installed and offer Firefox Reset
-      let updateChannel;
-      try {
-        updateChannel = ChromeUtils.importESModule(
-          "resource://gre/modules/UpdateUtils.sys.mjs"
-        ).UpdateUtils.UpdateChannel;
-      } catch (ex) {}
-      if (updateChannel) {
-        let uninstalledValue = lazy.WindowsRegistry.readRegKey(
-          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
-          "Software\\Mozilla\\Firefox",
-          `Uninstalled-${updateChannel}`
-        );
-        let removalSuccessful = lazy.WindowsRegistry.removeRegKey(
-          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
-          "Software\\Mozilla\\Firefox",
-          `Uninstalled-${updateChannel}`
-        );
-        if (removalSuccessful && uninstalledValue == "True") {
-          this._resetProfileNotification("uninstall");
-        }
-      }
-    }
+    this._maybeOfferProfileReset();
 
     this._checkForOldBuildUpdates();
 
@@ -1979,6 +1954,56 @@ BrowserGlue.prototype = {
       "browser.contentblocking.features.strict",
       this._setPrefExpectationsAndUpdate
     );
+  },
+
+  _maybeOfferProfileReset() {
+    // Offer to reset a user's profile if it hasn't been used for 60 days.
+    const OFFER_PROFILE_RESET_INTERVAL_MS = 60 * 24 * 60 * 60 * 1000;
+    let lastUse = Services.appinfo.replacedLockTime;
+    let disableResetPrompt = Services.prefs.getBoolPref(
+      "browser.disableResetPrompt",
+      false
+    );
+
+    // Also check prefs.js last modified timestamp as a backstop.
+    // This helps for cases where the lock file checks don't work,
+    // e.g. NFS or because the previous time Firefox ran, it ran
+    // for a very long time. See bug 1054947 and related bugs.
+    lastUse = Math.max(
+      lastUse,
+      Services.prefs.userPrefsFileLastModifiedAtStartup
+    );
+
+    if (
+      !disableResetPrompt &&
+      lastUse &&
+      Date.now() - lastUse >= OFFER_PROFILE_RESET_INTERVAL_MS
+    ) {
+      this._resetProfileNotification("unused");
+    } else if (AppConstants.platform == "win" && !disableResetPrompt) {
+      // Check if we were just re-installed and offer Firefox Reset
+      let updateChannel;
+      try {
+        updateChannel = ChromeUtils.importESModule(
+          "resource://gre/modules/UpdateUtils.sys.mjs"
+        ).UpdateUtils.UpdateChannel;
+      } catch (ex) {}
+      if (updateChannel) {
+        let uninstalledValue = lazy.WindowsRegistry.readRegKey(
+          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
+          "Software\\Mozilla\\Firefox",
+          `Uninstalled-${updateChannel}`
+        );
+        let removalSuccessful = lazy.WindowsRegistry.removeRegKey(
+          Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
+          "Software\\Mozilla\\Firefox",
+          `Uninstalled-${updateChannel}`
+        );
+        if (removalSuccessful && uninstalledValue == "True") {
+          this._resetProfileNotification("uninstall");
+        }
+      }
+    }
   },
 
   _updateAutoplayPref() {
@@ -2808,17 +2833,20 @@ BrowserGlue.prototype = {
         },
       },
 
-      // Report whether Firefox is the default handler for various files types,
-      // in particular, ".pdf".
+      // Report whether Firefox is the default handler for various files types
+      // and protocols, in particular, ".pdf" and "mailto"
       {
-        name: "IsDefaultHandlerForPDF",
+        name: "IsDefaultHandler",
         condition: AppConstants.platform == "win",
         task: () => {
-          Services.telemetry.keyedScalarSet(
-            "os.environment.is_default_handler",
-            ".pdf",
-            lazy.ShellService.isDefaultHandlerFor(".pdf")
-          );
+          [".pdf", "mailto"].every(x => {
+            Services.telemetry.keyedScalarSet(
+              "os.environment.is_default_handler",
+              x,
+              lazy.ShellService.isDefaultHandlerFor(x)
+            );
+            return true;
+          });
         },
       },
 
@@ -2899,6 +2927,13 @@ BrowserGlue.prototype = {
             "@mozilla.org/uriloader/handler-service;1"
           ].getService(Ci.nsIHandlerService);
           handlerService.asyncInit();
+        },
+      },
+
+      {
+        name: "webProtocolHandlerService.asyncInit",
+        task: () => {
+          lazy.WebProtocolHandlerRegistrar.prototype.init(true);
         },
       },
 
@@ -3040,16 +3075,11 @@ BrowserGlue.prototype = {
         name: "BackgroundUpdate",
         condition: AppConstants.MOZ_UPDATE_AGENT,
         task: async () => {
-          // Never in automation!  This is close to
-          // `UpdateService.disabledForTesting`, but without creating the
-          // service, which can perform a good deal of I/O in order to log its
-          // state.  Since this is in the startup path, we avoid all of that.
-          let disabledForTesting =
-            (Cu.isInAutomation ||
-              lazy.Marionette.running ||
-              lazy.RemoteAgent.running) &&
-            Services.prefs.getBoolPref("app.update.disabledForTesting", false);
-          if (!disabledForTesting) {
+          // Never in automation!
+          if (
+            AppConstants.MOZ_UPDATER &&
+            !lazy.UpdateServiceStub.updateDisabledForTesting
+          ) {
             try {
               await lazy.BackgroundUpdate.scheduleFirefoxMessagingSystemTargetingSnapshotting();
             } catch (e) {
@@ -3808,7 +3838,7 @@ BrowserGlue.prototype = {
   _migrateUI() {
     // Use an increasing number to keep track of the current migration state.
     // Completely unrelated to the current Firefox release number.
-    const UI_VERSION = 147;
+    const UI_VERSION = 148;
     const BROWSER_DOCURL = AppConstants.BROWSER_CHROME_URL;
 
     if (!Services.prefs.prefHasUserValue("browser.migration.version")) {
@@ -4541,6 +4571,24 @@ BrowserGlue.prototype = {
       Services.prefs.clearUserPref(
         "extensions.formautofill.creditcards.reauth.optout"
       );
+    }
+
+    if (currentUIVersion < 148) {
+      // The Firefox Translations addon is now a built-in Firefox feature.
+      let addonPromise;
+      try {
+        addonPromise = lazy.AddonManager.getAddonByID(
+          "firefox-translations-addon@mozilla.org"
+        );
+      } catch (error) {
+        // This always throws in xpcshell as the AddonManager is not initialized.
+        if (!Services.env.exists("XPCSHELL_TEST_PROFILE_DIR")) {
+          console.error(
+            "Could not access the AddonManager to upgrade the profile."
+          );
+        }
+      }
+      addonPromise?.then(addon => addon?.uninstall()).catch(console.error);
     }
 
     // Update the migration version.

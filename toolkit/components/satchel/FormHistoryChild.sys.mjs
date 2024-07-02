@@ -26,15 +26,14 @@ function log(message) {
   if (!lazy.gDebug) {
     return;
   }
-  dump("satchelFormListener: " + message + "\n");
   Services.console.logStringMessage("satchelFormListener: " + message);
 }
 
 export class FormHistoryChild extends JSWindowActorChild {
   handleEvent(event) {
     switch (event.type) {
-      case "form-submission-detected":
-        this.#onFormSubmission(event);
+      case "DOMFormBeforeSubmit":
+        this.#onDOMFormBeforeSubmit(event.target);
         break;
       default:
         throw new Error("Unexpected event");
@@ -45,8 +44,7 @@ export class FormHistoryChild extends JSWindowActorChild {
     return input.name || input.id;
   }
 
-  #onFormSubmission(event) {
-    const form = event.detail.form;
+  #onDOMFormBeforeSubmit(form) {
     if (
       !lazy.gEnabled ||
       lazy.PrivateBrowsingUtils.isContentWindowPrivate(form.ownerGlobal)
@@ -225,8 +223,8 @@ export class FormHistoryChild extends JSWindowActorChild {
         entry =>
           new lazy.GenericAutocompleteItem(
             entry.image,
-            entry.title,
-            entry.subtitle,
+            entry.label,
+            entry.secondary,
             entry.fillMessageName,
             entry.fillMessageData
           )

@@ -4,8 +4,10 @@
 "use strict";
 
 ChromeUtils.defineESModuleGetters(this, {
+  AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
   ContentRelevancyManager:
     "resource://gre/modules/ContentRelevancyManager.sys.mjs",
+  exposedForTesting: "resource://gre/modules/ContentRelevancyManager.sys.mjs",
   TestUtils: "resource://testing-common/TestUtils.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   sinon: "resource://testing-common/Sinon.sys.mjs",
@@ -43,6 +45,35 @@ add_task(function test_uninit() {
   ContentRelevancyManager.uninit();
 
   Assert.ok(!ContentRelevancyManager.initialized, "Uninit should succeed");
+});
+
+add_task(function test_store_manager() {
+  const RustRelevancyStoreManager = exposedForTesting.RustRelevancyStoreManager;
+  const fakeStore = {
+    close: gSandbox.fake(),
+  };
+  const fakeRustRelevancyStore = {
+    init: gSandbox.fake.returns(fakeStore),
+  };
+  const storeManager = new RustRelevancyStoreManager(
+    "test-path",
+    fakeRustRelevancyStore
+  );
+  Assert.equal(fakeRustRelevancyStore.init.callCount, 1);
+  Assert.deepEqual(fakeRustRelevancyStore.init.firstCall.args, ["test-path"]);
+  // store should throw before the manager is enabled
+  Assert.throws(() => storeManager.store, /StoreDisabledError/);
+  // Once the manager is enabled, store should return the RustRelevancyStore
+  storeManager.enable();
+  Assert.equal(storeManager.store, fakeStore);
+  // Disabling the store should call `close` and make store throw again
+  Assert.equal(fakeStore.close.callCount, 0);
+  storeManager.disable();
+  Assert.equal(fakeStore.close.callCount, 1);
+  Assert.throws(() => storeManager.store, /StoreDisabledError/);
+  // Test calling enable() one more time
+  storeManager.enable();
+  Assert.equal(storeManager.store, fakeStore);
 });
 
 add_task(async function test_timer() {
@@ -98,6 +129,26 @@ add_task(async function test_call_disable_twice() {
   Assert.ok(true, "`#disable` should be safe to call multiple times");
 
   Services.prefs.clearUserPref(PREF_CONTENT_RELEVANCY_ENABLED);
+});
+
+add_task(async function test_shutdown_blocker() {
+  Services.prefs.setBoolPref(PREF_CONTENT_RELEVANCY_ENABLED, true);
+  await TestUtils.waitForTick();
+
+  gSandbox.spy(ContentRelevancyManager, "interrupt");
+
+  // Simulate shutdown.
+  Services.prefs.setBoolPref("toolkit.asyncshutdown.testing", true);
+  AsyncShutdown.profileChangeTeardown._trigger();
+
+  await TestUtils.waitForCondition(
+    () => ContentRelevancyManager.interrupt.calledOnce,
+    "The interrupt shutdown blocker should be called"
+  );
+
+  Services.prefs.clearUserPref("toolkit.asyncshutdown.testing");
+  Services.prefs.clearUserPref(PREF_CONTENT_RELEVANCY_ENABLED);
+  gSandbox.restore();
 });
 
 /**

@@ -12,7 +12,7 @@ use neqo_http3::{
     Http3ClientEvent, Http3Parameters, Http3State, Priority, WebTransportEvent,
 };
 use neqo_transport::{
-    stream_id::StreamType, CongestionControlAlgorithm, ConnectionParameters,
+    stream_id::StreamType, CongestionControlAlgorithm, Connection, ConnectionParameters,
     Error as TransportError, Output, RandomConnectionIdGenerator, StreamId, Version,
 };
 use nserror::*;
@@ -39,7 +39,7 @@ use thin_vec::ThinVec;
 use uuid::Uuid;
 #[cfg(windows)]
 use winapi::shared::ws2def::{AF_INET, AF_INET6};
-use xpcom::{AtomicRefcnt, RefCounted, RefPtr};
+use xpcom::{interfaces::nsISocketProvider, AtomicRefcnt, RefCounted, RefPtr};
 
 #[repr(C)]
 pub struct NeqoHttp3Conn {
@@ -119,6 +119,7 @@ impl NeqoHttp3Conn {
         qlog_dir: &nsACString,
         webtransport_datagram_size: u32,
         max_accumlated_time_ms: u32,
+        provider_flags: u32,
     ) -> Result<RefPtr<NeqoHttp3Conn>, nsresult> {
         // Nss init.
         init().map_err(|_| NS_ERROR_UNEXPECTED)?;
@@ -182,17 +183,37 @@ impl NeqoHttp3Conn {
             .webtransport(webtransport)
             .http3_datagram(webtransport);
 
-        let mut conn = match Http3Client::new(
+        let Ok(mut conn) = Connection::new_client(
             origin_conv,
+            &[alpn_conv],
             Rc::new(RefCell::new(RandomConnectionIdGenerator::new(3))),
             local,
             remote,
-            http3_settings,
+            http3_settings.get_connection_parameters().clone(),
             Instant::now(),
-        ) {
-            Ok(c) => c,
-            Err(_) => return Err(NS_ERROR_INVALID_ARG),
+        ) else {
+            return Err(NS_ERROR_INVALID_ARG);
         };
+
+        if static_prefs::pref!("security.tls.enable_kyber")
+            && static_prefs::pref!("network.http.http3.enable_kyber")
+            && (provider_flags & nsISocketProvider::IS_RETRY) == 0
+            && (provider_flags & nsISocketProvider::BE_CONSERVATIVE) == 0
+        {
+            // These operations are infallible when conn.state == State::Init.
+            let _ = conn.set_groups(&[
+                neqo_crypto::TLS_GRP_KEM_XYBER768D00,
+                neqo_crypto::TLS_GRP_EC_X25519,
+                neqo_crypto::TLS_GRP_EC_SECP256R1,
+                neqo_crypto::TLS_GRP_EC_SECP384R1,
+                neqo_crypto::TLS_GRP_EC_SECP521R1,
+            ]);
+            // This ensures that we send key shares for Xyber768D00, X25519, and P-256,
+            // so that servers are less likely to use HelloRetryRequest.
+            let _ = conn.send_additional_key_shares(2);
+        }
+
+        let mut conn = Http3Client::new_with_conn(conn, http3_settings);
 
         if !qlog_dir.is_empty() {
             let qlog_dir_conv = str::from_utf8(qlog_dir).map_err(|_| NS_ERROR_INVALID_ARG)?;
@@ -278,6 +299,7 @@ pub extern "C" fn neqo_http3conn_new(
     qlog_dir: &nsACString,
     webtransport_datagram_size: u32,
     max_accumlated_time_ms: u32,
+    provider_flags: u32,
     result: &mut *const NeqoHttp3Conn,
 ) -> nsresult {
     *result = ptr::null_mut();
@@ -296,6 +318,7 @@ pub extern "C" fn neqo_http3conn_new(
         qlog_dir,
         webtransport_datagram_size,
         max_accumlated_time_ms,
+        provider_flags,
     ) {
         Ok(http3_conn) => {
             http3_conn.forget(result);

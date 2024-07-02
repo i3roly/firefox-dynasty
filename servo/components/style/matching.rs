@@ -8,7 +8,7 @@
 #![deny(missing_docs)]
 
 use crate::computed_value_flags::ComputedValueFlags;
-use crate::context::{CascadeInputs, ElementCascadeInputs, QuirksMode};
+use crate::context::{ElementCascadeInputs, QuirksMode};
 use crate::context::{SharedStyleContext, StyleContext};
 use crate::data::{ElementData, ElementStyles};
 use crate::dom::TElement;
@@ -21,10 +21,8 @@ use crate::properties::PropertyDeclarationBlock;
 use crate::rule_tree::{CascadeLevel, StrongRuleNode};
 use crate::selector_parser::{PseudoElement, RestyleDamage};
 use crate::shared_lock::Locked;
-use crate::style_resolver::{PseudoElementResolution, ResolvedElementStyles};
-#[cfg(feature = "gecko")]
-use crate::style_resolver::ResolvedStyle;
 use crate::style_resolver::StyleResolverForElement;
+use crate::style_resolver::{PseudoElementResolution, ResolvedElementStyles};
 use crate::stylesheets::layer_rule::LayerOrder;
 use crate::stylist::RuleInclusion;
 use crate::traversal_flags::TraversalFlags;
@@ -216,36 +214,14 @@ trait PrivateMatchMethods: TElement {
         context: &mut StyleContext<Self>,
         primary_style: &Arc<ComputedValues>,
     ) -> Option<Arc<ComputedValues>> {
-        let rule_node = primary_style.rules();
-        let without_transition_rules = context
-            .shared
-            .stylist
-            .rule_tree()
-            .remove_transition_rule_if_applicable(rule_node);
-        if without_transition_rules == *rule_node {
-            // We don't have transition rule in this case, so return None to let
-            // the caller use the original ComputedValues.
-            return None;
-        }
-
-        // FIXME(bug 868975): We probably need to transition visited style as
-        // well.
-        let inputs = CascadeInputs {
-            rules: Some(without_transition_rules),
-            visited_rules: primary_style.visited_rules().cloned(),
-            flags: primary_style.flags.for_cascade_inputs(),
-        };
-
         // Actually `PseudoElementResolution` doesn't really matter.
-        let style = StyleResolverForElement::new(
+        StyleResolverForElement::new(
             *self,
             context,
             RuleInclusion::All,
             PseudoElementResolution::IfApplicable,
         )
-        .cascade_style_and_visited_with_default_parents(inputs);
-
-        Some(style.0)
+        .after_change_style(primary_style)
     }
 
     fn needs_animations_update(
@@ -387,41 +363,31 @@ trait PrivateMatchMethods: TElement {
     }
 
     #[cfg(feature = "gecko")]
-    fn resolve_starting_style(
+    fn maybe_resolve_starting_style(
         &self,
         context: &mut StyleContext<Self>,
-    ) -> ResolvedStyle {
-        use selectors::matching::IncludeStartingStyle;
+        old_values: Option<&Arc<ComputedValues>>,
+        new_styles: &ResolvedElementStyles,
+    ) -> Option<Arc<ComputedValues>> {
+        // For both cases:
+        // 1. If we didn't see any starting-style rules for this given element during full matching.
+        // 2. If there is no transitions specified.
+        // We don't have to resolve starting style.
+        if !new_styles.may_have_starting_style() ||
+            !new_styles.primary_style().get_ui().specifies_transitions()
+        {
+            return None;
+        }
 
-        // Compute after-change style for the parent and the layout parent.
-        // Per spec, starting style inherits from the parent’s after-change style just like
-        // after-change style does.
-        let parent_el = self.inheritance_parent();
-        let parent_data = parent_el.as_ref().and_then(|e| e.borrow_data());
-        let parent_style = parent_data.as_ref().map(|d| d.styles.primary());
-        let parent_after_change_style =
-            parent_style.and_then(|s| self.after_change_style(context, s));
-        let parent_values = parent_after_change_style
-            .as_ref()
-            .or(parent_style)
-            .map(|x| &**x);
-
-        let mut layout_parent_el = parent_el.clone();
-        let layout_parent_data;
-        let layout_parent_after_change_style;
-        let layout_parent_values = if parent_style.map_or(false, |s| s.is_display_contents()) {
-            layout_parent_el = Some(layout_parent_el.unwrap().layout_parent());
-            layout_parent_data = layout_parent_el.as_ref().unwrap().borrow_data().unwrap();
-            let layout_parent_style = Some(layout_parent_data.styles.primary());
-            layout_parent_after_change_style =
-                layout_parent_style.and_then(|s| self.after_change_style(context, s));
-            layout_parent_after_change_style
-                .as_ref()
-                .or(layout_parent_style)
-                .map(|x| &**x)
-        } else {
-            parent_values
-        };
+        // We resolve starting style only if we don't have before-change-style, or we change from
+        // display:none.
+        if old_values.is_some() &&
+            !new_styles
+                .primary_style()
+                .is_display_property_changed_from_none(old_values.map(|s| &**s))
+        {
+            return None;
+        }
 
         // Note: Basically, we have to remove transition rules because the starting style for an
         // element is the after-change style with @starting-style rules applied in addition.
@@ -435,43 +401,8 @@ trait PrivateMatchMethods: TElement {
             RuleInclusion::All,
             PseudoElementResolution::IfApplicable,
         );
-        resolver
-            .resolve_primary_style(
-                parent_values,
-                layout_parent_values,
-                IncludeStartingStyle::Yes,
-            )
-            .style
-    }
 
-    #[cfg(feature = "gecko")]
-    fn maybe_resolve_starting_style(
-        &self,
-        context: &mut StyleContext<Self>,
-        old_values: Option<&Arc<ComputedValues>>,
-        new_styles: &ResolvedElementStyles,
-    ) -> Option<Arc<ComputedValues>> {
-        // For both cases:
-        // 1. If we didn't see any starting-style rules for this given element during full matching.
-        // 2. If there is no transitions specified.
-        // We don't have to resolve starting style.
-        if !new_styles.may_have_starting_style()
-            || !new_styles.primary_style().get_ui().specifies_transitions()
-        {
-            return None;
-        }
-
-        // We resolve starting style only if we don't have before-change-style, or we change from
-        // display:none.
-        if old_values.is_some()
-            && !new_styles
-                .primary_style()
-                .is_display_property_changed_from_none(old_values.map(|s| &**s))
-        {
-            return None;
-        }
-
-        let starting_style = self.resolve_starting_style(context);
+        let starting_style = resolver.resolve_starting_style().style;
         if starting_style.style().clone_display().is_none() {
             return None;
         }
@@ -566,15 +497,31 @@ trait PrivateMatchMethods: TElement {
         let mut tasks = UpdateAnimationsTasks::empty();
 
         if old_values.as_deref().map_or_else(
-            || new_styles.primary_style().get_ui().specifies_scroll_timelines(),
-            |old| !old.get_ui().scroll_timelines_equals(new_styles.primary_style().get_ui()),
+            || {
+                new_styles
+                    .primary_style()
+                    .get_ui()
+                    .specifies_scroll_timelines()
+            },
+            |old| {
+                !old.get_ui()
+                    .scroll_timelines_equals(new_styles.primary_style().get_ui())
+            },
         ) {
             tasks.insert(UpdateAnimationsTasks::SCROLL_TIMELINES);
         }
 
         if old_values.as_deref().map_or_else(
-            || new_styles.primary_style().get_ui().specifies_view_timelines(),
-            |old| !old.get_ui().view_timelines_equals(new_styles.primary_style().get_ui()),
+            || {
+                new_styles
+                    .primary_style()
+                    .get_ui()
+                    .specifies_view_timelines()
+            },
+            |old| {
+                !old.get_ui()
+                    .view_timelines_equals(new_styles.primary_style().get_ui())
+            },
         ) {
             tasks.insert(UpdateAnimationsTasks::VIEW_TIMELINES);
         }
@@ -1095,9 +1042,16 @@ pub trait MatchMethods: TElement {
             if old_line_height != Some(new_line_height) {
                 if is_root {
                     debug_assert!(self.owner_doc_matches_for_testing(device));
-                    device.set_root_line_height(new_primary_style.effective_zoom.unzoom(new_line_height.px()));
+                    device.set_root_line_height(
+                        new_primary_style
+                            .effective_zoom
+                            .unzoom(new_line_height.px()),
+                    );
                     if device.used_root_line_height() {
-                        restyle_requirement = std::cmp::max(restyle_requirement, ChildRestyleRequirement::MustCascadeDescendants);
+                        restyle_requirement = std::cmp::max(
+                            restyle_requirement,
+                            ChildRestyleRequirement::MustCascadeDescendants,
+                        );
                     }
                 }
 

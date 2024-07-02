@@ -11,10 +11,10 @@
 #include "mozilla/ScopeExit.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/ProfilerLabels.h"
+#include "mozilla/ScrollContainerFrame.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "mozilla/ToString.h"
 #include "nsBlockFrame.h"
-#include "nsGfxScrollFrame.h"
 #include "nsIFrame.h"
 #include "nsIFrameInlines.h"
 #include "nsLayoutUtils.h"
@@ -45,12 +45,12 @@ static mozilla::LazyLogModule sAnchorLog("scrollanchor");
 
 namespace mozilla::layout {
 
-nsHTMLScrollFrame* ScrollAnchorContainer::Frame() const {
-  return reinterpret_cast<nsHTMLScrollFrame*>(
-      ((char*)this) - offsetof(nsHTMLScrollFrame, mAnchor));
+ScrollContainerFrame* ScrollAnchorContainer::Frame() const {
+  return reinterpret_cast<ScrollContainerFrame*>(
+      ((char*)this) - offsetof(ScrollContainerFrame, mAnchor));
 }
 
-ScrollAnchorContainer::ScrollAnchorContainer(nsHTMLScrollFrame* aScrollFrame)
+ScrollAnchorContainer::ScrollAnchorContainer(ScrollContainerFrame* aScrollFrame)
     : mDisabled(false),
       mAnchorMightBeSubOptimal(false),
       mAnchorNodeIsDirty(true),
@@ -66,7 +66,7 @@ ScrollAnchorContainer* ScrollAnchorContainer::FindFor(nsIFrame* aFrame) {
   if (!aFrame) {
     return nullptr;
   }
-  nsIScrollableFrame* nearest = nsLayoutUtils::GetNearestScrollableFrame(
+  ScrollContainerFrame* nearest = nsLayoutUtils::GetNearestScrollContainerFrame(
       aFrame, nsLayoutUtils::SCROLLABLE_SAME_DOC |
                   nsLayoutUtils::SCROLLABLE_INCLUDE_HIDDEN);
   if (nearest) {
@@ -75,7 +75,7 @@ ScrollAnchorContainer* ScrollAnchorContainer::FindFor(nsIFrame* aFrame) {
   return nullptr;
 }
 
-nsIScrollableFrame* ScrollAnchorContainer::ScrollableFrame() const {
+ScrollContainerFrame* ScrollAnchorContainer::ScrollContainer() const {
   return Frame()->GetScrollTargetFrame();
 }
 
@@ -199,16 +199,17 @@ static nsRect FindScrollAnchoringBoundingRect(const nsIFrame* aScrollFrame,
 
 /**
  * Compute the offset between the scrollable overflow rect start edge of
- * aCandidate and the scroll-port start edge of aScrollFrame, in the block axis
- * of aScrollFrame.
+ * aCandidate and the scroll-port start edge of aScrollContainerFrame, in the
+ * block axis of aScrollContainerFrame.
  */
 static nscoord FindScrollAnchoringBoundingOffset(
-    const nsHTMLScrollFrame* aScrollFrame, nsIFrame* aCandidate) {
-  WritingMode writingMode = aScrollFrame->GetWritingMode();
+    const ScrollContainerFrame* aScrollContainerFrame, nsIFrame* aCandidate) {
+  WritingMode writingMode = aScrollContainerFrame->GetWritingMode();
   nsRect physicalBounding =
-      FindScrollAnchoringBoundingRect(aScrollFrame, aCandidate);
-  LogicalRect logicalBounding(writingMode, physicalBounding,
-                              aScrollFrame->mScrolledFrame->GetSize());
+      FindScrollAnchoringBoundingRect(aScrollContainerFrame, aCandidate);
+  LogicalRect logicalBounding(
+      writingMode, physicalBounding,
+      aScrollContainerFrame->GetScrolledFrame()->GetSize());
   return logicalBounding.BStart(writingMode);
 }
 
@@ -314,7 +315,7 @@ void ScrollAnchorContainer::UserScrolled() {
   if (!StaticPrefs::
           layout_css_scroll_anchoring_reset_heuristic_during_animation() &&
       Frame()->ScrollAnimationState().contains(
-          nsIScrollableFrame::AnimationState::APZInProgress)) {
+          ScrollContainerFrame::AnimationState::APZInProgress)) {
     // We'd want to skip resetting our heuristic while APZ is running an async
     // scroll because this UserScrolled function gets called on every refresh
     // driver's tick during running the async scroll, thus it will clobber the
@@ -465,7 +466,7 @@ void ScrollAnchorContainer::ApplyAdjustments() {
            layout_css_scroll_anchoring_reset_heuristic_during_animation() &&
        Frame()->IsProcessingScrollEvent()) ||
       Frame()->ScrollAnimationState().contains(
-          nsIScrollableFrame::AnimationState::TriggeredByScript) ||
+          ScrollContainerFrame::AnimationState::TriggeredByScript) ||
       Frame()->GetScrollPosition() == nsPoint()) {
     ANCHOR_LOG(
         "Ignoring post-reflow (anchor=%p, dirty=%d, disabled=%d, "
@@ -476,7 +477,7 @@ void ScrollAnchorContainer::ApplyAdjustments() {
         Frame()->HasPendingScrollRestoration(),
         Frame()->IsProcessingScrollEvent(),
         Frame()->ScrollAnimationState().contains(
-            nsIScrollableFrame::AnimationState::TriggeredByScript),
+            ScrollContainerFrame::AnimationState::TriggeredByScript),
         Frame()->GetScrollPosition() == nsPoint(), mSuppressAnchorAdjustment,
         this);
     if (mSuppressAnchorAdjustment) {
@@ -610,11 +611,11 @@ ScrollAnchorContainer::ExamineAnchorCandidate(nsIFrame* aFrame) const {
 
   // See if this frame has or could maintain its own anchor node.
   const bool isScrollableWithAnchor = [&] {
-    nsIScrollableFrame* scrollable = do_QueryFrame(aFrame);
-    if (!scrollable) {
+    ScrollContainerFrame* scrollContainer = do_QueryFrame(aFrame);
+    if (!scrollContainer) {
       return false;
     }
-    auto* anchor = scrollable->Anchor();
+    auto* anchor = scrollContainer->Anchor();
     return anchor->AnchorNode() || anchor->CanMaintainAnchor();
   }();
 

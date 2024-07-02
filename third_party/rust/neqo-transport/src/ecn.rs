@@ -9,7 +9,7 @@ use std::ops::{AddAssign, Deref, DerefMut, Sub};
 use enum_map::EnumMap;
 use neqo_common::{qdebug, qinfo, qwarn, IpTosEcn};
 
-use crate::{packet::PacketNumber, tracking::SentPacket};
+use crate::{packet::PacketNumber, recovery::SentPacket};
 
 /// The number of packets to use for testing a path for ECN capability.
 pub const ECN_TEST_COUNT: usize = 10;
@@ -159,7 +159,7 @@ impl EcnInfo {
         // > Validating ECN counts from reordered ACK frames can result in failure. An endpoint MUST
         // > NOT fail ECN validation as a result of processing an ACK frame that does not increase
         // > the largest acknowledged packet number.
-        let largest_acked = acked_packets.first().expect("must be there").pn;
+        let largest_acked = acked_packets.first().expect("must be there").pn();
         if largest_acked <= self.largest_acked {
             return;
         }
@@ -186,7 +186,7 @@ impl EcnInfo {
         // > ECT(0) marking.
         let newly_acked_sent_with_ect0: u64 = acked_packets
             .iter()
-            .filter(|p| p.ecn_mark == IpTosEcn::Ect0)
+            .filter(|p| p.ecn_mark() == IpTosEcn::Ect0)
             .count()
             .try_into()
             .unwrap();
@@ -207,8 +207,8 @@ impl EcnInfo {
         } else if ecn_diff[IpTosEcn::Ect1] > 0 {
             qwarn!("ECN validation failed, ACK counted ECT(1) marks that were never sent");
             self.state = EcnValidationState::Failed;
-        } else {
-            qinfo!("ECN validation succeeded, path is capable",);
+        } else if self.state != EcnValidationState::Capable {
+            qinfo!("ECN validation succeeded, path is capable");
             self.state = EcnValidationState::Capable;
         }
         self.baseline = ack_ecn;

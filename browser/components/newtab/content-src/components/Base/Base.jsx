@@ -13,9 +13,12 @@ import React from "react";
 import { Search } from "content-src/components/Search/Search";
 import { Sections } from "content-src/components/Sections/Sections";
 import { Weather } from "content-src/components/Weather/Weather";
+import { WallpaperFeatureHighlight } from "../DiscoveryStreamComponents/FeatureHighlight/WallpaperFeatureHighlight";
 
 const VISIBLE = "visible";
 const VISIBILITY_CHANGE_EVENT = "visibilitychange";
+const WALLPAPER_HIGHLIGHT_DISMISSED_PREF =
+  "newtabWallpapers.highlightDismissed";
 
 export const PrefsButton = ({ onClick, icon }) => (
   <div className="prefs-button">
@@ -111,6 +114,8 @@ export class BaseContent extends React.PureComponent {
     this.handleOnKeyDown = this.handleOnKeyDown.bind(this);
     this.onWindowScroll = debounce(this.onWindowScroll.bind(this), 5);
     this.setPref = this.setPref.bind(this);
+    this.shouldShowWallpapersHighlight =
+      this.shouldShowWallpapersHighlight.bind(this);
     this.updateWallpaper = this.updateWallpaper.bind(this);
     this.prefersDarkQuery = null;
     this.handleColorModeChange = this.handleColorModeChange.bind(this);
@@ -259,17 +264,19 @@ export class BaseContent extends React.PureComponent {
 
   async updateWallpaper() {
     const prefs = this.props.Prefs.values;
+    const wallpaperLight = prefs["newtabWallpapers.wallpaper-light"];
+    const wallpaperDark = prefs["newtabWallpapers.wallpaper-dark"];
     const { wallpaperList } = this.props.Wallpapers;
 
     if (wallpaperList) {
       const lightWallpaper =
-        wallpaperList.find(
-          wp => wp.title === prefs["newtabWallpapers.wallpaper-light"]
-        ) || "";
+        wallpaperList.find(wp => wp.title === wallpaperLight) || "";
       const darkWallpaper =
-        wallpaperList.find(
-          wp => wp.title === prefs["newtabWallpapers.wallpaper-dark"]
-        ) || "";
+        wallpaperList.find(wp => wp.title === wallpaperDark) || "";
+
+      const wallpaperColor =
+        darkWallpaper?.solid_color || lightWallpaper?.solid_color || "";
+
       global.document?.body.style.setProperty(
         `--newtab-wallpaper-light`,
         `url(${lightWallpaper?.wallpaperUrl || ""})`
@@ -280,15 +287,99 @@ export class BaseContent extends React.PureComponent {
         `url(${darkWallpaper?.wallpaperUrl || ""})`
       );
 
-      // Add helper class to body if user has a wallpaper selected
-      if (lightWallpaper) {
-        global.document?.body.classList.add("hasWallpaperLight");
+      global.document?.body.style.setProperty(
+        `--newtab-wallpaper-color`,
+        wallpaperColor || "transparent"
+      );
+
+      let wallpaperTheme = "";
+
+      // If we have a solid colour set, let's see how dark it is.
+      if (wallpaperColor) {
+        const rgbColors = this.getRGBColors(wallpaperColor);
+        const isColorDark = this.isWallpaperColorDark(rgbColors);
+        wallpaperTheme = isColorDark ? "dark" : "light";
+      } else {
+        // Grab the contrast of the currently displayed wallpaper.
+        const { theme } =
+          this.state.colorMode === "light" ? lightWallpaper : darkWallpaper;
+
+        if (theme) {
+          wallpaperTheme = theme;
+        }
       }
 
-      if (darkWallpaper) {
-        global.document?.body.classList.add("hasWallpaperDark");
+      // Add helper class to body if user has a wallpaper selected
+      if (wallpaperTheme === "light") {
+        global.document?.body.classList.add("lightWallpaper");
+        global.document?.body.classList.remove("darkWallpaper");
+      }
+
+      if (wallpaperTheme === "dark") {
+        global.document?.body.classList.add("darkWallpaper");
+        global.document?.body.classList.remove("lightWallpaper");
       }
     }
+  }
+
+  // Contains all the logic to show the wallpapers Feature Highlight
+  shouldShowWallpapersHighlight() {
+    const prefs = this.props.Prefs.values;
+
+    // If wallpapers (or v2 wallpapers) are not enabled, don't show the highlight.
+    const wallpapersEnabled = prefs["newtabWallpapers.enabled"];
+    const wallpapersV2Enabled = prefs["newtabWallpapers.v2.enabled"];
+    if (!wallpapersEnabled || !wallpapersV2Enabled) {
+      return false;
+    }
+
+    // If user has interacted/dismissed the highlight, don't show
+    const wallpapersHighlightDismissed =
+      prefs[WALLPAPER_HIGHLIGHT_DISMISSED_PREF];
+    if (wallpapersHighlightDismissed) {
+      return false;
+    }
+
+    // If the user has selected a wallpaper, don't show the pop-up
+    const activeWallpaperLight = prefs[`newtabWallpapers.wallpaper-light`];
+    const activeWallpaperDark = prefs[`newtabWallpapers.wallpaper-dark`];
+    if (activeWallpaperLight || activeWallpaperDark) {
+      this.props.dispatch(ac.SetPref(WALLPAPER_HIGHLIGHT_DISMISSED_PREF, true));
+      return false;
+    }
+
+    // If the user has seen* the highlight more than three times
+    // *Seen means they loaded HNT page and the highlight was observed for more than 3 seconds
+    const { highlightSeenCounter } = this.props.Wallpapers;
+    if (highlightSeenCounter.value > 3) {
+      return false;
+    }
+
+    // Show the highlight if available
+    const wallpapersHighlightEnabled =
+      prefs["newtabWallpapers.highlightEnabled"];
+    if (wallpapersHighlightEnabled) {
+      return true;
+    }
+
+    // Default return value
+    return false;
+  }
+
+  getRGBColors(input) {
+    if (input.length !== 7) {
+      return [];
+    }
+
+    const r = parseInt(input.substr(1, 2), 16);
+    const g = parseInt(input.substr(3, 2), 16);
+    const b = parseInt(input.substr(5, 2), 16);
+
+    return [r, g, b];
+  }
+
+  isWallpaperColorDark([r, g, b]) {
+    return 0.2125 * r + 0.7154 * g + 0.0721 * b <= 110;
   }
 
   render() {
@@ -300,6 +391,7 @@ export class BaseContent extends React.PureComponent {
     const activeWallpaper =
       prefs[`newtabWallpapers.wallpaper-${this.state.colorMode}`];
     const wallpapersEnabled = prefs["newtabWallpapers.enabled"];
+    const wallpapersV2Enabled = prefs["newtabWallpapers.v2.enabled"];
     const weatherEnabled = prefs.showWeather;
 
     const { pocketConfig } = prefs;
@@ -354,27 +446,37 @@ export class BaseContent extends React.PureComponent {
     ]
       .filter(v => v)
       .join(" ");
-    if (wallpapersEnabled) {
+    if (wallpapersEnabled || wallpapersV2Enabled) {
       this.updateWallpaper();
     }
 
     return (
       <div>
-        <CustomizeMenu
-          onClose={this.closeCustomizationMenu}
-          onOpen={this.openCustomizationMenu}
-          openPreferences={this.openPreferences}
-          setPref={this.setPref}
-          enabledSections={enabledSections}
-          wallpapersEnabled={wallpapersEnabled}
-          activeWallpaper={activeWallpaper}
-          pocketRegion={pocketRegion}
-          mayHaveSponsoredTopSites={mayHaveSponsoredTopSites}
-          mayHaveSponsoredStories={mayHaveSponsoredStories}
-          mayHaveWeather={mayHaveWeather}
-          spocMessageVariant={spocMessageVariant}
-          showing={customizeMenuVisible}
-        />
+        {/* Floating menu for customize menu toggle */}
+        <menu className="personalizeButtonWrapper">
+          <CustomizeMenu
+            onClose={this.closeCustomizationMenu}
+            onOpen={this.openCustomizationMenu}
+            openPreferences={this.openPreferences}
+            setPref={this.setPref}
+            enabledSections={enabledSections}
+            wallpapersEnabled={wallpapersEnabled}
+            wallpapersV2Enabled={wallpapersV2Enabled}
+            activeWallpaper={activeWallpaper}
+            pocketRegion={pocketRegion}
+            mayHaveSponsoredTopSites={mayHaveSponsoredTopSites}
+            mayHaveSponsoredStories={mayHaveSponsoredStories}
+            mayHaveWeather={mayHaveWeather}
+            spocMessageVariant={spocMessageVariant}
+            showing={customizeMenuVisible}
+          />
+          {this.shouldShowWallpapersHighlight() && (
+            <WallpaperFeatureHighlight
+              position="inset-block-end inset-inline-start"
+              dispatch={this.props.dispatch}
+            />
+          )}
+        </menu>
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions*/}
         <div className={outerClassName} onClick={this.closeCustomizationMenu}>
           <main>

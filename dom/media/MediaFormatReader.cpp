@@ -35,6 +35,7 @@
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/TaskQueue.h"
 #include "mozilla/Unused.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "nsContentUtils.h"
 #include "nsLiteralString.h"
 #include "nsPrintfCString.h"
@@ -1207,6 +1208,7 @@ void MediaFormatReader::OnDemuxerInitDone(const MediaResult& aResult) {
     MutexAutoLock lock(mVideo.mMutex);
     mVideo.mTrackDemuxer = mDemuxer->GetTrackDemuxer(TrackInfo::kVideoTrack, 0);
     if (!mVideo.mTrackDemuxer) {
+      LOG("No video track demuxer");
       mMetadataPromise.Reject(NS_ERROR_DOM_MEDIA_METADATA_ERR, __func__);
       return;
     }
@@ -1217,6 +1219,13 @@ void MediaFormatReader::OnDemuxerInitDone(const MediaResult& aResult) {
       if (platform &&
           platform->SupportsMimeType(videoInfo->mMimeType).isEmpty()) {
         // We have no decoder for this track. Error.
+        LOG("No supported decoder for video track (%s)",
+            videoInfo->mMimeType.get());
+        if (!videoInfo->mMimeType.IsEmpty()) {
+          mozilla::glean::media_playback::not_supported_video_per_mime_type
+              .Get(videoInfo->mMimeType)
+              .Add(1);
+        }
         mMetadataPromise.Reject(NS_ERROR_DOM_MEDIA_METADATA_ERR, __func__);
         return;
       }
@@ -1239,6 +1248,7 @@ void MediaFormatReader::OnDemuxerInitDone(const MediaResult& aResult) {
     MutexAutoLock lock(mAudio.mMutex);
     mAudio.mTrackDemuxer = mDemuxer->GetTrackDemuxer(TrackInfo::kAudioTrack, 0);
     if (!mAudio.mTrackDemuxer) {
+      LOG("No audio track demuxer");
       mMetadataPromise.Reject(NS_ERROR_DOM_MEDIA_METADATA_ERR, __func__);
       return;
     }
@@ -1289,6 +1299,7 @@ void MediaFormatReader::OnDemuxerInitDone(const MediaResult& aResult) {
       mDemuxer->IsSeekableOnlyInBufferedRanges();
 
   if (!videoActive && !audioActive) {
+    LOG("No active audio or video track");
     mMetadataPromise.Reject(NS_ERROR_DOM_MEDIA_METADATA_ERR, __func__);
     return;
   }

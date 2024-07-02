@@ -152,8 +152,6 @@
 
     <!-- Shortcut action to open Passwords screen -->
     <string name="home_screen_shortcut_passwords">Парольдер</string>
-    <!-- Shortcut action to open Passwords screen -->
-    <string name="home_screen_shortcut_open_password_screen" moz:removedIn="126" tools:ignore="UnusedResources">Парольдерге жылдам қатынау</string>
 
     <!-- Recent Tabs -->
     <!-- Header text for jumping back into the recent tab in the home screen -->
@@ -194,8 +192,6 @@
     <string name="browser_menu_refresh">Жаңарту</string>
     <!-- Content description (not visible, for screen readers etc.): Stop loading current website -->
     <string name="browser_menu_stop">Тоқтату</string>
-    <!-- Browser menu button that opens the addon manager -->
-    <string name="browser_menu_add_ons" moz:removedIn="126" tools:ignore="UnusedResources">Қосымшалар</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Кеңейтулер</string>
     <!-- Browser menu button that opens the extensions manager -->
@@ -204,8 +200,6 @@
     <string name="browser_menu_discover_more_extensions">Көбірек кеңейтулерді табу</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Тіркелгі ақпараты</string>
-    <!-- Text displayed when there are no add-ons to be shown -->
-    <string name="no_add_ons" moz:removedIn="126" tools:ignore="UnusedResources">Осында қосымшалар жоқ</string>
     <!-- Browser menu button that sends a user to help articles -->
     <string name="browser_menu_help">Көмек</string>
     <!-- Browser menu button that sends a to a the what's new article -->
@@ -222,8 +216,6 @@
     <string name="browser_menu_add_to_homescreen">Үй экранына қосу</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Үй экранына қосу…</string>
-    <!-- Browser menu toggle that installs a Progressive Web App shortcut to the site on the device home screen. -->
-    <string name="browser_menu_install_on_homescreen" moz:removedIn="126" tools:ignore="UnusedResources">Орнату</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Қайта синхрондау</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -599,7 +591,9 @@
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Тіркелгі</string>
     <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar">Құралдар панелі</string>
+    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Құралдар панелі</string>
+    <!-- Preference for changing where the AddressBar is positioned -->
+    <string name="preferences_toolbar_2">Алрестік жолақтың орны</string>
     <!-- Preference for changing default theme to dark or light mode -->
     <string name="preferences_theme">Тема</string>
     <!-- Preference for customizing the home screen -->
@@ -669,13 +663,8 @@
     <!-- Message to indicate users that we are quitting the application to apply the changes -->
     <string name="quit_application">Өзгерістерді іске асыру үшін қолданбадан шығу…</string>
 
-    <!-- Preference for add_ons -->
-    <string name="preferences_addons" moz:removedIn="126" tools:ignore="UnusedResources">Қосымшалар</string>
-
     <!-- Preference for extensions -->
     <string name="preferences_extensions">Кеңейтулер</string>
-    <!-- Preference for installing a local add-on -->
-    <string name="preferences_install_local_addon" moz:removedIn="126" tools:ignore="UnusedResources">Файлдан қосымшаны орнату</string>
     <!-- Preference for installing a local extension -->
     <string name="preferences_install_local_extension">Файлдан кеңейтуді орнату</string>
     <!-- Preference for notifications -->
@@ -696,9 +685,10 @@
     <!-- The subtitle for the allow for all sites preference toggle -->
     <string name="addons_permissions_allow_for_all_sites_subtitle" tools:ignore="UnusedResources">Бұл кеңейтуге сенсеңіз, оған әрбір веб-сайтта рұқсат бере аласыз.</string>
 
+    <!-- The text shown when an extension does not require permissions -->
+    <string name="addons_does_not_require_permissions">Бұл кеңейту ешқандай рұқсаттарды қажет етпейді.</string>
+
     <!-- Add-on Preferences -->
-    <!-- Preference to customize the configured AMO (addons.mozilla.org) collection -->
-    <string name="preferences_customize_amo_collection" moz:removedIn="126" tools:ignore="UnusedResources">Таңдауыңызша қосымшалар жинағы</string>
     <!-- Preference to customize the configured AMO (addons.mozilla.org) collection -->
     <string name="preferences_customize_extension_collection">Таңдауыңызша кеңейтулер жинағы</string>
     <!-- Button caption to confirm the add-on collection configuration -->
@@ -709,8 +699,6 @@
     <string name="customize_addon_collection_hint">Жинақ атауы</string>
     <!-- Hint displayed on input field for custom collection user ID-->
     <string name="customize_addon_collection_user_hint">Жинақ иесі (Пайдаланушы идентификаторы)</string>
-    <!-- Toast shown after confirming the custom add-on collection configuration -->
-    <string name="toast_customize_addon_collection_done" moz:removedIn="126" tools:ignore="UnusedResources">Қосымшалар жинағы өзгертілген. Өзгерістерді іске асыру үшін қолданба жұмысын аяқтау…</string>
 
     <!-- Toast shown after confirming the custom extension collection configuration -->
     <string name="toast_customize_extension_collection_done">Кеңейтулер жинағы өзгертілген. Өзгерістерді іске асыру үшін қолданба жұмысын аяқтау…</string>
@@ -769,36 +757,23 @@
     <string name="wallpapers_onboarding_dialog_explore_more_button_text">Қосымша тұсқағаздарды шолу</string>
 
     <!-- Add-ons general availability nimbus message-->
-    <!-- Title of the Nimbus message for add-ons general availability-->
-    <string name="addon_ga_message_title" moz:removedIn="126" tools:ignore="UnusedResources">Жаңа қосымшалар енді қолжетімді</string>
     <!-- Title of the Nimbus message for extension general availability-->
     <string name="addon_ga_message_title_2" tools:ignore="UnusedResources">Жаңа кеңейтулер енді қолжетімді</string>
     <!-- Body of the Nimbus message for add-ons general availability. 'Firefox' intentionally hardcoded here-->
     <string name="addon_ga_message_body" tools:ignore="UnusedResources">Firefox-ты өзіндік етіп қылуға мүмкіндік беретін 100+ жаңа кеңейтулерді қараңыз.</string>
-    <!-- Button text of the Nimbus message for add-ons general availability. -->
-    <string name="addon_ga_message_button" moz:removedIn="126" tools:ignore="UnusedResources">Қосымшаларды шолу</string>
 
     <!-- Button text of the Nimbus message for extensions general availability. -->
     <string name="addon_ga_message_button_2" tools:ignore="UnusedResources">Кеңейтулерді шолу</string>
 
     <!-- Extension process crash dialog to user -->
-    <!-- Title of a dialog shown to the user when enough errors have occurred with addons and they need to be temporarily disabled -->
-    <string name="addon_process_crash_dialog_title" moz:removedIn="126" tools:ignore="UnusedResources">Қосымшалар уақытша сөндірілген</string>
-
     <!-- Title of the extension crash dialog shown to the user when enough errors have occurred with extensions and they need to be temporarily disabled -->
     <string name="extension_process_crash_dialog_title">Кеңейтулер уақытша сөндірілген</string>
-    <!-- The first parameter is the application name. This is a message shown to the user when too many errors have occurred with the addons process and they have been disabled. The user can decide if they would like to continue trying to start add-ons or if they'd rather continue without them. -->
-    <string name="addon_process_crash_dialog_message" moz:removedIn="126" tools:ignore="UnusedResources">Бір немесе бірнеше қосымша жұмысын тоқтатып, жүйені тұрақсыз етті. %1$s қосымша(лар)ды қайта іске қосуды талабын сәтсіз жасады.\n\nҚосымшалар ағымдағы сеанс кезінде қайта іске қосылмайды.\n\nҚосымшаларды өшіру немесе сөндіру бұл мәселені шешуі мүмкін.</string>
     <!-- This is a message shown to the user when too many errors have occurred with the extensions process and they have been disabled.
     The user can decide if they would like to continue trying to start extensions or if they'd rather continue without them.
     The first parameter is the application name. -->
     <string name="extension_process_crash_dialog_message">Бір немесе бірнеше кеңейту өз жұмысын тоқтатып, жүйені тұрақсыз етті. %1$s кеңейту(лер)ді қайта іске қосуды талабын сәтсіз жасады.\n\nКеңейтулер ағымдағы сеанс кезінде қайта іске қосылмайды.\n\nКеңейтулерді өшіру немесе сөндіру бұл мәселені шешуі мүмкін.</string>
-    <!-- This will cause the add-ons to try restarting but the dialog will reappear if it is unsuccessful again -->
-    <string name="addon_process_crash_dialog_retry_button_text" moz:removedIn="126" tools:ignore="UnusedResources">Қосымшаларды қайта іске қосып көру</string>
     <!-- Button text on the extension crash dialog to prompt the user to try restarting the extensions but the dialog will reappear if it is unsuccessful again -->
     <string name="extension_process_crash_dialog_retry_button_text" tools:ignore="UnusedResources">Кеңейтулерді қайта іске қосып көріңіз</string>
-    <!-- The user will continue with all add-ons disabled -->
-    <string name="addon_process_crash_dialog_disable_addons_button_text" moz:removedIn="126" tools:ignore="UnusedResources">Сөндірілген кеңейтулермен жалғастыру</string>
 
     <!-- Button text on the extension crash dialog to prompt the user to continue with all extensions disabled. -->
     <string name="extension_process_crash_dialog_disable_extensions_button_text">Сөндірілген кеңейтулермен жалғастыру</string>
@@ -921,9 +896,14 @@
     <!-- Preference for using the dynamic toolbar -->
     <string name="preference_gestures_dynamic_toolbar">Құралдар тақтасын жасыру үшін айналдырыңыз</string>
     <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs">Беттерді ауыстыру үшін құралдар тақтасын сырғытыңыз</string>
+    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Беттерді ауыстыру үшін құралдар тақтасын сырғытыңыз</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Беттерді ашу үшін құралдар тақтасын жоғары қарай сырғытыңыз</string>
+
+    <!-- Preference for using the dynamic toolbars -->
+    <string name="preference_gestures_dynamic_toolbar_2">Адрестік жолақ және саймандар панелін жасыру үшін айналдыру</string>
+    <!-- Preference for switching tabs by swiping horizontally on the addressbar -->
+    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">Беттерді ауыстыру үшін адрестік жолақты сырғытыңыз</string>
 
     <!-- Library -->
     <!-- Option in Library to open Downloads page -->
@@ -1431,6 +1411,23 @@
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active. -->
     <string name="notification_pbm_delete_text_2">Жекелік беттерді жабу</string>
 
+    <!-- Microsuverys -->
+    <!-- Text shown in prompt for printing microsurvey. "sec" It's an abrevation for "second". -->
+    <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Firefox-та баспаға шығаруды жақсартуға көмектесіңіз. Бұл бар болғаны секундты алады</string>
+    <!-- Text shown in prompt for printing microsurvey. 'Firefox' intentionally hardcoded here--> --&gt;
+    <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Firefox жүйесінде баспаға шығаруға қаншалықты көңіліңіз толады?</string>
+    <!-- Text for option one, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_0" tools:ignore="UnusedResources">Бейтарап</string>
+    <!-- Text for option two, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_1" tools:ignore="UnusedResources">Өте нашар</string>
+    <!-- Text for option three, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_2" tools:ignore="UnusedResources">Нашар</string>
+    <!-- Text for option four, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_3" tools:ignore="UnusedResources">Жақсы</string>
+    <!-- Text for option five, shown in microsurvey.-->
+    <string name="microsurvey_survey_5_point_option_4" tools:ignore="UnusedResources">Өте жақсы</string>
+
+
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active for Android 14+ -->
     <string name="notification_erase_title_android_14">Жекелік беттерді жабу керек пе?</string>
     <string name="notification_erase_text_android_14">Жекелік беттерді жабу үшін бұл хабарландыруды шертіңіз немесе үстінен өткізіңіз.</string>
@@ -1505,10 +1502,6 @@
     <string name="qr_scanner_dialog_invalid_ok">ОК</string>
     <!-- Tab collection deletion prompt dialog message. Placeholder will be replaced with the collection name -->
     <string name="tab_collection_dialog_message">%1$s өшіруді шынымен қалайсыз ба?</string>
-    <!-- Collection and tab deletion prompt dialog message. This will show when the last tab from a collection is deleted -->
-    <string name="delete_tab_and_collection_dialog_message">Бұл бетті өшіру жинақты толығымен өшіреді. Жаңа жинақтарды кез келген уақытта жасауға болады.</string>
-    <!-- Collection and tab deletion prompt dialog title. Placeholder will be replaced with the collection name. This will show when the last tab from a collection is deleted -->
-    <string name="delete_tab_and_collection_dialog_title">%1$s өшіру керек пе?</string>
     <!-- Tab collection deletion prompt dialog option to delete the collection -->
     <string name="tab_collection_dialog_positive">Өшіру</string>
 
@@ -2486,8 +2479,6 @@
     <string name="translation_error_could_not_load_languages_warning_text">Тілдер жүктелмеді. Интернет байланысын тексеріп, әрекетті қайталаңыз.</string>
     <!-- The title of the warning card informs the user that a language is not supported. The first parameter is the name of the language that is not supported. -->
     <string name="translation_error_language_not_supported_warning_text">Кешіріңіз, біз әлі %1$s қолдамаймыз.</string>
-    <!-- Button text on the warning card when a language is not supported. The link will take the user to a page to a support page about translations. -->
-    <string name="translation_error_language_not_supported_learn_more" moz:removedIn="126" tools:ignore="UnusedResources">Көбірек білу</string>
 
     <!-- Snackbar title shown if the user closes the Translation Request dialogue and a translation is in progress. -->
     <string name="translation_in_progress_snackbar">Аударуда…</string>
@@ -2500,8 +2491,6 @@
 
 
     <!-- Translations options dialog -->
-    <!-- Title of the translation options dialog that allows a user to set their translation options for the site the user is currently on. -->
-    <string name="translation_option_bottom_sheet_title" moz:removedIn="126" tools:ignore="UnusedResources">Аударма баптаулары</string>
     <!-- Title of the translation options dialog that allows a user to set their translation options for the site the user is currently on. -->
     <string name="translation_option_bottom_sheet_title_heading">Аударма баптаулары</string>
     <!-- Toggle switch label that allows a user to set the setting if they would like the browser to always offer or suggest translations when available. -->
@@ -2603,8 +2592,10 @@
     <string name="download_languages_language_item_preference">%1$s (%2$s)</string>
     <!-- The subhead of the download language preference screen will appear above the items that were not downloaded. -->
     <string name="download_language_header_preference">Тілдерді жүктеп алу</string>
-    <!-- All languages list item. When the user presses this item, they can download or delete all languages. -->
+    <!-- All languages list item. When the user presses this item, they can download all languages. -->
     <string name="download_language_all_languages_item_preference">Барлық тілдер</string>
+    <!-- All languages list item. When the user presses this item, they can delete all languages that were downloaded. -->
+    <string name="download_language_all_languages_item_preference_to_delete">Барлық тілдерді өшіру</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">Өшіру</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
@@ -2612,7 +2603,16 @@
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was not downloaded. -->
     <string name="download_languages_item_content_description_not_downloaded_state">Жүктеп алу</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that is selected. -->
-    <string name="download_languages_item_content_description_selected_state">Таңдалған</string>
+    <string name="download_languages_item_content_description_selected_state" moz:removedIn="127" tools:ignore="UnusedResources">Таңдалған</string>
+
+    <!-- The title of the warning card informs the user that an error has occurred when fetching the list of languages. -->
+    <string name="download_languages_fetch_error_warning_text">Тілдерді жүктеу мүмкін емес. Кейінірек қайта тексеріңіз.</string>
+    <!-- The title of the warning card informs the user that an error has occurred at downloading a language.
+      The first parameter is the language name, for example, "Spanish". -->
+    <string name="download_languages_error_warning_text"><![CDATA[<b>%1$s</b> жүктеп алу мүмкін емес. Кейінірек қайталап көріңіз.]]></string>
+    <!-- The title of the warning card informs the user that an error has occurred at deleting a language.
+          The first parameter is the language name, for example, "Spanish". -->
+    <string name="download_languages_delete_error_warning_text"><![CDATA[<b>%1$s</b> өшіру мүмкін емес. Кейінірек қайталап көріңіз.]]></string>
 
     <!-- Title for the dialog used by the translations feature to confirm deleting a language.
     The dialog will be presented when the user requests deletion of a language.
@@ -2640,7 +2640,7 @@
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">Аудармаларды құпия сақтау үшін тілдерді кэшіңізге жартылай жүктеп аламыз.</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache">Аудармаларды құпия сақтау үшін тілдерді жартылай жүктеп аламыз.</string>
+    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">Аудармаларды құпия сақтау үшін тілдерді жартылай жүктеп аламыз.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Деректерді үнемдеу режимінде әрқашан жүктеп алу</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2697,16 +2697,27 @@
 
     <!-- Micro survey -->
 
+    <!-- Microsurvey -->
+    <!-- Prompt view -->
+    <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
+    <string name="micro_survey_prompt_title" tools:ignore="UnusedResources">Бізге Firefox-ты жақсартуға көмектесіңіз. Бұл бар болғаны бір минутты алады.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Жалғастыру</string>
+    <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header">Осы сауалнаманы толтыру</string>
+    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Осы сауалнаманы толтыру</string>
+    <!-- The survey header -->
+    <string name="micro_survey_survey_header_2">Сауалнаманы толтырыңыз</string>
     <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice">Жекелік ескертуі</string>
+    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Жекелік ескертуі</string>
+    <!-- The privacy notice link -->
+    <string name="micro_survey_privacy_notice_2">Жекелік ескертуі</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Жіберу</string>
     <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" tools:ignore="UnusedResources">Жабу</string>
+    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Жабу</string>
+    <!-- The survey completion header -->
+    <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Сауалнама аяқталды</string>
     <!-- The survey completion confirmation text -->
     <string name="micro_survey_feedback_confirmation">Пікіріңізге рахмет!</string>
     <!-- Option for likert scale -->
@@ -2720,7 +2731,11 @@
     <!-- Option for likert scale -->
     <string name="likert_scale_option_5" tools:ignore="UnusedResources">Өте нашар</string>
 
-    <!-- Microsurvey accessibility -->
+    <!-- Option for likert scale -->
+    <string name="likert_scale_option_6" tools:ignore="UnusedResources">Мен оны қолданбаймын</string>
+    <!-- Text shown in prompt for homepage microsurvey. 'Firefox' intentionally hardcoded here- -->
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources">Firefox басты бетіне қаншалықты көңіліңіз толады?</string>
+    <!-- Accessibility -->
     <!-- Content description (not visible, for screen readers etc.) for opening microsurvey bottom sheet. -->
     <string name="microsurvey_open_handle_content_description" tools:ignore="UnusedResources">Сауалнаманы ашу</string>
     <!-- Content description (not visible, for screen readers etc.) for closing microsurvey bottom sheet. -->

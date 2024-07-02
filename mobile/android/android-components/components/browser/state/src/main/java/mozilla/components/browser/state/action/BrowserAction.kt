@@ -48,6 +48,7 @@ import mozilla.components.concept.engine.search.SearchRequest
 import mozilla.components.concept.engine.translate.Language
 import mozilla.components.concept.engine.translate.LanguageModel
 import mozilla.components.concept.engine.translate.LanguageSetting
+import mozilla.components.concept.engine.translate.ModelManagementOptions
 import mozilla.components.concept.engine.translate.TranslationDownloadSize
 import mozilla.components.concept.engine.translate.TranslationEngineState
 import mozilla.components.concept.engine.translate.TranslationError
@@ -831,7 +832,11 @@ sealed class ContentAction : BrowserAction() {
      * Updates the [ContentState] with the provided [tabId] to the appropriate priority based on any
      * existing form data.
      */
-    data class UpdateHasFormDataAction(val tabId: String, val containsFormData: Boolean) : ContentAction()
+    data class UpdateHasFormDataAction(
+        val tabId: String,
+        val containsFormData: Boolean,
+        val adjustPriority: Boolean = true,
+    ) : ContentAction()
 
     /**
      * Lowers priority of the [tabId] to default after certain period of time
@@ -994,13 +999,15 @@ sealed class TranslationsAction : BrowserAction() {
     /**
      * Indicates that the given [operation] data should be fetched for the given [tabId].
      *
-     * @property tabId The ID of the tab the [EngineSession] should be linked to.
+     * @property tabId The ID of the tab the [EngineSession] should be linked to. May be null
+     * to complete the operation on the current tab (when a tab is required for the operation)
+     * or when no session is associated with the request.
      * @property operation The translation operation that failed.
      */
     data class OperationRequestedAction(
-        override val tabId: String,
+        val tabId: String?,
         val operation: TranslationOperation,
-    ) : TranslationsAction(), ActionWithTab
+    ) : TranslationsAction()
 
     /**
      * Sets whether the device architecture supports translations or not on
@@ -1120,6 +1127,16 @@ sealed class TranslationsAction : BrowserAction() {
      */
     data class SetLanguageModelsAction(
         val languageModels: List<LanguageModel>,
+    ) : TranslationsAction()
+
+    /**
+     * Manages the language machine learning translation models the translation engine has available.
+     * Has options for downloading and deleting models.
+     *
+     * @property options The operation to perform to manage the model.
+     */
+    data class ManageLanguageModelsAction(
+        val options: ModelManagementOptions,
     ) : TranslationsAction()
 }
 

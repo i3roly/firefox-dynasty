@@ -6,20 +6,20 @@
 
 #include "mozilla/Logging.h"
 #include "mozilla/MozPromise.h"
-#include "mozilla/glean/GleanMetrics.h"
 #include "nsIBounceTrackingProtection.h"
 #include "nsIClearDataService.h"
 #include "mozilla/Maybe.h"
+#include "ClearDataCallback.h"
 
 class nsIPrincipal;
 class nsITimer;
 
 namespace mozilla {
 
+class BounceTrackingAllowList;
 class BounceTrackingState;
 class BounceTrackingStateGlobal;
 class BounceTrackingProtectionStorage;
-class ContentBlockingAllowListCache;
 class OriginAttributes;
 
 extern LazyLogModule gBounceTrackingProtectionLog;
@@ -42,7 +42,7 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection {
   // Stores a user activation flag with a timestamp for the given principal. The
   // timestamp defaults to the current time, but can be overridden via
   // aActivationTime.
-  [[nodiscard]] nsresult RecordUserActivation(
+  [[nodiscard]] static nsresult RecordUserActivation(
       nsIPrincipal* aPrincipal, Maybe<PRTime> aActivationTime = Nothing());
 
   // Clears expired user interaction flags for the given state global. If
@@ -52,8 +52,11 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection {
       BounceTrackingStateGlobal* aStateGlobal = nullptr);
 
  private:
-  BounceTrackingProtection();
+  BounceTrackingProtection() = default;
   ~BounceTrackingProtection() = default;
+
+  // Initializes the singleton instance of BounceTrackingProtection.
+  [[nodiscard]] nsresult Init();
 
   // Keeps track of whether the feature is enabled based on pref state.
   // Initialized on first call of GetSingleton.
@@ -70,39 +73,16 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection {
       MozPromise<nsTArray<nsCString>, nsresult, true>;
   RefPtr<PurgeBounceTrackersMozPromise> PurgeBounceTrackers();
 
-  // Pending clear operations are stored as ClearDataMozPromise, one per host.
-  using ClearDataMozPromise = MozPromise<nsCString, uint32_t, true>;
-
   // Clear state for classified bounce trackers for a specific state global.
   // aClearPromises is populated with promises for each host that is cleared.
   [[nodiscard]] nsresult PurgeBounceTrackersForStateGlobal(
       BounceTrackingStateGlobal* aStateGlobal,
-      ContentBlockingAllowListCache& aContentBlockingAllowList,
+      BounceTrackingAllowList& aBounceTrackingAllowList,
       nsTArray<RefPtr<ClearDataMozPromise>>& aClearPromises);
 
   // Whether a purge operation is currently in progress. This avoids running
   // multiple purge operations at the same time.
   bool mPurgeInProgress = false;
-
-  // Wraps nsIClearDataCallback in MozPromise.
-  class ClearDataCallback final : public nsIClearDataCallback {
-   public:
-    NS_DECL_ISUPPORTS
-    NS_DECL_NSICLEARDATACALLBACK
-
-    explicit ClearDataCallback(ClearDataMozPromise::Private* aPromise,
-                               const nsACString& aHost);
-
-   private:
-    virtual ~ClearDataCallback();
-
-    nsCString mHost;
-
-    void RecordClearDurationTelemetry();
-
-    glean::TimerId mClearDurationTimer;
-    RefPtr<ClearDataMozPromise::Private> mPromise;
-  };
 
   // Imports user activation permissions from permission manager if needed. This
   // is important so we don't purge data for sites the user has interacted with

@@ -522,6 +522,78 @@ async function createAndMockRemoteSettings({
   };
 }
 
+/**
+ * This class mocks the window's A11yUtils to count/capture arguments.
+ *
+ * This helps us ensure that the right calls are being made without
+ * needing to handle whether the accessibility service is enabled in CI,
+ * and also without needing to worry about if the call itself is broken
+ * in the accessibility engine, since this is sometimes OS dependent.
+ */
+class MockedA11yUtils {
+  /**
+   * Holds the parameters passed to any calls to announce.
+   *
+   * @type {Array<{ raw: string, id: string}>}
+   */
+  static announceCalls = [];
+
+  /**
+   * Mocks the A11yUtils object for the given window, replacing the real A11yUtils with the mock
+   * and returning a function that will restore the original A11yUtils when called.
+   *
+   * @param {object} window - The window for which to mock A11yUtils.
+   * @returns {Function} - A function to restore A11yUtils to the window.
+   */
+  static mockForWindow(window) {
+    const realA11yUtils = window.A11yUtils;
+    window.A11yUtils = MockedA11yUtils;
+
+    return () => {
+      // Restore everything back to normal for this window.
+      MockedA11yUtils.announceCalls = [];
+      window.A11yUtils = realA11yUtils;
+    };
+  }
+
+  /**
+   * A mocked call to A11yUtils.announce that captures the parameters.
+   *
+   * @param {{ raw: string, id: string }}
+   */
+  static announce({ id, raw }) {
+    MockedA11yUtils.announceCalls.push({ id, raw });
+  }
+
+  /**
+   * Asserts that the most recent A11yUtils announce call matches the expectations.
+   *
+   * @param {object} expectations
+   * @param {string} expectations.expectedCallNumber - The expected position in the announceCalls array.
+   * @param {object} expectations.expectedArgs - The expected arguments passed to the most recent announce call.
+   */
+  static assertMostRecentAnnounceCall({ expectedCallNumber, expectedArgs }) {
+    is(
+      MockedA11yUtils.announceCalls.length,
+      expectedCallNumber,
+      "The most recent A11yUtils announce should match the expected call number."
+    );
+    const { id, raw } = MockedA11yUtils.announceCalls.at(-1);
+    const { id: expectedId, raw: expectedRaw } = expectedArgs;
+
+    is(
+      id,
+      expectedId,
+      "A11yUtils announce arg id should match the expected arg id."
+    );
+    is(
+      raw,
+      expectedRaw,
+      "A11yUtils announce arg raw should match the expected arg raw."
+    );
+  }
+}
+
 async function loadTestPage({
   languagePairs,
   autoDownloadFromRemoteSettings = false,
@@ -538,6 +610,8 @@ async function loadTestPage({
 
   let remoteClients = null;
   let removeMocks = () => {};
+
+  const restoreA11yUtils = MockedA11yUtils.mockForWindow(win);
 
   if (isFirstTimeSetup) {
     // Ensure no engine is being carried over from a previous test.
@@ -638,6 +712,7 @@ async function loadTestPage({
       await loadBlankPage();
       await EngineProcess.destroyTranslationsEngine();
       await removeMocks();
+      restoreA11yUtils();
       Services.fog.testResetFOG();
       TranslationsParent.testAutomaticPopup = false;
       TranslationsParent.resetHostsOffered();
@@ -1195,13 +1270,35 @@ class TestTranslationsTelemetry {
   static async assertCounter(name, counter, expectedCount) {
     // Ensures that glean metrics are collected from all child processes
     // so that calls to testGetValue() are up to date.
-    await Services.fog.testFlushAllChildren();
-    const count = counter.testGetValue() ?? 0;
+    let count;
+    await waitForCondition(async () => {
+      await Services.fog.testFlushAllChildren();
+      count = counter.testGetValue() ?? 0;
+      return expectedCount === count;
+    });
     is(
       count,
       expectedCount,
       `Telemetry counter ${name} should have expected count`
     );
+  }
+
+  /**
+   * Asserts that a counter with the given label matches the expected count for that label.
+   *
+   * @param {object} counter - The Glean counter object.
+   * @param {Array<Array<string | number>>} expectations - An array of string/number pairs for the label and expected count.
+   */
+  static async assertLabeledCounter(counter, expectations) {
+    for (const [label, expectedCount] of expectations) {
+      await Services.fog.testFlushAllChildren();
+      const count = counter[label].testGetValue() ?? 0;
+      is(
+        count,
+        expectedCount,
+        `Telemetry counter with label ${label} should have expected count.`
+      );
+    }
   }
 
   /**
@@ -1211,39 +1308,33 @@ class TestTranslationsTelemetry {
    * @param {object} expectations - The test expectations.
    * @param {number} expectations.expectedEventCount - The expected count of events.
    * @param {boolean} expectations.expectNewFlowId
-   * @param {boolean} [expectations.expectFirstInteraction]
-   * - Expects the flowId to be different than the previous flowId if true,
-   *   and expects it to be the same if false.
-   * @param {Array<Function>} [expectations.allValuePredicates=[]]
-   * - An array of function predicates to assert for all event values.
-   * @param {Array<Function>} [expectations.finalValuePredicates=[]]
-   * - An array of function predicates to assert for only the final event value.
+   * @param {Record<string, string | boolean | number>} [expectations.assertForAllEvents]
+   * - A record of key-value pairs to assert against all events in this category.
+   * @param {Record<string, string | boolean | number>} [expectations.assertForMostRecentEvent]
+   * - A record of key-value pairs to assert against the most recently recorded event in this category.
    */
   static async assertEvent(
     event,
     {
       expectedEventCount,
       expectNewFlowId = null,
-      expectFirstInteraction = null,
-      allValuePredicates = [],
-      finalValuePredicates = [],
+      assertForAllEvents = {},
+      assertForMostRecentEvent = {},
     }
   ) {
     // Ensures that glean metrics are collected from all child processes
     // so that calls to testGetValue() are up to date.
-    await Services.fog.testFlushAllChildren();
-    const events = event.testGetValue() ?? [];
-    const eventCount = events.length;
+    let events;
+    let eventCount;
+    await waitForCondition(async () => {
+      await Services.fog.testFlushAllChildren();
+      events = event.testGetValue() ?? [];
+      eventCount = events.length;
+      return expectedEventCount === eventCount;
+    });
+
     const name =
       eventCount > 0 ? `${events[0].category}.${events[0].name}` : null;
-
-    if (eventCount > 0 && expectFirstInteraction !== null) {
-      is(
-        events[eventCount - 1].extra.first_interaction,
-        expectFirstInteraction ? "true" : "false",
-        "The newest event should be match the given first-interaction expectation"
-      );
-    }
 
     if (eventCount > 0 && expectNewFlowId !== null) {
       const flowId = events[eventCount - 1].extra.flow_id;
@@ -1279,34 +1370,38 @@ class TestTranslationsTelemetry {
       `There should be ${expectedEventCount} telemetry events of type ${name}`
     );
 
-    if (allValuePredicates.length !== 0) {
+    if (Object.keys(assertForAllEvents).length !== 0) {
       is(
         eventCount > 0,
         true,
-        `Telemetry event ${name} should contain values if allPredicates are specified`
+        `Telemetry event ${name} should contain values if assertForMostRecentEvent are specified`
       );
-      for (const value of events) {
-        for (const predicate of allValuePredicates) {
+      for (const [key, expectedEntry] of Object.entries(
+        assertForMostRecentEvent
+      )) {
+        for (const event of events) {
           is(
-            predicate(value),
-            true,
-            `Telemetry event ${name} allPredicate { ${predicate.toString()} } should pass for each value`
+            event.extra[key],
+            String(expectedEntry),
+            `Telemetry event ${name} value for ${key} should match the expected entry`
           );
         }
       }
     }
 
-    if (finalValuePredicates.length !== 0) {
+    if (Object.keys(assertForMostRecentEvent).length !== 0) {
       is(
         eventCount > 0,
         true,
-        `Telemetry event ${name} should contain values if finalPredicates are specified`
+        `Telemetry event ${name} should contain values if assertForMostRecentEvent are specified`
       );
-      for (const predicate of finalValuePredicates) {
+      for (const [key, expectedEntry] of Object.entries(
+        assertForMostRecentEvent
+      )) {
         is(
-          predicate(events[eventCount - 1]),
-          true,
-          `Telemetry event ${name} finalPredicate { ${predicate.toString()} } should pass for final value`
+          events[eventCount - 1].extra[key],
+          String(expectedEntry),
+          `Telemetry event ${name} value for ${key} should match the expected entry`
         );
       }
     }

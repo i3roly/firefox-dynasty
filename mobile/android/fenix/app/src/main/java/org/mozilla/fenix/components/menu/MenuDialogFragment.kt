@@ -28,6 +28,8 @@ import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.components
+import org.mozilla.fenix.components.menu.compose.CUSTOM_TAB_MENU_ROUTE
+import org.mozilla.fenix.components.menu.compose.CustomTabMenu
 import org.mozilla.fenix.components.menu.compose.EXTENSIONS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.ExtensionsSubmenu
 import org.mozilla.fenix.components.menu.compose.MAIN_MENU_ROUTE
@@ -39,12 +41,14 @@ import org.mozilla.fenix.components.menu.compose.TOOLS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.ToolsSubmenu
 import org.mozilla.fenix.components.menu.middleware.MenuDialogMiddleware
 import org.mozilla.fenix.components.menu.middleware.MenuNavigationMiddleware
+import org.mozilla.fenix.components.menu.middleware.MenuTelemetryMiddleware
 import org.mozilla.fenix.components.menu.store.BrowserMenuState
 import org.mozilla.fenix.components.menu.store.MenuAction
 import org.mozilla.fenix.components.menu.store.MenuState
 import org.mozilla.fenix.components.menu.store.MenuStore
 import org.mozilla.fenix.ext.runIfFragmentIsAttached
 import org.mozilla.fenix.settings.SupportUtils
+import org.mozilla.fenix.settings.deletebrowsingdata.deleteAndQuit
 import org.mozilla.fenix.theme.FirefoxTheme
 
 /**
@@ -80,10 +84,12 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     val browserStore = components.core.store
                     val syncStore = components.backgroundServices.syncStore
                     val bookmarksStorage = components.core.bookmarksStorage
+                    val tabCollectionStorage = components.core.tabCollectionStorage
                     val addBookmarkUseCase = components.useCases.bookmarksUseCases.addBookmark
                     val printContentUseCase = components.useCases.sessionUseCases.printContent
                     val saveToPdfUseCase = components.useCases.sessionUseCases.saveToPdf
                     val selectedTab = browserStore.state.selectedTab
+                    val settings = components.settings
 
                     val navHostController = rememberNavController()
                     val coroutineScope = rememberCoroutineScope()
@@ -100,6 +106,13 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 MenuDialogMiddleware(
                                     bookmarksStorage = bookmarksStorage,
                                     addBookmarkUseCase = addBookmarkUseCase,
+                                    onDeleteAndQuit = {
+                                        deleteAndQuit(
+                                            activity = activity as HomeActivity,
+                                            coroutineScope = coroutineScope,
+                                            snackbar = null,
+                                        )
+                                    },
                                     scope = coroutineScope,
                                 ),
                                 MenuNavigationMiddleware(
@@ -108,6 +121,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     browsingModeManager = browsingModeManager,
                                     openToBrowser = ::openToBrowser,
                                     scope = coroutineScope,
+                                ),
+                                MenuTelemetryMiddleware(
+                                    accessPoint = args.accesspoint,
                                 ),
                             ),
                         )
@@ -123,7 +139,13 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
                     NavHost(
                         navController = navHostController,
-                        startDestination = MAIN_MENU_ROUTE,
+                        startDestination = when (args.accesspoint) {
+                            MenuAccessPoint.Browser,
+                            MenuAccessPoint.Home,
+                            -> MAIN_MENU_ROUTE
+
+                            MenuAccessPoint.External -> CUSTOM_TAB_MENU_ROUTE
+                        },
                     ) {
                         composable(route = MAIN_MENU_ROUTE) {
                             MainMenu(
@@ -131,6 +153,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 account = account,
                                 accountState = accountState,
                                 isPrivate = browsingModeManager.mode.isPrivate,
+                                showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                 onMozillaAccountButtonClick = {
                                     store.dispatch(
                                         MenuAction.Navigate.MozillaAccount(
@@ -180,6 +203,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 onNewInFirefoxMenuClick = {
                                     store.dispatch(MenuAction.Navigate.ReleaseNotes)
                                 },
+                                onQuitMenuClick = {
+                                    store.dispatch(MenuAction.DeleteBrowsingDataAndQuit)
+                                },
                             )
                         }
 
@@ -223,7 +249,14 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 },
                                 onAddToShortcutsMenuClick = {},
                                 onAddToHomeScreenMenuClick = {},
-                                onSaveToCollectionMenuClick = {},
+                                onSaveToCollectionMenuClick = {
+                                    store.dispatch(
+                                        MenuAction.Navigate.SaveToCollection(
+                                            hasCollection = tabCollectionStorage
+                                                .cachedTabCollections.isNotEmpty(),
+                                        ),
+                                    )
+                                },
                                 onSaveAsPDFMenuClick = {
                                     saveToPdfUseCase()
                                     dismiss()
@@ -242,6 +275,14 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 onDiscoverMoreExtensionsMenuClick = {
                                     store.dispatch(MenuAction.Navigate.DiscoverMoreExtensions)
                                 },
+                            )
+                        }
+
+                        composable(route = CUSTOM_TAB_MENU_ROUTE) {
+                            CustomTabMenu(
+                                onSwitchToDesktopSiteMenuClick = {},
+                                onFindInPageMenuClick = {},
+                                onOpenInFirefoxMenuClick = {},
                             )
                         }
                     }

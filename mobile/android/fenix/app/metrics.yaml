@@ -45,7 +45,7 @@ events:
       source:
         description: |
           The view the user was on when they initiated the search (For example:
-          `HOME`, `HOME_QR`, `HOME_VOICE` or `BROWSER`)
+          `Home` or `Browser`)
         type: string
     bugs:
       - https://github.com/mozilla-mobile/fenix/issues/959
@@ -5584,24 +5584,6 @@ tab_strip:
     type: event
     description: |
       A user selected a tab via tab strip
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1882111
-    data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1882111
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-    metadata:
-      tags:
-        - Tabs
-  enabled:
-    type: boolean
-    description: |
-      Whether or not the tab strip feature is enabled
-    send_in_pings:
-      - metrics
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1882111
     data_reviews:
@@ -11597,29 +11579,6 @@ debug_drawer:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1876596
     data_reviews:
       - https://github.com/mozilla-mobile/firefox-android/pull/5356
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-
-micro_survey:
-  response:
-    type: event
-    description: User response data for a micro survey.
-    extra_keys:
-      feature_name:
-        description: The name of the feature the survey is for e.g. "printing PDF".
-        type: string
-      user_selection:
-        description: |
-          The users selected option. For example, possible values are:
-          "Very satisfied", "satisfied", "neutral", "dissatisfied" and "Very dissatisfied".
-        type: string
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1891509
-    data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1891509
     data_sensitivity:
       - interaction
     notification_emails:

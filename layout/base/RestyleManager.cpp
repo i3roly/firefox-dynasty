@@ -19,6 +19,7 @@
 #include "mozilla/PresShell.h"
 #include "mozilla/PresShellInlines.h"
 #include "mozilla/ProfilerLabels.h"
+#include "mozilla/ScrollContainerFrame.h"
 #include "mozilla/ServoBindings.h"
 #include "mozilla/ServoStyleSetInlines.h"
 #include "mozilla/StaticPrefs_layout.h"
@@ -38,7 +39,6 @@
 #include "ScrollSnap.h"
 #include "nsAnimationManager.h"
 #include "nsBlockFrame.h"
-#include "nsIScrollableFrame.h"
 #include "nsContentUtils.h"
 #include "nsCSSFrameConstructor.h"
 #include "nsCSSRendering.h"
@@ -134,7 +134,8 @@ void RestyleManager::ContentAppended(nsIContent* aFirstNewContent) {
                        nsChangeHint(0));
       if (selectorFlags & NodeSelectorFlags::HasSlowSelectorNthAll) {
         StyleSet()->MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
-            containerElement->GetFirstElementChild());
+            containerElement->GetFirstElementChild(),
+            /* aForceRestyleSiblings = */ false);
       }
     } else {
       RestylePreviousSiblings(aFirstNewContent);
@@ -398,7 +399,8 @@ void RestyleManager::RestyleForInsertOrChange(nsIContent* aChild) {
                        nsChangeHint(0));
       if (selectorFlags & NodeSelectorFlags::HasSlowSelectorNthAll) {
         StyleSet()->MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
-            containerElement->GetFirstElementChild());
+            containerElement->GetFirstElementChild(),
+            /* aForceRestyleSiblings = */ false);
       }
     } else {
       RestylePreviousSiblings(aChild);
@@ -410,10 +412,11 @@ void RestyleManager::RestyleForInsertOrChange(nsIContent* aChild) {
 
   if (selectorFlags & NodeSelectorFlags::HasSlowSelectorLaterSiblings) {
     // Restyle all later siblings.
-    RestyleSiblingsStartingWith(aChild->GetNextSibling());
     if (selectorFlags & NodeSelectorFlags::HasSlowSelectorNthAll) {
       StyleSet()->MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
-          aChild->GetNextElementSibling());
+          aChild->GetNextElementSibling(), /* aForceRestyleSiblings = */ true);
+    } else {
+      RestyleSiblingsStartingWith(aChild->GetNextSibling());
     }
   }
 
@@ -488,7 +491,8 @@ void RestyleManager::ContentRemoved(nsIContent* aOldChild,
                        nsChangeHint(0));
       if (selectorFlags & NodeSelectorFlags::HasSlowSelectorNthAll) {
         StyleSet()->MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
-            containerElement->GetFirstElementChild());
+            containerElement->GetFirstElementChild(),
+            /* aForceRestyleSiblings = */ false);
       }
     } else {
       RestylePreviousSiblings(aOldChild);
@@ -500,7 +504,6 @@ void RestyleManager::ContentRemoved(nsIContent* aOldChild,
 
   if (selectorFlags & NodeSelectorFlags::HasSlowSelectorLaterSiblings) {
     // Restyle all later siblings.
-    RestyleSiblingsStartingWith(aFollowingSibling);
     if (selectorFlags & NodeSelectorFlags::HasSlowSelectorNthAll) {
       Element* nextSibling =
           aFollowingSibling ? aFollowingSibling->IsElement()
@@ -508,7 +511,9 @@ void RestyleManager::ContentRemoved(nsIContent* aOldChild,
                                   : aFollowingSibling->GetNextElementSibling()
                             : nullptr;
       StyleSet()->MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
-          nextSibling);
+          nextSibling, /* aForceRestyleSiblings = */ true);
+    } else {
+      RestyleSiblingsStartingWith(aFollowingSibling);
     }
   }
 
@@ -769,7 +774,7 @@ static nsIFrame* GetFrameForChildrenOnlyTransformHint(nsIFrame* aFrame) {
     // GetContent() returns nullptr for ViewportFrame.
     aFrame = aFrame->PrincipalChildList().FirstChild();
   }
-  // For an nsHTMLScrollFrame, this will get the SVG frame that has the
+  // For a ScrollContainerFrame, this will get the SVG frame that has the
   // children-only transforms:
   aFrame = aFrame->GetContent()->GetPrimaryFrame();
   if (aFrame->IsSVGOuterSVGFrame()) {
@@ -1128,7 +1133,7 @@ static nsIFrame* ContainingBlockForFrame(nsIFrame* aFrame) {
   // Generally frames with a different insertion frame are hard to deal with,
   // but scrollframes are easy because the containing block is just the
   // insertion frame.
-  if (aFrame->IsScrollFrame()) {
+  if (aFrame->IsScrollContainerFrame()) {
     return insertionFrame;
   }
   // Combobox frames are easy as well because they can't have positioned
@@ -1264,8 +1269,6 @@ static void SyncViewsAndInvalidateDescendants(nsIFrame* aFrame,
           nsIFrame* outOfFlowFrame =
               nsPlaceholderFrame::GetRealFrameForPlaceholder(child);
           DoApplyRenderingChangeToTree(outOfFlowFrame, aChange);
-        } else if (listID == FrameChildListID::Popup) {
-          DoApplyRenderingChangeToTree(child, aChange);
         } else {  // regular frame
           SyncViewsAndInvalidateDescendants(child, aChange);
         }
@@ -1460,10 +1463,10 @@ static inline void TryToDealWithScrollbarChange(nsChangeHint& aHint,
         // Under these conditions, we're OK to assume that this "overflow"
         // change only impacts the root viewport's scrollframe, which
         // already exists, so we can simply reflow instead of reframing.
-        if (nsIScrollableFrame* sf = do_QueryFrame(aFrame)) {
+        if (ScrollContainerFrame* sf = do_QueryFrame(aFrame)) {
           sf->MarkScrollbarsDirtyForReflow();
-        } else if (nsIScrollableFrame* sf =
-                       aPc->PresShell()->GetRootScrollFrameAsScrollable()) {
+        } else if (ScrollContainerFrame* sf =
+                       aPc->PresShell()->GetRootScrollContainerFrame()) {
           sf->MarkScrollbarsDirtyForReflow();
         }
         aHint |= nsChangeHint_ReflowHintsForScrollbarChange;
@@ -1477,7 +1480,7 @@ static inline void TryToDealWithScrollbarChange(nsChangeHint& aHint,
   }
 
   const bool scrollable = aFrame->StyleDisplay()->IsScrollableOverflow();
-  if (nsIScrollableFrame* sf = do_QueryFrame(aFrame)) {
+  if (ScrollContainerFrame* sf = do_QueryFrame(aFrame)) {
     if (scrollable && sf->HasAllNeededScrollbars()) {
       sf->MarkScrollbarsDirtyForReflow();
       // Once we've created scrollbars for a frame, don't bother reconstructing

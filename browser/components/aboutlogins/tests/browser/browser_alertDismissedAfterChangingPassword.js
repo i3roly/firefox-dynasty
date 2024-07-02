@@ -32,7 +32,6 @@ add_setup(async function () {
     gBrowser,
     url: "about:logins",
   });
-
   registerCleanupFunction(() => {
     BrowserTestUtils.removeTab(gBrowser.selectedTab);
     Services.logins.removeAllUserFacingLogins();

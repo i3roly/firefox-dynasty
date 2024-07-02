@@ -193,9 +193,6 @@ using namespace mozilla;
 // track which pages have been MADV_FREE'd.  You can then call
 // jemalloc_purge_freed_pages(), which will force the OS to release those
 // MADV_FREE'd pages, making the process's RSS reflect its true memory usage.
-//
-// The jemalloc_purge_freed_pages definition in memory/build/mozmemory.h needs
-// to be adjusted if MALLOC_DOUBLE_PURGE is ever enabled on Linux.
 
 #ifdef XP_DARWIN
 #  define MALLOC_DOUBLE_PURGE
@@ -684,7 +681,7 @@ struct arena_stats_t {
   // Number of bytes currently mapped.
   size_t mapped;
 
-  // Current number of committed pages.
+  // Current number of committed pages (non madvised/decommitted)
   size_t committed;
 
   // Per-size-category statistics.
@@ -2150,11 +2147,11 @@ bool AddressRadixTree<Bits>::Set(void* aKey, void* aValue) {
 
 // Return the offset between a and the nearest aligned address at or below a.
 #define ALIGNMENT_ADDR2OFFSET(a, alignment) \
-  ((size_t)((uintptr_t)(a) & ((alignment)-1)))
+  ((size_t)((uintptr_t)(a) & ((alignment) - 1)))
 
 // Return the smallest alignment multiple that is >= s.
 #define ALIGNMENT_CEILING(s, alignment) \
-  (((s) + ((alignment)-1)) & (~((alignment)-1)))
+  (((s) + ((alignment) - 1)) & (~((alignment) - 1)))
 
 static void* pages_trim(void* addr, size_t alloc_size, size_t leadsize,
                         size_t size) {
@@ -5524,7 +5521,7 @@ static void replace_malloc_init_funcs(malloc_table_t* table) {
 #include "malloc_decls.h"
 // ***************************************************************************
 
-#ifdef HAVE_DLOPEN
+#ifdef HAVE_DLFCN_H
 #  include <dlfcn.h>
 #endif
 

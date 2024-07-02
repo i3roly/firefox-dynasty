@@ -1206,7 +1206,7 @@ ParentAPIManager = {
         !context.extension.persistentBackground
       ) {
         context.extension.emit("background-script-reset-idle", {
-          reason: "parentApiCall",
+          reason: "parentapicall",
           path: data.path,
         });
       }
@@ -2297,7 +2297,6 @@ var StartupCache = {
       this.locales.delete(id),
       this.manifests.delete(id),
       this.permissions.delete(id),
-      this.menus.delete(id),
     ]).catch(() => {
       // Ignore the error. It happens when we try to flush the add-on
       // data after the AddonManager has flushed the entire startup cache.
@@ -2328,7 +2327,6 @@ var StartupCache = {
   other: new CacheStore("other"),
   permissions: new CacheStore("permissions"),
   schemas: new CacheStore("schemas"),
-  menus: new CacheStore("menus"),
 };
 
 Services.obs.addObserver(StartupCache, "startupcache-invalidate");
