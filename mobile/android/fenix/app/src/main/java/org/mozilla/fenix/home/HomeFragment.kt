@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -601,17 +603,30 @@ class HomeFragment : Fragment() {
             composableContent = {
                 FirefoxTheme {
                     Column {
-                        currentMicrosurvey.let {
-                            if (it == null) {
-                                binding.bottomBarShadow.visibility = View.VISIBLE
-                            } else {
-                                MicrosurveyRequestPrompt(it) {
-                                    findNavController().nav(
-                                        R.id.homeFragment,
-                                        HomeFragmentDirections.actionGlobalMicrosurveyDialog(),
+                        val shouldShowMicrosurveyPrompt =
+                            remember { mutableStateOf(context.settings().shouldShowMicrosurveyPrompt) }
+
+                        if (shouldShowMicrosurveyPrompt.value) {
+                            currentMicrosurvey.let {
+                                if (it == null) {
+                                    binding.bottomBarShadow.visibility = View.VISIBLE
+                                } else {
+                                    MicrosurveyRequestPrompt(
+                                        microsurvey = it,
+                                        onStartSurveyClicked = {
+                                            findNavController().nav(
+                                                R.id.homeFragment,
+                                                HomeFragmentDirections.actionGlobalMicrosurveyDialog(it.id),
+                                            )
+                                        },
+                                        onCloseButtonClicked = {
+                                            context.settings().shouldShowMicrosurveyPrompt = false
+                                            shouldShowMicrosurveyPrompt.value = false
+                                        },
                                     )
+
+                                    binding.bottomBarShadow.visibility = View.GONE
                                 }
-                                binding.bottomBarShadow.visibility = View.GONE
                             }
                         }
 
@@ -739,14 +754,31 @@ class HomeFragment : Fragment() {
             composableContent = {
                 FirefoxTheme {
                     Column {
-                        currentMicrosurvey?.let {
-                            MicrosurveyRequestPrompt(it) {
-                                findNavController().nav(
-                                    R.id.homeFragment,
-                                    HomeFragmentDirections.actionGlobalMicrosurveyDialog(),
-                                )
+                        val shouldShowMicrosurveyPrompt =
+                            remember { mutableStateOf(context.settings().shouldShowMicrosurveyPrompt) }
+
+                        if (shouldShowMicrosurveyPrompt.value) {
+                            currentMicrosurvey.let {
+                                if (it == null) {
+                                    binding.bottomBarShadow.visibility = View.VISIBLE
+                                } else {
+                                    MicrosurveyRequestPrompt(
+                                        microsurvey = it,
+                                        onStartSurveyClicked = {
+                                            findNavController().nav(
+                                                R.id.homeFragment,
+                                                HomeFragmentDirections.actionGlobalMicrosurveyDialog(it.id),
+                                            )
+                                        },
+                                        onCloseButtonClicked = {
+                                            context.settings().shouldShowMicrosurveyPrompt = false
+                                            shouldShowMicrosurveyPrompt.value = false
+                                        },
+                                    )
+
+                                    binding.bottomBarShadow.visibility = View.GONE
+                                }
                             }
-                            binding.bottomBarShadow.visibility = View.GONE
                         }
 
                         if (isToolbarAtTheBottom) {
@@ -789,9 +821,6 @@ class HomeFragment : Fragment() {
 
     private fun shouldShowMicrosurveyPrompt(context: Context) =
         context.components.settings.shouldShowMicrosurveyPrompt
-
-    private fun isToolbarAtBottom(context: Context) =
-        context.components.settings.toolbarPosition == ToolbarPosition.BOTTOM
 
     /**
      * Returns a [TopSitesConfig] which specifies how many top sites to display and whether or

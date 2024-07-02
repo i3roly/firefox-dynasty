@@ -44,18 +44,19 @@ import org.mozilla.fenix.theme.FirefoxTheme
  *
  * @param microsurvey Contains the required microsurvey data for the UI.
  * @param onStartSurveyClicked Handles the on click event of the start survey button.
+ * @param onCloseButtonClicked Invoked when the user clicks on the close button.
  */
 @Composable
 fun MicrosurveyRequestPrompt(
     microsurvey: MicrosurveyUIData,
     onStartSurveyClicked: () -> Unit = {},
+    onCloseButtonClicked: () -> Unit,
 ) {
-    // Using the keyboard state (open/closed) to determine if the microsurvey is visible.
     val isKeyboardVisible by keyboardAsState()
     var isMicrosurveyVisible by remember { mutableStateOf(true) }
     isMicrosurveyVisible = isKeyboardVisible == KeyboardState.Closed
 
-    // Adding animation properties for the microsurvey's visibility transitions.
+    // Animation properties for the microsurvey's visibility transitions.
     AnimatedVisibility(
         visible = isMicrosurveyVisible,
         enter = slideInVertically(initialOffsetY = { it }),
@@ -63,13 +64,16 @@ fun MicrosurveyRequestPrompt(
     ) {
         Column {
             Divider()
+
             Column(
                 modifier = Modifier
                     .background(color = FirefoxTheme.colors.layer1)
                     .padding(all = 16.dp),
             ) {
-                Header(microsurvey.promptTitle)
+                Header(microsurvey.promptTitle) { onCloseButtonClicked() }
+
                 Spacer(modifier = Modifier.height(8.dp))
+
                 PrimaryButton(text = stringResource(id = R.string.micro_survey_continue_button_label)) {
                     onStartSurveyClicked()
                 }
@@ -81,13 +85,14 @@ fun MicrosurveyRequestPrompt(
 @Composable
 private fun Header(
     title: String,
+    onCloseButtonClicked: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Image(
             painter = painterResource(R.drawable.ic_firefox),
-            contentDescription = null,
+            contentDescription = stringResource(id = R.string.microsurvey_app_icon_content_description),
             modifier = Modifier.size(24.dp),
         )
 
@@ -101,12 +106,12 @@ private fun Header(
         )
 
         IconButton(
-            onClick = {}, // todo FXDROID-1947.
+            onClick = { onCloseButtonClicked() },
             modifier = Modifier.size(20.dp),
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_close),
-                contentDescription = null, // todo update to string res once a11y strings are available FXDROID-1919.
+                contentDescription = stringResource(id = R.string.microsurvey_close_button_content_description),
                 tint = FirefoxTheme.colors.iconPrimary,
             )
         }
@@ -119,13 +124,15 @@ private fun Header(
 private fun MicrosurveyRequestPromptPreview() {
     FirefoxTheme {
         MicrosurveyRequestPrompt(
-            MicrosurveyUIData(
+            microsurvey = MicrosurveyUIData(
                 id = "",
                 promptTitle = "Help make printing in Firefox better. It only takes a sec.",
                 icon = R.drawable.mozac_ic_lightbulb_24,
                 question = "",
                 answers = emptyList(),
             ),
+            onStartSurveyClicked = {},
+            onCloseButtonClicked = {},
         )
     }
 }

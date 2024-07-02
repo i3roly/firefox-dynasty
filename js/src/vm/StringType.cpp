@@ -654,19 +654,21 @@ static MOZ_ALWAYS_INLINE JSString::OwnedChars<CharT> AllocChars(JSContext* cx,
         cx->zone(), length * sizeof(CharT), js::StringBufferArena);
     if (!buffer) {
       ReportOutOfMemory(cx);
-      return {nullptr, 0, false, false};
+      return {};
     }
 
-    return {static_cast<CharT*>(buffer), length, isMalloced, isMalloced};
+    using Kind = typename JSString::OwnedChars<CharT>::Kind;
+    Kind kind = isMalloced ? Kind::Malloc : Kind::Nursery;
+    return {static_cast<CharT*>(buffer), length, kind};
   }
 
   auto buffer = cx->make_pod_arena_array<CharT>(js::StringBufferArena, length);
   if (!buffer) {
     ReportOutOfMemory(cx);
-    return {nullptr, 0, false, false};
+    return {};
   }
 
-  return {std::move(buffer), length, true};
+  return {std::move(buffer), length};
 }
 
 template <typename CharT>
@@ -1043,7 +1045,7 @@ finish_node: {
   MOZ_ASSERT(pos >= wholeChars);
   CharT* chars = pos - str->length();
   JSRope* strParent = str->d.s.u2.parent;
-  str->setNonInlineChars(chars);
+  str->setNonInlineChars(chars, /* usesStringBuffer = */ false);
 
   MOZ_ASSERT(str->asRope().isBeingFlattened());
   mozilla::DebugOnly<bool> visitRight = str->flags() & FLATTEN_VISIT_RIGHT;
@@ -1084,7 +1086,7 @@ finish_root:
 
   root->setLengthAndFlags(wholeLength,
                           StringFlagsForCharType<CharT>(EXTENSIBLE_FLAGS));
-  root->setNonInlineChars(wholeChars);
+  root->setNonInlineChars(wholeChars, /* usesStringBuffer = */ false);
   root->d.s.u3.capacity = wholeCapacity;
   AddCellMemory(root, root->asLinear().allocSize(), MemoryUse::StringContents);
 
@@ -1870,7 +1872,7 @@ JSLinearString* js::NewStringDontDeflate(
   }
 
   JS::Rooted<JSString::OwnedChars<CharT>> ownedChars(cx, std::move(chars),
-                                                     length, true);
+                                                     length);
   return JSLinearString::new_<allowGC, CharT>(cx, &ownedChars, heap);
 }
 
@@ -2311,8 +2313,8 @@ static JSString* NewStringFromBuffer(JSContext* cx,
                                   gc::Heap::Default);
   }
 
-  return JSLinearString::new_<CanGC, CharT>(cx, std::move(buffer), length,
-                                            gc::Heap::Default);
+  Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(buffer), length);
+  return JSLinearString::new_<CanGC, CharT>(cx, &owned, gc::Heap::Default);
 }
 
 JS_PUBLIC_API JSString* JS::NewStringFromLatin1Buffer(
@@ -2659,10 +2661,10 @@ bool JSString::tryReplaceWithAtomRef(JSAtom* atom) {
   if (atom->hasLatin1Chars()) {
     flags |= LATIN1_CHARS_BIT;
     setLengthAndFlags(length(), flags);
-    setNonInlineChars(atom->chars<Latin1Char>(nogc));
+    setNonInlineChars(atom->chars<Latin1Char>(nogc), atom->hasStringBuffer());
   } else {
     setLengthAndFlags(length(), flags);
-    setNonInlineChars(atom->chars<char16_t>(nogc));
+    setNonInlineChars(atom->chars<char16_t>(nogc), atom->hasStringBuffer());
   }
   // Redundant, but just a reminder that this needs to be true or else we need
   // to check and conditionally put ourselves in the store buffer

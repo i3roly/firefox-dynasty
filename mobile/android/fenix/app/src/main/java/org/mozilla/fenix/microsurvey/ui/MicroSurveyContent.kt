@@ -47,7 +47,7 @@ private val shape = RoundedCornerShape(8.dp)
 fun MicroSurveyContent(
     question: String,
     answers: List<String>,
-    @DrawableRes icon: Int = R.drawable.ic_print, // todo currently unknown what the default will be if any.
+    @DrawableRes icon: Int = R.drawable.ic_print,
     backgroundColor: Color = FirefoxTheme.colors.layer2,
     selectedAnswer: String? = null,
     onSelectionChange: (String) -> Unit,
@@ -86,7 +86,7 @@ private fun Header(icon: Int, question: String) {
     ) {
         Image(
             painter = painterResource(icon),
-            contentDescription = null,
+            contentDescription = stringResource(id = R.string.microsurvey_feature_icon_content_description),
             modifier = Modifier.size(24.dp),
         )
 

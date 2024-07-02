@@ -1732,10 +1732,11 @@ pref("browser.newtabpage.activity-stream.weather.display", "simple");
 // Preference to enable wallpaper selection in the Customize Menu of new tab page
 #ifdef NIGHTLY_BUILD
   pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
+  pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true);
 #else
+  pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
   pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", false);
 #endif
-pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
 
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
@@ -1835,6 +1836,8 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-stories-block", 
 pref("browser.newtabpage.activity-stream.discoverystream.region-stories-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
 // List of regions that support the new recommendations BFF, also requires region-stories-config
 pref("browser.newtabpage.activity-stream.discoverystream.region-bff-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
+pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", false);
+pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
 // List of regions that get spocs by default.
 pref("browser.newtabpage.activity-stream.discoverystream.region-spocs-config", "US,CA,DE,GB,FR,IT,ES");
 // List of regions that don't get the 7 row layout.

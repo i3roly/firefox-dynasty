@@ -8978,7 +8978,7 @@
 #   2 - Symmetrical spacing, half added to each side
 - name: layout.css.letter-spacing.model
   type: int32_t
-#ifdef NIGHTLY_BUILD
+#if defined(MOZ_DEV_EDITION) || defined(EARLY_BETA_OR_EARLIER)
   value: 2
 #else
   value: 0
@@ -10564,7 +10564,7 @@
 # Allow using ffmpeg encoder
 -   name: media.ffmpeg.encoder.enabled
     type: RelaxedAtomicBool
-#if defined(MOZ_WIDGET_GTK) || defined(XP_WIN)
+#if !defined(MOZ_WIDGET_ANDROID)
     value: @IS_NIGHTLY_BUILD@
 #else
     value: false
@@ -11842,7 +11842,7 @@
 # with userinfo
 - name: network.auth.confirmAuth.enabled
   type: bool
-  value: true
+  value: false
   mirror: always
 
 # Whether to display auth prompts if X-Frame-Options header will block loading
@@ -11909,6 +11909,26 @@
 - name: network.cookie.staleThreshold
   type: uint32_t
   value: 60
+  mirror: always
+
+# Enable CHIPS partition byte limit enforcement
+# This pref will only be consulted if CHIPS itself is enabled
+- name: network.cookie.chips.partitionLimitEnabled
+  type: bool
+  value: @IS_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
+# CHIPS partition limit DryRun mode disables purging/rejection
+# but still checks for capacity overflow and reports telemetry
+- name: network.cookie.chips.partitionLimitDryRun
+  type: bool
+  value: true
+  mirror: always
+
+# The actual CHIPS parition limit in bytes
+- name: network.cookie.chips.partitionLimitByteCapacity
+  type: RelaxedAtomicInt32
+  value: 10240 # 10KiB
   mirror: always
 
 - name: network.cookie.sameSite.laxByDefault

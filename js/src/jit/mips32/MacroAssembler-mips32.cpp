@@ -1445,28 +1445,6 @@ void MacroAssemblerMIPSCompat::boxNonDouble(JSValueType type, Register src,
   ma_li(dest.typeReg(), ImmType(type));
 }
 
-void MacroAssemblerMIPSCompat::boolValueToDouble(const ValueOperand& operand,
-                                                 FloatRegister dest) {
-  convertBoolToInt32(operand.payloadReg(), ScratchRegister);
-  convertInt32ToDouble(ScratchRegister, dest);
-}
-
-void MacroAssemblerMIPSCompat::int32ValueToDouble(const ValueOperand& operand,
-                                                  FloatRegister dest) {
-  convertInt32ToDouble(operand.payloadReg(), dest);
-}
-
-void MacroAssemblerMIPSCompat::boolValueToFloat32(const ValueOperand& operand,
-                                                  FloatRegister dest) {
-  convertBoolToInt32(operand.payloadReg(), ScratchRegister);
-  convertInt32ToFloat32(ScratchRegister, dest);
-}
-
-void MacroAssemblerMIPSCompat::int32ValueToFloat32(const ValueOperand& operand,
-                                                   FloatRegister dest) {
-  convertInt32ToFloat32(operand.payloadReg(), dest);
-}
-
 void MacroAssemblerMIPSCompat::loadConstantFloat32(float f,
                                                    FloatRegister dest) {
   ma_lis(dest, f);
@@ -1716,22 +1694,6 @@ void MacroAssemblerMIPSCompat::storeTypeTag(ImmTag tag, const BaseIndex& dest) {
 }
 
 void MacroAssemblerMIPSCompat::breakpoint() { as_break(0); }
-
-void MacroAssemblerMIPSCompat::ensureDouble(const ValueOperand& source,
-                                            FloatRegister dest,
-                                            Label* failure) {
-  Label isDouble, done;
-  asMasm().branchTestDouble(Assembler::Equal, source.typeReg(), &isDouble);
-  asMasm().branchTestInt32(Assembler::NotEqual, source.typeReg(), failure);
-
-  convertInt32ToDouble(source.payloadReg(), dest);
-  jump(&done);
-
-  bind(&isDouble);
-  unboxDouble(source, dest);
-
-  bind(&done);
-}
 
 void MacroAssemblerMIPSCompat::checkStackAlignment() {
 #ifdef DEBUG

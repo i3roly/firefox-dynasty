@@ -5460,7 +5460,11 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // This function clobbers the input register.
   void clampDoubleToUint8(FloatRegister input, Register output) PER_ARCH;
 
-  using MacroAssemblerSpecific::ensureDouble;
+  // If source is a double, load into dest.
+  // If source is int32, convert to double and store in dest.
+  // Else, branch to failure.
+  inline void ensureDouble(const ValueOperand& source, FloatRegister dest,
+                           Label* failure);
 
   template <typename S>
   void ensureDouble(const S& source, FloatRegister dest, Label* failure) {
@@ -5834,48 +5838,24 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void printf(const char* output);
   void printf(const char* output, Register value);
 
-#define DISPATCH_FLOATING_POINT_OP(method, type, arg1d, arg1f, arg2) \
-  MOZ_ASSERT(IsFloatingPointType(type));                             \
-  if (type == MIRType::Double)                                       \
-    method##Double(arg1d, arg2);                                     \
-  else                                                               \
-    method##Float32(arg1f, arg2);
-
-  void loadConstantFloatingPoint(double d, float f, FloatRegister dest,
-                                 MIRType destType) {
-    DISPATCH_FLOATING_POINT_OP(loadConstant, destType, d, f, dest);
-  }
-  void boolValueToFloatingPoint(ValueOperand value, FloatRegister dest,
-                                MIRType destType) {
-    DISPATCH_FLOATING_POINT_OP(boolValueTo, destType, value, value, dest);
-  }
-  void int32ValueToFloatingPoint(ValueOperand value, FloatRegister dest,
-                                 MIRType destType) {
-    DISPATCH_FLOATING_POINT_OP(int32ValueTo, destType, value, value, dest);
-  }
-  void convertInt32ToFloatingPoint(Register src, FloatRegister dest,
-                                   MIRType destType) {
-    DISPATCH_FLOATING_POINT_OP(convertInt32To, destType, src, src, dest);
-  }
-
-#undef DISPATCH_FLOATING_POINT_OP
-
-  void convertValueToFloatingPoint(ValueOperand value, FloatRegister output,
-                                   Label* fail, MIRType outputType);
-
   void outOfLineTruncateSlow(FloatRegister src, Register dest,
                              bool widenFloatToDouble, bool compilingWasm,
                              wasm::BytecodeOffset callOffset);
 
   void convertInt32ValueToDouble(ValueOperand val);
 
+ private:
+  void convertValueToFloatingPoint(ValueOperand value, FloatRegister output,
+                                   Label* fail, MIRType outputType);
+
+ public:
   void convertValueToDouble(ValueOperand value, FloatRegister output,
                             Label* fail) {
     convertValueToFloatingPoint(value, output, fail, MIRType::Double);
   }
 
-  void convertValueToFloat(ValueOperand value, FloatRegister output,
-                           Label* fail) {
+  void convertValueToFloat32(ValueOperand value, FloatRegister output,
+                             Label* fail) {
     convertValueToFloatingPoint(value, output, fail, MIRType::Float32);
   }
 
@@ -5954,6 +5934,12 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // that the high bits of the register are appropriate for the architecture and
   // the value in the low bits.
   void debugAssertCanonicalInt32(Register r);
+#endif
+
+#ifdef FUZZING_JS_FUZZILLI
+  void fuzzilliHashDouble(FloatRegister src, Register result, Register temp);
+
+  void fuzzilliStoreHash(Register value, Register temp1, Register temp2);
 #endif
 };
 

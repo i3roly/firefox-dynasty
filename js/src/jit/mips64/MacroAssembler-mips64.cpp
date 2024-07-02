@@ -1535,28 +1535,6 @@ void MacroAssemblerMIPS64Compat::boxNonDouble(JSValueType type, Register src,
   boxValue(type, src, dest.valueReg());
 }
 
-void MacroAssemblerMIPS64Compat::boolValueToDouble(const ValueOperand& operand,
-                                                   FloatRegister dest) {
-  convertBoolToInt32(operand.valueReg(), ScratchRegister);
-  convertInt32ToDouble(ScratchRegister, dest);
-}
-
-void MacroAssemblerMIPS64Compat::int32ValueToDouble(const ValueOperand& operand,
-                                                    FloatRegister dest) {
-  convertInt32ToDouble(operand.valueReg(), dest);
-}
-
-void MacroAssemblerMIPS64Compat::boolValueToFloat32(const ValueOperand& operand,
-                                                    FloatRegister dest) {
-  convertBoolToInt32(operand.valueReg(), ScratchRegister);
-  convertInt32ToFloat32(ScratchRegister, dest);
-}
-
-void MacroAssemblerMIPS64Compat::int32ValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToFloat32(operand.valueReg(), dest);
-}
-
 void MacroAssemblerMIPS64Compat::loadConstantFloat32(float f,
                                                      FloatRegister dest) {
   ma_lis(dest, f);
@@ -1744,27 +1722,6 @@ void MacroAssemblerMIPS64Compat::popValue(ValueOperand val) {
 }
 
 void MacroAssemblerMIPS64Compat::breakpoint() { as_break(0); }
-
-void MacroAssemblerMIPS64Compat::ensureDouble(const ValueOperand& source,
-                                              FloatRegister dest,
-                                              Label* failure) {
-  Label isDouble, done;
-  {
-    ScratchTagScope tag(asMasm(), source);
-    splitTagForTest(source, tag);
-    asMasm().branchTestDouble(Assembler::Equal, tag, &isDouble);
-    asMasm().branchTestInt32(Assembler::NotEqual, tag, failure);
-  }
-
-  unboxInt32(source, ScratchRegister);
-  convertInt32ToDouble(ScratchRegister, dest);
-  jump(&done);
-
-  bind(&isDouble);
-  unboxDouble(source, dest);
-
-  bind(&done);
-}
 
 void MacroAssemblerMIPS64Compat::checkStackAlignment() {
 #ifdef DEBUG

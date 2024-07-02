@@ -49,11 +49,14 @@ ChromeUtils.defineESModuleGetters(this, {
   NewTabPagePreloading: "resource:///modules/NewTabPagePreloading.sys.mjs",
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
+  nsContextMenu: "chrome://browser/content/nsContextMenu.sys.mjs",
+  openContextMenu: "chrome://browser/content/nsContextMenu.sys.mjs",
   OpenInTabsUtils: "resource:///modules/OpenInTabsUtils.sys.mjs",
   PageActions: "resource:///modules/PageActions.sys.mjs",
   PageThumbs: "resource://gre/modules/PageThumbs.sys.mjs",
   PanelMultiView: "resource:///modules/PanelMultiView.sys.mjs",
   PanelView: "resource:///modules/PanelMultiView.sys.mjs",
+  PBMExitStatus: "resource:///modules/PBMExitStatus.sys.mjs",
   PictureInPicture: "resource://gre/modules/PictureInPicture.sys.mjs",
   PlacesTransactions: "resource://gre/modules/PlacesTransactions.sys.mjs",
   PlacesUIUtils: "resource:///modules/PlacesUIUtils.sys.mjs",
@@ -223,11 +226,6 @@ XPCOMUtils.defineLazyScriptGetter(
   this,
   "gBrowserThumbnails",
   "chrome://browser/content/browser-thumbnails.js"
-);
-XPCOMUtils.defineLazyScriptGetter(
-  this,
-  ["openContextMenu", "nsContextMenu"],
-  "chrome://browser/content/nsContextMenu.js"
 );
 XPCOMUtils.defineLazyScriptGetter(
   this,
@@ -892,6 +890,7 @@ function SetClickAndHoldHandlers() {
   let backButton = document.getElementById("back-button");
   backButton.setAttribute("type", "menu");
   popup.addEventListener("command", backForwardMenuCommand);
+  popup.addEventListener("popupshowing", FillHistoryMenu);
   backButton.prepend(popup);
   gClickAndHoldListenersOnElement.add(backButton);
 
@@ -899,6 +898,7 @@ function SetClickAndHoldHandlers() {
   popup = popup.cloneNode(true);
   forwardButton.setAttribute("type", "menu");
   popup.addEventListener("command", backForwardMenuCommand);
+  popup.addEventListener("popupshowing", FillHistoryMenu);
   forwardButton.prepend(popup);
   gClickAndHoldListenersOnElement.add(forwardButton);
 }
@@ -2685,7 +2685,8 @@ function CreateContainerTabMenu(event) {
   // Do not open context menus within menus.
   // Note that triggerNode is null if we're opened by long press.
   if (event.target.triggerNode?.closest("menupopup")) {
-    return false;
+    event.preventDefault();
+    return;
   }
   createUserContextMenu(event, {
     useAccessKeys: false,
@@ -2693,28 +2694,30 @@ function CreateContainerTabMenu(event) {
   });
 }
 
-function FillHistoryMenu(aParent) {
+function FillHistoryMenu(event) {
+  let parent = event.target;
+
   // Lazily add the hover listeners on first showing and never remove them
-  if (!aParent.hasStatusListener) {
+  if (!parent.hasStatusListener) {
     // Show history item's uri in the status bar when hovering, and clear on exit
-    aParent.addEventListener("DOMMenuItemActive", function (aEvent) {
+    parent.addEventListener("DOMMenuItemActive", function (aEvent) {
       // Only the current page should have the checked attribute, so skip it
       if (!aEvent.target.hasAttribute("checked")) {
         XULBrowserWindow.setOverLink(aEvent.target.getAttribute("uri"));
       }
     });
-    aParent.addEventListener("DOMMenuItemInactive", function () {
+    parent.addEventListener("DOMMenuItemInactive", function () {
       XULBrowserWindow.setOverLink("");
     });
 
-    aParent.hasStatusListener = true;
+    parent.hasStatusListener = true;
   }
 
   // Remove old entries if any
-  let children = aParent.children;
+  let children = parent.children;
   for (var i = children.length - 1; i >= 0; --i) {
     if (children[i].hasAttribute("index")) {
-      aParent.removeChild(children[i]);
+      parent.removeChild(children[i]);
     }
   }
 
@@ -2732,15 +2735,15 @@ function FillHistoryMenu(aParent) {
     if (!initial) {
       if (count <= 1) {
         // if there is only one entry now, close the popup.
-        aParent.hidePopup();
+        parent.hidePopup();
         return;
-      } else if (aParent.id != "backForwardMenu" && !aParent.parentNode.open) {
+      } else if (parent.id != "backForwardMenu" && !parent.parentNode.open) {
         // if the popup wasn't open before, but now needs to be, reopen the menu.
         // It should trigger FillHistoryMenu again. This might happen with the
         // delay from click-and-hold menus but skip this for the context menu
         // (backForwardMenu) rather than figuring out how the menu should be
         // positioned and opened as it is an extreme edgecase.
-        aParent.parentNode.open = true;
+        parent.parentNode.open = true;
         return;
       }
     }
@@ -2810,7 +2813,7 @@ function FillHistoryMenu(aParent) {
       }
 
       if (!item.parentNode) {
-        aParent.appendChild(item);
+        parent.appendChild(item);
       }
 
       existingIndex++;
@@ -2819,7 +2822,7 @@ function FillHistoryMenu(aParent) {
     if (!initial) {
       let existingLength = children.length;
       while (existingIndex < existingLength) {
-        aParent.removeChild(aParent.lastElementChild);
+        parent.removeChild(parent.lastElementChild);
         existingIndex++;
       }
     }
@@ -2831,7 +2834,8 @@ function FillHistoryMenu(aParent) {
   if (sessionHistory?.count) {
     // Don't show the context menu if there is only one item.
     if (sessionHistory.count <= 1) {
-      return false;
+      event.preventDefault();
+      return;
     }
 
     updateSessionHistory(sessionHistory, true, true);
@@ -2842,8 +2846,6 @@ function FillHistoryMenu(aParent) {
     );
     updateSessionHistory(sessionHistory, true, false);
   }
-
-  return true;
 }
 
 function toOpenWindowByType(inType, uri, features) {
@@ -6458,6 +6460,10 @@ function warnAboutClosingWindow(source) {
     if (exitingCanceled.data) {
       return false;
     }
+    // Notify observers that we're commited to exiting private browsing.
+    // "last-pb-context-exiting" isn't suitable for this since exit can still be
+    // cancelled by one of the observers.
+    Services.obs.notifyObservers(null, "last-pb-context-exiting-granted");
   }
 
   if (otherWindowExists) {
@@ -6772,6 +6778,9 @@ var gPrivateBrowsingUI = {
     if (!PrivateBrowsingUtils.isWindowPrivate(window)) {
       return;
     }
+
+    // Init PBM exit telemetry.
+    PBMExitStatus.init();
 
     // Disable the Clear Recent History... menu item when in PB mode
     // temporary fix until bug 463607 is fixed

@@ -2444,8 +2444,7 @@ bool CacheIRCompiler::emitIdToStringOrSymbol(ValOperandId resultId,
   masm.jump(&intDone);
 
   masm.bind(&callVM);
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   masm.PushRegsInMask(volatileRegs);
 
   using Fn = JSLinearString* (*)(JSContext* cx, int32_t i);
@@ -2684,9 +2683,8 @@ bool CacheIRCompiler::emitGuardStringToInt32(StringOperandId strId,
     return false;
   }
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
-  masm.guardStringToInt32(str, output, scratch, volatileRegs, failure->label());
+  masm.guardStringToInt32(str, output, scratch, liveVolatileRegs(),
+                          failure->label());
   return true;
 }
 
@@ -2717,8 +2715,7 @@ bool CacheIRCompiler::emitGuardStringToNumber(StringOperandId strId,
     // We cannot use callVM, as callVM expects to be able to clobber all
     // operands, however, since this op is not the last in the generated IC, we
     // want to be able to reference other live values.
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     masm.PushRegsInMask(volatileRegs);
 
     using Fn = bool (*)(JSContext* cx, JSString* str, double* result);
@@ -2854,7 +2851,7 @@ bool CacheIRCompiler::emitStringToAtom(StringOperandId stringId) {
   masm.jump(&done);
 
   masm.bind(&vmCall);
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = JSAtom* (*)(JSContext* cx, JSString* str);
@@ -2902,8 +2899,7 @@ bool CacheIRCompiler::emitGuardStringToIndex(StringOperandId strId,
 
   {
     masm.bind(&vmCall);
-    LiveRegisterSet save(GeneralRegisterSet::Volatile(),
-                         liveVolatileFloatRegs());
+    LiveRegisterSet save = liveVolatileRegs();
     masm.PushRegsInMask(save);
 
     using Fn = int32_t (*)(JSString* str);
@@ -3199,7 +3195,7 @@ bool CacheIRCompiler::emitDoubleModResult(NumberOperandId lhsId,
   allocator.ensureDoubleRegister(masm, lhsId, floatScratch0);
   allocator.ensureDoubleRegister(masm, rhsId, floatScratch1);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = double (*)(double a, double b);
@@ -3229,7 +3225,7 @@ bool CacheIRCompiler::emitDoublePowResult(NumberOperandId lhsId,
   allocator.ensureDoubleRegister(masm, lhsId, floatScratch0);
   allocator.ensureDoubleRegister(masm, rhsId, floatScratch1);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = double (*)(double x, double y);
@@ -3349,9 +3345,7 @@ bool CacheIRCompiler::emitInt32DivResult(Int32OperandId lhsId,
   masm.bind(&notZero);
 
   masm.mov(lhs, scratch);
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
-  masm.flexibleDivMod32(rhs, scratch, rem, false, volatileRegs);
+  masm.flexibleDivMod32(rhs, scratch, rem, false, liveVolatileRegs());
 
   // A remainder implies a double result.
   masm.branchTest32(Assembler::NonZero, rem, rem, failure->label());
@@ -3385,9 +3379,7 @@ bool CacheIRCompiler::emitInt32ModResult(Int32OperandId lhsId,
   masm.bind(&notOverflow);
 
   masm.mov(lhs, scratch);
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
-  masm.flexibleRemainder32(rhs, scratch, false, volatileRegs);
+  masm.flexibleRemainder32(rhs, scratch, false, liveVolatileRegs());
 
   // Modulo takes the sign of the dividend; we can't return negative zero here.
   Label notZero;
@@ -3783,7 +3775,7 @@ bool CacheIRCompiler::emitTruncateDoubleToUInt32(NumberOperandId inputId,
   masm.jump(&done);
 
   masm.bind(&truncateABICall);
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   save.takeUnchecked(floatReg);
   // Bug 1451976
   save.takeUnchecked(floatReg.get().asSingle());
@@ -4039,8 +4031,7 @@ bool CacheIRCompiler::emitLinearizeForCharAccess(StringOperandId strId,
 
   masm.branchIfCanLoadStringChar(str, index, scratch, &done);
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     masm.PushRegsInMask(volatileRegs);
 
     using Fn = JSLinearString* (*)(JSString*);
@@ -4083,8 +4074,7 @@ bool CacheIRCompiler::emitLinearizeForCodePointAccess(
 
   masm.branchIfCanLoadStringCodePoint(str, index, scratch1, scratch2, &done);
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     masm.PushRegsInMask(volatileRegs);
 
     using Fn = JSLinearString* (*)(JSString*);
@@ -4958,10 +4948,8 @@ bool CacheIRCompiler::emitPackedArrayShiftResult(ObjOperandId arrayId) {
     return false;
   }
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
   masm.packedArrayShift(array, output.valueReg(), scratch1, scratch2,
-                        volatileRegs, failure->label());
+                        liveVolatileRegs(), failure->label());
   return true;
 }
 
@@ -5016,8 +5004,7 @@ bool CacheIRCompiler::emitIsCallableResult(ValOperandId inputId) {
 
   masm.bind(&isProxy);
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     masm.PushRegsInMask(volatileRegs);
 
     using Fn = bool (*)(JSObject* obj);
@@ -5050,8 +5037,7 @@ bool CacheIRCompiler::emitIsConstructorResult(ObjOperandId objId) {
 
   masm.bind(&isProxy);
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     masm.PushRegsInMask(volatileRegs);
 
     using Fn = bool (*)(JSObject* obj);
@@ -5463,7 +5449,7 @@ bool CacheIRCompiler::emitGetNextMapSetEntryForIteratorResult(
   Register iter = allocator.useRegister(masm, iterId);
   Register resultArr = allocator.useRegister(masm, resultArrId);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   save.takeUnchecked(output.valueReg());
   save.takeUnchecked(scratch);
   masm.PushRegsInMask(save);
@@ -5969,7 +5955,7 @@ bool CacheIRCompiler::emitMathHypot2NumberResult(NumberOperandId first,
   allocator.ensureDoubleRegister(masm, first, floatScratch0);
   allocator.ensureDoubleRegister(masm, second, floatScratch1);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = double (*)(double x, double y);
@@ -6003,7 +5989,7 @@ bool CacheIRCompiler::emitMathHypot3NumberResult(NumberOperandId first,
   allocator.ensureDoubleRegister(masm, second, floatScratch1);
   allocator.ensureDoubleRegister(masm, third, floatScratch2);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = double (*)(double x, double y, double z);
@@ -6041,7 +6027,7 @@ bool CacheIRCompiler::emitMathHypot4NumberResult(NumberOperandId first,
   allocator.ensureDoubleRegister(masm, third, floatScratch2);
   allocator.ensureDoubleRegister(masm, fourth, floatScratch3);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = double (*)(double x, double y, double z, double w);
@@ -6074,7 +6060,7 @@ bool CacheIRCompiler::emitMathAtan2NumberResult(NumberOperandId yId,
   allocator.ensureDoubleRegister(masm, yId, floatScratch0);
   allocator.ensureDoubleRegister(masm, xId, floatScratch1);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = double (*)(double x, double y);
@@ -6269,7 +6255,7 @@ bool CacheIRCompiler::emitMathFunctionNumberResultShared(
     UnaryMathFunction fun, FloatRegister inputScratch, ValueOperand output) {
   UnaryMathFunctionType funPtr = GetUnaryMathFunctionPtr(fun);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   save.takeUnchecked(inputScratch);
   masm.PushRegsInMask(save);
 
@@ -6427,8 +6413,7 @@ bool CacheIRCompiler::emitStoreDenseElementHole(ObjOperandId objId,
 
     masm.bind(&allocElement);
 
-    LiveRegisterSet save(GeneralRegisterSet::Volatile(),
-                         liveVolatileFloatRegs());
+    LiveRegisterSet save = liveVolatileRegs();
     save.takeUnchecked(scratch);
     masm.PushRegsInMask(save);
 
@@ -6515,7 +6500,7 @@ bool CacheIRCompiler::emitArrayPush(ObjOperandId objId, ValOperandId rhsId) {
 
   masm.bind(&allocElement);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   save.takeUnchecked(scratch);
   masm.PushRegsInMask(save);
 
@@ -6694,6 +6679,11 @@ void CacheIRCompiler::emitTypedArrayBoundsCheck(ArrayBufferViewKind viewKind,
   MOZ_ASSERT(index != maybeScratch);
   MOZ_ASSERT(index != spectreScratch);
 
+  // Use |maybeScratch| when no explicit |spectreScratch| is present.
+  if (spectreScratch == InvalidReg) {
+    spectreScratch = maybeScratch;
+  }
+
   if (viewKind == ArrayBufferViewKind::FixedLength) {
     masm.loadArrayBufferViewLengthIntPtr(obj, scratch);
     masm.spectreBoundsCheckPtr(index, scratch, spectreScratch, fail);
@@ -6703,11 +6693,6 @@ void CacheIRCompiler::emitTypedArrayBoundsCheck(ArrayBufferViewKind viewKind,
       masm.push(index);
 
       maybeScratch = index;
-    } else {
-      // Use |maybeScratch| when no explicit |spectreScratch| is present.
-      if (spectreScratch == InvalidReg) {
-        spectreScratch = maybeScratch;
-      }
     }
 
     // Bounds check doesn't require synchronization. See IsValidIntegerIndex
@@ -6767,8 +6752,7 @@ bool CacheIRCompiler::emitLoadTypedArrayElementResult(
   if (Scalar::isBigIntType(elementType)) {
     bigInt.emplace(output.valueReg().scratchReg());
 
-    LiveRegisterSet save(GeneralRegisterSet::Volatile(),
-                         liveVolatileFloatRegs());
+    LiveRegisterSet save = liveVolatileRegs();
     save.takeUnchecked(scratch1);
     save.takeUnchecked(scratch2);
     save.takeUnchecked(output);
@@ -7009,8 +6993,7 @@ bool CacheIRCompiler::emitLoadDataViewValueResult(
       masm.push(bigInt);
       masm.push(bigIntScratch);
       Label fail, done;
-      LiveRegisterSet save(GeneralRegisterSet::Volatile(),
-                           liveVolatileFloatRegs());
+      LiveRegisterSet save = liveVolatileRegs();
       save.takeUnchecked(bigInt);
       save.takeUnchecked(bigIntScratch);
       gc::Heap initialHeap = InitialBigIntHeap(cx_);
@@ -7389,8 +7372,7 @@ bool CacheIRCompiler::emitLoadTypeOfObjectResult(ObjOperandId objId) {
 
   {
     masm.bind(&slowCheck);
-    LiveRegisterSet save(GeneralRegisterSet::Volatile(),
-                         liveVolatileFloatRegs());
+    LiveRegisterSet save = liveVolatileRegs();
     masm.PushRegsInMask(save);
 
     using Fn = JSString* (*)(JSObject* obj, JSRuntime* rt);
@@ -7452,8 +7434,7 @@ bool CacheIRCompiler::emitLoadTypeOfEqObjectResult(ObjOperandId objId,
 
   {
     masm.bind(&slowCheck);
-    LiveRegisterSet save(GeneralRegisterSet::Volatile(),
-                         liveVolatileFloatRegs());
+    LiveRegisterSet save = liveVolatileRegs();
     save.takeUnchecked(output.valueReg());
     save.takeUnchecked(scratch);
     masm.PushRegsInMask(save);
@@ -7549,8 +7530,7 @@ bool CacheIRCompiler::emitLoadObjectTruthyResult(ObjOperandId objId) {
 
   masm.bind(&slowPath);
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     volatileRegs.takeUnchecked(scratch);
     volatileRegs.takeUnchecked(output);
     masm.PushRegsInMask(volatileRegs);
@@ -7639,8 +7619,7 @@ bool CacheIRCompiler::emitLoadValueTruthyResult(ValOperandId inputId) {
 
       masm.bind(&slowPath);
       {
-        LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                     liveVolatileFloatRegs());
+        LiveRegisterSet volatileRegs = liveVolatileRegs();
         volatileRegs.takeUnchecked(scratch1);
         volatileRegs.takeUnchecked(scratch2);
         volatileRegs.takeUnchecked(output);
@@ -7800,7 +7779,7 @@ bool CacheIRCompiler::emitCompareBigIntResult(JSOp op, BigIntOperandId lhsId,
 
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   masm.setupUnalignedABICall(scratch);
@@ -7880,7 +7859,7 @@ bool CacheIRCompiler::emitCompareBigIntNumberResult(JSOp op,
 
   AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   masm.setupUnalignedABICall(scratch);
@@ -8150,7 +8129,7 @@ void CacheIRCompiler::emitPostBarrierShared(Register obj,
   //   void PostWriteBarrier(JSRuntime* rt, JSObject* obj);
   //   void PostWriteElementBarrier(JSRuntime* rt, JSObject* obj,
   //                                int32_t index);
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
   masm.setupUnalignedABICall(scratch);
   masm.movePtr(ImmPtr(cx_->runtime()), scratch);
@@ -8186,7 +8165,7 @@ bool CacheIRCompiler::emitWrapResult() {
   Register obj = output.valueReg().scratchReg();
   masm.unboxObject(output.valueReg(), obj);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   using Fn = JSObject* (*)(JSContext* cx, JSObject* obj);
@@ -8248,8 +8227,7 @@ bool CacheIRCompiler::emitMegamorphicLoadSlotByValueResult(ObjOperandId objId,
   masm.Push(idVal);
   masm.moveStackPtrTo(idVal.scratchReg());
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(scratch1);
   volatileRegs.takeUnchecked(idVal);
   masm.PushRegsInMask(volatileRegs);
@@ -8369,8 +8347,7 @@ bool CacheIRCompiler::emitMegamorphicHasPropResult(ObjOperandId objId,
   masm.Push(idVal);
   masm.moveStackPtrTo(idVal.scratchReg());
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(scratch1);
   volatileRegs.takeUnchecked(idVal);
   masm.PushRegsInMask(volatileRegs);
@@ -8489,8 +8466,7 @@ bool CacheIRCompiler::emitCallObjectHasSparseElementResult(
   masm.reserveStack(sizeof(Value));
   masm.moveStackPtrTo(scratch2.get());
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(scratch1);
   volatileRegs.takeUnchecked(index);
   masm.PushRegsInMask(volatileRegs);
@@ -8696,8 +8672,7 @@ bool CacheIRCompiler::emitMegamorphicLoadSlotResult(ObjOperandId objId,
   masm.Push(UndefinedValue());
   masm.moveStackPtrTo(idReg.get());
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(scratch1);
   volatileRegs.takeUnchecked(scratch2);
   volatileRegs.takeUnchecked(scratch3);
@@ -8824,8 +8799,7 @@ bool CacheIRCompiler::emitGuardHasGetterSetter(ObjOperandId objId,
     return false;
   }
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(scratch1);
   volatileRegs.takeUnchecked(scratch2);
   masm.PushRegsInMask(volatileRegs);
@@ -9002,8 +8976,7 @@ bool CacheIRCompiler::emitCallInt32ToString(Int32OperandId inputId,
     return false;
   }
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(result);
   masm.PushRegsInMask(volatileRegs);
 
@@ -9035,8 +9008,7 @@ bool CacheIRCompiler::emitCallNumberToString(NumberOperandId inputId,
     return false;
   }
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(result);
   masm.PushRegsInMask(volatileRegs);
 
@@ -9123,8 +9095,7 @@ bool CacheIRCompiler::emitObjectToStringResult(ObjOperandId objId) {
     return false;
   }
 
-  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                               liveVolatileFloatRegs());
+  LiveRegisterSet volatileRegs = liveVolatileRegs();
   volatileRegs.takeUnchecked(output.valueReg());
   volatileRegs.takeUnchecked(scratch);
   masm.PushRegsInMask(volatileRegs);
@@ -9422,8 +9393,7 @@ bool CacheIRCompiler::emitRegExpPrototypeOptimizableResult(
   {
     masm.bind(&slow);
 
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     volatileRegs.takeUnchecked(scratch);
     masm.PushRegsInMask(volatileRegs);
 
@@ -9461,8 +9431,7 @@ bool CacheIRCompiler::emitRegExpInstanceOptimizableResult(
   {
     masm.bind(&slow);
 
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     volatileRegs.takeUnchecked(scratch);
     masm.PushRegsInMask(volatileRegs);
 
@@ -9580,8 +9549,7 @@ bool CacheIRCompiler::emitAtomicsCompareExchangeResult(
   }
 
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     volatileRegs.takeUnchecked(output->valueReg());
     volatileRegs.takeUnchecked(scratch);
     masm.PushRegsInMask(volatileRegs);
@@ -9637,8 +9605,7 @@ bool CacheIRCompiler::emitAtomicsReadModifyWriteResult(
 
   // See comment in emitAtomicsCompareExchange for why we use an ABI call.
   {
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     volatileRegs.takeUnchecked(output.valueReg());
     volatileRegs.takeUnchecked(scratch);
     masm.PushRegsInMask(volatileRegs);
@@ -9917,8 +9884,7 @@ bool CacheIRCompiler::emitAtomicsStoreResult(ObjOperandId objId,
   } else {
     // See comment in emitAtomicsCompareExchange for why we use an ABI call.
 
-    LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                 liveVolatileFloatRegs());
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
     volatileRegs.takeUnchecked(output.valueReg());
     volatileRegs.takeUnchecked(scratch);
     masm.PushRegsInMask(volatileRegs);
@@ -10457,7 +10423,7 @@ bool CacheIRCompiler::emitAssertPropertyLookup(ObjOperandId objId,
   AutoScratchRegister id(allocator, masm);
   AutoScratchRegister slot(allocator, masm);
 
-  LiveRegisterSet save(GeneralRegisterSet::Volatile(), liveVolatileFloatRegs());
+  LiveRegisterSet save = liveVolatileRegs();
   masm.PushRegsInMask(save);
 
   masm.setupUnalignedABICall(id);
@@ -10482,170 +10448,110 @@ bool CacheIRCompiler::emitAssertPropertyLookup(ObjOperandId objId,
 bool CacheIRCompiler::emitFuzzilliHashResult(ValOperandId valId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
+  AutoCallVM callvm(masm, this, allocator);
+  const AutoOutputRegister& output = callvm.output();
+
   ValueOperand input = allocator.useValueRegister(masm, valId);
   AutoScratchRegister scratch(allocator, masm);
-  AutoScratchRegister scratchJSContext(allocator, masm);
+  AutoScratchRegisterMaybeOutput scratch2(allocator, masm, output);
+  AutoScratchRegisterMaybeOutputType scratchJSContext(allocator, masm, output);
   AutoScratchFloatRegister floatReg(this);
-#  ifdef JS_PUNBOX64
-  AutoScratchRegister64 scratch64(allocator, masm);
-#  else
-  AutoScratchRegister scratch2(allocator, masm);
-#  endif
 
-  Label addFloat, updateHash, done;
+  Label hashDouble, updateHash, done;
 
+  Label isInt32, isDouble, isNull, isUndefined, isBoolean, isBigInt, isObject;
   {
     ScratchTagScope tag(masm, input);
     masm.splitTagForTest(input, tag);
 
-    Label notInt32;
-    masm.branchTestInt32(Assembler::NotEqual, tag, &notInt32);
-    {
-      ScratchTagScopeRelease _(&tag);
+    masm.branchTestInt32(Assembler::Equal, tag, &isInt32);
+    masm.branchTestDouble(Assembler::Equal, tag, &isDouble);
+    masm.branchTestNull(Assembler::Equal, tag, &isNull);
+    masm.branchTestUndefined(Assembler::Equal, tag, &isUndefined);
+    masm.branchTestBoolean(Assembler::Equal, tag, &isBoolean);
+    masm.branchTestBigInt(Assembler::Equal, tag, &isBigInt);
+    masm.branchTestObject(Assembler::Equal, tag, &isObject);
 
-      masm.unboxInt32(input, scratch);
-      masm.convertInt32ToDouble(scratch, floatReg);
-      masm.jump(&addFloat);
-    }
-    masm.bind(&notInt32);
-
-    Label notDouble;
-    masm.branchTestDouble(Assembler::NotEqual, tag, &notDouble);
-    {
-      ScratchTagScopeRelease _(&tag);
-
-      masm.unboxDouble(input, floatReg);
-      masm.canonicalizeDouble(floatReg);
-      masm.jump(&addFloat);
-    }
-    masm.bind(&notDouble);
-
-    Label notNull;
-    masm.branchTestNull(Assembler::NotEqual, tag, &notNull);
-    {
-      ScratchTagScopeRelease _(&tag);
-
-      masm.move32(Imm32(1), scratch);
-      masm.convertInt32ToDouble(scratch, floatReg);
-      masm.jump(&addFloat);
-    }
-    masm.bind(&notNull);
-
-    Label notUndefined;
-    masm.branchTestUndefined(Assembler::NotEqual, tag, &notUndefined);
-    {
-      ScratchTagScopeRelease _(&tag);
-
-      masm.move32(Imm32(2), scratch);
-      masm.convertInt32ToDouble(scratch, floatReg);
-      masm.jump(&addFloat);
-    }
-    masm.bind(&notUndefined);
-
-    Label notBoolean;
-    masm.branchTestBoolean(Assembler::NotEqual, tag, &notBoolean);
-    {
-      ScratchTagScopeRelease _(&tag);
-
-      masm.unboxBoolean(input, scratch);
-      masm.add32(Imm32(3), scratch);
-      masm.convertInt32ToDouble(scratch, floatReg);
-      masm.jump(&addFloat);
-    }
-    masm.bind(&notBoolean);
-
-    Label notBigInt;
-    masm.branchTestBigInt(Assembler::NotEqual, tag, &notBigInt);
-    {
-      ScratchTagScopeRelease _(&tag);
-
-      masm.unboxBigInt(input, scratch);
-
-      LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
-                                   liveVolatileFloatRegs());
-      masm.PushRegsInMask(volatileRegs);
-      // TODO: remove floatReg, scratch, scratchJS?
-
-      using Fn = uint32_t (*)(BigInt* bigInt);
-      masm.setupUnalignedABICall(scratchJSContext);
-      masm.loadJSContext(scratchJSContext);
-      masm.passABIArg(scratch);
-      masm.callWithABI<Fn, js::FuzzilliHashBigInt>();
-      masm.storeCallInt32Result(scratch);
-
-      LiveRegisterSet ignore;
-      ignore.add(scratch);
-      ignore.add(scratchJSContext);
-      masm.PopRegsInMaskIgnore(volatileRegs, ignore);
-      masm.jump(&updateHash);
-    }
-    masm.bind(&notBigInt);
-
-    Label notObject;
-    masm.branchTestObject(Assembler::NotEqual, tag, &notObject);
-    {
-      ScratchTagScopeRelease _(&tag);
-
-      AutoCallVM callvm(masm, this, allocator);
-      Register obj = allocator.allocateRegister(masm);
-      masm.unboxObject(input, obj);
-
-      callvm.prepare();
-      masm.Push(obj);
-
-      using Fn = void (*)(JSContext* cx, JSObject* o);
-      callvm.callNoResult<Fn, js::FuzzilliHashObject>();
-      allocator.releaseRegister(obj);
-
-      masm.jump(&done);
-    }
-    masm.bind(&notObject);
-    {
-      masm.move32(Imm32(0), scratch);
-      masm.jump(&updateHash);
-    }
+    // Symbol or String.
+    masm.move32(Imm32(0), scratch);
+    masm.jump(&updateHash);
   }
 
+  masm.bind(&isInt32);
   {
-    masm.bind(&addFloat);
-
-    masm.loadJSContext(scratchJSContext);
-    Address addrExecHash(scratchJSContext, offsetof(JSContext, executionHash));
-
-#  ifdef JS_PUNBOX64
-    masm.moveDoubleToGPR64(floatReg, scratch64);
-    masm.move32(scratch64.get().reg, scratch);
-    masm.rshift64(Imm32(32), scratch64);
-    masm.add32(scratch64.get().reg, scratch);
-#  else
-    Register64 scratch64(scratch, scratch2);
-    masm.moveDoubleToGPR64(floatReg, scratch64);
-    masm.add32(scratch2, scratch);
-#  endif
+    masm.unboxInt32(input, scratch);
+    masm.convertInt32ToDouble(scratch, floatReg);
+    masm.jump(&hashDouble);
   }
 
+  masm.bind(&isDouble);
   {
-    masm.bind(&updateHash);
-
-    masm.loadJSContext(scratchJSContext);
-    Address addrExecHash(scratchJSContext, offsetof(JSContext, executionHash));
-    masm.load32(addrExecHash, scratchJSContext);
-    masm.add32(scratchJSContext, scratch);
-    masm.rotateLeft(Imm32(1), scratch, scratch);
-    masm.loadJSContext(scratchJSContext);
-    masm.store32(scratch, addrExecHash);
-
-    // stats
-    Address addrExecHashInputs(scratchJSContext,
-                               offsetof(JSContext, executionHashInputs));
-    masm.load32(addrExecHashInputs, scratch);
-    masm.add32(Imm32(1), scratch);
-    masm.store32(scratch, addrExecHashInputs);
+    masm.unboxDouble(input, floatReg);
+    masm.jump(&hashDouble);
   }
+
+  masm.bind(&isNull);
+  {
+    masm.loadConstantDouble(1.0, floatReg);
+    masm.jump(&hashDouble);
+  }
+
+  masm.bind(&isUndefined);
+  {
+    masm.loadConstantDouble(2.0, floatReg);
+    masm.jump(&hashDouble);
+  }
+
+  masm.bind(&isBoolean);
+  {
+    masm.unboxBoolean(input, scratch);
+    masm.add32(Imm32(3), scratch);
+    masm.convertInt32ToDouble(scratch, floatReg);
+    masm.jump(&hashDouble);
+  }
+
+  masm.bind(&isBigInt);
+  {
+    masm.unboxBigInt(input, scratch);
+
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
+    masm.PushRegsInMask(volatileRegs);
+
+    using Fn = uint32_t (*)(BigInt* bigInt);
+    masm.setupUnalignedABICall(scratchJSContext);
+    masm.loadJSContext(scratchJSContext);
+    masm.passABIArg(scratch);
+    masm.callWithABI<Fn, js::FuzzilliHashBigInt>();
+    masm.storeCallInt32Result(scratch);
+
+    LiveRegisterSet ignore;
+    ignore.add(scratch);
+    ignore.add(scratchJSContext);
+    masm.PopRegsInMaskIgnore(volatileRegs, ignore);
+    masm.jump(&updateHash);
+  }
+
+  masm.bind(&isObject);
+  {
+    masm.unboxObject(input, scratch);
+
+    callvm.prepare();
+    masm.Push(scratch);
+
+    using Fn = void (*)(JSContext* cx, JSObject* o);
+    callvm.callNoResult<Fn, js::FuzzilliHashObject>();
+
+    masm.jump(&done);
+  }
+
+  masm.bind(&hashDouble);
+  masm.fuzzilliHashDouble(floatReg, scratch, scratch2);
+
+  masm.bind(&updateHash);
+  masm.fuzzilliStoreHash(scratch, scratchJSContext, scratch2);
 
   masm.bind(&done);
 
-  AutoOutputRegister output(*this);
   masm.moveValue(UndefinedValue(), output.valueReg());
   return true;
 }
