@@ -3140,10 +3140,9 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   NSPoint defaultPosition = [self FrameView__fullScreenButtonOrigin];
   if ([[self window] isKindOfClass:[ToolbarWindow class]]) {
     return
-        [(ToolbarWindow*)[self window] fullScreenButtonPositionWithDefaultPosition:defaultPosition];
+      [(ToolbarWindow*)[self window] fullScreenButtonPositionWithDefaultPosition:defaultPosition];
   }
   return defaultPosition;
-
 }
 
 - (CGFloat)FrameView__titlebarHeight {
@@ -3238,8 +3237,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 
   static IMP our_closeButtonOrigin = class_getMethodImplementation(
       [NSView class], @selector(FrameView__closeButtonOrigin));
-  static IMP our_fullScreenButtonOrigin =
-    class_getMethodImplementation([NSView class], @selector(FrameView__fullScreenButtonOrigin)); 
   static IMP our_titlebarHeight = class_getMethodImplementation(
       [NSView class], @selector(FrameView__titlebarHeight));
 
@@ -3255,14 +3252,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
       nsToolkit::SwizzleMethods(frameViewClass, @selector(_closeButtonOrigin),
                                 @selector(FrameView__closeButtonOrigin));
     }
-    
-    IMP _fullScreenButtonOrigin =
-        class_getMethodImplementation(frameViewClass, @selector(_fullScreenButtonOrigin));
-    if (_fullScreenButtonOrigin && _fullScreenButtonOrigin != our_fullScreenButtonOrigin) {
-      nsToolkit::SwizzleMethods(frameViewClass, @selector(_fullScreenButtonOrigin),
-                                @selector(FrameView__fullScreenButtonOrigin));
-
-    }
     // Override _titlebarHeight so that the floating titlebar doesn't clip the
     // bottom of the window buttons which we move down with our override of
     // _closeButtonOrigin.
@@ -3271,6 +3260,19 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
     if (_titlebarHeight && _titlebarHeight != our_titlebarHeight) {
       nsToolkit::SwizzleMethods(frameViewClass, @selector(_titlebarHeight),
                                 @selector(FrameView__titlebarHeight));
+    }
+ 
+    //we don't want to render this if we have yosemite or later!
+    if(!nsCocoaFeatures::OnYosemiteOrLater()) {
+      static IMP our_fullScreenButtonOrigin =
+        class_getMethodImplementation([NSView class], @selector(FrameView__fullScreenButtonOrigin)); 
+      IMP _fullScreenButtonOrigin =
+        class_getMethodImplementation(frameViewClass, @selector(_fullScreenButtonOrigin));
+      if (_fullScreenButtonOrigin && _fullScreenButtonOrigin != our_fullScreenButtonOrigin) {
+        nsToolkit::SwizzleMethods(frameViewClass, @selector(_fullScreenButtonOrigin),
+            @selector(FrameView__fullScreenButtonOrigin));
+
+      }
     }
 
     [gSwizzledFrameViewClasses addObject:frameViewClass];
