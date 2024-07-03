@@ -1371,6 +1371,7 @@ nsresult nsCocoaUtils::GetScreenCapturePermissionState(
     uint16_t& aPermissionState) {
   aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_NOTDETERMINED;
 
+  if (@available(macOS 10.15, *)) {
   if (!StaticPrefs::media_macos_screenrecording_oscheck_enabled()) {
     aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
     LOG("screen authorization status: authorized (test disabled via pref)");
@@ -1405,55 +1406,59 @@ nsresult nsCocoaUtils::GetScreenCapturePermissionState(
     return NS_ERROR_UNEXPECTED;
   }
 
-  for (CFIndex i = 0; i < windowCount; i++) {
-    CFDictionaryRef windowDict = reinterpret_cast<CFDictionaryRef>(
-        CFArrayGetValueAtIndex(windowArray, i));
+    for (CFIndex i = 0; i < windowCount; i++) {
+      CFDictionaryRef windowDict = reinterpret_cast<CFDictionaryRef>(
+          CFArrayGetValueAtIndex(windowArray, i));
 
-    // Get the window owner's PID
-    int32_t windowOwnerPid = -1;
-    CFNumberRef windowPidRef = reinterpret_cast<CFNumberRef>(
-        CFDictionaryGetValue(windowDict, kCGWindowOwnerPID));
-    if (!windowPidRef ||
-        !CFNumberGetValue(windowPidRef, kCFNumberIntType, &windowOwnerPid)) {
-      LOG("GetScreenCapturePermissionState() ERROR: failed to get window "
-          "owner");
-      continue;
+      // Get the window owner's PID
+      int32_t windowOwnerPid = -1;
+      CFNumberRef windowPidRef = reinterpret_cast<CFNumberRef>(
+          CFDictionaryGetValue(windowDict, kCGWindowOwnerPID));
+      if (!windowPidRef ||
+          !CFNumberGetValue(windowPidRef, kCFNumberIntType, &windowOwnerPid)) {
+        LOG("GetScreenCapturePermissionState() ERROR: failed to get window "
+            "owner");
+        continue;
+      }
+
+      // Our own window names are always readable and
+      // therefore not relevant to the heuristic.
+      if (thisPid == windowOwnerPid) {
+        continue;
+      }
+
+      CFStringRef windowName = reinterpret_cast<CFStringRef>(
+          CFDictionaryGetValue(windowDict, kCGWindowName));
+      if (!windowName) {
+        continue;
+      }
+
+      CFNumberRef windowLayerRef = reinterpret_cast<CFNumberRef>(
+          CFDictionaryGetValue(windowDict, kCGWindowLayer));
+      int32_t windowLayer;
+      if (!windowLayerRef ||
+          !CFNumberGetValue(windowLayerRef, kCFNumberIntType, &windowLayer)) {
+        LOG("GetScreenCapturePermissionState() ERROR: failed to get layer");
+        continue;
+      }
+
+      // If we have a window name and the window is in the dock or normal window
+      // level, and for another process, assume we have screen recording access.
+      LOG("GetScreenCapturePermissionState(): windowLayer: %d", windowLayer);
+      if (windowLayer == windowLevelDock || windowLayer == windowLevelNormal) {
+        aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
+        LOG("screen authorization status: authorized");
+        return NS_OK;
+      }
     }
 
-    // Our own window names are always readable and
-    // therefore not relevant to the heuristic.
-    if (thisPid == windowOwnerPid) {
-      continue;
-    }
-
-    CFStringRef windowName = reinterpret_cast<CFStringRef>(
-        CFDictionaryGetValue(windowDict, kCGWindowName));
-    if (!windowName) {
-      continue;
-    }
-
-    CFNumberRef windowLayerRef = reinterpret_cast<CFNumberRef>(
-        CFDictionaryGetValue(windowDict, kCGWindowLayer));
-    int32_t windowLayer;
-    if (!windowLayerRef ||
-        !CFNumberGetValue(windowLayerRef, kCFNumberIntType, &windowLayer)) {
-      LOG("GetScreenCapturePermissionState() ERROR: failed to get layer");
-      continue;
-    }
-
-    // If we have a window name and the window is in the dock or normal window
-    // level, and for another process, assume we have screen recording access.
-    LOG("GetScreenCapturePermissionState(): windowLayer: %d", windowLayer);
-    if (windowLayer == windowLevelDock || windowLayer == windowLevelNormal) {
-      aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
-      LOG("screen authorization status: authorized");
-      return NS_OK;
-    }
+    aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_DENIED;
+    LOG("screen authorization status: not authorized");
+    return NS_OK;
   }
-
-  aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_DENIED;
-  LOG("screen authorization status: not authorized");
-  return NS_OK;
+  
+  LOG("GetScreenCapturePermissionState(): nothing to do, not on 10.15+");
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 nsresult nsCocoaUtils::RequestVideoCapturePermission(
