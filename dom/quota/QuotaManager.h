@@ -25,6 +25,7 @@
 #include "mozilla/dom/quota/DirectoryLockCategory.h"
 #include "mozilla/dom/quota/ForwardDecls.h"
 #include "mozilla/dom/quota/InitializationTypes.h"
+#include "mozilla/dom/quota/OriginOperationCallbacks.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "nsCOMPtr.h"
@@ -418,7 +419,9 @@ class QuotaManager final : public BackgroundThreadObject {
 
   RefPtr<BoolPromise> ClearStorage();
 
-  RefPtr<BoolPromise> ShutdownStorage();
+  RefPtr<BoolPromise> ShutdownStorage(
+      Maybe<OriginOperationCallbackOptions> aCallbackOptions = Nothing(),
+      Maybe<OriginOperationCallbacks&> aCallbacks = Nothing());
 
   void ShutdownStorageInternal();
 
@@ -806,7 +809,6 @@ class QuotaManager final : public BackgroundThreadObject {
   uint64_t mTemporaryStorageLimit;
   uint64_t mTemporaryStorageUsage;
   int64_t mNextDirectoryLockId;
-  uint64_t mShutdownStorageOpCount;
   bool mStorageInitialized;
   bool mTemporaryStorageInitialized;
   bool mTemporaryStorageInitializedInternal;

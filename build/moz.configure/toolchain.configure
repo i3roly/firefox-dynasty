@@ -4,6 +4,56 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+# Environment variables that impact the compilation step
+# ==============================================================
+option(
+    env="HOST_CPPFLAGS",
+    help="Extra flags for Preprocessing host sources.",
+    nargs=1,
+    default="",
+)
+
+
+option(
+    env="HOST_CFLAGS",
+    help="Extra flags for compiling host C sources.",
+    nargs=1,
+    default="",
+)
+
+
+option(
+    env="HOST_CXXFLAGS",
+    help="Extra flags for compiling host C++ sources.",
+    nargs=1,
+    default="",
+)
+
+
+option(
+    env="HOST_LDFLAGS",
+    help="Extra flags for linking host object files.",
+    nargs=1,
+    default="",
+)
+
+
+option(
+    env="CPPFLAGS",
+    help="Extra flags for preprocessing sources.",
+    nargs=1,
+    default="",
+)
+
+
+option(
+    env="ASFLAGS",
+    help="Extra flags for assembling sources.",
+    nargs=1,
+    default="",
+)
+
+
 # Code optimization
 # ==============================================================
 
@@ -1560,6 +1610,11 @@ def compiler(
                     % (host_or_target.alias, info.version)
                 )
 
+        if host_or_target.os == "WINNT" and info.type == "gcc":
+            raise FatalCheckError(
+                "Firefox cannot be built with mingw-gcc and requires a mingw-clang toolchain to work."
+            )
+
         if info.flags:
             raise FatalCheckError("Unknown compiler or compiler not supported.")
 
@@ -2080,7 +2135,6 @@ linker_ldflags = linker_ldflags_tmpl(target)
 add_old_configure_assignment("LINKER_LDFLAGS", linker_ldflags)
 
 host_linker_ldflags = linker_ldflags_tmpl(host)
-add_old_configure_assignment("HOST_LINKER_LDFLAGS", host_linker_ldflags)
 
 
 # There's a wrinkle with MinGW: linker configuration is not enabled, so

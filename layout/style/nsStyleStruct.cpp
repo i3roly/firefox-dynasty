@@ -909,7 +909,6 @@ nsStyleSVGReset::nsStyleSVGReset()
       mLightingColor(StyleColor::White()),
       mStopOpacity(1.0f),
       mFloodOpacity(1.0f),
-      mVectorEffect(StyleVectorEffect::None),
       mMaskType(StyleMaskType::Luminance),
       mD(StyleDProperty::None()) {
   MOZ_COUNT_CTOR(nsStyleSVGReset);
@@ -3608,12 +3607,12 @@ IntrinsicSize ContainSizeAxes::ContainIntrinsicSize(
     return aUncontainedSize;
   }
   IntrinsicSize result(aUncontainedSize);
-  const bool isVerticalWM = aFrame.GetWritingMode().IsVertical();
+  const auto wm = aFrame.GetWritingMode();
   if (Maybe<nscoord> containBSize = ContainIntrinsicBSize(aFrame)) {
-    (isVerticalWM ? result.width : result.height) = containBSize;
+    result.BSize(wm) = containBSize;
   }
   if (Maybe<nscoord> containISize = ContainIntrinsicISize(aFrame)) {
-    (isVerticalWM ? result.height : result.width) = containISize;
+    result.ISize(wm) = containISize;
   }
   return result;
 }

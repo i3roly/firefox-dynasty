@@ -19,12 +19,8 @@ dnl = CFLAGS="-foo" ./configure
 dnl =
 dnl ========================================================
 CFLAGS="${CFLAGS=}"
-CPPFLAGS="${CPPFLAGS=}"
 CXXFLAGS="${CXXFLAGS=}"
 LDFLAGS="${LDFLAGS=}"
-HOST_CFLAGS="${HOST_CFLAGS=}"
-HOST_CXXFLAGS="${HOST_CXXFLAGS=}"
-HOST_LDFLAGS="${HOST_LDFLAGS=}"
 
 
 dnl Propagate extra android flags
@@ -34,7 +30,6 @@ case "$target" in
     LDFLAGS="$ANDROID_LDFLAGS $LDFLAGS"
     CFLAGS="$ANDROID_CFLAGS $CFLAGS"
     CXXFLAGS="$ANDROID_CXXFLAGS $CXXFLAGS"
-    ASFLAGS="$ANDROID_ASFLAGS -DANDROID $ASFLAGS"
     ;;
 esac
 
@@ -45,7 +40,6 @@ W32API_VERSION=3.14
 
 
 LDFLAGS="$LDFLAGS $LINKER_LDFLAGS $PACK_REL_RELOC_FLAGS"
-HOST_LDFLAGS="$HOST_LDFLAGS $HOST_LINKER_LDFLAGS"
 
 dnl ========================================================
 dnl Checks for compilers.
@@ -160,51 +154,6 @@ if test "$COMPILE_ENVIRONMENT"; then
 fi # COMPILE_ENVIRONMENT
 
 dnl ========================================================
-dnl System overrides of the defaults for host
-dnl ========================================================
-case "$host" in
-*mingw*)
-    if test "$HOST_CC_TYPE" = clang-cl; then
-        HOST_CFLAGS="$HOST_CFLAGS"
-    else
-        HOST_CFLAGS="$HOST_CFLAGS -mwindows"
-    fi
-    HOST_CFLAGS="$HOST_CFLAGS -DXP_WIN -DWIN32 -D_WIN32 -D_CRT_SECURE_NO_WARNINGS"
-    HOST_OPTIMIZE_FLAGS="${HOST_OPTIMIZE_FLAGS=-O2}"
-    HOST_BIN_SUFFIX=.exe
-
-    case "${host_cpu}" in
-    i*86)
-        if test "$HOST_CC_TYPE" = clang-cl; then
-            HOST_LDFLAGS="$HOST_LDFLAGS -MACHINE:X86"
-        fi
-        ;;
-    x86_64)
-        if test "$HOST_CC_TYPE" = clang-cl; then
-            HOST_LDFLAGS="$HOST_LDFLAGS -MACHINE:X64"
-        fi
-        HOST_CFLAGS="$HOST_CFLAGS -D_AMD64_"
-        ;;
-    esac
-    ;;
-
-*-darwin*)
-    HOST_CFLAGS="$HOST_CFLAGS -DXP_UNIX -DXP_MACOSX"
-    HOST_OPTIMIZE_FLAGS="${HOST_OPTIMIZE_FLAGS=-O3}"
-    ;;
-
-*-linux*|*-kfreebsd*-gnu|*-gnu*)
-    HOST_CFLAGS="$HOST_CFLAGS -DXP_UNIX"
-    HOST_OPTIMIZE_FLAGS="${HOST_OPTIMIZE_FLAGS=-O3}"
-    ;;
-
-*)
-    HOST_CFLAGS="$HOST_CFLAGS -DXP_UNIX"
-    HOST_OPTIMIZE_FLAGS="${HOST_OPTIMIZE_FLAGS=-O2}"
-    ;;
-esac
-
-dnl ========================================================
 dnl System overrides of the defaults for target
 dnl ========================================================
 
@@ -224,22 +173,11 @@ case "$target" in
         MOZ_PGO_OPTIMIZE_FLAGS="-O3"
         MOZ_OPTIMIZE_FLAGS="-O2"
     fi
-
-    case "${target_cpu}" in
-    alpha*)
-        CFLAGS="$CFLAGS -mieee"
-        CXXFLAGS="$CXXFLAGS -mieee"
-    ;;
-    esac
     ;;
 *-mingw*)
     # certain versions of cygwin's makedepend barf on the
     # #include <string> vs -I./dist/include/string issue so don't use it
     if test "$CC_TYPE" != clang-cl ; then
-        # != clang-cl will match gcc and clang
-        if test "$CC_TYPE" = gcc; then
-            AC_MSG_ERROR(Firefox cannot be built with mingw-gcc and requires a mingw-clang toolchain to work)
-        fi
 
         MOZ_OPTIMIZE_FLAGS="-O2"
 
@@ -292,7 +230,6 @@ case "$target" in
     AC_DEFINE(WIN32_LEAN_AND_MEAN)
     dnl See http://support.microsoft.com/kb/143208 to use STL
     AC_DEFINE(NOMINMAX)
-    BIN_SUFFIX='.exe'
 
     case "$host_os" in
     cygwin*|msvc*|mks*)
@@ -439,18 +376,6 @@ AC_SUBST_LIST(MOZ_OPTIMIZE_FLAGS)
 AC_SUBST_LIST(MOZ_OPTIMIZE_LDFLAGS)
 AC_SUBST_LIST(MOZ_PGO_OPTIMIZE_FLAGS)
 
-case "${OS_TARGET}" in
-Android|WINNT|Darwin)
-  MOZ_GLUE_IN_PROGRAM=
-  ;;
-*)
-  dnl On !Android !Windows !OSX, we only want to link executables against mozglue
-  MOZ_GLUE_IN_PROGRAM=1
-  AC_DEFINE(MOZ_GLUE_IN_PROGRAM)
-  ;;
-esac
-AC_SUBST(MOZ_GLUE_IN_PROGRAM)
-
 dnl ========================================================
 dnl = Enable using the clang plugin to build
 dnl ========================================================
@@ -467,7 +392,6 @@ dnl = Maintainer debug option (no --enable equivalent)
 dnl =
 dnl ========================================================
 
-AC_SUBST_LIST(ASFLAGS)
 AC_SUBST_LIST(MOZ_DEBUG_LDFLAGS)
 
 dnl ========================================================
@@ -577,47 +501,20 @@ CXXFLAGS=`echo \
     $_COMPILATION_CXXFLAGS \
     $CXXFLAGS`
 
-ASFLAGS=`echo \
-    $_COMPILATION_ASFLAGS \
-    $ASFLAGS`
-
-HOST_CFLAGS=`echo \
-    $_COMPILATION_HOST_CFLAGS \
-    $HOST_CFLAGS`
-
-HOST_CXXFLAGS=`echo \
-    $_COMPILATION_HOST_CXXFLAGS \
-    $HOST_CXXFLAGS`
-
 LDFLAGS=`echo \
     $LDFLAGS \
     $_COMPILATION_LDFLAGS`
 
-HOST_LDFLAGS=`echo \
-    $HOST_LDFLAGS \
-    $_COMPILATION_HOST_LDFLAGS`
-
 OS_CFLAGS="$CFLAGS"
 OS_CXXFLAGS="$CXXFLAGS"
-OS_CPPFLAGS="$CPPFLAGS"
 OS_LDFLAGS="$LDFLAGS"
-OS_LIBS="$LIBS"
 AC_SUBST_LIST(OS_CFLAGS)
 AC_SUBST_LIST(OS_CXXFLAGS)
-AC_SUBST_LIST(OS_CPPFLAGS)
 AC_SUBST_LIST(OS_LDFLAGS)
-AC_SUBST(OS_LIBS)
 
 AC_SUBST(HOST_CC)
 AC_SUBST(HOST_CXX)
-AC_SUBST_LIST(HOST_CFLAGS)
-AC_SUBST_LIST(HOST_CPPFLAGS)
-AC_SUBST_LIST(HOST_CXXFLAGS)
-AC_SUBST(HOST_LDFLAGS)
-AC_SUBST_LIST(HOST_OPTIMIZE_FLAGS)
-AC_SUBST(HOST_BIN_SUFFIX)
 
-AC_SUBST(BIN_SUFFIX)
 AC_SUBST(WIN32_CONSOLE_EXE_LDFLAGS)
 AC_SUBST(WIN32_GUI_EXE_LDFLAGS)
 

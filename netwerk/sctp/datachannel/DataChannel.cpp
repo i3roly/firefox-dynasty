@@ -417,7 +417,7 @@ DataChannelConnection::~DataChannelConnection() {
   // sctp thread if we were in a callback when the DOM side shut things down.
   ASSERT_WEBRTC(mState == DataChannelConnectionState::Closed);
   MOZ_ASSERT(!mMasterSocket);
-  MOZ_ASSERT(mPending.GetSize() == 0);
+  MOZ_ASSERT(mPending.empty());
 
   if (!IsSTSThread()) {
     // We may be on MainThread *or* on an sctp thread (being called from
@@ -994,21 +994,8 @@ void DataChannelConnection::CompleteConnect() {
 
 // Process any pending Opens
 void DataChannelConnection::ProcessQueuedOpens() {
-  // The nsDeque holds channels with an AddRef applied.  Another reference
-  // (may) be held by the DOMDataChannel, unless it's been GC'd.  No other
-  // references should exist.
-
-  // Can't copy nsDeque's.  Move into temp array since any that fail will
-  // go back to mPending
-  nsRefPtrDeque<DataChannel> temp;
-  RefPtr<DataChannel> temp_channel;
-  while (nullptr != (temp_channel = mPending.PopFront())) {
-    temp.Push(temp_channel.forget());
-  }
-
-  RefPtr<DataChannel> channel;
-
-  while (nullptr != (channel = temp.PopFront())) {
+  std::set<RefPtr<DataChannel>> temp(std::move(mPending));
+  for (auto channel : temp) {
     if (channel->mHasFinishedOpen) {
       DC_DEBUG(("Processing queued open for %p (%u)", channel.get(),
                 channel->mStream));
@@ -1308,11 +1295,15 @@ bool DataChannelConnection::SendDeferredMessages() {
   uint32_t end = i;
   do {
     channel = mChannels.Get(i);
+    if (!channel) {
+      continue;
+    }
+
     // Note that `channel->mConnection` is `this`. This is just here to satisfy
     // the thread safety annotations on DataChannel.
     channel->mConnection->mLock.AssertCurrentThreadOwns();
     // Should already be cleared if closing/closed
-    if (!channel || channel->mBufferedData.IsEmpty()) {
+    if (channel->mBufferedData.IsEmpty()) {
       i = UpdateCurrentStreamIndex();
       continue;
     }
@@ -2139,19 +2130,20 @@ void DataChannelConnection::ClearResets() {
   mStreamsResetting.Clear();
 }
 
-void DataChannelConnection::ResetOutgoingStream(uint16_t stream) {
+void DataChannelConnection::ResetOutgoingStream(DataChannel& aChannel) {
   uint32_t i;
 
   mLock.AssertCurrentThreadOwns();
-  DC_DEBUG(
-      ("Connection %p: Resetting outgoing stream %u", (void*)this, stream));
+  DC_DEBUG(("Connection %p: Resetting outgoing stream %u", (void*)this,
+            aChannel.mStream));
+  aChannel.SetHasSentStreamReset();
   // Rarely has more than a couple items and only for a short time
   for (i = 0; i < mStreamsResetting.Length(); ++i) {
-    if (mStreamsResetting[i] == stream) {
+    if (mStreamsResetting[i] == aChannel.mStream) {
       return;
     }
   }
-  mStreamsResetting.AppendElement(stream);
+  mStreamsResetting.AppendElement(aChannel.mStream);
 }
 
 void DataChannelConnection::SendOutgoingStreamReset() {
@@ -2215,17 +2207,19 @@ void DataChannelConnection::HandleStreamResetEvent(
           //    I believe this is impossible, as we don't have an input stream
           //    yet.
 
-          DC_DEBUG(("Incoming: Channel %u  closed", channel->mStream));
-          if (mChannels.Remove(channel)) {
-            // Mark the stream for reset (the reset is sent below)
-            ResetOutgoingStream(channel->mStream);
+          DC_DEBUG(("Connection %p: stream %u closed", this, channel->mStream));
+          if (mChannels.Remove(channel) && !channel->HasSentStreamReset()) {
+            // If we haven't already started closing this channel, mark the
+            // stream for reset (the reset is sent below)
+            ResetOutgoingStream(*channel);
           }
 
           DC_DEBUG(("Disconnected DataChannel %p from connection %p",
                     (void*)channel.get(), (void*)channel->mConnection.get()));
           channel->StreamClosedLocked();
         } else {
-          DC_WARN(("Can't find incoming channel %d", i));
+          DC_WARN(("Connection %p: Can't find incoming stream %d", this,
+                   strrst->strreset_stream_list[i]));
         }
       }
     }
@@ -2482,7 +2476,7 @@ already_AddRefed<DataChannel> DataChannelConnection::OpenFinish(
     DC_DEBUG(("Queuing channel %p (%u) to finish open", channel.get(), stream));
     // Also serves to mark we told the app
     channel->mHasFinishedOpen = true;
-    mPending.Push(channel);
+    mPending.insert(channel);
     return channel.forget();
   }
 
@@ -2979,6 +2973,7 @@ void DataChannelConnection::CloseLocked(DataChannel* aChannel) {
     // reset.
     mChannels.Remove(channel);
   }
+  mPending.erase(channel);
 
   // This is supposed to only be accessed from Main thread, but this has
   // been accessed here from the STS thread for a long time now.
@@ -2992,7 +2987,7 @@ void DataChannelConnection::CloseLocked(DataChannel* aChannel) {
   }
 
   if (channel->mStream != INVALID_STREAM) {
-    ResetOutgoingStream(channel->mStream);
+    ResetOutgoingStream(*channel);
     if (GetState() != DataChannelConnectionState::Closed) {
       // Individual channel is being closed, send reset now.
       SendOutgoingStreamReset();
@@ -3023,13 +3018,13 @@ void DataChannelConnection::CloseAll() {
   }
 
   // Clean up any pending opens for channels
-  RefPtr<DataChannel> channel;
-  while (nullptr != (channel = mPending.PopFront())) {
+  for (const auto& channel : mPending) {
     DC_DEBUG(("closing pending channel %p, stream %u", channel.get(),
               channel->mStream));
     MutexAutoUnlock lock(mLock);
     channel->Close();  // also releases the ref on each iteration
   }
+  mPending.clear();
   // It's more efficient to let the Resets queue in shutdown and then
   // SendOutgoingStreamReset() here.
   SendOutgoingStreamReset();

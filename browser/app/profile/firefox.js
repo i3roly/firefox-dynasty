@@ -635,18 +635,14 @@ pref("browser.urlbar.suggest.addons", true);
 pref("browser.urlbar.suggest.mdn", true);
 
 // Feature gate pref for Yelp suggestions in the urlbar.
-pref("browser.urlbar.yelp.featureGate", false);
+pref("browser.urlbar.yelp.featureGate", true);
 
 // The minimum prefix length of a Yelp keyword the user must type to trigger the
 // suggestion. 0 means the min length should be taken from Nimbus.
-pref("browser.urlbar.yelp.minKeywordLength", 0);
+pref("browser.urlbar.yelp.minKeywordLength", 4);
 
 // Whether Yelp suggestions should be shown as top picks.
 pref("browser.urlbar.yelp.priority", false);
-
-// The group-relative suggestedIndex of Yelp suggestions within the Firefox
-// Suggest section. Ignored when Yelp suggestions are shown as top picks.
-pref("browser.urlbar.yelp.suggestedIndex", 0);
 
 // If `browser.urlbar.yelp.featureGate` is true, this controls whether
 // Yelp suggestions are turned on.
@@ -1836,7 +1832,12 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-stories-block", 
 pref("browser.newtabpage.activity-stream.discoverystream.region-stories-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
 // List of regions that support the new recommendations BFF, also requires region-stories-config
 pref("browser.newtabpage.activity-stream.discoverystream.region-bff-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
-pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", false);
+// Using merino for recommendations in nightly only
+#ifdef NIGHTLY_BUILD
+  pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", true);
+#else
+  pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", false);
+#endif
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
 // List of regions that get spocs by default.
 pref("browser.newtabpage.activity-stream.discoverystream.region-spocs-config", "US,CA,DE,GB,FR,IT,ES");
@@ -1865,6 +1866,7 @@ pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.en
 
 // Allow users to give thumbs up/down on recommended stories
 pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.enabled", false);
+pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.searchTopsitesCompact", false);
 
 // User pref to show stories on newtab (feeds.system.topstories has to be set to true as well)
 pref("browser.newtabpage.activity-stream.feeds.section.topstories", true);
@@ -1923,7 +1925,7 @@ pref("pdfjs.handleOctetStream", true);
 // Is the sidebar positioned ahead of the content browser
 pref("sidebar.position_start", true);
 pref("sidebar.revamp", false);
-pref("sidebar.main.tools", "history,syncedtabs");
+pref("sidebar.main.tools", "aichat,syncedtabs,history");
 pref("sidebar.verticalTabs", false);
 pref("sidebar.visibility", "always-show");
 
@@ -2684,6 +2686,9 @@ pref("devtools.inspector.simple-highlighters-reduced-motion", false);
 // Wheter or not Enter on inplace editor in the Rules view moves focus and activates
 // next inplace editor.
 pref("devtools.inspector.rule-view.focusNextOnEnter", true);
+// Display @starting-style rules in the Rules view.
+// Should be removed when Bug 1905035 is fixed.
+pref("devtools.inspector.rule-view.starting-style", false);
 
 // Whether or not the box model panel is opened in the layout view
 pref("devtools.layout.boxmodel.opened", true);
@@ -3126,9 +3131,9 @@ pref("browser.backup.scheduled.enabled", false);
 // Pref to control the visibility of the backup section in about:preferences
 pref("browser.backup.preferences.ui.enabled", false);
 // The number of SQLite database pages to backup per step.
-pref("browser.backup.sqlite.pages_per_step", 5);
+pref("browser.backup.sqlite.pages_per_step", 50);
 // The delay between SQLite database backup steps in milliseconds.
-pref("browser.backup.sqlite.step_delay_ms", 250);
+pref("browser.backup.sqlite.step_delay_ms", 50);
 pref("browser.backup.scheduled.idle-threshold-seconds", 300);
 pref("browser.backup.scheduled.minimum-time-between-backups-seconds", 3600);
 
@@ -3139,6 +3144,8 @@ pref("startup.homepage_override_url_nimbus", "");
 // These prefs are referring to the Fx update version
 pref("startup.homepage_override_nimbus_maxVersion", "");
 pref("startup.homepage_override_nimbus_minVersion", "");
+// Pref to disable all What's New pages
+pref("startup.homepage_override_nimbus_disable_wnp", false);
 
 // Pref to enable the content relevancy feature.
 pref("toolkit.contentRelevancy.enabled", false);

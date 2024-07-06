@@ -17,6 +17,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   error: "chrome://remote/content/shared/webdriver/Errors.sys.mjs",
   EventPromise: "chrome://remote/content/shared/Sync.sys.mjs",
   getTimeoutMultiplier: "chrome://remote/content/shared/AppInfo.sys.mjs",
+  getWebDriverSessionById:
+    "chrome://remote/content/shared/webdriver/Session.sys.mjs",
   Log: "chrome://remote/content/shared/Log.sys.mjs",
   modal: "chrome://remote/content/shared/Prompt.sys.mjs",
   registerNavigationId:
@@ -173,12 +175,15 @@ class BrowsingContextModule extends Module {
     this.#contextListener.on("attached", this.#onContextAttached);
     this.#contextListener.on("discarded", this.#onContextDiscarded);
 
-    // Create the navigation listener and listen to "navigation-started" and
-    // "location-changed" events.
+    // Create the navigation listener and listen to "fragment-navigated" and
+    // "navigation-started" events.
     this.#navigationListener = new lazy.NavigationListener(
       this.messageHandler.navigationManager
     );
-    this.#navigationListener.on("location-changed", this.#onLocationChanged);
+    this.#navigationListener.on(
+      "fragment-navigated",
+      this.#onFragmentNavigated
+    );
     this.#navigationListener.on(
       "navigation-started",
       this.#onNavigationStarted
@@ -200,6 +205,16 @@ class BrowsingContextModule extends Module {
     this.#contextListener.off("attached", this.#onContextAttached);
     this.#contextListener.off("discarded", this.#onContextDiscarded);
     this.#contextListener.destroy();
+
+    this.#navigationListener.off(
+      "fragment-navigated",
+      this.#onFragmentNavigated
+    );
+    this.#navigationListener.off(
+      "navigation-started",
+      this.#onNavigationStarted
+    );
+    this.#navigationListener.destroy();
 
     this.#promptListener.off("closed", this.#onPromptClosed);
     this.#promptListener.off("opened", this.#onPromptOpened);
@@ -1831,7 +1846,7 @@ class BrowsingContextModule extends Module {
     }
   };
 
-  #onLocationChanged = async (eventName, data) => {
+  #onFragmentNavigated = async (eventName, data) => {
     const { navigationId, navigableId, url } = data;
     const context = this.#getBrowsingContext(navigableId);
 
@@ -1884,10 +1899,11 @@ class BrowsingContextModule extends Module {
   #onPromptOpened = async (eventName, data) => {
     if (this.#subscribedEvents.has("browsingContext.userPromptOpened")) {
       const { contentBrowser, prompt } = data;
+      const type = prompt.promptType;
 
       // Do not send opened event for unsupported prompt types.
-      if (!(prompt.promptType in UserPromptType)) {
-        lazy.logger.trace(`Prompt type "${prompt.promptType}" not supported`);
+      if (!(type in UserPromptType)) {
+        lazy.logger.trace(`Prompt type "${type}" not supported`);
         return;
       }
 
@@ -1900,11 +1916,16 @@ class BrowsingContextModule extends Module {
         type: lazy.WindowGlobalMessageHandler.type,
       };
 
-      const type = prompt.promptType;
+      const session = lazy.getWebDriverSessionById(
+        this.messageHandler.sessionId
+      );
+      const handlerConfig = session.userPromptHandler.getPromptHandler(type);
+
       const eventPayload = {
         context: contextId,
-        type,
+        handler: handlerConfig.handler,
         message: await prompt.getText(),
+        type,
       };
 
       if (type === "prompt") {

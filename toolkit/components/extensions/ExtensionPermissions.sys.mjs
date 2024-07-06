@@ -4,7 +4,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { computeSha1HashAsString } from "resource://gre/modules/addons/crypto-utils.sys.mjs";
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
@@ -319,7 +318,42 @@ function createStore(useRkv = AppConstants.NIGHTLY_BUILD) {
 
 let store = createStore();
 
+// Map<string, Function[]> @see _synchronizeExtPermAccess.
+const extPermAccessQueues = new Map();
+
 export var ExtensionPermissions = {
+  // The public ExtensionPermissions.add, get, remove, removeAll methods may
+  // interact with the same underlying data source. These methods are not
+  // designed with concurrent modifications in mind, and therefore we
+  // explicitly synchronize each operation, by processing them sequentially.
+  async _synchronizeExtPermAccess(extensionId, asyncFunctionCallback) {
+    return new Promise((resolve, reject) => {
+      // Here we add the (wrapped) function in the queue. The first queue item
+      // is always the currently executing task. Once it completes, the next
+      // (wrapped) function in the queue will be run.
+      let queue = extPermAccessQueues.get(extensionId) ?? [];
+      queue.push(async () => {
+        try {
+          resolve(await asyncFunctionCallback());
+        } catch (e) {
+          reject(e);
+        }
+        queue.shift();
+        if (queue.length) {
+          queue[0]();
+        } else {
+          extPermAccessQueues.delete(extensionId);
+        }
+      });
+      if (queue.length === 1) {
+        // First item in the queue. Store queue (so that future calls become
+        // aware of the pending call), and call the first function in the queue.
+        extPermAccessQueues.set(extensionId, queue);
+        queue[0]();
+      }
+    });
+  },
+
   async _update(extensionId, perms) {
     await store.put(extensionId, perms);
     return lazy.StartupCache.permissions.set(extensionId, perms);
@@ -341,12 +375,14 @@ export var ExtensionPermissions = {
    * back to data from the disk (and cache the result in the StartupCache).
    *
    * @param {string} extensionId The extensionId
-   * @returns {object} An object with "permissions" and "origins" array.
+   * @returns {Promise<object>} Object with "permissions" and "origins" arrays.
    *   The object may be a direct reference to the storage or cache, so its
    *   value should immediately be used and not be modified by callers.
    */
   get(extensionId) {
-    return this._getCached(extensionId);
+    return this._synchronizeExtPermAccess(extensionId, () =>
+      this._getCached(extensionId)
+    );
   },
 
   /**
@@ -414,34 +450,36 @@ export var ExtensionPermissions = {
    * @param {EventEmitter} [emitter] optional object implementing emitter interfaces
    */
   async add(extensionId, perms, emitter) {
-    let { permissions, origins } = await this._get(extensionId);
+    return this._synchronizeExtPermAccess(extensionId, async () => {
+      let { permissions, origins } = await this._get(extensionId);
 
-    let added = emptyPermissions();
+      let added = emptyPermissions();
 
-    this._fixupAllUrlsPerms(perms);
+      this._fixupAllUrlsPerms(perms);
 
-    for (let perm of perms.permissions) {
-      if (!permissions.includes(perm)) {
-        added.permissions.push(perm);
-        permissions.push(perm);
+      for (let perm of perms.permissions) {
+        if (!permissions.includes(perm)) {
+          added.permissions.push(perm);
+          permissions.push(perm);
+        }
       }
-    }
 
-    for (let origin of perms.origins) {
-      origin = new MatchPattern(origin, { ignorePath: true }).pattern;
-      if (!origins.includes(origin)) {
-        added.origins.push(origin);
-        origins.push(origin);
+      for (let origin of perms.origins) {
+        origin = new MatchPattern(origin, { ignorePath: true }).pattern;
+        if (!origins.includes(origin)) {
+          added.origins.push(origin);
+          origins.push(origin);
+        }
       }
-    }
 
-    if (added.permissions.length || added.origins.length) {
-      await this._update(extensionId, { permissions, origins });
-      lazy.Management.emit("change-permissions", { extensionId, added });
-      if (emitter) {
-        emitter.emit("add-permissions", added);
+      if (added.permissions.length || added.origins.length) {
+        await this._update(extensionId, { permissions, origins });
+        lazy.Management.emit("change-permissions", { extensionId, added });
+        if (emitter) {
+          emitter.emit("add-permissions", added);
+        }
       }
-    }
+    });
   },
 
   /**
@@ -453,47 +491,51 @@ export var ExtensionPermissions = {
    * @param {EventEmitter} [emitter] optional object implementing emitter interfaces
    */
   async remove(extensionId, perms, emitter) {
-    let { permissions, origins } = await this._get(extensionId);
+    return this._synchronizeExtPermAccess(extensionId, async () => {
+      let { permissions, origins } = await this._get(extensionId);
 
-    let removed = emptyPermissions();
+      let removed = emptyPermissions();
 
-    this._fixupAllUrlsPerms(perms);
+      this._fixupAllUrlsPerms(perms);
 
-    for (let perm of perms.permissions) {
-      let i = permissions.indexOf(perm);
-      if (i >= 0) {
-        removed.permissions.push(perm);
-        permissions.splice(i, 1);
+      for (let perm of perms.permissions) {
+        let i = permissions.indexOf(perm);
+        if (i >= 0) {
+          removed.permissions.push(perm);
+          permissions.splice(i, 1);
+        }
       }
-    }
 
-    for (let origin of perms.origins) {
-      origin = new MatchPattern(origin, { ignorePath: true }).pattern;
+      for (let origin of perms.origins) {
+        origin = new MatchPattern(origin, { ignorePath: true }).pattern;
 
-      let i = origins.indexOf(origin);
-      if (i >= 0) {
-        removed.origins.push(origin);
-        origins.splice(i, 1);
+        let i = origins.indexOf(origin);
+        if (i >= 0) {
+          removed.origins.push(origin);
+          origins.splice(i, 1);
+        }
       }
-    }
 
-    if (removed.permissions.length || removed.origins.length) {
-      await this._update(extensionId, { permissions, origins });
-      lazy.Management.emit("change-permissions", { extensionId, removed });
-      if (emitter) {
-        emitter.emit("remove-permissions", removed);
+      if (removed.permissions.length || removed.origins.length) {
+        await this._update(extensionId, { permissions, origins });
+        lazy.Management.emit("change-permissions", { extensionId, removed });
+        if (emitter) {
+          emitter.emit("remove-permissions", removed);
+        }
       }
-    }
+    });
   },
 
   async removeAll(extensionId) {
-    lazy.StartupCache.permissions.delete(extensionId);
+    return this._synchronizeExtPermAccess(extensionId, async () => {
+      lazy.StartupCache.permissions.delete(extensionId);
 
-    let removed = store.get(extensionId);
-    await store.delete(extensionId);
-    lazy.Management.emit("change-permissions", {
-      extensionId,
-      removed: await removed,
+      let removed = store.get(extensionId);
+      await store.delete(extensionId);
+      lazy.Management.emit("change-permissions", {
+        extensionId,
+        removed: await removed,
+      });
     });
   },
 
@@ -768,36 +810,16 @@ export var QuarantinedDomains = {
       onUserAllowedPrefChanged
     );
 
-    const onUpdatedDomainsListTelemetry =
-      this._onUpdatedDomainsListTelemetry.bind(this);
     XPCOMUtils.defineLazyPreferenceGetter(
       this,
       "currentDomainsList",
       this.PREF_DOMAINSLIST_NAME,
       "",
-      onUpdatedDomainsListTelemetry,
+      null,
       value => this._transformDomainsListPrefValue(value || "")
-    );
-    // Collect it at least once per session (and update it when the pref value changes).
-    onUpdatedDomainsListTelemetry();
-
-    const onAMRemoteSettingsSetPref =
-      this._onAMRemoteSettingsSetPref.bind(this);
-    Services.obs.addObserver(
-      onAMRemoteSettingsSetPref,
-      "am-remote-settings-setpref"
     );
 
     this._initialized = true;
-  },
-  async _onAMRemoteSettingsSetPref(subject, _topic) {
-    const { prefName, prefValue } = subject?.wrappedJSObject ?? {};
-    if (prefName !== this.PREF_DOMAINSLIST_NAME) {
-      return;
-    }
-    Glean.extensionsQuarantinedDomains.remotehash.set(
-      computeSha1HashAsString(prefValue || "")
-    );
   },
   async _onUserAllowedPrefChanged(_subject, _topic, prefName) {
     let addonId = prefName.slice(this.PREF_ADDONS_BRANCH_NAME.length);
@@ -816,21 +838,9 @@ export var QuarantinedDomains = {
       ]);
     }
   },
-  _onUpdatedDomainsListTelemetry(_subject, _topic, _prefName) {
-    Glean.extensionsQuarantinedDomains.listsize.set(
-      this.currentDomainsList.set.size
-    );
-    Glean.extensionsQuarantinedDomains.listhash.set(
-      this.currentDomainsList.hash
-    );
-  },
   _transformDomainsListPrefValue(value) {
     try {
       return {
-        // NOTE: using a sha1 hash to make sure the resulting string will fit into the
-        // unified telemetry scalar string the glean metrics is mirrored to (which is
-        // limited to 50 characters).
-        hash: computeSha1HashAsString(value || ""),
         set: new Set(
           value
             .split(",")

@@ -12,6 +12,7 @@ import {
   BYTES_IN_MEGABYTE,
   BYTES_IN_MEBIBYTE,
 } from "resource:///modules/backup/MeasurementUtils.sys.mjs";
+import { ERRORS } from "resource:///modules/backup/BackupConstants.mjs";
 
 const BACKUP_DIR_PREF_NAME = "browser.backup.location";
 const SCHEDULED_BACKUPS_ENABLED_PREF_NAME = "browser.backup.scheduled.enabled";
@@ -51,6 +52,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ArchiveUtils: "resource:///modules/backup/ArchiveUtils.sys.mjs",
   BasePromiseWorker: "resource://gre/modules/PromiseWorker.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
+  DownloadPaths: "resource://gre/modules/DownloadPaths.sys.mjs",
   FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
   JsonSchema: "resource://gre/modules/JsonSchema.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
@@ -516,6 +518,13 @@ export class BackupService extends EventTarget {
   static #backupFolderName = null;
 
   /**
+   * The name of the backup archive file. Should be localized.
+   *
+   * @see BACKUP_FILE_NAME
+   */
+  static #backupFileName = null;
+
+  /**
    * Set to true if a backup is currently in progress. Causes stateUpdate()
    * to be called.
    *
@@ -618,10 +627,26 @@ export class BackupService extends EventTarget {
    */
   static get BACKUP_DIR_NAME() {
     if (!BackupService.#backupFolderName) {
-      BackupService.#backupFolderName =
-        lazy.gFluentStrings.formatValueSync("backup-folder-name");
+      BackupService.#backupFolderName = lazy.DownloadPaths.sanitize(
+        lazy.gFluentStrings.formatValueSync("backup-folder-name")
+      );
     }
     return BackupService.#backupFolderName;
+  }
+
+  /**
+   * The localized name for the user's backup archive file. This will have
+   * `.html` appended to it before writing the archive file.
+   *
+   * @returns {string} The localized backup file name
+   */
+  static get BACKUP_FILE_NAME() {
+    if (!BackupService.#backupFileName) {
+      BackupService.#backupFileName = lazy.DownloadPaths.sanitize(
+        lazy.gFluentStrings.formatValueSync("backup-file-name")
+      );
+    }
+    return BackupService.#backupFileName;
   }
 
   /**
@@ -735,7 +760,9 @@ export class BackupService extends EventTarget {
     } else if (schemaType == SCHEMAS.ARCHIVE_JSON_BLOCK) {
       schemaURL = `chrome://browser/content/backup/ArchiveJSONBlock.${version}.schema.json`;
     } else {
-      throw new Error(`Did not recognize SCHEMAS constant: ${schemaType}`);
+      throw new Error(`Did not recognize SCHEMAS constant: ${schemaType}`, {
+        cause: ERRORS.UNKNOWN,
+      });
     }
 
     let response = await fetch(schemaURL);
@@ -792,7 +819,9 @@ export class BackupService extends EventTarget {
    */
   static get() {
     if (!this.#instance) {
-      throw new Error("BackupService not initialized");
+      throw new Error("BackupService not initialized", {
+        cause: ERRORS.UNINITIALIZED,
+      });
     }
     return this.#instance;
   }
@@ -850,6 +879,81 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * Attempts to find the right folder to write the single-file archive to, and
+   * if it does not exist, to create it.
+   *
+   * If the configured destination's parent folder does not exist and cannot
+   * be recreated, we will fall back to the `defaultParentDirPath`. If
+   * `defaultParentDirPath` happens to not exist or cannot be created, we will
+   * fall back to the home directory. If _that_ folder does not exist and cannot
+   * be recreated, this method will reject.
+   *
+   * @param {string} configuredDestFolderPath
+   *   The currently configured destination folder for the archive.
+   * @returns {Promise<string, Error>}
+   */
+  async resolveArchiveDestFolderPath(configuredDestFolderPath) {
+    lazy.logConsole.log(
+      "Resolving configured archive destination folder: ",
+      configuredDestFolderPath
+    );
+
+    // Try to create the configured folder ancestry. If that fails, we clear
+    // configuredDestFolderPath so that we can try the fallback paths, as
+    // if the folder was never set.
+    try {
+      await IOUtils.makeDirectory(configuredDestFolderPath, {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      return configuredDestFolderPath;
+    } catch (e) {
+      lazy.logConsole.warn("Could not create configured destination path: ", e);
+    }
+
+    lazy.logConsole.warn(
+      "The destination directory was invalid. Attempting to fall back to " +
+        "default parent folder: ",
+      BackupService.DEFAULT_PARENT_DIR_PATH
+    );
+    let fallbackFolderPath = PathUtils.join(
+      BackupService.DEFAULT_PARENT_DIR_PATH,
+      BackupService.BACKUP_DIR_NAME
+    );
+    try {
+      await IOUtils.makeDirectory(fallbackFolderPath, {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      return fallbackFolderPath;
+    } catch (e) {
+      lazy.logConsole.warn("Could not create fallback destination path: ", e);
+    }
+
+    let homeDirPath = PathUtils.join(
+      Services.dirsvc.get("Home", Ci.nsIFile).path,
+      BackupService.BACKUP_DIR_NAME
+    );
+    lazy.logConsole.warn(
+      "The destination directory was invalid. Attempting to fall back to " +
+        "Home folder: ",
+      homeDirPath
+    );
+    try {
+      await IOUtils.makeDirectory(homeDirPath, {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      return homeDirPath;
+    } catch (e) {
+      lazy.logConsole.warn("Could not create Home destination path: ", e);
+      throw new Error(
+        "Could not resolve to a writable destination folder path."
+      );
+    }
+  }
+
+  /**
    * @typedef {object} CreateBackupResult
    * @property {string} stagingPath
    *   The staging path for where the backup was created.
@@ -882,6 +986,14 @@ export class BackupService extends EventTarget {
 
     try {
       lazy.logConsole.debug(`Creating backup for profile at ${profilePath}`);
+
+      let archiveDestFolderPath = await this.resolveArchiveDestFolderPath(
+        lazy.backupDirPref
+      );
+      lazy.logConsole.debug(
+        `Destination for archive: ${archiveDestFolderPath}`
+      );
+
       let manifest = await this.#createBackupManifest();
 
       // First, check to see if a `backups` directory already exists in the
@@ -1018,15 +1130,21 @@ export class BackupService extends EventTarget {
       );
 
       // Now create the single-file archive. For now, we'll stash this in the
-      // backups folder while we test this. It'll eventually get moved to the
-      // user's configured backup path once that part is built out.
-      let archivePath = PathUtils.join(backupDirPath, "archive.html");
-      lazy.logConsole.log("Exporting single-file archive to ", archivePath);
+      // backups folder while it gets written. Once that's done, we'll attempt
+      // to move it to the user's configured backup path.
+      let archiveTmpPath = PathUtils.join(backupDirPath, "archive.html");
+      lazy.logConsole.log("Exporting single-file archive to ", archiveTmpPath);
       await this.createArchive(
-        archivePath,
+        archiveTmpPath,
         BackupService.ARCHIVE_TEMPLATE,
         compressedStagingPath,
         this.#encState,
+        manifest.meta
+      );
+
+      let archivePath = await this.finalizeSingleFileArchive(
+        archiveTmpPath,
+        archiveDestFolderPath,
         manifest.meta
       );
 
@@ -1042,6 +1160,88 @@ export class BackupService extends EventTarget {
     } finally {
       this.#backupInProgress = false;
     }
+  }
+
+  /**
+   * Generates a string from a Date in the form of:
+   *
+   * YYYYMMDD-HHMM
+   *
+   * @param {Date} date
+   *   The date to convert into the archive date suffix.
+   * @returns {string}
+   */
+  generateArchiveDateSuffix(date) {
+    let year = date.getFullYear().toString();
+
+    // In all cases, months or days with single digits are expected to start
+    // with a 0.
+
+    // Note that getMonth() is 0-indexed for some reason, so we increment by 1.
+    let month = `${date.getMonth() + 1}`.padStart(2, "0");
+
+    let day = `${date.getDate()}`.padStart(2, "0");
+    let hours = `${date.getHours()}`.padStart(2, "0");
+    let minutes = `${date.getMinutes()}`.padStart(2, "0");
+
+    return `${year}${month}${day}-${hours}${minutes}`;
+  }
+
+  /**
+   * Moves the single-file archive into its configured location with a filename
+   * that is sanitized and contains a timecode. This also removes any existing
+   * single-file archives in that same folder after the move completes.
+   *
+   * @param {string} sourcePath
+   *   The file system location of the single-file archive prior to the move.
+   * @param {string} destFolder
+   *   The folder that the single-file archive is configured to be eventually
+   *   written to.
+   * @param {object} metadata
+   *   The metadata for the backup. See the BackupManifest schema for details.
+   * @returns {Promise<string>}
+   *   Resolves with the path that the single-file archive was moved to.
+   */
+  async finalizeSingleFileArchive(sourcePath, destFolder, metadata) {
+    let archiveDateSuffix = this.generateArchiveDateSuffix(
+      new Date(metadata.date)
+    );
+
+    let existingChildren = await IOUtils.getChildren(destFolder);
+
+    const FILENAME_PREFIX = `${BackupService.BACKUP_FILE_NAME}_${metadata.profileName}`;
+    const FILENAME = `${FILENAME_PREFIX}_${archiveDateSuffix}.html`;
+    let destPath = PathUtils.join(destFolder, FILENAME);
+    lazy.logConsole.log("Moving single-file archive to ", destPath);
+    await IOUtils.move(sourcePath, destPath);
+
+    for (let childFilePath of existingChildren) {
+      let childFileName = PathUtils.filename(childFilePath);
+      // We check both the prefix and the suffix, because the prefix encodes
+      // the profile name in it. If there are other profiles from the same
+      // application performing backup, we don't want to accidentally remove
+      // those.
+      if (
+        childFileName.startsWith(FILENAME_PREFIX) &&
+        childFileName.endsWith(".html")
+      ) {
+        if (childFileName == FILENAME) {
+          // Since filenames don't include seconds, this might occur if a
+          // backup was created seconds after the last one during the same
+          // minute. That tends not to happen in practice, but might occur
+          // during testing, in which case, we'll skip clearing this file.
+          lazy.logConsole.warn(
+            "Collided with a pre-existing archive name, so not clearing: ",
+            FILENAME
+          );
+          continue;
+        }
+        lazy.logConsole.debug("Getting rid of ", childFilePath);
+        await IOUtils.remove(childFilePath);
+      }
+    }
+
+    return destPath;
   }
 
   /**
@@ -1179,7 +1379,7 @@ export class BackupService extends EventTarget {
       await IOUtils.remove(recoveryFilePath, {
         retryReadonly: true,
       });
-      throw new Error("Corrupt archive.");
+      throw new Error("Corrupt archive.", { cause: ERRORS.CORRUPTED_ARCHIVE });
     }
 
     await this.#decompressChildren(recoveryFolderDestPath, "", recoveryArchive);
@@ -1342,7 +1542,9 @@ export class BackupService extends EventTarget {
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */`;
     if (!stylesText.includes(MPL_LICENSE)) {
-      throw new Error("Expected the MPL license block within archive.css");
+      throw new Error("Expected the MPL license block within archive.css", {
+        cause: ERRORS.UNKNOWN,
+      });
     }
 
     stylesText = stylesText.replace(MPL_LICENSE, "");
@@ -1421,6 +1623,12 @@ export class BackupService extends EventTarget {
           chunkSize,
         },
       ]);
+    } catch (e) {
+      // TODO: Bug 1906169 - errors in archive service worker should be more
+      // specific than a general "unknown" error cause
+      throw new Error("Backup archive creation failed", {
+        cause: ERRORS.UNKNOWN,
+      });
     } finally {
       worker.terminate();
     }
@@ -1581,7 +1789,11 @@ export class BackupService extends EventTarget {
               let archiveMetadata = JSON.parse(this._buffer);
               resolve(archiveMetadata);
             } catch (e) {
-              reject(new Error("Could not parse archive metadata."));
+              reject(
+                new Error("Could not parse archive metadata.", {
+                  cause: ERRORS.CORRUPTED_ARCHIVE,
+                })
+              );
             }
             // No need to load anything else - abort reading in more
             // attachments.
@@ -1669,7 +1881,9 @@ export class BackupService extends EventTarget {
     );
 
     if (!(await IOUtils.exists(archivePath))) {
-      throw new Error("Archive file does not exist at path " + archivePath);
+      throw new Error("Archive file does not exist at path " + archivePath, {
+        cause: ERRORS.UNKNOWN,
+      });
     }
 
     try {
@@ -1687,11 +1901,16 @@ export class BackupService extends EventTarget {
         );
 
         if (!archiveJSON.version) {
-          throw new Error("Missing version in the archive JSON block.");
+          throw new Error("Missing version in the archive JSON block.", {
+            cause: ERRORS.CORRUPTED_ARCHIVE,
+          });
         }
         if (archiveJSON.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
           throw new Error(
-            `Archive JSON block is a version newer than we can interpret: ${archiveJSON.version}`
+            `Archive JSON block is a version newer than we can interpret: ${archiveJSON.version}`,
+            {
+              cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+            }
           );
         }
 
@@ -1719,12 +1938,13 @@ export class BackupService extends EventTarget {
 
           // TODO: Collect telemetry for this case. (bug 1891817)
           throw new Error(
-            `Archive JSON block does not conform to schema version ${archiveJSON.version}`
+            `Archive JSON block does not conform to schema version ${archiveJSON.version}`,
+            { cause: ERRORS.CORRUPTED_ARCHIVE }
           );
         }
       } catch (e) {
         lazy.logConsole.error(e);
-        throw new Error("Backup archive is corrupted.");
+        throw e;
       }
 
       lazy.logConsole.debug("Read out archive JSON: ", archiveJSON);
@@ -1769,7 +1989,10 @@ export class BackupService extends EventTarget {
     let decryptor = null;
     if (isEncrypted) {
       if (!recoveryCode) {
-        throw new Error("A recovery code is required to decrypt this archive.");
+        throw new Error(
+          "A recovery code is required to decrypt this archive.",
+          { cause: ERRORS.UNAUTHORIZED }
+        );
       }
       decryptor = await lazy.ArchiveDecryptor.initialize(
         recoveryCode,
@@ -1852,7 +2075,9 @@ export class BackupService extends EventTarget {
       lazy.logConsole.error(
         `Something went wrong while finalizing the staging folder. ${e}`
       );
-      throw e;
+      throw new Error("Failed to finalize staging folder", {
+        cause: ERRORS.FILE_SYSTEM_ERROR,
+      });
     }
   }
 
@@ -2050,12 +2275,17 @@ export class BackupService extends EventTarget {
       );
       let manifest = await IOUtils.readJSON(manifestPath);
       if (!manifest.version) {
-        throw new Error("Backup manifest version not found");
+        throw new Error("Backup manifest version not found", {
+          cause: ERRORS.CORRUPTED_ARCHIVE,
+        });
       }
 
       if (manifest.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
         throw new Error(
-          "Cannot recover from a manifest newer than the current schema version"
+          "Cannot recover from a manifest newer than the current schema version",
+          {
+            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+          }
         );
       }
 
@@ -2076,7 +2306,9 @@ export class BackupService extends EventTarget {
           schemaValidationResult
         );
         // TODO: Collect telemetry for this case. (bug 1891817)
-        throw new Error("Cannot recover from an invalid backup manifest");
+        throw new Error("Cannot recover from an invalid backup manifest", {
+          cause: ERRORS.CORRUPTED_ARCHIVE,
+        });
       }
 
       // In the future, if we ever bump the ArchiveUtils.SCHEMA_VERSION and need
@@ -2087,7 +2319,10 @@ export class BackupService extends EventTarget {
 
       if (meta.appName != AppConstants.MOZ_APP_NAME) {
         throw new Error(
-          `Cannot recover a backup from ${meta.appName} in ${AppConstants.MOZ_APP_NAME}`
+          `Cannot recover a backup from ${meta.appName} in ${AppConstants.MOZ_APP_NAME}`,
+          {
+            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+          }
         );
       }
 
@@ -2095,7 +2330,10 @@ export class BackupService extends EventTarget {
         Services.vc.compare(AppConstants.MOZ_APP_VERSION, meta.appVersion) < 0
       ) {
         throw new Error(
-          `Cannot recover a backup created on version ${meta.appVersion} in ${AppConstants.MOZ_APP_VERSION}`
+          `Cannot recover a backup created on version ${meta.appVersion} in ${AppConstants.MOZ_APP_VERSION}`,
+          {
+            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+          }
         );
       }
 
@@ -2472,15 +2710,21 @@ export class BackupService extends EventTarget {
     lazy.logConsole.debug("Enabling encryption.");
     let encState = await this.loadEncryptionState(profilePath);
     if (encState) {
-      throw new Error("Encryption is already enabled.");
+      throw new Error("Encryption is already enabled.", {
+        cause: ERRORS.ENCRYPTION_ALREADY_ENABLED,
+      });
     }
 
     if (!password) {
-      throw new Error("Cannot supply a blank password.");
+      throw new Error("Cannot supply a blank password.", {
+        cause: ERRORS.INVALID_PASSWORD,
+      });
     }
 
     if (password.length < 8) {
-      throw new Error("Password must be at least 8 characters.");
+      throw new Error("Password must be at least 8 characters.", {
+        cause: ERRORS.INVALID_PASSWORD,
+      });
     }
 
     // TODO: Enforce other password rules here, such as ensuring that the
@@ -2489,7 +2733,9 @@ export class BackupService extends EventTarget {
       password
     ));
     if (!encState) {
-      throw new Error("Failed to construct ArchiveEncryptionState");
+      throw new Error("Failed to construct ArchiveEncryptionState", {
+        cause: ERRORS.UNKNOWN,
+      });
     }
 
     this.#encState = encState;
@@ -2520,7 +2766,9 @@ export class BackupService extends EventTarget {
     lazy.logConsole.debug("Disabling encryption.");
     let encState = await this.loadEncryptionState(profilePath);
     if (!encState) {
-      throw new Error("Encryption is already disabled.");
+      throw new Error("Encryption is already disabled.", {
+        cause: ERRORS.ENCRYPTION_ALREADY_DISABLED,
+      });
     }
 
     let encStateFile = PathUtils.join(
@@ -2735,5 +2983,23 @@ export class BackupService extends EventTarget {
       );
       this.createBackup();
     });
+  }
+
+  /**
+   * Gets a sample from a given backup file and sets a subset of that as
+   * the backupFileInfo in the backup service state.
+   *
+   * Called when getting a info for an archive to potentially restore.
+   *
+   * @param {string} backupFilePath path to the backup file to sample.
+   */
+  async getBackupFileInfo(backupFilePath) {
+    lazy.logConsole.debug(`Getting info from backup file at ${backupFilePath}`);
+    let { archiveJSON, isEncrypted } = await this.sampleArchive(backupFilePath);
+    this.#_state.backupFileInfo = {
+      isEncrypted,
+      date: archiveJSON?.meta?.date,
+    };
+    this.stateUpdate();
   }
 }

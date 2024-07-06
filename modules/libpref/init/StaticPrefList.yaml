@@ -173,9 +173,9 @@
 #endif
 
 #if defined(MOZ_DEV_EDITION) || defined(EARLY_BETA_OR_EARLIER)
-#define DEV_EDITION_OR_EARLY_BETA_OR_EARLIER true
+#define IS_DEV_EDITION_OR_EARLY_BETA_OR_EARLIER true
 #else
-#define DEV_EDITION_OR_EARLY_BETA_OR_EARLIER false
+#define IS_DEV_EDITION_OR_EARLY_BETA_OR_EARLIER false
 #endif
 
 #ifdef ANDROID
@@ -3822,7 +3822,7 @@
 # with a fallback
 - name: dom.security.https_first_schemeless
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # If true, will add a special temporary HTTPS-First exception for a site when a
@@ -4653,6 +4653,17 @@
 # between shadow DOM and light DOM.
 # This is based on https://github.com/mfreed7/shadow-dom-selection
 - name: dom.shadowdom.selection_across_boundary.enabled
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
+# When this pref is enabled:
+#  - Shadow DOM is not pierced by default anymore
+#  - The method accepts optional CaretPositionFromPointOptions to allow piercing
+#    certain ShadowRoots
+#
+# https://drafts.csswg.org/cssom-view/#dom-document-caretpositionfrompoint
+- name: dom.shadowdom.new_caretPositionFromPoint_behavior.enabled
   type: bool
   value: @IS_NIGHTLY_BUILD@
   mirror: always
@@ -5648,6 +5659,13 @@
   type: bool
   value: true
   mirror: always
+
+# Time in milliseconds after which geoclue will try to fallback to MLS if no
+# location is received after successful start.
+- name: geo.provider.geoclue.mls_fallback_timeout_ms
+  type: uint32_t
+  value: 5000
+  mirror: always
 #endif
 
 #---------------------------------------------------------------------------
@@ -5906,7 +5924,7 @@
 
 - name: gfx.canvas.remote.use-canvas-translator-event
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: once
 
 - name: gfx.canvas.willreadfrequently.enabled
@@ -7086,7 +7104,7 @@
 
 - name: gfx.remote-texture.wait-owner-at-image-host
   type: RelaxedAtomicBool
-  value: @IS_NOT_NIGHTLY_BUILD@
+  value: false
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -7748,13 +7766,6 @@
   value: 130
   mirror: always
   do_not_use_directly: true
-
-- name: javascript.options.use_emulates_undefined_fuse
-  type: bool
-  value: true
-  mirror: always
-  do_not_use_directly: true
-  set_spidermonkey_pref: startup
 
 - name: javascript.options.compact_on_user_inactive
   type: bool
@@ -10685,7 +10696,7 @@
 # 2 : enable for encrypted only, 3 : enable for clear only
 -   name: media.wmf.media-engine.enabled
     type: RelaxedAtomicUint32
-#if defined(DEV_EDITION_OR_EARLY_BETA_OR_EARLIER)
+#if defined(MOZ_DEV_EDITION) || defined(EARLY_BETA_OR_EARLIER)
     value: 2
 #else
     value: 0
@@ -10739,8 +10750,8 @@
 # Enable PlayReady DRM for EME
 -   name: media.eme.playready.enabled
     type: RelaxedAtomicBool
-#if defined(MOZ_WMF_CDM) && defined(DEV_EDITION_OR_EARLY_BETA_OR_EARLIER)
-    value: true
+#if defined(MOZ_WMF_CDM)
+    value: @IS_DEV_EDITION_OR_EARLY_BETA_OR_EARLIER@
 #else
     value: false
 #endif
@@ -11633,7 +11644,7 @@
 
 - name: memory.phc.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 - name: memory.phc.min_ram_mb
@@ -12766,7 +12777,7 @@
 # Use platform DNS APIs (where available) to resolve HTTPS queries
 - name: network.dns.native_https_query
   type: RelaxedAtomicBool
-#if defined(EARLY_BETA_OR_EARLIER) && !defined(XP_MACOSX)
+#if !defined(XP_MACOSX)
   value: true
 #else
   value: false
@@ -15301,17 +15312,17 @@
 
 - name: security.tls.enable_certificate_compression_zlib
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 - name: security.tls.enable_certificate_compression_brotli
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 - name: security.tls.enable_certificate_compression_zstd
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 - name: security.ssl.treat_unsafe_negotiation_as_broken
@@ -15619,6 +15630,13 @@
 
 - name: test.events.async.enabled
   type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Enable assertions in IMEContentObserver::FlatTextCache on debug builds.
+# If this pref is enabled, DOM mutation becomes much slower.
+- name: test.ime_content_observer.assert_valid_cache
+  type: bool
   value: false
   mirror: always
 
@@ -16123,6 +16141,11 @@
 #else
   value: false
 #endif
+  mirror: always
+
+- name: webgl.1.request_es2
+  type: RelaxedAtomicBool
+  value: true
   mirror: always
 
 - name: webgl.angle.force-d3d11

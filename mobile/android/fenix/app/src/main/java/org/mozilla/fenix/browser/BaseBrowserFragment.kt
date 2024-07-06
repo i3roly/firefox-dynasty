@@ -88,6 +88,7 @@ import mozilla.components.feature.prompts.PromptFeature.Companion.PIN_REQUEST
 import mozilla.components.feature.prompts.address.AddressDelegate
 import mozilla.components.feature.prompts.creditcard.CreditCardDelegate
 import mozilla.components.feature.prompts.dialog.FullScreenNotificationDialog
+import mozilla.components.feature.prompts.file.AndroidPhotoPicker
 import mozilla.components.feature.prompts.identitycredential.DialogColors
 import mozilla.components.feature.prompts.identitycredential.DialogColorsProvider
 import mozilla.components.feature.prompts.login.LoginDelegate
@@ -143,6 +144,8 @@ import org.mozilla.fenix.components.FenixSnackbar
 import org.mozilla.fenix.components.FindInPageIntegration
 import org.mozilla.fenix.components.StoreProvider
 import org.mozilla.fenix.components.appstate.AppAction
+import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.MicrosurveyAction
+import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.metrics.MetricsUtils
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerIntegration
@@ -295,9 +298,31 @@ abstract class BaseBrowserFragment :
 
     private lateinit var savedLoginsLauncher: ActivityResultLauncher<Intent>
 
+    // Registers a photo picker activity launcher in single-select mode.
+    private val singleMediaPicker =
+        AndroidPhotoPicker.singleMediaPicker(
+            { getFragment() },
+            { getPromptsFeature() },
+        )
+
+    // Registers a photo picker activity launcher in multi-select mode.
+    private val multipleMediaPicker =
+        AndroidPhotoPicker.multipleMediaPicker(
+            { getFragment() },
+            { getPromptsFeature() },
+        )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         savedLoginsLauncher = registerForActivityResult { navigateToSavedLoginsFragment() }
+    }
+
+    private fun getFragment(): Fragment {
+        return this
+    }
+
+    private fun getPromptsFeature(): PromptFeature? {
+        return promptsFeature.get()
     }
 
     @CallSuper
@@ -432,6 +457,7 @@ abstract class BaseBrowserFragment :
         )
         val browserToolbarController = DefaultBrowserToolbarController(
             store = store,
+            appStore = context.components.appStore,
             tabsUseCases = requireComponents.useCases.tabsUseCases,
             activity = activity,
             settings = context.settings(),
@@ -537,7 +563,7 @@ abstract class BaseBrowserFragment :
             )
         }
 
-        if (FeatureFlags.microsurveysEnabled) {
+        if (context.settings().microsurveyFeatureEnabled) {
             listenForMicrosurveyMessage(
                 browserToolbar = browserToolbarView.view,
                 view = view,
@@ -898,6 +924,11 @@ abstract class BaseBrowserFragment :
                         findNavController().navigate(directions)
                     }
                 },
+                androidPhotoPicker = AndroidPhotoPicker(
+                    requireContext(),
+                    singleMediaPicker,
+                    multipleMediaPicker,
+                ),
             ),
             owner = this,
             view = view,
@@ -1373,7 +1404,7 @@ abstract class BaseBrowserFragment :
             context = context,
             parent = binding.browserLayout,
             hideOnScroll = isToolbarDynamic(context),
-            composableContent = {
+            content = {
                 FirefoxTheme {
                     Column {
                         val shouldShowMicrosurveyPrompt =
@@ -1384,14 +1415,25 @@ abstract class BaseBrowserFragment :
                                 MicrosurveyRequestPrompt(
                                     microsurvey = it,
                                     onStartSurveyClicked = {
+                                        context.components.appStore.dispatch(MicrosurveyAction.Started(it.id))
                                         findNavController().nav(
                                             R.id.browserFragment,
                                             BrowserFragmentDirections.actionGlobalMicrosurveyDialog(it.id),
                                         )
                                     },
                                     onCloseButtonClicked = {
+                                        context.components.appStore.dispatch(
+                                            MicrosurveyAction.Dismissed(it.id),
+                                        )
                                         context.settings().shouldShowMicrosurveyPrompt = false
                                         shouldShowMicrosurveyPrompt.value = false
+
+                                        resumeDownloadDialogState(
+                                            getCurrentTab()?.id,
+                                            context.components.core.store,
+                                            context,
+                                            context.settings().getBottomToolbarHeight(),
+                                        )
                                     },
                                 )
                             }
@@ -1502,11 +1544,8 @@ abstract class BaseBrowserFragment :
     }
 
     @VisibleForTesting
-    internal fun initializeMicrosurveyFeature(
-        context: Context,
-        microsurveyEnabled: Boolean = FeatureFlags.microsurveysEnabled,
-    ) {
-        if (context.settings().isExperimentationEnabled && microsurveyEnabled) {
+    internal fun initializeMicrosurveyFeature(context: Context) {
+        if (context.settings().isExperimentationEnabled && context.settings().microsurveyFeatureEnabled) {
             messagingFeatureMicrosurvey.set(
                 feature = MessagingFeature(
                     appStore = requireComponents.appStore,
@@ -1534,7 +1573,7 @@ abstract class BaseBrowserFragment :
             context = context,
             parent = binding.browserLayout,
             hideOnScroll = isToolbarDynamic(context),
-            composableContent = {
+            content = {
                 FirefoxTheme {
                     Column {
                         val shouldShowMicrosurveyPrompt =
@@ -1545,14 +1584,25 @@ abstract class BaseBrowserFragment :
                                 MicrosurveyRequestPrompt(
                                     microsurvey = it,
                                     onStartSurveyClicked = {
+                                        context.components.appStore.dispatch(MicrosurveyAction.Started(it.id))
                                         findNavController().nav(
                                             R.id.browserFragment,
                                             BrowserFragmentDirections.actionGlobalMicrosurveyDialog(it.id),
                                         )
                                     },
                                     onCloseButtonClicked = {
+                                        context.components.appStore.dispatch(
+                                            MicrosurveyAction.Dismissed(it.id),
+                                        )
                                         context.settings().shouldShowMicrosurveyPrompt = false
                                         shouldShowMicrosurveyPrompt.value = false
+
+                                        resumeDownloadDialogState(
+                                            getCurrentTab()?.id,
+                                            context.components.core.store,
+                                            context,
+                                            context.settings().getBottomToolbarHeight(),
+                                        )
                                     },
                                 )
                             }

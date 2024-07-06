@@ -21,7 +21,11 @@ import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.selector.selectedTab
+import mozilla.components.concept.engine.translate.TranslationSupport
+import mozilla.components.concept.engine.translate.findLanguage
 import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.service.fxa.manager.AccountState.NotAuthenticated
 import mozilla.components.support.ktx.android.util.dpToPx
@@ -96,8 +100,10 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
         setContent {
             FirefoxTheme {
                 MenuDialogBottomSheet(onRequestDismiss = {}) {
+                    val appStore = components.appStore
                     val browserStore = components.core.store
                     val syncStore = components.backgroundServices.syncStore
+                    val addonManager = components.addonManager
                     val bookmarksStorage = components.core.bookmarksStorage
                     val pinnedSiteStorage = components.core.pinnedSiteStorage
                     val tabCollectionStorage = components.core.tabCollectionStorage
@@ -110,6 +116,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     val selectedTab = browserStore.state.selectedTab
                     val settings = components.settings
                     val topSitesMaxLimit = settings.topSitesMaxLimit
+                    val supportedLanguages = components.core.store.state.translationEngine.supportedLanguages
+                    val translateLanguageCode = selectedTab?.translationsState?.translationEngineState
+                        ?.requestedTranslationPair?.toLanguage
 
                     val navHostController = rememberNavController()
                     val coroutineScope = rememberCoroutineScope()
@@ -124,9 +133,14 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             ),
                             middleware = listOf(
                                 MenuDialogMiddleware(
+                                    appStore = appStore,
+                                    addonManager = addonManager,
                                     bookmarksStorage = bookmarksStorage,
                                     pinnedSiteStorage = pinnedSiteStorage,
                                     addBookmarkUseCase = addBookmarkUseCase,
+                                    addPinnedSiteUseCase = addPinnedSiteUseCase,
+                                    removePinnedSitesUseCase = removePinnedSiteUseCase,
+                                    topSitesMaxLimit = topSitesMaxLimit,
                                     onDeleteAndQuit = {
                                         deleteAndQuit(
                                             activity = activity as HomeActivity,
@@ -134,9 +148,11 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                             snackbar = null,
                                         )
                                     },
-                                    addPinnedSiteUseCase = addPinnedSiteUseCase,
-                                    removePinnedSitesUseCase = removePinnedSiteUseCase,
-                                    topSitesMaxLimit = topSitesMaxLimit,
+                                    onDismiss = {
+                                        withContext(Dispatchers.Main) {
+                                            this@MenuDialogFragment.dismiss()
+                                        }
+                                    },
                                     scope = coroutineScope,
                                 ),
                                 MenuNavigationMiddleware(
@@ -158,6 +174,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     val account by syncStore.observeAsState(initialValue = null) { state -> state.account }
                     val accountState by syncStore.observeAsState(initialValue = NotAuthenticated) { state ->
                         state.accountState
+                    }
+                    val recommendedAddons by store.observeAsState(initialValue = emptyList()) { state ->
+                        state.extensionMenuState.recommendedAddons
                     }
                     val isBookmarked by store.observeAsState(initialValue = false) { state ->
                         state.browserMenuState != null && state.browserMenuState.bookmarkState.isBookmarked
@@ -241,7 +260,15 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         composable(route = TOOLS_MENU_ROUTE) {
                             ToolsSubmenu(
                                 isReaderViewActive = false,
-                                isTranslated = false,
+                                isTranslated = selectedTab?.translationsState?.isTranslated ?: false,
+                                translatedLanguage = if (translateLanguageCode != null && supportedLanguages != null) {
+                                    TranslationSupport(
+                                        fromLanguages = supportedLanguages.fromLanguages,
+                                        toLanguages = supportedLanguages.toLanguages,
+                                    ).findLanguage(translateLanguageCode)?.localizedDisplayName ?: ""
+                                } else {
+                                    ""
+                                },
                                 onBackButtonClick = {
                                     store.dispatch(MenuAction.Navigate.Back)
                                 },
@@ -304,11 +331,18 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
                         composable(route = EXTENSIONS_MENU_ROUTE) {
                             ExtensionsSubmenu(
+                                recommendedAddons = recommendedAddons,
                                 onBackButtonClick = {
                                     store.dispatch(MenuAction.Navigate.Back)
                                 },
                                 onManageExtensionsMenuClick = {
                                     store.dispatch(MenuAction.Navigate.ManageExtensions)
+                                },
+                                onAddonClick = { addon ->
+                                    store.dispatch(MenuAction.Navigate.AddonDetails(addon = addon))
+                                },
+                                onInstallAddonClick = { addon ->
+                                    store.dispatch(MenuAction.InstallAddon(addon = addon))
                                 },
                                 onDiscoverMoreExtensionsMenuClick = {
                                     store.dispatch(MenuAction.Navigate.DiscoverMoreExtensions)

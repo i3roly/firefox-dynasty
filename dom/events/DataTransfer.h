@@ -425,6 +425,9 @@ class DataTransfer final : public nsISupports, public nsWrapperCache {
 
   nsIClipboardDataSnapshot* GetClipboardDataSnapshot() const;
 
+  // The drag session on the widget of the owner, if any.
+  nsIDragSession* GetOwnerDragSession();
+
  protected:
   // Retrieve a list of clipboard formats supported
   //
@@ -460,7 +463,7 @@ class DataTransfer final : public nsISupports, public nsWrapperCache {
   nsresult SetDataAtInternal(const nsAString& aFormat, nsIVariant* aData,
                              uint32_t aIndex, nsIPrincipal* aSubjectPrincipal);
 
-  friend class ContentParent;
+  friend class BrowserParent;
   friend class Clipboard;
 
   void FillAllExternalData();
@@ -473,6 +476,9 @@ class DataTransfer final : public nsISupports, public nsWrapperCache {
   void MozClearDataAtHelper(const nsAString& aFormat, uint32_t aIndex,
                             nsIPrincipal& aSubjectPrincipal,
                             mozilla::ErrorResult& aRv);
+
+  // Returns the widget of the owner, if known.
+  nsIWidget* GetOwnerWidget();
 
   nsCOMPtr<nsISupports> mParent;
 

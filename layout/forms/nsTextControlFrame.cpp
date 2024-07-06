@@ -143,7 +143,8 @@ void nsTextControlFrame::Destroy(DestroyContext& aContext) {
   // text node in the text control.  If so, we should set source node to the
   // text control because another text node may be recreated soon if the text
   // control is just reframed.
-  if (nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession()) {
+  if (nsCOMPtr<nsIDragSession> dragSession =
+          nsContentUtils::GetDragSession(PresContext())) {
     if (dragSession->IsDraggingTextInTextControl() && mRootNode &&
         mRootNode->GetFirstChild()) {
       nsCOMPtr<nsINode> sourceNode;
@@ -168,7 +169,7 @@ void nsTextControlFrame::Destroy(DestroyContext& aContext) {
   aContext.AddAnonymousContent(mRootNode.forget());
   aContext.AddAnonymousContent(mPlaceholderDiv.forget());
   aContext.AddAnonymousContent(mPreviewDiv.forget());
-  aContext.AddAnonymousContent(mRevealButton.forget());
+  aContext.AddAnonymousContent(mButton.forget());
 
   nsContainerFrame::Destroy(aContext);
 }
@@ -188,7 +189,8 @@ LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
   const nscoord charMaxAdvance = fontMet->MaxAdvance();
 
   // Initialize based on the width in characters.
-  const int32_t cols = GetCols();
+  const Maybe<int32_t> maybeCols = GetCols();
+  const int32_t cols = maybeCols.valueOr(TextControlElement::DEFAULT_COLS);
   intrinsicSize.ISize(aWM) = cols * charWidth;
 
   // If we do not have what appears to be a fixed-width font, add a "slop"
@@ -203,12 +205,11 @@ LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
                         nsPresContext::CSSPixelsToAppUnits(4));
     internalPadding = RoundToMultiple(internalPadding, AppUnitsPerCSSPixel());
     intrinsicSize.ISize(aWM) += internalPadding;
-  } else {
+  } else if (PresContext()->CompatibilityMode() ==
+             eCompatibility_FullStandards) {
     // This is to account for the anonymous <br> having a 1 twip width
     // in Full Standards mode, see BRFrame::Reflow and bug 228752.
-    if (PresContext()->CompatibilityMode() == eCompatibility_FullStandards) {
-      intrinsicSize.ISize(aWM) += 1;
-    }
+    intrinsicSize.ISize(aWM) += 1;
   }
 
   // Increment width with cols * letter-spacing.
@@ -248,6 +249,14 @@ LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
       }
     }
   }
+
+  // Add the inline size of the button if our char size is explicit, so as to
+  // make sure to make enough space for it.
+  if (maybeCols.isSome() && mButton && mButton->GetPrimaryFrame()) {
+    intrinsicSize.ISize(aWM) +=
+        mButton->GetPrimaryFrame()->GetMinISize(aRenderingContext);
+  }
+
   return intrinsicSize;
 }
 
@@ -431,21 +440,20 @@ nsresult nsTextControlFrame::CreateAnonymousContent(
   // background on the placeholder doesn't obscure the caret.
   aElements.AppendElement(mRootNode);
 
+  rv = UpdateValueDisplay(false);
+  NS_ENSURE_SUCCESS(rv, rv);
+
   if ((StaticPrefs::layout_forms_reveal_password_button_enabled() ||
        PresContext()->Document()->ChromeRulesEnabled()) &&
       IsPasswordTextControl() &&
       StyleDisplay()->EffectiveAppearance() != StyleAppearance::Textfield) {
-    mRevealButton =
+    mButton =
         MakeAnonElement(PseudoStyleType::mozReveal, nullptr, nsGkAtoms::button);
-    mRevealButton->SetAttr(kNameSpaceID_None, nsGkAtoms::aria_hidden,
-                           u"true"_ns, false);
-    mRevealButton->SetAttr(kNameSpaceID_None, nsGkAtoms::tabindex, u"-1"_ns,
-                           false);
-    aElements.AppendElement(mRevealButton);
+    mButton->SetAttr(kNameSpaceID_None, nsGkAtoms::aria_hidden, u"true"_ns,
+                     false);
+    mButton->SetAttr(kNameSpaceID_None, nsGkAtoms::tabindex, u"-1"_ns, false);
+    aElements.AppendElement(mButton);
   }
-
-  rv = UpdateValueDisplay(false);
-  NS_ENSURE_SUCCESS(rv, rv);
 
   InitializeEagerlyIfNeeded();
   return NS_OK;
@@ -474,7 +482,8 @@ bool nsTextControlFrame::ShouldInitializeEagerly() const {
   // If text in the editor is being dragged, we need the editor to create
   // new source node for the drag session (TextEditor creates the text node
   // in the anonymous <div> element.
-  if (nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession()) {
+  if (nsCOMPtr<nsIDragSession> dragSession =
+          nsContentUtils::GetDragSession(PresContext())) {
     if (dragSession->IsDraggingTextInTextControl()) {
       nsCOMPtr<nsINode> sourceNode;
       if (NS_SUCCEEDED(
@@ -561,8 +570,8 @@ void nsTextControlFrame::AppendAnonymousContentTo(
     aElements.AppendElement(mPreviewDiv);
   }
 
-  if (mRevealButton) {
-    aElements.AppendElement(mRevealButton);
+  if (mButton) {
+    aElements.AppendElement(mButton);
   }
 
   aElements.AppendElement(mRootNode);
@@ -597,13 +606,6 @@ Maybe<nscoord> nsTextControlFrame::ComputeBaseline(
   return Some(nsLayoutUtils::GetCenteredFontBaseline(fontMet, lineHeight,
                                                      wm.IsLineInverted()) +
               aReflowInput.ComputedLogicalBorderPadding(wm).BStart(wm));
-}
-
-static bool IsButtonBox(const nsIFrame* aFrame) {
-  auto pseudoType = aFrame->Style()->GetPseudoType();
-  return pseudoType == PseudoStyleType::mozNumberSpinBox ||
-         pseudoType == PseudoStyleType::mozSearchClearButton ||
-         pseudoType == PseudoStyleType::mozReveal;
 }
 
 void nsTextControlFrame::Reflow(nsPresContext* aPresContext,
@@ -1216,7 +1218,8 @@ nsTextControlFrame::EditorInitializer::Run() {
   // and its source node is the text control element, we're being reframed.
   // In this case we should restore the source node of the drag session to
   // new text node because it's required for dispatching `dragend` event.
-  if (nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession()) {
+  if (nsCOMPtr<nsIDragSession> dragSession =
+          nsContentUtils::GetDragSession(mFrame->PresContext())) {
     if (dragSession->IsDraggingTextInTextControl()) {
       nsCOMPtr<nsINode> sourceNode;
       if (NS_SUCCEEDED(

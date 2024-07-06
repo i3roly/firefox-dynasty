@@ -77,6 +77,11 @@ def check_libstdcxx_linkage():
     die("Firefox does not support linking statically with libstdc++")
 
 
+check_and_add_flag(
+    "-mieee",
+    when=target_has_linux_kernel & depends(target.cpu)(lambda cpu: cpu == "Alpha"),
+)
+
 # Identical Code Folding
 option(
     "--enable-icf",
@@ -537,20 +542,103 @@ set_config("OS_COMPILE_CMFLAGS", compilation_flags.cmflags)
 set_config("OS_COMPILE_CMMFLAGS", compilation_flags.cmmflags)
 
 
+# Final flags settings
+# ---------------------------------
+@depends(host_c_compiler)
+def host_optimize_flags(compiler):
+    if compiler.type == "clang-cl":
+        return ["-O2"]
+    else:
+        return ["-O3"]
+
+
+set_config("HOST_OPTIMIZE_FLAGS", host_optimize_flags)
+
+
+@depends("HOST_CPPFLAGS", host, host_c_compiler)
+@imports(_from="mozbuild.shellutil", _import="split")
+def host_cppflags(base_cppflags, host, compiler):
+    flags = []
+    if host.kernel == "WINNT":
+        if compiler.type != "clang-cl":
+            flags += ["-mwindows"]
+        flags += ["-DXP_WIN", "-DWIN32", "-D_WIN32", "-D_CRT_SECURE_NO_WARNINGS"]
+        if host.cpu == "x86_64":
+            flags += ["-D_AMD64_"]
+    elif host.kernel == "Darwin":
+        flags += ["-DXP_UNIX", "-DXP_MACOSX"]
+    else:
+        flags += ["-DXP_UNIX"]
+    flags += split(base_cppflags[0])
+    return flags
+
+
+@depends("HOST_CFLAGS", compilation_flags)
+@imports(_from="mozbuild.shellutil", _import="split")
+def host_cflags(base_cflags, compilation_flags):
+    flags = list(compilation_flags.host_cflags)
+    flags += split(base_cflags[0])
+    return flags
+
+
+@depends("HOST_CXXFLAGS", compilation_flags)
+@imports(_from="mozbuild.shellutil", _import="split")
+def host_cflags(base_cxxflags, compilation_flags):
+    flags = list(compilation_flags.host_cxxflags)
+    flags += split(base_cxxflags[0])
+    return flags
+
+
+@depends("HOST_LDFLAGS", linker_flags, host_linker_ldflags, host, host_c_compiler)
+@imports(_from="mozbuild.shellutil", _import="split")
+def host_ldflags(env_ldflags, linker_flags, host_linker_ldflags, host, compiler):
+    flags = split(env_ldflags[0])
+    flags += host_linker_ldflags
+    if host.kernel == "WINNT" and compiler.type == "clang-cl":
+        if host.cpu == "x86":
+            flags += ["-MACHINE:X86"]
+        elif host.cpu == "x86_64":
+            flags += ["-MACHINE:X64"]
+    flags += linker_flags.host_ldflags
+    return flags
+
+
+@depends("CPPFLAGS")
+@imports(_from="mozbuild.shellutil", _import="split")
+def os_cppflags(env_cppflags):
+    flags = split(env_cppflags[0])
+    return flags
+
+
+@depends("ASFLAGS", asm_flags, android_flags, all_arm_flags)
+@imports(_from="mozbuild.shellutil", _import="split")
+def os_asflags(env_asflags, asm_flags, android_flags, all_arm_flags):
+    flags = []
+    if android_flags:
+        flags.extend(android_flags.asflags)
+        flags.append("-DANDROID")
+    if all_arm_flags:
+        flags.extend(all_arm_flags)
+    flags.extend(asm_flags.asflags)
+    flags.extend(split(env_asflags[0]))
+    return flags
+
+
 # Please keep these last in this file.
-add_old_configure_assignment("_COMPILATION_ASFLAGS", asm_flags.asflags)
-add_old_configure_assignment("_COMPILATION_HOST_ASFLAGS", asm_flags.host_asflags)
 add_old_configure_assignment("_COMPILATION_LDFLAGS", linker_flags.ldflags)
 add_old_configure_assignment(
     "_COMPILATION_OPTIMIZE_LDFLAGS", linker_optimize_flags.ldflags
 )
-add_old_configure_assignment("_COMPILATION_HOST_LDFLAGS", linker_flags.host_ldflags)
+
+add_old_configure_assignment("CPPFLAGS", os_cppflags)
 
 add_old_configure_assignment("_COMPILATION_CFLAGS", compilation_flags.cflags)
 add_old_configure_assignment("_COMPILATION_CXXFLAGS", compilation_flags.cxxflags)
-add_old_configure_assignment("_COMPILATION_HOST_CFLAGS", compilation_flags.host_cflags)
-add_old_configure_assignment(
-    "_COMPILATION_HOST_CXXFLAGS", compilation_flags.host_cxxflags
-)
 
+set_config("HOST_CPPFLAGS", host_cppflags)
+set_config("HOST_CFLAGS", host_cflags)
+set_config("HOST_CXXFLAGS", host_cflags)
+set_config("HOST_LDFLAGS", host_ldflags)
+set_config("OS_CPPFLAGS", os_cppflags)
+set_config("ASFLAGS", os_asflags)
 set_config("DSO_LDOPTS", dso_flags.ldopts)

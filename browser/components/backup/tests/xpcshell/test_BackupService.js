@@ -129,13 +129,12 @@ async function testCreateBackupHelper(sandbox, taskFn) {
   let stagingPath = PathUtils.join(backupsFolderPath, "staging");
 
   // For now, we expect a single backup only to be saved. There should also be
-  // a single compressed file for the staging folder, and a single HTML file
-  // export.
+  // a single compressed file for the staging folder.
   let backupsChildren = await IOUtils.getChildren(backupsFolderPath);
   Assert.equal(
     backupsChildren.length,
-    3,
-    "There should only be 3 items in the backups folder"
+    2,
+    "There should only be 2 items in the backups folder"
   );
 
   // The folder and the compressed file should have the same filename, but
@@ -254,6 +253,21 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     1
   );
 
+  let archiveDateSuffix = bs.generateArchiveDateSuffix(
+    new Date(manifest.meta.date)
+  );
+
+  // We also expect the HTML file to have been written to the folder pointed
+  // at by browser.backups.location, within backupDirPath folder.
+  const EXPECTED_ARCHIVE_PATH = PathUtils.join(
+    bs.state.backupDirPath,
+    `${BackupService.BACKUP_FILE_NAME}_${manifest.meta.profileName}_${archiveDateSuffix}.html`
+  );
+  Assert.ok(
+    await IOUtils.exists(EXPECTED_ARCHIVE_PATH),
+    "Single-file backup archive was written."
+  );
+
   taskFn(manifest);
 
   // After createBackup is more fleshed out, we're going to want to make sure
@@ -261,6 +275,7 @@ async function testCreateBackupHelper(sandbox, taskFn) {
   // ManifestEntry objects, and that the staging folder was successfully
   // renamed with the current date.
   await IOUtils.remove(fakeProfilePath, { recursive: true });
+  await IOUtils.remove(EXPECTED_ARCHIVE_PATH);
 }
 
 /**
@@ -518,5 +533,44 @@ add_task(async function test_checkForPostRecovery() {
   );
 
   await IOUtils.remove(testProfilePath, { recursive: true });
+  sandbox.restore();
+});
+
+/**
+ * Tests that getBackupFileInfo updates backupFileInfo in the state with a subset
+ * of info from the fake SampleArchiveResult returned by sampleArchive().
+ */
+add_task(async function test_getBackupFileInfo() {
+  let sandbox = sinon.createSandbox();
+
+  const DATE = "2024-06-25T21:59:11.777Z";
+  const IS_ENCRYPTED = true;
+
+  let fakeSampleArchiveResult = {
+    isEncrypted: IS_ENCRYPTED,
+    startByteOffset: 26985,
+    contentType: "multipart/mixed",
+    archiveJSON: { version: 1, meta: { date: DATE }, encConfig: {} },
+  };
+
+  sandbox
+    .stub(BackupService.prototype, "sampleArchive")
+    .resolves(fakeSampleArchiveResult);
+
+  let bs = new BackupService();
+
+  await bs.getBackupFileInfo("fake-archive.html");
+
+  Assert.ok(
+    BackupService.prototype.sampleArchive.calledOnce,
+    "sampleArchive was called once"
+  );
+
+  Assert.deepEqual(
+    bs.state.backupFileInfo,
+    { isEncrypted: IS_ENCRYPTED, date: DATE },
+    "State should match a subset from the archive sample."
+  );
+
   sandbox.restore();
 });

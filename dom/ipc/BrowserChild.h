@@ -85,6 +85,13 @@ class SessionStoreChild;
 class RequestData;
 class WebProgressData;
 
+#define DOM_BROWSERCHILD_IID                         \
+  {                                                  \
+    0x58a5775d, 0xba05, 0x45bf, {                    \
+      0xbd, 0xb8, 0xd7, 0x61, 0xf9, 0x01, 0x01, 0x31 \
+    }                                                \
+  }
+
 class BrowserChildMessageManager : public ContentFrameMessageManager,
                                    public nsIMessageSender,
                                    public nsSupportsWeakReference {
@@ -181,6 +188,7 @@ class BrowserChild final : public nsMessageManagerScriptExecutor,
     return mUniqueId;
   }
 
+  NS_DECLARE_STATIC_IID_ACCESSOR(DOM_BROWSERCHILD_IID)
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
   NS_DECL_NSIWEBBROWSERCHROME
   NS_DECL_NSIINTERFACEREQUESTOR
@@ -657,6 +665,24 @@ class BrowserChild final : public nsMessageManagerScriptExecutor,
           aCanvasFingerprinter,
       const Maybe<bool> aCanvasFingerprinterKnownText);
 
+  already_AddRefed<nsIDragSession> GetDragSession();
+  void SetDragSession(nsIDragSession* aSession);
+
+  mozilla::ipc::IPCResult RecvInvokeChildDragSession(
+      const MaybeDiscarded<WindowContext>& aSourceWindowContext,
+      const MaybeDiscarded<WindowContext>& aSourceTopWindowContext,
+      nsTArray<IPCTransferableData>&& aTransferables, const uint32_t& aAction);
+
+  mozilla::ipc::IPCResult RecvUpdateDragSession(
+      nsTArray<IPCTransferableData>&& aTransferables,
+      EventMessage aEventMessage);
+
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY
+  mozilla::ipc::IPCResult RecvEndDragSession(
+      const bool& aDoneDrag, const bool& aUserCancelled,
+      const mozilla::LayoutDeviceIntPoint& aEndDragPoint,
+      const uint32_t& aKeyModifiers, const uint32_t& aDropEffect);
+
  protected:
   virtual ~BrowserChild();
 
@@ -759,6 +785,8 @@ class BrowserChild final : public nsMessageManagerScriptExecutor,
   RefPtr<ContentChild> mManager;
   RefPtr<BrowsingContext> mBrowsingContext;
   RefPtr<nsBrowserStatusFilter> mStatusFilter;
+  RefPtr<nsIDragSession> mDragSession;
+
   Maybe<CodeNameIndex> mPreviousConsumedKeyDownCode;
   uint32_t mChromeFlags;
   uint32_t mMaxTouchPoints;
@@ -860,6 +888,8 @@ class BrowserChild final : public nsMessageManagerScriptExecutor,
 
   DISALLOW_EVIL_CONSTRUCTORS(BrowserChild);
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(BrowserChild, DOM_BROWSERCHILD_IID)
 
 }  // namespace dom
 }  // namespace mozilla

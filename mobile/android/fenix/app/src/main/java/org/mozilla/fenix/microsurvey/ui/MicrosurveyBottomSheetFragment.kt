@@ -9,11 +9,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.navArgs
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -47,7 +44,8 @@ class MicrosurveyBottomSheetFragment : BottomSheetDialogFragment() {
                 val bottomSheet = findViewById<View?>(R.id.design_bottom_sheet)
                 bottomSheet?.setBackgroundResource(android.R.color.transparent)
                 val behavior = BottomSheetBehavior.from(bottomSheet)
-                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                behavior.setPeekHeightToHalfScreenHeight()
+                behavior.state = BottomSheetBehavior.STATE_HALF_EXPANDED
             }
         }
 
@@ -63,7 +61,7 @@ class MicrosurveyBottomSheetFragment : BottomSheetDialogFragment() {
             val microsurveyUIData = messaging.getMessage(microsurveyId)?.toMicrosurveyUIData()
             microsurveyUIData?.let {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-
+                microsurveyMessageController.onMicrosurveyShown(it.id)
                 setContent {
                     FirefoxTheme {
                         MicrosurveyBottomSheet(
@@ -71,18 +69,29 @@ class MicrosurveyBottomSheetFragment : BottomSheetDialogFragment() {
                             icon = it.icon,
                             answers = it.answers,
                             onPrivacyPolicyLinkClick = {
-                                closeBottomSheet
-                                microsurveyMessageController.onPrivacyPolicyLinkClicked(it.utmContent)
+                                closeBottomSheet()
+                                microsurveyMessageController.onPrivacyPolicyLinkClicked(
+                                    it.id,
+                                    it.utmContent,
+                                )
                             },
                             onCloseButtonClicked = {
+                                microsurveyMessageController.onMicrosurveyDismissed(it.id)
                                 context.settings().shouldShowMicrosurveyPrompt = false
                                 dismiss()
                             },
-                            modifier = Modifier.nestedScroll(rememberNestedScrollInteropConnection()),
+                            onSubmitButtonClicked = { answer ->
+                                context.settings().shouldShowMicrosurveyPrompt = false
+                                microsurveyMessageController.onSurveyCompleted(it.id, answer)
+                            },
                         )
                     }
                 }
             }
         }
+    }
+
+    private fun BottomSheetBehavior<View>.setPeekHeightToHalfScreenHeight() {
+        peekHeight = resources.displayMetrics.heightPixels / 2
     }
 }

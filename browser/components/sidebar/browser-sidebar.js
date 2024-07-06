@@ -8,8 +8,9 @@
  * and provides APIs for sidebar extensions, etc.
  */
 const defaultTools = {
-  viewHistorySidebar: "history",
+  viewGenaiChatSidebar: "aichat",
   viewTabsSidebar: "syncedtabs",
+  viewHistorySidebar: "history",
   viewBookmarksSidebar: "bookmarks",
 };
 
@@ -46,6 +47,8 @@ var SidebarController = {
       } else {
         switcherMenuitem?.remove();
       }
+
+      window.dispatchEvent(new CustomEvent("SidebarItemChanged"));
     };
 
     // Detect pref changes and handle initial state.
@@ -274,6 +277,10 @@ var SidebarController = {
         this.toggleTabstrip();
       }
     } else {
+      this._switcherCloseButton = document.getElementById("sidebar-close");
+      this._switcherCloseButton.addEventListener("command", () => {
+        this.hide();
+      });
       this._switcherTarget.addEventListener("command", () => {
         this.toggleSwitcherPanel();
       });
@@ -823,7 +830,10 @@ var SidebarController = {
     const menuitem = document.createXULElement("menuitem");
     menuitem.setAttribute("id", sidebar.menuId);
     menuitem.setAttribute("type", "checkbox");
-    menuitem.addEventListener("command", () => this.toggle(commandID));
+    // Some menu items get checkbox type removed, so should show the sidebar
+    menuitem.addEventListener("command", () =>
+      this[menuitem.hasAttribute("type") ? "toggle" : "show"](commandID)
+    );
     if (sidebar.classAttribute) {
       menuitem.setAttribute("class", sidebar.classAttribute);
     }
@@ -924,6 +934,10 @@ var SidebarController = {
         iconUrl: sidebar.iconUrl,
         l10nId: sidebar.revampL10nId,
         disabled,
+        // Reflect the current tool state defaulting to visible
+        get hidden() {
+          return !(sidebar.visible ?? true);
+        },
       };
     });
   },
@@ -1209,7 +1223,7 @@ XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,
   "sidebarRevampTools",
   "sidebar.main.tools",
-  "history, syncedtabs"
+  "aichat,syncedtabs,history"
 );
 XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,

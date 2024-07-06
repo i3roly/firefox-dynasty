@@ -174,29 +174,6 @@ pref("browser.helperApps.deleteTempFileOnExit", false);
 
 pref("browser.triple_click_selects_paragraph", true);
 
-// Enable fillable forms in the PDF viewer.
-pref("pdfjs.annotationMode", 2);
-
-// Enable editing in the PDF viewer.
-pref("pdfjs.annotationEditorMode", 0);
-
-// Enable JavaScript support in the PDF viewer.
-pref("pdfjs.enableScripting", true);
-
-// Enable XFA form support in the PDF viewer.
-pref("pdfjs.enableXfa", true);
-
-// Enable adding an image in a pdf.
-pref("pdfjs.enableStampEditor", true);
-
-// Enable highlighting in a pdf.
-pref("pdfjs.enableHighlightEditor", true);
-#if defined(EARLY_BETA_OR_EARLIER)
-  pref("pdfjs.enableHighlightFloatingButton", true);
-#else
-  pref("pdfjs.enableHighlightFloatingButton", false);
-#endif
-
 // Disable support for MathML
 pref("mathml.disabled",    false);
 
@@ -935,9 +912,7 @@ pref("javascript.options.mem.incremental_weakmap", true);
 
 // JSGC_SLICE_TIME_BUDGET_MS
 // Override the shell's default of unlimited slice time.
-// Note that this only applies to non-idle slices, which
-// should be the minority.
-pref("javascript.options.mem.gc_incremental_slice_ms", 10);
+pref("javascript.options.mem.gc_incremental_slice_ms", 5);
 
 // JSGC_COMPACTING_ENABLED
 pref("javascript.options.mem.gc_compacting", true);

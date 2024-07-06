@@ -516,8 +516,8 @@
 }
 
 .ruleview-invalid-at-computed-value-time-warning {
-    background-image: url(resource://devtools-shared-images/error-small.svg);
-    fill: var(--theme-highlight-red);
+    background-image: var(--invalid-at-computed-value-time-icon);
+    fill: var(--invalid-at-computed-value-time-fill-color);
 }
 
 
@@ -718,6 +718,8 @@
   /* Adjust outline so it doesn't conflate with the color swatch, which could have a similar background
      color as the outline */
   outline-offset: 2px;
+  /* Make sure that the background color is properly set in High Contrast Mode */
+  forced-color-adjust: none;
 }
 
 .ruleview-bezierswatch {

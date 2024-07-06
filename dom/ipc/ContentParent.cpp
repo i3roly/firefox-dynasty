@@ -47,6 +47,7 @@
 #include "mozilla/AntiTrackingUtils.h"
 #include "mozilla/AppShutdown.h"
 #include "mozilla/AutoRestore.h"
+#include "mozilla/ClipboardContentAnalysisParent.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/BenchmarkStorageParent.h"
 #include "mozilla/Casting.h"
@@ -1112,6 +1113,65 @@ static nsIDocShell* GetOpenerDocShellHelper(Element* aFrameElement) {
   }
 
   return docShell;
+}
+
+mozilla::ipc::IPCResult ContentParent::RecvCreateClipboardContentAnalysis() {
+  Endpoint<PClipboardContentAnalysisParent> parentEndpoint;
+  Endpoint<PClipboardContentAnalysisChild> childEndpoint;
+
+  if (mClipboardContentAnalysisCreated) {
+    return IPC_FAIL(this, "ClipboardContentAnalysisParent already created");
+  }
+
+  nsresult rv;
+  rv = PClipboardContentAnalysis::CreateEndpoints(
+      base::GetCurrentProcId(), OtherPid(), &parentEndpoint, &childEndpoint);
+  if (NS_FAILED(rv)) {
+    return IPC_FAIL(this, "CreateEndpoints failed");
+  }
+
+  if (!mClipboardContentAnalysisThread) {
+    rv = NS_NewNamedThread("BkgrndClipboard",
+                           getter_AddRefs(mClipboardContentAnalysisThread));
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return IPC_FAIL(this, "NS_NewNamedThread failed");
+    }
+  }
+
+  RefPtr<ContentParent> contentParent = this;
+  // Bind the new endpoint to the backgroundClipboardContentAnalysis thread,
+  // then send them from the main thread.
+  rv = NS_DispatchToThreadQueue(
+      NS_NewRunnableFunction(
+          "Create ClipboardContentAnalysisParent",
+          [contentParent = std::move(contentParent),
+           parentEndpoint = std::move(parentEndpoint),
+           childEndpoint = std::move(childEndpoint)]() mutable {
+            RefPtr<ClipboardContentAnalysisParent> parentActor =
+                new ClipboardContentAnalysisParent();
+            parentEndpoint.Bind(parentActor, nullptr);
+            DebugOnly<nsresult> rv = NS_DispatchToMainThread(
+                NS_NewRunnableFunction(
+                    "SendInitClipboardContentAnalysis",
+                    [contentParent = std::move(contentParent),
+                     childEndpoint = std::move(childEndpoint)]() mutable {
+                      DebugOnly<bool> success =
+                          contentParent->SendInitClipboardContentAnalysis(
+                              std::move(childEndpoint));
+                      MOZ_ASSERT(success,
+                                 "SendInitClipboardContentAnalysis failed");
+                    }),
+                0);
+            MOZ_ASSERT(NS_SUCCEEDED(rv),
+                       "Failed to dispatch "
+                       "SendInitClipboardContentAnalysis");
+          }),
+      mClipboardContentAnalysisThread, EventQueuePriority::Normal);
+  if (NS_FAILED(rv)) {
+    return IPC_FAIL(this, "NS_DispatchToThreadQueue failed");
+  }
+  mClipboardContentAnalysisCreated = true;
+  return IPC_OK();
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvCreateGMPService() {
@@ -2531,6 +2591,7 @@ ContentParent::ContentParent(const nsACString& aRemoteType)
       mIsInputPriorityEventEnabled(false),
       mIsInPool(false),
       mGMPCreated(false),
+      mClipboardContentAnalysisCreated(false),
 #ifdef MOZ_DIAGNOSTIC_ASSERT_ENABLED
       mBlockShutdownCalled(false),
 #endif
@@ -3115,10 +3176,8 @@ mozilla::ipc::IPCResult ContentParent::RecvSetClipboard(
   return IPC_OK();
 }
 
-namespace {
-
-static Result<nsCOMPtr<nsITransferable>, nsresult> CreateTransferable(
-    const nsTArray<nsCString>& aTypes) {
+/* static */ Result<nsCOMPtr<nsITransferable>, nsresult>
+ContentParent::CreateClipboardTransferable(const nsTArray<nsCString>& aTypes) {
   nsresult rv;
   nsCOMPtr<nsITransferable> trans =
       do_CreateInstance("@mozilla.org/widget/transferable;1", &rv);
@@ -3140,8 +3199,6 @@ static Result<nsCOMPtr<nsITransferable>, nsresult> CreateTransferable(
 
   return std::move(trans);
 }
-
-}  // anonymous namespace
 
 mozilla::ipc::IPCResult ContentParent::RecvGetClipboard(
     nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
@@ -3171,7 +3228,7 @@ mozilla::ipc::IPCResult ContentParent::RecvGetClipboard(
   }
 
   // Create transferable
-  auto result = CreateTransferable(aTypes);
+  auto result = CreateClipboardTransferable(aTypes);
   if (result.isErr()) {
     *aTransferableDataOrError = result.unwrapErr();
     return IPC_OK();
@@ -5119,89 +5176,6 @@ bool ContentParent::DeallocPWebrtcGlobalParent(PWebrtcGlobalParent* aActor) {
   return true;
 }
 #endif
-
-void ContentParent::GetIPCTransferableData(
-    nsIDragSession* aSession, BrowserParent* aParent,
-    nsTArray<IPCTransferableData>& aIPCTransferables) {
-  RefPtr<DataTransfer> transfer = aSession->GetDataTransfer();
-  if (!transfer) {
-    // Pass eDrop to get DataTransfer with external
-    // drag formats cached.
-    transfer = new DataTransfer(nullptr, eDrop, true, -1);
-    aSession->SetDataTransfer(transfer);
-  }
-  // Note, even though this fills the DataTransfer object with
-  // external data, the data is usually transfered over IPC lazily when
-  // needed.
-  transfer->FillAllExternalData();
-  nsCOMPtr<nsILoadContext> lc = aParent ? aParent->GetLoadContext() : nullptr;
-  nsCOMPtr<nsIArray> transferables = transfer->GetTransferables(lc);
-  nsContentUtils::TransferablesToIPCTransferableDatas(
-      transferables, aIPCTransferables, false, this);
-}
-
-void ContentParent::MaybeInvokeDragSession(BrowserParent* aParent,
-                                           EventMessage aMessage) {
-  // dnd uses IPCBlob to transfer data to the content process and the IPC
-  // message is sent as normal priority. When sending input events with input
-  // priority, the message may be preempted by the later dnd events. To make
-  // sure the input events and the blob message are processed in time order
-  // on the content process, we temporarily send the input events with normal
-  // priority when there is an active dnd session.
-  SetInputPriorityEventEnabled(false);
-
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (!dragService) {
-    return;
-  }
-
-  if (dragService->MaybeAddChildProcess(this)) {
-    nsCOMPtr<nsIDragSession> session;
-    dragService->GetCurrentSession(getter_AddRefs(session));
-    if (session) {
-      // We need to send transferable data to child process.
-      nsTArray<IPCTransferableData> ipcTransferables;
-      GetIPCTransferableData(session, aParent, ipcTransferables);
-      uint32_t action;
-      session->GetDragAction(&action);
-
-      RefPtr<WindowContext> sourceWC;
-      session->GetSourceWindowContext(getter_AddRefs(sourceWC));
-      RefPtr<WindowContext> sourceTopWC;
-      session->GetSourceTopWindowContext(getter_AddRefs(sourceTopWC));
-      mozilla::Unused << SendInvokeDragSession(
-          sourceWC, sourceTopWC, std::move(ipcTransferables), action);
-    }
-    return;
-  }
-
-  if (dragService->MustUpdateDataTransfer(aMessage)) {
-    nsCOMPtr<nsIDragSession> session;
-    dragService->GetCurrentSession(getter_AddRefs(session));
-    if (session) {
-      // We need to send transferable data to child process.
-      nsTArray<IPCTransferableData> ipcTransferables;
-      GetIPCTransferableData(session, aParent, ipcTransferables);
-      mozilla::Unused << SendUpdateDragSession(std::move(ipcTransferables),
-                                               aMessage);
-    }
-  }
-}
-
-mozilla::ipc::IPCResult ContentParent::RecvUpdateDropEffect(
-    const uint32_t& aDragAction, const uint32_t& aDropEffect) {
-  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
-  if (dragSession) {
-    dragSession->SetDragAction(aDragAction);
-    RefPtr<DataTransfer> dt = dragSession->GetDataTransfer();
-    if (dt) {
-      dt->SetDropEffectInt(aDropEffect);
-    }
-    dragSession->UpdateDragEffect();
-  }
-  return IPC_OK();
-}
 
 PContentPermissionRequestParent*
 ContentParent::AllocPContentPermissionRequestParent(

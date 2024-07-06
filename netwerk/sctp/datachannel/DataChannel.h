@@ -305,7 +305,7 @@ class DataChannelConnection final : public net::NeckoTargetHolder,
   void ProcessQueuedOpens() MOZ_REQUIRES(mLock);
   void ClearResets() MOZ_REQUIRES(mLock);
   void SendOutgoingStreamReset() MOZ_REQUIRES(mLock);
-  void ResetOutgoingStream(uint16_t stream) MOZ_REQUIRES(mLock);
+  void ResetOutgoingStream(DataChannel& aChannel) MOZ_REQUIRES(mLock);
   void HandleOpenRequestMessage(
       const struct rtcweb_datachannel_open_request* req, uint32_t length,
       uint16_t stream) MOZ_REQUIRES(mLock);
@@ -368,8 +368,8 @@ class DataChannelConnection final : public net::NeckoTargetHolder,
   Channels mChannels;
   // STS only
   uint32_t mCurrentStream = 0;
-  nsRefPtrDeque<DataChannel> mPending;
   // STS and main
+  std::set<RefPtr<DataChannel>> mPending MOZ_GUARDED_BY(mLock);
   size_t mNegotiatedIdLimit MOZ_GUARDED_BY(mLock) = 0;
   PendingType mPendingType MOZ_GUARDED_BY(mLock) = PendingType::None;
   // holds data that's come in before a channel is open
@@ -511,6 +511,9 @@ class DataChannel {
 
   TrafficCounters GetTrafficCounters() const;
 
+  bool HasSentStreamReset() const { return mHasSentStreamReset; }
+  void SetHasSentStreamReset() { mHasSentStreamReset = true; }
+
  private:
   nsresult AddDataToBinaryMsg(const char* data, uint32_t size);
   bool EnsureValidStream(ErrorResult& aRv);
@@ -541,6 +544,7 @@ class DataChannel {
   bool mWaitingForAck = false;
   // A too large message was attempted to be sent - closing data channel.
   bool mClosingTooLarge = false;
+  bool mHasSentStreamReset = false;
   bool mIsRecvBinary;
   size_t mBufferedThreshold;
   // Read/written on main only. Decremented via message-passing, because the

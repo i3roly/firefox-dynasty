@@ -10,10 +10,7 @@
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/dom/ScriptSettings.h"
 #include "mozilla/PerfStats.h"
-#include "nsCycleCollectionParticipant.h"
 #include "nsRefreshDriver.h"
-
-using mozilla::CCReason;
 
 /* Globally initialized constants
  */
@@ -706,45 +703,33 @@ JS::SliceBudget CCGCScheduler::ComputeCCSliceBudget(
       std::max({delaySliceBudget, laterSliceBudget, baseBudget})));
 }
 
-// Compute a budget for a GC slice. The budget corresponds to an amount of
-// time and a boolean indicating whether the slice should be interruptible.
-//
-// Inputs are an idle deadline (or null if this is not running in idle time),
-// and a timestamp (probably null) when the CC started being locked out while
-// waiting for the ongoing GC to finish.
 JS::SliceBudget CCGCScheduler::ComputeInterSliceGCBudget(TimeStamp aDeadline,
                                                          TimeStamp aNow) {
+  // We use longer budgets when the CC has been locked out but the CC has
+  // tried to run since that means we may have a significant amount of
+  // garbage to collect and it's better to GC in several longer slices than
+  // in a very long one.
   TimeDuration budget =
-      aDeadline.IsNull() ? mActiveIntersliceGCBudget : aDeadline - aNow;
-  if (!mCCBlockStart) {  // CC is not blocked.
-    return CreateGCSliceBudget(budget, aDeadline.IsNull() ? eNotIdle : eIdle,
-                               eNormalBudget, eInterruptible);
+      aDeadline.IsNull() ? mActiveIntersliceGCBudget * 2 : aDeadline - aNow;
+  if (!mCCBlockStart) {
+    return CreateGCSliceBudget(budget, !aDeadline.IsNull(), false);
   }
 
-  // Use longer budgets when the CC has tried to run but been locked out, since
-  // that means we may have a significant amount of garbage to collect and it's
-  // better to GC in multiple longer slices than one very long one.
-
   TimeDuration blockedTime = aNow - mCCBlockStart;
-  TimeDuration maxSliceGCBudget = mActiveIntersliceGCBudget * 5;
-  // Blocked for 100% of max allowed locked out time => use max GC slice budget.
-  // Blocked for 0% of max allowed => fall back to the standard budget.
-  //
-  // Scale intermediate values linearly between 0 and max GC slice budget, but
-  // use the standard budget as a minimum.
+  TimeDuration maxSliceGCBudget = mActiveIntersliceGCBudget * 10;
   double percentOfBlockedTime =
       std::min(blockedTime / kMaxCCLockedoutTime, 1.0);
   TimeDuration extendedBudget =
       maxSliceGCBudget.MultDouble(percentOfBlockedTime);
   if (budget >= extendedBudget) {
-    return CreateGCSliceBudget(budget, aDeadline.IsNull() ? eNotIdle : eIdle,
-                               eNormalBudget, eInterruptible);
+    return CreateGCSliceBudget(budget, !aDeadline.IsNull(), false);
   }
 
   // If the budget is being extended, do not allow it to be interrupted.
-  return CreateGCSliceBudget(extendedBudget,
-                             aDeadline.IsNull() ? eNotIdle : eIdle,
-                             eExtendedBudget, eNonInterruptible);
+  auto result = JS::SliceBudget(JS::TimeBudget(extendedBudget), nullptr);
+  result.idle = !aDeadline.IsNull();
+  result.extended = true;
+  return result;
 }
 
 CCReason CCGCScheduler::ShouldScheduleCC(TimeStamp aNow,

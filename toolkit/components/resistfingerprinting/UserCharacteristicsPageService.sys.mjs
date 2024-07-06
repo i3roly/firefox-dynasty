@@ -160,7 +160,7 @@ export class UserCharacteristicsPageService {
 
   shutdown() {}
 
-  createContentPage() {
+  createContentPage(principal) {
     lazy.console.debug("called createContentPage");
 
     lazy.console.debug("Registering actor");
@@ -184,7 +184,6 @@ export class UserCharacteristicsPageService {
         let { promise, resolve } = Promise.withResolvers();
         this._backgroundBrowsers.set(browser, resolve);
 
-        let principal = Services.scriptSecurityManager.getSystemPrincipal();
         let loadURIOptions = {
           triggeringPrincipal: principal,
         };
@@ -384,6 +383,19 @@ export class UserCharacteristicsPageService {
         "canvasdata11Webgl",
         "canvasdata12Fingerprintjs1",
         "canvasdata13Fingerprintjs2",
+        "canvasdata1software",
+        "canvasdata2software",
+        "canvasdata3software",
+        "canvasdata4software",
+        "canvasdata5software",
+        "canvasdata6software",
+        "canvasdata7software",
+        "canvasdata8software",
+        "canvasdata9software",
+        "canvasdata10software",
+        "canvasdata11Webglsoftware",
+        "canvasdata12Fingerprintjs1software",
+        "canvasdata13Fingerprintjs2software",
         "voices",
         "mediaCapabilities",
         "audioFingerprint",
@@ -397,6 +409,9 @@ export class UserCharacteristicsPageService {
         "motionFreq",
         "orientationFreq",
         "orientationabsFreq",
+        "audioFrames",
+        "audioRate",
+        "audioChannels",
       ],
     };
 

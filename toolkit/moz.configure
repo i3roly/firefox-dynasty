@@ -1104,7 +1104,7 @@ project_flag(
 
 # Child Process Name for IPC
 # ==============================================================
-@depends(toolkit, bin_suffix)
+@depends(toolkit, bin_suffix(target))
 def moz_child_process_name(toolkit, bin_suffix):
     if toolkit != "android":
         return f"plugin-container{bin_suffix}"
@@ -1122,7 +1122,7 @@ with only_when(target_is_osx):
     set_config("MOZ_CHILD_PROCESS_BUNDLE", "plugin-container.app/Contents/MacOS/")
     set_config(
         "MOZ_CHILD_PROCESS_BUNDLEID",
-        depends("--with-distribution-id")(lambda v: f"{v}.plugincontainer"),
+        depends("--with-distribution-id")(lambda v: f"{v[0]}.plugincontainer"),
     )
     set_config("MOZ_CHILD_PROCESS_BUNDLENAME", "plugin-container.app")
 
