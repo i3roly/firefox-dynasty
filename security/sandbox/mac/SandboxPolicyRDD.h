@@ -72,6 +72,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (literal "/private/etc/localtime"))
 
   (if (= macosVersion 1009)
+  (allow sysctl-read)
   (allow sysctl-read
     (sysctl-name-regex #"^sysctl\.")
     (sysctl-name "kern.ostype")
