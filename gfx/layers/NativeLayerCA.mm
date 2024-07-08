@@ -40,9 +40,6 @@
 - (void)setContentsOpaque:(BOOL)opaque;
 @end
 
-//remove DRM which seems to be a central reason we don't have firefox on mojave.
-// fucking corporate cocksucker jim mathies https://phabricator.services.mozilla.com/D155297
-
 namespace mozilla {
 namespace layers {
 

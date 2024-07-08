@@ -26,7 +26,11 @@ class NativeFontResourceMac final : public NativeFontResource {
       uint32_t aInstanceDataLength) final;
 
   ~NativeFontResourceMac() {
-    CFRelease(mFontDescRef);
+    if(mFontDescRef != NULL) {
+      //instead of introducing the old constructor, we use the new one
+      //for older macs and simply pass NULL; as such, we have to check 
+      CFRelease(mFontDescRef);
+    }
     CFRelease(mFontRef);
   }
 

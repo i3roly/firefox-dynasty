@@ -195,7 +195,7 @@ SharedLibraryInfo SharedLibraryInfo::GetInfoForSelf() {
 
   struct dyld_all_image_infos* aii =
       (struct dyld_all_image_infos*)task_dyld_info.all_image_info_addr;
-  if (aii->version >= 10) {
+  if (aii->version >= 9) {
     const platform_mach_header* header =
         reinterpret_cast<const platform_mach_header*>(
             aii->dyldImageLoadAddress);
