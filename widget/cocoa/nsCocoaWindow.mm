@@ -832,7 +832,6 @@ void nsCocoaWindow::Show(bool aState) {
         [mWindow orderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;
-      SendSetZLevelEvent();
       // If our popup window is a non-native context menu, tell the OS (and
       // other programs) that a menu has opened.  This is how the OS knows to
       // close other programs' context menus when ours open.
@@ -881,7 +880,6 @@ void nsCocoaWindow::Show(bool aState) {
         [mWindow makeKeyAndOrderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;
-      SendSetZLevelEvent();
     }
     SetSupportsNativeFullscreen(savedValueForSupportsNativeFullscreen);
   } else {
@@ -2086,14 +2084,6 @@ bool nsCocoaWindow::DragEvent(unsigned int aMessage,
   return false;
 }
 
-void nsCocoaWindow::SendSetZLevelEvent() {
-  if (mWidgetListener) {
-    nsWindowZ placement = nsWindowZTop;
-    nsCOMPtr<nsIWidget> actualBelow;
-    mWidgetListener->ZLevelChanged(true, &placement, nullptr,
-                                   getter_AddRefs(actualBelow));
-  }
-}
 
 // Invokes callback and ProcessEvent methods on Event Listener object
 nsresult nsCocoaWindow::DispatchEvent(WidgetGUIEvent* event,
@@ -2245,7 +2235,6 @@ void nsCocoaWindow::SetFocus(Raise aRaise,
       [mWindow deminiaturize:nil];
     }
     [mWindow makeKeyAndOrderFront:nil];
-    SendSetZLevelEvent();
   }
 }
 
@@ -4025,6 +4014,10 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   BOOL stateChanged = self.drawsContentsIntoWindowFrame != aState;
   [super setDrawsContentsIntoWindowFrame:aState];
   if (stateChanged && [self.delegate isKindOfClass:[WindowDelegate class]]) {
+    if(nsCocoaFeatures::OnYosemiteOrLater()) {
+    // Hide the titlebar if we are drawing into it
+      self.titlebarAppearsTransparent = self.drawsContentsIntoWindowFrame;
+    }
     // Here we extend / shrink our mainChildView. We do that by firing a resize
     // event which will cause the ChildView to be resized to the rect returned
     // by nsCocoaWindow::GetClientBounds. GetClientBounds bases its return
