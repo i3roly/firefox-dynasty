@@ -16,10 +16,19 @@ export function NarrateControls(win, languagePromise) {
 
   win.addEventListener("unload", this);
 
+  let improvedTextMenuEnabled = Services.prefs.getBoolPref(
+    "reader.improved_text_menu.enabled",
+    false
+  );
+
   // Append content style sheet in document head
   let style = win.document.createElement("link");
   style.rel = "stylesheet";
-  style.href = "chrome://global/skin/narrate.css";
+  if (improvedTextMenuEnabled) {
+    style.href = "chrome://global/skin/narrate-improved.css";
+  } else {
+    style.href = "chrome://global/skin/narrate.css";
+  }
   win.document.head.appendChild(style);
 
   let elemL10nMap = {
@@ -53,6 +62,13 @@ export function NarrateControls(win, languagePromise) {
   dropdownList.className = "dropdown-popup";
   dropdown.appendChild(dropdownList);
 
+  if (improvedTextMenuEnabled) {
+    let narrateHeader = win.document.createElement("h2");
+    narrateHeader.id = "narrate-header";
+    narrateHeader.textContent = gStrings.GetStringFromName("read-aloud-header");
+    dropdownList.appendChild(narrateHeader);
+  }
+
   let narrateControl = win.document.createElement("div");
   narrateControl.className = "narrate-row narrate-control";
   dropdownList.appendChild(narrateControl);
@@ -60,6 +76,18 @@ export function NarrateControls(win, languagePromise) {
   let narrateRate = win.document.createElement("div");
   narrateRate.className = "narrate-row narrate-rate";
   dropdownList.appendChild(narrateRate);
+
+  let selectLabel = "";
+  if (improvedTextMenuEnabled) {
+    let hr = win.document.createElement("hr");
+    let voiceHeader = win.document.createElement("h2");
+    voiceHeader.id = "voice-header";
+    voiceHeader.textContent = gStrings.GetStringFromName("select-voice-header");
+    dropdownList.appendChild(hr);
+    dropdownList.appendChild(voiceHeader);
+  } else {
+    selectLabel = gStrings.GetStringFromName("selectvoicelabel");
+  }
 
   let narrateVoices = win.document.createElement("div");
   narrateVoices.className = "narrate-row narrate-voices";
@@ -103,7 +131,22 @@ export function NarrateControls(win, languagePromise) {
   narrateRateInput.setAttribute("max", "100");
   narrateRateInput.setAttribute("min", "-100");
   narrateRateInput.setAttribute("type", "range");
+  narrateRateInput.setAttribute(
+    "aria-label",
+    "Choose a narration speed from -100 to 100, where 0 is the default speed."
+  );
+
+  let narrateRateSlowIcon = win.document.createElement("span");
+  narrateRateSlowIcon.className = "narrate-rate-icon slow";
+  narrateRateSlowIcon.title = gStrings.GetStringFromName("slow-speed-label");
+
+  let narrateRateFastIcon = win.document.createElement("span");
+  narrateRateFastIcon.className = "narrate-rate-icon fast";
+  narrateRateFastIcon.title = gStrings.GetStringFromName("fast-speed-label");
+
+  narrateRate.appendChild(narrateRateSlowIcon);
   narrateRate.appendChild(narrateRateInput);
+  narrateRate.appendChild(narrateRateFastIcon);
 
   function setShortcutAttribute(
     keyShortcut,
@@ -149,10 +192,10 @@ export function NarrateControls(win, languagePromise) {
   this.narrator = new Narrator(win, languagePromise);
 
   let branch = Services.prefs.getBranch("narrate.");
-  let selectLabel = gStrings.GetStringFromName("selectvoicelabel");
   this.voiceSelect = new VoiceSelect(win, selectLabel);
   this.voiceSelect.element.addEventListener("change", this);
   this.voiceSelect.element.classList.add("voice-select");
+  this.voiceSelect.selectToggle.setAttribute("aria-labelledby", "voice-header");
   win.speechSynthesis.addEventListener("voiceschanged", this);
   dropdown
     .querySelector(".narrate-voices")

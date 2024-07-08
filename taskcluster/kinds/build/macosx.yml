@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ---
-job-defaults:
+task-defaults:
     index:
         product: firefox
     worker-type: b-linux-gcp
@@ -94,7 +94,7 @@ macosx64-non-unified/plain:
         symbol: Bp-nu
         tier: 1
     worker:
-        max-run-time: 5400
+        max-run-time: 7200
         env:
             PERFHERDER_EXTRA_OPTIONS: non-unified
     run:

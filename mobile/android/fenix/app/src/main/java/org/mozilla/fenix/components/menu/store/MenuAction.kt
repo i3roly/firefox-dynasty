@@ -4,6 +4,7 @@
 
 package org.mozilla.fenix.components.menu.store
 
+import mozilla.components.feature.addons.Addon
 import mozilla.components.lib.state.Action
 import mozilla.components.service.fxa.manager.AccountState
 import org.mozilla.fenix.components.menu.MenuAccessPoint
@@ -34,9 +35,42 @@ sealed class MenuAction : Action {
     data class UpdateBookmarkState(val bookmarkState: BookmarkState) : MenuAction()
 
     /**
+     * [MenuAction] dispatched when a site is to be added to shortcuts.
+     */
+    data object AddShortcut : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when a site is to be removed from shortcuts.
+     */
+    data object RemoveShortcut : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when a pinned shortcut state is updated.
+     *
+     * @property isPinned The new [isPinned] state to be updated.
+     */
+    data class UpdatePinnedState(val isPinned: Boolean) : MenuAction()
+
+    /**
      * [MenuAction] dispatched to delete browsing data and quit the browser.
      */
     data object DeleteBrowsingDataAndQuit : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when the extension state is updated.
+     *
+     * @property recommendedAddons The recommended [Addon]s to suggest.
+     */
+    data class UpdateExtensionState(
+        val recommendedAddons: List<Addon>,
+    ) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when an addon is to be installed.
+     *
+     * @property addon The [Addon] to install.
+     */
+    data class InstallAddon(val addon: Addon) : MenuAction()
 
     /**
      * [MenuAction] dispatched when a navigation event occurs for a specific destination.
@@ -120,6 +154,11 @@ sealed class MenuAction : Action {
         data object EditBookmark : Navigate()
 
         /**
+         * [Navigate] action dispatched when navigating to add site to home screen.
+         */
+        data object AddToHomeScreen : Navigate()
+
+        /**
          * [Navigate] action dispatched when navigating to save a site to a collection.
          *
          * @property hasCollection Whether or not there are any existing tab collections.
@@ -157,5 +196,14 @@ sealed class MenuAction : Action {
          * [Navigate] action dispatched when navigating to the new private tab.
          */
         data object NewPrivateTab : Navigate()
+
+        /**
+         * [Navigate] action dispatched when navigating to the given [addon] details.
+         *
+         * @property addon The [Addon] details to display.
+         */
+        data class AddonDetails(
+            val addon: Addon,
+        ) : Navigate()
     }
 }

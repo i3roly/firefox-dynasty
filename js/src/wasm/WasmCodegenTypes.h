@@ -44,7 +44,7 @@ namespace wasm {
 
 using mozilla::EnumeratedArray;
 
-struct ModuleEnvironment;
+struct CodeMetadata;
 struct TableDesc;
 struct V128;
 
@@ -282,6 +282,18 @@ struct TrapSiteVectorArray
   size_t sumOfLengths() const;
   size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
 };
+
+struct CallFarJump {
+  uint32_t targetFuncIndex;
+  uint32_t jumpOffset;
+  WASM_CHECK_CACHEABLE_POD(targetFuncIndex, jumpOffset);
+
+  CallFarJump(uint32_t targetFuncIndex, uint32_t jumpOffset)
+      : targetFuncIndex(targetFuncIndex), jumpOffset(jumpOffset) {}
+};
+WASM_DECLARE_CACHEABLE_POD(CallFarJump);
+
+using CallFarJumpVector = Vector<CallFarJump, 0, SystemAllocPolicy>;
 
 // On trap, the bytecode offset to be reported in callstacks is saved.
 
@@ -864,11 +876,11 @@ class CallIndirectId {
   static CallIndirectId forAsmJSFunc();
 
   // Get the CallIndirectId for a function in a specific module.
-  static CallIndirectId forFunc(const ModuleEnvironment& moduleEnv,
+  static CallIndirectId forFunc(const CodeMetadata& codeMeta,
                                 uint32_t funcIndex);
 
   // Get the CallIndirectId for a function type in a specific module.
-  static CallIndirectId forFuncType(const ModuleEnvironment& moduleEnv,
+  static CallIndirectId forFuncType(const CodeMetadata& codeMeta,
                                     uint32_t funcTypeIndex);
 
   CallIndirectIdKind kind() const { return kind_; }
@@ -947,10 +959,10 @@ class CalleeDesc {
   CalleeDesc() = default;
   static CalleeDesc function(uint32_t funcIndex);
   static CalleeDesc import(uint32_t instanceDataOffset);
-  static CalleeDesc wasmTable(const ModuleEnvironment& moduleEnv,
+  static CalleeDesc wasmTable(const CodeMetadata& codeMeta,
                               const TableDesc& desc, uint32_t tableIndex,
                               CallIndirectId callIndirectId);
-  static CalleeDesc asmJSTable(const ModuleEnvironment& moduleEnv,
+  static CalleeDesc asmJSTable(const CodeMetadata& codeMeta,
                                uint32_t tableIndex);
   static CalleeDesc builtin(SymbolicAddress callee);
   static CalleeDesc builtinInstanceMethod(SymbolicAddress callee);

@@ -13,6 +13,7 @@ import React from "react";
 import { Search } from "content-src/components/Search/Search";
 import { Sections } from "content-src/components/Sections/Sections";
 import { Weather } from "content-src/components/Weather/Weather";
+import { Notifications } from "content-src/components/Notifications/Notifications";
 import { WallpaperFeatureHighlight } from "../DiscoveryStreamComponents/FeatureHighlight/WallpaperFeatureHighlight";
 
 const VISIBLE = "visible";
@@ -433,16 +434,21 @@ export class BaseContent extends React.PureComponent {
     const mayHaveWeather = prefs["system.showWeather"];
     const { mayHaveSponsoredTopSites } = prefs;
 
+    const hasThumbsUpDownLayout =
+      prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
+
     const outerClassName = [
       "outer-wrapper",
       isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment",
       isDiscoveryStream && "ds-outer-wrapper-breakpoint-override",
+      !prefs.showSearch && "no-search",
       prefs.showSearch &&
         this.state.fixedSearch &&
         !noSectionsEnabled &&
         "fixed-search",
       prefs.showSearch && noSectionsEnabled && "only-search",
       prefs["logowordmark.alwaysVisible"] && "visible-logo",
+      hasThumbsUpDownLayout && "thumbs-ui-compact",
     ]
       .filter(v => v)
       .join(" ");
@@ -515,6 +521,11 @@ export class BaseContent extends React.PureComponent {
                 <Weather />
               </ErrorBoundary>
             )}
+            {this.props.Notifications?.showNotifications && (
+              <ErrorBoundary>
+                <Notifications dispatch={this.props.dispatch} />
+              </ErrorBoundary>
+            )}
           </aside>
         </div>
       </div>
@@ -531,6 +542,7 @@ export const Base = connect(state => ({
   Prefs: state.Prefs,
   Sections: state.Sections,
   DiscoveryStream: state.DiscoveryStream,
+  Notifications: state.Notifications,
   Search: state.Search,
   Wallpapers: state.Wallpapers,
   Weather: state.Weather,

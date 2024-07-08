@@ -31,6 +31,7 @@ class DragBlockState;
 class PanGestureBlockState;
 class PinchGestureBlockState;
 class KeyboardBlockState;
+class InputQueueIterator;
 enum class BrowserGestureResponse : bool;
 
 /**
@@ -57,6 +58,7 @@ class InputBlockState : public RefCounted<InputBlockState> {
 
   virtual CancelableBlockState* AsCancelableBlock() { return nullptr; }
   virtual TouchBlockState* AsTouchBlock() { return nullptr; }
+  virtual const TouchBlockState* AsTouchBlock() const { return nullptr; }
   virtual WheelBlockState* AsWheelBlock() { return nullptr; }
   virtual DragBlockState* AsDragBlock() { return nullptr; }
   virtual PanGestureBlockState* AsPanGestureBlock() { return nullptr; }
@@ -65,7 +67,7 @@ class InputBlockState : public RefCounted<InputBlockState> {
 
   virtual bool SetConfirmedTargetApzc(
       const RefPtr<AsyncPanZoomController>& aTargetApzc,
-      TargetConfirmationState aState, InputData* aFirstInput,
+      TargetConfirmationState aState, InputQueueIterator aFirstInput,
       bool aForScrollbarDrag);
   const RefPtr<AsyncPanZoomController>& GetTargetApzc() const;
   const RefPtr<const OverscrollHandoffChain>& GetOverscrollHandoffChain() const;
@@ -209,7 +211,7 @@ class WheelBlockState : public CancelableBlockState {
   const char* Type() override;
   bool SetConfirmedTargetApzc(const RefPtr<AsyncPanZoomController>& aTargetApzc,
                               TargetConfirmationState aState,
-                              InputData* aFirstInput,
+                              InputQueueIterator aFirstInput,
                               bool aForScrollbarDrag) override;
 
   WheelBlockState* AsWheelBlock() override { return this; }
@@ -326,7 +328,7 @@ class PanGestureBlockState : public CancelableBlockState {
   const char* Type() override;
   bool SetConfirmedTargetApzc(const RefPtr<AsyncPanZoomController>& aTargetApzc,
                               TargetConfirmationState aState,
-                              InputData* aFirstInput,
+                              InputQueueIterator aFirstInput,
                               bool aForScrollbarDrag) override;
 
   PanGestureBlockState* AsPanGestureBlock() override { return this; }
@@ -429,6 +431,7 @@ class TouchBlockState : public CancelableBlockState {
                            TouchCounter& aTouchCounter);
 
   TouchBlockState* AsTouchBlock() override { return this; }
+  const TouchBlockState* AsTouchBlock() const override { return this; }
 
   /**
    * Set the allowed touch behavior flags for this block.
@@ -534,7 +537,7 @@ class TouchBlockState : public CancelableBlockState {
    * can be made.
    */
   Maybe<ScrollDirection> GetBestGuessPanDirection(
-      const MultiTouchInput& aInput);
+      const MultiTouchInput& aInput) const;
 
   /**
    * Returns the number of touch points currently active.

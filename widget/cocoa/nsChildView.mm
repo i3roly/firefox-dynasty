@@ -30,6 +30,7 @@
 #include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/dom/SimpleGestureEventBinding.h"
 #include "mozilla/dom/WheelEventBinding.h"
+#include "mozilla/layers/CompositorBridgeChild.h"
 
 #include "nsArrayUtils.h"
 #include "nsExceptionHandler.h"
@@ -94,6 +95,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/StaticPrefs_apz.h"
 #include "mozilla/StaticPrefs_browser.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_general.h"
 #include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/StaticPrefs_ui.h"
@@ -829,6 +831,11 @@ void nsChildView::SuspendAsyncCATransactions() {
   // accidentally stay suspended indefinitely.
   [mView markLayerForDisplay];
 
+  // Ensure that whatever we are going to do does sync flushes of the
+  // rendering pipeline, giving us smooth animation.
+  if (mCompositorBridgeChild) {
+    mCompositorBridgeChild->SetForceSyncFlushRendering(true);
+  }
   mNativeLayerRoot->SuspendOffMainThreadCommits();
 }
 
@@ -852,6 +859,11 @@ void nsChildView::UnsuspendAsyncCATransactions() {
     // display, because this will schedule a main thread CATransaction, during
     // which HandleMainThreadCATransaction will call CommitToScreen().
     [mView markLayerForDisplay];
+  }
+
+  // We're done with our critical animation, so allow aysnc flushes again.
+  if (mCompositorBridgeChild) {
+    mCompositorBridgeChild->SetForceSyncFlushRendering(false);
   }
 }
 
@@ -1191,8 +1203,7 @@ static void blinkRect(Rect* r) {
   ::ClipRect(r);
   ::InvertRect(r);
   UInt32 end = ::TickCount() + 5;
-  while (::TickCount() < end)
-    ;
+  while (::TickCount() < end);
   ::InvertRect(r);
 
   if (oldClip != NULL) ::SetClip(oldClip);
@@ -1205,8 +1216,7 @@ static void blinkRgn(RgnHandle rgn) {
   ::SetClip(rgn);
   ::InvertRgn(rgn);
   UInt32 end = ::TickCount() + 5;
-  while (::TickCount() < end)
-    ;
+  while (::TickCount() < end);
   ::InvertRgn(rgn);
 
   if (oldClip != NULL) ::SetClip(oldClip);
@@ -3321,8 +3331,16 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     if (!mGeckoChild) return nil;
   }
 
-  WidgetMouseEvent geckoEvent(true, eContextMenu, mGeckoChild,
-                              WidgetMouseEvent::eReal);
+  Maybe<WidgetPointerEvent> pointerEvent;
+  Maybe<WidgetMouseEvent> mouseEvent;
+  if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
+    pointerEvent.emplace(true, eContextMenu, mGeckoChild);
+  } else {
+    mouseEvent.emplace(true, eContextMenu, mGeckoChild,
+                       WidgetMouseEvent::eReal);
+  }
+  WidgetMouseEvent& geckoEvent =
+      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
   [self convertCocoaMouseEvent:theEvent toGeckoEvent:&geckoEvent];
   if (StaticPrefs::dom_event_treat_ctrl_click_as_right_click_disabled() &&
       [theEvent type] == NSEventTypeLeftMouseDown) {
@@ -3986,8 +4004,8 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
 - (BOOL)isDragInProgress {
   if (!mDragService) return NO;
 
-  nsCOMPtr<nsIDragSession> dragSession;
-  mDragService->GetCurrentSession(getter_AddRefs(dragSession));
+  nsCOMPtr<nsIDragSession> dragSession =
+      mDragService->GetCurrentSession(mGeckoChild);
   return dragSession != nullptr;
 }
 
@@ -4119,18 +4137,19 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     if (!mDragService) return NSDragOperationNone;
   }
 
+  nsCOMPtr<nsIDragSession> dragSession;
   if (aMessage == eDragEnter) {
-    mDragService->StartDragSession();
+    nsIWidget* widget = mGeckoChild;
+    dragSession = mDragService->StartDragSession(widget);
+  } else {
+    dragSession = mDragService->GetCurrentSession(mGeckoChild);
   }
 
-  nsCOMPtr<nsIDragSession> dragSession;
-  mDragService->GetCurrentSession(getter_AddRefs(dragSession));
   if (dragSession) {
     if (aMessage == eDragOver) {
       // fire the drag event at the source. Just ignore whether it was
       // cancelled or not as there isn't actually a means to stop the drag
-      nsCOMPtr<nsIDragService> dragService = mDragService;
-      dragService->FireDragEventAtSource(
+      dragSession->FireDragEventAtSource(
           eDrag, nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
       dragSession->SetCanDrop(false);
     } else if (aMessage == eDrop) {
@@ -4143,8 +4162,7 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
         nsCOMPtr<nsINode> sourceNode;
         dragSession->GetSourceNode(getter_AddRefs(sourceNode));
         if (!sourceNode) {
-          nsCOMPtr<nsIDragService> dragService = mDragService;
-          dragService->EndDragSession(
+          dragSession->EndDragSession(
               false, nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
         }
         return NSDragOperationNone;
@@ -4188,8 +4206,8 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
         // DRAGDROP_ACTION_UNINITIALIZED, it means that the last event was sent
         // to the child process and this event is also being sent to the child
         // process. In this case, use the last event's action instead.
-        nsDragService* dragService = static_cast<nsDragService*>(mDragService);
-        int32_t childDragAction = dragService->TakeChildProcessDragAction();
+        nsDragSession* ds = static_cast<nsDragSession*>(dragSession.get());
+        int32_t childDragAction = ds->TakeChildProcessDragAction();
         if (childDragAction != nsIDragService::DRAGDROP_ACTION_UNINITIALIZED) {
           dragAction = childDragAction;
         }
@@ -4205,8 +4223,7 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
           // initiated in a different app. End the drag session,
           // since we're done with it for now (until the user
           // drags back into mozilla).
-          nsCOMPtr<nsIDragService> dragService = mDragService;
-          dragService->EndDragSession(
+          dragSession->EndDragSession(
               false, nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
         }
         break;
@@ -4297,10 +4314,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     NS_ASSERTION(mDragService, "Couldn't get a drag service - big problem!");
   }
 
-  if (mDragService) {
-    RefPtr<nsDragService> dragService =
-        static_cast<nsDragService*>(mDragService);
-
+  nsCOMPtr<nsIDragSession> session =
+      mDragService->GetCurrentSession(mGeckoChild);
+  if (session) {
     // Set the dragend point from the current mouse location
     // FIXME(emilio): Weird that we wouldn't use aPoint instead? Seems to work
     // locally as well...
@@ -4309,8 +4325,8 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     NSPoint locationInWindow =
         nsCocoaUtils::ConvertPointFromScreen([self window], pnt);
     FlipCocoaScreenCoordinate(pnt);
-    dragService->SetDragEndPoint(
-        [self convertWindowCoordinates:locationInWindow]);
+    LayoutDeviceIntPoint pt = [self convertWindowCoordinates:locationInWindow];
+    session->SetDragEndPoint(pt.x, pt.y);
 
     // XXX: dropEffect should be updated per |aOperation|.
     // As things stand though, |aOperation| isn't well handled within "our"
@@ -4321,16 +4337,17 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     // value for NSDragOperationGeneric that is passed by other applications.
     // All that said, NSDragOperationNone is still reliable.
     if (aOperation == NSDragOperationNone) {
-      RefPtr<dom::DataTransfer> dataTransfer = dragService->GetDataTransfer();
-      if (dataTransfer) {
+      if (RefPtr dataTransfer = session->GetDataTransfer()) {
         dataTransfer->SetDropEffectInt(nsIDragService::DRAGDROP_ACTION_NONE);
       }
     }
 
-    dragService->EndDragSession(true,
-                                nsCocoaUtils::ModifiersForEvent(currentEvent));
-    NS_RELEASE(mDragService);
+    session->EndDragSession(true,
+                            nsCocoaUtils::ModifiersForEvent(currentEvent));
   }
+
+  session = nullptr;
+  NS_IF_RELEASE(mDragService);
 
   [globalDragPboard release];
   globalDragPboard = nil;
@@ -4346,16 +4363,19 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
            movedToPoint:(NSPoint)aPoint {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
-  // Get the drag service if it isn't already cached. The drag service
-  // isn't cached when dragging over a different application.
   nsCOMPtr<nsIDragService> dragService = mDragService;
   if (!dragService) {
     dragService = do_GetService(kDragServiceContractID);
   }
-
   if (dragService) {
-    nsDragService* ds = static_cast<nsDragService*>(dragService.get());
-    ds->DragMovedWithView(aSession, aPoint);
+    RefPtr<nsIDragSession> dragSession;
+    nsIWidget* widget = mGeckoChild;
+    dragService->GetCurrentSession(widget, getter_AddRefs(dragSession));
+    if (dragSession) {
+      MOZ_ASSERT(aSession == static_cast<nsDragSession*>(dragSession.get())
+                                 ->GetNSDraggingSession());
+      dragSession->DragMoved(aPoint.x, aPoint.y);
+    }
   }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;

@@ -253,9 +253,8 @@ function approximateFraction(x) {
   }
   return result;
 }
-function roundToDivide(x, div) {
-  const r = x % div;
-  return r === 0 ? x : Math.round(x - r + div);
+function floorToDivide(x, div) {
+  return x - x % div;
 }
 function getPageSizeInches({
   view,
@@ -727,6 +726,10 @@ const defaultOptions = {
   docBaseUrl: {
     value: "",
     kind: OptionKind.API
+  },
+  enableHWA: {
+    value: false,
+    kind: OptionKind.API + OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   enableXfa: {
     value: true,
@@ -1305,28 +1308,45 @@ class EventBus {
     }
   }
 }
-class AutomationEventBus extends EventBus {
+class FirefoxEventBus extends EventBus {
+  #externalServices;
+  #globalEventNames;
+  #isInAutomation;
+  constructor(globalEventNames, externalServices, isInAutomation) {
+    super();
+    this.#globalEventNames = globalEventNames;
+    this.#externalServices = externalServices;
+    this.#isInAutomation = isInAutomation;
+  }
   dispatch(eventName, data) {
     super.dispatch(eventName, data);
-    const detail = Object.create(null);
-    if (data) {
-      for (const key in data) {
-        const value = data[key];
-        if (key === "source") {
-          if (value === window || value === document) {
-            return;
+    if (this.#isInAutomation) {
+      const detail = Object.create(null);
+      if (data) {
+        for (const key in data) {
+          const value = data[key];
+          if (key === "source") {
+            if (value === window || value === document) {
+              return;
+            }
+            continue;
           }
-          continue;
+          detail[key] = value;
         }
-        detail[key] = value;
       }
+      const event = new CustomEvent(eventName, {
+        bubbles: true,
+        cancelable: true,
+        detail
+      });
+      document.dispatchEvent(event);
     }
-    const event = new CustomEvent(eventName, {
-      bubbles: true,
-      cancelable: true,
-      detail
-    });
-    document.dispatchEvent(event);
+    if (this.#globalEventNames?.has(eventName)) {
+      this.#externalServices.dispatchGlobalEvent({
+        eventName,
+        detail: data
+      });
+    }
   }
 }
 
@@ -1351,6 +1371,10 @@ class BaseExternalServices {
     throw new Error("Not implemented: updateEditorStates");
   }
   async getNimbusExperimentData() {}
+  async getGlobalEventNames() {
+    return null;
+  }
+  dispatchGlobalEvent(_event) {}
 }
 
 ;// CONCATENATED MODULE: ./web/preferences.js
@@ -1397,6 +1421,7 @@ class BasePreferences {
     disableFontFace: false,
     disableRange: false,
     disableStream: false,
+    enableHWA: false,
     enableXfa: true
   });
   #prefs = Object.create(null);
@@ -1465,6 +1490,7 @@ class BasePreferences {
 ;// CONCATENATED MODULE: ./web/l10n.js
 class L10n {
   #dir;
+  #elements = new Set();
   #lang;
   #l10n;
   constructor({
@@ -1499,10 +1525,18 @@ class L10n {
     return messages?.[0].value || fallback;
   }
   async translate(element) {
+    this.#elements.add(element);
     try {
       this.#l10n.connectRoot(element);
       await this.#l10n.translateRoots();
     } catch {}
+  }
+  async destroy() {
+    for (const element of this.#elements) {
+      this.#l10n.disconnectRoot(element);
+    }
+    this.#elements.clear();
+    this.#l10n.pauseObserving();
   }
   pause() {
     this.#l10n.pauseObserving();
@@ -1581,13 +1615,6 @@ class FirefoxCom {
 }
 class DownloadManager {
   #openBlobUrls = new WeakMap();
-  downloadUrl(url, filename, options = {}) {
-    FirefoxCom.request("download", {
-      originalUrl: url,
-      filename,
-      options
-    });
-  }
   downloadData(data, filename, contentType) {
     const blobUrl = URL.createObjectURL(new Blob([data], {
       type: contentType
@@ -1626,8 +1653,10 @@ class DownloadManager {
     this.downloadData(data, filename, contentType);
     return false;
   }
-  download(blob, url, filename, options = {}) {
-    const blobUrl = URL.createObjectURL(blob);
+  download(data, url, filename, options = {}) {
+    const blobUrl = data ? URL.createObjectURL(new Blob([data], {
+      type: "application/pdf"
+    })) : null;
     FirefoxCom.request("download", {
       blobUrl,
       originalUrl: url,
@@ -1826,6 +1855,12 @@ class ExternalServices extends BaseExternalServices {
   }
   async getNimbusExperimentData() {
     return null;
+  }
+  async getGlobalEventNames() {
+    return FirefoxCom.requestAsync("getGlobalEventNames", null);
+  }
+  dispatchGlobalEvent(event) {
+    FirefoxCom.request("dispatchGlobalEvent", event);
   }
 }
 
@@ -3858,6 +3893,7 @@ class PDFFindController {
       source: this,
       state,
       previous,
+      entireWord: this.#state?.entireWord ?? null,
       matchesCount: this.#requestMatchesCount(),
       rawQuery: this.#state?.query ?? null
     });
@@ -6252,7 +6288,8 @@ class PDFThumbnailView {
     optionalContentConfigPromise,
     linkService,
     renderingQueue,
-    pageColors
+    pageColors,
+    enableHWA
   }) {
     this.id = id;
     this.renderingId = "thumbnail" + id;
@@ -6263,6 +6300,7 @@ class PDFThumbnailView {
     this.pdfPageRotate = defaultViewport.rotation;
     this._optionalContentConfigPromise = optionalContentConfigPromise || null;
     this.pageColors = pageColors || null;
+    this.enableHWA = enableHWA || false;
     this.eventBus = eventBus;
     this.linkService = linkService;
     this.renderingQueue = renderingQueue;
@@ -6346,10 +6384,11 @@ class PDFThumbnailView {
     }
     this.resume = null;
   }
-  #getPageDrawContext(upscaleFactor = 1) {
+  #getPageDrawContext(upscaleFactor = 1, enableHWA = this.enableHWA) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", {
-      alpha: false
+      alpha: false,
+      willReadFrequently: !enableHWA
     });
     const outputScale = new OutputScale();
     canvas.width = upscaleFactor * this.canvasWidth * outputScale.sx | 0;
@@ -6468,7 +6507,7 @@ class PDFThumbnailView {
     const {
       ctx,
       canvas
-    } = this.#getPageDrawContext();
+    } = this.#getPageDrawContext(1, true);
     if (img.width <= 2 * canvas.width) {
       ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
       return canvas;
@@ -6516,13 +6555,15 @@ class PDFThumbnailViewer {
     linkService,
     renderingQueue,
     pageColors,
-    abortSignal
+    abortSignal,
+    enableHWA
   }) {
     this.container = container;
     this.eventBus = eventBus;
     this.linkService = linkService;
     this.renderingQueue = renderingQueue;
     this.pageColors = pageColors || null;
+    this.enableHWA = enableHWA || false;
     this.scroll = watchScroll(this.container, this.#scrollUpdated.bind(this), abortSignal);
     this.#resetView();
   }
@@ -6644,7 +6685,8 @@ class PDFThumbnailViewer {
           optionalContentConfigPromise,
           linkService: this.linkService,
           renderingQueue: this.renderingQueue,
-          pageColors: this.pageColors
+          pageColors: this.pageColors,
+          enableHWA: this.enableHWA
         });
         this._thumbnails.push(thumbnail);
       }
@@ -7473,13 +7515,6 @@ class TextLayerBuilder {
     this.div.tabIndex = 0;
     this.div.className = "textLayer";
   }
-  #finishRendering() {
-    this.#renderingDone = true;
-    const endOfContent = document.createElement("div");
-    endOfContent.className = "endOfContent";
-    this.div.append(endOfContent);
-    this.#bindMouse(endOfContent);
-  }
   async render(viewport, textContentParams = null) {
     if (this.#renderingDone && this.#textLayer) {
       this.#textLayer.update({
@@ -7505,7 +7540,11 @@ class TextLayerBuilder {
     this.highlighter?.setTextMapping(textDivs, textContentItemsStr);
     this.accessibilityManager?.setTextMapping(textDivs);
     await this.#textLayer.render();
-    this.#finishRendering();
+    this.#renderingDone = true;
+    const endOfContent = document.createElement("div");
+    endOfContent.className = "endOfContent";
+    this.div.append(endOfContent);
+    this.#bindMouse(endOfContent);
     this.#onAppend?.(this.div);
     this.highlighter?.enable();
     this.accessibilityManager?.enable();
@@ -7616,6 +7655,7 @@ const DEFAULT_LAYER_PROPERTIES = null;
 const LAYERS_ORDER = new Map([["canvasWrapper", 0], ["textLayer", 1], ["annotationLayer", 2], ["annotationEditorLayer", 3], ["xfaLayer", 3]]);
 class PDFPageView {
   #annotationMode = AnnotationMode.ENABLE_FORMS;
+  #enableHWA = false;
   #hasRestrictedScaling = false;
   #layerProperties = null;
   #loadingId = null;
@@ -7648,6 +7688,7 @@ class PDFPageView {
     this.imageResourcesPath = options.imageResourcesPath || "";
     this.maxCanvasPixels = options.maxCanvasPixels ?? AppOptions.get("maxCanvasPixels");
     this.pageColors = options.pageColors || null;
+    this.#enableHWA = options.enableHWA || false;
     this.eventBus = options.eventBus;
     this.renderingQueue = options.renderingQueue;
     this.l10n = options.l10n;
@@ -8229,7 +8270,8 @@ class PDFPageView {
     canvasWrapper.append(canvas);
     this.canvas = canvas;
     const ctx = canvas.getContext("2d", {
-      alpha: false
+      alpha: false,
+      willReadFrequently: !this.#enableHWA
     });
     const outputScale = this.outputScale = new OutputScale();
     if (this.maxCanvasPixels > 0) {
@@ -8245,13 +8287,13 @@ class PDFPageView {
     }
     const sfx = approximateFraction(outputScale.sx);
     const sfy = approximateFraction(outputScale.sy);
-    canvas.width = roundToDivide(width * outputScale.sx, sfx[0]);
-    canvas.height = roundToDivide(height * outputScale.sy, sfy[0]);
+    canvas.width = floorToDivide(width * outputScale.sx, sfx[0]);
+    canvas.height = floorToDivide(height * outputScale.sy, sfy[0]);
     const {
       style
     } = canvas;
-    style.width = roundToDivide(width, sfx[1]) + "px";
-    style.height = roundToDivide(height, sfy[1]) + "px";
+    style.width = floorToDivide(width, sfx[1]) + "px";
+    style.height = floorToDivide(height, sfy[1]) + "px";
     this.#viewportMap.set(canvas, viewport);
     const transform = outputScale.scaled ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0] : null;
     const renderContext = {
@@ -8418,6 +8460,7 @@ class PDFViewer {
   #annotationEditorUIManager = null;
   #annotationMode = AnnotationMode.ENABLE_FORMS;
   #containerTopLeft = null;
+  #enableHWA = false;
   #enableHighlightFloatingButton = false;
   #enablePermissions = false;
   #eventAbortController = null;
@@ -8431,7 +8474,7 @@ class PDFViewer {
   #scaleTimeoutId = null;
   #textLayerMode = TextLayerMode.ENABLE;
   constructor(options) {
-    const viewerVersion = "4.4.10";
+    const viewerVersion = "4.4.140";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -8459,6 +8502,7 @@ class PDFViewer {
     this.#enablePermissions = options.enablePermissions || false;
     this.pageColors = options.pageColors || null;
     this.#mlManager = options.mlManager || null;
+    this.#enableHWA = options.enableHWA || false;
     this.defaultRenderingQueue = !options.renderingQueue;
     this.renderingQueue = options.renderingQueue;
     const {
@@ -8729,10 +8773,14 @@ class PDFViewer {
         return;
       }
       this.#getAllTextInProgress = true;
-      const savedCursor = this.container.style.cursor;
-      this.container.style.cursor = "wait";
-      const interruptCopy = ev => this.#interruptCopyCondition = ev.key === "Escape";
-      window.addEventListener("keydown", interruptCopy);
+      const {
+        classList
+      } = this.viewer;
+      classList.add("copyAll");
+      const ac = new AbortController();
+      window.addEventListener("keydown", ev => this.#interruptCopyCondition = ev.key === "Escape", {
+        signal: ac.signal
+      });
       this.getAllText().then(async text => {
         if (text !== null) {
           await navigator.clipboard.writeText(text);
@@ -8742,8 +8790,8 @@ class PDFViewer {
       }).finally(() => {
         this.#getAllTextInProgress = false;
         this.#interruptCopyCondition = false;
-        window.removeEventListener("keydown", interruptCopy);
-        this.container.style.cursor = savedCursor;
+        ac.abort();
+        classList.remove("copyAll");
       });
       event.preventDefault();
       event.stopPropagation();
@@ -8876,7 +8924,8 @@ class PDFViewer {
           maxCanvasPixels: this.maxCanvasPixels,
           pageColors,
           l10n: this.l10n,
-          layerProperties: this._layerProperties
+          layerProperties: this._layerProperties,
+          enableHWA: this.#enableHWA
         });
         this._pages.push(pageView);
       }
@@ -10520,6 +10569,7 @@ const PDFViewerApplication = {
   isViewerEmbedded: window.parent !== window,
   url: "",
   baseUrl: "",
+  _allowedGlobalEventsPromise: null,
   _downloadUrl: "",
   _eventBusAbortController: null,
   _windowAbortController: null,
@@ -10545,6 +10595,7 @@ const PDFViewerApplication = {
   async initialize(appConfig) {
     let l10nPromise;
     l10nPromise = this.externalServices.createL10n();
+    this._allowedGlobalEventsPromise = this.externalServices.getGlobalEventNames();
     this.appConfig = appConfig;
     try {
       await this.preferences.initializedPromise;
@@ -10648,7 +10699,9 @@ const PDFViewerApplication = {
       externalServices,
       l10n
     } = this;
-    const eventBus = AppOptions.get("isInAutomation") ? new AutomationEventBus() : new EventBus();
+    let eventBus;
+    eventBus = new FirefoxEventBus(await this._allowedGlobalEventsPromise, externalServices, AppOptions.get("isInAutomation"));
+    this._allowedGlobalEventsPromise = null;
     this.eventBus = eventBus;
     this.overlayManager = new OverlayManager();
     const pdfRenderingQueue = new PDFRenderingQueue();
@@ -10682,6 +10735,7 @@ const PDFViewerApplication = {
       foreground: AppOptions.get("pageColorsForeground")
     } : null;
     const altTextManager = appConfig.altTextDialog ? new AltTextManager(appConfig.altTextDialog, container, this.overlayManager, eventBus) : null;
+    const enableHWA = AppOptions.get("enableHWA");
     const pdfViewer = new PDFViewer({
       container,
       viewer,
@@ -10704,7 +10758,8 @@ const PDFViewerApplication = {
       enablePermissions: AppOptions.get("enablePermissions"),
       pageColors,
       mlManager: this.mlManager,
-      abortSignal: this._globalAbortController.signal
+      abortSignal: this._globalAbortController.signal,
+      enableHWA
     });
     this.pdfViewer = pdfViewer;
     pdfRenderingQueue.setViewer(pdfViewer);
@@ -10717,7 +10772,8 @@ const PDFViewerApplication = {
         renderingQueue: pdfRenderingQueue,
         linkService: pdfLinkService,
         pageColors,
-        abortSignal: this._globalAbortController.signal
+        abortSignal: this._globalAbortController.signal,
+        enableHWA
       });
       pdfRenderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
     }
@@ -11048,25 +11104,14 @@ const PDFViewerApplication = {
       });
     });
   },
-  _ensureDownloadComplete() {
-    if (this.pdfDocument && this.downloadComplete) {
-      return;
-    }
-    throw new Error("PDF document not downloaded.");
-  },
   async download(options = {}) {
-    const url = this._downloadUrl,
-      filename = this._docFilename;
+    let data;
     try {
-      this._ensureDownloadComplete();
-      const data = await this.pdfDocument.getData();
-      const blob = new Blob([data], {
-        type: "application/pdf"
-      });
-      await this.downloadManager.download(blob, url, filename, options);
-    } catch {
-      await this.downloadManager.downloadUrl(url, filename, options);
-    }
+      if (this.downloadComplete) {
+        data = await this.pdfDocument.getData();
+      }
+    } catch {}
+    this.downloadManager.download(data, this._downloadUrl, this._docFilename, options);
   },
   async save(options = {}) {
     if (this._saveInProgress) {
@@ -11074,15 +11119,9 @@ const PDFViewerApplication = {
     }
     this._saveInProgress = true;
     await this.pdfScriptingManager.dispatchWillSave();
-    const url = this._downloadUrl,
-      filename = this._docFilename;
     try {
-      this._ensureDownloadComplete();
       const data = await this.pdfDocument.saveDocument();
-      const blob = new Blob([data], {
-        type: "application/pdf"
-      });
-      await this.downloadManager.download(blob, url, filename, options);
+      this.downloadManager.download(data, this._downloadUrl, this._docFilename, options);
     } catch (reason) {
       console.error(`Error when saving the document: ${reason.message}`);
       await this.download(options);
@@ -11100,12 +11139,13 @@ const PDFViewerApplication = {
       });
     }
   },
-  downloadOrSave(options = {}) {
-    if (this.pdfDocument?.annotationStorage.size > 0) {
-      this.save(options);
-    } else {
-      this.download(options);
-    }
+  async downloadOrSave(options = {}) {
+    const {
+      classList
+    } = this.appConfig.appContainer;
+    classList.add("wait");
+    await (this.pdfDocument?.annotationStorage.size > 0 ? this.save(options) : this.download(options));
+    classList.remove("wait");
   },
   async _documentError(key, moreInfo = null) {
     this._unblockDocumentLoadEvent();
@@ -11855,10 +11895,14 @@ const PDFViewerApplication = {
   unbindWindowEvents() {
     this._windowAbortController?.abort();
     this._windowAbortController = null;
-    if (AppOptions.get("isInAutomation")) {
-      this._globalAbortController?.abort();
-      this._globalAbortController = null;
-    }
+  },
+  async testingClose() {
+    this.unbindEvents();
+    this.unbindWindowEvents();
+    this._globalAbortController?.abort();
+    this._globalAbortController = null;
+    this.findBar?.close();
+    await Promise.all([this.l10n?.destroy(), this.close()]);
   },
   _accumulateTicks(ticks, prop) {
     if (this[prop] > 0 && ticks < 0 || this[prop] < 0 && ticks > 0) {
@@ -12116,6 +12160,7 @@ function webViewerUpdateFindMatchesCount({
 function webViewerUpdateFindControlState({
   state,
   previous,
+  entireWord,
   matchesCount,
   rawQuery
 }) {
@@ -12123,6 +12168,7 @@ function webViewerUpdateFindControlState({
     PDFViewerApplication.externalServices.updateFindControlState({
       result: state,
       findPrevious: previous,
+      entireWord,
       matchesCount,
       rawQuery
     });
@@ -12603,8 +12649,8 @@ function webViewerReportTelemetry({
 
 
 
-const pdfjsVersion = "4.4.10";
-const pdfjsBuild = "5c51d5622";
+const pdfjsVersion = "4.4.140";
+const pdfjsBuild = "2fbd61944";
 const AppConstants = null;
 window.PDFViewerApplication = PDFViewerApplication;
 window.PDFViewerApplicationConstants = AppConstants;

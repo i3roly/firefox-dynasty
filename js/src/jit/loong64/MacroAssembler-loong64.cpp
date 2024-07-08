@@ -2114,18 +2114,6 @@ FaultingCodeOffset MacroAssemblerLOONG64::loadDouble(const BaseIndex& src,
   return asMasm().ma_fld_d(dest, src);
 }
 
-void MacroAssemblerLOONG64::loadFloatAsDouble(const Address& address,
-                                              FloatRegister dest) {
-  asMasm().ma_fld_s(dest, address);
-  as_fcvt_d_s(dest, dest);
-}
-
-void MacroAssemblerLOONG64::loadFloatAsDouble(const BaseIndex& src,
-                                              FloatRegister dest) {
-  asMasm().loadFloat32(src, dest);
-  as_fcvt_d_s(dest, dest);
-}
-
 FaultingCodeOffset MacroAssemblerLOONG64::loadFloat32(const Address& address,
                                                       FloatRegister dest) {
   return asMasm().ma_fld_s(dest, address);
@@ -5149,30 +5137,6 @@ void MacroAssemblerLOONG64Compat::boxDouble(FloatRegister src,
 void MacroAssemblerLOONG64Compat::boxNonDouble(JSValueType type, Register src,
                                                const ValueOperand& dest) {
   boxValue(type, src, dest.valueReg());
-}
-
-void MacroAssemblerLOONG64Compat::boolValueToDouble(const ValueOperand& operand,
-                                                    FloatRegister dest) {
-  ScratchRegisterScope scratch(asMasm());
-  convertBoolToInt32(operand.valueReg(), scratch);
-  convertInt32ToDouble(scratch, dest);
-}
-
-void MacroAssemblerLOONG64Compat::int32ValueToDouble(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToDouble(operand.valueReg(), dest);
-}
-
-void MacroAssemblerLOONG64Compat::boolValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  ScratchRegisterScope scratch(asMasm());
-  convertBoolToInt32(operand.valueReg(), scratch);
-  convertInt32ToFloat32(scratch, dest);
-}
-
-void MacroAssemblerLOONG64Compat::int32ValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToFloat32(operand.valueReg(), dest);
 }
 
 void MacroAssemblerLOONG64Compat::loadConstantFloat32(float f,

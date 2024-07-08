@@ -159,6 +159,7 @@
   "Sanitizer",
   "SaveToPocket",
   "ScreenshotsUtils",
+  "SearchModeSwitcher",
   "SearchUIUtils",
   "SessionStartup",
   "SessionStore",
@@ -274,5 +275,6 @@
   "gFindBar",
   "gFindBarInitialized",
   "gFindBarPromise",
-  "BrowserSearch"
+  "BrowserSearch",
+  "PBMExitStatus"
 ]

@@ -51,6 +51,8 @@ import org.mozilla.fenix.browser.BrowserFragmentDirections
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.browsingmode.SimpleBrowsingModeManager
 import org.mozilla.fenix.browser.readermode.ReaderModeController
+import org.mozilla.fenix.components.AppStore
+import org.mozilla.fenix.components.appstate.AppAction.SnackbarAction
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.helpers.FenixRobolectricTestRunner
@@ -93,7 +95,11 @@ class DefaultBrowserToolbarControllerTest {
     @RelaxedMockK
     private lateinit var homeViewModel: HomeScreenViewModel
 
+    @RelaxedMockK
+    private lateinit var settings: Settings
+
     private lateinit var store: BrowserStore
+    private lateinit var appStore: AppStore
     private val captureMiddleware = CaptureActionsMiddleware<BrowserState, BrowserAction>()
 
     @get:Rule
@@ -127,6 +133,7 @@ class DefaultBrowserToolbarControllerTest {
             ),
             middleware = listOf(captureMiddleware),
         )
+        appStore = AppStore()
     }
 
     @After
@@ -453,6 +460,8 @@ class DefaultBrowserToolbarControllerTest {
         controller.handleTranslationsButtonClick()
 
         verify {
+            appStore.dispatch(SnackbarAction.SnackbarDismissed)
+
             navController.navigate(
                 BrowserFragmentDirections.actionBrowserFragmentToTranslationsDialogFragment(),
             )
@@ -462,13 +471,46 @@ class DefaultBrowserToolbarControllerTest {
         assertEquals("main_flow_toolbar", telemetry?.extra?.get("item"))
     }
 
+    @Test
+    fun `WHEN new tab button is clicked THEN navigate to homepage`() {
+        val controller = createController()
+        controller.handleNewTabButtonClick()
+
+        verify {
+            navController.navigate(
+                BrowserFragmentDirections.actionGlobalHome(focusOnAddressBar = true),
+            )
+        }
+    }
+
+    @Test
+    fun `GIVEN homepage as a new tab is enabled WHEN new tab button is clicked THEN a new homepage tab is displayed`() {
+        every { settings.enableHomepageAsNewTab } returns true
+
+        val controller = createController()
+        controller.handleNewTabButtonClick()
+
+        verify {
+            tabsUseCases.addTab.invoke(
+                startLoading = false,
+                private = false,
+            )
+
+            navController.navigate(
+                BrowserFragmentDirections.actionGlobalHome(focusOnAddressBar = true),
+            )
+        }
+    }
+
     private fun createController(
         activity: HomeActivity = this.activity,
         customTabSessionId: String? = null,
     ) = DefaultBrowserToolbarController(
         store = store,
+        appStore = appStore,
         tabsUseCases = tabsUseCases,
         activity = activity,
+        settings = settings,
         navController = navController,
         engineView = engineView,
         homeViewModel = homeViewModel,

@@ -923,15 +923,12 @@ dialog > .sync-engines-list + hbox {
 }
 
 .update-throbber {
-  width: 16px;
-  min-height: 16px;
-  margin-block: 7px;
+  width: 1.3em;
+  min-height: 1.3em;
   margin-inline-end: 8px;
-  vertical-align: middle;
-}
-
-.update-throbber {
-  content: image-set(url("chrome://global/skin/icons/loading.png"), url("chrome://global/skin/icons/loading@2x.png") 2x);
+  content: url("chrome://global/skin/icons/loading.svg");
+  -moz-context-properties: fill;
+  fill: var(--in-content-accent-color);
 }
 
 .navigation {
@@ -1206,25 +1203,6 @@ richlistitem .text-link:hover {
 #proxy-grid > .thin {
   grid-column: span 2;
   height: 20px;
-}
-
-#pane-experimental-search-results-header,
-#pane-experimental-subtitle {
-  background-image: url("chrome://global/skin/icons/warning.svg");
-  background-repeat: no-repeat;
-  background-position: 0 center;
-  background-size: contain;
-  min-height: 30px;
-  padding-inline-start: 38px;
-  display: flex;
-  align-items: center;
-  -moz-context-properties: fill;
-  fill: #FFBF00;
-}
-
-#pane-experimental-search-results-header:-moz-locale-dir(rtl),
-#pane-experimental-subtitle:-moz-locale-dir(rtl) {
-  background-position-x: right;
 }
 
 #pane-experimental-featureGates {

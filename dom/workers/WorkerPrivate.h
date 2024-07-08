@@ -11,6 +11,7 @@
 #include "MainThreadUtils.h"
 #include "ScriptLoader.h"
 #include "js/ContextOptions.h"
+#include "mozilla/Atomics.h"
 #include "mozilla/Attributes.h"
 #include "mozilla/AutoRestore.h"
 #include "mozilla/BasePrincipal.h"
@@ -77,6 +78,7 @@ class JSExecutionManager;
 class MessagePort;
 class UniqueMessagePortId;
 class PerformanceStorage;
+class StrongWorkerRef;
 class TimeoutHandler;
 class WorkerControlRunnable;
 class WorkerCSPEventListener;
@@ -90,6 +92,7 @@ class WorkerRef;
 class WorkerRunnable;
 class WorkerDebuggeeRunnable;
 class WorkerThread;
+class WorkerThreadRunnable;
 
 // SharedMutex is a small wrapper around an (internal) reference-counted Mutex
 // object. It exists to avoid changing a lot of code to use Mutex* instead of
@@ -293,6 +296,17 @@ class WorkerPrivate final
 
     mCondVar.Notify();
   }
+
+  // Mark worker private as running in the background tab
+  // for further throttling
+  void SetIsRunningInBackground();
+
+  void SetIsRunningInForeground();
+
+  bool ChangeBackgroundStateInternal(bool aIsBackground);
+
+  // returns true, if worker is running in the background tab
+  bool IsRunningInBackground() const { return mIsInBackground; }
 
   void WaitForIsDebuggerRegistered(bool aDebuggerRegistered) {
     AssertIsOnParentThread();
@@ -1434,7 +1448,8 @@ class WorkerPrivate final
   RefPtr<WorkerCSPEventListener> mCSPEventListener;
 
   // Protected by mMutex.
-  nsTArray<RefPtr<WorkerRunnable>> mPreStartRunnables MOZ_GUARDED_BY(mMutex);
+  nsTArray<RefPtr<WorkerThreadRunnable>> mPreStartRunnables
+      MOZ_GUARDED_BY(mMutex);
 
   // Only touched on the parent thread.  Used for both SharedWorker and
   // ServiceWorker RemoteWorkers.
@@ -1556,10 +1571,13 @@ class WorkerPrivate final
     ~AutoPushEventLoopGlobal();
 
    private:
-    // We cannot make this CheckedUnsafePtr<WorkerPrivate> as this would violate
-    // our static assert
-    MOZ_NON_OWNING_REF WorkerPrivate* mWorkerPrivate;
     nsCOMPtr<nsIGlobalObject> mOldEventLoopGlobal;
+
+#ifdef DEBUG
+    // This is used to checking if we are on the right stack while push the
+    // mOldEventLoopGlobal back.
+    nsCOMPtr<nsIGlobalObject> mNewEventLoopGlobal;
+#endif
   };
   friend class AutoPushEventLoopGlobal;
 
@@ -1597,6 +1615,7 @@ class WorkerPrivate final
   const bool mIsSecureContext;
 
   bool mDebuggerRegistered MOZ_GUARDED_BY(mMutex);
+  mozilla::Atomic<bool> mIsInBackground;
 
   // During registration, this worker may be marked as not being ready to
   // execute debuggee runnables or content.
@@ -1661,41 +1680,21 @@ class WorkerPrivate final
 };
 
 class AutoSyncLoopHolder {
-  CheckedUnsafePtr<WorkerPrivate> mWorkerPrivate;
+  RefPtr<StrongWorkerRef> mWorkerRef;
   nsCOMPtr<nsISerialEventTarget> mTarget;
   uint32_t mIndex;
 
  public:
   // See CreateNewSyncLoop() for more information about the correct value to use
   // for aFailStatus.
-  AutoSyncLoopHolder(WorkerPrivate* aWorkerPrivate, WorkerStatus aFailStatus)
-      : mWorkerPrivate(aWorkerPrivate),
-        mTarget(aWorkerPrivate->CreateNewSyncLoop(aFailStatus)),
-        mIndex(aWorkerPrivate->mSyncLoopStack.Length() - 1) {
-    aWorkerPrivate->AssertIsOnWorkerThread();
-  }
+  AutoSyncLoopHolder(WorkerPrivate* aWorkerPrivate, WorkerStatus aFailStatus,
+                     const char* const aName = "AutoSyncLoopHolder");
 
-  ~AutoSyncLoopHolder() {
-    if (mWorkerPrivate && mTarget) {
-      mWorkerPrivate->AssertIsOnWorkerThread();
-      mWorkerPrivate->StopSyncLoop(mTarget, NS_ERROR_FAILURE);
-      mWorkerPrivate->DestroySyncLoop(mIndex);
-    }
-  }
+  ~AutoSyncLoopHolder();
 
-  nsresult Run() {
-    CheckedUnsafePtr<WorkerPrivate> workerPrivate = mWorkerPrivate;
-    mWorkerPrivate = nullptr;
+  nsresult Run();
 
-    workerPrivate->AssertIsOnWorkerThread();
-
-    return workerPrivate->RunCurrentSyncLoop();
-  }
-
-  nsISerialEventTarget* GetSerialEventTarget() const {
-    // This can be null if CreateNewSyncLoop() fails.
-    return mTarget;
-  }
+  nsISerialEventTarget* GetSerialEventTarget() const;
 };
 
 /**

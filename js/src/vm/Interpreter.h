@@ -15,6 +15,11 @@
 
 #include "vm/BuiltinObjectKind.h"
 #include "vm/CheckIsObjectKind.h"  // CheckIsObjectKind
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+#  include "vm/DisposableRecord.h"
+#  include "vm/ErrorObject.h"
+#  include "vm/UsingHint.h"
+#endif
 #include "vm/Stack.h"
 
 namespace js {
@@ -640,6 +645,16 @@ bool OptimizeGetIterator(JSContext* cx, HandleValue arg, bool* result);
 
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
 bool DisposeDisposablesOnScopeLeave(JSContext* cx, JS::Handle<JSObject*> env);
+
+bool GetDisposeMethod(JSContext* cx, JS::Handle<JS::Value> obj, UsingHint hint,
+                      JS::MutableHandle<JS::Value> disposeMethod);
+
+ErrorObject* CreateSuppressedError(JSContext* cx, JS::Handle<JS::Value> error,
+                                   JS::Handle<JS::Value> suppressed);
+
+bool CreateDisposableResource(JSContext* cx, JS::Handle<JS::Value> objVal,
+                              UsingHint hint,
+                              JS::MutableHandle<JS::Value> result);
 #endif
 
 ArrayObject* ArrayFromArgumentsObject(JSContext* cx,

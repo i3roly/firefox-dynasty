@@ -485,8 +485,21 @@ class nsContentUtils {
    * This method just sucks.
    */
   static nsresult GetInclusiveAncestorsAndOffsets(
-      nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>* aAncestorNodes,
-      nsTArray<mozilla::Maybe<uint32_t>>* aAncestorOffsets);
+      nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+      nsTArray<mozilla::Maybe<uint32_t>>& aAncestorOffsets);
+
+  /*
+   * https://dom.spec.whatwg.org/#concept-shadow-including-ancestor.
+   *
+   * Similar as the GetInclusiveAncestorsAndOffsets method, except this
+   * will use host elements as the parent for shadow roots.
+   *
+   * When the current content is a ShadowRoot, the offset of it from
+   * its ancestor (the host element) will be Nothing().
+   */
+  static nsresult GetShadowIncludingAncestorsAndOffsets(
+      nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+      nsTArray<mozilla::Maybe<uint32_t>>& aAncestorOffsets);
 
   /**
    * Returns the closest common inclusive ancestor
@@ -2151,6 +2164,13 @@ class nsContentUtils {
   }
 
   /**
+   * Gets the about:fingerprintingprotection principal.
+   */
+  static nsIPrincipal* GetFingerprintingProtectionPrincipal() {
+    return sFingerprintingProtectionPrincipal;
+  }
+
+  /**
    * *aResourcePrincipal is a principal describing who may access the contents
    * of a resource. The resource can only be consumed by a principal that
    * subsumes *aResourcePrincipal. MAKE SURE THAT NOTHING EVER ACTS WITH THE
@@ -2211,7 +2231,9 @@ class nsContentUtils {
   /**
    * Retrieve the current drag session, or null if no drag is currently occuring
    */
-  static already_AddRefed<nsIDragSession> GetDragSession();
+  static already_AddRefed<nsIDragSession> GetDragSession(nsIWidget* aWidget);
+
+  static already_AddRefed<nsIDragSession> GetDragSession(nsPresContext* aPC);
 
   /*
    * Initialize and set the dataTransfer field of an WidgetDragEvent.
@@ -3625,6 +3647,7 @@ class nsContentUtils {
   static nsIScriptSecurityManager* sSecurityManager;
   static nsIPrincipal* sSystemPrincipal;
   static nsIPrincipal* sNullSubjectPrincipal;
+  static nsIPrincipal* sFingerprintingProtectionPrincipal;
 
   static nsIConsoleService* sConsoleService;
 
@@ -3716,7 +3739,8 @@ nsContentUtils::InternalContentPolicyTypeToExternal(nsContentPolicyType aType) {
     case nsIContentPolicy::TYPE_INTERNAL_TRACK:
       return ExtContentPolicy::TYPE_MEDIA;
 
-    case nsIContentPolicy::TYPE_INTERNAL_XMLHTTPREQUEST:
+    case nsIContentPolicy::TYPE_INTERNAL_XMLHTTPREQUEST_ASYNC:
+    case nsIContentPolicy::TYPE_INTERNAL_XMLHTTPREQUEST_SYNC:
     case nsIContentPolicy::TYPE_INTERNAL_EVENTSOURCE:
       return ExtContentPolicy::TYPE_XMLHTTPREQUEST;
 

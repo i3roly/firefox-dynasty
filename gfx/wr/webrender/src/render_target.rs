@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-use api::{units::*, PremultipliedColorF, ClipMode};
+use api::{units::*, PremultipliedColorF};
 use api::{ColorF, LineOrientation, BorderStyle};
 use crate::batch::{AlphaBatchBuilder, AlphaBatchContainer, BatchTextures};
 use crate::batch::{ClipBatcher, BatchBuilder, INVALID_SEGMENT_INDEX, ClipMaskInstanceList};
@@ -396,19 +396,23 @@ impl RenderTarget for ColorRenderTarget {
                     }
                 );
             }
-            RenderTaskKind::VerticalBlur(..) => {
+            RenderTaskKind::VerticalBlur(ref info) => {
                 add_blur_instances(
                     &mut self.vertical_blurs,
                     BlurDirection::Vertical,
+                    info.blur_std_deviation,
+                    info.blur_region,
                     task_id.into(),
                     task.children[0],
                     render_tasks,
                 );
             }
-            RenderTaskKind::HorizontalBlur(..) => {
+            RenderTaskKind::HorizontalBlur(ref info) => {
                 add_blur_instances(
                     &mut self.horizontal_blurs,
                     BlurDirection::Horizontal,
+                    info.blur_std_deviation,
+                    info.blur_region,
                     task_id.into(),
                     task.children[0],
                     render_tasks,
@@ -573,21 +577,25 @@ impl RenderTarget for AlphaRenderTarget {
                 //           prim region with blend disabled.
                 self.one_clears.push(task_id);
             }
-            RenderTaskKind::VerticalBlur(..) => {
+            RenderTaskKind::VerticalBlur(ref info) => {
                 self.zero_clears.push(task_id);
                 add_blur_instances(
                     &mut self.vertical_blurs,
                     BlurDirection::Vertical,
+                    info.blur_std_deviation,
+                    info.blur_region,
                     task_id.into(),
                     task.children[0],
                     render_tasks,
                 );
             }
-            RenderTaskKind::HorizontalBlur(..) => {
+            RenderTaskKind::HorizontalBlur(ref info) => {
                 self.zero_clears.push(task_id);
                 add_blur_instances(
                     &mut self.horizontal_blurs,
                     BlurDirection::Horizontal,
+                    info.blur_std_deviation,
+                    info.blur_region,
                     task_id.into(),
                     task.children[0],
                     render_tasks,
@@ -744,10 +752,12 @@ impl TextureCacheRenderTarget {
                     wavy_line_thickness: info.wavy_line_thickness,
                 });
             }
-            RenderTaskKind::HorizontalBlur(..) => {
+            RenderTaskKind::HorizontalBlur(ref info) => {
                 add_blur_instances(
                     &mut self.horizontal_blurs,
                     BlurDirection::Horizontal,
+                    info.blur_std_deviation,
+                    info.blur_region,
                     task_address,
                     task.children[0],
                     render_tasks,
@@ -817,6 +827,8 @@ impl TextureCacheRenderTarget {
 fn add_blur_instances(
     instances: &mut FastHashMap<TextureSource, Vec<BlurInstance>>,
     blur_direction: BlurDirection,
+    blur_std_deviation: f32,
+    blur_region: DeviceIntSize,
     task_address: RenderTaskAddress,
     src_task_id: RenderTaskId,
     render_tasks: &RenderTaskGraph,
@@ -827,6 +839,8 @@ fn add_blur_instances(
         task_address,
         src_task_address: src_task_id.into(),
         blur_direction: blur_direction.as_int(),
+        blur_std_deviation,
+        blur_region: blur_region.to_f32(),
     };
 
     instances
@@ -1194,8 +1208,6 @@ fn build_mask_tasks(
                 (clip_address, fast_path)
             }
             ClipItemKind::Rectangle { rect, mode, .. } => {
-                assert_eq!(mode, ClipMode::Clip);
-
                 let mut writer = gpu_buffer_builder.f32.write_blocks(3);
                 writer.push_one(rect);
                 writer.push_one([0.0, 0.0, 0.0, 0.0]);

@@ -2692,6 +2692,17 @@
      */ \
     MACRO(TryDestructuring, try_destructuring, NULL, 1, 0, 0, JOF_BYTE) \
     /*
+     * No-op instruction used by the exception unwinder to determine the
+     * correct environment to unwind to when an exception occurs in a
+     * environment with disposables.
+     *
+     *   Category: Control flow
+     *   Type: Exceptions
+     *   Operands:
+     *   Stack: =>
+     */ \
+    IF_EXPLICIT_RESOURCE_MANAGEMENT(MACRO(TryUsing, try_using, NULL, 1, 0, 0, JOF_BYTE)) \
+    /*
      * Push and clear the pending exception. ┬──┬◡ﾉ(° -°ﾉ)
      *
      * This must be used only in the fixed sequence of instructions following a
@@ -3391,7 +3402,7 @@
      * Append the object on the stack as a disposable to be disposed on
      * to the current lexical environment object.
      *
-     * Implements: [AddDisposableResource ( disposeCapability, V, hint [ , method ] )][1], step 3
+     * Implements: [AddDisposableResource ( disposeCapability, V, hint [ , method ] )][1], step 1, 3-4.
      *
      * [1] https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-adddisposableresource
      *
@@ -3411,10 +3422,10 @@
      *
      *   Category: Variables and scopes
      *   Type: Entering and leaving environments
-     *   Operands:
+     *   Operands: DisposeJumpKind jumpKind
      *   Stack: =>
      */ \
-    IF_EXPLICIT_RESOURCE_MANAGEMENT(MACRO(DisposeDisposables, dispose_disposables, NULL, 1, 0, 0, JOF_BYTE)) \
+    IF_EXPLICIT_RESOURCE_MANAGEMENT(MACRO(DisposeDisposables, dispose_disposables, NULL, 2, 0, 0, JOF_UINT8)) \
     /*
      * Push the current VariableEnvironment (the environment on the environment
      * chain designated to receive new variables).
@@ -3679,14 +3690,13 @@
 
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
 #  define FOR_EACH_TRAILING_UNUSED_OPCODE(MACRO) \
-    IF_RECORD_TUPLE(/* empty */, MACRO(238))     \
     IF_RECORD_TUPLE(/* empty */, MACRO(239))     \
     IF_RECORD_TUPLE(/* empty */, MACRO(240))     \
     IF_RECORD_TUPLE(/* empty */, MACRO(241))     \
     IF_RECORD_TUPLE(/* empty */, MACRO(242))     \
     IF_RECORD_TUPLE(/* empty */, MACRO(243))     \
     IF_RECORD_TUPLE(/* empty */, MACRO(244))     \
-    MACRO(245)                                   \
+    IF_RECORD_TUPLE(/* empty */, MACRO(245))     \
     MACRO(246)                                   \
     MACRO(247)                                   \
     MACRO(248)                                   \

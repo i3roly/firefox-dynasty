@@ -2684,14 +2684,6 @@ LayoutDeviceIntMargin nsNativeThemeCocoa::GetWidgetBorder(
       break;
     }
 
-    case StyleAppearance::Checkbox:
-    case StyleAppearance::Radio: {
-      // nsCheckboxRadioFrame::GetIntrinsicWidth and
-      // nsCheckboxRadioFrame::GetIntrinsicHeight assume a border width of 2px.
-      result.SizeTo(2, 2, 2, 2);
-      break;
-    }
-
     case StyleAppearance::Menulist:
     case StyleAppearance::MenulistButton:
     case StyleAppearance::MozMenulistArrowButton:
@@ -3067,7 +3059,7 @@ bool nsNativeThemeCocoa::ThemeSupportsWidget(nsPresContext* aPresContext,
     case StyleAppearance::MozMacHelpButton:
     case StyleAppearance::MozMacDisclosureButtonOpen:
     case StyleAppearance::MozMacDisclosureButtonClosed:
-    case StyleAppearance::MozMacUnifiedToolbarWindow:
+    case StyleAppearance::MozMacWindow:
     case StyleAppearance::Button:
     case StyleAppearance::Toolbarbutton:
     case StyleAppearance::Spinner:
@@ -3187,7 +3179,7 @@ nsITheme::Transparency nsNativeThemeCocoa::GetWidgetTransparency(
     case StyleAppearance::Menupopup:
     case StyleAppearance::Tooltip:
       return eTransparent;
-    case StyleAppearance::MozMacUnifiedToolbarWindow:
+    case StyleAppearance::MozMacWindow:
       // We want these to be treated as opaque by Gecko. We ensure there's an
       // appropriate OS-level clear color to make sure that's the case.
       return eOpaque;

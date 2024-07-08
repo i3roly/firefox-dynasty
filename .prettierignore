@@ -57,6 +57,7 @@ browser/base/content/macWindow.inc.xhtml
 browser/base/content/main-popupset.inc.xhtml
 browser/base/content/pageinfo/pageInfo.xhtml
 browser/base/content/webext-panels.xhtml
+browser/components/backup/content/archive.template.html
 browser/components/downloads/content/contentAreaDownloadsView.xhtml
 browser/components/places/content/bookmarkProperties.xhtml
 browser/components/places/content/bookmarksSidebar.xhtml
@@ -1519,7 +1520,8 @@ security/manager/tools/KnownRootHashes.json
 security/manager/tools/PreloadedHPKPins.json
 services/settings/dumps/
 toolkit/components/nimbus/schemas/NimbusExperiment.schema.json
-toolkit/components/pdfjs/content/PdfJsDefaultPreferences.sys.mjs
+toolkit/components/pdfjs/PdfJsDefaultPrefs.js
+toolkit/components/pdfjs/PdfJsOverridePrefs.js
 toolkit/components/uniffi-js/UniFFIGeneratedScaffolding.cpp
 toolkit/components/uniffi-js/UniFFIFixtureScaffolding.cpp
 toolkit/components/uniffi-bindgen-gecko-js/fixtures/generated

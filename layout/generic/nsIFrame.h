@@ -375,6 +375,20 @@ struct IntrinsicSize {
     return width && height ? Some(nsSize(*width, *height)) : Nothing();
   }
 
+  Maybe<nscoord>& ISize(WritingMode aWM) {
+    return aWM.IsVertical() ? height : width;
+  }
+  const Maybe<nscoord>& ISize(WritingMode aWM) const {
+    return aWM.IsVertical() ? height : width;
+  }
+
+  Maybe<nscoord>& BSize(WritingMode aWM) {
+    return aWM.IsVertical() ? width : height;
+  }
+  const Maybe<nscoord>& BSize(WritingMode aWM) const {
+    return aWM.IsVertical() ? width : height;
+  }
+
   void Zoom(const StyleZoom& aZoom) {
     if (width) {
       *width = aZoom.ZoomCoord(*width);
@@ -602,7 +616,6 @@ class nsIFrame : public nsQueryFrame {
   using ReflowInput = mozilla::ReflowInput;
   using ReflowOutput = mozilla::ReflowOutput;
   using Visibility = mozilla::Visibility;
-  using LengthPercentage = mozilla::LengthPercentage;
   using ContentRelevancy = mozilla::ContentRelevancy;
 
   using nsDisplayItem = mozilla::nsDisplayItem;
@@ -2529,18 +2542,12 @@ class nsIFrame : public nsQueryFrame {
   virtual nsIFrame* LastInFlow() const { return const_cast<nsIFrame*>(this); }
 
   /**
-   * Note: "width" in the names and comments on the following methods
-   * means inline-size, which could be height in vertical layout
-   */
-
-  /**
-   * Mark any stored intrinsic width information as dirty (requiring
+   * Mark any stored intrinsic inline size information as dirty (requiring
    * re-calculation).  Note that this should generally not be called
    * directly; PresShell::FrameNeedsReflow() will call it instead.
    */
   virtual void MarkIntrinsicISizesDirty();
 
- public:
   /**
    * Make this frame and all descendants dirty (if not already).
    * Exceptions: TableColGroupFrame children.
@@ -2579,8 +2586,8 @@ class nsIFrame : public nsQueryFrame {
   virtual nscoord GetPrefISize(gfxContext* aRenderingContext);
 
   /**
-   * |InlineIntrinsicISize| represents the intrinsic width information
-   * in inline layout.  Code that determines the intrinsic width of a
+   * |InlineIntrinsicISize| represents the intrinsic inline size information
+   * in inline layout.  Code that determines the intrinsic inline size of a
    * region of inline layout accumulates the result into this structure.
    * This pattern is needed because we need to maintain state
    * information about whitespace (for both collapsing and trimming).
@@ -4426,11 +4433,11 @@ class nsIFrame : public nsQueryFrame {
                             bool aConstrainBSize = true);
 
  private:
-  Maybe<nscoord> ComputeISizeValueFromAspectRatio(
+  nscoord ComputeISizeValueFromAspectRatio(
       mozilla::WritingMode aWM, const mozilla::LogicalSize& aCBSize,
       const mozilla::LogicalSize& aContentEdgeToBoxSizing,
-      const mozilla::StyleSizeOverrides& aSizeOverrides,
-      mozilla::ComputeSizeFlags aFlags) const;
+      const mozilla::LengthPercentage& aBSize,
+      const mozilla::AspectRatio& aAspectRatio) const;
 
  public:
   /**
@@ -4799,10 +4806,10 @@ class nsIFrame : public nsQueryFrame {
   /**
    * Helper function - computes the content-box inline size for aSize, which is
    * a more complex version to resolve a StyleExtremumLength.
+   *
    * @param aAvailableISizeOverride If this has a value, it is used as the
-   *                                available inline-size instead of
-   *                                aContainingBlockSize.ISize(aWM) when
-   *                                resolving fit-content.
+   * available inline-size instead of aCBSize.ISize(aWM) when resolving
+   * fit-content.
    */
   struct ISizeComputationResult {
     nscoord mISize = 0;
@@ -4810,11 +4817,12 @@ class nsIFrame : public nsQueryFrame {
   };
   ISizeComputationResult ComputeISizeValue(
       gfxContext* aRenderingContext, const mozilla::WritingMode aWM,
-      const mozilla::LogicalSize& aContainingBlockSize,
+      const mozilla::LogicalSize& aCBSize,
       const mozilla::LogicalSize& aContentEdgeToBoxSizing,
       nscoord aBoxSizingToMarginEdge, ExtremumLength aSize,
       Maybe<nscoord> aAvailableISizeOverride,
-      const mozilla::StyleSizeOverrides& aSizeOverrides,
+      const mozilla::StyleSize& aStyleBSize,
+      const mozilla::AspectRatio& aAspectRatio,
       mozilla::ComputeSizeFlags aFlags);
 
   /**
@@ -4822,34 +4830,45 @@ class nsIFrame : public nsQueryFrame {
    * a simpler version to resolve a LengthPercentage.
    */
   nscoord ComputeISizeValue(const mozilla::WritingMode aWM,
-                            const mozilla::LogicalSize& aContainingBlockSize,
+                            const mozilla::LogicalSize& aCBSize,
                             const mozilla::LogicalSize& aContentEdgeToBoxSizing,
-                            const LengthPercentage& aSize);
+                            const mozilla::LengthPercentage& aSize) const;
 
+  /**
+   * Compute content-box inline size for aSize.
+   *
+   * This method doesn't handle 'auto' when aSize is of type StyleSize,
+   * nor does it handle 'none' when aSize is of type StyleMaxSize.
+   *
+   * @param aStyleBSize the style block size of the frame, used to compute
+   * intrinsic inline size with aAspectRatio.
+   *
+   * @param aAspectRatio the preferred aspect-ratio of the frame.
+   */
   template <typename SizeOrMaxSize>
   ISizeComputationResult ComputeISizeValue(
       gfxContext* aRenderingContext, const mozilla::WritingMode aWM,
-      const mozilla::LogicalSize& aContainingBlockSize,
+      const mozilla::LogicalSize& aCBSize,
       const mozilla::LogicalSize& aContentEdgeToBoxSizing,
       nscoord aBoxSizingToMarginEdge, const SizeOrMaxSize& aSize,
-      const mozilla::StyleSizeOverrides& aSizeOverrides = {},
+      const mozilla::StyleSize& aStyleBSize,
+      const mozilla::AspectRatio& aAspectRatio,
       mozilla::ComputeSizeFlags aFlags = {}) {
     if (aSize.IsLengthPercentage()) {
-      return {ComputeISizeValue(aWM, aContainingBlockSize,
-                                aContentEdgeToBoxSizing,
+      return {ComputeISizeValue(aWM, aCBSize, aContentEdgeToBoxSizing,
                                 aSize.AsLengthPercentage())};
     }
     auto length = ToExtremumLength(aSize);
     MOZ_ASSERT(length, "This doesn't handle none / auto");
     Maybe<nscoord> availbleISizeOverride;
     if (aSize.IsFitContentFunction()) {
-      availbleISizeOverride.emplace(aSize.AsFitContentFunction().Resolve(
-          aContainingBlockSize.ISize(aWM)));
+      availbleISizeOverride.emplace(
+          aSize.AsFitContentFunction().Resolve(aCBSize.ISize(aWM)));
     }
-    return ComputeISizeValue(aRenderingContext, aWM, aContainingBlockSize,
-                             aContentEdgeToBoxSizing, aBoxSizingToMarginEdge,
-                             length.valueOr(ExtremumLength::MinContent),
-                             availbleISizeOverride, aSizeOverrides, aFlags);
+    return ComputeISizeValue(
+        aRenderingContext, aWM, aCBSize, aContentEdgeToBoxSizing,
+        aBoxSizingToMarginEdge, length.valueOr(ExtremumLength::MinContent),
+        availbleISizeOverride, aStyleBSize, aAspectRatio, aFlags);
   }
 
   DisplayItemArray& DisplayItems() { return mDisplayItems; }

@@ -64,6 +64,35 @@ class MenuTelemetryMiddlewareTest {
     }
 
     @Test
+    fun `WHEN adding a shortcut THEN record the add to top sites browser menu telemetry`() {
+        val store = createStore()
+        assertNull(Events.browserMenuAction.testGetValue())
+
+        store.dispatch(MenuAction.AddShortcut).joinBlocking()
+
+        assertTelemetryRecorded(Events.browserMenuAction, item = "add_to_top_sites")
+    }
+
+    @Test
+    fun `WHEN removing a shortcut from top sites THEN record the remove from top sites browser menu telemetry`() {
+        val store = createStore()
+        assertNull(Events.browserMenuAction.testGetValue())
+
+        store.dispatch(MenuAction.RemoveShortcut).joinBlocking()
+
+        assertTelemetryRecorded(Events.browserMenuAction, item = "remove_from_top_sites")
+    }
+
+    fun `WHEN navigating to add site to home screen THEN record the add_to_homescreen browser menu telemetry`() {
+        val store = createStore()
+        assertNull(Events.browserMenuAction.testGetValue())
+
+        store.dispatch(MenuAction.Navigate.AddToHomeScreen).joinBlocking()
+
+        assertTelemetryRecorded(Events.browserMenuAction, item = "add_to_homescreen")
+    }
+
+    @Test
     fun `WHEN navigating to customize homepage THEN record the customize homepage telemetry`() {
         val store = createStore()
         assertNull(AppMenu.customizeHomepage.testGetValue())

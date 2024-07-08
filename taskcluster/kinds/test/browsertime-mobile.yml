@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ---
-job-defaults:
+task-defaults:
     max-run-time: 3600
     suite: raptor
     variants:
@@ -368,6 +368,33 @@ browsertime-tp6m-profiling:
             android-hw-(a51).*aarch64-shippable-qr/opt: [mozilla-central]
             default: []
 
+browsertime-video-playback-latency-mobile:
+    <<: *tp6m-defaults
+    description: Browsertime Video Playback Latency on Android
+    treeherder-symbol: Btime(vpl)
+    run-without-variant: false
+    raptor:
+        apps: [chrome-m, fenix, geckoview]
+        run-visual-metrics: true
+        test: video-playback-latency
+        subtests:
+            - vpl-av1
+            - vpl-h264
+            - vpl-vp9
+    mozharness:
+        extra-options:
+            - --chimera
+            - --browsertime-no-ffwindowrecorder
+            - --extra-profiler-run
+    run-on-projects:
+        by-app:
+            chrome-m: []
+            default:
+                by-test-platform:
+                    android-hw-a51.*shippable.*: [autoland, mozilla-central]
+                    default: []
+    tier: 3
+
 browsertime-benchmark-speedometer-mobile:
     description: Browsertime Speedometer on Android
     run-without-variant: false
@@ -407,6 +434,7 @@ browsertime-benchmark-speedometer3-mobile:
         by-app:
             fenix: 2
             geckoview: 2
+            cstm-car-m: 2
             default: 3
     run-on-projects:
         by-app:
@@ -470,7 +498,11 @@ browsertime-benchmark-motionmark-1-3:
                     android-hw-a51-.*aarch64-shippable-qr.*: [mozilla-central]
                     default: []
     treeherder-symbol: Btime()
-    tier: 2
+    tier:
+        by-app:
+            fenix: 2
+            geckoview: 2
+            default: 3
 
 browsertime-benchmark-unity-webgl-mobile:
     description: Browsertime Unity WebGL on Android

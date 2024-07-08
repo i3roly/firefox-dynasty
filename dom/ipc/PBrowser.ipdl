@@ -73,6 +73,7 @@ using class mozilla::WidgetKeyboardEvent from "ipc/nsGUIEventIPC.h";
 using class mozilla::WidgetMouseEvent from "ipc/nsGUIEventIPC.h";
 using class mozilla::WidgetWheelEvent from "ipc/nsGUIEventIPC.h";
 using class mozilla::WidgetDragEvent from "ipc/nsGUIEventIPC.h";
+using class mozilla::WidgetPointerEvent from "ipc/nsGUIEventIPC.h";
 using struct nsRect from "nsRect.h";
 using class mozilla::WidgetSelectionEvent from "ipc/nsGUIEventIPC.h";
 using class mozilla::WidgetTouchEvent from "ipc/nsGUIEventIPC.h";
@@ -756,6 +757,14 @@ child:
                                              uint64_t aInputBlockId);
 
     [Priority=input]
+    async RealPointerButtonEvent(WidgetPointerEvent event,
+                                 ScrollableLayerGuid aGuid,
+                                 uint64_t aInputBlockId);
+    async NormalPriorityRealPointerButtonEvent(WidgetPointerEvent event,
+                                               ScrollableLayerGuid aGuid,
+                                               uint64_t aInputBlockId);
+
+    [Priority=input]
     async RealMouseEnterExitWidgetEvent(WidgetMouseEvent event,
                                                     ScrollableLayerGuid aGuid,
                                                     uint64_t aInputBlockId);
@@ -994,6 +1003,19 @@ child:
 
     async WillChangeProcess();
 
+    async InvokeChildDragSession(
+        MaybeDiscardedWindowContext aSourceWindowContext,
+        MaybeDiscardedWindowContext aSourceTopWindowContext,
+        IPCTransferableData[] transfers, uint32_t action);
+
+    async UpdateDragSession(IPCTransferableData[] transfers,
+                            EventMessage message);
+
+    async EndDragSession(bool aDoneDrag, bool aUserCancelled,
+                         LayoutDeviceIntPoint aDragEndPoint,
+                         uint32_t aKeyModifiers,
+                         uint32_t aDropEffect);
+
 parent:
     /**
      * Fetches whether this window supports protected media, which is sent back in response.
@@ -1019,6 +1041,8 @@ parent:
      */
     async NewWindowGlobal(ManagedEndpoint<PWindowGlobalParent> aEndpoint,
                           WindowGlobalInit aInit);
+
+    async UpdateDropEffect(uint32_t aDragAction, uint32_t aDropEffect);
 
 /*
  * FIXME: write protocol!

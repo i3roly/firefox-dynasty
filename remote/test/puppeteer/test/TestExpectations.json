@@ -612,13 +612,6 @@
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
   },
   {
-    "testIdPattern": "[page.spec] Page Page.close should *not* run beforeunload by default",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["SKIP"],
-    "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
     "testIdPattern": "[page.spec] Page Page.Events.Console should have location when fetch fails",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["webDriverBiDi"],
@@ -787,13 +780,6 @@
     "comment": "`HTTPRequest.resourceType()` has no eqivalent in BiDi spec"
   },
   {
-    "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Request.respond *",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["SKIP"],
-    "comment": "TODO: Needs full support for continueResponse in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1853887"
-  },
-  {
     "testIdPattern": "[requestinterception.spec] *",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "firefox"],
@@ -843,13 +829,6 @@
     "comment": "Firefox needs support for the url parameter of continueRequest"
   },
   {
-    "testIdPattern": "[requestinterception.spec] request interception Request.continue should fail if the header value is invalid",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["FAIL"],
-    "comment": "Puppeteer expecting a chrome only error https://github.com/puppeteer/puppeteer/issues/12412"
-  },
-  {
     "testIdPattern": "[requestinterception.spec] request interception Request.resourceType should work for document type",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["webDriverBiDi"],
@@ -862,13 +841,6 @@
     "parameters": ["webDriverBiDi"],
     "expectations": ["FAIL"],
     "comment": "`HTTPRequest.resourceType()` has no eqivalent in BiDi spec"
-  },
-  {
-    "testIdPattern": "[requestinterception.spec] request interception Request.respond *",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["SKIP"],
-    "comment": "TODO: Needs full support for continueResponse in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1853887"
   },
   {
     "testIdPattern": "[screencast.spec] Screencasts Page.screencast should validate options",
@@ -2366,6 +2338,13 @@
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
   },
   {
+    "testIdPattern": "[navigation.spec] navigation Page.goBack should work with HistoryAPI",
+    "platforms": ["darwin", "linux", "win32"],
+    "parameters": ["firefox", "webDriverBiDi"],
+    "expectations": ["FAIL"],
+    "comment": "https://github.com/w3c/webdriver-bidi/issues/502"
+  },
+  {
     "testIdPattern": "[navigation.spec] navigation Page.goto should fail when navigating to bad SSL",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "firefox"],
@@ -2384,13 +2363,6 @@
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "firefox"],
     "expectations": ["FAIL"],
-    "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
-    "testIdPattern": "[navigation.spec] navigation Page.goto should navigate to dataURL and fire dataURL requests",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["SKIP"],
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
   },
   {
@@ -2438,23 +2410,9 @@
   {
     "testIdPattern": "[navigation.spec] navigation Page.goto should work when navigating to data url",
     "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["FAIL"],
-    "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
-    "testIdPattern": "[navigation.spec] navigation Page.goto should work when navigating to data url",
-    "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "firefox"],
     "expectations": ["FAIL"],
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
-    "testIdPattern": "[navigation.spec] navigation Page.goto should work when page calls history API in beforeunload",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["FAIL"],
-    "comment": "https://bugzilla.mozilla.org/show_bug.cgi?id=1879163"
   },
   {
     "testIdPattern": "[navigation.spec] navigation Page.goto should work with anchor navigation",
@@ -2499,6 +2457,13 @@
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
   },
   {
+    "testIdPattern": "[navigation.spec] navigation Page.waitForNavigation should work with DOM history.back()/history.forward()",
+    "platforms": ["darwin", "linux", "win32"],
+    "parameters": ["firefox", "webDriverBiDi"],
+    "expectations": ["SKIP"],
+    "comment": "Test timeout: https://github.com/w3c/webdriver-bidi/issues/502"
+  },
+  {
     "testIdPattern": "[navigation.spec] navigation Page.waitForNavigation should work with history.pushState()",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "firefox"],
@@ -2506,11 +2471,18 @@
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
   },
   {
+    "testIdPattern": "[navigation.spec] navigation Page.waitForNavigation should work with history.pushState()",
+    "platforms": ["darwin", "linux", "win32"],
+    "parameters": ["firefox", "webDriverBiDi"],
+    "expectations": ["SKIP"],
+    "comment": "Test timeout: https://github.com/w3c/webdriver-bidi/issues/502"
+  },
+  {
     "testIdPattern": "[navigation.spec] navigation Page.waitForNavigation should work with history.replaceState()",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["SKIP"],
-    "comment": "https://github.com/puppeteer/puppeteer/issues/11854"
+    "comment": "Test timeout: https://github.com/w3c/webdriver-bidi/issues/502"
   },
   {
     "testIdPattern": "[navigation.spec] navigation Page.waitForNavigation should work with history.replaceState()",
@@ -2609,13 +2581,6 @@
     "parameters": ["cdp", "firefox"],
     "expectations": ["FAIL"],
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
-    "testIdPattern": "[network.spec] network Page.authenticate should allow disable authentication",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["FAIL"],
-    "comment": "The Puppeteer implementation does not expect 2 responseCompleted events (that AuthRequired triggered)"
   },
   {
     "testIdPattern": "[network.spec] network Page.authenticate should fail if wrong credentials",
@@ -2876,18 +2841,11 @@
     "comment": "Failed previously and currently times out"
   },
   {
-    "testIdPattern": "[oopif.spec] OOPIF should report google.com frame",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["FAIL", "TIMEOUT"],
-    "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
     "testIdPattern": "[oopif.spec] OOPIF should support lazy OOP frames",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["FAIL", "TIMEOUT"],
-    "comment": "https://bugzilla.mozilla.org/show_bug.cgi?id=187816"
+    "comment": "https://bugzilla.mozilla.org/show_bug.cgi?id=1878166"
   },
   {
     "testIdPattern": "[oopif.spec] OOPIF should support OOP iframes becoming normal iframes again",
@@ -2985,13 +2943,6 @@
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "firefox"],
     "expectations": ["SKIP"],
-    "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
-  },
-  {
-    "testIdPattern": "[page.spec] Page Page.close should run beforeunload if asked for",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["FAIL"],
     "comment": "TODO: add a comment explaining why this expectation is required (include links to issues)"
   },
   {
@@ -3312,7 +3263,7 @@
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["SKIP"],
-    "comment": "TODO: Needs support for data URIs in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1805176"
+    "comment": "TODO: Needs support for data URIs in Firefox in content process https://bugzilla.mozilla.org/show_bug.cgi?id=1903060"
   },
   {
     "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Page.setRequestInterception should be able to remove headers",
@@ -3364,13 +3315,6 @@
     "comment": "TODO: Needs support for enabling cache in BiDi without CDP https://github.com/w3c/webdriver-bidi/issues/582"
   },
   {
-    "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Page.setRequestInterception should navigate to dataURL and fire dataURL requests",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["SKIP"],
-    "comment": "TODO: Needs support for data URIs in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1805176"
-  },
-  {
     "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Page.setRequestInterception should not cache if cache disabled",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
@@ -3389,7 +3333,7 @@
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["SKIP"],
-    "comment": "TODO: Needs support for data URIs in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1805176"
+    "comment": "TODO: Needs investigation"
   },
   {
     "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Page.setRequestInterception should work with file URLs",
@@ -3421,12 +3365,6 @@
   },
   {
     "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Request.continue should work",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["PASS"]
-  },
-  {
-    "testIdPattern": "[requestinterception-experimental.spec] cooperative request interception Request.respond should indicate already-handled if an intercept has been handled",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["PASS"]
@@ -3464,7 +3402,7 @@
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["SKIP"],
-    "comment": "TODO: Needs support for data URIs in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1805176"
+    "comment": "TODO: Needs support for data URIs in Firefox in content process https://bugzilla.mozilla.org/show_bug.cgi?id=1903060"
   },
   {
     "testIdPattern": "[requestinterception.spec] request interception Page.setRequestInterception should be able to remove headers",
@@ -3502,13 +3440,6 @@
     "comment": "TODO: Needs support for enabling cache in BiDi without CDP https://github.com/w3c/webdriver-bidi/issues/582"
   },
   {
-    "testIdPattern": "[requestinterception.spec] request interception Page.setRequestInterception should navigate to dataURL and fire dataURL requests",
-    "platforms": ["darwin", "linux", "win32"],
-    "parameters": ["firefox", "webDriverBiDi"],
-    "expectations": ["SKIP"],
-    "comment": "TODO: Needs support for data URIs in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1805176"
-  },
-  {
     "testIdPattern": "[requestinterception.spec] request interception Page.setRequestInterception should navigate to URL with hash and fire requests without hash",
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["cdp", "chrome"],
@@ -3534,7 +3465,7 @@
     "platforms": ["darwin", "linux", "win32"],
     "parameters": ["firefox", "webDriverBiDi"],
     "expectations": ["SKIP"],
-    "comment": "TODO: Needs support for data URIs in Firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1805176"
+    "comment": "TODO: Needs investigation"
   },
   {
     "testIdPattern": "[requestinterception.spec] request interception Page.setRequestInterception should work with file URLs",

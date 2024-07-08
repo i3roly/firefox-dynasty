@@ -1,6 +1,23 @@
 import com.android.build.api.variant.FilterConfiguration
 import org.apache.tools.ant.util.StringUtils
 
+buildscript {
+    repositories {
+        gradle.mozconfig.substs.GRADLE_MAVEN_REPOSITORIES.each { repository ->
+            maven {
+                url repository
+                if (gradle.mozconfig.substs.ALLOW_INSECURE_GRADLE_REPOSITORIES) {
+                    allowInsecureProtocol = true
+                }
+            }
+        }
+    }
+
+    dependencies {
+        classpath ComponentsDependencies.plugin_serialization
+    }
+}
+
 plugins {
     id "com.jetbrains.python.envs" version "$python_envs_plugin"
     id "com.google.protobuf" version "$protobuf_plugin"
@@ -16,6 +33,7 @@ apply plugin: 'kotlin-parcelize'
 apply plugin: 'jacoco'
 apply plugin: 'androidx.navigation.safeargs.kotlin'
 apply plugin: 'com.google.android.gms.oss-licenses-plugin'
+apply plugin: 'kotlinx-serialization'
 
 if (findProject(":geckoview") != null) {
     apply from: "${topsrcdir}/mobile/android/gradle/product_flavors.gradle"
@@ -255,8 +273,8 @@ android {
     }
     packagingOptions {
         resources {
-            excludes += ['META-INF/atomicfu.kotlin_module', 'META-INF/AL2.0', 'META-INF/LGPL2.1',
-                         'META-INF/LICENSE.md', 'META-INF/LICENSE-notice.md']
+            excludes += ['MANIFEST.MF', 'META-INF/atomicfu.kotlin_module', 'META-INF/AL2.0',
+                         'META-INF/LGPL2.1', 'META-INF/LICENSE.md', 'META-INF/LICENSE-notice.md']
         }
         jniLibs {
             useLegacyPackaging true
@@ -543,6 +561,8 @@ tasks.withType(KotlinCompile).configureEach {
 }
 
 dependencies {
+    implementation ComponentsDependencies.kotlin_json
+
     implementation platform(ComponentsDependencies.androidx_compose_bom)
     androidTestImplementation platform(ComponentsDependencies.androidx_compose_bom)
 
@@ -693,44 +713,35 @@ dependencies {
     implementation FenixDependencies.google_ads_id // Required for the Google Advertising ID
 
     // Required for in-app reviews
-    implementation FenixDependencies.google_play_review
-    implementation FenixDependencies.google_play_review_ktx
+    implementation ComponentsDependencies.play_review
+    implementation ComponentsDependencies.play_review_ktx
 
     implementation FenixDependencies.androidx_profileinstaller
 
-    androidTestImplementation ComponentsDependencies.androidx_test_uiautomator
+    constraints {
+        implementation (ComponentsDependencies.androidx_tracing) {
+            because 'AndroidX Test gets force-downgraded to 1.0.0 and breaks otherwise'
+        }
+    }
+
     androidTestImplementation FenixDependencies.fastlane
     // This Falcon version is added to maven central now required for Screengrab
     androidTestImplementation FenixDependencies.falcon
 
-    androidTestImplementation ComponentsDependencies.androidx_compose_ui_test
-
-    androidTestImplementation ComponentsDependencies.androidx_espresso_core, {
-        exclude group: 'com.android.support', module: 'support-annotations'
-    }
-
-    androidTestImplementation(FenixDependencies.espresso_contrib) {
-        exclude module: 'appcompat-v7'
-        exclude module: 'support-v4'
-        exclude module: 'support-annotations'
-        exclude module: 'recyclerview-v7'
-        exclude module: 'design'
-        exclude module: 'espresso-core'
+    androidTestImplementation(ComponentsDependencies.androidx_espresso_contrib) {
         exclude module: 'protobuf-lite'
     }
-
+    androidTestImplementation ComponentsDependencies.androidx_espresso_core
+    androidTestImplementation ComponentsDependencies.androidx_espresso_idling_resource
+    androidTestImplementation ComponentsDependencies.androidx_espresso_intents
     androidTestImplementation ComponentsDependencies.androidx_test_core
-    androidTestImplementation FenixDependencies.espresso_idling_resources
-    androidTestImplementation FenixDependencies.espresso_intents
-
-    androidTestImplementation ComponentsDependencies.androidx_test_runner
-    androidTestImplementation ComponentsDependencies.androidx_test_rules
-    androidTestUtil FenixDependencies.orchestrator
-    androidTestImplementation ComponentsDependencies.androidx_espresso_core, {
-        exclude group: 'com.android.support', module: 'support-annotations'
-    }
-
     androidTestImplementation ComponentsDependencies.androidx_test_junit
+    androidTestImplementation ComponentsDependencies.androidx_test_rules
+    androidTestImplementation ComponentsDependencies.androidx_test_runner
+    androidTestImplementation ComponentsDependencies.androidx_test_uiautomator
+    androidTestUtil ComponentsDependencies.androidx_test_orchestrator
+
+    androidTestImplementation ComponentsDependencies.androidx_compose_ui_test
     androidTestImplementation ComponentsDependencies.androidx_work_testing
     androidTestImplementation FenixDependencies.androidx_benchmark_junit4
     androidTestImplementation ComponentsDependencies.testing_mockwebserver

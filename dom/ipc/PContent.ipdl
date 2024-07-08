@@ -6,6 +6,7 @@
 
 include protocol PBackgroundStarter;
 include protocol PBrowser;
+include protocol PClipboardContentAnalysis;
 include protocol PClipboardReadRequest;
 include protocol PClipboardWriteRequest;
 include protocol PCompositorManager;
@@ -40,6 +41,7 @@ include protocol PURLClassifier;
 include protocol PURLClassifierLocal;
 include protocol PVRManager;
 include protocol PRemoteDecoderManager;
+include protocol PRemoteWorkerService;
 include protocol PProfiler;
 include protocol PScriptCache;
 include protocol PSessionStorageObserver;
@@ -577,6 +579,7 @@ child:
     async InitGMPService(Endpoint<PGMPServiceChild> service);
     async InitProcessHangMonitor(Endpoint<PProcessHangMonitorChild> hangMonitor);
     async InitProfiler(Endpoint<PProfilerChild> aEndpoint);
+    async InitClipboardContentAnalysis(Endpoint<PClipboardContentAnalysisChild> aEndpoint);
 
     // Give the content process its endpoints to the compositor.
     async InitRendering(
@@ -772,6 +775,11 @@ child:
     async RemoteType(nsCString aRemoteType, nsCString aProfile);
 
     /**
+     * Initialize the RemoteWorkerService thread in the content process.
+     */
+    async InitRemoteWorkerService(Endpoint<PRemoteWorkerServiceChild> aEndpoint);
+
+    /**
      * Send BlobURLRegistrationData to child process.
      */
     async InitBlobURLs(BlobURLRegistrationData[] registrations);
@@ -817,17 +825,6 @@ child:
      * Notify idle observers in the child
      */
     async NotifyIdleObserver(uint64_t observerId, nsCString topic, nsString str);
-
-    async InvokeDragSession(MaybeDiscardedWindowContext aSourceWindowContext,
-                            MaybeDiscardedWindowContext aSourceTopWindowContext,
-                            IPCTransferableData[] transfers, uint32_t action);
-
-    async UpdateDragSession(IPCTransferableData[] transfers, EventMessage message);
-
-    async EndDragSession(bool aDoneDrag, bool aUserCancelled,
-                         LayoutDeviceIntPoint aDragEndPoint,
-                         uint32_t aKeyModifiers,
-                         uint32_t aDropEffect);
 
     async DomainSetChanged(uint32_t aSetType, uint32_t aChangeType, nullable nsIURI aDomain);
 
@@ -1082,6 +1079,8 @@ parent:
 
     async CreateGMPService();
 
+    async CreateClipboardContentAnalysis();
+
     async InitStreamFilter(uint64_t channelId, nsString addonId)
         returns (Endpoint<PStreamFilterChild> aEndpoint);
 
@@ -1220,9 +1219,9 @@ parent:
         returns (IPCTransferableDataOrError transferableDataOrError);
 
     // Requests getting data from clipboard.
-    async GetClipboardAsync(nsCString[] aTypes, int32_t aWhichClipboard,
-                            MaybeDiscardedWindowContext aRequestingWindowContext,
-                            nsIPrincipal aRequestingPrincipal)
+    async GetClipboardDataSnapshot(nsCString[] aTypes, int32_t aWhichClipboard,
+                                   MaybeDiscardedWindowContext aRequestingWindowContext,
+                                   nsIPrincipal aRequestingPrincipal)
         returns (ClipboardReadRequestOrError aClipboardReadRequestOrError);
 
     // Requests getting data from clipboard.
@@ -1295,8 +1294,6 @@ parent:
      * its shutdown tasks.
      */
     async FinishShutdown();
-
-    async UpdateDropEffect(uint32_t aDragAction, uint32_t aDropEffect);
 
     /**
      * Initiates an asynchronous request for permission for the
@@ -1541,7 +1538,9 @@ parent:
                        nullable nsIPrincipal aTriggeringPrincipal,
                        nullable nsIContentSecurityPolicy aCsp,
                        nullable nsIReferrerInfo aReferrerInfo,
-                       OriginAttributes aOriginAttributes)
+                       OriginAttributes aOriginAttributes,
+                       bool aUserActivation,
+                       bool aTextDirectiveUserActivation)
         returns (CreatedWindowInfo window);
 
     async CreateWindowInDifferentProcess(
@@ -1557,7 +1556,9 @@ parent:
       nullable nsIPrincipal aTriggeringPrincipal,
       nullable nsIContentSecurityPolicy aCsp,
       nullable nsIReferrerInfo aReferrerInfo,
-      OriginAttributes aOriginAttributes);
+      OriginAttributes aOriginAttributes,
+      bool aUserActivation,
+      bool aTextDirectiveUserActivation);
 
     /**
      * Tell the parent that a decoder's' benchmark has been completed.

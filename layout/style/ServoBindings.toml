@@ -16,7 +16,6 @@ headers = [
     "mozilla/dom/MediaList.h",
     "mozilla/dom/ScreenBinding.h",
     "mozilla/dom/ShadowRoot.h",
-    "mozilla/dom/SVGPathSegBinding.h",
     "mozilla/ipc/ByteBuf.h",
     "mozilla/AnimationPropertySegment.h",
     "mozilla/ComputedTiming.h",
@@ -139,6 +138,7 @@ rusty-enums = [
     "mozilla::StyleListStylePosition",
     "mozilla::StylePointerEvents",
     "mozilla::StyleScrollbarWidth",
+    "mozilla::StyleFieldSizing",
     "mozilla::StyleWhiteSpaceCollapse",
     "mozilla::StyleTextWrapMode",
     "mozilla::StyleTextRendering",
@@ -174,7 +174,6 @@ rusty-enums = [
     "mozilla::StyleMaskMode",
     "mozilla::StyleScrollBehavior",
     "mozilla::StyleColorInterpolation",
-    "mozilla::StyleVectorEffect",
     "mozilla::StyleBackfaceVisibility",
     "mozilla::StyleBlend",
     "mozilla::StyleMaskComposite",
@@ -194,7 +193,6 @@ allowlist-vars = [
     "GECKO_IS_NIGHTLY",
     "NS_SAME_AS_FOREGROUND_COLOR",
     "mozilla::detail::gGkAtoms",
-    "mozilla::dom::SVGPathSeg_Binding::PATHSEG_.*",
 ]
 # TODO(emilio): A bunch of types here can go away once we generate bindings and
 # structs together.
@@ -330,8 +328,6 @@ opaque-types = [
                                   # is available
     "mozilla::detail::PointerType",
     "mozilla::HashSet",
-    "mozilla::Pair",
-    "mozilla::Pair_Base",
     "mozilla::ScrollAxis",  # <- For some reason the alignment of this is 4
                             # for clang.
     "mozilla::SeenPtrs",
@@ -591,6 +587,9 @@ cbindgen-types = [
     { gecko = "StylePageOrientation", servo = "crate::values::generics::page::PageOrientation" },
     { gecko = "StylePageSize", servo = "crate::values::computed::page::PageSize" },
     { gecko = "StyleDProperty", servo = "crate::values::specified::svg::DProperty" },
+    { gecko = "StyleVectorEffectType", servo = "crate::values::specified::svg::VectorEffectType" },
+    { gecko = "StyleCoordinateSpace", servo = "crate::values::specified::svg::CoordinateSpace" },
+    { gecko = "StyleVectorEffect", servo = "crate::values::specified::svg::VectorEffect" },
     { gecko = "StyleImageRendering", servo = "crate::values::computed::ImageRendering" },
     { gecko = "StylePrintColorAdjust", servo = "crate::values::computed::PrintColorAdjust" },
     { gecko = "StyleForcedColorAdjust", servo = "crate::values::computed::ForcedColorAdjust" },

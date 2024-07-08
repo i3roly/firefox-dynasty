@@ -1470,19 +1470,14 @@ nscoord nsImageFrame::GetMinISize(gfxContext* aRenderingContext) {
   // XXX The caller doesn't account for constraints of the block-size,
   // min-block-size, and max-block-size properties.
   EnsureIntrinsicSizeAndRatio();
-  const auto& iSize = GetWritingMode().IsVertical() ? mIntrinsicSize.height
-                                                    : mIntrinsicSize.width;
-  return iSize.valueOr(0);
+  return mIntrinsicSize.ISize(GetWritingMode()).valueOr(0);
 }
 
 nscoord nsImageFrame::GetPrefISize(gfxContext* aRenderingContext) {
   // XXX The caller doesn't account for constraints of the block-size,
   // min-block-size, and max-block-size properties.
   EnsureIntrinsicSizeAndRatio();
-  const auto& iSize = GetWritingMode().IsVertical() ? mIntrinsicSize.height
-                                                    : mIntrinsicSize.width;
-  // convert from normal twips to scaled twips (printing...)
-  return iSize.valueOr(0);
+  return mIntrinsicSize.ISize(GetWritingMode()).valueOr(0);
 }
 
 void nsImageFrame::ReflowChildren(nsPresContext* aPresContext,
@@ -2678,7 +2673,7 @@ nsresult nsImageFrame::HandleEvent(nsPresContext* aPresContext,
                                    nsEventStatus* aEventStatus) {
   NS_ENSURE_ARG_POINTER(aEventStatus);
 
-  if ((aEvent->mMessage == eMouseClick &&
+  if ((aEvent->mMessage == ePointerClick &&
        aEvent->AsMouseEvent()->mButton == MouseButton::ePrimary) ||
       aEvent->mMessage == eMouseMove) {
     nsImageMap* map = GetImageMap();
@@ -2719,7 +2714,8 @@ nsresult nsImageFrame::HandleEvent(nsPresContext* aPresContext,
           NS_ENSURE_SUCCESS(rv, rv);
 
           bool clicked = false;
-          if (aEvent->mMessage == eMouseClick && !aEvent->DefaultPrevented()) {
+          if (aEvent->mMessage == ePointerClick &&
+              !aEvent->DefaultPrevented()) {
             *aEventStatus = nsEventStatus_eConsumeDoDefault;
             clicked = true;
           }

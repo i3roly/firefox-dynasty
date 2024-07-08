@@ -6,6 +6,7 @@ package mozilla.components.feature.prompts
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import androidx.annotation.VisibleForTesting
 import androidx.annotation.VisibleForTesting.Companion.PRIVATE
 import androidx.core.view.isVisible
@@ -46,6 +47,7 @@ import mozilla.components.concept.identitycredential.Account
 import mozilla.components.concept.identitycredential.Provider
 import mozilla.components.concept.storage.CreditCardEntry
 import mozilla.components.concept.storage.CreditCardValidationDelegate
+import mozilla.components.concept.storage.Login
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.concept.storage.LoginValidationDelegate
 import mozilla.components.feature.prompts.address.AddressDelegate
@@ -75,6 +77,7 @@ import mozilla.components.feature.prompts.facts.emitPromptDismissedFact
 import mozilla.components.feature.prompts.facts.emitPromptDisplayedFact
 import mozilla.components.feature.prompts.facts.emitSuccessfulAddressAutofillFormDetectedFact
 import mozilla.components.feature.prompts.facts.emitSuccessfulCreditCardAutofillFormDetectedFact
+import mozilla.components.feature.prompts.file.AndroidPhotoPicker
 import mozilla.components.feature.prompts.file.FilePicker
 import mozilla.components.feature.prompts.file.FileUploadsDirCleaner
 import mozilla.components.feature.prompts.identitycredential.DialogColors
@@ -85,6 +88,9 @@ import mozilla.components.feature.prompts.identitycredential.SelectProviderDialo
 import mozilla.components.feature.prompts.login.LoginDelegate
 import mozilla.components.feature.prompts.login.LoginExceptions
 import mozilla.components.feature.prompts.login.LoginPicker
+import mozilla.components.feature.prompts.login.PasswordGeneratorDialogColors
+import mozilla.components.feature.prompts.login.PasswordGeneratorDialogColorsProvider
+import mozilla.components.feature.prompts.login.PasswordGeneratorDialogFragment
 import mozilla.components.feature.prompts.login.StrongPasswordPromptViewListener
 import mozilla.components.feature.prompts.login.SuggestStrongPasswordDelegate
 import mozilla.components.feature.prompts.share.DefaultShareDelegate
@@ -154,6 +160,10 @@ internal const val FRAGMENT_TAG = "mozac_feature_prompt_dialog"
  * feature is enabled or not. If this resolves to 'false', the feature will be hidden.
  * @property onSaveLoginWithStrongPassword A callback invoked to save a new login that uses the
  * generated strong password
+ * @property shouldAutomaticallyShowSuggestedPassword A callback invoked to check whether the user
+ * is engaging with signup for the first time.
+ * @property onFirstTimeEngagedWithSignup A callback invoked when user is engaged with signup for
+ * the first time.
  * @property creditCardDelegate Delegate for credit card picker.
  * @property addressDelegate Delegate for address picker.
  * @property fileUploadsDirCleaner a [FileUploadsDirCleaner] to clean up temporary file uploads.
@@ -161,7 +171,7 @@ internal const val FRAGMENT_TAG = "mozac_feature_prompt_dialog"
  * need to be requested before a prompt (e.g. a file picker) can be displayed.
  * Once the request is completed, [onPermissionsResult] needs to be invoked.
  */
-@Suppress("LargeClass", "LongParameterList")
+@Suppress("LargeClass", "LongParameterList", "MaxLineLength")
 class PromptFeature private constructor(
     private val container: PromptContainer,
     private val store: BrowserStore,
@@ -184,11 +194,18 @@ class PromptFeature private constructor(
     private val suggestStrongPasswordDelegate: SuggestStrongPasswordDelegate = object :
         SuggestStrongPasswordDelegate {},
     private val isSuggestStrongPasswordEnabled: Boolean = false,
+    private var shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
+    private val onFirstTimeEngagedWithSignup: () -> Unit = {},
     private val onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
+    private val onSavedGeneratedPassword: () -> Unit = {},
+    private val passwordGeneratorColorsProvider: PasswordGeneratorDialogColorsProvider = PasswordGeneratorDialogColorsProvider {
+        PasswordGeneratorDialogColors.default()
+    },
     private val creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
     private val addressDelegate: AddressDelegate = DefaultAddressDelegate(),
     private val fileUploadsDirCleaner: FileUploadsDirCleaner,
     onNeedToRequestPermissions: OnNeedToRequestPermissions,
+    androidPhotoPicker: AndroidPhotoPicker?,
 ) : LifecycleAwareFeature,
     PermissionsFeature,
     Prompter,
@@ -233,11 +250,18 @@ class PromptFeature private constructor(
         suggestStrongPasswordDelegate: SuggestStrongPasswordDelegate = object :
             SuggestStrongPasswordDelegate {},
         isSuggestStrongPasswordEnabled: Boolean = false,
+        shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
+        onFirstTimeEngagedWithSignup: () -> Unit = {},
         onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
+        onSavedGeneratedPassword: () -> Unit = {},
+        passwordGeneratorColorsProvider: PasswordGeneratorDialogColorsProvider = PasswordGeneratorDialogColorsProvider {
+            PasswordGeneratorDialogColors.default()
+        },
         creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
         addressDelegate: AddressDelegate = DefaultAddressDelegate(),
         fileUploadsDirCleaner: FileUploadsDirCleaner,
         onNeedToRequestPermissions: OnNeedToRequestPermissions,
+        androidPhotoPicker: AndroidPhotoPicker? = null,
     ) : this(
         container = PromptContainer.Activity(activity),
         store = store,
@@ -259,9 +283,14 @@ class PromptFeature private constructor(
         loginDelegate = loginDelegate,
         suggestStrongPasswordDelegate = suggestStrongPasswordDelegate,
         isSuggestStrongPasswordEnabled = isSuggestStrongPasswordEnabled,
+        shouldAutomaticallyShowSuggestedPassword = shouldAutomaticallyShowSuggestedPassword,
+        onFirstTimeEngagedWithSignup = onFirstTimeEngagedWithSignup,
         onSaveLoginWithStrongPassword = onSaveLoginWithStrongPassword,
+        onSavedGeneratedPassword = onSavedGeneratedPassword,
+        passwordGeneratorColorsProvider = passwordGeneratorColorsProvider,
         creditCardDelegate = creditCardDelegate,
         addressDelegate = addressDelegate,
+        androidPhotoPicker = androidPhotoPicker,
     )
 
     constructor(
@@ -283,10 +312,14 @@ class PromptFeature private constructor(
         suggestStrongPasswordDelegate: SuggestStrongPasswordDelegate = object :
             SuggestStrongPasswordDelegate {},
         isSuggestStrongPasswordEnabled: Boolean = false,
+        shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
+        onFirstTimeEngagedWithSignup: () -> Unit = {},
         onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
+        onSavedGeneratedPassword: () -> Unit = {},
         creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
         addressDelegate: AddressDelegate = DefaultAddressDelegate(),
         fileUploadsDirCleaner: FileUploadsDirCleaner,
+        androidPhotoPicker: AndroidPhotoPicker? = null,
         onNeedToRequestPermissions: OnNeedToRequestPermissions,
     ) : this(
         container = PromptContainer.Fragment(fragment),
@@ -303,18 +336,30 @@ class PromptFeature private constructor(
         isCreditCardAutofillEnabled = isCreditCardAutofillEnabled,
         isAddressAutofillEnabled = isAddressAutofillEnabled,
         loginExceptionStorage = loginExceptionStorage,
-        fileUploadsDirCleaner = fileUploadsDirCleaner,
-        onNeedToRequestPermissions = onNeedToRequestPermissions,
         loginDelegate = loginDelegate,
         suggestStrongPasswordDelegate = suggestStrongPasswordDelegate,
         isSuggestStrongPasswordEnabled = isSuggestStrongPasswordEnabled,
+        shouldAutomaticallyShowSuggestedPassword = shouldAutomaticallyShowSuggestedPassword,
+        onFirstTimeEngagedWithSignup = onFirstTimeEngagedWithSignup,
         onSaveLoginWithStrongPassword = onSaveLoginWithStrongPassword,
+        onSavedGeneratedPassword = onSavedGeneratedPassword,
         creditCardDelegate = creditCardDelegate,
         addressDelegate = addressDelegate,
+        fileUploadsDirCleaner = fileUploadsDirCleaner,
+        onNeedToRequestPermissions = onNeedToRequestPermissions,
+        androidPhotoPicker = androidPhotoPicker,
     )
 
-    private val filePicker =
-        FilePicker(container, store, customTabId, fileUploadsDirCleaner, onNeedToRequestPermissions)
+    @VisibleForTesting
+    // var for testing purposes
+    internal var filePicker = FilePicker(
+        container,
+        store,
+        customTabId,
+        fileUploadsDirCleaner,
+        androidPhotoPicker,
+        onNeedToRequestPermissions,
+    )
 
     @VisibleForTesting(otherwise = PRIVATE)
     internal var loginPicker =
@@ -572,14 +617,20 @@ class PromptFeature private constructor(
                         return
                     }
                     if (promptRequest.generatedPassword != null && isSuggestStrongPasswordEnabled) {
-                        val currentUrl =
-                            store.state.findTabOrCustomTabOrSelectedTab(customTabId)?.content?.url
-                        if (currentUrl != null) {
-                            strongPasswordPromptViewListener?.handleSuggestStrongPasswordRequest(
+                        if (shouldAutomaticallyShowSuggestedPassword.invoke()) {
+                            onFirstTimeEngagedWithSignup.invoke()
+                            handleDialogsRequest(
                                 promptRequest,
-                                currentUrl,
-                                onSaveLoginWithStrongPassword,
+                                session,
                             )
+                        } else {
+                            strongPasswordPromptViewListener?.onGeneratedPasswordPromptClick = {
+                                handleDialogsRequest(
+                                    promptRequest,
+                                    session,
+                                )
+                            }
+                            strongPasswordPromptViewListener?.handleSuggestStrongPasswordRequest()
                         }
                     } else {
                         loginPicker?.handleSelectLoginRequest(promptRequest)
@@ -694,6 +745,7 @@ class PromptFeature private constructor(
                 is PromptRequest.IdentityCredential.SelectProvider -> it.onConfirm(value as Provider)
                 is PromptRequest.IdentityCredential.SelectAccount -> it.onConfirm(value as Account)
                 is PromptRequest.IdentityCredential.PrivacyPolicy -> it.onConfirm(value as Boolean)
+                is SelectLoginPrompt -> it.onConfirm(value as Login)
                 else -> {
                     // no-op
                 }
@@ -760,6 +812,29 @@ class PromptFeature private constructor(
     ) {
         // Requests that are handled with dialogs
         val dialog = when (promptRequest) {
+            is SelectLoginPrompt -> {
+                val currentUrl =
+                    store.state.findTabOrCustomTabOrSelectedTab(customTabId)?.content?.url
+                val generatedPassword = promptRequest.generatedPassword
+
+                if (generatedPassword == null || currentUrl == null) {
+                    logger.debug(
+                        "Ignoring received SelectLogin.onGeneratedPasswordPromptClick" +
+                            " when either the generated password or the currentUrl is null.",
+                    )
+                    dismissDialogRequest(promptRequest, session)
+                    return
+                }
+                PasswordGeneratorDialogFragment.newInstance(
+                    sessionId = session.id,
+                    promptRequestUID = promptRequest.uid,
+                    generatedPassword = generatedPassword,
+                    currentUrl = currentUrl,
+                    onSavedGeneratedPassword = onSavedGeneratedPassword,
+                    colorsProvider = passwordGeneratorColorsProvider,
+                )
+            }
+
             is SaveCreditCard -> {
                 if (!isCreditCardAutofillEnabled.invoke() || creditCardValidationDelegate == null ||
                     !promptRequest.creditCard.isValid
@@ -1144,6 +1219,16 @@ class PromptFeature private constructor(
         }
 
         return result
+    }
+
+    /**
+     * Handles the result received from the Android photo picker.
+     *
+     * @param listOf An array of [Uri] objects representing the selected photos.
+     */
+
+    fun onAndroidPhotoPickerResult(uriList: Array<Uri>) {
+        filePicker.onAndroidPhotoPickerResult(uriList)
     }
 
     companion object {

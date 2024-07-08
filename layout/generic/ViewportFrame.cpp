@@ -289,6 +289,9 @@ nsPoint ViewportFrame::AdjustReflowInputForScrollbars(
   nsIFrame* kidFrame = mFrames.FirstChild();
 
   if (ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(kidFrame)) {
+    // Note: In ReflowInput::CalculateHypotheticalPosition(), we exclude the
+    // scrollbar or scrollbar-gutter area when computing the offset to
+    // ViewportFrame. Ensure the code there remains in sync with the logic here.
     WritingMode wm = aReflowInput->GetWritingMode();
     LogicalMargin scrollbars(wm,
                              scrollContainerFrame->GetActualScrollbarSizes());
@@ -353,6 +356,12 @@ void ViewportFrame::Reflow(nsPresContext* aPresContext,
 
       // Reflow the frame
       kidReflowInput.SetComputedBSize(aReflowInput.ComputedBSize());
+      if (aReflowInput.IsBResizeForWM(kidWM)) {
+        kidReflowInput.SetBResize(true);
+      }
+      if (aReflowInput.IsBResizeForPercentagesForWM(kidWM)) {
+        kidReflowInput.mFlags.mIsBResizeForPercentages = true;
+      }
       ReflowChild(kidFrame, aPresContext, kidDesiredSize, kidReflowInput, 0, 0,
                   ReflowChildFlags::Default, aStatus);
       kidBSize = kidDesiredSize.BSize(wm);

@@ -174,29 +174,6 @@ pref("browser.helperApps.deleteTempFileOnExit", false);
 
 pref("browser.triple_click_selects_paragraph", true);
 
-// Enable fillable forms in the PDF viewer.
-pref("pdfjs.annotationMode", 2);
-
-// Enable editing in the PDF viewer.
-pref("pdfjs.annotationEditorMode", 0);
-
-// Enable JavaScript support in the PDF viewer.
-pref("pdfjs.enableScripting", true);
-
-// Enable XFA form support in the PDF viewer.
-pref("pdfjs.enableXfa", true);
-
-// Enable adding an image in a pdf.
-pref("pdfjs.enableStampEditor", true);
-
-// Enable highlighting in a pdf.
-pref("pdfjs.enableHighlightEditor", true);
-#if defined(EARLY_BETA_OR_EARLIER)
-  pref("pdfjs.enableHighlightFloatingButton", true);
-#else
-  pref("pdfjs.enableHighlightFloatingButton", false);
-#endif
-
 // Disable support for MathML
 pref("mathml.disabled",    false);
 
@@ -286,7 +263,11 @@ pref("media.videocontrols.keyboard-tab-to-all-controls", true);
   pref("media.navigator.video.default_height",0); // adaptive default
   pref("media.navigator.video.max_fs", 12288); // Enough for 2048x1536
   pref("media.navigator.video.max_fr", 60);
-  pref("media.navigator.video.disable_h264_baseline", false);
+  #ifdef NIGHTLY_BUILD
+    pref("media.navigator.video.disable_h264_baseline", false);
+  #else
+    pref("media.navigator.video.disable_h264_baseline", true);
+  #endif
   pref("media.navigator.video.h264.level", 31); // 0x42E01f - level 3.1
   pref("media.navigator.video.h264.max_br", 0);
   pref("media.navigator.video.h264.max_mbps", 0);
@@ -608,9 +589,13 @@ pref("toolkit.telemetry.translations.logLevel", "Error");
 // this pref via our remote update/experimentation system
 pref("toolkit.telemetry.user_characteristics_ping.current_version", 0);
 // pref containing the value for the user of the last version of the ping we sent
-// if a user wants to disable this type of ping explicitly, set this to -1
-// firefox/mozilla will not modify this value if a negative number is present.
 pref("toolkit.telemetry.user_characteristics_ping.last_version_sent", 0);
+// if a user wants to disable this type of ping explicitly, set this to true
+// firefox/mozilla will not modify this value.
+pref("toolkit.telemetry.user_characteristics_ping.opt-out", false);
+// if a user wants to send a single ping of this type, they can set it
+// to true. It will be set to false again after a successfull ping.
+pref("toolkit.telemetry.user_characteristics_ping.send-once", false);
 // A unique identifier for the user characteristics ping. This is not the same as
 // the telemetry client id (which is not sent in this ping), it is cleared when a
 // user opts-out of telemetry, it is set upon first telemetry submission
@@ -927,9 +912,7 @@ pref("javascript.options.mem.incremental_weakmap", true);
 
 // JSGC_SLICE_TIME_BUDGET_MS
 // Override the shell's default of unlimited slice time.
-// Note that this only applies to non-idle slices, which
-// should be the minority.
-pref("javascript.options.mem.gc_incremental_slice_ms", 10);
+pref("javascript.options.mem.gc_incremental_slice_ms", 5);
 
 // JSGC_COMPACTING_ENABLED
 pref("javascript.options.mem.gc_compacting", true);
@@ -3160,7 +3143,6 @@ pref("signon.firefoxRelay.manage_url", "https://relay.firefox.com/accounts/profi
 pref("signon.firefoxRelay.terms_of_service_url", "https://www.mozilla.org/%LOCALE%/about/legal/terms/subscription-services/");
 pref("signon.firefoxRelay.privacy_policy_url", "https://www.mozilla.org/%LOCALE%/privacy/subscription-services/");
 pref("signon.signupDetection.confidenceThreshold",     "0.75");
-pref("signon.signupDetection.enabled", true);
 
 // Satchel (Form Manager) prefs
 pref("browser.formfill.debug",            false);
@@ -3555,7 +3537,11 @@ pref("browser.safebrowsing.reportPhishURL", "https://%LOCALE%.phish-report.mozil
 // Mozilla Safe Browsing provider (for tracking protection and plugin blocking)
 pref("browser.safebrowsing.provider.mozilla.pver", "2.2");
 pref("browser.safebrowsing.provider.mozilla.lists", "base-track-digest256,mozstd-trackwhite-digest256,google-trackwhite-digest256,content-track-digest256,mozplugin-block-digest256,mozplugin2-block-digest256,ads-track-digest256,social-track-digest256,analytics-track-digest256,base-fingerprinting-track-digest256,content-fingerprinting-track-digest256,base-cryptomining-track-digest256,content-cryptomining-track-digest256,fanboyannoyance-ads-digest256,fanboysocial-ads-digest256,easylist-ads-digest256,easyprivacy-ads-digest256,adguard-ads-digest256,social-tracking-protection-digest256,social-tracking-protection-facebook-digest256,social-tracking-protection-linkedin-digest256,social-tracking-protection-twitter-digest256,base-email-track-digest256,content-email-track-digest256");
-pref("browser.safebrowsing.provider.mozilla.updateURL", "https://shavar.services.mozilla.com/downloads?client=SAFEBROWSING_ID&appver=%MAJOR_VERSION%&pver=2.2");
+#ifdef NIGHTLY_BUILD
+  pref("browser.safebrowsing.provider.mozilla.updateURL", "moz-sbrs:://antitracking");
+#else
+  pref("browser.safebrowsing.provider.mozilla.updateURL", "https://shavar.services.mozilla.com/downloads?client=SAFEBROWSING_ID&appver=%MAJOR_VERSION%&pver=2.2");
+#endif
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "https://shavar.services.mozilla.com/gethash?client=SAFEBROWSING_ID&appver=%MAJOR_VERSION%&pver=2.2");
 // Set to a date in the past to force immediate download in new profiles.
 pref("browser.safebrowsing.provider.mozilla.nextupdatetime", "1");
@@ -3676,7 +3662,7 @@ pref("reader.content_width", 3);
 pref("reader.line_height", 4);
 
 // Determines if improved text and layout menu is enabled in reader mode.
-pref("reader.improved_text_menu.enabled", false);
+pref("reader.improved_text_menu.enabled", true);
 
 // The default character spacing in reader mode (1-9)
 pref("reader.character_spacing", 0);
@@ -3696,7 +3682,7 @@ pref("reader.color_scheme", "auto");
 pref("reader.color_scheme.values", "[\"auto\",\"light\",\"dark\",\"sepia\",\"contrast\",\"gray\"]");
 
 // Determines if updated color theme menu is enabled in reader mode.
-pref("reader.colors_menu.enabled", false);
+pref("reader.colors_menu.enabled", true);
 
 // The custom color scheme options in reader colors menu.
 pref("reader.custom_colors.foreground", "");
@@ -3992,7 +3978,7 @@ pref("services.common.log.logger.tokenserverclient", "Debug");
   // 1: WebDriver BiDi
   // 2: CDP (Chrome DevTools Protocol)
   // 3: WebDriver BiDi + CDP
-  pref("remote.active-protocols", 3);
+  pref("remote.active-protocols", 1);
 
   // Enable WebDriver BiDi experimental commands and events.
   #if defined(NIGHTLY_BUILD)
@@ -4050,6 +4036,10 @@ pref("devtools.errorconsole.deprecation_warnings", true);
 
 // Disable service worker debugging on all channels (see Bug 1651605).
 pref("devtools.debugger.features.windowless-service-workers", false);
+
+// Bug 1824726 replaced client side throttling with server side throttling.
+// Use a preference in order to rollback in case of trouble.
+pref("devtools.client-side-throttling.enable", false);
 
 // Disable remote debugging protocol logging.
 pref("devtools.debugger.log", false);
@@ -4123,11 +4113,9 @@ pref("extensions.formautofill.addresses.capture.enabled", true);
   // Whether address autofill is enabled or not ( this is set via Nimbus )
   pref("extensions.formautofill.addresses.experiments.enabled", false);
 #endif
-// Defies the required address form fields to trigger the display of the address capture doorhanger
-pref("extensions.formautofill.addresses.capture.requiredFields", "street-address,postal-code,address-level1,address-level2");
 pref("extensions.formautofill.addresses.ignoreAutocompleteOff", true);
 // Supported countries need to follow ISO 3166-1 to align with "browser.search.region"
-pref("extensions.formautofill.addresses.supportedCountries", "US,CA");
+pref("extensions.formautofill.addresses.supportedCountries", "US,CA,FR,DE");
 pref("extensions.formautofill.creditCards.supported", "detect");
 pref("extensions.formautofill.creditCards.enabled", true);
 pref("extensions.formautofill.creditCards.ignoreAutocompleteOff", true);

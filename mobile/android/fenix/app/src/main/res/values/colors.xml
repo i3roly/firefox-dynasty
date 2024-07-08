@@ -23,7 +23,7 @@
     <!-- Tooltip -->
     <color name="fx_mobile_layer_color_gradient_start">@color/photonViolet70</color>
     <!-- Tooltip -->
-    <color name="fx_mobile_layer_color_gradient_end">@color/photonViolet40</color>
+    <color name="fx_mobile_layer_color_gradient_end">@color/photonViolet60</color>
     <!-- Warning background -->
     <color name="fx_mobile_layer_color_warning" tools:ignore="UnusedResources">@color/photonYellow20</color>
     <!-- Confirmation background -->
@@ -236,7 +236,7 @@
 
     <!-- Icon -->
     <!-- Primary icon -->
-    <color name="fx_mobile_private_icon_color_primary" tools:ignore="UnusedResources">@color/photonLightGrey05</color>
+    <color name="fx_mobile_private_icon_color_primary">@color/photonLightGrey05</color>
     <!-- Inactive tab -->
     <color name="fx_mobile_private_icon_color_primary_inactive" tools:ignore="UnusedResources">@color/photonLightGrey05A60</color>
     <!-- Secondary icon -->

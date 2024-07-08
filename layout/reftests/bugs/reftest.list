@@ -1277,7 +1277,7 @@ skip-if(Android) random-if(winWidget) == chrome://reftest/content/bugs/478377-1.
 == 481024-1e.html 481024-1-ref.html
 != 481948-1.html 481948-1-ref.html
 != 481948-2.html 481948-2-ref.html
-fails-if(Android||gtkWidget) random-if(winWidget||cocoaWidget) == 481948-3.html 481948-3-ref.html # questionable test, see bug 488364
+== 481948-3.html 481948-3-ref.html
 == 482398-1.html 482398-1-ref.html
 random-if(winWidget) == 482592-1a-shadow.xhtml 482592-1-ref.html # bug 586771
 random-if(winWidget) == 482592-1b-shadow.xhtml 482592-1-ref.html # bug 586771
@@ -1581,12 +1581,12 @@ fuzzy(0-64,0-45) == 614272-1.svg 614272-1-ref.svg
 != 618071.html 618071-notref.html
 == 619117-1.html 619117-1-ref.html
 == 619511-1.html 619511-1-ref.html
-fails-if(useDrawSnapshot) == 621253-1-externalFilter.html 621253-1-ref.html
-fails-if(useDrawSnapshot) == 621253-1-internalFilter.html 621253-1-ref.html
-fails-if(useDrawSnapshot) == 621253-2-externalFilter.html 621253-2-ref.html
-fails-if(useDrawSnapshot) == 621253-2-internalFilter.html 621253-2-ref.html
+fails-if(useDrawSnapshot) fuzzy-if(geckoview&&!emulator&&gfxSVGFEColorMatrix,0-4,0-39) == 621253-1-externalFilter.html 621253-1-ref.html
+fails-if(useDrawSnapshot) fuzzy-if(geckoview&&!emulator&&gfxSVGFEColorMatrix,0-4,0-39) == 621253-1-internalFilter.html 621253-1-ref.html
+fails-if(useDrawSnapshot) fuzzy-if(geckoview&&!emulator&&gfxSVGFEColorMatrix,0-4,0-210) == 621253-2-externalFilter.html 621253-2-ref.html
+fails-if(useDrawSnapshot) fuzzy-if(geckoview&&!emulator&&gfxSVGFEColorMatrix,0-4,0-210) == 621253-2-internalFilter.html 621253-2-ref.html
 random-if(winWidget) == 621918-1.svg 621918-1-ref.svg # 1-pixel diacritic positioning discrepancy in rotated text (may depend on platform fonts)
-random-if(winWidget) fuzzy-if(geckoview&&!emulator,0-255,0-22) == 621918-2.svg 621918-2-ref.svg # same 1px issue as above
+random-if(winWidget) fuzzy-if(geckoview&&!emulator,0-255,0-32) == 621918-2.svg 621918-2-ref.svg # same 1px issue as above
 fuzzy-if(winWidget,0-5,0-1) == 622585-1.html 622585-1-ref.html # bug 789402
 fuzzy(0-1,0-40000) == 625409-1.html 625409-1-ref.html
 == 627393-1.html about:blank
@@ -1818,7 +1818,7 @@ fuzzy(0-1,0-800000) == 1119117-1b.html 1119117-1-ref.html
 == 1120431-1.html 1120431-1-ref.html
 == 1120431-2.html 1120431-2-ref.html
 == 1121748-1.html 1121748-1-ref.html
-skip-if(verify) == 1121748-2.html 1121748-2-ref.html
+== 1121748-2.html 1121748-2-ref.html
 == 1127107-1a-nowrap.html 1127107-1-ref.html
 == 1127107-1b-pre.html 1127107-1-ref.html
 == 1127107-2-capitalize.html 1127107-2-capitalize-ref.html

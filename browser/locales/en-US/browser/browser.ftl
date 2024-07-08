@@ -131,9 +131,6 @@ urlbar-result-menu-tip-get-help =
 urlbar-search-tips-onboard = Type less, find more: Search { $engineName } right from your address bar.
 urlbar-search-tips-redirect-2 = Start your search in the address bar to see suggestions from { $engineName } and your browsing history.
 
-# Make sure to match the name of the Search panel in settings.
-urlbar-search-tips-persist = Searching just got simpler. Try making your search more specific here in the address bar. To show the URL instead, visit Search, in settings.
-
 # Prompts users to use the Urlbar when they are typing in the domain of a
 # search engine, e.g. google.com or amazon.com.
 urlbar-tabtosearch-onboard = Select this shortcut to find what you need faster.
@@ -677,6 +674,24 @@ urlbar-group-quickactions =
 urlbar-group-recent-searches =
   .label = Recent Searches
 
+# The header shown above trending results.
+# Variables:
+#  $engine (String): the name of the search engine providing the trending suggestions
+urlbar-group-trending =
+  .label = Trending on { $engine }
+
+# The result menu labels shown next to trending results.
+urlbar-result-menu-trending-dont-show =
+    .label = Don’t show trending searches
+    .accesskey = D
+urlbar-result-menu-trending-why =
+    .label = Why am I seeing this?
+    .accesskey = W
+
+# A message that replaces a result when the user dismisses all suggestions of a
+# particular type.
+urlbar-trending-dismissal-acknowledgment = Thanks for your feedback. You won’t see trending searches anymore.
+
 ## Reader View toolbar buttons
 
 # This should match menu-view-enter-readerview in menubar.ftl
@@ -1052,6 +1067,11 @@ firefox-relay-offer-legal-notice = By clicking “Use email mask”, you agree t
 popup-notification-addon-install-unsigned =
     .value = (Unverified)
 popup-notification-xpinstall-prompt-learn-more = Learn more about installing add-ons safely
+
+# Note: Access key is set to P to match "Private" in the corresponding localized label.
+popup-notification-addon-privatebrowsing-checkbox =
+    .label = Run in Private Windows
+    .accesskey = P
 
 ## Pop-up warning
 

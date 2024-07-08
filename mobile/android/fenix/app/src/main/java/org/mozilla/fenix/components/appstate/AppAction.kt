@@ -33,6 +33,11 @@ import org.mozilla.fenix.wallpapers.Wallpaper
  * [Action] implementation related to [AppStore].
  */
 sealed class AppAction : Action {
+    /**
+     * Updates the [AppState.inactiveTabsExpanded] boolean
+     *
+     * @property expanded The updated boolean to [AppState.inactiveTabsExpanded]
+     */
     data class UpdateInactiveExpanded(val expanded: Boolean) : AppAction()
 
     /**
@@ -191,16 +196,50 @@ sealed class AppAction : Action {
 
         /**
          * Sealed class representing actions related to microsurveys within messaging functionality.
-         * Extends [MessagingAction].
          */
         sealed class MicrosurveyAction : MessagingAction() {
             /**
-             * Indicates that the microsurvey associated with the [message] has been completed.
+             * Indicates that the microsurvey associated with the [id] has been completed.
              *
-             * @property message The message associated with the completed microsurvey.
+             * @property id The id message associated with the completed microsurvey.
              * @property answer The answer provided for the microsurvey.
              */
-            data class Completed(val message: Message, val answer: String) : MicrosurveyAction()
+            data class Completed(val id: String, val answer: String) : MicrosurveyAction()
+
+            /**
+             * Indicates the microsurvey associated with this [id] has been started.
+             *
+             * @property id The id of the message associated with the started microsurvey.
+             */
+            data class Started(val id: String) : MicrosurveyAction()
+
+            /**
+             * Indicates the microsurvey associated with the [id] has been shown.
+             *
+             * @property id The id of the message associated with the shown microsurvey.
+             */
+            data class Shown(val id: String) : MicrosurveyAction()
+
+            /**
+             * Indicates the microsurvey associated with the [id] has been dismissed.
+             *
+             * @property id The id of the message associated with the microsurvey.
+             */
+            data class Dismissed(val id: String) : MicrosurveyAction()
+
+            /**
+             * Indicates the sent confirmation message for this microsurvey [id] has been shown.
+             *
+             * @property id The id of the message associated with the microsurvey.
+             */
+            data class SentConfirmationShown(val id: String) : MicrosurveyAction()
+
+            /**
+             * Indicates the privacy notice of microsurveys has been tapped.
+             *
+             * @property id The id of the message associated with the microsurvey.
+             */
+            data class OnPrivacyNoticeTapped(val id: String) : MicrosurveyAction()
         }
     }
 
@@ -306,5 +345,51 @@ sealed class AppAction : Action {
          * Null means the state should reset and no snackbar should be shown.
          */
         data class UpdateLastTabClosed(val private: Boolean?) : TabStripAction()
+    }
+
+    /**
+     * [AppAction]s related to translations.
+     */
+    sealed class TranslationsAction : AppAction() {
+
+        /**
+         * [TranslationsAction] dispatched when a translation is in progress.
+         *
+         * @property sessionId The ID of the session being translated.
+         */
+        data class TranslationStarted(val sessionId: String?) : TranslationsAction()
+    }
+
+    /**
+     * [AppAction]s related to bookmarks.
+     */
+    sealed class BookmarkAction : AppAction() {
+        /**
+         * [BookmarkAction] dispatched when a bookmark is added.
+         *
+         * @property guidToEdit The guid of the newly added bookmark or null.
+         */
+        data class BookmarkAdded(val guidToEdit: String?) : BookmarkAction()
+    }
+
+    /**
+     * [AppAction]s related to the snackbar.
+     */
+    sealed class SnackbarAction : AppAction() {
+
+        /**
+         * [SnackbarAction] dispatched to dismiss the snackbar.
+         */
+        data object SnackbarDismissed : SnackbarAction()
+
+        /**
+         * [SnackbarAction] dispatched when a snackbar is shown.
+         */
+        data object SnackbarShown : SnackbarAction()
+
+        /**
+         * [SnackbarAction] dispatched to reset the [AppState.snackbarState] to its default state.
+         */
+        data object Reset : SnackbarAction()
     }
 }

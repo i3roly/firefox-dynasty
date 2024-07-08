@@ -71,7 +71,8 @@
     <!-- Browser Toolbar -->
     <dimen name="browser_toolbar_height">56dp</dimen>
     <dimen name="browser_navbar_height">48dp</dimen>
-    <dimen name="tab_strip_height">0dp</dimen>
+    <dimen name="tab_strip_height">48dp</dimen>
+    <dimen name="browser_microsurvey_height">131dp</dimen>
 
     <!-- Bookmark Edit Fragment  -->
     <dimen name="bookmark_edit_text_height">48dp</dimen>
@@ -91,7 +92,7 @@
     <!-- The download dialogs are shown above the toolbar so they need a bigger elevation. -->
     <dimen name="browser_fragment_download_dialog_elevation">17dp</dimen>
     <!-- The size of padding for the display toolbar. -->
-    <dimen name="browser_fragment_display_toolbar_padding">8dp</dimen>
+    <dimen name="browser_fragment_display_toolbar_padding">16dp</dimen>
 
     <!-- Search Fragment -->
     <dimen name="search_fragment_clipboard_item_height">56dp</dimen>
@@ -180,6 +181,9 @@
     <!-- Credit Cards Fragment -->
     <dimen name="credit_cards_saved_cards_item_margin_start">16dp</dimen>
     <dimen name="credit_cards_saved_cards_item_margin_end">48dp</dimen>
+
+    <!-- DisplayToolbar -->
+    <dimen name="mozac_browser_toolbar_background_margin_end" tools:ignore="UnusedResources">8dp</dimen>
 
     <!-- a11y -->
     <dimen name="accessibility_min_height">48dp</dimen>

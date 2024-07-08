@@ -53,8 +53,8 @@ const DEFAULT_TEXT_LAYOUT = {
   fontWeight: "regular",
   contentWidth: 3,
   lineSpacing: 4,
-  characterSpacing: 0,
-  wordSpacing: 0,
+  characterSpacing: 1,
+  wordSpacing: 1,
   textAlignment: "start",
 };
 
@@ -416,7 +416,7 @@ export var AboutReader = function (
 
     let characterSpacing = Services.prefs.getIntPref(
       "reader.character_spacing",
-      0
+      1
     );
     this._setupSlider(
       "character-spacing",
@@ -426,7 +426,7 @@ export var AboutReader = function (
     );
     this._setCharacterSpacing(characterSpacing);
 
-    let wordSpacing = Services.prefs.getIntPref("reader.word_spacing", 0);
+    let wordSpacing = Services.prefs.getIntPref("reader.word_spacing", 1);
     this._setupSlider(
       "word-spacing",
       wordSpacingSliderOptions,
@@ -1126,6 +1126,20 @@ AboutReader.prototype = {
       return false;
     }
 
+    const blockImageMarginRight = {
+      left: "auto",
+      center: "auto",
+      right: "0",
+      start: "unset",
+    };
+
+    const blockImageMarginLeft = {
+      left: "0",
+      center: "auto",
+      right: "auto",
+      start: "unset",
+    };
+
     if (newTextAlignment === "start") {
       let startAlignButton;
       if (isAppLocaleRTL) {
@@ -1139,6 +1153,16 @@ AboutReader.prototype = {
     this._containerElement.style.setProperty(
       "--text-alignment",
       newTextAlignment
+    );
+
+    this._containerElement.style.setProperty(
+      "--block-img-margin-right",
+      blockImageMarginRight[newTextAlignment]
+    );
+
+    this._containerElement.style.setProperty(
+      "--block-img-margin-left",
+      blockImageMarginLeft[newTextAlignment]
     );
 
     lazy.AsyncPrefs.set("reader.text_alignment", newTextAlignment);

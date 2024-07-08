@@ -46,6 +46,7 @@
 #include "mozilla/layers/APZInputBridge.h"
 #include "mozilla/layers/IAPZCTreeManager.h"
 #include "mozilla/Likely.h"
+#include "mozilla/Maybe.h"
 #include "mozilla/MiscEvents.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/NativeKeyBindingsType.h"
@@ -54,6 +55,7 @@
 #include "mozilla/ProfilerLabels.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticPrefs_apz.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "mozilla/StaticPrefs_mozilla.h"
 #include "mozilla/StaticPrefs_ui.h"
@@ -589,10 +591,14 @@ void nsWindow::Destroy() {
   UnlockNativePointer();
 #endif
 
-  // dragService will be null after shutdown of the service manager.
+  // Cancel (dragleave) the current drag session, if any.
   RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  if (dragService && this == dragService->GetMostRecentDestWindow()) {
-    dragService->ScheduleLeaveEvent();
+  if (dragService) {
+    nsDragSession* dragSession =
+        static_cast<nsDragSession*>(dragService->GetCurrentSession(this));
+    if (dragSession && this == dragSession->GetMostRecentDestWindow()) {
+      dragSession->ScheduleLeaveEvent();
+    }
   }
 
   nsIRollupListener* rollupListener = nsBaseWidget::GetActiveRollupListener();
@@ -778,6 +784,53 @@ void nsWindow::ReparentNativeWidget(nsIWidget* aNewParent) {
 
   LOG("nsWindow::ReparentNativeWidget new parent %p\n", newParent);
   GtkWindowSetTransientFor(GTK_WINDOW(mShell), newParentWidget);
+}
+
+static void InitPenEvent(WidgetMouseEvent& aGeckoEvent, GdkEvent* aEvent) {
+  // Find the source of the event
+  GdkDevice* device = gdk_event_get_source_device(aEvent);
+  GdkInputSource eSource = gdk_device_get_source(device);
+  gdouble value;
+
+  // We distinguish touch screens from pens using the event type
+  // Eraser corresponds to the pen with the "erase" button pressed
+  if (eSource != GDK_SOURCE_PEN && eSource != GDK_SOURCE_ERASER) {
+    bool XWaylandPen = false;
+#ifdef MOZ_X11
+    // Workaround : When using Xwayland, pens are reported as
+    // GDK_SOURCE_TOUCHSCREEN If eSource is GDK_SOURCE_TOUCHSCREEN and the
+    // GDK_AXIS_XTILT and GDK_AXIS_YTILT axes are reported then it's a pen and
+    // not a finger on a screen. Yes, that's a stupid heuristic but it works...
+    // Note, however, that the tilt values are not reliable
+    // Another approach could be use the device tool type, but that's only
+    // available in GTK > 3.22
+    XWaylandPen = (eSource == GDK_SOURCE_TOUCHSCREEN && GdkIsX11Display() &&
+                   gdk_event_get_axis(aEvent, GDK_AXIS_XTILT, &value) &&
+                   gdk_event_get_axis(aEvent, GDK_AXIS_YTILT, &value));
+#endif
+    if (!XWaylandPen) {
+      return;
+    }
+    LOGW("InitPenEvent(): Is XWayland pen");
+  }
+
+  aGeckoEvent.mInputSource = dom::MouseEvent_Binding::MOZ_SOURCE_PEN;
+  aGeckoEvent.pointerId = 1;
+
+  // The range of xtilt and ytilt are -1 to 1. Normalize it to -90 to 90.
+  if (gdk_event_get_axis(aEvent, GDK_AXIS_XTILT, &value)) {
+    aGeckoEvent.tiltX = int32_t(NS_round(value * 90));
+  }
+  if (gdk_event_get_axis(aEvent, GDK_AXIS_YTILT, &value)) {
+    aGeckoEvent.tiltY = int32_t(NS_round(value * 90));
+  }
+  if (gdk_event_get_axis(aEvent, GDK_AXIS_PRESSURE, &value)) {
+    aGeckoEvent.mPressure = (float)value;
+    // Make sure the pression is acceptable
+    MOZ_ASSERT(aGeckoEvent.mPressure >= 0.0 && aGeckoEvent.mPressure <= 1.0);
+  }
+
+  LOGW("InitPenEvent(): pressure %f\n", aGeckoEvent.mPressure);
 }
 
 void nsWindow::SetModal(bool aModal) {
@@ -2380,7 +2433,7 @@ nsWindow::WaylandPopupGetPositionFromLayout() {
   nsMenuPopupFrame* popupFrame = GetMenuPopupFrame(GetFrame());
 
   const bool isTopContextMenu = mPopupContextMenu && !mPopupAnchored;
-  const bool isRTL = IsPopupDirectionRTL();
+  const bool isRTL = popupFrame->IsDirectionRTL();
   const bool anchored = popupFrame->IsAnchored();
   int8_t popupAlign = POPUPALIGNMENT_TOPLEFT;
   int8_t anchorAlign = POPUPALIGNMENT_BOTTOMRIGHT;
@@ -2389,7 +2442,7 @@ nsWindow::WaylandPopupGetPositionFromLayout() {
     popupAlign = popupFrame->GetPopupAlignment();
     anchorAlign = popupFrame->GetPopupAnchor();
   }
-  if (isRTL && (anchored || isTopContextMenu)) {
+  if (isRTL) {
     popupAlign = -popupAlign;
     anchorAlign = -anchorAlign;
   }
@@ -2721,37 +2774,6 @@ void nsWindow::WaylandPopupMoveImpl() {
                        mPopupMoveToRectParams.mAnchorRectType,
                        mPopupMoveToRectParams.mPopupAnchorType,
                        mPopupMoveToRectParams.mHints, offset.x, offset.y);
-}
-
-void nsWindow::SetZIndex(int32_t aZIndex) {
-  nsIWidget* oldPrev = GetPrevSibling();
-
-  nsBaseWidget::SetZIndex(aZIndex);
-
-  if (GetPrevSibling() == oldPrev) {
-    return;
-  }
-
-  // We skip the nsWindows that don't have mGdkWindows.
-  // These are probably in the process of being destroyed.
-  if (!mGdkWindow) {
-    return;
-  }
-
-  if (!GetNextSibling()) {
-    // We're to be on top.
-    if (mGdkWindow) {
-      gdk_window_raise(mGdkWindow);
-    }
-  } else {
-    // All the siblings before us need to be below our widget.
-    for (nsWindow* w = this; w;
-         w = static_cast<nsWindow*>(w->GetPrevSibling())) {
-      if (w->mGdkWindow) {
-        gdk_window_lower(w->mGdkWindow);
-      }
-    }
-  }
 }
 
 void nsWindow::SetSizeMode(nsSizeMode aMode) {
@@ -4514,6 +4536,7 @@ void nsWindow::OnMotionNotifyEvent(GdkEventMotion* aEvent) {
   event.AssignEventTime(GetWidgetEventTime(aEvent->time));
 
   KeymapWrapper::InitInputEvent(event, aEvent->state);
+  InitPenEvent(event, (GdkEvent*)aEvent);
 
   DispatchInputEvent(&event);
 }
@@ -4617,8 +4640,15 @@ void nsWindow::DispatchContextMenuEventFromMouseEvent(
     uint16_t domButton, GdkEventButton* aEvent,
     const LayoutDeviceIntPoint& aRefPoint) {
   if (domButton == MouseButton::eSecondary && MOZ_LIKELY(!mIsDestroyed)) {
-    WidgetMouseEvent contextMenuEvent(true, eContextMenu, this,
-                                      WidgetMouseEvent::eReal);
+    Maybe<WidgetPointerEvent> pointerEvent;
+    Maybe<WidgetMouseEvent> mouseEvent;
+    if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
+      pointerEvent.emplace(true, eContextMenu, this);
+    } else {
+      mouseEvent.emplace(true, eContextMenu, this, WidgetMouseEvent::eReal);
+    }
+    WidgetMouseEvent& contextMenuEvent =
+        pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
     InitButtonEvent(contextMenuEvent, aEvent, aRefPoint);
     contextMenuEvent.mPressure = mLastMotionPressure;
     DispatchInputEvent(&contextMenuEvent);
@@ -4790,6 +4820,7 @@ void nsWindow::OnButtonPressEvent(GdkEventButton* aEvent) {
   InitButtonEvent(event, aEvent, refPoint);
   event.mPressure = mLastMotionPressure;
 
+  InitPenEvent(event, (GdkEvent*)aEvent);
   nsIWidget::ContentAndAPZEventStatus eventStatus = DispatchInputEvent(&event);
 
   const bool defaultPrevented =
@@ -4858,6 +4889,8 @@ void nsWindow::OnButtonReleaseEvent(GdkEventButton* aEvent) {
   // The mRefPoint is manipulated in DispatchInputEvent, we're saving it
   // to use it for the doubleclick position check.
   const LayoutDeviceIntPoint pos = event.mRefPoint;
+
+  InitPenEvent(event, (GdkEvent*)aEvent);
 
   nsIWidget::ContentAndAPZEventStatus eventStatus = DispatchInputEvent(&event);
 
@@ -4928,8 +4961,8 @@ void nsWindow::OnContainerFocusOutEvent(GdkEventFocus* aEvent) {
     const bool shouldRollupMenus = [&] {
       nsCOMPtr<nsIDragService> dragService =
           do_GetService("@mozilla.org/widget/dragservice;1");
-      nsCOMPtr<nsIDragSession> dragSession;
-      dragService->GetCurrentSession(getter_AddRefs(dragSession));
+      nsCOMPtr<nsIDragSession> dragSession =
+          dragService->GetCurrentSession(this);
       if (!dragSession) {
         return true;
       }
@@ -5487,9 +5520,13 @@ void nsWindow::OnDragDataReceivedEvent(GtkWidget* aWidget,
   LOGDRAG("nsWindow::OnDragDataReceived");
 
   RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
-  dragService->TargetDataReceived(aWidget, aDragContext, aX, aY, aSelectionData,
-                                  aInfo, aTime);
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(dragService->GetCurrentSession(this));
+  if (dragSession) {
+    nsDragSession::AutoEventLoop loop(dragSession);
+    dragSession->TargetDataReceived(aWidget, aDragContext, aX, aY,
+                                    aSelectionData, aInfo, aTime);
+  }
 }
 
 nsWindow* nsWindow::GetTransientForWindowIfPopup() {
@@ -7656,7 +7693,6 @@ bool nsWindow::CheckForRollup(gdouble aMouseX, gdouble aMouseY, bool aIsWheel,
   return retVal;
 }
 
-/* static */
 bool nsWindow::DragInProgress() {
   nsCOMPtr<nsIDragService> dragService =
       do_GetService("@mozilla.org/widget/dragservice;1");
@@ -7664,8 +7700,8 @@ bool nsWindow::DragInProgress() {
     return false;
   }
 
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  dragService->GetCurrentSession(getter_AddRefs(currentDragSession));
+  nsCOMPtr<nsIDragSession> currentDragSession =
+      dragService->GetCurrentSession(this);
   return !!currentDragSession;
 }
 
@@ -7673,7 +7709,8 @@ bool nsWindow::DragInProgress() {
 // https://bugzilla.mozilla.org/show_bug.cgi?id=1622107
 // We try to detect when Wayland compositor / gtk fails to deliver
 // info about finished D&D operations and cancel it on our own.
-MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(GdkEventButton* aEvent) {
+MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(nsWindow* aWindow,
+                                                     GdkEventButton* aEvent) {
   static int buttonPressCountWithDrag = 0;
 
   // We track only left button state as Firefox performs D&D on left
@@ -7687,8 +7724,8 @@ MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(GdkEventButton* aEvent) {
   if (!dragService) {
     return;
   }
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  dragService->GetCurrentSession(getter_AddRefs(currentDragSession));
+  nsCOMPtr<nsIDragSession> currentDragSession =
+      dragService->GetCurrentSession(aWindow);
 
   if (!currentDragSession) {
     buttonPressCountWithDrag = 0;
@@ -7701,7 +7738,7 @@ MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(GdkEventButton* aEvent) {
         "Quit unfinished Wayland Drag and Drop operation. Buggy Wayland "
         "compositor?");
     buttonPressCountWithDrag = 0;
-    dragService->EndDragSession(false, 0);
+    currentDragSession->EndDragSession(false, 0);
   }
 }
 
@@ -8348,7 +8385,7 @@ static gboolean button_press_event_cb(GtkWidget* widget,
   window->OnButtonPressEvent(event);
 
   if (GdkIsWaylandDisplay()) {
-    WaylandDragWorkaround(event);
+    WaylandDragWorkaround(window, event);
   }
 
   return TRUE;
@@ -8726,8 +8763,19 @@ gboolean WindowDragMotionHandler(GtkWidget* aWidget,
   LOGDRAG("WindowDragMotionHandler target nsWindow [%p]", window.get());
 
   RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
-  if (!dragService->ScheduleMotionEvent(
+  NS_ENSURE_TRUE(dragService, FALSE);
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(dragService->GetCurrentSession(window));
+  if (!dragSession) {
+    // This may be the start of an external drag session.
+    nsIWidget* widget = window;
+    dragSession =
+        static_cast<nsDragSession*>(dragService->StartDragSession(widget));
+  }
+  NS_ENSURE_TRUE(dragSession, FALSE);
+
+  nsDragSession::AutoEventLoop loop(dragSession);
+  if (!dragSession->ScheduleMotionEvent(
           window, aDragContext, GetWindowDropPosition(window, aX, aY), aTime)) {
     return FALSE;
   }
@@ -8750,9 +8798,17 @@ void WindowDragLeaveHandler(GtkWidget* aWidget) {
   }
 
   RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
+  nsIWidget* widget = window;
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(dragService->GetCurrentSession(widget));
+  if (!dragSession) {
+    LOGDRAG("    Received dragleave after drag had ended.\n");
+    return;
+  }
 
-  nsWindow* mostRecentDragWindow = dragService->GetMostRecentDestWindow();
+  nsDragSession::AutoEventLoop loop(dragSession);
+
+  nsWindow* mostRecentDragWindow = dragSession->GetMostRecentDestWindow();
   if (!mostRecentDragWindow) {
     // This can happen when the target will not accept a drop.  A GTK drag
     // source sends the leave message to the destination before the
@@ -8772,7 +8828,7 @@ void WindowDragLeaveHandler(GtkWidget* aWidget) {
   }
 
   LOGDRAG("WindowDragLeaveHandler nsWindow %p\n", (void*)mostRecentDragWindow);
-  dragService->ScheduleLeaveEvent();
+  dragSession->ScheduleLeaveEvent();
 }
 
 static void drag_leave_event_cb(GtkWidget* aWidget,
@@ -8800,8 +8856,10 @@ gboolean WindowDragDropHandler(GtkWidget* aWidget, GdkDragContext* aDragContext,
 
   LOGDRAG("WindowDragDropHandler nsWindow [%p]", window.get());
   RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
-  return dragService->ScheduleDropEvent(
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(dragService->GetCurrentSession(window));
+  nsDragSession::AutoEventLoop loop(dragSession);
+  return dragSession->ScheduleDropEvent(
       window, aDragContext, GetWindowDropPosition(window, aX, aY), aTime);
 }
 

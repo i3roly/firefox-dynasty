@@ -505,8 +505,8 @@ pref("browser.urlbar.quicksuggest.showOnboardingDialogAfterNRestarts", 0);
 
 // The indexes of the sponsored and non-sponsored quick suggest results within
 // the general results group.
-pref("browser.urlbar.quicksuggest.sponsoredIndex", -1);
-pref("browser.urlbar.quicksuggest.nonSponsoredIndex", -1);
+pref("browser.urlbar.quicksuggest.sponsoredIndex", 0);
+pref("browser.urlbar.quicksuggest.nonSponsoredIndex", 0);
 
 // Whether quick suggest results can be shown in position specified in the
 // suggestions.
@@ -635,18 +635,14 @@ pref("browser.urlbar.suggest.addons", true);
 pref("browser.urlbar.suggest.mdn", true);
 
 // Feature gate pref for Yelp suggestions in the urlbar.
-pref("browser.urlbar.yelp.featureGate", false);
+pref("browser.urlbar.yelp.featureGate", true);
 
 // The minimum prefix length of a Yelp keyword the user must type to trigger the
 // suggestion. 0 means the min length should be taken from Nimbus.
-pref("browser.urlbar.yelp.minKeywordLength", 0);
+pref("browser.urlbar.yelp.minKeywordLength", 4);
 
 // Whether Yelp suggestions should be shown as top picks.
 pref("browser.urlbar.yelp.priority", false);
-
-// The group-relative suggestedIndex of Yelp suggestions within the Firefox
-// Suggest section. Ignored when Yelp suggestions are shown as top picks.
-pref("browser.urlbar.yelp.suggestedIndex", 0);
 
 // If `browser.urlbar.yelp.featureGate` is true, this controls whether
 // Yelp suggestions are turned on.
@@ -658,6 +654,10 @@ pref("browser.urlbar.addons.minKeywordLength", 0);
 
 // Feature gate pref for Pocket suggestions in the urlbar.
 pref("browser.urlbar.pocket.featureGate", false);
+
+// The group-relative suggestedIndex of Pocket suggestions within the Firefox
+// Suggest section.
+pref("browser.urlbar.pocket.suggestedIndex", 0);
 
 // If `browser.urlbar.pocket.featureGate` is true, this controls whether Pocket
 // suggestions are turned on.
@@ -1523,8 +1523,6 @@ pref("browser.bookmarks.editDialog.maxRecentFolders", 7);
   pref("browser.taskbar.previews.max", 20);
   pref("browser.taskbar.previews.cachetime", 5);
 
-  pref("browser.taskbar.lists.legacyBackend", false);
-
   pref("browser.taskbar.lists.enabled", true);
   pref("browser.taskbar.lists.frequent.enabled", true);
   pref("browser.taskbar.lists.recent.enabled", false);
@@ -1625,7 +1623,6 @@ pref("services.sync.prefs.sync.media.eme.enabled", true);
 pref("services.sync.prefs.sync-seen.media.eme.enabled", false);
 pref("services.sync.prefs.sync.media.videocontrols.picture-in-picture.video-toggle.enabled", true);
 pref("services.sync.prefs.sync.network.cookie.cookieBehavior", true);
-pref("services.sync.prefs.sync.network.cookie.thirdparty.sessionOnly", true);
 pref("services.sync.prefs.sync.permissions.default.image", true);
 pref("services.sync.prefs.sync.pref.downloads.disable_button.edit_actions", true);
 pref("services.sync.prefs.sync.pref.privacy.disable_button.cookie_exceptions", true);
@@ -1712,8 +1709,15 @@ pref("browser.newtab.preload", true);
 // Weather widget for newtab
 pref("browser.newtabpage.activity-stream.showWeather", true);
 pref("browser.newtabpage.activity-stream.weather.query", "");
-pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", false);
 pref("browser.newtabpage.activity-stream.weather.display", "simple");
+
+// enable location search for newtab weather widget
+#ifdef NIGHTLY_BUILD
+  pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
+#else
+  pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
+#endif
+
 // List of regions that get weather by default.
 #ifdef NIGHTLY_BUILD
   pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "US,CA");
@@ -1724,10 +1728,11 @@ pref("browser.newtabpage.activity-stream.weather.display", "simple");
 // Preference to enable wallpaper selection in the Customize Menu of new tab page
 #ifdef NIGHTLY_BUILD
   pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
+  pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true);
 #else
+  pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
   pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", false);
 #endif
-pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
 
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
@@ -1756,8 +1761,9 @@ pref("browser.newtabpage.activity-stream.fxaccounts.endpoint", "https://accounts
 pref("browser.newtabpage.activity-stream.improvesearch.topSiteSearchShortcuts", true);
 
 // ASRouter provider configuration
-pref("browser.newtabpage.activity-stream.asrouter.providers.cfr", "{\"id\":\"cfr\",\"enabled\":true,\"type\":\"remote-settings\",\"collection\":\"cfr\",\"updateCycleInMs\":3600000}");
 pref("browser.newtabpage.activity-stream.asrouter.providers.message-groups", "{\"id\":\"message-groups\",\"enabled\":true,\"type\":\"remote-settings\",\"collection\":\"message-groups\",\"updateCycleInMs\":3600000}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.onboarding", "{\"id\":\"onboarding\",\"type\":\"local\",\"localProvider\":\"OnboardingMessageProvider\",\"enabled\":true,\"exclude\":[]}");
+pref("browser.newtabpage.activity-stream.asrouter.providers.cfr", "{\"id\":\"cfr\",\"enabled\":true,\"type\":\"remote-settings\",\"collection\":\"cfr\",\"updateCycleInMs\":3600000}");
 pref("browser.newtabpage.activity-stream.asrouter.providers.messaging-experiments", "{\"id\":\"messaging-experiments\",\"enabled\":true,\"type\":\"remote-experiments\",\"updateCycleInMs\":3600000}");
 
 // ASRouter user prefs
@@ -1826,6 +1832,13 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-stories-block", 
 pref("browser.newtabpage.activity-stream.discoverystream.region-stories-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
 // List of regions that support the new recommendations BFF, also requires region-stories-config
 pref("browser.newtabpage.activity-stream.discoverystream.region-bff-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
+// Using merino for recommendations in nightly only
+#ifdef NIGHTLY_BUILD
+  pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", true);
+#else
+  pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", false);
+#endif
+pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
 // List of regions that get spocs by default.
 pref("browser.newtabpage.activity-stream.discoverystream.region-spocs-config", "US,CA,DE,GB,FR,IT,ES");
 // List of regions that don't get the 7 row layout.
@@ -1844,9 +1857,16 @@ pref("browser.newtabpage.activity-stream.discoverystream.recs.personalized", fal
 // System pref to allow Pocket sponsored content personalization to be turned on/off.
 pref("browser.newtabpage.activity-stream.discoverystream.spocs.personalized", true);
 
+// System pref to enable topic selection for pocket feed
+pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.enabled", false);
+
 // Flip this once the user has dismissed the Pocket onboarding experience,
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.dismissed", false);
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.enabled", false);
+
+// Allow users to give thumbs up/down on recommended stories
+pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.enabled", false);
+pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.searchTopsitesCompact", false);
 
 // User pref to show stories on newtab (feeds.system.topstories has to be set to true as well)
 pref("browser.newtabpage.activity-stream.feeds.section.topstories", true);
@@ -1905,13 +1925,18 @@ pref("pdfjs.handleOctetStream", true);
 // Is the sidebar positioned ahead of the content browser
 pref("sidebar.position_start", true);
 pref("sidebar.revamp", false);
+pref("sidebar.main.tools", "aichat,syncedtabs,history");
+pref("sidebar.verticalTabs", false);
+pref("sidebar.visibility", "always-show");
 
 pref("browser.ml.chat.enabled", false);
-pref("browser.ml.chat.prompt.prefix", 'I’m on page "%currentTabTitle%" with "%selection|12000%" selected. ');
-pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Highlight the main themes and conclusions. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning of the selection."}');
-pref("browser.ml.chat.prompts.1", '{"label":"Simplify language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; examples where applicable to make explanations clearer; explanations for jargon and technical terms; headers and bulleted lists for scannability. Maintain factual accuracy while simplifying."}');
-pref("browser.ml.chat.prompts.2", '{"label":"Quiz me","value":"Please create questions related to the selection. Ask the questions one by one. Wait for my response before moving on to the next question. Evaluate each response. Ask a variety of types of questions, like multiple choice, true or false and short answer."}');
+pref("browser.ml.chat.hideLocalhost", true);
+pref("browser.ml.chat.prompt.prefix", 'I’m on page "%tabTitle%" with "%selection|12000%" selected. ');
+pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning and factual accuracy.","id":"summarize"}');
+pref("browser.ml.chat.prompts.1", '{"label":"Simplify Language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; headers and bulleted lists for scannability. Maintain meaning and factual accuracy.","id":"simplify"}');
+pref("browser.ml.chat.prompts.2", '{"label":"Quiz Me","value":"Please quiz me on this selection. Ask me a variety of types of questions, for example multiple choice, true or false, and short answer. Wait for my response before moving on to the next question.","id":"quiz","targeting":"!provider|regExpMatch(\'gemini\')"}');
 pref("browser.ml.chat.provider", "");
+pref("browser.ml.chat.sidebar", true);
 
 pref("security.protectionspopup.recordEventTelemetry", true);
 pref("security.app_menu.recordEventTelemetry", true);
@@ -1995,6 +2020,10 @@ pref("identity.fxaccounts.commands.missed.fetch_interval", 86400);
 // Controls whether this client can send and receive "close tab"
 // commands from other FxA clients
 pref("identity.fxaccounts.commands.remoteTabManagement.enabled", false);
+
+// Controls whether or not the client association ping has values set on it
+// when the sync-ui-state:update notification fires.
+pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", false);
 
 // Note: when media.gmp-*.visible is true, provided we're running on a
 // supported platform/OS version, the corresponding CDM appears in the
@@ -2153,8 +2182,15 @@ pref("browser.contentblocking.reject-and-isolate-cookies.preferences.ui.enabled"
 //     "cookieBehaviorPBM3": cookie behaviour BEHAVIOR_LIMIT_FOREIGN
 //     "cookieBehaviorPBM4": cookie behaviour BEHAVIOR_REJECT_TRACKER
 //     "cookieBehaviorPBM5": cookie behaviour BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN
+//   Third-party cookie deprecation behavior:
+//     "3pcd": Third-party cookie deprecation enabled
+//     "-3pcd": Third-party cookie deprecation disabled
 // One value from each section must be included in the browser.contentblocking.features.strict pref.
+#ifdef NIGHTLY_BUILD
+pref("browser.contentblocking.features.strict", "tp,tpPrivate,cookieBehavior5,cookieBehaviorPBM5,cm,fp,stp,emailTP,emailTPPrivate,lvl2,rp,rpTop,ocsp,qps,qpsPBM,fpp,fppPrivate,3pcd");
+#else
 pref("browser.contentblocking.features.strict", "tp,tpPrivate,cookieBehavior5,cookieBehaviorPBM5,cm,fp,stp,emailTP,emailTPPrivate,lvl2,rp,rpTop,ocsp,qps,qpsPBM,fpp,fppPrivate");
+#endif
 
 // Hide the "Change Block List" link for trackers/tracking content in the custom
 // Content Blocking/ETP panel. By default, it will not be visible. There is also
@@ -2650,6 +2686,9 @@ pref("devtools.inspector.simple-highlighters-reduced-motion", false);
 // Wheter or not Enter on inplace editor in the Rules view moves focus and activates
 // next inplace editor.
 pref("devtools.inspector.rule-view.focusNextOnEnter", true);
+// Display @starting-style rules in the Rules view.
+// Should be removed when Bug 1905035 is fixed.
+pref("devtools.inspector.rule-view.starting-style", false);
 
 // Whether or not the box model panel is opened in the layout view
 pref("devtools.layout.boxmodel.opened", true);
@@ -2931,6 +2970,9 @@ pref("devtools.debugger.hide-ignored-sources", false);
 // about:devtools-toolbox tabs unusable by mistake.
 pref("devtools.popup.disable_autohide", false);
 
+// Add support for high contrast mode
+pref("devtools.high-contrast-mode-support", false);
+
 // FirstStartup service time-out in ms
 pref("first-startup.timeout", 30000);
 
@@ -3089,9 +3131,11 @@ pref("browser.backup.scheduled.enabled", false);
 // Pref to control the visibility of the backup section in about:preferences
 pref("browser.backup.preferences.ui.enabled", false);
 // The number of SQLite database pages to backup per step.
-pref("browser.backup.sqlite.pages_per_step", 5);
+pref("browser.backup.sqlite.pages_per_step", 50);
 // The delay between SQLite database backup steps in milliseconds.
-pref("browser.backup.sqlite.step_delay_ms", 250);
+pref("browser.backup.sqlite.step_delay_ms", 50);
+pref("browser.backup.scheduled.idle-threshold-seconds", 300);
+pref("browser.backup.scheduled.minimum-time-between-backups-seconds", 3600);
 
 // Pref to enable the new profiles
 pref("browser.profiles.enabled", false);
@@ -3100,6 +3144,8 @@ pref("startup.homepage_override_url_nimbus", "");
 // These prefs are referring to the Fx update version
 pref("startup.homepage_override_nimbus_maxVersion", "");
 pref("startup.homepage_override_nimbus_minVersion", "");
+// Pref to disable all What's New pages
+pref("startup.homepage_override_nimbus_disable_wnp", false);
 
 // Pref to enable the content relevancy feature.
 pref("toolkit.contentRelevancy.enabled", false);

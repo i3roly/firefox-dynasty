@@ -312,13 +312,15 @@ static TextureType ChooseTextureType(gfx::SurfaceFormat aFormat,
 #endif
 
 #ifdef XP_MACOSX
-  if (StaticPrefs::gfx_use_iosurface_textures_AtStartup()) {
+  if (StaticPrefs::gfx_use_iosurface_textures_AtStartup() &&
+      !aKnowsCompositor->UsingSoftwareWebRender()) {
     return TextureType::MacIOSurface;
   }
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID
-  if (StaticPrefs::gfx_use_surfacetexture_textures_AtStartup()) {
+  if (StaticPrefs::gfx_use_surfacetexture_textures_AtStartup() &&
+      !aKnowsCompositor->UsingSoftwareWebRender()) {
     return TextureType::AndroidNativeWindow;
   }
 #endif
@@ -375,9 +377,12 @@ TextureData* TextureData::Create(TextureForwarder* aAllocator,
   if (aAllocFlags & ALLOC_FORCE_REMOTE) {
     RefPtr<CanvasChild> canvasChild = aAllocator->GetCanvasChild();
     if (canvasChild) {
-      return new RecordedTextureData(canvasChild.forget(), aSize, aFormat,
-                                     textureType,
-                                     layers::TexTypeForWebgl(aKnowsCompositor));
+      TextureType webglTextureType = TexTypeForWebgl(aKnowsCompositor);
+      if (canvasChild->EnsureRecorder(aSize, aFormat, textureType,
+                                      webglTextureType)) {
+        return new RecordedTextureData(canvasChild.forget(), aSize, aFormat,
+                                       textureType, webglTextureType);
+      }
     }
     // If we must be remote, but there is no canvas child, then falling back
     // is not possible.
@@ -1489,6 +1494,7 @@ already_AddRefed<TextureClient> TextureClient::CreateForRawBufferAccess(
                            aMoz2DBackend == gfx::BackendType::DIRECT2D1_1,
                        "Unsupported TextureClient backend type");
 
+  // For future changes, check aAllocFlags aAllocFlags & ALLOC_DO_NOT_ACCELERATE
   TextureData* texData = BufferTextureData::Create(
       aSize, aFormat, gfx::BackendType::SKIA, aLayersBackend, aTextureFlags,
       aAllocFlags, aAllocator);
@@ -1608,8 +1614,9 @@ void TextureClient::GetSurfaceDescriptorRemoteDecoder(
   MOZ_RELEASE_ASSERT(mData);
   mData->GetSubDescriptor(&subDesc);
 
-  *aOutDesc =
-      SurfaceDescriptorRemoteDecoder(handle, std::move(subDesc), Nothing());
+  *aOutDesc = SurfaceDescriptorRemoteDecoder(
+      handle, std::move(subDesc), Nothing(),
+      SurfaceDescriptorRemoteDecoderId::GetNext());
 }
 
 class MemoryTextureReadLock : public NonBlockingTextureReadLock {

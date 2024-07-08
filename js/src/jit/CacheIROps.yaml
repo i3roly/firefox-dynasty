@@ -897,6 +897,22 @@
     obj: ObjId
     id: ValId
 
+- name: MegamorphicLoadSlotPermissiveResult
+  shared: true
+  transpile: true
+  cost_estimate: 4
+  args:
+    obj: ObjId
+    name: IdField
+
+- name: MegamorphicLoadSlotByValuePermissiveResult
+  shared: true
+  transpile: true
+  cost_estimate: 4
+  args:
+    obj: ObjId
+    id: ValId
+
 - name: MegamorphicStoreSlot
   shared: true
   transpile: true
@@ -1977,7 +1993,7 @@
     argc: Int32Id
     flags: CallFlagsImm
     argcFixed: UInt32Imm
-    funcExport: RawPointerField
+    funcType: RawPointerField
     instance: ObjectField
 
 - name: GuardWasmArg

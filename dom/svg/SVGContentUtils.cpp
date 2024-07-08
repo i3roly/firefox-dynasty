@@ -873,10 +873,9 @@ float SVGContentUtils::CoordToFloat(const SVGElement* aContent,
 }
 
 already_AddRefed<gfx::Path> SVGContentUtils::GetPath(
-    const nsAString& aPathString) {
-  SVGPathData pathData;
-  SVGPathDataParser parser(aPathString, &pathData);
-  if (!parser.Parse()) {
+    const nsACString& aPathString) {
+  SVGPathData pathData(aPathString);
+  if (pathData.IsEmpty()) {
     return nullptr;
   }
 
@@ -885,7 +884,9 @@ already_AddRefed<gfx::Path> SVGContentUtils::GetPath(
   RefPtr<PathBuilder> builder =
       drawTarget->CreatePathBuilder(FillRule::FILL_WINDING);
 
-  return pathData.BuildPath(builder, StyleStrokeLinecap::Butt, 1);
+  // This is called from canvas, so we don't need to get the effective zoom here
+  // or so.
+  return pathData.BuildPath(builder, StyleStrokeLinecap::Butt, 1, 1.0f);
 }
 
 bool SVGContentUtils::ShapeTypeHasNoCorners(const nsIContent* aContent) {

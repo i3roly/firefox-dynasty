@@ -52,7 +52,11 @@ export default class TabHoverPreviewPanel {
 
   getPrettyURI(uri) {
     try {
-      const url = new URL(uri);
+      let url = new URL(uri);
+      if (url.protocol == "about:" && url.pathname == "reader") {
+        url = new URL(url.searchParams.get("url"));
+      }
+
       if (url.protocol === "about:") {
         return url.href;
       }
@@ -112,7 +116,7 @@ export default class TabHoverPreviewPanel {
 
     this._thumbnailElement = null;
     this._maybeRequestThumbnail();
-    if (this._panel.state == "open") {
+    if (this._panel.state == "open" || this._panel.state == "showing") {
       this._updatePreview();
     }
     if (this._timer) {
@@ -157,13 +161,7 @@ export default class TabHoverPreviewPanel {
         this._updatePreview();
         break;
       case "TabSelect":
-        if (
-          this._thumbnailElement &&
-          !this._hasValidThumbnailState(this._tab)
-        ) {
-          this._thumbnailElement.remove();
-          this._thumbnailElement = null;
-        }
+        this.deactivate();
         break;
     }
   }

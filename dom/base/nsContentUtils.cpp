@@ -425,6 +425,7 @@ nsIXPConnect* nsContentUtils::sXPConnect;
 nsIScriptSecurityManager* nsContentUtils::sSecurityManager;
 nsIPrincipal* nsContentUtils::sSystemPrincipal;
 nsIPrincipal* nsContentUtils::sNullSubjectPrincipal;
+nsIPrincipal* nsContentUtils::sFingerprintingProtectionPrincipal;
 nsIConsoleService* nsContentUtils::sConsoleService;
 
 static nsTHashMap<RefPtr<nsAtom>, EventNameMapping>* sAtomEventTable;
@@ -817,6 +818,15 @@ nsresult nsContentUtils::Init() {
   }
 
   nullPrincipal.forget(&sNullSubjectPrincipal);
+
+  RefPtr<nsIPrincipal> fingerprintingProtectionPrincipal =
+      BasePrincipal::CreateContentPrincipal(
+          "about:fingerprintingprotection"_ns);
+  if (!fingerprintingProtectionPrincipal) {
+    return NS_ERROR_FAILURE;
+  }
+
+  fingerprintingProtectionPrincipal.forget(&sFingerprintingProtectionPrincipal);
 
   if (!InitializeEventTable()) return NS_ERROR_FAILURE;
 
@@ -1972,6 +1982,7 @@ void nsContentUtils::Shutdown() {
   NS_IF_RELEASE(sSecurityManager);
   NS_IF_RELEASE(sSystemPrincipal);
   NS_IF_RELEASE(sNullSubjectPrincipal);
+  NS_IF_RELEASE(sFingerprintingProtectionPrincipal);
 
   sBidiKeyboard = nullptr;
 
@@ -2555,8 +2566,7 @@ bool nsContentUtils::ShouldResistFingerprinting_dangerous(
     const char* aJustification, RFPTarget aTarget) {
   // With this check, we can ensure that the prefs and target say yes, so only
   // an exemption would cause us to return false.
-  bool isPBM = aOriginAttributes.mPrivateBrowsingId !=
-               nsIScriptSecurityManager::DEFAULT_PRIVATE_BROWSING_ID;
+  bool isPBM = aOriginAttributes.IsPrivateBrowsing();
   if (!ShouldResistFingerprinting_("Positive return check", isPBM, aTarget)) {
     MOZ_LOG(nsContentUtils::ResistFingerprintingLog(), LogLevel::Debug,
             ("Inside ShouldResistFingerprinting_dangerous(nsIURI*,"
@@ -2575,8 +2585,7 @@ bool nsContentUtils::ShouldResistFingerprinting_dangerous(
     // If neither of the 'regular' RFP prefs are set, then one (or both)
     // of the PBM-Only prefs are set (or we would have failed the
     // Positive return check.)  Therefore, if we are not in PBM, return false
-    if (aOriginAttributes.mPrivateBrowsingId ==
-        nsIScriptSecurityManager::DEFAULT_PRIVATE_BROWSING_ID) {
+    if (!aOriginAttributes.IsPrivateBrowsing()) {
       MOZ_LOG(nsContentUtils::ResistFingerprintingLog(), LogLevel::Debug,
               ("Inside ShouldResistFingerprinting_dangerous(nsIURI*,"
                " OriginAttributes) OA PBM Check said false"));
@@ -2626,8 +2635,7 @@ bool nsContentUtils::ShouldResistFingerprinting_dangerous(
       BasePrincipal::Cast(aPrincipal)->OriginAttributesRef();
   // With this check, we can ensure that the prefs and target say yes, so only
   // an exemption would cause us to return false.
-  bool isPBM = originAttributes.mPrivateBrowsingId !=
-               nsIScriptSecurityManager::DEFAULT_PRIVATE_BROWSING_ID;
+  bool isPBM = originAttributes.IsPrivateBrowsing();
   if (!ShouldResistFingerprinting_("Positive return check", isPBM, aTarget)) {
     MOZ_LOG(nsContentUtils::ResistFingerprintingLog(), LogLevel::Debug,
             ("Inside ShouldResistFingerprinting(nsIPrincipal*) Positive return "
@@ -2932,9 +2940,10 @@ nsresult nsContentUtils::GetInclusiveAncestors(nsINode* aNode,
 }
 
 // static
-nsresult nsContentUtils::GetInclusiveAncestorsAndOffsets(
-    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>* aAncestorNodes,
-    nsTArray<Maybe<uint32_t>>* aAncestorOffsets) {
+template <typename GetParentFunc>
+nsresult static GetInclusiveAncestorsAndOffsetsHelper(
+    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+    nsTArray<Maybe<uint32_t>>& aAncestorOffsets, GetParentFunc aGetParentFunc) {
   NS_ENSURE_ARG_POINTER(aNode);
 
   if (!aNode->IsContent()) {
@@ -2942,31 +2951,50 @@ nsresult nsContentUtils::GetInclusiveAncestorsAndOffsets(
   }
   nsIContent* content = aNode->AsContent();
 
-  if (!aAncestorNodes->IsEmpty()) {
+  if (!aAncestorNodes.IsEmpty()) {
     NS_WARNING("aAncestorNodes is not empty");
-    aAncestorNodes->Clear();
+    aAncestorNodes.Clear();
   }
 
-  if (!aAncestorOffsets->IsEmpty()) {
+  if (!aAncestorOffsets.IsEmpty()) {
     NS_WARNING("aAncestorOffsets is not empty");
-    aAncestorOffsets->Clear();
+    aAncestorOffsets.Clear();
   }
 
   // insert the node itself
-  aAncestorNodes->AppendElement(content);
-  aAncestorOffsets->AppendElement(Some(aOffset));
+  aAncestorNodes.AppendElement(content);
+  aAncestorOffsets.AppendElement(Some(aOffset));
 
   // insert all the ancestors
   nsIContent* child = content;
-  nsIContent* parent = child->GetParent();
+  nsIContent* parent = aGetParentFunc(child);
   while (parent) {
-    aAncestorNodes->AppendElement(parent);
-    aAncestorOffsets->AppendElement(parent->ComputeIndexOf(child));
+    aAncestorNodes.AppendElement(parent->AsContent());
+    aAncestorOffsets.AppendElement(parent->ComputeIndexOf(child));
     child = parent;
-    parent = parent->GetParent();
+    parent = aGetParentFunc(child);
   }
 
   return NS_OK;
+}
+
+nsresult nsContentUtils::GetInclusiveAncestorsAndOffsets(
+    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+    nsTArray<Maybe<uint32_t>>& aAncestorOffsets) {
+  return GetInclusiveAncestorsAndOffsetsHelper(
+      aNode, aOffset, aAncestorNodes, aAncestorOffsets,
+      [](nsIContent* aContent) { return aContent->GetParent(); });
+}
+
+nsresult nsContentUtils::GetShadowIncludingAncestorsAndOffsets(
+    nsINode* aNode, uint32_t aOffset, nsTArray<nsIContent*>& aAncestorNodes,
+    nsTArray<Maybe<uint32_t>>& aAncestorOffsets) {
+  return GetInclusiveAncestorsAndOffsetsHelper(
+      aNode, aOffset, aAncestorNodes, aAncestorOffsets,
+      [](nsIContent* aContent) -> nsIContent* {
+        return nsIContent::FromNodeOrNull(
+            aContent->GetParentOrShadowHostNode());
+      });
 }
 
 template <typename Node, typename GetParentFunc>
@@ -4490,7 +4518,7 @@ nsresult nsContentUtils::FormatLocalizedString(
     auto runnable = MakeRefPtr<FormatLocalizedStringRunnable>(
         workerPrivate, aFile, aKey, aParams, aResult);
 
-    runnable->Dispatch(Canceling, IgnoreErrors());
+    runnable->Dispatch(workerPrivate, Canceling, IgnoreErrors());
     return runnable->GetResult();
   }
 
@@ -6277,7 +6305,7 @@ void nsContentUtils::WarnScriptWasIgnored(Document* aDocument) {
       msg.AppendLiteral(" : ");
     }
     privateBrowsing =
-        !!aDocument->NodePrincipal()->OriginAttributesRef().mPrivateBrowsingId;
+        aDocument->NodePrincipal()->OriginAttributesRef().IsPrivateBrowsing();
     chromeContext = aDocument->NodePrincipal()->IsSystemPrincipal();
   }
 
@@ -6347,12 +6375,21 @@ void nsContentUtils::HidePopupsInDocument(Document* aDocument) {
 }
 
 /* static */
-already_AddRefed<nsIDragSession> nsContentUtils::GetDragSession() {
+already_AddRefed<nsIDragSession> nsContentUtils::GetDragSession(
+    nsIWidget* aWidget) {
   nsCOMPtr<nsIDragSession> dragSession;
   nsCOMPtr<nsIDragService> dragService =
       do_GetService("@mozilla.org/widget/dragservice;1");
-  if (dragService) dragService->GetCurrentSession(getter_AddRefs(dragSession));
+  if (dragService) {
+    dragSession = dragService->GetCurrentSession(aWidget);
+  }
   return dragSession.forget();
+}
+
+/* static */
+already_AddRefed<nsIDragSession> nsContentUtils::GetDragSession(
+    nsPresContext* aPC) {
+  return GetDragSession(aPC->GetRootWidget());
 }
 
 /* static */
@@ -6367,7 +6404,7 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
   NS_ASSERTION(aDragEvent->mMessage != eDragStart,
                "draggesture event created without a dataTransfer");
 
-  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
+  nsCOMPtr<nsIDragSession> dragSession = GetDragSession(aDragEvent->mWidget);
   NS_ENSURE_TRUE(dragSession, NS_OK);  // no drag in progress
 
   RefPtr<DataTransfer> initialDataTransfer = dragSession->GetDataTransfer();
@@ -7272,9 +7309,19 @@ nsContentUtils::FindInternalDocumentViewer(const nsACString& aType,
 }
 
 static void ReportPatternCompileFailure(nsAString& aPattern,
+                                        const JS::RegExpFlags& aFlags,
                                         const Document* aDocument,
                                         JS::MutableHandle<JS::Value> error,
                                         JSContext* cx) {
+  AutoTArray<nsString, 3> strings;
+
+  strings.AppendElement(aPattern);
+
+  std::stringstream flag_ss;
+  flag_ss << aFlags;
+  nsString* flagstr = strings.AppendElement();
+  AppendUTF8toUTF16(flag_ss.str(), *flagstr);
+
   JS::AutoSaveExceptionState savedExc(cx);
   JS::Rooted<JSObject*> exnObj(cx, &error.toObject());
   JS::Rooted<JS::Value> messageVal(cx);
@@ -7283,16 +7330,13 @@ static void ReportPatternCompileFailure(nsAString& aPattern,
   }
   JS::Rooted<JSString*> messageStr(cx, messageVal.toString());
   MOZ_ASSERT(messageStr);
-
-  AutoTArray<nsString, 2> strings;
-  strings.AppendElement(aPattern);
   if (!AssignJSString(cx, *strings.AppendElement(), messageStr)) {
     return;
   }
 
   nsContentUtils::ReportToConsole(nsIScriptError::errorFlag, "DOM"_ns,
                                   aDocument, nsContentUtils::eDOM_PROPERTIES,
-                                  "PatternAttributeCompileFailure", strings);
+                                  "PatternAttributeCompileFailurev2", strings);
   savedExc.drop();
 }
 
@@ -7326,7 +7370,7 @@ Maybe<bool> nsContentUtils::IsPatternMatching(const nsAString& aValue,
   }
 
   if (!error.isUndefined()) {
-    ReportPatternCompileFailure(aPattern, aDocument, &error, cx);
+    ReportPatternCompileFailure(aPattern, aFlags, aDocument, &error, cx);
     return Some(true);
   }
 
@@ -8836,30 +8880,48 @@ nsresult nsContentUtils::SendMouseEvent(
     aInputSourceArg = MouseEvent_Binding::MOZ_SOURCE_MOUSE;
   }
 
-  WidgetMouseEvent event(true, msg, widget,
-                         aIsWidgetEventSynthesized
-                             ? WidgetMouseEvent::eSynthesized
-                             : WidgetMouseEvent::eReal,
+  Maybe<WidgetPointerEvent> pointerEvent;
+  Maybe<WidgetMouseEvent> mouseEvent;
+  if (IsPointerEventMessage(msg)) {
+    MOZ_ASSERT(!aIsWidgetEventSynthesized,
+               "The event shouldn't be dispatched as a synthesized event");
+    if (MOZ_UNLIKELY(aIsWidgetEventSynthesized)) {
+      // `click`, `auxclick` nor `contextmenu` should not be dispatched as a
+      // synthesized event.
+      return NS_ERROR_INVALID_ARG;
+    }
+    pointerEvent.emplace(true, msg, widget,
                          contextMenuKey ? WidgetMouseEvent::eContextMenuKey
                                         : WidgetMouseEvent::eNormal);
-  event.pointerId = aIdentifier;
-  event.mModifiers = GetWidgetModifiers(aModifiers);
-  event.mButton = aButton;
-  event.mButtons = aButtons != nsIDOMWindowUtils::MOUSE_BUTTONS_NOT_SPECIFIED
-                       ? aButtons
-                   : msg == eMouseUp ? 0
-                                     : GetButtonsFlagForButton(aButton);
-  event.mPressure = aPressure;
-  event.mInputSource = aInputSourceArg;
-  event.mClickCount = aClickCount;
-  event.mFlags.mIsSynthesizedForTests = aIsDOMEventSynthesized;
-  event.mExitFrom = exitFrom;
+  } else {
+    mouseEvent.emplace(true, msg, widget,
+                       aIsWidgetEventSynthesized
+                           ? WidgetMouseEvent::eSynthesized
+                           : WidgetMouseEvent::eReal,
+                       contextMenuKey ? WidgetMouseEvent::eContextMenuKey
+                                      : WidgetMouseEvent::eNormal);
+  }
+  WidgetMouseEvent& mouseOrPointerEvent =
+      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+  mouseOrPointerEvent.pointerId = aIdentifier;
+  mouseOrPointerEvent.mModifiers = GetWidgetModifiers(aModifiers);
+  mouseOrPointerEvent.mButton = aButton;
+  mouseOrPointerEvent.mButtons =
+      aButtons != nsIDOMWindowUtils::MOUSE_BUTTONS_NOT_SPECIFIED ? aButtons
+      : msg == eMouseUp                                          ? 0
+                        : GetButtonsFlagForButton(aButton);
+  mouseOrPointerEvent.mPressure = aPressure;
+  mouseOrPointerEvent.mInputSource = aInputSourceArg;
+  mouseOrPointerEvent.mClickCount = aClickCount;
+  mouseOrPointerEvent.mFlags.mIsSynthesizedForTests = aIsDOMEventSynthesized;
+  mouseOrPointerEvent.mExitFrom = exitFrom;
 
   nsPresContext* presContext = aPresShell->GetPresContext();
   if (!presContext) return NS_ERROR_FAILURE;
 
-  event.mRefPoint = ToWidgetPoint(CSSPoint(aX, aY), offset, presContext);
-  event.mIgnoreRootScrollFrame = aIgnoreRootScrollFrame;
+  mouseOrPointerEvent.mRefPoint =
+      ToWidgetPoint(CSSPoint(aX, aY), offset, presContext);
+  mouseOrPointerEvent.mIgnoreRootScrollFrame = aIgnoreRootScrollFrame;
 
   nsEventStatus status = nsEventStatus_eIgnore;
   if (aToWindow) {
@@ -8869,17 +8931,18 @@ nsresult nsContentUtils::SendMouseEvent(
     if (!presShell || !view) {
       return NS_ERROR_FAILURE;
     }
-    return presShell->HandleEvent(view->GetFrame(), &event, false, &status);
+    return presShell->HandleEvent(view->GetFrame(), &mouseOrPointerEvent, false,
+                                  &status);
   }
   if (StaticPrefs::test_events_async_enabled()) {
-    status = widget->DispatchInputEvent(&event).mContentStatus;
+    status = widget->DispatchInputEvent(&mouseOrPointerEvent).mContentStatus;
   } else {
-    nsresult rv = widget->DispatchEvent(&event, status);
+    nsresult rv = widget->DispatchEvent(&mouseOrPointerEvent, status);
     NS_ENSURE_SUCCESS(rv, rv);
   }
   if (aPreventDefault) {
     if (status == nsEventStatus_eConsumeNoDefault) {
-      if (event.mFlags.mDefaultPreventedByContent) {
+      if (mouseOrPointerEvent.mFlags.mDefaultPreventedByContent) {
         *aPreventDefault = PreventDefaultResult::ByContent;
       } else {
         *aPreventDefault = PreventDefaultResult::ByChrome;
@@ -9882,11 +9945,9 @@ nsIDocShell* nsContentUtils::GetDocShellForEventTarget(EventTarget* aTarget) {
         do_QueryInterface(node->OwnerDoc()->GetScriptHandlingObject(ignore));
   } else if ((innerWindow = nsPIDOMWindowInner::FromEventTarget(aTarget))) {
     // Nothing else to do
-  } else {
-    nsCOMPtr<DOMEventTargetHelper> helper = do_QueryInterface(aTarget);
-    if (helper) {
-      innerWindow = helper->GetOwner();
-    }
+  } else if (nsCOMPtr<DOMEventTargetHelper> helper =
+                 do_QueryInterface(aTarget)) {
+    innerWindow = helper->GetOwnerWindow();
   }
 
   if (innerWindow) {

@@ -25,6 +25,7 @@
 #include "mozilla/dom/quota/DirectoryLockCategory.h"
 #include "mozilla/dom/quota/ForwardDecls.h"
 #include "mozilla/dom/quota/InitializationTypes.h"
+#include "mozilla/dom/quota/OriginOperationCallbacks.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "nsCOMPtr.h"
@@ -291,10 +292,9 @@ class QuotaManager final : public BackgroundThreadObject {
   // is resolved, there are no longer other strong references except the one
   // held by the resolve value itself. So it's up to client to add a new
   // reference in order to keep the lock alive.
-  // Unlocking is simply done by dropping all references to the lock object.
-  // In other words, protection which the lock represents dies with the lock
-  // object itself (Note that it's now possible to release directory locks
-  // sooner by calling newly added Drop method).
+  // Unlocking is simply done by calling lock object's Drop method. Unlocking
+  // must be always done explicitly before the lock object is destroyed (when
+  // the last strong reference is removed).
   RefPtr<ClientDirectoryLockPromise> OpenClientDirectory(
       const ClientMetadata& aClientMetadata,
       Maybe<RefPtr<ClientDirectoryLock>&> aPendingDirectoryLockOut = Nothing());
@@ -419,7 +419,9 @@ class QuotaManager final : public BackgroundThreadObject {
 
   RefPtr<BoolPromise> ClearStorage();
 
-  RefPtr<BoolPromise> ShutdownStorage();
+  RefPtr<BoolPromise> ShutdownStorage(
+      Maybe<OriginOperationCallbackOptions> aCallbackOptions = Nothing(),
+      Maybe<OriginOperationCallbacks&> aCallbacks = Nothing());
 
   void ShutdownStorageInternal();
 
@@ -443,6 +445,8 @@ class QuotaManager final : public BackgroundThreadObject {
     for (const auto& client : *mClients) {
       client->StartIdleMaintenance();
     }
+
+    NotifyMaintenanceStarted();
   }
 
   void StopIdleMaintenance() {
@@ -498,6 +502,8 @@ class QuotaManager final : public BackgroundThreadObject {
       const OriginMetadata& aOriginMetadata);
 
   void NotifyStoragePressure(uint64_t aUsage);
+
+  void NotifyMaintenanceStarted();
 
   // Record a quota client shutdown step, if shutting down.
   // Assumes that the QuotaManager singleton is alive.
@@ -803,7 +809,6 @@ class QuotaManager final : public BackgroundThreadObject {
   uint64_t mTemporaryStorageLimit;
   uint64_t mTemporaryStorageUsage;
   int64_t mNextDirectoryLockId;
-  uint64_t mShutdownStorageOpCount;
   bool mStorageInitialized;
   bool mTemporaryStorageInitialized;
   bool mTemporaryStorageInitializedInternal;

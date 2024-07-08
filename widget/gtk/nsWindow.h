@@ -169,7 +169,6 @@ class nsWindow final : public nsBaseWidget {
               bool aRepaint) override;
   bool IsEnabled() const override;
 
-  void SetZIndex(int32_t aZIndex) override;
   nsSizeMode SizeMode() override { return mSizeMode; }
   void SetSizeMode(nsSizeMode aMode) override;
   void GetWorkspaceID(nsAString& workspaceID) override;
@@ -799,7 +798,7 @@ class nsWindow final : public nsBaseWidget {
 
   InputRegion mInputRegion;
 
-  static bool DragInProgress(void);
+  bool DragInProgress(void);
 
   void DispatchMissedButtonReleases(GdkEventCrossing* aGdkEvent);
 

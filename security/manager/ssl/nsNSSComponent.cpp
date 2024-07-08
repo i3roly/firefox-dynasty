@@ -11,6 +11,7 @@
 #include "EnterpriseRoots.h"
 #include "ExtendedValidation.h"
 #include "NSSCertDBTrustDomain.h"
+#include "PKCS11ModuleDB.h"
 #include "SSLTokensCache.h"
 #include "ScopedNSSTypes.h"
 #include "SharedSSLState.h"
@@ -49,7 +50,6 @@
 #include "nsDirectoryServiceDefs.h"
 #include "nsICertOverrideService.h"
 #include "nsIFile.h"
-#include "nsILocalFileWin.h"
 #include "nsIOService.h"
 #include "nsIObserverService.h"
 #include "nsIPrompt.h"
@@ -81,10 +81,6 @@
 #if defined(XP_LINUX) && !defined(ANDROID)
 #  include <linux/magic.h>
 #  include <sys/vfs.h>
-#endif
-
-#ifdef XP_WIN
-#  include "nsILocalFileWin.h"
 #endif
 
 using namespace mozilla;
@@ -615,7 +611,7 @@ void AsyncLoadOrUnloadOSClientCertsModule(bool load) {
     Unused << task->Dispatch();
   } else {
     UniqueSECMODModule osClientCertsModule(
-        SECMOD_FindModule(kOSClientCertsModuleName));
+        SECMOD_FindModule(kOSClientCertsModuleName.get()));
     if (osClientCertsModule) {
       SECMOD_UnloadUserModule(osClientCertsModule.get());
     }
@@ -1316,14 +1312,8 @@ static nsresult GetNSSProfilePath(nsAutoCString& aProfilePath) {
 #if defined(XP_WIN)
   // SQLite always takes UTF-8 file paths regardless of the current system
   // code page.
-  nsCOMPtr<nsILocalFileWin> profileFileWin(do_QueryInterface(profileFile));
-  if (!profileFileWin) {
-    MOZ_LOG(gPIPNSSLog, LogLevel::Error,
-            ("Could not get nsILocalFileWin for profile directory.\n"));
-    return NS_ERROR_FAILURE;
-  }
   nsAutoString u16ProfilePath;
-  rv = profileFileWin->GetPath(u16ProfilePath);
+  rv = profileFile->GetPath(u16ProfilePath);
   CopyUTF16toUTF8(u16ProfilePath, aProfilePath);
 #else
   rv = profileFile->GetNativePath(aProfilePath);

@@ -453,10 +453,9 @@ class CodeGenerator final : public CodeGeneratorSpecific {
   uint32_t zoneStubsToReadBarrier_;
 
 #ifdef FUZZING_JS_FUZZILLI
-  void emitFuzzilliHashDouble(FloatRegister floatDouble, Register scratch,
-                              Register output);
   void emitFuzzilliHashObject(LInstruction* lir, Register obj, Register output);
-  void emitFuzzilliHashBigInt(Register bigInt, Register output);
+  void emitFuzzilliHashBigInt(LInstruction* lir, Register bigInt,
+                              Register output);
 #endif
 
 #define LIR_OP(op) void visit##op(L##op* ins);
@@ -496,11 +495,6 @@ class CodeGenerator final : public CodeGeneratorSpecific {
   // Return true if the fuse is intact, andd if the fuse is intact note the
   // dependency
   bool hasSeenObjectEmulateUndefinedFuseIntactAndDependencyNoted() {
-    if (!JS::Prefs::use_emulates_undefined_fuse()) {
-      // if we're not active, simply pretend the fuse is popped.
-      return false;
-    }
-
     bool intact = gen->outerInfo().hasSeenObjectEmulateUndefinedFuseIntact();
     if (intact) {
       addHasSeenObjectEmulateUndefinedFuseDependency();

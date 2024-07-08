@@ -549,7 +549,7 @@ bool ContentSecurityPolicyAllows(JSContext* aCx, JS::RuntimeCode aKind,
                                         scriptSample);
 
     ErrorResult rv;
-    runnable->Dispatch(Killing, rv);
+    runnable->Dispatch(worker, Killing, rv);
     if (NS_WARN_IF(rv.Failed())) {
       rv.SuppressException();
     }
@@ -1746,6 +1746,19 @@ void RuntimeService::CancelWorkersForWindow(const nsPIDOMWindowInner& aWindow) {
   }
 }
 
+void RuntimeService::UpdateWorkersBackgroundState(
+    const nsPIDOMWindowInner& aWindow, bool aIsBackground) {
+  AssertIsOnMainThread();
+  for (WorkerPrivate* const worker : GetWorkersForWindow(aWindow)) {
+    MOZ_ASSERT(!worker->IsSharedWorker());
+    if (aIsBackground) {
+      worker->SetIsRunningInBackground();
+    } else {
+      worker->SetIsRunningInForeground();
+    }
+  }
+}
+
 void RuntimeService::FreezeWorkersForWindow(const nsPIDOMWindowInner& aWindow) {
   AssertIsOnMainThread();
 
@@ -2043,14 +2056,15 @@ void RuntimeService::DumpRunningWorkers() {
 
 bool LogViolationDetailsRunnable::MainThreadRun() {
   AssertIsOnMainThread();
+  MOZ_ASSERT(mWorkerRef);
 
-  nsIContentSecurityPolicy* csp = mWorkerPrivate->GetCsp();
+  nsIContentSecurityPolicy* csp = mWorkerRef->Private()->GetCsp();
   if (csp) {
     csp->LogViolationDetails(mViolationType,
                              nullptr,  // triggering element
-                             mWorkerPrivate->CSPEventListener(), mFileName,
-                             mScriptSample, mLineNum, mColumnNum, u""_ns,
-                             u""_ns);
+                             mWorkerRef->Private()->CSPEventListener(),
+                             mFileName, mScriptSample, mLineNum, mColumnNum,
+                             u""_ns, u""_ns);
   }
 
   return true;
@@ -2204,19 +2218,15 @@ WorkerThreadPrimaryRunnable::Run() {
     // Check sentinels if we actually removed all global scope references.
     // In case use the earlier set-aside raw pointers to not mess with the
     // ref counting after the cycle collector has gone away.
-    if (globalScopeSentinel) {
-      MOZ_ASSERT(!globalScopeSentinel->IsAlive());
-      if (NS_WARN_IF(globalScopeSentinel->IsAlive())) {
-        globalScopeRawPtr->NoteWorkerTerminated();
-        globalScopeRawPtr = nullptr;
-      }
+    if (NS_WARN_IF(globalScopeSentinel && globalScopeSentinel->IsAlive())) {
+      MOZ_ASSERT_UNREACHABLE("WorkerGlobalScope alive after worker shutdown");
+      globalScopeRawPtr->NoteWorkerTerminated();
+      globalScopeRawPtr = nullptr;
     }
-    if (debuggerScopeSentinel) {
-      MOZ_ASSERT(!debuggerScopeSentinel->IsAlive());
-      if (NS_WARN_IF(debuggerScopeSentinel->IsAlive())) {
-        debuggerScopeRawPtr->NoteWorkerTerminated();
-        debuggerScopeRawPtr = nullptr;
-      }
+    if (NS_WARN_IF(debuggerScopeSentinel && debuggerScopeSentinel->IsAlive())) {
+      MOZ_ASSERT_UNREACHABLE("Debugger global alive after worker shutdown");
+      debuggerScopeRawPtr->NoteWorkerTerminated();
+      debuggerScopeRawPtr = nullptr;
     }
   }
 
@@ -2266,6 +2276,15 @@ void CancelWorkersForWindow(const nsPIDOMWindowInner& aWindow) {
   RuntimeService* runtime = RuntimeService::GetService();
   if (runtime) {
     runtime->CancelWorkersForWindow(aWindow);
+  }
+}
+
+void UpdateWorkersBackgroundState(const nsPIDOMWindowInner& aWindow,
+                                  bool aIsBackground) {
+  AssertIsOnMainThread();
+  RuntimeService* runtime = RuntimeService::GetService();
+  if (runtime) {
+    runtime->UpdateWorkersBackgroundState(aWindow, aIsBackground);
   }
 }
 

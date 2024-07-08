@@ -3026,32 +3026,12 @@
     "kind": "boolean",
     "description": "Whether or not a new alt-svc mapping would change the target hostname of the existing mapping"
   },
-  "HTTP_SCHEME_UPGRADE_TYPE": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["seceng-telemetry@mozilla.com", "freddyb@mozilla.com"],
-    "bug_numbers": [1340021, 1435733, 1722895],
-    "releaseChannelCollection": "opt-out",
-    "expires_in_version": "never",
-    "kind": "categorical",
-    "labels": [
-      "AlreadyHTTPS",
-      "NoReasonToUpgrade",
-      "PrefBlockedSTS",
-      "STS",
-      "CSP",
-      "BrowserDisplay",
-      "HTTPSOnly",
-      "HTTPSFirst"
-    ],
-    "description": "Was the URL upgraded to HTTPS?"
-  },
   "HTTP_RESPONSE_STATUS_CODE": {
     "record_in_processes": ["main", "content"],
     "products": ["firefox", "fennec"],
     "alert_emails": ["smayya@mozilla.com"],
     "bug_numbers": [1896350],
-    "expires_in_version": "134",
+    "expires_in_version": "never",
     "kind": "enumerated",
     "n_values": 12,
     "description": "Http response status (0=200, 1=301, 2=302, 3=304, 4=307, 5=308, 6=400, 7=401, 8=403, 9=404, 10=500, 11=other)"
@@ -14019,18 +13999,6 @@
     "releaseChannelCollection": "opt-out",
     "record_into_store": ["main"]
   },
-  "PWMGR_NUM_FORM_HAS_POSSIBLE_USERNAME_EVENT_PER_DOC": {
-    "record_in_processes": ["content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "130",
-    "kind": "linear",
-    "high": 21,
-    "n_buckets": 20,
-    "bug_numbers": [1708455, 1791929, 1822724],
-    "description": "The number of documents that receive >= bucket number 'DOMFormHasPossibleUsernameEvent' event",
-    "alert_emails": ["passwords-dev@mozilla.org"],
-    "releaseChannelCollection": "opt-out"
-  },
   "PWMGR_NUM_SAVED_PASSWORDS": {
     "record_in_processes": ["main"],
     "products": ["firefox", "fennec", "thunderbird"],
@@ -17180,19 +17148,6 @@
     "keyed": true,
     "description": "The time between navigationStart and the first contentful paint of a foreground http or https root content document, in milliseconds. The contentful paint timestamp is taken during display list building and does not include rasterization or compositing of that paint. This is collected only on page load where the main document uses or supports Early Hints preload."
   },
-  "EH_PERF_CHANNEL_COMPLETION_TIME": {
-    "record_in_processes": ["content"],
-    "products": ["firefox"],
-    "alert_emails": ["necko@mozilla.com", "kershaw@mozilla.com"],
-    "expires_in_version": "130",
-    "releaseChannelCollection": "opt-out",
-    "kind": "exponential",
-    "high": 50000,
-    "n_buckets": 100,
-    "bug_numbers": [1838406],
-    "keyed": true,
-    "description": "The time between AsyncOpen and OnStopRequest for Early Hints preload request."
-  },
   "FX_PICTURE_IN_PICTURE_WINDOW_OPEN_DURATION": {
     "record_in_processes": ["main"],
     "products": ["firefox"],
@@ -17383,5 +17338,17 @@
     "n_buckets": 50,
     "bug_numbers": [1589554],
     "description": "Battery level when discharging and the wake lock was released"
+  },
+  "BROWSER_BACKUP_TOTAL_BACKUP_SIZE": {
+    "record_in_processes": ["main"],
+    "alert_emails": "mconley@mozilla.com",
+    "products": ["firefox"],
+    "expires_in_version": "never",
+    "kind": "exponential",
+    "low": 1,
+    "high": 10240,
+    "n_buckets": 50,
+    "bug_numbers": [1887765],
+    "description": "The total uncompressed size of all profile data included in a completed backup, in mebibytes"
   }
 }

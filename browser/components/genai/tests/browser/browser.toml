@@ -1,1 +1,12 @@
+[DEFAULT]
+prefs = [
+  "browser.ml.chat.enabled=true",
+  "browser.ml.chat.openSidebarOnProviderChange=false",
+  "browser.preferences.experimental=true",
+]
+
 ["browser_chat_contextmenu.js"]
+["browser_chat_request.js"]
+["browser_chat_sidebar.js"]
+["browser_chat_telemetry.js"]
+["browser_genai_init.js"]

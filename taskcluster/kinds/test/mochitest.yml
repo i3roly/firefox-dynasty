@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ---
-job-defaults:
+task-defaults:
     suite:
         category: mochitest
     target:
@@ -69,7 +69,7 @@ mochitest-plain:
                 by-test-platform:
                     .*(asan|ccov|wayland).*: []
                     linux1804-64(-shippable)?-qr/opt: ['trunk']
-                    windows11-64.*(-shippable)?-qr/opt: ['trunk']
+                    windows11-64.*(-shippable)?-qr/opt: []
                     default: []
             xorigin:
                 by-test-platform:

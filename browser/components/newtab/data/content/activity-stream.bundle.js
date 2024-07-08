@@ -103,10 +103,6 @@ for (const type of [
   "ADDONS_INFO_REQUEST",
   "ADDONS_INFO_RESPONSE",
   "ARCHIVE_FROM_POCKET",
-  "AS_ROUTER_INITIALIZED",
-  "AS_ROUTER_PREF_CHANGED",
-  "AS_ROUTER_TARGETING_UPDATE",
-  "AS_ROUTER_TELEMETRY_USER_EVENT",
   "BLOCK_URL",
   "BOOKMARK_URL",
   "CLEAR_PREF",
@@ -159,6 +155,7 @@ for (const type of [
   "HANDOFF_SEARCH_TO_AWESOMEBAR",
   "HIDE_PERSONALIZE",
   "HIDE_PRIVACY_INFO",
+  "HIDE_TOAST_MESSAGE",
   "INIT",
   "NEW_TAB_INIT",
   "NEW_TAB_INITIAL_STATE",
@@ -182,6 +179,8 @@ for (const type of [
   "POCKET_CTA",
   "POCKET_LINK_DELETED_OR_ARCHIVED",
   "POCKET_LOGGED_IN",
+  "POCKET_THUMBS_DOWN",
+  "POCKET_THUMBS_UP",
   "POCKET_WAITING_FOR_SPOC",
   "PREFS_INITIAL_VALUES",
   "PREF_CHANGED",
@@ -209,6 +208,7 @@ for (const type of [
   "SHOW_PERSONALIZE",
   "SHOW_PRIVACY_INFO",
   "SHOW_SEARCH",
+  "SHOW_TOAST_MESSAGE",
   "SKIPPED_SIGNIN",
   "SOV_UPDATED",
   "SUBMIT_EMAIL",
@@ -399,20 +399,6 @@ function DiscoveryStreamUserEvent(data) {
 }
 
 /**
- * ASRouterUserEvent - A telemetry ping indicating a user action from AS router. This should only
- *                     be sent from the UI during a user session.
- *
- * @param  {object} data Fields to include in the ping (source, etc.)
- * @return {object} An AlsoToMain action
- */
-function ASRouterUserEvent(data) {
-  return AlsoToMain({
-    type: actionTypes.AS_ROUTER_TELEMETRY_USER_EVENT,
-    data,
-  });
-}
-
-/**
  * ImpressionStats - A telemetry ping indicating an impression stats.
  *
  * @param  {object} data Fields to include in the ping
@@ -485,7 +471,6 @@ const actionCreators = {
   BroadcastToContent,
   UserEvent,
   DiscoveryStreamUserEvent,
-  ASRouterUserEvent,
   ImpressionStats,
   AlsoToOneContent,
   OnlyToOneContent,
@@ -1558,8 +1543,16 @@ const LinkMenuOptions = {
         url: site.original_url || site.open_url || site.url,
         // pocket_id is only for pocket stories being in highlights, and then dismissed.
         pocket_id: site.pocket_id,
+        tile_id: site.tile_id,
+        recommendation_id: site.recommendation_id,
+        scheduled_corpus_item_id: site.scheduled_corpus_item_id,
+        received_rank: site.received_rank,
+        recommended_at: site.recommended_at,
         // used by PlacesFeed and TopSitesFeed for sponsored top sites blocking.
         isSponsoredTopSite: site.sponsored_position,
+        type: site.type,
+        card_type: site.card_type,
+        ...(site.shim && site.shim.delete ? { shim: site.shim.delete } : {}),
         ...(site.flight_id ? { flight_id: site.flight_id } : {}),
         // If not sponsored, hostname could be anything (Cat3 Data!).
         // So only put in advertiser_name for sponsored topsites.
@@ -2048,9 +2041,15 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
         url: this.props.url,
         guid: this.props.id,
         pocket_id: this.props.pocket_id,
+        card_type: this.props.card_type,
         shim: this.props.shim,
         bookmarkGuid: this.props.bookmarkGuid,
-        flight_id: this.props.flightId
+        flight_id: this.props.flightId,
+        tile_id: this.props.tile_id,
+        recommendation_id: this.props.recommendation_id,
+        scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+        recommended_at: this.props.recommended_at,
+        received_rank: this.props.received_rank
       }
     })));
   }
@@ -2188,7 +2187,10 @@ class ImpressionStats_ImpressionStats extends (external_React_default()).PureCom
             shim: link.shim
           } : {}),
           recommendation_id: link.recommendation_id,
-          fetchTimestamp: link.fetchTimestamp
+          fetchTimestamp: link.fetchTimestamp,
+          scheduled_corpus_item_id: link.scheduled_corpus_item_id,
+          recommended_at: link.recommended_at,
+          received_rank: link.received_rank
         })),
         firstVisibleTimestamp: this.props.firstVisibleTimestamp
       }));
@@ -2722,6 +2724,7 @@ const DSMessageFooter = props => {
 
 
 
+
 const READING_WPM = 220;
 
 /**
@@ -2789,7 +2792,11 @@ const DefaultMeta = ({
   saveToPocketCard,
   ctaButtonVariant,
   dispatch,
-  spocMessageVariant
+  spocMessageVariant,
+  mayHaveThumbsUpDown,
+  onThumbsUpClick,
+  onThumbsDownClick,
+  state
 }) => /*#__PURE__*/external_React_default().createElement("div", {
   className: "meta"
 }, /*#__PURE__*/external_React_default().createElement("div", {
@@ -2805,7 +2812,19 @@ const DefaultMeta = ({
   className: "title clamp"
 }, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
   className: "excerpt clamp"
-}, excerpt)), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
+}, excerpt)), mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement("div", {
+  className: "card-stp-thumbs-buttons-wrapper"
+}, !sponsor && /*#__PURE__*/external_React_default().createElement("div", {
+  className: "card-stp-thumbs-buttons"
+}, /*#__PURE__*/external_React_default().createElement("button", {
+  onClick: onThumbsUpClick,
+  className: `card-stp-thumbs-button icon icon-thumbs-up ${state.isThumbsUpActive ? "is-active" : null}`,
+  "data-l10n-id": "newtab-pocket-thumbs-up-tooltip"
+}), /*#__PURE__*/external_React_default().createElement("button", {
+  onClick: onThumbsDownClick,
+  className: `card-stp-thumbs-button icon icon-thumbs-down ${state.isThumbsDownActive ? "is-active" : null}`,
+  "data-l10n-id": "newtab-pocket-thumbs-down-tooltip"
+}))), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
   context_type: context_type,
   context: context,
   sponsor: sponsor,
@@ -2826,6 +2845,8 @@ class _DSCard extends (external_React_default()).PureComponent {
     this.onSaveClick = this.onSaveClick.bind(this);
     this.onMenuUpdate = this.onMenuUpdate.bind(this);
     this.onMenuShow = this.onMenuShow.bind(this);
+    this.onThumbsUpClick = this.onThumbsUpClick.bind(this);
+    this.onThumbsDownClick = this.onThumbsDownClick.bind(this);
     this.setContextMenuButtonHostRef = element => {
       this.contextMenuButtonHostElement = element;
     };
@@ -2833,7 +2854,9 @@ class _DSCard extends (external_React_default()).PureComponent {
       this.placeholderElement = element;
     };
     this.state = {
-      isSeen: false
+      isSeen: false,
+      isThumbsUpActive: false,
+      isThumbsDownActive: false
     };
 
     // If this is for the about:home startup cache, then we always want
@@ -2878,7 +2901,10 @@ class _DSCard extends (external_React_default()).PureComponent {
             shim: this.props.shim.click
           } : {}),
           fetchTimestamp: this.props.fetchTimestamp,
-          firstVisibleTimestamp: this.props.firstVisibleTimestamp
+          firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+          scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+          recommended_at: this.props.recommended_at,
+          received_rank: this.props.received_rank
         }
       }));
       this.props.dispatch(actionCreators.ImpressionStats({
@@ -2921,7 +2947,10 @@ class _DSCard extends (external_React_default()).PureComponent {
             shim: this.props.shim.save
           } : {}),
           fetchTimestamp: this.props.fetchTimestamp,
-          firstVisibleTimestamp: this.props.firstVisibleTimestamp
+          firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+          scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+          recommended_at: this.props.recommended_at,
+          received_rank: this.props.received_rank
         }
       }));
       this.props.dispatch(actionCreators.ImpressionStats({
@@ -2936,6 +2965,107 @@ class _DSCard extends (external_React_default()).PureComponent {
           recommendation_id: this.props.recommendation_id
         }]
       }));
+    }
+  }
+  onThumbsUpClick() {
+    // Toggle active state for thumbs up button to show CSS animation
+    const currentState = this.state.isThumbsUpActive;
+
+    // If thumbs up has been clicked already, do nothing.
+    if (currentState) {
+      return;
+    }
+    this.setState({
+      isThumbsUpActive: !currentState
+    });
+
+    // Record thumbs up telemetry event
+    this.props.dispatch(actionCreators.DiscoveryStreamUserEvent({
+      event: "POCKET_THUMBS_UP",
+      source: "THUMBS_UI",
+      value: {
+        recommendation_id: this.props.recommendation_id,
+        tile_id: this.props.id,
+        scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+        recommended_at: this.props.recommended_at,
+        received_rank: this.props.received_rank,
+        thumbs_up: true,
+        thumbs_down: false
+      }
+    }));
+
+    // Show Toast
+    this.props.dispatch(actionCreators.OnlyToOneContent({
+      type: actionTypes.SHOW_TOAST_MESSAGE,
+      data: {
+        showNotifications: true,
+        toastId: "thumbsUpToast"
+      }
+    }, "ActivityStream:Content"));
+  }
+  onThumbsDownClick() {
+    // Toggle active state for thumbs down button to show CSS animation
+    const currentState = this.state.isThumbsDownActive;
+    this.setState({
+      isThumbsDownActive: !currentState
+    });
+
+    // Run dismiss event after 0.5 second delay
+    if (this.props.dispatch && this.props.type && this.props.id && this.props.url) {
+      const index = this.props.pos;
+      const source = this.props.type.toUpperCase();
+      const spocData = {
+        url: this.props.url,
+        guid: this.props.id,
+        type: "CardGrid",
+        card_type: "organic",
+        recommendation_id: this.props.recommendation_id,
+        tile_id: this.props.id,
+        scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+        recommended_at: this.props.recommended_at,
+        received_rank: this.props.received_rank
+      };
+      const blockUrlOption = LinkMenuOptions.BlockUrl(spocData, index, source);
+      const {
+        action,
+        impression,
+        userEvent
+      } = blockUrlOption;
+      setTimeout(() => {
+        this.props.dispatch(action);
+        this.props.dispatch(actionCreators.DiscoveryStreamUserEvent({
+          event: userEvent,
+          source,
+          action_position: index
+        }));
+      }, 500);
+      if (impression) {
+        this.props.dispatch(impression);
+      }
+
+      // Record thumbs down telemetry event
+      this.props.dispatch(actionCreators.DiscoveryStreamUserEvent({
+        event: "POCKET_THUMBS_DOWN",
+        source: "THUMBS_UI",
+        value: {
+          recommendation_id: this.props.recommendation_id,
+          tile_id: this.props.id,
+          scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+          recommended_at: this.props.recommended_at,
+          received_rank: this.props.received_rank,
+          thumbs_up: false,
+          thumbs_down: true
+        }
+      }));
+
+      // Show Toast
+      this.props.dispatch(actionCreators.OnlyToOneContent({
+        type: actionTypes.SHOW_TOAST_MESSAGE,
+        data: {
+          showNotifications: true,
+          toastId: "thumbsDownToast"
+        }
+      }, "ActivityStream:Content"));
     }
   }
   onMenuUpdate(showContextMenu) {
@@ -3084,7 +3214,10 @@ class _DSCard extends (external_React_default()).PureComponent {
           shim: this.props.shim.impression
         } : {}),
         recommendation_id: this.props.recommendation_id,
-        fetchTimestamp: this.props.fetchTimestamp
+        fetchTimestamp: this.props.fetchTimestamp,
+        scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+        recommended_at: this.props.recommended_at,
+        received_rank: this.props.received_rank
       }],
       dispatch: this.props.dispatch,
       source: this.props.type,
@@ -3104,7 +3237,11 @@ class _DSCard extends (external_React_default()).PureComponent {
       saveToPocketCard: saveToPocketCard,
       ctaButtonVariant: ctaButtonVariant,
       dispatch: this.props.dispatch,
-      spocMessageVariant: this.props.spocMessageVariant
+      spocMessageVariant: this.props.spocMessageVariant,
+      mayHaveThumbsUpDown: this.props.mayHaveThumbsUpDown,
+      onThumbsUpClick: this.onThumbsUpClick,
+      onThumbsDownClick: this.onThumbsDownClick,
+      state: this.state
     }), /*#__PURE__*/external_React_default().createElement("div", {
       className: "card-stp-button-hover-background"
     }, /*#__PURE__*/external_React_default().createElement("div", {
@@ -3117,6 +3254,7 @@ class _DSCard extends (external_React_default()).PureComponent {
       title: this.props.title,
       source: source,
       type: this.props.type,
+      card_type: this.props.flightId ? "spoc" : "organic",
       pocket_id: this.props.pocket_id,
       shim: this.props.shim,
       bookmarkGuid: this.props.bookmarkGuid,
@@ -3126,7 +3264,12 @@ class _DSCard extends (external_React_default()).PureComponent {
       onMenuShow: this.onMenuShow,
       saveToPocketCard: saveToPocketCard,
       pocket_button_enabled: pocketButtonEnabled,
-      isRecentSave: isRecentSave
+      isRecentSave: isRecentSave,
+      recommendation_id: this.props.recommendation_id,
+      tile_id: this.props.id,
+      scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
+      recommended_at: this.props.recommended_at,
+      received_rank: this.props.received_rank
     }))));
   }
 }
@@ -3410,6 +3553,7 @@ const TopicsWidget = (0,external_ReactRedux_namespaceObject.connect)(state => ({
 
 
 const PREF_ONBOARDING_EXPERIENCE_DISMISSED = "discoverystream.onboardingExperience.dismissed";
+const PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
 const CardGrid_INTERSECTION_RATIO = 0.5;
 const CardGrid_VISIBLE = "visible";
 const CardGrid_VISIBILITY_CHANGE_EVENT = "visibilitychange";
@@ -3682,6 +3826,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
     } = DiscoveryStream;
     const showRecentSaves = prefs.showRecentSaves && recentSavesEnabled;
     const isOnboardingExperienceDismissed = prefs[PREF_ONBOARDING_EXPERIENCE_DISMISSED];
+    const mayHaveThumbsUpDown = prefs[PREF_THUMBS_UP_DOWN_ENABLED];
     const recs = this.props.data.recommendations.slice(0, items);
     const cards = [];
     let essentialReadsCards = [];
@@ -3720,7 +3865,11 @@ class _CardGrid extends (external_React_default()).PureComponent {
         ctaButtonVariant: ctaButtonVariant,
         spocMessageVariant: spocMessageVariant,
         recommendation_id: rec.recommendation_id,
-        firstVisibleTimestamp: this.props.firstVisibleTimestamp
+        firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+        mayHaveThumbsUpDown: mayHaveThumbsUpDown,
+        scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
+        recommended_at: rec.recommended_at,
+        received_rank: rec.received_rank
       }));
     }
     if (widgets?.positions?.length && widgets?.data?.length) {
@@ -5569,7 +5718,6 @@ const INITIAL_STATE = {
     isForStartupCache: false,
     customizeMenuVisible: false,
   },
-  ASRouter: { initialized: false },
   TopSites: {
     // Have we received real data from history yet?
     initialized: false,
@@ -5638,6 +5786,14 @@ const INITIAL_STATE = {
     isUserLoggedIn: false,
     recentSavesEnabled: false,
   },
+  Notifications: {
+    showNotifications: false,
+    toastCounter: 0,
+    toastId: "",
+    // This queue is reset each time SHOW_TOAST_MESSAGE is ran.
+    // For can be a queue in the future, but for now is one item
+    toastQueue: [],
+  },
   Personalization: {
     lastUpdated: null,
     initialized: false,
@@ -5693,15 +5849,6 @@ function App(prevState = INITIAL_STATE.App, action) {
       return Object.assign({}, prevState, {
         customizeMenuVisible: false,
       });
-    default:
-      return prevState;
-  }
-}
-
-function ASRouter(prevState = INITIAL_STATE.ASRouter, action) {
-  switch (action.type) {
-    case actionTypes.AS_ROUTER_INITIALIZED:
-      return { ...action.data, initialized: true };
     default:
       return prevState;
   }
@@ -6433,6 +6580,26 @@ function Wallpapers(prevState = INITIAL_STATE.Wallpapers, action) {
   }
 }
 
+function Notifications(prevState = INITIAL_STATE.Notifications, action) {
+  switch (action.type) {
+    case actionTypes.SHOW_TOAST_MESSAGE:
+      return {
+        ...prevState,
+        showNotifications: action.data.showNotifications,
+        toastCounter: prevState.toastCounter + 1,
+        toastId: action.data.toastId,
+        toastQueue: [action.data.toastId],
+      };
+    case actionTypes.HIDE_TOAST_MESSAGE:
+      return {
+        ...prevState,
+        showNotifications: action.data.showNotifications,
+      };
+    default:
+      return prevState;
+  }
+}
+
 function Weather(prevState = INITIAL_STATE.Weather, action) {
   switch (action.type) {
     case actionTypes.WEATHER_UPDATE:
@@ -6459,10 +6626,10 @@ function Weather(prevState = INITIAL_STATE.Weather, action) {
 const reducers = {
   TopSites,
   App,
-  ASRouter,
   Prefs,
   Dialog,
   Sections,
+  Notifications,
   Pocket,
   Personalization: Reducers_sys_Personalization,
   DiscoveryStream,
@@ -10225,7 +10392,7 @@ class _Weather extends (external_React_default()).PureComponent {
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "weatherNotAvailable"
     }, /*#__PURE__*/external_React_default().createElement("span", {
-      className: "icon icon-small-spacer icon-info-critical"
+      className: "icon icon-small-spacer icon-info-warning"
     }), " ", /*#__PURE__*/external_React_default().createElement("span", {
       "data-l10n-id": "newtab-weather-error-not-available"
     })));
@@ -10237,6 +10404,103 @@ const Weather_Weather = (0,external_ReactRedux_namespaceObject.connect)(state =>
   IntersectionObserver: globalThis.IntersectionObserver,
   document: globalThis.document
 }))(_Weather);
+;// CONCATENATED MODULE: ./content-src/components/Notifications/Toasts/ThumbsUpToast.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function ThumbsUpToast({
+  onDismissClick
+}) {
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "notification-feed-item is-success"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "icon icon-check-filled icon-themed"
+  }), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "notification-feed-item-text",
+    "data-l10n-id": "newtab-toast-thumbs-up-or-down"
+  }), /*#__PURE__*/external_React_default().createElement("button", {
+    onClick: onDismissClick,
+    className: "icon icon-dismiss",
+    "data-l10n-id": "newtab-toast-dismiss-button"
+  }));
+}
+
+;// CONCATENATED MODULE: ./content-src/components/Notifications/Toasts/ThumbsDownToast.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function ThumbsDownToast({
+  onDismissClick
+}) {
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "notification-feed-item is-success"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "icon icon-check-filled icon-themed"
+  }), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "notification-feed-item-text",
+    "data-l10n-id": "newtab-toast-thumbs-up-or-down"
+  }), /*#__PURE__*/external_React_default().createElement("button", {
+    onClick: onDismissClick,
+    className: "icon icon-dismiss",
+    "data-l10n-id": "newtab-toast-dismiss-button"
+  }));
+}
+
+;// CONCATENATED MODULE: ./content-src/components/Notifications/Notifications.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+
+
+
+
+function Notifications_Notifications({
+  dispatch
+}) {
+  const toastQueue = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Notifications.toastQueue);
+  const toastCounter = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Notifications.toastCounter);
+  const onDismissClick = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.OnlyToOneContent({
+      type: actionTypes.HIDE_TOAST_MESSAGE,
+      data: {
+        showNotifications: false
+      }
+    }, "ActivityStream:Content"));
+  }, [dispatch]);
+  const getToast = (0,external_React_namespaceObject.useCallback)(() => {
+    // Note: This architecture could expand to support multiple toast notifications at once
+    const latestToastItem = toastQueue[toastQueue.length - 1];
+    switch (latestToastItem) {
+      case "thumbsDownToast":
+        return /*#__PURE__*/external_React_default().createElement(ThumbsDownToast, {
+          onDismissClick: onDismissClick,
+          key: toastCounter
+        });
+      case "thumbsUpToast":
+        return /*#__PURE__*/external_React_default().createElement(ThumbsUpToast, {
+          onDismissClick: onDismissClick,
+          key: toastCounter
+        });
+      default:
+        throw new Error("No toast found");
+    }
+  }, [onDismissClick, toastCounter, toastQueue]);
+  (0,external_React_namespaceObject.useEffect)(() => {
+    getToast();
+  }, [toastQueue, getToast]);
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "notification-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("ul", {
+    className: "notification-feed"
+  }, getToast()));
+}
+
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/FeatureHighlight/WallpaperFeatureHighlight.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -10372,6 +10636,7 @@ function Base_extends() { Base_extends = Object.assign ? Object.assign.bind() : 
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -10742,7 +11007,8 @@ class BaseContent extends (external_React_default()).PureComponent {
     const {
       mayHaveSponsoredTopSites
     } = prefs;
-    const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["logowordmark.alwaysVisible"] && "visible-logo"].filter(v => v).join(" ");
+    const hasThumbsUpDownLayout = prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
+    const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", !prefs.showSearch && "no-search", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["logowordmark.alwaysVisible"] && "visible-logo", hasThumbsUpDownLayout && "thumbs-ui-compact"].filter(v => v).join(" ");
     if (wallpapersEnabled || wallpapersV2Enabled) {
       this.updateWallpaper();
     }
@@ -10782,7 +11048,9 @@ class BaseContent extends (external_React_default()).PureComponent {
       locale: props.App.locale,
       mayHaveSponsoredStories: mayHaveSponsoredStories,
       firstVisibleTimestamp: this.state.firstVisibleTimestamp
-    })) : /*#__PURE__*/external_React_default().createElement(Sections_Sections, null)), /*#__PURE__*/external_React_default().createElement(ConfirmDialog, null), wallpapersEnabled && this.renderWallpaperAttribution()), /*#__PURE__*/external_React_default().createElement("aside", null, weatherEnabled && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Weather_Weather, null)))));
+    })) : /*#__PURE__*/external_React_default().createElement(Sections_Sections, null)), /*#__PURE__*/external_React_default().createElement(ConfirmDialog, null), wallpapersEnabled && this.renderWallpaperAttribution()), /*#__PURE__*/external_React_default().createElement("aside", null, weatherEnabled && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Weather_Weather, null)), this.props.Notifications?.showNotifications && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Notifications_Notifications, {
+      dispatch: this.props.dispatch
+    })))));
   }
 }
 BaseContent.defaultProps = {
@@ -10793,6 +11061,7 @@ const Base = (0,external_ReactRedux_namespaceObject.connect)(state => ({
   Prefs: state.Prefs,
   Sections: state.Sections,
   DiscoveryStream: state.DiscoveryStream,
+  Notifications: state.Notifications,
   Search: state.Search,
   Wallpapers: state.Wallpapers,
   Weather: state.Weather

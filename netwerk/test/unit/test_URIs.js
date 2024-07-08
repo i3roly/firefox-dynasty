@@ -799,6 +799,59 @@ add_task(function check_space_escaping() {
   uri = Services.io.newURI("http://example.com/test%20path#test%20path");
 });
 
+add_task(function check_space_with_query_and_ref() {
+  let url = Services.io.newURI("data:space");
+  Assert.equal(url.spec, "data:space");
+
+  url = Services.io.newURI("data:space ?");
+  Assert.equal(url.spec, "data:space ?");
+  url = Services.io.newURI("data:space #");
+  Assert.equal(url.spec, "data:space #");
+
+  url = Services.io.newURI("data:space?");
+  Assert.equal(url.spec, "data:space?");
+  url = Services.io.newURI("data:space#");
+  Assert.equal(url.spec, "data:space#");
+
+  url = Services.io.newURI("data:space ?query");
+  Assert.equal(url.spec, "data:space ?query");
+  url = url.mutate().setQuery("").finalize();
+  Assert.equal(url.spec, "data:space");
+
+  url = Services.io.newURI("data:space #ref");
+  Assert.equal(url.spec, "data:space #ref");
+  url = url.mutate().setRef("").finalize();
+  Assert.equal(url.spec, "data:space");
+
+  url = Services.io.newURI("data:space?query#ref");
+  Assert.equal(url.spec, "data:space?query#ref");
+  url = url.mutate().setRef("").finalize();
+  Assert.equal(url.spec, "data:space?query");
+  url = url.mutate().setQuery("").finalize();
+  Assert.equal(url.spec, "data:space");
+
+  url = Services.io.newURI("data:space#ref?query");
+  Assert.equal(url.spec, "data:space#ref?query");
+  url = url.mutate().setQuery("").finalize();
+  Assert.equal(url.spec, "data:space#ref?query");
+  url = url.mutate().setRef("").finalize();
+  Assert.equal(url.spec, "data:space");
+
+  url = Services.io.newURI("data:space ?query#ref");
+  Assert.equal(url.spec, "data:space ?query#ref");
+  url = url.mutate().setRef("").finalize();
+  Assert.equal(url.spec, "data:space ?query");
+  url = url.mutate().setQuery("").finalize();
+  Assert.equal(url.spec, "data:space");
+
+  url = Services.io.newURI("data:space #ref?query");
+  Assert.equal(url.spec, "data:space #ref?query");
+  url = url.mutate().setQuery("").finalize();
+  Assert.equal(url.spec, "data:space #ref?query");
+  url = url.mutate().setRef("").finalize();
+  Assert.equal(url.spec, "data:space");
+});
+
 add_task(function check_schemeIsNull() {
   let uri = Services.io.newURI("data:text/plain,aaa");
   Assert.ok(!uri.schemeIs(null));
@@ -993,4 +1046,38 @@ add_task(async function test_bug1843717() {
   Assert.equal(uri.spec, "file:///abc/def/foo/bar#xy");
   uri = Services.io.newURI("foo\\bar#", null, base);
   Assert.equal(uri.spec, "file:///abc/def/foo/bar#");
+});
+
+add_task(async function test_bug1874118() {
+  let base = Services.io.newURI("file:///tmp/mock/path");
+  let uri = Services.io.newURI("file:c:\\\\foo\\\\bar.html", null, base);
+  Assert.equal(uri.spec, "file:///c://foo//bar.html");
+
+  base = Services.io.newURI("file:///tmp/mock/path");
+  uri = Services.io.newURI("file:c|\\\\foo\\\\bar.html", null, base);
+  Assert.equal(uri.spec, "file:///c://foo//bar.html");
+
+  base = Services.io.newURI("file:///C:/");
+  uri = Services.io.newURI("..", null, base);
+  Assert.equal(uri.spec, "file:///C:/");
+
+  base = Services.io.newURI("file:///");
+  uri = Services.io.newURI("C|/hello/../../", null, base);
+  Assert.equal(uri.spec, "file:///C:/");
+
+  base = Services.io.newURI("file:///");
+  uri = Services.io.newURI("/C:/../../", null, base);
+  Assert.equal(uri.spec, "file:///C:/");
+
+  base = Services.io.newURI("file:///");
+  uri = Services.io.newURI("/C://../../", null, base);
+  Assert.equal(uri.spec, "file:///C:/");
+
+  base = Services.io.newURI("file:///tmp/mock/path");
+  uri = Services.io.newURI("C|/foo/bar", null, base);
+  Assert.equal(uri.spec, "file:///C:/foo/bar");
+
+  base = Services.io.newURI("file:///tmp/mock/path");
+  uri = Services.io.newURI("/C|/foo/bar", null, base);
+  Assert.equal(uri.spec, "file:///C:/foo/bar");
 });

@@ -328,9 +328,9 @@ private:
     }
   }
 
-  // Convert SourceRange to "line-line".
+  // Convert SourceRange to "line-line" or "line".
   // In the resulting string rep, line is 1-based.
-  std::string lineRangeToString(SourceRange Range) {
+  std::string lineRangeToString(SourceRange Range, bool omitEnd = false) {
     std::pair<FileID, unsigned> Begin = SM.getDecomposedLoc(Range.getBegin());
     std::pair<FileID, unsigned> End = SM.getDecomposedLoc(Range.getEnd());
 
@@ -344,7 +344,37 @@ private:
       return "";
     }
 
+    if (omitEnd && Line1 == Line2) {
+      return stringFormat("%d", Line1);
+    }
+
     return stringFormat("%d-%d", Line1, Line2);
+  }
+
+  // Convert SourceRange to "PATH#line-line" or "PATH#line".
+  // If Range's file is same as fromFileID, PATH is omitted.
+  std::string pathAndLineRangeToString(FileID fromFileID, SourceRange Range) {
+    FileInfo* toFile = getFileInfo(Range.getBegin());
+    FileInfo* fromFile = FileMap.find(fromFileID)->second.get();
+
+    auto lineRange = lineRangeToString(Range, true);
+
+    if (lineRange.empty()) {
+      return "";
+    }
+
+    if (toFile == fromFile) {
+      return "#" + lineRange;
+    }
+
+    if (toFile->Realname.empty()) {
+      return "#" + lineRange;
+    }
+
+    std::string result = toFile->Realname;
+    result += "#";
+    result += lineRange;
+    return result;
   }
 
   // Convert SourceRange to "line:column-line:column".
@@ -1189,6 +1219,8 @@ public:
       J.attributeEnd();
     }
 
+    FileID structFileID = SM.getFileID(Loc);
+
     J.attributeBegin("fields");
     J.arrayBegin();
     uint64_t iField = 0;
@@ -1199,11 +1231,17 @@ public:
       CharUnits localOffsetBytes = C.toCharUnitsFromBits(localOffsetBits);
 
       J.objectBegin();
+      J.attribute("lineRange", pathAndLineRangeToString(structFileID, Field.getSourceRange()));
       J.attribute("pretty", getQualifiedName(&Field));
       J.attribute("sym", getMangledName(CurMangleContext, &Field));
+
       QualType FieldType = Field.getType();
       QualType CanonicalFieldType = FieldType.getCanonicalType();
-      J.attribute("type", CanonicalFieldType.getAsString());
+      LangOptions langOptions;
+      PrintingPolicy Policy(langOptions);
+      Policy.PrintCanonicalTypes = true;
+      J.attribute("type", CanonicalFieldType.getAsString(Policy));
+
       const TagDecl *tagDecl = CanonicalFieldType->getAsTagDecl();
       if (!tagDecl) {
         // Try again piercing any pointers/references involved.  Note that our
@@ -2216,6 +2254,9 @@ public:
   // with an identical string representation (which is a good reason to have
   // this helper, as it ensures identical representations).
   void visitHeuristicResult(SourceLocation Loc, const NamedDecl *ND) {
+    if (const UsingShadowDecl *USD = dyn_cast<UsingShadowDecl>(ND)) {
+      ND = USD->getTargetDecl();
+    }
     if (const TemplateDecl *TD = dyn_cast<TemplateDecl>(ND)) {
       ND = TD->getTemplatedDecl();
     }

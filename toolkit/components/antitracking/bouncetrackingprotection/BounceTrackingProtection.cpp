@@ -9,6 +9,7 @@
 #include "BounceTrackingState.h"
 #include "BounceTrackingRecord.h"
 #include "BounceTrackingMapEntry.h"
+#include "ClearDataCallback.h"
 
 #include "BounceTrackingStateGlobal.h"
 #include "ErrorList.h"
@@ -32,12 +33,18 @@
 #include "mozilla/dom/BrowsingContext.h"
 #include "xpcpublic.h"
 #include "mozilla/glean/GleanMetrics.h"
+#include "mozilla/ContentBlockingLog.h"
+#include "mozilla/glean/GleanPings.h"
+#include "mozilla/dom/WindowContext.h"
+#include "mozilla/dom/WindowGlobalChild.h"
+#include "mozilla/dom/WindowGlobalParent.h"
 
 #define TEST_OBSERVER_MSG_RECORD_BOUNCES_FINISHED "test-record-bounces-finished"
 
 namespace mozilla {
 
-NS_IMPL_ISUPPORTS(BounceTrackingProtection, nsIBounceTrackingProtection);
+NS_IMPL_ISUPPORTS(BounceTrackingProtection, nsIObserver,
+                  nsIBounceTrackingProtection);
 
 LazyLogModule gBounceTrackingProtectionLog("BounceTrackingProtection");
 
@@ -315,6 +322,39 @@ nsresult BounceTrackingProtection::RecordUserActivation(
                                            aActivationTime.valueOr(PR_Now()));
 }
 
+nsresult BounceTrackingProtection::RecordUserActivation(
+    dom::WindowContext* aWindowContext) {
+  NS_ENSURE_ARG_POINTER(aWindowContext);
+
+  if (XRE_IsContentProcess()) {
+    dom::WindowGlobalChild* wgc = aWindowContext->GetWindowGlobalChild();
+    NS_ENSURE_TRUE(wgc, NS_ERROR_FAILURE);
+    NS_ENSURE_TRUE(wgc->SendRecordUserActivationForBTP(), NS_ERROR_FAILURE);
+    return NS_OK;
+  }
+  MOZ_ASSERT(XRE_IsParentProcess());
+
+  dom::WindowGlobalParent* wgp = aWindowContext->Canonical();
+  MOZ_ASSERT(wgp);
+
+  NS_ENSURE_TRUE(wgp->RecvRecordUserActivationForBTP(), NS_ERROR_FAILURE);
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+BounceTrackingProtection::Observe(nsISupports* aSubject, const char* aTopic,
+                                  const char16_t* aData) {
+  MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Debug,
+          ("%s: aTopic: %s", __FUNCTION__, aTopic));
+
+  if (!strcmp(aTopic, "idle-daily")) {
+    // Submit custom telemetry ping.
+    glean_pings::BounceTrackingProtection.Submit();
+  }
+  return NS_OK;
+}
+
 NS_IMETHODIMP
 BounceTrackingProtection::TestGetBounceTrackerCandidateHosts(
     JS::Handle<JS::Value> aOriginAttributes, JSContext* aCx,
@@ -558,23 +598,56 @@ BounceTrackingProtection::PurgeBounceTrackers() {
                     ("%s: Done. Cleared %zu hosts.", __FUNCTION__,
                      aResults.ResolveValue().Length()));
 
+            if (!aResults.ResolveValue().IsEmpty()) {
+              glean::bounce_tracking_protection::num_hosts_per_purge_run
+                  .AccumulateSingleSample(aResults.ResolveValue().Length());
+            }
+
+            // Check if any clear call failed.
+            bool anyFailed = false;
+
             nsTArray<nsCString> purgedSiteHosts;
             // If any clear call failed reject.
             for (auto& result : aResults.ResolveValue()) {
               if (result.IsReject()) {
-                mPurgeInProgress = false;
-                return PurgeBounceTrackersMozPromise::CreateAndReject(
-                    NS_ERROR_FAILURE, __func__);
+                anyFailed = true;
+              } else {
+                purgedSiteHosts.AppendElement(result.ResolveValue());
               }
-              purgedSiteHosts.AppendElement(result.ResolveValue());
             }
 
-            // No clearing errors, resolve.
+            // Record successful purges via nsITrackingDBService for tracker
+            // stats.
+            if (purgedSiteHosts.Length() > 0) {
+              ReportPurgedTrackersToAntiTrackingDB(purgedSiteHosts);
+            }
 
             mPurgeInProgress = false;
+            // If any clear call failed reject the promise.
+            if (anyFailed) {
+              return PurgeBounceTrackersMozPromise::CreateAndReject(
+                  NS_ERROR_FAILURE, __func__);
+            }
+
             return PurgeBounceTrackersMozPromise::CreateAndResolve(
                 std::move(purgedSiteHosts), __func__);
           });
+}
+
+// static
+void BounceTrackingProtection::ReportPurgedTrackersToAntiTrackingDB(
+    const nsTArray<nsCString>& aPurgedSiteHosts) {
+  MOZ_ASSERT(!aPurgedSiteHosts.IsEmpty());
+
+  ContentBlockingLog log;
+  for (const nsCString& host : aPurgedSiteHosts) {
+    nsAutoCString origin("https://");
+    origin.Append(host);
+
+    log.RecordLogParent(
+        origin, nsIWebProgressListener::STATE_PURGED_BOUNCETRACKER, true);
+  }
+  log.ReportLog();
 }
 
 nsresult BounceTrackingProtection::PurgeBounceTrackersForStateGlobal(
@@ -666,10 +739,10 @@ nsresult BounceTrackingProtection::PurgeBounceTrackersForStateGlobal(
     }
 
     // No exception above applies, clear state for the given host.
-
     RefPtr<ClearDataMozPromise::Private> clearPromise =
         new ClearDataMozPromise::Private(__func__);
-    RefPtr<ClearDataCallback> cb = new ClearDataCallback(clearPromise, host);
+    RefPtr<ClearDataCallback> cb =
+        new ClearDataCallback(clearPromise, host, bounceTime);
 
     MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Info,
             ("%s: Purging bounce tracker. siteHost: %s, bounceTime: %" PRIu64

@@ -696,12 +696,20 @@ bool nsStandardURL::ValidIPv6orHostname(const char* host, uint32_t length) {
 }
 
 void nsStandardURL::CoalescePath(netCoalesceFlags coalesceFlag, char* path) {
-  net_CoalesceDirs(coalesceFlag, path);
+  auto resultCoalesceDirs = net_CoalesceDirs(coalesceFlag, path);
   int32_t newLen = strlen(path);
-  if (newLen < mPath.mLen) {
+  if (newLen < mPath.mLen && resultCoalesceDirs) {
+    // Obtain indicies for the last slash and end of basename
+    uint32_t lastSlash = resultCoalesceDirs->first();
+    uint32_t endOfBasename = resultCoalesceDirs->second();
+
     int32_t diff = newLen - mPath.mLen;
     mPath.mLen = newLen;
-    mDirectory.mLen += diff;
+    // directory length is until and upto the last slash
+    mDirectory.mLen = static_cast<int32_t>(lastSlash) + 1;
+    // basename length includes everything after the last slash until hash,
+    // query, or the null char
+    mBasename.mLen = static_cast<int32_t>(endOfBasename - mDirectory.mLen);
     mFilepath.mLen += diff;
     ShiftFromBasename(diff);
   }
@@ -1100,8 +1108,9 @@ nsresult nsStandardURL::BuildNormalizedSpec(const char* spec,
   // https://url.spec.whatwg.org/#windows-drive-letter
   if (SegmentIs(buf, mScheme, "file")) {
     char* path = &buf[mPath.mPos];
+    // To account for cases like file:///w|/m and file:///c|
     if (mPath.mLen >= 3 && path[0] == '/' && IsAsciiAlpha(path[1]) &&
-        path[2] == '|') {
+        path[2] == '|' && (mPath.mLen == 3 || path[3] == '/')) {
       buf[mPath.mPos + 2] = ':';
     }
   }
@@ -2673,6 +2682,17 @@ nsStandardURL::Resolve(const nsACString& in, nsACString& out) {
   scheme.mPos = schemePos;
   scheme.mLen = schemeLen;
 
+  // Bug 1873976: For cases involving file:c: against file:
+  if (NS_SUCCEEDED(rv) && protocol == "file"_ns && baseProtocol == "file"_ns) {
+    const char* path = buf.get() + scheme.mPos + scheme.mLen;
+    // For instance: file:c:\foo\bar.html against file:///tmp/mock/path
+    if (path[0] == ':' && IsAsciiAlpha(path[1]) &&
+        (path[2] == ':' || path[2] == '|')) {
+      out = buf;
+      return NS_OK;
+    }
+  }
+
   protocol.Assign(Segment(scheme));
 
   // We need to do backslash replacement for the following cases:
@@ -2767,7 +2787,13 @@ nsStandardURL::Resolve(const nsACString& in, nsACString& out) {
         }
         break;
       default:
-        if (coalesceFlag & NET_COALESCE_DOUBLE_SLASH_IS_ROOT) {
+        if (protocol.IsEmpty() && Scheme() == "file" &&
+            IsAsciiAlpha(realrelpath[0]) && realrelpath[1] == '|') {
+          // For instance, <C|/foo/bar> against <file:///tmp/mock/path>
+          // Treat tmp/mock/C|/foo/bar as /C|/foo/bar
+          // + 1 should account for '/' at the beginning
+          len = mAuthority.mPos + mAuthority.mLen + 1;
+        } else if (coalesceFlag & NET_COALESCE_DOUBLE_SLASH_IS_ROOT) {
           if (Filename().Equals("%2F"_ns, nsCaseInsensitiveCStringComparator)) {
             // if ftp URL ends with %2F then simply
             // append relative part because %2F also
@@ -2791,7 +2817,21 @@ nsStandardURL::Resolve(const nsACString& in, nsACString& out) {
   }
 
   if (resultPath) {
-    net_CoalesceDirs(coalesceFlag, resultPath);
+    constexpr uint32_t slashDriveSpecifierLength = sizeof("/C:") - 1;
+    // starting with file:C:/*
+    // We need to ignore file:C: and begin from /
+    // Note that file:C://* is already handled
+    if (protocol.IsEmpty() && Scheme() == "file") {
+      if (resultPath[0] == '/' && IsAsciiAlpha(resultPath[1]) &&
+          (resultPath[2] == ':' || resultPath[2] == '|')) {
+        resultPath += slashDriveSpecifierLength;
+      }
+    }
+
+    // Edge case: <C|> against <file:///tmp/mock/path>
+    if (resultPath && resultPath[0] == '/') {
+      net_CoalesceDirs(coalesceFlag, resultPath);
+    }
   } else {
     // locate result path
     resultPath = strstr(result, "://");

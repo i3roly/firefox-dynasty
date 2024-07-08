@@ -575,8 +575,15 @@ static void WebRenderDebugPrefChangeCallback(const char* aPrefName, void*) {
   GFX_WEBRENDER_DEBUG(".window-visibility",
                       wr::DebugFlags::WINDOW_VISIBILITY_DBG)
   GFX_WEBRENDER_DEBUG(".restrict-blob-size", wr::DebugFlags::RESTRICT_BLOB_SIZE)
+  GFX_WEBRENDER_DEBUG(".surface-promotion-logging",
+                      wr::DebugFlags::SURFACE_PROMOTION_LOGGING)
 #undef GFX_WEBRENDER_DEBUG
   gfx::gfxVars::SetWebRenderDebugFlags(flags._0);
+
+  uint32_t threshold = Preferences::GetFloat(
+      StaticPrefs::GetPrefName_gfx_webrender_debug_slow_cpu_frame_threshold(),
+      10.0);
+  gfx::gfxVars::SetWebRenderSlowCpuFrameThreshold(threshold);
 }
 
 static void WebRenderQualityPrefChangeCallback(const char* aPref, void*) {
@@ -1672,19 +1679,35 @@ already_AddRefed<DrawTarget> gfxPlatform::CreateDrawTargetForBackend(
 }
 
 already_AddRefed<DrawTarget> gfxPlatform::CreateOffscreenCanvasDrawTarget(
-    const IntSize& aSize, SurfaceFormat aFormat) {
+    const IntSize& aSize, SurfaceFormat aFormat, bool aRequireSoftwareRender) {
   NS_ASSERTION(mPreferredCanvasBackend != BackendType::NONE, "No backend.");
 
+  BackendType backend = mFallbackCanvasBackend;
   // If we are using remote canvas we don't want to use acceleration in
   // canvas DrawTargets we are not remoting, so we always use the fallback
   // software one.
   if (!gfxPlatform::UseRemoteCanvas() ||
       !gfxPlatform::IsBackendAccelerated(mPreferredCanvasBackend)) {
-    RefPtr<DrawTarget> target =
-        CreateDrawTargetForBackend(mPreferredCanvasBackend, aSize, aFormat);
-    if (target || mFallbackCanvasBackend == BackendType::NONE) {
-      return target.forget();
-    }
+    backend = mPreferredCanvasBackend;
+  }
+
+  if (aRequireSoftwareRender) {
+    backend = gfxPlatform::IsBackendAccelerated(mPreferredCanvasBackend)
+                  ? mFallbackCanvasBackend
+                  : mPreferredCanvasBackend;
+  }
+
+#ifdef XP_WIN
+  // On Windows, the fallback backend (Cairo) should use its image backend.
+  RefPtr<DrawTarget> target =
+      Factory::CreateDrawTarget(backend, aSize, aFormat);
+#else
+  RefPtr<DrawTarget> target =
+      CreateDrawTargetForBackend(backend, aSize, aFormat);
+#endif
+
+  if (target || mFallbackCanvasBackend == BackendType::NONE) {
+    return target.forget();
   }
 
 #ifdef XP_WIN
@@ -3663,11 +3686,21 @@ void gfxPlatform::GetOverlayInfo(mozilla::widget::InfoObject& aObj) {
     MOZ_CRASH("Incomplete switch");
   };
 
-  nsPrintfCString value("NV12=%s YUV2=%s BGRA8=%s RGB10A2=%s",
-                        toString(mOverlayInfo.ref().mNv12Overlay),
-                        toString(mOverlayInfo.ref().mYuy2Overlay),
-                        toString(mOverlayInfo.ref().mBgra8Overlay),
-                        toString(mOverlayInfo.ref().mRgb10a2Overlay));
+  auto toStringBool = [](bool aSupported) -> const char* {
+    if (aSupported) {
+      return "Supported";
+    }
+    return "Not Supported";
+  };
+
+  nsPrintfCString value(
+      "NV12=%s YUV2=%s BGRA8=%s RGB10A2=%s VpSR=%s VpAutoHDR=%s",
+      toString(mOverlayInfo.ref().mNv12Overlay),
+      toString(mOverlayInfo.ref().mYuy2Overlay),
+      toString(mOverlayInfo.ref().mBgra8Overlay),
+      toString(mOverlayInfo.ref().mRgb10a2Overlay),
+      toStringBool(mOverlayInfo.ref().mSupportsVpSuperResolution),
+      toStringBool(mOverlayInfo.ref().mSupportsVpAutoHDR));
 
   aObj.DefineProperty("OverlaySupport", NS_ConvertUTF8toUTF16(value));
 }

@@ -45,7 +45,7 @@ storage = { path = "../../../../storage/rust" }
 bookmark_sync = { path = "../../../components/places/bookmark_sync", optional = true }
 buildid_reader = { path = "../../buildid_reader" }
 chardetng_c = "0.1.1"
-audio_thread_priority = { version = "0.32", default_features = false }
+audio_thread_priority = { version = "0.32", default-features = false }
 mdns_service = { path="../../../../dom/media/webrtc/transport/mdns_service", optional = true }
 neqo_glue = { path = "../../../../netwerk/socket/neqo_glue" }
 wgpu_bindings = { path = "../../../../gfx/wgpu_bindings" }
@@ -105,6 +105,7 @@ qcms = { path = "../../../../gfx/qcms", features = ["c_bindings", "neon"], defau
 
 wpf-gpu-raster = { git = "https://github.com/FirefoxGraphics/wpf-gpu-raster", rev = "99979da091fd58fba8477e7fcdf5ec0727102916" }
 aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "d94278ed9c7020f50232689a26d1277eb0eb74d2" }
+etagere = { version = "0.2.13", features = ["ffi"] }
 
 url = "2.5.0"
 
@@ -151,6 +152,7 @@ uniffi_fixtures = [
 ]
 webmidi_midir_impl = ["midir_impl"]
 icu4x = ["jsrust_shared/icu4x"]
+icu4x_calendar = ["jsrust_shared/icu4x_calendar"]
 
 [lib]
 path = "lib.rs"

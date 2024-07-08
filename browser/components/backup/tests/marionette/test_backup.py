@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
 import os
 import shutil
 import tempfile
@@ -44,19 +43,15 @@ class BackupTest(MarionetteTestCase):
         self.add_test_preferences()
         self.add_test_permissions()
 
-        resourceKeys = self.marionette.execute_script(
-            """
-          const DefaultBackupResources = ChromeUtils.importESModule("resource:///modules/backup/BackupResources.sys.mjs");
-          let resourceKeys = [];
-          for (const resourceName in DefaultBackupResources) {
-            let resource = DefaultBackupResources[resourceName];
-            resourceKeys.push(resource.key);
-          }
-          return resourceKeys;
-        """
-        )
+        # Restart the browser to force all of the test data we just added
+        # to be flushed to disk and to be made ready for backup
+        self.marionette.quit()
+        self.marionette.start_session()
+        self.marionette.set_context("chrome")
 
-        originalStagingPath = self.marionette.execute_async_script(
+        archiveDestPath = os.path.join(tempfile.gettempdir(), "backup-dest")
+        recoveryCode = "This is a test password"
+        archivePath = self.marionette.execute_async_script(
             """
           const { OSKeyStore } = ChromeUtils.importESModule(
             "resource://gre/modules/OSKeyStore.sys.mjs"
@@ -67,7 +62,9 @@ class BackupTest(MarionetteTestCase):
             throw new Error("Could not get initialized BackupService.");
           }
 
-          let [outerResolve] = arguments;
+          let [archiveDestPath, recoveryCode, outerResolve] = arguments;
+          bs.setParentDirPath(archiveDestPath);
+
           (async () => {
             // This is some hackery to make it so that OSKeyStore doesn't kick
             // off an OS authentication dialog in our test, and also to make
@@ -77,65 +74,22 @@ class BackupTest(MarionetteTestCase):
             // testing-common modules aren't available in Marionette tests.
             const ORIGINAL_STORE_LABEL = OSKeyStore.STORE_LABEL;
             OSKeyStore.STORE_LABEL = "test-" + Math.random().toString(36).substr(2);
-            await bs.enableEncryption("This is a test password");
+            await bs.enableEncryption(recoveryCode);
             await OSKeyStore.cleanup();
             OSKeyStore.STORE_LABEL = ORIGINAL_STORE_LABEL;
 
-            let { stagingPath } = await bs.createBackup();
-            if (!stagingPath) {
+            let { archivePath } = await bs.createBackup();
+            if (!archivePath) {
               throw new Error("Could not create backup.");
             }
-            return stagingPath;
+            return archivePath;
           })().then(outerResolve);
-        """
+        """,
+            script_args=[archiveDestPath, recoveryCode],
         )
 
-        # When we switch over to the recovered profile, the Marionette framework
-        # will blow away the profile directory of the one that we created the
-        # backup on, which ruins our ability to do postRecovery work, since
-        # that relies on the prior profile sticking around. We work around this
-        # by moving the staging folder we got back to the OS temporary
-        # directory, and telling the recovery method to use that instead of the
-        # one from the profile directory.
-        stagingPath = os.path.join(tempfile.gettempdir(), "staging-test")
-        # Delete the destination folder if it exists already
-        shutil.rmtree(stagingPath, ignore_errors=True)
-        shutil.move(originalStagingPath, stagingPath)
-
-        # First, ensure that the staging path exists
-        self.assertTrue(os.path.exists(stagingPath))
-        # Now, ensure that the backup-manifest.json file exists within it.
-        manifestPath = os.path.join(stagingPath, "backup-manifest.json")
-        self.assertTrue(os.path.exists(manifestPath))
-
-        # For now, we just do a cursory check to ensure that for the resources
-        # that are listed in the manifest as having been backed up, that we
-        # have at least one file in their respective staging directories.
-        # We don't check the contents of the files, just that they exist.
-
-        # Read the JSON manifest file
-        with open(manifestPath, "r") as f:
-            manifest = json.load(f)
-
-        # Ensure that the manifest has a "resources" key
-        self.assertIn("resources", manifest)
-        resources = manifest["resources"]
-        self.assertTrue(isinstance(resources, dict))
-        self.assertTrue(len(resources) > 0)
-
-        # We don't have encryption capabilities wired up yet, so we'll check
-        # that all default resources are represented in the manifest.
-        self.assertEqual(len(resources), len(resourceKeys))
-        for resourceKey in resourceKeys:
-            self.assertIn(resourceKey, resources)
-
-        # Iterate the resources dict keys
-        for resourceKey in resources:
-            print("Checking resource: %s" % resourceKey)
-            # Ensure that there are staging directories created for each
-            # resource that was backed up
-            resourceStagingDir = os.path.join(stagingPath, resourceKey)
-            self.assertTrue(os.path.exists(resourceStagingDir))
+        recoveryPath = os.path.join(tempfile.gettempdir(), "recovery")
+        shutil.rmtree(recoveryPath, ignore_errors=True)
 
         # Start a brand new profile, one without any of the data we created or
         # backed up. This is the one that we'll be starting recovery from.
@@ -153,6 +107,7 @@ class BackupTest(MarionetteTestCase):
             expectedClientID,
         ] = self.marionette.execute_async_script(
             """
+          const { OSKeyStore } = ChromeUtils.importESModule("resource://gre/modules/OSKeyStore.sys.mjs");
           const { ClientID } = ChromeUtils.importESModule("resource://gre/modules/ClientID.sys.mjs");
           const { BackupService } = ChromeUtils.importESModule("resource:///modules/backup/BackupService.sys.mjs");
           let bs = BackupService.get();
@@ -160,13 +115,27 @@ class BackupTest(MarionetteTestCase):
             throw new Error("Could not get initialized BackupService.");
           }
 
-          let [stagingPath, outerResolve] = arguments;
+          let [archivePath, recoveryCode, recoveryPath, outerResolve] = arguments;
           (async () => {
             let newProfileRootPath = await IOUtils.createUniqueDirectory(
               PathUtils.tempDir,
-              "recoverFromBackupTest-newProfileRoot"
+              "recoverFromBackupArchiveTest-newProfileRoot"
             );
-            let newProfile = await bs.recoverFromBackup(stagingPath, false, newProfileRootPath)
+
+            // This is some hackery to make it so that OSKeyStore doesn't kick
+            // off an OS authentication dialog in our test, and also to make
+            // sure we don't blow away the _real_ OSKeyStore key for the browser
+            // on the system that this test is running on. Normally, I'd use
+            // OSKeyStoreTestUtils.setup to do this, but apparently the
+            // testing-common modules aren't available in Marionette tests.
+            const ORIGINAL_STORE_LABEL = OSKeyStore.STORE_LABEL;
+            OSKeyStore.STORE_LABEL = "test-" + Math.random().toString(36).substr(2);
+
+            let newProfile = await bs.recoverFromBackupArchive(archivePath, recoveryCode, false, recoveryPath, newProfileRootPath);
+
+            await OSKeyStore.cleanup();
+            OSKeyStore.STORE_LABEL = ORIGINAL_STORE_LABEL;
+
             if (!newProfile) {
               throw new Error("Could not create recovery profile.");
             }
@@ -176,7 +145,7 @@ class BackupTest(MarionetteTestCase):
             return [newProfile.name, newProfile.rootDir.path, expectedClientID];
           })().then(outerResolve);
         """,
-            script_args=[stagingPath],
+            script_args=[archivePath, recoveryCode, recoveryPath],
         )
 
         print("Recovery name: %s" % newProfileName)
@@ -189,8 +158,9 @@ class BackupTest(MarionetteTestCase):
         self.marionette.start_session()
         self.marionette.set_context("chrome")
 
-        # Ensure that all postRecovery actions have completed.
-        self.marionette.execute_async_script(
+        # Ensure that all postRecovery actions have completed, and that
+        # encryption is enabled.
+        encryptionEnabled = self.marionette.execute_async_script(
             """
           const { BackupService } = ChromeUtils.importESModule("resource:///modules/backup/BackupService.sys.mjs");
           let bs = BackupService.get();
@@ -201,9 +171,13 @@ class BackupTest(MarionetteTestCase):
           let [outerResolve] = arguments;
           (async () => {
             await bs.postRecoveryComplete;
+
+            await bs.loadEncryptionState();
+            return bs.state.encryptionEnabled;
           })().then(outerResolve);
         """
         )
+        self.assertTrue(encryptionEnabled)
 
         self.verify_recovered_test_cookie()
         self.verify_recovered_test_login()
@@ -250,8 +224,10 @@ class BackupTest(MarionetteTestCase):
             script_args=[newProfileName],
         )
 
-        # Cleanup the staging path that we moved
-        mozfile.remove(stagingPath)
+        # Cleanup the archive we moved, and the recovery folder we decompressed
+        # to.
+        mozfile.remove(archivePath)
+        mozfile.remove(recoveryPath)
 
     def add_test_cookie(self):
         self.marionette.execute_async_script(

@@ -33,6 +33,7 @@
 #include "mozilla/dom/ipc/StructuredCloneData.h"
 #include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Components.h"
+#include "mozilla/IdentityCredentialRequestManager.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/ServoCSSParser.h"
 #include "mozilla/ServoStyleSet.h"
@@ -1430,6 +1431,8 @@ mozilla::ipc::IPCResult WindowGlobalParent::RecvReloadWithHttpsOnlyException() {
   RefPtr<nsDocShellLoadState> loadState = new nsDocShellLoadState(insecureURI);
   loadState->SetTriggeringPrincipal(nsContentUtils::GetSystemPrincipal());
   loadState->SetLoadType(LOAD_NORMAL_REPLACE);
+  loadState->SetHttpsUpgradeTelemetry(
+      nsILoadInfo::HTTPS_ONLY_UPGRADE_DOWNGRADE);
 
   RefPtr<CanonicalBrowsingContext> topBC = BrowsingContext()->Top();
   topBC->LoadURI(loadState, /* setNavigating */ true);
@@ -1475,6 +1478,22 @@ IPCResult WindowGlobalParent::RecvStoreIdentityCredential(
           GetCurrentSerialEventTarget(), __func__,
           [aResolver](const bool& aResult) { aResolver(NS_OK); },
           [aResolver](nsresult aErr) { aResolver(aErr); });
+  return IPC_OK();
+}
+
+IPCResult WindowGlobalParent::RecvNotifyPendingIdentityCredentialDiscovery(
+    const IdentityCredentialRequestOptions& aOptions,
+    const NotifyPendingIdentityCredentialDiscoveryResolver& aResolver) {
+  IdentityCredentialRequestManager* icrm =
+      IdentityCredentialRequestManager::GetInstance();
+  if (!icrm) {
+    aResolver(NS_ERROR_NOT_AVAILABLE);
+    return IPC_OK();
+  }
+  nsresult rv =
+      icrm->StorePendingRequest(this->TopWindowContext()->DocumentPrincipal(),
+                                aOptions, this->InnerWindowId());
+  aResolver(rv);
   return IPC_OK();
 }
 
@@ -1579,7 +1598,7 @@ void WindowGlobalParent::ActorDestroy(ActorDestroyReason aWhy) {
       nsCOMPtr<nsILoadContext> loadContext = browserParent->GetLoadContext();
       if (loadContext && !loadContext->UsePrivateBrowsing() &&
           BrowsingContext()->IsTopContent()) {
-        GetContentBlockingLog()->ReportLog(DocumentPrincipal());
+        GetContentBlockingLog()->ReportLog();
 
         if (mDocumentURI && (net::SchemeIsHTTP(mDocumentURI) ||
                              net::SchemeIsHTTPS(mDocumentURI))) {
@@ -1713,7 +1732,8 @@ void WindowGlobalParent::SetShouldReportHasBlockedOpaqueResponse(
 
 IPCResult WindowGlobalParent::RecvSetCookies(
     const nsCString& aBaseDomain, const OriginAttributes& aOriginAttributes,
-    nsIURI* aHost, bool aFromHttp, const nsTArray<CookieStruct>& aCookies) {
+    nsIURI* aHost, bool aFromHttp, bool aIsThirdParty,
+    const nsTArray<CookieStruct>& aCookies) {
   // Get CookieServiceParent via
   // ContentParent->NeckoParent->CookieServiceParent.
   ContentParent* contentParent = GetContentParent();
@@ -1728,7 +1748,7 @@ IPCResult WindowGlobalParent::RecvSetCookies(
   auto* cs = static_cast<net::CookieServiceParent*>(csParent);
 
   return cs->SetCookies(aBaseDomain, aOriginAttributes, aHost, aFromHttp,
-                        aCookies, GetBrowsingContext());
+                        aIsThirdParty, aCookies, GetBrowsingContext());
 }
 
 IPCResult WindowGlobalParent::RecvOnInitialStorageAccess() {

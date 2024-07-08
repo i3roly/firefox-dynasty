@@ -1550,18 +1550,6 @@ void MacroAssemblerMIPSShared::loadDouble(const BaseIndex& src,
   asMasm().ma_ld(dest, src);
 }
 
-void MacroAssemblerMIPSShared::loadFloatAsDouble(const Address& address,
-                                                 FloatRegister dest) {
-  asMasm().ma_ls(dest, address);
-  as_cvtds(dest, dest);
-}
-
-void MacroAssemblerMIPSShared::loadFloatAsDouble(const BaseIndex& src,
-                                                 FloatRegister dest) {
-  asMasm().loadFloat32(src, dest);
-  as_cvtds(dest, dest);
-}
-
 void MacroAssemblerMIPSShared::loadFloat32(const Address& address,
                                            FloatRegister dest) {
   asMasm().ma_ls(dest, address);
@@ -2100,40 +2088,12 @@ void MacroAssemblerMIPSShared::wasmLoadImpl(
   }
 
   unsigned byteSize = access.byteSize();
-  bool isSigned;
-  bool isFloat = false;
+  bool isSigned = Scalar::isSignedIntType(access.type());
+  bool isFloat = Scalar::isFloatingType(access.type());
 
   MOZ_ASSERT(!access.isZeroExtendSimd128Load());
   MOZ_ASSERT(!access.isSplatSimd128Load());
   MOZ_ASSERT(!access.isWidenSimd128Load());
-  switch (access.type()) {
-    case Scalar::Int8:
-      isSigned = true;
-      break;
-    case Scalar::Uint8:
-      isSigned = false;
-      break;
-    case Scalar::Int16:
-      isSigned = true;
-      break;
-    case Scalar::Uint16:
-      isSigned = false;
-      break;
-    case Scalar::Int32:
-      isSigned = true;
-      break;
-    case Scalar::Uint32:
-      isSigned = false;
-      break;
-    case Scalar::Float64:
-      isFloat = true;
-      break;
-    case Scalar::Float32:
-      isFloat = true;
-      break;
-    default:
-      MOZ_CRASH("unexpected array type");
-  }
 
   BaseIndex address(memoryBase, ptr, TimesOne);
   if (IsUnaligned(access)) {
@@ -2182,40 +2142,8 @@ void MacroAssemblerMIPSShared::wasmStoreImpl(
   }
 
   unsigned byteSize = access.byteSize();
-  bool isSigned;
-  bool isFloat = false;
-
-  switch (access.type()) {
-    case Scalar::Int8:
-      isSigned = true;
-      break;
-    case Scalar::Uint8:
-      isSigned = false;
-      break;
-    case Scalar::Int16:
-      isSigned = true;
-      break;
-    case Scalar::Uint16:
-      isSigned = false;
-      break;
-    case Scalar::Int32:
-      isSigned = true;
-      break;
-    case Scalar::Uint32:
-      isSigned = false;
-      break;
-    case Scalar::Int64:
-      isSigned = true;
-      break;
-    case Scalar::Float64:
-      isFloat = true;
-      break;
-    case Scalar::Float32:
-      isFloat = true;
-      break;
-    default:
-      MOZ_CRASH("unexpected array type");
-  }
+  bool isSigned = Scalar::isSignedIntType(access.type());
+  bool isFloat = Scalar::isFloatingType(access.type());
 
   BaseIndex address(memoryBase, ptr, TimesOne);
   if (IsUnaligned(access)) {

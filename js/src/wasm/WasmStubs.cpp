@@ -986,56 +986,53 @@ static bool GenerateJitEntry(MacroAssembler& masm, size_t funcExportIndex,
     Label next;
     switch (funcType.args()[i].kind()) {
       case ValType::I32: {
-        ScratchTagScope tag(masm, scratchV);
-        masm.splitTagForTest(scratchV, tag);
+        Label isDouble, isUndefinedOrNull, isBoolean;
+        {
+          ScratchTagScope tag(masm, scratchV);
+          masm.splitTagForTest(scratchV, tag);
 
-        // For int32 inputs, just skip.
-        masm.branchTestInt32(Assembler::Equal, tag, &next);
+          // For int32 inputs, just skip.
+          masm.branchTestInt32(Assembler::Equal, tag, &next);
+
+          masm.branchTestDouble(Assembler::Equal, tag, &isDouble);
+          masm.branchTestUndefined(Assembler::Equal, tag, &isUndefinedOrNull);
+          masm.branchTestNull(Assembler::Equal, tag, &isUndefinedOrNull);
+          masm.branchTestBoolean(Assembler::Equal, tag, &isBoolean);
+
+          // Other types (symbol, object, strings) go to the C++ call.
+          masm.jump(&oolCall);
+        }
+
+        Label storeBack;
 
         // For double inputs, unbox, truncate and store back.
-        Label storeBack, notDouble;
-        masm.branchTestDouble(Assembler::NotEqual, tag, &notDouble);
+        masm.bind(&isDouble);
         {
-          ScratchTagScopeRelease _(&tag);
           masm.unboxDouble(scratchV, scratchF);
           masm.branchTruncateDoubleMaybeModUint32(scratchF, scratchG, &oolCall);
           masm.jump(&storeBack);
         }
-        masm.bind(&notDouble);
 
         // For null or undefined, store 0.
-        Label nullOrUndefined, notNullOrUndefined;
-        masm.branchTestUndefined(Assembler::Equal, tag, &nullOrUndefined);
-        masm.branchTestNull(Assembler::NotEqual, tag, &notNullOrUndefined);
-        masm.bind(&nullOrUndefined);
+        masm.bind(&isUndefinedOrNull);
         {
-          ScratchTagScopeRelease _(&tag);
           masm.storeValue(Int32Value(0), jitArgAddr);
+          masm.jump(&next);
         }
-        masm.jump(&next);
-        masm.bind(&notNullOrUndefined);
 
-        // For booleans, store the number value back. Other types (symbol,
-        // object, strings) go to the C++ call.
-        masm.branchTestBoolean(Assembler::NotEqual, tag, &oolCall);
+        // For booleans, store the number value back.
+        masm.bind(&isBoolean);
         masm.unboxBoolean(scratchV, scratchG);
         // fallthrough:
 
         masm.bind(&storeBack);
-        {
-          ScratchTagScopeRelease _(&tag);
-          masm.storeValue(JSVAL_TYPE_INT32, scratchG, jitArgAddr);
-        }
+        masm.storeValue(JSVAL_TYPE_INT32, scratchG, jitArgAddr);
         break;
       }
       case ValType::I64: {
-        ScratchTagScope tag(masm, scratchV);
-        masm.splitTagForTest(scratchV, tag);
-
         // For BigInt inputs, just skip. Otherwise go to C++ for other
         // types that require creating a new BigInt or erroring.
-        masm.branchTestBigInt(Assembler::NotEqual, tag, &oolCall);
-        masm.jump(&next);
+        masm.branchTestBigInt(Assembler::NotEqual, scratchV, &oolCall);
         break;
       }
       case ValType::F32:
@@ -1043,53 +1040,42 @@ static bool GenerateJitEntry(MacroAssembler& masm, size_t funcExportIndex,
         // Note we can reuse the same code for f32/f64 here, since for the
         // case of f32, the conversion of f64 to f32 will happen in the
         // second loop.
-        ScratchTagScope tag(masm, scratchV);
-        masm.splitTagForTest(scratchV, tag);
 
-        // For double inputs, just skip.
-        masm.branchTestDouble(Assembler::Equal, tag, &next);
-
-        // For int32 inputs, convert and rebox.
-        Label storeBack, notInt32;
+        Label isInt32OrBoolean, isUndefined, isNull;
         {
-          ScratchTagScopeRelease _(&tag);
-          masm.branchTestInt32(Assembler::NotEqual, scratchV, &notInt32);
-          masm.int32ValueToDouble(scratchV, scratchF);
-          masm.jump(&storeBack);
+          ScratchTagScope tag(masm, scratchV);
+          masm.splitTagForTest(scratchV, tag);
+
+          // For double inputs, just skip.
+          masm.branchTestDouble(Assembler::Equal, tag, &next);
+
+          masm.branchTestInt32(Assembler::Equal, tag, &isInt32OrBoolean);
+          masm.branchTestUndefined(Assembler::Equal, tag, &isUndefined);
+          masm.branchTestNull(Assembler::Equal, tag, &isNull);
+          masm.branchTestBoolean(Assembler::Equal, tag, &isInt32OrBoolean);
+
+          // Other types (symbol, object, strings) go to the C++ call.
+          masm.jump(&oolCall);
         }
-        masm.bind(&notInt32);
+
+        // For int32 and boolean inputs, convert and rebox.
+        masm.bind(&isInt32OrBoolean);
+        {
+          masm.convertInt32ToDouble(scratchV.payloadOrValueReg(), scratchF);
+          masm.boxDouble(scratchF, jitArgAddr);
+          masm.jump(&next);
+        }
 
         // For undefined (missing argument), store NaN.
-        Label notUndefined;
-        masm.branchTestUndefined(Assembler::NotEqual, tag, &notUndefined);
+        masm.bind(&isUndefined);
         {
-          ScratchTagScopeRelease _(&tag);
           masm.storeValue(DoubleValue(JS::GenericNaN()), jitArgAddr);
           masm.jump(&next);
         }
-        masm.bind(&notUndefined);
 
         // +null is 0.
-        Label notNull;
-        masm.branchTestNull(Assembler::NotEqual, tag, &notNull);
-        {
-          ScratchTagScopeRelease _(&tag);
-          masm.storeValue(DoubleValue(0.), jitArgAddr);
-        }
-        masm.jump(&next);
-        masm.bind(&notNull);
-
-        // For booleans, store the number value back. Other types (symbol,
-        // object, strings) go to the C++ call.
-        masm.branchTestBoolean(Assembler::NotEqual, tag, &oolCall);
-        masm.boolValueToDouble(scratchV, scratchF);
-        // fallthrough:
-
-        masm.bind(&storeBack);
-        {
-          ScratchTagScopeRelease _(&tag);
-          masm.boxDouble(scratchF, jitArgAddr);
-        }
+        masm.bind(&isNull);
+        { masm.storeValue(DoubleValue(0.), jitArgAddr); }
         break;
       }
       case ValType::Ref: {
@@ -1300,11 +1286,11 @@ static bool GenerateJitEntry(MacroAssembler& masm, size_t funcExportIndex,
     // unify the BuiltinThunk's interface we call it here with wasm abi.
     jit::WasmABIArgIter<MIRTypeVector> argsIter(coerceArgTypes);
 
-    // argument 0: function export index.
+    // argument 0: function index.
     if (argsIter->kind() == ABIArg::GPR) {
-      masm.movePtr(ImmWord(funcExportIndex), argsIter->gpr());
+      masm.movePtr(ImmWord(fe.funcIndex()), argsIter->gpr());
     } else {
-      masm.storePtr(ImmWord(funcExportIndex),
+      masm.storePtr(ImmWord(fe.funcIndex()),
                     Address(sp, argsIter->offsetFromArgBase()));
     }
     argsIter++;
@@ -1354,7 +1340,7 @@ void wasm::GenerateDirectCallFromJit(MacroAssembler& masm, const FuncExport& fe,
                                      Register scratch, uint32_t* callOffset) {
   MOZ_ASSERT(!IsCompilingWasm());
 
-  const FuncType& funcType = inst.metadata().getFuncExportType(fe);
+  const FuncType& funcType = inst.code().getFuncExportType(fe);
 
   size_t framePushedAtStart = masm.framePushed();
 
@@ -1506,10 +1492,9 @@ void wasm::GenerateDirectCallFromJit(MacroAssembler& masm, const FuncExport& fe,
   masm.loadWasmPinnedRegsFromInstance();
 
   // Actual call.
-  const CodeTier& codeTier = inst.code().codeTier(inst.code().bestTier());
-  const MetadataTier& metadata = codeTier.metadata();
-  const CodeRange& codeRange = metadata.codeRange(fe);
-  void* callee = codeTier.segment().base() + codeRange.funcUncheckedCallEntry();
+  const CodeBlock& codeBlock = inst.code().funcCodeBlock(fe.funcIndex());
+  const CodeRange& codeRange = codeBlock.codeRange(fe);
+  void* callee = codeBlock.segment->base() + codeRange.funcUncheckedCallEntry();
 
   masm.assertStackAlignment(WasmStackAlignment);
   MoveSPForJitABI(masm);
@@ -1975,37 +1960,6 @@ static bool GenerateImportFunction(jit::MacroAssembler& masm,
 
 static const unsigned STUBS_LIFO_DEFAULT_CHUNK_SIZE = 4 * 1024;
 
-bool wasm::GenerateImportFunctions(const ModuleEnvironment& env,
-                                   const FuncImportVector& imports,
-                                   CompiledCode* code) {
-  LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE);
-  TempAllocator alloc(&lifo);
-  WasmMacroAssembler masm(alloc, env);
-
-  for (uint32_t funcIndex = 0; funcIndex < imports.length(); funcIndex++) {
-    const FuncImport& fi = imports[funcIndex];
-    const FuncType& funcType = *env.funcs[funcIndex].type;
-    CallIndirectId callIndirectId = CallIndirectId::forFunc(env, funcIndex);
-
-    FuncOffsets offsets;
-    if (!GenerateImportFunction(masm, fi, funcType, callIndirectId, &offsets,
-                                &code->stackMaps)) {
-      return false;
-    }
-    if (!code->codeRanges.emplaceBack(funcIndex, /* bytecodeOffset = */ 0,
-                                      offsets, /* hasUnwindInfo = */ false)) {
-      return false;
-    }
-  }
-
-  masm.finish();
-  if (masm.oom()) {
-    return false;
-  }
-
-  return code->swap(masm);
-}
-
 // Generate a stub that is called via the internal ABI derived from the
 // signature of the import and calls into an appropriate callImport C++
 // function, having boxed all the ABI arguments into a homogeneous Value array.
@@ -2338,8 +2292,8 @@ static bool GenerateImportJitExit(MacroAssembler& masm, const FuncImport& fi,
         masm.breakpoint();
         break;
       case ValType::F32:
-        masm.convertValueToFloat(JSReturnOperand, ReturnFloat32Reg,
-                                 &oolConvert);
+        masm.convertValueToFloat32(JSReturnOperand, ReturnFloat32Reg,
+                                   &oolConvert);
         GenPrintF32(DebugChannel::Import, masm, ReturnFloat32Reg);
         break;
       case ValType::F64:
@@ -2914,6 +2868,43 @@ static bool GenerateDebugTrapStub(MacroAssembler& masm, Label* throwLabel,
   return FinishOffsets(masm, offsets);
 }
 
+bool wasm::GenerateEntryStubs(const CodeMetadata& codeMeta,
+                              const FuncExportVector& exports,
+                              CompiledCode* code) {
+  LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE);
+  TempAllocator alloc(&lifo);
+  JitContext jcx;
+  WasmMacroAssembler masm(alloc);
+  AutoCreatedBy acb(masm, "wasm::GenerateEntryStubs");
+
+  // Swap in already-allocated empty vectors to avoid malloc/free.
+  if (!code->swap(masm)) {
+    return false;
+  }
+
+  JitSpew(JitSpew_Codegen, "# Emitting wasm export stubs");
+
+  Maybe<ImmPtr> noAbsolute;
+  for (size_t i = 0; i < exports.length(); i++) {
+    const FuncExport& fe = exports[i];
+    const FuncType& funcType = (*codeMeta.types)[fe.typeIndex()].funcType();
+    if (!fe.hasEagerStubs()) {
+      continue;
+    }
+    if (!GenerateEntryStubs(masm, i, fe, funcType, noAbsolute,
+                            codeMeta.isAsmJS(), &code->codeRanges)) {
+      return false;
+    }
+  }
+
+  masm.finish();
+  if (masm.oom()) {
+    return false;
+  }
+
+  return code->swap(masm);
+}
+
 bool wasm::GenerateEntryStubs(MacroAssembler& masm, size_t funcExportIndex,
                               const FuncExport& fe, const FuncType& funcType,
                               const Maybe<ImmPtr>& callee, bool isAsmJS,
@@ -2981,13 +2972,13 @@ bool wasm::GenerateProvisionalLazyJitEntryStub(MacroAssembler& masm,
   return FinishOffsets(masm, offsets);
 }
 
-bool wasm::GenerateStubs(const ModuleEnvironment& env,
+bool wasm::GenerateStubs(const CodeMetadata& codeMeta,
                          const FuncImportVector& imports,
                          const FuncExportVector& exports, CompiledCode* code) {
   LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE);
   TempAllocator alloc(&lifo);
   JitContext jcx;
-  WasmMacroAssembler masm(alloc, env);
+  WasmMacroAssembler masm(alloc);
   AutoCreatedBy acb(masm, "wasm::GenerateStubs");
 
   // Swap in already-allocated empty vectors to avoid malloc/free.
@@ -3001,7 +2992,21 @@ bool wasm::GenerateStubs(const ModuleEnvironment& env,
 
   for (uint32_t funcIndex = 0; funcIndex < imports.length(); funcIndex++) {
     const FuncImport& fi = imports[funcIndex];
-    const FuncType& funcType = *env.funcs[funcIndex].type;
+    const FuncType& funcType = *codeMeta.funcs[funcIndex].type;
+
+    CallIndirectId callIndirectId =
+        CallIndirectId::forFunc(codeMeta, funcIndex);
+
+    FuncOffsets wrapperOffsets;
+    if (!GenerateImportFunction(masm, fi, funcType, callIndirectId,
+                                &wrapperOffsets, &code->stackMaps)) {
+      return false;
+    }
+    if (!code->codeRanges.emplaceBack(funcIndex, /* bytecodeOffset = */ 0,
+                                      wrapperOffsets,
+                                      /* hasUnwindInfo = */ false)) {
+      return false;
+    }
 
     CallableOffsets interpOffsets;
     if (!GenerateImportInterpExit(masm, fi, funcType, funcIndex, &throwLabel,
@@ -3030,22 +3035,22 @@ bool wasm::GenerateStubs(const ModuleEnvironment& env,
     }
   }
 
-  JitSpew(JitSpew_Codegen, "# Emitting wasm export stubs");
+  JitSpew(JitSpew_Codegen, "# Emitting wasm entry stubs");
 
   Maybe<ImmPtr> noAbsolute;
   for (size_t i = 0; i < exports.length(); i++) {
     const FuncExport& fe = exports[i];
-    const FuncType& funcType = (*env.types)[fe.typeIndex()].funcType();
+    const FuncType& funcType = (*codeMeta.types)[fe.typeIndex()].funcType();
     if (!fe.hasEagerStubs()) {
       continue;
     }
-    if (!GenerateEntryStubs(masm, i, fe, funcType, noAbsolute, env.isAsmJS(),
-                            &code->codeRanges)) {
+    if (!GenerateEntryStubs(masm, i, fe, funcType, noAbsolute,
+                            codeMeta.isAsmJS(), &code->codeRanges)) {
       return false;
     }
   }
 
-  JitSpew(JitSpew_Codegen, "# Emitting wasm exit stubs");
+  JitSpew(JitSpew_Codegen, "# Emitting wasm trap and throw stubs");
 
   Offsets offsets;
 

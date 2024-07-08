@@ -9676,8 +9676,7 @@ void nsCSSFrameConstructor::ProcessChildren(
             }
           }
           listItem->SetMarkerFrameForListItem(childFrame);
-          MOZ_ASSERT(listItem->HasAnyStateBits(
-                         NS_BLOCK_FRAME_HAS_OUTSIDE_MARKER) == isOutsideMarker);
+          MOZ_ASSERT(listItem->HasOutsideMarker() == isOutsideMarker);
 #ifdef ACCESSIBILITY
           if (nsAccessibilityService* accService = GetAccService()) {
             auto* marker = markerFrame->GetContent();

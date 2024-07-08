@@ -69,7 +69,7 @@ class BrowserToolbarView(
     var view: BrowserToolbar = layout
         .findViewById(R.id.toolbar)
 
-    private val isNavBarEnabled = IncompleteRedesignToolbarFeature(context.settings()).isEnabled
+    private val isNavBarEnabled = context.settings().navigationToolbarEnabled
 
     val toolbarIntegration: ToolbarIntegration
     val menuToolbar: ToolbarMenu
@@ -108,6 +108,7 @@ class BrowserToolbarView(
 
             view.apply {
                 setToolbarBehavior()
+                setDisplayToolbarColors()
 
                 if (!isCustomTabSession) {
                     display.setUrlBackground(getDrawable(R.drawable.search_url_background))
@@ -123,19 +124,6 @@ class BrowserToolbarView(
                     ToolbarPosition.TOP -> DisplayToolbar.Gravity.BOTTOM
                 }
 
-                val primaryTextColor = ContextCompat.getColor(
-                    context,
-                    ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                )
-                val secondaryTextColor = ContextCompat.getColor(
-                    context,
-                    ThemeManager.resolveAttribute(R.attr.textSecondary, context),
-                )
-                val separatorColor = ContextCompat.getColor(
-                    context,
-                    ThemeManager.resolveAttribute(R.attr.borderPrimary, context),
-                )
-
                 display.urlFormatter = { url ->
                     if (isNavBarEnabled) {
                         Uri.parse(url.toString()).host ?: url
@@ -143,20 +131,6 @@ class BrowserToolbarView(
                         URLStringUtils.toDisplayUrl(url)
                     }
                 }
-
-                display.colors = display.colors.copy(
-                    text = primaryTextColor,
-                    securityIconSecure = primaryTextColor,
-                    securityIconInsecure = Color.TRANSPARENT,
-                    menu = primaryTextColor,
-                    hint = secondaryTextColor,
-                    separator = separatorColor,
-                    trackingProtection = primaryTextColor,
-                    highlight = ContextCompat.getColor(
-                        context,
-                        R.color.fx_mobile_icon_color_information,
-                    ),
-                )
 
                 display.hint = context.getString(R.string.search_hint)
             }
@@ -210,7 +184,6 @@ class BrowserToolbarView(
                     lifecycleOwner,
                     sessionId = null,
                     isPrivate = components.core.store.state.selectedTab?.content?.private ?: false,
-                    isNavBarEnabled = isNavBarEnabled,
                     interactor = interactor,
                 )
             }
@@ -252,6 +225,23 @@ class BrowserToolbarView(
     }
 
     /**
+     * Updates the visibility of the menu in the toolbar.
+     */
+    fun updateMenuVisibility(isVisible: Boolean) {
+        with(view) {
+            if (isVisible) {
+                showMenuButton()
+                setDisplayHorizontalPadding(0)
+            } else {
+                hideMenuButton()
+                setDisplayHorizontalPadding(
+                    context.resources.getDimensionPixelSize(R.dimen.browser_fragment_display_toolbar_padding),
+                )
+            }
+        }
+    }
+
+    /**
      * Sets whether the toolbar will have a dynamic behavior (to be scrolled) or not.
      *
      * This will intrinsically check and disable the dynamic behavior if
@@ -266,7 +256,7 @@ class BrowserToolbarView(
     fun setToolbarBehavior(shouldDisableScroll: Boolean = false) {
         when (settings.toolbarPosition) {
             ToolbarPosition.BOTTOM -> {
-                if (settings.isDynamicToolbarEnabled && !isPwaTabOrTwaTab && !settings.shouldUseFixedTopToolbar) {
+                if (settings.isDynamicToolbarEnabled && !settings.shouldUseFixedTopToolbar) {
                     setDynamicToolbarBehavior(MozacToolbarPosition.BOTTOM)
                 } else {
                     expandToolbarAndMakeItFixed()
@@ -283,6 +273,35 @@ class BrowserToolbarView(
                 }
             }
         }
+    }
+
+    private fun setDisplayToolbarColors() {
+        val primaryTextColor = ContextCompat.getColor(
+            context,
+            ThemeManager.resolveAttribute(R.attr.textPrimary, context),
+        )
+        val secondaryTextColor = ContextCompat.getColor(
+            context,
+            ThemeManager.resolveAttribute(R.attr.textSecondary, context),
+        )
+        val separatorColor = ContextCompat.getColor(
+            context,
+            ThemeManager.resolveAttribute(R.attr.borderPrimary, context),
+        )
+
+        view.display.colors = view.display.colors.copy(
+            text = primaryTextColor,
+            securityIconSecure = primaryTextColor,
+            securityIconInsecure = Color.TRANSPARENT,
+            menu = primaryTextColor,
+            hint = secondaryTextColor,
+            separator = separatorColor,
+            trackingProtection = primaryTextColor,
+            highlight = ContextCompat.getColor(
+                context,
+                R.color.fx_mobile_icon_color_information,
+            ),
+        )
     }
 
     @VisibleForTesting

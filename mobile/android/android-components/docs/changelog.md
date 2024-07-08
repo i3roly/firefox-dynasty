@@ -4,7 +4,24 @@ title: Changelog
 permalink: /changelog/
 ---
 
-# 128.0 (In Development)
+# 129.0 (In Development)
+
+* **browser-engine-gecko**
+    * Added `WebExtensionInstallException.AdminInstallOnly` to handle the `ERROR_ADMIN_INSTALL_ONLY` error returned by Gecko when the add-on can only be installed via Enterprise Policies.
+
+* **browser-icons**
+  * Increased size of single-letter fallback-favicon, see [Bug 1905393](https://bugzilla.mozilla.org/show_bug.cgi?id=1905393).
+
+* **feature-accounts-push**
+  * `CloseTabsUseCases.close()` now returns an `UndoableOperation`.
+  * 🆕 New `CloseTabsCommandReceiver` class for processing "close synced tabs" commands received from other devices.
+  * ⚠️ **Breaking change**: `CloseTabsFeature()` now takes a `CloseTabsCommandReceiver` instead of an `onTabsClosed` callback.
+
+* **lib-state**
+  * Introduce a `UiStore` that is similar to a regular `Store` but all the actions are dispatched and processed _immediately_ on the Main thread.
+    * ⚠️ **Note:** Using a `UiStore` means that long running work will block the main thread like any other long running UI work would. Ensure you are dispatching async work to an appropriate background dispatcher.
+
+# 128.0
 
 * **browser-toolbar**
   * Added new data classes `CustomTabsToolbarButtonConfig` and `CustomTabsToolbarListeners` to `CustomTabsToolbarFeature`, see [Bug 1897811](https://bugzilla.mozilla.org/show_bug.cgi?id=1897811).

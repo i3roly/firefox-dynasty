@@ -1121,6 +1121,7 @@ void CanvasRenderingContext2D::GetContextAttributes(
 
   aSettings.mAlpha = mContextAttributesHasAlpha;
   aSettings.mWillReadFrequently = mWillReadFrequently;
+  aSettings.mForceSoftwareRendering = mForceSoftwareRendering;
 
   // We don't support the 'desynchronized' and 'colorSpace' attributes, so
   // those just keep their default values.
@@ -1471,7 +1472,7 @@ bool CanvasRenderingContext2D::BorrowTarget(const IntRect& aPersistedRect,
   // acceleration, then we skip trying to use this provider so that it will be
   // recreated by EnsureTarget later.
   if (!mBufferProvider || mBufferProvider->RequiresRefresh() ||
-      (mBufferProvider->IsAccelerated() && GetEffectiveWillReadFrequently())) {
+      (mBufferProvider->IsAccelerated() && UseSoftwareRendering())) {
     return false;
   }
   mTarget = mBufferProvider->BorrowDrawTarget(aPersistedRect);
@@ -1722,7 +1723,7 @@ bool CanvasRenderingContext2D::TryAcceleratedTarget(
   }
   // Don't try creating an accelerate DrawTarget if either acceleration failed
   // previously or if the application expects acceleration to be slow.
-  if (!mAllowAcceleration || GetEffectiveWillReadFrequently()) {
+  if (!mAllowAcceleration || UseSoftwareRendering()) {
     return false;
   }
 
@@ -1779,7 +1780,7 @@ bool CanvasRenderingContext2D::TrySharedTarget(
 
     aOutProvider = renderer->CreatePersistentBufferProvider(
         GetSize(), GetSurfaceFormat(),
-        !mAllowAcceleration || GetEffectiveWillReadFrequently());
+        !mAllowAcceleration || UseSoftwareRendering());
   } else if (mOffscreenCanvas) {
     if (!StaticPrefs::gfx_offscreencanvas_shared_provider()) {
       return false;
@@ -1793,7 +1794,7 @@ bool CanvasRenderingContext2D::TrySharedTarget(
 
     aOutProvider = PersistentBufferProviderShared::Create(
         GetSize(), GetSurfaceFormat(), imageBridge,
-        !mAllowAcceleration || GetEffectiveWillReadFrequently(),
+        !mAllowAcceleration || UseSoftwareRendering(),
         mOffscreenCanvas->GetWindowID());
   }
 
@@ -1814,7 +1815,7 @@ bool CanvasRenderingContext2D::TryBasicTarget(
     RefPtr<layers::PersistentBufferProvider>& aOutProvider,
     ErrorResult& aError) {
   aOutDT = gfxPlatform::GetPlatform()->CreateOffscreenCanvasDrawTarget(
-      GetSize(), GetSurfaceFormat());
+      GetSize(), GetSurfaceFormat(), UseSoftwareRendering());
   if (!aOutDT) {
     aError.ThrowInvalidStateError("Canvas could not create basic draw target.");
     return false;
@@ -2027,6 +2028,7 @@ CanvasRenderingContext2D::SetContextOptions(JSContext* aCx,
   }
 
   mWillReadFrequently = attributes.mWillReadFrequently;
+  mForceSoftwareRendering = attributes.mForceSoftwareRendering;
 
   mContextAttributesHasAlpha = attributes.mAlpha;
   UpdateIsOpaque();
@@ -5429,18 +5431,29 @@ MaybeGetSurfaceDescriptorForRemoteCanvas(
     return Nothing();
   }
 
-  const auto& sdv = sd.ref().get_SurfaceDescriptorGPUVideo();
+  auto& sdv = sd.ref().get_SurfaceDescriptorGPUVideo();
   const auto& sdvType = sdv.type();
   if (sdvType ==
       layers::SurfaceDescriptorGPUVideo::TSurfaceDescriptorRemoteDecoder) {
-    const auto& sdrd = sdv.get_SurfaceDescriptorRemoteDecoder();
-    const auto& subdesc = sdrd.subdesc();
+    auto& sdrd = sdv.get_SurfaceDescriptorRemoteDecoder();
+    auto& subdesc = sdrd.subdesc();
     const auto& subdescType = subdesc.type();
     if (subdescType == layers::RemoteDecoderVideoSubDescriptor::Tnull_t) {
       return sd;
     }
     if (subdescType == layers::RemoteDecoderVideoSubDescriptor::
                            TSurfaceDescriptorMacIOSurface) {
+      return sd;
+    }
+    if (subdescType ==
+        layers::RemoteDecoderVideoSubDescriptor::TSurfaceDescriptorD3D10) {
+      auto& descD3D10 = subdesc.get_SurfaceDescriptorD3D10();
+      // Clear FileHandleWrapper, since FileHandleWrapper::mHandle could not be
+      // cross process delivered by using Shmem. Cross-process delivery of
+      // FileHandleWrapper::mHandle is not possible simply by using shmen. When
+      // it is tried, parent side process just causes crash during destroying
+      // FileHandleWrapper.
+      descD3D10.handle() = nullptr;
       return sd;
     }
   }
@@ -6658,9 +6671,10 @@ void CanvasRenderingContext2D::SetWriteOnly() {
   }
 }
 
-bool CanvasRenderingContext2D::GetEffectiveWillReadFrequently() const {
-  return StaticPrefs::gfx_canvas_willreadfrequently_enabled_AtStartup() &&
-         mWillReadFrequently;
+bool CanvasRenderingContext2D::UseSoftwareRendering() const {
+  return (StaticPrefs::gfx_canvas_willreadfrequently_enabled_AtStartup() &&
+          mWillReadFrequently) ||
+         mForceSoftwareRendering;
 }
 
 NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(CanvasPath, mParent)
@@ -6703,7 +6717,7 @@ already_AddRefed<CanvasPath> CanvasPath::Constructor(
 }
 
 already_AddRefed<CanvasPath> CanvasPath::Constructor(
-    const GlobalObject& aGlobal, const nsAString& aPathString) {
+    const GlobalObject& aGlobal, const nsACString& aPathString) {
   RefPtr<gfx::Path> tempPath = SVGContentUtils::GetPath(aPathString);
   if (!tempPath) {
     return Constructor(aGlobal);

@@ -1514,6 +1514,7 @@ class Document : public nsINode,
 
   nsresult InitCSP(nsIChannel* aChannel);
   nsresult InitCOEP(nsIChannel* aChannel);
+  nsresult InitDocPolicy(nsIChannel* aChannel);
 
   nsresult InitReferrerInfo(nsIChannel* aChannel);
 
@@ -3450,8 +3451,8 @@ class Document : public nsINode,
    * @param aY Vertical point at which to determine the caret position, in
    *           page coordinates.
    */
-  already_AddRefed<nsDOMCaretPosition> CaretPositionFromPoint(float aX,
-                                                              float aY);
+  already_AddRefed<nsDOMCaretPosition> CaretPositionFromPoint(
+      float aX, float aY, const CaretPositionFromPointOptions& aOptions);
 
   Element* GetScrollingElement();
   // A way to check whether a given element is what would get returned from
@@ -3625,6 +3626,9 @@ class Document : public nsINode,
   // Whether we're cloning the contents of an SVG use element.
   bool CloningForSVGUse() const { return mCloningForSVGUse; }
 
+  // If this is true, we're ignoring scrolling to a fragment.
+  bool ForceLoadAtTop() const { return mForceLoadAtTop; }
+
   // This should be called when this document receives events which are likely
   // to be user interaction with the document, rather than the byproduct of
   // interaction with the browser (i.e. a keypress to scroll the view port,
@@ -3640,6 +3644,12 @@ class Document : public nsINode,
   // Return true if NotifyUserGestureActivation() has been called on any
   // document in the document tree.
   bool HasBeenUserGestureActivated();
+
+  // Returns true if this document was loaded with an user interaction,
+  // allowing a text directive to be scrolled to if the document was loaded with
+  // a text fragment. This call consumes this flag, ie. a subsequent call will
+  // return false.
+  bool ConsumeTextDirectiveUserActivation();
 
   // Reture timestamp of last user gesture in milliseconds relative to
   // navigation start timestamp.
@@ -3694,16 +3704,17 @@ class Document : public nsINode,
            GetDocGroup() == GetInProcessParentDocument()->GetDocGroup();
   }
 
-  void AddIntersectionObserver(DOMIntersectionObserver* aObserver) {
-    MOZ_ASSERT(!mIntersectionObservers.Contains(aObserver),
+  void AddIntersectionObserver(DOMIntersectionObserver& aObserver) {
+    MOZ_ASSERT(!mIntersectionObservers.Contains(&aObserver),
                "Intersection observer already in the list");
-    mIntersectionObservers.Insert(aObserver);
+    mIntersectionObservers.AppendElement(&aObserver);
   }
-
-  void RemoveIntersectionObserver(DOMIntersectionObserver* aObserver) {
-    mIntersectionObservers.Remove(aObserver);
+  void RemoveIntersectionObserver(DOMIntersectionObserver& aObserver) {
+    // TODO(emilio): This can fail during unlink because Document unlink clears
+    // the IntersectionObserver array, but it seems it wouldn't need to?
+    // MOZ_ASSERT(mIntersectionObservers.Contains(&aObserver));
+    mIntersectionObservers.RemoveElement(&aObserver);
   }
-
   bool HasIntersectionObservers() const {
     return !mIntersectionObservers.IsEmpty();
   }
@@ -3735,10 +3746,17 @@ class Document : public nsINode,
   bool IsScriptTracking(JSContext* aCx) const;
 
   // ResizeObserver usage.
-  void AddResizeObserver(ResizeObserver&);
-  void RemoveResizeObserver(ResizeObserver&);
-  void ScheduleResizeObserversNotification() const;
+  void AddResizeObserver(ResizeObserver& aObserver) {
+    MOZ_ASSERT(!mResizeObservers.Contains(&aObserver));
+    mResizeObservers.AppendElement(&aObserver);
+  }
+  void RemoveResizeObserver(ResizeObserver& aObserver) {
+    MOZ_ASSERT(mResizeObservers.Contains(&aObserver));
+    mResizeObservers.RemoveElement(&aObserver);
+  }
   bool HasResizeObservers() const { return !mResizeObservers.IsEmpty(); }
+
+  void ScheduleResizeObserversNotification() const;
   /**
    * Calls GatherActiveObservations(aDepth) for all ResizeObservers.
    * All observations in each ResizeObserver with element's depth more than
@@ -4284,10 +4302,10 @@ class Document : public nsINode,
     MOZ_CAN_RUN_SCRIPT nsresult
     GetCommandStateParams(nsCommandParams& aParams) const;
 
-   private:
     // The returned editor's life is guaranteed while this instance is alive.
     EditorBase* GetTargetEditor() const;
 
+   private:
     RefPtr<EditorBase> mActiveEditor;
     RefPtr<HTMLEditor> mHTMLEditor;
     RefPtr<EditorCommand> mEditorCommand;
@@ -4881,6 +4899,8 @@ class Document : public nsINode,
 
   bool mSuspendDOMNotifications : 1;
 
+  bool mForceLoadAtTop : 1;
+
   // The fingerprinting protections overrides for this document. The value will
   // override the default enabled fingerprinting protections for this document.
   // This will only get populated if these is one that comes from the local
@@ -5173,10 +5193,9 @@ class Document : public nsINode,
   // is a weak reference to avoid leaks due to circular references.
   nsWeakPtr mScopeObject;
 
-  // Array of intersection observers
-  nsTHashSet<DOMIntersectionObserver*> mIntersectionObservers;
-
-  // Array of resize observers
+  // Array of intersection observers with active observations.
+  nsTArray<DOMIntersectionObserver*> mIntersectionObservers;
+  // Array of resize observers with active observations.
   nsTArray<ResizeObserver*> mResizeObservers;
 
   RefPtr<DOMIntersectionObserver> mLazyLoadObserver;

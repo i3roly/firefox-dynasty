@@ -10,6 +10,7 @@
 #include "mozilla/CycleCollectedJSContext.h"
 #include "mozilla/DeferredFinalize.h"
 #include "mozilla/HashTable.h"
+#include "mozilla/HoldDropJSObjects.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/RefPtr.h"
@@ -272,7 +273,7 @@ class CycleCollectedJSRuntime {
 
   // Trace gray JS roots until budget is exceeded and return whether we
   // finished.
-  static bool TraceGrayJS(JSTracer* aTracer, js::SliceBudget& budget,
+  static bool TraceGrayJS(JSTracer* aTracer, JS::SliceBudget& budget,
                           void* aData);
 
   static void GCCallback(JSContext* aContext, JSGCStatus aStatus,
@@ -296,9 +297,9 @@ class CycleCollectedJSRuntime {
 #endif
 
   bool TraceNativeGrayRoots(JSTracer* aTracer, JSHolderMap::WhichHolders aWhich,
-                            js::SliceBudget& aBudget);
+                            JS::SliceBudget& aBudget);
   bool TraceJSHolders(JSTracer* aTracer, JSHolderMap::Iter& aIter,
-                      js::SliceBudget& aBudget);
+                      JS::SliceBudget& aBudget);
 
  public:
   enum DeferredFinalizeType {
@@ -394,7 +395,7 @@ class CycleCollectedJSRuntime {
  public:
   void AddJSHolder(void* aHolder, nsScriptObjectTracer* aTracer,
                    JS::Zone* aZone);
-  void RemoveJSHolder(void* aHolder);
+  void RemoveJSHolder(void* aHolder, ShouldClearJSRefs aClearRefs);
 #ifdef DEBUG
   void AssertNoObjectsToTrace(void* aPossibleJSHolder);
 #endif

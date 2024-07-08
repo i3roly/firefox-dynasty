@@ -8,7 +8,7 @@ import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import org.junit.Rule
 import org.junit.Test
 import org.mozilla.fenix.customannotations.SmokeTest
-import org.mozilla.fenix.helpers.HomeActivityTestRule
+import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
 import org.mozilla.fenix.helpers.RetryTestRule
 import org.mozilla.fenix.helpers.TestAssetHelper
 import org.mozilla.fenix.helpers.TestHelper
@@ -28,7 +28,7 @@ class HomeScreenTest : TestSetup() {
     @get:Rule(order = 0)
     val activityTestRule =
         AndroidComposeTestRule(
-            HomeActivityTestRule.withDefaultSettingsOverrides(),
+            HomeActivityIntentTestRule.withDefaultSettingsOverrides(),
         ) { it.activity }
 
     @Rule(order = 1)
@@ -172,6 +172,7 @@ class HomeScreenTest : TestSetup() {
     fun verifyJumpBackInContextualHintTest() {
         activityTestRule.activityRule.applySettingsExceptions {
             it.isJumpBackInCFREnabled = true
+            it.isNavigationBarCFREnabled = false
         }
 
         val genericPage = TestAssetHelper.getGenericAsset(mockWebServer, 1)
@@ -179,7 +180,25 @@ class HomeScreenTest : TestSetup() {
         navigationToolbar {
         }.enterURLAndEnterToBrowser(genericPage.url) {
         }.goToHomescreen {
-            verifyJumpBackInMessage(activityTestRule)
+            verifyJumpBackInMessage(activityTestRule, exists = true)
+        }
+    }
+
+    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2651349
+    @Test
+    fun verifyJumpBackCFRIsNotDisplayedWhileSearchFragmentIsEnableTest() {
+        activityTestRule.activityRule.applySettingsExceptions {
+            it.isJumpBackInCFREnabled = true
+        }
+
+        val genericPage = TestAssetHelper.getGenericAsset(mockWebServer, 1)
+
+        navigationToolbar {
+        }.enterURLAndEnterToBrowser(genericPage.url) {
+        }.openNavigationToolbar {
+        }
+        homeScreen {
+            verifyJumpBackInMessage(activityTestRule, exists = false)
         }
     }
 }

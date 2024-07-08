@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.annotation.UiThread
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatDialogFragment
 import androidx.core.view.isVisible
@@ -92,6 +93,7 @@ class TabsTrayFragment : AppCompatDialogFragment() {
     @VisibleForTesting internal lateinit var trayBehaviorManager: TabSheetBehaviorManager
 
     private val tabLayoutMediator = ViewBoundFeatureWrapper<TabLayoutMediator>()
+    private val inactiveTabsBinding = ViewBoundFeatureWrapper<InactiveTabsBinding>()
     private val tabCounterBinding = ViewBoundFeatureWrapper<TabCounterBinding>()
     private val floatingActionButtonBinding = ViewBoundFeatureWrapper<FloatingActionButtonBinding>()
     private val selectionBannerBinding = ViewBoundFeatureWrapper<SelectionBannerBinding>()
@@ -147,12 +149,15 @@ class TabsTrayFragment : AppCompatDialogFragment() {
         }
         val initialPage = args.page
         val activity = activity as HomeActivity
+        val initialInactiveExpanded = requireComponents.appStore.state.inactiveTabsExpanded
 
         tabsTrayStore = StoreProvider.get(this) {
             TabsTrayStore(
                 initialState = TabsTrayState(
                     selectedPage = initialPage,
                     mode = initialMode,
+                    selectedTabId = requireComponents.core.store.state.selectedTabId,
+                    inactiveTabsExpanded = initialInactiveExpanded,
                 ),
                 middlewares = listOf(
                     TabsTrayMiddleware(),
@@ -182,15 +187,15 @@ class TabsTrayFragment : AppCompatDialogFragment() {
             navigationInteractor = navigationInteractor,
             profiler = requireComponents.core.engine.profiler,
             tabsUseCases = requireComponents.useCases.tabsUseCases,
-            closeSyncedTabsUseCases = CloseTabsUseCases(
-                requireComponents.backgroundServices.syncedTabsCommands,
-            ),
+            closeSyncedTabsUseCases = requireComponents.useCases.closeSyncedTabsUseCases,
             bookmarksUseCase = requireComponents.useCases.bookmarksUseCases,
             ioDispatcher = Dispatchers.IO,
             collectionStorage = requireComponents.core.tabCollectionStorage,
             selectTabPosition = ::selectTabPosition,
             dismissTray = ::dismissTabsTray,
             showUndoSnackbarForTab = ::showUndoSnackbarForTab,
+            showUndoSnackbarForInactiveTab = ::showUndoSnackbarForInactiveTab,
+            showUndoSnackbarForSyncedTab = ::showUndoSnackbarForSyncedTab,
             showCancelledDownloadWarning = ::showCancelledDownloadWarning,
             showCollectionSnackbar = ::showCollectionSnackbar,
             showBookmarkSnackbar = ::showBookmarkSnackbar,
@@ -244,8 +249,6 @@ class TabsTrayFragment : AppCompatDialogFragment() {
             tabsTrayComposeBinding.root.setContent {
                 FirefoxTheme(theme = Theme.getTheme(allowPrivateTheme = false)) {
                     TabsTray(
-                        appStore = requireComponents.appStore,
-                        browserStore = requireComponents.core.store,
                         tabsTrayStore = tabsTrayStore,
                         displayTabsInGrid = requireContext().settings().gridTabView,
                         isInDebugMode = Config.channel.isDebug ||
@@ -545,6 +548,15 @@ class TabsTrayFragment : AppCompatDialogFragment() {
             )
         }
 
+        inactiveTabsBinding.set(
+            feature = InactiveTabsBinding(
+                tabsTrayStore = tabsTrayStore,
+                appStore = requireComponents.appStore,
+            ),
+            owner = this,
+            view = view,
+        )
+
         tabsFeature.set(
             feature = TabsFeature(
                 tabsTray = TabSorter(
@@ -633,6 +645,19 @@ class TabsTrayFragment : AppCompatDialogFragment() {
         dialog.show(parentFragmentManager, DOWNLOAD_CANCEL_DIALOG_FRAGMENT_TAG)
     }
 
+    @UiThread
+    internal fun showUndoSnackbarForSyncedTab(closeOperation: CloseTabsUseCases.UndoableOperation) {
+        lifecycleScope.allowUndo(
+            view = requireView(),
+            message = getString(R.string.snackbar_tab_closed),
+            undoActionTitle = getString(R.string.snackbar_deleted_undo),
+            onCancel = closeOperation::undo,
+            operation = { },
+            elevation = ELEVATION,
+            anchorView = getSnackbarAnchor(),
+        )
+    }
+
     @VisibleForTesting
     internal fun showUndoSnackbarForTab(isPrivate: Boolean) {
         val snackbarMessage =
@@ -654,6 +679,35 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                 } else {
                     tabLayoutMediator.withFeature {
                         it.selectTabAtPosition(pagePosition)
+                    }
+                }
+            },
+            operation = { },
+            elevation = ELEVATION,
+            anchorView = getSnackbarAnchor(),
+        )
+    }
+
+    @VisibleForTesting
+    internal fun showUndoSnackbarForInactiveTab(numClosed: Int) {
+        val snackbarMessage =
+            when (numClosed == 1) {
+                true -> getString(R.string.snackbar_tab_closed)
+                false -> getString(R.string.snackbar_num_tabs_closed, numClosed.toString())
+            }
+
+        lifecycleScope.allowUndo(
+            view = requireView(),
+            message = snackbarMessage,
+            undoActionTitle = getString(R.string.snackbar_deleted_undo),
+            onCancel = {
+                requireComponents.useCases.tabsUseCases.undo.invoke()
+
+                if (requireContext().settings().enableTabsTrayToCompose) {
+                    tabsTrayStore.dispatch(TabsTrayAction.PageSelected(Page.positionToPage(Page.NormalTabs.ordinal)))
+                } else {
+                    tabLayoutMediator.withFeature {
+                        it.selectTabAtPosition(Page.NormalTabs.ordinal)
                     }
                 }
             },

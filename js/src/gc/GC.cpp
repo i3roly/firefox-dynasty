@@ -247,6 +247,7 @@
 #include "vm/JSContext-inl.h"
 #include "vm/Realm-inl.h"
 #include "vm/Stack-inl.h"
+#include "vm/StringType-inl.h"
 
 using namespace js;
 using namespace js::gc;
@@ -260,6 +261,9 @@ using mozilla::TimeDuration;
 using mozilla::TimeStamp;
 
 using JS::AutoGCRooter;
+using JS::SliceBudget;
+using JS::TimeBudget;
+using JS::WorkBudget;
 
 const AllocKind gc::slotsToThingKind[] = {
     // clang-format off
@@ -469,7 +473,6 @@ GCRuntime::GCRuntime(JSRuntime* rt)
       markingValidator(nullptr),
 #endif
       defaultTimeBudgetMS_(TuningDefaults::DefaultTimeBudgetMS),
-      incrementalAllowed(true),
       compactingEnabled(TuningDefaults::CompactingEnabled),
       parallelMarkingEnabled(TuningDefaults::ParallelMarkingEnabled),
       rootsRemoved(false),
@@ -1079,8 +1082,9 @@ void GCRuntime::restoreSharedAtomsZone() {
   MOZ_ASSERT(rt->isMainRuntime());
   MOZ_ASSERT(rt->childRuntimeCount == 0);
 
+  // Insert at start to preserve invariant that atoms zones come first.
   AutoEnterOOMUnsafeRegion oomUnsafe;
-  if (!zones().append(sharedAtomsZone_)) {
+  if (!zones().insert(zones().begin(), sharedAtomsZone_)) {
     oomUnsafe.crash("restoreSharedAtomsZone");
   }
 
@@ -3372,6 +3376,8 @@ void GCRuntime::finishCollection(JS::GCReason reason) {
   for (GCZonesIter zone(this); !zone.done(); zone.next()) {
     zone->changeGCState(Zone::Finished, Zone::NoGC);
     zone->notifyObservingDebuggers();
+    zone->gcNextGraphNode = nullptr;
+    zone->gcNextGraphComponent = nullptr;
   }
 
 #ifdef JS_GC_ZEAL
@@ -3404,6 +3410,8 @@ void GCRuntime::checkGCStateNotInUse() {
     MOZ_ASSERT(!zone->wasGCStarted());
     MOZ_ASSERT(!zone->needsIncrementalBarrier());
     MOZ_ASSERT(!zone->isOnList());
+    MOZ_ASSERT(!zone->gcNextGraphNode);
+    MOZ_ASSERT(!zone->gcNextGraphComponent);
   }
 
   MOZ_ASSERT(zonesToMaybeCompact.ref().isEmpty());
@@ -4029,16 +4037,6 @@ IncrementalProgress GCRuntime::waitForBackgroundTask(
   return Finished;
 }
 
-GCAbortReason gc::IsIncrementalGCUnsafe(JSRuntime* rt) {
-  MOZ_ASSERT(!rt->mainContextFromOwnThread()->suppressGC);
-
-  if (!rt->gc.isIncrementalGCAllowed()) {
-    return GCAbortReason::IncrementalDisabled;
-  }
-
-  return GCAbortReason::None;
-}
-
 inline void GCRuntime::checkZoneIsScheduled(Zone* zone, JS::GCReason reason,
                                             const char* trigger) {
 #ifdef DEBUG
@@ -4084,13 +4082,11 @@ GCRuntime::IncrementalResult GCRuntime::budgetIncrementalGC(
   }
 
   if (!budget.isUnlimited()) {
-    GCAbortReason unsafeReason = IsIncrementalGCUnsafe(rt);
-    if (unsafeReason == GCAbortReason::None) {
-      if (reason == JS::GCReason::COMPARTMENT_REVIVED) {
-        unsafeReason = GCAbortReason::CompartmentRevived;
-      } else if (!incrementalGCEnabled) {
-        unsafeReason = GCAbortReason::ModeChange;
-      }
+    GCAbortReason unsafeReason = GCAbortReason::None;
+    if (reason == JS::GCReason::COMPARTMENT_REVIVED) {
+      unsafeReason = GCAbortReason::CompartmentRevived;
+    } else if (!incrementalGCEnabled) {
+      unsafeReason = GCAbortReason::ModeChange;
     }
 
     if (unsafeReason != GCAbortReason::None) {
@@ -4666,7 +4662,7 @@ void GCRuntime::gc(JS::GCOptions options, JS::GCReason reason) {
 }
 
 void GCRuntime::startGC(JS::GCOptions options, JS::GCReason reason,
-                        const js::SliceBudget& budget) {
+                        const SliceBudget& budget) {
   MOZ_ASSERT(!isIncrementalGCInProgress());
   setGCOptions(options);
 
@@ -4683,7 +4679,7 @@ void GCRuntime::setGCOptions(JS::GCOptions options) {
   maybeGcOptions = Some(options);
 }
 
-void GCRuntime::gcSlice(JS::GCReason reason, const js::SliceBudget& budget) {
+void GCRuntime::gcSlice(JS::GCReason reason, const SliceBudget& budget) {
   MOZ_ASSERT(isIncrementalGCInProgress());
   collect(false, budget, reason);
 }

@@ -10,9 +10,6 @@ import {
 } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
-// eslint-disable-next-line import/no-unassigned-import
-import "chrome://global/content/elements/moz-button.mjs";
-
 /**
  * Sidebar with expanded and collapsed states that provides entry points
  * to various sidebar panels and sidebar extensions.
@@ -20,7 +17,7 @@ import "chrome://global/content/elements/moz-button.mjs";
 export default class SidebarMain extends MozLitElement {
   static properties = {
     bottomActions: { type: Array },
-    expanded: { type: Boolean },
+    expanded: { type: Boolean, reflect: true },
     selectedView: { type: String },
     sidebarItems: { type: Array },
     open: { type: Boolean },
@@ -87,9 +84,13 @@ export default class SidebarMain extends MozLitElement {
     // Store the context menu target which holds the id required for managing sidebar items
     this.contextMenuTarget =
       event.explicitOriginalTarget.flattenedTreeParentNode;
-    if (!this.contextMenuTarget.getAttribute("extensionId")) {
-      event.preventDefault();
+    if (
+      this.contextMenuTarget.getAttribute("extensionId") ||
+      this.contextMenuTarget.className.includes("tab")
+    ) {
+      return;
     }
+    event.preventDefault();
   }
 
   async manageExtension() {
@@ -190,7 +191,7 @@ export default class SidebarMain extends MozLitElement {
   }
 
   entrypointTemplate(action) {
-    if (action.disabled) {
+    if (action.disabled || action.hidden) {
       return null;
     }
     const isActiveView = this.open && action.view === this.selectedView;
@@ -219,6 +220,7 @@ export default class SidebarMain extends MozLitElement {
         href="chrome://browser/content/sidebar/sidebar-main.css"
       />
       <div class="wrapper">
+        <slot name="tabstrip"></slot>
         <button-group
           class="tools-and-extensions actions-list"
           orientation="vertical"

@@ -1648,32 +1648,6 @@ void MacroAssemblerRiscv64Compat::boxNonDouble(JSValueType type, Register src,
   boxValue(type, src, dest.valueReg());
 }
 
-void MacroAssemblerRiscv64Compat::boolValueToDouble(const ValueOperand& operand,
-                                                    FloatRegister dest) {
-  UseScratchRegisterScope temps(this);
-  Register ScratchRegister = temps.Acquire();
-  convertBoolToInt32(operand.valueReg(), ScratchRegister);
-  convertInt32ToDouble(ScratchRegister, dest);
-}
-
-void MacroAssemblerRiscv64Compat::int32ValueToDouble(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToDouble(operand.valueReg(), dest);
-}
-
-void MacroAssemblerRiscv64Compat::boolValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  UseScratchRegisterScope temps(this);
-  Register ScratchRegister = temps.Acquire();
-  convertBoolToInt32(operand.valueReg(), ScratchRegister);
-  convertInt32ToFloat32(ScratchRegister, dest);
-}
-
-void MacroAssemblerRiscv64Compat::int32ValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToFloat32(operand.valueReg(), dest);
-}
-
 void MacroAssemblerRiscv64Compat::loadConstantFloat32(float f,
                                                       FloatRegister dest) {
   ma_lis(dest, f);
@@ -1885,28 +1859,6 @@ void MacroAssemblerRiscv64Compat::popValue(ValueOperand val) {
 }
 
 void MacroAssemblerRiscv64Compat::breakpoint(uint32_t value) { break_(value); }
-
-void MacroAssemblerRiscv64Compat::ensureDouble(const ValueOperand& source,
-                                               FloatRegister dest,
-                                               Label* failure) {
-  Label isDouble, done;
-  {
-    ScratchTagScope tag(asMasm(), source);
-    splitTagForTest(source, tag);
-    asMasm().branchTestDouble(Assembler::Equal, tag, &isDouble);
-    asMasm().branchTestInt32(Assembler::NotEqual, tag, failure);
-  }
-  UseScratchRegisterScope temps(this);
-  Register ScratchRegister = temps.Acquire();
-  unboxInt32(source, ScratchRegister);
-  convertInt32ToDouble(ScratchRegister, dest);
-  jump(&done);
-
-  bind(&isDouble);
-  unboxDouble(source, dest);
-
-  bind(&done);
-}
 
 void MacroAssemblerRiscv64Compat::handleFailureWithHandlerTail(
     Label* profilerExitTail, Label* bailoutTail) {
@@ -6512,40 +6464,8 @@ void MacroAssemblerRiscv64::wasmStoreImpl(const wasm::MemoryAccessDesc& access,
   }
 
   unsigned byteSize = access.byteSize();
-  bool isSigned;
-  bool isFloat = false;
-
-  switch (access.type()) {
-    case Scalar::Int8:
-      isSigned = true;
-      break;
-    case Scalar::Uint8:
-      isSigned = false;
-      break;
-    case Scalar::Int16:
-      isSigned = true;
-      break;
-    case Scalar::Uint16:
-      isSigned = false;
-      break;
-    case Scalar::Int32:
-      isSigned = true;
-      break;
-    case Scalar::Uint32:
-      isSigned = false;
-      break;
-    case Scalar::Int64:
-      isSigned = true;
-      break;
-    case Scalar::Float64:
-      isFloat = true;
-      break;
-    case Scalar::Float32:
-      isFloat = true;
-      break;
-    default:
-      MOZ_CRASH("unexpected array type");
-  }
+  bool isSigned = Scalar::isSignedIntType(access.type());
+  bool isFloat = Scalar::isFloatingType(access.type());
 
   BaseIndex address(memoryBase, ptr, TimesOne);
   asMasm().memoryBarrierBefore(access.sync());

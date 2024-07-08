@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 ---
-loader: gecko_taskgraph.loader.transform:loader
+loader: taskgraph.loader.transform:loader
 
 kind-dependencies:
     - packages
@@ -17,9 +17,14 @@ transforms:
 # (to use subdirectory clones of the proper directory), at which point we can
 # generate tasks for every docker image in the directory, secure in the
 # knowledge that unnecessary images will be omitted from the target task graph
-jobs:
+tasks:
     image_builder:
         symbol: I(ib)
+    image_builder_arm64:
+        symbol: I(ib-a64)
+        definition: image_builder
+        args:
+            ARCH: arm64
     # Neither the ubuntu1804-*raw nor the ubuntu1804-*packages images can have
     # packages dependencies.
     ubuntu1804-raw:
@@ -178,6 +183,9 @@ jobs:
         parent: debian12-raw
         packages:
             - deb12-python-zstandard
+    fetch-more:
+        symbol: I(fetch-more)
+        parent: fetch
     static-analysis-build:
         symbol: I(static-analysis-build)
         parent: debian12-base
@@ -247,4 +255,4 @@ jobs:
         parent: debian12-base
     android-ui-tests:
         symbol: I(android-ui-tests)
-        parent: android-components
+        parent: ubuntu2204-base

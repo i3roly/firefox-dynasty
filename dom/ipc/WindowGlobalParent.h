@@ -329,12 +329,17 @@ class WindowGlobalParent final : public WindowContext,
       const IPCIdentityCredential& aCredential,
       const StoreIdentityCredentialResolver& aResolver);
 
+  mozilla::ipc::IPCResult RecvNotifyPendingIdentityCredentialDiscovery(
+      const IdentityCredentialRequestOptions& aOptions,
+      const NotifyPendingIdentityCredentialDiscoveryResolver& aResolver);
+
   mozilla::ipc::IPCResult RecvGetStorageAccessPermission(
       GetStorageAccessPermissionResolver&& aResolve);
 
   mozilla::ipc::IPCResult RecvSetCookies(
       const nsCString& aBaseDomain, const OriginAttributes& aOriginAttributes,
-      nsIURI* aHost, bool aFromHttp, const nsTArray<CookieStruct>& aCookies);
+      nsIURI* aHost, bool aFromHttp, bool aIsThirdParty,
+      const nsTArray<CookieStruct>& aCookies);
 
   mozilla::ipc::IPCResult RecvOnInitialStorageAccess();
 

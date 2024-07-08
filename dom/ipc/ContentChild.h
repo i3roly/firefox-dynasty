@@ -160,6 +160,9 @@ class ContentChild final : public PContentChild,
   mozilla::ipc::IPCResult RecvInitProfiler(
       Endpoint<PProfilerChild>&& aEndpoint);
 
+  mozilla::ipc::IPCResult RecvInitClipboardContentAnalysis(
+      Endpoint<PClipboardContentAnalysisChild>&& aEndpoint);
+
   mozilla::ipc::IPCResult RecvGMPsChanged(
       nsTArray<GMPCapabilityData>&& capabilities);
 
@@ -365,6 +368,9 @@ class ContentChild final : public PContentChild,
   // this for telemetry.
   const nsACString& GetRemoteType() const override;
 
+  mozilla::ipc::IPCResult RecvInitRemoteWorkerService(
+      Endpoint<PRemoteWorkerServiceChild>&& aEndpoint);
+
   mozilla::ipc::IPCResult RecvInitBlobURLs(
       nsTArray<BlobURLRegistrationData>&& aRegistations);
 
@@ -406,21 +412,6 @@ class ContentChild final : public PContentChild,
   mozilla::ipc::IPCResult RecvShutdownConfirmedHP();
 
   mozilla::ipc::IPCResult RecvShutdown();
-
-  mozilla::ipc::IPCResult RecvInvokeDragSession(
-      const MaybeDiscarded<WindowContext>& aSourceWindowContext,
-      const MaybeDiscarded<WindowContext>& aSourceTopWindowContext,
-      nsTArray<IPCTransferableData>&& aTransferables, const uint32_t& aAction);
-
-  mozilla::ipc::IPCResult RecvUpdateDragSession(
-      nsTArray<IPCTransferableData>&& aTransferables,
-      EventMessage aEventMessage);
-
-  MOZ_CAN_RUN_SCRIPT_BOUNDARY
-  mozilla::ipc::IPCResult RecvEndDragSession(
-      const bool& aDoneDrag, const bool& aUserCancelled,
-      const mozilla::LayoutDeviceIntPoint& aEndDragPoint,
-      const uint32_t& aKeyModifiers, const uint32_t& aDropEffect);
 
   mozilla::ipc::IPCResult RecvPush(const nsCString& aScope,
                                    nsIPrincipal* aPrincipal,
