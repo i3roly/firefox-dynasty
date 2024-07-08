@@ -221,12 +221,16 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
       (iokit-property "MetalPluginName")
       (iokit-property "MetalPluginClassName")))
   ; bug 1893921
-  (if (defined? 'iokit-get-properties)
-    (with-filter (iokit-registry-entry-class "IOPlatformDevice")
-      (allow iokit-get-properties
-        (iokit-property "product-id")
-        (iokit-property "IORegistryEntryPropertyKeys")
-        (iokit-property "ean-storage-present"))))
+  ; added by haik on 26 june 2024 and seems to be for arm-only
+  ; (big surprise), so limit to big sur and above.
+  (if (>= macosVersion 1100)
+    (if (defined? 'iokit-get-properties)
+      (with-filter (iokit-registry-entry-class "IOPlatformDevice")
+        (allow iokit-get-properties
+          (iokit-property "product-id")
+          (iokit-property "IORegistryEntryPropertyKeys")
+          (iokit-property "ean-storage-present")))))
+  (if (>= macosVersion 1100)
   (if (defined? 'iokit-get-properties)
     (with-filter (iokit-registry-entry-class "IOService")
       (allow iokit-get-properties
@@ -234,7 +238,7 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
         (iokit-property "syscfg-erly-kbgs-allow-load")
         (iokit-property "syscfg-erly-kbgs-data-class")
         (iokit-property "syscfg-erly-kbgs-allow-unsealed")
-        (iokit-property "syscfg-v2-data"))))
+        (iokit-property "syscfg-v2-data")))))
 
   ; depending on systems, the 1st, 2nd or both rules are necessary
   (allow user-preference-read (preference-domain "com.apple.HIToolbox"))
