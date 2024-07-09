@@ -697,6 +697,7 @@ NativeLayerRootSnapshotterCA::NativeLayerRootSnapshotterCA(
 
 NativeLayerRootSnapshotterCA::~NativeLayerRootSnapshotterCA() {
   mLayerRoot->OnNativeLayerRootSnapshotterDestroyed(this);
+  AutoCATransaction transaction;
   [mRenderer release];
 }
 
