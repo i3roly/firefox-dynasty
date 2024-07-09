@@ -2343,6 +2343,11 @@
   value: true
   mirror: always
 
+- name: dom.details_group.enabled
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # Only propagate the open window click permission if the setTimeout() is equal
 # to or less than this value.
 - name: dom.disable_open_click_delay
@@ -4770,9 +4775,9 @@
   value: true
   mirror: always
 
-- name: dom.webnotifications.privateBrowsing.enableDespiteLimitations
+- name: dom.webnotifications.privateBrowsing.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 - name: dom.webnotifications.requireuserinteraction
@@ -11256,7 +11261,7 @@
 # Planned next steps: true → @IS_NOT_NIGHTLY_BUILD@ → false
 - name: media.devices.enumerate.legacy.enabled
   type: bool
-  value: true
+  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # WebRTC prefs follow

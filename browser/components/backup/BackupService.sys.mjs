@@ -13,6 +13,7 @@ import {
   BYTES_IN_MEBIBYTE,
 } from "resource:///modules/backup/MeasurementUtils.sys.mjs";
 import { ERRORS } from "resource:///modules/backup/BackupConstants.mjs";
+import { BackupError } from "resource:///modules/backup/BackupError.mjs";
 
 const BACKUP_DIR_PREF_NAME = "browser.backup.location";
 const SCHEDULED_BACKUPS_ENABLED_PREF_NAME = "browser.backup.scheduled.enabled";
@@ -760,9 +761,10 @@ export class BackupService extends EventTarget {
     } else if (schemaType == SCHEMAS.ARCHIVE_JSON_BLOCK) {
       schemaURL = `chrome://browser/content/backup/ArchiveJSONBlock.${version}.schema.json`;
     } else {
-      throw new Error(`Did not recognize SCHEMAS constant: ${schemaType}`, {
-        cause: ERRORS.UNKNOWN,
-      });
+      throw new BackupError(
+        `Did not recognize SCHEMAS constant: ${schemaType}`,
+        ERRORS.UNKNOWN
+      );
     }
 
     let response = await fetch(schemaURL);
@@ -819,9 +821,10 @@ export class BackupService extends EventTarget {
    */
   static get() {
     if (!this.#instance) {
-      throw new Error("BackupService not initialized", {
-        cause: ERRORS.UNINITIALIZED,
-      });
+      throw new BackupError(
+        "BackupService not initialized",
+        ERRORS.UNINITIALIZED
+      );
     }
     return this.#instance;
   }
@@ -954,11 +957,44 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * Computes the appropriate link to place in the single-file archive for
+   * downloading a version of this application for the same update channel.
+   *
+   * When bug 1905909 lands, we'll first check to see if there are download
+   * links available in Remote Settings.
+   *
+   * If there aren't any, we will fallback by looking for preference values at
+   * browser.backup.template.fallback-download.${updateChannel}.
+   *
+   * If no such preference exists, a final "ultimate" fallback download link is
+   * chosen for the release channel.
+   *
+   * @param {string} updateChannel
+   *  The current update channel for the application, as provided by
+   *  AppConstants.MOZ_UPDATE_CHANNEL.
+   * @returns {Promise<string>}
+   */
+  async resolveDownloadLink(updateChannel) {
+    // If all else fails, this is the download link we'll put into the rendered
+    // template.
+    const ULTIMATE_FALLBACK_DOWNLOAD_URL =
+      "https://www.mozilla.org/firefox/download/thanks/?s=direct&utm_medium=firefox-desktop&utm_source=backup&utm_campaign=firefox-backup-2024&utm_content=control";
+    const FALLBACK_DOWNLOAD_URL = Services.prefs.getStringPref(
+      `browser.backup.template.fallback-download.${updateChannel}`,
+      ULTIMATE_FALLBACK_DOWNLOAD_URL
+    );
+
+    // Bug 1905909: Once we set up the download links in RemoteSettings, we can
+    // query for them here.
+
+    return FALLBACK_DOWNLOAD_URL;
+  }
+
+  /**
    * @typedef {object} CreateBackupResult
-   * @property {string} stagingPath
-   *   The staging path for where the backup was created.
-   * @property {string} compressedStagingPath
-   *   The path to the file containing the compressed staging path.
+   * @property {object} manifest
+   *   The backup manifest data of the created backup. See BackupManifest
+   *   schema for specific details.
    * @property {string} archivePath
    *   The path to the single file archive that was created.
    */
@@ -972,8 +1008,8 @@ export class BackupService extends EventTarget {
    *   The path to the profile to backup. By default, this is the current
    *   profile.
    * @returns {Promise<CreateBackupResult|null>}
-   *   A promise that resolves to an object containing the path to the staging
-   *   folder where the backup was created, or null if the backup failed.
+   *   A promise that resolves to information about the backup that was
+   *   created, or null if the backup failed.
    */
   async createBackup({ profilePath = PathUtils.profileDir } = {}) {
     // createBackup does not allow re-entry or concurrent backups.
@@ -1127,7 +1163,9 @@ export class BackupService extends EventTarget {
       let compressedStagingPath = await this.#compressStagingFolder(
         renamedStagingPath,
         backupDirPath
-      );
+      ).finally(async () => {
+        await IOUtils.remove(renamedStagingPath, { recursive: true });
+      });
 
       // Now create the single-file archive. For now, we'll stash this in the
       // backups folder while it gets written. Once that's done, we'll attempt
@@ -1140,7 +1178,9 @@ export class BackupService extends EventTarget {
         compressedStagingPath,
         this.#encState,
         manifest.meta
-      );
+      ).finally(async () => {
+        await IOUtils.remove(compressedStagingPath);
+      });
 
       let archivePath = await this.finalizeSingleFileArchive(
         archiveTmpPath,
@@ -1152,11 +1192,7 @@ export class BackupService extends EventTarget {
       Services.prefs.setIntPref(LAST_BACKUP_TIMESTAMP_PREF_NAME, nowSeconds);
       this.#_state.lastBackupDate = nowSeconds;
 
-      return {
-        stagingPath: renamedStagingPath,
-        compressedStagingPath,
-        archivePath,
-      };
+      return { manifest, archivePath };
     } finally {
       this.#backupInProgress = false;
     }
@@ -1379,7 +1415,7 @@ export class BackupService extends EventTarget {
       await IOUtils.remove(recoveryFilePath, {
         retryReadonly: true,
       });
-      throw new Error("Corrupt archive.", { cause: ERRORS.CORRUPTED_ARCHIVE });
+      throw new BackupError("Corrupt archive.", ERRORS.CORRUPTED_ARCHIVE);
     }
 
     await this.#decompressChildren(recoveryFolderDestPath, "", recoveryArchive);
@@ -1474,7 +1510,11 @@ export class BackupService extends EventTarget {
       Services.locale.appLocaleAsBCP47
     );
 
-    // TODO: insert download link (bug 1903117)
+    let downloadLink = templateDOM.querySelector("#download-moz-browser");
+    downloadLink.href = await this.resolveDownloadLink(
+      AppConstants.MOZ_UPDATE_CHANNEL
+    );
+
     let supportLinkHref =
       Services.urlFormatter.formatURLPref("app.support.baseURL") +
       "recover-from-backup";
@@ -1542,9 +1582,10 @@ export class BackupService extends EventTarget {
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */`;
     if (!stylesText.includes(MPL_LICENSE)) {
-      throw new Error("Expected the MPL license block within archive.css", {
-        cause: ERRORS.UNKNOWN,
-      });
+      throw new BackupError(
+        "Expected the MPL license block within archive.css",
+        ERRORS.UNKNOWN
+      );
     }
 
     stylesText = stylesText.replace(MPL_LICENSE, "");
@@ -1598,6 +1639,7 @@ export class BackupService extends EventTarget {
       "resource:///modules/backup/Archive.worker.mjs",
       { type: "module" }
     );
+    worker.ExceptionHandlers[BackupError.name] = BackupError.fromMsg;
 
     let chunkSize =
       options.chunkSize || lazy.ArchiveUtils.ARCHIVE_CHUNK_MAX_BYTES_SIZE;
@@ -1613,22 +1655,24 @@ export class BackupService extends EventTarget {
           }
         : null;
 
-      await worker.post("constructArchive", [
-        {
-          archivePath,
-          markup,
-          backupMetadata,
-          compressedBackupSnapshotPath,
-          encryptionArgs,
-          chunkSize,
-        },
-      ]);
-    } catch (e) {
-      // TODO: Bug 1906169 - errors in archive service worker should be more
-      // specific than a general "unknown" error cause
-      throw new Error("Backup archive creation failed", {
-        cause: ERRORS.UNKNOWN,
-      });
+      await worker
+        .post("constructArchive", [
+          {
+            archivePath,
+            markup,
+            backupMetadata,
+            compressedBackupSnapshotPath,
+            encryptionArgs,
+            chunkSize,
+          },
+        ])
+        .catch(e => {
+          lazy.logConsole.error(e);
+          if (!(e instanceof BackupError)) {
+            throw new BackupError("Failed to create archive", ERRORS.UNKNOWN);
+          }
+          throw e;
+        });
     } finally {
       worker.terminate();
     }
@@ -1790,9 +1834,10 @@ export class BackupService extends EventTarget {
               resolve(archiveMetadata);
             } catch (e) {
               reject(
-                new Error("Could not parse archive metadata.", {
-                  cause: ERRORS.CORRUPTED_ARCHIVE,
-                })
+                new BackupError(
+                  "Could not parse archive metadata.",
+                  ERRORS.CORRUPTED_ARCHIVE
+                )
               );
             }
             // No need to load anything else - abort reading in more
@@ -1879,18 +1924,28 @@ export class BackupService extends EventTarget {
       "resource:///modules/backup/Archive.worker.mjs",
       { type: "module" }
     );
+    worker.ExceptionHandlers[BackupError.name] = BackupError.fromMsg;
 
     if (!(await IOUtils.exists(archivePath))) {
-      throw new Error("Archive file does not exist at path " + archivePath, {
-        cause: ERRORS.UNKNOWN,
-      });
+      throw new BackupError(
+        "Archive file does not exist at path " + archivePath,
+        ERRORS.UNKNOWN
+      );
     }
 
     try {
-      let { startByteOffset, contentType } = await worker.post(
-        "parseArchiveHeader",
-        [archivePath]
-      );
+      let { startByteOffset, contentType } = await worker
+        .post("parseArchiveHeader", [archivePath])
+        .catch(e => {
+          lazy.logConsole.error(e);
+          if (!(e instanceof BackupError)) {
+            throw new BackupError(
+              "Failed to parse archive header",
+              ERRORS.FILE_SYSTEM_ERROR
+            );
+          }
+          throw e;
+        });
       let archiveFile = await IOUtils.getFile(archivePath);
       let archiveJSON;
       try {
@@ -1901,16 +1956,15 @@ export class BackupService extends EventTarget {
         );
 
         if (!archiveJSON.version) {
-          throw new Error("Missing version in the archive JSON block.", {
-            cause: ERRORS.CORRUPTED_ARCHIVE,
-          });
+          throw new BackupError(
+            "Missing version in the archive JSON block.",
+            ERRORS.CORRUPTED_ARCHIVE
+          );
         }
         if (archiveJSON.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
-          throw new Error(
+          throw new BackupError(
             `Archive JSON block is a version newer than we can interpret: ${archiveJSON.version}`,
-            {
-              cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
-            }
+            ERRORS.UNSUPPORTED_BACKUP_VERSION
           );
         }
 
@@ -1937,9 +1991,9 @@ export class BackupService extends EventTarget {
           );
 
           // TODO: Collect telemetry for this case. (bug 1891817)
-          throw new Error(
+          throw new BackupError(
             `Archive JSON block does not conform to schema version ${archiveJSON.version}`,
-            { cause: ERRORS.CORRUPTED_ARCHIVE }
+            ERRORS.CORRUPTED_ARCHIVE
           );
         }
       } catch (e) {
@@ -1955,6 +2009,9 @@ export class BackupService extends EventTarget {
         contentType,
         archiveJSON,
       };
+    } catch (e) {
+      lazy.logConsole.error(e);
+      throw e;
     } finally {
       worker.terminate();
     }
@@ -1989,9 +2046,9 @@ export class BackupService extends EventTarget {
     let decryptor = null;
     if (isEncrypted) {
       if (!recoveryCode) {
-        throw new Error(
+        throw new BackupError(
           "A recovery code is required to decrypt this archive.",
-          { cause: ERRORS.UNAUTHORIZED }
+          ERRORS.UNAUTHORIZED
         );
       }
       decryptor = await lazy.ArchiveDecryptor.initialize(
@@ -2075,15 +2132,17 @@ export class BackupService extends EventTarget {
       lazy.logConsole.error(
         `Something went wrong while finalizing the staging folder. ${e}`
       );
-      throw new Error("Failed to finalize staging folder", {
-        cause: ERRORS.FILE_SYSTEM_ERROR,
-      });
+      throw new BackupError(
+        "Failed to finalize staging folder",
+        ERRORS.FILE_SYSTEM_ERROR
+      );
     }
   }
 
   /**
    * Creates and resolves with a backup manifest object with an empty resources
-   * property.
+   * property. See the BackupManifest schema for the specific shape of the
+   * returned manifest object.
    *
    * @returns {Promise<object>}
    */
@@ -2275,17 +2334,16 @@ export class BackupService extends EventTarget {
       );
       let manifest = await IOUtils.readJSON(manifestPath);
       if (!manifest.version) {
-        throw new Error("Backup manifest version not found", {
-          cause: ERRORS.CORRUPTED_ARCHIVE,
-        });
+        throw new BackupError(
+          "Backup manifest version not found",
+          ERRORS.CORRUPTED_ARCHIVE
+        );
       }
 
       if (manifest.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
-        throw new Error(
+        throw new BackupError(
           "Cannot recover from a manifest newer than the current schema version",
-          {
-            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
-          }
+          ERRORS.UNSUPPORTED_BACKUP_VERSION
         );
       }
 
@@ -2306,9 +2364,10 @@ export class BackupService extends EventTarget {
           schemaValidationResult
         );
         // TODO: Collect telemetry for this case. (bug 1891817)
-        throw new Error("Cannot recover from an invalid backup manifest", {
-          cause: ERRORS.CORRUPTED_ARCHIVE,
-        });
+        throw new BackupError(
+          "Cannot recover from an invalid backup manifest",
+          ERRORS.CORRUPTED_ARCHIVE
+        );
       }
 
       // In the future, if we ever bump the ArchiveUtils.SCHEMA_VERSION and need
@@ -2318,22 +2377,18 @@ export class BackupService extends EventTarget {
       let meta = manifest.meta;
 
       if (meta.appName != AppConstants.MOZ_APP_NAME) {
-        throw new Error(
+        throw new BackupError(
           `Cannot recover a backup from ${meta.appName} in ${AppConstants.MOZ_APP_NAME}`,
-          {
-            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
-          }
+          ERRORS.UNSUPPORTED_BACKUP_VERSION
         );
       }
 
       if (
         Services.vc.compare(AppConstants.MOZ_APP_VERSION, meta.appVersion) < 0
       ) {
-        throw new Error(
+        throw new BackupError(
           `Cannot recover a backup created on version ${meta.appVersion} in ${AppConstants.MOZ_APP_VERSION}`,
-          {
-            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
-          }
+          ERRORS.UNSUPPORTED_BACKUP_VERSION
         );
       }
 
@@ -2509,7 +2564,10 @@ export class BackupService extends EventTarget {
   setParentDirPath(parentDirPath) {
     try {
       if (!parentDirPath || !PathUtils.filename(parentDirPath)) {
-        throw new Error("Parent directory path is invalid.");
+        throw new BackupError(
+          "Parent directory path is invalid.",
+          ERRORS.FILE_SYSTEM_ERROR
+        );
       }
       // Recreate the backups path with the new parent directory.
       let fullPath = PathUtils.join(
@@ -2710,21 +2768,24 @@ export class BackupService extends EventTarget {
     lazy.logConsole.debug("Enabling encryption.");
     let encState = await this.loadEncryptionState(profilePath);
     if (encState) {
-      throw new Error("Encryption is already enabled.", {
-        cause: ERRORS.ENCRYPTION_ALREADY_ENABLED,
-      });
+      throw new BackupError(
+        "Encryption is already enabled.",
+        ERRORS.ENCRYPTION_ALREADY_ENABLED
+      );
     }
 
     if (!password) {
-      throw new Error("Cannot supply a blank password.", {
-        cause: ERRORS.INVALID_PASSWORD,
-      });
+      throw new BackupError(
+        "Cannot supply a blank password.",
+        ERRORS.INVALID_PASSWORD
+      );
     }
 
     if (password.length < 8) {
-      throw new Error("Password must be at least 8 characters.", {
-        cause: ERRORS.INVALID_PASSWORD,
-      });
+      throw new BackupError(
+        "Password must be at least 8 characters.",
+        ERRORS.INVALID_PASSWORD
+      );
     }
 
     // TODO: Enforce other password rules here, such as ensuring that the
@@ -2733,9 +2794,10 @@ export class BackupService extends EventTarget {
       password
     ));
     if (!encState) {
-      throw new Error("Failed to construct ArchiveEncryptionState", {
-        cause: ERRORS.UNKNOWN,
-      });
+      throw new BackupError(
+        "Failed to construct ArchiveEncryptionState",
+        ERRORS.UNKNOWN
+      );
     }
 
     this.#encState = encState;
@@ -2766,9 +2828,10 @@ export class BackupService extends EventTarget {
     lazy.logConsole.debug("Disabling encryption.");
     let encState = await this.loadEncryptionState(profilePath);
     if (!encState) {
-      throw new Error("Encryption is already disabled.", {
-        cause: ERRORS.ENCRYPTION_ALREADY_DISABLED,
-      });
+      throw new BackupError(
+        "Encryption is already disabled.",
+        ERRORS.ENCRYPTION_ALREADY_DISABLED
+      );
     }
 
     let encStateFile = PathUtils.join(

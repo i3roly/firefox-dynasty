@@ -30,6 +30,64 @@ static TextLeafPoint GetEndpoint(TextLeafRange& aRange,
   return aRange.End();
 }
 
+static void RemoveExcludedAccessiblesFromRange(TextLeafRange& aRange) {
+  MOZ_ASSERT(aRange);
+  TextLeafPoint start = aRange.Start();
+  TextLeafPoint end = aRange.End();
+  if (start == end) {
+    // The range is collapsed. It doesn't include anything.
+    return;
+  }
+  if (end.mOffset != 0) {
+    return;
+  }
+  // end is at the start of its Accessible. This can happen because we always
+  // search for the start of a character, word, etc. Since the end of a range
+  // is exclusive, the range doesn't include anything in this Accessible.
+  // Move the end back so that it doesn't touch this Accessible at all. This
+  // is important when determining what Accessibles lie within this range
+  // because otherwise, we'd incorrectly consider an Accessible which the range
+  // doesn't actually cover.
+  // Move to the previous character.
+  end = end.FindBoundary(nsIAccessibleText::BOUNDARY_CHAR, eDirPrevious);
+  // We want the position immediately after this character in the same
+  // Accessible.
+  ++end.mOffset;
+  if (start <= end) {
+    aRange.SetEnd(end);
+  }
+}
+
+static bool IsUiaEmbeddedObject(const Accessible* aAcc) {
+  // "For UI Automation, an embedded object is any element that has non-textual
+  // boundaries such as an image, hyperlink, table, or document type"
+  // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-textpattern-and-embedded-objects-overview
+  if (aAcc->IsText()) {
+    return false;
+  }
+  switch (aAcc->Role()) {
+    case roles::CONTENT_DELETION:
+    case roles::CONTENT_INSERTION:
+    case roles::EMPHASIS:
+    case roles::LANDMARK:
+    case roles::MARK:
+    case roles::NAVIGATION:
+    case roles::NOTE:
+    case roles::PARAGRAPH:
+    case roles::REGION:
+    case roles::SECTION:
+    case roles::STRONG:
+    case roles::SUBSCRIPT:
+    case roles::SUPERSCRIPT:
+    case roles::TEXT:
+    case roles::TEXT_CONTAINER:
+      return false;
+    default:
+      break;
+  }
+  return true;
+}
+
 // UiaTextRange
 
 UiaTextRange::UiaTextRange(TextLeafRange& aRange) {
@@ -277,7 +335,22 @@ UiaTextRange::GetBoundingRectangles(__RPC__deref_out_opt SAFEARRAY** aRetVal) {
 STDMETHODIMP
 UiaTextRange::GetEnclosingElement(
     __RPC__deref_out_opt IRawElementProviderSimple** aRetVal) {
-  return E_NOTIMPL;
+  if (!aRetVal) {
+    return E_INVALIDARG;
+  }
+  *aRetVal = nullptr;
+  TextLeafRange range = GetRange();
+  if (!range) {
+    return CO_E_OBJNOTCONNECTED;
+  }
+  RemoveExcludedAccessiblesFromRange(range);
+  if (Accessible* enclosing =
+          range.Start().mAcc->GetClosestCommonInclusiveAncestor(
+              range.End().mAcc)) {
+    RefPtr<IRawElementProviderSimple> uia = MsaaAccessible::GetFrom(enclosing);
+    uia.forget(aRetVal);
+  }
+  return S_OK;
 }
 
 STDMETHODIMP
@@ -411,6 +484,68 @@ UiaTextRange::GetChildren(__RPC__deref_out_opt SAFEARRAY** aRetVal) {
     return E_INVALIDARG;
   }
   *aRetVal = nullptr;
+  TextLeafRange range = GetRange();
+  if (!range) {
+    return CO_E_OBJNOTCONNECTED;
+  }
+  RemoveExcludedAccessiblesFromRange(range);
+  Accessible* startAcc = range.Start().mAcc;
+  Accessible* endAcc = range.End().mAcc;
+  Accessible* common = startAcc->GetClosestCommonInclusiveAncestor(endAcc);
+  if (!common) {
+    return S_OK;
+  }
+  // Get all the direct children of `common` from `startAcc` through `endAcc`.
+  // Find the index of the direct child containing startAcc.
+  int32_t startIndex = -1;
+  if (startAcc == common) {
+    startIndex = 0;
+  } else {
+    Accessible* child = startAcc;
+    for (;;) {
+      Accessible* parent = child->Parent();
+      if (parent == common) {
+        startIndex = child->IndexInParent();
+        break;
+      }
+      child = parent;
+    }
+    MOZ_ASSERT(startIndex >= 0);
+  }
+  // Find the index of the direct child containing endAcc.
+  int32_t endIndex = -1;
+  if (endAcc == common) {
+    endIndex = static_cast<int32_t>(common->ChildCount()) - 1;
+  } else {
+    Accessible* child = endAcc;
+    for (;;) {
+      Accessible* parent = child->Parent();
+      if (parent == common) {
+        endIndex = child->IndexInParent();
+        break;
+      }
+      child = parent;
+    }
+    MOZ_ASSERT(endIndex >= 0);
+  }
+  // Now get the children between startIndex and endIndex.
+  // We guess 30 children because:
+  // 1. It's unlikely that a client would call GetChildren on a very large range
+  // because GetChildren is normally only called when reporting content and
+  // reporting the entire content of a massive range in one hit isn't ideal for
+  // performance.
+  // 2. A client is more likely to query the content of a line, paragraph, etc.
+  // 3. It seems unlikely that there would be more than 30 children in a line or
+  // paragraph, especially because we're only including children that are
+  // considered embedded objects by UIA.
+  AutoTArray<Accessible*, 30> children;
+  for (int32_t i = startIndex; i <= endIndex; ++i) {
+    Accessible* child = common->ChildAt(static_cast<uint32_t>(i));
+    if (IsUiaEmbeddedObject(child)) {
+      children.AppendElement(child);
+    }
+  }
+  *aRetVal = AccessibleArrayToUiaArray(children);
   return S_OK;
 }
 
