@@ -32,7 +32,8 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
 
   (moz-deny default)
   ; These are not included in (deny default)
-  (moz-deny process-info*)
+  (if (>= macosVersion 1009)
+    (moz-deny process-info*))
   ; This isn't available in some older macOS releases.
   (if (defined? 'nvram*)
     (moz-deny nvram*))
@@ -44,7 +45,8 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
     (debug deny))
 
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
-  (allow process-info-pidinfo process-info-setcontrol (target self))
+  (if (>= macosVersion 1009)  
+  (allow process-info-pidinfo process-info-setcontrol (target self)))
 
   (if (defined? 'file-map-executable)
     (begin

@@ -350,8 +350,9 @@ nsresult nsIconChannel::MakeInputStream(nsIInputStream** _retval,
       setCurrentContext:[NSGraphicsContext graphicsContextWithGraphicsPort:ctx
                                                                 flipped:NO]];
 
-  [iconImage drawInRect:NSMakeRect(0, 0, width, height)];
-
+  if(@available(macOS 10.9, *)) {
+     [iconImage drawInRect:NSMakeRect(0, 0, width, height)];
+  }
   [NSGraphicsContext setCurrentContext:oldContext];
 
   CGContextRelease(ctx);

@@ -153,8 +153,9 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     aScheme = ColorScheme::Light;
   }
 
-  NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
-
+  if(nsCocoaFeatures::OnMavericksOrLater()) {
+    NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
+  }
   nscolor color = 0;
   switch (aID) {
     case ColorID::Infobackground:
@@ -344,7 +345,9 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       color = GetColorFromNSColor(NSColor.secondarySelectedControlColor);
       break;
     case ColorID::MozColheadertext:
+      DISPATCH_FALLTHROUGH;
     case ColorID::MozColheaderhovertext:
+      DISPATCH_FALLTHROUGH;
     case ColorID::MozColheaderactivetext:
       color = GetColorFromNSColor(NSColor.headerTextColor);
       break;
@@ -620,8 +623,15 @@ nsresult nsLookAndFeel::NativeGetFloat(FloatID aID, float& aResult) {
       aResult = 2.0f;
       break;
     case FloatID::CursorScale: {
-      id uaDefaults = [[NSUserDefaults alloc]
+      id uaDefaults;
+      if(@available(macOS 10.9, *)) {
+        uaDefaults = [[NSUserDefaults alloc]
           initWithSuiteName:@"com.apple.universalaccess"];
+      }
+      else {
+        uaDefaults = [(id) CFPreferencesCopyAppValue(CFSTR("com.apple.universalaccess"),
+        kCFPreferencesCurrentApplication) autorelease];
+      }
       float f = [uaDefaults floatForKey:@"mouseDriverCursorSize"];
       [uaDefaults release];
       aResult = f > 0.0 ? f : 1.0;  // default to 1.0 if value not available
