@@ -2,10 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
- @import url("chrome://global/skin/in-content/common.css");
+@import url("chrome://global/skin/in-content/common.css");
+@import url("chrome://browser/content/backup/backup-common.css");
 
 :host {
   --margin-inline-start-checkbox-content: calc(var(--checkbox-margin-inline) + var(--checkbox-size));
+  flex: 1;
 }
 
 #turn-on-scheduled-backups-dialog {
@@ -25,6 +27,7 @@
 #backup-sensitive-data-checkbox {
   display: flex;
   flex-direction: column;
+  flex: 1;
   row-gap: var(--space-xsmall);
 }
 
@@ -35,4 +38,40 @@
 
 #backup-sensitive-data-checkbox-description {
   margin-inline-start: var(--margin-inline-start-checkbox-content);
+}
+
+.backups-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "header button"
+    "description .";
+  grid-gap: 0 12px;
+  align-items: center;
+}
+
+section {
+  margin-block-start: 24px;
+}
+
+#last-backup-info {
+  color: var(--text-color-deemphasized);
+}
+
+#last-backup-location-control,
+#last-backup-info > div {
+  margin-block: 14px;
+}
+
+#last-backup-location-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-overflow: ellipsis ellipsis;
+}
+
+#backup-password-controls {
+  display: flex;
+  margin-block: var(--space-large);
 }

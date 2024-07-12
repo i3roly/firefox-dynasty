@@ -19,6 +19,8 @@ prefs = ["browser.bookmarks.testing.skipDefaultBookmarksImport=true"]
 
 ["browser_quicksuggest_configuration.js"]
 
+["browser_quicksuggest_fakespot.js"]
+
 ["browser_quicksuggest_indexes.js"]
 
 ["browser_quicksuggest_mdn.js"]
@@ -44,6 +46,9 @@ skip-if = ["true"] # Bug 1880214
 ["browser_telemetry_impressionEdgeCases.js"]
 tags = "search-telemetry"
 skip-if = ["true"] # Bug 1880214
+
+["browser_telemetry_ingestTime.js"]
+tags = "search-telemetry"
 
 ["browser_telemetry_navigationalSuggestions.js"]
 tags = "search-telemetry"

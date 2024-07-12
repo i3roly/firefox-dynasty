@@ -104,6 +104,14 @@ static_assert(Instance::offsetOfLastCommonJitField() < 128);
 //
 // Functions and invocation.
 
+FuncDefInstanceData* Instance::funcDefInstanceData(uint32_t funcIndex) const {
+  MOZ_ASSERT(funcIndex >= codeMeta().numFuncImports);
+  uint32_t funcDefIndex = funcIndex - codeMeta().numFuncImports;
+  FuncDefInstanceData* instanceData =
+      (FuncDefInstanceData*)(data() + codeMeta().funcDefsOffsetStart);
+  return &instanceData[funcDefIndex];
+}
+
 TypeDefInstanceData* Instance::typeDefInstanceData(uint32_t typeIndex) const {
   TypeDefInstanceData* instanceData =
       (TypeDefInstanceData*)(data() + codeMeta().typeDefsOffsetStart);
@@ -228,7 +236,7 @@ bool Instance::callImport(JSContext* cx, uint32_t funcImportIndex,
   AssertRealmUnchanged aru(cx);
 
   const FuncImport& fi = code().funcImport(funcImportIndex);
-  const FuncType& funcType = code().getFuncImportType(funcImportIndex);
+  const FuncType& funcType = codeMeta().getFuncType(funcImportIndex);
 
   ArgTypeVector argTypes(funcType);
   InvokeArgs args(cx);
@@ -2305,6 +2313,14 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
   addressOfGCZealModeBits_ = cx->runtime()->gc.addressOfZealModeBits();
 #endif
 
+  // Initialize the hotness counters, if any
+  if (code().mode() == CompileMode::LazyTiering) {
+    for (uint32_t funcIndex = codeMeta().numFuncImports;
+         funcIndex < codeMeta().numFuncs(); funcIndex++) {
+      funcDefInstanceData(funcIndex)->hotnessCounter = 1;
+    }
+  }
+
   // Initialize type definitions in the instance data.
   const SharedTypeContext& types = codeMeta().types;
   Zone* zone = realm()->zone();
@@ -2385,7 +2401,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
 #ifdef ENABLE_WASM_JSPI
     if (JSObject* suspendingObject = MaybeUnwrapSuspendingObject(f)) {
       // Compile suspending function Wasm wrapper.
-      const FuncType& funcType = code().getFuncImportType(i);
+      const FuncType& funcType = codeMeta().getFuncType(i);
       RootedObject wrapped(cx, suspendingObject);
       RootedFunction wrapper(
           cx, WasmSuspendingFunctionCreate(cx, wrapped, funcType));
@@ -2399,7 +2415,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
 
     MOZ_ASSERT(f->isCallable());
     const FuncImport& fi = code().funcImport(i);
-    const FuncType& funcType = code().getFuncImportType(i);
+    const FuncType& funcType = codeMeta().getFuncType(i);
     FuncImportInstanceData& import = funcImportInstanceData(fi);
     import.callable = f;
     if (f->is<JSFunction>()) {
@@ -2564,7 +2580,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
 
   // Add debug filtering table.
   if (codeMeta().debugEnabled) {
-    size_t numFuncs = codeMeta().debugNumFuncs();
+    size_t numFuncs = codeMeta().numFuncs();
     size_t numWords = std::max<size_t>((numFuncs + 31) / 32, 1);
     debugFilter_ = (uint32_t*)js_calloc(numWords, sizeof(uint32_t));
     if (!debugFilter_) {
@@ -2661,6 +2677,10 @@ void Instance::resetTemporaryStackLimit(JSContext* cx) {
   if (!isInterrupted()) {
     stackLimit_ = cx->stackLimitForJitCode(JS::StackForUntrustedScript);
   }
+}
+
+void Instance::resetHotnessCounter(uint32_t funcIndex) {
+  funcDefInstanceData(funcIndex)->hotnessCounter = INT32_MAX;
 }
 
 bool Instance::debugFilter(uint32_t funcIndex) const {
@@ -2917,7 +2937,7 @@ static bool GetInterpEntryAndEnsureStubs(JSContext* cx, Instance& instance,
     return false;
   }
 
-  *funcType = &instance.code().getFuncExportType(funcIndex);
+  *funcType = &instance.codeMeta().getFuncType(funcIndex);
 
 #ifdef DEBUG
   // EnsureEntryStubs() has ensured proper jit-entry stubs have been created and
@@ -3346,8 +3366,8 @@ JSString* Instance::createDisplayURL(JSContext* cx) {
   // In the best case, we simply have a URL, from a streaming compilation of a
   // fetched Response.
 
-  if (codeMeta().filenameIsURL) {
-    const char* filename = codeMeta().filename.get();
+  if (codeMeta().scriptedCaller().filenameIsURL) {
+    const char* filename = codeMeta().scriptedCaller().filename.get();
     return NewStringCopyUTF8N(cx, JS::UTF8Chars(filename, strlen(filename)));
   }
 
@@ -3361,7 +3381,7 @@ JSString* Instance::createDisplayURL(JSContext* cx) {
     return nullptr;
   }
 
-  if (const char* filename = codeMeta().filename.get()) {
+  if (const char* filename = codeMeta().scriptedCaller().filename.get()) {
     // EncodeURI returns false due to invalid chars or OOM -- fail only
     // during OOM.
     JSString* filenamePrefix = EncodeURI(cx, filename, strlen(filename));

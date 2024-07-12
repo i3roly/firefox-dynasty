@@ -138,13 +138,16 @@ struct LinkData : LinkDataCacheablePod {
   };
 
   InternalLinkVector internalLinks;
+  CallFarJumpVector callFarJumps;
   SymbolicLinkArray symbolicLinks;
 
   bool isEmpty() const {
-    return internalLinks.length() == 0 && symbolicLinks.isEmpty();
+    return internalLinks.length() == 0 && callFarJumps.length() == 0 &&
+           symbolicLinks.isEmpty();
   }
   void clear() {
     internalLinks.clear();
+    callFarJumps.clear();
     symbolicLinks.clear();
   }
 
@@ -154,6 +157,7 @@ struct LinkData : LinkDataCacheablePod {
 WASM_DECLARE_CACHEABLE_POD(LinkData::InternalLink);
 
 using UniqueLinkData = UniquePtr<LinkData>;
+using UniqueLinkDataVector = Vector<UniqueLinkData, 0, SystemAllocPolicy>;
 
 // Executable code must be deallocated specially.
 
@@ -171,7 +175,8 @@ class CodeBlock;
 
 using UniqueCodeBlock = UniquePtr<CodeBlock>;
 using UniqueConstCodeBlock = UniquePtr<const CodeBlock>;
-using UniqueCodeBlockVector = Vector<UniqueCodeBlock, 0, SystemAllocPolicy>;
+using UniqueConstCodeBlockVector =
+    Vector<UniqueConstCodeBlock, 0, SystemAllocPolicy>;
 using RawCodeBlockVector = Vector<const CodeBlock*, 0, SystemAllocPolicy>;
 
 enum class CodeBlockKind {
@@ -205,8 +210,7 @@ class CodeSegment : public ShareableBase<CodeSegment> {
   const Code* code_;
 
   bool linkAndMakeExecutable(jit::AutoMarkJitCodeWritableForThread& writable,
-                             const LinkData& linkData,
-                             const CodeBlock* maybeSharedStubs);
+                             const LinkData& linkData, const Code* maybeCode);
 
  public:
   CodeSegment(UniqueCodeBytes bytes, uint32_t lengthBytes,
@@ -219,11 +223,10 @@ class CodeSegment : public ShareableBase<CodeSegment> {
   static RefPtr<CodeSegment> createEmpty(size_t capacityBytes);
   static RefPtr<CodeSegment> createFromMasm(jit::MacroAssembler& masm,
                                             const LinkData& linkData,
-                                            const CodeBlock* maybeSharedStubs);
+                                            const Code* maybeCode);
   static RefPtr<CodeSegment> createFromBytes(const uint8_t* unlinkedBytes,
                                              size_t unlinkedBytesLength,
-                                             const LinkData& linkData,
-                                             const CodeBlock* maybeSharedStubs);
+                                             const LinkData& linkData);
 
   void setCode(const Code& code) { code_ = &code; }
 
@@ -266,8 +269,20 @@ extern UniqueCodeBytes AllocateCodeBytes(
     uint32_t codeLength);
 extern bool StaticallyLink(jit::AutoMarkJitCodeWritableForThread& writable,
                            uint8_t* base, const LinkData& linkData,
-                           const CodeBlock* maybeSharedStubs);
+                           const Code* maybeCode);
 extern void StaticallyUnlink(uint8_t* base, const LinkData& linkData);
+
+enum class TierUpState : uint32_t {
+  NotRequested,
+  Requested,
+  Finished,
+};
+
+struct FuncState {
+  Atomic<const CodeBlock*> bestTier;
+  Atomic<TierUpState> tierUpState;
+};
+using FuncStatesPointer = mozilla::UniquePtr<FuncState[], JS::FreePolicy>;
 
 // LazyFuncExport helps to efficiently lookup a CodeRange from a given function
 // index. It is inserted in a vector sorted by function index, to perform
@@ -375,6 +390,8 @@ class CodeBlock {
  public:
   // Weak reference to the code that owns us, not serialized.
   const Code* code;
+  // The index we are held inside our containing Code::data::blocks_ vector.
+  size_t codeBlockIndex;
 
   // The following information is all serialized
   // Which kind of code is being stored in this block. Most consumers don't
@@ -414,14 +431,22 @@ class CodeBlock {
 
   explicit CodeBlock(CodeBlockKind kind)
       : code(nullptr),
+        codeBlockIndex((size_t)-1),
         kind(kind),
         debugTrapOffset(0),
         unregisterOnDestroy_(false) {}
   ~CodeBlock();
 
-  bool initialized() const { return !!code; }
+  bool initialized() const {
+    if (code) {
+      // Initialize should have given us an index too.
+      MOZ_ASSERT(codeBlockIndex != (size_t)-1);
+      return true;
+    }
+    return false;
+  }
 
-  bool initialize(const Code& code);
+  bool initialize(const Code& code, size_t codeBlockIndex);
 
   // Gets the tier for this code block. Only valid for non-lazy stub code.
   Tier tier() const {
@@ -433,6 +458,12 @@ class CodeBlock {
       default:
         MOZ_CRASH();
     }
+  }
+
+  // Returns whether this code block should be considered for serialization.
+  bool isSerializable() const {
+    return kind == CodeBlockKind::SharedStubs ||
+           kind == CodeBlockKind::OptimizedTier;
   }
 
   const uint8_t* base() const { return codeBase; }
@@ -685,8 +716,8 @@ class JumpTables {
       "SelfHostedLazyScript");
 
  public:
-  bool initialize(CompileMode mode, const CodeBlock& sharedStubs,
-                  const CodeBlock& tier1);
+  bool initialize(CompileMode mode, const CodeMetadata& codeMeta,
+                  const CodeBlock& sharedStubs, const CodeBlock& tier1);
 
   void setJitEntry(size_t i, void* target) const {
     // Make sure that write is atomic; see comment in wasm::Module::finishTier2
@@ -717,7 +748,7 @@ class JumpTables {
   void setTieringEntry(size_t i, void* target) const {
     MOZ_ASSERT(i < numFuncs_);
     // See comment in wasm::Module::finishTier2.
-    if (mode_ == CompileMode::Tier1) {
+    if (mode_ != CompileMode::Once) {
       tiering_.get()[i] = target;
     }
   }
@@ -742,8 +773,17 @@ using MetadataAnalysisHashMap =
 
 class Code : public ShareableBase<Code> {
   struct ProtectedData {
-    UniqueCodeBlockVector blocks;
+    // A vector of all of the code blocks owned by this code. Each code block
+    // is immutable once added to the vector, but this vector may grow.
+    UniqueConstCodeBlockVector blocks;
+    // A vector of link data paired 1:1 with `blocks`. Entries may be null if
+    // the code block is not serializable. This is separate from CodeBlock so
+    // that we may clear it out after serialization has happened.
+    UniqueLinkDataVector blocksLinkData;
+
+    // A vector of code segments that we can allocate lazy segments into
     SharedCodeSegmentVector lazySegments;
+    // A sorted vector of LazyFuncExport
     LazyFuncExportVector lazyExports;
   };
   using ReadGuard = RWExclusiveData<ProtectedData>::ReadGuard;
@@ -768,26 +808,31 @@ class Code : public ShareableBase<Code> {
   SharedCodeMetadataForAsmJS codeMetaForAsmJS_;
 
   const CodeBlock* sharedStubs_;
-  const CodeBlock* tier1_;
+  const CodeBlock* completeTier1_;
   // [SMDOC] Tier-2 data
   //
-  // hasTier2_ and tier2_ implement a three-state protocol for broadcasting
-  // tier-2 data; this also amounts to a single-writer/multiple-reader setup.
+  // hasCompleteTier2_ and completeTier2_ implement a three-state protocol for
+  // broadcasting tier-2 data; this also amounts to a single-writer/
+  // multiple-reader setup.
   //
-  // Initially hasTier2_ is false and tier2_ is null.
+  // Initially hasCompleteTier2_ is false and completeTier2_ is null.
   //
-  // While hasTier2_ is false, *no* thread may read tier2_, but one thread may
-  // make tier2_ non-null (this will be the tier-2 compiler thread).  That same
-  // thread must then later set hasTier2_ to true to broadcast the tier2_ value
-  // and its availability.  Note that the writing thread may not itself read
-  // tier2_ before setting hasTier2_, in order to simplify reasoning about
-  // global invariants.
+  // While hasCompleteTier2_ is false, *no* thread may read completeTier2_, but
+  // one thread may make completeTier2_ non-null (this will be the tier-2
+  // compiler thread).  That same thread must then later set hasCompleteTier2_
+  // to true to broadcast the completeTier2_ value and its availability.  Note
+  // that the writing thread may not itself read completeTier2_ before setting
+  // hasCompleteTier2_, in order to simplify reasoning about global invariants.
   //
-  // Once hasTier2_ is true, *no* thread may write tier2_ and *no* thread may
-  // read tier2_ without having observed hasTier2_ as true first.  Once
-  // hasTier2_ is true, it stays true.
-  mutable const CodeBlock* tier2_;
-  mutable Atomic<bool> hasTier2_;
+  // Once hasCompleteTier2_ is true, *no* thread may write completeTier2_ and
+  // *no* thread may read completeTier2_ without having observed
+  // hasCompleteTier2_ as true first.  Once hasCompleteTier2_ is true, it stays
+  // true.
+  mutable const CodeBlock* completeTier2_;
+  mutable Atomic<bool> hasCompleteTier2_;
+  // State for every defined function (not imported) in this module. This is
+  // only needed if we're doing partial tiering.
+  mutable FuncStatesPointer funcStates_;
 
   FuncImportVector funcImports_;
   ExclusiveData<CacheableCharsVector> profilingLabels_;
@@ -796,12 +841,20 @@ class Code : public ShareableBase<Code> {
   // Where to redirect PC to for handling traps from the signal handler.
   uint8_t* trapCode_;
 
+  // The bytecode for a module. Only available for debuggable modules, or if
+  // doing lazy tiering.
+  const SharedBytes bytecode_;
+
   // Methods for getting complete tiers, private while we're moving to partial
   // tiering.
-  bool hasTier2() const { return hasTier2_; }
-  Tiers tiers() const;
-  bool hasTier(Tier t) const;
-  const CodeBlock& codeBlock(Tier tier) const;
+  Tiers completeTiers() const;
+
+  [[nodiscard]] bool addCodeBlock(const WriteGuard& guard,
+                                  UniqueCodeBlock block,
+                                  UniqueLinkData maybeLinkData) const;
+
+  [[nodiscard]] const LazyFuncExport* lookupLazyFuncExport(
+      const WriteGuard& guard, uint32_t funcIndex) const;
 
   // Returns a pointer to the raw interpreter entry of a given function for
   // which stubs have been lazily generated.
@@ -828,19 +881,24 @@ class Code : public ShareableBase<Code> {
 
  public:
   Code(CompileMode mode, const CodeMetadata& codeMeta,
-       const CodeMetadataForAsmJS* codeMetaForAsmJS);
-  bool initialized() const { return !!tier1_ && tier1_->initialized(); }
+       const CodeMetadataForAsmJS* codeMetaForAsmJS,
+       const ShareableBytes* maybeBytecode);
 
   [[nodiscard]] bool initialize(FuncImportVector&& funcImports,
                                 UniqueCodeBlock sharedStubs,
-                                const LinkData& sharedStubsLinkData,
-                                UniqueCodeBlock tier1CodeBlock);
-  [[nodiscard]] bool finishCompleteTier2(const LinkData& linkData,
-                                         UniqueCodeBlock tier2Code) const;
+                                UniqueLinkData sharedStubsLinkData,
+                                UniqueCodeBlock tier1CodeBlock,
+                                UniqueLinkData tier1LinkData);
+  [[nodiscard]] bool finishTier2(UniqueCodeBlock tier2CodeBlock,
+                                 UniqueLinkData tier2LinkData) const;
 
   [[nodiscard]] bool getOrCreateInterpEntry(uint32_t funcIndex,
                                             const FuncExport** funcExport,
                                             void** interpEntry) const;
+
+  bool requestTierUp(uint32_t funcIndex) const;
+
+  CompileMode mode() const { return mode_; }
 
   void** tieringJumpTable() const { return jumpTables_.tiering(); }
 
@@ -854,15 +912,23 @@ class Code : public ShareableBase<Code> {
 
   uint8_t* trapCode() const { return trapCode_; }
 
+  const Bytes& bytecode() const {
+    MOZ_ASSERT(codeMeta().debugEnabled || mode_ == CompileMode::LazyTiering);
+    return bytecode_->bytes;
+  }
+
   const FuncImport& funcImport(uint32_t funcIndex) const {
     return funcImports_[funcIndex];
   }
   const FuncImportVector& funcImports() const { return funcImports_; }
 
-  bool hasSerializableCode() const { return hasTier(Tier::Serialized); }
-  Tier stableTier() const;  // This is stable during a run
-  Tier bestTier()
-      const;  // This may transition from Baseline -> Ion at any time
+  bool hasCompleteTier(Tier tier) const;
+  // The 'stable' complete tier of code. This is stable during a run/
+  Tier stableCompleteTier() const;
+  // The 'best' complete tier of code. This may transition from baseline to ion
+  // at any time.
+  Tier bestCompleteTier() const;
+  bool hasSerializableCode() const { return hasCompleteTier(Tier::Serialized); }
 
   const CodeMetadata& codeMeta() const { return *codeMeta_; }
   const CodeMetadataForAsmJS* codeMetaForAsmJS() const {
@@ -872,41 +938,25 @@ class Code : public ShareableBase<Code> {
   const CodeBlock& sharedStubs() const { return *sharedStubs_; }
   const CodeBlock& debugCodeBlock() const {
     MOZ_ASSERT(codeMeta_->debugEnabled);
-    MOZ_ASSERT(tier1_->tier() == Tier::Debug);
-    return *tier1_;
+    MOZ_ASSERT(completeTier1_->tier() == Tier::Debug);
+    return *completeTier1_;
   }
-  const CodeBlock& completeTierCodeBlock(Tier tier) const {
-    return codeBlock(tier);
-  }
-  bool hasCompleteTier(Tier tier) const { return hasTier(tier); }
+  const CodeBlock& completeTierCodeBlock(Tier tier) const;
   const CodeBlock& funcCodeBlock(uint32_t funcIndex) const {
     if (funcIndex < funcImports_.length()) {
       return *sharedStubs_;
     }
-    return codeBlock(bestTier());
+    if (mode_ == CompileMode::LazyTiering) {
+      return *funcStates_.get()[funcIndex - codeMeta_->numFuncImports].bestTier;
+    }
+    return completeTierCodeBlock(bestCompleteTier());
   }
   bool funcHasTier(uint32_t funcIndex, Tier tier) const {
     return funcCodeBlock(funcIndex).tier() == tier;
   }
 
-  // Function type lookup:
-  const TypeDef& getFuncImportTypeDef(uint32_t funcIndex) const {
-    return codeMeta().types->type(funcImports_[funcIndex].typeIndex());
-  }
-  const FuncType& getFuncImportType(uint32_t funcIndex) const {
-    return getFuncImportTypeDef(funcIndex).funcType();
-  }
-  const FuncType& getFuncExportType(FuncExport funcExport) const {
-    return codeMeta().types->type(funcExport.typeIndex()).funcType();
-  }
-  const TypeDef& getFuncExportTypeDef(uint32_t funcIndex) const {
-    const CodeBlock& code = funcCodeBlock(funcIndex);
-    const FuncExport& funcExport = code.lookupFuncExport(funcIndex);
-    return codeMeta().types->type(funcExport.typeIndex());
-  }
-  const FuncType& getFuncExportType(uint32_t funcIndex) const {
-    return getFuncExportTypeDef(funcIndex).funcType();
-  }
+  const LinkData* codeBlockLinkData(const CodeBlock& block) const;
+  void clearLinkData() const;
 
   // Code metadata lookup:
   const CallSite* lookupCallSite(void* pc) const {
@@ -979,7 +1029,7 @@ class Code : public ShareableBase<Code> {
       Code::SeenSet* seenCode, size_t* code, size_t* data) const;
 
   size_t tier1CodeMemoryUsed() const {
-    return tier1_->segment->capacityBytes();
+    return completeTier1_->segment->capacityBytes();
   }
 
   WASM_DECLARE_FRIEND_SERIALIZE_ARGS(SharedCode,

@@ -650,6 +650,17 @@ pref("browser.urlbar.yelp.priority", false);
 // Yelp suggestions are turned on.
 pref("browser.urlbar.suggest.yelp", true);
 
+// Feature gate pref for Fakespot suggestions in the urlbar.
+pref("browser.urlbar.fakespot.featureGate", false);
+
+// The minimum prefix length of a Fakespot keyword the user must type to trigger
+// the suggestion. 0 means the min length should be taken from Nimbus.
+pref("browser.urlbar.fakespot.minKeywordLength", 0);
+
+// If `browser.urlbar.fakespot.featureGate` is true, this controls whether
+// Fakespot suggestions are turned on.
+pref("browser.urlbar.suggest.fakespot", true);
+
 // The minimum prefix length of addons keyword the user must type to trigger
 // the suggestion. 0 means the min length should be taken from Nimbus.
 pref("browser.urlbar.addons.minKeywordLength", 0);
@@ -899,8 +910,6 @@ pref("browser.tabs.warnOnClose", false);
 pref("browser.tabs.warnOnCloseOtherTabs", true);
 pref("browser.tabs.warnOnOpen", true);
 pref("browser.tabs.maxOpenBeforeWarn", 15);
-pref("browser.tabs.loadInBackground", true);
-pref("browser.tabs.opentabfor.middleclick", true);
 pref("browser.tabs.loadDivertedInBackground", false);
 pref("browser.tabs.loadBookmarksInBackground", false);
 pref("browser.tabs.loadBookmarksInTabs", false);
@@ -1726,6 +1735,8 @@ pref("browser.newtabpage.activity-stream.weather.display", "simple");
 #else
   pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "");
 #endif
+// List of locales that weather widget supports.
+pref("browser.newtabpage.activity-stream.discoverystream.locale-weather-config", "en-US,en-GB,en-CA");
 
 // Preference to enable wallpaper selection in the Customize Menu of new tab page
 #ifdef NIGHTLY_BUILD
@@ -2025,7 +2036,7 @@ pref("identity.fxaccounts.commands.remoteTabManagement.enabled", false);
 
 // Controls whether or not the client association ping has values set on it
 // when the sync-ui-state:update notification fires.
-pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", false);
+pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", true);
 
 // Note: when media.gmp-*.visible is true, provided we're running on a
 // supported platform/OS version, the corresponding CDM appears in the
@@ -2689,8 +2700,7 @@ pref("devtools.inspector.simple-highlighters-reduced-motion", false);
 // next inplace editor.
 pref("devtools.inspector.rule-view.focusNextOnEnter", true);
 // Display @starting-style rules in the Rules view.
-// Should be removed when Bug 1905035 is fixed.
-pref("devtools.inspector.rule-view.starting-style", false);
+pref("devtools.inspector.rule-view.starting-style", true);
 
 // Whether or not the box model panel is opened in the layout view
 pref("devtools.layout.boxmodel.opened", true);

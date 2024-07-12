@@ -650,24 +650,38 @@ static MOZ_ALWAYS_INLINE JSString::OwnedChars<CharT> AllocChars(JSContext* cx,
                                                                 gc::Heap heap) {
   if (heap == gc::Heap::Default && cx->zone()->allocNurseryStrings()) {
     MOZ_ASSERT(cx->nursery().isEnabled());
-    auto [buffer, isMalloced] = cx->nursery().allocateBuffer(
+    void* buffer = cx->nursery().tryAllocateNurseryBuffer(
         cx->zone(), length * sizeof(CharT), js::StringBufferArena);
-    if (!buffer) {
-      ReportOutOfMemory(cx);
-      return {};
+    if (buffer) {
+      using Kind = typename JSString::OwnedChars<CharT>::Kind;
+      return {static_cast<CharT*>(buffer), length, Kind::Nursery};
     }
-
-    using Kind = typename JSString::OwnedChars<CharT>::Kind;
-    Kind kind = isMalloced ? Kind::Malloc : Kind::Nursery;
-    return {static_cast<CharT*>(buffer), length, kind};
   }
 
-  auto buffer = cx->make_pod_arena_array<CharT>(js::StringBufferArena, length);
+  static_assert(JSString::MIN_BYTES_FOR_BUFFER % sizeof(CharT) == 0);
+
+  if (length < JSString::MIN_BYTES_FOR_BUFFER / sizeof(CharT)) {
+    auto buffer =
+        cx->make_pod_arena_array<CharT>(js::StringBufferArena, length);
+    if (!buffer) {
+      return {};
+    }
+    return {std::move(buffer), length};
+  }
+
+  if (MOZ_UNLIKELY(!mozilla::StringBuffer::IsValidLength<CharT>(length))) {
+    ReportOversizedAllocation(cx, JSMSG_ALLOC_OVERFLOW);
+    return {};
+  }
+
+  // Note: StringBuffers must be null-terminated.
+  RefPtr<mozilla::StringBuffer> buffer = mozilla::StringBuffer::Alloc(
+      (length + 1) * sizeof(CharT), mozilla::Some(js::StringBufferArena));
   if (!buffer) {
     ReportOutOfMemory(cx);
     return {};
   }
-
+  static_cast<CharT*>(buffer->Data())[length] = '\0';
   return {std::move(buffer), length};
 }
 
@@ -2112,12 +2126,12 @@ JSLinearString* NewStringCopyUTF8N(JSContext* cx, const JS::UTF8Chars& utf8,
 }
 
 template <typename CharT>
-MOZ_ALWAYS_INLINE JSExternalString* ExternalStringCache::lookupExternalImpl(
+MOZ_ALWAYS_INLINE JSLinearString* ExternalStringCache::lookupImpl(
     const CharT* chars, size_t len) const {
   AutoCheckCannotGC nogc;
 
   for (size_t i = 0; i < NumEntries; i++) {
-    JSExternalString* str = externalEntries_[i];
+    JSLinearString* str = entries_[i];
     if (!str || str->length() != len) {
       continue;
     }
@@ -2132,11 +2146,12 @@ MOZ_ALWAYS_INLINE JSExternalString* ExternalStringCache::lookupExternalImpl(
       }
     }
 
-    const CharT* strChars = str->nonInlineChars<CharT>(nogc);
+    const CharT* strChars = str->chars<CharT>(nogc);
     if (chars == strChars) {
       // Note that we don't need an incremental barrier here or below.
       // The cache is purged on GC so any string we get from the cache
       // must have been allocated after the GC started.
+      MOZ_ASSERT(!str->isInline());
       return str;
     }
 
@@ -2151,24 +2166,24 @@ MOZ_ALWAYS_INLINE JSExternalString* ExternalStringCache::lookupExternalImpl(
   return nullptr;
 }
 
-MOZ_ALWAYS_INLINE JSExternalString* ExternalStringCache::lookupExternal(
+MOZ_ALWAYS_INLINE JSLinearString* ExternalStringCache::lookup(
     const JS::Latin1Char* chars, size_t len) const {
-  return lookupExternalImpl(chars, len);
+  return lookupImpl(chars, len);
 }
-MOZ_ALWAYS_INLINE JSExternalString* ExternalStringCache::lookupExternal(
+MOZ_ALWAYS_INLINE JSLinearString* ExternalStringCache::lookup(
     const char16_t* chars, size_t len) const {
-  return lookupExternalImpl(chars, len);
+  return lookupImpl(chars, len);
 }
 
-MOZ_ALWAYS_INLINE void ExternalStringCache::putExternal(JSExternalString* str) {
+MOZ_ALWAYS_INLINE void ExternalStringCache::put(JSLinearString* str) {
   for (size_t i = NumEntries - 1; i > 0; i--) {
-    externalEntries_[i] = externalEntries_[i - 1];
+    entries_[i] = entries_[i - 1];
   }
-  externalEntries_[0] = str;
+  entries_[0] = str;
 }
 
 template <typename CharT>
-MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInlineImpl(
+MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInlineLatin1Impl(
     const CharT* chars, size_t len) const {
   MOZ_ASSERT(CanStoreCharsAsLatin1(chars, len));
   MOZ_ASSERT(JSThinInlineString::lengthFits<Latin1Char>(len));
@@ -2176,7 +2191,7 @@ MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInlineImpl(
   AutoCheckCannotGC nogc;
 
   for (size_t i = 0; i < NumEntries; i++) {
-    JSInlineString* str = inlineEntries_[i];
+    JSInlineString* str = inlineLatin1Entries_[i];
     if (!str || str->length() != len) {
       continue;
     }
@@ -2190,22 +2205,23 @@ MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInlineImpl(
   return nullptr;
 }
 
-MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInline(
+MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInlineLatin1(
     const JS::Latin1Char* chars, size_t len) const {
-  return lookupInlineImpl(chars, len);
+  return lookupInlineLatin1Impl(chars, len);
 }
-MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInline(
+MOZ_ALWAYS_INLINE JSInlineString* ExternalStringCache::lookupInlineLatin1(
     const char16_t* chars, size_t len) const {
-  return lookupInlineImpl(chars, len);
+  return lookupInlineLatin1Impl(chars, len);
 }
 
-MOZ_ALWAYS_INLINE void ExternalStringCache::putInline(JSInlineString* str) {
+MOZ_ALWAYS_INLINE void ExternalStringCache::putInlineLatin1(
+    JSInlineString* str) {
   MOZ_ASSERT(str->hasLatin1Chars());
 
   for (size_t i = NumEntries - 1; i > 0; i--) {
-    inlineEntries_[i] = inlineEntries_[i - 1];
+    inlineLatin1Entries_[i] = inlineLatin1Entries_[i - 1];
   }
-  inlineEntries_[0] = str;
+  inlineLatin1Entries_[0] = str;
 }
 
 } /* namespace js */
@@ -2240,7 +2256,7 @@ JSString* NewMaybeExternalString(JSContext* cx, const CharT* s, size_t n,
   if (JSThinInlineString::lengthFits<Latin1Char>(n) &&
       CanStoreCharsAsLatin1(s, n)) {
     *allocatedExternal = false;
-    if (JSInlineString* str = cache.lookupInline(s, n)) {
+    if (JSInlineString* str = cache.lookupInlineLatin1(s, n)) {
       return str;
     }
     JSInlineString* str = NewInlineStringMaybeDeflated<AllowGC::CanGC>(
@@ -2248,11 +2264,11 @@ JSString* NewMaybeExternalString(JSContext* cx, const CharT* s, size_t n,
     if (!str) {
       return nullptr;
     }
-    cache.putInline(str);
+    cache.putInlineLatin1(str);
     return str;
   }
 
-  if (JSExternalString* str = cache.lookupExternal(s, n)) {
+  if (auto* str = cache.lookup(s, n)) {
     *allocatedExternal = false;
     return str;
   }
@@ -2263,7 +2279,7 @@ JSString* NewMaybeExternalString(JSContext* cx, const CharT* s, size_t n,
   }
 
   *allocatedExternal = true;
-  cache.putExternal(str);
+  cache.put(str);
   return str;
 }
 
@@ -2292,11 +2308,12 @@ static JSString* NewStringFromBuffer(JSContext* cx,
     return str;
   }
 
+  ExternalStringCache& cache = cx->zone()->externalStringCache();
+
   // Use the inline-string cache that we also use for external strings.
   if (JSThinInlineString::lengthFits<Latin1Char>(length) &&
       CanStoreCharsAsLatin1(s, length)) {
-    ExternalStringCache& cache = cx->zone()->externalStringCache();
-    if (JSInlineString* str = cache.lookupInline(s, length)) {
+    if (JSInlineString* str = cache.lookupInlineLatin1(s, length)) {
       return str;
     }
     JSInlineString* str = NewInlineStringMaybeDeflated<AllowGC::CanGC>(
@@ -2304,17 +2321,27 @@ static JSString* NewStringFromBuffer(JSContext* cx,
     if (!str) {
       return nullptr;
     }
-    cache.putInline(str);
+    cache.putInlineLatin1(str);
     return str;
   }
 
-  if (JSInlineString::lengthFits<CharT>(length)) {
-    return NewInlineString<CanGC>(cx, mozilla::Range(s, length),
-                                  gc::Heap::Default);
+  if (auto* str = cache.lookup(s, length)) {
+    return str;
   }
 
-  Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(buffer), length);
-  return JSLinearString::new_<CanGC, CharT>(cx, &owned, gc::Heap::Default);
+  JSLinearString* str;
+  if (JSInlineString::lengthFits<CharT>(length)) {
+    str = NewInlineString<CanGC>(cx, mozilla::Range(s, length),
+                                 gc::Heap::Default);
+  } else {
+    Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(buffer), length);
+    str = JSLinearString::new_<CanGC, CharT>(cx, &owned, gc::Heap::Default);
+  }
+  if (!str) {
+    return nullptr;
+  }
+  cache.put(str);
+  return str;
 }
 
 JS_PUBLIC_API JSString* JS::NewStringFromLatin1Buffer(

@@ -265,7 +265,12 @@ var SidebarController = {
     });
 
     if (this.sidebarRevampEnabled) {
-      await import("chrome://browser/content/sidebar/sidebar-main.mjs");
+      if (!customElements.get("sidebar-main")) {
+        ChromeUtils.importESModule(
+          "chrome://browser/content/sidebar/sidebar-main.mjs",
+          { global: "current" }
+        );
+      }
       this.revampComponentsLoaded = true;
       this.sidebarContainer.hidden =
         !window.toolbar.visible ||
@@ -886,8 +891,7 @@ var SidebarController = {
       updateAttributes(switcherMenu, sidebar);
     }
     if (this.initialized && this.currentID === commandID) {
-      // Update the sidebar if this extension is the current sidebar.
-      updateAttributes(this._switcherTarget, sidebar);
+      // Update the sidebar title if this extension is the current sidebar.
       this.title = label;
       if (this.isOpen && needsRefresh) {
         this.show(commandID);

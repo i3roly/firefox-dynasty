@@ -1340,7 +1340,7 @@ void wasm::GenerateDirectCallFromJit(MacroAssembler& masm, const FuncExport& fe,
                                      Register scratch, uint32_t* callOffset) {
   MOZ_ASSERT(!IsCompilingWasm());
 
-  const FuncType& funcType = inst.code().getFuncExportType(fe);
+  const FuncType& funcType = inst.codeMeta().getFuncType(fe.funcIndex());
 
   size_t framePushedAtStart = masm.framePushed();
 
@@ -2887,7 +2887,7 @@ bool wasm::GenerateEntryStubs(const CodeMetadata& codeMeta,
   Maybe<ImmPtr> noAbsolute;
   for (size_t i = 0; i < exports.length(); i++) {
     const FuncExport& fe = exports[i];
-    const FuncType& funcType = (*codeMeta.types)[fe.typeIndex()].funcType();
+    const FuncType& funcType = codeMeta.getFuncType(fe.funcIndex());
     if (!fe.hasEagerStubs()) {
       continue;
     }
@@ -2992,7 +2992,7 @@ bool wasm::GenerateStubs(const CodeMetadata& codeMeta,
 
   for (uint32_t funcIndex = 0; funcIndex < imports.length(); funcIndex++) {
     const FuncImport& fi = imports[funcIndex];
-    const FuncType& funcType = *codeMeta.funcs[funcIndex].type;
+    const FuncType& funcType = codeMeta.getFuncType(funcIndex);
 
     CallIndirectId callIndirectId =
         CallIndirectId::forFunc(codeMeta, funcIndex);
@@ -3002,8 +3002,7 @@ bool wasm::GenerateStubs(const CodeMetadata& codeMeta,
                                 &wrapperOffsets, &code->stackMaps)) {
       return false;
     }
-    if (!code->codeRanges.emplaceBack(funcIndex, /* bytecodeOffset = */ 0,
-                                      wrapperOffsets,
+    if (!code->codeRanges.emplaceBack(funcIndex, wrapperOffsets,
                                       /* hasUnwindInfo = */ false)) {
       return false;
     }
@@ -3040,7 +3039,7 @@ bool wasm::GenerateStubs(const CodeMetadata& codeMeta,
   Maybe<ImmPtr> noAbsolute;
   for (size_t i = 0; i < exports.length(); i++) {
     const FuncExport& fe = exports[i];
-    const FuncType& funcType = (*codeMeta.types)[fe.typeIndex()].funcType();
+    const FuncType& funcType = codeMeta.getFuncType(fe.funcIndex());
     if (!fe.hasEagerStubs()) {
       continue;
     }

@@ -127,6 +127,17 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // amount of time in milliseconds for them to respond before timing out.
   ["extension.omnibox.timeout", 3000],
 
+  // Feature gate pref for Fakespot suggestions in the urlbar.
+  ["fakespot.featureGate", false],
+
+  // The minimum prefix length of a Fakespot keyword the user must type to
+  // trigger the suggestion. 0 means the min length should be taken from Nimbus.
+  ["fakespot.minKeywordLength", 0],
+
+  // The number of times the user has clicked the "Show less frequently" command
+  // for Fakespot suggestions.
+  ["fakespot.showLessFrequentlyCount", 0],
+
   // When true, `javascript:` URLs are not included in search results.
   ["filter.javascript", true],
 
@@ -381,6 +392,10 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Whether results will include search engines (e.g. tab-to-search).
   ["suggest.engines", true],
 
+  // If `browser.urlbar.fakespot.featureGate` is true, this controls whether
+  // Fakespot suggestions are turned on.
+  ["suggest.fakespot", true],
+
   // Whether results will include the user's history.
   ["suggest.history", true],
 
@@ -522,6 +537,7 @@ const PREF_OTHER_DEFAULTS = new Map([
 const NIMBUS_DEFAULTS = {
   addonsShowLessFrequentlyCap: 0,
   experimentType: "",
+  fakespotMinKeywordLength: 0,
   pocketShowLessFrequentlyCap: 0,
   quickSuggestRemoteSettingsDataType: "data",
   quickSuggestScoreMap: null,

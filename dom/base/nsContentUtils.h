@@ -2165,13 +2165,6 @@ class nsContentUtils {
   }
 
   /**
-   * Gets the about:fingerprintingprotection principal.
-   */
-  static nsIPrincipal* GetFingerprintingProtectionPrincipal() {
-    return sFingerprintingProtectionPrincipal;
-  }
-
-  /**
    * *aResourcePrincipal is a principal describing who may access the contents
    * of a resource. The resource can only be consumed by a principal that
    * subsumes *aResourcePrincipal. MAKE SURE THAT NOTHING EVER ACTS WITH THE
@@ -3505,6 +3498,12 @@ class nsContentUtils {
   static SubresourceCacheValidationInfo GetSubresourceCacheValidationInfo(
       nsIRequest*, nsIURI*);
 
+  /**
+   * Returns true if the request associated with the document should bypass the
+   * shared sub resource cache.
+   */
+  static bool ShouldBypassSubResourceCache(Document* aDoc);
+
   static uint32_t SecondsFromPRTime(PRTime aTime) {
     return uint32_t(int64_t(aTime) / int64_t(PR_USEC_PER_SEC));
   }
@@ -3648,7 +3647,6 @@ class nsContentUtils {
   static nsIScriptSecurityManager* sSecurityManager;
   static nsIPrincipal* sSystemPrincipal;
   static nsIPrincipal* sNullSubjectPrincipal;
-  static nsIPrincipal* sFingerprintingProtectionPrincipal;
 
   static nsIConsoleService* sConsoleService;
 

@@ -98,7 +98,7 @@ bool wasm::DecodeLocalEntriesWithParams(Decoder& d,
     return d.fail("failed to read number of local entries");
   }
 
-  if (!locals->appendAll(codeMeta.funcs[funcIndex].type->args())) {
+  if (!locals->appendAll(codeMeta.getFuncType(funcIndex).args())) {
     return false;
   }
 
@@ -113,7 +113,7 @@ bool wasm::DecodeLocalEntriesWithParams(Decoder& d,
     }
 
     ValType type;
-    if (!d.readValType(*codeMeta.types, codeMeta.features, &type)) {
+    if (!d.readValType(*codeMeta.types, codeMeta.features(), &type)) {
       return false;
     }
 
@@ -1567,7 +1567,8 @@ static bool DecodeValTypeVector(Decoder& d, CodeMetadata* codeMeta,
   }
 
   for (uint32_t i = 0; i < count; i++) {
-    if (!d.readValType(*codeMeta->types, codeMeta->features, &(*valTypes)[i])) {
+    if (!d.readValType(*codeMeta->types, codeMeta->features(),
+                       &(*valTypes)[i])) {
       return false;
     }
   }
@@ -1625,7 +1626,7 @@ static bool DecodeStructType(Decoder& d, CodeMetadata* codeMeta,
   }
 
   for (uint32_t i = 0; i < numFields; i++) {
-    if (!d.readStorageType(*codeMeta->types, codeMeta->features,
+    if (!d.readStorageType(*codeMeta->types, codeMeta->features(),
                            &fields[i].type)) {
       return false;
     }
@@ -1656,7 +1657,8 @@ static bool DecodeArrayType(Decoder& d, CodeMetadata* codeMeta,
   }
 
   StorageType elementType;
-  if (!d.readStorageType(*codeMeta->types, codeMeta->features, &elementType)) {
+  if (!d.readStorageType(*codeMeta->types, codeMeta->features(),
+                         &elementType)) {
     return false;
   }
 
@@ -1998,7 +2000,7 @@ static bool DecodeTableTypeAndLimits(Decoder& d, CodeMetadata* codeMeta) {
   }
 
   RefType tableElemType;
-  if (!d.readRefType(*codeMeta->types, codeMeta->features, &tableElemType)) {
+  if (!d.readRefType(*codeMeta->types, codeMeta->features(), &tableElemType)) {
     return false;
   }
 
@@ -2072,7 +2074,7 @@ static bool DecodeGlobalType(Decoder& d, const SharedTypeContext& types,
 
 static bool DecodeMemoryTypeAndLimits(Decoder& d, CodeMetadata* codeMeta,
                                       MemoryDescVector* memories) {
-  if (!codeMeta->features.multiMemory && codeMeta->numMemories() == 1) {
+  if (!codeMeta->features().multiMemory && codeMeta->numMemories() == 1) {
     return d.fail("already have default memory");
   }
 
@@ -2159,9 +2161,7 @@ static bool DecodeImport(Decoder& d, CodeMetadata* codeMeta,
       if (!DecodeFuncTypeIndex(d, codeMeta->types, &funcTypeIndex)) {
         return false;
       }
-      if (!codeMeta->funcs.append(
-              FuncDesc(&codeMeta->types->type(funcTypeIndex).funcType(),
-                       funcTypeIndex))) {
+      if (!codeMeta->funcs.append(FuncDesc(funcTypeIndex))) {
         return false;
       }
       if (codeMeta->funcs.length() > MaxFuncs) {
@@ -2185,7 +2185,7 @@ static bool DecodeImport(Decoder& d, CodeMetadata* codeMeta,
     case DefinitionKind::Global: {
       ValType type;
       bool isMutable;
-      if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features, &type,
+      if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features(), &type,
                             &isMutable)) {
         return false;
       }
@@ -2232,7 +2232,7 @@ static bool DecodeImport(Decoder& d, CodeMetadata* codeMeta,
 static bool CheckImportsAgainstBuiltinModules(Decoder& d,
                                               CodeMetadata* codeMeta,
                                               ModuleMetadata* moduleMeta) {
-  const BuiltinModuleIds& builtinModules = codeMeta->features.builtinModules;
+  const BuiltinModuleIds& builtinModules = codeMeta->features().builtinModules;
 
   // Skip this pass if there are no builtin modules enabled
   if (builtinModules.hasNone()) {
@@ -2344,8 +2344,7 @@ static bool DecodeFunctionSection(Decoder& d, CodeMetadata* codeMeta) {
     if (!DecodeFuncTypeIndex(d, codeMeta->types, &funcTypeIndex)) {
       return false;
     }
-    codeMeta->funcs.infallibleAppend(FuncDesc(
-        &codeMeta->types->type(funcTypeIndex).funcType(), funcTypeIndex));
+    codeMeta->funcs.infallibleAppend(funcTypeIndex);
   }
 
   return d.finishSection(*range, "function");
@@ -2388,7 +2387,7 @@ static bool DecodeMemorySection(Decoder& d, CodeMetadata* codeMeta) {
     return d.fail("failed to read number of memories");
   }
 
-  if (!codeMeta->features.multiMemory && numMemories > 1) {
+  if (!codeMeta->features().multiMemory && numMemories > 1) {
     return d.fail("the number of memories must be at most one");
   }
 
@@ -2428,7 +2427,7 @@ static bool DecodeGlobalSection(Decoder& d, CodeMetadata* codeMeta) {
   for (uint32_t i = 0; i < numDefs; i++) {
     ValType type;
     bool isMutable;
-    if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features, &type,
+    if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features(), &type,
                           &isMutable)) {
       return false;
     }
@@ -2646,7 +2645,7 @@ static bool DecodeStartSection(Decoder& d, CodeMetadata* codeMeta,
     return d.fail("unknown start function");
   }
 
-  const FuncType& funcType = *codeMeta->funcs[funcIndex].type;
+  const FuncType& funcType = codeMeta->getFuncType(funcIndex);
   if (funcType.results().length() > 0) {
     return d.fail("start function must not return anything");
   }
@@ -2737,7 +2736,7 @@ static bool DecodeElemSegment(Decoder& d, CodeMetadata* codeMeta,
   } else {
     switch (payload) {
       case ElemSegmentPayload::Expressions: {
-        if (!d.readRefType(*codeMeta->types, codeMeta->features, &elemType)) {
+        if (!d.readRefType(*codeMeta->types, codeMeta->features(), &elemType)) {
           return false;
         }
       } break;
@@ -3375,14 +3374,15 @@ bool wasm::Validate(JSContext* cx, const ShareableBytes& bytecode,
   Decoder d(bytecode.bytes, 0, error);
 
   FeatureArgs features = FeatureArgs::build(cx, options);
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(features);
-  if (!codeMeta || !codeMeta->init()) {
+  SharedCompileArgs compileArgs = CompileArgs::buildForValidation(features);
+  if (!compileArgs) {
     return false;
   }
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*compileArgs)) {
     return false;
   }
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
 
   if (!DecodeModuleEnvironment(d, codeMeta, moduleMeta)) {
     return false;

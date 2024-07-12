@@ -217,6 +217,25 @@ urlbar:
       enum:
         - best-match
         - ""
+    fakespotFeatureGate:
+      type: boolean
+      fallbackPref: browser.urlbar.fakespot.featureGate
+      description: >-
+        Feature gate that controls whether all aspects of the Fakespot suggestion
+        feature are exposed to the user.
+    fakespotMinKeywordLength:
+      type: int
+      description: >-
+        The minimum prefix length of a Fakespot keyword the user must type to
+        trigger the suggestion.
+    fakespotShowLessFrequentlyCap:
+      type: int
+      fallbackPref: browser.urlbar.fakespot.showLessFrequentlyCap
+      description: >-
+        If defined and non-zero, this is the maximum number of times the user
+        will be able to click the "Show less frequently" command for Fakespot
+        suggestions. If undefined or zero, the user will be able to click the
+        command without any limit.
     mdnFeatureGate:
       type: boolean
       setPref:
@@ -977,7 +996,7 @@ pocketNewtab:
         browser.newtabpage.activity-stream.discoverystream.region-bff-config
       description: A comma-separated list of regions to get stories from the recommendations BFF. Also requires region-stories-config.
     merinoProviderEnabled:
-      type: string
+      type: boolean
       fallbackPref: >-
         browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled
       description: Sets the recommendations provider service to Merino.
@@ -1006,6 +1025,11 @@ pocketNewtab:
       type: string
       fallbackPref: >-
         browser.newtabpage.activity-stream.discoverystream.region-weather-config
+    localeWeatherConfig:
+      description: A comma-separated list of locales that weather widget supports.
+      type: string
+      fallbackPref: >-
+        browser.newtabpage.activity-stream.discoverystream.locale-weather-config
     topSitesMaxSponsored:
       # Defined under `pocketNewtab` as it needs to be used along with other variables
       type: int
@@ -2183,6 +2207,19 @@ fxaButtonVisibility:
       setPref:
         branch: user
         pref: identity.fxaccounts.toolbar.pxiToolbarEnabled.vpnEnabled
+
+fxaClientAssociation:
+  description: Prefs to control the client association ping.
+  owner: mconley@mozilla.com
+  hasExposure: false
+  variables:
+    pingEnabled:
+      description: >-
+        True if the client association ping should be sent.
+      type: boolean
+      setPref:
+        branch: user
+        pref: identity.fxaccounts.telemetry.clientAssociationPing.enabled
 
 legacyHeartbeat:
   description: Normandy Heartbeat exposed to Nimbus

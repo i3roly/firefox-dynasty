@@ -245,6 +245,7 @@ class FunctionCompiler {
   using PendingBlockTargetVector =
       Vector<PendingBlockTarget, 0, SystemAllocPolicy>;
 
+  const CompilerEnvironment& compilerEnv_;
   const CodeMetadata& codeMeta_;
   IonOpIter iter_;
   uint32_t functionBodyOffset_;
@@ -279,10 +280,12 @@ class FunctionCompiler {
   VectorUniqueTryControl tryControlCache_;
 
  public:
-  FunctionCompiler(const CodeMetadata& codeMeta, Decoder& decoder,
+  FunctionCompiler(const CompilerEnvironment& compilerEnv,
+                   const CodeMetadata& codeMeta, Decoder& decoder,
                    const FuncCompileInput& func, const ValTypeVector& locals,
                    MIRGenerator& mirGen, TryNoteVector& tryNotes)
-      : codeMeta_(codeMeta),
+      : compilerEnv_(compilerEnv),
+        codeMeta_(codeMeta),
         iter_(codeMeta, decoder),
         functionBodyOffset_(decoder.beginOffset()),
         func_(func),
@@ -310,7 +313,7 @@ class FunctionCompiler {
   // FIXME(1401675): Replace with BlockType.
   uint32_t funcIndex() const { return func_.index; }
   const FuncType& funcType() const {
-    return *codeMeta_.funcs[func_.index].type;
+    return codeMeta_.getFuncType(func_.index);
   }
 
   MBasicBlock* getCurBlock() const { return curBlock_; }
@@ -402,7 +405,7 @@ class FunctionCompiler {
     }
 #endif
     MOZ_ASSERT(inDeadCode());
-    MOZ_ASSERT(done(), "all bytes must be consumed");
+    MOZ_ASSERT(done());
     MOZ_ASSERT(func_.callSiteLineNums.length() == lastReadCallSite_);
   }
 
@@ -411,6 +414,7 @@ class FunctionCompiler {
   MIRGenerator& mirGen() const { return mirGen_; }
   MIRGraph& mirGraph() const { return graph_; }
   const CompileInfo& info() const { return info_; }
+  const CompilerEnvironment& compilerEnv() const { return compilerEnv_; }
 
   MDefinition* getLocalDef(unsigned slot) {
     if (inDeadCode()) {
@@ -5053,7 +5057,7 @@ static bool EmitEnd(FunctionCompiler& f) {
   // time for the label case
   DefVector postJoinDefs;
   switch (kind) {
-    case LabelKind::Body:
+    case LabelKind::Body: {
       MOZ_ASSERT(!control.tryControl);
       if (!f.emitBodyDelegateThrowPad(control)) {
         return false;
@@ -5067,6 +5071,7 @@ static bool EmitEnd(FunctionCompiler& f) {
       f.iter().popEnd();
       MOZ_ASSERT(f.iter().controlStackEmpty());
       return f.iter().endFunction(f.iter().end());
+    }
     case LabelKind::Block:
       MOZ_ASSERT(!control.tryControl);
       if (!f.finishBlock(&postJoinDefs)) {
@@ -5371,7 +5376,7 @@ static bool EmitCall(FunctionCompiler& f, bool asmJSFuncDef) {
     return true;
   }
 
-  const FuncType& funcType = *f.codeMeta().funcs[funcIndex].type;
+  const FuncType& funcType = f.codeMeta().getFuncType(funcIndex);
 
   CallCompileState call;
   if (!EmitCallArgs(f, funcType, args, &call)) {
@@ -5466,7 +5471,7 @@ static bool EmitReturnCall(FunctionCompiler& f) {
     return true;
   }
 
-  const FuncType& funcType = *f.codeMeta().funcs[funcIndex].type;
+  const FuncType& funcType = f.codeMeta().getFuncType(funcIndex);
 
   CallCompileState call;
   f.markReturnCall(&call);
@@ -5724,8 +5729,14 @@ static bool EmitTruncate(FunctionCompiler& f, ValType operandType,
   }
   if (resultType == ValType::I32) {
     if (f.codeMeta().isAsmJS()) {
-      if (input && (input->type() == MIRType::Double ||
-                    input->type() == MIRType::Float32)) {
+      if (f.inDeadCode()) {
+        // The read callsite line, produced by prepareCall, has to be
+        // consumed -- the MWasmBuiltinTruncateToInt32 and MTruncateToInt32
+        // will not create MIR node.
+        (void)f.readCallSiteLineOrBytecode();
+        f.iter().setResult(nullptr);
+      } else if (input && (input->type() == MIRType::Double ||
+                           input->type() == MIRType::Float32)) {
         f.iter().setResult(f.unary<MWasmBuiltinTruncateToInt32>(input));
       } else {
         f.iter().setResult(f.unary<MTruncateToInt32>(input));
@@ -9331,7 +9342,8 @@ static bool EmitBodyExprs(FunctionCompiler& f) {
 #undef CHECK
 }
 
-static bool IonBuildMIR(Decoder& d, const CodeMetadata& codeMeta,
+static bool IonBuildMIR(Decoder& d, const CompilerEnvironment& compilerEnv,
+                        const CodeMetadata& codeMeta,
                         const FuncCompileInput& func,
                         const ValTypeVector& locals, MIRGenerator& mir,
                         TryNoteVector& tryNotes, FeatureUsage* observedFeatures,
@@ -9346,7 +9358,7 @@ static bool IonBuildMIR(Decoder& d, const CodeMetadata& codeMeta,
   }
 
   // Build MIR graph
-  FunctionCompiler f(codeMeta, d, func, locals, mir, tryNotes);
+  FunctionCompiler f(compilerEnv, codeMeta, d, func, locals, mir, tryNotes);
   if (!f.init()) {
     return false;
   }
@@ -9426,8 +9438,8 @@ bool wasm::IonCompileFunctions(const CodeMetadata& codeMeta,
 
     // Build MIR graph
     FeatureUsage observedFeatures;
-    if (!IonBuildMIR(d, codeMeta, func, locals, mir, masm.tryNotes(),
-                     &observedFeatures, error)) {
+    if (!IonBuildMIR(d, compilerEnv, codeMeta, func, locals, mir,
+                     masm.tryNotes(), &observedFeatures, error)) {
       return false;
     }
 
@@ -9454,7 +9466,7 @@ bool wasm::IonCompileFunctions(const CodeMetadata& codeMeta,
 
       BytecodeOffset prologueTrapOffset(func.lineOrBytecode);
       FuncOffsets offsets;
-      ArgTypeVector args(*codeMeta.funcs[func.index].type);
+      ArgTypeVector args(codeMeta.getFuncType(func.index));
       if (!codegen.generateWasm(CallIndirectId::forFunc(codeMeta, func.index),
                                 prologueTrapOffset, args, trapExitLayout,
                                 trapExitLayoutNumWords, &offsets,
@@ -9464,8 +9476,7 @@ bool wasm::IonCompileFunctions(const CodeMetadata& codeMeta,
 
       bool hasUnwindInfo =
           unwindInfoBefore != masm.codeRangeUnwindInfos().length();
-      if (!code->codeRanges.emplaceBack(func.index, func.lineOrBytecode,
-                                        offsets, hasUnwindInfo)) {
+      if (!code->codeRanges.emplaceBack(func.index, offsets, hasUnwindInfo)) {
         return false;
       }
     }
@@ -9488,7 +9499,8 @@ bool wasm::IonCompileFunctions(const CodeMetadata& codeMeta,
   return code->swap(masm);
 }
 
-bool wasm::IonDumpFunction(const CodeMetadata& codeMeta,
+bool wasm::IonDumpFunction(const CompilerEnvironment& compilerEnv,
+                           const CodeMetadata& codeMeta,
                            const FuncCompileInput& func,
                            IonDumpContents contents, GenericPrinter& out,
                            UniqueChars* error) {
@@ -9513,8 +9525,8 @@ bool wasm::IonDumpFunction(const CodeMetadata& codeMeta,
   // Build MIR graph
   TryNoteVector tryNotes;
   FeatureUsage observedFeatures;
-  if (!IonBuildMIR(d, codeMeta, func, locals, mir, tryNotes, &observedFeatures,
-                   error)) {
+  if (!IonBuildMIR(d, compilerEnv, codeMeta, func, locals, mir, tryNotes,
+                   &observedFeatures, error)) {
     return false;
   }
 

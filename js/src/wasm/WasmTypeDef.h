@@ -842,11 +842,12 @@ class TypeDef {
       return true;
     }
     const SuperTypeVector* subSTV = subTypeDef->superTypeVector();
+    const SuperTypeVector* superSTV = superTypeDef->superTypeVector();
 
     // During construction of a recursion group, the super type vector may not
     // have been computed yet, in which case we need to fall back to a linear
     // search.
-    if (!subSTV) {
+    if (!subSTV || !superSTV) {
       while (subTypeDef) {
         if (subTypeDef == superTypeDef) {
           return true;
@@ -868,7 +869,6 @@ class TypeDef {
       return false;
     }
 
-    const SuperTypeVector* superSTV = superTypeDef->superTypeVector();
     MOZ_ASSERT(superSTV);
     MOZ_ASSERT(superSTV->typeDef() == superTypeDef);
 
@@ -1101,7 +1101,6 @@ using SharedRecGroupVector = Vector<SharedRecGroup, 0, SystemAllocPolicy>;
 // A type context holds the recursion groups and corresponding type definitions
 // defined in a module.
 class TypeContext : public AtomicRefCounted<TypeContext> {
-  FeatureArgs features_;
   // The pending recursion group that is currently being constructed
   MutableRecGroup pendingRecGroup_;
   // An in-order list of all the recursion groups defined in this module
@@ -1116,7 +1115,6 @@ class TypeContext : public AtomicRefCounted<TypeContext> {
 
  public:
   TypeContext() = default;
-  explicit TypeContext(const FeatureArgs& features) : features_(features) {}
   ~TypeContext();
 
   size_t sizeOfExcludingThis(MallocSizeOf mallocSizeOf) const {

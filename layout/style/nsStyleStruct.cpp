@@ -909,6 +909,7 @@ nsStyleSVGReset::nsStyleSVGReset()
       mLightingColor(StyleColor::White()),
       mStopOpacity(1.0f),
       mFloodOpacity(1.0f),
+      mVectorEffect(StyleVectorEffect::NONE),
       mMaskType(StyleMaskType::Luminance),
       mD(StyleDProperty::None()) {
   MOZ_COUNT_CTOR(nsStyleSVGReset);
@@ -2247,6 +2248,11 @@ static bool ScrollbarGenerationChanged(const nsStyleDisplay& aOld,
 static bool AppearanceValueAffectsFrames(StyleAppearance aAppearance,
                                          StyleAppearance aDefaultAppearance) {
   switch (aAppearance) {
+    case StyleAppearance::None:
+      // Checkbox / radio with appearance none doesn't construct an
+      // nsCheckboxRadioFrame.
+      return aDefaultAppearance == StyleAppearance::Checkbox ||
+             aDefaultAppearance == StyleAppearance::Radio;
     case StyleAppearance::Textfield:
       // This is for <input type=number/search> where we allow authors to
       // specify a |-moz-appearance:textfield| to get a control without buttons.
@@ -2274,9 +2280,11 @@ nsChangeHint nsStyleDisplay::CalcDifference(
   auto oldAppearance = EffectiveAppearance();
   auto newAppearance = aNewData.EffectiveAppearance();
   if (oldAppearance != newAppearance) {
-    // Changes to the relevant default appearance changes in
-    // AppearanceValueRequiresFrameReconstruction require reconstruction on
-    // their own, so we can just pick either the new or the old.
+    // Changes to the mDefaultAppearance values handled in
+    // AppearanceValueAffectsFrames reconstruct their frames via other means.
+    // E.g. switching the <input> type attribute reframes via
+    // GetAttributeChangeHint. Thus, it doesn't matter whether we pick
+    // mDefaultAppearance or aNewData.mDefaultAppearance for the check below.
     if (AppearanceValueAffectsFrames(oldAppearance, mDefaultAppearance) ||
         AppearanceValueAffectsFrames(newAppearance, mDefaultAppearance)) {
       return nsChangeHint_ReconstructFrame;
@@ -3537,6 +3545,13 @@ StyleContentVisibility nsStyleDisplay::ContentVisibility(
   // content-visibility applies to elements for which size containment applies.
   // https://drafts.csswg.org/css-contain/#content-visibility
   if (PrecludesSizeContainmentOrContentVisibilityWithFrame(aFrame)) {
+    return StyleContentVisibility::Visible;
+  }
+  // If we're in print/print-preview, or being used as an image, we should
+  // always treat `auto` as `visible`.
+  if (mContentVisibility == StyleContentVisibility::Auto &&
+      (aFrame.PresContext()->IsPrintingOrPrintPreview() ||
+       aFrame.PresContext()->Document()->IsBeingUsedAsImage())) {
     return StyleContentVisibility::Visible;
   }
   return mContentVisibility;

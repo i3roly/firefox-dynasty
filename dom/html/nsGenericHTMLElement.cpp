@@ -447,7 +447,7 @@ bool nsGenericHTMLElement::Spellcheck() {
   }
 
   // Anything else that's not a form control is not spellchecked by default
-  nsCOMPtr<nsIFormControl> formControl = do_QueryObject(this);
+  const nsIFormControl* formControl = GetAsFormControl();
   if (!formControl) {
     return false;  // Not spellchecked by default
   }
@@ -3776,4 +3776,58 @@ void nsGenericHTMLElement::GetPopover(nsString& aPopover) const {
   if (aPopover.IsEmpty() && !DOMStringIsNull(aPopover)) {
     aPopover.Assign(NS_ConvertUTF8toUTF16(kPopoverAttributeValueAuto));
   }
+}
+
+/******************************************************************************
+ *  nsIFormControl
+ *****************************************************************************/
+
+// static
+nsIFormControl* nsIFormControl::FromEventTarget(
+    mozilla::dom::EventTarget* aTarget) {
+  MOZ_ASSERT(aTarget);
+  return aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl() : nullptr;
+}
+
+// static
+nsIFormControl* nsIFormControl::FromEventTargetOrNull(
+    mozilla::dom::EventTarget* aTarget) {
+  return aTarget && aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl()
+                                      : nullptr;
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromEventTarget(
+    const mozilla::dom::EventTarget* aTarget) {
+  MOZ_ASSERT(aTarget);
+  return aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl() : nullptr;
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromEventTargetOrNull(
+    const mozilla::dom::EventTarget* aTarget) {
+  return aTarget && aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl()
+                                      : nullptr;
+}
+
+// static
+nsIFormControl* nsIFormControl::FromNode(nsINode* aNode) {
+  MOZ_ASSERT(aNode);
+  return aNode->GetAsFormControl();
+}
+
+// static
+nsIFormControl* nsIFormControl::FromNodeOrNull(nsINode* aNode) {
+  return aNode ? aNode->GetAsFormControl() : nullptr;
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromNode(const nsINode* aNode) {
+  MOZ_ASSERT(aNode);
+  return aNode->GetAsFormControl();
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromNodeOrNull(const nsINode* aNode) {
+  return aNode ? aNode->GetAsFormControl() : nullptr;
 }

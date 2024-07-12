@@ -318,7 +318,7 @@ void DebugState::adjustEnterAndLeaveFrameTrapsState(JSContext* cx,
 
   MOZ_RELEASE_ASSERT(&instance->codeMeta() == &codeMeta());
   MOZ_RELEASE_ASSERT(instance->codeMetaForAsmJS() == codeMetaForAsmJS());
-  uint32_t numFuncs = codeMeta().debugNumFuncs();
+  uint32_t numFuncs = codeMeta().numFuncs();
   if (enabled) {
     MOZ_ASSERT(enterAndLeaveFrameTrapsCounter_ > 0);
     for (uint32_t funcIdx = 0; funcIdx < numFuncs; funcIdx++) {
@@ -373,7 +373,7 @@ bool DebugState::debugGetLocalTypes(uint32_t funcIndex, ValTypeVector* locals,
                                     size_t* argsLength,
                                     StackResults* stackResults) {
   const TypeContext& types = *codeMeta().types;
-  const FuncType& funcType = codeMeta().debugFuncType(funcIndex);
+  const FuncType& funcType = codeMeta().getFuncType(funcIndex);
   const ValTypeVector& args = funcType.args();
   const ValTypeVector& results = funcType.results();
   ResultType resultType(ResultType::Vector(results));
@@ -386,12 +386,9 @@ bool DebugState::debugGetLocalTypes(uint32_t funcIndex, ValTypeVector* locals,
   }
 
   // Decode local var types from wasm binary function body.
-  const CodeRange& range =
-      debugCode().codeRanges[funcToCodeRangeIndex(funcIndex)];
-  // In wasm, the Code points to the function start via funcLineOrBytecode.
-  size_t offsetInModule = range.funcLineOrBytecode();
-  Decoder d(bytecode().begin() + offsetInModule, bytecode().end(),
-            offsetInModule,
+  uint32_t bytecodeOffset = codeMeta().funcBytecodeOffset(funcIndex);
+  Decoder d(bytecode().begin() + bytecodeOffset, bytecode().end(),
+            bytecodeOffset,
             /* error = */ nullptr);
   return DecodeValidatedLocalEntries(types, d, locals);
 }
@@ -507,7 +504,7 @@ bool DebugState::getSourceMappingURL(JSContext* cx,
   }
 
   // Check presence of "SourceMap:" HTTP response header.
-  char* sourceMapURL = codeMeta().sourceMapURL.get();
+  char* sourceMapURL = codeMeta().sourceMapURL().get();
   if (sourceMapURL && strlen(sourceMapURL)) {
     JS::UTF8Chars utf8Chars(sourceMapURL, strlen(sourceMapURL));
     JSString* str = JS_NewStringCopyUTF8N(cx, utf8Chars);

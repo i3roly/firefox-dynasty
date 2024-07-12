@@ -7,19 +7,11 @@
 ##########
 # android_version strings
 #   https://en.wikipedia.org/wiki/Android_version_history
-#   * Android 'ICS' 4.0-4.0.2: 14 ('4.0' slaves, inactive)
-#   * Android 'Jelly Bean' 4.2: 17 ('4.2' slaves)
-#   * Android 'Jelly Bean' 4.3: 18 ('4.3' slaves)
-#   * Android 'Lollipop' 5.0: 21 ('5.0' slaves)
-#   * Android            8.0: 26 (pixel 2 phones)
 #   * Android           13.0: 33 (pixel 5 phones)
 
 ##########
 # os_version strings
 #   https://msdn.microsoft.com/en-us/library/windows/desktop/ms724832%28v=vs.85%29.aspx
-#   * Windows 7: 6.1
-#   * Windows 8: 6.2
-#   * Windows 8.1: 6.3
 #   * Windows 10: 10.0
 
 [DEFAULT]
@@ -516,6 +508,10 @@ fail-if = ["os == 'mac' && !apple_silicon"]
 
 ########################################################################
 # Complicated
+
+["generated/test_conformance__ogles__GL__abs__abs_001_to_006.html"]
+# Test suite terminates, e.g. at pixel @ (412, 253 was [191,0,0,255] expected [98,0,0,255]. Bug 1897792
+skip-if = ["os == 'android' && debug"]
 
 ["generated/test_conformance__context__context-attributes-alpha-depth-stencil-antialias.html"]
 # Asserts on linux debug. Crashes on Android.
@@ -1291,6 +1287,11 @@ fail-if = ["os == 'linux' && display != 'wayland'"]
 ["generated/test_conformance__rendering__line-rendering-quality.html"]
 # Found 0 lines, looking in the vertical direction, expected 2
 fail-if = ["os == 'linux' && display != 'wayland'"]
+
+["generated/test_conformance__rendering__blending.html"]
+# Android 13.0 Pixel5 AArch64
+# dom/canvas/test/webgl-conf/generated/test_conformance__rendering__blending.html | Expected [100,2,3,4], was [1,2,3,4]
+fail-if = ["os == 'android'"]
 
 ["generated/test_2_conformance__rendering__blending.html"]
 fail-if = ["os == 'android'"]

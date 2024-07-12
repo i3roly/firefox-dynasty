@@ -22,7 +22,7 @@ object Versions {
     const val mozilla_glean = "60.3.0"
 
     const val junit = "4.13.2"
-    const val robolectric = "4.12.1"
+    const val robolectric = "4.13"
     const val mockito = "5.12.0"
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.11"
@@ -61,7 +61,7 @@ object Versions {
         const val browser = "1.8.0"
         const val biometric = "1.1.0"
         const val cardview = "1.0.0"
-        const val collection = "1.4.0"
+        const val collection = "1.4.1"
         const val compose_bom = "2024.06.00"
         const val constraintlayout = "2.1.4"
         const val coordinatorlayout = "1.2.0"

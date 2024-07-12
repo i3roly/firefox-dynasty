@@ -716,7 +716,8 @@
 
 <%helpers:shorthand
     name="place-content"
-    engines="gecko"
+    engines="gecko servo"
+    servo_pref="layout.flexbox.enabled",
     sub_properties="align-content justify-content"
     spec="https://drafts.csswg.org/css-align/#propdef-place-content"
 >
@@ -771,7 +772,7 @@
 
 <%helpers:shorthand
     name="place-self"
-    engines="gecko"
+    engines="gecko servo"
     sub_properties="align-self justify-self"
     spec="https://drafts.csswg.org/css-align/#place-self-property"
 >
@@ -797,7 +798,6 @@
             justify_self: JustifySelf(justify),
         })
     }
-
     impl<'a> ToCss for LonghandsToSerialize<'a> {
         fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result where W: fmt::Write {
             self.align_self.to_css(dest)?;
@@ -812,7 +812,8 @@
 
 <%helpers:shorthand
     name="place-items"
-    engines="gecko"
+    engines="gecko servo"
+    servo_pref="layout.flexbox.enabled",
     sub_properties="align-items justify-items"
     spec="https://drafts.csswg.org/css-align/#place-items-property"
 >

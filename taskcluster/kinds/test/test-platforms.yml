@@ -129,22 +129,6 @@ linux2204-64-wayland-shippable/opt:
 ##
 # Windows platforms (matching /windows.*/)
 
-# win32
-windows10-32-shippable-qr/opt:
-    build-platform: win32-shippable/opt
-    build-signing-label: build-signing-win32-shippable/opt
-    test-sets:
-        - browsertime
-        - talos-profiling
-        - windows-talos
-
-windows10-32-qr/opt:
-    build-platform: win32/opt
-    test-sets:
-        - browsertime
-        - windows-talos
-
-
 # win11-32
 windows11-32-2009-shippable-qr/opt:
     build-platform: win32-shippable/opt
@@ -186,7 +170,6 @@ windows10-64-qr/opt:
     build-platform: win64/opt
     test-sets:
         - windows-talos
-        - browsertime
 
 windows11-64-qr/opt:
     build-platform: win64/opt
@@ -219,18 +202,12 @@ windows10-64-shippable-qr/opt:
     test-sets:
         - talos-profiling
         - windows-talos
-        - browsertime
 
 windows11-64-shippable-qr/opt:
     build-platform: win64-shippable/opt
     test-sets:
         - talos-profiling
         - windows-talos
-        - browsertime
-
-windows10-64-nightlyasrelease-qr/opt:
-    build-platform: win64-nightlyasrelease/opt
-    test-sets:
         - browsertime
 
 windows11-64-nightlyasrelease-qr/opt:
@@ -349,20 +326,18 @@ macosx1100-64-qr/debug:
     test-sets:
         - macosx1100-64-jittests
 
-macosx1100-64-aarch64-qr/debug:
+macosx1100-aarch64-qr/debug:
     build-platform: macosx64-aarch64/debug
     build-signing-label: repackage-macosx64-aarch64/debug
     test-sets:
         - macosx1100-aarch64-qr-tests
 
-macosx1100-64-shippable-qr/opt:
+macosx1100-aarch64-shippable-qr/opt:
     build-platform: macosx64-shippable/opt
     build-signing-label: repackage-macosx64-shippable/opt
     test-sets:
         - macosx1100-64-jittests
         - macosx1100-64-qr-tests
-        # - macosx64-talos
-        # - browsertime-high-priority
 
 macosx1015-64-shippable-qr/opt:
     build-platform: macosx64-shippable/opt

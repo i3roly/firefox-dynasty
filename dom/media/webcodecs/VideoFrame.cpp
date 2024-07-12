@@ -399,7 +399,7 @@ static Result<Ok, nsCString> VerifyRectOffsetAlignment(
 }
 
 // https://w3c.github.io/webcodecs/#videoframe-parse-visible-rect
-static Result<gfx::IntRect, nsCString> ParseVisibleRect(
+static Result<gfx::IntRect, MediaResult> ParseVisibleRect(
     const gfx::IntRect& aDefaultRect, const Maybe<gfx::IntRect>& aOverrideRect,
     const gfx::IntSize& aCodedSize, const VideoFrame::Format& aFormat) {
   MOZ_ASSERT(ValidateVisibility(aDefaultRect, aCodedSize).isOk());
@@ -409,11 +409,17 @@ static Result<gfx::IntRect, nsCString> ParseVisibleRect(
     // Skip checking overrideRect's width and height here. They should be
     // checked before reaching here, and ValidateVisibility will assert it.
 
-    MOZ_TRY(ValidateVisibility(aOverrideRect.ref(), aCodedSize));
+    MOZ_TRY(ValidateVisibility(aOverrideRect.ref(), aCodedSize)
+                .mapErr([](const nsCString& error) {
+                  return MediaResult(NS_ERROR_INVALID_ARG, error);
+                }));
     rect = *aOverrideRect;
   }
 
-  MOZ_TRY(VerifyRectOffsetAlignment(Some(aFormat), rect));
+  MOZ_TRY(VerifyRectOffsetAlignment(Some(aFormat), rect)
+              .mapErr([](const nsCString& error) {
+                return MediaResult(NS_ERROR_INVALID_ARG, error);
+              }));
 
   return rect;
 }
@@ -446,13 +452,14 @@ struct CombinedBufferLayout {
 };
 
 // https://w3c.github.io/webcodecs/#videoframe-compute-layout-and-allocation-size
-static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
+static Result<CombinedBufferLayout, MediaResult> ComputeLayoutAndAllocationSize(
     const gfx::IntRect& aRect, const VideoFrame::Format& aFormat,
     const Sequence<PlaneLayout>* aPlaneLayouts) {
   nsTArray<VideoFrame::Format::Plane> planes = aFormat.Planes();
 
   if (aPlaneLayouts && aPlaneLayouts->Length() != planes.Length()) {
-    return Err("Mismatch between format and layout"_ns);
+    return Err(MediaResult(NS_ERROR_INVALID_ARG,
+                           "Mismatch between format and layout"_ns));
   }
 
   uint32_t minAllocationSize = 0;
@@ -480,9 +487,11 @@ static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
     MOZ_RELEASE_ASSERT(sourceLeftBytes.isValid());
     sourceLeftBytes *= aFormat.SampleBytes(p);
     if (!sourceLeftBytes.isValid()) {
-      return Err(nsPrintfCString(
-          "The parsed-rect's x-offset is too large for %s plane",
-          aFormat.PlaneName(p)));
+      return Err(MediaResult(
+          NS_ERROR_INVALID_ARG,
+          nsPrintfCString(
+              "The parsed-rect's x-offset is too large for %s plane",
+              aFormat.PlaneName(p))));
     }
 
     CheckedUint32 sourceWidthBytes(aRect.Width());
@@ -490,9 +499,10 @@ static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
     MOZ_RELEASE_ASSERT(sourceWidthBytes.isValid());
     sourceWidthBytes *= aFormat.SampleBytes(p);
     if (!sourceWidthBytes.isValid()) {
-      return Err(
+      return Err(MediaResult(
+          NS_ERROR_INVALID_ARG,
           nsPrintfCString("The parsed-rect's width is too large for %s plane",
-                          aFormat.PlaneName(p)));
+                          aFormat.PlaneName(p))));
     }
 
     // TODO: Spec here is wrong so we do differently:
@@ -507,8 +517,10 @@ static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
     if (aPlaneLayouts) {
       const PlaneLayout& planeLayout = aPlaneLayouts->ElementAt(i);
       if (planeLayout.mStride < layout.mSourceWidthBytes) {
-        return Err(nsPrintfCString("The stride in %s plane is too small",
-                                   aFormat.PlaneName(p)));
+        return Err(
+            MediaResult(NS_ERROR_INVALID_ARG,
+                        nsPrintfCString("The stride in %s plane is too small",
+                                        aFormat.PlaneName(p))));
       }
       layout.mDestinationOffset = planeLayout.mOffset;
       layout.mDestinationStride = planeLayout.mStride;
@@ -520,11 +532,14 @@ static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
     const CheckedInt<uint32_t> planeSize =
         CheckedInt<uint32_t>(layout.mDestinationStride) * layout.mSourceHeight;
     if (!planeSize.isValid()) {
-      return Err("Invalid layout with an over-sized plane"_ns);
+      return Err(MediaResult(NS_ERROR_INVALID_ARG,
+                             "Invalid layout with an over-sized plane"_ns));
     }
     const CheckedInt<uint32_t> planeEnd = planeSize + layout.mDestinationOffset;
     if (!planeEnd.isValid()) {
-      return Err("Invalid layout with the out-out-bound offset"_ns);
+      return Err(
+          MediaResult(NS_ERROR_INVALID_ARG,
+                      "Invalid layout with the out-out-bound offset"_ns));
     }
     endOffsets.AppendElement(planeEnd.value());
 
@@ -537,7 +552,8 @@ static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
       // one's head, then they do not overlap. Otherwise, they do.
       if (endOffsets[i] > earlier.mDestinationOffset &&
           endOffsets[j] > layout.mDestinationOffset) {
-        return Err("Invalid layout with the overlapped planes"_ns);
+        return Err(MediaResult(NS_ERROR_INVALID_ARG,
+                               "Invalid layout with the overlapped planes"_ns));
       }
     }
     layouts.AppendElement(layout);
@@ -547,23 +563,25 @@ static Result<CombinedBufferLayout, nsCString> ComputeLayoutAndAllocationSize(
 }
 
 // https://w3c.github.io/webcodecs/#videoframe-verify-rect-size-alignment
-static Result<Ok, nsCString> VerifyRectSizeAlignment(
-    const VideoFrame::Format& aFormat, const gfx::IntRect& aRect) {
+static MediaResult VerifyRectSizeAlignment(const VideoFrame::Format& aFormat,
+                                           const gfx::IntRect& aRect) {
   for (const VideoFrame::Format::Plane& p : aFormat.Planes()) {
     const gfx::IntSize sample = aFormat.SampleSize(p);
     if (aRect.Width() % sample.Width() != 0) {
-      return Err("Mismatch between format and given rect's width"_ns);
+      return MediaResult(NS_ERROR_INVALID_ARG,
+                         "Mismatch between format and given rect's width"_ns);
     }
 
     if (aRect.Height() % sample.Height() != 0) {
-      return Err("Mismatch between format and given rect's height"_ns);
+      return MediaResult(NS_ERROR_INVALID_ARG,
+                         "Mismatch between format and given rect's height"_ns);
     }
   }
-  return Ok();
+  return MediaResult(NS_OK);
 }
 
 // https://w3c.github.io/webcodecs/#videoframe-parse-videoframecopytooptions
-static Result<CombinedBufferLayout, nsCString> ParseVideoFrameCopyToOptions(
+static Result<CombinedBufferLayout, MediaResult> ParseVideoFrameCopyToOptions(
     const VideoFrameCopyToOptions& aOptions, const gfx::IntRect& aVisibleRect,
     const gfx::IntSize& aCodedSize, const VideoFrame::Format& aFormat) {
   Maybe<gfx::IntRect> overrideRect;
@@ -575,10 +593,13 @@ static Result<CombinedBufferLayout, nsCString> ParseVideoFrameCopyToOptions(
     MOZ_TRY_VAR(overrideRect.ref(),
                 ToIntRect(aOptions.mRect.Value()).mapErr([](nsCString error) {
                   error.Insert("rect's ", 0);
-                  return error;
+                  return MediaResult(NS_ERROR_INVALID_ARG, error);
                 }));
 
-    MOZ_TRY(VerifyRectSizeAlignment(aFormat, overrideRect.ref()));
+    MediaResult r = VerifyRectSizeAlignment(aFormat, overrideRect.ref());
+    if (NS_FAILED(r.Code())) {
+      return Err(r);
+    }
   }
 
   gfx::IntRect parsedRect;
@@ -586,6 +607,19 @@ static Result<CombinedBufferLayout, nsCString> ParseVideoFrameCopyToOptions(
                                            aCodedSize, aFormat));
 
   const Sequence<PlaneLayout>* optLayout = OptionalToPointer(aOptions.mLayout);
+
+  VideoFrame::Format format(aFormat);
+  if (aOptions.mFormat.WasPassed()) {
+    if (aOptions.mFormat.Value() != VideoPixelFormat::RGBA &&
+        aOptions.mFormat.Value() != VideoPixelFormat::RGBX &&
+        aOptions.mFormat.Value() != VideoPixelFormat::BGRA &&
+        aOptions.mFormat.Value() != VideoPixelFormat::BGRX) {
+      nsAutoCString error(dom::GetEnumString(aOptions.mFormat.Value()).get());
+      error.Append(" is unsupported in ParseVideoFrameCopyToOptions");
+      return Err(MediaResult(NS_ERROR_DOM_NOT_SUPPORTED_ERR, error));
+    }
+    format = VideoFrame::Format(aOptions.mFormat.Value());
+  }
 
   return ComputeLayoutAndAllocationSize(parsedRect, aFormat, optLayout);
 }
@@ -976,19 +1010,13 @@ static Result<RefPtr<VideoFrame>, MediaResult> CreateVideoFrameFromBuffer(
 
   gfx::IntRect parsedRect;
   MOZ_TRY_VAR(parsedRect, ParseVisibleRect(gfx::IntRect({0, 0}, codedSize),
-                                           visibleRect, codedSize, format)
-                              .mapErr([](nsCString error) {
-                                return MediaResult(NS_ERROR_INVALID_ARG, error);
-                              }));
+                                           visibleRect, codedSize, format));
 
   const Sequence<PlaneLayout>* optLayout = OptionalToPointer(aInit.mLayout);
 
   CombinedBufferLayout combinedLayout;
   MOZ_TRY_VAR(combinedLayout,
-              ComputeLayoutAndAllocationSize(parsedRect, format, optLayout)
-                  .mapErr([](nsCString error) {
-                    return MediaResult(NS_ERROR_INVALID_ARG, error);
-                  }));
+              ComputeLayoutAndAllocationSize(parsedRect, format, optLayout));
 
   Maybe<uint64_t> duration = OptionalToMaybe(aInit.mDuration);
 
@@ -1161,6 +1189,100 @@ InitializeFrameFromOtherFrame(nsIGlobalObject* aGlobal, VideoFrameData&& aData,
       aGlobal, aData.mImage, format ? Some(format->PixelFormat()) : Nothing(),
       aData.mImage->GetSize(), *visibleRect, *displaySize, duration, timestamp,
       aData.mColorSpace);
+}
+
+static void CloneConfiguration(RootedDictionary<VideoFrameCopyToOptions>& aDest,
+                               const VideoFrameCopyToOptions& aSrc) {
+  if (aSrc.mColorSpace.WasPassed()) {
+    aDest.mColorSpace.Construct(aSrc.mColorSpace.Value());
+  }
+
+  if (aSrc.mFormat.WasPassed()) {
+    aDest.mFormat.Construct(aSrc.mFormat.Value());
+  }
+
+  if (aSrc.mLayout.WasPassed()) {
+    aDest.mLayout.Construct(aSrc.mLayout.Value());
+  }
+
+  if (aSrc.mRect.WasPassed()) {
+    aDest.mRect.Construct(aSrc.mRect.Value());
+  }
+}
+
+// Convert the aImage to an image with aColorSpace color space in aFormat
+// format.
+static Result<RefPtr<layers::Image>, MediaResult> ConvertToRGBAImage(
+    const RefPtr<layers::Image>& aImage, const VideoPixelFormat& aFormat,
+    const PredefinedColorSpace& aColorSpace) {
+  MOZ_ASSERT(aImage);
+
+  if (aFormat != VideoPixelFormat::RGBA && aFormat != VideoPixelFormat::RGBX &&
+      aFormat != VideoPixelFormat::BGRA && aFormat != VideoPixelFormat::BGRX) {
+    return Err(MediaResult(
+        NS_ERROR_INVALID_ARG,
+        nsPrintfCString("Image conversion into %s format is invalid",
+                        dom::GetEnumString(aFormat).get())));
+  }
+
+  CheckedInt32 stride(aImage->GetSize().Width());
+  stride *= 4;
+  if (!stride.isValid()) {
+    return Err(
+        MediaResult(NS_ERROR_INVALID_ARG, "The image width is too big"_ns));
+  }
+
+  CheckedInt<size_t> size(stride.value());
+  size *= aImage->GetSize().Height();
+  if (!size.isValid()) {
+    return Err(
+        MediaResult(NS_ERROR_INVALID_ARG, "The image size is too big"_ns));
+  }
+
+  UniquePtr<uint8_t[]> buffer(new uint8_t[size.value()]);
+  if (!buffer) {
+    return Err(MediaResult(NS_ERROR_OUT_OF_MEMORY,
+                           "Failed to allocate buffer for converted image"_ns));
+  }
+
+  VideoFrame::Format format(aFormat);
+  gfx::SurfaceFormat surfaceFormat = format.ToSurfaceFormat();
+
+  // TODO: Take aColorSpace into account (bug 1904471)
+  nsresult r =
+      ConvertToRGBA(aImage.get(), surfaceFormat, buffer.get(), stride.value(),
+                    aImage->GetSize().Width(), aImage->GetSize().Height());
+  if (NS_FAILED(r)) {
+    return Err(
+        MediaResult(r, nsPrintfCString("Failed to convert into %s image",
+                                       dom::GetEnumString(aFormat).get())));
+  }
+
+  Span<uint8_t> data(buffer.get(), size.value());
+  return CreateImageFromRawData(aImage->GetSize(), stride.value(),
+                                surfaceFormat, data);
+}
+
+static VideoColorSpaceInit ConvertToColorSpace(
+    const PredefinedColorSpace& aColorSpace) {
+  VideoColorSpaceInit colorSpace;
+  switch (aColorSpace) {
+    case PredefinedColorSpace::Srgb:
+      // https://w3c.github.io/webcodecs/#srgb-color-space
+      colorSpace.mFullRange.SetValue(true);
+      colorSpace.mMatrix.SetValue(VideoMatrixCoefficients::Rgb);
+      colorSpace.mPrimaries.SetValue(VideoColorPrimaries::Bt709);
+      colorSpace.mTransfer.SetValue(VideoTransferCharacteristics::Iec61966_2_1);
+      break;
+    case PredefinedColorSpace::Display_p3:
+      colorSpace.mFullRange.SetValue(true);
+      colorSpace.mMatrix.SetValue(VideoMatrixCoefficients::Rgb);
+      colorSpace.mPrimaries.SetValue(VideoColorPrimaries::Smpte432);
+      colorSpace.mTransfer.SetValue(VideoTransferCharacteristics::Iec61966_2_1);
+      break;
+  }
+  MOZ_ASSERT(!colorSpace.mFullRange.IsNull());
+  return colorSpace;
 }
 
 /*
@@ -1729,7 +1851,12 @@ uint32_t VideoFrame::AllocationSize(const VideoFrameCopyToOptions& aOptions,
   auto r = ParseVideoFrameCopyToOptions(aOptions, mVisibleRect, mCodedSize,
                                         mResource->mFormat.ref());
   if (r.isErr()) {
-    aRv.ThrowTypeError(r.unwrapErr());
+    MediaResult error = r.unwrapErr();
+    if (error.Code() == NS_ERROR_DOM_NOT_SUPPORTED_ERR) {
+      aRv.ThrowNotSupportedError(error.Message());
+    } else {
+      aRv.ThrowTypeError(error.Message());
+    }
     return 0;
   }
   CombinedBufferLayout layout = r.unwrap();
@@ -1761,12 +1888,54 @@ already_AddRefed<Promise> VideoFrame::CopyTo(
   auto r = ParseVideoFrameCopyToOptions(aOptions, mVisibleRect, mCodedSize,
                                         mResource->mFormat.ref());
   if (r.isErr()) {
-    p->MaybeRejectWithTypeError(r.unwrapErr());
+    MediaResult error = r.unwrapErr();
+    if (error.Code() == NS_ERROR_DOM_NOT_SUPPORTED_ERR) {
+      p->MaybeRejectWithNotSupportedError(error.Message());
+    } else {
+      p->MaybeRejectWithTypeError(error.Message());
+    }
     return p.forget();
   }
   CombinedBufferLayout layout = r.unwrap();
 
+  if (aOptions.mFormat.WasPassed() &&
+      (aOptions.mFormat.Value() == VideoPixelFormat::RGBA ||
+       aOptions.mFormat.Value() == VideoPixelFormat::RGBX ||
+       aOptions.mFormat.Value() == VideoPixelFormat::BGRA ||
+       aOptions.mFormat.Value() == VideoPixelFormat::BGRX)) {
+    // By [1], if color space is not set, use "srgb".
+    // [1]:
+    // https://w3c.github.io/webcodecs/#dom-videoframecopytooptions-colorspace
+    PredefinedColorSpace colorSpace = aOptions.mColorSpace.WasPassed()
+                                          ? aOptions.mColorSpace.Value()
+                                          : PredefinedColorSpace::Srgb;
+
+    if (mResource->mFormat->PixelFormat() != aOptions.mFormat.Value() ||
+        !IsSameColorSpace(ConvertToColorSpace(colorSpace), mColorSpace)) {
+      AutoJSAPI jsapi;
+      if (!jsapi.Init(mParent.get())) {
+        p->MaybeRejectWithTypeError("Failed to get JS context");
+        return p.forget();
+      }
+
+      RootedDictionary<VideoFrameCopyToOptions> options(jsapi.cx());
+      CloneConfiguration(options, aOptions);
+      options.mFormat.Reset();
+
+      RefPtr<VideoFrame> rgbFrame =
+          ConvertToRGBFrame(aOptions.mFormat.Value(), colorSpace);
+      if (!rgbFrame) {
+        p->MaybeRejectWithTypeError(
+            "Failed to convert videoframe in the defined format");
+        return p.forget();
+      }
+      return rgbFrame->CopyTo(aDestination, options, aRv);
+    }
+  }
+
   return ProcessTypedArraysFixed(aDestination, [&](const Span<uint8_t>& aData) {
+    MOZ_ASSERT(!aRv.Failed());
+
     if (aData.size_bytes() < layout.mAllocationSize) {
       p->MaybeRejectWithTypeError("Destination buffer is too small");
       return p.forget();
@@ -1942,6 +2111,32 @@ VideoFrameData VideoFrame::GetVideoFrameData() const {
   return VideoFrameData(mResource->mImage.get(), mResource->TryPixelFormat(),
                         mVisibleRect, mDisplaySize, mDuration, mTimestamp,
                         mColorSpace);
+}
+
+already_AddRefed<VideoFrame> VideoFrame::ConvertToRGBFrame(
+    const VideoPixelFormat& aFormat, const PredefinedColorSpace& aColorSpace) {
+  MOZ_ASSERT(
+      aFormat == VideoPixelFormat::RGBA || aFormat == VideoPixelFormat::RGBX ||
+      aFormat == VideoPixelFormat::BGRA || aFormat == VideoPixelFormat::BGRX);
+  MOZ_ASSERT(mResource);
+
+  auto r = ConvertToRGBAImage(mResource->mImage, aFormat, aColorSpace);
+  if (r.isErr()) {
+    MediaResult err = r.unwrapErr();
+    LOGE("VideoFrame %p, failed to convert image into %s format: %s", this,
+         dom::GetEnumString(aFormat).get(), err.Description().get());
+    return nullptr;
+  }
+  const RefPtr<layers::Image> img = r.unwrap();
+
+  // TODO: https://github.com/w3c/webcodecs/issues/817
+  // spec doesn't mention how the display size is set. Use the original one for
+  // now.
+
+  return MakeAndAddRef<VideoFrame>(
+      mParent.get(), img, Some(aFormat), mVisibleRect.Size(),
+      gfx::IntRect{{0, 0}, mVisibleRect.Size()}, mDisplaySize, mDuration,
+      mTimestamp, ConvertToColorSpace(aColorSpace));
 }
 
 void VideoFrame::StartAutoClose() {

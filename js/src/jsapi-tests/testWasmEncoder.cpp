@@ -44,12 +44,11 @@ BEGIN_TEST(testWasmEncodeBasic) {
 
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
   MOZ_ALWAYS_TRUE(moduleMeta);
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(compileArgs->features);
-  MOZ_ALWAYS_TRUE(codeMeta);
+  MOZ_ALWAYS_TRUE(moduleMeta->init(*compileArgs));
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
   CompilerEnvironment compilerEnv(CompileMode::Once, Tier::Optimized,
                                   DebugEnabled::False);
   compilerEnv.computeParameters();
-  MOZ_ALWAYS_TRUE(codeMeta->init());
 
   ValTypeVector paramsImp, resultsImp;
   MOZ_ALWAYS_TRUE(paramsImp.emplaceBack(ValType::F64) &&
@@ -69,10 +68,11 @@ BEGIN_TEST(testWasmEncodeBasic) {
   MOZ_ALWAYS_TRUE(codeMeta->addDefinedFunc(moduleMeta, std::move(params),
                                            std::move(results), true,
                                            mozilla::Some(std::move(expName))));
+  MOZ_ALWAYS_TRUE(moduleMeta->prepareForCompile(compilerEnv.mode()));
 
-  ModuleGenerator mg(*compileArgs, codeMeta, &compilerEnv, nullptr, nullptr,
-                     nullptr);
-  MOZ_ALWAYS_TRUE(mg.init(nullptr));
+  ModuleGenerator mg(*codeMeta, compilerEnv, compilerEnv.initialState(),
+                     nullptr, nullptr, nullptr);
+  MOZ_ALWAYS_TRUE(mg.initializeCompleteTier());
 
   // Build function and keep bytecode around until the end.
   Bytes bytecode;

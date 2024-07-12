@@ -1412,6 +1412,13 @@ void EventStateManager::NotifyTargetUserActivation(WidgetEvent* aEvent,
       if (inputEvent->IsAlt()) {
         modifiers.SetAlt();
       }
+
+      WidgetMouseEvent* mouseEvent = inputEvent->AsMouseEvent();
+      if (mouseEvent) {
+        if (mouseEvent->mButton == MouseButton::eMiddle) {
+          modifiers.SetMiddleMouse();
+        }
+      }
     }
   }
   doc->NotifyUserGestureActivation(modifiers);
@@ -2271,9 +2278,8 @@ void EventStateManager::FireContextClick() {
         }
       }
     } else if (mGestureDownContent->IsHTMLElement()) {
-      nsCOMPtr<nsIFormControl> formCtrl(do_QueryInterface(mGestureDownContent));
-
-      if (formCtrl) {
+      if (const auto* formCtrl =
+              nsIFormControl::FromNode(mGestureDownContent)) {
         allowedToDispatch =
             formCtrl->IsTextControl(/*aExcludePassword*/ false) ||
             formCtrl->ControlType() == FormControlType::InputFile;

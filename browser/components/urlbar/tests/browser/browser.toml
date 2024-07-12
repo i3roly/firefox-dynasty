@@ -14,6 +14,7 @@ prefs = [
   "browser.urlbar.trending.featureGate=false",
   "extensions.screenshots.disabled=false",
   "screenshots.browser.component.enabled=true",
+  "sidebar.revamp=false",
 ]
 
 ["browser_UrlbarInput_formatValue.js"]
@@ -449,6 +450,8 @@ support-files = [
 ["browser_searchMode_newWindow.js"]
 
 ["browser_searchMode_no_results.js"]
+
+["browser_searchMode_omnibox.js"]
 
 ["browser_searchMode_oneOffButton.js"]
 

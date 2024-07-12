@@ -14,7 +14,10 @@ ChromeUtils.defineESModuleGetters(
 );
 
 const { Actor } = require("resource://devtools/shared/protocol.js");
-const { tracerSpec } = require("resource://devtools/shared/specs/tracer.js");
+const {
+  tracerSpec,
+  TRACER_LOG_METHODS,
+} = require("resource://devtools/shared/specs/tracer.js");
 
 loader.lazyRequireGetter(
   this,
@@ -24,8 +27,8 @@ loader.lazyRequireGetter(
 );
 loader.lazyRequireGetter(
   this,
-  "ConsoleTracingListener",
-  "resource://devtools/server/actors/tracer/console.js",
+  "ResourcesTracingListener",
+  "resource://devtools/server/actors/tracer/resources.js",
   true
 );
 loader.lazyRequireGetter(
@@ -37,21 +40,18 @@ loader.lazyRequireGetter(
 
 // Indexes of each data type within the array describing a frame
 exports.TRACER_FIELDS_INDEXES = {
-  FRAME_IMPLEMENTATION: 0,
-  FRAME_NAME: 1,
-  FRAME_SOURCEID: 2,
-  FRAME_LINE: 3,
-  FRAME_COLUMN: 4,
-  FRAME_URL: 5,
+  // This is shared with all the data types
+  TYPE: 0,
+
+  FRAME_IMPLEMENTATION: 1,
+  FRAME_NAME: 2,
+  FRAME_SOURCEID: 3,
+  FRAME_LINE: 4,
+  FRAME_COLUMN: 5,
+  FRAME_URL: 6,
 };
 
-const LOG_METHODS = {
-  STDOUT: "stdout",
-  CONSOLE: "console",
-  PROFILER: "profiler",
-};
-exports.LOG_METHODS = LOG_METHODS;
-const VALID_LOG_METHODS = Object.values(LOG_METHODS);
+const VALID_LOG_METHODS = Object.values(TRACER_LOG_METHODS);
 
 class TracerActor extends Actor {
   constructor(conn, targetActor) {
@@ -132,17 +132,17 @@ class TracerActor extends Actor {
       return;
     }
 
-    this.logMethod = options.logMethod || LOG_METHODS.STDOUT;
+    this.logMethod = options.logMethod || TRACER_LOG_METHODS.STDOUT;
 
     let ListenerClass = null;
     switch (this.logMethod) {
-      case LOG_METHODS.STDOUT:
+      case TRACER_LOG_METHODS.STDOUT:
         ListenerClass = StdoutTracingListener;
         break;
-      case LOG_METHODS.CONSOLE:
-        ListenerClass = ConsoleTracingListener;
+      case TRACER_LOG_METHODS.CONSOLE:
+        ListenerClass = ResourcesTracingListener;
         break;
-      case LOG_METHODS.PROFILER:
+      case TRACER_LOG_METHODS.PROFILER:
         ListenerClass = ProfilerTracingListener;
         // Recording function returns is mandatory when recording profiler output.
         // Otherwise frames are not closed and mixed up in the profiler frontend.

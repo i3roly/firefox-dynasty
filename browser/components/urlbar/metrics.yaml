@@ -124,6 +124,10 @@ urlbar:
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
+          `rust_fakespot_amazon`,
+          `rust_fakespot_bestbuy`,
+          `rust_fakespot_other`,
+          `rust_fakespot_walmart`,
           `rust_mdn`,
           `rust_pocket`,
           `rust_yelp`,
@@ -263,6 +267,10 @@ urlbar:
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
+          `rust_fakespot_amazon`,
+          `rust_fakespot_bestbuy`,
+          `rust_fakespot_other`,
+          `rust_fakespot_walmart`,
           `rust_mdn`,
           `rust_pocket`,
           `rust_yelp`,
@@ -377,6 +385,10 @@ urlbar:
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
+          `rust_fakespot_amazon`,
+          `rust_fakespot_bestbuy`,
+          `rust_fakespot_other`,
+          `rust_fakespot_walmart`,
           `rust_mdn`,
           `rust_pocket`,
           `rust_yelp`,
@@ -601,6 +613,22 @@ urlbar:
     expires: never
     send_in_pings:
       - events
+
+  quick_suggest_ingest_time:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      Counts how long each successful ingest takes in the Firefox Suggest Rust
+      component. Ingests that fail for whatever reason are not included.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907227
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907227
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - fx-search-telemetry@mozilla.com
+    expires: never
 
 # Replacement for PingCentre "quicksuggest-block|impression|click" pings.
 quick_suggest:

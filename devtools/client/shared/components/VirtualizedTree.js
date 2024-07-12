@@ -989,17 +989,11 @@ class TreeNodeClass extends Component {
     });
 
     const classList = ["tree-node", "div"];
-    if (this.props.index % 2) {
-      classList.push("tree-node-odd");
-    }
-    if (this.props.first) {
-      classList.push("tree-node-first");
-    }
-    if (this.props.last) {
-      classList.push("tree-node-last");
-    }
     if (this.props.active) {
       classList.push("tree-node-active");
+    }
+    if (this.props.focused) {
+      classList.push("focused");
     }
 
     let ariaExpanded;

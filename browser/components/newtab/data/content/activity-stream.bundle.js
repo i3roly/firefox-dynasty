@@ -2710,10 +2710,39 @@ const DSMessageFooter = props => {
     className: "story-footer"
   }, dsMessageLabel);
 };
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/DSThumbsUpDownButtons/DSThumbsUpDownButtons.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function DSThumbsUpDownButtons({
+  sponsor,
+  onThumbsUpClick,
+  onThumbsDownClick,
+  isThumbsUpActive,
+  isThumbsDownActive
+}) {
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "card-stp-thumbs-buttons-wrapper"
+  }, !sponsor && /*#__PURE__*/external_React_default().createElement("div", {
+    className: "card-stp-thumbs-buttons"
+  }, /*#__PURE__*/external_React_default().createElement("button", {
+    onClick: onThumbsUpClick,
+    className: `card-stp-thumbs-button icon icon-thumbs-up ${isThumbsUpActive ? "is-active" : null}`,
+    "data-l10n-id": "newtab-pocket-thumbs-up-tooltip"
+  }), /*#__PURE__*/external_React_default().createElement("button", {
+    onClick: onThumbsDownClick,
+    className: `card-stp-thumbs-button icon icon-thumbs-down ${isThumbsDownActive ? "is-active" : null}`,
+    "data-l10n-id": "newtab-pocket-thumbs-down-tooltip"
+  })));
+}
+
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/DSCard/DSCard.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -2812,19 +2841,13 @@ const DefaultMeta = ({
   className: "title clamp"
 }, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
   className: "excerpt clamp"
-}, excerpt)), mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement("div", {
-  className: "card-stp-thumbs-buttons-wrapper"
-}, !sponsor && /*#__PURE__*/external_React_default().createElement("div", {
-  className: "card-stp-thumbs-buttons"
-}, /*#__PURE__*/external_React_default().createElement("button", {
-  onClick: onThumbsUpClick,
-  className: `card-stp-thumbs-button icon icon-thumbs-up ${state.isThumbsUpActive ? "is-active" : null}`,
-  "data-l10n-id": "newtab-pocket-thumbs-up-tooltip"
-}), /*#__PURE__*/external_React_default().createElement("button", {
-  onClick: onThumbsDownClick,
-  className: `card-stp-thumbs-button icon icon-thumbs-down ${state.isThumbsDownActive ? "is-active" : null}`,
-  "data-l10n-id": "newtab-pocket-thumbs-down-tooltip"
-}))), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
+}, excerpt)), mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
+  onThumbsDownClick: onThumbsDownClick,
+  onThumbsUpClick: onThumbsUpClick,
+  sponsor: sponsor,
+  isThumbsDownActive: state.isThumbsDownActive,
+  isThumbsUpActive: state.isThumbsUpActive
+}), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
   context_type: context_type,
   context: context,
   sponsor: sponsor,
@@ -11008,11 +11031,16 @@ class BaseContent extends (external_React_default()).PureComponent {
       mayHaveSponsoredTopSites
     } = prefs;
     const hasThumbsUpDownLayout = prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
-    const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", !prefs.showSearch && "no-search", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["logowordmark.alwaysVisible"] && "visible-logo", hasThumbsUpDownLayout && "thumbs-ui-compact"].filter(v => v).join(" ");
+    const featureClassName = [weatherEnabled && mayHaveWeather && "has-weather",
+    // Show is weather is enabled/visible
+    prefs.showSearch ? "has-search" : "no-search"].filter(v => v).join(" ");
+    const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["logowordmark.alwaysVisible"] && "visible-logo", hasThumbsUpDownLayout && "thumbs-ui-compact"].filter(v => v).join(" ");
     if (wallpapersEnabled || wallpapersV2Enabled) {
       this.updateWallpaper();
     }
-    return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("menu", {
+    return /*#__PURE__*/external_React_default().createElement("div", {
+      className: featureClassName
+    }, /*#__PURE__*/external_React_default().createElement("menu", {
       className: "personalizeButtonWrapper"
     }, /*#__PURE__*/external_React_default().createElement(CustomizeMenu, {
       onClose: this.closeCustomizationMenu,
@@ -11033,6 +11061,8 @@ class BaseContent extends (external_React_default()).PureComponent {
       position: "inset-block-end inset-inline-start",
       dispatch: this.props.dispatch
     })), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "weatherWrapper"
+    }, weatherEnabled && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Weather_Weather, null))), /*#__PURE__*/external_React_default().createElement("div", {
       className: outerClassName,
       onClick: this.closeCustomizationMenu
     }, /*#__PURE__*/external_React_default().createElement("main", null, prefs.showSearch && /*#__PURE__*/external_React_default().createElement("div", {
@@ -11048,7 +11078,7 @@ class BaseContent extends (external_React_default()).PureComponent {
       locale: props.App.locale,
       mayHaveSponsoredStories: mayHaveSponsoredStories,
       firstVisibleTimestamp: this.state.firstVisibleTimestamp
-    })) : /*#__PURE__*/external_React_default().createElement(Sections_Sections, null)), /*#__PURE__*/external_React_default().createElement(ConfirmDialog, null), wallpapersEnabled && this.renderWallpaperAttribution()), /*#__PURE__*/external_React_default().createElement("aside", null, weatherEnabled && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Weather_Weather, null)), this.props.Notifications?.showNotifications && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Notifications_Notifications, {
+    })) : /*#__PURE__*/external_React_default().createElement(Sections_Sections, null)), /*#__PURE__*/external_React_default().createElement(ConfirmDialog, null), wallpapersEnabled && this.renderWallpaperAttribution()), /*#__PURE__*/external_React_default().createElement("aside", null, this.props.Notifications?.showNotifications && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Notifications_Notifications, {
       dispatch: this.props.dispatch
     })))));
   }

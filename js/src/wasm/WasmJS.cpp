@@ -148,6 +148,7 @@ bool js::wasm::GetImports(JSContext* cx, const Module& module,
                           HandleObject importObj, ImportValues* imports) {
   const ModuleMetadata& moduleMeta = module.moduleMeta();
   const CodeMetadata& codeMeta = module.codeMeta();
+  const BuiltinModuleIds& builtinModules = codeMeta.features().builtinModules;
 
   if (!moduleMeta.imports.empty() && !importObj) {
     return ThrowBadImportArg(cx);
@@ -165,8 +166,8 @@ bool js::wasm::GetImports(JSContext* cx, const Module& module,
   uint32_t tableIndex = 0;
   const TableDescVector& tables = codeMeta.tables;
   for (const Import& import : moduleMeta.imports) {
-    Maybe<BuiltinModuleId> builtinModule = ImportMatchesBuiltinModule(
-        import.module.utf8Bytes(), codeMeta.features.builtinModules);
+    Maybe<BuiltinModuleId> builtinModule =
+        ImportMatchesBuiltinModule(import.module.utf8Bytes(), builtinModules);
     if (builtinModule) {
       MutableHandle<JSObject*> builtinInstance =
           builtinInstances[*builtinModule];
@@ -457,7 +458,7 @@ bool wasm::CompileAndSerialize(JSContext* cx, const ShareableBytes& bytecode,
   MOZ_ASSERT(CodeCachingAvailable(cx));
 
   // Create and manually fill in compile args for code caching
-  MutableCompileArgs compileArgs = js_new<CompileArgs>(ScriptedCaller());
+  MutableCompileArgs compileArgs = js_new<CompileArgs>();
   if (!compileArgs) {
     return false;
   }
@@ -1129,7 +1130,6 @@ bool WasmModuleObject::imports(JSContext* cx, unsigned argc, Value* vp) {
 
 #ifdef ENABLE_WASM_TYPE_REFLECTIONS
   const CodeMetadata& codeMeta = module->codeMeta();
-  const Code& code = module->code();
 
   size_t numFuncImport = 0;
   size_t numMemoryImport = 0;
@@ -1170,7 +1170,7 @@ bool WasmModuleObject::imports(JSContext* cx, unsigned argc, Value* vp) {
     switch (import.kind) {
       case DefinitionKind::Function: {
         size_t funcIndex = numFuncImport++;
-        const FuncType& funcType = code.getFuncImportType(funcIndex);
+        const FuncType& funcType = codeMeta.getFuncType(funcIndex);
         typeObj = FuncTypeToObject(cx, funcType);
         break;
       }
@@ -1277,7 +1277,7 @@ bool WasmModuleObject::exports(JSContext* cx, unsigned argc, Value* vp) {
     switch (exp.kind()) {
       case DefinitionKind::Function: {
         const FuncType& funcType =
-            module->code().getFuncExportType(exp.funcIndex());
+            module->codeMeta().getFuncType(exp.funcIndex());
         typeObj = FuncTypeToObject(cx, funcType);
         break;
       }
@@ -1634,8 +1634,8 @@ bool WasmInstanceObject::isNewborn() const {
 // This is defined here in order to avoid recursive dependency between
 // WasmJS.h and Scope.h.
 using WasmFunctionScopeMap =
-    WeakCache<GCHashMap<uint32_t, WeakHeapPtr<WasmFunctionScope*>,
-                        DefaultHasher<uint32_t>, CellAllocPolicy>>;
+    JS::WeakCache<GCHashMap<uint32_t, WeakHeapPtr<WasmFunctionScope*>,
+                            DefaultHasher<uint32_t>, CellAllocPolicy>>;
 class WasmInstanceObject::UnspecifiedScopeMap {
  public:
   WasmFunctionScopeMap& asWasmFunctionScopeMap() {
@@ -2103,7 +2103,7 @@ bool WasmInstanceObject::getExportedFunction(
   const Instance& instance = instanceObj->instance();
   const CodeBlock& codeBlock = instance.code().funcCodeBlock(funcIndex);
   const FuncExport& funcExport = codeBlock.lookupFuncExport(funcIndex);
-  const TypeDef& funcTypeDef = instance.code().getFuncExportTypeDef(funcIndex);
+  const TypeDef& funcTypeDef = instance.codeMeta().getFuncTypeDef(funcIndex);
   unsigned numArgs = funcTypeDef.funcType().args().length();
 
   if (instance.isAsmJS()) {
@@ -2832,14 +2832,6 @@ static Value RefTypeDefautValue(wasm::RefType tableType) {
   return tableType.isExtern() ? UndefinedValue() : NullValue();
 }
 
-static bool CheckRefTypeValue(JSContext* cx, wasm::RefType type,
-                              HandleValue value) {
-  RootedFunction fun(cx);
-  RootedAnyRef any(cx, AnyRef::null());
-
-  return CheckRefType(cx, type, value, &fun, &any);
-}
-
 /* static */
 WasmTableObject* WasmTableObject::create(JSContext* cx, uint32_t initialLength,
                                          Maybe<uint32_t> maximumLength,
@@ -2947,7 +2939,7 @@ bool WasmTableObject::construct(JSContext* cx, unsigned argc, Value* vp) {
   // Initialize the table to a default value
   RootedValue initValue(
       cx, args.length() < 2 ? RefTypeDefautValue(tableType) : args[1]);
-  if (!CheckRefTypeValue(cx, tableType, initValue)) {
+  if (!wasm::CheckRefType(cx, tableType, initValue)) {
     return false;
   }
 
@@ -3100,7 +3092,7 @@ bool WasmTableObject::growImpl(JSContext* cx, const CallArgs& args) {
 
   RootedValue fillValue(
       cx, args.length() < 2 ? RefTypeDefautValue(table.elemType()) : args[1]);
-  if (!CheckRefTypeValue(cx, table.elemType(), fillValue)) {
+  if (!wasm::CheckRefType(cx, table.elemType(), fillValue)) {
     return false;
   }
 
@@ -3160,15 +3152,15 @@ bool WasmTableObject::fillRange(JSContext* cx, uint32_t index, uint32_t length,
   // bounds
   MOZ_ASSERT(uint64_t(index) + uint64_t(length) <= tab.length());
 
-  RootedFunction fun(cx);
   RootedAnyRef any(cx, AnyRef::null());
-  if (!CheckRefType(cx, tab.elemType(), value, &fun, &any)) {
+  if (!wasm::CheckRefType(cx, tab.elemType(), value, &any)) {
     return false;
   }
   switch (tab.repr()) {
     case TableRepr::Func:
       MOZ_RELEASE_ASSERT(!tab.isAsmJS());
-      tab.fillFuncRef(index, length, FuncRef::fromJSFunction(fun), cx);
+      tab.fillFuncRef(index, length, FuncRef::fromAnyRefUnchecked(any.get()),
+                      cx);
       break;
     case TableRepr::Ref:
       tab.fillAnyRef(index, length, any);
@@ -4105,20 +4097,13 @@ static JSFunction* WasmFunctionCreate(JSContext* cx, HandleObject func,
   }
 
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*compileArgs)) {
     return nullptr;
   }
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(compileArgs->features);
-  if (!codeMeta) {
-    return nullptr;
-  }
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
   CompilerEnvironment compilerEnv(CompileMode::Once, Tier::Optimized,
                                   DebugEnabled::False);
   compilerEnv.computeParameters();
-
-  if (!codeMeta->init()) {
-    return nullptr;
-  }
 
   FuncType funcType = FuncType(std::move(params), std::move(results));
   if (!codeMeta->types->addType(std::move(funcType))) {
@@ -4126,7 +4111,7 @@ static JSFunction* WasmFunctionCreate(JSContext* cx, HandleObject func,
   }
 
   // Add an (import (func ...))
-  FuncDesc funcDesc = FuncDesc(&(*codeMeta->types)[0].funcType(), 0);
+  FuncDesc funcDesc = FuncDesc(0);
   if (!codeMeta->funcs.append(funcDesc)) {
     return nullptr;
   }
@@ -4144,9 +4129,13 @@ static JSFunction* WasmFunctionCreate(JSContext* cx, HandleObject func,
     return nullptr;
   }
 
-  ModuleGenerator mg(*compileArgs, codeMeta, &compilerEnv, nullptr, nullptr,
-                     nullptr);
-  if (!mg.init(nullptr)) {
+  if (!moduleMeta->prepareForCompile(compilerEnv.mode())) {
+    return nullptr;
+  }
+
+  ModuleGenerator mg(*codeMeta, compilerEnv, compilerEnv.initialState(),
+                     nullptr, nullptr, nullptr);
+  if (!mg.initializeCompleteTier()) {
     return nullptr;
   }
   // We're not compiling any function definitions.

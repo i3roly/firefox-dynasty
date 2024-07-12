@@ -163,6 +163,7 @@
 #include "js/Stack.h"
 #include "js/StreamConsumer.h"
 #include "js/StructuredClone.h"
+#include "js/SweepingAPI.h"
 #include "js/Transcoding.h"  // JS::TranscodeBuffer, JS::TranscodeRange, JS::IsTranscodeFailureResult
 #include "js/Warnings.h"    // JS::SetWarningReporter
 #include "js/WasmModule.h"  // JS::WasmModule
@@ -12921,7 +12922,8 @@ bool SetContextWasmOptions(JSContext* cx, const OptionParser& op) {
       .setWasm(enableWasm)
       .setWasmForTrustedPrinciples(enableWasm)
       .setWasmBaseline(enableWasmBaseline)
-      .setWasmIon(enableWasmOptimizing);
+      .setWasmIon(enableWasmOptimizing)
+      .setTestWasmAwaitTier2(enableTestWasmAwaitTier2);
 
 #ifndef __wasi__
   // This must be set before self-hosted code is initialized, as self-hosted

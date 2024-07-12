@@ -156,6 +156,41 @@ bool BaseCompiler::generateOutOfLineCode() {
 //
 // Sundry code generation.
 
+bool BaseCompiler::addHotnessCheck() {
+  if (compilerEnv_.mode() != CompileMode::LazyTiering) {
+    return true;
+  }
+
+#ifdef RABALDR_PIN_INSTANCE
+  Register tmp(InstanceReg);
+#else
+  ScratchI32 tmp(*this);
+  fr.loadInstancePtr(tmp);
+#endif
+  Label isHot;
+  Label rejoin;
+  RegI32 scratch = needI32();
+  Address addressOfCounter =
+      Address(tmp, wasm::Instance::offsetInData(
+                       codeMeta_.offsetOfFuncDefInstanceData(func_.index)));
+  masm.load32(addressOfCounter, scratch);
+  masm.branchSub32(Assembler::Signed, Imm32(1), scratch, &isHot);
+  masm.store32(scratch, addressOfCounter);
+  masm.jump(&rejoin);
+
+  masm.bind(&isHot);
+  masm.wasmTrap(wasm::Trap::RequestTierUp, bytecodeOffset());
+  if (!createStackMap("addHotnessCheck")) {
+    freeI32(scratch);
+    return false;
+  }
+
+  masm.bind(&rejoin);
+  freeI32(scratch);
+
+  return true;
+}
+
 bool BaseCompiler::addInterruptCheck() {
 #ifdef RABALDR_PIN_INSTANCE
   Register tmp(InstanceReg);
@@ -404,7 +439,7 @@ bool BaseCompiler::beginFunction() {
 
   GenerateFunctionPrologue(
       masm, CallIndirectId::forFunc(codeMeta_, func_.index),
-      compilerEnv_.mode() == CompileMode::Tier1 ? Some(func_.index) : Nothing(),
+      compilerEnv_.mode() != CompileMode::Once ? Some(func_.index) : Nothing(),
       &offsets_);
 
   // GenerateFunctionPrologue pushes exactly one wasm::Frame's worth of
@@ -547,7 +582,7 @@ bool BaseCompiler::beginFunction() {
   MOZ_ASSERT(stackMapGenerator_.framePushedAtEntryToBody.isNothing());
   stackMapGenerator_.framePushedAtEntryToBody.emplace(masm.framePushed());
 
-  return true;
+  return addHotnessCheck();
 }
 
 bool BaseCompiler::endFunction() {
@@ -3555,7 +3590,7 @@ bool BaseCompiler::emitLoop() {
     masm.bind(&controlItem(0).label);
     // The interrupt check barfs if there are live registers.
     sync();
-    if (!addInterruptCheck()) {
+    if (!addInterruptCheck() || !addHotnessCheck()) {
       return false;
     }
   }
@@ -3775,7 +3810,7 @@ bool BaseCompiler::emitEnd() {
   // Every label case is responsible to pop the control item at the appropriate
   // time for the label case
   switch (kind) {
-    case LabelKind::Body:
+    case LabelKind::Body: {
       if (!endBlock(type)) {
         return false;
       }
@@ -3783,6 +3818,7 @@ bool BaseCompiler::emitEnd() {
       iter_.popEnd();
       MOZ_ASSERT(iter_.controlStackEmpty());
       return iter_.endFunction(iter_.end());
+    }
     case LabelKind::Block:
       if (!endBlock(type)) {
         return false;
@@ -5019,7 +5055,7 @@ bool BaseCompiler::emitCall() {
 
   sync();
 
-  const FuncType& funcType = *codeMeta_.funcs[funcIndex].type;
+  const FuncType& funcType = codeMeta_.getFuncType(funcIndex);
   bool import = codeMeta_.funcIsImport(funcIndex);
 
   uint32_t numArgs = funcType.args().length();
@@ -5080,7 +5116,7 @@ bool BaseCompiler::emitReturnCall() {
     return false;
   }
 
-  const FuncType& funcType = *codeMeta_.funcs[funcIndex].type;
+  const FuncType& funcType = codeMeta_.getFuncType(funcIndex);
   bool import = codeMeta_.funcIsImport(funcIndex);
 
   uint32_t numArgs = funcType.args().length();
@@ -11835,7 +11871,7 @@ bool BaseCompiler::init() {
 }
 
 FuncOffsets BaseCompiler::finish() {
-  MOZ_ASSERT(iter_.done(), "all bytes must be consumed");
+  MOZ_ASSERT(iter_.done());
   MOZ_ASSERT(stk_.empty());
   MOZ_ASSERT(stackMapGenerator_.memRefsOnStk == 0);
 
@@ -11930,8 +11966,7 @@ bool js::wasm::BaselineCompileFunctions(const CodeMetadata& codeMeta,
     FuncOffsets offsets(f.finish());
     bool hasUnwindInfo =
         unwindInfoBefore != masm.codeRangeUnwindInfos().length();
-    if (!code->codeRanges.emplaceBack(func.index, func.lineOrBytecode, offsets,
-                                      hasUnwindInfo)) {
+    if (!code->codeRanges.emplaceBack(func.index, offsets, hasUnwindInfo)) {
       return false;
     }
 

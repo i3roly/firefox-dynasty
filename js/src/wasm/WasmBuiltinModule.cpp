@@ -144,15 +144,11 @@ bool CompileBuiltinModule(JSContext* cx,
 
   // Build a module metadata struct
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*compileArgs)) {
     ReportOutOfMemory(cx);
     return false;
   }
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(compileArgs->features);
-  if (!codeMeta || !codeMeta->init()) {
-    ReportOutOfMemory(cx);
-    return false;
-  }
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
 
   if (memory.isSome()) {
     // Add (import (memory 0))
@@ -193,7 +189,7 @@ bool CompileBuiltinModule(JSContext* cx,
   // as the function declaration metadata uses pointers into the type vectors
   // that must be stable.
   for (uint32_t funcIndex = 0; funcIndex < ids.size(); funcIndex++) {
-    FuncDesc decl(&(*codeMeta->types)[funcIndex].funcType(), funcIndex);
+    FuncDesc decl(funcIndex);
     if (!codeMeta->funcs.append(decl)) {
       ReportOutOfMemory(cx);
       return false;
@@ -217,11 +213,15 @@ bool CompileBuiltinModule(JSContext* cx,
     }
   }
 
+  if (!moduleMeta->prepareForCompile(compilerEnv.mode())) {
+    return false;
+  }
+
   // Compile the module functions
   UniqueChars error;
-  ModuleGenerator mg(*compileArgs, codeMeta, &compilerEnv, nullptr, &error,
-                     nullptr);
-  if (!mg.init(nullptr)) {
+  ModuleGenerator mg(*codeMeta, compilerEnv, compilerEnv.initialState(),
+                     nullptr, &error, nullptr);
+  if (!mg.initializeCompleteTier()) {
     ReportOutOfMemory(cx);
     return false;
   }

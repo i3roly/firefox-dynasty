@@ -46,6 +46,8 @@
 #include "mozilla/dom/MediaDeviceInfoBinding.h"
 #include "mozilla/MozPromise.h"
 #include "nsThreadUtils.h"
+#include "CubebDeviceEnumerator.h"
+#include "mozilla/media/MediaUtils.h"
 #include "mozilla/dom/Navigator.h"
 #include "nsIGSettingsService.h"
 #include "nsITimer.h"
@@ -56,22 +58,11 @@
 #  include "WinUtils.h"
 #  include "mozilla/gfx/DisplayConfigWindows.h"
 #  include "gfxWindowsPlatform.h"
-#  include <winuser.h>
 #elif defined(MOZ_WIDGET_ANDROID)
 #  include "mozilla/java/GeckoAppShellWrappers.h"
 #elif defined(XP_MACOSX)
-#  include <Carbon/Carbon.h>
 #  include "nsMacUtilsImpl.h"
 #  include <CoreFoundation/CoreFoundation.h>
-#elif defined(XP_LINUX)
-#  include "mozilla/WidgetUtilsGtk.h"
-#  include <gtk/gtk.h>
-#  ifdef MOZ_X11
-#    include <X11/XKBlib.h>
-#  endif
-#  ifdef MOZ_WAYLAND
-#    include <xkbcommon/xkbcommon.h>
-#  endif
 #endif
 
 using namespace mozilla;
@@ -109,9 +100,7 @@ RefPtr<PopulatePromise> ContentPageStuff() {
 
   RefPtr<PopulatePromise> populatePromise = new PopulatePromise(__func__);
   RefPtr<mozilla::dom::Promise> promise;
-  nsresult rv = ucp->CreateContentPage(
-      nsContentUtils::GetFingerprintingProtectionPrincipal(),
-      getter_AddRefs(promise));
+  nsresult rv = ucp->CreateContentPage(getter_AddRefs(promise));
   if (NS_FAILED(rv)) {
     MOZ_LOG(gUserCharacteristicsLog, mozilla::LogLevel::Error,
             ("Could not create Content Page"));
@@ -306,78 +295,10 @@ void PopulatePrefs() {
 
 void PopulateKeyboardLayout() {
   nsAutoCString layoutName;
-#if defined(XP_WIN)
-  char layout[KL_NAMELENGTH];
-  if (!::GetKeyboardLayoutNameA(layout)) {
-    return;
-  }
-  layoutName.Assign(layout);
 
-#elif defined(XP_MACOSX)
-  TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
-  char layout[128];
+  nsresult rv = LookAndFeel::GetKeyboardLayout(layoutName);
 
-  CFStringRef layoutID = static_cast<CFStringRef>(
-      TISGetInputSourceProperty(source, kTISPropertyInputSourceID));
-  CFStringGetCString(layoutID, layout, sizeof(layout), kCFStringEncodingUTF8);
-  layoutName.Assign(layout);
-#elif defined(XP_LINUX) && !defined(ANDROID)
-  if (mozilla::widget::GdkIsX11Display()) {
-#  if defined(MOZ_X11)
-    Display* display = XOpenDisplay(nullptr);
-    if (!display) {
-      return;
-    }
-    XkbDescRec* kbdDesc = XkbAllocKeyboard();
-    if (!kbdDesc) {
-      XCloseDisplay(display);
-      return;
-    }
-
-    XkbStateRec state;
-    XkbGetState(display, XkbUseCoreKbd, &state);
-    uint32_t group = state.group;
-
-    XkbGetNames(display, XkbGroupNamesMask, kbdDesc);
-
-    if (!kbdDesc->names || !kbdDesc->names->groups[group]) {
-      return;
-    }
-
-    char* layout = XGetAtomName(display, kbdDesc->names->groups[group]);
-
-    XkbFreeKeyboard(kbdDesc, 0, True);
-    XCloseDisplay(display);
-
-    layoutName.Assign(layout);
-#  endif
-  } else {
-#  if defined(MOZ_WAYLAND)
-    struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (!context) {
-      return;
-    }
-
-    struct xkb_keymap* keymap = xkb_keymap_new_from_names(
-        context, nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    if (!keymap) {
-      xkb_context_unref(context);
-      return;
-    }
-
-    const char* layout = xkb_keymap_layout_get_name(keymap, 0);
-
-    if (layout) {
-      layoutName.Assign(layout);
-    }
-
-    xkb_keymap_unref(keymap);
-    xkb_context_unref(context);
-#  endif
-  }
-#endif
-
-  if (layoutName.IsEmpty()) {
+  if (NS_FAILED(rv) || layoutName.IsEmpty()) {
     return;
   }
 
@@ -555,6 +476,74 @@ RefPtr<PopulatePromise> PopulateMediaDevices() {
         populatePromise->Reject(
             std::pair("PopulateMediaDevices"_ns, reason->mMessage), __func__);
       });
+  return populatePromise;
+}
+
+RefPtr<PopulatePromise> PopulateAudioDeviceProperties() {
+  RefPtr<PopulatePromise> populatePromise = new PopulatePromise(__func__);
+
+  NS_DispatchBackgroundTask(
+      NS_NewRunnableFunction("PopulateAudioDeviceProperties", [=]() {
+        RefPtr<CubebDeviceEnumerator> enumerator =
+            CubebDeviceEnumerator::GetInstance();
+        RefPtr<const CubebDeviceEnumerator::AudioDeviceSet> devices;
+
+        nsCString output = "{"_ns;
+
+        nsCString list = "["_ns;
+        devices = enumerator->EnumerateAudioInputDevices();
+        for (const auto& deviceInfo : *devices) {
+          uint32_t maxChannels;
+          deviceInfo->GetMaxChannels(&maxChannels);
+
+          list.AppendPrintf(R"({"rate":%d,"channels":%d)",
+                            deviceInfo->DefaultRate(), maxChannels);
+          if (deviceInfo->Preferred()) {
+            list.Append(",\"default\":1");
+          }
+          list.Append("}");
+
+          if (&deviceInfo != &devices->LastElement()) {
+            list.Append(',');
+          }
+        }
+        list.Append(']');
+
+        output.AppendPrintf(R"("devices":%s,)", list.get());
+
+        double inputMean, inputStdDev, outputMean, outputStdDev;
+        CubebUtils::EstimatedLatencyDefaultDevices(&inputMean, &inputStdDev,
+                                                   CubebUtils::Side::Input);
+        CubebUtils::EstimatedLatencyDefaultDevices(&outputMean, &outputStdDev,
+                                                   CubebUtils::Side::Output);
+
+        cubeb_stream_params output_params;
+        output_params.format = CUBEB_SAMPLE_FLOAT32NE;
+        output_params.rate = CubebUtils::PreferredSampleRate(false);
+        output_params.channels = 2;
+        output_params.layout = CUBEB_LAYOUT_UNDEFINED;
+        output_params.prefs =
+            CubebUtils::GetDefaultStreamPrefs(CUBEB_DEVICE_TYPE_OUTPUT);
+
+        uint32_t latencyFrames =
+            CubebUtils::GetCubebMTGLatencyInFrames(&output_params);
+        RefPtr<AudioDeviceInfo> defaultOutputDevice =
+            enumerator->DefaultDevice(CubebDeviceEnumerator::Side::OUTPUT);
+        output.AppendPrintf(
+            R"("latency":[%f,%f,%f,%f],"latFrames":%d,"rate":%u,"channels":%u)",
+            inputMean, inputStdDev, outputMean, outputStdDev, latencyFrames,
+            defaultOutputDevice->DefaultRate(),
+            defaultOutputDevice->MaxChannels());
+
+        output.Append("}");
+
+        glean::characteristics::audio_devices.Set(output);
+
+        NS_DispatchToMainThread(NS_NewRunnableFunction(
+            "PopulateAudioDeviceProperties",
+            [=]() { populatePromise->Resolve(void_t(), __func__); }));
+      }));
+
   return populatePromise;
 }
 
@@ -966,6 +955,7 @@ void nsUserCharacteristics::PopulateDataAndEventuallySubmit(
     // ------------------------------------------------------------------------
 
     promises.AppendElement(PopulateMediaDevices());
+    promises.AppendElement(PopulateAudioDeviceProperties());
     promises.AppendElement(PopulateTimeZone());
     promises.AppendElement(TimoutPromise(PopulatePointerInfo(), 5 * 60 * 1000,
                                          "PopulatePointerInfo"_ns));

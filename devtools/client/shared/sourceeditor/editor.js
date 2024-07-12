@@ -728,9 +728,15 @@ class Editor extends EventEmitter {
     const lineContentMarkers = this.#lineContentMarkers;
 
     class LineContentWidget extends WidgetType {
-      constructor(line, createElementNode) {
+      constructor(line, markerId, createElementNode) {
         super();
+        this.line = line;
+        this.markerId = markerId;
         this.toDOM = () => createElementNode(line);
+      }
+
+      eq(widget) {
+        return widget.line == this.line && widget.markerId == this.markerId;
       }
     }
 
@@ -787,11 +793,14 @@ class Editor extends EventEmitter {
           // 1) conditional-breakpoint-panel-marker
           // 2) inline-preview-marker
           const nodeDecoration = Decoration.widget({
-            widget: new LineContentWidget(line, marker.createLineElementNode),
+            widget: new LineContentWidget(
+              line,
+              marker.id,
+              marker.createLineElementNode
+            ),
             // Render the widget after the cursor
             side: 1,
-            // Render the widget inline (on the same line)
-            block: false,
+            block: !!marker.renderAsBlock,
           });
           nodeDecoration.markerType = marker.id;
           newMarkerDecorations.push(nodeDecoration.range(lo.to));
@@ -920,7 +929,6 @@ class Editor extends EventEmitter {
   }
 
   #createEventHandlers() {
-    const cm = editors.get(this);
     function posToLineColumn(pos, view) {
       if (!pos) {
         return { line: null, column: null };
@@ -946,20 +954,7 @@ class Editor extends EventEmitter {
               view.state.selection.main.head,
               view
             );
-            // For events like mouse over the event postion which gives the line / column on hover.
-            const pos =
-              !event.pageX || !event.pageY
-                ? null
-                : cm.posAtCoords({ x: event.pageX, y: event.pageY });
-            const eventPos = posToLineColumn(pos, view);
-            handler(
-              event,
-              view,
-              cursorPos.line,
-              cursorPos.column,
-              eventPos.line,
-              eventPos.column
-            );
+            handler(event, view, cursorPos.line, cursorPos.column);
           }, 0);
         }
       };
@@ -1057,9 +1052,11 @@ class Editor extends EventEmitter {
    *                                  The css class to apply to the line
    *   @property {Array<Number>}      marker.lines
    *                                  The lines to add markers to
-   *   @property {Boolean=}           marker.shouldMarkAllLines
+   *   @property {Boolean}           marker.renderAsBlock
+   *                                  The specifies that the widget should be rendered as a block element. defaults to `false`. This is optional.
+   *   @property {Boolean}           marker.shouldMarkAllLines
    *                                  Set to true to apply the marker to all the lines. In such case, `positions` is ignored. This is optional.
-   *   @property {function}           marker.createLineElementNode
+   *   @property {Function}           marker.createLineElementNode
    *                                  This should return the DOM element which is used for the marker. The line number is passed as a parameter.
    *                                  This is optional.
 
@@ -1105,9 +1102,20 @@ class Editor extends EventEmitter {
     const cachedPositionContentMarkers = this.#posContentMarkers;
 
     class NodeWidget extends WidgetType {
-      constructor(line, column, createElementNode, domNode) {
+      constructor(line, column, markerId, createElementNode) {
         super();
-        this.toDOM = () => createElementNode(line, column, domNode);
+        this.line = line;
+        this.column = column;
+        this.markerId = markerId;
+        this.toDOM = () => createElementNode(line, column);
+      }
+
+      eq(widget) {
+        return (
+          this.line == widget.line &&
+          this.column == widget.column &&
+          this.markerId == widget.markerId
+        );
       }
     }
 
@@ -1169,6 +1177,7 @@ class Editor extends EventEmitter {
               widget: new NodeWidget(
                 position.line,
                 position.column,
+                marker.id,
                 marker.createPositionElementNode
               ),
               // Make sure the widget is rendered after the cursor
@@ -1809,6 +1818,41 @@ class Editor extends EventEmitter {
       end: { line: lineNumber, column: expressionEnd },
     };
     return { expression, location };
+  }
+
+  /**
+   * Given screen coordinates this should return the line and column
+   * related. This used currently to determine the line and columns
+   * for the tokens that are hovered over.
+   * @param {Number} left - Horizontal position from the left
+   * @param {Number} top - Vertical position from the top
+   * @returns {Object} position - The line and column related to the screen coordinates.
+   */
+  getPositionAtScreenCoords(left, top) {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      const position = cm.posAtCoords(
+        { x: left, y: top },
+        // "precise", i.e. if a specific position cannot be determined, an estimated one will be used
+        false
+      );
+      const line = cm.state.doc.lineAt(position);
+      return {
+        line: line.number,
+        column: position - line.from,
+      };
+    }
+    const { line, ch } = cm.coordsChar(
+      { left, top },
+      // Use the "window" context where the coordinates are relative to the top-left corner
+      // of the currently visible (scrolled) window.
+      // This enables codemirror also correctly handle wrappped lines in the editor.
+      "window"
+    );
+    return {
+      line: line + 1,
+      column: ch,
+    };
   }
 
   /**

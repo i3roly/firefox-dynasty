@@ -29,7 +29,10 @@
 #include "mozilla/WindowsVersion.h"
 #include "nsCRT.h"
 #include "nsEnumeratorUtils.h"
+#include "nsHashPropertyBag.h"
 #include "nsIContentAnalysis.h"
+#include "nsCExternalHandlerService.h"
+#include "nsIExternalHelperAppService.h"
 #include "nsNetUtil.h"
 #include "nsPIDOMWindow.h"
 #include "nsPrintfCString.h"
@@ -223,7 +226,12 @@ static nsTArray<T> Copy(nsTArray<T> const& arr) {
 }
 
 // The possible execution strategies of AsyncExecute.
-enum Strategy { Local, Remote, RemoteWithFallback };
+enum Strategy {
+  LocalOnly,
+  RemoteOnly,
+  RemoteWithFallback,
+  FallbackUnlessCrash,
+};
 
 // Decode the relevant preference to determine the desired execution-
 // strategy.
@@ -232,19 +240,21 @@ static Strategy GetStrategy() {
       mozilla::StaticPrefs::widget_windows_utility_process_file_picker();
   switch (pref) {
     case -1:
-      return Local;
+      return LocalOnly;
+    case 3:
+      return FallbackUnlessCrash;
     case 2:
-      return Remote;
+      return RemoteOnly;
     case 1:
       return RemoteWithFallback;
 
     default:
 #ifdef NIGHTLY_BUILD
-      // on Nightly builds, fall back to local on failure
-      return RemoteWithFallback;
+      // on Nightly builds, fall back to local on crash
+      return FallbackUnlessCrash;
 #else
       // on release and beta, remain local-only for now
-      return Local;
+      return LocalOnly;
 #endif
   }
 };
@@ -394,7 +404,7 @@ struct AsyncExecuteInfo {
                        "remote promise must reject with a filedialog::Error");
 
   using ResolveT = typename InfoL::ResolveT;
-  using PromiseT = MozPromise<ResolveT, Unit, true>;
+  using PromiseT = MozPromise<ResolveT, filedialog::Error, true>;
 
   using RetT = RefPtr<PromiseT>;
 };
@@ -429,42 +439,38 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
   };
   uint64_t const t0 = GetTime();
 
+  bool (*useLocalFallback)(Error const& err) = [](Error const& err) {
+    MOZ_ASSERT_UNREACHABLE("useLocalFallback not set?!");
+    return true;
+  };
+
   switch (GetStrategy()) {
-    case Local: {
+    case LocalOnly: {
       return local(args...)->MapErr(
           NS_GetCurrentThread(), __func__, [](Error const& err) {
             MOZ_ASSERT(err.kind == Error::LocalError);
             MOZ_LOG(filedialog::sLogFileDialog, LogLevel::Info,
                     ("local file-dialog failed: where=%s, why=%08" PRIX32,
                      err.where.c_str(), err.why));
-            return Ok();
+            return err;
           });
     }
 
-    case Remote:
-      return remote(args...)->Then(
-          NS_GetCurrentThread(), __func__,
-          [t0](
-              typename RPromiseT::ResolveValueType result) -> RefPtr<PromiseT> {
-            // success; stop here
-            auto const t1 = GetTime();
-            // record success
-            telemetry::RecordSuccess({t0, t1});
-            return PromiseT::CreateAndResolve(std::move(result), kFunctionName);
-          },
-          [t0](Error const& err) {
-            auto const t1 = GetTime();
-            telemetry::RecordFailure({t0, t1}, err);
-
-            MOZ_LOG(filedialog::sLogFileDialog, LogLevel::Info,
-                    ("remote file-dialog failed: kind=%s, where=%s, "
-                     "why=%08" PRIX32,
-                     Error::KindName(err.kind), err.where.c_str(), err.why));
-            return PromiseT::CreateAndReject(Ok(), kFunctionName);
-          });
+    case RemoteOnly:
+      useLocalFallback = [](Error const&) { return false; };
+      break;
 
     case RemoteWithFallback:
-      // more complicated; continue below
+      useLocalFallback = [](Error const&) { return true; };
+      break;
+
+    case FallbackUnlessCrash:
+      useLocalFallback = [](Error const& err) {
+        // All remote crashes are reported as IPCError. The converse isn't
+        // necessarily true in theory, but (per telemetry) appears to be true in
+        // practice.
+        return err.kind != Error::IPCError;
+      };
       break;
   }
 
@@ -484,7 +490,19 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
         // failure; record time
         auto const t1 = GetTime();
 
-        // retry locally...
+        // should we fall back to a local implementation?
+        if (!useLocalFallback(err)) {
+          // if not, log this failure immediately...
+          telemetry::RecordFailure({t0, t1}, err);
+          MOZ_LOG(filedialog::sLogFileDialog, LogLevel::Info,
+                  ("remote file-dialog failed: kind=%s, where=%s, "
+                   "why=%08" PRIX32,
+                   Error::KindName(err.kind), err.where.c_str(), err.why));
+          // ... and stop here
+          return PromiseT::CreateAndReject(err, kFunctionName);
+        }
+
+        // otherwise, retry locally...
         auto p0 = std::apply(local, std::move(tuple));
         // ...then record the telemetry event
         return p0->Then(
@@ -501,7 +519,7 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
               return PromiseT::CreateAndResolveOrReject(
                   val.IsResolve()
                       ? V::MakeResolve(std::move(val).ResolveValue())
-                      : V::MakeReject(Ok{}),
+                      : V::MakeReject(val.RejectValue()),
                   kFunctionName);
             });
       });
@@ -546,7 +564,7 @@ using fd_async::AsyncExecute;
  *          - resolves to false if the dialog was cancelled by the user;
  *          - is rejected with the associated HRESULT if some error occurred.
  */
-RefPtr<mozilla::MozPromise<bool, nsFilePicker::Unit, true>>
+RefPtr<mozilla::MozPromise<bool, nsFilePicker::Error, true>>
 nsFilePicker::ShowFolderPicker(const nsString& aInitialDir) {
   namespace fd = ::mozilla::widget::filedialog;
   nsTArray<fd::Command> commands = {
@@ -594,16 +612,14 @@ nsFilePicker::ShowFolderPicker(const nsString& aInitialDir) {
  *          - resolves to false if the dialog was cancelled by the user;
  *          - is rejected with the associated HRESULT if some error occurred.
  */
-RefPtr<mozilla::MozPromise<bool, nsFilePicker::Unit, true>>
+RefPtr<mozilla::MozPromise<bool, nsFilePicker::Error, true>>
 nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
   AUTO_PROFILER_LABEL("nsFilePicker::ShowFilePicker", OTHER);
 
-  using Promise = mozilla::MozPromise<bool, Unit, true>;
-  constexpr static auto Ok = [](bool val) {
-    return Promise::CreateAndResolve(val, "nsFilePicker::ShowFilePicker");
-  };
-  constexpr static auto NotOk = []() {
-    return Promise::CreateAndReject(Unit(), "nsFilePicker::ShowFilePicker");
+  using Promise = mozilla::MozPromise<bool, Error, true>;
+  constexpr static auto NotOk = [](Error error) -> RefPtr<Promise> {
+    return Promise::CreateAndReject(std::move(error),
+                                    "nsFilePicker::ShowFilePicker");
   };
 
   namespace fd = ::mozilla::widget::filedialog;
@@ -637,7 +653,8 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
 
       case modeGetFolder:
         MOZ_ASSERT(false, "file-picker opened in directory-picker mode");
-        return NotOk();
+        return NotOk(MOZ_FD_LOCAL_ERROR(
+            "file-picker opened in directory-picker mode", E_INVALIDARG));
     }
 
     commands.AppendElement(fd::SetOptions(fos));
@@ -650,8 +667,13 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
 
   // default filename
   if (!mDefaultFilename.IsEmpty()) {
-    // Prevent the shell from expanding environment variables by removing
-    // the % characters that are used to delimit them.
+    // Prevent the shell from expanding environment variables by removing the %
+    // characters that are used to delimit them.
+    //
+    // Note that we do _not_ need to preserve this sanitization for the fallback
+    // case where the file dialog fails. Variable-expansion only occurs in the
+    // file dialog specifically, and not when creating a file directly via other
+    // means.
     nsAutoString sanitizedFilename(mDefaultFilename);
     sanitizedFilename.ReplaceChar('%', '_');
 
@@ -694,12 +716,12 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
       &mozilla::detail::ShowFilePickerLocal,
       &mozilla::detail::ShowFilePickerRemote, shim.get(), type, commands);
 
-  return promise->Then(
+  return promise->Map(
       mozilla::GetMainThreadSerialEventTarget(), __PRETTY_FUNCTION__,
       [self = RefPtr(this), mode = mMode, shim = std::move(shim),
        awps = std::move(awps)](Maybe<Results> res_opt) {
         if (!res_opt) {
-          return Ok(false);
+          return false;  // operation cancelled by user
         }
         auto result = res_opt.extract();
 
@@ -713,9 +735,9 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
           if (!paths.IsEmpty()) {
             MOZ_ASSERT(paths.Length() == 1);
             self->mUnicodeFile = paths[0];
-            return Ok(true);
+            return true;
           }
-          return Ok(false);
+          return false;
         }
 
         // multiple selection
@@ -726,11 +748,7 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
           }
         }
 
-        return Ok(true);
-      },
-      [](Unit err) {
-        NS_WARNING("ShowFilePicker failed");
-        return NotOk();
+        return true;
       });
 }
 
@@ -989,9 +1007,27 @@ nsresult nsFilePicker::Open(nsIFilePickerShownCallback* aCallback) {
 
         callback->Done(retValue);
       },
-      [callback = RefPtr(aCallback)](Unit _) {
-        // logging already handled
-        callback->Done(ResultCode::returnCancel);
+      [callback = RefPtr(aCallback), self = RefPtr{this}](Error const& err) {
+        // The file-dialog process (probably) crashed. Report this fact to the
+        // user, and try to recover with a fallback rather than discarding the
+        // file.
+        //
+        // (Note that at this point, logging of the crash -- and possibly also a
+        // telemetry ping -- has already occurred.)
+        ResultCode resultCode = ResultCode::returnCancel;
+
+        // This does not describe the original error, just the error when trying
+        // to select a fallback location -- no such attempt means no such error.
+        FallbackResult fallback{nullptr};
+
+        if (self->mMode == Mode::modeSave) {
+          fallback = self->ComputeFallbackSavePath();
+          // don't set sLastUsedUnicodeDirectory here: the user didn't
+          // actually select anything
+        }
+
+        self->SendFailureNotification(resultCode, err, std::move(fallback));
+        callback->Done(resultCode);
       });
 
   return NS_OK;
@@ -1171,4 +1207,90 @@ bool nsFilePicker::IsDefaultPathHtml() {
       return true;
   }
   return false;
+}
+
+auto nsFilePicker::ComputeFallbackSavePath() const -> FallbackResult {
+  using mozilla::Err;
+
+  // we shouldn't even be here if we're not trying to save
+  if (mMode != Mode::modeSave) {
+    return Err(NS_ERROR_FAILURE);
+  }
+
+  // get a fallback download-location
+  RefPtr<nsIFile> location;
+  {
+    // try to query the helper service for the preferred downloads directory
+    nsresult rv;
+    nsCOMPtr<nsIExternalHelperAppService> svc =
+        do_GetService(NS_EXTERNALHELPERAPPSERVICE_CONTRACTID, &rv);
+    MOZ_TRY(rv);
+
+    MOZ_TRY(svc->GetPreferredDownloadsDirectory(getter_AddRefs(location)));
+  }
+  MOZ_ASSERT(location);
+
+  constexpr static const auto EndsWithExtension =
+      [](nsAString const& path, nsAString const& extension) -> bool {
+    size_t const len = path.Length();
+    size_t const extLen = extension.Length();
+    if (extLen + 2 > len) {
+      // `path` is too short and can't possibly end with `extension`. (Note that
+      // we consider, _e.g._, ".jpg" not to end with the extension "jpg".)
+      return false;
+    }
+    if (path[len - extLen - 1] == L'.' &&
+        StringTail(path, extLen) == extension) {
+      return true;
+    }
+    return false;
+  };
+
+  nsString filename(mDefaultFilename);
+  if (!mDefaultExtension.IsEmpty() &&
+      !EndsWithExtension(filename, mDefaultExtension)) {
+    filename.AppendLiteral(".");
+    filename.Append(mDefaultExtension);
+  }
+
+  MOZ_TRY(location->Append(filename));
+  MOZ_TRY(location->CreateUnique(nsIFile::NORMAL_FILE_TYPE, 0600));
+  return location;
+}
+
+void nsFilePicker::SendFailureNotification(nsFilePicker::ResultCode aResult,
+                                           Error error,
+                                           FallbackResult aFallback) const {
+  if (MOZ_LOG_TEST(filedialog::sLogFileDialog, LogLevel::Info)) {
+    nsString msg;
+    if (aFallback.isOk()) {
+      nsString path;
+      aFallback.inspect()->GetPath(path);
+      msg = u"path: "_ns;
+      msg.Append(path);
+    } else {
+      msg.AppendPrintf("err: 0x%08" PRIX32, (uint32_t)aFallback.inspectErr());
+    }
+    MOZ_LOG(filedialog::sLogFileDialog, LogLevel::Info,
+            ("SendCrashNotification: %" PRIX16 ", %ls", aResult,
+             static_cast<wchar_t const*>(msg.get())));
+  }
+
+  nsCOMPtr<nsIObserverService> obsSvc = mozilla::services::GetObserverService();
+  if (!obsSvc) return;  // normal during XPCOM shutdown
+
+  RefPtr<nsHashPropertyBag> props = new nsHashPropertyBag();
+  props->SetPropertyAsInterface(u"ctx"_ns, mBrowsingContext);
+  props->SetPropertyAsUint32(u"mode"_ns, mMode);
+  if (aFallback.isOk()) {
+    props->SetPropertyAsInterface(u"file"_ns, aFallback.unwrap().get());
+  } else {
+    props->SetPropertyAsUint32(u"file-error"_ns,
+                               (uint32_t)aFallback.unwrapErr());
+  }
+
+  props->SetPropertyAsBool(u"crash"_ns, error.kind == Error::IPCError);
+
+  nsIPropertyBag2* const iface = props;
+  obsSvc->NotifyObservers(iface, "file-picker-crashed", nullptr);
 }

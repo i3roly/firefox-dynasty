@@ -6000,6 +6000,15 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   }
   mShell = gtk_window_new(type);
 
+  // It is important that this happens before the realize() call below, so that
+  // we don't get bogus CSD margins on Wayland, see bug 1794577.
+  mUndecorated = IsAlwaysUndecoratedWindow();
+  if (mUndecorated) {
+    LOG("    Is undecorated Window\n");
+    gtk_window_set_titlebar(GTK_WINDOW(mShell), gtk_fixed_new());
+    gtk_window_set_decorated(GTK_WINDOW(mShell), false);
+  }
+
   // Ensure gfxPlatform is initialized, since that is what initializes
   // gfxVars, used below.
   Unused << gfxPlatform::GetPlatform();
@@ -6181,15 +6190,6 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
 
   if (mAlwaysOnTop) {
     gtk_window_set_keep_above(GTK_WINDOW(mShell), TRUE);
-  }
-
-  // It is important that this happens before the realize() call below, so that
-  // we don't get bogus CSD margins on Wayland, see bug 1794577.
-  mUndecorated = IsAlwaysUndecoratedWindow();
-  if (mUndecorated) {
-    LOG("    Is undecorated Window\n");
-    gtk_window_set_titlebar(GTK_WINDOW(mShell), gtk_fixed_new());
-    gtk_window_set_decorated(GTK_WINDOW(mShell), false);
   }
 
   // Create a container to hold child windows and child GtkWidgets.
@@ -10089,7 +10089,7 @@ void nsWindow::OnMap() {
     OnScaleChanged(/* aNotify = */ false);
 
     if (mIsAlert) {
-      gdk_window_set_override_redirect(mGdkWindow, TRUE);
+      gdk_window_set_override_redirect(GetToplevelGdkWindow(), TRUE);
     }
 
 #ifdef MOZ_X11
@@ -10275,4 +10275,11 @@ void nsWindow::SetDragSource(GdkDragContext* aSourceDragContext) {
       menuPopupFrame->SetIsDragSource(!!aSourceDragContext);
     }
   }
+}
+
+UniquePtr<MozContainerSurfaceLock> nsWindow::LockSurface() {
+  if (mIsDestroyed) {
+    return nullptr;
+  }
+  return MakeUnique<MozContainerSurfaceLock>(mContainer);
 }

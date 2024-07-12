@@ -1706,6 +1706,18 @@
   value: false
   mirror: always
 
+# If set, when a link is opened to a new tab, do not switch to the new tab.
+#
+# This pref is used when the link is opened with "Open Link in New Tab",
+# middle-click, etc.
+#
+# See also browser.tabs.loadDivertedInBackground, which is used when the website
+# diverts the link into a new tab.
+- name: browser.tabs.loadInBackground
+  type: bool
+  value: true
+  mirror: always
+
 # Whether we should draw the tabs on top of the titlebar.
 #
 # no (0), yes (1), or default (2), which is true everywhere except Linux.
@@ -1719,6 +1731,12 @@
 - name: browser.tabs.documentchannel.parent-controlled
   type: bool
   value: false
+  mirror: always
+
+# If set, middle clicking on a link opens the link in a new tab.
+- name: browser.tabs.opentabfor.middleclick
+  type: bool
+  value: true
   mirror: always
 
 # Testing-only pref which makes data: URIs be loaded in a "web" content process
@@ -2894,7 +2912,7 @@
 #ifdef MOZ_ENABLE_FORKSERVER
 - name: dom.ipc.forkserver.enable
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: once
 #endif
 
@@ -9839,7 +9857,7 @@
 # Whether table cells can generate scroll boxes.
 - name: layout.tables.scrollable-cells
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: false
   mirror: always
 
 # Whether to disable layer pixel alignment in scroll related stuff.
@@ -11688,6 +11706,21 @@
   mirror: always
 
 #---------------------------------------------------------------------------
+# Prefs starting with "middlemouse."
+#---------------------------------------------------------------------------
+
+# If set and browser.tabs.opentabfor.middleclick is not set, middle clicking on
+# a link opens the link in a new window.
+- name: middlemouse.openNewWindow
+  type: bool
+#if defined(ANDROID) || !defined(XP_MACOSX) && defined(XP_UNIX)
+  value: true
+#else
+  value: false
+#endif
+  mirror: always
+
+#---------------------------------------------------------------------------
 # Prefs starting with "midi."
 #---------------------------------------------------------------------------
 
@@ -13467,13 +13500,13 @@
   value: 32
   mirror: always
 
-# Receive buffer size of QUIC socket
+# Connection-level flow control limit
 - name: network.http.http3.max_data
   type: RelaxedAtomicUint32
   value: 25165824
   mirror: always
 
-# Receive buffer size of QUIC socket
+# Stream-level flow control limit
 - name: network.http.http3.max_stream_data
   type: RelaxedAtomicUint32
   value: 12582912
@@ -15157,16 +15190,6 @@
   value: true
   mirror: always
 
-- name: security.intermediate_preloading_healer.enabled
-  type: RelaxedAtomicBool
-  value: @IS_NOT_ANDROID@
-  mirror: always
-
-- name: security.intermediate_preloading_healer.timer_interval_ms
-  type: RelaxedAtomicUint32
-  value: 300000
-  mirror: always
-
 # If true, attempt to load the osclientcerts PKCS#11 module at startup on a
 # background thread. This module allows Firefox to use client certificates
 # stored in OS certificate storage. Currently only available for Windows and
@@ -16635,6 +16658,11 @@
   value: true
   mirror: always
 
+- name: widget.macos.sidebar-blend-mode.behind-window
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
 - name: widget.macos.titlebar-blend-mode.behind-window
   type: RelaxedAtomicBool
   value: false
@@ -16973,6 +17001,7 @@
 #  *  0: auto (possibly release-channel-dependent)
 #  *  1: remotely, falling back to locally
 #  *  2: remotely, no fallback
+#  *  3: remotely, falling back to locally except on crashes
 #  * -1: locally, no fallback
 - name: widget.windows.utility_process_file_picker
   type: RelaxedAtomicInt32

@@ -272,6 +272,7 @@
 #include "nsIBidiKeyboard.h"
 #include "nsIBrowser.h"
 #include "nsICacheInfoChannel.h"
+#include "nsICachingChannel.h"
 #include "nsICategoryManager.h"
 #include "nsIChannel.h"
 #include "nsIChannelEventSink.h"
@@ -425,7 +426,6 @@ nsIXPConnect* nsContentUtils::sXPConnect;
 nsIScriptSecurityManager* nsContentUtils::sSecurityManager;
 nsIPrincipal* nsContentUtils::sSystemPrincipal;
 nsIPrincipal* nsContentUtils::sNullSubjectPrincipal;
-nsIPrincipal* nsContentUtils::sFingerprintingProtectionPrincipal;
 nsIConsoleService* nsContentUtils::sConsoleService;
 
 static nsTHashMap<RefPtr<nsAtom>, EventNameMapping>* sAtomEventTable;
@@ -818,15 +818,6 @@ nsresult nsContentUtils::Init() {
   }
 
   nullPrincipal.forget(&sNullSubjectPrincipal);
-
-  RefPtr<nsIPrincipal> fingerprintingProtectionPrincipal =
-      BasePrincipal::CreateContentPrincipal(
-          "about:fingerprintingprotection"_ns);
-  if (!fingerprintingProtectionPrincipal) {
-    return NS_ERROR_FAILURE;
-  }
-
-  fingerprintingProtectionPrincipal.forget(&sFingerprintingProtectionPrincipal);
 
   if (!InitializeEventTable()) return NS_ERROR_FAILURE;
 
@@ -1982,7 +1973,6 @@ void nsContentUtils::Shutdown() {
   NS_IF_RELEASE(sSecurityManager);
   NS_IF_RELEASE(sSystemPrincipal);
   NS_IF_RELEASE(sNullSubjectPrincipal);
-  NS_IF_RELEASE(sFingerprintingProtectionPrincipal);
 
   sBidiKeyboard = nullptr;
 
@@ -3489,8 +3479,7 @@ void nsContentUtils::GenerateStateKey(nsIContent* aContent, Document* aDocument,
     // XXX We don't need to use index if name is there
     // XXXbz We don't?  Why not?  I don't follow.
     //
-    nsCOMPtr<nsIFormControl> control(do_QueryInterface(aContent));
-    if (control) {
+    if (const auto* control = nsIFormControl::FromNode(aContent)) {
       // Get the control number if this was a parser inserted element from the
       // network.
       int32_t controlNumber =
@@ -11486,6 +11475,20 @@ nsContentUtils::GetSubresourceCacheValidationInfo(nsIRequest* aRequest,
   }
 
   return info;
+}
+
+/* static */
+bool nsContentUtils::ShouldBypassSubResourceCache(Document* aDoc) {
+  RefPtr<nsILoadGroup> lg = aDoc->GetDocumentLoadGroup();
+  if (!lg) {
+    return false;
+  }
+  nsLoadFlags flags;
+  if (NS_FAILED(lg->GetLoadFlags(&flags))) {
+    return false;
+  }
+  return flags & (nsIRequest::LOAD_BYPASS_CACHE |
+                  nsICachingChannel::LOAD_BYPASS_LOCAL_CACHE);
 }
 
 nsCString nsContentUtils::TruncatedURLForDisplay(nsIURI* aURL, size_t aMaxLen) {

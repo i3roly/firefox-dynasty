@@ -553,7 +553,7 @@ abstract class BaseBrowserFragment :
             },
         )
 
-        val shouldAddNavigationBar = context.shouldAddNavigationBar()
+        val shouldAddNavigationBar = context.shouldAddNavigationBar() && webAppToolbarShouldBeVisible
         if (shouldAddNavigationBar) {
             initializeNavBar(
                 browserToolbar = browserToolbarView.view,
@@ -1448,7 +1448,6 @@ abstract class BaseBrowserFragment :
                         BrowserNavBar(
                             isPrivateMode = activity.browsingModeManager.mode.isPrivate,
                             isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
-                            showNewTabButton = FeatureFlags.navigationToolbarNewTabButtonEnabled,
                             browserStore = context.components.core.store,
                             menuButton = menuButton,
                             tabsCounterMenu = FenixTabCounterMenu(
@@ -1488,14 +1487,6 @@ abstract class BaseBrowserFragment :
                                 browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
                                     ToolbarMenu.Item.Forward(viewHistory = true),
                                 )
-                            },
-                            onHomeButtonClick = {
-                                NavigationBar.browserHomeTapped.record(NoExtras())
-                                browserAnimator.captureEngineViewAndDrawStatically {
-                                    findNavController().navigate(
-                                        BrowserFragmentDirections.actionGlobalHome(),
-                                    )
-                                }
                             },
                             onNewTabButtonClick = {
                                 browserToolbarInteractor.onNewTabButtonClicked()
@@ -2118,7 +2109,8 @@ abstract class BaseBrowserFragment :
         toolbar.dismissMenu()
 
         // If the navbar feature could be visible, we should update it's state.
-        val shouldUpdateNavBarState = requireContext().settings().navigationToolbarEnabled && !isTablet()
+        val shouldUpdateNavBarState =
+            requireContext().settings().navigationToolbarEnabled && !isTablet() && webAppToolbarShouldBeVisible
         if (shouldUpdateNavBarState) {
             updateNavBarForConfigurationChange(
                 parent = binding.browserLayout,

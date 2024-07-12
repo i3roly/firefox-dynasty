@@ -25,6 +25,9 @@ internal const val TOOLS_MENU_ROUTE = "tools_menu"
 internal fun ToolsSubmenu(
     isReaderViewActive: Boolean,
     isTranslated: Boolean,
+    isTranslationSupported: Boolean,
+    hasExternalApp: Boolean,
+    externalAppName: String,
     translatedLanguage: String,
     onBackButtonClick: () -> Unit,
     onReaderViewMenuClick: () -> Unit,
@@ -47,13 +50,16 @@ internal fun ToolsSubmenu(
                 onClick = onReaderViewMenuClick,
             )
 
-            Divider(color = FirefoxTheme.colors.borderSecondary)
+            if (isTranslationSupported) {
+                Divider(color = FirefoxTheme.colors.borderSecondary)
 
-            TranslationMenuItem(
-                isTranslated = isTranslated,
-                translatedLanguage = translatedLanguage,
-                onClick = onTranslatePageMenuClick,
-            )
+                TranslationMenuItem(
+                    isTranslated = isTranslated,
+                    isReaderViewActive = isReaderViewActive,
+                    translatedLanguage = translatedLanguage,
+                    onClick = onTranslatePageMenuClick,
+                )
+            }
         }
 
         MenuGroup {
@@ -73,11 +79,24 @@ internal fun ToolsSubmenu(
 
             Divider(color = FirefoxTheme.colors.borderSecondary)
 
-            MenuItem(
-                label = stringResource(id = R.string.browser_menu_open_app_link),
-                beforeIconPainter = painterResource(id = R.drawable.mozac_ic_more_grid_24),
-                onClick = onOpenInAppMenuClick,
-            )
+            if (hasExternalApp) {
+                MenuItem(
+                    label = if (externalAppName != "") {
+                        stringResource(id = R.string.browser_menu_open_in_fenix, externalAppName)
+                    } else {
+                        stringResource(id = R.string.browser_menu_open_app_link)
+                    },
+                    beforeIconPainter = painterResource(id = R.drawable.mozac_ic_more_grid_24),
+                    state = MenuItemState.ENABLED,
+                    onClick = onOpenInAppMenuClick,
+                )
+            } else {
+                MenuItem(
+                    label = stringResource(id = R.string.browser_menu_open_app_link),
+                    beforeIconPainter = painterResource(id = R.drawable.mozac_ic_more_grid_24),
+                    state = MenuItemState.DISABLED,
+                )
+            }
         }
     }
 }
@@ -106,6 +125,7 @@ private fun ReaderViewMenuItem(
 @Composable
 private fun TranslationMenuItem(
     isTranslated: Boolean,
+    isReaderViewActive: Boolean,
     translatedLanguage: String,
     onClick: () -> Unit,
 ) {
@@ -116,13 +136,14 @@ private fun TranslationMenuItem(
                 translatedLanguage,
             ),
             beforeIconPainter = painterResource(id = R.drawable.mozac_ic_translate_24),
-            state = MenuItemState.ACTIVE,
+            state = if (isReaderViewActive) MenuItemState.DISABLED else MenuItemState.ENABLED,
             onClick = onClick,
         )
     } else {
         MenuItem(
             label = stringResource(id = R.string.browser_menu_translate_page),
             beforeIconPainter = painterResource(id = R.drawable.mozac_ic_translate_24),
+            state = if (isReaderViewActive) MenuItemState.DISABLED else MenuItemState.ENABLED,
             onClick = onClick,
         )
     }
@@ -138,6 +159,9 @@ private fun ToolsSubmenuPreview() {
             ToolsSubmenu(
                 isReaderViewActive = false,
                 isTranslated = false,
+                isTranslationSupported = false,
+                hasExternalApp = true,
+                externalAppName = "Pocket",
                 translatedLanguage = "",
                 onBackButtonClick = {},
                 onReaderViewMenuClick = {},
@@ -160,6 +184,9 @@ private fun ToolsSubmenuPrivatePreview() {
             ToolsSubmenu(
                 isReaderViewActive = false,
                 isTranslated = false,
+                isTranslationSupported = true,
+                hasExternalApp = true,
+                externalAppName = "Pocket",
                 translatedLanguage = "",
                 onBackButtonClick = {},
                 onReaderViewMenuClick = {},
