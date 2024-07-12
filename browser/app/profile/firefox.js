@@ -503,10 +503,12 @@ pref("browser.urlbar.quicksuggest.shouldShowOnboardingDialog", true);
 // Show QuickSuggest onboarding dialog on the nth browser restarts.
 pref("browser.urlbar.quicksuggest.showOnboardingDialogAfterNRestarts", 0);
 
-// The indexes of the sponsored and non-sponsored quick suggest results within
-// the general results group.
+// The index of sponsored Firefox Suggest results within the Firefox Suggest
+// section when "Show search suggestions ahead of browsing history in address bar
+// results" is checked. When not checked, the index is hardcoded as -1. Negative
+// indexes are relative to the end of the section.
 pref("browser.urlbar.quicksuggest.sponsoredIndex", 0);
-pref("browser.urlbar.quicksuggest.nonSponsoredIndex", 0);
+pref("browser.urlbar.quicksuggest.nonSponsoredIndex", -1);
 
 // Whether quick suggest results can be shown in position specified in the
 // suggestions.
@@ -2687,8 +2689,7 @@ pref("devtools.inspector.simple-highlighters-reduced-motion", false);
 // next inplace editor.
 pref("devtools.inspector.rule-view.focusNextOnEnter", true);
 // Display @starting-style rules in the Rules view.
-// Should be removed when Bug 1905035 is fixed.
-pref("devtools.inspector.rule-view.starting-style", false);
+pref("devtools.inspector.rule-view.starting-style", true);
 
 // Whether or not the box model panel is opened in the layout view
 pref("devtools.layout.boxmodel.opened", true);
