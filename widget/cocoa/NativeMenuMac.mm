@@ -255,6 +255,7 @@ void NativeMenuMac::ShowAsContextMenu(nsIFrame* aClickedFrame,
 
   NSMenu* menu = mMenu->NativeNSMenu();
   NSView* view = NativeViewForFrame(aClickedFrame);
+  
   NSAppearance* appearance = NativeAppearanceForContent(mMenu->Content());
   NSPoint locationOnScreen = nsCocoaUtils::GeckoPointToCocoaPoint(desktopPoint);
 

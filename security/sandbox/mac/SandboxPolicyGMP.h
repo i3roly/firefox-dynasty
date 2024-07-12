@@ -16,6 +16,7 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
   (define should-log (param "SHOULD_LOG"))
   (define app-path (param "APP_PATH"))
   (define plugin-path (param "PLUGIN_PATH"))
+  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define plugin-binary-path (param "PLUGIN_BINARY_PATH"))
   (define crashPort (param "CRASH_PORT"))
   (define hasWindowServer (param "HAS_WINDOW_SERVER"))
@@ -30,7 +31,8 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
 
   (moz-deny default)
   ; These are not included in (deny default)
-  (moz-deny process-info*)
+  (if (>= macosVersion 1009)  
+  (moz-deny process-info*))
   ; This isn't available in some older macOS releases.
   (if (defined? 'nvram*)
     (moz-deny nvram*))
@@ -41,7 +43,8 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
   (allow process-info-pidinfo (target self))
 
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
-  (allow process-info-pidinfo process-info-setcontrol (target self))
+  (if (>= macosVersion 1009)  
+  (allow process-info-pidinfo process-info-setcontrol (target self)))
 
   (if (defined? 'file-map-executable)
     (begin

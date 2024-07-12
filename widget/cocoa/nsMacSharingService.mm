@@ -34,8 +34,6 @@ NSString* const openSharingSubpaneProtocolValue = @"com.apple.share-services";
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_10
 NSString* const NSUserActivityTypeBrowsingWeb =
     @"NSUserActivityTypeBrowsingWeb";
-
-NSString* const NSAppearanceNameVibrantDark = @"NSAppearanceNameVibrantDark";
 #endif  // MAC_OS_X_VERSION_10_10
 
 // Expose the id so we can pass reference through to JS and back

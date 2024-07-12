@@ -71,8 +71,9 @@ const SAFE_MAX_LATENCY_FRAMES: u32 = 512;
 const VPIO_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 const MACOS_KERNEL_MAJOR_VERSION_MONTEREY: u32 = 21;
+const MACOS_KERNEL_MAJOR_VERSION_MAVERICKS: u32 = 13;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialOrd, PartialEq)]
 enum ParseMacOSKernelVersionError {
     SysCtl,
     Malformed,
@@ -1394,14 +1395,16 @@ fn create_voiceprocessing_audiounit() -> Result<VoiceProcessingUnit> {
             cubeb_log!("Could not get default output device in order to undo vpio ducking");
         }
         Some(id) => {
-            let r = audio_device_duck(id, 1.0, ptr::null_mut(), 0.5);
-            if r != NO_ERR {
-                cubeb_log!(
-                        "Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
-                        id,
-                        r
+            if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+                let r = audio_device_duck(id, 1.0, ptr::null_mut(), 0.5);
+                if r != NO_ERR {
+                    cubeb_log!(
+                            "Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
+                            id,
+                            r
                     );
-            }
+                }
+            } 
         }
     };
 
@@ -4018,14 +4021,16 @@ impl<'ctx> CoreStreamData<'ctx> {
                     );
                 }
                 Some(id) => {
-                    let r = audio_device_duck(id, 1.0, ptr::null_mut(), 0.5);
-                    if r != NO_ERR {
-                        cubeb_log!(
-                            "({:p}) Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
-                            self.stm_ptr,
-                            id,
-                            r
-                        );
+                    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+                        let r = audio_device_duck(id, 1.0, ptr::null_mut(), 0.5);
+                        if r != NO_ERR {
+                            cubeb_log!(
+                                "({:p}) Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
+                                self.stm_ptr,
+                                id,
+                                r
+                            );
+                        }
                     }
                 }
             };
