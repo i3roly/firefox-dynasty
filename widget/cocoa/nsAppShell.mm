@@ -446,8 +446,10 @@ nsresult nsAppShell::Init() {
     } else {
       screenManager.SetHelper(mozilla::MakeUnique<ScreenHelperCocoa>());
     }
-
-    InitMemoryPressureObserver();
+    if(__builtin_available(macOS 10.9, *)) {
+      //does not exist in 10.8 or lower. guarded accordingly.
+      InitMemoryPressureObserver();
+    }
   }
 
   nsresult rv = nsBaseAppShell::Init();
@@ -463,7 +465,8 @@ nsresult nsAppShell::Init() {
   }
 
 #if !defined(RELEASE_OR_BETA) || defined(DEBUG)
-  if (Preferences::GetBool("security.sandbox.mac.track.violations", false)) {
+  if (nsCocoaFeatures::OnMavericksOrLater() && 
+      Preferences::GetBool("security.sandbox.mac.track.violations", false)) {
     nsSandboxViolationSink::Start();
   }
 #endif
@@ -902,7 +905,9 @@ nsAppShell::Exit(void) {
   mTerminated = true;
 
 #if !defined(RELEASE_OR_BETA) || defined(DEBUG)
-  nsSandboxViolationSink::Stop();
+  if (nsCocoaFeatures::OnMavericksOrLater()) {
+    nsSandboxViolationSink::Stop();
+  }
 #endif
 
   // Quoting from Apple's doc on the [NSApplication stop:] method (from their

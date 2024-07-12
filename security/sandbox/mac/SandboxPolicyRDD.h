@@ -25,7 +25,8 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
 
   (moz-deny default)
   ; These are not included in (deny default)
-  (moz-deny process-info*)
+  (if (>= macosVersion 1009) 
+  (moz-deny process-info*))
   ; This isn't available in some older macOS releases.
   (if (defined? 'nvram*)
     (moz-deny nvram*))
@@ -36,7 +37,8 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (moz-deny file-map-executable))
 
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
-  (allow process-info-pidinfo process-info-setcontrol (target self))
+  (if (= macosVersion 1009)
+  (allow process-info-pidinfo process-info-setcontrol (target self)))
 
   (if (defined? 'file-map-executable)
     (begin
@@ -71,7 +73,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (subpath "/usr/share/zoneinfo.default")
     (literal "/private/etc/localtime"))
 
-  (if (= macosVersion 1009)
+  (if (<= macosVersion 1009)
   (allow sysctl-read)
   (allow sysctl-read
     (sysctl-name-regex #"^sysctl\.")
