@@ -2181,26 +2181,27 @@ void nsCocoaWindow::DispatchOcclusionEvent() {
     return;
   }
 
-  // Our new occlusion state is true if the window is not visible.
-  bool newOcclusionState =
-      !(mHasStartedNativeFullscreen ||
-        ([mWindow occlusionState] & NSWindowOcclusionStateVisible));
+  if(@available(macOS 10.9, *)) {
+    // Our new occlusion state is true if the window is not visible.
+    bool newOcclusionState =
+        !(mHasStartedNativeFullscreen ||
+          ([mWindow occlusionState] & NSWindowOcclusionStateVisible));
+    // Don't dispatch if the new occlustion state is the same as the current
+    // state.
+    if (mIsFullyOccluded == newOcclusionState) {
+      return;
+    }
 
-  // Don't dispatch if the new occlustion state is the same as the current
-  // state.
-  if (mIsFullyOccluded == newOcclusionState) {
-    return;
-  }
+    MOZ_ASSERT(mIgnoreOcclusionCount >= 0);
+    if (newOcclusionState && mIgnoreOcclusionCount > 0) {
+      return;
+    }
 
-  MOZ_ASSERT(mIgnoreOcclusionCount >= 0);
-  if (newOcclusionState && mIgnoreOcclusionCount > 0) {
-    return;
-  }
-
-  mIsFullyOccluded = newOcclusionState;
-  if (mWidgetListener) {
-    mWidgetListener->OcclusionStateChanged(mIsFullyOccluded);
-  }
+    mIsFullyOccluded = newOcclusionState;
+    if (mWidgetListener) {
+      mWidgetListener->OcclusionStateChanged(mIsFullyOccluded);
+    }
+}
 }
 
 void nsCocoaWindow::ReportSizeEvent() {
@@ -2269,7 +2270,7 @@ LayoutDeviceIntPoint nsCocoaWindow::GetClientOffset() {
   NS_OBJC_END_TRY_BLOCK_RETURN(LayoutDeviceIntPoint(0, 0));
 }
 
-LayoutDeviceIntMargin nsCocoaWindow::ClientToWindowMargin() {
+LayoutDeviceIntSize nsCocoaWindow::ClientToWindowSize(const LayoutDeviceIntSize& aClientSize) {
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
   if (!mWindow || mWindow.drawsContentsIntoWindowFrame ||
@@ -2278,45 +2279,15 @@ LayoutDeviceIntMargin nsCocoaWindow::ClientToWindowMargin() {
   }
 
   CGFloat backingScale = BackingScaleFactor();
+  LayoutDeviceIntRect r(0, 0, aClientSize.width, aClientSize.height);
+  NSRect rect = nsCocoaUtils::DevPixelsToCocoaPoints(r, backingScale);
 
-  if(@available(macOS 10.10, *)) {
-    NSRect clientNSRect = mWindow.contentLayoutRect;
-    NSRect frameNSRect = [mWindow frameRectForChildViewRect:clientNSRect];
-    const auto clientRect =
-      nsCocoaUtils::CocoaRectToGeckoRectDevPix(clientNSRect, backingScale);
-    const auto frameRect =
-      nsCocoaUtils::CocoaRectToGeckoRectDevPix(frameNSRect, backingScale);
+  NSRect maybeInflatedRect = [mWindow frameRectForChildViewRect:rect];
+  r = nsCocoaUtils::CocoaRectToGeckoRectDevPix(maybeInflatedRect, backingScale);
+  return r.Size();
 
-    return frameRect - clientRect;
-  }
-  else {
-   //LayoutDeviceIntRect r(0, 0, .width, aClientSize.height);
-   LayoutDeviceIntRect r = GetClientBounds(); //^is a proper restatement of the
-                                              //line commented out above?
-   NSRect rect = nsCocoaUtils::DevPixelsToCocoaPoints(r, backingScale);
+  NS_OBJC_END_TRY_BLOCK_RETURN(LayoutDeviceIntSize(0, 0));
 
-  // Our caller expects the inflated rect for windows *with separate titlebars*,
-  // i.e. for windows where [mWindow drawsContentsIntoWindowFrame] is NO.
-  //
-  // So we call frameRectForContentRect on NSWindow here, instead of mWindow, so
-  // that we don't run into our override if this window is a window that draws
-  // its content into the titlebar.
-  //
-  // This is the same thing the windows widget does, but we probably should fix
-  // that, see bug 1445738.
-  NSUInteger styleMask = [mWindow styleMask];
-  styleMask &= ~NSFullSizeContentViewWindowMask;
-  NSRect inflatedNSRect = [NSWindow frameRectForContentRect:rect styleMask:styleMask];
-  const auto inflatedRect = nsCocoaUtils::CocoaRectToGeckoRectDevPix(inflatedNSRect, backingScale);
-  const auto clientRect = nsCocoaUtils::CocoaRectToGeckoRectDevPix(rect, backingScale);
-  return inflatedRect - clientRect;
-  /* i don't know if the above is right for the overhauled code, but this is the
-   * original implementation (lines 2128 to 2153):
-   * https://hg.mozilla.org/mozilla-unified/file/b9f6138e55656ff6447de1b7c9cfab37906035db/widget/cocoa/nsCocoaWindow.mm#l2128
-   */
-  }
-
-  NS_OBJC_END_TRY_BLOCK_RETURN({});
 }
 
 nsMenuBarX* nsCocoaWindow::GetMenuBar() { return mMenuBar; }
@@ -3100,6 +3071,7 @@ void nsCocoaWindow::CocoaWindowDidResize() {
 @interface NSView (FrameViewMethodSwizzling)
 - (NSPoint)FrameView__closeButtonOrigin;
 - (NSPoint)FrameView__fullScreenButtonOrigin;
+- (BOOL)FrameView__wantsFloatingTitlebar;
 - (CGFloat)FrameView__titlebarHeight;
 @end
 
@@ -3145,33 +3117,30 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   return defaultPosition;
 }
 
+- (BOOL)FrameView__wantsFloatingTitlebar {
+  return NO;
+}
+
 - (CGFloat)FrameView__titlebarHeight {
-  // XXX: Shouldn't this be [super FrameView__titlebarHeight]?
   CGFloat height = [self FrameView__titlebarHeight];
-  if ([self.window isKindOfClass:[ToolbarWindow class]]) {
+  if ([[self window] isKindOfClass:[ToolbarWindow class]]) {
     // Make sure that the titlebar height includes our shifted buttons.
-    // The following coordinates are in window space, with the origin being at
-    // the bottom left corner of the window.
-    auto* win = static_cast<ToolbarWindow*>(self.window);
-    CGFloat frameHeight = self.frame.size.height;
+    // The following coordinates are in window space, with the origin being at the bottom left
+    // corner of the window.
+    ToolbarWindow* win = (ToolbarWindow*)[self window];
+    CGFloat frameHeight = [self frame].size.height;
     NSPoint pointAboveWindow = {0.0, frameHeight};
-    CGFloat windowButtonY = frameHeight;
-    if (!NSIsEmptyRect(win.windowButtonsRect) &&
-        win.drawsContentsIntoWindowFrame &&
-        !(win.styleMask & NSWindowStyleMaskFullScreen) &&
-        (win.styleMask & NSWindowStyleMaskTitled)) {
-      windowButtonY = win.windowButtonsRect.origin.y;
-    }
+    CGFloat windowButtonY = [win windowButtonsPositionWithDefaultPosition:pointAboveWindow].y;
     CGFloat fullScreenButtonY =
-      [win fullScreenButtonPositionWithDefaultPosition:pointAboveWindow].y;
+        [win fullScreenButtonPositionWithDefaultPosition:pointAboveWindow].y;
     CGFloat maxDistanceFromWindowTopToButtonBottom =
-      std::max(frameHeight - windowButtonY, frameHeight - fullScreenButtonY);
-  height = std::max(height, maxDistanceFromWindowTopToButtonBottom);
+        std::max(frameHeight - windowButtonY, frameHeight - fullScreenButtonY);
+    height = std::max(height, maxDistanceFromWindowTopToButtonBottom);
   }
   return height;
+
 }
 @end
-
 static NSMutableSet* gSwizzledFrameViewClasses = nil;
 
 @interface NSWindow (PrivateSetNeedsDisplayInRectMethod)
@@ -3218,13 +3187,15 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 @end
 
 @implementation BaseWindow
-
 // The frame of a window is implemented using undocumented NSView subclasses.
-// We offset the window buttons by overriding the method _closeButtonOrigin on
-// these frame view classes. The class which is
+// We offset the window buttons by overriding the methods _closeButtonOrigin
+// and _fullScreenButtonOrigin on these frame view classes. The class which is
 // used for a window is determined in the window's frameViewClassForStyleMask:
 // method, so this is where we make sure that we have swizzled the method on
 // all encountered classes.
+// We also override the _wantsFloatingTitlebar method to return NO in order to
+// avoid some glitches in the titlebar that are caused by the way we mess with
+// the window.
 + (Class)frameViewClassForStyleMask:(NSUInteger)styleMask {
   Class frameViewClass = [super frameViewClassForStyleMask:styleMask];
 
@@ -3235,10 +3206,14 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
     }
   }
 
-  static IMP our_closeButtonOrigin = class_getMethodImplementation(
-      [NSView class], @selector(FrameView__closeButtonOrigin));
-  static IMP our_titlebarHeight = class_getMethodImplementation(
-      [NSView class], @selector(FrameView__titlebarHeight));
+  static IMP our_closeButtonOrigin =
+      class_getMethodImplementation([NSView class], @selector(FrameView__closeButtonOrigin));
+  static IMP our_fullScreenButtonOrigin =
+      class_getMethodImplementation([NSView class], @selector(FrameView__fullScreenButtonOrigin));
+  static IMP our_wantsFloatingTitlebar =
+      class_getMethodImplementation([NSView class], @selector(FrameView__wantsFloatingTitlebar));
+  static IMP our_titlebarHeight =
+      class_getMethodImplementation([NSView class], @selector(FrameView__titlebarHeight));
 
   if (![gSwizzledFrameViewClasses containsObject:frameViewClass]) {
     // Either of these methods might be implemented in both a subclass of
@@ -3246,32 +3221,37 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
     // aren't careful we might end up swizzling the same method twice.
     // Since method swizzling involves swapping pointers, this would break
     // things.
-    IMP _closeButtonOrigin = class_getMethodImplementation(
-        frameViewClass, @selector(_closeButtonOrigin));
+    IMP _closeButtonOrigin =
+        class_getMethodImplementation(frameViewClass, @selector(_closeButtonOrigin));
     if (_closeButtonOrigin && _closeButtonOrigin != our_closeButtonOrigin) {
       nsToolkit::SwizzleMethods(frameViewClass, @selector(_closeButtonOrigin),
                                 @selector(FrameView__closeButtonOrigin));
     }
-    // Override _titlebarHeight so that the floating titlebar doesn't clip the
-    // bottom of the window buttons which we move down with our override of
-    // _closeButtonOrigin.
-    IMP _titlebarHeight = class_getMethodImplementation(
-        frameViewClass, @selector(_titlebarHeight));
-    if (_titlebarHeight && _titlebarHeight != our_titlebarHeight) {
-      nsToolkit::SwizzleMethods(frameViewClass, @selector(_titlebarHeight),
-                                @selector(FrameView__titlebarHeight));
-    }
- 
-    //we don't want to render this if we have yosemite or later!
-    if(!nsCocoaFeatures::OnYosemiteOrLater()) {
-      static IMP our_fullScreenButtonOrigin =
-        class_getMethodImplementation([NSView class], @selector(FrameView__fullScreenButtonOrigin)); 
-      IMP _fullScreenButtonOrigin =
+    IMP _fullScreenButtonOrigin =
         class_getMethodImplementation(frameViewClass, @selector(_fullScreenButtonOrigin));
-      if (_fullScreenButtonOrigin && _fullScreenButtonOrigin != our_fullScreenButtonOrigin) {
-        nsToolkit::SwizzleMethods(frameViewClass, @selector(_fullScreenButtonOrigin),
-            @selector(FrameView__fullScreenButtonOrigin));
+    if (_fullScreenButtonOrigin && _fullScreenButtonOrigin != our_fullScreenButtonOrigin) {
+      nsToolkit::SwizzleMethods(frameViewClass, @selector(_fullScreenButtonOrigin),
+                                @selector(FrameView__fullScreenButtonOrigin));
+    }
 
+    if (@available(macOS 10.10, *)) {
+      // Override _titlebarHeight so that the floating titlebar doesn't clip the bottom of the
+      // window buttons which we move down with our override of _closeButtonOrigin.
+      IMP _titlebarHeight =
+          class_getMethodImplementation(frameViewClass, @selector(_titlebarHeight));
+      if (_titlebarHeight && _titlebarHeight != our_titlebarHeight) {
+        nsToolkit::SwizzleMethods(frameViewClass, @selector(_titlebarHeight),
+                                  @selector(FrameView__titlebarHeight));
+      }
+    } else {
+      // If CoreAnimation is not enabled, override the _wantsFloatingTitlebar method to return NO,
+      // in order to avoid titlebar glitches when in that configuration. These glitches do not
+      // appear when CoreAnimation is enabled.
+      IMP _wantsFloatingTitlebar =
+          class_getMethodImplementation(frameViewClass, @selector(_wantsFloatingTitlebar));
+      if (_wantsFloatingTitlebar && _wantsFloatingTitlebar != our_wantsFloatingTitlebar) {
+        nsToolkit::SwizzleMethods(frameViewClass, @selector(_wantsFloatingTitlebar),
+                                  @selector(FrameView__wantsFloatingTitlebar));
       }
     }
 
@@ -3307,6 +3287,7 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 static NSImage* GetMenuMaskImage() {
   const CGFloat radius = 6.0f;
   const NSSize maskSize = {radius * 3.0f, radius * 3.0f};
+  NSEdgeInsets insets = {5, 5, 5, 5};
   NSImage* maskImage = [NSImage imageWithSize:maskSize
                                       flipped:FALSE
                                drawingHandler:^BOOL(NSRect dstRect) {
@@ -3318,7 +3299,8 @@ static NSImage* GetMenuMaskImage() {
                                  [path fill];
                                  return YES;
                                }];
-  maskImage.capInsets = NSEdgeInsetsMake(radius, radius, radius, radius);
+  
+  [maskImage setCapInsets:insets];
   return maskImage;
 }
 
@@ -3562,6 +3544,17 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   if ([frameView respondsToSelector:@selector(_tileTitlebarAndRedisplay:)]) {
     [frameView _tileTitlebarAndRedisplay:NO];
   }
+}
+
+- (NSArray*)titlebarControls {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnYosemiteOrLater());
+
+  // Return all subviews of the frameView which are not the content view.
+  NSView* frameView = [[self contentView] superview];
+  NSMutableArray* array = [[[frameView subviews] mutableCopy] autorelease];
+  [array removeObject:[self contentView]];
+  return array;
+
 }
 
 - (BOOL)respondsToSelector:(SEL)aSelector {
@@ -3811,6 +3804,14 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
 
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
 }
+- (void)dealloc {
+  [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
+  [mFullscreenTitlebarTracker removeFromParentViewController];
+  [mTitlebarGradientView release];
+  [mFullscreenTitlebarTracker release];
+
+  [super dealloc];
+}
 
 
 - (void)updateTitlebarGradientViewPresence {
@@ -3824,6 +3825,11 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
     [mTitlebarGradientView release];
     mTitlebarGradientView = nil;
   }
+}
+
+- (void)windowMainStateChanged {
+  [self setTitlebarNeedsDisplay];
+  [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
 }
 
 - (void)observeValueForKeyPath:(NSString*)keyPath
@@ -3911,14 +3917,6 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   }
 }
 
-- (void)dealloc {
-  [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
-  [mFullscreenTitlebarTracker removeFromParentViewController];
-  [mTitlebarGradientView release];
-  [mFullscreenTitlebarTracker release];
-
-  [super dealloc];
-}
 
 - (NSArray<NSView*>*)contentViewContents {
   NSMutableArray<NSView*>* contents = [[[self contentView] subviews] mutableCopy];
@@ -3970,25 +3968,14 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 }
 
 
-- (void)windowMainStateChanged {
-  [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
-}
-
 - (void)setTitlebarNeedsDisplay {
   [mTitlebarGradientView setNeedsDisplay:YES];
 }
-
 
 - (NSRect)titlebarRect {
   CGFloat titlebarHeight = [self titlebarHeight];
   return NSMakeRect(0, [self frame].size.height - titlebarHeight, [self frame].size.width,
                     titlebarHeight);
-}
-
-// In window contentView coordinates (origin bottom left)
-- (NSRect)unifiedToolbarRect {
-  return NSMakeRect(0, [self frame].size.height - mUnifiedToolbarHeight, [self frame].size.width,
-                    mUnifiedToolbarHeight);
 }
 
 // Returns the unified height of titlebar + toolbar.
@@ -4007,17 +3994,16 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   return NSMaxY(frameRect) - NSMaxY(originalContentRect);
 
 }
-
-
 // Stores the complete height of titlebar + toolbar.
 - (void)setUnifiedToolbarHeight:(CGFloat)aHeight {
   if (aHeight == mUnifiedToolbarHeight) return;
 
   mUnifiedToolbarHeight = aHeight;
 
-
+  if (![self drawsContentsIntoWindowFrame]) {
+    [self setTitlebarNeedsDisplay];
+  }
 }
-
 
 // Extending the content area into the title bar works by resizing the
 // mainChildView so that it covers the titlebar.
@@ -4045,20 +4031,17 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   [self updateTitlebarGradientViewPresence];
 }
 
-- (void)placeFullScreenButton:(NSRect)aRect {
-  if (!NSEqualRects(mFullScreenButtonRect, aRect)) {
-    mFullScreenButtonRect = aRect;
-    [self reflowTitlebarElements];
-  }
+- (void)setWantsTitleDrawn:(BOOL)aDrawTitle {
+  [super setWantsTitleDrawn:aDrawTitle];
+  [self setTitlebarNeedsDisplay];
 }
 
-- (NSPoint)fullScreenButtonPositionWithDefaultPosition:(NSPoint)aDefaultPosition {
-  if ([self drawsContentsIntoWindowFrame] && !NSIsEmptyRect(mFullScreenButtonRect)) {
-    return NSMakePoint(std::min(mFullScreenButtonRect.origin.x, aDefaultPosition.x),
-                       std::min(mFullScreenButtonRect.origin.y, aDefaultPosition.y));
-  }
-  return aDefaultPosition;
+- (void)setSheetAttachmentPosition:(CGFloat)aY {
+  mSheetAttachmentPosition = aY;
+}
 
+- (CGFloat)sheetAttachmentPosition {
+  return mSheetAttachmentPosition;
 }
 
 - (void)placeWindowButtons:(NSRect)aRect {
@@ -4066,6 +4049,7 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
     mWindowButtonsRect = aRect;
     [self reflowTitlebarElements];
   }
+
 }
 
 - (NSPoint)windowButtonsPositionWithDefaultPosition:(NSPoint)aDefaultPosition {
@@ -4080,6 +4064,22 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
       return NSMakePoint(0, [self frame].size.height);
     }
     return NSMakePoint(mWindowButtonsRect.origin.x, mWindowButtonsRect.origin.y);
+  }
+  return aDefaultPosition;
+
+}
+
+- (void)placeFullScreenButton:(NSRect)aRect {
+  if (!NSEqualRects(mFullScreenButtonRect, aRect)) {
+    mFullScreenButtonRect = aRect;
+    [self reflowTitlebarElements];
+  }
+}
+
+- (NSPoint)fullScreenButtonPositionWithDefaultPosition:(NSPoint)aDefaultPosition {
+  if ([self drawsContentsIntoWindowFrame] && !NSIsEmptyRect(mFullScreenButtonRect)) {
+    return NSMakePoint(std::min(mFullScreenButtonRect.origin.x, aDefaultPosition.x),
+                       std::min(mFullScreenButtonRect.origin.y, aDefaultPosition.y));
   }
   return aDefaultPosition;
 

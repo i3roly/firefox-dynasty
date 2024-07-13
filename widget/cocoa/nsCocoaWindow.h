@@ -200,6 +200,7 @@ enum class NativeKeyBindingsType : uint8_t;
 - (void)setDrawsContentsIntoWindowFrame:(BOOL)aState;
 - (void)placeWindowButtons:(NSRect)aRect;
 - (void)placeFullScreenButton:(NSRect)aRect;
+- (NSPoint)windowButtonsPositionWithDefaultPosition:(NSPoint)aDefaultPosition;
 - (NSPoint)fullScreenButtonPositionWithDefaultPosition:(NSPoint)aDefaultPosition;
 - (NSRect)windowButtonsRect;
 - (void)windowMainStateChanged;
@@ -235,7 +236,7 @@ class nsCocoaWindow final : public nsBaseWidget {
   void SetFocus(Raise, mozilla::dom::CallerType aCallerType) override;
   LayoutDeviceIntPoint WidgetToScreenOffset() override;
   LayoutDeviceIntPoint GetClientOffset() override;
-  LayoutDeviceIntMargin ClientToWindowMargin() override;
+  virtual LayoutDeviceIntSize ClientToWindowSize(const LayoutDeviceIntSize& aClientSize) override;
 
   void* GetNativeData(uint32_t aDataType) override;
 
