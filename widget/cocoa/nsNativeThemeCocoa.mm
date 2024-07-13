@@ -2408,6 +2408,7 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
   // Some of the drawing below uses NSAppearance.currentAppearance behind the
   // scenes. Set it to the appearance we want, the same way as
   // nsLookAndFeel::NativeGetColor.
+  
   NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
 
   // Also set the cell draw window's appearance; this is respected by
@@ -2555,19 +2556,34 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
         }
         case Widget::eListBox: {
           // Fill the content with the control background color.
-          CGContextSetFillColorWithColor(
-              cgContext, [NSColor.controlBackgroundColor CGColor]);
-          CGContextFillRect(cgContext, macRect);
-          // Draw the frame using kCUIWidgetScrollViewFrame. This is what
-          // NSScrollView uses in
-          // -[NSScrollView drawRect:] if you give it a borderType of
-          // NSBezelBorder.
-          RenderWithCoreUI(
-              macRect, cgContext, @{
-                @"widget" : @"kCUIWidgetScrollViewFrame",
-                @"kCUIIsFlippedKey" : @YES,
-                @"kCUIVariantMetal" : @NO,
-              });
+          if(@available(macOS 10.9, *)) {
+            CGContextSetFillColorWithColor(
+                cgContext, [NSColor.controlBackgroundColor CGColor]);
+            CGContextFillRect(cgContext, macRect);
+            // Draw the frame using kCUIWidgetScrollViewFrame. This is what
+            // NSScrollView uses in
+            // -[NSScrollView drawRect:] if you give it a borderType of
+            // NSBezelBorder.
+            RenderWithCoreUI(
+                macRect, cgContext, @{
+                  @"widget" : @"kCUIWidgetScrollViewFrame",
+                  @"kCUIIsFlippedKey" : @YES,
+                  @"kCUIVariantMetal" : @NO,
+                });
+          } else {
+            // We have to draw this by hand because kHIThemeFrameListBox drawing
+            // is buggy on 10.5, see bug 579259.
+            CGContextSetRGBFillColor(cgContext, 1.0, 1.0, 1.0, 1.0);
+            CGContextFillRect(cgContext, macRect);
+            float x = macRect.origin.x, y = macRect.origin.y;
+            float w = macRect.size.width, h = macRect.size.height;
+            CGContextSetRGBFillColor(cgContext,0.557, 0.557, 0.557, 1.0);
+            CGContextFillRect(cgContext, CGRectMake(x, y, w, 1));
+            CGContextSetRGBFillColor(cgContext,0.745, 0.745, 0.745, 1.0);
+            CGContextFillRect(cgContext, CGRectMake(x, y + 1, 1, h - 1));
+            CGContextFillRect(cgContext, CGRectMake(x + w - 1, y + 1, 1, h - 1));
+            CGContextFillRect(cgContext, CGRectMake(x + 1, y + h - 1, w - 2, 1));
+        }
           break;
         }
         case Widget::eTabPanel: {
