@@ -1698,6 +1698,32 @@ void nsChildView::PostRender(WidgetRenderingContext* aContext)
 RefPtr<layers::NativeLayerRoot> nsChildView::GetNativeLayerRoot() {
   return mNativeLayerRoot;
 }
+static int32_t FindTitlebarBottom(const nsTArray<nsIWidget::ThemeGeometry>& aThemeGeometries,
+                                  int32_t aWindowWidth) {
+  int32_t titlebarBottom = 0;
+  for (auto& g : aThemeGeometries) {
+    if ((g.mType == eThemeGeometryTypeTitlebar ||
+         g.mType == eThemeGeometryTypeVibrantTitlebarLight ||
+         g.mType == eThemeGeometryTypeVibrantTitlebarDark) &&
+        g.mRect.X() <= 0 && g.mRect.XMost() >= aWindowWidth && g.mRect.Y() <= 0) {
+      titlebarBottom = std::max(titlebarBottom, g.mRect.YMost());
+    }
+  }
+  return titlebarBottom;
+}
+
+static int32_t FindUnifiedToolbarBottom(const nsTArray<nsIWidget::ThemeGeometry>& aThemeGeometries,
+                                        int32_t aWindowWidth, int32_t aTitlebarBottom) {
+  int32_t unifiedToolbarBottom = aTitlebarBottom;
+  for (uint32_t i = 0; i < aThemeGeometries.Length(); ++i) {
+    const nsIWidget::ThemeGeometry& g = aThemeGeometries[i];
+    if ((g.mType == eThemeGeometryTypeToolbar) && g.mRect.X() <= 0 &&
+        g.mRect.XMost() >= aWindowWidth && g.mRect.Y() <= aTitlebarBottom) {
+      unifiedToolbarBottom = std::max(unifiedToolbarBottom, g.mRect.YMost());
+    }
+  }
+  return unifiedToolbarBottom;
+}
 
 static LayoutDeviceIntRect FindFirstRectOfType(
     const nsTArray<nsIWidget::ThemeGeometry>& aThemeGeometries,
@@ -1723,7 +1749,24 @@ void nsChildView::UpdateThemeGeometries(
     return;
   }
 
+
+  // Update unified toolbar height and sheet attachment position.
+  int32_t windowWidth = mBounds.width;
+  int32_t titlebarBottom = FindTitlebarBottom(aThemeGeometries, windowWidth);
+  int32_t unifiedToolbarBottom =
+      FindUnifiedToolbarBottom(aThemeGeometries, windowWidth, titlebarBottom);
+  int32_t toolboxBottom =
+      FindFirstRectOfType(aThemeGeometries, eThemeGeometryTypeToolbox).YMost();
+
   ToolbarWindow* win = (ToolbarWindow*)[mView window];
+  int32_t titlebarHeight = CocoaPointsToDevPixels([win titlebarHeight]);
+  int32_t devUnifiedHeight = titlebarHeight + unifiedToolbarBottom;
+  [win setUnifiedToolbarHeight:DevPixelsToCocoaPoints(devUnifiedHeight)];
+
+  int32_t sheetPositionDevPx = std::max(toolboxBottom, unifiedToolbarBottom);
+  NSPoint sheetPositionView = {0, DevPixelsToCocoaPoints(sheetPositionDevPx)};
+  NSPoint sheetPositionWindow = [mView convertPoint:sheetPositionView toView:nil];
+  [win setSheetAttachmentPosition:sheetPositionWindow.y];
 
   // Update titlebar control offsets.
   LayoutDeviceIntRect windowButtonRect =
@@ -1731,12 +1774,10 @@ void nsChildView::UpdateThemeGeometries(
   [win placeWindowButtons:[mView convertRect:DevPixelsToCocoaPoints(
                                                  windowButtonRect)
                                       toView:nil]];
-  if(!nsCocoaFeatures::OnYosemiteOrLater()) {
       LayoutDeviceIntRect fullScreenButtonRect =
           FindFirstRectOfType(aThemeGeometries, eThemeGeometryTypeFullscreenButton);
       [win placeFullScreenButton:[mView convertRect:DevPixelsToCocoaPoints(fullScreenButtonRect)
           toView:nil]];
-  }
 }
 
 static Maybe<VibrancyType> ThemeGeometryTypeToVibrancyType(

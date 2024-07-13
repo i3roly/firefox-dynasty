@@ -199,6 +199,8 @@ enum class NativeKeyBindingsType : uint8_t;
 - (NSRect)titlebarRect;
 - (void)setTitlebarNeedsDisplay;
 - (void)setDrawsContentsIntoWindowFrame:(BOOL)aState;
+- (void)setSheetAttachmentPosition:(CGFloat)aY;
+- (CGFloat)sheetAttachmentPosition;
 - (void)placeWindowButtons:(NSRect)aRect;
 - (void)placeFullScreenButton:(NSRect)aRect;
 - (NSPoint)windowButtonsPositionWithDefaultPosition:(NSPoint)aDefaultPosition;

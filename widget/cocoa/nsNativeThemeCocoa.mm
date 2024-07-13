@@ -129,7 +129,7 @@ void CUIDraw(CUIRendererRef r, CGRect rect, CGContextRef ctx,
 static void DrawFocusRingForCellIfNeeded(NSCell* aCell, NSRect aWithFrame,
                                          NSView* aInView) {
   if ([aCell showsFirstResponder]) {
-    CGContextRef cgContext = [[NSGraphicsContext currentContext] CGContext];
+    CGContextRef cgContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
     CGContextSaveGState(cgContext);
 
     // It's important to set the focus ring style before we enter the
