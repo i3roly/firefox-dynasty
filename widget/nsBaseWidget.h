@@ -362,6 +362,12 @@ class nsBaseWidget : public nsIWidget, public nsSupportsWeakReference {
   bool IsSmallPopup() const;
 
   PopupLevel GetPopupLevel() { return mPopupLevel; }
+  
+  LayoutDeviceIntSize ClientToWindowSize(
+      const LayoutDeviceIntSize& aClientSize) override {
+    return aClientSize;
+  }
+
 
   void ReparentNativeWidget(nsIWidget* aNewParent) override {}
 
