@@ -4014,6 +4014,10 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   BOOL stateChanged = self.drawsContentsIntoWindowFrame != aState;
   [super setDrawsContentsIntoWindowFrame:aState];
   if (stateChanged && [self.delegate isKindOfClass:[WindowDelegate class]]) {
+    if(nsCocoaFeatures::OnYosemiteOrLater()) {
+    // Hide the titlebar if we are drawing into it
+      self.titlebarAppearsTransparent = self.drawsContentsIntoWindowFrame;
+    }
     // Here we extend / shrink our mainChildView. We do that by firing a resize
     // event which will cause the ChildView to be resized to the rect returned
     // by nsCocoaWindow::GetClientBounds. GetClientBounds bases its return
