@@ -1742,8 +1742,6 @@ void nsChildView::UpdateThemeGeometries(
 static Maybe<VibrancyType> ThemeGeometryTypeToVibrancyType(
     nsITheme::ThemeGeometryType aThemeGeometryType) {
   switch (aThemeGeometryType) {
-    case eThemeGeometryTypeSidebar:
-      return Some(VibrancyType::Sidebar);
     case eThemeGeometryTypeTitlebar:
       return Some(VibrancyType::Titlebar);
     default:
