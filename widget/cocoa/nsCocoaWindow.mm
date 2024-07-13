@@ -2525,10 +2525,14 @@ void nsCocoaWindow::SetWindowAnimationType(
 void nsCocoaWindow::SetDrawsTitle(bool aDrawTitle) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
-  // If we don't draw into the window frame, we always want to display window
-  // titles.
-  mWindow.wantsTitleDrawn = aDrawTitle || !mWindow.drawsContentsIntoWindowFrame;
+  if (![mWindow drawsContentsIntoWindowFrame]) {
+    // If we don't draw into the window frame, we always want to display window
+    // titles.
+    [mWindow setWantsTitleDrawn:YES];
+  } else {
 
+    [mWindow setWantsTitleDrawn:aDrawTitle];
+    }
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
@@ -3146,6 +3150,16 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 - (void)_setNeedsDisplayInRect:(NSRect)aRect;
 @end
 
+// This method is on NSThemeFrame starting with 10.10, but since NSThemeFrame
+// is not a public class, we declare the method on NSView instead. We only have
+// this declaration in order to avoid compiler warnings.
+@interface NSView (PrivateAddKnownSubviewMethod)
+- (void)_addKnownSubview:(NSView*)aView
+              positioned:(NSWindowOrderingMode)place
+              relativeTo:(NSView*)otherView;
+
+@end
+
 #if !defined(MAC_OS_X_VERSION_10_10) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_10
 
 @interface NSImage (CapInsets)
@@ -3164,16 +3178,11 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 
 #endif
 
-
-// This method is on NSThemeFrame starting with 10.10, but since NSThemeFrame
-// is not a public class, we declare the method on NSView instead. We only have
-// this declaration in order to avoid compiler warnings.
-@interface NSView (PrivateAddKnownSubviewMethod)
-- (void)_addKnownSubview:(NSView*)aView
-              positioned:(NSWindowOrderingMode)place
-              relativeTo:(NSView*)otherView;
-
+#if !defined(MAC_OS_X_VERSION_10_12_2) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12_2
+@interface NSView (NSTouchBarProvider)
+- (NSTouchBar*)makeTouchBar;
 @end
+#endif
 
 @interface NSView (NSVisualEffectViewSetMaskImage)
 - (void)setMaskImage:(NSImage*)image;
@@ -3283,25 +3292,24 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
   return self;
 }
 
-// Returns an autoreleased NSImage.
 static NSImage* GetMenuMaskImage() {
-  const CGFloat radius = 6.0f;
-  const NSSize maskSize = {radius * 3.0f, radius * 3.0f};
+  CGFloat radius = 4.0f;
   NSEdgeInsets insets = {5, 5, 5, 5};
+  NSSize maskSize = {12, 12};
   NSImage* maskImage = [NSImage imageWithSize:maskSize
-                                      flipped:FALSE
+                                      flipped:YES
                                drawingHandler:^BOOL(NSRect dstRect) {
-                                 NSBezierPath* path = [NSBezierPath
-                                     bezierPathWithRoundedRect:dstRect
-                                                       xRadius:radius
-                                                       yRadius:radius];
-                                 [NSColor.blackColor set];
+                                 NSBezierPath* path =
+                                     [NSBezierPath bezierPathWithRoundedRect:dstRect
+                                                                     xRadius:radius
+                                                                     yRadius:radius];
+                                 [[NSColor colorWithDeviceWhite:1.0 alpha:1.0] set];
                                  [path fill];
                                  return YES;
                                }];
-  
   [maskImage setCapInsets:insets];
   return maskImage;
+
 }
 
 - (void)swapOutChildViewWrapper:(NSView*)aNewWrapper {
@@ -3701,6 +3709,11 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   return false;
 }
 
+@interface NSView (NSThemeFrame)
+- (void)_drawTitleStringInClip:(NSRect)aRect;
+- (void)_maskCorners:(NSUInteger)aFlags clipRect:(NSRect)aRect;
+@end
+
 @implementation TitlebarGradientView
 
 - (void)drawRect:(NSRect)aRect {
@@ -3708,6 +3721,35 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   ToolbarWindow* window = (ToolbarWindow*)[self window];
   nsNativeThemeCocoa::DrawNativeTitlebar(ctx, NSRectToCGRect([self bounds]),
                                          [window unifiedToolbarHeight], [window isMainWindow], NO);
+
+  // The following is only necessary because we're not using
+  // NSFullSizeContentViewWindowMask yet: We need to mask our drawing to the
+  // rounded top corners of the window, and we need to draw the title string
+  // on top. That's because the title string is drawn as part of the frame view
+  // and this view covers that drawing up.
+  // Once we use NSFullSizeContentViewWindowMask and remove our override of
+  // _wantsFloatingTitlebar, Cocoa will draw the title string as part of a
+  // separate view which sits on top of the window's content view, and we'll be
+  // able to remove the code below.
+
+  NSView* frameView = [[[self window] contentView] superview];
+  if (!frameView || ![frameView respondsToSelector:@selector(_maskCorners:clipRect:)] ||
+      ![frameView respondsToSelector:@selector(_drawTitleStringInClip:)]) {
+    return;
+  }
+
+  NSPoint offsetToFrameView = [self convertPoint:NSZeroPoint toView:frameView];
+  NSRect clipRect = {offsetToFrameView, [self bounds].size};
+
+  // Both this view and frameView return NO from isFlipped. Switch into
+  // frameView's coordinate system using a translation by the offset.
+  CGContextSaveGState(ctx);
+  CGContextTranslateCTM(ctx, -offsetToFrameView.x, -offsetToFrameView.y);
+
+  [frameView _maskCorners:2 clipRect:clipRect];
+  [frameView _drawTitleStringInClip:clipRect];
+
+  CGContextRestoreGState(ctx);
 }
 
 - (BOOL)isOpaque {
@@ -3808,14 +3850,22 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
 }
 - (void)dealloc {
+  [mTitlebarGradientView release];
   [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
   [mFullscreenTitlebarTracker removeFromParentViewController];
-  [mTitlebarGradientView release];
   [mFullscreenTitlebarTracker release];
 
   [super dealloc];
 }
 
+- (NSArray<NSView*>*)contentViewContents {
+  NSMutableArray<NSView*>* contents = [[[self contentView] subviews] mutableCopy];
+  if (mTitlebarGradientView) {
+    // Do not include the titlebar gradient view in the returned array.
+    [contents removeObject:mTitlebarGradientView];
+  }
+  return [contents autorelease];
+}
 
 - (void)updateTitlebarGradientViewPresence {
   BOOL needTitlebarView = ![self drawsContentsIntoWindowFrame];
@@ -3830,6 +3880,44 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   }
 }
 
+// Override methods that translate between content rect and frame rect.
+// These overrides are only needed on 10.9 or when the CoreAnimation pref is
+// is false; otherwise we use NSFullSizeContentViewMask and get this behavior
+// for free.
+- (NSRect)contentRectForFrameRect:(NSRect)aRect {
+  return aRect;
+}
+
+- (NSRect)contentRectForFrameRect:(NSRect)aRect styleMask:(NSUInteger)aMask {
+  return aRect;
+}
+
+- (NSRect)frameRectForContentRect:(NSRect)aRect {
+  return aRect;
+}
+
+- (NSRect)frameRectForContentRect:(NSRect)aRect styleMask:(NSUInteger)aMask {
+  return aRect;
+}
+
+- (void)setContentView:(NSView*)aView {
+  [super setContentView:aView];
+  if (!([self styleMask] & NSFullSizeContentViewWindowMask)) {
+    // Move the contentView to the bottommost layer so that it's guaranteed
+    // to be under the window buttons.
+    // When the window uses the NSFullSizeContentViewMask, this manual
+    // adjustment is not necessary.
+    NSView* frameView = [aView superview];
+    [aView removeFromSuperview];
+    if ([frameView respondsToSelector:@selector(_addKnownSubview:positioned:relativeTo:)]) {
+      // 10.10 prints a warning when we call addSubview on the frame view, so we
+      // silence the warning by calling a private method instead.
+      [frameView _addKnownSubview:aView positioned:NSWindowBelow relativeTo:nil];
+    } else {
+      [frameView addSubview:aView positioned:NSWindowBelow relativeTo:nil];
+    }
+  } 
+}
 - (void)windowMainStateChanged {
   [self setTitlebarNeedsDisplay];
   [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
@@ -3919,57 +4007,6 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
     }
   }
 }
-
-
-- (NSArray<NSView*>*)contentViewContents {
-  NSMutableArray<NSView*>* contents = [[[self contentView] subviews] mutableCopy];
-  if (mTitlebarGradientView) {
-    // Do not include the titlebar gradient view in the returned array.
-    [contents removeObject:mTitlebarGradientView];
-  }
-  return [contents autorelease];
-}
-
-// Override methods that translate between content rect and frame rect.
-// These overrides are only needed on 10.9 or when the CoreAnimation pref is
-// is false; otherwise we use NSFullSizeContentViewMask and get this behavior
-// for free.
-- (NSRect)contentRectForFrameRect:(NSRect)aRect {
-  return aRect;
-}
-
-- (NSRect)contentRectForFrameRect:(NSRect)aRect styleMask:(NSUInteger)aMask {
-  return aRect;
-}
-
-- (NSRect)frameRectForContentRect:(NSRect)aRect {
-  return aRect;
-}
-
-- (NSRect)frameRectForContentRect:(NSRect)aRect styleMask:(NSUInteger)aMask {
-  return aRect;
-}
-
-- (void)setContentView:(NSView*)aView {
-  [super setContentView:aView];
-
-  if (!([self styleMask] & NSFullSizeContentViewWindowMask)) {
-    // Move the contentView to the bottommost layer so that it's guaranteed
-    // to be under the window buttons.
-    // When the window uses the NSFullSizeContentViewMask, this manual
-    // adjustment is not necessary.
-    NSView* frameView = [aView superview];
-    [aView removeFromSuperview];
-    if ([frameView respondsToSelector:@selector(_addKnownSubview:positioned:relativeTo:)]) {
-      // 10.10 prints a warning when we call addSubview on the frame view, so we
-      // silence the warning by calling a private method instead.
-      [frameView _addKnownSubview:aView positioned:NSWindowBelow relativeTo:nil];
-    } else {
-      [frameView addSubview:aView positioned:NSWindowBelow relativeTo:nil];
-    }
-  }
-}
-
 
 - (void)setTitlebarNeedsDisplay {
   [mTitlebarGradientView setNeedsDisplay:YES];
