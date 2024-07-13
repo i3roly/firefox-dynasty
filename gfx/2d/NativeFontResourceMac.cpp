@@ -18,7 +18,6 @@
 #endif
 
 #include "nsIMemoryReporter.h"
-#include "nsCocoaFeatures.h"
 
 namespace mozilla {
 namespace gfx {
@@ -104,39 +103,22 @@ already_AddRefed<NativeFontResourceMac> NativeFontResourceMac::Create(
     return nullptr;
   }
 
-  CTFontRef ctFont = NULL;
-  CGFontRef fontRef = NULL;
-  CTFontDescriptorRef ctFontDesc = NULL;
-  //it seems this will cause problems on older macs1
-  if(nsCocoaFeatures::OnElCapitanOrLater()) {
-    ctFontDesc =
-        CTFontManagerCreateFontDescriptorFromData(data);
-    if (!ctFontDesc) {
-      CFRelease(data);
-      return nullptr;
-    }
-    // creating the CGFontRef via the CTFont avoids the data being held alive
-    // in a cache.
-    ctFont = CTFontCreateWithFontDescriptor(ctFontDesc, 0, NULL);
-
-    // Creating the CGFont from the CTFont prevents the font data from being
-    // held in the TDescriptorSource cache. This appears to be true even
-    // if we later create a CTFont from the CGFont.
-    fontRef = CTFontCopyGraphicsFont(ctFont, NULL);
-    CFRelease(ctFont);
-  } else { //old code for yosemite and below
-    // create a provider
-    CGDataProviderRef provider = CGDataProviderCreateWithCFData(data);
-
-    // release our reference to the CFData, provider keeps it alive
+  CTFontDescriptorRef ctFontDesc =
+      CTFontManagerCreateFontDescriptorFromData(data);
+  if (!ctFontDesc) {
     CFRelease(data);
-    // create the font object
-    fontRef = CGFontCreateWithDataProvider(provider);
-
-    // release our reference, font will keep it alive as long as needed
-    CGDataProviderRelease(provider);
+    return nullptr;
   }
 
+  // creating the CGFontRef via the CTFont avoids the data being held alive
+  // in a cache.
+  CTFontRef ctFont = CTFontCreateWithFontDescriptor(ctFontDesc, 0, NULL);
+
+  // Creating the CGFont from the CTFont prevents the font data from being
+  // held in the TDescriptorSource cache. This appears to be true even
+  // if we later create a CTFont from the CGFont.
+  CGFontRef fontRef = CTFontCopyGraphicsFont(ctFont, NULL);
+  CFRelease(ctFont);
 
   if (!fontRef) {
     // Not a valid font; release the structures we've been holding.
@@ -173,7 +155,7 @@ already_AddRefed<NativeFontResourceMac> NativeFontResourceMac::Create(
 
   // passes ownership of fontRef to the NativeFontResourceMac instance
   RefPtr<NativeFontResourceMac> fontResource =
-    new NativeFontResourceMac(ctFontDesc, fontRef, aDataLength);
+      new NativeFontResourceMac(ctFontDesc, fontRef, aDataLength);
 
   return fontResource.forget();
 }
@@ -183,6 +165,7 @@ already_AddRefed<UnscaledFont> NativeFontResourceMac::CreateUnscaledFont(
     uint32_t aInstanceDataLength) {
   RefPtr<UnscaledFont> unscaledFont =
       new UnscaledFontMac(mFontDescRef, mFontRef, true);
+
   return unscaledFont.forget();
 }
 

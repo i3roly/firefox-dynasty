@@ -1844,7 +1844,7 @@ void nsChildView::UpdateBoundsFromView() {
   //
   // Since this view is constructed and used such that its entire bounds is the
   // relevant region, we just return our bounds.
-  return self.bounds;
+  return [self visibleRect];
 }
 @end
 
