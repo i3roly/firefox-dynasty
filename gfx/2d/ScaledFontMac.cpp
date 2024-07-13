@@ -104,7 +104,12 @@ CTFontRef CreateCTFontFromCGFontWithVariations(CGFontRef aCGFont, CGFloat aSize,
     return ctFont.forget();
   }
 #endif
+  // Avoid calling potentially buggy variation APIs on pre-Sierra macOS
+  // versions (see bug 1331683)
+  if (!nsCocoaFeatures::OnSierraOrLater()) {
+    return CTFontCreateWithGraphicsFont(aCGFont, aSize, nullptr, nullptr);
 
+  }
   // Older implementation used up to macOS 12.
   CTFontRef ctFont;
   if (aInstalledFont) {
