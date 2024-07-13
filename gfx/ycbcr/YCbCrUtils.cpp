@@ -108,160 +108,189 @@ ConvertYCbCr16to8Line(uint8_t* aDst,
   libyuv::Convert16To8Plane(aSrc, aStride16, aDst, aStride, scale, aWidth, aHeight);
 }
 
-void
-ConvertYCbCrToRGBInternal(const layers::PlanarYCbCrData& aData,
-                          const SurfaceFormat& aDestFormat,
-                          const IntSize& aDestSize,
-                          unsigned char* aDestBuffer,
-                          int32_t aStride)
-{
-  // ConvertYCbCrToRGB et al. assume the chroma planes are rounded up if the
-  // luma plane is odd sized. Monochrome images have 0-sized CbCr planes
-  YUVType yuvtype = GetYUVType(aData);
+struct YUV8BitData {
+  explicit YUV8BitData(const layers::PlanarYCbCrData& aData) {
+    if (aData.mColorDepth == ColorDepth::COLOR_8) {
+      mData = aData;
+      return;
+    }
 
-  // Used if converting to 8 bits YUV.
-  UniquePtr<uint8_t[]> yChannel;
-  UniquePtr<uint8_t[]> cbChannel;
-  UniquePtr<uint8_t[]> crChannel;
-  layers::PlanarYCbCrData dstData;
-  const layers::PlanarYCbCrData& srcData =
-    aData.mColorDepth == ColorDepth::COLOR_8 ? aData : dstData;
+    mData.mPictureRect = aData.mPictureRect;
 
-  if (aData.mColorDepth != ColorDepth::COLOR_8) {
-    // Convert to 8 bits data first.
-    dstData.mPictureRect = aData.mPictureRect;
     // We align the destination stride to 32 bytes, so that libyuv can use
     // SSE optimised code.
     auto ySize = aData.YDataSize();
     auto cbcrSize = aData.CbCrDataSize();
-    dstData.mYStride = (ySize.width + 31) & ~31;
-    dstData.mCbCrStride = (cbcrSize.width + 31) & ~31;
-    dstData.mYUVColorSpace = aData.mYUVColorSpace;
-    dstData.mColorDepth = ColorDepth::COLOR_8;
-    dstData.mColorRange = aData.mColorRange;
-    dstData.mChromaSubsampling = aData.mChromaSubsampling;
+    mData.mYStride = (ySize.width + 31) & ~31;
+    mData.mCbCrStride = (cbcrSize.width + 31) & ~31;
+    mData.mYUVColorSpace = aData.mYUVColorSpace;
+    mData.mColorDepth = ColorDepth::COLOR_8;
+    mData.mColorRange = aData.mColorRange;
+    mData.mChromaSubsampling = aData.mChromaSubsampling;
 
-    size_t yMemorySize = GetAlignedStride<1>(dstData.mYStride, ySize.height);
+    size_t yMemorySize = GetAlignedStride<1>(mData.mYStride, ySize.height);
     size_t cbcrMemorySize =
-      GetAlignedStride<1>(dstData.mCbCrStride, cbcrSize.height);
+        GetAlignedStride<1>(mData.mCbCrStride, cbcrSize.height);
     if (yMemorySize == 0) {
-      MOZ_DIAGNOSTIC_ASSERT(cbcrMemorySize == 0, "CbCr without Y makes no sense");
+      MOZ_DIAGNOSTIC_ASSERT(cbcrMemorySize == 0,
+                            "CbCr without Y makes no sense");
       return;
     }
-    yChannel = MakeUnique<uint8_t[]>(yMemorySize);
+    mYChannel = MakeUnique<uint8_t[]>(yMemorySize);
 
-    dstData.mYChannel = yChannel.get();
+    mData.mYChannel = mYChannel.get();
 
     int bitDepth = BitDepthForColorDepth(aData.mColorDepth);
 
-    ConvertYCbCr16to8Line(dstData.mYChannel,
-                          dstData.mYStride,
+    ConvertYCbCr16to8Line(mData.mYChannel, mData.mYStride,
                           reinterpret_cast<uint16_t*>(aData.mYChannel),
-                          aData.mYStride / 2,
-                          ySize.width,
-                          ySize.height,
+                          aData.mYStride / 2, ySize.width, ySize.height,
                           bitDepth);
 
     if (cbcrMemorySize) {
-      cbChannel = MakeUnique<uint8_t[]>(cbcrMemorySize);
-      crChannel = MakeUnique<uint8_t[]>(cbcrMemorySize);
+      mCbChannel = MakeUnique<uint8_t[]>(cbcrMemorySize);
+      mCrChannel = MakeUnique<uint8_t[]>(cbcrMemorySize);
 
-      dstData.mCbChannel = cbChannel.get();
-      dstData.mCrChannel = crChannel.get();
+      mData.mCbChannel = mCbChannel.get();
+      mData.mCrChannel = mCrChannel.get();
 
-      ConvertYCbCr16to8Line(dstData.mCbChannel,
-                            dstData.mCbCrStride,
+      ConvertYCbCr16to8Line(mData.mCbChannel, mData.mCbCrStride,
                             reinterpret_cast<uint16_t*>(aData.mCbChannel),
-                            aData.mCbCrStride / 2,
-                            cbcrSize.width,
-                            cbcrSize.height,
-                            bitDepth);
+                            aData.mCbCrStride / 2, cbcrSize.width,
+                            cbcrSize.height, bitDepth);
 
-      ConvertYCbCr16to8Line(dstData.mCrChannel,
-                            dstData.mCbCrStride,
+      ConvertYCbCr16to8Line(mData.mCrChannel, mData.mCbCrStride,
                             reinterpret_cast<uint16_t*>(aData.mCrChannel),
-                            aData.mCbCrStride / 2,
-                            cbcrSize.width,
-                            cbcrSize.height,
-                            bitDepth);
+                            aData.mCbCrStride / 2, cbcrSize.width,
+                            cbcrSize.height, bitDepth);
+    }
+    if (aData.mAlpha) {
+      int32_t alphaStride8bpp = (aData.mAlpha->mSize.width + 31) & ~31;
+      size_t alphaSize =
+          GetAlignedStride<1>(alphaStride8bpp, aData.mAlpha->mSize.height);
+      mAlphaChannel = MakeUnique<uint8_t[]>(alphaSize);
+
+      mData.mAlpha.emplace();
+      mData.mAlpha->mPremultiplied = aData.mAlpha->mPremultiplied;
+      mData.mAlpha->mSize = aData.mAlpha->mSize;
+      mData.mAlpha->mChannel = mAlphaChannel.get();
+
+      ConvertYCbCr16to8Line(mData.mAlpha->mChannel, alphaStride8bpp,
+                            reinterpret_cast<uint16_t*>(aData.mAlpha->mChannel),
+                            aData.mYStride / 2, aData.mAlpha->mSize.width,
+                            aData.mAlpha->mSize.height,
+                            BitDepthForColorDepth(aData.mColorDepth));
     }
   }
 
-  // Convert from YCbCr to RGB now, scaling the image if needed.
-  if (aDestSize != srcData.mPictureRect.Size()) {
+  const layers::PlanarYCbCrData& Get8BitData() { return mData; }
+
+  layers::PlanarYCbCrData mData;
+  UniquePtr<uint8_t[]> mYChannel;
+  UniquePtr<uint8_t[]> mCbChannel;
+  UniquePtr<uint8_t[]> mCrChannel;
+  UniquePtr<uint8_t[]> mAlphaChannel;
+};
+
+static void ScaleYCbCrToRGB(const layers::PlanarYCbCrData& aData,
+                            const SurfaceFormat& aDestFormat,
+                            const IntSize& aDestSize,
+                            unsigned char* aDestBuffer,
+                            int32_t aStride,
+                            YUVType aYUVType) {
 #if defined(HAVE_YCBCR_TO_RGB565)
-    if (aDestFormat == SurfaceFormat::R5G6B5_UINT16) {
-      ScaleYCbCrToRGB565(srcData.mYChannel,
-                         srcData.mCbChannel,
-                         srcData.mCrChannel,
-                         aDestBuffer,
-                         srcData.mPictureRect.x,
-                         srcData.mPictureRect.y,
-                         srcData.mPictureRect.width,
-                         srcData.mPictureRect.height,
-                         aDestSize.width,
-                         aDestSize.height,
-                         srcData.mYStride,
-                         srcData.mCbCrStride,
-                         aStride,
-                         yuvtype,
-                         FILTER_BILINEAR);
-    } else
-#endif
-      ScaleYCbCrToRGB32(srcData.mYChannel, //
-                        srcData.mCbChannel,
-                        srcData.mCrChannel,
-                        aDestBuffer,
-                        srcData.mPictureRect.width,
-                        srcData.mPictureRect.height,
-                        aDestSize.width,
-                        aDestSize.height,
-                        srcData.mYStride,
-                        srcData.mCbCrStride,
-                        aStride,
-                        yuvtype,
-                        srcData.mYUVColorSpace,
-                        FILTER_BILINEAR);
-  } else { // no prescale
-#if defined(HAVE_YCBCR_TO_RGB565)
-    if (aDestFormat == SurfaceFormat::R5G6B5_UINT16) {
-      ConvertYCbCrToRGB565(srcData.mYChannel,
-                           srcData.mCbChannel,
-                           srcData.mCrChannel,
-                           aDestBuffer,
-                           srcData.mPictureRect.x,
-                           srcData.mPictureRect.y,
-                           srcData.mPictureRect.width,
-                           srcData.mPictureRect.height,
-                           srcData.mYStride,
-                           srcData.mCbCrStride,
-                           aStride,
-                           yuvtype);
-    } else // aDestFormat != SurfaceFormat::R5G6B5_UINT16
-#endif
-      ConvertYCbCrToRGB32(srcData.mYChannel, //
-                          srcData.mCbChannel,
-                          srcData.mCrChannel,
-                          aDestBuffer,
-                          srcData.mPictureRect.x,
-                          srcData.mPictureRect.y,
-                          srcData.mPictureRect.width,
-                          srcData.mPictureRect.height,
-                          srcData.mYStride,
-                          srcData.mCbCrStride,
-                          aStride,
-                          yuvtype,
-                          srcData.mYUVColorSpace,
-                          srcData.mColorRange);
+  if (aDestFormat == SurfaceFormat::R5G6B5_UINT16) {
+    ScaleYCbCrToRGB565(aData.mYChannel,
+                       aData.mCbChannel,
+                       aData.mCrChannel,
+                       aDestBuffer,
+                       aData.mPictureRect.x,
+                       aData.mPictureRect.y,
+                       aData.mPictureRect.width,
+                       aData.mPictureRect.height,
+                       aDestSize.width,
+                       aDestSize.height,
+                       aData.mYStride,
+                       aData.mCbCrStride,
+                       aStride,
+                       aYUVType,
+                       FILTER_BILINEAR);
+    return;
   }
+#endif
+  ScaleYCbCrToRGB32(aData.mYChannel,
+                    aData.mCbChannel,
+                    aData.mCrChannel,
+                    aDestBuffer,
+                    aData.mPictureRect.width,
+                    aData.mPictureRect.height,
+                    aDestSize.width,
+                    aDestSize.height,
+                    aData.mYStride,
+                    aData.mCbCrStride,
+                    aStride,
+                    aYUVType,
+                    aData.mYUVColorSpace,
+                    FILTER_BILINEAR);
+}
+
+static void ConvertYCbCrToRGB(const layers::PlanarYCbCrData& aData,
+                              const SurfaceFormat& aDestFormat,
+                              unsigned char* aDestBuffer,
+                              int32_t aStride,
+                              YUVType aYUVType) {
+#if defined(HAVE_YCBCR_TO_RGB565)
+  if (aDestFormat == SurfaceFormat::R5G6B5_UINT16) {
+    ConvertYCbCrToRGB565(aData.mYChannel,
+                         aData.mCbChannel,
+                         aData.mCrChannel,
+                         aDestBuffer,
+                         aData.mPictureRect.x,
+                         aData.mPictureRect.y,
+                         aData.mPictureRect.width,
+                         aData.mPictureRect.height,
+                         aData.mYStride,
+                         aData.mCbCrStride,
+                         aStride,
+                         aYUVType);
+    return;
+  }
+#endif
+  ConvertYCbCrToRGB32(aData.mYChannel,
+                      aData.mCbChannel,
+                      aData.mCrChannel,
+                      aDestBuffer,
+                      aData.mPictureRect.x,
+                      aData.mPictureRect.y,
+                      aData.mPictureRect.width,
+                      aData.mPictureRect.height,
+                      aData.mYStride,
+                      aData.mCbCrStride,
+                      aStride,
+                      aYUVType,
+                      aData.mYUVColorSpace,
+                      aData.mColorRange);
 }
 
 void ConvertYCbCrToRGB(const layers::PlanarYCbCrData& aData,
                        const SurfaceFormat& aDestFormat,
                        const IntSize& aDestSize, unsigned char* aDestBuffer,
                        int32_t aStride) {
-  ConvertYCbCrToRGBInternal(aData, aDestFormat, aDestSize, aDestBuffer,
-                            aStride);
+  // ConvertYCbCrToRGB et al. assume the chroma planes are rounded up if the
+  // luma plane is odd sized. Monochrome images have 0-sized CbCr planes
+  YUVType yuvtype = GetYUVType(aData);
+
+  YUV8BitData data(aData);
+  const layers::PlanarYCbCrData& srcData = data.Get8BitData();
+
+  // Convert from YCbCr to RGB now, scaling the image if needed.
+  if (aDestSize != srcData.mPictureRect.Size()) {
+    ScaleYCbCrToRGB(srcData, aDestFormat, aDestSize, aDestBuffer, aStride,
+                    yuvtype);
+  } else { // no prescale
+    ConvertYCbCrToRGB(srcData, aDestFormat, aDestBuffer, aStride, yuvtype);
+  }
+
 #if MOZ_BIG_ENDIAN()
   // libyuv makes endian-correct result, which needs to be swapped to BGRX
   if (aDestFormat != SurfaceFormat::R5G6B5_UINT16) {
@@ -293,66 +322,39 @@ void FillAlphaToRGBA(const uint8_t* aAlpha, const int32_t aAlphaStride,
   }
 }
 
-void ConvertYCbCrAToARGB(const layers::PlanarYCbCrData& aYCbCr,
-                         const layers::PlanarAlphaData& aAlpha,
+void ConvertYCbCrToRGB32(const layers::PlanarYCbCrData& aData,
                          const SurfaceFormat& aDestFormat,
-                         const IntSize& aDestSize, unsigned char* aDestBuffer,
-                         int32_t aStride, PremultFunc premultiplyAlphaOp) {
-  // libyuv makes endian-correct result, so the format needs to be B8G8R8A8.
-  MOZ_ASSERT(aDestFormat == SurfaceFormat::B8G8R8A8);
-  MOZ_ASSERT(aAlpha.mSize == aYCbCr.YDataSize());
+                         unsigned char* aDestBuffer, int32_t aStride,
+                         PremultFunc premultiplyAlphaOp) {
+  MOZ_ASSERT(aDestFormat == SurfaceFormat::B8G8R8A8 ||
+             aDestFormat == SurfaceFormat::B8G8R8X8);
 
-  // libyuv has libyuv::I420AlphaToARGB, but lacks support for 422 and 444.
-  // Until that's added, we'll rely on our own code to handle this more
-  // generally, rather than have a special case and more redundant code.
+  YUVType yuvtype = GetYUVType(aData);
 
-  UniquePtr<uint8_t[]> alphaChannel;
-  int32_t alphaStride8bpp = 0;
-  uint8_t* alphaChannel8bpp = nullptr;
+  YUV8BitData data8pp(aData);
+  const layers::PlanarYCbCrData& data = data8pp.Get8BitData();
 
-  // This function converts non-8-bpc images to 8-bpc. (Bug 1682322)
-  ConvertYCbCrToRGBInternal(aYCbCr, aDestFormat, aDestSize, aDestBuffer,
-                            aStride);
+  ConvertYCbCrToRGB(data, aDestFormat, aDestBuffer, aStride, yuvtype);
 
-  if (aYCbCr.mColorDepth != ColorDepth::COLOR_8) {
-    // These two lines are borrowed from ConvertYCbCrToRGBInternal, since
-    // there's not a very elegant way of sharing the logic that I can see
-    alphaStride8bpp = (aAlpha.mSize.width + 31) & ~31;
-    size_t alphaSize =
-        GetAlignedStride<1>(alphaStride8bpp, aAlpha.mSize.height);
+  if (data.mAlpha) {
+    // Alpha stride should be same as the Y stride.
+    FillAlphaToRGBA(data.mAlpha->mChannel, data.mYStride, aDestBuffer,
+                    data.mPictureRect.width, aData.mPictureRect.height,
+                    aDestFormat);
 
-    alphaChannel = MakeUnique<uint8_t[]>(alphaSize);
-
-    ConvertYCbCr16to8Line(alphaChannel.get(), alphaStride8bpp,
-                          reinterpret_cast<uint16_t*>(aAlpha.mChannel),
-                          aYCbCr.mYStride / 2, aAlpha.mSize.width,
-                          aAlpha.mSize.height,
-                          BitDepthForColorDepth(aYCbCr.mColorDepth));
-
-    alphaChannel8bpp = alphaChannel.get();
-  } else {
-    alphaStride8bpp = aYCbCr.mYStride;
-    alphaChannel8bpp = aAlpha.mChannel;
-  }
-
-  MOZ_ASSERT(alphaStride8bpp != 0);
-  MOZ_ASSERT(alphaChannel8bpp);
-
-  FillAlphaToRGBA(alphaChannel8bpp, alphaStride8bpp, aDestBuffer,
-                  aYCbCr.mPictureRect.width, aYCbCr.mPictureRect.height, aDestFormat);
-
-  if (premultiplyAlphaOp) {
-    DebugOnly<int> err =
-        premultiplyAlphaOp(aDestBuffer, aStride, aDestBuffer, aStride,
-                           aYCbCr.mPictureRect.width, aYCbCr.mPictureRect.height);
-    MOZ_ASSERT(!err);
+    if (premultiplyAlphaOp) {
+      DebugOnly<int> err = premultiplyAlphaOp(aDestBuffer, aStride, aDestBuffer,
+                                              aStride, aData.mPictureRect.width,
+                                              aData.mPictureRect.height);
+      MOZ_ASSERT(!err);
+    }
   }
 
 #if MOZ_BIG_ENDIAN()
-  // libyuv makes endian-correct result, which needs to be swapped to BGRA
-  gfx::SwizzleData(aDestBuffer, aStride, gfx::SurfaceFormat::A8R8G8B8,
-                   aDestBuffer, aStride, gfx::SurfaceFormat::B8G8R8A8,
-                   aYCbCr.mPictureRect.Size());
+  // libyuv makes endian-correct result, which needs to be swapped to BGR*
+  gfx::SwizzleData(aDestBuffer, aStride, gfx::SurfaceFormat::X8R8G8B8,
+                   aDestBuffer, aStride, gfx::SurfaceFormat::B8G8R8X8,
+                   aData.mPictureRect.Size());
 #endif
 }
 
