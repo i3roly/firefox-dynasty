@@ -1372,39 +1372,39 @@ nsresult nsCocoaUtils::GetScreenCapturePermissionState(
   aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_NOTDETERMINED;
 
   if (@available(macOS 10.15, *)) {
-  if (!StaticPrefs::media_macos_screenrecording_oscheck_enabled()) {
-    aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
-    LOG("screen authorization status: authorized (test disabled via pref)");
-    return NS_OK;
-  }
+    if (!StaticPrefs::media_macos_screenrecording_oscheck_enabled()) {
+      aPermissionState = nsIOSPermissionRequest::PERMISSION_STATE_AUTHORIZED;
+      LOG("screen authorization status: authorized (test disabled via pref)");
+      return NS_OK;
+    }
 
-  // Unlike with camera and microphone capture, there is no support for
-  // checking the screen recording permission status. Instead, an application
-  // can use the presence of window names (which are privacy sensitive) in
-  // the window info list as an indication. The list only includes window
-  // names if the calling application has been authorized to record the
-  // screen. We use the window name, window level, and owning PID as
-  // heuristics to determine if we have screen recording permission.
-  AutoCFRelease<CFArrayRef> windowArray =
-      CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
-  if (!windowArray) {
-    LOG("GetScreenCapturePermissionState() ERROR: got NULL window info list");
-    return NS_ERROR_UNEXPECTED;
-  }
+    // Unlike with camera and microphone capture, there is no support for
+    // checking the screen recording permission status. Instead, an application
+    // can use the presence of window names (which are privacy sensitive) in
+    // the window info list as an indication. The list only includes window
+    // names if the calling application has been authorized to record the
+    // screen. We use the window name, window level, and owning PID as
+    // heuristics to determine if we have screen recording permission.
+    AutoCFRelease<CFArrayRef> windowArray =
+        CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
+    if (!windowArray) {
+      LOG("GetScreenCapturePermissionState() ERROR: got NULL window info list");
+      return NS_ERROR_UNEXPECTED;
+    }
 
-  int32_t windowLevelDock = CGWindowLevelForKey(kCGDockWindowLevelKey);
-  int32_t windowLevelNormal = CGWindowLevelForKey(kCGNormalWindowLevelKey);
-  LOG("GetScreenCapturePermissionState(): DockWindowLevel: %d, "
-      "NormalWindowLevel: %d",
-      windowLevelDock, windowLevelNormal);
+    int32_t windowLevelDock = CGWindowLevelForKey(kCGDockWindowLevelKey);
+    int32_t windowLevelNormal = CGWindowLevelForKey(kCGNormalWindowLevelKey);
+    LOG("GetScreenCapturePermissionState(): DockWindowLevel: %d, "
+        "NormalWindowLevel: %d",
+        windowLevelDock, windowLevelNormal);
 
-  int32_t thisPid = [[NSProcessInfo processInfo] processIdentifier];
+    int32_t thisPid = [[NSProcessInfo processInfo] processIdentifier];
 
-  CFIndex windowCount = CFArrayGetCount(windowArray);
-  LOG("GetScreenCapturePermissionState() returned %ld windows", windowCount);
-  if (windowCount == 0) {
-    return NS_ERROR_UNEXPECTED;
-  }
+    CFIndex windowCount = CFArrayGetCount(windowArray);
+    LOG("GetScreenCapturePermissionState() returned %ld windows", windowCount);
+    if (windowCount == 0) {
+      return NS_ERROR_UNEXPECTED;
+    }
 
     for (CFIndex i = 0; i < windowCount; i++) {
       CFDictionaryRef windowDict = reinterpret_cast<CFDictionaryRef>(
