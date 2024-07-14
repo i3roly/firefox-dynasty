@@ -3234,11 +3234,6 @@ AttachDecision GetPropIRGenerator::tryAttachTypedArrayElement(
 
   auto* tarr = &obj->as<TypedArrayObject>();
 
-  if (tarr->type() == Scalar::Float16) {
-    // TODO: See Bug 1835034 for JIT support for Float16Array.
-    return AttachDecision::NoAction;
-  }
-
   bool handleOOB = false;
   int64_t indexInt64;
   if (!ValueIsInt64Index(idVal_, &indexInt64) || indexInt64 < 0 ||
@@ -5130,11 +5125,6 @@ AttachDecision SetPropIRGenerator::tryAttachSetTypedArrayElement(
 
   auto* tarr = &obj->as<TypedArrayObject>();
   Scalar::Type elementType = tarr->type();
-
-  if (elementType == Scalar::Float16) {
-    // TODO: See Bug 1835034 for JIT support for Float16Array.
-    return AttachDecision::NoAction;
-  }
 
   // Don't attach if the input type doesn't match the guard added below.
   if (!ValueCanConvertToNumeric(elementType, rhsVal_)) {
@@ -8737,6 +8727,28 @@ AttachDecision InlinableNativeIRGenerator::tryAttachMathFRound() {
   return AttachDecision::Attach;
 }
 
+AttachDecision InlinableNativeIRGenerator::tryAttachMathF16Round() {
+  // Need one (number) argument.
+  if (argc_ != 1 || !args_[0].isNumber()) {
+    return AttachDecision::NoAction;
+  }
+
+  // Initialize the input operand.
+  initializeInputOperand();
+
+  // Guard callee is the 'f16round' native function.
+  emitNativeCalleeGuard();
+
+  ValOperandId argumentId =
+      writer.loadArgumentFixedSlot(ArgumentKind::Arg0, argc_);
+  NumberOperandId numberId = writer.guardIsNumber(argumentId);
+  writer.mathF16RoundNumberResult(numberId);
+  writer.returnFromIC();
+
+  trackAttached("MathF16Round");
+  return AttachDecision::Attach;
+}
+
 static bool CanAttachInt32Pow(const Value& baseVal, const Value& powerVal) {
   auto valToInt32 = [](const Value& v) {
     if (v.isInt32()) {
@@ -11694,6 +11706,8 @@ AttachDecision InlinableNativeIRGenerator::tryAttachStub() {
       return tryAttachDataViewGet(Scalar::Int32);
     case InlinableNative::DataViewGetUint32:
       return tryAttachDataViewGet(Scalar::Uint32);
+    case InlinableNative::DataViewGetFloat16:
+      return tryAttachDataViewGet(Scalar::Float16);
     case InlinableNative::DataViewGetFloat32:
       return tryAttachDataViewGet(Scalar::Float32);
     case InlinableNative::DataViewGetFloat64:
@@ -11714,6 +11728,8 @@ AttachDecision InlinableNativeIRGenerator::tryAttachStub() {
       return tryAttachDataViewSet(Scalar::Int32);
     case InlinableNative::DataViewSetUint32:
       return tryAttachDataViewSet(Scalar::Uint32);
+    case InlinableNative::DataViewSetFloat16:
+      return tryAttachDataViewSet(Scalar::Float16);
     case InlinableNative::DataViewSetFloat32:
       return tryAttachDataViewSet(Scalar::Float32);
     case InlinableNative::DataViewSetFloat64:
@@ -11885,6 +11901,8 @@ AttachDecision InlinableNativeIRGenerator::tryAttachStub() {
       return tryAttachMathSqrt();
     case InlinableNative::MathFRound:
       return tryAttachMathFRound();
+    case InlinableNative::MathF16Round:
+      return tryAttachMathF16Round();
     case InlinableNative::MathHypot:
       return tryAttachMathHypot();
     case InlinableNative::MathATan2:

@@ -621,7 +621,7 @@ template bool CacheIdPolicy<1>::staticAdjustInputs(TempAllocator& alloc,
 
 bool ToDoublePolicy::staticAdjustInputs(TempAllocator& alloc,
                                         MInstruction* ins) {
-  MOZ_ASSERT(ins->isToDouble() || ins->isToFloat32());
+  MOZ_ASSERT(ins->isToDouble() || ins->isToFloat32() || ins->isToFloat16());
 
   MDefinition* in = ins->getOperand(0);
   switch (in->type()) {
@@ -904,6 +904,10 @@ bool StoreUnboxedScalarPolicy::adjustValueInput(TempAllocator& alloc,
     case Scalar::Uint8Clamped:
       // The transpiler should have inserted MClampToUint8.
       MOZ_ASSERT(value->type() == MIRType::Int32);
+      break;
+    case Scalar::Float16:
+      value = MToFloat16::New(alloc, value);
+      ins->block()->insertBefore(ins, value->toInstruction());
       break;
     case Scalar::Float32:
       if (value->type() != MIRType::Float32) {

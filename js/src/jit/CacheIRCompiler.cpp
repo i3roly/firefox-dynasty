@@ -5943,6 +5943,36 @@ bool CacheIRCompiler::emitMathFRoundNumberResult(NumberOperandId inputId) {
   return true;
 }
 
+bool CacheIRCompiler::emitMathF16RoundNumberResult(NumberOperandId inputId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  AutoScratchRegisterMaybeOutput scratch(allocator, masm, output);
+  AutoAvailableFloatRegister floatScratch(*this, FloatReg0);
+
+  allocator.ensureDoubleRegister(masm, inputId, floatScratch);
+
+  if (MacroAssembler::SupportsFloat64To16()) {
+    masm.convertDoubleToFloat16(floatScratch, floatScratch);
+    masm.convertFloat16ToDouble(floatScratch, floatScratch);
+  } else {
+    LiveRegisterSet save = liveVolatileRegs();
+    save.takeUnchecked(floatScratch);
+    masm.PushRegsInMask(save);
+
+    using Fn = double (*)(double);
+    masm.setupUnalignedABICall(scratch);
+    masm.passABIArg(floatScratch, ABIType::Float64);
+    masm.callWithABI<Fn, js::RoundFloat16>(ABIType::Float64);
+    masm.storeCallFloatResult(floatScratch);
+
+    masm.PopRegsInMask(save);
+  }
+
+  masm.boxDouble(floatScratch, output.valueReg(), floatScratch);
+  return true;
+}
+
 bool CacheIRCompiler::emitMathHypot2NumberResult(NumberOperandId first,
                                                  NumberOperandId second) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
@@ -6581,7 +6611,7 @@ bool CacheIRCompiler::emitStoreTypedArrayElement(ObjOperandId objId,
   AutoScratchRegister scratch1(allocator, masm);
   Maybe<AutoScratchRegister> scratch2;
   Maybe<AutoSpectreBoundsScratchRegister> spectreScratch;
-  if (Scalar::isBigIntType(elementType) ||
+  if (Scalar::isBigIntType(elementType) || elementType == Scalar::Float16 ||
       viewKind == ArrayBufferViewKind::Resizable) {
     scratch2.emplace(allocator, masm);
   } else {
@@ -6621,12 +6651,10 @@ bool CacheIRCompiler::emitStoreTypedArrayElement(ObjOperandId objId,
 #ifndef JS_PUNBOX64
     masm.pop(obj);
 #endif
-  } else if (elementType == Scalar::Float32) {
-    ScratchFloat32Scope fpscratch(masm);
-    masm.convertDoubleToFloat32(floatScratch0, fpscratch);
-    masm.storeToTypedFloatArray(elementType, fpscratch, dest);
-  } else if (elementType == Scalar::Float64) {
-    masm.storeToTypedFloatArray(elementType, floatScratch0, dest);
+  } else if (Scalar::isFloatingType(elementType)) {
+    Register temp = scratch2 ? scratch2->get() : InvalidReg;
+    masm.storeToTypedFloatArray(elementType, floatScratch0, dest, temp,
+                                liveVolatileRegs());
   } else {
     masm.storeToTypedIntArray(elementType, *valInt32, dest);
   }
@@ -6791,7 +6819,7 @@ bool CacheIRCompiler::emitLoadTypedArrayElementResult(
         forceDoubleForUint32 ? MacroAssembler::Uint32Mode::ForceDouble
                              : MacroAssembler::Uint32Mode::FailOnDouble;
     masm.loadFromTypedArray(elementType, source, output.valueReg(), uint32Mode,
-                            scratch1, failure->label());
+                            scratch1, failure->label(), liveVolatileRegs());
   }
 
   if (handleOOB) {
@@ -6868,16 +6896,18 @@ bool CacheIRCompiler::emitLoadDataViewValueResult(
   Register64 outputReg64 = output.valueReg().toRegister64();
   Register outputScratch = outputReg64.scratchReg();
 
-  Register boundsCheckScratch;
+  Register scratch2;
 #ifndef JS_CODEGEN_X86
-  Maybe<AutoScratchRegister> maybeBoundsCheckScratch;
-  if (viewKind == ArrayBufferViewKind::Resizable) {
-    maybeBoundsCheckScratch.emplace(allocator, masm);
-    boundsCheckScratch = *maybeBoundsCheckScratch;
+  Maybe<AutoScratchRegister> maybeScratch2;
+  if (viewKind == ArrayBufferViewKind::Resizable ||
+      (elementType == Scalar::Float16 &&
+       !MacroAssembler::SupportsFloat32To16())) {
+    maybeScratch2.emplace(allocator, masm);
+    scratch2 = *maybeScratch2;
   }
 #else
   // Not enough registers on x86, so use the other part of outputReg64.
-  boundsCheckScratch = outputReg64.secondScratchReg();
+  scratch2 = outputReg64.secondScratchReg();
 #endif
 
   FailurePath* failure;
@@ -6888,7 +6918,7 @@ bool CacheIRCompiler::emitLoadDataViewValueResult(
   const size_t byteSize = Scalar::byteSize(elementType);
 
   emitDataViewBoundsCheck(viewKind, byteSize, obj, offset, outputScratch,
-                          boundsCheckScratch, failure->label());
+                          scratch2, failure->label());
 
   masm.loadPtr(Address(obj, DataViewObject::dataOffset()), outputScratch);
 
@@ -6905,6 +6935,7 @@ bool CacheIRCompiler::emitLoadDataViewValueResult(
       masm.load16UnalignedSignExtend(source, outputScratch);
       break;
     case Scalar::Uint16:
+    case Scalar::Float16:
       masm.load16UnalignedZeroExtend(source, outputScratch);
       break;
     case Scalar::Int32:
@@ -6933,6 +6964,7 @@ bool CacheIRCompiler::emitLoadDataViewValueResult(
         masm.byteSwap16SignExtend(outputScratch);
         break;
       case Scalar::Uint16:
+      case Scalar::Float16:
         masm.byteSwap16ZeroExtend(outputScratch);
         break;
       case Scalar::Int32:
@@ -6970,6 +7002,15 @@ bool CacheIRCompiler::emitLoadDataViewValueResult(
                                : MacroAssembler::Uint32Mode::FailOnDouble;
       masm.boxUint32(outputScratch, output.valueReg(), uint32Mode,
                      failure->label());
+      break;
+    }
+    case Scalar::Float16: {
+      FloatRegister scratchFloat32 = floatScratch0.get().asSingle();
+      masm.moveGPRToFloat16(outputScratch, scratchFloat32, scratch2,
+                            liveVolatileRegs());
+      masm.canonicalizeFloat(scratchFloat32);
+      masm.convertFloat32ToDouble(scratchFloat32, floatScratch0);
+      masm.boxDouble(floatScratch0, output.valueReg(), floatScratch0);
       break;
     }
     case Scalar::Float32: {
@@ -7084,6 +7125,7 @@ bool CacheIRCompiler::emitStoreDataViewValueResult(
     case Scalar::Uint16:
     case Scalar::Int32:
     case Scalar::Uint32:
+    case Scalar::Float16:
     case Scalar::Float32:
       scratch2.construct<AutoScratchRegister>(allocator, masm);
       break;
@@ -7166,6 +7208,14 @@ bool CacheIRCompiler::emitStoreDataViewValueResult(
     case Scalar::Uint32:
       masm.move32(*valInt32, valScratch32());
       break;
+    case Scalar::Float16: {
+      FloatRegister scratchFloat32 = floatScratch0.get().asSingle();
+      masm.convertDoubleToFloat16(floatScratch0, scratchFloat32, valScratch32(),
+                                  liveVolatileRegs());
+      masm.canonicalizeFloatIfDeterministic(scratchFloat32);
+      masm.moveFloat16ToGPR(scratchFloat32, valScratch32(), liveVolatileRegs());
+      break;
+    }
     case Scalar::Float32: {
       FloatRegister scratchFloat32 = floatScratch0.get().asSingle();
       masm.convertDoubleToFloat32(floatScratch0, scratchFloat32);
@@ -7203,6 +7253,7 @@ bool CacheIRCompiler::emitStoreDataViewValueResult(
       masm.byteSwap16SignExtend(valScratch32());
       break;
     case Scalar::Uint16:
+    case Scalar::Float16:
       masm.byteSwap16ZeroExtend(valScratch32());
       break;
     case Scalar::Int32:
@@ -7227,6 +7278,7 @@ bool CacheIRCompiler::emitStoreDataViewValueResult(
   switch (elementType) {
     case Scalar::Int16:
     case Scalar::Uint16:
+    case Scalar::Float16:
       masm.store16Unaligned(valScratch32(), dest);
       break;
     case Scalar::Int32:
@@ -9824,7 +9876,7 @@ bool CacheIRCompiler::emitAtomicsLoadResult(ObjOperandId objId,
   Label* failUint32 = nullptr;
   MacroAssembler::Uint32Mode mode = MacroAssembler::Uint32Mode::ForceDouble;
   masm.loadFromTypedArray(elementType, source, output->valueReg(), mode,
-                          scratch, failUint32);
+                          InvalidReg, failUint32, LiveRegisterSet{});
   masm.memoryBarrierAfter(sync);
 
   return true;

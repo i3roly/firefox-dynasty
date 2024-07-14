@@ -572,6 +572,25 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
     Fcvt(ARMFPRegister(dest, 32), ARMFPRegister(src, 64));
   }
 
+  void convertDoubleToFloat16(FloatRegister src, FloatRegister dest) {
+    Fcvt(ARMFPRegister(dest, 16), ARMFPRegister(src, 64));
+  }
+  void convertFloat16ToDouble(FloatRegister src, FloatRegister dest) {
+    Fcvt(ARMFPRegister(dest, 64), ARMFPRegister(src, 16));
+  }
+  void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest) {
+    Fcvt(ARMFPRegister(dest, 16), ARMFPRegister(src, 32));
+  }
+  void convertFloat16ToFloat32(FloatRegister src, FloatRegister dest) {
+    Fcvt(ARMFPRegister(dest, 32), ARMFPRegister(src, 16));
+  }
+  void convertInt32ToFloat16(Register src, FloatRegister dest) {
+    // Direct "32-bit to half-precision" move requires (FEAT_FP16), so we
+    // instead use a "32-bit to single-precision" move.
+    convertInt32ToFloat32(src, dest);
+    convertFloat32ToFloat16(dest, dest);
+  }
+
   using vixl::MacroAssembler::B;
 
   void convertDoubleToInt32(FloatRegister src, Register dest, Label* fail,
@@ -1113,6 +1132,29 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
 
       Add(scratch64, base, Operand(index, vixl::LSL, unsigned(src.scale)));
       return Ldr(ARMFPRegister(dest, 32), MemOperand(scratch64, src.offset));
+    }
+  }
+
+  FaultingCodeOffset loadFloat16(const Address& addr, FloatRegister dest,
+                                 Register) {
+    return Ldr(ARMFPRegister(dest, 16), toMemOperand(addr));
+  }
+
+  FaultingCodeOffset loadFloat16(const BaseIndex& src, FloatRegister dest,
+                                 Register) {
+    ARMRegister base = toARMRegister(src.base, 64);
+    ARMRegister index(src.index, 64);
+    if (src.offset == 0) {
+      return Ldr(ARMFPRegister(dest, 16),
+                 MemOperand(base, index, vixl::LSL, unsigned(src.scale)));
+    } else {
+      vixl::UseScratchRegisterScope temps(this);
+      const ARMRegister scratch64 = temps.AcquireX();
+      MOZ_ASSERT(scratch64.asUnsized() != src.base);
+      MOZ_ASSERT(scratch64.asUnsized() != src.index);
+
+      Add(scratch64, base, Operand(index, vixl::LSL, unsigned(src.scale)));
+      return Ldr(ARMFPRegister(dest, 16), MemOperand(scratch64, src.offset));
     }
   }
 

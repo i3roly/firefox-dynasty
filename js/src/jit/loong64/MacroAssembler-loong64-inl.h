@@ -60,6 +60,14 @@ void MacroAssembler::moveGPRToFloat32(Register src, FloatRegister dest) {
   moveToFloat32(src, dest);
 }
 
+void MacroAssembler::moveFloat16ToGPR(FloatRegister src, Register dest) {
+  MOZ_CRASH("Not supported for this target");
+}
+
+void MacroAssembler::moveGPRToFloat16(Register src, FloatRegister dest) {
+  MOZ_CRASH("Not supported for this target");
+}
+
 void MacroAssembler::move8ZeroExtend(Register src, Register dest) {
   as_bstrpick_d(dest, src, 7, 0);
 }
@@ -2011,6 +2019,15 @@ FaultingCodeOffset MacroAssembler::storeUncanonicalizedDouble(
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedDouble(
     FloatRegister src, const BaseIndex& addr) {
   return ma_fst_d(src, addr);
+}
+
+FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat16(
+    FloatRegister src, const Address& dest, Register) {
+  MOZ_CRASH("Not supported for this target");
+}
+FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat16(
+    FloatRegister src, const BaseIndex& dest, Register) {
+  MOZ_CRASH("Not supported for this target");
 }
 
 void MacroAssembler::memoryBarrier(MemoryBarrierBits barrier) {

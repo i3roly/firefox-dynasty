@@ -24,6 +24,14 @@ void MacroAssembler::move64(Imm64 imm, Register64 dest) {
   move32(Imm32((imm.value >> 32) & 0xFFFFFFFFL), dest.high);
 }
 
+void MacroAssembler::moveFloat16ToGPR(FloatRegister src, Register dest) {
+  MOZ_CRASH("Not supported for this target");
+}
+
+void MacroAssembler::moveGPRToFloat16(Register src, FloatRegister dest) {
+  MOZ_CRASH("Not supported for this target");
+}
+
 void MacroAssembler::moveFloat32ToGPR(FloatRegister src, Register dest) {
   ma_vxfer(src, dest);
 }
@@ -2531,6 +2539,15 @@ FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat32(
   BufferOffset offset = ma_vstr(src.asSingle(), addr.base, addr.index, scratch,
                                 scratch2, scale, addr.offset);
   return FaultingCodeOffset(offset.getOffset());
+}
+
+FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat16(
+    FloatRegister src, const Address& dest, Register) {
+  MOZ_CRASH("Not supported for this target");
+}
+FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat16(
+    FloatRegister src, const BaseIndex& dest, Register) {
+  MOZ_CRASH("Not supported for this target");
 }
 
 void MacroAssembler::memoryBarrier(MemoryBarrierBits barrier) {

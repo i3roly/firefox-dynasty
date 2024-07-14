@@ -32,6 +32,7 @@
 #include "util/Unicode.h"
 #include "vm/ArrayObject.h"
 #include "vm/Compartment.h"
+#include "vm/Float16.h"
 #include "vm/Interpreter.h"
 #include "vm/JSAtomUtils.h"  // AtomizeString
 #include "vm/PlainObject.h"  // js::PlainObject
@@ -3062,6 +3063,33 @@ BigInt* AtomicsXor64(JSContext* cx, TypedArrayObject* typedArray, size_t index,
         return jit::AtomicOperations::fetchXorSeqCst(addr, val);
       },
       value);
+}
+
+float RoundFloat16ToFloat32(int32_t d) {
+  AutoUnsafeCallWithABI unsafe;
+  return js::float16{d}.toFloat();
+}
+
+float RoundFloat16ToFloat32(float d) {
+  AutoUnsafeCallWithABI unsafe;
+  return js::float16{d}.toFloat();
+}
+
+float RoundFloat16ToFloat32(double d) {
+  AutoUnsafeCallWithABI unsafe;
+  return js::float16{d}.toFloat();
+}
+
+float Float16ToFloat32(int32_t value) {
+  AutoUnsafeCallWithABI unsafe;
+  js::float16 f16;
+  f16.val = static_cast<uint16_t>(value);
+  return f16.toFloat();
+}
+
+int32_t Float32ToFloat16(float value) {
+  AutoUnsafeCallWithABI unsafe;
+  return static_cast<int32_t>(js::float16{value}.val);
 }
 
 JSAtom* AtomizeStringNoGC(JSContext* cx, JSString* str) {

@@ -688,6 +688,13 @@ BigInt* AtomicsSub64(JSContext* cx, TypedArrayObject* typedArray, size_t index,
 BigInt* AtomicsXor64(JSContext* cx, TypedArrayObject* typedArray, size_t index,
                      const BigInt* value);
 
+float RoundFloat16ToFloat32(int32_t d);
+float RoundFloat16ToFloat32(float d);
+float RoundFloat16ToFloat32(double d);
+
+float Float16ToFloat32(int32_t value);
+int32_t Float32ToFloat16(float value);
+
 JSAtom* AtomizeStringNoGC(JSContext* cx, JSString* str);
 
 bool SetObjectHas(JSContext* cx, HandleObject obj, HandleValue key, bool* rval);

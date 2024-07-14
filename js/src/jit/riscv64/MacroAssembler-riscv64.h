@@ -75,6 +75,9 @@ class MacroAssemblerRiscv64 : public Assembler {
   static bool SupportsFloatingPoint() { return true; }
   static bool SupportsUnalignedAccesses() { return true; }
   static bool SupportsFastUnalignedFPAccesses() { return true; }
+  static bool SupportsFloat64To16() { return false; }
+  static bool SupportsFloat32To16() { return false; }
+
   void haltingAlign(int alignment) {
     // TODO(loong64): Implement a proper halting align.
     nopAlign(alignment);
@@ -546,6 +549,22 @@ class MacroAssemblerRiscv64Compat : public MacroAssemblerRiscv64 {
   void convertFloat32ToDouble(FloatRegister src, FloatRegister dest);
   void convertInt32ToFloat32(Register src, FloatRegister dest);
   void convertInt32ToFloat32(const Address& src, FloatRegister dest);
+
+  void convertDoubleToFloat16(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat16ToDouble(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat16ToFloat32(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertInt32ToFloat16(Register src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
 
   void movq(Register rj, Register rd);
 
@@ -1106,6 +1125,15 @@ class MacroAssemblerRiscv64Compat : public MacroAssemblerRiscv64 {
     FaultingCodeOffset fco = FaultingCodeOffset(currentOffset());
     flw(dest, scratch, 0);
     return fco;
+  }
+
+  FaultingCodeOffset loadFloat16(const Address& addr, FloatRegister dest,
+                                 Register) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  FaultingCodeOffset loadFloat16(const BaseIndex& src, FloatRegister dest,
+                                 Register) {
+    MOZ_CRASH("Not supported for this target");
   }
 
   template <typename S>

@@ -70,14 +70,28 @@ TrampolinePtr MacroAssembler::preBarrierTrampoline(MIRType type) {
   return rt->preBarrier(type);
 }
 
-template <typename S, typename T>
-static void StoreToTypedFloatArray(MacroAssembler& masm, int arrayType,
-                                   const S& value, const T& dest) {
+template <typename T>
+static void StoreToTypedFloatArray(MacroAssembler& masm, Scalar::Type arrayType,
+                                   FloatRegister value, const T& dest,
+                                   Register temp,
+                                   LiveRegisterSet volatileLiveRegs) {
   switch (arrayType) {
-    case Scalar::Float32:
-      masm.storeFloat32(value, dest);
+    case Scalar::Float16:
+      masm.storeFloat16(value, dest, temp, volatileLiveRegs);
       break;
+    case Scalar::Float32: {
+      if (value.isDouble()) {
+        ScratchFloat32Scope fpscratch(masm);
+        masm.convertDoubleToFloat32(value, fpscratch);
+        masm.storeFloat32(fpscratch, dest);
+      } else {
+        MOZ_ASSERT(value.isSingle());
+        masm.storeFloat32(value, dest);
+      }
+      break;
+    }
     case Scalar::Float64:
+      MOZ_ASSERT(value.isDouble());
       masm.storeDouble(value, dest);
       break;
     default:
@@ -87,13 +101,16 @@ static void StoreToTypedFloatArray(MacroAssembler& masm, int arrayType,
 
 void MacroAssembler::storeToTypedFloatArray(Scalar::Type arrayType,
                                             FloatRegister value,
-                                            const BaseIndex& dest) {
-  StoreToTypedFloatArray(*this, arrayType, value, dest);
+                                            const BaseIndex& dest,
+                                            Register temp,
+                                            LiveRegisterSet volatileLiveRegs) {
+  StoreToTypedFloatArray(*this, arrayType, value, dest, temp, volatileLiveRegs);
 }
 void MacroAssembler::storeToTypedFloatArray(Scalar::Type arrayType,
                                             FloatRegister value,
-                                            const Address& dest) {
-  StoreToTypedFloatArray(*this, arrayType, value, dest);
+                                            const Address& dest, Register temp,
+                                            LiveRegisterSet volatileLiveRegs) {
+  StoreToTypedFloatArray(*this, arrayType, value, dest, temp, volatileLiveRegs);
 }
 
 template <typename S, typename T>
@@ -136,8 +153,9 @@ void MacroAssembler::boxUint32(Register source, ValueOperand dest,
 
 template <typename T>
 void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
-                                        AnyRegister dest, Register temp,
-                                        Label* fail) {
+                                        AnyRegister dest, Register temp1,
+                                        Register temp2, Label* fail,
+                                        LiveRegisterSet volatileLiveRegs) {
   switch (arrayType) {
     case Scalar::Int8:
       load8SignExtend(src, dest.gpr());
@@ -157,8 +175,8 @@ void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
       break;
     case Scalar::Uint32:
       if (dest.isFloat()) {
-        load32(src, temp);
-        convertUInt32ToDouble(temp, dest.fpu());
+        load32(src, temp1);
+        convertUInt32ToDouble(temp1, dest.fpu());
       } else {
         load32(src, dest.gpr());
 
@@ -167,6 +185,10 @@ void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
         // MIRType::Int32 for UInt32 array loads.
         branchTest32(Assembler::Signed, dest.gpr(), dest.gpr(), fail);
       }
+      break;
+    case Scalar::Float16:
+      loadFloat16(src, dest.fpu(), temp1, temp2, volatileLiveRegs);
+      canonicalizeFloat(dest.fpu());
       break;
     case Scalar::Float32:
       loadFloat32(src, dest.fpu());
@@ -183,20 +205,21 @@ void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
   }
 }
 
-template void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType,
-                                                 const Address& src,
-                                                 AnyRegister dest,
-                                                 Register temp, Label* fail);
-template void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType,
-                                                 const BaseIndex& src,
-                                                 AnyRegister dest,
-                                                 Register temp, Label* fail);
+template void MacroAssembler::loadFromTypedArray(
+    Scalar::Type arrayType, const Address& src, AnyRegister dest,
+    Register temp1, Register temp2, Label* fail,
+    LiveRegisterSet volatileLiveRegs);
+template void MacroAssembler::loadFromTypedArray(
+    Scalar::Type arrayType, const BaseIndex& src, AnyRegister dest,
+    Register temp1, Register temp2, Label* fail,
+    LiveRegisterSet volatileLiveRegs);
 
 template <typename T>
 void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
                                         const ValueOperand& dest,
                                         Uint32Mode uint32Mode, Register temp,
-                                        Label* fail) {
+                                        Label* fail,
+                                        LiveRegisterSet volatileLiveRegs) {
   switch (arrayType) {
     case Scalar::Int8:
     case Scalar::Uint8:
@@ -205,26 +228,35 @@ void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
     case Scalar::Uint16:
     case Scalar::Int32:
       loadFromTypedArray(arrayType, src, AnyRegister(dest.scratchReg()),
-                         InvalidReg, nullptr);
+                         InvalidReg, InvalidReg, nullptr, LiveRegisterSet{});
       tagValue(JSVAL_TYPE_INT32, dest.scratchReg(), dest);
       break;
     case Scalar::Uint32:
       load32(src, dest.scratchReg());
       boxUint32(dest.scratchReg(), dest, uint32Mode, fail);
       break;
-    case Scalar::Float32: {
+    case Scalar::Float16: {
       ScratchDoubleScope dscratch(*this);
       FloatRegister fscratch = dscratch.asSingle();
       loadFromTypedArray(arrayType, src, AnyRegister(fscratch),
-                         dest.scratchReg(), nullptr);
+                         dest.scratchReg(), temp, nullptr, volatileLiveRegs);
+      convertFloat32ToDouble(fscratch, dscratch);
+      boxDouble(dscratch, dest, dscratch);
+      break;
+    }
+    case Scalar::Float32: {
+      ScratchDoubleScope dscratch(*this);
+      FloatRegister fscratch = dscratch.asSingle();
+      loadFromTypedArray(arrayType, src, AnyRegister(fscratch), InvalidReg,
+                         InvalidReg, nullptr, LiveRegisterSet{});
       convertFloat32ToDouble(fscratch, dscratch);
       boxDouble(dscratch, dest, dscratch);
       break;
     }
     case Scalar::Float64: {
       ScratchDoubleScope fpscratch(*this);
-      loadFromTypedArray(arrayType, src, AnyRegister(fpscratch),
-                         dest.scratchReg(), nullptr);
+      loadFromTypedArray(arrayType, src, AnyRegister(fpscratch), InvalidReg,
+                         InvalidReg, nullptr, LiveRegisterSet{});
       boxDouble(fpscratch, dest, fpscratch);
       break;
     }
@@ -235,16 +267,14 @@ void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
   }
 }
 
-template void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType,
-                                                 const Address& src,
-                                                 const ValueOperand& dest,
-                                                 Uint32Mode uint32Mode,
-                                                 Register temp, Label* fail);
-template void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType,
-                                                 const BaseIndex& src,
-                                                 const ValueOperand& dest,
-                                                 Uint32Mode uint32Mode,
-                                                 Register temp, Label* fail);
+template void MacroAssembler::loadFromTypedArray(
+    Scalar::Type arrayType, const Address& src, const ValueOperand& dest,
+    Uint32Mode uint32Mode, Register temp, Label* fail,
+    LiveRegisterSet volatileLiveRegs);
+template void MacroAssembler::loadFromTypedArray(
+    Scalar::Type arrayType, const BaseIndex& src, const ValueOperand& dest,
+    Uint32Mode uint32Mode, Register temp, Label* fail,
+    LiveRegisterSet volatileLiveRegs);
 
 template <typename T>
 void MacroAssembler::loadFromTypedBigIntArray(Scalar::Type arrayType,
@@ -3721,10 +3751,10 @@ void MacroAssembler::convertInt32ValueToDouble(ValueOperand val) {
   bind(&done);
 }
 
-void MacroAssembler::convertValueToFloatingPoint(ValueOperand value,
-                                                 FloatRegister output,
-                                                 Label* fail,
-                                                 MIRType outputType) {
+void MacroAssembler::convertValueToFloatingPoint(
+    ValueOperand value, FloatRegister output, Register maybeTemp,
+    LiveRegisterSet volatileLiveRegs, Label* fail,
+    FloatingPointType outputType) {
   Label isDouble, isInt32OrBool, isNull, done;
 
   {
@@ -3739,7 +3769,8 @@ void MacroAssembler::convertValueToFloatingPoint(ValueOperand value,
   }
 
   // fall-through: undefined
-  if (outputType == MIRType::Float32) {
+  if (outputType == FloatingPointType::Float16 ||
+      outputType == FloatingPointType::Float32) {
     loadConstantFloat32(float(GenericNaN()), output);
   } else {
     loadConstantDouble(GenericNaN(), output);
@@ -3747,7 +3778,8 @@ void MacroAssembler::convertValueToFloatingPoint(ValueOperand value,
   jump(&done);
 
   bind(&isNull);
-  if (outputType == MIRType::Float32) {
+  if (outputType == FloatingPointType::Float16 ||
+      outputType == FloatingPointType::Float32) {
     loadConstantFloat32(0.0f, output);
   } else {
     loadConstantDouble(0.0, output);
@@ -3755,7 +3787,10 @@ void MacroAssembler::convertValueToFloatingPoint(ValueOperand value,
   jump(&done);
 
   bind(&isInt32OrBool);
-  if (outputType == MIRType::Float32) {
+  if (outputType == FloatingPointType::Float16) {
+    convertInt32ToFloat16(value.payloadOrValueReg(), output, maybeTemp,
+                          volatileLiveRegs);
+  } else if (outputType == FloatingPointType::Float32) {
     convertInt32ToFloat32(value.payloadOrValueReg(), output);
   } else {
     convertInt32ToDouble(value.payloadOrValueReg(), output);
@@ -3765,14 +3800,24 @@ void MacroAssembler::convertValueToFloatingPoint(ValueOperand value,
   // On some non-multiAlias platforms, unboxDouble may use the scratch register,
   // so do not merge code paths here.
   bind(&isDouble);
-  if (outputType == MIRType::Float32 && hasMultiAlias()) {
+  if ((outputType == FloatingPointType::Float16 ||
+       outputType == FloatingPointType::Float32) &&
+      hasMultiAlias()) {
     ScratchDoubleScope tmp(*this);
     unboxDouble(value, tmp);
-    convertDoubleToFloat32(tmp, output);
+
+    if (outputType == FloatingPointType::Float16) {
+      convertDoubleToFloat16(tmp, output, maybeTemp, volatileLiveRegs);
+    } else {
+      convertDoubleToFloat32(tmp, output);
+    }
   } else {
     FloatRegister tmp = output.asDouble();
     unboxDouble(value, tmp);
-    if (outputType == MIRType::Float32) {
+
+    if (outputType == FloatingPointType::Float16) {
+      convertDoubleToFloat16(tmp, output, maybeTemp, volatileLiveRegs);
+    } else if (outputType == FloatingPointType::Float32) {
       convertDoubleToFloat32(tmp, output);
     }
   }
@@ -7550,6 +7595,220 @@ void MacroAssembler::memoryBarrierBefore(Synchronization sync) {
 
 void MacroAssembler::memoryBarrierAfter(Synchronization sync) {
   memoryBarrier(sync.barrierAfter);
+}
+
+void MacroAssembler::convertDoubleToFloat16(FloatRegister src,
+                                            FloatRegister dest, Register temp,
+                                            LiveRegisterSet volatileLiveRegs) {
+  if (MacroAssembler::SupportsFloat64To16()) {
+    convertDoubleToFloat16(src, dest);
+
+    // Float16 is currently passed as Float32, so expand again to Float32.
+    convertFloat16ToFloat32(dest, dest);
+    return;
+  }
+
+  LiveRegisterSet save = volatileLiveRegs;
+  save.takeUnchecked(dest);
+  save.takeUnchecked(dest.asDouble());
+  save.takeUnchecked(temp);
+
+  PushRegsInMask(save);
+
+  using Fn = float (*)(double);
+  setupUnalignedABICall(temp);
+  passABIArg(src, ABIType::Float64);
+  callWithABI<Fn, jit::RoundFloat16ToFloat32>(ABIType::Float32);
+  storeCallFloatResult(dest);
+
+  PopRegsInMask(save);
+}
+
+void MacroAssembler::convertFloat32ToFloat16(FloatRegister src,
+                                             FloatRegister dest, Register temp,
+                                             LiveRegisterSet volatileLiveRegs) {
+  if (MacroAssembler::SupportsFloat32To16()) {
+    convertFloat32ToFloat16(src, dest);
+
+    // Float16 is currently passed as Float32, so expand again to Float32.
+    convertFloat16ToFloat32(dest, dest);
+    return;
+  }
+
+  LiveRegisterSet save = volatileLiveRegs;
+  save.takeUnchecked(dest);
+  save.takeUnchecked(dest.asDouble());
+  save.takeUnchecked(temp);
+
+  PushRegsInMask(save);
+
+  using Fn = float (*)(float);
+  setupUnalignedABICall(temp);
+  passABIArg(src, ABIType::Float32);
+  callWithABI<Fn, jit::RoundFloat16ToFloat32>(ABIType::Float32);
+  storeCallFloatResult(dest);
+
+  PopRegsInMask(save);
+}
+
+void MacroAssembler::convertInt32ToFloat16(Register src, FloatRegister dest,
+                                           Register temp,
+                                           LiveRegisterSet volatileLiveRegs) {
+  if (MacroAssembler::SupportsFloat32To16()) {
+    convertInt32ToFloat16(src, dest);
+
+    // Float16 is currently passed as Float32, so expand again to Float32.
+    convertFloat16ToFloat32(dest, dest);
+    return;
+  }
+
+  LiveRegisterSet save = volatileLiveRegs;
+  save.takeUnchecked(dest);
+  save.takeUnchecked(dest.asDouble());
+  save.takeUnchecked(temp);
+
+  PushRegsInMask(save);
+
+  using Fn = float (*)(int32_t);
+  setupUnalignedABICall(temp);
+  passABIArg(src);
+  callWithABI<Fn, jit::RoundFloat16ToFloat32>(ABIType::Float32);
+  storeCallFloatResult(dest);
+
+  PopRegsInMask(save);
+}
+
+template <typename T>
+void MacroAssembler::loadFloat16(const T& src, FloatRegister dest,
+                                 Register temp1, Register temp2,
+                                 LiveRegisterSet volatileLiveRegs) {
+  if (MacroAssembler::SupportsFloat32To16()) {
+    loadFloat16(src, dest, temp1);
+
+    // Float16 is currently passed as Float32, so expand again to Float32.
+    convertFloat16ToFloat32(dest, dest);
+    return;
+  }
+
+  load16ZeroExtend(src, temp1);
+
+  LiveRegisterSet save = volatileLiveRegs;
+  save.takeUnchecked(dest);
+  save.takeUnchecked(dest.asDouble());
+  save.takeUnchecked(temp1);
+  save.takeUnchecked(temp2);
+
+  PushRegsInMask(save);
+
+  using Fn = float (*)(int32_t);
+  setupUnalignedABICall(temp2);
+  passABIArg(temp1);
+  callWithABI<Fn, jit::Float16ToFloat32>(ABIType::Float32);
+  storeCallFloatResult(dest);
+
+  PopRegsInMask(save);
+}
+
+template void MacroAssembler::loadFloat16(const Address& src,
+                                          FloatRegister dest, Register temp1,
+                                          Register temp2,
+                                          LiveRegisterSet volatileLiveRegs);
+
+template void MacroAssembler::loadFloat16(const BaseIndex& src,
+                                          FloatRegister dest, Register temp1,
+                                          Register temp2,
+                                          LiveRegisterSet volatileLiveRegs);
+
+template <typename T>
+void MacroAssembler::storeFloat16(FloatRegister src, const T& dest,
+                                  Register temp,
+                                  LiveRegisterSet volatileLiveRegs) {
+  ScratchFloat32Scope fpscratch(*this);
+
+  if (src.isDouble()) {
+    if (MacroAssembler::SupportsFloat64To16()) {
+      canonicalizeDoubleIfDeterministic(src);
+      convertDoubleToFloat16(src, fpscratch);
+      storeUncanonicalizedFloat16(fpscratch, dest, temp);
+      return;
+    }
+
+    convertDoubleToFloat16(src, fpscratch, temp, volatileLiveRegs);
+    src = fpscratch;
+  }
+  MOZ_ASSERT(src.isSingle());
+
+  if (MacroAssembler::SupportsFloat32To16()) {
+    canonicalizeFloatIfDeterministic(src);
+    convertFloat32ToFloat16(src, fpscratch);
+    storeUncanonicalizedFloat16(fpscratch, dest, temp);
+    return;
+  }
+
+  canonicalizeFloatIfDeterministic(src);
+  moveFloat16ToGPR(src, temp, volatileLiveRegs);
+  store16(temp, dest);
+}
+
+template void MacroAssembler::storeFloat16(FloatRegister src,
+                                           const Address& dest, Register temp,
+                                           LiveRegisterSet volatileLiveRegs);
+
+template void MacroAssembler::storeFloat16(FloatRegister src,
+                                           const BaseIndex& dest, Register temp,
+                                           LiveRegisterSet volatileLiveRegs);
+
+void MacroAssembler::moveFloat16ToGPR(FloatRegister src, Register dest,
+                                      LiveRegisterSet volatileLiveRegs) {
+  if (MacroAssembler::SupportsFloat32To16()) {
+    ScratchFloat32Scope fpscratch(*this);
+
+    // Float16 is currently passed as Float32, so first narrow to Float16.
+    convertFloat32ToFloat16(src, fpscratch);
+
+    moveFloat16ToGPR(fpscratch, dest);
+    return;
+  }
+
+  LiveRegisterSet save = volatileLiveRegs;
+  save.takeUnchecked(dest);
+
+  PushRegsInMask(save);
+
+  using Fn = int32_t (*)(float);
+  setupUnalignedABICall(dest);
+  passABIArg(src, ABIType::Float32);
+  callWithABI<Fn, jit::Float32ToFloat16>();
+  storeCallInt32Result(dest);
+
+  PopRegsInMask(save);
+}
+
+void MacroAssembler::moveGPRToFloat16(Register src, FloatRegister dest,
+                                      Register temp,
+                                      LiveRegisterSet volatileLiveRegs) {
+  if (MacroAssembler::SupportsFloat32To16()) {
+    moveGPRToFloat16(src, dest);
+
+    // Float16 is currently passed as Float32, so expand again to Float32.
+    convertFloat16ToFloat32(dest, dest);
+    return;
+  }
+
+  LiveRegisterSet save = volatileLiveRegs;
+  save.takeUnchecked(dest);
+  save.takeUnchecked(dest.asDouble());
+  save.takeUnchecked(temp);
+
+  PushRegsInMask(save);
+
+  using Fn = float (*)(int32_t);
+  setupUnalignedABICall(temp);
+  passABIArg(src);
+  callWithABI<Fn, jit::Float16ToFloat32>(ABIType::Float32);
+  storeCallFloatResult(dest);
+
+  PopRegsInMask(save);
 }
 
 void MacroAssembler::debugAssertIsObject(const ValueOperand& val) {

@@ -1307,7 +1307,7 @@ bool WarpCacheIRTranspiler::emitGuardBooleanToInt32(ValOperandId inputId,
 bool WarpCacheIRTranspiler::emitGuardIsNumber(ValOperandId inputId) {
   // Prefer MToDouble because it gets further optimizations downstream.
   MDefinition* def = getOperand(inputId);
-  if (def->type() == MIRType::Int32) {
+  if (def->type() == MIRType::Int32 || def->type() == MIRType::Float32) {
     auto* ins = MToDouble::New(alloc(), def);
     add(ins);
 
@@ -2244,6 +2244,7 @@ static MIRType MIRTypeForArrayBufferViewRead(Scalar::Type arrayType,
       return MIRType::Int32;
     case Scalar::Uint32:
       return forceDoubleForUint32 ? MIRType::Double : MIRType::Int32;
+    case Scalar::Float16:
     case Scalar::Float32:
       return MIRType::Float32;
     case Scalar::Float64:
@@ -3667,6 +3668,17 @@ bool WarpCacheIRTranspiler::emitMathFRoundNumberResult(
   MDefinition* input = getOperand(inputId);
 
   auto* ins = MToFloat32::New(alloc(), input);
+  add(ins);
+
+  pushResult(ins);
+  return true;
+}
+
+bool WarpCacheIRTranspiler::emitMathF16RoundNumberResult(
+    NumberOperandId inputId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* ins = MToFloat16::New(alloc(), input);
   add(ins);
 
   pushResult(ins);

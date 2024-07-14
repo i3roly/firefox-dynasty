@@ -2965,6 +2965,90 @@ void LIRGenerator::visitToFloat32(MToFloat32* convert) {
   }
 }
 
+void LIRGenerator::visitToFloat16(MToFloat16* convert) {
+  MDefinition* opd = convert->input();
+
+  switch (opd->type()) {
+    case MIRType::Value: {
+      LDefinition tempDef = LDefinition::BogusTemp();
+      if (!MacroAssembler::SupportsFloat64To16()) {
+        tempDef = temp();
+      }
+
+      auto* lir = new (alloc()) LValueToFloat16(useBox(opd), tempDef);
+      assignSnapshot(lir, convert->bailoutKind());
+      define(lir, convert);
+
+      if (!MacroAssembler::SupportsFloat64To16()) {
+        assignSafepoint(lir, convert);
+      }
+      break;
+    }
+
+    case MIRType::Null:
+      lowerConstantFloat32(0, convert);
+      break;
+
+    case MIRType::Undefined:
+      lowerConstantFloat32(GenericNaN(), convert);
+      break;
+
+    case MIRType::Boolean:
+    case MIRType::Int32: {
+      LDefinition tempDef = LDefinition::BogusTemp();
+      if (!MacroAssembler::SupportsFloat32To16()) {
+        tempDef = temp();
+      }
+
+      auto* lir =
+          new (alloc()) LInt32ToFloat16(useRegisterAtStart(opd), tempDef);
+      define(lir, convert);
+
+      if (!MacroAssembler::SupportsFloat32To16()) {
+        assignSafepoint(lir, convert);
+      }
+      break;
+    }
+
+    case MIRType::Double: {
+      LDefinition tempDef = LDefinition::BogusTemp();
+      if (!MacroAssembler::SupportsFloat64To16()) {
+        tempDef = temp();
+      }
+
+      auto* lir =
+          new (alloc()) LDoubleToFloat16(useRegisterAtStart(opd), tempDef);
+      define(lir, convert);
+
+      if (!MacroAssembler::SupportsFloat64To16()) {
+        assignSafepoint(lir, convert);
+      }
+      break;
+    }
+
+    case MIRType::Float32: {
+      LDefinition tempDef = LDefinition::BogusTemp();
+      if (!MacroAssembler::SupportsFloat32To16()) {
+        tempDef = temp();
+      }
+
+      auto* lir =
+          new (alloc()) LFloat32ToFloat16(useRegisterAtStart(opd), tempDef);
+      define(lir, convert);
+
+      if (!MacroAssembler::SupportsFloat32To16()) {
+        assignSafepoint(lir, convert);
+      }
+      break;
+    }
+
+    default:
+      // Objects might be effectful. Symbols will throw.
+      // Strings are complicated - we don't handle them yet.
+      MOZ_CRASH("unexpected type");
+  }
+}
+
 void LIRGenerator::visitToNumberInt32(MToNumberInt32* convert) {
   MDefinition* opd = convert->input();
 
@@ -4454,18 +4538,30 @@ void LIRGenerator::visitLoadUnboxedScalar(MLoadUnboxedScalar* ins) {
   }
 
   if (!Scalar::isBigIntType(ins->storageType())) {
-    // We need a temp register for Uint32Array with known double result.
-    LDefinition tempDef = LDefinition::BogusTemp();
-    if (ins->storageType() == Scalar::Uint32 &&
-        IsFloatingPointType(ins->type())) {
-      tempDef = temp();
+    // We need a temp register for Uint32Array with known double result and for
+    // Float16Array.
+    LDefinition temp1 = LDefinition::BogusTemp();
+    if ((ins->storageType() == Scalar::Uint32 &&
+         IsFloatingPointType(ins->type())) ||
+        ins->storageType() == Scalar::Float16) {
+      temp1 = temp();
     }
 
-    auto* lir = new (alloc()) LLoadUnboxedScalar(elements, index, tempDef);
+    // Additional temp when Float16 to Float32 conversion requires a call.
+    LDefinition temp2 = LDefinition::BogusTemp();
+    if (MacroAssembler::LoadRequiresCall(ins->storageType())) {
+      temp2 = temp();
+    }
+
+    auto* lir = new (alloc()) LLoadUnboxedScalar(elements, index, temp1, temp2);
     if (ins->fallible()) {
       assignSnapshot(lir, ins->bailoutKind());
     }
     define(lir, ins);
+
+    if (MacroAssembler::LoadRequiresCall(ins->storageType())) {
+      assignSafepoint(lir, ins);
+    }
   } else {
     MOZ_ASSERT(ins->type() == MIRType::BigInt);
 
@@ -4493,40 +4589,49 @@ void LIRGenerator::visitLoadDataViewElement(MLoadDataViewElement* ins) {
 
   // We need a temp register for:
   // - Uint32Array with known double result,
+  // - Float16Array,
   // - Float32Array,
   // - and BigInt64Array and BigUint64Array.
-  LDefinition tempDef = LDefinition::BogusTemp();
+  LDefinition temp1 = LDefinition::BogusTemp();
   if ((ins->storageType() == Scalar::Uint32 &&
        IsFloatingPointType(ins->type())) ||
+      ins->storageType() == Scalar::Float16 ||
       ins->storageType() == Scalar::Float32) {
-    tempDef = temp();
+    temp1 = temp();
   }
   if (Scalar::isBigIntType(ins->storageType())) {
 #ifdef JS_CODEGEN_X86
     // There are not enough registers on x86.
     if (littleEndian.isConstant()) {
-      tempDef = temp();
+      temp1 = temp();
     }
 #else
-    tempDef = temp();
+    temp1 = temp();
 #endif
+  }
+
+  // Additional temp when Float16 to Float64 conversion requires a call.
+  LDefinition temp2 = LDefinition::BogusTemp();
+  if (MacroAssembler::LoadRequiresCall(ins->storageType())) {
+    temp2 = temp();
   }
 
   // We also need a separate 64-bit temp register for:
   // - Float64Array
   // - and BigInt64Array and BigUint64Array.
-  LInt64Definition temp64Def = LInt64Definition::BogusTemp();
+  LInt64Definition temp64 = LInt64Definition::BogusTemp();
   if (Scalar::byteSize(ins->storageType()) == 8) {
-    temp64Def = tempInt64();
+    temp64 = tempInt64();
   }
 
   auto* lir = new (alloc())
-      LLoadDataViewElement(elements, index, littleEndian, tempDef, temp64Def);
+      LLoadDataViewElement(elements, index, littleEndian, temp1, temp2, temp64);
   if (ins->fallible()) {
     assignSnapshot(lir, ins->bailoutKind());
   }
   define(lir, ins);
-  if (Scalar::isBigIntType(ins->storageType())) {
+  if (Scalar::isBigIntType(ins->storageType()) ||
+      MacroAssembler::LoadRequiresCall(ins->storageType())) {
     assignSafepoint(lir, ins);
   }
 }
@@ -4579,12 +4684,21 @@ void LIRGenerator::visitLoadTypedArrayElementHole(
   const LAllocation length = useRegister(ins->length());
 
   if (!Scalar::isBigIntType(ins->arrayType())) {
-    auto* lir =
-        new (alloc()) LLoadTypedArrayElementHole(elements, index, length);
+    LDefinition tempDef = LDefinition::BogusTemp();
+    if (MacroAssembler::LoadRequiresCall(ins->arrayType())) {
+      tempDef = temp();
+    }
+
+    auto* lir = new (alloc())
+        LLoadTypedArrayElementHole(elements, index, length, tempDef);
     if (ins->fallible()) {
       assignSnapshot(lir, ins->bailoutKind());
     }
     defineBox(lir, ins);
+
+    if (MacroAssembler::LoadRequiresCall(ins->arrayType())) {
+      assignSafepoint(lir, ins);
+    }
   } else {
 #ifdef JS_CODEGEN_X86
     LInt64Definition temp64 = LInt64Definition::BogusTemp();
@@ -4604,6 +4718,8 @@ void LIRGenerator::visitStoreUnboxedScalar(MStoreUnboxedScalar* ins) {
   MOZ_ASSERT(ins->index()->type() == MIRType::IntPtr);
 
   if (ins->isFloatWrite()) {
+    MOZ_ASSERT_IF(ins->writeType() == Scalar::Float16,
+                  ins->value()->type() == MIRType::Float32);
     MOZ_ASSERT_IF(ins->writeType() == Scalar::Float32,
                   ins->value()->type() == MIRType::Float32);
     MOZ_ASSERT_IF(ins->writeType() == Scalar::Float64,
@@ -4647,7 +4763,19 @@ void LIRGenerator::visitStoreUnboxedScalar(MStoreUnboxedScalar* ins) {
     add(fence, ins);
   }
   if (!ins->isBigIntWrite()) {
-    add(new (alloc()) LStoreUnboxedScalar(elements, index, value), ins);
+    // We need a temp register for Float16Array.
+    LDefinition tempDef = LDefinition::BogusTemp();
+    if (ins->writeType() == Scalar::Float16) {
+      tempDef = temp();
+    }
+
+    auto* lir =
+        new (alloc()) LStoreUnboxedScalar(elements, index, value, tempDef);
+    add(lir, ins);
+
+    if (MacroAssembler::StoreRequiresCall(ins->writeType())) {
+      assignSafepoint(lir, ins);
+    }
   } else {
     add(new (alloc()) LStoreUnboxedBigInt(elements, index, value, tempInt64()),
         ins);
@@ -4664,6 +4792,8 @@ void LIRGenerator::visitStoreDataViewElement(MStoreDataViewElement* ins) {
   MOZ_ASSERT(ins->littleEndian()->type() == MIRType::Boolean);
 
   if (ins->isFloatWrite()) {
+    MOZ_ASSERT_IF(ins->writeType() == Scalar::Float16,
+                  ins->value()->type() == MIRType::Float32);
     MOZ_ASSERT_IF(ins->writeType() == Scalar::Float32,
                   ins->value()->type() == MIRType::Float32);
     MOZ_ASSERT_IF(ins->writeType() == Scalar::Float64,
@@ -4692,9 +4822,13 @@ void LIRGenerator::visitStoreDataViewElement(MStoreDataViewElement* ins) {
     temp64Def = tempInt64();
   }
 
-  add(new (alloc()) LStoreDataViewElement(elements, index, value, littleEndian,
-                                          tempDef, temp64Def),
-      ins);
+  auto* lir = new (alloc()) LStoreDataViewElement(
+      elements, index, value, littleEndian, tempDef, temp64Def);
+  add(lir, ins);
+
+  if (MacroAssembler::StoreRequiresCall(ins->writeType())) {
+    assignSafepoint(lir, ins);
+  }
 }
 
 void LIRGenerator::visitStoreTypedArrayElementHole(
@@ -4704,6 +4838,8 @@ void LIRGenerator::visitStoreTypedArrayElementHole(
   MOZ_ASSERT(ins->length()->type() == MIRType::IntPtr);
 
   if (ins->isFloatWrite()) {
+    MOZ_ASSERT_IF(ins->arrayType() == Scalar::Float16,
+                  ins->value()->type() == MIRType::Float32);
     MOZ_ASSERT_IF(ins->arrayType() == Scalar::Float32,
                   ins->value()->type() == MIRType::Float32);
     MOZ_ASSERT_IF(ins->arrayType() == Scalar::Float64,
@@ -4729,11 +4865,18 @@ void LIRGenerator::visitStoreTypedArrayElementHole(
   }
 
   if (!ins->isBigIntWrite()) {
-    LDefinition spectreTemp =
-        BoundsCheckNeedsSpectreTemp() ? temp() : LDefinition::BogusTemp();
-    auto* lir = new (alloc()) LStoreTypedArrayElementHole(
-        elements, length, index, value, spectreTemp);
+    LDefinition tempDef = LDefinition::BogusTemp();
+    if (BoundsCheckNeedsSpectreTemp() || ins->arrayType() == Scalar::Float16) {
+      tempDef = temp();
+    }
+
+    auto* lir = new (alloc())
+        LStoreTypedArrayElementHole(elements, length, index, value, tempDef);
     add(lir, ins);
+
+    if (MacroAssembler::StoreRequiresCall(ins->arrayType())) {
+      assignSafepoint(lir, ins);
+    }
   } else {
     auto* lir = new (alloc()) LStoreTypedArrayElementHoleBigInt(
         elements, length, index, value, tempInt64());

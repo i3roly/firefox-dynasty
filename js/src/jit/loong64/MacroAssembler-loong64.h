@@ -355,6 +355,15 @@ class MacroAssemblerLOONG64 : public Assembler {
   FaultingCodeOffset loadFloat32(const Address& addr, FloatRegister dest);
   FaultingCodeOffset loadFloat32(const BaseIndex& src, FloatRegister dest);
 
+  FaultingCodeOffset loadFloat16(const Address& addr, FloatRegister dest,
+                                 Register) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  FaultingCodeOffset loadFloat16(const BaseIndex& src, FloatRegister dest,
+                                 Register) {
+    MOZ_CRASH("Not supported for this target");
+  }
+
   void outOfLineWasmTruncateToInt32Check(FloatRegister input, Register output,
                                          MIRType fromType, TruncFlags flags,
                                          Label* rejoin,
@@ -412,6 +421,22 @@ class MacroAssemblerLOONG64Compat : public MacroAssemblerLOONG64 {
   void convertFloat32ToDouble(FloatRegister src, FloatRegister dest);
   void convertInt32ToFloat32(Register src, FloatRegister dest);
   void convertInt32ToFloat32(const Address& src, FloatRegister dest);
+
+  void convertDoubleToFloat16(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat16ToDouble(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat16ToFloat32(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertInt32ToFloat16(Register src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
 
   void movq(Register rj, Register rd);
 

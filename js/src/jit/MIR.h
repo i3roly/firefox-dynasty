@@ -3315,6 +3315,10 @@ class MToDouble : public MToFPInstruction {
   bool isConsistentFloat32Use(MUse* use) const override { return true; }
 #endif
 
+  bool canProduceFloat32() const override {
+    return input()->canProduceFloat32();
+  }
+
   TruncateKind truncateKind() const { return implicitTruncate_; }
   void setTruncateKind(TruncateKind kind) {
     implicitTruncate_ = std::max(implicitTruncate_, kind);
@@ -3375,6 +3379,38 @@ class MToFloat32 : public MToFPInstruction {
   bool canRecoverOnBailout() const override { return true; }
 
   ALLOW_CLONE(MToFloat32)
+};
+
+// Converts a primitive (either typed or untyped) to a float16. If the input is
+// not primitive at runtime, a bailout occurs.
+class MToFloat16 : public MToFPInstruction {
+  explicit MToFloat16(MDefinition* def)
+      : MToFPInstruction(classOpcode, def, MIRType::Float32) {}
+
+ public:
+  INSTRUCTION_HEADER(ToFloat16)
+  TRIVIAL_NEW_WRAPPERS
+
+  virtual MDefinition* foldsTo(TempAllocator& alloc) override;
+  bool congruentTo(const MDefinition* ins) const override {
+    return congruentIfOperandsEqual(ins);
+  }
+  AliasSet getAliasSet() const override { return AliasSet::None(); }
+
+  // This instruction can produce but NOT consume float32.
+  bool canProduceFloat32() const override { return true; }
+
+#ifdef DEBUG
+  // Float16 inputs are typed as float32, but this instruction can NOT consume
+  // float32.
+  bool isConsistentFloat32Use(MUse* use) const override { return true; }
+#endif
+
+  [[nodiscard]] bool writeRecoverData(
+      CompactBufferWriter& writer) const override;
+  bool canRecoverOnBailout() const override { return true; }
+
+  ALLOW_CLONE(MToFloat16)
 };
 
 class MWrapInt64ToInt32 : public MUnaryInstruction, public NoTypePolicy::Data {
@@ -6644,7 +6680,7 @@ class MLoadUnboxedScalar : public MBinaryInstruction,
   void computeRange(TempAllocator& alloc) override;
 
   bool canProduceFloat32() const override {
-    return storageType_ == Scalar::Float32;
+    return storageType_ == Scalar::Float32 || storageType_ == Scalar::Float16;
   }
 
   ALLOW_CLONE(MLoadUnboxedScalar)
@@ -6700,7 +6736,7 @@ class MLoadDataViewElement : public MTernaryInstruction,
   void computeRange(TempAllocator& alloc) override;
 
   bool canProduceFloat32() const override {
-    return storageType_ == Scalar::Float32;
+    return storageType_ == Scalar::Float32 || storageType_ == Scalar::Float16;
   }
 
   ALLOW_CLONE(MLoadDataViewElement)
@@ -6754,7 +6790,7 @@ class MLoadTypedArrayElementHole : public MTernaryInstruction,
     return AliasSet::Load(AliasSet::UnboxedElement);
   }
   bool canProduceFloat32() const override {
-    return arrayType_ == Scalar::Float32;
+    return arrayType_ == Scalar::Float32 || arrayType_ == Scalar::Float16;
   }
 
   ALLOW_CLONE(MLoadTypedArrayElementHole)
@@ -6782,7 +6818,8 @@ class StoreUnboxedScalarBase {
            writeType_ == Scalar::Uint32;
   }
   bool isFloatWrite() const {
-    return writeType_ == Scalar::Float32 || writeType_ == Scalar::Float64;
+    return writeType_ == Scalar::Float16 || writeType_ == Scalar::Float32 ||
+           writeType_ == Scalar::Float64;
   }
   bool isBigIntWrite() const { return Scalar::isBigIntType(writeType_); }
 };
@@ -6823,6 +6860,15 @@ class MStoreUnboxedScalar : public MTernaryInstruction,
     return use == getUseFor(2) && writeType() == Scalar::Float32;
   }
 
+#ifdef DEBUG
+  // Float16 inputs are typed as float32, but this instruction can NOT consume
+  // float32 when its write-type is float16.
+  bool isConsistentFloat32Use(MUse* use) const override {
+    return use == getUseFor(2) &&
+           (writeType() == Scalar::Float32 || writeType() == Scalar::Float16);
+  }
+#endif
+
   ALLOW_CLONE(MStoreUnboxedScalar)
 };
 
@@ -6856,6 +6902,15 @@ class MStoreDataViewElement : public MQuaternaryInstruction,
     return use == getUseFor(2) && writeType() == Scalar::Float32;
   }
 
+#ifdef DEBUG
+  // Float16 inputs are typed as float32, but this instruction can NOT consume
+  // float32 when its write-type is float16.
+  bool isConsistentFloat32Use(MUse* use) const override {
+    return use == getUseFor(2) &&
+           (writeType() == Scalar::Float32 || writeType() == Scalar::Float16);
+  }
+#endif
+
   ALLOW_CLONE(MStoreDataViewElement)
 };
 
@@ -6887,6 +6942,15 @@ class MStoreTypedArrayElementHole : public MQuaternaryInstruction,
   bool canConsumeFloat32(MUse* use) const override {
     return use == getUseFor(3) && arrayType() == Scalar::Float32;
   }
+
+#ifdef DEBUG
+  // Float16 inputs are typed as float32, but this instruction can NOT consume
+  // float32 when its array-type is float16.
+  bool isConsistentFloat32Use(MUse* use) const override {
+    return use == getUseFor(3) &&
+           (arrayType() == Scalar::Float32 || arrayType() == Scalar::Float16);
+  }
+#endif
 
   ALLOW_CLONE(MStoreTypedArrayElementHole)
 };
