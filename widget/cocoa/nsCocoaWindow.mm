@@ -3313,7 +3313,7 @@ static NSImage* GetMenuMaskImage() {
 }
 
 - (void)swapOutChildViewWrapper:(NSView*)aNewWrapper {
-  aNewWrapper.frame = self.contentView.frame;
+  [aNewWrapper setFrame:[[self contentView] frame]]; 
   NSView* childView = [self.mainChildView retain];
   [childView removeFromSuperview];
   [aNewWrapper addSubview:childView];
@@ -3722,34 +3722,36 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   nsNativeThemeCocoa::DrawNativeTitlebar(ctx, NSRectToCGRect([self bounds]),
                                          [window unifiedToolbarHeight], [window isMainWindow], NO);
 
-  // The following is only necessary because we're not using
-  // NSFullSizeContentViewWindowMask yet: We need to mask our drawing to the
-  // rounded top corners of the window, and we need to draw the title string
-  // on top. That's because the title string is drawn as part of the frame view
-  // and this view covers that drawing up.
-  // Once we use NSFullSizeContentViewWindowMask and remove our override of
-  // _wantsFloatingTitlebar, Cocoa will draw the title string as part of a
-  // separate view which sits on top of the window's content view, and we'll be
-  // able to remove the code below.
+  if(!nsCocoaFeatures::OnYosemiteOrLater()) {
+    // The following is only necessary because we're not using
+    // NSFullSizeContentViewWindowMask yet: We need to mask our drawing to the
+    // rounded top corners of the window, and we need to draw the title string
+    // on top. That's because the title string is drawn as part of the frame view
+    // and this view covers that drawing up.
+    // Once we use NSFullSizeContentViewWindowMask and remove our override of
+    // _wantsFloatingTitlebar, Cocoa will draw the title string as part of a
+    // separate view which sits on top of the window's content view, and we'll be
+    // able to remove the code below.
 
-  NSView* frameView = [[[self window] contentView] superview];
-  if (!frameView || ![frameView respondsToSelector:@selector(_maskCorners:clipRect:)] ||
-      ![frameView respondsToSelector:@selector(_drawTitleStringInClip:)]) {
-    return;
+    NSView* frameView = [[[self window] contentView] superview];
+    if (!frameView || ![frameView respondsToSelector:@selector(_maskCorners:clipRect:)] ||
+        ![frameView respondsToSelector:@selector(_drawTitleStringInClip:)]) {
+      return;
+    }
+
+    NSPoint offsetToFrameView = [self convertPoint:NSZeroPoint toView:frameView];
+    NSRect clipRect = {offsetToFrameView, [self bounds].size};
+
+    // Both this view and frameView return NO from isFlipped. Switch into
+    // frameView's coordinate system using a translation by the offset.
+    CGContextSaveGState(ctx);
+    CGContextTranslateCTM(ctx, -offsetToFrameView.x, -offsetToFrameView.y);
+
+    [frameView _maskCorners:2 clipRect:clipRect];
+    [frameView _drawTitleStringInClip:clipRect];
+
+    CGContextRestoreGState(ctx);
   }
-
-  NSPoint offsetToFrameView = [self convertPoint:NSZeroPoint toView:frameView];
-  NSRect clipRect = {offsetToFrameView, [self bounds].size};
-
-  // Both this view and frameView return NO from isFlipped. Switch into
-  // frameView's coordinate system using a translation by the offset.
-  CGContextSaveGState(ctx);
-  CGContextTranslateCTM(ctx, -offsetToFrameView.x, -offsetToFrameView.y);
-
-  [frameView _maskCorners:2 clipRect:clipRect];
-  [frameView _drawTitleStringInClip:clipRect];
-
-  CGContextRestoreGState(ctx);
 }
 
 - (BOOL)isOpaque {
