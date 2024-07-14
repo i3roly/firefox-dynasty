@@ -1774,10 +1774,10 @@ void nsChildView::UpdateThemeGeometries(
   [win placeWindowButtons:[mView convertRect:DevPixelsToCocoaPoints(
                                                  windowButtonRect)
                                       toView:nil]];
-      LayoutDeviceIntRect fullScreenButtonRect =
-          FindFirstRectOfType(aThemeGeometries, eThemeGeometryTypeFullscreenButton);
-      [win placeFullScreenButton:[mView convertRect:DevPixelsToCocoaPoints(fullScreenButtonRect)
-          toView:nil]];
+  LayoutDeviceIntRect fullScreenButtonRect =
+      FindFirstRectOfType(aThemeGeometries, eThemeGeometryTypeFullscreenButton);
+  [win placeFullScreenButton:[mView convertRect:DevPixelsToCocoaPoints(fullScreenButtonRect)
+      toView:nil]];
 }
 
 static Maybe<VibrancyType> ThemeGeometryTypeToVibrancyType(
@@ -2368,6 +2368,34 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     // the backing scale factor and comparing to the old value
     mGeckoChild->BackingScaleFactorChanged();
   }
+}
+
+- (void)drawTitleString {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnYosemiteOrLater());
+
+  BaseWindow* window = (BaseWindow*)[self window];
+  if (![window wantsTitleDrawn]) {
+    return;
+  }
+
+  NSView* frameView = [[window contentView] superview];
+  if (![frameView respondsToSelector:@selector(_drawTitleBar:)]) {
+    return;
+  }
+
+  NSGraphicsContext* oldContext = [NSGraphicsContext currentContext];
+  CGContextRef ctx = (CGContextRef)[oldContext graphicsPort];
+  CGContextSaveGState(ctx);
+  if ([oldContext isFlipped] != [frameView isFlipped]) {
+    CGContextTranslateCTM(ctx, 0, [self bounds].size.height);
+    CGContextScaleCTM(ctx, 1, -1);
+  }
+  [NSGraphicsContext
+      setCurrentContext:[NSGraphicsContext graphicsContextWithGraphicsPort:ctx
+                                                                   flipped:[frameView isFlipped]]];
+  [frameView _drawTitleBar:[frameView bounds]];
+  CGContextRestoreGState(ctx);
+  [NSGraphicsContext setCurrentContext:oldContext];
 }
 
 - (BOOL)isCoveringTitlebar {
