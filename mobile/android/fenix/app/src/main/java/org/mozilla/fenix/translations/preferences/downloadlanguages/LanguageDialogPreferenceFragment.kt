@@ -24,6 +24,7 @@ import mozilla.components.concept.engine.translate.ModelOperation
 import mozilla.components.concept.engine.translate.ModelState
 import mozilla.components.concept.engine.translate.OperationLevel
 import org.mozilla.fenix.ext.requireComponents
+import org.mozilla.fenix.ext.runIfFragmentIsAttached
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.theme.FirefoxTheme
 
@@ -47,15 +48,35 @@ class LanguageDialogPreferenceFragment : DialogFragment() {
         savedInstanceState: Bundle?,
     ): View {
         val view = ComposeView(requireContext())
-        if (args.modelState == ModelState.DOWNLOADED) {
-            setPrefDeleteLanguageFileDialog(view)
-        } else {
-            if (args.modelState == ModelState.NOT_DOWNLOADED) {
-                setDownloadLanguageFileDialog(view)
+        when (args.modelState) {
+            ModelState.NOT_DOWNLOADED -> setDownloadLanguageFileDialog(view)
+            ModelState.DOWNLOAD_IN_PROGRESS -> setCancelDownloadFileDialog(view)
+            ModelState.DOWNLOADED -> setPrefDeleteLanguageFileDialog(view)
+            ModelState.DELETION_IN_PROGRESS -> {}
+            ModelState.ERROR_DELETION -> {}
+            ModelState.ERROR_DOWNLOAD -> {}
+        }
+        return view
+    }
+
+    private fun setCancelDownloadFileDialog(composeView: ComposeView) {
+        composeView.apply {
+            setContent {
+                FirefoxTheme {
+                    CancelDownloadFileDialog(
+                        language = args.languageDisplayName,
+                        onConfirmDelete = {
+                            deleteOrDownloadModel(
+                                modelOperation = ModelOperation.DELETE,
+                                languageToManage = args.languageCode,
+                            )
+                            findNavController().popBackStack()
+                        },
+                        onCancel = { findNavController().popBackStack() },
+                    )
+                }
             }
         }
-
-        return view
     }
 
     private fun setPrefDeleteLanguageFileDialog(composeView: ComposeView) {
@@ -85,9 +106,11 @@ class LanguageDialogPreferenceFragment : DialogFragment() {
                                     languageToManage = args.languageCode,
                                 )
                             }
-                            findNavController().popBackStack()
+                            runIfFragmentIsAttached {
+                                findNavController().popBackStack()
+                            }
                         },
-                        onCancel = { findNavController().popBackStack() },
+                        onCancel = { runIfFragmentIsAttached { findNavController().popBackStack() } },
                     )
                 }
             }

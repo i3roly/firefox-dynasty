@@ -146,6 +146,9 @@ const BITS_ACTIVE_NO_PROGRESS_TIMEOUT_SECS = 5;
 const BITS_IDLE_POLL_RATE_MS = 1000;
 const BITS_ACTIVE_POLL_RATE_MS = 200;
 
+// The number of update attempts when a write error occurs during an attempt
+const MAX_TOTAL_INSTALL_ATTEMPTS = 2;
+
 // The values below used by this code are from common/updatererrors.h
 const WRITE_ERROR = 7;
 const ELEVATION_CANCELED = 9;
@@ -188,7 +191,7 @@ const INVALID_UPDATER_STATE_CODE = 98;
 const INVALID_UPDATER_STATUS_CODE = 99;
 
 const SILENT_UPDATE_NEEDED_ELEVATION_ERROR = 105;
-const WRITE_ERROR_BACKGROUND_TASK_SHARING_VIOLATION = 106;
+const BACKGROUND_TASK_SHARING_VIOLATION = 106;
 
 // Array of write errors to simplify checks for write errors
 const WRITE_ERRORS = [
@@ -205,7 +208,6 @@ const WRITE_ERRORS = [
   WRITE_ERROR_DIR_ACCESS_DENIED,
   WRITE_ERROR_DELETE_BACKUP,
   WRITE_ERROR_EXTRACT,
-  WRITE_ERROR_BACKGROUND_TASK_SHARING_VIOLATION,
 ];
 
 // Array of write errors to simplify checks for service errors
@@ -1580,10 +1582,34 @@ function readStringFromFile(file) {
  */
 function handleUpdateFailure(update) {
   if (WRITE_ERRORS.includes(update.errorCode)) {
+    let nextState = getBestPendingState();
+
+    // Check how many install attempts we have with this patch
+    let totalInstallAttempts =
+      update.selectedPatch
+        .QueryInterface(Ci.nsIWritablePropertyBag)
+        .getProperty("numTotalInstallAttempts") ?? 0;
+    // Out of retries, unable to handle the update failure here
+    if (totalInstallAttempts >= MAX_TOTAL_INSTALL_ATTEMPTS) {
+      return false;
+    }
+
     LOG(
-      "handleUpdateFailure - Failure is a write error. Setting state to pending"
+      "handleUpdateFailure - Failure is a write error. Setting state to " +
+        nextState
     );
-    writeStatusFile(getReadyUpdateDir(), (update.state = STATE_PENDING));
+    writeStatusFile(getReadyUpdateDir(), (update.state = nextState));
+    transitionState(Ci.nsIApplicationUpdateService.STATE_PENDING);
+    return true;
+  }
+
+  if (update.errorCode == BACKGROUND_TASK_SHARING_VIOLATION) {
+    let newState = getBestPendingState();
+    LOG(
+      "handleUpdateFailure - witnessed BACKGROUND_TASK_SHARING_VIOLATION, setting state to " +
+        newState
+    );
+    writeStatusFile(getReadyUpdateDir(), (update.state = newState));
     transitionState(Ci.nsIApplicationUpdateService.STATE_PENDING);
     return true;
   }
@@ -3060,7 +3086,8 @@ export class UpdateService {
     }
 
     let parts = status.split(":");
-    update.state = parts[0];
+    status = parts[0];
+    update.state = status;
     LOG(
       `UpdateService:_postUpdateProcessing - Setting update's state from ` +
         `the status file (="${update.state}")`
@@ -3077,6 +3104,21 @@ export class UpdateService {
       // Rotate the update logs so the update log isn't removed. By passing
       // false the patch directory won't be removed.
       cleanUpReadyUpdateDir(false);
+    }
+
+    // Track number of installation attempts for this patch
+    if (
+      update.selectedPatch &&
+      [STATE_SUCCEEDED, STATE_FAILED].includes(status)
+    ) {
+      let totalInstallAttempts =
+        update.selectedPatch
+          .QueryInterface(Ci.nsIWritablePropertyBag)
+          .getProperty("numTotalInstallAttempts") ?? 0;
+
+      update.selectedPatch
+        .QueryInterface(Ci.nsIWritablePropertyBag)
+        .setProperty("numTotalInstallAttempts", totalInstallAttempts + 1);
     }
 
     if (status == STATE_SUCCEEDED) {

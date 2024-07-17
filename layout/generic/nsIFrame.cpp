@@ -7266,17 +7266,11 @@ nsPoint nsIFrame::GetOffsetToCrossDoc(const nsIFrame* aOther) const {
 nsPoint nsIFrame::GetOffsetToCrossDoc(const nsIFrame* aOther,
                                       const int32_t aAPD) const {
   MOZ_ASSERT(aOther, "Must have frame for destination coordinate system!");
-  NS_ASSERTION(PresContext()->GetRootPresContext() ==
-                   aOther->PresContext()->GetRootPresContext(),
-               "trying to get the offset between frames in different document "
-               "hierarchies?");
-  if (PresContext()->GetRootPresContext() !=
-      aOther->PresContext()->GetRootPresContext()) {
-    // crash right away, we are almost certainly going to crash anyway.
-    MOZ_CRASH(
-        "trying to get the offset between frames in different "
-        "document hierarchies?");
-  }
+  MOZ_DIAGNOSTIC_ASSERT(
+      PresContext()->GetRootPresContext() ==
+          aOther->PresContext()->GetRootPresContext(),
+      "trying to get the offset between frames in different document "
+      "hierarchies?");
 
   const nsIFrame* root = nullptr;
   // offset will hold the final offset
@@ -7453,7 +7447,12 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
     return result;
   }
 
-  *aOutAncestor = nsLayoutUtils::GetCrossDocParentFrameInProcess(this);
+  // We are not transformed, so the returned transform is just going to be a
+  // translation up to whatever ancestor we decide to stop at.
+
+  nsPoint crossdocOffset;
+  *aOutAncestor =
+      nsLayoutUtils::GetCrossDocParentFrameInProcess(this, &crossdocOffset);
 
   /* Otherwise, we're not transformed.  In that case, we'll walk up the frame
    * tree until we either hit the root frame or something that may be
@@ -7467,37 +7466,65 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
 
   /* Keep iterating while the frame can't possibly be transformed. */
   const nsIFrame* current = this;
-  auto shouldStopAt = [](const nsIFrame* aCurrent, nsIFrame* aAncestor,
-                         uint32_t aFlags) {
-    return aAncestor->IsTransformed() ||
-           ViewportUtils::IsZoomedContentRoot(aAncestor) ||
+  auto shouldStopAt = [](const nsIFrame* aCurrent, RelativeTo& aStopAtAncestor,
+                         nsIFrame* aOutAncestor, uint32_t aFlags) {
+    return aOutAncestor->IsTransformed() ||
+           ((aStopAtAncestor.mViewportType == ViewportType::Visual) &&
+            ViewportUtils::IsZoomedContentRoot(aOutAncestor)) ||
            ((aFlags & STOP_AT_STACKING_CONTEXT_AND_DISPLAY_PORT) &&
-            (aAncestor->IsStackingContext() ||
-             DisplayPortUtils::FrameHasDisplayPort(aAncestor, aCurrent)));
+            (aOutAncestor->IsStackingContext() ||
+             DisplayPortUtils::FrameHasDisplayPort(aOutAncestor, aCurrent)));
   };
+
+  // We run the GetOffsetToCrossDoc code here as an optimization, instead of
+  // walking the parent chain here and then asking GetOffsetToCrossDoc to walk
+  // the same parent chain and compute the offset.
+  const int32_t finalAPD = PresContext()->AppUnitsPerDevPixel();
+  // offset accumulates the offset at finalAPD.
+  nsPoint offset = GetPosition();
+
+  int32_t currAPD = (*aOutAncestor)->PresContext()->AppUnitsPerDevPixel();
+  // docOffset accumulates the current offset at currAPD, and then flushes to
+  // offset at finalAPD when the APD changes or we finish.
+  nsPoint docOffset = crossdocOffset;
+  MOZ_ASSERT(crossdocOffset == nsPoint(0, 0) || !GetParent());
+
   while (*aOutAncestor != aStopAtAncestor.mFrame &&
-         !shouldStopAt(current, *aOutAncestor, aFlags)) {
-    /* If no parent, stop iterating.  Otherwise, update the ancestor. */
-    nsIFrame* parent =
-        nsLayoutUtils::GetCrossDocParentFrameInProcess(*aOutAncestor);
-    if (!parent) break;
+         !shouldStopAt(current, aStopAtAncestor, *aOutAncestor, aFlags)) {
+    docOffset += (*aOutAncestor)->GetPosition();
+
+    nsIFrame* parent = (*aOutAncestor)->GetParent();
+    if (!parent) {
+      crossdocOffset.x = crossdocOffset.y = 0;
+      parent = nsLayoutUtils::GetCrossDocParentFrameInProcess(*aOutAncestor,
+                                                              &crossdocOffset);
+
+      int32_t newAPD =
+          parent ? parent->PresContext()->AppUnitsPerDevPixel() : currAPD;
+      if (!parent || newAPD != currAPD) {
+        // Convert docOffset to finalAPD and add it to offset.
+        offset += docOffset.ScaleToOtherAppUnits(currAPD, finalAPD);
+        docOffset.x = docOffset.y = 0;
+      }
+      currAPD = newAPD;
+      docOffset += crossdocOffset;
+
+      if (!parent) break;
+    }
 
     current = *aOutAncestor;
     *aOutAncestor = parent;
   }
+  offset += docOffset.ScaleToOtherAppUnits(currAPD, finalAPD);
 
   NS_ASSERTION(*aOutAncestor, "Somehow ended up with a null ancestor...?");
 
-  /* Translate from this frame to our ancestor, if it exists.  That's the
-   * entire transform, so we're done.
-   */
-  nsPoint delta = GetOffsetToCrossDoc(*aOutAncestor);
   int32_t scaleFactor =
       ((aFlags & IN_CSS_UNITS) ? AppUnitsPerCSSPixel()
                                : PresContext()->AppUnitsPerDevPixel());
   return Matrix4x4Flagged::Translation2d(
-      NSAppUnitsToFloatPixels(delta.x, scaleFactor),
-      NSAppUnitsToFloatPixels(delta.y, scaleFactor));
+      NSAppUnitsToFloatPixels(offset.x, scaleFactor),
+      NSAppUnitsToFloatPixels(offset.y, scaleFactor));
 }
 
 static void InvalidateRenderingObservers(nsIFrame* aDisplayRoot,

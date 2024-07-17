@@ -200,6 +200,24 @@ function logAction(...params) {
 }
 
 /**
+ * Returns true if Full-Page Translations is currently active, otherwise false.
+ *
+ * @returns {boolean}
+ */
+function isFullPageTranslationsActive() {
+  try {
+    const { requestedTranslationPair } =
+      TranslationsParent.getTranslationsActor(
+        gBrowser.selectedBrowser
+      ).languageState;
+    return !!requestedTranslationPair;
+  } catch {
+    // Translations actor unavailable, continue on.
+  }
+  return false;
+}
+
+/**
  * Navigate to a URL and indicate a message as to why.
  */
 async function navigate(
@@ -1513,6 +1531,8 @@ class SelectTranslationsTestUtils {
       if (expectedTargetLanguage) {
         // Target language expected, check for the data-l10n-id with a `{$language}` argument.
         const expectedL10nId =
+          selectH1 ||
+          selectPdfSpan ||
           selectFrenchSection ||
           selectEnglishSection ||
           selectSpanishSection ||
@@ -1521,26 +1541,34 @@ class SelectTranslationsTestUtils {
           selectSpanishSentence
             ? "main-context-menu-translate-selection-to-language"
             : "main-context-menu-translate-link-text-to-language";
+
+        await waitForCondition(
+          () =>
+            menuItem.getAttribute("target-language") === expectedTargetLanguage,
+          `Waiting for translate-selection context menu item to match the expected target language ${expectedTargetLanguage}`
+        );
         await waitForCondition(
           () => menuItem.getAttribute("data-l10n-id") === expectedL10nId,
-          `Waiting for translate-selection context menu item to localize with target language ${expectedTargetLanguage}`
+          `Waiting for translate-selection context menu item to have the correct data-l10n-id '${expectedL10nId}`
         );
 
-        is(
-          menuItem.getAttribute("data-l10n-id"),
-          expectedL10nId,
-          "Expected the translate-selection context menu item to be localized with a target language."
-        );
-
-        const l10nArgs = JSON.parse(menuItem.getAttribute("data-l10n-args"));
-        is(
-          l10nArgs.language,
-          getIntlDisplayName(expectedTargetLanguage),
-          `Expected the translate-selection context menu item to have the target language '${expectedTargetLanguage}'.`
-        );
+        if (Services.locale.appLocaleAsBCP47 === "en-US") {
+          // We only want to test the localized name in CI if the current app locale is the default (en-US).
+          const expectedLanguageDisplayName = getIntlDisplayName(
+            expectedTargetLanguage
+          );
+          await waitForCondition(() => {
+            const l10nArgs = JSON.parse(
+              menuItem.getAttribute("data-l10n-args")
+            );
+            return l10nArgs.language === expectedLanguageDisplayName;
+          }, `Waiting for translate-selection context menu item to have the correct data-l10n-args '${expectedLanguageDisplayName}`);
+        }
       } else {
         // No target language expected, check for the data-l10n-id that has no `{$language}` argument.
         const expectedL10nId =
+          selectH1 ||
+          selectPdfSpan ||
           selectFrenchSection ||
           selectEnglishSection ||
           selectSpanishSection ||
@@ -1550,17 +1578,54 @@ class SelectTranslationsTestUtils {
             ? "main-context-menu-translate-selection"
             : "main-context-menu-translate-link-text";
         await waitForCondition(
-          () => menuItem.getAttribute("data-l10n-id") === expectedL10nId,
-          "Waiting for translate-selection context menu item to localize without target language."
+          () => !menuItem.getAttribute("target-language"),
+          "Waiting for translate-selection context menu item to remove its target-language attribute."
         );
-
-        is(
-          menuItem.getAttribute("data-l10n-id"),
-          expectedL10nId,
-          "Expected the translate-selection context menu item to be localized without a target language."
+        await waitForCondition(
+          () => menuItem.getAttribute("data-l10n-id") === expectedL10nId,
+          `Waiting for translate-selection context menu item to have the correct data-l10n-id '${expectedL10nId}`
         );
       }
     }
+  }
+
+  /**
+   * Tests that the context menu displays the expected target language for translation based on
+   * the provided configurations.
+   *
+   * @param {object} options - Options for configuring the test environment and expected language behavior.
+   * @param {Array.<string>} options.runInPage - A content-exposed function to run within the context of the page.
+   * @param {Array.<string>} [options.systemLocales=[]] - Locales to mock as system locales.
+   * @param {Array.<string>} [options.appLocales=[]] - Locales to mock as application locales.
+   * @param {Array.<string>} [options.webLanguages=[]] - Languages to mock as web languages.
+   * @param {string} options.expectedTargetLanguage - The expected target language for the translate-selection item.
+   */
+  static async testContextMenuItemWithLocales({
+    runInPage,
+    systemLocales = [],
+    appLocales = [],
+    webLanguages = [],
+    expectedTargetLanguage,
+  }) {
+    const cleanupLocales = await mockLocales({
+      systemLocales,
+      appLocales,
+      webLanguages,
+    });
+
+    await SelectTranslationsTestUtils.assertContextMenuTranslateSelectionItem(
+      runInPage,
+      {
+        selectSpanishSentence: true,
+        openAtSpanishSentence: true,
+        expectMenuItemVisible: true,
+        expectedTargetLanguage,
+      },
+      `The translate-selection context menu item should match the expected target language '${expectedTargetLanguage}'`
+    );
+
+    await closeAllOpenPanelsAndMenus();
+    await cleanupLocales();
   }
 
   /**
@@ -1660,14 +1725,20 @@ class SelectTranslationsTestUtils {
       textArea: true,
       toLabel: true,
       toMenuList: true,
-      translateFullPageButton: !isFullPageTranslationsRestrictedForPage,
+      translateFullPageButton: !(
+        isFullPageTranslationsRestrictedForPage ||
+        isFullPageTranslationsActive()
+      ),
     });
     SelectTranslationsTestUtils.#assertConditionalUIEnabled({
       copyButton: true,
       doneButtonPrimary: true,
       textArea: true,
-      translateFullPageButton:
-        !sameLanguageSelected && !isFullPageTranslationsRestrictedForPage,
+      translateFullPageButton: !(
+        sameLanguageSelected ||
+        isFullPageTranslationsRestrictedForPage ||
+        isFullPageTranslationsActive()
+      ),
     });
 
     await waitForCondition(
@@ -1683,7 +1754,11 @@ class SelectTranslationsTestUtils {
     await SelectTranslationsTestUtils.#assertPanelTextAreaOverflow();
 
     let footerButtons;
-    if (sameLanguageSelected || isFullPageTranslationsRestrictedForPage) {
+    if (
+      sameLanguageSelected ||
+      isFullPageTranslationsRestrictedForPage ||
+      isFullPageTranslationsActive()
+    ) {
       footerButtons = [copyButton, doneButtonPrimary];
     } else {
       footerButtons =
@@ -1914,7 +1989,10 @@ class SelectTranslationsTestUtils {
       textArea: true,
       toLabel: true,
       toMenuList: true,
-      translateFullPageButton: !isFullPageTranslationsRestrictedForPage,
+      translateFullPageButton: !(
+        isFullPageTranslationsRestrictedForPage ||
+        isFullPageTranslationsActive()
+      ),
     });
     SelectTranslationsTestUtils.#assertPanelHasTranslatingPlaceholder();
   }
@@ -1943,7 +2021,8 @@ class SelectTranslationsTestUtils {
       doneButtonPrimary: true,
       translateFullPageButton:
         fromMenuList.value !== toMenuList.value &&
-        !isFullPageTranslationsRestrictedForPage,
+        !isFullPageTranslationsRestrictedForPage &&
+        !isFullPageTranslationsActive(),
     });
   }
 
@@ -1965,7 +2044,9 @@ class SelectTranslationsTestUtils {
       copyButton: true,
       doneButtonPrimary: true,
       translateFullPageButton:
-        fromLanguage !== toLanguage && !isFullPageTranslationsRestrictedForPage,
+        fromLanguage !== toLanguage &&
+        !isFullPageTranslationsRestrictedForPage &&
+        !isFullPageTranslationsActive(),
     });
 
     if (fromLanguage === toLanguage) {

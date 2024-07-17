@@ -54,6 +54,13 @@ option(
 )
 
 
+option(
+    env="MOZ_OPTIMIZE_FLAGS",
+    help="Extra optimization flags.",
+    nargs=1,
+    default="",
+)
+
 # Code optimization
 # ==============================================================
 
@@ -84,6 +91,16 @@ def moz_optimize(option):
 set_config("MOZ_OPTIMIZE", moz_optimize.optimize)
 add_old_configure_assignment("MOZ_OPTIMIZE", moz_optimize.optimize)
 add_old_configure_assignment("MOZ_CONFIGURE_OPTIMIZE_FLAGS", moz_optimize.flags)
+
+
+@depends("MOZ_OPTIMIZE_FLAGS")
+@imports(_from="mozbuild.shellutil", _import="split")
+def moz_optimize_flags(env_optimize_flags):
+    return split(env_optimize_flags[0])
+
+
+add_old_configure_assignment("MOZ_OPTIMIZE_FLAGS", moz_optimize_flags)
+
 
 # Android NDK
 # ==============================================================
@@ -2456,11 +2473,6 @@ def preprocess_option(compiler):
 set_config("PREPROCESS_OPTION", preprocess_option)
 
 
-# We only want to include windows.configure when we are compiling on
-# Windows, or for Windows.
-include("windows.configure", when=is_windows)
-
-
 # On Power ISA, determine compiler flags for VMX, VSX and VSX-3.
 
 set_config(
@@ -2806,6 +2818,10 @@ any_ubsan = ubsan | ub_signed_overflow_san | ub_unsigned_overflow_san
 set_define("MOZ_UBSAN", True, when=any_ubsan)
 set_config("MOZ_UBSAN", any_ubsan)
 
+
+# We only want to include windows.configure when we are compiling on
+# Windows, or for Windows.
+include("windows.configure", when=is_windows)
 
 # Security Hardening
 # ==============================================================
@@ -3261,6 +3277,9 @@ llvm_objdump = check_prog(
 
 add_old_configure_assignment("LLVM_OBJDUMP", llvm_objdump)
 
+# Force clang-cl compiler to treat input as C++
+# ==============================================================
+add_flag("-TP", cxx_compiler, when=target_is_windows & ~building_with_gnu_compatible_cc)
 
 option(
     "--enable-clang-plugin-alpha",

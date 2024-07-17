@@ -1355,13 +1355,13 @@ class Connection final : public CachingDatabaseConnection {
 };
 
 /**
- * Helper to invoke EnsureTemporaryOriginIsInitialized on the QuotaManager IO
- * thread from the LocalStorage connection thread when creating a database
- * connection on demand. This is necessary because we attempt to defer the
- * creation of the origin directory and the database until absolutely needed,
- * but the directory creation and origin initialization must happen on the QM
- * IO thread for invariant reasons. (We can't just use a mutex because there
- * could be logic on the IO thread that also wants to deal with the same
+ * Helper to invoke EnsureTemporaryOriginIsInitializedInternal on the
+ * QuotaManager IO thread from the LocalStorage connection thread when creating
+ * a database connection on demand. This is necessary because we attempt to
+ * defer the creation of the origin directory and the database until absolutely
+ * needed, but the directory creation and origin initialization must happen on
+ * the QM IO thread for invariant reasons. (We can't just use a mutex because
+ * there could be logic on the IO thread that also wants to deal with the same
  * origin, so we need to queue a runnable and wait our turn.)
  */
 class Connection::InitTemporaryOriginHelper final : public Runnable {
@@ -4202,11 +4202,10 @@ nsresult Connection::InitTemporaryOriginHelper::RunOnIOThread() {
   QuotaManager* quotaManager = QuotaManager::Get();
   MOZ_ASSERT(quotaManager);
 
-  QM_TRY_INSPECT(const auto& directoryEntry,
-                 quotaManager
-                     ->EnsureTemporaryOriginIsInitialized(
-                         PERSISTENCE_TYPE_DEFAULT, mOriginMetadata)
-                     .map([](const auto& res) { return res.first; }));
+  QM_TRY_INSPECT(
+      const auto& directoryEntry,
+      quotaManager->EnsureTemporaryOriginIsInitializedInternal(mOriginMetadata)
+          .map([](const auto& res) { return res.first; }));
 
   QM_TRY(MOZ_TO_RESULT(directoryEntry->GetPath(mOriginDirectoryPath)));
 
@@ -6944,8 +6943,8 @@ nsresult PrepareDatastoreOp::DatabaseWork() {
           this]() -> mozilla::Result<nsCOMPtr<nsIFile>, nsresult> {
           if (hasDataForMigration) {
             QM_TRY_RETURN(quotaManager
-                              ->EnsureTemporaryOriginIsInitialized(
-                                  PERSISTENCE_TYPE_DEFAULT, mOriginMetadata)
+                              ->EnsureTemporaryOriginIsInitializedInternal(
+                                  mOriginMetadata)
                               .map([](const auto& res) { return res.first; }));
           }
 

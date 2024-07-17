@@ -30,7 +30,7 @@ pub use self::align::{JustifyContent, JustifyItems, JustifySelf, SelfAlignment};
 pub use self::angle::{AllowUnitlessZeroAngle, Angle};
 pub use self::animation::{
     AnimationComposition, AnimationDirection, AnimationFillMode, AnimationIterationCount,
-    AnimationName, AnimationPlayState, AnimationTimeline, ScrollAxis, ScrollTimelineName,
+    AnimationName, AnimationPlayState, AnimationTimeline, ScrollAxis, TimelineName,
     TransitionBehavior, TransitionProperty, ViewTimelineInset,
 };
 pub use self::background::{BackgroundRepeat, BackgroundSize};
@@ -82,7 +82,7 @@ pub use self::position::AnchorName;
 pub use self::position::AnchorScope;
 pub use self::position::AspectRatio;
 pub use self::position::PositionAnchor;
-pub use self::position::PositionTryOptions;
+pub use self::position::PositionTryFallbacks;
 pub use self::position::PositionTryOrder;
 pub use self::position::PositionVisibility;
 pub use self::position::{GridAutoFlow, GridTemplateAreas, Position, PositionOrAuto};

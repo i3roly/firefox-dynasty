@@ -8,7 +8,7 @@
 # documentation and how to modify this file.
 repo: mozilla-central
 created_at: '2021-10-14T12:50:40.073465'
-updated_at: '2024-07-10T15:47:32.256847+00:00'
+updated_at: '2024-07-17T10:11:06.881599+00:00'
 export:
   path: ./docs/mots/index.rst
   format: rst
@@ -827,6 +827,10 @@ people:
     bmo_id: 404637
     name: Paul Adenot
     nick: padenot
+  - &pbone
+    bmo_id: 595166
+    name: Paul Bone
+    nick: pbone
   - &pbz
     bmo_id: 636491
     name: Paul Zühlcke
@@ -1641,6 +1645,7 @@ modules:
       - *ahal
     peers:
       - *Sylvestre
+      - *marco
     meta:
       components:
         - Developer Infrastructure::Source Documentation
@@ -2109,7 +2114,6 @@ modules:
       - media/libnestegg/**/*
       - media/libogg/**/*
       - media/libopus/**/*
-      - media/libtheora/**/*
       - media/libtremor/**/*
       - media/libvorbis/**/*
       - media/libvpx/**/*
@@ -2164,7 +2168,8 @@ modules:
         - Core::jemalloc
     owners:
       - *glandium
-    peers: []
+    peers:
+      - *pbone
     machine_name: core_memory_allocator
 
   - name: 'Core: mfbt'
@@ -3845,9 +3850,10 @@ modules:
       such as lint configurations, formatting and naming style.
     includes:
       - .eslintrc-test-paths.js
-      - '**/.eslintignore'
-      - '**/.eslintrc.js'
+      - '**/.eslintrc*.js'
       - tools/lint/eslint/**/*
+      - .prettier*
+      - .stylelint*
     excludes: []
     owners:
       - *mossop
@@ -4359,5 +4365,5 @@ modules:
         - Ryan Tilder
       group: dev-platform
 hashes:
-  config: c187a82ea9772e8a0e65611c0d64c164ccd7f60c
-  export: 7101ade973617f1b4aa16978462a432b059ffdcd
+  config: ac276628add50ad9e6c70137a79d070d76a82942
+  export: a6650d7d2bf731f897479af4be65afeb7fca9501

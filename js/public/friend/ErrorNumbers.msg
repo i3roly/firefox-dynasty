@@ -136,7 +136,7 @@ MSG_DEF(JSMSG_BAD_DERIVED_RETURN,      1, JSEXN_TYPEERR, "derived class construc
 MSG_DEF(JSMSG_BAD_HERITAGE,            2, JSEXN_TYPEERR, "class heritage {0} is {1}")
 MSG_DEF(JSMSG_NOT_OBJORNULL,           1, JSEXN_TYPEERR, "{0} is not an object or null")
 MSG_DEF(JSMSG_CONSTRUCTOR_DISABLED,    1, JSEXN_TYPEERR, "{0} is disabled")
-MSG_DEF(JSMSG_NO_DISPOSE_IN_USING,     0, JSEXN_TYPEERR, "'Symbol.dispose' property is not callable")
+MSG_DEF(JSMSG_DISPOSE_NOT_CALLABLE,     0, JSEXN_TYPEERR, "'Symbol.dispose' property is not callable")
 MSG_DEF(JSMSG_DISPOSABLE_NOT_OBJ,      0, JSEXN_TYPEERR, "Value to be disposed is not an object")
 
 // JSON
@@ -282,10 +282,10 @@ MSG_DEF(JSMSG_DEPRECATED_OCTAL_LITERAL,0, JSEXN_SYNTAXERR, "\"0\"-prefixed octal
 MSG_DEF(JSMSG_DEPRECATED_OCTAL_ESCAPE ,0, JSEXN_SYNTAXERR, "octal escape sequences can't be used in untagged template literals or in strict mode code")
 MSG_DEF(JSMSG_DEPRECATED_EIGHT_OR_NINE_ESCAPE, 0, JSEXN_SYNTAXERR, "the escapes \\8 and \\9 can't be used in untagged template literals or in strict mode code")
 MSG_DEF(JSMSG_DEPRECATED_PRAGMA,       1, JSEXN_WARN, "Using //@ to indicate {0} pragmas is deprecated. Use //# instead")
+MSG_DEF(JSMSG_DUPLICATE_CONSTRUCTOR,   0, JSEXN_SYNTAXERR, "a class cannot have more than one constructor definition")
 MSG_DEF(JSMSG_DUPLICATE_EXPORT_NAME,   1, JSEXN_SYNTAXERR, "duplicate export name '{0}'")
 MSG_DEF(JSMSG_DUPLICATE_FORMAL,        1, JSEXN_SYNTAXERR, "duplicate formal argument {0}")
 MSG_DEF(JSMSG_DUPLICATE_LABEL,         0, JSEXN_SYNTAXERR, "duplicate label")
-MSG_DEF(JSMSG_DUPLICATE_PROPERTY,      1, JSEXN_SYNTAXERR, "property name {0} appears more than once in object literal")
 MSG_DEF(JSMSG_DUPLICATE_PROTO_PROPERTY, 0, JSEXN_SYNTAXERR, "property name __proto__ appears more than once in object literal")
 MSG_DEF(JSMSG_EQUAL_AS_ASSIGN,         0, JSEXN_SYNTAXERR, "test for equality (==) mistyped as assignment (=)?")
 MSG_DEF(JSMSG_EXPORT_DECL_AT_TOP_LEVEL,0, JSEXN_SYNTAXERR, "export declarations may only appear at top level of a module")
@@ -963,5 +963,8 @@ MSG_DEF(JSMSG_TEMPORAL_PARSER_INVALID_SUBMINUTE_TIMEZONE, 0, JSEXN_RANGEERR, "ti
 
 // TODO: Improve the messaging for suppressed errors (Bug 1906150)
 MSG_DEF(JSMSG_ERROR_WAS_SUPPRESSED, 0, IF_EXPLICIT_RESOURCE_MANAGEMENT(JSEXN_SUPPRESSEDERR, JSEXN_INTERNALERR), "An error is suppressed because another error happened while disposing an object")
+
+// DisposableStack
+MSG_DEF(JSMSG_DISPOSABLE_STACK_DISPOSED, 0, JSEXN_REFERENCEERR, "DisposableStack has already been disposed")
 
 //clang-format on

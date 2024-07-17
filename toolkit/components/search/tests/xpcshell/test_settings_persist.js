@@ -7,23 +7,6 @@
 
 "use strict";
 
-const CONFIG_UPDATED = [
-  {
-    webExtension: {
-      id: "plainengine@search.mozilla.org",
-      name: "Plain",
-      search_url: "https://duckduckgo.com/",
-      params: [
-        {
-          name: "q",
-          value: "{searchTerms}",
-        },
-      ],
-    },
-    appliesTo: [{ included: { everywhere: true } }],
-  },
-];
-
 const SEARCH_CONFIG_V2_UPDATED = [
   {
     recordType: "engine",
@@ -57,7 +40,6 @@ const SEARCH_CONFIG_V2_UPDATED = [
 async function startup() {
   let settingsFileWritten = promiseAfterSettings();
   let ss = new SearchService();
-  await AddonTestUtils.promiseRestartManager();
   await ss.init(false);
   await settingsFileWritten;
   return ss;
@@ -78,8 +60,6 @@ async function visibleEngines(ss) {
 
 add_setup(async function () {
   await SearchTestUtils.useTestEngines("test-extensions");
-  registerCleanupFunction(AddonTestUtils.promiseShutdownManager);
-  await AddonTestUtils.promiseStartupManager();
   // This is only needed as otherwise events will not be properly notified
   // due to https://searchfox.org/mozilla-central/rev/5f0a7ca8968ac5cef8846e1d970ef178b8b76dcc/toolkit/components/search/SearchSettings.sys.mjs#41-42
   let settingsFileWritten = promiseAfterSettings();
@@ -106,11 +86,7 @@ add_task(async function () {
   );
 
   ss._removeObservers();
-  await updateConfig(
-    SearchUtils.newSearchConfigEnabled
-      ? SEARCH_CONFIG_V2_UPDATED
-      : CONFIG_UPDATED
-  );
+  await updateConfig(SEARCH_CONFIG_V2_UPDATED);
   ss = await startup();
 
   Assert.ok(

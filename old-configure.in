@@ -36,7 +36,6 @@ esac
 
 dnl Set the minimum version of toolkit libs used by mozilla
 dnl ========================================================
-W32API_VERSION=3.14
 
 
 LDFLAGS="$LDFLAGS $LINKER_LDFLAGS $PACK_REL_RELOC_FLAGS"
@@ -63,88 +62,6 @@ else
     AC_PROG_CXX
 fi
 
-dnl ========================================================
-dnl Special win32 checks
-dnl ========================================================
-
-WINVER=0A00
-
-case "$target" in
-*-mingw*)
-    if test "$CC_TYPE" = clang-cl; then
-        # Check to see if we are really running in a msvc environemnt
-        _WIN32_MSVC=1
-
-        # Make sure compilers are valid
-        CXXFLAGS="$CXXFLAGS -TP"
-        AC_LANG_SAVE
-        AC_LANG_C
-        AC_TRY_COMPILE([#include <stdio.h>],
-            [ printf("Hello World\n"); ],,
-            AC_MSG_ERROR([\$(CC) test failed.  You must have MS VC++ in your path to build.]) )
-
-        AC_LANG_CPLUSPLUS
-        AC_TRY_COMPILE([#include <new.h>],
-            [ unsigned *test = new unsigned(42); ],,
-            AC_MSG_ERROR([\$(CXX) test failed.  You must have MS VC++ in your path to build.]) )
-        AC_LANG_RESTORE
-
-        AC_DEFINE(_CRT_SECURE_NO_WARNINGS)
-        AC_DEFINE(_CRT_NONSTDC_NO_WARNINGS)
-
-        MSVC_C_RUNTIME_DLL=vcruntime140.dll
-        if test "$TARGET_CPU" != "x86"; then
-            MSVC_C_RUNTIME_1_DLL=vcruntime140_1.dll
-        fi
-        MSVC_CXX_RUNTIME_DLL=msvcp140.dll
-
-        # -Zc:sizedDealloc- disables C++14 global sized deallocation (see bug 1160146)
-        CXXFLAGS="$CXXFLAGS -Zc:sizedDealloc-"
-
-        AC_SUBST(MSVC_C_RUNTIME_DLL)
-        AC_SUBST(MSVC_C_RUNTIME_1_DLL)
-        AC_SUBST(MSVC_CXX_RUNTIME_DLL)
-
-        AC_DEFINE(HAVE_SEH_EXCEPTIONS)
-    else
-        # Check w32api version
-        _W32API_MAJOR_VERSION=`echo $W32API_VERSION | $AWK -F\. '{ print $1 }'`
-        _W32API_MINOR_VERSION=`echo $W32API_VERSION | $AWK -F\. '{ print $2 }'`
-        AC_MSG_CHECKING([for w32api version >= $W32API_VERSION])
-        AC_TRY_COMPILE([#include <w32api.h>],
-            #if (__W32API_MAJOR_VERSION < $_W32API_MAJOR_VERSION) || \
-                (__W32API_MAJOR_VERSION == $_W32API_MAJOR_VERSION && \
-                 __W32API_MINOR_VERSION < $_W32API_MINOR_VERSION)
-                #error "test failed."
-            #endif
-            , [ res=yes ], [ res=no ])
-        AC_MSG_RESULT([$res])
-        if test "$res" != "yes"; then
-            AC_MSG_ERROR([w32api version $W32API_VERSION or higher required.])
-        fi
-        # strsafe.h on mingw uses macros for function deprecation that pollutes namespace
-        # causing problems with local implementations with the same name.
-        AC_DEFINE(STRSAFE_NO_DEPRECATE)
-    fi
-
-    AC_DEFINE(_USE_MATH_DEFINES) # Otherwise Windows' math.h doesn't #define M_PI.
-
-    CFLAGS="$CFLAGS -D_HAS_EXCEPTIONS=0"
-    CXXFLAGS="$CXXFLAGS -D_HAS_EXCEPTIONS=0"
-
-    AC_DEFINE_UNQUOTED(WINVER,0x$WINVER)
-    AC_DEFINE_UNQUOTED(_WIN32_WINNT,0x$WINVER)
-    AC_DEFINE_UNQUOTED(_WIN32_IE,0x0A00)
-
-    ;;
-esac
-
-if test -n "$_WIN32_MSVC"; then
-    # Since we're skipping compiler and library checks, hard-code
-    # some facts here.
-    AC_DEFINE(HAVE_IO_H)
-fi
-
 fi # COMPILE_ENVIRONMENT
 
 dnl Configure platform-specific CPU architecture compiler options.
@@ -156,8 +73,6 @@ fi # COMPILE_ENVIRONMENT
 dnl ========================================================
 dnl System overrides of the defaults for target
 dnl ========================================================
-
-MOZ_OPTIMIZE_LDFLAGS="${_COMPILATION_OPTIMIZE_LDFLAGS} ${MOZ_OPTIMIZE_FLAGS}"
 
 case "$target" in
 *-darwin*)
@@ -178,21 +93,8 @@ case "$target" in
     # certain versions of cygwin's makedepend barf on the
     # #include <string> vs -I./dist/include/string issue so don't use it
     if test "$CC_TYPE" != clang-cl ; then
-
         MOZ_OPTIMIZE_FLAGS="-O2"
-
-        WIN32_CONSOLE_EXE_LDFLAGS=-mconsole
-        WIN32_GUI_EXE_LDFLAGS=-mwindows
-
-        # Silence problematic clang warnings
-        CXXFLAGS="$CXXFLAGS -Wno-incompatible-ms-struct"
-        LDFLAGS="$LDFLAGS -Wl,--no-insert-timestamp"
     else
-        WIN32_SUBSYSTEM_VERSION=10.0
-        WIN32_CONSOLE_EXE_LDFLAGS=-SUBSYSTEM:CONSOLE,$WIN32_SUBSYSTEM_VERSION
-        WIN32_GUI_EXE_LDFLAGS=-SUBSYSTEM:WINDOWS,$WIN32_SUBSYSTEM_VERSION
-        CFLAGS="$CFLAGS -Gy -Zc:inline"
-        CXXFLAGS="$CXXFLAGS -Gy -Zc:inline"
         if test "$TARGET_CPU" = "x86"; then
             dnl VS2012+ defaults to -arch:SSE2. We want to target nothing
             dnl more recent, so set that explicitly here unless another
@@ -206,18 +108,6 @@ case "$target" in
             fi
             changequote([,])
         fi
-        dnl VS2013+ supports -Gw for better linker optimizations.
-        dnl http://blogs.msdn.com/b/vcblog/archive/2013/09/11/introducing-gw-compiler-switch.aspx
-        dnl Disabled on ASan because it causes false-positive ODR violations.
-        if test -z "$MOZ_ASAN"; then
-            CFLAGS="$CFLAGS -Gw"
-            CXXFLAGS="$CXXFLAGS -Gw"
-        else
-            # String tail merging doesn't play nice with ASan's ODR checker.
-            LDFLAGS="$LDFLAGS -opt:nolldtailmerge"
-        fi
-        # Silence VS2017 15.5+ TR1 deprecation warnings hit by older gtest versions
-        CXXFLAGS="$CXXFLAGS -D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING"
         MOZ_DEBUG_LDFLAGS='-DEBUG'
         if test "$HOST_OS_ARCH" != "WINNT"; then
           # %_PDB% is a special signal to emit only the PDB basename. This
@@ -225,11 +115,7 @@ case "$target" in
           MOZ_DEBUG_LDFLAGS="$MOZ_DEBUG_LDFLAGS -PDBALTPATH:%_PDB%"
         fi
         MOZ_OPTIMIZE_FLAGS='-O2'
-        LDFLAGS="$LDFLAGS -LARGEADDRESSAWARE"
     fi
-    AC_DEFINE(WIN32_LEAN_AND_MEAN)
-    dnl See http://support.microsoft.com/kb/143208 to use STL
-    AC_DEFINE(NOMINMAX)
 
     case "$host_os" in
     cygwin*|msvc*|mks*)
@@ -239,14 +125,6 @@ case "$target" in
 
     case "$target" in
     i*86-*)
-        if test "$CC_TYPE" != clang-cl ; then
-            CFLAGS="$CFLAGS -mstackrealign"
-            CXXFLAGS="$CXXFLAGS -mstackrealign"
-            LDFLAGS="$LDFLAGS -Wl,--large-address-aware"
-        else
-            LDFLAGS="$LDFLAGS -SAFESEH"
-        fi
-
         AC_DEFINE(_X86_)
         ;;
     x86_64-*)
@@ -358,22 +236,10 @@ if test -n "$MOZ_OPTIMIZE"; then
         AC_MSG_ERROR([These compiler flags for C are invalid: $MOZ_OPTIMIZE_FLAGS])
     fi
     CFLAGS=$_SAVE_CFLAGS
-    if test -n "$MOZ_LTO" -a "$CC_TYPE" = clang ; then
-        # When using llvm-based LTO, non numeric optimization levels are
-        # not supported by the linker, so force the linker to use -O2 (
-        # which doesn't influence the level compilation units are actually
-        # compiled at).
-        case " $MOZ_OPTIMIZE_FLAGS " in
-        *\ -Os\ *|*\ -Oz\ *)
-            MOZ_OPTIMIZE_LDFLAGS="$MOZ_OPTIMIZE_LDFLAGS -O2"
-            ;;
-        esac
-    fi
 fi
 fi # COMPILE_ENVIRONMENT
 
 AC_SUBST_LIST(MOZ_OPTIMIZE_FLAGS)
-AC_SUBST_LIST(MOZ_OPTIMIZE_LDFLAGS)
 AC_SUBST_LIST(MOZ_PGO_OPTIMIZE_FLAGS)
 
 dnl ========================================================
@@ -514,9 +380,6 @@ AC_SUBST_LIST(OS_LDFLAGS)
 
 AC_SUBST(HOST_CC)
 AC_SUBST(HOST_CXX)
-
-AC_SUBST(WIN32_CONSOLE_EXE_LDFLAGS)
-AC_SUBST(WIN32_GUI_EXE_LDFLAGS)
 
 dnl Set various defines and substitutions
 dnl ========================================================

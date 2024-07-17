@@ -537,13 +537,14 @@ nsBaseDragService::InvokeDragSessionWithSelection(
     Selection* aSelection, nsIPrincipal* aPrincipal,
     nsIContentSecurityPolicy* aCsp, nsICookieJarSettings* aCookieJarSettings,
     nsIArray* aTransferableArray, uint32_t aActionType, DragEvent* aDragEvent,
-    DataTransfer* aDataTransfer) {
+    DataTransfer* aDataTransfer, nsINode* aTargetContent) {
   nsCOMPtr<nsIWidget> widget =
       aDragEvent->WidgetEventPtr()->AsDragEvent()->mWidget;
   MOZ_ASSERT(widget);
 
   NS_ENSURE_TRUE(aSelection, NS_ERROR_NULL_POINTER);
   NS_ENSURE_TRUE(aDragEvent, NS_ERROR_NULL_POINTER);
+  NS_ENSURE_TRUE(aTargetContent, NS_ERROR_NULL_POINTER);
   NS_ENSURE_TRUE(mSuppressLevel == 0, NS_ERROR_FAILURE);
 
   RefPtr<nsBaseDragSession> session =
@@ -557,14 +558,15 @@ nsBaseDragService::InvokeDragSessionWithSelection(
   return session->InitWithSelection(widget, aSelection, aPrincipal, aCsp,
                                     aCookieJarSettings, aTransferableArray,
                                     aActionType, aDragEvent, aDataTransfer,
-                                    isSynthesized);
+                                    aTargetContent, isSynthesized);
 }
 
 nsresult nsBaseDragSession::InitWithSelection(
     nsIWidget* aWidget, Selection* aSelection, nsIPrincipal* aPrincipal,
     nsIContentSecurityPolicy* aCsp, nsICookieJarSettings* aCookieJarSettings,
     nsIArray* aTransferableArray, uint32_t aActionType, DragEvent* aDragEvent,
-    DataTransfer* aDataTransfer, bool aIsSynthesizedForTests) {
+    DataTransfer* aDataTransfer, nsINode* aTargetContent,
+    bool aIsSynthesizedForTests) {
   mSessionIsSynthesizedForTests = aIsSynthesizedForTests;
   mDataTransfer = aDataTransfer;
   mSelection = aSelection;
@@ -579,11 +581,10 @@ nsresult nsBaseDragSession::InitWithSelection(
   mScreenPosition.y = aDragEvent->ScreenY(CallerType::System);
   mInputSource = aDragEvent->InputSource(CallerType::System);
 
-  // just get the focused node from the selection
   // XXXndeakin this should actually be the deepest node that contains both
   // endpoints of the selection
-  nsCOMPtr<nsINode> node = aSelection->GetFocusNode();
-  mSourceWindowContext = node ? node->OwnerDoc()->GetWindowContext() : nullptr;
+  nsCOMPtr<nsINode> node = aTargetContent;
+  mSourceWindowContext = node->OwnerDoc()->GetWindowContext();
   mSourceTopWindowContext =
       mSourceWindowContext ? mSourceWindowContext->TopWindowContext() : nullptr;
 
@@ -1031,9 +1032,9 @@ nsresult nsBaseDragSession::DrawDragForImage(
     aScreenDragRect->SizeTo(aPresContext->CSSPixelsToDevPixels(imageWidth),
                             aPresContext->CSSPixelsToDevPixels(imageHeight));
   } else {
-    // XXX The canvas size should be converted to dev pixels.
+    // Bug 1907668: The canvas size should be converted to dev pixels.
     NS_ASSERTION(aCanvas, "both image and canvas are null");
-    nsIntSize sz = aCanvas->GetSize();
+    CSSIntSize sz = aCanvas->GetSize();
     aScreenDragRect->SizeTo(sz.width, sz.height);
   }
 

@@ -23,8 +23,6 @@ import androidx.annotation.CallSuper
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Column
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
@@ -87,7 +85,8 @@ import mozilla.components.feature.prompts.PromptFeature
 import mozilla.components.feature.prompts.PromptFeature.Companion.PIN_REQUEST
 import mozilla.components.feature.prompts.address.AddressDelegate
 import mozilla.components.feature.prompts.creditcard.CreditCardDelegate
-import mozilla.components.feature.prompts.dialog.FullScreenNotificationDialog
+import mozilla.components.feature.prompts.dialog.FullScreenNotificationToast
+import mozilla.components.feature.prompts.dialog.GestureNavUtils
 import mozilla.components.feature.prompts.file.AndroidPhotoPicker
 import mozilla.components.feature.prompts.identitycredential.DialogColors
 import mozilla.components.feature.prompts.identitycredential.DialogColorsProvider
@@ -141,12 +140,13 @@ import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.readermode.DefaultReaderModeController
 import org.mozilla.fenix.browser.tabstrip.TabStrip
 import org.mozilla.fenix.browser.tabstrip.isTabStripEnabled
+import org.mozilla.fenix.components.Components
 import org.mozilla.fenix.components.FenixSnackbar
 import org.mozilla.fenix.components.FindInPageIntegration
 import org.mozilla.fenix.components.StoreProvider
 import org.mozilla.fenix.components.appstate.AppAction
+import org.mozilla.fenix.components.appstate.AppAction.MessagingAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.MicrosurveyAction
-import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.metrics.MetricsUtils
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerIntegration
@@ -994,7 +994,7 @@ abstract class BaseBrowserFragment :
         )
 
         val accentHighContrastColor =
-            ThemeManager.resolveAttribute(R.attr.accentHighContrast, context)
+            ThemeManager.resolveAttribute(R.attr.actionPrimary, context)
 
         sitePermissionsFeature.set(
             feature = SitePermissionsFeature(
@@ -1005,7 +1005,7 @@ abstract class BaseBrowserFragment :
                     gravity = getAppropriateLayoutGravity(),
                     shouldWidthMatchParent = true,
                     positiveButtonBackgroundColor = accentHighContrastColor,
-                    positiveButtonTextColor = R.color.photonWhite,
+                    positiveButtonTextColor = R.color.fx_mobile_text_color_action_primary,
                 ),
                 sessionId = customTabSessionId,
                 onNeedToRequestPermissions = { permissions ->
@@ -1418,13 +1418,11 @@ abstract class BaseBrowserFragment :
             content = {
                 FirefoxTheme {
                     Column {
-                        val shouldShowMicrosurveyPrompt =
-                            remember { mutableStateOf(context.settings().shouldShowMicrosurveyPrompt) }
-
-                        if (shouldShowMicrosurveyPrompt.value) {
+                        if (!activity.isMicrosurveyPromptDismissed.value) {
                             currentMicrosurvey?.let {
                                 MicrosurveyRequestPrompt(
                                     microsurvey = it,
+                                    activity = activity,
                                     onStartSurveyClicked = {
                                         context.components.appStore.dispatch(MicrosurveyAction.Started(it.id))
                                         findNavController().nav(
@@ -1437,7 +1435,6 @@ abstract class BaseBrowserFragment :
                                             MicrosurveyAction.Dismissed(it.id),
                                         )
                                         context.settings().shouldShowMicrosurveyPrompt = false
-                                        shouldShowMicrosurveyPrompt.value = false
 
                                         resumeDownloadDialogState(
                                             getCurrentTab()?.id,
@@ -1578,13 +1575,13 @@ abstract class BaseBrowserFragment :
             content = {
                 FirefoxTheme {
                     Column {
-                        val shouldShowMicrosurveyPrompt =
-                            remember { mutableStateOf(context.settings().shouldShowMicrosurveyPrompt) }
+                        val activity = requireActivity() as HomeActivity
 
-                        if (shouldShowMicrosurveyPrompt.value) {
+                        if (!activity.isMicrosurveyPromptDismissed.value) {
                             currentMicrosurvey?.let {
                                 MicrosurveyRequestPrompt(
                                     microsurvey = it,
+                                    activity = activity,
                                     onStartSurveyClicked = {
                                         context.components.appStore.dispatch(MicrosurveyAction.Started(it.id))
                                         findNavController().nav(
@@ -1597,7 +1594,6 @@ abstract class BaseBrowserFragment :
                                             MicrosurveyAction.Dismissed(it.id),
                                         )
                                         context.settings().shouldShowMicrosurveyPrompt = false
-                                        shouldShowMicrosurveyPrompt.value = false
 
                                         resumeDownloadDialogState(
                                             getCurrentTab()?.id,
@@ -1776,7 +1772,12 @@ abstract class BaseBrowserFragment :
                     openLinksInExternalApp
                 }
             }
+
+        evaluateMessagesForMicrosurvey(components)
     }
+
+    private fun evaluateMessagesForMicrosurvey(components: Components) =
+        components.appStore.dispatch(MessagingAction.Evaluate(FenixMessageSurfaceId.MICROSURVEY))
 
     @CallSuper
     override fun onPause() {
@@ -2063,15 +2064,19 @@ abstract class BaseBrowserFragment :
 
     @VisibleForTesting
     internal fun fullScreenChanged(inFullScreen: Boolean) {
+        val activity = activity ?: return
         if (inFullScreen) {
             // Close find in page bar if opened
             findInPageIntegration.onBackPressed()
 
-            FullScreenNotificationDialog(R.layout.full_screen_notification_dialog).show(
-                parentFragmentManager,
-            )
+            FullScreenNotificationToast(
+                activity = activity,
+                gestureNavString = getString(R.string.exit_fullscreen_with_gesture),
+                backButtonString = getString(R.string.exit_fullscreen_with_back_button),
+                GestureNavUtils,
+            ).show()
 
-            activity?.enterImmersiveMode()
+            activity.enterImmersiveMode()
             (view as? SwipeGestureLayout)?.isSwipeEnabled = false
             browserToolbarView.collapse()
             browserToolbarView.gone()
@@ -2090,12 +2095,12 @@ abstract class BaseBrowserFragment :
 
             MediaState.fullscreen.record(NoExtras())
         } else {
-            activity?.exitImmersiveMode()
+            activity.exitImmersiveMode()
             (view as? SwipeGestureLayout)?.isSwipeEnabled = true
-            (activity as? HomeActivity)?.let { activity ->
+            (activity as? HomeActivity)?.let { homeActivity ->
                 // ExternalAppBrowserActivity exclusively handles it's own theming unless in private mode.
-                if (activity !is ExternalAppBrowserActivity || activity.browsingModeManager.mode.isPrivate) {
-                    activity.themeManager.applyStatusBarTheme(activity)
+                if (homeActivity !is ExternalAppBrowserActivity || homeActivity.browsingModeManager.mode.isPrivate) {
+                    homeActivity.themeManager.applyStatusBarTheme(homeActivity)
                 }
             }
             if (webAppToolbarShouldBeVisible) {

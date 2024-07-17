@@ -1786,13 +1786,20 @@ void ScriptSource::addSizeOfIncludingThis(mozilla::MallocSizeOf mallocSizeOf,
 }
 
 bool ScriptSource::startIncrementalEncoding(
-    JSContext* cx,
-    UniquePtr<frontend::ExtensibleCompilationStencil>&& initial) {
+    JSContext* cx, UniquePtr<frontend::ExtensibleCompilationStencil>&& initial,
+    bool& alreadyStarted) {
   // We don't support asm.js in XDR.
   // Encoding failures are reported by the xdrFinalizeEncoder function.
   if (initial->asmJS) {
+    alreadyStarted = false;
     return true;
   }
+
+  if (xdrEncoder_.hasEncoder()) {
+    alreadyStarted = true;
+    return true;
+  }
+  alreadyStarted = false;
 
   // Remove the reference to the source, to avoid the circular reference.
   initial->source = nullptr;
@@ -1850,6 +1857,26 @@ bool ScriptSource::xdrFinalizeEncoder(JSContext* cx,
     }
     return false;
   }
+  return true;
+}
+
+bool ScriptSource::xdrFinalizeEncoder(JSContext* cx, JS::Stencil** stencilOut) {
+  if (!hasEncoder()) {
+    JS_ReportErrorASCII(cx, "XDR encoding failure");
+    return false;
+  }
+
+  auto cleanup = mozilla::MakeScopeExit([&] { xdrEncoder_.reset(); });
+
+  UniquePtr<frontend::ExtensibleCompilationStencil> extensibleStencil =
+      xdrEncoder_.merger_->takeResult();
+  extensibleStencil->source = this;
+  RefPtr<frontend::CompilationStencil> stencil =
+      cx->new_<frontend::CompilationStencil>(std::move(extensibleStencil));
+  if (!stencil) {
+    return false;
+  }
+  stencil.forget(stencilOut);
   return true;
 }
 

@@ -685,6 +685,41 @@ static MOZ_ALWAYS_INLINE JSString::OwnedChars<CharT> AllocChars(JSContext* cx,
   return {std::move(buffer), length};
 }
 
+// Like AllocChars but for atom characters. Does not report an exception on OOM.
+template <typename CharT>
+JSString::OwnedChars<CharT> js::AllocAtomCharsValidLength(JSContext* cx,
+                                                          size_t length) {
+  MOZ_ASSERT(cx->zone()->isAtomsZone());
+  MOZ_ASSERT(JSAtom::validateLength(cx, length));
+  MOZ_ASSERT(mozilla::StringBuffer::IsValidLength<CharT>(length));
+
+  static_assert(JSString::MIN_BYTES_FOR_BUFFER % sizeof(CharT) == 0);
+
+  if (length < JSString::MIN_BYTES_FOR_BUFFER / sizeof(CharT)) {
+    auto buffer =
+        cx->make_pod_arena_array<CharT>(js::StringBufferArena, length);
+    if (!buffer) {
+      cx->recoverFromOutOfMemory();
+      return {};
+    }
+    return {std::move(buffer), length};
+  }
+
+  // Note: StringBuffers must be null-terminated.
+  RefPtr<mozilla::StringBuffer> buffer = mozilla::StringBuffer::Alloc(
+      (length + 1) * sizeof(CharT), mozilla::Some(js::StringBufferArena));
+  if (!buffer) {
+    return {};
+  }
+  static_cast<CharT*>(buffer->Data())[length] = '\0';
+  return {std::move(buffer), length};
+}
+
+template JSString::OwnedChars<Latin1Char> js::AllocAtomCharsValidLength(
+    JSContext* cx, size_t length);
+template JSString::OwnedChars<char16_t> js::AllocAtomCharsValidLength(
+    JSContext* cx, size_t length);
+
 template <typename CharT>
 UniquePtr<CharT[], JS::FreePolicy> JSRope::copyCharsInternal(
     JSContext* maybecx, arena_id_t destArenaId) const {
@@ -1858,16 +1893,16 @@ static JSAtom* NewAtomDeflatedValidLength(JSContext* cx, const char16_t* s,
     return NewInlineAtomDeflated(cx, s, n, hash);
   }
 
-  auto news = cx->make_pod_arena_array<Latin1Char>(js::StringBufferArena, n);
-  if (!news) {
-    cx->recoverFromOutOfMemory();
+  JSString::OwnedChars<Latin1Char> newChars(
+      AllocAtomCharsValidLength<Latin1Char>(cx, n));
+  if (!newChars) {
     return nullptr;
   }
 
   MOZ_ASSERT(CanStoreCharsAsLatin1(s, n));
-  FillFromCompatible(news.get(), s, n);
+  FillFromCompatible(newChars.data(), s, n);
 
-  return JSAtom::newValidLength(cx, std::move(news), n, hash);
+  return JSAtom::newValidLength<Latin1Char>(cx, newChars, hash);
 }
 
 template <AllowGC allowGC, typename CharT>
@@ -2045,15 +2080,14 @@ JSAtom* NewAtomCopyNDontDeflateValidLength(JSContext* cx, const CharT* s,
     return NewInlineAtom(cx, s, n, hash);
   }
 
-  auto news = cx->make_pod_arena_array<CharT>(js::StringBufferArena, n);
-  if (!news) {
-    cx->recoverFromOutOfMemory();
+  JSString::OwnedChars<CharT> newChars(AllocAtomCharsValidLength<CharT>(cx, n));
+  if (!newChars) {
     return nullptr;
   }
 
-  PodCopy(news.get(), s, n);
+  PodCopy(newChars.data(), s, n);
 
-  return JSAtom::newValidLength(cx, std::move(news), n, hash);
+  return JSAtom::newValidLength<CharT>(cx, newChars, hash);
 }
 
 template JSAtom* NewAtomCopyNDontDeflateValidLength(JSContext* cx,
@@ -2295,9 +2329,8 @@ template JSString* NewMaybeExternalString(
 
 } /* namespace js */
 
-template <typename CharT>
-static JSString* NewStringFromBuffer(JSContext* cx,
-                                     RefPtr<mozilla::StringBuffer>&& buffer,
+template <typename CharT, typename BufferT>
+static JSString* NewStringFromBuffer(JSContext* cx, BufferT&& buffer,
                                      size_t length) {
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
@@ -2334,7 +2367,10 @@ static JSString* NewStringFromBuffer(JSContext* cx,
     str = NewInlineString<CanGC>(cx, mozilla::Range(s, length),
                                  gc::Heap::Default);
   } else {
-    Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(buffer), length);
+    // Note: |buffer| is either a StringBuffer* or a RefPtr<StringBuffer>, so
+    // ensure we have a RefPtr.
+    RefPtr<mozilla::StringBuffer> bufferRef(std::move(buffer));
+    Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(bufferRef), length);
     str = JSLinearString::new_<CanGC, CharT>(cx, &owned, gc::Heap::Default);
   }
   if (!str) {
@@ -2349,13 +2385,24 @@ JS_PUBLIC_API JSString* JS::NewStringFromLatin1Buffer(
   return NewStringFromBuffer<Latin1Char>(cx, std::move(buffer), length);
 }
 
+JS_PUBLIC_API JSString* JS::NewStringFromKnownLiveLatin1Buffer(
+    JSContext* cx, mozilla::StringBuffer* buffer, size_t length) {
+  return NewStringFromBuffer<Latin1Char>(cx, buffer, length);
+}
+
 JS_PUBLIC_API JSString* JS::NewStringFromTwoByteBuffer(
     JSContext* cx, RefPtr<mozilla::StringBuffer> buffer, size_t length) {
   return NewStringFromBuffer<char16_t>(cx, std::move(buffer), length);
 }
 
-JS_PUBLIC_API JSString* JS::NewStringFromUTF8Buffer(
-    JSContext* cx, RefPtr<mozilla::StringBuffer> buffer, size_t length) {
+JS_PUBLIC_API JSString* JS::NewStringFromKnownLiveTwoByteBuffer(
+    JSContext* cx, mozilla::StringBuffer* buffer, size_t length) {
+  return NewStringFromBuffer<char16_t>(cx, buffer, length);
+}
+
+template <typename BufferT>
+static JSString* NewStringFromUTF8Buffer(JSContext* cx, BufferT&& buffer,
+                                         size_t length) {
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
 
@@ -2369,6 +2416,16 @@ JS_PUBLIC_API JSString* JS::NewStringFromUTF8Buffer(
 
   // Non-ASCII case cannot use the string buffer.
   return NewStringCopyUTF8N(cx, utf8, encoding);
+}
+
+JS_PUBLIC_API JSString* JS::NewStringFromUTF8Buffer(
+    JSContext* cx, RefPtr<mozilla::StringBuffer> buffer, size_t length) {
+  return ::NewStringFromUTF8Buffer(cx, std::move(buffer), length);
+}
+
+JS_PUBLIC_API JSString* JS::NewStringFromKnownLiveUTF8Buffer(
+    JSContext* cx, mozilla::StringBuffer* buffer, size_t length) {
+  return ::NewStringFromUTF8Buffer(cx, buffer, length);
 }
 
 #if defined(DEBUG) || defined(JS_JITSPEW) || defined(JS_CACHEIR_SPEW)

@@ -668,10 +668,6 @@ pref("browser.urlbar.addons.minKeywordLength", 0);
 // Feature gate pref for Pocket suggestions in the urlbar.
 pref("browser.urlbar.pocket.featureGate", false);
 
-// The group-relative suggestedIndex of Pocket suggestions within the Firefox
-// Suggest section.
-pref("browser.urlbar.pocket.suggestedIndex", 0);
-
 // If `browser.urlbar.pocket.featureGate` is true, this controls whether Pocket
 // suggestions are turned on.
 pref("browser.urlbar.suggest.pocket", true);
@@ -758,6 +754,11 @@ pref("browser.search.serpEventTelemetryCategorization.enabled", true);
 #else
 pref("browser.search.serpEventTelemetryCategorization.enabled", false);
 #endif
+
+// A count of Glean SERP categorization event metrics that have been recorded
+// but not yet submitted in a ping. Needed to prevent sending a ping with only
+// experiment info (and not actual SERP categorizations) at startup.
+pref("browser.search.serpMetricsRecordedCounter", 0);
 
 // Search Bar removal from the toolbar for users who haven’t used it in 120
 // days
@@ -1870,8 +1871,10 @@ pref("browser.newtabpage.activity-stream.discoverystream.recs.personalized", fal
 // System pref to allow Pocket sponsored content personalization to be turned on/off.
 pref("browser.newtabpage.activity-stream.discoverystream.spocs.personalized", true);
 
-// System pref to enable topic selection for pocket feed
+// System pref to enable topic selection for Pocket feed
 pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.enabled", false);
+// System pref to enable topic labels on Pocket cards
+pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.enabled", false);
 
 // Flip this once the user has dismissed the Pocket onboarding experience,
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.dismissed", false);

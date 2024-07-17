@@ -11,7 +11,6 @@ import {
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  AddonTestUtils: "resource://testing-common/AddonTestUtils.sys.mjs",
   BrowserTestUtils: "resource://testing-common/BrowserTestUtils.sys.mjs",
   BrowserUIUtils: "resource:///modules/BrowserUIUtils.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
@@ -1069,7 +1068,7 @@ export var UrlbarTestUtils = {
     }
 
     // Also remove emphasis markers if present.
-    if (lazy.UrlbarPrefs.get("trimHttps")) {
+    if (lazy.UrlbarPrefs.getScotchBonnetPref("trimHttps")) {
       sanitizedURL = sanitizedURL.replace(/^<?https:\/\/>?/, "");
     } else {
       sanitizedURL = sanitizedURL.replace(/^<?http:\/\/>?/, "");
@@ -1086,7 +1085,7 @@ export var UrlbarTestUtils = {
    */
   getTrimmedProtocolWithSlashes() {
     if (Services.prefs.getBoolPref("browser.urlbar.trimURLs")) {
-      return Services.prefs.getBoolPref("browser.urlbar.trimHttps")
+      return lazy.UrlbarPrefs.getScotchBonnetPref("trimHttps")
         ? "https://"
         : "http://"; // eslint-disable-this-line @microsoft/sdl/no-insecure-url
     }
@@ -1241,16 +1240,6 @@ export var UrlbarTestUtils = {
     Cc["@mozilla.org/satchel/form-history-startup;1"]
       .getService(Ci.nsIObserver)
       .observe(null, "profile-after-change", null);
-
-    // This is necessary because UrlbarMuxerUnifiedComplete.sort calls
-    // Services.search.parseSubmissionURL, so we need engines.
-    try {
-      await lazy.AddonTestUtils.promiseStartupManager();
-    } catch (error) {
-      if (!error.message.includes("already started")) {
-        throw error;
-      }
-    }
   },
 
   /**
