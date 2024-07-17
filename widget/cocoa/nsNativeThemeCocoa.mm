@@ -2700,6 +2700,14 @@ LayoutDeviceIntMargin nsNativeThemeCocoa::GetWidgetBorder(
       break;
     }
 
+    case StyleAppearance::Checkbox:
+    case StyleAppearance::Radio: {
+      // nsCheckboxRadioFrame::GetIntrinsicWidth and
+      // nsCheckboxRadioFrame::GetIntrinsicHeight assume a border width of 2px.
+      result.SizeTo(2, 2, 2, 2);
+      break;
+    }
+
     case StyleAppearance::Menulist:
     case StyleAppearance::MenulistButton:
     case StyleAppearance::MozMenulistArrowButton:
