@@ -556,7 +556,9 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
   // Make the window use CoreAnimation from the start, so that we don't
   // switch from a non-CA window to a CA-window in the middle.
   [[mWindow contentView] setWantsLayer:YES];
-
+  if(!nsCocoaFeatures::OnMavericksOrLater()) {// so the buttons show up on 10.8
+    mWindow.contentView.superview.wantsLayer = YES;
+  }
   // Make sure the window starts out not draggable by the background.
   // We will turn it on as necessary.
   [mWindow setMovableByWindowBackground:NO]; 
