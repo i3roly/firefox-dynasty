@@ -15,6 +15,8 @@
 #define MACOS_MINOR_VERSION_MASK 0x00FFFFFF
 #define MACOS_BUGFIX_VERSION_MASK 0x00FFFFFF
 #define MACOS_VERSION_10_0_HEX  0x000A0000
+#define MACOS_VERSION_10_5_HEX  0x000A0500
+#define MACOS_VERSION_10_6_HEX  0x000A0600
 #define MACOS_VERSION_10_7_HEX  0x000A0700
 #define MACOS_VERSION_10_8_HEX  0x000A0800
 #define MACOS_VERSION_10_9_HEX  0x000A0900
@@ -96,12 +98,12 @@ int32_t nsCocoaFeatures::GetVersion(int32_t aMajor, int32_t aMinor,
   int32_t macOSVersion;
   if (aMajor < 10) {
     aMajor = 10;
-    NS_ERROR("Couldn't determine macOS version, assuming 10.9");
-    macOSVersion = MACOS_VERSION_10_9_HEX;
-  } else if (aMajor == 10 && aMinor < 9) {
+    NS_ERROR("Couldn't determine macOS version, assuming 10.6");
+    macOSVersion = MACOS_VERSION_10_6_HEX;
+  } else if (aMajor == 10 && aMinor < 6) {
     aMinor = 9;
-    NS_ERROR("macOS version too old, assuming 10.9");
-    macOSVersion = MACOS_VERSION_10_9_HEX;
+    NS_ERROR("macOS version too old, assuming 10.6");
+    macOSVersion = MACOS_VERSION_10_6_HEX;
   } else {
     MOZ_ASSERT(aMajor >= 10);
     MOZ_ASSERT(aMajor < 256);
