@@ -79,7 +79,7 @@ fun ToolbarTabCounterButton(
             },
             // The IconButton composable has a 48dp size and it's own ripple with a 24dp radius.
             // The TabCounter view has it's own inherent ripple that has a bigger radius
-            // so based on manual testing I set on a size of 34dp for this View which would
+            // so based on manual testing we set a size of 34dp for this View which would
             // ensure it's ripple matches the composable one. Otherwise there is a visible mismatch.
             modifier = Modifier.size(34.dp),
             update = { tabCounter ->

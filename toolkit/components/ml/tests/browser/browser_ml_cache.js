@@ -6,6 +6,10 @@ const { sinon } = ChromeUtils.importESModule(
   "resource://testing-common/Sinon.sys.mjs"
 );
 
+const { ProgressStatusText, ProgressType } = ChromeUtils.importESModule(
+  "chrome://global/content/ml/Utils.sys.mjs"
+);
+
 // Root URL of the fake hub, see the `data` dir in the tests.
 const FAKE_HUB =
   "chrome://mochitests/content/browser/toolkit/components/ml/tests/browser/data";
@@ -38,6 +42,10 @@ const badHubs = [
   "ftp://localhost/myhub", // Disallowed scheme with allowed host
   "https://model-hub.mozilla.org.hack", // Domain that contains allowed domain
 ];
+
+function createBlob(size = 8) {
+  return new Blob([new ArrayBuffer(size)]);
+}
 
 /**
  * Make sure we reject bad model hub URLs.
@@ -271,6 +279,157 @@ add_task(async function test_getting_file_from_cache() {
 });
 
 /**
+ * Test that the callback is appropriately called when the data is retrieved from the server
+ * or from the cache.
+ */
+add_task(async function test_getting_file_from_url_cache_with_callback() {
+  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+
+  hub.cache = await initializeCache();
+
+  let numCalls = 0;
+  let currentData = null;
+  let array = await hub.getModelFileAsArrayBuffer({
+    ...FAKE_MODEL_ARGS,
+    progressCallback: data => {
+      // expecting initiate status and download
+      currentData = data;
+      if (numCalls == 0) {
+        Assert.deepEqual(
+          {
+            type: data.type,
+            statusText: data.statusText,
+            ok: data.ok,
+            model: currentData?.metadata?.model,
+            file: currentData?.metadata?.file,
+            revision: currentData?.metadata?.revision,
+          },
+          {
+            type: ProgressType.DOWNLOAD,
+            statusText: ProgressStatusText.INITIATE,
+            ok: true,
+            ...FAKE_MODEL_ARGS,
+          },
+          "Initiate Data from server should be correct"
+        );
+      }
+
+      if (numCalls == 1) {
+        Assert.deepEqual(
+          {
+            type: data.type,
+            statusText: data.statusText,
+            ok: data.ok,
+            model: currentData?.metadata?.model,
+            file: currentData?.metadata?.file,
+            revision: currentData?.metadata?.revision,
+          },
+          {
+            type: ProgressType.DOWNLOAD,
+            statusText: ProgressStatusText.SIZE_ESTIMATE,
+            ok: true,
+            ...FAKE_MODEL_ARGS,
+          },
+          "size estimate Data from server should be correct"
+        );
+      }
+
+      numCalls += 1;
+    },
+  });
+
+  Assert.greaterOrEqual(numCalls, 3);
+
+  // last received message is DONE
+  Assert.deepEqual(
+    {
+      type: currentData?.type,
+      statusText: currentData?.statusText,
+      ok: currentData?.ok,
+      model: currentData?.metadata?.model,
+      file: currentData?.metadata?.file,
+      revision: currentData?.metadata?.revision,
+    },
+    {
+      type: ProgressType.DOWNLOAD,
+      statusText: ProgressStatusText.DONE,
+      ok: true,
+      ...FAKE_MODEL_ARGS,
+    },
+    "Done Data from server should be correct"
+  );
+
+  // stub to verify that the data was retrieved from IndexDB
+  let matchMethod = hub.cache._testGetData;
+
+  sinon.stub(hub.cache, "_testGetData").callsFake(function () {
+    return matchMethod.apply(this, arguments).then(result => {
+      Assert.notEqual(result, null);
+      return result;
+    });
+  });
+
+  numCalls = 0;
+  currentData = null;
+
+  // Now we expect the callback to indicate cache usage.
+  let array2 = await hub.getModelFileAsArrayBuffer({
+    ...FAKE_MODEL_ARGS,
+    progressCallback: data => {
+      // expecting initiate status and download
+
+      currentData = data;
+
+      if (numCalls == 0) {
+        Assert.deepEqual(
+          {
+            type: data.type,
+            statusText: data.statusText,
+            ok: data.ok,
+            model: currentData?.metadata?.model,
+            file: currentData?.metadata?.file,
+            revision: currentData?.metadata?.revision,
+          },
+          {
+            type: ProgressType.LOAD_FROM_CACHE,
+            statusText: ProgressStatusText.INITIATE,
+            ok: true,
+            ...FAKE_MODEL_ARGS,
+          },
+          "Initiate Data from cache should be correct"
+        );
+      }
+
+      numCalls += 1;
+    },
+  });
+  hub.cache._testGetData.restore();
+
+  Assert.deepEqual(array, array2);
+
+  // last received message is DONE
+  Assert.deepEqual(
+    {
+      type: currentData?.type,
+      statusText: currentData?.statusText,
+      ok: currentData?.ok,
+      model: currentData?.metadata?.model,
+      file: currentData?.metadata?.file,
+      revision: currentData?.metadata?.revision,
+    },
+    {
+      type: ProgressType.LOAD_FROM_CACHE,
+      statusText: ProgressStatusText.DONE,
+      ok: true,
+      ...FAKE_MODEL_ARGS,
+    },
+    "Done Data from cache should be correct"
+  );
+
+  await deleteCache(hub.cache);
+});
+
+/**
  * Test parsing of a well-formed full URL, including protocol and path.
  */
 add_task(async function testWellFormedFullUrl() {
@@ -378,7 +537,7 @@ add_task(async function test_Init() {
  */
 add_task(async function test_PutAndCheckExists() {
   const cache = await initializeCache();
-  const testData = new ArrayBuffer(8); // Example data
+  const testData = createBlob();
   const key = "file.txt";
   await cache.put("org/model", "v1", "file.txt", testData, {
     ETag: "ETAG123",
@@ -402,7 +561,7 @@ add_task(async function test_PutAndCheckExists() {
  */
 add_task(async function test_PutAndGet() {
   const cache = await initializeCache();
-  const testData = new ArrayBuffer(8); // Example data
+  const testData = createBlob();
   await cache.put("org/model", "v1", "file.txt", testData, {
     ETag: "ETAG123",
   });
@@ -431,7 +590,7 @@ add_task(async function test_PutAndGet() {
  */
 add_task(async function test_GetHeaders() {
   const cache = await initializeCache();
-  const testData = new ArrayBuffer(8);
+  const testData = createBlob();
   const headers = {
     ETag: "ETAG123",
     status: 200,
@@ -450,6 +609,7 @@ add_task(async function test_GetHeaders() {
       ETag: "ETAG123",
       status: 200,
       "Content-Type": "application/octet-stream",
+      fileSize: 8,
     },
     storedHeaders,
     "The retrieved headers should match the stored headers."
@@ -462,14 +622,15 @@ add_task(async function test_GetHeaders() {
  */
 add_task(async function test_ListModels() {
   const cache = await initializeCache();
-  await cache.put("org1/modelA", "v1", "file1.txt", new ArrayBuffer(8), null);
-  await cache.put("org2/modelB", "v1", "file2.txt", new ArrayBuffer(8), null);
+  await cache.put("org1/modelA", "v1", "file1.txt", createBlob(), null);
+  await cache.put("org2/modelB", "v2", "file2.txt", createBlob(), null);
 
   const models = await cache.listModels();
-  Assert.ok(
-    models.includes("org1/modelA/v1") && models.includes("org2/modelB/v1"),
-    "All models should be listed."
-  );
+  const wanted = [
+    { name: "org1/modelA", revision: "v1" },
+    { name: "org2/modelB", revision: "v2" },
+  ];
+  Assert.deepEqual(models, wanted, "All models should be listed");
   await deleteCache(cache);
 });
 
@@ -478,7 +639,7 @@ add_task(async function test_ListModels() {
  */
 add_task(async function test_DeleteModel() {
   const cache = await initializeCache();
-  await cache.put("org/model", "v1", "file.txt", new ArrayBuffer(8), null);
+  await cache.put("org/model", "v1", "file.txt", createBlob(), null);
   await cache.deleteModel("org/model", "v1");
 
   const dataAfterDelete = await cache.getFile("org/model", "v1", "file.txt");
@@ -487,5 +648,50 @@ add_task(async function test_DeleteModel() {
     null,
     "The data for the deleted model should not exist."
   );
+  await deleteCache(cache);
+});
+
+/**
+ * Test listing files
+ */
+add_task(async function test_listFiles() {
+  const cache = await initializeCache();
+  const headers = { "Content-Length": "12345", ETag: "XYZ" };
+  const blob = createBlob();
+
+  await cache.put("org/model", "v1", "file.txt", blob, null);
+  await cache.put("org/model", "v1", "file2.txt", blob, null);
+  await cache.put("org/model", "v1", "sub/file3.txt", createBlob(32), headers);
+
+  const files = await cache.listFiles("org/model", "v1");
+  const wanted = [
+    {
+      path: "file.txt",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        fileSize: 8,
+        ETag: "NO_ETAG",
+      },
+    },
+    {
+      path: "file2.txt",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        fileSize: 8,
+        ETag: "NO_ETAG",
+      },
+    },
+    {
+      path: "sub/file3.txt",
+      headers: {
+        "Content-Length": "12345",
+        "Content-Type": "application/octet-stream",
+        fileSize: 32,
+        ETag: "XYZ",
+      },
+    },
+  ];
+
+  Assert.deepEqual(files, wanted);
   await deleteCache(cache);
 });

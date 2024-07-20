@@ -1,11 +1,17 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/**
+ * @typedef {import("./Utils.sys.mjs").ProgressAndStatusCallbackParams} ProgressAndStatusCallbackParams
+ */
+
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
+  Progress: "chrome://global/content/ml/Utils.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "console", () => {
@@ -23,7 +29,13 @@ const ALLOWED_HUBS = [
   "https://model-hub.mozilla.org",
 ];
 
-const ALLOWED_HEADERS_KEYS = ["Content-Type", "ETag", "status"];
+const ALLOWED_HEADERS_KEYS = [
+  "Content-Type",
+  "ETag",
+  "status",
+  "fileSize", // the size in bytes we store
+  "Content-Length", // the size we download (can be different when gzipped)
+];
 const DEFAULT_URL_TEMPLATE = "{model}/resolve/{revision}";
 
 /**
@@ -273,7 +285,7 @@ export class IndexedDBCache {
     const headersKey = `${model}/${revision}`;
     const cacheKey = `${model}/${revision}/${file}`;
     const headers = await this.#getData(this.headersStoreName, headersKey);
-    if (headers && headers.files[cacheKey]) {
+    if (headers?.files[cacheKey]) {
       return headers.files[cacheKey];
     }
     return null; // Return null if no headers is found
@@ -303,27 +315,30 @@ export class IndexedDBCache {
    * @param {string} model - The model name (organization/name).
    * @param {string} revision - The model version.
    * @param {string} file - The file name.
-   * @param {ArrayBuffer} arrayBuffer - The data to cache.
+   * @param {Blob} data - The data to cache.
    * @param {object} [headers] - The headers for the file.
    * @returns {Promise<void>}
    */
-  async put(model, revision, file, arrayBuffer, headers = {}) {
+  async put(model, revision, file, data, headers = {}) {
+    const fileSize = data.size;
     const cacheKey = `${model}/${revision}/${file}`;
-    const newSize = this.totalSize + arrayBuffer.byteLength;
+    const newSize = this.totalSize + fileSize;
     if (newSize > this.#maxSize) {
       throw new Error("Exceeding total cache size limit of 1GB");
     }
 
     const headersKey = `${model}/${revision}`;
-    const data = { id: cacheKey, data: arrayBuffer };
+    const fileEntry = { id: cacheKey, data };
 
     // Store the file data
-    await this.#updateData(this.fileStoreName, data);
+    lazy.console.debug(`Storing ${cacheKey} with size:`, file);
+    await this.#updateData(this.fileStoreName, fileEntry);
 
     // Update headers store - whith defaults for ETag and Content-Type
     headers = headers || {};
     headers["Content-Type"] =
       headers["Content-Type"] ?? "application/octet-stream";
+    headers.fileSize = fileSize;
     headers.ETag = headers.ETag ?? NO_ETAG;
 
     // filter out any keys that are not allowed
@@ -334,6 +349,7 @@ export class IndexedDBCache {
         return obj;
       }, {});
 
+    lazy.console.debug(`Storing ${cacheKey} with headers:`, headers);
     const headersStore = (await this.#getData(
       this.headersStoreName,
       headersKey
@@ -345,7 +361,7 @@ export class IndexedDBCache {
     await this.#updateData(this.headersStoreName, headersStore);
 
     // Update size
-    await this.#updateTotalSize(arrayBuffer.byteLength);
+    await this.#updateTotalSize(fileSize);
   }
 
   /**
@@ -369,6 +385,7 @@ export class IndexedDBCache {
    * @returns {Promise<void>}
    */
   async deleteModel(model, revision) {
+    lazy.console.debug("Deleting model", model, revision);
     const headersKey = `${model}/${revision}`;
     const headers = await this.#getData(this.headersStoreName, headersKey);
     if (headers) {
@@ -377,6 +394,49 @@ export class IndexedDBCache {
       }
       await this.#deleteData(this.headersStoreName, headersKey); // Remove headers entry after files are deleted
     }
+  }
+
+  /**
+   * Lists all files for a given model and revision stored in the cache.
+   *
+   * @param {string} model - The model name (organization/name).
+   * @param {string} revision - The model version.
+   * @returns {Promise<Array<string>>} An array of file identifiers.
+   */
+  async listFiles(model, revision) {
+    const headersKey = `${model}/${revision}`;
+    let files = [];
+    const headers = await this.#getData(this.headersStoreName, headersKey);
+    if (headers?.files) {
+      const prefix = `${headersKey}/`;
+      for (const file in headers.files) {
+        const filePath = file.startsWith(prefix)
+          ? file.slice(prefix.length)
+          : file;
+        files.push({ path: filePath, headers: headers.files[file] });
+      }
+    }
+    return files;
+  }
+
+  /**
+   * Parses a string with three '/' like 'model/distilvit/main'
+   * and returns an object with name and revision.
+   *
+   * @param {string} str - The input string.
+   * @returns {{name: string, revision: string}} An object with name and revision.
+   */
+  parseModelString(str) {
+    const parts = str.split("/");
+    if (parts.length === 3) {
+      return {
+        name: `${parts[0]}/${parts[1]}`,
+        revision: parts[2],
+      };
+    }
+    throw new Error(
+      "Invalid model string format. Expected format: 'model/name/revision'"
+    );
   }
 
   /**
@@ -396,8 +456,14 @@ export class IndexedDBCache {
       request.onerror = event => reject(event.target.error);
       request.onsuccess = event => {
         const cursor = event.target.result;
-        if (cursor) {
-          models.push(cursor.value.id); // Assuming id is the organization/modelName
+
+        // The `headersStoreName` object store contains one `id` field
+        // which can be `totalSize` (the total size of the stored data)
+        // or a model identifier `model/organization/revision`
+        // When we list models here, we ignore `totalSize`
+        if (cursor && cursor.value.id !== "totalSize") {
+          const model = this.parseModelString(cursor.value.id);
+          models.push(model);
           cursor.continue();
         } else {
           resolve(models);
@@ -640,25 +706,7 @@ export class ModelHub {
   }
 
   /**
-   * Given an organization, model, and version, fetch a model file in the hub as an ArrayBuffer.
-   *
-   * @param {object} config
-   * @param {string} config.model
-   * @param {string} config.revision
-   * @param {string} config.file
-   * @returns {Promise<[ArrayBuffer, headers]>} The file content
-   */
-  async getModelFileAsArrayBuffer({ model, revision, file }) {
-    const [blob, headers] = await this.getModelFileAsBlob({
-      model,
-      revision,
-      file,
-    });
-    return [await blob.arrayBuffer(), headers];
-  }
-
-  /**
-   * Given an organization, model, and version, fetch a model file in the hub as blob.
+   * Given an organization, model, and version, fetch a model file in the hub as an blob.
    *
    * @param {object} config
    * @param {string} config.model
@@ -667,6 +715,26 @@ export class ModelHub {
    * @returns {Promise<[Blob, object]>} The file content
    */
   async getModelFileAsBlob({ model, revision, file }) {
+    const [buffer, headers] = await this.getModelFileAsArrayBuffer({
+      model,
+      revision,
+      file,
+    });
+    return [new Blob([buffer]), headers];
+  }
+
+  /**
+   * Given an organization, model, and version, fetch a model file in the hub as an ArrayBuffer
+   * while supporting status callback.
+   *
+   * @param {object} config
+   * @param {string} config.model
+   * @param {string} config.revision
+   * @param {string} config.file
+   * @param {?function(ProgressAndStatusCallbackParams):void} config.progressCallback A function to call to indicate progress status.
+   * @returns {Promise<[ArrayBuffer, headers]>} The file content
+   */
+  async getModelFileAsArrayBuffer({ model, revision, file, progressCallback }) {
     // Make sure inputs are clean. We don't sanitize them but throw an exception
     let checkError = this.#checkInput(model, revision, file);
     if (checkError) {
@@ -696,20 +764,82 @@ export class ModelHub {
       useCached = await this.cache.fileExists(model, revision, file);
     }
 
+    const progressInfo = {
+      progress: null,
+      totalLoaded: null,
+      currentLoaded: null,
+      total: null,
+    };
+
+    const statusInfo = {
+      metadata: { model, revision, file, url },
+      ok: true,
+      id: url,
+    };
+
     if (useCached) {
       lazy.console.debug(`Cache Hit for ${url}`);
-      return await this.cache.getFile(model, revision, file);
+      progressCallback?.(
+        new lazy.Progress.ProgressAndStatusCallbackParams({
+          ...statusInfo,
+          ...progressInfo,
+          type: lazy.Progress.ProgressType.LOAD_FROM_CACHE,
+          statusText: lazy.Progress.ProgressStatusText.INITIATE,
+        })
+      );
+      const [blob, headers] = await this.cache.getFile(model, revision, file);
+      progressCallback?.(
+        new lazy.Progress.ProgressAndStatusCallbackParams({
+          ...statusInfo,
+          ...progressInfo,
+          type: lazy.Progress.ProgressType.LOAD_FROM_CACHE,
+          statusText: lazy.Progress.ProgressStatusText.DONE,
+        })
+      );
+      return [await blob.arrayBuffer(), headers];
     }
+
+    progressCallback?.(
+      new lazy.Progress.ProgressAndStatusCallbackParams({
+        ...statusInfo,
+        ...progressInfo,
+        type: lazy.Progress.ProgressType.DOWNLOAD,
+        statusText: lazy.Progress.ProgressStatusText.INITIATE,
+      })
+    );
 
     lazy.console.debug(`Fetching ${url}`);
     try {
-      const response = await fetch(url);
+      let response = await fetch(url);
+      let isFirstCall = true;
+      let responseContentArray = await lazy.Progress.readResponse(
+        response,
+        progressData => {
+          progressCallback?.(
+            new lazy.Progress.ProgressAndStatusCallbackParams({
+              ...progressInfo,
+              ...progressData,
+              statusText: isFirstCall
+                ? lazy.Progress.ProgressStatusText.SIZE_ESTIMATE
+                : lazy.Progress.ProgressStatusText.IN_PROGRESS,
+              type: lazy.Progress.ProgressType.DOWNLOAD,
+              ...statusInfo,
+            })
+          );
+          isFirstCall = false;
+        }
+      );
+      let responseContent = responseContentArray.buffer.slice(
+        responseContentArray.byteOffset,
+        responseContentArray.byteLength + responseContentArray.byteOffset
+      );
+
       if (response.ok) {
-        const clone = response.clone();
         const headers = {
           // We don't store the boundary or the charset, just the content type,
           // so we drop what's after the semicolon.
           "Content-Type": response.headers.get("Content-Type").split(";")[0],
+          "Content-Length": response.headers.get("Content-Length"),
           ETag: response.headers.get("ETag"),
         };
 
@@ -717,14 +847,35 @@ export class ModelHub {
           model,
           revision,
           file,
-          await clone.blob(),
+          new Blob([responseContent]),
           headers
         );
-        return [await response.blob(), headers];
+
+        progressCallback?.(
+          new lazy.Progress.ProgressAndStatusCallbackParams({
+            ...statusInfo,
+            ...progressInfo,
+            type: lazy.Progress.ProgressType.DOWNLOAD,
+            statusText: lazy.Progress.ProgressStatusText.DONE,
+          })
+        );
+
+        return [responseContent, headers];
       }
     } catch (error) {
       lazy.console.error(`Failed to fetch ${url}:`, error);
     }
+
+    // Indicate there is an error
+    progressCallback?.(
+      new lazy.Progress.ProgressAndStatusCallbackParams({
+        ...statusInfo,
+        ...progressInfo,
+        type: lazy.Progress.ProgressType.DOWNLOAD,
+        statusText: lazy.Progress.ProgressStatusText.DONE,
+        ok: false,
+      })
+    );
 
     throw new Error(`Failed to fetch the model file: ${url}`);
   }

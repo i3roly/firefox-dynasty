@@ -1240,7 +1240,7 @@ dependencies = [
 [[package]]
 name = "d3d12"
 version = "0.20.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=a0c185a28c232ee2ab63f72d6fd3a63a3f787309#a0c185a28c232ee2ab63f72d6fd3a63a3f787309"
+source = "git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4#aeb2067e8120c1ff480625c00b9571db8d01d5a4"
 dependencies = [
  "bitflags 2.6.0",
  "libloading",
@@ -1525,9 +1525,9 @@ dependencies = [
 
 [[package]]
 name = "document-features"
-version = "0.2.8"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef5282ad69563b5fc40319526ba27e0e7363d552a896f0297d54f767717f9b95"
+checksum = "cb6969eaabd2421f8a2775cfd2471a2b634372b4a25d41e3bd647b79912850a0"
 dependencies = [
  "litrs",
 ]
@@ -3660,9 +3660,9 @@ dependencies = [
 
 [[package]]
 name = "metal"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5637e166ea14be6063a3f8ba5ccb9a4159df7d8f6d61c02fc3d480b1f90dcfcb"
+checksum = "7ecfd3296f8c56b7c1f6fbac3c71cefa9d78ce009850c45000015f206dc7fa21"
 dependencies = [
  "bitflags 2.6.0",
  "block",
@@ -4032,7 +4032,7 @@ checksum = "a2983372caf4480544083767bf2d27defafe32af49ab4df3a0b7fc90793a3664"
 [[package]]
 name = "naga"
 version = "0.20.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=a0c185a28c232ee2ab63f72d6fd3a63a3f787309#a0c185a28c232ee2ab63f72d6fd3a63a3f787309"
+source = "git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4#aeb2067e8120c1ff480625c00b9571db8d01d5a4"
 dependencies = [
  "arrayvec",
  "bit-set",
@@ -5235,9 +5235,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.203"
+version = "1.0.204"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7253ab4de971e72fb7be983802300c30b5a7f0c2e56fab8abfc6a214307c0094"
+checksum = "bc76f558e0cbb2a839d37354c575f1dc3fdc6546b5be373ba43d95f231bf7c12"
 dependencies = [
  "serde_derive",
 ]
@@ -5263,9 +5263,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.203"
+version = "1.0.204"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
+checksum = "e0cd7e117be63d3c3678776753929474f3b04a43a080c744d6b0ae2a8c28e222"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5844,18 +5844,18 @@ checksum = "aac81b6fd6beb5884b0cf3321b8117e6e5d47ecb6fc89f414cfdcca8b2fe2dd8"
 
 [[package]]
 name = "thiserror"
-version = "1.0.61"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c546c80d6be4bc6a00c0f01730c08df82eaa7a7a61f11d656526506112cc1709"
+checksum = "c0342370b38b6a11b6cc11d6a805569958d54cfa061a29969c3b5ce2ea405724"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.61"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46c3384250002a6d5af4d114f2845d37b57521033f30d5c3f46c4d70e1197533"
+checksum = "a4558b58466b9ad7ca0f102865eccc95938dca1a74a856f2b57b6629050da261"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6115,9 +6115,9 @@ dependencies = [
 
 [[package]]
 name = "unic-langid"
-version = "0.9.5"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23dd9d1e72a73b25e07123a80776aae3e7b0ec461ef94f9151eed6ec88005a44"
+checksum = "398f9ad7239db44fd0f80fe068d12ff22d78354080332a5077dc6f52f14dcf2f"
 dependencies = [
  "unic-langid-impl",
 ]
@@ -6133,9 +6133,9 @@ dependencies = [
 
 [[package]]
 name = "unic-langid-impl"
-version = "0.9.5"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a5422c1f65949306c99240b81de9f3f15929f5a8bfe05bb44b034cc8bf593e5"
+checksum = "e35bfd2f2b8796545b55d7d3fd3e89a0613f68a0d1c8bc28cb7ff96b411a35ff"
 dependencies = [
  "tinystr",
 ]
@@ -6549,18 +6549,18 @@ version = "0.2.100"
 
 [[package]]
 name = "wasm-encoder"
-version = "0.205.0"
+version = "0.210.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90e95b3563d164f33c1cfb0a7efbd5940c37710019be10cd09f800fdec8b0e5c"
+checksum = "e7e3764d9d6edabd8c9e16195e177be0d20f6ab942ad18af52860f12f82bc59a"
 dependencies = [
  "leb128",
 ]
 
 [[package]]
 name = "wasm-smith"
-version = "0.205.0"
+version = "0.210.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1218f393276f7a13f6c54467434633144b46c33ecbc3cbafdc938033f0315d1a"
+checksum = "c9ffe2374e5d2f9e52463c8bfdca4d6fe265f07b9697dad3b7e2f7c12277d552"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -6572,9 +6572,9 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "205.0.0"
+version = "210.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "441a6a195b3b5245e26d450bbcc91366c6b652382a22f63cbe3c73240e13b2bb"
+checksum = "aa835c59bd615e00f16be65705d85517d40b44b3c831d724e450244685176c3c"
 dependencies = [
  "bumpalo",
  "leb128",
@@ -6771,7 +6771,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.20.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=a0c185a28c232ee2ab63f72d6fd3a63a3f787309#a0c185a28c232ee2ab63f72d6fd3a63a3f787309"
+source = "git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4#aeb2067e8120c1ff480625c00b9571db8d01d5a4"
 dependencies = [
  "arrayvec",
  "bit-vec",
@@ -6796,7 +6796,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "0.20.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=a0c185a28c232ee2ab63f72d6fd3a63a3f787309#a0c185a28c232ee2ab63f72d6fd3a63a3f787309"
+source = "git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4#aeb2067e8120c1ff480625c00b9571db8d01d5a4"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -6835,7 +6835,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.20.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=a0c185a28c232ee2ab63f72d6fd3a63a3f787309#a0c185a28c232ee2ab63f72d6fd3a63a3f787309"
+source = "git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4#aeb2067e8120c1ff480625c00b9571db8d01d5a4"
 dependencies = [
  "bitflags 2.6.0",
  "js-sys",

@@ -513,9 +513,11 @@ void nsHttpHandler::UpdateParentalControlsEnabled(bool waitForCompletion) {
       sParentalControlsEnabled = localEnabled;
 
       // Cache the state of parental controls via preference
-      Preferences::SetBool(
-          StaticPrefs::GetPrefName_network_parental_controls_cached_state(),
-          localEnabled);
+      if (!AppShutdown::IsInOrBeyond(ShutdownPhase::AppShutdownConfirmed)) {
+        Preferences::SetBool(
+            StaticPrefs::GetPrefName_network_parental_controls_cached_state(),
+            localEnabled);
+      }
     }
   };
 

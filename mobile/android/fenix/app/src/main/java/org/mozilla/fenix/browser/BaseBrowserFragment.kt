@@ -134,6 +134,7 @@ import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.IntentReceiverActivity
 import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.OnLongPressedListener
+import org.mozilla.fenix.OpenInFirefoxBinding
 import org.mozilla.fenix.R
 import org.mozilla.fenix.ReaderViewBinding
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
@@ -157,6 +158,7 @@ import org.mozilla.fenix.components.toolbar.BrowserToolbarView
 import org.mozilla.fenix.components.toolbar.DefaultBrowserToolbarController
 import org.mozilla.fenix.components.toolbar.DefaultBrowserToolbarMenuController
 import org.mozilla.fenix.components.toolbar.FenixTabCounterMenu
+import org.mozilla.fenix.components.toolbar.NewTabMenu
 import org.mozilla.fenix.components.toolbar.ToolbarIntegration
 import org.mozilla.fenix.components.toolbar.ToolbarMenu
 import org.mozilla.fenix.components.toolbar.ToolbarPosition
@@ -165,6 +167,7 @@ import org.mozilla.fenix.components.toolbar.interactor.DefaultBrowserToolbarInte
 import org.mozilla.fenix.components.toolbar.navbar.BrowserNavBar
 import org.mozilla.fenix.components.toolbar.navbar.EngineViewClippingBehavior
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
+import org.mozilla.fenix.components.toolbar.navbar.updateNavBarForConfigurationChange
 import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.crashes.CrashContentIntegration
 import org.mozilla.fenix.customtabs.ExternalAppBrowserActivity
@@ -190,7 +193,6 @@ import org.mozilla.fenix.ext.secure
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.ext.tabClosedUndoMessage
 import org.mozilla.fenix.ext.updateMicrosurveyPromptForConfigurationChange
-import org.mozilla.fenix.ext.updateNavBarForConfigurationChange
 import org.mozilla.fenix.home.HomeScreenViewModel
 import org.mozilla.fenix.home.SharedViewModel
 import org.mozilla.fenix.library.bookmarks.BookmarksSharedViewModel
@@ -283,6 +285,7 @@ abstract class BaseBrowserFragment :
     private val biometricPromptFeature = ViewBoundFeatureWrapper<BiometricPromptFeature>()
     private val crashContentIntegration = ViewBoundFeatureWrapper<CrashContentIntegration>()
     private val readerViewBinding = ViewBoundFeatureWrapper<ReaderViewBinding>()
+    private val openInFirefoxBinding = ViewBoundFeatureWrapper<OpenInFirefoxBinding>()
     private var pipFeature: PictureInPictureFeature? = null
 
     var customTabSessionId: String? = null
@@ -604,6 +607,19 @@ abstract class BaseBrowserFragment :
             view = view,
         )
 
+        openInFirefoxBinding.set(
+            feature = OpenInFirefoxBinding(
+                activity = activity,
+                appStore = context.components.appStore,
+                customTabSessionId = customTabSessionId,
+                customTabsUseCases = context.components.useCases.customTabsUseCases,
+                openInFenixIntent = openInFenixIntent,
+                sessionFeature = sessionFeature,
+            ),
+            owner = this,
+            view = view,
+        )
+
         browserToolbarView.view.display.setOnSiteSecurityClickedListener {
             showQuickSettingsDialog()
             Events.browserToolbarSecurityIndicatorTapped.record()
@@ -755,7 +771,7 @@ abstract class BaseBrowserFragment :
             )
         }
 
-        val bottomToolbarHeight = context.settings().getBottomToolbarHeight()
+        val bottomToolbarHeight = context.settings().getBottomToolbarHeight(context)
 
         downloadFeature.onDownloadStopped = { downloadState, _, downloadJobStatus ->
             handleOnDownloadFinished(downloadState, downloadJobStatus, downloadFeature::tryAgain)
@@ -1440,7 +1456,7 @@ abstract class BaseBrowserFragment :
                                             getCurrentTab()?.id,
                                             context.components.core.store,
                                             context,
-                                            context.settings().getBottomToolbarHeight(),
+                                            context.settings().getBottomToolbarHeight(context),
                                         )
                                     },
                                 )
@@ -1458,6 +1474,16 @@ abstract class BaseBrowserFragment :
                             isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
                             browserStore = context.components.core.store,
                             menuButton = menuButton,
+                            newTabMenu = NewTabMenu(
+                                context = context,
+                                onItemTapped = { item ->
+                                    browserToolbarInteractor.onTabCounterMenuItemTapped(item)
+                                },
+                                iconColor = when (activity.browsingModeManager.mode.isPrivate) {
+                                    true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
+                                    else -> null
+                                },
+                            ),
                             tabsCounterMenu = FenixTabCounterMenu(
                                 context = context,
                                 onItemTapped = { item ->
@@ -1599,7 +1625,7 @@ abstract class BaseBrowserFragment :
                                             getCurrentTab()?.id,
                                             context.components.core.store,
                                             context,
-                                            context.settings().getBottomToolbarHeight(),
+                                            context.settings().getBottomToolbarHeight(context),
                                         )
                                     },
                                 )
@@ -1745,7 +1771,7 @@ abstract class BaseBrowserFragment :
                 browserToolbarView.expand()
 
                 val context = requireContext()
-                val bottomToolbarHeight = context.settings().getBottomToolbarHeight()
+                val bottomToolbarHeight = context.settings().getBottomToolbarHeight(context)
                 resumeDownloadDialogState(selectedTab.id, context.components.core.store, context, bottomToolbarHeight)
                 it.announceForAccessibility(selectedTab.toDisplayTitle())
             }
@@ -2106,12 +2132,7 @@ abstract class BaseBrowserFragment :
             if (webAppToolbarShouldBeVisible) {
                 browserToolbarView.visible()
                 _bottomToolbarContainerView?.toolbarContainerView?.isVisible = true
-                initializeEngineView(
-                    topToolbarHeight = requireContext().settings().getTopToolbarHeight(
-                        includeTabStrip = customTabSessionId == null && requireContext().isTabStripEnabled(),
-                    ),
-                    bottomToolbarHeight = requireContext().settings().getBottomToolbarHeight(),
-                )
+                reinitializeEngineView()
                 browserToolbarView.expand()
                 _bottomToolbarContainerView?.toolbarContainerView?.expand()
             }
@@ -2129,12 +2150,14 @@ abstract class BaseBrowserFragment :
             requireContext().settings().navigationToolbarEnabled && !isTablet() && webAppToolbarShouldBeVisible
         if (shouldUpdateNavBarState) {
             updateNavBarForConfigurationChange(
+                context = requireContext(),
                 parent = binding.browserLayout,
                 toolbarView = browserToolbarView.view,
                 bottomToolbarContainerView = _bottomToolbarContainerView?.toolbarContainerView,
                 reinitializeNavBar = ::reinitializeNavBar,
                 reinitializeMicrosurveyPrompt = ::reinitializeMicrosurveyPrompt,
             )
+            reinitializeEngineView()
         }
 
         // If the microsurvey feature is visible, we should update it's state.
@@ -2161,6 +2184,15 @@ abstract class BaseBrowserFragment :
             browserToolbar = browserToolbarView.view,
             view = requireView(),
             context = requireContext(),
+        )
+    }
+
+    private fun reinitializeEngineView() {
+        initializeEngineView(
+            topToolbarHeight = requireContext().settings().getTopToolbarHeight(
+                includeTabStrip = customTabSessionId == null && requireContext().isTabStripEnabled(),
+            ),
+            bottomToolbarHeight = requireContext().settings().getBottomToolbarHeight(requireContext()),
         )
     }
 

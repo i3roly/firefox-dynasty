@@ -251,42 +251,48 @@ static nsresult SwapRGBA(DataSourceSurface* aSurface,
 }
 
 nsresult ConvertToRGBA(Image* aImage, const SurfaceFormat& aDestFormat,
-                       uint8_t* aDestBuffer, int aDestStride, int aWidth,
-                       int aHeight) {
-  IntSize destSize(aWidth, aHeight);
-
-  if (!aImage || !aImage->IsValid() || !aDestBuffer || !IsRGBX(aDestFormat) ||
-      aDestStride <= 0 || destSize.IsEmpty()) {
+                       uint8_t* aDestBuffer, int aDestStride) {
+  if (!aImage || !aImage->IsValid() || aImage->GetSize().IsEmpty() ||
+      !aDestBuffer || !IsRGBX(aDestFormat) || aDestStride <= 0) {
     return NS_ERROR_INVALID_ARG;
   }
 
   // Read YUV image to the given buffer in required RGBA format.
   if (const PlanarYCbCrData* data = GetPlanarYCbCrData(aImage)) {
-    SurfaceFormat convertedFormat;
+    SurfaceFormat convertedFormat = aDestFormat;
     gfx::PremultFunc premultOp = nullptr;
     if (data->mAlpha && HasAlpha(aDestFormat)) {
-      convertedFormat = SurfaceFormat::B8G8R8A8;
+      if (aDestFormat == SurfaceFormat::A8R8G8B8) {
+        convertedFormat = SurfaceFormat::B8G8R8A8;
+      }
       if (data->mAlpha->mPremultiplied) {
         premultOp = libyuv::ARGBUnattenuate;
       }
     } else {
-      convertedFormat = SurfaceFormat::B8G8R8X8;
+      if (aDestFormat == SurfaceFormat::X8R8G8B8 ||
+          aDestFormat == SurfaceFormat::A8R8G8B8) {
+        convertedFormat = SurfaceFormat::B8G8R8X8;
+      }
     }
 
-    ConvertYCbCrToRGB32(*data, convertedFormat, aDestBuffer,
-                        AssertedCast<int32_t>(aDestStride), premultOp);
+    nsresult result =
+        ConvertYCbCrToRGB32(*data, convertedFormat, aDestBuffer,
+                            AssertedCast<int32_t>(aDestStride), premultOp);
+    if (NS_FAILED(result)) {
+      return result;
+    }
 
     if (convertedFormat == aDestFormat) {
       return NS_OK;
     }
 
     // Since format of the converted data returned from ConvertYCbCrToRGB or
-    // ConvertYCbCrAToARGB is BRGX or BRGA, we need swap the RGBA channels to
-    // the required format.
+    // ConvertYCbCrAToARGB is BRG* or RBG*, we need swap the RGBA channels to
+    // the required format if needed.
 
     RefPtr<DataSourceSurface> surf =
         gfx::Factory::CreateWrappingDataSourceSurface(
-            aDestBuffer, aDestStride, destSize, convertedFormat);
+            aDestBuffer, aDestStride, aImage->GetSize(), convertedFormat);
 
     if (!surf) {
       return NS_ERROR_FAILURE;
@@ -306,11 +312,6 @@ nsresult ConvertToRGBA(Image* aImage, const SurfaceFormat& aDestFormat,
     return NS_ERROR_NOT_IMPLEMENTED;
   }
 
-  if (surf->GetSize() != destSize) {
-    // TODO: crop or scale the image.
-    return NS_ERROR_NOT_IMPLEMENTED;
-  }
-
   RefPtr<DataSourceSurface> src = surf->GetDataSurface();
   if (!src) {
     return NS_ERROR_FAILURE;
@@ -322,8 +323,8 @@ nsresult ConvertToRGBA(Image* aImage, const SurfaceFormat& aDestFormat,
   }
 
   RefPtr<DataSourceSurface> dest =
-      gfx::Factory::CreateWrappingDataSourceSurface(aDestBuffer, aDestStride,
-                                                    destSize, aDestFormat);
+      gfx::Factory::CreateWrappingDataSourceSurface(
+          aDestBuffer, aDestStride, aImage->GetSize(), aDestFormat);
 
   if (!dest) {
     return NS_ERROR_FAILURE;

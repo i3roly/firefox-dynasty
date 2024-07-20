@@ -11,32 +11,6 @@ AC_INIT(js/src/jsapi.h)
 AC_CONFIG_AUX_DIR(${srcdir}/build/autoconf)
 AC_CANONICAL_SYSTEM
 
-dnl ========================================================
-dnl =
-dnl = Don't change the following lines. Doing so breaks:
-dnl =
-dnl = CFLAGS="-foo" ./configure
-dnl =
-dnl ========================================================
-CFLAGS="${CFLAGS=}"
-CXXFLAGS="${CXXFLAGS=}"
-LDFLAGS="${LDFLAGS=}"
-
-dnl Propagate extra android flags
-dnl =============================
-case "$target" in
-*-android*|*-linuxandroid*)
-    LDFLAGS="$ANDROID_LDFLAGS $LDFLAGS"
-    CFLAGS="$ANDROID_CFLAGS $CFLAGS"
-    CXXFLAGS="$ANDROID_CXXFLAGS $CXXFLAGS"
-    ;;
-esac
-
-
-dnl Set the minimum version of toolkit libs used by mozilla
-dnl ========================================================
-LDFLAGS="$LDFLAGS $LINKER_LDFLAGS $PACK_REL_RELOC_FLAGS"
-
 if test -z "$JS_STANDALONE"; then
   autoconfmk=autoconf-js.mk
 fi
@@ -70,10 +44,6 @@ fi
 
 fi # COMPILE_ENVIRONMENT
 
-dnl Configure platform-specific CPU architecture compiler options.
-dnl ==============================================================
-MOZ_ARCH_OPTS
-
 dnl ========================================================
 dnl System overrides of the defaults for target
 dnl ========================================================
@@ -91,56 +61,11 @@ case "$target" in
     ;;
 
 *-*linux*)
-    MOZ_PGO_OPTIMIZE_FLAGS="-O3"
     MOZ_OPTIMIZE_FLAGS="-O3"
     ;;
 
 *-mingw*)
-    if test "$CC_TYPE" != clang-cl ; then
-        MOZ_OPTIMIZE_FLAGS="-O2"
-    else
-        if test "$TARGET_CPU" = "x86";then
-          dnl VS2012+ defaults to -arch:SSE2. We want to target nothing
-          dnl more recent, so set that explicitly here unless another
-          dnl target arch has already been set.
-          changequote(,)
-          if test -z `echo $CFLAGS | grep -i [-/]arch:` ; then
-            CFLAGS="$CFLAGS -arch:SSE2"
-          fi
-          if test -z `echo $CXXFLAGS | grep -i [-/]arch:` ; then
-            CXXFLAGS="$CXXFLAGS -arch:SSE2"
-          fi
-          changequote([,])
-        fi
-        MOZ_DEBUG_LDFLAGS='-DEBUG'
-        if test "$HOST_OS_ARCH" != "WINNT"; then
-          # %_PDB% is a special signal to emit only the PDB basename. This
-          # avoids problems in Windows tools that don't like forward-slashes.
-          MOZ_DEBUG_LDFLAGS="$MOZ_DEBUG_LDFLAGS -PDBALTPATH:%_PDB%"
-        fi
-        MOZ_OPTIMIZE_FLAGS="-O2"
-    fi
-
-    case "$host_os" in
-    cygwin*|msvc*|mks*)
-        AC_MSG_ERROR([Using a Cygwin build environment is unsupported. Configure cannot check for presence of necessary headers. Please upgrade to MozillaBuild; see https://developer.mozilla.org/en/Windows_Build_Prerequisites.])
-        ;;
-    esac
-
-    case "$target" in
-    i*86-*)
-    	AC_DEFINE(_X86_)
-	;;
-    x86_64-*)
-        AC_DEFINE(_AMD64_)
-        ;;
-    aarch64-*)
-        AC_DEFINE(_ARM64_)
-        ;;
-    *)
-    	AC_DEFINE(_CPU_ARCH_NOT_DEFINED)
-	;;
-    esac
+    MOZ_OPTIMIZE_FLAGS="-O2"
     ;;
 
 *-netbsd*)
@@ -192,7 +117,6 @@ fi
 fi # COMPILE_ENVIRONMENT
 
 AC_SUBST_LIST(MOZ_OPTIMIZE_FLAGS)
-AC_SUBST_LIST(MOZ_PGO_OPTIMIZE_FLAGS)
 
 dnl ========================================================
 dnl = Enable using the clang plugin to build
@@ -208,31 +132,14 @@ dnl = Maintainer debug option (no --enable equivalent)
 dnl =
 dnl ========================================================
 
-AC_SUBST_LIST(MOZ_DEBUG_LDFLAGS)
-
 AC_SUBST(MOZ_POST_PROGRAM_COMMAND)
 
 AC_SUBST(MOZ_APP_DISPLAYNAME)
 
-dnl Echo the CFLAGS to remove extra whitespace.
-CFLAGS=`echo \
-	$_COMPILATION_CFLAGS \
-	$CFLAGS`
-
-CXXFLAGS=`echo \
-	$_COMPILATION_CXXFLAGS \
-	$CXXFLAGS`
-
-LDFLAGS=`echo \
-    $LDFLAGS \
-    $_COMPILATION_LDFLAGS`
-
 OS_CFLAGS="$CFLAGS"
 OS_CXXFLAGS="$CXXFLAGS"
-OS_LDFLAGS="$LDFLAGS"
 AC_SUBST_LIST(OS_CFLAGS)
 AC_SUBST_LIST(OS_CXXFLAGS)
-AC_SUBST_LIST(OS_LDFLAGS)
 
 AC_SUBST(HOST_CC)
 AC_SUBST(HOST_CXX)
@@ -249,20 +156,12 @@ dnl ========================================================
 dnl JavaScript shell
 dnl ========================================================
 
-if test -n "$JS_STANDALONE"; then
-JS_LIBRARY_NAME="mozjs-$MOZILLA_SYMBOLVERSION"
-else
-JS_LIBRARY_NAME="mozjs"
-fi
-JS_CONFIG_LIBS="$NSPR_LIBS $MOZ_INSTRUMENTS_LIBS"
 if test "$CC_TYPE" != clang-cl ; then
 JS_CONFIG_MOZ_JS_LIBS='-L${libdir} -l${JS_LIBRARY_NAME}'
 else
 JS_CONFIG_MOZ_JS_LIBS='${libdir}/${JS_LIBRARY_NAME}.lib'
 fi
-AC_SUBST(JS_LIBRARY_NAME)
 AC_SUBST(JS_CONFIG_MOZ_JS_LIBS)
-AC_SUBST(JS_CONFIG_LIBS)
 
 dnl Spit out some output
 dnl ========================================================

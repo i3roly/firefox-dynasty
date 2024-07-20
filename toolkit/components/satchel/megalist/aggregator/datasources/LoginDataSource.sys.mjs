@@ -40,7 +40,6 @@ export class LoginDataSource extends DataSourceBase {
   #originPrototype;
   #usernamePrototype;
   #passwordPrototype;
-  #loginsDisabledMessage;
   #enabled;
   #header;
   #exportPasswordsStrings;
@@ -92,7 +91,6 @@ export class LoginDataSource extends DataSourceBase {
         expand: strings.expandSection,
         collapse: strings.collapseSection,
       };
-      this.#loginsDisabledMessage = strings.passwordsDisabled;
       this.#header = this.createHeaderLine(strings.headerLabel, tooltip);
       this.#header.commands.push(
         { id: "Create", label: "passwords-command-create" },
@@ -150,6 +148,7 @@ export class LoginDataSource extends DataSourceBase {
       };
 
       this.#originPrototype = this.prototypeDataLine({
+        field: { value: "origin" },
         label: { value: strings.originLabel },
         start: { value: true },
         value: {
@@ -168,16 +167,13 @@ export class LoginDataSource extends DataSourceBase {
           },
         },
         commands: {
-          *value() {
-            yield { id: "Open", label: "command-open" };
-            yield copyCommand;
-            yield "-";
-            yield deleteCommand;
-
-            if (this.breached) {
-              yield dismissBreachCommand;
-            }
-          },
+          value: [
+            { id: "Open", label: "command-open" },
+            copyCommand,
+            editCommand,
+            deleteCommand,
+            dismissBreachCommand,
+          ],
         },
         executeDismissBreach: {
           value() {
@@ -209,6 +205,7 @@ export class LoginDataSource extends DataSourceBase {
         },
       });
       this.#usernamePrototype = this.prototypeDataLine({
+        field: { value: "username" },
         label: { value: strings.usernameLabel },
         value: {
           get() {
@@ -237,6 +234,7 @@ export class LoginDataSource extends DataSourceBase {
         },
       });
       this.#passwordPrototype = this.prototypeDataLine({
+        field: { value: "password" },
         label: { value: strings.passwordLabel },
         concealed: { value: true, writable: true },
         end: { value: true },
@@ -260,17 +258,17 @@ export class LoginDataSource extends DataSourceBase {
           },
         },
         commands: {
-          *value() {
-            if (this.concealed) {
-              yield { id: "Reveal", label: "command-reveal", verify: true };
-            } else {
-              yield { id: "Conceal", label: "command-conceal" };
-            }
-            yield { ...copyCommand, verify: true };
-            yield editCommand;
-            yield "-";
-            yield deleteCommand;
-          },
+          value: [
+            { ...copyCommand, verify: true },
+            {
+              id: "Reveal",
+              label: "command-reveal",
+              verify: true,
+            },
+            { id: "Conceal", label: "command-conceal" },
+            editCommand,
+            deleteCommand,
+          ],
         },
         executeReveal: {
           value() {
@@ -543,15 +541,7 @@ export class LoginDataSource extends DataSourceBase {
         login.password.toUpperCase().includes(searchText)
     );
 
-    this.formatMessages({
-      id:
-        stats.count == stats.total
-          ? "passwords-count"
-          : "passwords-filtered-count",
-      args: stats,
-    }).then(([headerLabel]) => {
-      this.#header.value = headerLabel;
-    });
+    this.#header.value.total = stats.total;
   }
 
   /**
@@ -573,6 +563,7 @@ export class LoginDataSource extends DataSourceBase {
       ? await lazy.LoginBreaches.getPotentialBreachesByLoginGUID(logins)
       : new Map();
 
+    let alertsAcc = 0;
     logins.forEach(login => {
       // Similar domains will be grouped together
       // www. will have least effect on the sorting
@@ -589,8 +580,10 @@ export class LoginDataSource extends DataSourceBase {
       let alertValue;
       if (isLoginBreached) {
         alertValue = ALERT_VALUES.breached;
+        alertsAcc += 1;
       } else if (isLoginVulnerable) {
         alertValue = ALERT_VALUES.vulnerable;
+        alertsAcc += 1;
       } else {
         alertValue = ALERT_VALUES.none;
       }
@@ -616,13 +609,15 @@ export class LoginDataSource extends DataSourceBase {
       originLine.breached = isLoginBreached;
       passwordLine.vulnerable = isLoginVulnerable;
     });
+    this.#header.value.alerts = alertsAcc;
     this.afterReloadingDataSource();
   }
 
   #reloadEmptyDataSource() {
     this.lines.length = 0;
     //todo: user can enable passwords by activating Passwords header line
-    this.#header.value = this.#loginsDisabledMessage;
+    this.#header.value.total = 0;
+    this.#header.value.alerts = 0;
     this.refreshAllLinesOnScreen();
   }
 

@@ -14,7 +14,6 @@
 #include "PKCS11ModuleDB.h"
 #include "SSLTokensCache.h"
 #include "ScopedNSSTypes.h"
-#include "SharedSSLState.h"
 #include "cert.h"
 #include "cert_storage/src/cert_storage.h"
 #include "certdb.h"
@@ -62,6 +61,7 @@
 #include "nsIXULRuntime.h"
 #include "nsLiteralString.h"
 #include "nsNSSHelper.h"
+#include "nsNSSIOLayer.h"
 #include "nsNetCID.h"
 #include "nsPK11TokenDB.h"
 #include "nsPrintfCString.h"
@@ -293,7 +293,7 @@ nsNSSComponent::~nsNSSComponent() {
   // All cleanup code requiring services needs to happen in xpcom_shutdown
 
   PrepareForShutdown();
-  SharedSSLState::GlobalCleanup();
+  nsSSLIOLayerHelpers::GlobalCleanup();
   --mInstanceCount;
 
   MOZ_LOG(gPIPNSSLog, LogLevel::Debug, ("nsNSSComponent::dtor finished\n"));
@@ -930,15 +930,14 @@ nsresult CommonInit() {
   DisableMD5();
 
   mozilla::pkix::RegisterErrorTable();
-  SharedSSLState::GlobalInit();
-  SetValidationOptionsCommon();
+  nsSSLIOLayerHelpers::GlobalInit();
 
   return NS_OK;
 }
 
 void PrepareForShutdownInSocketProcess() {
   MOZ_ASSERT(XRE_IsSocketProcess());
-  SharedSSLState::GlobalCleanup();
+  nsSSLIOLayerHelpers::GlobalCleanup();
 }
 
 bool HandleTLSPrefChange(const nsCString& prefName) {
@@ -981,37 +980,6 @@ bool HandleTLSPrefChange(const nsCString& prefName) {
     prefFound = false;
   }
   return prefFound;
-}
-
-void SetValidationOptionsCommon() {
-  // Note that the code in this function should be kept in sync with
-  // gCallbackSecurityPrefs in nsIOService.cpp.
-  bool ocspStaplingEnabled = StaticPrefs::security_ssl_enable_ocsp_stapling();
-  PublicSSLState()->SetOCSPStaplingEnabled(ocspStaplingEnabled);
-  PrivateSSLState()->SetOCSPStaplingEnabled(ocspStaplingEnabled);
-
-  bool ocspMustStapleEnabled =
-      StaticPrefs::security_ssl_enable_ocsp_must_staple();
-  PublicSSLState()->SetOCSPMustStapleEnabled(ocspMustStapleEnabled);
-  PrivateSSLState()->SetOCSPMustStapleEnabled(ocspMustStapleEnabled);
-
-  const CertVerifier::CertificateTransparencyMode defaultCTMode =
-      CertVerifier::CertificateTransparencyMode::TelemetryOnly;
-  CertVerifier::CertificateTransparencyMode ctMode =
-      static_cast<CertVerifier::CertificateTransparencyMode>(
-          StaticPrefs::security_pki_certificate_transparency_mode());
-  switch (ctMode) {
-    case CertVerifier::CertificateTransparencyMode::Disabled:
-    case CertVerifier::CertificateTransparencyMode::TelemetryOnly:
-      break;
-    default:
-      ctMode = defaultCTMode;
-      break;
-  }
-  bool sctsEnabled =
-      ctMode != CertVerifier::CertificateTransparencyMode::Disabled;
-  PublicSSLState()->SetSignedCertTimestampsEnabled(sctsEnabled);
-  PrivateSSLState()->SetSignedCertTimestampsEnabled(sctsEnabled);
 }
 
 namespace {
@@ -1126,21 +1094,8 @@ void nsNSSComponent::setValidationOptions(
     return;
   }
 
-  SetValidationOptionsCommon();
-
-  const CertVerifier::CertificateTransparencyMode defaultCTMode =
-      CertVerifier::CertificateTransparencyMode::TelemetryOnly;
   CertVerifier::CertificateTransparencyMode ctMode =
-      static_cast<CertVerifier::CertificateTransparencyMode>(
-          StaticPrefs::security_pki_certificate_transparency_mode());
-  switch (ctMode) {
-    case CertVerifier::CertificateTransparencyMode::Disabled:
-    case CertVerifier::CertificateTransparencyMode::TelemetryOnly:
-      break;
-    default:
-      ctMode = defaultCTMode;
-      break;
-  }
+      GetCertificateTransparencyMode();
 
   // This preference controls whether we do OCSP fetching and does not affect
   // OCSP stapling.
@@ -1826,6 +1781,8 @@ nsNSSComponent::Observe(nsISupports* aSubject, const char* aTopic,
     if (clearSessionCache) {
       ClearSSLExternalAndInternalSessionCache();
     }
+  } else if (!nsCRT::strcmp(aTopic, "last-pb-context-exited")) {
+    nsNSSComponent::DoClearSSLExternalAndInternalSessionCache();
   }
 
   return NS_OK;
@@ -1885,6 +1842,7 @@ nsresult nsNSSComponent::RegisterObservers() {
   // least as long as the observer service.
   observerService->AddObserver(this, PROFILE_BEFORE_CHANGE_TOPIC, false);
   observerService->AddObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID, false);
+  observerService->AddObserver(this, "last-pb-context-exited", false);
 
   return NS_OK;
 }
@@ -2183,6 +2141,23 @@ UniqueCERTCertList FindClientCertificatesWithPrivateKeys() {
   }
 
   return certsWithPrivateKeys;
+}
+
+CertVerifier::CertificateTransparencyMode GetCertificateTransparencyMode() {
+  const CertVerifier::CertificateTransparencyMode defaultCTMode =
+      CertVerifier::CertificateTransparencyMode::TelemetryOnly;
+  CertVerifier::CertificateTransparencyMode ctMode =
+      static_cast<CertVerifier::CertificateTransparencyMode>(
+          StaticPrefs::security_pki_certificate_transparency_mode());
+  switch (ctMode) {
+    case CertVerifier::CertificateTransparencyMode::Disabled:
+    case CertVerifier::CertificateTransparencyMode::TelemetryOnly:
+      break;
+    default:
+      ctMode = defaultCTMode;
+      break;
+  }
+  return ctMode;
 }
 
 }  // namespace psm

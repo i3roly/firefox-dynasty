@@ -795,7 +795,13 @@ class nsIFrame : public nsQueryFrame {
    * Get the content object associated with this frame. Does not add a
    * reference.
    */
-  nsIContent* GetContent() const { return mContent; }
+  [[nodiscard]] nsIContent* GetContent() const { return mContent; }
+
+  [[nodiscard]] bool ContentIsRootOfNativeAnonymousSubtree() const {
+    return mContent && mContent->IsRootOfNativeAnonymousSubtree();
+  }
+
+  [[nodiscard]] inline bool ContentIsEditable() const;
 
   /**
    * @brief Get the closest native anonymous subtree root if the content is in a
@@ -982,10 +988,6 @@ class nsIFrame : public nsQueryFrame {
 
   /**
    * Set this frame's parent to aParent.
-   * If the frame may have moved into or out of a scrollframe's
-   * frame subtree,
-   * StickyScrollContainer::NotifyReparentedFrameAcrossScrollFrameBoundary must
-   * also be called.
    */
   void SetParent(nsContainerFrame* aParent);
 
@@ -3379,6 +3381,9 @@ class nsIFrame : public nsQueryFrame {
     return sLayoutFrameTypes[uint8_t(mClass)];
   }
 
+  /** Return this frame's class id */
+  ClassID GetClassID() const { return mClass; }
+
   /**
    * Get the type flags of the frame.
    *
@@ -5110,7 +5115,7 @@ class nsIFrame : public nsQueryFrame {
   mozilla::WritingMode mWritingMode;
 
   /** The ClassID of the concrete class of this instance. */
-  ClassID mClass;  // 1 byte
+  const ClassID mClass;  // 1 byte
 
   bool mMayHaveRoundedCorners : 1;
 

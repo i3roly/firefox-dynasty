@@ -3690,6 +3690,12 @@
   value: false
   mirror: always
 
+# Cache stencil across navigation
+- name: dom.script_loader.navigation_cache
+  type: bool
+  value: false
+  mirror: always
+
 - name: dom.securecontext.allowlist_onions
   type: bool
   value: false
@@ -9178,7 +9184,7 @@
 # Is support for -moz-prefixed transform properties enabled?
 - name: layout.css.prefixes.transforms
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Is support for -moz-prefixed transition properties enabled?

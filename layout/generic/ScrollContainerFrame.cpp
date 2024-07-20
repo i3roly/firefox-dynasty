@@ -3820,18 +3820,15 @@ void ScrollContainerFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   const bool isRootContent =
       mIsRoot && PresContext()->IsRootContentDocumentCrossProcess();
 
-  nsRect effectiveScrollPort = mScrollPort;
-  if (isRootContent && PresContext()->HasDynamicToolbar()) {
-    // Expand the scroll port to the size including the area covered by dynamic
-    // toolbar in the case where the dynamic toolbar is being used since
-    // position:fixed elements attached to this root scroller might be taller
-    // than its scroll port (e.g 100vh). Even if the dynamic toolbar covers the
-    // taller area, it doesn't mean the area is clipped by the toolbar because
-    // the dynamic toolbar is laid out outside of our topmost window and it
-    // transitions without changing our topmost window size.
-    effectiveScrollPort.SizeTo(nsLayoutUtils::ExpandHeightForDynamicToolbar(
-        PresContext(), effectiveScrollPort.Size()));
-  }
+  // Expand the scroll port to the size including the area covered by dynamic
+  // toolbar in the case where the dynamic toolbar is being used since
+  // position:fixed elements attached to this root scroller might be taller
+  // than its scroll port (e.g 100vh). Even if the dynamic toolbar covers the
+  // taller area, it doesn't mean the area is clipped by the toolbar because
+  // the dynamic toolbar is laid out outside of our topmost window and it
+  // transitions without changing our topmost window size.
+  const nsRect effectiveScrollPort =
+      GetScrollPortRectAccountingForMaxDynamicToolbar();
 
   // It's safe to get this value before the DecideScrollableLayer call below
   // because that call cannot create a displayport for root scroll frames,
@@ -5132,8 +5129,7 @@ static nsSize GetScrollPortSizeExcludingHeadersAndFooters(
       StickyScrollContainer::GetStickyScrollContainerForScrollFrame(
           aScrollFrame);
   if (ssc) {
-    const nsTArray<nsIFrame*>& stickyFrames = ssc->GetFrames();
-    for (nsIFrame* f : stickyFrames) {
+    for (nsIFrame* f : ssc->GetFrames().IterFromShallowest()) {
       // If it's acting like fixed position.
       if (ssc->IsStuckInYDirection(f)) {
         AddToListIfHeaderFooter(f, aScrollFrame, aScrollPort, list);

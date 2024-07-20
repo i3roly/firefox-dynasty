@@ -16,11 +16,9 @@
 #include "PSMRunnable.h"
 #include "SSLServerCertVerification.h"
 #include "ScopedNSSTypes.h"
-#include "SharedSSLState.h"
 #include "TLSClientAuthCertSelection.h"
 #include "keyhi.h"
 #include "mozilla/Base64.h"
-#include "mozilla/Casting.h"
 #include "mozilla/DebugOnly.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
@@ -123,12 +121,6 @@ void getSiteKey(const nsACString& hostName, uint16_t port,
 
 extern LazyLogModule gPIPNSSLog;
 
-void nsSSLIOLayerHelpers::Cleanup() {
-  MutexAutoLock lock(mutex);
-  mTLSIntoleranceInfo.Clear();
-  mInsecureFallbackSites.Clear();
-}
-
 namespace {
 
 enum Operation { reading, writing, not_reading_or_writing };
@@ -183,7 +175,7 @@ static PRStatus nsSSLIOLayerConnect(PRFileDesc* fd, const PRNetAddr* addr,
 }
 
 void nsSSLIOLayerHelpers::rememberTolerantAtVersion(const nsACString& hostName,
-                                                    int16_t port,
+                                                    uint16_t port,
                                                     uint16_t tolerant) {
   nsCString key;
   getSiteKey(hostName, port, key);
@@ -210,7 +202,7 @@ void nsSSLIOLayerHelpers::rememberTolerantAtVersion(const nsACString& hostName,
 }
 
 void nsSSLIOLayerHelpers::forgetIntolerance(const nsACString& hostName,
-                                            int16_t port) {
+                                            uint16_t port) {
   nsCString key;
   getSiteKey(hostName, port, key);
 
@@ -238,7 +230,7 @@ bool nsSSLIOLayerHelpers::fallbackLimitReached(const nsACString& hostName,
 
 // returns true if we should retry the handshake
 bool nsSSLIOLayerHelpers::rememberIntolerantAtVersion(
-    const nsACString& hostName, int16_t port, uint16_t minVersion,
+    const nsACString& hostName, uint16_t port, uint16_t minVersion,
     uint16_t intolerant, PRErrorCode intoleranceReason) {
   if (intolerant <= minVersion || fallbackLimitReached(hostName, intolerant)) {
     // We can't fall back any further. Assume that intolerance isn't the issue.
@@ -275,7 +267,7 @@ bool nsSSLIOLayerHelpers::rememberIntolerantAtVersion(
 }
 
 void nsSSLIOLayerHelpers::adjustForTLSIntolerance(
-    const nsACString& hostName, int16_t port,
+    const nsACString& hostName, uint16_t port,
     /*in/out*/ SSLVersionRange& range) {
   IntoleranceEntry entry;
 
@@ -301,7 +293,7 @@ void nsSSLIOLayerHelpers::adjustForTLSIntolerance(
 }
 
 PRErrorCode nsSSLIOLayerHelpers::getIntoleranceReason(
-    const nsACString& hostName, int16_t port) {
+    const nsACString& hostName, uint16_t port) {
   IntoleranceEntry entry;
 
   {
@@ -460,7 +452,6 @@ bool retryDueToTLSIntolerance(PRErrorCode err, NSSSocketControl* socketInfo) {
   }
 
   SSLVersionRange range = socketInfo->GetTLSVersionRange();
-  nsSSLIOLayerHelpers& helpers = socketInfo->SharedState().IOLayerHelpers();
 
   if (err == SSL_ERROR_UNSUPPORTED_VERSION &&
       range.min == SSL_LIBRARY_VERSION_TLS_1_0) {
@@ -479,12 +470,11 @@ bool retryDueToTLSIntolerance(PRErrorCode err, NSSSocketControl* socketInfo) {
     // First, track the original cause of the version fallback.  This uses the
     // same buckets as the telemetry below, except that bucket 0 will include
     // all cases where there wasn't an original reason.
-    PRErrorCode originalReason = helpers.getIntoleranceReason(
-        socketInfo->GetHostName(), socketInfo->GetPort());
+    PRErrorCode originalReason = socketInfo->GetTLSIntoleranceReason();
     Telemetry::Accumulate(Telemetry::SSL_VERSION_FALLBACK_INAPPROPRIATE,
                           tlsIntoleranceTelemetryBucket(originalReason));
 
-    helpers.forgetIntolerance(socketInfo->GetHostName(), socketInfo->GetPort());
+    socketInfo->ForgetTLSIntolerance();
 
     return false;
   }
@@ -532,9 +522,7 @@ bool retryDueToTLSIntolerance(PRErrorCode err, NSSSocketControl* socketInfo) {
   // TLS intolerance fallback due to remembered tolerance.
   Telemetry::Accumulate(pre, reason);
 
-  if (!helpers.rememberIntolerantAtVersion(socketInfo->GetHostName(),
-                                           socketInfo->GetPort(), range.min,
-                                           range.max, err)) {
+  if (!socketInfo->RememberTLSIntolerant(err)) {
     return false;
   }
 
@@ -770,9 +758,10 @@ static int16_t nsSSLIOLayerPoll(PRFileDesc* fd, int16_t in_flags,
   return result;
 }
 
-nsSSLIOLayerHelpers::nsSSLIOLayerHelpers(uint32_t aTlsFlags)
-    : mTreatUnsafeNegotiationAsBroken(false),
-      mVersionFallbackLimit(SSL_LIBRARY_VERSION_TLS_1_0),
+nsSSLIOLayerHelpers::nsSSLIOLayerHelpers(PublicOrPrivate aPublicOrPrivate,
+                                         uint32_t aTlsFlags)
+    : mVersionFallbackLimit(SSL_LIBRARY_VERSION_TLS_1_0),
+      mPublicOrPrivate(aPublicOrPrivate),
       mutex("nsSSLIOLayerHelpers.mutex"),
       mTlsFlags(aTlsFlags) {}
 
@@ -946,48 +935,52 @@ static PRStatus PSMConnectcontinue(PRFileDesc* fd, int16_t out_flags) {
   return fd->lower->methods->connectcontinue(fd, out_flags);
 }
 
-namespace {
-
-class PrefObserver : public nsIObserver {
- public:
-  NS_DECL_THREADSAFE_ISUPPORTS
-  NS_DECL_NSIOBSERVER
-  explicit PrefObserver(nsSSLIOLayerHelpers* aOwner) : mOwner(aOwner) {}
-
- protected:
-  virtual ~PrefObserver() = default;
-
- private:
-  nsSSLIOLayerHelpers* mOwner;
-};
-
-}  // unnamed namespace
-
-NS_IMPL_ISUPPORTS(PrefObserver, nsIObserver)
+NS_IMPL_ISUPPORTS(nsSSLIOLayerHelpers, nsIObserver)
 
 NS_IMETHODIMP
-PrefObserver::Observe(nsISupports* aSubject, const char* aTopic,
-                      const char16_t* someData) {
+nsSSLIOLayerHelpers::Observe(nsISupports* aSubject, const char* aTopic,
+                             const char16_t* someData) {
   if (nsCRT::strcmp(aTopic, NS_PREFBRANCH_PREFCHANGE_TOPIC_ID) == 0) {
     NS_ConvertUTF16toUTF8 prefName(someData);
 
-    if (prefName.EqualsLiteral(
-            "security.ssl.treat_unsafe_negotiation_as_broken")) {
-      bool enabled;
-      Preferences::GetBool("security.ssl.treat_unsafe_negotiation_as_broken",
-                           &enabled);
-      mOwner->setTreatUnsafeNegotiationAsBroken(enabled);
-    } else if (prefName.EqualsLiteral("security.tls.version.fallback-limit")) {
-      mOwner->loadVersionFallbackLimit();
+    if (prefName.EqualsLiteral("security.tls.version.fallback-limit")) {
+      loadVersionFallbackLimit();
     } else if (prefName.EqualsLiteral("security.tls.insecure_fallback_hosts")) {
-      // Changes to the allowlist on the public side will update the pref.
-      // Don't propagate the changes to the private side.
-      if (mOwner->isPublic()) {
-        mOwner->initInsecureFallbackSites();
-      }
+      initInsecureFallbackSites();
     }
+  } else if (nsCRT::strcmp(aTopic, "last-pb-context-exited") == 0) {
+    clearStoredData();
   }
   return NS_OK;
+}
+
+void nsSSLIOLayerHelpers::GlobalInit() {
+  MOZ_ASSERT(NS_IsMainThread(), "Not on main thread");
+  gPublicSSLIOLayerHelpers = new nsSSLIOLayerHelpers(PublicOrPrivate::Public);
+  gPublicSSLIOLayerHelpers->Init();
+  gPrivateSSLIOLayerHelpers = new nsSSLIOLayerHelpers(PublicOrPrivate::Private);
+  gPrivateSSLIOLayerHelpers->Init();
+}
+
+/*static*/
+void nsSSLIOLayerHelpers::GlobalCleanup() {
+  MOZ_ASSERT(NS_IsMainThread(), "Not on main thread");
+
+  if (gPrivateSSLIOLayerHelpers) {
+    gPrivateSSLIOLayerHelpers = nullptr;
+  }
+
+  if (gPublicSSLIOLayerHelpers) {
+    gPublicSSLIOLayerHelpers = nullptr;
+  }
+}
+
+already_AddRefed<nsSSLIOLayerHelpers> PublicSSLIOLayerHelpers() {
+  return do_AddRef(gPublicSSLIOLayerHelpers);
+}
+
+already_AddRefed<nsSSLIOLayerHelpers> PrivateSSLIOLayerHelpers() {
+  return do_AddRef(gPrivateSSLIOLayerHelpers);
 }
 
 static int32_t PlaintextRecv(PRFileDesc* fd, void* buf, int32_t amount,
@@ -1007,16 +1000,8 @@ static int32_t PlaintextRecv(PRFileDesc* fd, void* buf, int32_t amount,
 }
 
 nsSSLIOLayerHelpers::~nsSSLIOLayerHelpers() {
-  // mPrefObserver will only be set if this->Init was called. The GTest tests
-  // do not call Init.
-  if (mPrefObserver) {
-    Preferences::RemoveObserver(
-        mPrefObserver, "security.ssl.treat_unsafe_negotiation_as_broken");
-    Preferences::RemoveObserver(mPrefObserver,
-                                "security.tls.version.fallback-limit");
-    Preferences::RemoveObserver(mPrefObserver,
-                                "security.tls.insecure_fallback_hosts");
-  }
+  Preferences::RemoveObserver(this, "security.tls.version.fallback-limit");
+  Preferences::RemoveObserver(this, "security.tls.insecure_fallback_hosts");
 }
 
 template <typename R, R return_value, typename... Args>
@@ -1095,20 +1080,21 @@ nsresult nsSSLIOLayerHelpers::Init() {
 
   // non main thread helpers will need to use defaults
   if (NS_IsMainThread()) {
-    bool enabled = false;
-    Preferences::GetBool("security.ssl.treat_unsafe_negotiation_as_broken",
-                         &enabled);
-    setTreatUnsafeNegotiationAsBroken(enabled);
-
     initInsecureFallbackSites();
 
-    mPrefObserver = new PrefObserver(this);
-    Preferences::AddStrongObserver(
-        mPrefObserver, "security.ssl.treat_unsafe_negotiation_as_broken");
-    Preferences::AddStrongObserver(mPrefObserver,
-                                   "security.tls.version.fallback-limit");
-    Preferences::AddStrongObserver(mPrefObserver,
-                                   "security.tls.insecure_fallback_hosts");
+    Preferences::AddStrongObserver(this, "security.tls.version.fallback-limit");
+    if (isPublic()) {
+      // Changes to the allowlist on the public side will update the pref.
+      // Don't propagate the changes to the private side.
+      Preferences::AddStrongObserver(this,
+                                     "security.tls.insecure_fallback_hosts");
+    } else {
+      nsCOMPtr<nsIObserverService> obsSvc =
+          mozilla::services::GetObserverService();
+      if (obsSvc) {
+        obsSvc->AddObserver(this, "last-pb-context-exited", false);
+      }
+    }
   } else {
     MOZ_ASSERT(mTlsFlags, "Only per socket version can ignore prefs");
   }
@@ -1118,12 +1104,7 @@ nsresult nsSSLIOLayerHelpers::Init() {
 
 void nsSSLIOLayerHelpers::loadVersionFallbackLimit() {
   // see nsNSSComponent::SetEnabledTLSVersions for pref handling rules
-  uint32_t limit = 3;  // TLS 1.2
-
-  if (NS_IsMainThread()) {
-    limit = Preferences::GetUint("security.tls.version.fallback-limit",
-                                 3);  // 3 = TLS 1.2
-  }
+  uint32_t limit = StaticPrefs::security_tls_version_fallback_limit();
 
   // set fallback limit if it is set in the tls flags
   uint32_t tlsFlagsFallbackLimit = getTLSProviderFlagFallbackLimit(mTlsFlags);
@@ -1174,7 +1155,7 @@ void nsSSLIOLayerHelpers::initInsecureFallbackSites() {
 }
 
 bool nsSSLIOLayerHelpers::isPublic() const {
-  return this == &PublicSSLState()->IOLayerHelpers();
+  return mPublicOrPrivate == PublicOrPrivate::Public;
 }
 
 class FallbackPrefRemover final : public Runnable {
@@ -1231,16 +1212,6 @@ void nsSSLIOLayerHelpers::removeInsecureFallbackSite(const nsACString& hostname,
 bool nsSSLIOLayerHelpers::isInsecureFallbackSite(const nsACString& hostname) {
   MutexAutoLock lock(mutex);
   return mInsecureFallbackSites.Contains(hostname);
-}
-
-void nsSSLIOLayerHelpers::setTreatUnsafeNegotiationAsBroken(bool broken) {
-  MutexAutoLock lock(mutex);
-  mTreatUnsafeNegotiationAsBroken = broken;
-}
-
-bool nsSSLIOLayerHelpers::treatUnsafeNegotiationAsBroken() {
-  MutexAutoLock lock(mutex);
-  return mTreatUnsafeNegotiationAsBroken;
 }
 
 nsresult nsSSLIOLayerNewSocket(int32_t family, const char* host, int32_t port,
@@ -1527,8 +1498,7 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
   }
 
   uint16_t maxEnabledVersion = range.max;
-  infoObject->SharedState().IOLayerHelpers().adjustForTLSIntolerance(
-      infoObject->GetHostName(), infoObject->GetPort(), range);
+  infoObject->AdjustForTLSIntolerance(range);
   MOZ_LOG(
       gPIPNSSLog, LogLevel::Debug,
       ("[%p] nsSSLIOLayerSetOptions: using TLS version range (0x%04x,0x%04x)\n",
@@ -1667,12 +1637,13 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
     return NS_ERROR_FAILURE;
   }
 
-  bool enabled = infoObject->SharedState().IsOCSPStaplingEnabled();
+  bool enabled = StaticPrefs::security_ssl_enable_ocsp_stapling();
   if (SECSuccess != SSL_OptionSet(fd, SSL_ENABLE_OCSP_STAPLING, enabled)) {
     return NS_ERROR_FAILURE;
   }
 
-  bool sctsEnabled = infoObject->SharedState().IsSignedCertTimestampsEnabled();
+  bool sctsEnabled = GetCertificateTransparencyMode() !=
+                     CertVerifier::CertificateTransparencyMode::Disabled;
   if (SECSuccess !=
       SSL_OptionSet(fd, SSL_ENABLE_SIGNED_CERT_TIMESTAMPS, sctsEnabled)) {
     return NS_ERROR_FAILURE;
@@ -1763,29 +1734,27 @@ nsresult nsSSLIOLayerAddToSocket(int32_t family, const char* host, int32_t port,
                                  nsITLSSocketControl** tlsSocketControl,
                                  bool forSTARTTLS, uint32_t providerFlags,
                                  uint32_t providerTlsFlags) {
-  SharedSSLState* sharedState = nullptr;
-  RefPtr<SharedSSLState> allocatedState;
+  RefPtr<nsSSLIOLayerHelpers> sslIOLayerHelpers;
   if (providerTlsFlags) {
-    allocatedState = new SharedSSLState(providerTlsFlags);
-    sharedState = allocatedState.get();
+    sslIOLayerHelpers =
+        new nsSSLIOLayerHelpers(PublicOrPrivate::Public, providerTlsFlags);
+    sslIOLayerHelpers->Init();
   } else {
     bool isPrivate = providerFlags & nsISocketProvider::NO_PERMANENT_STORAGE ||
                      originAttributes.IsPrivateBrowsing();
-    sharedState = isPrivate ? PrivateSSLState() : PublicSSLState();
+    sslIOLayerHelpers =
+        isPrivate ? PrivateSSLIOLayerHelpers() : PublicSSLIOLayerHelpers();
   }
 
-  RefPtr<NSSSocketControl> infoObject(
-      new NSSSocketControl(nsDependentCString(host), port, *sharedState,
-                           providerFlags, providerTlsFlags));
+  RefPtr<NSSSocketControl> infoObject(new NSSSocketControl(
+      nsDependentCString(host), port, sslIOLayerHelpers.forget(), providerFlags,
+      providerTlsFlags));
   if (!infoObject) {
     return NS_ERROR_FAILURE;
   }
 
   infoObject->SetForSTARTTLS(forSTARTTLS);
   infoObject->SetOriginAttributes(originAttributes);
-  if (allocatedState) {
-    infoObject->SetSharedOwningReference(allocatedState);
-  }
 
   bool haveProxy = false;
   bool haveHTTPSProxy = false;
@@ -1871,8 +1840,6 @@ nsresult nsSSLIOLayerAddToSocket(int32_t family, const char* host, int32_t port,
   if (forSTARTTLS || haveProxy) {
     infoObject->SetHandshakeNotPending();
   }
-
-  infoObject->SharedState().NoteSocketCreated();
 
   rv = infoObject->SetResumptionTokenFromExternalCache(sslSock);
   if (NS_FAILED(rv)) {

@@ -6,8 +6,9 @@
 #ifndef Y_CB_CR_UTILS_H_
 #define Y_CB_CR_UTILS_H_
 
-#include "mozilla/gfx/Types.h"
+#include "ErrorList.h"
 #include "ImageContainer.h"
+#include "mozilla/gfx/Types.h"
 
 namespace mozilla {
 namespace gfx {
@@ -17,7 +18,7 @@ GetYCbCrToRGBDestFormatAndSize(const layers::PlanarYCbCrData& aData,
                                SurfaceFormat& aSuggestedFormat,
                                IntSize& aSuggestedSize);
 
-void
+nsresult
 ConvertYCbCrToRGB(const layers::PlanarYCbCrData& aData,
                   const SurfaceFormat& aDestFormat,
                   const IntSize& aDestSize,
@@ -29,14 +30,14 @@ using PremultFunc = int (*)(const uint8_t* src_argb, int src_stride_argb,
                             int height);
 
 // Convert given YUV data w/ or w/out alpha into BGRA or BGRX data.
-void
+nsresult
 ConvertYCbCrToRGB32(const layers::PlanarYCbCrData& aData,
                     const SurfaceFormat& aDestFormat,
                     unsigned char* aDestBuffer,
                     int32_t aStride,
                     PremultFunc premultiplyAlphaOp);
 
-void
+nsresult
 ConvertI420AlphaToARGB(const uint8_t* aSrcY,
                        const uint8_t* aSrcU,
                        const uint8_t* aSrcV,

@@ -197,6 +197,7 @@ pub struct PrimTask {
     pub edge_flags: EdgeAaSegmentMask,
     pub quad_flags: QuadFlags,
     pub prim_needs_scissor_rect: bool,
+    pub texture_input: RenderTaskId,
 }
 
 #[cfg_attr(feature = "capture", derive(Serialize))]
@@ -297,6 +298,8 @@ pub struct BorderTask {
 #[cfg_attr(feature = "replay", derive(Deserialize))]
 pub struct BlitTask {
     pub source: RenderTaskId,
+    // Normalized rect within the source task to blit from
+    pub source_rect: DeviceIntRect,
 }
 
 #[derive(Debug)]
@@ -544,6 +547,7 @@ impl RenderTaskKind {
         edge_flags: EdgeAaSegmentMask,
         quad_flags: QuadFlags,
         prim_needs_scissor_rect: bool,
+        texture_input: RenderTaskId,
     ) -> Self {
         RenderTaskKind::Prim(PrimTask {
             pattern,
@@ -556,6 +560,7 @@ impl RenderTaskKind {
             edge_flags,
             quad_flags,
             prim_needs_scissor_rect,
+            texture_input,
         })
     }
 
@@ -1123,6 +1128,7 @@ impl RenderTask {
     pub fn new_blit(
         size: DeviceIntSize,
         source: RenderTaskId,
+        source_rect: DeviceIntRect,
         rg_builder: &mut RenderTaskGraphBuilder,
     ) -> RenderTaskId {
         // If this blit uses a render task as a source,
@@ -1133,7 +1139,7 @@ impl RenderTask {
 
         let blit_task_id = rg_builder.add().init(RenderTask::new_dynamic(
             size,
-            RenderTaskKind::Blit(BlitTask { source }),
+            RenderTaskKind::Blit(BlitTask { source, source_rect }),
         ));
 
         rg_builder.add_dependency(blit_task_id, source);

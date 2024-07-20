@@ -2963,9 +2963,7 @@ void nsPresContext::SetVisibleArea(const nsRect& r) {
   if (!r.IsEqualEdges(mVisibleArea)) {
     mVisibleArea = r;
     mSizeForViewportUnits = mVisibleArea.Size();
-    if (IsRootContentDocumentCrossProcess()) {
-      AdjustSizeForViewportUnits();
-    }
+    AdjustSizeForViewportUnits();
     // Visible area does not affect media queries when paginated.
     if (!IsRootPaginatedDocument()) {
       MediaFeatureValuesChanged(
@@ -2998,25 +2996,24 @@ void nsPresContext::SetDynamicToolbarMaxHeight(ScreenIntCoord aHeight) {
 }
 
 void nsPresContext::AdjustSizeForViewportUnits() {
-  MOZ_ASSERT(IsRootContentDocumentCrossProcess());
-  if (mVisibleArea.height == NS_UNCONSTRAINEDSIZE) {
+  if (!HasDynamicToolbar()) {
+    return;
+  }
+
+  if (MOZ_UNLIKELY(mVisibleArea.height == NS_UNCONSTRAINEDSIZE)) {
     // Ignore `NS_UNCONSTRAINEDSIZE` since it's a temporary state during a
     // reflow. We will end up calling this function again with a proper size in
     // the same reflow.
     return;
   }
 
-  if (MOZ_UNLIKELY(mVisibleArea.height +
-                       NSIntPixelsToAppUnits(mDynamicToolbarMaxHeight,
-                                             mCurAppUnitsPerDevPixel) >
-                   nscoord_MAX)) {
+  nscoord toolbarMaxHeight = GetDynamicToolbarMaxHeightInAppUnits();
+  if (MOZ_UNLIKELY(mVisibleArea.height + toolbarMaxHeight > nscoord_MAX)) {
     MOZ_ASSERT_UNREACHABLE("The dynamic toolbar max height is probably wrong");
     return;
   }
 
-  mSizeForViewportUnits.height =
-      mVisibleArea.height +
-      NSIntPixelsToAppUnits(mDynamicToolbarMaxHeight, mCurAppUnitsPerDevPixel);
+  mSizeForViewportUnits.height = mVisibleArea.height + toolbarMaxHeight;
 }
 
 void nsPresContext::UpdateDynamicToolbarOffset(ScreenIntCoord aOffset) {
@@ -3055,16 +3052,39 @@ void nsPresContext::UpdateDynamicToolbarOffset(ScreenIntCoord aOffset) {
 }
 
 DynamicToolbarState nsPresContext::GetDynamicToolbarState() const {
-  if (!IsRootContentDocumentCrossProcess() || !HasDynamicToolbar()) {
+  if (!HasDynamicToolbar()) {
     return DynamicToolbarState::None;
   }
-
   if (mDynamicToolbarMaxHeight == mDynamicToolbarHeight) {
     return DynamicToolbarState::Expanded;
-  } else if (mDynamicToolbarHeight == 0) {
+  }
+  if (mDynamicToolbarHeight == 0) {
     return DynamicToolbarState::Collapsed;
   }
   return DynamicToolbarState::InTransition;
+}
+
+static CSSToScreenScale GetMVMScale(PresShell* aPS) {
+  if (aPS) {
+    if (RefPtr mvm = aPS->GetMobileViewportManager()) {
+      return mvm->GetZoom();
+    }
+  }
+  return CSSToScreenScale(1.0f);
+}
+
+nscoord nsPresContext::GetDynamicToolbarMaxHeightInAppUnits() const {
+  if (mDynamicToolbarMaxHeight == 0) {
+    return 0;
+  }
+  return CSSPixel::ToAppUnits(ScreenCoord(GetDynamicToolbarMaxHeight()) /
+                              GetMVMScale(mPresShell));
+}
+
+nscoord nsPresContext::GetBimodalDynamicToolbarHeightInAppUnits() const {
+  return GetDynamicToolbarState() == DynamicToolbarState::Collapsed
+             ? GetDynamicToolbarMaxHeightInAppUnits()
+             : 0;
 }
 
 void nsPresContext::SetSafeAreaInsets(const ScreenIntMargin& aSafeAreaInsets) {

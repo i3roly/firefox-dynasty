@@ -19,10 +19,18 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   createEngine: "chrome://global/content/ml/EngineProcess.sys.mjs",
+  MultiProgressAggregator: "chrome://global/content/ml/Utils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   PdfJsTelemetry: "resource://pdf.js/PdfJsTelemetry.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SetClipboardSearchString: "resource://gre/modules/Finder.sys.mjs",
+});
+
+ChromeUtils.defineLazyGetter(lazy, "console", () => {
+  return console.createInstance({
+    maxLogLevelPref: "browser.ml.logLevel",
+    prefix: "PDF_JS",
+  });
 });
 
 var Svc = {};
@@ -49,6 +57,8 @@ let gFindTypes = [
 ];
 
 export class PdfjsParent extends JSWindowActorParent {
+  #mutablePreferences = new Set(["enableAltText"]);
+
   constructor() {
     super();
     this._boundToFindbar = null;
@@ -75,6 +85,8 @@ export class PdfjsParent extends JSWindowActorParent {
         return this._reportTelemetry(aMsg);
       case "PDFJS:Parent:mlGuess":
         return this._mlGuess(aMsg);
+      case "PDFJS:Parent:setPreferences":
+        return this._setPreferences(aMsg);
     }
     return undefined;
   }
@@ -87,12 +99,45 @@ export class PdfjsParent extends JSWindowActorParent {
     return this.browsingContext.top.embedderElement;
   }
 
+  _setPreferences({ data }) {
+    if (!data || typeof data !== "object") {
+      return;
+    }
+    const branch = Services.prefs.getBranch("pdfjs.");
+    for (const [key, value] of Object.entries(data)) {
+      if (!this.#mutablePreferences.has(key)) {
+        continue;
+      }
+      switch (branch.getPrefType(key)) {
+        case Services.prefs.PREF_STRING:
+          if (typeof value === "string") {
+            branch.setStringPref(key, value);
+          }
+          break;
+        case Services.prefs.PREF_INT:
+          if (Number.isInteger(value)) {
+            branch.setIntPref(key, value);
+          }
+          break;
+        case Services.prefs.PREF_BOOL:
+          if (typeof value === "boolean") {
+            branch.setBoolPref(key, value);
+          }
+          break;
+      }
+    }
+  }
+
   _recordExposure() {
     lazy.NimbusFeatures.pdfjs.recordExposureEvent({ once: true });
   }
 
   _reportTelemetry(aMsg) {
     lazy.PdfJsTelemetry.report(aMsg.data);
+  }
+
+  _initProgressBar(progressData) {
+    lazy.console.debug("progess_from_pdfjs", progressData);
   }
 
   async _mlGuess({ data: { service, request } }) {
@@ -102,10 +147,20 @@ export class PdfjsParent extends JSWindowActorParent {
     if (service !== "image-to-text") {
       throw new Error("Invalid service");
     }
-    // We are using the internal task name prefixed with moz-
-    const engine = await lazy.createEngine({
-      taskName: "moz-image-to-text",
+
+    let aggregator = new lazy.MultiProgressAggregator({
+      progressCallback: this._initProgressBar,
     });
+
+    const callback = aggregator.aggregateCallback.bind(aggregator);
+
+    // We are using the internal task name prefixed with moz-
+    const engine = await lazy.createEngine(
+      {
+        taskName: "moz-image-to-text",
+      },
+      callback
+    );
     return engine.run(request);
   }
 
