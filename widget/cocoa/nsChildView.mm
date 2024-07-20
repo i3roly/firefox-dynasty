@@ -175,6 +175,11 @@ static uint32_t sUniqueKeyEventId = 0;
 
 @end
 
+@interface NSView(NSThemeFrameCornerRadius)
+- (float)roundedCornerRadius;
+@end
+
+
 @interface ChildView (Private)
 
 // sets up our view, attaching it to its owning gecko view
@@ -192,6 +197,8 @@ static uint32_t sUniqueKeyEventId = 0;
 - (void)markLayerForDisplay;
 - (CALayer*)rootCALayer;
 - (void)updateRootCALayer;
+
+- (CGFloat)cornerRadius;
 
 #ifdef ACCESSIBILITY
 - (id<mozAccessible>)accessible;
@@ -2228,6 +2235,10 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     mRootCALayer.bounds = NSZeroRect;
     mRootCALayer.anchorPoint = NSZeroPoint;
     mRootCALayer.contentsGravity = kCAGravityTopLeft;
+    if(!nsCocoaFeatures::OnMavericksOrLater()) {
+      mRootCALayer.cornerRadius = 4.0f;
+      mRootCALayer.masksToBounds = YES;
+    }
     [mPixelHostingView.layer addSublayer:mRootCALayer];
 
     mLastPressureStage = 0;
@@ -2370,6 +2381,13 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   }
 }
 
+- (CGFloat)cornerRadius
+{
+  NSView* frameView = [[[self window] contentView] superview];
+  if (!frameView || ![frameView respondsToSelector:@selector(roundedCornerRadius)])
+    return 4.0f;
+  return [frameView roundedCornerRadius];
+}
 - (BOOL)isCoveringTitlebar {
   return [[self window] isKindOfClass:[BaseWindow class]] &&
          [(BaseWindow*)[self window] mainChildView] == self &&
