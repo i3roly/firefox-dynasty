@@ -771,12 +771,13 @@ void nsMenuX::RebuildMenu() {
   }
 
 
-  //marcus added these around milestone 90a1, so 
+  //markus added these around milestone 90a1, so 
   //anything beneath sierra is not going to handle these
-  if(@available(macOS 10.12, *)) 
-  if (menuPopup->IsElement()) {
-    mNativeMenu.userInterfaceLayoutDirection =
-        DirectionForElement(menuPopup->AsElement());
+  if(@available(macOS 10.12, *)) {
+    if (menuPopup->IsElement()) {
+      mNativeMenu.userInterfaceLayoutDirection =
+          DirectionForElement(menuPopup->AsElement());
+    }
   }
 
   // Iterate over the kids
