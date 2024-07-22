@@ -200,10 +200,6 @@ enum class Trap {
   // the same over-recursed error as JS.
   StackOverflow,
 
-  // A function has crossed the hotness threshold and an optimized version
-  // should be compiled.
-  RequestTierUp,
-
   // The wasm execution has potentially run too long and the engine must call
   // CheckForInterrupt(). This trap is resumable.
   CheckInterrupt,
@@ -986,21 +982,10 @@ enum class BuiltinModuleId {
   SelfTest = 0,
   IntGemm,
   JSString,
+
+  // Not technically a builtin module, but it uses most of the same machinery.
+  JSStringConstants,
 };
-
-struct BuiltinModuleIds {
-  BuiltinModuleIds() = default;
-
-  bool selfTest = false;
-  bool intGemm = false;
-  bool jsString = false;
-
-  bool hasNone() const { return !selfTest && !intGemm && !jsString; }
-
-  WASM_CHECK_CACHEABLE_POD(selfTest, intGemm, jsString)
-};
-
-WASM_DECLARE_CACHEABLE_POD(BuiltinModuleIds)
 
 enum class StackSwitchKind {
   SwitchToSuspendable,

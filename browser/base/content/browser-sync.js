@@ -393,6 +393,12 @@ this.SyncedTabsPanelList = class SyncedTabsPanelList {
       "subviewbutton"
     );
     closeBtn.setAttribute("closemenu", "none");
+    closeBtn.setAttribute(
+      "tooltiptext",
+      gSync.fluentStrings.formatValueSync("synced-tabs-context-close-tab", {
+        deviceName: device.name,
+      })
+    );
     closeBtn.addEventListener("click", e => {
       e.stopPropagation();
 
@@ -1427,7 +1433,10 @@ var gSync = {
 
   async openFxAEmailFirstPageFromFxaMenu(sourceElement, extraParams = {}) {
     this.emitFxaToolbarTelemetry("login", sourceElement);
-    this.openFxAEmailFirstPage("fxa_toolbar_button", extraParams);
+    this.openFxAEmailFirstPage(
+      this._getEntryPointForElement(sourceElement),
+      extraParams
+    );
   },
 
   async openFxAManagePage(entryPoint) {

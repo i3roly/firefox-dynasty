@@ -327,6 +327,29 @@ CoderResult CodeRefPtr(Coder<mode>& coder, CoderArg<mode, RefPtr<T>> item) {
   }
 }
 
+// The same as CodeRefPtr, but allowing for nullable pointers.
+template <CoderMode mode, typename T,
+          CodeFunc<mode, std::remove_const_t<T>> CodeT>
+CoderResult CodeNullableRefPtr(Coder<mode>& coder,
+                               CoderArg<mode, RefPtr<T>> item) {
+  if constexpr (mode == MODE_DECODE) {
+    uint32_t isNull;
+    MOZ_TRY(CodePod(coder, &isNull));
+    if (isNull == 0) {
+      MOZ_ASSERT(item->get() == nullptr);
+      return Ok();
+    }
+    return CodeRefPtr<mode, T, CodeT>(coder, item);
+  } else {
+    uint32_t isNull = !!item->get() ? 1 : 0;
+    MOZ_TRY(CodePod(coder, &isNull));
+    if (isNull == 0) {
+      return Ok();
+    }
+    return CodeRefPtr<mode, T, CodeT>(coder, item);
+  }
+}
+
 // This function implements encoding and decoding of UniquePtr<T>.
 // A coding function is provided for the inner value as a function parameter.
 template <CoderMode mode, typename T,
@@ -405,6 +428,14 @@ CoderResult CodeCacheableChars(Coder<mode>& coder,
                                CoderArg<mode, CacheableChars> item) {
   WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CacheableChars, 8);
   return CodeUniqueChars(coder, (UniqueChars*)item);
+}
+
+// Code a ShareableChars. This functions only needs to forward to the inner
+// unique chars.
+template <CoderMode mode>
+CoderResult CodeShareableChars(Coder<mode>& coder,
+                               CoderArg<mode, ShareableChars> item) {
+  return CodeUniqueChars(coder, &item->chars);
 }
 
 // Code a CacheableName
@@ -845,7 +876,7 @@ CoderResult CodeTableDesc(Coder<mode>& coder, CoderArg<mode, TableDesc> item) {
 template <CoderMode mode>
 CoderResult CodeTrapSiteVectorArray(Coder<mode>& coder,
                                     CoderArg<mode, TrapSiteVectorArray> item) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::TrapSiteVectorArray, 560);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::TrapSiteVectorArray, 520);
   for (Trap trap : mozilla::MakeEnumeratedRange(Trap::Limit)) {
     MOZ_TRY(CodePodVector(coder, &(*item)[trap]));
   }
@@ -865,15 +896,44 @@ CoderResult CodeScriptedCaller(Coder<mode>& coder,
 }
 
 template <CoderMode mode>
+CoderResult CodeBuiltinModuleIds(Coder<mode>& coder,
+                                 CoderArg<mode, BuiltinModuleIds> item) {
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(BuiltinModuleIds, 16);
+  MOZ_TRY(CodePod(coder, &item->selfTest));
+  MOZ_TRY(CodePod(coder, &item->intGemm));
+  MOZ_TRY(CodePod(coder, &item->jsString));
+  MOZ_TRY(CodePod(coder, &item->jsStringConstants));
+  MOZ_TRY((CodeNullableRefPtr<mode, const ShareableChars, &CodeShareableChars>(
+      coder, &item->jsStringConstantsNamespace)));
+  return Ok();
+}
+
+template <CoderMode mode>
+CoderResult CodeFeatureArgs(Coder<mode>& coder,
+                            CoderArg<mode, FeatureArgs> item) {
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(FeatureArgs, 40);
+#define WASM_FEATURE(NAME, LOWER_NAME, ...) \
+  MOZ_TRY(CodePod(coder, &item->LOWER_NAME));
+  JS_FOR_WASM_FEATURES(WASM_FEATURE)
+#undef WASM_FEATURE
+  MOZ_TRY(CodePod(coder, &item->sharedMemory));
+  MOZ_TRY(CodePod(coder, &item->simd));
+  MOZ_TRY(CodePod(coder, &item->isBuiltinModule));
+  MOZ_TRY(CodeBuiltinModuleIds(coder, &item->builtinModules));
+  return Ok();
+}
+
+template <CoderMode mode>
 CoderResult CodeCompileArgs(Coder<mode>& coder,
                             CoderArg<mode, CompileArgs> item) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CompileArgs, 64);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CompileArgs, 80);
   MOZ_TRY((CodeScriptedCaller(coder, &item->scriptedCaller)));
   MOZ_TRY((CodeUniqueChars(coder, &item->sourceMapURL)));
   MOZ_TRY((CodePod(coder, &item->baselineEnabled)));
   MOZ_TRY((CodePod(coder, &item->ionEnabled)));
   MOZ_TRY((CodePod(coder, &item->debugEnabled)));
   MOZ_TRY((CodePod(coder, &item->forceTiering)));
+  MOZ_TRY((CodeFeatureArgs(coder, &item->features)));
   return Ok();
 }
 
@@ -1146,7 +1206,6 @@ CoderResult CodeModuleMetadata(Coder<mode>& coder,
   MOZ_TRY(Magic(coder, Marker::CustomSections));
   MOZ_TRY((CodeVector<mode, CustomSection, &CodeCustomSection<mode>>(
       coder, &item->customSections)));
-  MOZ_TRY(CodePod(coder, &item->featureUsage));
   return Ok();
 }
 
@@ -1164,7 +1223,7 @@ CoderResult CodeFuncToCodeRangeMap(
 CoderResult CodeCodeBlock(Coder<MODE_DECODE>& coder,
                           wasm::UniqueCodeBlock* item,
                           const wasm::LinkData& linkData) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeBlock, 944);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeBlock, 904);
   *item = js::MakeUnique<CodeBlock>(CodeBlock::kindFromTier(Tier::Serialized));
   if (!*item) {
     return Err(OutOfMemory());
@@ -1190,7 +1249,7 @@ template <CoderMode mode>
 CoderResult CodeCodeBlock(Coder<mode>& coder,
                           CoderArg<mode, wasm::CodeBlock> item,
                           const wasm::LinkData& linkData) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeBlock, 944);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeBlock, 904);
   STATIC_ASSERT_ENCODING_OR_SIZING;
   MOZ_TRY(Magic(coder, Marker::CodeBlock));
   // We don't support serializing sub-ranges yet. These only happen with
@@ -1211,7 +1270,7 @@ CoderResult CodeCodeBlock(Coder<mode>& coder,
 
 CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
                            const wasm::CodeMetadata& codeMeta) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 760);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 768);
 
   FuncImportVector funcImports;
   MOZ_TRY(CodePodVector(coder, &funcImports));
@@ -1237,6 +1296,12 @@ CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
                                  std::move(optimizedCodeLinkData))) {
     return Err(OutOfMemory());
   }
+  // not serialized: debugStubOffset_
+  {
+    uint32_t offs = 0;
+    MOZ_TRY(CodePod(coder, &offs));
+    code->setRequestTierUpStubOffset(offs);
+  }
   *item = code;
   return Ok();
 }
@@ -1244,7 +1309,7 @@ CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
 template <CoderMode mode>
 CoderResult CodeSharedCode(Coder<mode>& coder,
                            CoderArg<mode, wasm::SharedCode> item) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 760);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 768);
   STATIC_ASSERT_ENCODING_OR_SIZING;
   // Don't encode the CodeMetadata, that is handled by wasm::Module
   MOZ_TRY(CodePodVector(coder, &(*item)->funcImports()));
@@ -1259,6 +1324,11 @@ CoderResult CodeSharedCode(Coder<mode>& coder,
       *(*item)->codeBlockLinkData(optimizedCodeBlock);
   MOZ_TRY(CodeLinkData(coder, &optimizedLinkData));
   MOZ_TRY(CodeCodeBlock(coder, &optimizedCodeBlock, optimizedLinkData));
+  // not serialized: debugStubOffset_
+  {
+    uint32_t offs = (*item)->requestTierUpStubOffset();
+    MOZ_TRY(CodePod(coder, &offs));
+  }
   return Ok();
 }
 

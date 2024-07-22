@@ -89,7 +89,8 @@ ModuleGenerator::ModuleGenerator(const CodeMetadata& codeMeta,
       linkData_(nullptr),
       lifo_(GENERATOR_LIFO_DEFAULT_CHUNK_SIZE),
       masm_(nullptr),
-      debugTrapCodeOffset_(),
+      debugStubCodeOffset_(0),
+      requestTierUpStubCodeOffset_(0),
       lastPatchedCallSite_(0),
       startOfUnpatchedCallsites_(0),
       parallel_(false),
@@ -238,6 +239,7 @@ bool ModuleGenerator::linkCallSites() {
       case CallSiteDesc::FuncRefFast:
       case CallSiteDesc::ReturnStub:
       case CallSiteDesc::StackSwitch:
+      case CallSiteDesc::RequestTierUp:
         break;
       case CallSiteDesc::ReturnFunc:
       case CallSiteDesc::Func: {
@@ -314,9 +316,13 @@ void ModuleGenerator::noteCodeRange(uint32_t codeRangeIndex,
       funcImports_[codeRange.funcIndex()].initInterpExitOffset(
           codeRange.begin());
       break;
-    case CodeRange::DebugTrap:
-      MOZ_ASSERT(!debugTrapCodeOffset_);
-      debugTrapCodeOffset_ = codeRange.begin();
+    case CodeRange::DebugStub:
+      MOZ_ASSERT(!debugStubCodeOffset_);
+      debugStubCodeOffset_ = codeRange.begin();
+      break;
+    case CodeRange::RequestTierUpStub:
+      MOZ_ASSERT(!requestTierUpStubCodeOffset_);
+      requestTierUpStubCodeOffset_ = codeRange.begin();
       break;
     case CodeRange::TrapExit:
       MOZ_ASSERT(!linkData_->trapOffset);
@@ -847,9 +853,6 @@ UniqueCodeBlock ModuleGenerator::finishCodeBlock(UniqueLinkData* linkData) {
     }
   }
 
-  codeBlock_->debugTrapOffset = debugTrapCodeOffset_;
-  debugTrapCodeOffset_ = UINT32_MAX;
-
   lastPatchedCallSite_ = 0;
   startOfUnpatchedCallsites_ = 0;
   callSiteTargets_.clear();
@@ -1198,6 +1201,10 @@ SharedModule ModuleGenerator::finishModule(
     return nullptr;
   }
 
+  // Copy in a couple of offsets.
+  code->setDebugStubOffset(debugStubCodeOffset_);
+  code->setRequestTierUpStubOffset(requestTierUpStubCodeOffset_);
+
   // All the components are finished, so create the complete Module and start
   // tier-2 compilation if requested.
 
@@ -1227,7 +1234,7 @@ SharedModule ModuleGenerator::finishModule(
 
     // Perform storeOptimizedEncoding here instead of below so we don't have to
     // re-serialize the module.
-    if (maybeTier2Listener) {
+    if (maybeTier2Listener && codeMeta_->features().builtinModules.hasNone()) {
       maybeTier2Listener->storeOptimizedEncoding(serializedBytes.begin(),
                                                  serializedBytes.length());
       maybeTier2Listener = nullptr;
@@ -1236,7 +1243,8 @@ SharedModule ModuleGenerator::finishModule(
 
   if (compileState_ == CompileState::EagerTier1) {
     module->startTier2(bytecode, maybeTier2Listener);
-  } else if (tier() == Tier::Serialized && maybeTier2Listener) {
+  } else if (tier() == Tier::Serialized && maybeTier2Listener &&
+             codeMeta_->features().builtinModules.hasNone()) {
     Bytes bytes;
     if (module->serialize(&bytes)) {
       maybeTier2Listener->storeOptimizedEncoding(bytes.begin(), bytes.length());

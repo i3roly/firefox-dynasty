@@ -1397,10 +1397,8 @@ void nsIFrame::DidSetComputedStyle(ComputedStyle* aOldComputedStyle) {
 
 void nsIFrame::HandleLastRememberedSize() {
   MOZ_ASSERT(IsPrimaryFrame());
-  // Storing a last remembered size requires contain-intrinsic-size, and using
-  // a previously stored last remembered size requires content-visibility.
-  if (!StaticPrefs::layout_css_contain_intrinsic_size_enabled() ||
-      !StaticPrefs::layout_css_content_visibility_enabled()) {
+  // Storing a last remembered size requires contain-intrinsic-size.
+  if (!StaticPrefs::layout_css_contain_intrinsic_size_enabled()) {
     return;
   }
   auto* element = Element::FromNodeOrNull(mContent);
@@ -6988,10 +6986,6 @@ bool nsIFrame::IsHiddenByContentVisibilityOfInFlowParentForLayout() const {
 
 nsIFrame* nsIFrame::GetClosestContentVisibilityAncestor(
     const EnumSet<IncludeContentVisibility>& aInclude) const {
-  if (!StaticPrefs::layout_css_content_visibility_enabled()) {
-    return nullptr;
-  }
-
   auto* parent = GetInFlowParent();
   bool isAnonymousBlock = Style()->IsAnonBox() && parent &&
                           parent->HasAnyStateBits(NS_FRAME_OWNS_ANON_BOXES);
@@ -7398,6 +7392,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
   }
 
   if (isTransformed || zoomedContentRoot) {
+    MOZ_ASSERT(GetParent());
     Matrix4x4 result;
     int32_t scaleFactor =
         ((aFlags & IN_CSS_UNITS) ? AppUnitsPerCSSPixel()
@@ -7407,20 +7402,16 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
      * coordinates to our parent.
      */
     if (isTransformed) {
-      NS_ASSERTION(nsLayoutUtils::GetCrossDocParentFrameInProcess(this),
-                   "Cannot transform the viewport frame!");
-
       result = result * nsDisplayTransform::GetResultingTransformMatrix(
-                            this, nsPoint(0, 0), scaleFactor,
-                            nsDisplayTransform::INCLUDE_PERSPECTIVE |
-                                nsDisplayTransform::OFFSET_BY_ORIGIN);
+                            this, nsPoint(), scaleFactor,
+                            nsDisplayTransform::INCLUDE_PERSPECTIVE);
     }
 
     // The offset from a zoomed content root to its parent (e.g. from
     // a canvas frame to a scroll frame) is in layout coordinates, so
     // apply it before applying any layout-to-visual transform.
-    *aOutAncestor = nsLayoutUtils::GetCrossDocParentFrameInProcess(this);
-    nsPoint delta = GetOffsetToCrossDoc(*aOutAncestor);
+    *aOutAncestor = GetParent();
+    nsPoint delta = GetPosition();
     /* Combine the raw transform with a translation to our parent. */
     result.PostTranslate(NSAppUnitsToFloatPixels(delta.x, scaleFactor),
                          NSAppUnitsToFloatPixels(delta.y, scaleFactor), 0.0f);

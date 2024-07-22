@@ -323,6 +323,15 @@ class ChromeActions {
     sendResponse(response);
   }
 
+  async loadAIEngine(data, sendResponse) {
+    const actor = getActor(this.domWindow);
+    if (!actor) {
+      sendResponse(null);
+      return;
+    }
+    sendResponse(await actor.sendQuery("PDFJS:Parent:loadAIEngine", data));
+  }
+
   download(data) {
     const { originalUrl, options } = data;
     const blobUrl = data.blobUrl || originalUrl;
@@ -509,7 +518,12 @@ class ChromeActions {
           currentPrefs[key] = Services.prefs.getIntPref(prefName, prefValue);
           break;
         case "string":
-          currentPrefs[key] = Services.prefs.getStringPref(prefName, prefValue);
+          // The URL contains some dynamic values (%VERSION%, ...), so we need to
+          // format it.
+          currentPrefs[key] =
+            key === "altTextLearnMoreUrl"
+              ? Services.urlFormatter.formatURLPref(prefName)
+              : Services.prefs.getStringPref(prefName, prefValue);
           break;
       }
     }

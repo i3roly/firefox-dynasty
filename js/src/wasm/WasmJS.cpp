@@ -157,6 +157,7 @@ bool js::wasm::GetImports(JSContext* cx, const Module& module,
   BuiltinModuleInstances builtinInstances(cx);
   RootedValue importModuleValue(cx);
   RootedObject importModuleObject(cx);
+  bool isImportedStringModule = false;
   RootedValue importFieldValue(cx);
 
   uint32_t tagIndex = 0;
@@ -169,13 +170,19 @@ bool js::wasm::GetImports(JSContext* cx, const Module& module,
     Maybe<BuiltinModuleId> builtinModule =
         ImportMatchesBuiltinModule(import.module.utf8Bytes(), builtinModules);
     if (builtinModule) {
-      MutableHandle<JSObject*> builtinInstance =
-          builtinInstances[*builtinModule];
-      if (!builtinInstance && !wasm::InstantiateBuiltinModule(
-                                  cx, *builtinModule, builtinInstance)) {
-        return false;
+      if (*builtinModule == BuiltinModuleId::JSStringConstants) {
+        isImportedStringModule = true;
+        importModuleObject = nullptr;
+      } else {
+        MutableHandle<JSObject*> builtinInstance =
+            builtinInstances[*builtinModule];
+        if (!builtinInstance && !wasm::InstantiateBuiltinModule(
+                                    cx, *builtinModule, builtinInstance)) {
+          return false;
+        }
+        isImportedStringModule = false;
+        importModuleObject = builtinInstance;
       }
-      importModuleObject = builtinInstance;
     } else {
       RootedId moduleName(cx);
       if (!import.module.toPropertyKey(cx, &moduleName)) {
@@ -199,17 +206,28 @@ bool js::wasm::GetImports(JSContext* cx, const Module& module,
         return false;
       }
 
+      isImportedStringModule = false;
       importModuleObject = &importModuleValue.toObject();
     }
+    MOZ_RELEASE_ASSERT(!isImportedStringModule ||
+                       import.kind == DefinitionKind::Global);
 
-    RootedId fieldName(cx);
-    if (!import.field.toPropertyKey(cx, &fieldName)) {
-      return false;
-    }
-
-    if (!GetProperty(cx, importModuleObject, importModuleObject, fieldName,
-                     &importFieldValue)) {
-      return false;
+    if (isImportedStringModule) {
+      RootedString stringConstant(cx, import.field.toJSString(cx));
+      if (!stringConstant) {
+        ReportOutOfMemory(cx);
+        return false;
+      }
+      importFieldValue = StringValue(stringConstant);
+    } else {
+      RootedId fieldName(cx);
+      if (!import.field.toPropertyKey(cx, &fieldName)) {
+        return false;
+      }
+      if (!GetProperty(cx, importModuleObject, importModuleObject, fieldName,
+                       &importFieldValue)) {
+        return false;
+      }
     }
 
     switch (import.kind) {
@@ -1144,9 +1162,12 @@ bool WasmModuleObject::imports(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-#ifdef ENABLE_WASM_TYPE_REFLECTIONS
+#if defined(ENABLE_WASM_JS_STRING_BUILTINS) || \
+    defined(ENABLE_WASM_TYPE_REFLECTIONS)
   const CodeMetadata& codeMeta = module->codeMeta();
+#endif
 
+#if defined(ENABLE_WASM_TYPE_REFLECTIONS)
   size_t numFuncImport = 0;
   size_t numMemoryImport = 0;
   size_t numGlobalImport = 0;
@@ -1155,6 +1176,14 @@ bool WasmModuleObject::imports(JSContext* cx, unsigned argc, Value* vp) {
 #endif  // ENABLE_WASM_TYPE_REFLECTIONS
 
   for (const Import& import : moduleMeta.imports) {
+#ifdef ENABLE_WASM_JS_STRING_BUILTINS
+    Maybe<BuiltinModuleId> builtinModule = ImportMatchesBuiltinModule(
+        import.module.utf8Bytes(), codeMeta.features().builtinModules);
+    if (builtinModule) {
+      continue;
+    }
+#endif
+
     Rooted<IdValueVector> props(cx, IdValueVector(cx));
     if (!props.reserve(3)) {
       return false;

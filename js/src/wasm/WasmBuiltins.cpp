@@ -654,6 +654,58 @@ static const wasm::TryNote* FindNonDelegateTryNote(
   return tryNote;
 }
 
+// Request tier-2 compilation for the calling wasm function.
+
+static void WasmHandleRequestTierUp(Instance* instance) {
+  JSContext* cx = instance->cx();
+
+  // Don't turn this into a release assert - TlsContext.get() can be expensive.
+  MOZ_ASSERT(cx == TlsContext.get());
+
+  // Neither this routine nor the stub that calls it make any attempt to
+  // communicate roots to the GC.  This is OK because we will only be
+  // compiling code here, which shouldn't GC.  Nevertheless ..
+  JS::AutoAssertNoGC nogc(cx);
+
+  JitActivation* activation = CallingActivation(cx);
+  Frame* fp = activation->wasmExitFP();
+
+  // Similarly, don't turn this into a release assert.
+  MOZ_ASSERT(instance == GetNearestEffectiveInstance(fp));
+
+  // Figure out the requesting funcIndex.  We could add a field to the
+  // Instance and, in the slow path of BaseCompiler::addHotnessCheck, write it
+  // in there.  That would avoid having to call LookupCodeBlock here, but (1)
+  // LookupCodeBlock is pretty cheap and (2) this would make hotness checks
+  // larger.  It doesn't seem like a worthwhile tradeoff.
+  void* resumePC = fp->returnAddress();
+  const CodeRange* codeRange;
+  const CodeBlock* codeBlock = LookupCodeBlock(resumePC, &codeRange);
+  MOZ_RELEASE_ASSERT(codeBlock && codeRange);
+
+  uint32_t funcIndex = codeRange->funcIndex();
+
+  // Function `funcIndex` is requesting tier-up.  This can go one of three ways:
+  // - the request is a duplicate -- ignore
+  // - tier-up compilation succeeds -- we hope
+  // - tier-up compilation fails (eg, OOMs).
+  //   We have no feasible way to recover.
+  //
+  // Regardless of the outcome, we want to defer duplicate requests as long as
+  // possible.  So set the counter to "infinity" right now.
+  instance->resetHotnessCounter(funcIndex);
+
+  // Try to Ion-compile it.  Note that `ok == true` signifies either
+  // "duplicate request" or "not a duplicate, and compilation succeeded".
+  bool ok = codeBlock->code->requestTierUp(funcIndex);
+
+  // If compilation failed, there's no feasible way to recover.
+  if (!ok) {
+    wasm::Log(cx, "Failed to tier-up function=%d in instance=%p.", funcIndex,
+              instance);
+  }
+}
+
 // Unwind the activation in response to a thrown exception. This function is
 // responsible for notifying the debugger of each unwound frame.
 //
@@ -811,40 +863,6 @@ static void* WasmHandleThrow(jit::ResumeFromException* rfe) {
 }
 
 // Has the same return-value convention as HandleTrap().
-static void* RequestTierUp(JSContext* cx, JitActivation* activation) {
-  void* resumePC = activation->wasmTrapData().resumePC;
-  const CodeRange* codeRange;
-  const CodeBlock* codeBlock = LookupCodeBlock(resumePC, &codeRange);
-  MOZ_RELEASE_ASSERT(codeBlock && codeRange);
-
-  uint32_t funcIndex = codeRange->funcIndex();
-
-  // Function `funcIndex` is requesting tier-up.  This can go one of three ways:
-  // - the request is a duplicate -- ignore
-  // - tier-up compilation succeeds -- we hope
-  // - tier-up compilation fails (eg, OOMs).  We're in a signal handler (!) and
-  //   have no feasible way to recover.
-
-  // Regardless of the outcome, we want to defer duplicate requests as long as
-  // possible.  So set the counter to "infinity" right now.
-
-  wasm::Instance* instance = activation->wasmExitInstance();
-  instance->resetHotnessCounter(funcIndex);
-
-  // Try to Ion-compile it.  Note that `ok == true` signifies either
-  // "duplicate request" or "not a duplicate, and compilation succeeded".
-  bool ok = codeBlock->code->requestTierUp(funcIndex);
-  // If compilation failed, there's no feasible way to recover.
-  if (!ok) {
-    wasm::Log(cx, "Failed to tier-up function=%d in instance=%p.", funcIndex,
-              instance);
-  }
-
-  activation->finishWasmTrap();
-  return resumePC;
-}
-
-// Has the same return-value convention as HandleTrap().
 static void* CheckInterrupt(JSContext* cx, JitActivation* activation) {
   ResetInterruptState(cx);
 
@@ -908,8 +926,6 @@ static void* WasmHandleTrap() {
       ReportTrapError(cx, JSMSG_WASM_UNALIGNED_ACCESS);
       return nullptr;
     }
-    case Trap::RequestTierUp:
-      return RequestTierUp(cx, activation);
     case Trap::CheckInterrupt:
       return CheckInterrupt(cx, activation);
     case Trap::StackOverflow: {
@@ -1200,6 +1216,9 @@ void* wasm::AddressOf(SymbolicAddress imm, ABIFunctionType* abiType) {
     case SymbolicAddress::HandleDebugTrap:
       *abiType = Args_General0;
       return FuncCast(WasmHandleDebugTrap, *abiType);
+    case SymbolicAddress::HandleRequestTierUp:
+      *abiType = Args_General1;
+      return FuncCast(WasmHandleRequestTierUp, *abiType);
     case SymbolicAddress::HandleThrow:
       *abiType = Args_General1;
       return FuncCast(WasmHandleThrow, *abiType);
@@ -1622,7 +1641,8 @@ bool wasm::NeedsBuiltinThunk(SymbolicAddress sym) {
     // No thunk, because some work has to be done within the activation before
     // the activation exit: when called, arbitrary wasm registers are live and
     // must be saved, and the stack pointer may not be aligned for any ABI.
-    case SymbolicAddress::HandleDebugTrap:  // GenerateDebugTrapStub
+    case SymbolicAddress::HandleDebugTrap:      // GenerateDebugStub
+    case SymbolicAddress::HandleRequestTierUp:  // GenerateRequestTierUpStub
 
     // No thunk, because their caller manages the activation exit explicitly
     case SymbolicAddress::CallImport_General:      // GenerateImportInterpExit

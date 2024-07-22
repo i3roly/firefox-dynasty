@@ -1111,6 +1111,34 @@ const AVAILABLE_INJECTIONS = [
       ],
     },
   },
+  {
+    id: "bug1896571",
+    platform: "all",
+    domain: "gracobaby.ca",
+    bug: "1896571",
+    contentScripts: {
+      matches: ["*://www.gracobaby.ca/*"],
+      css: [
+        {
+          file: "injections/css/bug1896571-gracobaby.ca-unlock-scrolling.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1895994",
+    platform: "android",
+    domain: "www.softrans.ro",
+    bug: "1895994",
+    contentScripts: {
+      matches: ["*://*.softrans.ro/*"],
+      css: [
+        {
+          file: "injections/css/bug1895994-softtrans.ro-unlock-scrolling.css",
+        },
+      ],
+    },
+  },
 ];
 
 module.exports = AVAILABLE_INJECTIONS;

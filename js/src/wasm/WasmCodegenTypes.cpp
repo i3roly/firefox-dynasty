@@ -70,8 +70,6 @@ const char* js::wasm::NameOfTrap(Trap trap) {
       return "BadCast";
     case Trap::StackOverflow:
       return "StackOverflow";
-    case Trap::RequestTierUp:
-      return "RequestTierUp";
     case Trap::CheckInterrupt:
       return "CheckInterrupt";
     case Trap::ThrowReported:
@@ -183,8 +181,9 @@ CodeRange::CodeRange(Kind kind, CallableOffsets offsets)
   PodZero(&u);
 #ifdef DEBUG
   switch (kind_) {
-    case DebugTrap:
+    case DebugStub:
     case BuiltinThunk:
+    case RequestTierUpStub:
       break;
     default:
       MOZ_CRASH("should use more specific constructor");

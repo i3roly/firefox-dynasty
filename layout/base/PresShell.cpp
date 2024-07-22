@@ -611,6 +611,15 @@ int16_t PresShell::sMouseButtons = MouseButtonsFlag::eNoButtons;
 
 LazyLogModule PresShell::gLog("PresShell");
 
+#ifdef DEBUG
+// MouseLocation logs the mouse location and when/where enqueued synthesized
+// mouse move is flushed.  If you don't need all mouse location recording at
+// eMouseMove, you can use MouseLocation:3,sync.  Then, it's logged once per
+// 50 times.  Otherwise, if you need to log all eMouseMove locations, you can
+// use MouseLocation:5,sync.
+LazyLogModule gLogMouseLocation("MouseLocation");
+#endif
+
 TimeStamp PresShell::EventHandler::sLastInputCreated;
 TimeStamp PresShell::EventHandler::sLastInputProcessed;
 StaticRefPtr<Element> PresShell::EventHandler::sLastKeyDownEventTargetElement;
@@ -3218,7 +3227,7 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
     // TODO(emilio): Do we really want to clear the focus even if aScroll is
     // false?
     const bool shouldFocusTarget = [&] {
-      if (!aScroll) {
+      if (!aScroll || thereIsATextFragment) {
         return false;
       }
       nsIFrame* targetFrame = target->GetPrimaryFrame();
@@ -5777,7 +5786,8 @@ void PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll) {
   nsCOMPtr<nsIDragSession> dragSession =
       nsContentUtils::GetDragSession(rootView->GetWidget());
   if (dragSession) {
-    mSynthMouseMoveEvent.Forget();
+    // Don't forget it.  We need to synthesize a mouse move when the drag
+    // session ends.
     return;
   }
 
@@ -5799,9 +5809,10 @@ void PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll) {
   // we need to access members after we call DispatchEvent).
   RefPtr<PresShell> kungFuDeathGrip(this);
 
-#ifdef DEBUG_MOUSE_LOCATION
-  printf("[ps=%p]synthesizing mouse move to (%d,%d)\n", this, mMouseLocation.x,
-         mMouseLocation.y);
+#ifdef DEBUG
+  MOZ_LOG(gLogMouseLocation, LogLevel::Info,
+          ("[ps=%p]synthesizing mouse move to (%d,%d)\n", this,
+           mMouseLocation.x, mMouseLocation.y));
 #endif
 
   int32_t APD = mPresContext->AppUnitsPerDevPixel();
@@ -6753,45 +6764,94 @@ void PresShell::RecordPointerLocation(WidgetGUIEvent* aEvent) {
     return;
   }
 
-  if ((aEvent->mMessage == eMouseMove &&
-       aEvent->AsMouseEvent()->mReason == WidgetMouseEvent::eReal) ||
-      aEvent->mMessage == eMouseEnterIntoWidget ||
-      aEvent->mMessage == eMouseDown || aEvent->mMessage == eMouseUp) {
-    mMouseLocation = GetEventLocation(*aEvent->AsMouseEvent());
-    mMouseEventTargetGuid = InputAPZContext::GetTargetLayerGuid();
-    mMouseLocationWasSetBySynthesizedMouseEventForTests =
-        aEvent->mFlags.mIsSynthesizedForTests;
-#ifdef DEBUG_MOUSE_LOCATION
-    if (aEvent->mMessage == eMouseEnterIntoWidget) {
-      printf("[ps=%p]got mouse enter for %p\n", this, aEvent->mWidget);
-    }
-    printf("[ps=%p]setting mouse location to (%d,%d)\n", this, mMouseLocation.x,
-           mMouseLocation.y);
+  switch (aEvent->mMessage) {
+    case eMouseMove:
+      if (!aEvent->AsMouseEvent()->IsReal()) {
+        break;
+      }
+      [[fallthrough]];
+    case eMouseEnterIntoWidget:
+    case eMouseDown:
+    case eMouseUp:
+    case eDragEnter:
+    case eDragStart:
+    case eDragOver:
+    case eDrop: {
+      mMouseLocation = GetEventLocation(*aEvent->AsMouseEvent());
+      mMouseEventTargetGuid = InputAPZContext::GetTargetLayerGuid();
+      // FIXME: Don't trust the synthesized for tests flag of drag events.
+      if (aEvent->mClass != eDragEventClass) {
+        mMouseLocationWasSetBySynthesizedMouseEventForTests =
+            aEvent->mFlags.mIsSynthesizedForTests;
+      }
+#ifdef DEBUG
+      if (MOZ_LOG_TEST(gLogMouseLocation, LogLevel::Info)) {
+        static uint32_t sFrequentMessageCount = 0;
+        const bool isFrequestMessage =
+            aEvent->mMessage == eMouseMove || aEvent->mMessage == eDragOver;
+        if (!isFrequestMessage ||
+            MOZ_LOG_TEST(gLogMouseLocation, LogLevel::Verbose) ||
+            !(sFrequentMessageCount % 50)) {
+          MOZ_LOG(gLogMouseLocation,
+                  isFrequestMessage ? LogLevel::Debug : LogLevel::Info,
+                  ("[ps=%p]got %s for %p at {%d, %d}\n", this,
+                   ToChar(aEvent->mMessage), aEvent->mWidget.get(),
+                   mMouseLocation.x, mMouseLocation.y));
+        }
+        if (isFrequestMessage) {
+          sFrequentMessageCount++;
+        } else {
+          // Let's log the next eMouseMove or eDragOver after the other
+          // messages.
+          sFrequentMessageCount = 0;
+        }
+      }
 #endif
-    if (aEvent->mMessage == eMouseEnterIntoWidget) {
-      SynthesizeMouseMove(false);
+      if (aEvent->mMessage == eMouseEnterIntoWidget ||
+          aEvent->mClass == eDragEventClass) {
+        SynthesizeMouseMove(false);
+      }
+      break;
     }
-  } else if (aEvent->mMessage == eMouseExitFromWidget) {
-    // Although we only care about the mouse moving into an area for which this
-    // pres shell doesn't receive mouse move events, we don't check which widget
-    // the mouse exit was for since this seems to vary by platform.  Hopefully
-    // this won't matter at all since we'll get the mouse move or enter after
-    // the mouse exit when the mouse moves from one of our widgets into another.
-    mMouseLocation = nsPoint(NS_UNCONSTRAINEDSIZE, NS_UNCONSTRAINEDSIZE);
-    mMouseEventTargetGuid = InputAPZContext::GetTargetLayerGuid();
-    mMouseLocationWasSetBySynthesizedMouseEventForTests =
-        aEvent->mFlags.mIsSynthesizedForTests;
-#ifdef DEBUG_MOUSE_LOCATION
-    printf("[ps=%p]got mouse exit for %p\n", this, aEvent->mWidget);
-    printf("[ps=%p]clearing mouse location\n", this);
+    case eDragExit:
+      if (aEvent->mRelatedTarget) {
+        // not exit from the widget
+        break;
+      }
+      [[fallthrough]];
+    case eMouseExitFromWidget: {
+      // Although we only care about the mouse moving into an area for which
+      // this pres shell doesn't receive mouse move events, we don't check which
+      // widget the mouse exit was for since this seems to vary by platform.
+      // Hopefully this won't matter at all since we'll get the mouse move or
+      // enter after the mouse exit when the mouse moves from one of our widgets
+      // into another.
+      mMouseLocation = nsPoint(NS_UNCONSTRAINEDSIZE, NS_UNCONSTRAINEDSIZE);
+      mMouseEventTargetGuid = InputAPZContext::GetTargetLayerGuid();
+      mMouseLocationWasSetBySynthesizedMouseEventForTests =
+          aEvent->mFlags.mIsSynthesizedForTests;
+#ifdef DEBUG
+      MOZ_LOG(gLogMouseLocation, LogLevel::Info,
+              ("[ps=%p]got %s for %p, mouse location is cleared\n", this,
+               ToChar(aEvent->mMessage), aEvent->mWidget.get()));
 #endif
-  } else if ((aEvent->mMessage == ePointerMove &&
-              aEvent->AsMouseEvent()->mReason == WidgetMouseEvent::eReal) ||
-             aEvent->mMessage == ePointerDown ||
-             aEvent->mMessage == ePointerUp) {
-    // TODO: instead, encapsulate `mMouseLocation` and
-    // `mLastOverWindowPointerLocation` in a struct.
-    mLastOverWindowPointerLocation = GetEventLocation(*aEvent->AsMouseEvent());
+      break;
+    }
+    case ePointerMove:
+      if (!aEvent->AsMouseEvent()->IsReal()) {
+        break;
+      }
+      [[fallthrough]];
+    case ePointerDown:
+    case ePointerUp: {
+      // TODO: instead, encapsulate `mMouseLocation` and
+      // `mLastOverWindowPointerLocation` in a struct.
+      mLastOverWindowPointerLocation =
+          GetEventLocation(*aEvent->AsMouseEvent());
+      break;
+    }
+    default:
+      break;
   }
 }
 
@@ -8320,7 +8380,8 @@ nsresult PresShell::EventHandler::HandleEventWithTarget(
 #endif
   NS_ENSURE_STATE(!aNewEventContent ||
                   aNewEventContent->GetComposedDoc() == GetDocument());
-  if (aEvent->mClass == ePointerEventClass) {
+  if (aEvent->mClass == ePointerEventClass ||
+      aEvent->mClass == eDragEventClass) {
     mPresShell->RecordPointerLocation(aEvent->AsMouseEvent());
   }
   AutoPointerEventTargetUpdater updater(mPresShell, aEvent, aNewEventFrame,
@@ -12091,8 +12152,7 @@ bool PresShell::ReflowForHiddenContentIfNeeded() {
 }
 
 void PresShell::UpdateHiddenContentInForcedLayout(nsIFrame* aFrame) {
-  if (!aFrame || !aFrame->IsSubtreeDirty() ||
-      !StaticPrefs::layout_css_content_visibility_enabled()) {
+  if (!aFrame || !aFrame->IsSubtreeDirty()) {
     return;
   }
 
