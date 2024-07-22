@@ -15,6 +15,8 @@
 #include "nsTouchBarInputIcon.h"
 #include "nsWidgetsCID.h"
 
+#include "nsCocoaFeatures.h"
+
 @implementation nsTouchBar
 
 // Used to tie action strings to buttons.
@@ -378,8 +380,10 @@ static const uint32_t kInputIconSize = 16;
   button.imageHugsTitle = YES;
   [button.widthAnchor constraintGreaterThanOrEqualToConstant:MAIN_BUTTON_WIDTH]
       .active = YES;
-  [button setContentHuggingPriority:1.0
-                     forOrientation:NSLayoutConstraintOrientationHorizontal];
+  if(nsCocoaFeatures::OnLionOrLater()) {
+    [button setContentHuggingPriority:1.0
+                       forOrientation:NSLayoutConstraintOrientationHorizontal];
+  }
 }
 
 - (void)updatePopover:(NSPopoverTouchBarItem*)aPopoverItem
@@ -476,18 +480,19 @@ static const uint32_t kInputIconSize = 16;
   }
   layoutFormat =
       [layoutFormat stringByAppendingString:[NSString stringWithFormat:@"|"]];
-  NSArray* hConstraints = [NSLayoutConstraint
-      constraintsWithVisualFormat:layoutFormat
-                          options:NSLayoutFormatAlignAllCenterY
-                          metrics:nil
-                            views:constraintViews];
-  NSScrollView* scrollView = [[NSScrollView alloc]
-      initWithFrame:CGRectMake(0, 0, size.width, size.height)];
-  [documentView setFrame:NSMakeRect(0, 0, size.width, size.height)];
-  [NSLayoutConstraint activateConstraints:hConstraints];
-  scrollView.documentView = documentView;
-
+  if(nsCocoaFeatures::OnLionOrLater()) {
+    NSArray* hConstraints = [NSLayoutConstraint
+        constraintsWithVisualFormat:layoutFormat
+                            options:NSLayoutFormatAlignAllCenterY
+                            metrics:nil
+                              views:constraintViews];
+    NSScrollView* scrollView = [[NSScrollView alloc]
+        initWithFrame:CGRectMake(0, 0, size.width, size.height)];
+    [documentView setFrame:NSMakeRect(0, 0, size.width, size.height)];
+    [NSLayoutConstraint activateConstraints:hConstraints];
+    scrollView.documentView = documentView;
   aScrollViewItem.view = scrollView;
+  }
 }
 
 - (void)updateLabel:(NSTextField*)aLabel
