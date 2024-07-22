@@ -120,9 +120,14 @@ int ShowProgressUI(bool indeterminate) {
 
   sIndeterminate = indeterminate;
   [NSApplication sharedApplication];
-  [[NSBundle mainBundle] loadNibNamed:@"MainMenu"
+  if(@available(macOS 10.8, *)) {
+    [[NSBundle mainBundle] loadNibNamed:@"MainMenu"
                                 owner:NSApp
                       topLevelObjects:nil];
+
+  } else {
+    [NSBundle loadNibNamed:@"MainMenu" owner:NSApp];
+  }
   [NSApp run];
 
   return 0;

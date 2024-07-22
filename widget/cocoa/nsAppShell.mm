@@ -391,14 +391,32 @@ nsresult nsAppShell::Init() {
       (XRE_GetProcessType() != GeckoProcessType_Socket);
 
   if (isNSApplicationProcessType) {
-    // This call initializes NSApplication unless:
-    // 1) we're using xre -- NSApp's already been initialized by
-    //    MacApplicationDelegate.mm's EnsureUseCocoaDockAPI().
-    // 2) an embedding app that uses NSApplicationMain() is running -- NSApp's
-    //    already been initialized and its main run loop is already running.
-    [[NSBundle mainBundle] loadNibNamed:@"res/MainMenu"
-                                  owner:[GeckoNSApplication sharedApplication]
-                        topLevelObjects:nil];
+    if(@available(macOS 10.8, *)) {
+      // This call initializes NSApplication unless:
+      // 1) we're using xre -- NSApp's already been initialized by
+      //    MacApplicationDelegate.mm's EnsureUseCocoaDockAPI().
+      // 2) an embedding app that uses NSApplicationMain() is running -- NSApp's
+      //    already been initialized and its main run loop is already running.
+      [[NSBundle mainBundle] loadNibNamed:@"res/MainMenu"
+                                    owner:[GeckoNSApplication sharedApplication]
+                          topLevelObjects:nil];
+    } else {
+      // Get the path of the nib file, which lives in the GRE location
+      nsCOMPtr<nsIFile> nibFile;
+      nsresult rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(nibFile));
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      nibFile->AppendNative("res"_ns);
+      nibFile->AppendNative("MainMenu.nib"_ns);
+
+      nsAutoCString nibPath;
+      rv = nibFile->GetNativePath(nibPath);
+      NS_ENSURE_SUCCESS(rv, rv);
+       [NSBundle loadNibFile:[NSString stringWithUTF8String:(const char*)nibPath.get()]
+        externalNameTable:[NSDictionary dictionaryWithObject:[GeckoNSApplication sharedApplication]
+                                                      forKey:@"NSOwner"]
+                 withZone:NSDefaultMallocZone()];
+   }
   }
 
   mDelegate = [[AppShellDelegate alloc] initWithAppShell:this];
