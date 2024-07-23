@@ -89,6 +89,14 @@ void RenderTextureHostWrapper::NotifyNotUsed() {
 
 bool RenderTextureHostWrapper::SyncObjectNeeded() { return false; }
 
+RefPtr<layers::TextureSource> RenderTextureHostWrapper::CreateTextureSource(
+    layers::TextureSourceProvider* aProvider) {
+  if (!mTextureHost) {
+    return nullptr;
+  }
+  return mTextureHost->CreateTextureSource(aProvider);
+}
+
 RenderMacIOSurfaceTextureHost*
 RenderTextureHostWrapper::AsRenderMacIOSurfaceTextureHost() {
   if (!mTextureHost) {
@@ -141,6 +149,14 @@ RenderTextureHostWrapper::AsRenderAndroidSurfaceTextureHost() {
     return nullptr;
   }
   return mTextureHost->AsRenderAndroidSurfaceTextureHost();
+}
+
+RenderEGLImageTextureHost*
+RenderTextureHostWrapper::AsRenderEGLImageTextureHost() {
+  if (!mTextureHost) {
+    return nullptr;
+  }
+  return mTextureHost->AsRenderEGLImageTextureHost();
 }
 
 RenderTextureHostSWGL* RenderTextureHostWrapper::EnsureRenderTextureHostSWGL()

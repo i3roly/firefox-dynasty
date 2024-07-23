@@ -21,9 +21,14 @@ namespace mozilla {
 namespace gl {
 class GLContext;
 }
+namespace layers {
+class TextureSource;
+class TextureSourceProvider;
+}  // namespace layers
 
 namespace wr {
 
+class RenderEGLImageTextureHost;
 class RenderAndroidHardwareBufferTextureHost;
 class RenderAndroidSurfaceTextureHost;
 class RenderCompositor;
@@ -61,6 +66,11 @@ class RenderTextureHost {
 
   virtual void UnlockSWGL() {}
 
+  virtual RefPtr<layers::TextureSource> CreateTextureSource(
+      layers::TextureSourceProvider* aProvider) {
+    return nullptr;
+  }
+
   virtual void ClearCachedResources() {}
 
   // Called asynchronouly when corresponding TextureHost's mCompositableCount
@@ -92,6 +102,10 @@ class RenderTextureHost {
   }
 
   virtual RenderMacIOSurfaceTextureHost* AsRenderMacIOSurfaceTextureHost() {
+    return nullptr;
+  }
+
+  virtual RenderEGLImageTextureHost* AsRenderEGLImageTextureHost() {
     return nullptr;
   }
 

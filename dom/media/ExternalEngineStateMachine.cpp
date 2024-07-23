@@ -217,7 +217,14 @@ void ExternalEngineStateMachine::InitEngine() {
   if (mEngine) {
     MOZ_ASSERT(mInfo);
     auto* state = mState.AsInitEngine();
-    state->mInitPromise = mEngine->Init(*mInfo, !mMinimizePreroll);
+    ExternalPlaybackEngine::InitFlagSet flags;
+    if (mMinimizePreroll) {
+      flags += ExternalPlaybackEngine::InitFlag::ShouldPreload;
+    }
+    if (mReader->IsEncryptedCustomIdent()) {
+      flags += ExternalPlaybackEngine::InitFlag::EncryptedCustomIdent;
+    }
+    state->mInitPromise = mEngine->Init(*mInfo, flags);
     state->mInitPromise
         ->Then(OwnerThread(), __func__, this,
                &ExternalEngineStateMachine::OnEngineInitSuccess,
@@ -296,7 +303,7 @@ void ExternalEngineStateMachine::OnMetadataRead(MetadataHolder&& aMetadata) {
 #ifdef MOZ_WMF_MEDIA_ENGINE
   // Only support encrypted playback. Not a real "error", because it would
   // fallback to another state machine.
-  if (!mInfo->IsEncrypted() &&
+  if ((!mInfo->IsEncrypted() && !mReader->IsEncryptedCustomIdent()) &&
       StaticPrefs::media_wmf_media_engine_enabled() == 2) {
     LOG("External engine only supports encrypted playback by the pref");
     DecodeError(
@@ -1271,6 +1278,7 @@ RefPtr<SetCDMPromise> ExternalEngineStateMachine::SetCDMProxy(
 
   if (!mEngine || !mEngine->IsInited()) {
     LOG("SetCDMProxy is called before init");
+    mReader->SetEncryptedCustomIdent();
     mPendingTasks.AppendElement(NS_NewRunnableFunction(
         "ExternalEngineStateMachine::SetCDMProxy",
         [self = RefPtr{this}, proxy = RefPtr{aProxy}, this] {

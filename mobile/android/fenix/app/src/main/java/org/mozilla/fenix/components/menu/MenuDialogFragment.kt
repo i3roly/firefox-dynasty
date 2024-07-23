@@ -168,6 +168,11 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     openToBrowser = ::openToBrowser,
                                     webAppUseCases = webAppUseCases,
                                     settings = settings,
+                                    onDismiss = {
+                                        withContext(Dispatchers.Main) {
+                                            this@MenuDialogFragment.dismiss()
+                                        }
+                                    },
                                     scope = coroutineScope,
                                 ),
                                 MenuTelemetryMiddleware(
@@ -297,6 +302,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 },
                                 onReaderViewMenuClick = {
                                     store.dispatch(MenuAction.ToggleReaderView)
+                                },
+                                onCustomizeReaderViewMenuClick = {
+                                    store.dispatch(MenuAction.CustomizeReaderView)
                                 },
                                 onTranslatePageMenuClick = {
                                     selectedTab?.let {

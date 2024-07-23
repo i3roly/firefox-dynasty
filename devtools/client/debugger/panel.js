@@ -375,10 +375,6 @@ class DebuggerPanel {
   destroy() {
     this.panelWin.Debugger.destroy();
     this.emit("destroyed");
-    this.panelWin.L10N = null;
-    this.panelWin.sourceMapURLService = null;
-    this.panelWin = null;
-    this.commands = null;
   }
 }
 

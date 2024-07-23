@@ -11,6 +11,7 @@ import org.mozilla.fenix.GleanMetrics.AppMenu
 import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.HomeMenu
 import org.mozilla.fenix.GleanMetrics.HomeScreen
+import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Translations
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.menu.store.MenuAction
@@ -33,6 +34,8 @@ class MenuTelemetryMiddleware(
         next: (MenuAction) -> Unit,
         action: MenuAction,
     ) {
+        val currentState = context.state
+
         next(action)
 
         when (action) {
@@ -166,8 +169,19 @@ class MenuTelemetryMiddleware(
                 ),
             )
 
+            MenuAction.CustomizeReaderView -> ReaderMode.appearance.record(NoExtras())
+
+            MenuAction.ToggleReaderView -> {
+                val readerState = currentState.browserMenuState?.selectedTab?.readerState ?: return
+
+                if (readerState.active) {
+                    ReaderMode.closed.record(NoExtras())
+                } else {
+                    ReaderMode.opened.record(NoExtras())
+                }
+            }
+
             MenuAction.InitAction,
-            MenuAction.ToggleReaderView,
             MenuAction.OpenInFirefox,
             is MenuAction.InstallAddon,
             is MenuAction.Navigate.AddonDetails,

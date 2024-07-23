@@ -468,7 +468,8 @@ void ClientWebGLContext::EndComposition() {
 layers::TextureType ClientWebGLContext::GetTexTypeForSwapChain() const {
   const RefPtr<layers::ImageBridgeChild> imageBridge =
       layers::ImageBridgeChild::GetSingleton();
-  return layers::TexTypeForWebgl(imageBridge);
+  return layers::TexTypeForWebgl(imageBridge,
+                                 mNotLost->outOfProcess != nullptr);
 }
 
 void ClientWebGLContext::Present(WebGLFramebufferJS* const xrFb,
@@ -587,8 +588,9 @@ Maybe<layers::SurfaceDescriptor> ClientWebGLContext::GetFrontBuffer(
 }
 
 Maybe<layers::SurfaceDescriptor> ClientWebGLContext::PresentFrontBuffer(
-    WebGLFramebufferJS* const fb, const layers::TextureType type, bool webvr) {
-  Present(fb, type, webvr);
+    WebGLFramebufferJS* const fb, bool webvr) {
+  const auto texType = GetTexTypeForSwapChain();
+  Present(fb, texType, webvr);
   return GetFrontBuffer(fb, webvr);
 }
 

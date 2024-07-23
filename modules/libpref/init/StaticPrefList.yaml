@@ -2533,7 +2533,7 @@
 # Whether wheel event target's should be grouped. When enabled, all wheel
 # events that occur in a given wheel transaction have the same event target.
 - name: dom.event.wheel-event-groups.enabled
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -10319,8 +10319,6 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
-#elif defined(XP_SOLARIS)
-  value: true
 #else
   value: false
 #endif
@@ -10363,8 +10361,6 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
-#elif defined(XP_SOLARIS)
-  value: true
 #else
   value: false
 #endif
@@ -10396,8 +10392,6 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
-#elif defined(XP_SOLARIS)
-  value: true
 #else
   value: false
 #endif
@@ -10414,8 +10408,6 @@
 #elif defined(XP_FREEBSD)
   value: true
 #elif defined(XP_OPENBSD)
-  value: true
-#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -10434,8 +10426,6 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
-#elif defined(XP_SOLARIS)
-  value: true
 #else
   value: false
 #endif
@@ -10452,8 +10442,6 @@
 #elif defined(XP_FREEBSD)
   value: true
 #elif defined(XP_OPENBSD)
-  value: true
-#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -10483,8 +10471,6 @@
 #elif defined(XP_FREEBSD)
   value: true
 #elif defined(XP_OPENBSD)
-  value: true
-#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -11416,8 +11402,6 @@
 - name: media.audioFocus.management
   type: bool
 #if defined(MOZ_WIDGET_ANDROID)
-  value: true
-#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -16173,7 +16157,11 @@
 
 - name: webgl.1.request_es2
   type: RelaxedAtomicBool
+#ifdef XP_WIN
+  value: false
+#else
   value: true
+#endif
   mirror: always
 
 - name: webgl.angle.force-d3d11
@@ -16294,6 +16282,11 @@
   mirror: always
 
 - name: webgl.enable-renderer-query
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+- name: webgl.enable-egl-image
   type: RelaxedAtomicBool
   value: true
   mirror: always

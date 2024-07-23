@@ -15,6 +15,12 @@ const { getRemoteCommandStore, RemoteCommand } = ChromeUtils.importESModule(
   "resource://services-sync/TabsStore.sys.mjs"
 );
 
+ChromeUtils.defineESModuleGetters(this, {
+  ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
+  ExperimentManager: "resource://nimbus/lib/ExperimentManager.sys.mjs",
+});
+
 class TelemetryMock {
   constructor() {
     this._events = [];
@@ -56,21 +62,37 @@ add_task(async function test_closetab_isDeviceCompatible() {
       "https://identity.mozilla.com/cmd/close-uri/v1": "payload",
     },
   };
-  // Even though the command is available, we're keeping this feature behind a feature
-  // flag for now, so it should still show up as "not available"
-  Assert.ok(!closeTab.isDeviceCompatible(device));
-
-  // Enable the feature
-  Services.prefs.setBoolPref(
-    "identity.fxaccounts.commands.remoteTabManagement.enabled",
-    true
-  );
+  // The feature should be on by default
   Assert.ok(closeTab.isDeviceCompatible(device));
 
-  // clear it for the next test
+  // Disable the feature
+  Services.prefs.setBoolPref(
+    "identity.fxaccounts.commands.remoteTabManagement.enabled",
+    false
+  );
+  Assert.ok(!closeTab.isDeviceCompatible(device));
+
+  // clear the pref to test overriding with nimbus
   Services.prefs.clearUserPref(
     "identity.fxaccounts.commands.remoteTabManagement.enabled"
   );
+  Assert.ok(closeTab.isDeviceCompatible(device));
+
+  // Verify that nimbus can remotely override the pref
+  await ExperimentManager.onStartup();
+  await ExperimentAPI.ready();
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
+    featureId: "remoteTabManagement",
+    // You can add values for each variable you added to the manifest
+    value: {
+      closeTabsEnabled: false,
+    },
+  });
+
+  // Feature successfully disabled
+  Assert.ok(!closeTab.isDeviceCompatible(device));
+
+  doExperimentCleanup();
 });
 
 add_task(async function test_closetab_send() {
@@ -190,6 +212,81 @@ add_task(async function test_closetab_send() {
   await store.removeRemoteCommand(targetDevice.id, command4);
   await store.removeRemoteCommand(targetDevice.id, command5);
 
+  commandMock.restore();
+  queueMock.restore();
+  commandQueue.shutdown();
+});
+
+add_task(async function test_closetab_send() {
+  const targetDevice = { id: "dev1", name: "Device 1" };
+
+  const fxai = FxaInternalMock([targetDevice]);
+  let fxaCommands = {};
+  const closeTab = (fxaCommands.closeTab = new CloseRemoteTab(
+    fxaCommands,
+    fxai
+  ));
+  const commandQueue = (fxaCommands.commandQueue = new CommandQueue(
+    fxaCommands,
+    fxai
+  ));
+  let commandMock = sinon.mock(closeTab);
+  let queueMock = sinon.mock(commandQueue);
+
+  // freeze "now" to <= when the command was sent.
+  let now = Date.now();
+  commandQueue.now = () => now;
+
+  // Set the delay to 10ms
+  commandQueue.DELAY = 10;
+
+  // Our command will be written and have a timer set in 21ms.
+  queueMock.expects("_ensureTimer").once().withArgs(21);
+
+  // In this test we expect no commands sent but a timer instead.
+  closeTab.invoke = sinon.spy((cmd, device, payload) => {
+    Assert.equal(payload.encrypted, "encryptedpayload");
+  });
+
+  const store = await getRemoteCommandStore();
+  Assert.equal((await store.getUnsentCommands()).length, 0);
+  // queue a tab to close, recent enough that it remains queued and a new timer is set for it.
+  const command = new RemoteCommand.CloseTab(
+    "https://foo.bar/send-at-shutdown"
+  );
+  Assert.ok(
+    await store.addRemoteCommandAt(targetDevice.id, command, now),
+    "adding the remote command should work"
+  );
+
+  // We have the tab queued
+  const pending = await store.getUnsentCommands();
+  Assert.equal(pending.length, 1);
+
+  await commandQueue.flushQueue();
+  // A timer was set for it.
+  Assert.equal((await store.getUnsentCommands()).length, 1);
+
+  commandMock.verify();
+  queueMock.verify();
+
+  // now pretend we are being shutdown - we should force the send even though the time
+  // criteria has not been met.
+  commandMock = sinon.mock(closeTab);
+  queueMock = sinon.mock(commandQueue);
+  queueMock.expects("_ensureTimer").never();
+  commandMock
+    .expects("sendCloseTabsCommand")
+    .once()
+    .withArgs(targetDevice, ["https://foo.bar/send-at-shutdown"])
+    .resolves(true);
+
+  await commandQueue.flushQueue(true);
+  // No tabs waiting
+  Assert.equal((await store.getUnsentCommands()).length, 0);
+
+  commandMock.verify();
+  queueMock.verify();
   commandMock.restore();
   queueMock.restore();
   commandQueue.shutdown();

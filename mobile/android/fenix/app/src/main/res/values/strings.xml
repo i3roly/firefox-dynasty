@@ -242,6 +242,8 @@
     <string name="browser_menu_open_app_link">Open in app</string>
     <!-- Browser menu button to show reader view appearance controls e.g. the used font type and size -->
     <string name="browser_menu_customize_reader_view">Customize reader view</string>
+    <!-- Browser menu button to show reader view appearance controls e.g. the used font type and size -->
+    <string name="browser_menu_customize_reader_view_2">Customize Reader View</string>
     <!-- Browser menu label for adding a bookmark -->
     <string name="browser_menu_add">Add</string>
     <!-- Browser menu label for editing a bookmark -->
@@ -2478,7 +2480,9 @@
 
     <!-- Download languages preference screen -->
     <!-- Title of the download languages preference screen toolbar.-->
-    <string name="download_languages_toolbar_title_preference">Download Languages</string>
+    <string name="download_languages_toolbar_title_preference" moz:removedIn="130" tools:ignore="UnusedResources">Download Languages</string>
+    <!-- Title of the toolbar for the translation feature screen where users may download different languages for translation. -->
+    <string name="download_languages_translations_toolbar_title_preference">Download languages</string>
     <!-- Screen header presenting the download language preference feature. It will appear under the toolbar.The first parameter is "Learn More," a clickable text with a link. Talkback will append this to say "Double tap to open link to learn more". -->
     <string name="download_languages_header_preference">Download complete languages for faster translations and to translate offline. %1$s</string>
     <!-- Clickable text from the screen header that links to a website. -->
