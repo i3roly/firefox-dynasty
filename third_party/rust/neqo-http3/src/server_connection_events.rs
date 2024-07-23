@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Http3ServerConnEvent {
+pub(crate) enum Http3ServerConnEvent {
     /// Headers are ready.
     Headers {
         stream_info: Http3StreamInfo,
@@ -62,7 +62,7 @@ pub enum Http3ServerConnEvent {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Http3ServerConnEvents {
+pub(crate) struct Http3ServerConnEvents {
     events: Rc<RefCell<VecDeque<Http3ServerConnEvent>>>,
 }
 

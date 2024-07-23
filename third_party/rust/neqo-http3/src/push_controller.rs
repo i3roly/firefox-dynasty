@@ -144,7 +144,7 @@ impl ActivePushStreams {
 /// `CANCEL_PUSH` frame. The difference is that                              `PushCanceled` will not
 /// be posted and a `CANCEL_PUSH` frame may be sent.
 #[derive(Debug)]
-pub struct PushController {
+pub(crate) struct PushController {
     max_concurent_push: u64,
     current_max_push_id: u64,
     // push_streams holds the states of push streams.
@@ -459,7 +459,7 @@ impl PushController {
 /// `PushHeaderReady` and `PushDataReadable` events or to postpone them if
 /// a `push_promise` has not been yet received for the stream.
 #[derive(Debug)]
-pub struct RecvPushEvents {
+pub(crate) struct RecvPushEvents {
     push_id: u64,
     push_handler: Rc<RefCell<PushController>>,
 }

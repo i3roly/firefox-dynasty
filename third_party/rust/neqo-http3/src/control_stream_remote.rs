@@ -15,7 +15,7 @@ use crate::{
 /// The remote control stream is responsible only for reading frames. The frames are handled by
 /// `Http3Connection`.
 #[derive(Debug)]
-pub struct ControlStreamRemote {
+pub(crate) struct ControlStreamRemote {
     stream_id: StreamId,
     frame_reader: FrameReader,
 }

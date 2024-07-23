@@ -204,9 +204,10 @@ impl Paths {
     #[must_use]
     fn select_primary(&mut self, path: &PathRef) -> Option<PathRef> {
         qdebug!([path.borrow()], "set as primary path");
-        let old_path = self.primary.replace(Rc::clone(path)).inspect(|old| {
+        let old_path = self.primary.replace(Rc::clone(path)).map(|old| {
             old.borrow_mut().set_primary(false);
-        });
+            old
+        }); 
 
         // Swap the primary path into slot 0, so that it is protected from eviction.
         let idx = self

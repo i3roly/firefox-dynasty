@@ -42,7 +42,7 @@ pub trait StreamReader {
     fn read_data(&mut self, buf: &mut [u8]) -> Res<(usize, bool)>;
 }
 
-pub struct StreamReaderConnectionWrapper<'a> {
+pub(crate) struct StreamReaderConnectionWrapper<'a> {
     conn: &'a mut Connection,
     stream_id: StreamId,
 }
@@ -63,7 +63,7 @@ impl<'a> StreamReader for StreamReaderConnectionWrapper<'a> {
     }
 }
 
-pub struct StreamReaderRecvStreamWrapper<'a> {
+pub(crate) struct StreamReaderRecvStreamWrapper<'a> {
     recv_stream: &'a mut Box<dyn RecvStream>,
     conn: &'a mut Connection,
 }
@@ -93,7 +93,7 @@ enum FrameReaderState {
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug)]
-pub struct FrameReader {
+pub(crate) struct FrameReader {
     state: FrameReaderState,
     frame_type: u64,
     frame_len: u64,

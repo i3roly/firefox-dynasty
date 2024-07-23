@@ -44,7 +44,7 @@ use crate::{
     SendStreamEvents,
 };
 
-pub struct RequestDescription<'b, 't, T>
+pub(crate) struct RequestDescription<'b, 't, T>
 where
     T: AsRequestTarget<'t> + ?Sized + Debug,
 {
@@ -296,7 +296,7 @@ The call to function `receive` may produce `Http3ClientEvent::DataReadable`. Act
 data is done in the `read_data` function.
 */
 #[derive(Debug)]
-pub struct Http3Connection {
+pub(crate) struct Http3Connection {
     role: Role,
     pub state: Http3State,
     local_params: Http3Parameters,

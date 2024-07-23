@@ -20,7 +20,7 @@ use crate::{
 };
 
 #[allow(clippy::module_name_repetitions)]
-pub struct RecvMessageInfo {
+pub(crate) struct RecvMessageInfo {
     pub message_type: MessageType,
     pub stream_type: Http3StreamType,
     pub stream_id: StreamId,
@@ -66,7 +66,7 @@ struct PushInfo {
 }
 
 #[derive(Debug)]
-pub struct RecvMessage {
+pub(crate) struct RecvMessage {
     state: RecvMessageState,
     message_type: MessageType,
     stream_type: Http3StreamType,
