@@ -1261,6 +1261,42 @@ const AVAILABLE_UA_OVERRIDES = [
       },
     },
   },
+  {
+    /*
+     * Bug 1903970 - UA override for unimedlitoral.com.br
+     * Webcompat issue #138342 - https://webcompat.com/issues/138342
+     *
+     * Site blocks Firefox, but seems to work with a UA spoof.
+     */
+    id: "bug1903970",
+    platform: "all",
+    domain: "www.unimedlitoral.com.br",
+    bug: "1903970",
+    config: {
+      matches: ["*://www.unimedlitoral.com.br/agendaonline/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1902474 - UA override for lg.jio.com
+     * Webcompat issue #124681 - https://webcompat.com/issues/124681
+     *
+     * Site incorrectly blocks Firefox on Android. A desktop UA works.
+     */
+    id: "bug1902474",
+    platform: "android",
+    domain: "lg.jio.com",
+    bug: "1902474",
+    config: {
+      matches: ["*://lg.jio.com/*"],
+      uaTransformer: originalUA => {
+        return originalUA.replace(/ (Mobile|Tablet);/, "");
+      },
+    },
+  },
 ];
 
 module.exports = AVAILABLE_UA_OVERRIDES;

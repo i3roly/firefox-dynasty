@@ -398,6 +398,9 @@ PeerConnectionImpl::PeerConnectionImpl(const GlobalObject* aGlobal)
 
       mRtxIsAllowed = !HostnameInPref(
           "media.peerconnection.video.use_rtx.blocklist", mHostname);
+      mDuplicateFingerprintQuirk = HostnameInPref(
+          "media.peerconnection.sdp.quirk.duplicate_fingerprint.allowlist",
+          mHostname);
     }
   }
 
@@ -731,10 +734,6 @@ class ConfigureCodec {
             // We're assuming packetization mode 0 is unsupported by
             // hardware.
             videoCodec.mEnabled = false;
-          }
-
-          if (mHardwareH264Enabled) {
-            videoCodec.mStronglyPreferred = true;
           }
         } else if (videoCodec.mName == "red") {
           videoCodec.mEnabled = mRedUlpfecEnabled;

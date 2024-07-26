@@ -15,6 +15,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Region: "resource://gre/modules/Region.sys.mjs",
   TelemetryEnvironment: "resource://gre/modules/TelemetryEnvironment.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
+  CustomizableUI: "resource:///modules/CustomizableUI.sys.mjs",
 });
 
 const PREF_URLBAR_BRANCH = "browser.urlbar.";
@@ -132,11 +133,15 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // The minimum prefix length of a Fakespot keyword the user must type to
   // trigger the suggestion. 0 means the min length should be taken from Nimbus.
-  ["fakespot.minKeywordLength", 0],
+  ["fakespot.minKeywordLength", 4],
 
   // The number of times the user has clicked the "Show less frequently" command
   // for Fakespot suggestions.
   ["fakespot.showLessFrequentlyCount", 0],
+
+  // The index of Fakespot results within the Firefox Suggest section. A
+  // negative index is relative to the end of the section.
+  ["fakespot.suggestedIndex", -1],
 
   // When true, `javascript:` URLs are not included in search results.
   ["filter.javascript", true],
@@ -523,7 +528,6 @@ const PREF_OTHER_DEFAULTS = new Map([
   ["browser.fixup.dns_first_for_single_words", false],
   ["browser.search.suggest.enabled", true],
   ["browser.search.suggest.enabled.private", false],
-  ["browser.search.widget.inNavBar", false],
   ["keyword.enabled", true],
   ["security.insecure_connection_text.enabled", false],
   ["ui.popup.disable_autohide", false],
@@ -535,7 +539,7 @@ const PREF_OTHER_DEFAULTS = new Map([
 const NIMBUS_DEFAULTS = {
   addonsShowLessFrequentlyCap: 0,
   experimentType: "",
-  fakespotMinKeywordLength: 0,
+  fakespotMinKeywordLength: null,
   pocketShowLessFrequentlyCap: 0,
   pocketSuggestIndex: null,
   quickSuggestRemoteSettingsDataType: "data",
@@ -1689,7 +1693,7 @@ class Preferences {
     return (
       this.get("showSearchTermsFeatureGate") &&
       this.get("showSearchTerms.enabled") &&
-      !this.get("browser.search.widget.inNavBar")
+      !lazy.CustomizableUI.getPlacementOfWidget("search-container")
     );
   }
 

@@ -800,6 +800,16 @@ const buildCast = (operationName, context, builder, resources) => {
   return namedOutputOperand;
 };
 
+const buildArgMinMax = (operationName, context, builder, resources) => {
+  // MLOperand argMin/argMax(MLOperand input, unsigned long axis, optional MLArgMinMaxOptions options = {});
+  const namedOutputOperand = {};
+  const inputOperand = createSingleInputOperand(context, builder, resources);
+  let argMinMaxOptions = {...resources.options};
+  // invoke builder.argMin/argMax()
+  namedOutputOperand[resources.expected.name] = builder[operationName](inputOperand, resources.axis, argMinMaxOptions);
+  return namedOutputOperand;
+};
+
 const buildConcat = (operationName, context, builder, resources) => {
   // MLOperand concat(sequence<MLOperand> inputs, unsigned long axis);
   const namedOutputOperand = {};
@@ -1053,7 +1063,6 @@ const testWebNNOperation = (operationName, buildFunc) => {
   }
 
   let context;
-  let builder;
   operationNameArray.forEach((subOperationName) => {
     const tests = loadTests(subOperationName);
     promise_setup(async () => {
@@ -1065,10 +1074,10 @@ const testWebNNOperation = (operationName, buildFunc) => {
       }
       assert_implements(
           supported, `Unable to create context for ${variant} variant`);
-      builder = new MLGraphBuilder(context);
     });
     for (const subTest of tests) {
       promise_test(async () => {
+        const builder = new MLGraphBuilder(context);
         await run(subOperationName, context, builder, subTest, buildFunc);
       }, `${subTest.name}`);
     }

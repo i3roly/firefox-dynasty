@@ -655,7 +655,11 @@ pref("browser.urlbar.fakespot.featureGate", false);
 
 // The minimum prefix length of a Fakespot keyword the user must type to trigger
 // the suggestion. 0 means the min length should be taken from Nimbus.
-pref("browser.urlbar.fakespot.minKeywordLength", 0);
+pref("browser.urlbar.fakespot.minKeywordLength", 4);
+
+// The index of Fakespot results within the Firefox Suggest section. A negative
+// index is relative to the end of the section.
+pref("browser.urlbar.fakespot.suggestedIndex", -1);
 
 // If `browser.urlbar.fakespot.featureGate` is true, this controls whether
 // Fakespot suggestions are turned on.
@@ -738,9 +742,6 @@ pref("browser.search.openintab", false);
 
 // context menu searches open in the foreground
 pref("browser.search.context.loadInBackground", false);
-
-// Mirrors whether the search-container widget is in the navigation toolbar.
-pref("browser.search.widget.inNavBar", false);
 
 // Enables display of the options for the user using a separate default search
 // engine in private browsing mode.
@@ -1544,6 +1545,7 @@ pref("browser.bookmarks.editDialog.maxRecentFolders", 7);
   pref("browser.taskbar.lists.maxListItemCount", 7);
   pref("browser.taskbar.lists.tasks.enabled", true);
   pref("browser.taskbar.lists.refreshInSeconds", 120);
+  pref("browser.startMenu.msixPinnedWhenLastChecked", false);
 #endif
 
 // Preferences to be synced by default.
@@ -1727,18 +1729,11 @@ pref("browser.newtabpage.activity-stream.weather.query", "");
 pref("browser.newtabpage.activity-stream.weather.display", "simple");
 
 // enable location search for newtab weather widget
-#ifdef NIGHTLY_BUILD
-  pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
-#else
-  pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
-#endif
+pref("browser.newtabpage.activity-stream.weather.locationSearchEnabled", true);
 
 // List of regions that get weather by default.
-#ifdef NIGHTLY_BUILD
-  pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "US,CA");
-#else
-  pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "");
-#endif
+pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config", "US,CA");
+
 // List of locales that weather widget supports.
 pref("browser.newtabpage.activity-stream.discoverystream.locale-weather-config", "en-US,en-GB,en-CA");
 
@@ -1863,6 +1858,7 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-basic-config", "
 
 // Add parameters to Pocket feed URL.
 pref("browser.newtabpage.activity-stream.discoverystream.pocket-feed-parameters", "");
+pref("browser.newtabpage.activity-stream.discoverystream.merino-feed-experiment", false);
 
 // Allows Pocket story collections to be dismissed.
 pref("browser.newtabpage.activity-stream.discoverystream.isCollectionDismissible", true);
@@ -1960,6 +1956,8 @@ pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summariz
 pref("browser.ml.chat.prompts.1", '{"label":"Simplify Language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; headers and bulleted lists for scannability. Maintain meaning and factual accuracy.","id":"simplify"}');
 pref("browser.ml.chat.prompts.2", '{"label":"Quiz Me","value":"Please quiz me on this selection. Ask me a variety of types of questions, for example multiple choice, true or false, and short answer. Wait for my response before moving on to the next question.","id":"quiz","targeting":"!provider|regExpMatch(\'gemini\')"}');
 pref("browser.ml.chat.provider", "");
+pref("browser.ml.chat.shortcuts", false);
+pref("browser.ml.chat.shortcuts.custom", false);
 pref("browser.ml.chat.sidebar", true);
 
 pref("security.protectionspopup.recordEventTelemetry", true);
@@ -3053,7 +3051,11 @@ pref("browser.firefox-view.feature-tour", "{\"screen\":\"FIREFOX_VIEW_SPOTLIGHT\
 // Number of times the user visited about:firefoxview
 pref("browser.firefox-view.view-count", 0);
 // Maximum number of rows to show on the "History" page.
-pref("browser.firefox-view.max-history-rows", 300);
+#ifdef NIGHTLY_BUILD
+  pref("browser.firefox-view.max-history-rows", 0);
+#else
+  pref("browser.firefox-view.max-history-rows", 300);
+#endif
 // Enables virtual list functionality in Firefox View.
 pref("browser.firefox-view.virtual-list.enabled", true);
 

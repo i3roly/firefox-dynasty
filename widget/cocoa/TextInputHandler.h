@@ -933,6 +933,7 @@ class IMEInputHandler : public TextInputHandlerBase {
 
   void OnSelectionChange(const IMENotification& aIMENotification);
   void OnLayoutChange();
+  void OnTextChange(const IMENotification& aIMENotification);
 
   /**
    * Call [NSTextInputContext handleEvent] for mouse event support of IME
@@ -1057,6 +1058,10 @@ class IMEInputHandler : public TextInputHandlerBase {
   // be what you want.
   static TSMDocumentID GetCurrentTSMDocumentID();
 
+  void EnableTextSubstitution(bool aEnableTextSubstitution) {
+    mEnableTextSubstitution = aEnableTextSubstitution;
+  }
+
  protected:
   // We cannot do some jobs in the given stack by some reasons.
   // Following flags and the timer provide the execution pending mechanism,
@@ -1064,6 +1069,11 @@ class IMEInputHandler : public TextInputHandlerBase {
   nsCOMPtr<nsITimer> mTimer;
   enum { kNotifyIMEOfFocusChangeInGecko = 1, kSyncASCIICapableOnly = 2 };
   uint32_t mPendingMethods;
+
+  // Used by text substitution.
+  nsString mOriginalTextForTextSubstitution;
+  NSTextCheckingResult* mCandidatedTextSubstitutionResult;
+  bool mProcessTextSubstitution;
 
   IMEInputHandler(nsChildView* aWidget, NSView<mozView>* aNativeView);
   virtual ~IMEInputHandler();
@@ -1096,6 +1106,13 @@ class IMEInputHandler : public TextInputHandlerBase {
    */
   bool MaybeDispatchCurrentKeydownEvent(bool aIsProcessedByIME);
 
+  /**
+   * ShowTextSubstitutionPanel shows text replacement panel by text substitution
+   * using current candidate strings.
+   */
+  void ShowTextSubstitutionPanel();
+  void DismissTextSubstitutionPanel();
+
  private:
   // If mIsIMEComposing is true, the composition string is stored here.
   NSString* mIMECompositionString;
@@ -1116,6 +1133,7 @@ class IMEInputHandler : public TextInputHandlerBase {
   bool mIsASCIICapableOnly;
   bool mIgnoreIMECommit;
   bool mIMEHasFocus;
+  bool mEnableTextSubstitution;
 
   void KillIMEComposition();
   void SendCommittedText(NSString* aString);
@@ -1209,6 +1227,23 @@ class IMEInputHandler : public TextInputHandlerBase {
    *                              Otherwise, false.
    */
   bool DispatchCompositionCommitEvent(const nsAString* aCommitString = nullptr);
+
+  /*
+   * HandleTextSubstitution handles text substitution features such as text
+   * replacement.
+   */
+  void HandleTextSubstitution(const IMENotification& aIMENotification);
+
+  /*
+   * The followings are the helper methods for text substitution.
+   */
+  void OnTextSubstitution(uint32_t aStartOffset);
+
+  enum class PreventSetSelection { Yes, No };
+
+  void ReplaceTextForTextSubstitution(const nsAString& aOriginalString,
+                                      NSString* aString, const NSRange& aRange,
+                                      PreventSetSelection aPreventSetSelection);
 
   // The focused IME handler.  Please note that the handler might lost the
   // actual focus by deactivating the application.  If we are active, this

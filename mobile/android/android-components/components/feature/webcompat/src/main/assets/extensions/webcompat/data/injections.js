@@ -1047,20 +1047,6 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
-    id: "1882040",
-    platform: "android",
-    domain: "YouTube Shorts",
-    bug: "1882040",
-    contentScripts: {
-      matches: ["*://m.youtube.com/shorts", "*://m.youtube.com/shorts/*"],
-      css: [
-        {
-          file: "injections/css/bug1882040-disable-pull-to-refresh.css",
-        },
-      ],
-    },
-  },
-  {
     id: "bug1889326",
     platform: "desktop",
     domain: "Office 365 email handling prompt",
@@ -1135,6 +1121,20 @@ const AVAILABLE_INJECTIONS = [
       css: [
         {
           file: "injections/css/bug1895994-softtrans.ro-unlock-scrolling.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1898952",
+    platform: "desktop",
+    domain: "digits.t-mobile.com",
+    bug: "1898952",
+    contentScripts: {
+      matches: ["*://digits.t-mobile.com/*"],
+      js: [
+        {
+          file: "injections/js/bug1898952-digits.t-mobile.com.js",
         },
       ],
     },

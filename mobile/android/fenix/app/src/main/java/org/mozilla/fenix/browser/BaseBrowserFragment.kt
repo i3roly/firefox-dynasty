@@ -23,9 +23,18 @@ import androidx.annotation.CallSuper
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
-import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getColor
 import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
@@ -65,12 +74,13 @@ import mozilla.components.browser.state.state.content.DownloadState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.browser.thumbnails.BrowserThumbnails
 import mozilla.components.browser.toolbar.BrowserToolbar
+import mozilla.components.compose.cfr.CFRPopup
+import mozilla.components.compose.cfr.CFRPopupLayout
+import mozilla.components.compose.cfr.CFRPopupProperties
 import mozilla.components.concept.base.crash.Breadcrumb
 import mozilla.components.concept.engine.permission.SitePermissions
 import mozilla.components.concept.engine.prompt.ShareData
 import mozilla.components.concept.storage.LoginEntry
-import mozilla.components.feature.accounts.FxaCapability
-import mozilla.components.feature.accounts.FxaWebChannelFeature
 import mozilla.components.feature.app.links.AppLinksFeature
 import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.contextmenu.ContextMenuFeature
@@ -146,6 +156,7 @@ import org.mozilla.fenix.components.Components
 import org.mozilla.fenix.components.FenixSnackbar
 import org.mozilla.fenix.components.FindInPageIntegration
 import org.mozilla.fenix.components.StoreProvider
+import org.mozilla.fenix.components.accounts.FxaWebChannelIntegration
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.MicrosurveyAction
@@ -217,6 +228,10 @@ import mozilla.components.ui.widgets.behavior.EngineViewClippingBehavior as OldE
 import mozilla.components.ui.widgets.behavior.ToolbarPosition as OldToolbarPosition
 import org.mozilla.fenix.GleanMetrics.TabStrip as TabStripMetrics
 
+private const val NAVIGATION_CFR_VERTICAL_OFFSET = 10
+private const val NAVIGATION_CFR_ARROW_OFFSET = 48
+private const val NAVIGATION_CFR_MAX_MS_BETWEEN_CLICKS = 5000
+
 /**
  * Base fragment extended by [BrowserFragment].
  * This class only contains shared code focused on the main browsing content.
@@ -274,7 +289,7 @@ abstract class BaseBrowserFragment :
     private val sitePermissionsFeature = ViewBoundFeatureWrapper<SitePermissionsFeature>()
     private val fullScreenFeature = ViewBoundFeatureWrapper<FullScreenFeature>()
     private val swipeRefreshFeature = ViewBoundFeatureWrapper<SwipeRefreshFeature>()
-    private val webchannelIntegration = ViewBoundFeatureWrapper<FxaWebChannelFeature>()
+    private val webchannelIntegration = ViewBoundFeatureWrapper<FxaWebChannelIntegration>()
     private val sitePermissionWifiIntegration =
         ViewBoundFeatureWrapper<SitePermissionsWifiIntegration>()
     private val secureWindowFeature = ViewBoundFeatureWrapper<SecureWindowFeature>()
@@ -940,8 +955,10 @@ abstract class BaseBrowserFragment :
                         password = password,
                     )
                 },
-                onSavedGeneratedPassword = {
-                    showSnackbarAfterUsingTheGeneratedPassword()
+                onSaveLogin = { isUpdate ->
+                    showSnackbarAfterLoginChange(
+                        isUpdate,
+                    )
                 },
                 passwordGeneratorColorsProvider = passwordGeneratorColorsProvider,
                 creditCardDelegate = object : CreditCardDelegate {
@@ -1135,13 +1152,13 @@ abstract class BaseBrowserFragment :
         }
 
         webchannelIntegration.set(
-            feature = FxaWebChannelFeature(
-                customTabSessionId,
-                requireComponents.core.engine,
-                requireComponents.core.store,
-                requireComponents.backgroundServices.accountManager,
-                requireComponents.backgroundServices.serverConfig,
-                setOf(FxaCapability.CHOOSE_WHAT_TO_SYNC),
+            feature = FxaWebChannelIntegration(
+                customTabSessionId = customTabSessionId,
+                runtime = requireComponents.core.engine,
+                store = requireComponents.core.store,
+                accountManager = requireComponents.backgroundServices.accountManager,
+                serverConfig = requireComponents.backgroundServices.serverConfig,
+                activityReceiver = { getActivity() },
             ),
             owner = this,
             view = view,
@@ -1187,12 +1204,17 @@ abstract class BaseBrowserFragment :
     }
 
     /**
-     * Show a [Snackbar] when credentials are saved using the generated password.
+     * Show a [Snackbar] when credentials are saved or updated.
      */
-    private fun showSnackbarAfterUsingTheGeneratedPassword() {
+    private fun showSnackbarAfterLoginChange(isUpdate: Boolean) {
+        val snackbarText = if (isUpdate) {
+            R.string.mozac_feature_prompt_login_snackbar_username_updated
+        } else {
+            R.string.mozac_feature_prompts_suggest_strong_password_saved_snackbar_title
+        }
         ContextMenuSnackbarDelegate().show(
             snackBarParentView = binding.dynamicSnackbarContainer,
-            text = R.string.mozac_feature_prompts_suggest_strong_password_saved_snackbar_title,
+            text = snackbarText,
             duration = Snackbar.LENGTH_LONG,
         )
     }
@@ -1427,19 +1449,6 @@ abstract class BaseBrowserFragment :
             binding.browserLayout.removeView(browserToolbar)
         }
 
-        // We need a second menu button, but we could reuse the existing builder.
-        val menuButton = MenuButton(context).apply {
-            menuBuilder = browserToolbarView.menuToolbar.menuBuilder
-            // We have to set colorFilter manually as the button isn't being managed by a [BrowserToolbarView].
-            setColorFilter(
-                ContextCompat.getColor(
-                    context,
-                    ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                ),
-            )
-            recordClickEvent = { NavigationBar.browserMenuTapped.record(NoExtras()) }
-        }
-
         _bottomToolbarContainerView = BottomToolbarContainerView(
             context = context,
             parent = binding.browserLayout,
@@ -1482,90 +1491,7 @@ abstract class BaseBrowserFragment :
                             Divider()
                         }
 
-                        BrowserNavBar(
-                            isPrivateMode = activity.browsingModeManager.mode.isPrivate,
-                            isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
-                            browserStore = context.components.core.store,
-                            menuButton = menuButton,
-                            newTabMenu = NewTabMenu(
-                                context = context,
-                                onItemTapped = { item ->
-                                    browserToolbarInteractor.onTabCounterMenuItemTapped(item)
-                                },
-                                iconColor = when (activity.browsingModeManager.mode.isPrivate) {
-                                    true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
-                                    else -> null
-                                },
-                            ),
-                            tabsCounterMenu = FenixTabCounterMenu(
-                                context = context,
-                                onItemTapped = { item ->
-                                    browserToolbarInteractor.onTabCounterMenuItemTapped(item)
-                                },
-                                iconColor = when (activity.browsingModeManager.mode.isPrivate) {
-                                    true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
-                                    else -> null
-                                },
-                            ).also {
-                                it.updateMenu(
-                                    toolbarPosition = context.settings().toolbarPosition,
-                                )
-                            },
-                            onBackButtonClick = {
-                                NavigationBar.browserBackTapped.record(NoExtras())
-                                browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
-                                    ToolbarMenu.Item.Back(viewHistory = false),
-                                )
-                            },
-                            onBackButtonLongPress = {
-                                NavigationBar.browserBackLongTapped.record(NoExtras())
-                                browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
-                                    ToolbarMenu.Item.Back(viewHistory = true),
-                                )
-                            },
-                            onForwardButtonClick = {
-                                NavigationBar.browserForwardTapped.record(NoExtras())
-                                browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
-                                    ToolbarMenu.Item.Forward(viewHistory = false),
-                                )
-                            },
-                            onForwardButtonLongPress = {
-                                NavigationBar.browserForwardLongTapped.record(NoExtras())
-                                browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
-                                    ToolbarMenu.Item.Forward(viewHistory = true),
-                                )
-                            },
-                            onNewTabButtonClick = {
-                                browserToolbarInteractor.onNewTabButtonClicked()
-                            },
-                            onNewTabButtonLongPress = {
-                                browserToolbarInteractor.onNewTabButtonLongClicked()
-                            },
-                            onTabsButtonClick = {
-                                NavigationBar.browserTabTrayTapped.record(NoExtras())
-                                thumbnailsFeature.get()?.requestScreenshot()
-                                findNavController().nav(
-                                    R.id.browserFragment,
-                                    BrowserFragmentDirections.actionGlobalTabsTrayFragment(
-                                        page = when (activity.browsingModeManager.mode) {
-                                            BrowsingMode.Normal -> Page.NormalTabs
-                                            BrowsingMode.Private -> Page.PrivateTabs
-                                        },
-                                    ),
-                                )
-                            },
-                            onTabsButtonLongPress = {
-                                NavigationBar.browserTabTrayLongTapped.record(NoExtras())
-                            },
-                            onMenuButtonClick = {
-                                findNavController().nav(
-                                    R.id.browserFragment,
-                                    BrowserFragmentDirections.actionGlobalMenuDialogFragment(
-                                        accesspoint = MenuAccessPoint.Browser,
-                                    ),
-                                )
-                            },
-                        )
+                        NavigationButtonsCFR(context = context, activity = activity)
                     }
                 }
             },
@@ -1582,6 +1508,163 @@ abstract class BaseBrowserFragment :
             owner = this,
             view = view,
         )
+    }
+
+    @Suppress("LongMethod")
+    @Composable
+    internal fun NavigationButtonsCFR(
+        context: Context,
+        activity: HomeActivity,
+    ) {
+        var showCFR by remember { mutableStateOf(false) }
+        val lastTimeNavigationButtonsClicked = remember { mutableLongStateOf(0L) }
+
+        // We need a second menu button, but we could reuse the existing builder.
+        val menuButton = MenuButton(context).apply {
+            menuBuilder = browserToolbarView.menuToolbar.menuBuilder
+            // We have to set colorFilter manually as the button isn't being managed by a [BrowserToolbarView].
+            setColorFilter(
+                getColor(
+                    context,
+                    ThemeManager.resolveAttribute(R.attr.textPrimary, context),
+                ),
+            )
+            recordClickEvent = { NavigationBar.browserMenuTapped.record(NoExtras()) }
+        }
+
+        CFRPopupLayout(
+            showCFR = showCFR && context.settings().shouldShowNavigationButtonsCFR,
+            properties = CFRPopupProperties(
+                popupBodyColors = listOf(
+                    FirefoxTheme.colors.layerGradientEnd.toArgb(),
+                    FirefoxTheme.colors.layerGradientStart.toArgb(),
+                ),
+                dismissButtonColor = FirefoxTheme.colors.iconOnColor.toArgb(),
+                indicatorDirection = CFRPopup.IndicatorDirection.DOWN,
+                popupVerticalOffset = NAVIGATION_CFR_VERTICAL_OFFSET.dp,
+                indicatorArrowStartOffset = NAVIGATION_CFR_ARROW_OFFSET.dp,
+            ),
+            onCFRShown = {
+                NavigationBar.navigationButtonsCfrShown.record(NoExtras())
+            },
+            onDismiss = {
+                context.settings().shouldShowNavigationButtonsCFR = false
+                context.settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
+                NavigationBar.navigationButtonsCfrDismissed.record(NoExtras())
+            },
+            text = {
+                FirefoxTheme {
+                    Text(
+                        text = stringResource(R.string.navbar_navigation_buttons_cfr_message),
+                        color = FirefoxTheme.colors.textOnColorPrimary,
+                        style = FirefoxTheme.typography.body2,
+                    )
+                }
+            },
+        ) {
+            BrowserNavBar(
+                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
+                browserStore = context.components.core.store,
+                menuButton = menuButton,
+                newTabMenu = NewTabMenu(
+                    context = context,
+                    onItemTapped = { item ->
+                        browserToolbarInteractor.onTabCounterMenuItemTapped(item)
+                    },
+                    iconColor = when (activity.browsingModeManager.mode.isPrivate) {
+                        true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
+                        else -> null
+                    },
+                ),
+                tabsCounterMenu = FenixTabCounterMenu(
+                    context = context,
+                    onItemTapped = { item ->
+                        browserToolbarInteractor.onTabCounterMenuItemTapped(item)
+                    },
+                    iconColor = when (activity.browsingModeManager.mode.isPrivate) {
+                        true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
+                        else -> null
+                    },
+                ).also {
+                    it.updateMenu(
+                        toolbarPosition = context.settings().toolbarPosition,
+                    )
+                },
+                onBackButtonClick = {
+                    if (context.settings().shouldShowNavigationButtonsCFR) {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastTimeNavigationButtonsClicked.longValue <=
+                            NAVIGATION_CFR_MAX_MS_BETWEEN_CLICKS
+                        ) {
+                            showCFR = true
+                        }
+                        lastTimeNavigationButtonsClicked.longValue = currentTime
+                    }
+                    NavigationBar.browserBackTapped.record(NoExtras())
+                    browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
+                        ToolbarMenu.Item.Back(viewHistory = false),
+                    )
+                },
+                onBackButtonLongPress = {
+                    NavigationBar.browserBackLongTapped.record(NoExtras())
+                    browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
+                        ToolbarMenu.Item.Back(viewHistory = true),
+                    )
+                },
+                onForwardButtonClick = {
+                    if (context.settings().shouldShowNavigationButtonsCFR) {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastTimeNavigationButtonsClicked.longValue <=
+                            NAVIGATION_CFR_MAX_MS_BETWEEN_CLICKS
+                        ) {
+                            showCFR = true
+                        }
+                        lastTimeNavigationButtonsClicked.longValue = currentTime
+                    }
+                    NavigationBar.browserForwardTapped.record(NoExtras())
+                    browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
+                        ToolbarMenu.Item.Forward(viewHistory = false),
+                    )
+                },
+                onForwardButtonLongPress = {
+                    NavigationBar.browserForwardLongTapped.record(NoExtras())
+                    browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
+                        ToolbarMenu.Item.Forward(viewHistory = true),
+                    )
+                },
+                onNewTabButtonClick = {
+                    browserToolbarInteractor.onNewTabButtonClicked()
+                },
+                onNewTabButtonLongPress = {
+                    browserToolbarInteractor.onNewTabButtonLongClicked()
+                },
+                onTabsButtonClick = {
+                    NavigationBar.browserTabTrayTapped.record(NoExtras())
+                    thumbnailsFeature.get()?.requestScreenshot()
+                    findNavController().nav(
+                        R.id.browserFragment,
+                        BrowserFragmentDirections.actionGlobalTabsTrayFragment(
+                            page = when (activity.browsingModeManager.mode) {
+                                BrowsingMode.Normal -> Page.NormalTabs
+                                BrowsingMode.Private -> Page.PrivateTabs
+                            },
+                        ),
+                    )
+                },
+                onTabsButtonLongPress = {
+                    NavigationBar.browserTabTrayLongTapped.record(NoExtras())
+                },
+                onMenuButtonClick = {
+                    findNavController().nav(
+                        R.id.browserFragment,
+                        BrowserFragmentDirections.actionGlobalMenuDialogFragment(
+                            accesspoint = MenuAccessPoint.Browser,
+                        ),
+                    )
+                },
+            )
+        }
     }
 
     @VisibleForTesting

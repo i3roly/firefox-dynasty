@@ -2418,9 +2418,9 @@ dependencies = [
 
 [[package]]
 name = "glean"
-version = "60.3.0"
+version = "60.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91f89fe066ba5b34ec859f25904342ece8bb2d4e6ec03851c6d98c2d81bcb4f2"
+checksum = "ca647335c75b91b4dc5314542d27206a1d457209077e0588a68f727e0eaa73f4"
 dependencies = [
  "glean-core",
  "inherent",
@@ -2431,9 +2431,9 @@ dependencies = [
 
 [[package]]
 name = "glean-core"
-version = "60.3.0"
+version = "60.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d758269d4009b8586c446ecd8bac40134fe198ae201328c7fe9afff4c546ada"
+checksum = "2be44a42d3d442ec6e99af1e679c8052d3a36dad68b40a05815409df39605fcf"
 dependencies = [
  "android_logger",
  "bincode",
@@ -4164,6 +4164,7 @@ dependencies = [
  "neqo-http3",
  "neqo-qpack",
  "neqo-transport",
+ "neqo-udp",
  "nserror",
  "nsstring",
  "qlog",
@@ -4812,14 +4813,13 @@ checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quinn-udp"
-version = "0.5.0"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb7ad7bc932e4968523fa7d9c320ee135ff779de720e9350fee8728838551764"
+checksum = "8bffec3605b73c6f1754535084a85229fa8a30f86014e6c81aeec4abb68b0285"
 dependencies = [
  "libc",
  "once_cell",
  "socket2 0.5.7",
- "tracing",
  "windows-sys 0.52.0",
 ]
 
@@ -6514,8 +6514,9 @@ dependencies = [
 
 [[package]]
 name = "warp"
-version = "0.3.6"
-source = "git+https://github.com/seanmonstar/warp?rev=9d081461ae1167eb321585ce424f4fef6cf0092b#9d081461ae1167eb321585ce424f4fef6cf0092b"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4378d202ff965b011c64817db11d5829506d3404edeadb61f190d111da3f231c"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -6533,7 +6534,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "tokio",
- "tokio-stream",
  "tokio-util",
  "tower-service",
  "tracing",
@@ -6558,18 +6558,18 @@ version = "0.2.100"
 
 [[package]]
 name = "wasm-encoder"
-version = "0.210.0"
+version = "0.214.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7e3764d9d6edabd8c9e16195e177be0d20f6ab942ad18af52860f12f82bc59a"
+checksum = "ff694f02a8d7a50b6922b197ae03883fbf18cdb2ae9fbee7b6148456f5f44041"
 dependencies = [
  "leb128",
 ]
 
 [[package]]
 name = "wasm-smith"
-version = "0.210.0"
+version = "0.214.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9ffe2374e5d2f9e52463c8bfdca4d6fe265f07b9697dad3b7e2f7c12277d552"
+checksum = "ffe5856b6e06e8d37dad11167111e49339a5b017ab1399f7cb708fcb4c4550d0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -6581,9 +6581,9 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "210.0.0"
+version = "214.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa835c59bd615e00f16be65705d85517d40b44b3c831d724e450244685176c3c"
+checksum = "694bcdb24c49c8709bd8713768b71301a11e823923eee355d530f1d8d0a7f8e9"
 dependencies = [
  "bumpalo",
  "leb128",

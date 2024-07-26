@@ -118,39 +118,6 @@ struct MOZ_STACK_CLASS SavedRange final {
 };
 
 /******************************************************************************
- * HTMLEditor::AutoSelectionRestorer
- *****************************************************************************/
-
-HTMLEditor::AutoSelectionRestorer::AutoSelectionRestorer(
-    HTMLEditor& aHTMLEditor)
-    : mHTMLEditor(nullptr) {
-  if (aHTMLEditor.ArePreservingSelection()) {
-    // We already have initialized mParentData::mSavedSelection, so this must
-    // be nested call.
-    return;
-  }
-  MOZ_ASSERT(aHTMLEditor.IsEditActionDataAvailable());
-  mHTMLEditor = &aHTMLEditor;
-  mHTMLEditor->PreserveSelectionAcrossActions();
-}
-
-HTMLEditor::AutoSelectionRestorer::~AutoSelectionRestorer() {
-  if (!mHTMLEditor || !mHTMLEditor->ArePreservingSelection()) {
-    return;
-  }
-  DebugOnly<nsresult> rvIgnored = mHTMLEditor->RestorePreservedSelection();
-  NS_WARNING_ASSERTION(
-      NS_SUCCEEDED(rvIgnored),
-      "EditorBase::RestorePreservedSelection() failed, but ignored");
-}
-
-void HTMLEditor::AutoSelectionRestorer::Abort() {
-  if (mHTMLEditor) {
-    mHTMLEditor->StopPreservingSelection();
-  }
-}
-
-/******************************************************************************
  * HTMLEditor
  *****************************************************************************/
 
@@ -1278,41 +1245,6 @@ nsresult HTMLEditor::MaybeCollapseSelectionAtFirstEditableNode(
   NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                        "EditorBase::CollapseSelectionTo() failed");
   return rv;
-}
-
-bool HTMLEditor::ArePreservingSelection() const {
-  return IsEditActionDataAvailable() && SavedSelectionRef().RangeCount();
-}
-
-void HTMLEditor::PreserveSelectionAcrossActions() {
-  MOZ_ASSERT(IsEditActionDataAvailable());
-
-  SavedSelectionRef().SaveSelection(SelectionRef());
-  RangeUpdaterRef().RegisterSelectionState(SavedSelectionRef());
-}
-
-nsresult HTMLEditor::RestorePreservedSelection() {
-  MOZ_ASSERT(IsEditActionDataAvailable());
-
-  if (!SavedSelectionRef().RangeCount()) {
-    // XXX Returning error when it does not store is odd because no selection
-    //     ranges is not illegal case in general.
-    return NS_ERROR_FAILURE;
-  }
-  DebugOnly<nsresult> rvIgnored =
-      SavedSelectionRef().RestoreSelection(SelectionRef());
-  NS_WARNING_ASSERTION(
-      NS_SUCCEEDED(rvIgnored),
-      "SelectionState::RestoreSelection() failed, but ignored");
-  StopPreservingSelection();
-  return NS_OK;
-}
-
-void HTMLEditor::StopPreservingSelection() {
-  MOZ_ASSERT(IsEditActionDataAvailable());
-
-  RangeUpdaterRef().DropSelectionState(SavedSelectionRef());
-  SavedSelectionRef().RemoveAllRanges();
 }
 
 void HTMLEditor::PreHandleMouseDown(const MouseEvent& aMouseDownEvent) {
@@ -6894,12 +6826,7 @@ NS_IMETHODIMP HTMLEditor::SetWrapWidth(int32_t aWrapColumn) {
 }
 
 Element* HTMLEditor::GetFocusedElement() const {
-  nsFocusManager* focusManager = nsFocusManager::GetFocusManager();
-  if (NS_WARN_IF(!focusManager)) {
-    return nullptr;
-  }
-
-  Element* const focusedElement = focusManager->GetFocusedElement();
+  Element* const focusedElement = nsFocusManager::GetFocusedElementStatic();
 
   Document* document = GetDocument();
   if (NS_WARN_IF(!document)) {
@@ -7183,14 +7110,12 @@ nsINode* HTMLEditor::GetFocusedNode() const {
     return nullptr;
   }
 
-  // focusedElement might be non-null even focusManager->GetFocusedElement()
-  // is null.  That's the designMode case, and in that case our
-  // FocusedContent() returns the root element, but we want to return
-  // the document.
+  // focusedElement might be non-null even
+  // nsFocusManager::GetFocusedElementStatic() returns null.  That's the
+  // designMode case, and in that case our GetFocusedElement() returns the root
+  // element, but we want to return the document.
 
-  nsFocusManager* focusManager = nsFocusManager::GetFocusManager();
-  NS_ASSERTION(focusManager, "Focus manager is null");
-  if ((focusedElement = focusManager->GetFocusedElement())) {
+  if ((focusedElement = nsFocusManager::GetFocusedElementStatic())) {
     return focusedElement;
   }
 

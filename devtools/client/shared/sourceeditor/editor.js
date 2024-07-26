@@ -745,28 +745,35 @@ class Editor extends EventEmitter {
     const lineContentMarkers = this.#lineContentMarkers;
 
     class LineContentWidget extends WidgetType {
-      constructor(line, markerId, createElementNode) {
+      constructor(line, value, markerId, createElementNode) {
         super();
         this.line = line;
+        this.value = value;
         this.markerId = markerId;
-        this.toDOM = () => createElementNode(line);
+        this.createElementNode = createElementNode;
+      }
+
+      toDOM() {
+        return this.createElementNode(this.line, this.value);
       }
 
       eq(widget) {
-        return widget.line == this.line && widget.markerId == this.markerId;
+        return (
+          widget.line == this.line &&
+          widget.markerId == this.markerId &&
+          widget.value == this.value
+        );
       }
     }
 
     /**
      * Uses the marker and current decoration list to create a new decoration list
      *
-     * @param {Array} markerDecorations - List of the current marker decorations
      * @param {Object} marker - The marker to be used to create the new decoration
      * @param {Transaction} transaction - The transaction object
      * @param {Array} newMarkerDecorations - List of the new marker decorations being built
      */
     function _buildDecorationsForMarker(
-      markerDecorations,
       marker,
       transaction,
       newMarkerDecorations
@@ -780,13 +787,13 @@ class Editor extends EventEmitter {
       if (marker.shouldMarkAllLines) {
         decorationLines = [];
         for (let i = vStartLine.number; i < vEndLine.number; i++) {
-          decorationLines.push(i);
+          decorationLines.push({ line: i });
         }
       } else {
         decorationLines = marker.lines;
       }
 
-      for (const line of decorationLines) {
+      for (const { line, value } of decorationLines) {
         // Make sure the position is within the viewport
         if (line < vStartLine.number || line > vEndLine.number) {
           continue;
@@ -812,6 +819,7 @@ class Editor extends EventEmitter {
           const nodeDecoration = Decoration.widget({
             widget: new LineContentWidget(
               line,
+              value,
               marker.id,
               marker.createLineElementNode
             ),
@@ -835,12 +843,7 @@ class Editor extends EventEmitter {
      */
     function updateDecorations(markerDecorations, marker, transaction) {
       const newDecorations = [];
-      _buildDecorationsForMarker(
-        markerDecorations,
-        marker,
-        transaction,
-        newDecorations
-      );
+      _buildDecorationsForMarker(marker, transaction, newDecorations);
 
       return markerDecorations.update({
         // Filter out old decorations for the specified marker
@@ -870,12 +873,7 @@ class Editor extends EventEmitter {
       const allNewDecorations = [];
 
       for (const marker of allMarkers) {
-        _buildDecorationsForMarker(
-          markerDecorations,
-          marker,
-          transaction,
-          allNewDecorations
-        );
+        _buildDecorationsForMarker(marker, transaction, allNewDecorations);
       }
 
       return markerDecorations.update({
@@ -1067,8 +1065,8 @@ class Editor extends EventEmitter {
    *                                  The unique identifier for this marker
    *   @property {string}             marker.lineClassName
    *                                  The css class to apply to the line
-   *   @property {Array<Number>}      marker.lines
-   *                                  The lines to add markers to
+   *   @property {Array<Object>}      marker.lines
+   *                                  The lines to add markers to. Each line object has a `line` and `value` property.
    *   @property {Boolean}           marker.renderAsBlock
    *                                  The specifies that the widget should be rendered as a block element. defaults to `false`. This is optional.
    *   @property {Boolean}           marker.shouldMarkAllLines
@@ -1149,7 +1147,6 @@ class Editor extends EventEmitter {
     }
 
     function _buildDecorationsForPositionMarkers(
-      markerDecorations,
       marker,
       transaction,
       newMarkerDecorations
@@ -1244,12 +1241,7 @@ class Editor extends EventEmitter {
     function updateDecorations(markerDecorations, marker, transaction) {
       const newDecorations = [];
 
-      _buildDecorationsForPositionMarkers(
-        markerDecorations,
-        marker,
-        transaction,
-        newDecorations
-      );
+      _buildDecorationsForPositionMarkers(marker, transaction, newDecorations);
       return markerDecorations.update({
         filter: (from, to, decoration) => {
           return decoration.markerType !== marker.id;
@@ -1278,7 +1270,6 @@ class Editor extends EventEmitter {
 
       for (const marker of markers) {
         _buildDecorationsForPositionMarkers(
-          markerDecorations,
           marker,
           transaction,
           allNewDecorations

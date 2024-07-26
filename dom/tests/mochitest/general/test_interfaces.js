@@ -770,6 +770,12 @@ let interfaceNamesInGlobalScope = [
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "ImageData", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "ImageDecoder", nightly: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "ImageTrack", nightly: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "ImageTrackList", nightly: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "InputEvent", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   {
@@ -898,6 +904,24 @@ let interfaceNamesInGlobalScope = [
   { name: "MutationRecord", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "NamedNodeMap", insecureContext: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "NavigateEvent", insecureContext: true, disabled: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "Navigation", insecureContext: true, disabled: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "NavigationActivation", insecureContext: true, disabled: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  {
+    name: "NavigationCurrentEntryChangeEvent",
+    insecureContext: true,
+    disabled: true,
+  },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "NavigationDestination", insecureContext: true, disabled: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "NavigationHistoryEntry", insecureContext: true, disabled: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "NavigationTransition", insecureContext: true, disabled: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "NavigationPreloadManager",
   // IMPORTANT: Do not change this list without review from a DOM peer!

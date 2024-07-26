@@ -395,6 +395,19 @@ bool ModuleGenerator::linkCompiledCode(CompiledCode& code) {
   // Combine observed features from the compiled code into the metadata
   featureUsage_ |= code.featureUsage;
 
+  if (compilingTier1() && mode() == CompileMode::LazyTiering) {
+    for (const FuncCompileOutput& func : code.funcs) {
+      // We only compile defined functions, not imported functions
+      MOZ_ASSERT(func.index >= codeMeta_->numFuncImports);
+      uint32_t funcDefIndex = func.index - codeMeta_->numFuncImports;
+      // This function should only be compiled once
+      MOZ_ASSERT(funcDefFeatureUsages_[funcDefIndex] == FeatureUsage::None);
+      funcDefFeatureUsages_[funcDefIndex] = func.featureUsage;
+    }
+  } else {
+    MOZ_ASSERT(funcDefFeatureUsages_.length() == 0);
+  }
+
   // Before merging in new code, if calls in a prior code range might go out of
   // range, insert far jumps to extend the range.
 
@@ -924,6 +937,13 @@ bool ModuleGenerator::prepareTier1() {
     return false;
   }
 
+  // Initialize function definition feature usages (only used for lazy tiering
+  // and inlining right now).
+  if (mode() == CompileMode::LazyTiering &&
+      !funcDefFeatureUsages_.resize(codeMeta_->numFuncDefs())) {
+    return false;
+  }
+
   // Initialize function import metadata
   if (!funcImports_.resize(codeMeta_->numFuncImports)) {
     return false;
@@ -1169,6 +1189,18 @@ SharedModule ModuleGenerator::finishModule(
   MOZ_ASSERT(funcDefRanges_.length() == codeMeta->numFuncDefs());
   codeMeta->funcDefRanges = std::move(funcDefRanges_);
 
+  // Transfer the function definition feature usages
+  codeMeta->funcDefFeatureUsages = std::move(funcDefFeatureUsages_);
+
+  // We keep the bytecode alive for debuggable modules, or if we're doing
+  // partial tiering.
+  if (compilerEnv_->debugEnabled() ||
+      compilerEnv_->mode() == CompileMode::LazyTiering) {
+    codeMeta->bytecode = &bytecode;
+  } else {
+    codeMeta->bytecode = nullptr;
+  }
+
   // Store a reference to the name section on the code metadata
   if (codeMeta_->nameCustomSectionIndex) {
     codeMeta->namePayload =
@@ -1188,12 +1220,7 @@ SharedModule ModuleGenerator::finishModule(
     memcpy(codeMeta->debugHash, hash, sizeof(ModuleHash));
   }
 
-  // We keep the bytecode alive for debuggable modules, or if we're doing
-  // partial tiering.
-  bool keepBytecode = compilerEnv_->debugEnabled() ||
-                      compilerEnv_->mode() == CompileMode::LazyTiering;
-  MutableCode code = js_new<Code>(mode(), *codeMeta_, codeMetaForAsmJS_,
-                                  keepBytecode ? &bytecode : nullptr);
+  MutableCode code = js_new<Code>(mode(), *codeMeta_, codeMetaForAsmJS_);
   if (!code || !code->initialize(
                    std::move(funcImports_), std::move(sharedStubsCodeBlock_),
                    std::move(sharedStubsLinkData_), std::move(tier1Code),
@@ -1323,7 +1350,8 @@ size_t CompiledCode::sizeOfExcludingThis(
     trapSitesSize += vec.sizeOfExcludingThis(mallocSizeOf);
   }
 
-  return bytes.sizeOfExcludingThis(mallocSizeOf) +
+  return funcs.sizeOfExcludingThis(mallocSizeOf) +
+         bytes.sizeOfExcludingThis(mallocSizeOf) +
          codeRanges.sizeOfExcludingThis(mallocSizeOf) +
          callSites.sizeOfExcludingThis(mallocSizeOf) +
          callSiteTargets.sizeOfExcludingThis(mallocSizeOf) + trapSitesSize +

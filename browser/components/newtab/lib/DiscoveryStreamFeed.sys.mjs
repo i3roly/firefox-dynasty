@@ -41,6 +41,8 @@ const FEED_URL =
 const PREF_CONFIG = "discoverystream.config";
 const PREF_ENDPOINTS = "discoverystream.endpoints";
 const PREF_IMPRESSION_ID = "browser.newtabpage.activity-stream.impressionId";
+const PREF_MERINO_FEED_EXPERIMENT =
+  "browser.newtabpage.activity-stream.discoverystream.merino-feed-experiment";
 const PREF_ENABLED = "discoverystream.enabled";
 const PREF_HARDCODED_BASIC_LAYOUT = "discoverystream.hardcoded-basic-layout";
 const PREF_SPOCS_ENDPOINT = "discoverystream.spocs-endpoint";
@@ -63,6 +65,8 @@ const PREF_COLLECTIONS_ENABLED =
   "discoverystream.sponsored-collections.enabled";
 const PREF_POCKET_BUTTON = "extensions.pocket.enabled";
 const PREF_COLLECTION_DISMISSIBLE = "discoverystream.isCollectionDismissible";
+const PREF_SELECTED_TOPICS = "discoverystream.topicSelection.selectedTopics";
+const PREF_TOPIC_SELECTION_ENABLED = "discoverystream.topicSelection.enabled";
 
 let getHardcodedLayout;
 
@@ -1391,6 +1395,28 @@ export class DiscoveryStreamFeed {
     );
   }
 
+  getExperimentInfo() {
+    const pocketNewtabExperiment = lazy.ExperimentAPI.getExperimentMetaData({
+      featureId: "pocketNewtab",
+    });
+
+    const pocketNewtabRollout = lazy.ExperimentAPI.getRolloutMetaData({
+      featureId: "pocketNewtab",
+    });
+
+    // We want to know if the user is in an experiment or rollout,
+    // but we prioritize experiments over rollouts.
+    const experimentMetaData = pocketNewtabExperiment || pocketNewtabRollout;
+
+    let experimentName = experimentMetaData?.slug || "";
+    let experimentBranch = experimentMetaData?.branch?.slug || "";
+
+    return {
+      experimentName,
+      experimentBranch,
+    };
+  }
+
   async getComponentFeed(feedUrl, isStartup) {
     const cachedData = (await this.cache.get()) || {};
     const { feeds } = cachedData;
@@ -1400,13 +1426,31 @@ export class DiscoveryStreamFeed {
       let options = {};
       const headers = new Headers();
       if (this.isMerino) {
+        const topicSelectionEnabled =
+          this.store.getState().Prefs.values[PREF_TOPIC_SELECTION_ENABLED];
+        const topicsString =
+          this.store.getState().Prefs.values[PREF_SELECTED_TOPICS];
+        const topics = topicSelectionEnabled
+          ? topicsString
+              .split(",")
+              .map(s => s.trim())
+              .filter(item => item)
+          : [];
+
+        // Should we pass the experiment branch and slug to the Merino feed request.
+        const prefMerinoFeedExperiment = Services.prefs.getBoolPref(
+          PREF_MERINO_FEED_EXPERIMENT
+        );
+
         headers.append("content-type", "application/json");
         options = {
           method: "POST",
           headers,
           body: JSON.stringify({
+            ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
             locale: this.locale,
             region: this.region,
+            topics,
           }),
         };
       } else if (this.isBff) {
@@ -1674,6 +1718,10 @@ export class DiscoveryStreamFeed {
     await this.cache.set("sov", {});
   }
 
+  async resetContentFeed() {
+    await this.cache.set("feeds", {});
+  }
+
   async resetAllCache() {
     await this.resetContentCache();
     // Reset in-memory caches.
@@ -1829,6 +1877,15 @@ export class DiscoveryStreamFeed {
       case PREF_COLLECTIONS_ENABLED:
         this.onCollectionsChanged();
         break;
+      case PREF_SELECTED_TOPICS:
+        {
+          // when topics have been updated, make a new request from merino and clear impression cap
+          this.resetContentFeed();
+          this.writeDataPref(PREF_REC_IMPRESSIONS, {});
+          const url = this.generateFeedUrl();
+          this.retryFeed({ url });
+        }
+        break;
       case PREF_USER_TOPSITES:
       case PREF_SYSTEM_TOPSITES:
         if (
@@ -1920,6 +1977,17 @@ export class DiscoveryStreamFeed {
         // we want to be able to expire just content to trigger the earlier expire times.
         await this.resetContentCache();
         break;
+      case at.DISCOVERY_STREAM_DEV_SHOW_PLACEHOLDER: {
+        // We want to display the loading state permanently, for dev purposes.
+        // We do this by resetting everything, loading the layout, and nothing else.
+        // This essentially hangs because we never triggered the content load.
+        await this.reset();
+        this.loadLayout(
+          a => this.store.dispatch(ac.BroadcastToContent(a)),
+          false
+        );
+        break;
+      }
       case at.DISCOVERY_STREAM_CONFIG_SET_VALUE:
         // Use the original string pref to then set a value instead of
         // this.config which has some modifications

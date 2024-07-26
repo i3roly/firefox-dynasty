@@ -425,7 +425,6 @@ check_prog(
 profiling = dependable(False)
 # Same for js_standalone
 js_standalone = dependable(False)
-moz_linker = dependable(False)
 # Same for fold_libs
 fold_libs = dependable(False)
 # And dmd
@@ -911,16 +910,6 @@ def deprecated_system_zlib_path(value):
 pkg_check_modules("MOZ_ZLIB", "zlib >= 1.2.3", when="--with-system-zlib")
 
 set_config("MOZ_SYSTEM_ZLIB", True, when="--with-system-zlib")
-
-
-@depends(with_system_zlib_option, moz_linker, target.os)
-def zlib_in_mozglue(system_zlib, linker, os):
-    if not system_zlib and (linker or os == "Android"):
-        return True
-
-
-set_config("ZLIB_IN_MOZGLUE", zlib_in_mozglue)
-set_define("ZLIB_IN_MOZGLUE", zlib_in_mozglue)
 
 
 with only_when(cross_compiling):

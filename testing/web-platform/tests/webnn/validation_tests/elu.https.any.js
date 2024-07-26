@@ -6,10 +6,10 @@
 
 validateInputFromAnotherBuilder('elu');
 
-validateUnaryOperation(
-    'elu', floatingPointTypes, /*alsoBuildActivation=*/ true);
+validateSingleInputOperation('elu', /*alsoBuildActivation=*/ true);
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   const options = {alpha: 1.0};
   const input =
       builder.input('input', {dataType: 'float32', dimensions: [1, 2, 3]});
@@ -19,11 +19,13 @@ promise_test(async t => {
 }, '[elu] Test building an operator with options');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   const options = {alpha: 1.5};
   builder.elu(options);
 }, '[elu] Test building an activation with options');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   const options = {alpha: -1.0};
   const input =
       builder.input('input', {dataType: 'float32', dimensions: [1, 2, 3]});
@@ -31,17 +33,20 @@ promise_test(async t => {
 }, '[elu] Throw if options.alpha <= 0 when building an operator');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   const options = {alpha: NaN};
   const input = builder.input('input', {dataType: 'float16', dimensions: []});
   assert_throws_js(TypeError, () => builder.elu(input, options));
 }, '[elu] Throw if options.alpha is NaN when building an operator');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   const options = {alpha: 0};
   assert_throws_js(TypeError, () => builder.elu(options));
 }, '[elu] Throw if options.alpha <= 0 when building an activation');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   const options = {alpha: Infinity};
   assert_throws_js(TypeError, () => builder.elu(options));
 }, '[elu] Throw if options.alpha is Infinity when building an activation');

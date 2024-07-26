@@ -175,6 +175,43 @@ CoderResult Magic(Coder<mode>& coder, Marker item) {
   }
 }
 
+// Coding function for a nullable pointer
+//
+// These functions will only code the inner value is not null. The
+// coding function to use for the inner value is specified by a template
+// parameter.
+
+template <CoderMode _, typename T, CodeFunc<MODE_DECODE, T> CodeT>
+CoderResult CodeNullablePtr(Coder<MODE_DECODE>& coder, T* item) {
+  // Decode 'isNonNull'
+  uint8_t isNonNull;
+  MOZ_TRY(CodePod(coder, &isNonNull));
+
+  if (isNonNull == 1) {
+    // Code the inner type
+    MOZ_TRY(CodeT(coder, item));
+  } else {
+    // Initialize to nullptr
+    *item = nullptr;
+  }
+  return Ok();
+}
+
+template <CoderMode mode, typename T, CodeFunc<mode, T> CodeT>
+CoderResult CodeNullablePtr(Coder<mode>& coder, const T* item) {
+  STATIC_ASSERT_ENCODING_OR_SIZING;
+
+  // Encode or size 'isNonNull'
+  const uint8_t isNonNull = *item != nullptr;
+  MOZ_TRY(CodePod(coder, &isNonNull));
+
+  if (isNonNull) {
+    // Encode or size the inner value
+    MOZ_TRY(CodeT(coder, item));
+  }
+  return Ok();
+}
+
 // mozilla::Maybe coding functions
 //
 // These functions will only code the inner value if Maybe.isSome(). The
@@ -1124,57 +1161,78 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
   // NOTE: keep the field sequence here in sync with the sequence in the
   // declaration of CodeMetadata.
 
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 664);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 712);
   // Serialization doesn't handle asm.js or debug enabled modules
   MOZ_RELEASE_ASSERT(mode == MODE_SIZE || !item->isAsmJS());
+
   if constexpr (mode == MODE_ENCODE) {
     MOZ_ASSERT(!item->debugEnabled);
   }
 
   MOZ_TRY(Magic(coder, Marker::CodeMetadata));
-  // not serialized: kind
+
+  MOZ_TRY(CodePod(coder, &item->kind));
   MOZ_TRY((CodeRefPtr<mode, const CompileArgs, &CodeCompileArgs>(
       coder, &item->compileArgs)));
-  // not serialized: dataCount
-  MOZ_TRY(CodePodVector(coder, &item->memories));
-  // Types go in relatively early, because deserialisation of various other
-  // fields (globals, at least) depends on types having been deserialised
-  // first.
-  MOZ_TRY(
-      (CodeRefPtr<mode, TypeContext, &CodeTypeContext>(coder, &item->types)));
-  // not serialized: branchHints
+
   MOZ_TRY(CodePod(coder, &item->numFuncImports));
   MOZ_TRY(CodePod(coder, &item->numGlobalImports));
-  MOZ_TRY((CodeVector<mode, GlobalDesc, &CodeGlobalDesc<mode>>(
-      coder, &item->globals)));
-  MOZ_TRY((CodeVector<mode, TagDesc, &CodeTagDesc<mode>>(coder, &item->tags)));
+
+  // We must deserialize types first so that they're available for
+  // deserializing values that need types.
+  MOZ_TRY(
+      (CodeRefPtr<mode, TypeContext, &CodeTypeContext>(coder, &item->types)));
+  MOZ_TRY(CodePodVector(coder, &item->funcs));
   MOZ_TRY((
       CodeVector<mode, TableDesc, &CodeTableDesc<mode>>(coder, &item->tables)));
+  MOZ_TRY(CodePodVector(coder, &item->memories));
+  MOZ_TRY((CodeVector<mode, TagDesc, &CodeTagDesc<mode>>(coder, &item->tags)));
+  MOZ_TRY((CodeVector<mode, GlobalDesc, &CodeGlobalDesc<mode>>(
+      coder, &item->globals)));
+
+  MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder, &item->startFuncIndex)));
+
+  MOZ_TRY((
+      CodeVector<mode, RefType, &CodeRefType>(coder, &item->elemSegmentTypes)));
+
+  MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder, &item->dataCount)));
+
+  // We do not serialize `asmJSSigToTableIndex` because we don't serialize
+  // asm.js.
+
+  MOZ_TRY(CodePodVector(coder, &item->customSectionRanges));
+
+  MOZ_TRY((CodeMaybe<mode, SectionRange, &CodePod>(coder, &item->codeSection)));
+
+  MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder,
+                                               &item->nameCustomSectionIndex)));
+  MOZ_TRY(CodePod(coder, &item->moduleName));
+  MOZ_TRY(CodePodVector(coder, &item->funcNames));
+  // We do not serialize the `namePayload` because the ModuleMetadata will do
+  // that for us.
+
+  // TODO (bug 1907645): We do not serialize branch hints yet.
+
+  MOZ_TRY(CodePodVector(coder, &item->funcDefRanges));
+  MOZ_TRY(CodePodVector(coder, &item->funcDefFeatureUsages));
+  MOZ_TRY((CodeNullablePtr<
+           mode, SharedBytes,
+           &CodeRefPtr<mode, const ShareableBytes, CodeShareableBytes>>(
+      coder, &item->bytecode)));
+
+  MOZ_TRY(CodePod(coder, &item->funcDefsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->funcImportsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->typeDefsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->memoriesOffsetStart));
   MOZ_TRY(CodePod(coder, &item->tablesOffsetStart));
   MOZ_TRY(CodePod(coder, &item->tagsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->instanceDataLength));
-  // not serialized: namePayload
-  MOZ_TRY(CodePod(coder, &item->moduleName));
-  MOZ_TRY(CodePodVector(coder, &item->funcNames));
-  MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder, &item->startFuncIndex)));
-  MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder,
-                                               &item->nameCustomSectionIndex)));
-  MOZ_TRY(CodePodVector(coder, &item->funcs));
-  // not serialized: elemSegmentTypes
-  // not serialized: asmJSSigToTableIndex
-  // not serialized: codeSection
-  // not serialized: customSectionRanges
-  MOZ_TRY(CodePodVector(coder, &item->funcDefRanges));
-  MOZ_TRY(CodePod(coder, &item->parsedBranchHints));
+
   if constexpr (mode == MODE_DECODE) {
     // Initialize debugging state to disabled
     item->debugEnabled = false;
     MOZ_ASSERT(!item->isAsmJS());
   }
-  // not serialized: debugHash
 
   return Ok();
 }
@@ -1206,6 +1264,20 @@ CoderResult CodeModuleMetadata(Coder<mode>& coder,
   MOZ_TRY(Magic(coder, Marker::CustomSections));
   MOZ_TRY((CodeVector<mode, CustomSection, &CodeCustomSection<mode>>(
       coder, &item->customSections)));
+  MOZ_TRY(CodePod(coder, &item->featureUsage));
+
+  // Give CodeMetadata a pointer to our name payload now that we've
+  // deserialized it.
+  if constexpr (mode == MODE_DECODE) {
+    if (item->codeMeta->nameCustomSectionIndex) {
+      item->codeMeta->namePayload =
+          item->customSections[*item->codeMeta->nameCustomSectionIndex].payload;
+    } else {
+      MOZ_RELEASE_ASSERT(!item->codeMeta->moduleName);
+      MOZ_RELEASE_ASSERT(item->codeMeta->funcNames.empty());
+    }
+  }
+
   return Ok();
 }
 
@@ -1270,7 +1342,7 @@ CoderResult CodeCodeBlock(Coder<mode>& coder,
 
 CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
                            const wasm::CodeMetadata& codeMeta) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 768);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 760);
 
   FuncImportVector funcImports;
   MOZ_TRY(CodePodVector(coder, &funcImports));
@@ -1288,8 +1360,7 @@ CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
 
   // Create and initialize the code
   MutableCode code =
-      js_new<Code>(CompileMode::Once, codeMeta, /*codeMetaForAsmJS=*/nullptr,
-                   /*maybeBytecode=*/nullptr);
+      js_new<Code>(CompileMode::Once, codeMeta, /*codeMetaForAsmJS=*/nullptr);
   if (!code || !code->initialize(std::move(funcImports), std::move(sharedStubs),
                                  std::move(sharedStubsLinkData),
                                  std::move(optimizedCode),
@@ -1309,7 +1380,7 @@ CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
 template <CoderMode mode>
 CoderResult CodeSharedCode(Coder<mode>& coder,
                            CoderArg<mode, wasm::SharedCode> item) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 768);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 760);
   STATIC_ASSERT_ENCODING_OR_SIZING;
   // Don't encode the CodeMetadata, that is handled by wasm::Module
   MOZ_TRY(CodePodVector(coder, &(*item)->funcImports()));
@@ -1352,17 +1423,6 @@ CoderResult CodeModule(Coder<MODE_DECODE>& coder, MutableModule* item) {
   SharedCode code;
   MOZ_TRY(Magic(coder, Marker::Code));
   MOZ_TRY(CodeSharedCode(coder, &code, *moduleMeta->codeMeta));
-
-  // Initialize metadata's name payload from the custom section.  This
-  // requires the kludge that CodeMetadata::namePayload is marked `mutable`.
-  if (code->codeMeta().nameCustomSectionIndex) {
-    code->codeMeta().namePayload =
-        moduleMeta->customSections[*code->codeMeta().nameCustomSectionIndex]
-            .payload;
-  } else {
-    MOZ_RELEASE_ASSERT(!code->codeMeta().moduleName);
-    MOZ_RELEASE_ASSERT(code->codeMeta().funcNames.empty());
-  }
 
   *item = js_new<Module>(*moduleMeta, *code,
                          /* loggingDeserialized = */ true);

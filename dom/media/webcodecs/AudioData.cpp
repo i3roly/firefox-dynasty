@@ -455,10 +455,12 @@ void CopySamples(Span<S> aSource, Span<D> aDest, uint32_t aSourceChannelCount,
   }
   if (!IsInterleaved(aSourceFormat) && !IsInterleaved(aCopyToSpec.mFormat)) {
     // Planar to Planar / convert + copy from the right index in the source.
-    size_t offset =
-        aCopyToSpec.mPlaneIndex * aSource.Length() / aSourceChannelCount;
-    MOZ_ASSERT(aDest.Length() >= aSource.Length() / aSourceChannelCount -
-                                     aCopyToSpec.mFrameOffset);
+    size_t framePerPlane = aSource.Length() / aSourceChannelCount;
+    size_t offset = aCopyToSpec.mPlaneIndex * framePerPlane;
+    MOZ_ASSERT(aDest.Length() >= aCopyToSpec.mFrameCount,
+               "Destination buffer too small");
+    MOZ_ASSERT(aSource.Length() >= offset + aCopyToSpec.mFrameCount,
+               "Source buffer too small");
     for (uint32_t i = 0; i < aCopyToSpec.mFrameCount; i++) {
       aDest[i] =
           ConvertAudioSample<D>(aSource[offset + aCopyToSpec.mFrameOffset + i]);
@@ -706,16 +708,12 @@ RefPtr<mozilla::AudioData> AudioData::ToAudioData() const {
     LOGE("Overflow AudioData::ToAudioData when computing the number of frames");
     return nullptr;
   }
-  uint32_t bytesPerSample = BytesPerSamples(mAudioSampleFormat.value());
-  CheckedInt64 storageNeeded = sampleCount.value();
-  storageNeeded *= bytesPerSample;
-  if (!storageNeeded.isValid()) {
-    LOGE("Overflow AudioData::ToAudioData when computing the number of bytes");
+  AlignedAudioBuffer buf(sampleCount.value());
+  if (!buf.Length()) {
+    LOGE("OOM when allocating storage for AudioData conversion");
     return nullptr;
   }
-  AlignedAudioBuffer buf(sampleCount.value());
-  Span<uint8_t> storage(reinterpret_cast<uint8_t*>(buf.Data()),
-                        storageNeeded.value());
+  Span<uint8_t> storage(reinterpret_cast<uint8_t*>(buf.Data()), buf.Size());
 
   CopyToSpec spec(mNumberOfFrames, 0, 0, AudioSampleFormat::F32);
 

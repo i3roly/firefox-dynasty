@@ -197,7 +197,7 @@ class PromptFeature private constructor(
     private var shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
     private val onFirstTimeEngagedWithSignup: () -> Unit = {},
     private val onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
-    private val onSavedGeneratedPassword: () -> Unit = {},
+    private val onSaveLogin: (Boolean) -> Unit = { _ -> },
     private val passwordGeneratorColorsProvider: PasswordGeneratorDialogColorsProvider = PasswordGeneratorDialogColorsProvider {
         PasswordGeneratorDialogColors.default()
     },
@@ -253,7 +253,7 @@ class PromptFeature private constructor(
         shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
         onFirstTimeEngagedWithSignup: () -> Unit = {},
         onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
-        onSavedGeneratedPassword: () -> Unit = {},
+        onSaveLogin: (Boolean) -> Unit = { _ -> },
         passwordGeneratorColorsProvider: PasswordGeneratorDialogColorsProvider = PasswordGeneratorDialogColorsProvider {
             PasswordGeneratorDialogColors.default()
         },
@@ -286,7 +286,7 @@ class PromptFeature private constructor(
         shouldAutomaticallyShowSuggestedPassword = shouldAutomaticallyShowSuggestedPassword,
         onFirstTimeEngagedWithSignup = onFirstTimeEngagedWithSignup,
         onSaveLoginWithStrongPassword = onSaveLoginWithStrongPassword,
-        onSavedGeneratedPassword = onSavedGeneratedPassword,
+        onSaveLogin = onSaveLogin,
         passwordGeneratorColorsProvider = passwordGeneratorColorsProvider,
         creditCardDelegate = creditCardDelegate,
         addressDelegate = addressDelegate,
@@ -315,7 +315,7 @@ class PromptFeature private constructor(
         shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
         onFirstTimeEngagedWithSignup: () -> Unit = {},
         onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
-        onSavedGeneratedPassword: () -> Unit = {},
+        onSaveLogin: (Boolean) -> Unit = { _ -> },
         creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
         addressDelegate: AddressDelegate = DefaultAddressDelegate(),
         fileUploadsDirCleaner: FileUploadsDirCleaner,
@@ -342,7 +342,7 @@ class PromptFeature private constructor(
         shouldAutomaticallyShowSuggestedPassword = shouldAutomaticallyShowSuggestedPassword,
         onFirstTimeEngagedWithSignup = onFirstTimeEngagedWithSignup,
         onSaveLoginWithStrongPassword = onSaveLoginWithStrongPassword,
-        onSavedGeneratedPassword = onSavedGeneratedPassword,
+        onSaveLogin = onSaveLogin,
         creditCardDelegate = creditCardDelegate,
         addressDelegate = addressDelegate,
         fileUploadsDirCleaner = fileUploadsDirCleaner,
@@ -589,64 +589,75 @@ class PromptFeature private constructor(
      *
      * @param session The session which requested the dialog.
      */
-    @Suppress("NestedBlockDepth")
     @VisibleForTesting(otherwise = PRIVATE)
     internal fun onPromptRequested(session: SessionState) {
         // Some requests are handle with intents
         session.content.promptRequests.lastOrNull()?.let { promptRequest ->
-            store.state.findTabOrCustomTabOrSelectedTab(customTabId)?.let {
-                promptRequest.executeIfWindowedPrompt { exitFullscreenUsecase(it.id) }
+            if (session.content.permissionRequestsList.isNotEmpty()) {
+                onCancel(session.id, promptRequest.uid)
+            } else {
+                processPromptRequest(promptRequest, session)
+            }
+        }
+    }
+
+    @Suppress("NestedBlockDepth")
+    private fun processPromptRequest(
+        promptRequest: PromptRequest,
+        session: SessionState,
+    ) {
+        store.state.findTabOrCustomTabOrSelectedTab(customTabId)?.let {
+            promptRequest.executeIfWindowedPrompt { exitFullscreenUsecase(it.id) }
+        }
+
+        when (promptRequest) {
+            is File -> {
+                emitPromptDisplayedFact(promptName = "FilePrompt")
+                filePicker.handleFileRequest(promptRequest)
             }
 
-            when (promptRequest) {
-                is File -> {
-                    emitPromptDisplayedFact(promptName = "FilePrompt")
-                    filePicker.handleFileRequest(promptRequest)
+            is Share -> handleShareRequest(promptRequest, session)
+            is SelectCreditCard -> {
+                emitSuccessfulCreditCardAutofillFormDetectedFact()
+                if (isCreditCardAutofillEnabled() && promptRequest.creditCards.isNotEmpty()) {
+                    creditCardPicker?.handleSelectCreditCardRequest(promptRequest)
                 }
+            }
 
-                is Share -> handleShareRequest(promptRequest, session)
-                is SelectCreditCard -> {
-                    emitSuccessfulCreditCardAutofillFormDetectedFact()
-                    if (isCreditCardAutofillEnabled() && promptRequest.creditCards.isNotEmpty()) {
-                        creditCardPicker?.handleSelectCreditCardRequest(promptRequest)
-                    }
+            is SelectLoginPrompt -> {
+                if (!isLoginAutofillEnabled()) {
+                    return
                 }
-
-                is SelectLoginPrompt -> {
-                    if (!isLoginAutofillEnabled()) {
-                        return
-                    }
-                    if (promptRequest.generatedPassword != null && isSuggestStrongPasswordEnabled) {
-                        if (shouldAutomaticallyShowSuggestedPassword.invoke()) {
-                            onFirstTimeEngagedWithSignup.invoke()
+                if (promptRequest.generatedPassword != null && isSuggestStrongPasswordEnabled) {
+                    if (shouldAutomaticallyShowSuggestedPassword.invoke()) {
+                        onFirstTimeEngagedWithSignup.invoke()
+                        handleDialogsRequest(
+                            promptRequest,
+                            session,
+                        )
+                    } else {
+                        strongPasswordPromptViewListener?.onGeneratedPasswordPromptClick = {
                             handleDialogsRequest(
                                 promptRequest,
                                 session,
                             )
-                        } else {
-                            strongPasswordPromptViewListener?.onGeneratedPasswordPromptClick = {
-                                handleDialogsRequest(
-                                    promptRequest,
-                                    session,
-                                )
-                            }
-                            strongPasswordPromptViewListener?.handleSuggestStrongPasswordRequest()
                         }
-                    } else {
-                        loginPicker?.handleSelectLoginRequest(promptRequest)
+                        strongPasswordPromptViewListener?.handleSuggestStrongPasswordRequest()
                     }
-                    emitPromptDisplayedFact(promptName = "SelectLoginPrompt")
+                } else {
+                    loginPicker?.handleSelectLoginRequest(promptRequest)
                 }
-
-                is SelectAddress -> {
-                    emitSuccessfulAddressAutofillFormDetectedFact()
-                    if (isAddressAutofillEnabled() && promptRequest.addresses.isNotEmpty()) {
-                        addressPicker?.handleSelectAddressRequest(promptRequest)
-                    }
-                }
-
-                else -> handleDialogsRequest(promptRequest, session)
+                emitPromptDisplayedFact(promptName = "SelectLoginPrompt")
             }
+
+            is SelectAddress -> {
+                emitSuccessfulAddressAutofillFormDetectedFact()
+                if (isAddressAutofillEnabled() && promptRequest.addresses.isNotEmpty()) {
+                    addressPicker?.handleSelectAddressRequest(promptRequest)
+                }
+            }
+
+            else -> handleDialogsRequest(promptRequest, session)
         }
     }
 
@@ -830,7 +841,7 @@ class PromptFeature private constructor(
                     promptRequestUID = promptRequest.uid,
                     generatedPassword = generatedPassword,
                     currentUrl = currentUrl,
-                    onSavedGeneratedPassword = onSavedGeneratedPassword,
+                    onSavedGeneratedPassword = onSaveLogin,
                     colorsProvider = passwordGeneratorColorsProvider,
                 )
             }
@@ -885,6 +896,7 @@ class PromptFeature private constructor(
                     // For v1, we only handle a single login and drop all others on the floor
                     entry = promptRequest.logins[0],
                     icon = session.content.icon,
+                    onShowSnackbarAfterLoginChange = onSaveLogin,
                 )
             }
 
