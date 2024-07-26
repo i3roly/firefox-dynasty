@@ -1731,6 +1731,8 @@
 
     <!-- Preference for fingerprinting protection for the custom protection settings -->
     <string name="etp_suspected_fingerprinters_title">Suspektne palcowe wótśišće</string>
+    <!-- Description of fingerprinters that can be blocked by fingerprinting protection -->
+    <string name="etp_suspected_fingerprinters_description">Zmóžnja šćit pśeśiwo palcowym wótśišćam, aby suspektne kšadnjenja palcowych wótśišćow blokěrował.</string>
     <!-- Category of trackers (fingerprinters) that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_known_fingerprinters_title">Znate palcowe wótśišće</string>
     <!-- Description of the SmartBlock Enhanced Tracking Protection feature. The * symbol is intentionally hardcoded here,
@@ -1828,7 +1830,7 @@
     <!-- The header for the site that a login is for -->
     <string name="preferences_passwords_saved_logins_site">Sedło</string>
     <!-- The header for the username for a login -->
-    <string name="preferences_passwords_saved_logins_username">Wužywarske mě</string>
+    <string name="preferences_passwords_saved_logins_username">Wužywaŕske mě</string>
     <!-- The header for the password for a login -->
     <string name="preferences_passwords_saved_logins_password">Gronidło</string>
 
@@ -2113,7 +2115,7 @@
     <!--  The error message in add login view when username field is blank. -->
     <string name="saved_login_username_required_2">Wužywaŕske mě zapódaś</string>
     <!--  The error message in add login view when hostname field is blank. -->
-    <string name="saved_login_hostname_required" tools:ignore="UnusedResources">Hostmě trěbne.</string>
+    <string name="saved_login_hostname_required" tools:ignore="UnusedResources">Hostmě trjebne</string>
     <!--  The error message in add login view when hostname field is blank. -->
     <string name="saved_login_hostname_required_2" tools:ignore="UnusedResources">Webadresu zapódaś</string>
     <!-- Voice search button content description  -->
@@ -2129,7 +2131,7 @@
     <!-- This is an error message shown below the hostname field of the add login page when a hostname does not contain http or https. -->
     <string name="add_login_hostname_invalid_text_3">Webadresa musy „https://“ abo „http://“ wopśimowaś</string>
     <!-- This is an error message shown below the hostname field of the add login page when a hostname is invalid. -->
-    <string name="add_login_hostname_invalid_text_2">Płaśiwe hostmě trěbne</string>
+    <string name="add_login_hostname_invalid_text_2">Płaśiwe hostmě trjebne</string>
 
     <!-- Synced Tabs -->
     <!-- Text displayed to ask user to connect another device as no devices found with account -->

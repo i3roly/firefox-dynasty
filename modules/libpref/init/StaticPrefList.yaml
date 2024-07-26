@@ -3242,14 +3242,18 @@
 # 0: normal, 1: always-enabled, 2: always-disabled
 - name: dom.origin-trials.private-attribution.state
   type: RelaxedAtomicInt32
+#ifdef ANDROID
+  value: 2
+#else
   value: 0
+#endif
   mirror: always
 
 # User pref to control whether Private Attribution
 # information should be collected / submitted.
 - name: dom.private-attribution.submission.enabled
   type: bool
-  value: true
+  value: @IS_NOT_ANDROID@
   mirror: always
 
 # Is support for Window.paintWorklet enabled?
@@ -13339,7 +13343,7 @@
 
 - name: network.http.http2.enabled.deps
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 - name: network.http.http2.enforce-tls-profile
@@ -15225,6 +15229,15 @@
   type: RelaxedAtomicUint32
   value: 3
   mirror: always
+
+# The CRLite filter channel to which the user is subscribed.
+# - "all" => filters that contain all revocations,
+# - "specified" => filters that contain revocations with specified reason codes,
+# - "priority" => filters that contain high priority revocations.
+- name: security.pki.crlite_channel
+  type: String
+  value: "specified"
+  mirror: never
 
 - name: security.tls.version.min
   type: RelaxedAtomicUint32
