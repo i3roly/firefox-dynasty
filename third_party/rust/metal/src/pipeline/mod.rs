@@ -40,7 +40,7 @@ foreign_obj_type! {
 
 impl PipelineBufferDescriptorArrayRef {
     pub fn object_at(&self, index: NSUInteger) -> Option<&PipelineBufferDescriptorRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn set_object_at(
@@ -48,7 +48,7 @@ impl PipelineBufferDescriptorArrayRef {
         index: NSUInteger,
         buffer_desc: Option<&PipelineBufferDescriptorRef>,
     ) {
-        unsafe { msg_send![self, setObject:buffer_desc atIndexedSubscript:index] }
+        unsafe { msg_send![self, setObject:buffer_desc atIndex:index] }
     }
 }
 

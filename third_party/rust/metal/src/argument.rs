@@ -200,7 +200,7 @@ foreign_obj_type! {
 
 impl StructMemberArrayRef {
     pub fn object_at(&self, index: NSUInteger) -> Option<&StructMemberRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn count(&self) -> NSUInteger {

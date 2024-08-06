@@ -118,7 +118,7 @@
         TouchBarInput* convertedChild =
             [[TouchBarInput alloc] initWithXPCOM:child];
         if (convertedChild) {
-          orderedChildren[i] = convertedChild;
+          [orderedChildren replaceObjectAtIndex:i withObject:convertedChild];
         }
       }
       [self setChildren:orderedChildren];
