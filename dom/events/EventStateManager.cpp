@@ -2294,17 +2294,7 @@ void EventStateManager::FireContextClick() {
 
     if (allowedToDispatch) {
       // init the event while mCurrentTarget is still good
-      Maybe<WidgetPointerEvent> pointerEvent;
-      Maybe<WidgetMouseEvent> mouseEvent;
-      if (StaticPrefs::
-              dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-        pointerEvent.emplace(true, eContextMenu, targetWidget);
-      } else {
-        mouseEvent.emplace(true, eContextMenu, targetWidget,
-                           WidgetMouseEvent::eReal);
-      }
-      WidgetMouseEvent& event =
-          pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+      WidgetPointerEvent event(true, eContextMenu, targetWidget);
       event.mClickCount = 1;
       FillInEventFromGestureDown(&event);
 
@@ -2591,7 +2581,8 @@ void EventStateManager::GenerateDragGesture(nsPresContext* aPresContext,
   if (!window) return;
 
   RefPtr<DataTransfer> dataTransfer =
-      new DataTransfer(window, eDragStart, false, -1);
+      new DataTransfer(window, eDragStart, /* aIsExternal */ false,
+                       /* aClipboardType */ Nothing());
   auto protectDataTransfer = MakeScopeExit([&] {
     if (dataTransfer) {
       dataTransfer->Disconnect();
@@ -6151,7 +6142,7 @@ nsresult EventStateManager::HandleMiddleClickPaste(
   // Don't modify selection here because we've already set caret to the point
   // at "mousedown" event.
 
-  int32_t clipboardType = nsIClipboard::kGlobalClipboard;
+  nsIClipboard::ClipboardType clipboardType = nsIClipboard::kGlobalClipboard;
   nsCOMPtr<nsIClipboard> clipboardService =
       do_GetService("@mozilla.org/widget/clipboard;1");
   if (clipboardService && clipboardService->IsClipboardTypeSupported(
@@ -6162,8 +6153,8 @@ nsresult EventStateManager::HandleMiddleClickPaste(
   // Fire ePaste event by ourselves since we need to dispatch "paste" event
   // even if the middle click event was consumed for compatibility with
   // Chromium.
-  if (!nsCopySupport::FireClipboardEvent(ePaste, clipboardType, aPresShell,
-                                         selection)) {
+  if (!nsCopySupport::FireClipboardEvent(ePaste, Some(clipboardType),
+                                         aPresShell, selection)) {
     *aStatus = nsEventStatus_eConsumeNoDefault;
     return NS_OK;
   }

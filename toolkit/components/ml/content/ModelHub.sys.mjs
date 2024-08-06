@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
+
 /**
  * @typedef {import("./Utils.sys.mjs").ProgressAndStatusCallbackParams} ProgressAndStatusCallbackParams
  */
@@ -10,6 +12,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  ObjectUtils: "resource://gre/modules/ObjectUtils.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   Progress: "chrome://global/content/ml/Utils.sys.mjs",
 });
@@ -37,6 +40,18 @@ const ALLOWED_HEADERS_KEYS = [
   "Content-Length", // the size we download (can be different when gzipped)
 ];
 const DEFAULT_URL_TEMPLATE = "{model}/resolve/{revision}";
+
+// Default indexedDB revision.
+const DEFAULT_MODEL_REVISION = 2;
+
+// The origin to use for storage. If null uses system.
+const DEFAULT_PRINCIPAL_ORIGIN = null;
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "DEFAULT_MAX_CACHE_SIZE",
+  "browser.ml.modelCacheMaxSizeBytes"
+);
 
 /**
  * Checks if a given URL string corresponds to an allowed hub.
@@ -99,13 +114,6 @@ export class IndexedDBCache {
   dbVersion = null;
 
   /**
-   * Total size of the files stored in the cache.
-   *
-   * @type {number}
-   */
-  totalSize = 0;
-
-  /**
    * Name of the database used by IndexedDB.
    *
    * @type {string}
@@ -156,46 +164,55 @@ export class IndexedDBCache {
     },
   };
   /**
-   * Maximum size of the cache in bytes. Defaults to 1GB.
+   * Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSizeBytes".
    *
    * @type {number}
    */
-  #maxSize = 1_073_741_824; // 1GB in bytes
+  #maxSize = lazy.DEFAULT_MAX_CACHE_SIZE;
 
   /**
    * Private constructor to prevent direct instantiation.
    * Use IndexedDBCache.init to create an instance.
    *
-   * @param {string} dbName - The name of the database file.
-   * @param {number} version - The version number of the database.
+   * @param {object} config
+   * @param {string} config.dbName - The name of the database file.
+   * @param {number} config.version - The version number of the database.
+   * @param {number} config.maxSize Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSizeBytes".
    */
-  constructor(dbName = "modelFiles", version = 1) {
+  constructor({
+    dbName = "modelFiles",
+    version = DEFAULT_MODEL_REVISION,
+    maxSize = lazy.DEFAULT_MAX_CACHE_SIZE,
+  } = {}) {
     this.dbName = dbName;
     this.dbVersion = version;
     this.fileStoreName = "files";
     this.headersStoreName = "headers";
     this.taskStoreName = "tasks";
+    this.#maxSize = maxSize;
   }
 
   /**
    * Static method to create and initialize an instance of IndexedDBCache.
    *
-   * @param {string} [dbName="modelFiles"] - The name of the database.
-   * @param {number} [version=1] - The version number of the database.
+   * @param {object} config
+   * @param {string} [config.dbName="modelFiles"] - The name of the database.
+   * @param {number} [config.version] - The version number of the database.
+   * @param {number} config.maxSize Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSizeBytes".
    * @returns {Promise<IndexedDBCache>} An initialized instance of IndexedDBCache.
    */
-  static async init(dbName = "modelFiles", version = 1) {
-    const cacheInstance = new IndexedDBCache(dbName, version);
+  static async init({
+    dbName = "modelFiles",
+    version = DEFAULT_MODEL_REVISION,
+    maxSize = lazy.DEFAULT_MAX_CACHE_SIZE,
+  } = {}) {
+    const cacheInstance = new IndexedDBCache({
+      dbName,
+      version,
+      maxSize,
+    });
     cacheInstance.db = await cacheInstance.#openDB();
-    const storedSize = (
-      await cacheInstance.#getData({
-        storeName: cacheInstance.headersStoreName,
-        // totalSize should be independent of model/revision.
-        // So using empty model and revision.
-        key: ["", "", "totalSize"],
-      })
-    )[0];
-    cacheInstance.totalSize = storedSize ? storedSize.size : 0;
+
     return cacheInstance;
   }
 
@@ -210,6 +227,71 @@ export class IndexedDBCache {
     }
   }
 
+  #migrateStore(db, oldVersion) {
+    const newVersion = db.version;
+    // Delete all existing data when migrating from 1 to 2
+    if (oldVersion == 1 && newVersion == 2) {
+      // Version 1 may contains task depe
+      for (const name of [
+        this.fileStoreName,
+        this.headersStoreName,
+        this.taskStoreName,
+      ]) {
+        if (db.objectStoreNames.contains(name)) {
+          db.deleteObjectStore(name);
+        }
+      }
+    }
+  }
+
+  #createOrMigrateIndices({ store, name, keyPath }) {
+    if (store.indexNames.contains(name)) {
+      if (!lazy.ObjectUtils.deepEqual(store.index(name).keyPath, keyPath)) {
+        lazy.console.debug(
+          `Deleting and recreating index ${name} on store ${store.name}`
+        );
+        store.deleteIndex(name);
+        store.createIndex(name, keyPath);
+      }
+    } else {
+      // index does not exist, so create
+      lazy.console.debug(`Creating index ${name} on store ${store.name}`);
+      store.createIndex(name, keyPath);
+    }
+  }
+
+  /**
+   * Enable persistence for a principal.
+   *
+   * @param {Ci.nsIPrincipal} principal - The principal
+   * @returns {Promise<boolean>} Wether persistence was successfully enabled.
+   */
+
+  async #ensurePersistentStorage(principal) {
+    try {
+      const { promise, resolve, reject } = Promise.withResolvers();
+      const request = Services.qms.persist(principal);
+
+      request.callback = () => {
+        if (request.resultCode === Cr.NS_OK) {
+          resolve();
+        } else {
+          reject(
+            new Error(
+              `Failed to persist storage for principal: ${principal.originNoSuffix}`
+            )
+          );
+        }
+      };
+
+      await promise;
+      return true;
+    } catch (error) {
+      lazy.console.error("An unexpected error occurred:", error);
+      return false;
+    }
+  }
+
   /**
    * Opens or creates the IndexedDB database.
    *
@@ -217,11 +299,44 @@ export class IndexedDBCache {
    */
   async #openDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.dbVersion);
+      const principal = DEFAULT_PRINCIPAL_ORIGIN
+        ? Services.scriptSecurityManager.createContentPrincipalFromOrigin(
+            DEFAULT_PRINCIPAL_ORIGIN
+          )
+        : Services.scriptSecurityManager.getSystemPrincipal();
+
+      if (DEFAULT_PRINCIPAL_ORIGIN) {
+        this.#ensurePersistentStorage(principal);
+      }
+
+      const request = indexedDB.openForPrincipal(
+        principal,
+        this.dbName,
+        this.dbVersion
+      );
       request.onerror = event => reject(event.target.error);
-      request.onsuccess = event => resolve(event.target.result);
+      request.onsuccess = event => {
+        const db = event.target.result;
+        // This is called when a version upgrade event is sent from elsewhere
+        // for example from another tab/window from the same computer.
+        db.onversionchange = _onVersionChangeevent => {
+          lazy.console.debug(
+            "The version of this database is changing. Closing."
+          );
+          // Closing allow the change from elsewhere to go through and invalidate
+          // this version.
+          db.close();
+        };
+        return resolve(event.target.result);
+      };
+      // If you make any change to onupgradeneeded, then you must change
+      // the version of the database, otherwise, the changes would not apply.
       request.onupgradeneeded = event => {
         const db = event.target.result;
+
+        // Migrating is required anytime the keyPath for an existing store changes
+        this.#migrateStore(db, event.oldVersion);
+
         if (!db.objectStoreNames.contains(this.fileStoreName)) {
           db.createObjectStore(this.fileStoreName, { keyPath: "id" });
         }
@@ -235,16 +350,11 @@ export class IndexedDBCache {
           this.headersStoreName
         );
 
-        if (
-          !headerStore.indexNames.contains(
-            this.#indices.modelRevisionIndex.name
-          )
-        ) {
-          headerStore.createIndex(
-            this.#indices.modelRevisionIndex.name,
-            this.#indices.modelRevisionIndex.keyPath
-          );
-        }
+        this.#createOrMigrateIndices({
+          store: headerStore,
+          name: this.#indices.modelRevisionIndex.name,
+          keyPath: this.#indices.modelRevisionIndex.keyPath,
+        });
 
         if (!db.objectStoreNames.contains(this.taskStoreName)) {
           db.createObjectStore(this.taskStoreName, {
@@ -253,11 +363,8 @@ export class IndexedDBCache {
         }
 
         const taskStore = request.transaction.objectStore(this.taskStoreName);
-
         for (const { name, keyPath } of Object.values(this.#indices)) {
-          if (!taskStore.indexNames.contains(name)) {
-            taskStore.createIndex(name, keyPath);
-          }
+          this.#createOrMigrateIndices({ store: taskStore, name, keyPath });
         }
       };
     });
@@ -498,6 +605,34 @@ export class IndexedDBCache {
   }
 
   /**
+   * Estimate the disk size in bytes for a domain origin. If no origin is provided, assume the system origin.
+   *
+   * @param {?string} origin - The origin.
+   * @returns {Promise<number>} The estimated size.
+   */
+  async #estimateUsageForOrigin(origin) {
+    const { promise, resolve, reject } = Promise.withResolvers();
+    try {
+      const principal = origin
+        ? Services.scriptSecurityManager.createContentPrincipalFromOrigin(
+            origin
+          )
+        : Services.scriptSecurityManager.getSystemPrincipal();
+      Services.qms.getUsageForPrincipal(principal, request => {
+        if (request.resultCode == Cr.NS_OK) {
+          resolve(request.result.usage);
+        } else {
+          reject(new Error(request.resultCode));
+        }
+      });
+    } catch (error) {
+      reject(new Error(`An unexpected error occurred: ${error.message}`));
+    }
+
+    return promise;
+  }
+
+  /**
    * Adds or updates a cache entry.
    *
    * @param {object} config
@@ -513,9 +648,12 @@ export class IndexedDBCache {
     const updatePromises = [];
     const fileSize = data.size;
     const cacheKey = this.#generatePrimaryKey({ model, revision, file });
-    const newSize = this.totalSize + fileSize;
-    if (newSize > this.#maxSize) {
-      throw new Error("Exceeding total cache size limit of 1GB");
+    const totalSize = await this.#estimateUsageForOrigin(
+      DEFAULT_PRINCIPAL_ORIGIN
+    );
+
+    if (totalSize + fileSize > this.#maxSize) {
+      throw new Error(`Exceeding cache size limit of ${this.#maxSize} bytes"`);
     }
 
     const fileEntry = { id: cacheKey, data };
@@ -561,26 +699,7 @@ export class IndexedDBCache {
       })
     );
 
-    // Update size
-    updatePromises.push(this.#updateTotalSize(fileSize));
-
     await Promise.all(updatePromises);
-  }
-
-  /**
-   * Updates the total size of the cache.
-   *
-   * @param {number} sizeToAdd - The size to add to the total.
-   * @returns {Promise<void>}
-   */
-  async #updateTotalSize(sizeToAdd) {
-    this.totalSize += sizeToAdd;
-    await this.#updateData(this.headersStoreName, {
-      model: "",
-      revision: "",
-      file: "totalSize",
-      size: this.totalSize,
-    });
   }
   /**
    * Deletes all data related to the specifed models.
@@ -719,7 +838,14 @@ export class IndexedDBCache {
 }
 
 export class ModelHub {
-  constructor({ rootUrl, urlTemplate = DEFAULT_URL_TEMPLATE }) {
+  /**
+   * Create an instance of ModelHub.
+   *
+   * @param {object} config
+   * @param {string} config.rootUrl - Root URL used to download models.
+   * @param {string} config.urlTemplate - The template to retrieve the full URL using a model name and revision.
+   */
+  constructor({ rootUrl, urlTemplate = DEFAULT_URL_TEMPLATE } = {}) {
     if (!allowedHub(rootUrl)) {
       throw new Error(`Invalid model hub root url: ${rootUrl}`);
     }

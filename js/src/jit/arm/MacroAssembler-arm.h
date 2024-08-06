@@ -126,15 +126,9 @@ class MacroAssemblerARM : public Assembler {
   void convertFloat16ToDouble(FloatRegister src, FloatRegister dest) {
     MOZ_CRASH("Not supported for this target");
   }
-  void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest) {
-    MOZ_CRASH("Not supported for this target");
-  }
-  void convertFloat16ToFloat32(FloatRegister src, FloatRegister dest) {
-    MOZ_CRASH("Not supported for this target");
-  }
-  void convertInt32ToFloat16(Register src, FloatRegister dest) {
-    MOZ_CRASH("Not supported for this target");
-  }
+  void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest);
+  void convertFloat16ToFloat32(FloatRegister src, FloatRegister dest);
+  void convertInt32ToFloat16(Register src, FloatRegister dest);
 
   void wasmTruncateToInt32(FloatRegister input, Register output,
                            MIRType fromType, bool isUnsigned, bool isSaturating,
@@ -1133,8 +1127,8 @@ class MacroAssemblerARMCompat : public MacroAssemblerARM {
   void storeTypeTag(ImmTag tag, const Address& dest);
   void storeTypeTag(ImmTag tag, const BaseIndex& dest);
 
-  void handleFailureWithHandlerTail(Label* profilerExitTail,
-                                    Label* bailoutTail);
+  void handleFailureWithHandlerTail(Label* profilerExitTail, Label* bailoutTail,
+                                    uint32_t* returnValueCheckOffset);
 
   /////////////////////////////////////////////////////////////////
   // Common interface.
@@ -1234,13 +1228,9 @@ class MacroAssemblerARMCompat : public MacroAssemblerARM {
   FaultingCodeOffset loadFloat32(const BaseIndex& src, FloatRegister dest);
 
   FaultingCodeOffset loadFloat16(const Address& addr, FloatRegister dest,
-                                 Register) {
-    MOZ_CRASH("Not supported for this target");
-  }
+                                 Register scratch);
   FaultingCodeOffset loadFloat16(const BaseIndex& src, FloatRegister dest,
-                                 Register) {
-    MOZ_CRASH("Not supported for this target");
-  }
+                                 Register scratch);
 
   FaultingCodeOffset store8(Register src, const Address& address);
   void store8(Imm32 imm, const Address& address);
@@ -1421,7 +1411,7 @@ class MacroAssemblerARMCompat : public MacroAssemblerARM {
   void profilerExitFrame();
 };
 
-typedef MacroAssemblerARMCompat MacroAssemblerSpecific;
+using MacroAssemblerSpecific = MacroAssemblerARMCompat;
 
 }  // namespace jit
 }  // namespace js

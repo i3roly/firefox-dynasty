@@ -8038,9 +8038,9 @@ nsresult nsHttpChannel::LogConsoleError(const char* aTag) {
   nsCOMPtr<nsIScriptError> error(do_CreateInstance(NS_SCRIPTERROR_CONTRACTID));
   NS_ENSURE_TRUE(error, NS_ERROR_OUT_OF_MEMORY);
 
-  rv = error->InitWithSourceURI(errorText, mURI, u""_ns, 0, 0,
-                                nsIScriptError::errorFlag,
-                                "Invalid HTTP Status Lines"_ns, innerWindowID);
+  rv =
+      error->InitWithSourceURI(errorText, mURI, 0, 0, nsIScriptError::errorFlag,
+                               "Invalid HTTP Status Lines"_ns, innerWindowID);
   NS_ENSURE_SUCCESS(rv, rv);
   console->LogMessage(error);
   return NS_OK;
@@ -8056,6 +8056,13 @@ static void RecordHTTPSUpgradeTelemetry(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
   // exempt loopback addresses because we only want to record telemetry
   // for actual web requests
   if (nsMixedContentBlocker::IsPotentiallyTrustworthyLoopbackURL(aURI)) {
+    return;
+  }
+
+  // todo: for now we don't record form submissions, only
+  // top-level document loads. Once Bug 1720500 is fixed, we can
+  // consider recording form submissions too.
+  if (aLoadInfo->GetIsFormSubmission()) {
     return;
   }
 
@@ -8110,6 +8117,10 @@ static void RecordHTTPSUpgradeTelemetry(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
     case nsILoadInfo::HTTPS_FIRST_SCHEMELESS_UPGRADE_DOWNGRADE:
       mozilla::glean::networking::http_to_https_upgrade_reason
           .Get("https_first_schemeless_upgrade_downgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::CSP_UIR:
+      mozilla::glean::networking::http_to_https_upgrade_reason.Get("csp_uir"_ns)
           .Add(1);
       break;
     case nsILoadInfo::HTTPS_RR:

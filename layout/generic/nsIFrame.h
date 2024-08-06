@@ -2577,7 +2577,9 @@ class nsIFrame : public nsQueryFrame {
    *
    * This method must not return a negative value.
    */
-  virtual nscoord GetMinISize(gfxContext* aRenderingContext);
+  nscoord GetMinISize(gfxContext* aContext) {
+    return IntrinsicISize(aContext, mozilla::IntrinsicISizeType::MinISize);
+  }
 
   /**
    * Get the max-content intrinsic inline size of the frame.  This must be
@@ -2585,7 +2587,20 @@ class nsIFrame : public nsQueryFrame {
    *
    * Otherwise, all the comments for |GetMinISize| above apply.
    */
-  virtual nscoord GetPrefISize(gfxContext* aRenderingContext);
+  nscoord GetPrefISize(gfxContext* aContext) {
+    return IntrinsicISize(aContext, mozilla::IntrinsicISizeType::PrefISize);
+  }
+
+  /**
+   * A helper to implement GetMinISize() and GetPrefISize(). A derived class
+   * should override this method to return its intrinsic size.
+   *
+   * All the comments for GetMinISize() and GetPrefISize() apply.
+   */
+  virtual nscoord IntrinsicISize(gfxContext* aContext,
+                                 mozilla::IntrinsicISizeType aType) {
+    return 0;
+  }
 
   /**
    * |InlineIntrinsicISize| represents the intrinsic inline size information
@@ -2878,6 +2893,14 @@ class nsIFrame : public nsQueryFrame {
    */
   nscoord ShrinkISizeToFit(gfxContext* aRenderingContext, nscoord aISizeInCB,
                            mozilla::ComputeSizeFlags aFlags);
+
+  /**
+   * A helper for derived classes to implement min-content & max-content
+   * intrinsic inline size in terms of AddInlineMinISize() and
+   * AddInlinePrefISize().
+   */
+  nscoord IntrinsicISizeFromInline(gfxContext* aContext,
+                                   mozilla::IntrinsicISizeType aType);
 
  public:
   /**
@@ -3622,16 +3645,6 @@ class nsIFrame : public nsQueryFrame {
    * Normally does nothing since DLBI handles removed frames.
    */
   virtual void InvalidateFrameForRemoval() {}
-
-  /**
-   * When HasUserData(frame->LayerIsPrerenderedDataKey()), then the
-   * entire overflow area of this frame has been rendered in its
-   * layer(s).
-   */
-  static void* LayerIsPrerenderedDataKey() {
-    return &sLayerIsPrerenderedDataKey;
-  }
-  static uint8_t sLayerIsPrerenderedDataKey;
 
   /**
    * Checks if a frame has had InvalidateFrame() called on it since the

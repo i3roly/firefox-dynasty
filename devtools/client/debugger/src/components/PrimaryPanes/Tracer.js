@@ -20,6 +20,7 @@ import {
   getAllMutationTraces,
   getAllTraceCount,
   getIsCurrentlyTracing,
+  getRuntimeVersions,
 } from "../../selectors/index";
 const VirtualizedTree = require("resource://devtools/client/shared/components/VirtualizedTree.js");
 const FrameView = createFactory(
@@ -180,7 +181,7 @@ export class Tracer extends Component {
       if (!this.props.isTracing) {
         return div(
           { className: "tracer-message" },
-          "Tracer is off, or pending for next interation/load."
+          "Tracer is off, or pending for next interaction/load."
         );
       }
       return div(
@@ -189,7 +190,12 @@ export class Tracer extends Component {
       );
     }
 
-    const { searchStrings, startIndex, endIndex } = this.state;
+    const { searchStrings } = this.state;
+
+    // Indexes are floating number, so convert them to a decimal number as indexes in the trace array
+    let { startIndex, endIndex } = this.state;
+    startIndex = Math.floor(startIndex);
+    endIndex = Math.floor(endIndex);
 
     if (startIndex != 0 || endIndex != -1) {
       // When we start zooming, only consider traces whose top level frame
@@ -198,6 +204,7 @@ export class Tracer extends Component {
       // Lookup for the first top trace after the start index
       let topTracesStartIndex = 0;
       if (startIndex != 0) {
+        topTracesStartIndex = -1;
         for (let i = 0; i < topTraces.length; i++) {
           const traceIndex = topTraces[i];
           if (traceIndex >= startIndex) {
@@ -219,7 +226,13 @@ export class Tracer extends Component {
         }
       }
 
-      topTraces = topTraces.slice(topTracesStartIndex, topTracesEndIndex);
+      if (topTracesStartIndex == -1) {
+        // When none of the top traces are within the selected range, pick the start index of top trace.
+        // This happens when we zoom on the last call tree at the end of the record.
+        topTraces = [startIndex];
+      } else {
+        topTraces = topTraces.slice(topTracesStartIndex, topTracesEndIndex);
+      }
 
       // When the top trace isn't the top most one (`!0`) and isn't a top trace (`!topTraces[0]`),
       // We need to add the current start trace as a top trace, as well as all its following siblings
@@ -229,8 +242,7 @@ export class Tracer extends Component {
       // Note that for endIndex, the cut is being done in VirtualizedTree's getChildren function.
       if (startIndex != 0 && topTraces[0] != startIndex) {
         const results = [];
-        // indexes are floating number, so convert it to a decimal number as index in the trace array
-        results.push(Math.floor(startIndex));
+        results.push(startIndex);
         collectAllSiblings(traceParents, traceChildren, startIndex, results);
         topTraces.unshift(...results);
       }
@@ -274,7 +286,7 @@ export class Tracer extends Component {
         // we may need to remove children that are outside of the viewport.
         if (endIndex != -1) {
           return traceChildren[traceIndex].filter(index => {
-            return index <= endIndex;
+            return index < endIndex;
           });
         }
         return traceChildren[traceIndex];
@@ -483,6 +495,9 @@ export class Tracer extends Component {
     // Normalize the computed indexes.
     // start can't be lower than zero
     startIndex = Math.max(0, startIndex);
+    // start can't be greater than the trace count
+    startIndex = Math.min(startIndex, this.props.traceCount - 1);
+
     if (endIndex != -1) {
       // end can't be lower than start + 1
       endIndex = Math.max(startIndex + 1, endIndex);
@@ -706,6 +721,8 @@ export class Tracer extends Component {
   render() {
     const isZoomed = this.state.renderedTraceCount != this.props.traceCount;
 
+    const { runtimeVersions } = this.props;
+
     return div(
       {
         className: "tracer-container",
@@ -721,6 +738,16 @@ export class Tracer extends Component {
                 className: "tracer-experimental-notice",
               },
               "This panel is experimental. It may change, regress, be dropped or replaced."
+            )
+          : null,
+        runtimeVersions &&
+          runtimeVersions.localPlatformVersion !=
+            runtimeVersions.remotePlatformVersion
+          ? div(
+              {
+                className: "tracer-runtime-version-mismatch",
+              },
+              `Client and remote runtime have different versions (${runtimeVersions.localPlatformVersion} vs ${runtimeVersions.remotePlatformVersion}) . The Tracer may be broken because of protocol changes between these two versions. Please upgrade or downgrade one of the two to use the same major version.`
             )
           : null,
         this.renderSearchInput()
@@ -815,6 +842,7 @@ const mapStateToProps = state => {
     mutationTraces: getAllMutationTraces(state),
     traceCount: getAllTraceCount(state),
     selectedTraceIndex: getSelectedTraceIndex(state),
+    runtimeVersions: getRuntimeVersions(state),
   };
 };
 

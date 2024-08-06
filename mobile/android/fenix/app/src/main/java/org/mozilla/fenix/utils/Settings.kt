@@ -1936,9 +1936,10 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     /**
      * Indicates if the menu redesign is enabled.
      */
-    var enableMenuRedesign by booleanPreference(
+    var enableMenuRedesign by lazyFeatureFlagPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_enable_menu_redesign),
-        default = FeatureFlags.menuRedesignEnabled,
+        default = { FxNimbus.features.menuRedesign.value().enabled },
+        featureFlag = true,
     )
 
     /**
@@ -2008,15 +2009,6 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         key = appContext.getPreferenceKey(R.string.pref_key_enable_fxsuggest),
         default = { FxNimbus.features.fxSuggest.value().enabled },
         featureFlag = FeatureFlags.fxSuggest,
-    )
-
-    /**
-     * Indicates if SuggestStrongPassword feature is enabled.
-     */
-    var enableSuggestStrongPassword by lazyFeatureFlagPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_suggest_strong_password),
-        default = { FxNimbus.features.fxStrongPassword.value().enabled },
-        featureFlag = FeatureFlags.suggestStrongPassword,
     )
 
     /**
@@ -2154,8 +2146,8 @@ class Settings(private val appContext: Context) : PreferencesHolder {
      * Indicates if the microsurvey feature is enabled.
      */
     var microsurveyFeatureEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_microsurvey_feature_enabled),
-        default = false,
+        key = appContext.getPreferenceKey(R.string.pref_key_microsurvey_feature_enabled),
+        default = FxNimbus.features.microsurveys.value().enabled,
     )
 
     /**

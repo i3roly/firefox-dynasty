@@ -605,7 +605,7 @@ TextPropertyEditor.prototype = {
       urlClass: "theme-link",
       fontFamilyClass: FONT_FAMILY_CLASS,
       baseURI: this.sheetHref,
-      unmatchedVariableClass: "ruleview-unmatched-variable",
+      unmatchedClass: "ruleview-unmatched",
       matchedVariableClass: "ruleview-variable",
       getVariableData: varName =>
         this.rule.elementStyle.getVariableData(
@@ -614,6 +614,10 @@ TextPropertyEditor.prototype = {
         ),
       inStartingStyleRule: this.rule.isInStartingStyle(),
     };
+
+    if (this.rule.darkColorScheme !== undefined) {
+      parserOptions.isDarkColorScheme = this.rule.darkColorScheme;
+    }
     const frag = outputParser.parseCssProperty(name, val, parserOptions);
 
     // Save the initial value as the last committed value,

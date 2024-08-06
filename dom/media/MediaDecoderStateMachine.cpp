@@ -4,10 +4,24 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "MediaDecoderStateMachine.h"
+
 #include <algorithm>
 #include <stdint.h>
 #include <utility>
 
+#include "AudioSegment.h"
+#include "DOMMediaStream.h"
+#include "ImageContainer.h"
+#include "MediaDecoder.h"
+#include "MediaShutdownManager.h"
+#include "MediaTimer.h"
+#include "MediaTrackGraph.h"
+#include "PerformanceRecorder.h"
+#include "ReaderProxy.h"
+#include "TimeUnits.h"
+#include "VideoSegment.h"
+#include "VideoUtils.h"
 #include "mediasink/AudioSink.h"
 #include "mediasink/AudioSinkWrapper.h"
 #include "mediasink/DecodedStream.h"
@@ -17,30 +31,16 @@
 #include "mozilla/NotNull.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/ProfilerLabels.h"
-#include "mozilla/ProfilerMarkers.h"
 #include "mozilla/ProfilerMarkerTypes.h"
+#include "mozilla/ProfilerMarkers.h"
 #include "mozilla/SharedThreadPool.h"
 #include "mozilla/Sprintf.h"
 #include "mozilla/StaticPrefs_media.h"
-#include "mozilla/Telemetry.h"
 #include "mozilla/TaskQueue.h"
-
+#include "mozilla/Telemetry.h"
 #include "nsIMemoryReporter.h"
 #include "nsPrintfCString.h"
 #include "nsTArray.h"
-#include "AudioSegment.h"
-#include "DOMMediaStream.h"
-#include "ImageContainer.h"
-#include "MediaDecoder.h"
-#include "MediaDecoderStateMachine.h"
-#include "MediaShutdownManager.h"
-#include "MediaTrackGraph.h"
-#include "MediaTimer.h"
-#include "PerformanceRecorder.h"
-#include "ReaderProxy.h"
-#include "TimeUnits.h"
-#include "VideoSegment.h"
-#include "VideoUtils.h"
 
 namespace mozilla {
 
@@ -934,7 +934,8 @@ class MediaDecoderStateMachine::LoopingDecodingState
              ? mMaster->mVideoTrackDecodedDuration->ToMicroseconds()
              : 0,
          mDataWaitingTimestampAdjustment
-             ? MediaData::TypeToStr(mDataWaitingTimestampAdjustment->mType)
+             ? MediaData::EnumValueToString(
+                   mDataWaitingTimestampAdjustment->mType)
              : "none");
     if (ShouldDiscardLoopedData(MediaData::Type::AUDIO_DATA)) {
       DiscardLoopedData(MediaData::Type::AUDIO_DATA);
@@ -1485,8 +1486,8 @@ class MediaDecoderStateMachine::LoopingDecodingState
     MOZ_ASSERT(!mDataWaitingTimestampAdjustment);
     mDataWaitingTimestampAdjustment = aData;
     SLOG("put %s [%" PRId64 ",%" PRId64 "] on waiting",
-         MediaData::TypeToStr(aData->mType), aData->mTime.ToMicroseconds(),
-         aData->GetEndTime().ToMicroseconds());
+         MediaData::EnumValueToString(aData->mType),
+         aData->mTime.ToMicroseconds(), aData->GetEndTime().ToMicroseconds());
     MaybeStopPrerolling();
   }
 
@@ -1999,7 +2000,7 @@ class MediaDecoderStateMachine::AccurateSeekingState
 
     if (aReject.mError == NS_ERROR_DOM_MEDIA_WAITING_FOR_DATA) {
       SLOG("OnSeekRejected reason=WAITING_FOR_DATA type=%s",
-           MediaData::TypeToStr(aReject.mType));
+           MediaData::EnumValueToString(aReject.mType));
       MOZ_ASSERT_IF(aReject.mType == MediaData::Type::AUDIO_DATA,
                     !mMaster->IsRequestingAudioData());
       MOZ_ASSERT_IF(aReject.mType == MediaData::Type::VIDEO_DATA,
@@ -3834,7 +3835,7 @@ void MediaDecoderStateMachine::PlayStateChanged() {
                       MEDIA_PLAYBACK);
   PROFILER_MARKER_TEXT(
       "MDSM::PlayStateChanged", MEDIA_PLAYBACK, {},
-      nsPrintfCString("%s", MediaDecoder::ToPlayStateStr(mPlayState.Ref())));
+      nsPrintfCString("%s", MediaDecoder::EnumValueToString(mPlayState.Ref())));
   MOZ_ASSERT(OnTaskQueue());
 
   if (mPlayState != MediaDecoder::PLAY_STATE_PLAYING) {

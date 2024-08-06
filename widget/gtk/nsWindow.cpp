@@ -3122,6 +3122,18 @@ void nsWindow::SetFocus(Raise aRaise, mozilla::dom::CallerType aCallerType) {
             return t;
           }
         }
+#if defined(MOZ_X11)
+        // If it's X11 and there's a startup token, use GDK_CURRENT_TIME, so
+        // gtk_window_present_with_time will pull the timestamp from the startup
+        // token.
+        if (GdkIsX11Display()) {
+          nsGTKToolkit* toolkit = nsGTKToolkit::GetToolkit();
+          const auto& startupToken = toolkit->GetStartupToken();
+          if (!startupToken.IsEmpty()) {
+            return static_cast<uint32_t>(GDK_CURRENT_TIME);
+          }
+        }
+#endif
         return GetLastUserInputTime();
       }();
 
@@ -4638,15 +4650,7 @@ void nsWindow::DispatchContextMenuEventFromMouseEvent(
     uint16_t domButton, GdkEventButton* aEvent,
     const LayoutDeviceIntPoint& aRefPoint) {
   if (domButton == MouseButton::eSecondary && MOZ_LIKELY(!mIsDestroyed)) {
-    Maybe<WidgetPointerEvent> pointerEvent;
-    Maybe<WidgetMouseEvent> mouseEvent;
-    if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-      pointerEvent.emplace(true, eContextMenu, this);
-    } else {
-      mouseEvent.emplace(true, eContextMenu, this, WidgetMouseEvent::eReal);
-    }
-    WidgetMouseEvent& contextMenuEvent =
-        pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+    WidgetPointerEvent contextMenuEvent(true, eContextMenu, this);
     InitButtonEvent(contextMenuEvent, aEvent, aRefPoint);
     contextMenuEvent.mPressure = mLastMotionPressure;
     DispatchInputEvent(&contextMenuEvent);
@@ -10279,5 +10283,6 @@ UniquePtr<MozContainerSurfaceLock> nsWindow::LockSurface() {
   if (mIsDestroyed) {
     return nullptr;
   }
+  LOG_WAYLAND("nsWindow::LockSurface()");
   return MakeUnique<MozContainerSurfaceLock>(mContainer);
 }

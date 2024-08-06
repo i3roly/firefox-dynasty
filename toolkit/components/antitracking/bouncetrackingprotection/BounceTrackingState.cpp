@@ -270,7 +270,8 @@ bool BounceTrackingState::ShouldTrackPrincipal(nsIPrincipal* aPrincipal) {
 
 // static
 nsresult BounceTrackingState::HasBounceTrackingStateForSite(
-    const nsACString& aSiteHost, bool& aResult) {
+    const nsACString& aSiteHost, const OriginAttributes& aOriginAttributes,
+    bool& aResult) {
   aResult = false;
   NS_ENSURE_TRUE(aSiteHost.Length(), NS_ERROR_FAILURE);
 
@@ -288,6 +289,13 @@ nsresult BounceTrackingState::HasBounceTrackingStateForSite(
     }
     RefPtr<BounceTrackingState> state(btsWeak);
 
+    // Skip BTS of unrelated OA. These are not relevant for the caller as their
+    // state is isolated.
+    if (state->mOriginAttributes != aOriginAttributes) {
+      continue;
+    }
+
+    // For each active BTS get the current window's document principal.
     RefPtr<dom::BrowsingContext> browsingContext =
         state->CurrentBrowsingContext();
 
@@ -296,26 +304,20 @@ nsresult BounceTrackingState::HasBounceTrackingStateForSite(
       continue;
     }
 
-    RefPtr<dom::Element> embedderElement =
-        browsingContext->GetEmbedderElement();
-    if (!embedderElement) {
+    RefPtr<dom::WindowGlobalParent> currentWindow =
+        browsingContext->Canonical()->GetCurrentWindowGlobal();
+    if (!currentWindow) {
       continue;
     }
 
-    nsCOMPtr<nsIBrowser> browser = embedderElement->AsBrowser();
-    if (!browser) {
+    nsCOMPtr<nsIPrincipal> principal = currentWindow->DocumentPrincipal();
+    if (NS_WARN_IF(!principal)) {
       continue;
     }
 
-    nsCOMPtr<nsIPrincipal> contentPrincipal;
-    nsresult rv =
-        browser->GetContentPrincipal(getter_AddRefs(contentPrincipal));
-    if (NS_WARN_IF(NS_FAILED(rv))) {
-      continue;
-    }
-
+    // Lastly, check if the site matches.
     nsAutoCString baseDomain;
-    rv = contentPrincipal->GetBaseDomain(baseDomain);
+    nsresult rv = principal->GetBaseDomain(baseDomain);
     if (NS_WARN_IF(NS_FAILED(rv))) {
       continue;
     }

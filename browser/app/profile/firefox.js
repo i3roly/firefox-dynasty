@@ -866,6 +866,20 @@ pref("permissions.desktop-notification.notNow.enabled", false);
 
 pref("permissions.fullscreen.allowed", false);
 
+#ifdef MOZ_WEBRTC
+  // When users grant camera or microphone through a permission prompt
+  // and leave "☐ Remember this decision" unchecked, Gecko persists
+  // their choice to "Always ask" for this permission going forward.
+  // This is exposed to websites through the permissions.query() API
+  // as "granted", to ward off well-meaning attempts to further escalate
+  // permission to always grant, to help sites respect this user choice.
+  //
+  // By default, these permissions are only visible in Tools / Page Info.
+  // But turning this pref on also makes them show up as "Always Ask ✖"
+  // in the more prominent site permissions dropdown.
+  pref("permissions.media.show_always_ask.enabled", false);
+#endif
+
 // Force external link opens into the default user context ID instead of guessing
 // the most appropriate one based on the URL (https://bugzilla.mozilla.org/show_bug.cgi?id=1874599#c8)
 pref("browser.link.force_default_user_context_id_for_external_opens", false);
@@ -958,11 +972,7 @@ pref("browser.tabs.tooltipsShowPidAndActiveness", true);
 pref("browser.tabs.tooltipsShowPidAndActiveness", false);
 #endif
 
-#ifdef NIGHTLY_BUILD
 pref("browser.tabs.hoverPreview.enabled", true);
-#else
-pref("browser.tabs.hoverPreview.enabled", false);
-#endif
 pref("browser.tabs.hoverPreview.showThumbnails", true);
 
 pref("browser.tabs.firefox-view.logLevel", "Warn");
@@ -1738,13 +1748,8 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-weather-config",
 pref("browser.newtabpage.activity-stream.discoverystream.locale-weather-config", "en-US,en-GB,en-CA");
 
 // Preference to enable wallpaper selection in the Customize Menu of new tab page
-#ifdef NIGHTLY_BUILD
-  pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
-  pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true);
-#else
-  pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", false);
-  pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", false);
-#endif
+pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
+pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true);
 
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
@@ -1844,12 +1849,24 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-stories-block", 
 pref("browser.newtabpage.activity-stream.discoverystream.region-stories-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
 // List of regions that support the new recommendations BFF, also requires region-stories-config
 pref("browser.newtabpage.activity-stream.discoverystream.region-bff-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
-// Using merino for recommendations in nightly only
-#ifdef NIGHTLY_BUILD
+
+// Merino & topic selection related prefs in nightly only
+#if defined(EARLY_BETA_OR_EARLIER)
   pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", true);
+  // List of regions that get topics selection by default.
+  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "US, CA");
+  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", true);
 #else
   pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", false);
+  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "");
+  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", false);
 #endif
+
+// List of locales that get topics selection by default.
+pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.locale-topics-config", "en-US, en-GB, en-CA");
+// System pref to enable topic labels on Pocket cards
+pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.enabled", true);
+
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
 // List of regions that get spocs by default.
 pref("browser.newtabpage.activity-stream.discoverystream.region-spocs-config", "US,CA,DE,GB,FR,IT,ES");
@@ -1870,23 +1887,22 @@ pref("browser.newtabpage.activity-stream.discoverystream.recs.personalized", fal
 // System pref to allow Pocket sponsored content personalization to be turned on/off.
 pref("browser.newtabpage.activity-stream.discoverystream.spocs.personalized", true);
 
-// System pref to enable topic selection for Pocket feed
-pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.enabled", false);
-// System pref to enable topic labels on Pocket cards
-pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.enabled", false);
-
 // Flip this once the user has dismissed the Pocket onboarding experience,
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.dismissed", false);
 pref("browser.newtabpage.activity-stream.discoverystream.onboardingExperience.enabled", false);
 
-// Allow users to give thumbs up/down on recommended stories
-#ifdef NIGHTLY_BUILD
-  pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.enabled", true);
-  pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.searchTopsitesCompact", true);
+// List of locales that get thumbs up/down on recommended stories by default.
+pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.locale-thumbs-config", "en-US, en-GB, en-CA");
+
+// List of regions that get thumbs up/down on recommended stories by default.
+#ifdef EARLY_BETA_OR_EARLIER
+  pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.region-thumbs-config", "US, CA");
 #else
-  pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.enabled", false);
-  pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.searchTopsitesCompact", false);
+  pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.region-thumbs-config", "");
 #endif
+
+// Shows users compact layout of Home New Tab page. Also requires region-thumbs-config.
+pref("browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.searchTopsitesCompact", true);
 
 // User pref to show stories on newtab (feeds.system.topstories has to be set to true as well)
 pref("browser.newtabpage.activity-stream.feeds.section.topstories", true);
@@ -1952,12 +1968,17 @@ pref("sidebar.visibility", "always-show");
 pref("browser.ml.chat.enabled", false);
 pref("browser.ml.chat.hideLocalhost", true);
 pref("browser.ml.chat.prompt.prefix", 'I’m on page "%tabTitle%" with "%selection|12000%" selected. ');
-pref("browser.ml.chat.prompts.0", '{"label":"Summarize","value":"Please summarize the selection using precise and concise language. Use headers and bulleted lists in the summary, to make it scannable. Maintain the meaning and factual accuracy.","id":"summarize"}');
-pref("browser.ml.chat.prompts.1", '{"label":"Simplify Language","value":"Please rewrite the selection in plain, clear language suitable for a general audience without specialized knowledge. Use all of the following tactics: simple vocabulary; short sentences; active voice; headers and bulleted lists for scannability. Maintain meaning and factual accuracy.","id":"simplify"}');
-pref("browser.ml.chat.prompts.2", '{"label":"Quiz Me","value":"Please quiz me on this selection. Ask me a variety of types of questions, for example multiple choice, true or false, and short answer. Wait for my response before moving on to the next question.","id":"quiz","targeting":"!provider|regExpMatch(\'gemini\')"}');
+pref("browser.ml.chat.prompts.0", '{"id":"summarize","l10nId":"genai-prompts-summarize"}');
+pref("browser.ml.chat.prompts.1", '{"id":"simplify","l10nId":"genai-prompts-simplify"}');
+pref("browser.ml.chat.prompts.2", '{"id":"quiz","l10nId":"genai-prompts-quiz","targeting":"!provider|regExpMatch(\'gemini\')"}');
+pref("browser.ml.chat.prompts.3", '{"id":"explain","l10nId":"genai-prompts-explain","targeting":"channel==\'nightly\'"}');
 pref("browser.ml.chat.provider", "");
-pref("browser.ml.chat.shortcuts", false);
+pref("browser.ml.chat.shortcuts", true);
+#ifdef NIGHTLY_BUILD
+pref("browser.ml.chat.shortcuts.custom", true);
+#else
 pref("browser.ml.chat.shortcuts.custom", false);
+#endif
 pref("browser.ml.chat.sidebar", true);
 
 pref("security.protectionspopup.recordEventTelemetry", true);
@@ -2045,7 +2066,7 @@ pref("identity.fxaccounts.commands.remoteTabManagement.enabled", true);
 
 // Controls whether or not the client association ping has values set on it
 // when the sync-ui-state:update notification fires.
-pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", true);
+pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", false);
 
 // Note: when media.gmp-*.visible is true, provided we're running on a
 // supported platform/OS version, the corresponding CDM appears in the
@@ -2079,6 +2100,7 @@ pref("media.videocontrols.picture-in-picture.video-toggle.enabled", true);
 pref("media.videocontrols.picture-in-picture.video-toggle.visibility-threshold", "1.0");
 pref("media.videocontrols.picture-in-picture.keyboard-controls.enabled", true);
 pref("media.videocontrols.picture-in-picture.urlbar-button.enabled", true);
+pref("media.videocontrols.picture-in-picture.enable-when-switching-tabs.enabled", false);
 
 // TODO (Bug 1817084) - This pref is used for managing translation preferences
 // in the Firefox Translations addon. It should be removed when the addon is

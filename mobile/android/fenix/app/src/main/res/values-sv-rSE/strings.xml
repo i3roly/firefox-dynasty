@@ -261,7 +261,7 @@
     <!-- Browser menu button to show reader view appearance controls e.g. the used font type and size -->
     <string name="browser_menu_customize_reader_view">Anpassa läsvyn</string>
     <!-- Browser menu button to show reader view appearance controls e.g. the used font type and size -->
-    <string name="browser_menu_customize_reader_view_2">Anpassa läsarvyn</string>
+    <string name="browser_menu_customize_reader_view_2">Anpassa läsvyn</string>
     <!-- Browser menu label for adding a bookmark -->
     <string name="browser_menu_add">Lägg till</string>
     <!-- Browser menu label for editing a bookmark -->
@@ -294,10 +294,16 @@
     <string name="browser_menu_switch_to_mobile_site">Växla till mobil webbplats</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Verktyg</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Läsvy, översätt, skriv ut, dela, öppna app</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Läsvy, skriv ut, dela, öppna app</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Spara</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Lägg till bokmärke, genväg, hem, samling, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Bokmärk denna sida</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -1109,7 +1115,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Samlingsnamn</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Byt namn</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Byt namn</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Ta bort</string>
 
@@ -1240,6 +1246,17 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Ange söktermer</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Navigera bakåt</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">Lägg till en ny mapp</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Stäng bokmärken</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Sök bokmärken</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">Objektmeny för %s</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2196,8 +2213,10 @@
     <string name="top_sites_rename_dialog_title">Namn</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Genvägsnamn</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">Genvägs-URL</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">OK</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">OK</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">Avbryt</string>
 
@@ -2207,6 +2226,17 @@
     <string name="top_sites_menu_sponsor_privacy">Våra sponsorer &amp; din integritet</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Sponsrad</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Redigera</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Redigera genväg</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Spara</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Ange en giltig webbadress</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->

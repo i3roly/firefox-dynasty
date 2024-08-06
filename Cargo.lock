@@ -263,13 +263,13 @@ dependencies = [
  "libc",
  "log",
  "mach",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
 name = "audioipc2"
 version = "0.6.0"
-source = "git+https://github.com/mozilla/audioipc?rev=3495905752a4263827f5d43737f9ca3ed0243ce0#3495905752a4263827f5d43737f9ca3ed0243ce0"
+source = "git+https://github.com/mozilla/audioipc?rev=c200b1efa8d4a567b875b46ce7c395ca172fae5b#c200b1efa8d4a567b875b46ce7c395ca172fae5b"
 dependencies = [
  "arrayvec",
  "ashmem",
@@ -284,20 +284,20 @@ dependencies = [
  "iovec",
  "libc",
  "log",
- "memmap2 0.9.3",
+ "memmap2",
  "mio",
  "scopeguard",
  "serde",
  "serde_bytes",
  "serde_derive",
  "slab",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
 name = "audioipc2-client"
 version = "0.6.0"
-source = "git+https://github.com/mozilla/audioipc?rev=3495905752a4263827f5d43737f9ca3ed0243ce0#3495905752a4263827f5d43737f9ca3ed0243ce0"
+source = "git+https://github.com/mozilla/audioipc?rev=c200b1efa8d4a567b875b46ce7c395ca172fae5b#c200b1efa8d4a567b875b46ce7c395ca172fae5b"
 dependencies = [
  "audio_thread_priority",
  "audioipc2",
@@ -308,7 +308,7 @@ dependencies = [
 [[package]]
 name = "audioipc2-server"
 version = "0.6.0"
-source = "git+https://github.com/mozilla/audioipc?rev=3495905752a4263827f5d43737f9ca3ed0243ce0#3495905752a4263827f5d43737f9ca3ed0243ce0"
+source = "git+https://github.com/mozilla/audioipc?rev=c200b1efa8d4a567b875b46ce7c395ca172fae5b#c200b1efa8d4a567b875b46ce7c395ca172fae5b"
 dependencies = [
  "audio_thread_priority",
  "audioipc2",
@@ -321,9 +321,9 @@ dependencies = [
 
 [[package]]
 name = "authenticator"
-version = "0.4.0-alpha.24"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be346361f2602704c3a48d71530df852a59558b9774a144432d91fdfe775f298"
+checksum = "253b4c27b89127df34b7037a462305affda8ec85b32d7a0b799484796a3cdc85"
 dependencies = [
  "base64 0.21.3",
  "bitflags 1.999.999",
@@ -702,6 +702,7 @@ dependencies = [
  "byteorder",
  "crossbeam-utils",
  "cstr",
+ "firefox-on-glean",
  "log",
  "moz_task",
  "nserror",
@@ -1047,7 +1048,7 @@ dependencies = [
  "unic-langid",
  "uuid",
  "warp",
- "windows-sys 0.52.0",
+ "windows-sys",
  "yaml-rust",
  "zip",
 ]
@@ -1701,7 +1702,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a258e46cdc063eb8519c00b9fc845fc47bcfca4130e2f08e88665ceda8474245"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1790,9 +1791,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
+checksum = "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
 
 [[package]]
 name = "ffi-support"
@@ -2175,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "geckodriver"
-version = "0.34.0"
+version = "0.35.0"
 dependencies = [
  "anyhow",
  "base64 0.21.3",
@@ -2680,12 +2681,7 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee512640fe35acbfb4bb779db6f0d80704c2cacfa2e39b601ef3e3f47d1ae4c7"
-dependencies = [
- "libc",
-]
+version = "0.3.999"
 
 [[package]]
 name = "hex"
@@ -3378,7 +3374,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.999",
+ "windows-targets",
 ]
 
 [[package]]
@@ -3564,16 +3560,16 @@ dependencies = [
 [[package]]
 name = "mapped_hyph"
 version = "0.4.3"
-source = "git+https://github.com/jfkthame/mapped_hyph.git?rev=c7651a0cffff41996ad13c44f689bd9cd2192c01#c7651a0cffff41996ad13c44f689bd9cd2192c01"
+source = "git+https://github.com/jfkthame/mapped_hyph.git?rev=eff105f6ad7ec9b79816cfc1985a28e5340ad14b#eff105f6ad7ec9b79816cfc1985a28e5340ad14b"
 dependencies = [
  "arrayref",
  "log",
- "memmap2 0.5.999",
+ "memmap2",
 ]
 
 [[package]]
 name = "marionette"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3618,20 +3614,6 @@ name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
-
-[[package]]
-name = "memmap2"
-version = "0.5.999"
-dependencies = [
- "memmap2 0.8.999",
-]
-
-[[package]]
-name = "memmap2"
-version = "0.8.999"
-dependencies = [
- "memmap2 0.9.3",
-]
 
 [[package]]
 name = "memmap2"
@@ -3752,7 +3734,7 @@ dependencies = [
  "libc",
  "log",
  "mach2",
- "memmap2 0.9.3",
+ "memmap2",
  "memoffset 0.9.0",
  "minidump-common",
  "nix 0.28.0",
@@ -3779,13 +3761,15 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.8"
-source = "git+https://github.com/glandium/mio?rev=9a2ef335c366044ffe73b1c4acabe50a1daefe05#9a2ef335c366044ffe73b1c4acabe50a1daefe05"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4569e456d394deccd22ce1c1913e6ea0e54519f577285001215d33557431afe4"
 dependencies = [
+ "hermit-abi",
  "libc",
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -3845,7 +3829,7 @@ version = "0.1.0"
 
 [[package]]
 name = "mozdevice"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "log",
  "once_cell",
@@ -3879,6 +3863,7 @@ dependencies = [
  "chrono",
  "clap",
  "core-foundation-sys",
+ "crossbeam-utils",
  "dist-bin",
  "env_logger",
  "flate2",
@@ -3891,13 +3876,16 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "getrandom",
+ "glean",
  "hashbrown 0.13.999",
  "hex",
  "hyper",
  "icu_locid",
+ "icu_properties",
  "indexmap 2.2.6",
  "itertools",
  "libc",
+ "lmdb-rkv-sys",
  "log",
  "memchr",
  "mio",
@@ -3909,6 +3897,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
+ "rkv",
  "scopeguard",
  "scroll",
  "semver",
@@ -3928,10 +3917,11 @@ dependencies = [
  "unic-langid",
  "unic-langid-impl",
  "unicode-bidi",
+ "uniffi",
  "url",
  "uuid",
  "winapi",
- "windows-sys 0.52.0",
+ "windows-sys",
  "xml-rs",
  "yoke",
  "zerofrom",
@@ -3941,7 +3931,7 @@ dependencies = [
 
 [[package]]
 name = "mozprofile"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "tempfile",
  "thiserror",
@@ -3949,7 +3939,7 @@ dependencies = [
 
 [[package]]
 name = "mozrunner"
-version = "0.15.2"
+version = "0.15.3"
 dependencies = [
  "dirs",
  "log",
@@ -3972,7 +3962,7 @@ dependencies = [
 
 [[package]]
 name = "mozversion"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "regex",
  "rust-ini",
@@ -3991,7 +3981,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -4304,9 +4294,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.15"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",
@@ -4314,9 +4304,9 @@ dependencies = [
 
 [[package]]
 name = "num_cpus"
-version = "1.15.0"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fac9e2da13b5eb447a6ce3d392f23a29d8694bff781bf03a16cd9ac8697593b"
+checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
 dependencies = [
  "hermit-abi",
  "libc",
@@ -4452,15 +4442,15 @@ dependencies = [
 
 [[package]]
 name = "parking_lot_core"
-version = "0.9.9"
+version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c42a9226546d68acdd9c0a280d17ce19bfe27a46bf68784e4066115788d008e"
+checksum = "1e401f977ab385c9e4e3ab30627d6f26d00e2c73eef317493c4ec6d468726cf8"
 dependencies = [
  "cfg-if",
  "libc",
  "redox_syscall",
  "smallvec",
- "windows-targets 0.48.999",
+ "windows-targets",
 ]
 
 [[package]]
@@ -4578,9 +4568,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.9"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0a7ae3ac2f1173085d398531c705756c94a4c56843785df85a60c1a0afac116"
+checksum = "bda66fc9667c18cb2758a2ac84d1167245054bcf85d5d1aaa6923f45801bdd02"
 
 [[package]]
 name = "pin-utils"
@@ -4695,7 +4685,7 @@ dependencies = [
  "mozilla-central-workspace-hack",
  "scroll",
  "thiserror",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -4731,7 +4721,7 @@ dependencies = [
 name = "profiler_helper"
 version = "0.1.0"
 dependencies = [
- "memmap2 0.9.3",
+ "memmap2",
  "object",
  "rustc-demangle",
  "thin-vec",
@@ -4820,7 +4810,7 @@ dependencies = [
  "libc",
  "once_cell",
  "socket2 0.5.7",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -4905,7 +4895,7 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.4.999"
+version = "0.5.999"
 
 [[package]]
 name = "redox_users"
@@ -5144,15 +5134,15 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.28"
+version = "0.38.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72e572a5e8ca657d7366229cdde4bd14c4eb5499a9573d4d366fe1b599daa316"
+checksum = "70dc5ec042f7a43c4a73241207cecc9873a06d45debb38b329f8541d85c2730f"
 dependencies = [
  "bitflags 2.6.0",
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -5486,7 +5476,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce305eb0b4296696835b71df73eb912e0f1ffd2556a501fcede6e0c50349191c"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -5800,15 +5790,14 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.9.0"
+version = "3.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01ce4141aa927a6d1bd34a041795abd0db1cccba5d5f24b009f694bdf3a1f3fa"
+checksum = "85b77fafb263dd9d05cbeac119526425676db3784113aa9295c88498cbf8bff1"
 dependencies = [
  "cfg-if",
  "fastrand",
- "redox_syscall",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -5954,27 +5943,25 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.29.1"
+version = "1.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "532826ff75199d5833b9d2c5fe410f29235e25704ee5f0ef599fb51c21f4a4da"
+checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
 dependencies = [
- "autocfg",
  "backtrace",
  "bytes",
  "libc",
  "mio",
- "num_cpus",
  "pin-project-lite",
- "socket2 0.4.999",
+ "socket2 0.5.7",
  "tokio-macros",
- "windows-sys 0.48.999",
+ "windows-sys",
 ]
 
 [[package]]
 name = "tokio-macros"
-version = "2.1.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
+checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6598,7 +6585,7 @@ version = "0.3.100"
 
 [[package]]
 name = "webdriver"
-version = "0.50.0"
+version = "0.51.0"
 dependencies = [
  "base64 0.21.3",
  "bytes",
@@ -6740,6 +6727,7 @@ dependencies = [
  "objc",
  "rayon",
  "remove_dir_all",
+ "static_prefs",
  "swgl",
  "thin-vec",
  "tracy-rs",
@@ -6918,7 +6906,7 @@ version = "0.52.0"
 dependencies = [
  "mozbuild",
  "windows-core",
- "windows-targets 0.52.999",
+ "windows-targets",
 ]
 
 [[package]]
@@ -6927,14 +6915,7 @@ version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9"
 dependencies = [
- "windows-targets 0.52.999",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.48.999"
-dependencies = [
- "windows-sys 0.52.0",
+ "windows-targets",
 ]
 
 [[package]]
@@ -6943,14 +6924,7 @@ version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
 dependencies = [
- "windows-targets 0.52.999",
-]
-
-[[package]]
-name = "windows-targets"
-version = "0.48.999"
-dependencies = [
- "windows-targets 0.52.999",
+ "windows-targets",
 ]
 
 [[package]]
@@ -7170,9 +7144,9 @@ dependencies = [
 
 [[package]]
 name = "zerovec"
-version = "0.10.2"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb2cc8827d6c0994478a15c53f374f46fbd41bea663d809b14744bc42e6b109c"
+checksum = "aa2b893d79df23bfb12d5461018d408ea19dfafe76c2c7ef6d4eba614f8ff079"
 dependencies = [
  "yoke",
  "zerofrom",

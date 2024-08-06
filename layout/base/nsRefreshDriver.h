@@ -371,8 +371,6 @@ class nsRefreshDriver final : public mozilla::layers::TransactionIdAllocator,
   static void DispatchIdleTaskAfterTickUnlessExists(mozilla::Task* aTask);
   static void CancelIdleTask(mozilla::Task* aTask);
 
-  void NotifyDOMContentLoaded();
-
   // Schedule a refresh so that any delayed events will run soon.
   void RunDelayedEventsSoon();
 
@@ -488,7 +486,13 @@ class nsRefreshDriver final : public mozilla::layers::TransactionIdAllocator,
   void UpdateAnimationsAndSendEvents();
 
   MOZ_CAN_RUN_SCRIPT
-  void RunFrameRequestCallbacks(mozilla::TimeStamp aNowTime);
+  void RunVideoAndFrameRequestCallbacks(mozilla::TimeStamp aNowTime);
+  MOZ_CAN_RUN_SCRIPT
+  void RunVideoFrameCallbacks(const nsTArray<RefPtr<mozilla::dom::Document>>&,
+                              mozilla::TimeStamp aNowTime);
+  MOZ_CAN_RUN_SCRIPT
+  void RunFrameRequestCallbacks(const nsTArray<RefPtr<mozilla::dom::Document>>&,
+                                mozilla::TimeStamp aNowTime);
   void UpdateIntersectionObservations(mozilla::TimeStamp aNowTime);
   void UpdateRelevancyOfContentVisibilityAutoFrames();
   MOZ_CAN_RUN_SCRIPT void
@@ -540,6 +544,9 @@ class nsRefreshDriver final : public mozilla::layers::TransactionIdAllocator,
   void UpdateAnimatedImages(mozilla::TimeStamp aPreviousRefresh,
                             mozilla::TimeStamp aNowTime);
 
+  bool HasReasonsToTick() const {
+    return GetReasonsToTick() != TickReasons::eNone;
+  }
   TickReasons GetReasonsToTick() const;
   void AppendTickReasonsToString(TickReasons aReasons, nsACString& aStr) const;
 
@@ -626,9 +633,6 @@ class nsRefreshDriver final : public mozilla::layers::TransactionIdAllocator,
   // next tick by the refresh driver. This flag will be reset at the
   // start of every tick.
   bool mResizeSuppressed : 1;
-
-  // True if the next tick should notify DOMContentFlushed.
-  bool mNotifyDOMContentFlushed : 1;
 
   // True if we need to flush in order to update intersection observations in
   // all our documents.

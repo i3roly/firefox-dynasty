@@ -46,10 +46,26 @@ experimental-features-ime-search =
     .label = Address Bar: show results during IME composition
 experimental-features-ime-search-description = An IME (Input Method Editor) is a tool that allows you to enter complex symbols, such as those used in East Asian or Indic written languages, using a standard keyboard. Enabling this experiment will keep the address bar panel open, showing search results and suggestions, while using IME to input text. Note that the IME might display a panel that covers the address bar results, therefore this preference is only suggested for IME not using this type of panel.
 
+# Auto Picture-in-Picture
+experimental-features-auto-pip =
+    .label = Picture-in-Picture: auto-open on tab switch
+experimental-features-auto-pip-description = Enable Picture-in-Picture on active videos when switching tabs.
 
-experimental-features-group-browsing =
-  .label = Browsing
+genai-settings-chat-title =
+    .label = AI chatbot
+
+# Updated sidebar settings
+sidebar-title =
+    .label = Sidebar
+sidebar-description = Easily access your history, tabs from other devices, sidebar extensions, and more as you browse. <a data-l10n-name="connect">Share feedback</a>
+vertical-tabs-title =
+    .label = Vertical tabs
+vertical-tabs-description = Move your tabs from the top of the browser to the side. Requires you also try the sidebar. <a data-l10n-name="connect">Share feedback</a>
+
 experimental-features-group-developer-tools =
   .label = Developer Tools
 experimental-features-group-webpage-display =
   .label = Webpage Display
+experimental-features-group-customize-browsing =
+  .label = Customize your browsing
+experimental-features-group-customize-browsing-description = If you try these features, <a data-l10n-name="connect">share your thoughts on Connect</a>

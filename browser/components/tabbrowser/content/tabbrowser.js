@@ -346,6 +346,12 @@
       return (this.tabpanels = document.getElementById("tabbrowser-tabpanels"));
     },
 
+    get verticalPinnedTabsContainer() {
+      return (this.verticalPinnedTabsContainer = document.getElementById(
+        "vertical-pinned-tabs-container"
+      ));
+    },
+
     addEventListener(...args) {
       this.tabpanels.addEventListener(...args);
     },
@@ -841,7 +847,14 @@
       }
 
       this.showTab(aTab);
-      this.moveTabTo(aTab, this._numPinnedTabs);
+      if (this.tabContainer.verticalMode) {
+        let wasFocused = document.activeElement == this.selectedTab;
+        let oldPosition = aTab._tPos;
+        this.verticalPinnedTabsContainer.appendChild(aTab);
+        this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+      } else {
+        this.moveTabTo(aTab, this._numPinnedTabs);
+      }
       aTab.setAttribute("pinned", "true");
       this._updateTabBarForPinnedTabs();
       this._notifyPinnedStatus(aTab);
@@ -852,8 +865,19 @@
         return;
       }
 
-      this.moveTabTo(aTab, this._numPinnedTabs - 1);
-      aTab.removeAttribute("pinned");
+      if (this.tabContainer.verticalMode) {
+        let wasFocused = document.activeElement == this.selectedTab;
+        let oldPosition = aTab._tPos;
+        // we remove this attribute first, so that allTabs represents
+        // the moving of a tab from the vertical pinned tabs container
+        // and back into arrowscrollbox.
+        aTab.removeAttribute("pinned");
+        this.tabContainer.arrowScrollbox.prepend(aTab);
+        this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+      } else {
+        this.moveTabTo(aTab, this._numPinnedTabs - 1);
+        aTab.removeAttribute("pinned");
+      }
       aTab.style.marginInlineStart = "";
       aTab._pinnedUnscrollable = false;
       this._updateTabBarForPinnedTabs();
@@ -2715,7 +2739,8 @@
       }
       let openerTab =
         (openerBrowser && this.getTabForBrowser(openerBrowser)) ||
-        (relatedToCurrent && this.selectedTab);
+        (relatedToCurrent && this.selectedTab) ||
+        null;
 
       // When overflowing, new tabs are scrolled into view smoothly, which
       // doesn't go well together with the width transition. So we skip the
@@ -2896,6 +2921,15 @@
         this.selectedTab = t;
       }
       return t;
+    },
+
+    addTabGroup(color, label = "") {
+      let group = document.createXULElement("tab-group", { is: "tab-group" });
+      group.id = `${Date.now()}-${Math.round(Math.random() * 100)}`;
+      group.color = color;
+      group.label = label;
+      this.tabContainer.appendChild(group);
+      return group;
     },
 
     _determineURIToLoad(uriString, createLazyBrowser) {
@@ -4544,30 +4578,28 @@
       }
     },
     /**
-     * Closes tabs within the browser that match a given list of nsURIs. Returns
-     * any nsURIs that could not be closed successfully. This does not close any
-     * tabs that have a beforeUnload prompt
+     * Closes all tabs matching the list of nsURIs.
+     * This does not close any tabs that have a beforeUnload prompt.
      *
      * @param {nsURI[]} urisToClose
      *   The set of uris to remove.
-     * @returns {nsURI[]}
-     *  the nsURIs that weren't found in this browser
+     * @returns {number} The count of successfully closed tabs.
      */
     async closeTabsByURI(urisToClose) {
-      let remainingURIsToClose = [...urisToClose];
       let tabsToRemove = [];
       for (let tab of this.tabs) {
         let currentURI = tab.linkedBrowser.currentURI;
         // Find any URI that matches the current tab's URI
-        const matchedIndex = remainingURIsToClose.findIndex(uriToClose =>
+        const matchedIndex = urisToClose.findIndex(uriToClose =>
           uriToClose.equals(currentURI)
         );
 
         if (matchedIndex > -1) {
           tabsToRemove.push(tab);
-          remainingURIsToClose.splice(matchedIndex, 1); // Remove the matched URI
         }
       }
+
+      let closedCount = 0;
 
       if (tabsToRemove.length) {
         const { beforeUnloadComplete, lastToClose } = this._startRemoveTabs(
@@ -4584,14 +4616,16 @@
         // Wait for the beforeUnload handlers to complete.
         await beforeUnloadComplete;
 
+        closedCount = tabsToRemove.length - (lastToClose ? 1 : 0);
+
         // _startRemoveTabs doesn't close the last tab in the window
         // for this use case, we simply close it
         if (lastToClose) {
           this.removeTab(lastToClose);
+          closedCount++;
         }
       }
-      // If we still have uris, that means we couldn't find them in this window instance
-      return remainingURIsToClose;
+      return closedCount;
     },
 
     /**
@@ -5076,6 +5110,9 @@
 
       this.tabContainer._updateCloseButtons();
       this.tabContainer._updateHiddenTabsStatus();
+      if (aTab.multiselected) {
+        this._updateMultiselectedTabCloseButtonTooltip();
+      }
 
       let event = document.createEvent("Events");
       event.initEvent("TabShow", true, false);
@@ -5099,6 +5136,9 @@
 
       this.tabContainer._updateCloseButtons();
       this.tabContainer._updateHiddenTabsStatus();
+      if (aTab.multiselected) {
+        this._updateMultiselectedTabCloseButtonTooltip();
+      }
 
       // Splice this tab out of any lines of succession before any events are
       // dispatched.
@@ -5286,11 +5326,40 @@
 
       let wasFocused = document.activeElement == this.selectedTab;
 
-      aIndex = aIndex < aTab._tPos ? aIndex : aIndex + 1;
+      let neighbor = this.tabs[aIndex];
+      if (aIndex < aTab._tPos) {
+        neighbor.before(aTab);
+      } else if (!neighbor) {
+        // Put the tab after the neighbor, as once we remove the tab from its current position,
+        // the indexing of the tabs will shift.
+        aTab.parentElement.append(aTab);
+      } else {
+        neighbor.after(aTab);
+      }
 
-      let neighbor = this.tabs[aIndex] || null;
+      this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+    },
+
+    moveTabToGroup(aTab, aGroup) {
+      if (aTab.pinned) {
+        return;
+      }
+      if (aTab.group && aTab.group.id === aGroup.id) {
+        return;
+      }
+      let wasFocused = document.activeElement == this.selectedTab;
+      aGroup.appendChild(aTab);
+
+      // pass -1 to oldPosition because a move occurred even if position
+      // hasn't changed
+      this._updateAfterMoveTabTo(aTab, -1, wasFocused);
+    },
+
+    _updateAfterMoveTabTo(aTab, oldPosition, wasFocused = null) {
+      // We want to clear _allTabs after moving nodes because the order of
+      // vertical tabs may have changed.
       this.tabContainer._invalidateCachedTabs();
-      this.tabContainer.insertBefore(aTab, neighbor);
+
       this._updateTabsAfterInsert();
 
       if (wasFocused) {
@@ -5302,7 +5371,11 @@
       if (aTab.pinned) {
         this.tabContainer._positionPinnedTabs();
       }
-
+      // Pinning and unpinning vertical tabs bypasses moveTabTo,
+      // so we still want to check whether its worth dispatching an event
+      if (oldPosition == aTab._tPos) {
+        return;
+      }
       var evt = document.createEvent("UIEvents");
       evt.initUIEvent("TabMove", true, false, window, oldPosition);
       aTab.dispatchEvent(evt);
@@ -5432,6 +5505,19 @@
       );
     },
 
+    /**
+     * Update accessible names of close buttons in the (multi) selected tabs
+     * collection with how many tabs they will close
+     */
+    _updateMultiselectedTabCloseButtonTooltip() {
+      const tabCount = gBrowser.selectedTabs.length;
+      gBrowser.selectedTabs.forEach(selectedTab => {
+        document.l10n.setArgs(selectedTab.querySelector(".tab-close-button"), {
+          tabCount,
+        });
+      });
+    },
+
     addToMultiSelectedTabs(aTab) {
       if (aTab.multiselected) {
         return;
@@ -5446,6 +5532,8 @@
       } else {
         this._multiSelectChangeAdditions.add(aTab);
       }
+
+      this._updateMultiselectedTabCloseButtonTooltip();
     },
 
     /**
@@ -5468,6 +5556,8 @@
       for (let i = lowerIndex; i <= higherIndex; i++) {
         this.addToMultiSelectedTabs(tabs[i]);
       }
+
+      this._updateMultiselectedTabCloseButtonTooltip();
     },
 
     removeFromMultiSelectedTabs(aTab) {
@@ -5483,6 +5573,13 @@
       } else {
         this._multiSelectChangeRemovals.add(aTab);
       }
+      // Update labels for Close buttons of the remaining multiselected tabs:
+      this._updateMultiselectedTabCloseButtonTooltip();
+      // Update the label for the Close button of the tab being removed
+      // from the multiselection:
+      document.l10n.setArgs(aTab.querySelector(".tab-close-button"), {
+        tabCount: 1,
+      });
     },
 
     clearMultiSelectedTabs() {
@@ -5993,12 +6090,7 @@
       const tabCount = this.selectedTabs.includes(tab)
         ? this.selectedTabs.length
         : 1;
-      if (tab.mOverCloseButton) {
-        tooltip.label = "";
-        document.l10n.setAttributes(tooltip, "tabbrowser-close-tabs-tooltip", {
-          tabCount,
-        });
-      } else if (tab._overPlayingIcon) {
+      if (tab._overPlayingIcon) {
         let l10nId;
         const l10nArgs = { tabCount };
         if (tab.selected) {

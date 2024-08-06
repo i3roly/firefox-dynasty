@@ -707,10 +707,55 @@ add_task(async function wheelTests() {
   while (gBrowser.tabs.length > 1) {
     BrowserTestUtils.removeTab(gBrowser.tabs[0]);
   }
-  await SpecialPowers.popPrefEnv();
 
   // Move the mouse outside of the tab strip.
   EventUtils.synthesizeMouseAtCenter(document.documentElement, {
     type: "mouseover",
   });
+});
+
+add_task(async function appearsAsTooltipToAccessibilityToolsTests() {
+  const previewPanel = document.getElementById("tab-preview-panel");
+  Assert.equal(
+    previewPanel.getAttribute("role"),
+    "tooltip",
+    "The panel appears as a tooltip to assistive technology"
+  );
+});
+
+/**
+ * Verify that if the browser document title (i.e. tab label) changes,
+ * the tab preview panel is updated
+ */
+add_task(async function tabContentChangeTests() {
+  const previewPanel = document.getElementById("tab-preview-panel");
+
+  const tabUrl =
+    "data:text/html,<html><head><title>Original Tab Title</title></head><body>Hello</body></html>";
+  const tab = await BrowserTestUtils.openNewForegroundTab(gBrowser, tabUrl);
+
+  await openPreview(tab);
+  Assert.equal(
+    previewPanel.querySelector(".tab-preview-title").innerText,
+    "Original Tab Title",
+    "Preview of tab shows original tab title"
+  );
+
+  tab.setAttribute("label", "New Tab Title");
+
+  await BrowserTestUtils.waitForCondition(() => {
+    return (
+      previewPanel.querySelector(".tab-preview-title").innerText ===
+      "New Tab Title"
+    );
+  });
+
+  Assert.equal(
+    previewPanel.querySelector(".tab-preview-title").innerText,
+    "New Tab Title",
+    "Preview of tab shows new tab title"
+  );
+
+  await closePreviews();
+  BrowserTestUtils.removeTab(tab);
 });

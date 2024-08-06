@@ -52,6 +52,7 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/DocumentTimeline.h"
 #include "mozilla/dom/DocumentInlines.h"
+#include "mozilla/dom/HTMLVideoElement.h"
 #include "nsIXULRuntime.h"
 #include "jsapi.h"
 #include "nsContentUtils.h"
@@ -1362,7 +1363,6 @@ nsRefreshDriver::nsRefreshDriver(nsPresContext* aPresContext)
       mWaitingForTransaction(false),
       mSkippedPaints(false),
       mResizeSuppressed(false),
-      mNotifyDOMContentFlushed(false),
       mNeedToUpdateIntersectionObservations(false),
       mNeedToUpdateResizeObservers(false),
       mNeedToRunFrameRequestCallbacks(false),
@@ -1637,21 +1637,6 @@ void nsRefreshDriver::RemoveImageRequest(imgIRequest* aRequest) {
   }
 }
 
-void nsRefreshDriver::NotifyDOMContentLoaded() {
-  // If the refresh driver is going to tick, we mark the timestamp after
-  // everything is flushed in the next tick. If it isn't, mark ourselves as
-  // flushed now.
-  if (!HasObservers()) {
-    if (nsPresContext* pc = GetPresContext()) {
-      pc->NotifyDOMContentFlushed();
-    }
-    // else, we don't have a nsPresContext, so our doc is probably being
-    // destroyed and this notification doesn't need sending anyway.
-  } else {
-    mNotifyDOMContentFlushed = true;
-  }
-}
-
 void nsRefreshDriver::RegisterCompositionPayload(
     const mozilla::layers::CompositionPayload& aPayload) {
   mCompositionPayloads.AppendElement(aPayload);
@@ -1914,9 +1899,6 @@ bool nsRefreshDriver::HasObservers() const {
     }
   }
 
-  // We should NOT count mTimerAdjustmentObservers here since this method is
-  // used to determine whether or not to stop the timer or re-start it and timer
-  // adjustment observers should not influence timer starting or stopping.
   return (mViewManagerFlushIsPending && !mThrottled) ||
          !mStyleFlushObservers.IsEmpty() ||
          !mAnimationEventFlushObservers.IsEmpty() ||
@@ -2360,7 +2342,123 @@ void nsRefreshDriver::UpdateAnimationsAndSendEvents() {
   }
 }
 
-void nsRefreshDriver::RunFrameRequestCallbacks(TimeStamp aNowTime) {
+void nsRefreshDriver::RunVideoFrameCallbacks(
+    const nsTArray<RefPtr<Document>>& aDocs, TimeStamp aNowTime) {
+  // For each fully active Document in docs, for each associated video element
+  // for that Document, run the video frame request callbacks passing now as the
+  // timestamp.
+  Maybe<TimeStamp> nextTickHint;
+  for (Document* doc : aDocs) {
+    nsTArray<RefPtr<HTMLVideoElement>> videoElms;
+    doc->TakeVideoFrameRequestCallbacks(videoElms);
+    if (videoElms.IsEmpty()) {
+      continue;
+    }
+
+    DOMHighResTimeStamp timeStamp = 0;
+    DOMHighResTimeStamp nextTickTimeStamp = 0;
+    if (auto* innerWindow = doc->GetInnerWindow()) {
+      if (Performance* perf = innerWindow->GetPerformance()) {
+        if (!nextTickHint) {
+          nextTickHint = GetNextTickHint();
+        }
+        timeStamp = perf->TimeStampToDOMHighResForRendering(aNowTime);
+        nextTickTimeStamp =
+            nextTickHint
+                ? perf->TimeStampToDOMHighResForRendering(*nextTickHint)
+                : timeStamp;
+      }
+      // else window is partially torn down already
+    }
+
+    AUTO_PROFILER_TRACING_MARKER_INNERWINDOWID(
+        "Paint", "requestVideoFrame callbacks", GRAPHICS, doc->InnerWindowID());
+    for (const auto& videoElm : videoElms) {
+      nsTArray<VideoFrameRequest> callbacks;
+      VideoFrameCallbackMetadata metadata;
+
+      // Presentation time is our best estimate of when the video frame was
+      // submitted for compositing. Given that we decode frames in advance,
+      // this can be most closely estimated as the vsync time (aNowTime), as
+      // that is when the compositor samples the ImageHost to get the next
+      // frame to present.
+      metadata.mPresentationTime = timeStamp;
+
+      // Expected display time is our best estimate of when the video frame we
+      // are submitting for compositing this cycle is shown to the user's eye.
+      // This will generally be when the next vsync triggers, assuming we do
+      // not fall behind on compositing.
+      metadata.mExpectedDisplayTime = nextTickTimeStamp;
+
+      // TakeVideoFrameRequestCallbacks is responsible for populating the rest
+      // of the metadata fields. If it is not ready, or there has been no
+      // change, it will not populate metadata nor yield any callbacks.
+      videoElm->TakeVideoFrameRequestCallbacks(aNowTime, nextTickHint, metadata,
+                                               callbacks);
+
+      for (auto& callback : callbacks) {
+        if (videoElm->IsVideoFrameCallbackCancelled(callback.mHandle)) {
+          continue;
+        }
+
+        // MOZ_KnownLive is OK, because the stack array frameRequestCallbacks
+        // keeps callback alive and the mCallback strong reference can't be
+        // mutated by the call.
+        LogVideoFrameRequestCallback::Run run(callback.mCallback);
+        MOZ_KnownLive(callback.mCallback)->Call(timeStamp, metadata);
+      }
+    }
+  }
+}
+
+void nsRefreshDriver::RunFrameRequestCallbacks(
+    const nsTArray<RefPtr<Document>>& aDocs, TimeStamp aNowTime) {
+  for (Document* doc : aDocs) {
+    nsTArray<FrameRequest> callbacks;
+    doc->TakeFrameRequestCallbacks(callbacks);
+    if (callbacks.IsEmpty()) {
+      continue;
+    }
+
+    DOMHighResTimeStamp timeStamp = 0;
+    RefPtr innerWindow = nsGlobalWindowInner::Cast(doc->GetInnerWindow());
+    if (innerWindow) {
+      if (Performance* perf = innerWindow->GetPerformance()) {
+        timeStamp = perf->TimeStampToDOMHighResForRendering(aNowTime);
+      }
+      // else window is partially torn down already
+    }
+
+    AUTO_PROFILER_TRACING_MARKER_INNERWINDOWID(
+        "Paint", "requestAnimationFrame callbacks", GRAPHICS,
+        doc->InnerWindowID());
+    const TimeStamp startTime = TimeStamp::Now();
+    for (const auto& callback : callbacks) {
+      if (doc->IsCanceledFrameRequestCallback(callback.mHandle)) {
+        continue;
+      }
+
+      CallbackDebuggerNotificationGuard guard(
+          innerWindow, DebuggerNotificationType::RequestAnimationFrameCallback);
+
+      // MOZ_KnownLive is OK, because the stack array frameRequestCallbacks
+      // keeps callback alive and the mCallback strong reference can't be
+      // mutated by the call.
+      LogFrameRequestCallback::Run run(callback.mCallback);
+      MOZ_KnownLive(callback.mCallback)->Call(timeStamp);
+    }
+
+    if (doc->GetReadyStateEnum() == Document::READYSTATE_COMPLETE) {
+      glean::performance_responsiveness::req_anim_frame_callback
+          .AccumulateRawDuration(TimeStamp::Now() - startTime);
+    } else {
+      glean::performance_pageload::req_anim_frame_callback
+          .AccumulateRawDuration(TimeStamp::Now() - startTime);
+    }
+  }
+}
+
+void nsRefreshDriver::RunVideoAndFrameRequestCallbacks(TimeStamp aNowTime) {
   if (!mNeedToRunFrameRequestCallbacks) {
     return;
   }
@@ -2383,9 +2481,15 @@ void nsRefreshDriver::RunFrameRequestCallbacks(TimeStamp aNowTime) {
   if (NS_WARN_IF(!mPresContext)) {
     return;
   }
-  // Grab all of our frame request callbacks up front.
+  // Grab all of our documents that can fire frame request callbacks up front.
   AutoTArray<RefPtr<Document>, 8> docs;
   auto ShouldCollect = [](const Document* aDoc) {
+    // TODO(emilio): Consider removing HasFrameRequestCallbacks() to deal with
+    // callbacks posted from other documents more per spec?
+    //
+    // If we do that we also need to tweak the throttling code to not set
+    // mNeedToRunFrameRequestCallbacks unnecessarily... Check what other engines
+    // do too.
     return aDoc->HasFrameRequestCallbacks() &&
            aDoc->ShouldFireFrameRequestCallbacks();
   };
@@ -2393,60 +2497,26 @@ void nsRefreshDriver::RunFrameRequestCallbacks(TimeStamp aNowTime) {
     docs.AppendElement(mPresContext->Document());
   }
   mPresContext->Document()->CollectDescendantDocuments(docs, ShouldCollect);
-
-  for (Document* doc : docs) {
-    if (!tickThrottledFrameRequests && doc->ShouldThrottleFrameRequests()) {
-      // Skip throttled docs if it's not time to un-throttle them yet.
+  // Skip throttled docs if it's not time to un-throttle them yet.
+  if (!tickThrottledFrameRequests) {
+    const size_t sizeBefore = docs.Length();
+    docs.RemoveElementsBy(
+        [](Document* aDoc) { return aDoc->ShouldThrottleFrameRequests(); });
+    if (sizeBefore != docs.Length()) {
       // FIXME(emilio): It's a bit subtle to just set this to true here, but
       // matches pre-existing behavior for throttled docs. It seems at least we
       // should EnsureTimerStarted too? But that kinda defeats the throttling, a
       // little bit? For now, preserve behavior.
       mNeedToRunFrameRequestCallbacks = true;
-      continue;
-    }
-
-    AutoTArray<FrameRequest, 8> callbacks;
-    doc->TakeFrameRequestCallbacks(callbacks);
-    if (NS_WARN_IF(callbacks.IsEmpty())) {
-      continue;
-    }
-    AUTO_PROFILER_TRACING_MARKER_INNERWINDOWID(
-        "Paint", "requestAnimationFrame callbacks", GRAPHICS,
-        doc->InnerWindowID());
-    TimeStamp startTime = TimeStamp::Now();
-    nsCOMPtr<nsIGlobalObject> global;
-    DOMHighResTimeStamp timeStamp = 0;
-    if (nsPIDOMWindowInner* innerWindow = doc->GetInnerWindow()) {
-      if (Performance* perf = innerWindow->GetPerformance()) {
-        timeStamp = perf->TimeStampToDOMHighResForRendering(aNowTime);
-      }
-      global = nsGlobalWindowInner::Cast(innerWindow);
-      // else window is partially torn down already
-    }
-
-    for (const auto& callback : callbacks) {
-      if (doc->IsCanceledFrameRequestCallback(callback.mHandle)) {
-        continue;
-      }
-
-      CallbackDebuggerNotificationGuard guard(
-          global, DebuggerNotificationType::RequestAnimationFrameCallback);
-
-      // MOZ_KnownLive is OK, because the stack array frameRequestCallbacks
-      // keeps callback alive and the mCallback strong reference can't be
-      // mutated by the call.
-      LogFrameRequestCallback::Run run(callback.mCallback);
-      MOZ_KnownLive(callback.mCallback)->Call(timeStamp);
-    }
-
-    if (doc->GetReadyStateEnum() == Document::READYSTATE_COMPLETE) {
-      glean::performance_responsiveness::req_anim_frame_callback
-          .AccumulateRawDuration(TimeStamp::Now() - startTime);
-    } else {
-      glean::performance_pageload::req_anim_frame_callback
-          .AccumulateRawDuration(TimeStamp::Now() - startTime);
     }
   }
+
+  if (docs.IsEmpty()) {
+    return;
+  }
+
+  RunVideoFrameCallbacks(docs, aNowTime);
+  RunFrameRequestCallbacks(docs, aNowTime);
 }
 
 static StaticAutoPtr<AutoTArray<RefPtr<Task>, 8>> sPendingIdleTasks;
@@ -2666,8 +2736,22 @@ void nsRefreshDriver::Tick(VsyncId aId, TimeStamp aNowTime,
   // Step 12. For each doc of docs, run the fullscreen steps for doc.
   RunFullscreenSteps();
 
-  // Step 14. For each doc of docs, run the animation frame callbacks for doc.
-  RunFrameRequestCallbacks(aNowTime);
+  // TODO: Step 13. For each doc of docs, if the user agent detects that the
+  // backing storage associated with a CanvasRenderingContext2D or an
+  // OffscreenCanvasRenderingContext2D, context, has been lost, then it must run
+  // the context lost steps for each such context.
+
+  // Step 13.5. (https://wicg.github.io/video-rvfc/#video-rvfc-procedures):
+  //
+  //   For each fully active Document in docs, for each associated video element
+  //   for that Document, run the video frame request callbacks passing now as
+  //   the timestamp.
+  //
+  // Step 14. For each doc of docs, run the animation frame callbacks for doc,
+  // passing in the relative high resolution time given frameTimestamp and doc's
+  // relevant global object as the timestamp.
+  RunVideoAndFrameRequestCallbacks(aNowTime);
+
   MaybeIncreaseMeasuredTicksSinceLoading();
 
   // Step 17. For each doc of docs, if the focused area of doc is not a
@@ -2789,11 +2873,6 @@ void nsRefreshDriver::Tick(VsyncId aId, TimeStamp aNowTime,
                                  static_cast<uint32_t>(totalMs));
 #endif
 
-  if (mNotifyDOMContentFlushed) {
-    mNotifyDOMContentFlushed = false;
-    mPresContext->NotifyDOMContentFlushed();
-  }
-
   for (nsAPostRefreshObserver* observer :
        mPostRefreshObservers.ForwardRange()) {
     observer->DidRefresh();
@@ -2911,28 +2990,25 @@ void nsRefreshDriver::Thaw() {
     mFreezeCount--;
   }
 
-  if (mFreezeCount == 0) {
-    if (HasObservers() || HasImageRequests()) {
-      // FIXME: This isn't quite right, since our EnsureTimerStarted call
-      // updates our mMostRecentRefresh, but the DoRefresh call won't run
-      // and notify our observers until we get back to the event loop.
-      // Thus MostRecentRefresh() will lie between now and the DoRefresh.
-      RefPtr<nsRunnableMethod<nsRefreshDriver>> event = NewRunnableMethod(
-          "nsRefreshDriver::DoRefresh", this, &nsRefreshDriver::DoRefresh);
-      nsPresContext* pc = GetPresContext();
-      if (pc) {
-        pc->Document()->Dispatch(event.forget());
-        EnsureTimerStarted();
-      } else {
-        NS_ERROR("Thawing while document is being destroyed");
-      }
+  if (mFreezeCount == 0 && HasReasonsToTick()) {
+    // FIXME: This isn't quite right, since our EnsureTimerStarted call
+    // updates our mMostRecentRefresh, but the DoRefresh call won't run
+    // and notify our observers until we get back to the event loop.
+    // Thus MostRecentRefresh() will lie between now and the DoRefresh.
+    RefPtr<nsRunnableMethod<nsRefreshDriver>> event = NewRunnableMethod(
+        "nsRefreshDriver::DoRefresh", this, &nsRefreshDriver::DoRefresh);
+    if (nsPresContext* pc = GetPresContext()) {
+      pc->Document()->Dispatch(event.forget());
+      EnsureTimerStarted();
+    } else {
+      NS_ERROR("Thawing while document is being destroyed");
     }
   }
 }
 
 void nsRefreshDriver::FinishedWaitingForTransaction() {
-  if (mSkippedPaints && !IsInRefresh() &&
-      (HasObservers() || HasImageRequests()) && CanDoCatchUpTick()) {
+  if (mSkippedPaints && !IsInRefresh() && HasReasonsToTick() &&
+      CanDoCatchUpTick()) {
     NS_DispatchToCurrentThreadQueue(
         NS_NewRunnableFunction(
             "nsRefreshDriver::FinishedWaitingForTransaction",

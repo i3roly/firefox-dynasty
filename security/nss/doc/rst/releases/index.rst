@@ -8,7 +8,10 @@ Releases
    :glob:
    :hidden:
 
+   nss_3_103.rst
+   nss_3_102_1.rst
    nss_3_102.rst
+   nss_3_101_2.rst
    nss_3_101_1.rst
    nss_3_101.rst
    nss_3_100.rst
@@ -22,6 +25,7 @@ Releases
    nss_3_93.rst
    nss_3_92.rst
    nss_3_91_0.rst
+   nss_3_90_4.rst
    nss_3_90_3.rst
    nss_3_90_2.rst
    nss_3_90_1.rst
@@ -71,20 +75,20 @@ Releases
 
 .. note::
 
-   **NSS 3.102** is the latest version of NSS.
-   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_102_release_notes`
+   **NSS 3.103** is the latest version of NSS.
+   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_103_release_notes`
 
-   **NSS 3.101.1 (ESR)** is the latest ESR version of NSS.
+   **NSS 3.101.2 (ESR)** is the latest ESR version of NSS.
    Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_101_1_release_notes`
 
 .. container::
 
-   Changes in 3.102 included in this release:
+   Changes in 3.103 included in this release:
 
-   - Bug 1880351 - Add Valgrind annotations to freebl Chacha20-Poly1305.
-   - Bug 1901932 - missing sqlite header.
-   - Bug 1901080 - GLOBALTRUST 2020: Set Distrust After for TLS and S/MIME.
-   - Bug 1615298 - improve certutil keyUsage, extKeyUsage, and nsCertType keyword handling.
-   - Bug 1660676 - correct length of raw SPKI data before printing in pp utility.
-
+   - Bug 1908623 - move list size check after lock acquisition in sftk_PutObjectToList. 
+   - Bug 1899542: Add fuzzing support for SSL_ENABLE_POST_HANDSHAKE_AUTH, 
+   - Bug 1909638 - Follow-up to fix test for presence of file nspr.patch. 
+   - Bug 1903783: Adjust libFuzzer size limits
+   - Bug 1899542: Add fuzzing support for SSL_SetCertificateCompressionAlgorithm, SSL_SetClientEchConfigs, SSL_VersionRangeSet and SSL_AddExternalPsk
+   - Bug 1899542: Add fuzzing support for SSL_ENABLE_GREASE and SSL_ENABLE_CH_EXTENSION_PERMUTATION
 

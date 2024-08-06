@@ -511,7 +511,7 @@ class MacroAssemblerWasm32 : public Assembler {
   void convertUInt32ToDouble(Register, FloatRegister) { MOZ_CRASH(); }
   void convertUInt32ToFloat32(Register, FloatRegister) { MOZ_CRASH(); }
   void incrementInt32Value(Address) { MOZ_CRASH(); }
-  void handleFailureWithHandlerTail(Label*, Label*) { MOZ_CRASH(); }
+  void handleFailureWithHandlerTail(Label*, Label*, uint32_t*) { MOZ_CRASH(); }
 
   void buildFakeExitFrame(Register, uint32_t*) { MOZ_CRASH(); }
   bool buildOOLFakeExitFrame(void*) { MOZ_CRASH(); }
@@ -531,7 +531,7 @@ class MacroAssemblerWasm32 : public Assembler {
 #endif
 };
 
-typedef MacroAssemblerWasm32 MacroAssemblerSpecific;
+using MacroAssemblerSpecific = MacroAssemblerWasm32;
 
 static inline bool GetTempRegForIntArg(uint32_t, uint32_t, Register*) {
   MOZ_CRASH();

@@ -50,8 +50,24 @@ export class _CollapsibleSection extends React.PureComponent {
   }
 
   handleTopicSelectionButtonClick() {
+    const maybeDisplay =
+      this.props.Prefs.values[
+        "discoverystream.topicSelection.onboarding.maybeDisplay"
+      ];
+
+    this.props.dispatch(ac.OnlyToMain({ type: at.TOPIC_SELECTION_USER_OPEN }));
+
+    if (maybeDisplay) {
+      // if still part of onboarding, remove user from onboarding flow
+      this.props.dispatch(
+        ac.SetPref(
+          "discoverystream.topicSelection.onboarding.maybeDisplay",
+          false
+        )
+      );
+    }
     this.props.dispatch(
-      ac.AlsoToMain({ type: at.TOPIC_SELECTION_SPOTLIGHT_TOGGLE })
+      ac.BroadcastToContent({ type: at.TOPIC_SELECTION_SPOTLIGHT_OPEN })
     );
   }
 
@@ -61,10 +77,10 @@ export class _CollapsibleSection extends React.PureComponent {
     const {
       id,
       collapsed,
-      learnMore,
       title,
       subTitle,
       mayHaveSponsoredStories,
+      mayHaveTopicsSelection,
     } = this.props;
     const active = menuButtonHover || showContextMenu;
     let bodyStyle;
@@ -78,8 +94,14 @@ export class _CollapsibleSection extends React.PureComponent {
       titleStyle = { visibility: "hidden" };
     }
     const hasSubtitleClassName = subTitle ? `has-subtitle` : ``;
-    const topicSelectionEnabled =
-      this.props.Prefs.values["discoverystream.topicSelection.enabled"];
+    const hasBeenUpdatedPreviously =
+      this.props.Prefs.values[
+        "discoverystream.topicSelection.hasBeenUpdatedPreviously"
+      ];
+    const selectedTopics =
+      this.props.Prefs.values["discoverystream.topicSelection.selectedTopics"];
+    const topicsHaveBeenPreviouslySet =
+      hasBeenUpdatedPreviously || selectedTopics;
     return (
       <section
         className={`collapsible-section ${this.props.className}${
@@ -96,15 +118,6 @@ export class _CollapsibleSection extends React.PureComponent {
             <span className="section-title">
               <FluentOrText message={title} />
             </span>
-            <span className="learn-more-link-wrapper">
-              {learnMore && (
-                <span className="learn-more-link">
-                  <FluentOrText message={learnMore.link.message}>
-                    <a href={learnMore.link.href} />
-                  </FluentOrText>
-                </span>
-              )}
-            </span>
             {subTitle && (
               <span className="section-sub-title">
                 <FluentOrText message={subTitle} />
@@ -118,12 +131,18 @@ export class _CollapsibleSection extends React.PureComponent {
                 />
               )}
           </h3>
-          {topicSelectionEnabled && (
-            <moz-button
-              label="Personalize my feed"
-              type="primary"
-              onClick={this.handleTopicSelectionButtonClick}
-            />
+          {mayHaveTopicsSelection && (
+            <div className="button-topic-selection">
+              <moz-button
+                data-l10n-id={
+                  topicsHaveBeenPreviouslySet
+                    ? "newtab-topic-selection-button-update-interests"
+                    : "newtab-topic-selection-button-pick-interests"
+                }
+                type={topicsHaveBeenPreviouslySet ? "default" : "primary"}
+                onClick={this.handleTopicSelectionButtonClick}
+              />
+            </div>
           )}
         </div>
         <ErrorBoundary className="section-body-fallback">

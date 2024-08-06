@@ -17,11 +17,10 @@ import androidx.core.content.ContextCompat.getColor
 import androidx.recyclerview.widget.RecyclerView
 import mozilla.components.compose.cfr.CFRPopup
 import mozilla.components.compose.cfr.CFRPopupProperties
-import mozilla.components.service.glean.private.NoExtras
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.Onboarding
 import org.mozilla.fenix.GleanMetrics.RecentTabs
 import org.mozilla.fenix.R
-import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.home.recentsyncedtabs.view.RecentSyncedTabViewHolder
 import org.mozilla.fenix.home.recenttabs.view.RecentTabsHeaderViewHolder
@@ -156,7 +155,7 @@ class HomeCFRPresenter(
         var result: Result = Result.None
         val count = recyclerView.adapter?.itemCount ?: return result
 
-        if (context.shouldAddNavigationBar() && context.settings().shouldShowNavigationBarCFR) {
+        if (context.settings().navigationToolbarEnabled && context.settings().shouldShowNavigationBarCFR) {
             return result
         }
 

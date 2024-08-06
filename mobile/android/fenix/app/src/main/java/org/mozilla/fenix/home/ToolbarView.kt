@@ -70,6 +70,7 @@ class ToolbarView(
         binding.toolbarWrapper.setOnLongClickListener {
             ToolbarPopupWindow.show(
                 WeakReference(it),
+                WeakReference(binding.dynamicSnackbarContainer),
                 handlePasteAndGo = interactor::onPasteAndGo,
                 handlePaste = interactor::onPaste,
                 copyVisible = false,
@@ -118,6 +119,7 @@ class ToolbarView(
         browsingModeManager = homeActivity.browsingModeManager,
         navController = homeFragment.findNavController(),
         tabCounter = binding.tabButton,
+        showLongPressMenu = !(context.settings().navigationToolbarEnabled && context.isTablet()),
     )
 
     /**

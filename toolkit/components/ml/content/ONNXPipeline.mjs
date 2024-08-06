@@ -2,19 +2,29 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// This import does not use Chromutils because the next version of the library
-// will require an async import, which is not supported by importESModule,
-// so we'll just add await here.
+/* eslint-disable-next-line mozilla/reject-import-system-module-from-non-system */
+import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
-import * as transformers from "chrome://global/content/ml/transformers-dev.js";
+/**
+ * Log level set by the pipeline.
+ *
+ * @type {string}
+ */
+let _logLevel = "Error";
 
 /**
  * Lazy initialization container.
  *
  * @type {object}
  */
-
 const lazy = {};
+
+ChromeUtils.defineLazyGetter(lazy, "console", () => {
+  return console.createInstance({
+    maxLogLevel: _logLevel, // we can't use maxLogLevelPref in workers.
+    prefix: "ML:ONNXPipeline",
+  });
+});
 
 ChromeUtils.defineESModuleGetters(
   lazy,
@@ -24,13 +34,24 @@ ChromeUtils.defineESModuleGetters(
   { global: "current" }
 );
 
-// Using a custom console, see https://bugzilla.mozilla.org/show_bug.cgi?id=1891789
-let _logLevel = "Error";
+/**
+ * Conditional import for Transformer.js
+ *
+ * The library will be lazily await on first usage in the Pipeline constructor.
+ * If we are in Nightly, we are using the non-minified version.
+ */
+let transformersPromise;
+let transformers = null;
+let transformersDev;
 
-function debug(...args) {
-  if (["Debug", "Trace", "All"].includes(_logLevel)) {
-    console.log("ML:ONNXPipeline", ...args); // eslint-disable-line no-console
-  }
+if (AppConstants.NIGHTLY_BUILD) {
+  transformersPromise = import(
+    "chrome://global/content/ml/transformers-dev.js"
+  );
+  transformersDev = true;
+} else {
+  transformersPromise = import("chrome://global/content/ml/transformers.js");
+  transformersDev = false;
 }
 
 /**
@@ -41,14 +62,21 @@ function debug(...args) {
  * @param {object} _model - The model used for inference.
  * @param {object} _tokenizer - The tokenizer used for decoding.
  * @param {object} _processor - The processor used for preparing  data.
+ * @param {object} config - The config
  * @returns {Promise<object>} The result object containing the processed text.
  */
-async function echo(request, _model, _tokenizer, _processor) {
+async function echo(request, _model, _tokenizer, _processor, config) {
+  let result = {};
+  for (let key in config) {
+    result[key] = String(config[key]);
+  }
+  result.echo = request.data;
+
   return {
     metrics: {
       tokenizingTime: 0,
     },
-    output: request.data,
+    output: result,
   };
 }
 
@@ -65,9 +93,10 @@ async function echo(request, _model, _tokenizer, _processor) {
  * @param {object} model - The model used for inference.
  * @param {object} tokenizer - The tokenizer used for decoding.
  * @param {object} processor - The processor used for preparing image data.
+ * @param {object} _config - The config
  * @returns {Promise<object>} The result object containing the processed text.
  */
-async function imageToText(request, model, tokenizer, processor) {
+async function imageToText(request, model, tokenizer, processor, _config) {
   let result = {
     metrics: {
       inferenceTime: 0,
@@ -88,7 +117,7 @@ async function imageToText(request, model, tokenizer, processor) {
     );
   }
 
-  debug("Image loaded in ", Date.now() - start);
+  lazy.console.debug("Image loaded in ", Date.now() - start);
 
   const { pixel_values } = await processor(rawImage);
   result.metrics.tokenizingTime += Date.now() - start;
@@ -107,7 +136,7 @@ async function imageToText(request, model, tokenizer, processor) {
     result.metrics.tokenizingTime += Date.now() - start;
     toReturn.push(decoded);
   }
-  debug("Inference done in ", Date.now() - start);
+  lazy.console.debug("Inference done in ", Date.now() - start);
   result.output = toReturn[0][0].generated_text;
   return result;
 }
@@ -132,11 +161,11 @@ async function imageToText(request, model, tokenizer, processor) {
 const ENGINE_CONFIGURATION = {
   "moz-image-to-text": {
     modelId: "mozilla/distilvit",
-    modelClass: transformers.AutoModelForVision2Seq,
+    modelClass: "AutoModelForVision2Seq",
     tokenizerId: "mozilla/distilvit",
-    tokenizerClass: transformers.AutoTokenizer,
+    tokenizerClass: "AutoTokenizer",
     processorId: "mozilla/distilvit",
-    processorClass: transformers.AutoProcessor,
+    processorClass: "AutoProcessor",
     pipelineFunction: imageToText,
   },
   "moz-echo": {
@@ -160,10 +189,9 @@ export class Pipeline {
   #processor = null;
   #pipelineFunction = null;
   #genericPipelineFunction = null;
-  #taskName = null;
   #initTime = 0;
   #isReady = false;
-  #modelId = null;
+  #config = null;
 
   /**
    * Creates an instance of a Pipeline.
@@ -176,6 +204,7 @@ export class Pipeline {
     this.#modelCache = modelCache;
 
     _logLevel = config.logLevel || "Error";
+
     // Setting up the Transformers.js environment
     // See https://huggingface.co/docs/transformers.js/api/env
 
@@ -193,50 +222,68 @@ export class Pipeline {
     transformers.env.localModelPath = "NO_LOCAL";
 
     // ONNX runtime - we set up the wasm runtime we got from RS for the ONNX backend to pick
-    debug("Setting up ONNX backend");
+    lazy.console.debug(
+      "Setting up ONNX backend for runtime",
+      config.runtimeFilename
+    );
     transformers.env.backends.onnx.wasm.wasmPaths = {};
     transformers.env.backends.onnx.wasm.wasmPaths[config.runtimeFilename] =
       lazy.arrayBufferToBlobURL(config.runtime);
+    lazy.console.debug("Transformers.js env", transformers.env);
 
-    if (config.pipelineFunction) {
-      debug("Using internal inference function");
+    if (config.pipelineFunction && config.taskName != "test-echo") {
+      lazy.console.debug("Using internal inference function");
+
+      // use the model revision of the tokenizer or processor don't have one
+      if (!config.tokenizerRevision) {
+        config.tokenizerRevision = config.modelRevision;
+      }
+      if (!config.processorRevision) {
+        config.processorRevision = config.modelRevision;
+      }
 
       this.#pipelineFunction = config.pipelineFunction;
 
       if (config.modelClass && config.modelId) {
-        debug(
+        lazy.console.debug(
           `Loading model ${config.modelId} with class ${config.modelClass}`
         );
-        this.#model = config.modelClass.from_pretrained(config.modelId);
+        this.#model = transformers[config.modelClass].from_pretrained(
+          config.modelId,
+          {
+            revision: config.modelRevision,
+          }
+        );
       }
       if (config.tokenizerClass && config.tokenizerId) {
-        debug(
+        lazy.console.debug(
           `Loading tokenizer ${config.tokenizerId} with class ${config.tokenizerClass}`
         );
-        this.#tokenizer = config.tokenizerClass.from_pretrained(
-          config.tokenizerId
+        this.#tokenizer = transformers[config.tokenizerClass].from_pretrained(
+          config.tokenizerId,
+          { revision: config.tokenizerRevision }
         );
       }
       if (config.processorClass && config.processorId) {
-        debug(
+        lazy.console.debug(
           `Loading processor ${config.processorId} with class ${config.processorClass}`
         );
-        this.#processor = config.processorClass.from_pretrained(
-          config.processorId
+        this.#processor = transformers[config.processorClass].from_pretrained(
+          config.processorId,
+          { revision: config.processorRevision }
         );
       }
     } else {
-      debug("Using generic pipeline function");
+      lazy.console.debug("Using generic pipeline function");
       this.#genericPipelineFunction = transformers.pipeline(
         config.taskName,
         config.modelId,
         { revision: config.modelRevision }
       );
     }
-    this.#taskName = config.taskName;
-    this.#modelId = config.modelId;
     this.#initTime = Date.now() - start;
-    debug("Pipeline initialized, took ", this.#initTime);
+    this.#config = config;
+    lazy.console.debug("Pipeline initialized, took ", this.#initTime);
   }
 
   /**
@@ -251,11 +298,11 @@ export class Pipeline {
    */
   static async initialize(modelCache, runtime, options) {
     const taskName = options.taskName;
-    debug(`Initializing Pipeline for task ${taskName}`);
+    lazy.console.debug(`Initializing Pipeline for task ${taskName}`);
     let config;
 
     if (!ENGINE_CONFIGURATION[taskName]) {
-      debug(`Unknown internal task ${taskName}`);
+      lazy.console.debug(`Unknown internal task ${taskName}`);
       // generic pipeline function
       config = {
         pipelineFunction: null,
@@ -265,7 +312,7 @@ export class Pipeline {
       };
     } else {
       // Loading the config defaults for the task
-      debug(`Internal task detected ${taskName}`);
+      lazy.console.debug(`Internal task detected ${taskName}`);
       config = { ...ENGINE_CONFIGURATION[taskName] };
     }
     config.runtime = runtime;
@@ -273,6 +320,14 @@ export class Pipeline {
     // Overriding the defaults with the options
     options.applyToConfig(config);
 
+    if (!transformers) {
+      if (transformersDev) {
+        lazy.console.debug("Nightly detected. Using transformers-dev.js");
+      } else {
+        lazy.console.debug("Beta or Release detected, using transformers.js");
+      }
+      transformers = await transformersPromise;
+    }
     return new Pipeline(modelCache, config);
   }
 
@@ -288,7 +343,7 @@ export class Pipeline {
    * @returns {Promise<object>} The result object from the pipeline execution.
    */
   async run(request) {
-    debug("Running task: ", this.#taskName);
+    lazy.console.debug("Running task: ", this.#config.taskName);
     // Calling all promises to ensure they are resolved before running the first pipeline
     if (!this.#isReady) {
       let start = Date.now();
@@ -298,12 +353,12 @@ export class Pipeline {
       console.warn = () => {};
       try {
         if (this.#genericPipelineFunction) {
-          debug("Initializing pipeline");
-          if (this.#modelId != "test-echo") {
+          lazy.console.debug("Initializing pipeline");
+          if (this.#config.modelId != "test-echo") {
             this.#genericPipelineFunction = await this.#genericPipelineFunction;
           }
         } else {
-          debug("Initializing model, tokenizer and processor");
+          lazy.console.debug("Initializing model, tokenizer and processor");
 
           try {
             this.#model = await this.#model;
@@ -311,7 +366,7 @@ export class Pipeline {
             this.#processor = await this.#processor;
             this.#isReady = true;
           } catch (error) {
-            debug("Error initializing pipeline", error);
+            lazy.console.debug("Error initializing pipeline", error);
             throw error;
           }
         }
@@ -320,12 +375,15 @@ export class Pipeline {
       }
 
       this.#initTime += Date.now() - start;
-      debug("Pipeline is fully initialized, took ", this.#initTime);
+      lazy.console.debug(
+        "Pipeline is fully initialized, took ",
+        this.#initTime
+      );
     }
     let result;
 
     if (this.#genericPipelineFunction) {
-      if (this.#modelId === "test-echo") {
+      if (this.#config.modelId === "test-echo") {
         result = { output: request.args };
       } else {
         result = await this.#genericPipelineFunction(
@@ -342,7 +400,8 @@ export class Pipeline {
         request,
         this.#model,
         this.#tokenizer,
-        this.#processor
+        this.#processor,
+        this.#config
       );
       result.metrics.initTime = this.#initTime;
     }

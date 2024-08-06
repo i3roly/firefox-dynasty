@@ -335,17 +335,12 @@ nsString KeySystemConfig::GetDebugInfo() const {
     }
   }
   debugInfo.AppendLiteral("]");
-  debugInfo.AppendASCII(
-      nsPrintfCString(" persistent=%s", RequirementToStr(mPersistentState))
-          .get());
-  debugInfo.AppendASCII(
-      nsPrintfCString(" distinctive=%s",
-                      RequirementToStr(mDistinctiveIdentifier))
-          .get());
+  debugInfo.AppendPrintf(" persistent=%s", EnumValueToString(mPersistentState));
+  debugInfo.AppendPrintf(" distinctive=%s",
+                         EnumValueToString(mDistinctiveIdentifier));
   debugInfo.AppendLiteral(" sessionType=[");
   for (size_t idx = 0; idx < mSessionTypes.Length(); idx++) {
-    debugInfo.AppendASCII(
-        nsPrintfCString("%s", SessionTypeToStr(mSessionTypes[idx])).get());
+    debugInfo.AppendASCII(EnumValueToString(mSessionTypes[idx]));
     if (idx + 1 < mSessionTypes.Length()) {
       debugInfo.AppendLiteral(",");
     }
@@ -371,8 +366,7 @@ nsString KeySystemConfig::GetDebugInfo() const {
   debugInfo.AppendLiteral(" WEBM={");
   debugInfo.Append(NS_ConvertUTF8toUTF16(mWebM.GetDebugInfo()));
   debugInfo.AppendLiteral("}");
-  debugInfo.AppendASCII(
-      nsPrintfCString(" isHDCP22Compatible=%d", mIsHDCP22Compatible));
+  debugInfo.AppendPrintf(" isHDCP22Compatible=%d", mIsHDCP22Compatible);
   return debugInfo;
 }
 
@@ -386,29 +380,6 @@ KeySystemConfig::SessionType ConvertToKeySystemConfigSessionType(
     default:
       MOZ_ASSERT_UNREACHABLE("Invalid session type");
       return KeySystemConfig::SessionType::Temporary;
-  }
-}
-
-const char* SessionTypeToStr(KeySystemConfig::SessionType aType) {
-  switch (aType) {
-    case KeySystemConfig::SessionType::Temporary:
-      return "Temporary";
-    case KeySystemConfig::SessionType::PersistentLicense:
-      return "PersistentLicense";
-    default:
-      MOZ_ASSERT_UNREACHABLE("Invalid session type");
-      return "Invalid";
-  }
-}
-
-const char* RequirementToStr(KeySystemConfig::Requirement aRequirement) {
-  switch (aRequirement) {
-    case KeySystemConfig::Requirement::Required:
-      return "required";
-    case KeySystemConfig::Requirement::Optional:
-      return "optional";
-    default:
-      return "not-allowed";
   }
 }
 

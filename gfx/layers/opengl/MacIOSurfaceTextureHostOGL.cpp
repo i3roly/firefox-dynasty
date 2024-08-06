@@ -93,11 +93,12 @@ uint32_t MacIOSurfaceTextureHostOGL::NumSubTextures() {
     case gfx::SurfaceFormat::R8G8B8A8:
     case gfx::SurfaceFormat::B8G8R8A8:
     case gfx::SurfaceFormat::B8G8R8X8:
-    case gfx::SurfaceFormat::YUV422: {
+    case gfx::SurfaceFormat::YUY2: {
       return 1;
     }
     case gfx::SurfaceFormat::NV12:
-    case gfx::SurfaceFormat::P010: {
+    case gfx::SurfaceFormat::P010:
+    case gfx::SurfaceFormat::NV16: {
       return 2;
     }
     default: {
@@ -132,7 +133,7 @@ void MacIOSurfaceTextureHostOGL::PushResourceUpdates(
       (aResources.*method)(aImageKeys[0], descriptor, aExtID, imageType, 0);
       break;
     }
-    case gfx::SurfaceFormat::YUV422: {
+    case gfx::SurfaceFormat::YUY2: {
       // This is the special buffer format. The buffer contents could be a
       // converted RGB interleaving data or a YCbCr interleaving data depending
       // on the different platform setting. (e.g. It will be RGB at OpenGL 2.1
@@ -173,6 +174,21 @@ void MacIOSurfaceTextureHostOGL::PushResourceUpdates(
       (aResources.*method)(aImageKeys[1], descriptor1, aExtID, imageType, 1);
       break;
     }
+    case gfx::SurfaceFormat::NV16: {
+      MOZ_ASSERT(aImageKeys.length() == 2);
+      MOZ_ASSERT(mSurface->GetPlaneCount() == 2);
+      wr::ImageDescriptor descriptor0(
+          gfx::IntSize(mSurface->GetDevicePixelWidth(0),
+                       mSurface->GetDevicePixelHeight(0)),
+          gfx::SurfaceFormat::A16);
+      wr::ImageDescriptor descriptor1(
+          gfx::IntSize(mSurface->GetDevicePixelWidth(1),
+                       mSurface->GetDevicePixelHeight(1)),
+          gfx::SurfaceFormat::R16G16);
+      (aResources.*method)(aImageKeys[0], descriptor0, aExtID, imageType, 0);
+      (aResources.*method)(aImageKeys[1], descriptor1, aExtID, imageType, 1);
+      break;
+    }
     default: {
       MOZ_ASSERT_UNREACHABLE("unexpected to be called");
     }
@@ -199,7 +215,7 @@ void MacIOSurfaceTextureHostOGL::PushDisplayItems(
                          /* aSupportsExternalCompositing */ true);
       break;
     }
-    case gfx::SurfaceFormat::YUV422: {
+    case gfx::SurfaceFormat::YUY2: {
       MOZ_ASSERT(aImageKeys.length() == 1);
       MOZ_ASSERT(mSurface->GetPlaneCount() == 0);
       // Those images can only be generated at present by the Apple H264 decoder
@@ -225,6 +241,16 @@ void MacIOSurfaceTextureHostOGL::PushDisplayItems(
       MOZ_ASSERT(aImageKeys.length() == 2);
       MOZ_ASSERT(mSurface->GetPlaneCount() == 2);
       aBuilder.PushP010Image(
+          aBounds, aClip, true, aImageKeys[0], aImageKeys[1],
+          wr::ColorDepth::Color10, wr::ToWrYuvColorSpace(GetYUVColorSpace()),
+          wr::ToWrColorRange(GetColorRange()), aFilter, preferCompositorSurface,
+          /* aSupportsExternalCompositing */ true);
+      break;
+    }
+    case gfx::SurfaceFormat::NV16: {
+      MOZ_ASSERT(aImageKeys.length() == 2);
+      MOZ_ASSERT(mSurface->GetPlaneCount() == 2);
+      aBuilder.PushNV16Image(
           aBounds, aClip, true, aImageKeys[0], aImageKeys[1],
           wr::ColorDepth::Color10, wr::ToWrYuvColorSpace(GetYUVColorSpace()),
           wr::ToWrColorRange(GetColorRange()), aFilter, preferCompositorSurface,

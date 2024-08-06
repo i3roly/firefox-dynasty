@@ -285,9 +285,9 @@ class Completion {
   Variant variant;
 };
 
-typedef HashSet<WeakHeapPtr<GlobalObject*>,
-                StableCellHasher<WeakHeapPtr<GlobalObject*>>, ZoneAllocPolicy>
-    WeakGlobalObjectSet;
+using WeakGlobalObjectSet =
+    HashSet<WeakHeapPtr<GlobalObject*>,
+            StableCellHasher<WeakHeapPtr<GlobalObject*>>, ZoneAllocPolicy>;
 
 #ifdef DEBUG
 extern void CheckDebuggeeThing(BaseScript* script, bool invisibleOk);
@@ -344,7 +344,7 @@ class DebuggerWeakMap : private WeakMap<HeapPtr<Referent*>, HeapPtr<Wrapper*>> {
   JS::Compartment* compartment;
 
  public:
-  typedef WeakMap<Key, Value> Base;
+  using Base = WeakMap<Key, Value>;
   using ReferentType = Referent;
   using WrapperType = Wrapper;
 
@@ -466,8 +466,8 @@ using Env = JSObject;
 // does point to something okay. Instead, we immediately build an instance of
 // this type from the Cell* and use that instead, so we can benefit from
 // Variant's static checks.
-typedef mozilla::Variant<BaseScript*, WasmInstanceObject*>
-    DebuggerScriptReferent;
+using DebuggerScriptReferent =
+    mozilla::Variant<BaseScript*, WasmInstanceObject*>;
 
 // The referent of a Debugger.Source.
 //
@@ -479,8 +479,8 @@ typedef mozilla::Variant<BaseScript*, WasmInstanceObject*>
 // The DebuggerSource object actually simply stores a Cell* in its private
 // pointer. See the comments for DebuggerScriptReferent for the rationale for
 // this type.
-typedef mozilla::Variant<ScriptSourceObject*, WasmInstanceObject*>
-    DebuggerSourceReferent;
+using DebuggerSourceReferent =
+    mozilla::Variant<ScriptSourceObject*, WasmInstanceObject*>;
 
 template <typename HookIsEnabledFun /* bool (Debugger*) */>
 class MOZ_RAII DebuggerList {
@@ -656,6 +656,9 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
   // See JS::dbg::ShouldAvoidSideEffects.
   bool shouldAvoidSideEffects;
 
+  // Whether to enable native tracing on the Debuggee.
+  bool nativeTracing;
+
   template <typename T>
   struct DebuggerLinkAccess {
     static mozilla::DoublyLinkedListElement<T>& Get(T* aThis) {
@@ -749,9 +752,8 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
    * that way, but since stack frames are not gc-things, the implementation
    * has to be different.
    */
-  typedef HashMap<AbstractFramePtr, HeapPtr<DebuggerFrame*>,
-                  DefaultHasher<AbstractFramePtr>, ZoneAllocPolicy>
-      FrameMap;
+  using FrameMap = HashMap<AbstractFramePtr, HeapPtr<DebuggerFrame*>,
+                           DefaultHasher<AbstractFramePtr>, ZoneAllocPolicy>;
   FrameMap frames;
 
   /*
@@ -778,8 +780,8 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
    * An entry in this table exists if and only if the Debugger.Frame's
    * GENERATOR_INFO_SLOT is set.
    */
-  typedef DebuggerWeakMap<AbstractGeneratorObject, DebuggerFrame>
-      GeneratorWeakMap;
+  using GeneratorWeakMap =
+      DebuggerWeakMap<AbstractGeneratorObject, DebuggerFrame>;
   GeneratorWeakMap generatorFrames;
 
   // An ephemeral map from BaseScript* to Debugger.Script instances.
@@ -790,28 +792,28 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
 
   // The map from debuggee source script objects to their Debugger.Source
   // instances.
-  typedef DebuggerWeakMap<ScriptSourceObject, DebuggerSource, true>
-      SourceWeakMap;
+  using SourceWeakMap =
+      DebuggerWeakMap<ScriptSourceObject, DebuggerSource, true>;
   SourceWeakMap sources;
 
   // The map from debuggee objects to their Debugger.Object instances.
-  typedef DebuggerWeakMap<JSObject, DebuggerObject> ObjectWeakMap;
+  using ObjectWeakMap = DebuggerWeakMap<JSObject, DebuggerObject>;
   ObjectWeakMap objects;
 
   // The map from debuggee Envs to Debugger.Environment instances.
-  typedef DebuggerWeakMap<JSObject, DebuggerEnvironment> EnvironmentWeakMap;
+  using EnvironmentWeakMap = DebuggerWeakMap<JSObject, DebuggerEnvironment>;
   EnvironmentWeakMap environments;
 
   // The map from WasmInstanceObjects to synthesized Debugger.Script
   // instances.
-  typedef DebuggerWeakMap<WasmInstanceObject, DebuggerScript>
-      WasmInstanceScriptWeakMap;
+  using WasmInstanceScriptWeakMap =
+      DebuggerWeakMap<WasmInstanceObject, DebuggerScript>;
   WasmInstanceScriptWeakMap wasmInstanceScripts;
 
   // The map from WasmInstanceObjects to synthesized Debugger.Source
   // instances.
-  typedef DebuggerWeakMap<WasmInstanceObject, DebuggerSource>
-      WasmInstanceSourceWeakMap;
+  using WasmInstanceSourceWeakMap =
+      DebuggerWeakMap<WasmInstanceObject, DebuggerSource>;
   WasmInstanceSourceWeakMap wasmInstanceSources;
 
   class QueryBase;
@@ -922,6 +924,7 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
 
   static const JSPropertySpec properties[];
   static const JSFunctionSpec methods[];
+  static const JSPropertySpec static_properties[];
   static const JSFunctionSpec static_methods[];
 
   /**

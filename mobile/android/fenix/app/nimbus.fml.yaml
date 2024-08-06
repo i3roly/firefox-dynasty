@@ -329,26 +329,6 @@ features:
         type: Map<String, String>
         default: {}
 
-  fx-strong-password:
-    description: A feature that provides a generated strong password on sign up.
-    variables:
-      enabled:
-        description: >
-          When the feature is enabled and Firefox receives a Login event with an
-          empty saved logins list, a suggested strong password prompt will be shown,
-          allowing the user to use the generated password to fill in the password field
-          for the new account that will be created. When the feature is disabled,
-          there won't be any prompt displayed that would allow using a generated password.
-        type: Boolean
-        default: false
-    defaults:
-      - channel: developer
-        value:
-          enabled: true
-      - channel: nightly
-        value:
-          enabled: true
-
   fx-suggest:
     description: A feature that provides Firefox Suggest search suggestions.
     variables:
@@ -387,70 +367,42 @@ features:
         description: >
           Show the primary toolbar entry point into the translations feature. (Translations icon on URL toolbar.)
         type: Boolean
-        default: false
+        default: true
       main-flow-browser-menu-enabled:
         description: >
           Show the browser menu entry point into the translations feature. ('Translate Page' on browser menu.)
         type: Boolean
-        default: false
+        default: true
       page-settings-enabled:
         description: >
           Show the page settings entry point within the translations feature. (Gear icon on the translations main flow page.)
           'main-flow-toolbar-enabled' or 'main-flow-browser-menu-enabled' must also be enabled for users to access this feature.
         type: Boolean
-        default: false
+        default: true
       global-settings-enabled:
         description: >
           Show the global settings entry point within the translations feature. ('Translation Settings' on the page settings view.)
           'page-settings-enabled' must also be enabled for users to access this feature.
         type: Boolean
-        default: false
+        default: true
       global-lang-settings-enabled:
         description: >
           Show the global language options entry point for automatically translating. ('Automatic Translation' on the global settings view.)
           'global-settings-enabled' must also be enabled for users to access this feature.
         type: Boolean
-        default: false
+        default: true
       global-site-settings-enabled:
         description: >
           Show the global never translate this site options entry point for site management. ('Never translate these sites' on the global settings view.)
           'global-settings-enabled' must also be enabled for users to access this feature.
         type: Boolean
-        default: false
+        default: true
       downloads-enabled:
         description: >
           Show the global language model download options entry point for translations. ('Download languages' on the global settings view.)
           'global-settings-enabled' must also be enabled for users to access this feature.
         type: Boolean
-        default: false
-    defaults:
-      - channel: developer
-        value:
-          main-flow-toolbar-enabled: true
-          main-flow-browser-menu-enabled: true
-          page-settings-enabled: true
-          global-settings-enabled: true
-          global-lang-settings-enabled: true
-          global-site-settings-enabled: true
-          downloads-enabled: true
-      - channel: nightly
-        value:
-          main-flow-toolbar-enabled: true
-          main-flow-browser-menu-enabled: true
-          page-settings-enabled: true
-          global-settings-enabled: true
-          global-lang-settings-enabled: true
-          global-site-settings-enabled: true
-          downloads-enabled: true
-      - channel: beta
-        value:
-          main-flow-toolbar-enabled: true
-          main-flow-browser-menu-enabled: true
-          page-settings-enabled: true
-          global-settings-enabled: true
-          global-lang-settings-enabled: true
-          global-site-settings-enabled: true
-          downloads-enabled: true
+        default: true
 
   navigation-toolbar:
     description: Feature for navigation toolbar.
@@ -480,7 +432,7 @@ features:
           show a "close" button for tabs that are currently open on other supported devices
           in the synced tabs tray.
         type: Boolean
-        default: false
+        default: true
 
   suggest-shipped-domains:
     description: Feature that suggests domains from the shipped domain list.
@@ -527,6 +479,30 @@ features:
           exposes less entropy
         type: Boolean
         default: false
+
+  menu-redesign:
+    description: Control the new menu redesign.
+    variables:
+      enabled:
+        description: If true, the new menu redesign is available.
+        type: Boolean
+        default: false
+
+  microsurveys:
+    description: Feature for microsurveys.
+    variables:
+      enabled:
+        description: >
+          When the feature is enabled then microsurveys can be used.
+        type: Boolean
+        default: false
+    defaults:
+      - channel: developer
+        value:
+          enabled: true
+      - channel: nightly
+        value:
+          enabled: true
 
 types:
   objects: {}

@@ -278,6 +278,7 @@ BrowserChild::BrowserChild(ContentChild* aManager, const TabId& aTabId,
       mLayersId{0},
       mEffectsInfo{EffectsInfo::FullyHidden()},
       mDynamicToolbarMaxHeight(0),
+      mKeyboardHeight(0),
       mUniqueId(aTabId),
       mDidFakeShow(false),
       mTriedBrowserInit(false),
@@ -1237,6 +1238,23 @@ mozilla::ipc::IPCResult BrowserChild::RecvDynamicToolbarOffsetChanged(
   return IPC_OK();
 }
 
+mozilla::ipc::IPCResult BrowserChild::RecvKeyboardHeightChanged(
+    const ScreenIntCoord& aHeight) {
+#if defined(MOZ_WIDGET_ANDROID)
+  mKeyboardHeight = aHeight;
+
+  RefPtr<Document> document = GetTopLevelDocument();
+  if (!document) {
+    return IPC_OK();
+  }
+
+  if (nsPresContext* presContext = document->GetPresContext()) {
+    presContext->UpdateKeyboardHeight(aHeight);
+  }
+#endif
+  return IPC_OK();
+}
+
 mozilla::ipc::IPCResult BrowserChild::RecvSuppressDisplayport(
     const bool& aEnabled) {
   if (RefPtr<PresShell> presShell = GetTopLevelPresShell()) {
@@ -1949,7 +1967,7 @@ static already_AddRefed<DataTransfer> ConvertToDataTransfer(
   }
   // Add the entries from the IPC to the new DataTransfer
   RefPtr<DataTransfer> dataTransfer =
-      new DataTransfer(nullptr, aMessage, false, -1);
+      new DataTransfer(nullptr, aMessage, false, Nothing());
   for (uint32_t i = 0; i < aTransferables.Length(); ++i) {
     auto& items = aTransferables[i].items();
     for (uint32_t j = 0; j < items.Length(); ++j) {

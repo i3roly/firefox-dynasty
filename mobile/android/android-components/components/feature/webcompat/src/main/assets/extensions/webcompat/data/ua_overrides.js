@@ -1297,6 +1297,113 @@ const AVAILABLE_UA_OVERRIDES = [
       },
     },
   },
+  {
+    /*
+     * Bug 1909448 - UA override for fire.honeywell.com
+     *
+     * Site doesn't load on Firefox, but works fine with a UA spoof.
+     */
+    id: "bug1909448",
+    platform: "all",
+    domain: "fire.honeywell.com",
+    bug: "1909448",
+    config: {
+      matches: ["*://fire.honeywell.com/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1899937 - UA override for plus.nhk.jp
+     * Webcompat issue #103463 - https://webcompat.com/issues/103463
+     *
+     * Site blocks Firefox, so a UA spoof and an intervention is needed.
+     */
+    id: "bug1899937-ua",
+    platform: "all",
+    domain: "plus.nhk.jp",
+    bug: "1899937",
+    config: {
+      matches: ["*://plus.nhk.jp/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1897724 - UA override for app.homewyse.com
+     * Webcompat issue #137164 - https://webcompat.com/issues/137164
+     *
+     * Site blocks Firefox, but seems to work with a UA spoof.
+     */
+    id: "bug1897724",
+    platform: "all",
+    domain: "app.homewyse.com",
+    bug: "1897724",
+    config: {
+      matches: ["*://app.homewyse.com/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1898923 - UA override for trade-in.vodafone.com
+     * Webcompat issue #127158 - https://webcompat.com/issues/127158
+     *
+     * Site blocks Firefox, but seems to work with a UA spoof.
+     */
+    id: "bug1898923",
+    platform: "all",
+    domain: "trade-in.vodafone.com",
+    bug: "1898923",
+    config: {
+      matches: ["*://trade-in.vodafone.com/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1899067 - UA override for game.granbluefantasy.jp
+     * Webcompat issue #43155 - https://webcompat.com/issues/43155
+     *
+     * Site blocks Firefox, but seems to work with a UA spoof.
+     */
+    id: "bug1899067",
+    platform: "desktop",
+    domain: "game.granbluefantasy.jp",
+    bug: "1899067",
+    config: {
+      matches: ["*://game.granbluefantasy.jp/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1898941 - UA override for events.webinar.ru
+     * Webcompat issue #121871 - https://webcompat.com/issues/121871
+     *
+     * Site blocks Firefox, but seems to work with a UA spoof.
+     */
+    id: "bug1898941",
+    platform: "all",
+    domain: "events.webinar.ru",
+    bug: "1898941",
+    config: {
+      matches: ["*://events.webinar.ru/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
 ];
 
 module.exports = AVAILABLE_UA_OVERRIDES;

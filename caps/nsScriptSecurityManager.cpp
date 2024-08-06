@@ -7,6 +7,7 @@
 #include "nsScriptSecurityManager.h"
 
 #include "mozilla/ArrayUtils.h"
+#include "mozilla/SourceLocation.h"
 #include "mozilla/StaticPrefs_extensions.h"
 #include "mozilla/StaticPrefs_security.h"
 #include "mozilla/StoragePrincipalHelper.h"
@@ -542,18 +543,7 @@ bool nsScriptSecurityManager::ContentSecurityPolicyPermitsJSAction(
   }
 
   if (reportViolation) {
-    JS::AutoFilename scriptFilename;
-    nsAutoString fileName;
-    uint32_t lineNum = 0;
-    JS::ColumnNumberOneOrigin columnNum;
-    if (JS::DescribeScriptedCaller(cx, &scriptFilename, &lineNum, &columnNum)) {
-      if (const char* file = scriptFilename.get()) {
-        CopyUTF8toUTF16(nsDependentCString(file), fileName);
-      }
-    } else {
-      MOZ_ASSERT(!JS_IsExceptionPending(cx));
-    }
-
+    auto caller = JSCallingLocation::Get(cx);
     nsAutoJSString scriptSample;
     if (aKind == JS::RuntimeCode::JS &&
         NS_WARN_IF(!scriptSample.init(cx, aCode))) {
@@ -566,8 +556,8 @@ bool nsScriptSecurityManager::ContentSecurityPolicyPermitsJSAction(
             : nsIContentSecurityPolicy::VIOLATION_TYPE_WASM_EVAL;
     csp->LogViolationDetails(violationType,
                              nullptr,  // triggering element
-                             cspEventListener, fileName, scriptSample, lineNum,
-                             columnNum.oneOriginValue(), u""_ns, u""_ns);
+                             cspEventListener, caller.FileName(), scriptSample,
+                             caller.mLine, caller.mColumn, u""_ns, u""_ns);
   }
 
   return evalOK;
@@ -1161,12 +1151,11 @@ nsresult nsScriptSecurityManager::ReportError(const char* aMessageTag,
   // using category of "SOP" so we can link to MDN
   if (aInnerWindowID != 0) {
     rv = error->InitWithWindowID(
-        message, u""_ns, u""_ns, 0, 0, nsIScriptError::errorFlag, "SOP"_ns,
+        message, ""_ns, 0, 0, nsIScriptError::errorFlag, "SOP"_ns,
         aInnerWindowID, true /* From chrome context */);
   } else {
-    rv = error->Init(message, u""_ns, u""_ns, 0, 0, nsIScriptError::errorFlag,
-                     "SOP"_ns, aFromPrivateWindow,
-                     true /* From chrome context */);
+    rv = error->Init(message, ""_ns, 0, 0, nsIScriptError::errorFlag, "SOP"_ns,
+                     aFromPrivateWindow, true /* From chrome context */);
   }
   NS_ENSURE_SUCCESS(rv, rv);
   console->LogMessage(error);

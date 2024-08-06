@@ -1210,8 +1210,18 @@ richlistitem .text-link:hover {
   margin-top: var(--space-xlarge);
 }
 
+#pane-experimental-featureGates moz-fieldset::part(label) {
+  font-size: var(--font-size-large);
+}
+
 .featureGateDescription {
   white-space: pre-wrap;
+}
+
+#genai-chat-label,
+#genai-chat-provider,
+#genai-chat-links {
+  margin-block: 0 var(--input-space-block);
 }
 
 #genai-chat-provider {

@@ -11,11 +11,9 @@
 #include "nsIContentSecurityPolicy.h"
 #include "nsILoadInfo.h"
 #include "nsIURI.h"
-#include "nsLiteralString.h"
 #include "nsString.h"
 #include "nsTArray.h"
 #include "nsUnicharUtils.h"
-#include "mozilla/Logging.h"
 
 class nsIChannel;
 
@@ -27,7 +25,7 @@ class Document;
 /* =============== Logging =================== */
 
 void CSP_LogLocalizedStr(const char* aName, const nsTArray<nsString>& aParams,
-                         const nsAString& aSourceName,
+                         const nsACString& aSourceName,
                          const nsAString& aSourceLine, uint32_t aLineNumber,
                          uint32_t aColumnNumber, uint32_t aFlags,
                          const nsACString& aCategory, uint64_t aInnerWindowID,
@@ -38,7 +36,7 @@ void CSP_GetLocalizedStr(const char* aName, const nsTArray<nsString>& aParams,
 
 void CSP_LogStrMessage(const nsAString& aMsg);
 
-void CSP_LogMessage(const nsAString& aMessage, const nsAString& aSourceName,
+void CSP_LogMessage(const nsAString& aMessage, const nsACString& aSourceName,
                     const nsAString& aSourceLine, uint32_t aLineNumber,
                     uint32_t aColumnNumber, uint32_t aFlags,
                     const nsACString& aCategory, uint64_t aInnerWindowID,

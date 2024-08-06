@@ -50,7 +50,6 @@ ChromeUtils.defineESModuleGetters(this, {
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   nsContextMenu: "chrome://browser/content/nsContextMenu.sys.mjs",
-  openContextMenu: "chrome://browser/content/nsContextMenu.sys.mjs",
   OpenInTabsUtils: "resource:///modules/OpenInTabsUtils.sys.mjs",
   PageActions: "resource:///modules/PageActions.sys.mjs",
   PageThumbs: "resource://gre/modules/PageThumbs.sys.mjs",
@@ -4691,8 +4690,13 @@ function onViewToolbarsPopupShowing(aEvent, aInsertPoint) {
     return;
   }
 
+  // fxms-bmb-button is a Firefox Messaging System Bookmarks bar button
+  let removable = !toolbarItem?.classList?.contains("fxms-bmb-button");
   let movable =
-    toolbarItem?.id && CustomizableUI.isWidgetRemovable(toolbarItem);
+    toolbarItem?.id &&
+    removable &&
+    !toolbarItem?.classList?.contains("fxms-bmb-button") &&
+    CustomizableUI.isWidgetRemovable(toolbarItem);
   if (movable) {
     if (CustomizableUI.isSpecialWidget(toolbarItem.id)) {
       moveToPanel.setAttribute("disabled", true);
@@ -4701,8 +4705,10 @@ function onViewToolbarsPopupShowing(aEvent, aInsertPoint) {
     }
     removeFromToolbar.removeAttribute("disabled");
   } else {
+    if (removable) {
+      removeFromToolbar.setAttribute("disabled", true);
+    }
     moveToPanel.setAttribute("disabled", true);
-    removeFromToolbar.setAttribute("disabled", true);
   }
 }
 
@@ -5002,6 +5008,7 @@ const nodeToTooltipMap = {
   "appMenu-zoomReduce-button2": "zoomReduce-button.tooltip",
   "reader-mode-button": "reader-mode-button.tooltip",
   "reader-mode-button-icon": "reader-mode-button.tooltip",
+  "vertical-tabs-newtab-button": "newTabButton.tooltip",
 };
 const nodeToShortcutMap = {
   "bookmarks-menu-button": "manBookmarkKb",
@@ -5021,6 +5028,7 @@ const nodeToShortcutMap = {
   "appMenu-zoomReduce-button2": "key_fullZoomReduce",
   "reader-mode-button": "key_toggleReaderMode",
   "reader-mode-button-icon": "key_toggleReaderMode",
+  "vertical-tabs-newtab-button": "key_newNavigatorTab",
 };
 
 const gDynamicTooltipCache = new Map();

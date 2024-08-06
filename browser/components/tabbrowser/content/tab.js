@@ -37,7 +37,7 @@
               <label class="tab-icon-sound-label tab-icon-sound-tooltip-label" role="presentation"/>
             </hbox>
           </vbox>
-          <image class="tab-close-button close-icon" role="presentation"/>
+          <image class="tab-close-button close-icon" role="button" data-l10n-id="tabbrowser-close-tabs-button" data-l10n-args='{"tabCount": 1}' keyNav="false"/>
         </hbox>
       </stack>
       `;
@@ -318,6 +318,13 @@
 
     get closeButton() {
       return this.querySelector(".tab-close-button");
+    }
+
+    get group() {
+      if (this.parentElement.tagName == "tab-group") {
+        return this.parentElement;
+      }
+      return null;
     }
 
     updateLastAccessed(aDate) {

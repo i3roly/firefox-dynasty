@@ -54,7 +54,7 @@ object Versions {
     const val compose_compiler = "1.5.14"
 
     object AndroidX {
-        const val activityCompose = "1.7.2"
+        const val activity = "1.7.2"
         const val annotation = "1.8.1"
         const val appcompat = "1.7.0"
         const val autofill = "1.1.0"
@@ -98,7 +98,9 @@ object Versions {
 
     object Google {
         const val play_review = "2.0.1"
-        const val play_services = "18.4.0"
+        const val play_services_ads_id = "16.0.0"
+        const val play_services_base = "18.5.0"
+        const val play_services_fido = "21.1.0"
     }
 }
 
@@ -117,7 +119,8 @@ object ComponentsDependencies {
     const val testing_maven_ant_tasks = "org.apache.maven:maven-ant-tasks:${Versions.maven_ant_tasks}"
     const val testing_leakcanary = "com.squareup.leakcanary:leakcanary-android-instrumentation:${Versions.leakcanary}"
 
-    const val androidx_activity_compose = "androidx.activity:activity-compose:${Versions.AndroidX.activityCompose}"
+    const val androidx_activity = "androidx.activity:activity:${Versions.AndroidX.activity}"
+    const val androidx_activity_ktx = "androidx.activity:activity-ktx:${Versions.AndroidX.activity}"
     const val androidx_annotation = "androidx.annotation:annotation:${Versions.AndroidX.annotation}"
     const val androidx_appcompat = "androidx.appcompat:appcompat:${Versions.AndroidX.appcompat}"
     const val androidx_autofill = "androidx.autofill:autofill:${Versions.AndroidX.autofill}"
@@ -207,7 +210,6 @@ object ComponentsDependencies {
 
     val mozilla_appservices_fxaclient = "${ApplicationServicesConfig.groupId}:fxaclient:${ApplicationServicesConfig.version}"
     val mozilla_appservices_nimbus = "${ApplicationServicesConfig.groupId}:nimbus:${ApplicationServicesConfig.version}"
-    const val mozilla_glean_forUnitTests = "org.mozilla.telemetry:glean-native-forUnitTests:${Versions.mozilla_glean}"
     val mozilla_appservices_autofill = "${ApplicationServicesConfig.groupId}:autofill:${ApplicationServicesConfig.version}"
     val mozilla_appservices_logins = "${ApplicationServicesConfig.groupId}:logins:${ApplicationServicesConfig.version}"
     val mozilla_appservices_places = "${ApplicationServicesConfig.groupId}:places:${ApplicationServicesConfig.version}"
@@ -224,6 +226,9 @@ object ComponentsDependencies {
     val mozilla_appservices_rust_log_forwarder = "${ApplicationServicesConfig.groupId}:rust-log-forwarder:${ApplicationServicesConfig.version}"
     val mozilla_appservices_sync15 = "${ApplicationServicesConfig.groupId}:sync15:${ApplicationServicesConfig.version}"
 
+    const val mozilla_glean = "org.mozilla.telemetry:glean:${Versions.mozilla_glean}"
+    const val mozilla_glean_forUnitTests = "org.mozilla.telemetry:glean-native-forUnitTests:${Versions.mozilla_glean}"
+
     const val thirdparty_okhttp = "com.squareup.okhttp3:okhttp:${Versions.okhttp}"
     const val thirdparty_okhttp_urlconnection = "com.squareup.okhttp3:okhttp-urlconnection:${Versions.okhttp}"
     const val thirdparty_okio = "com.squareup.okio:okio:${Versions.okio}"
@@ -236,5 +241,7 @@ object ComponentsDependencies {
 
     const val play_review = "com.google.android.play:review:${Versions.Google.play_review}"
     const val play_review_ktx = "com.google.android.play:review-ktx:${Versions.Google.play_review}"
-    const val play_services_base = "com.google.android.gms:play-services-base:${Versions.Google.play_services}"
+    const val play_services_ads_id = "com.google.android.gms:play-services-ads-identifier:${Versions.Google.play_services_ads_id}"
+    const val play_services_base = "com.google.android.gms:play-services-base:${Versions.Google.play_services_base}"
+    const val play_services_fido = "com.google.android.gms:play-services-fido:${Versions.Google.play_services_fido}"
 }

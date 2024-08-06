@@ -1135,7 +1135,8 @@ parent:
                           nullable nsIPrincipal redirectPrincipal,
                           MaybeDiscardedBrowsingContext browsingContext,
                           bool wasExternallyTriggered,
-                          bool hasValidUserGestureActivation);
+                          bool hasValidUserGestureActivation,
+                          bool newWindowTarget);
     async ExtProtocolChannelConnectParent(uint64_t registrarId);
 
     sync SyncMessage(nsString aMessage, ClonedMessageData aData)
@@ -1205,7 +1206,7 @@ parent:
     async SetGeolocationHigherAccuracy(bool enable);
 
     async ConsoleMessage(nsString message);
-    async ScriptErrorWithStack(nsString message, nsString sourceName, nsString sourceLine,
+    async ScriptErrorWithStack(nsString message, nsCString sourceName,
                                uint32_t lineNumber, uint32_t colNumber, uint32_t flags,
                                nsCString category, bool isFromPrivateWindow,
                                bool isFromChromeContext, ClonedMessageData stack);
@@ -1801,7 +1802,7 @@ parent:
                     bool aUserActivation) returns(int32_t? requestedIndex);
 
     async BlobURLDataRequest(nsCString aBlobURL,
-                             nullable nsIPrincipal aTriggeringPrincipal,
+                             nsIPrincipal aTriggeringPrincipal,
                              nullable nsIPrincipal aLoadingPrincipal,
                              OriginAttributes aOriginAttributes,
                              uint64_t aInnerWindowId,
@@ -1827,7 +1828,7 @@ parent:
     [LazySend] async CleanupPendingLoadState(uint64_t aLoadIdentifier);
 
 both:
-    async ScriptError(nsString message, nsString sourceName, nsString sourceLine,
+    async ScriptError(nsString message, nsCString sourceName,
                       uint32_t lineNumber, uint32_t colNumber, uint32_t flags,
                       nsCString category, bool isFromPrivateWindow, uint64_t innerWindowId,
                       bool isFromChromeContext);

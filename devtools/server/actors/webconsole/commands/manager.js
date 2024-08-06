@@ -866,16 +866,12 @@ WebConsoleCommandsManager.register({
   name: "trace",
   isSideEffectFree: false,
   command(owner, args) {
+    // Disable :trace command on worker until this feature is enabled by default
     if (isWorker) {
       throw new Error(":trace command isn't supported in workers");
     }
-    // Disable :trace command on worker until this feature is enabled by default
-    if (
-      !Services.prefs.getBoolPref(
-        "devtools.debugger.features.javascript-tracing",
-        false
-      )
-    ) {
+
+    if (!owner.consoleActor.parentActor.isTracerFeatureEnabled) {
       throw new Error(
         ":trace requires 'devtools.debugger.features.javascript-tracing' preference to be true"
       );
@@ -911,6 +907,7 @@ WebConsoleCommandsManager.register({
       traceFunctionReturn: !!args.returns,
       traceValues: !!args.values,
       traceOnNextInteraction: args["on-next-interaction"] || null,
+      useNativeTracing: args["use-native-tracing"] || null,
       traceDOMMutations,
       maxDepth: args["max-depth"] || null,
       maxRecords: args["max-records"] || null,

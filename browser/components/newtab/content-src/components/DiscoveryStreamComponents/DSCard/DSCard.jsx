@@ -145,6 +145,8 @@ export class _DSCard extends React.PureComponent {
     super(props);
 
     this.onLinkClick = this.onLinkClick.bind(this);
+    this.doesLinkTopicMatchSelectedTopic =
+      this.doesLinkTopicMatchSelectedTopic.bind(this);
     this.onSaveClick = this.onSaveClick.bind(this);
     this.onMenuUpdate = this.onMenuUpdate.bind(this);
     this.onMenuShow = this.onMenuShow.bind(this);
@@ -199,7 +201,27 @@ export class _DSCard extends React.PureComponent {
     ];
   }
 
+  doesLinkTopicMatchSelectedTopic() {
+    // Edge case for clicking on a card when topic selections have not be set
+    if (this.props.selectedTopics === "") {
+      return "not-set";
+    }
+
+    // Edge case the topic of the card is not one of the available topics
+    if (!this.props.availableTopics.includes(this.props.topic)) {
+      return "topic-not-selectable";
+    }
+
+    if (this.props.selectedTopics.includes(this.props.topic)) {
+      return "true";
+    }
+
+    return "false";
+  }
+
   onLinkClick() {
+    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
+
     if (this.props.dispatch) {
       this.props.dispatch(
         ac.DiscoveryStreamUserEvent({
@@ -218,6 +240,9 @@ export class _DSCard extends React.PureComponent {
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
+            topic: this.props.topic,
+            matches_selected_topic: matchesSelectedTopic,
+            selected_topics: this.props.selectedTopics,
           },
         })
       );
@@ -237,6 +262,8 @@ export class _DSCard extends React.PureComponent {
                 : {}),
               type: this.props.flightId ? "spoc" : "organic",
               recommendation_id: this.props.recommendation_id,
+              topic: this.props.topic,
+              selected_topics: this.props.selectedTopics,
             },
           ],
         })
@@ -245,6 +272,8 @@ export class _DSCard extends React.PureComponent {
   }
 
   onSaveClick() {
+    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
+
     if (this.props.dispatch) {
       this.props.dispatch(
         ac.AlsoToMain({
@@ -270,6 +299,9 @@ export class _DSCard extends React.PureComponent {
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
+            topic: this.props.topic,
+            matches_selected_topic: matchesSelectedTopic,
+            selected_topics: this.props.selectedTopics,
           },
         })
       );
@@ -286,6 +318,8 @@ export class _DSCard extends React.PureComponent {
                 ? { shim: this.props.shim.save }
                 : {}),
               recommendation_id: this.props.recommendation_id,
+              topic: this.props.topic,
+              selected_topics: this.props.selectedTopics,
             },
           ],
         })
@@ -317,6 +351,7 @@ export class _DSCard extends React.PureComponent {
           received_rank: this.props.received_rank,
           thumbs_up: true,
           thumbs_down: false,
+          topic: this.props.topic,
         },
       })
     );
@@ -394,6 +429,7 @@ export class _DSCard extends React.PureComponent {
             received_rank: this.props.received_rank,
             thumbs_up: false,
             thumbs_down: true,
+            topic: this.props.topic,
           },
         })
       );
@@ -565,7 +601,10 @@ export class _DSCard extends React.PureComponent {
         ref={this.setContextMenuButtonHostRef}
       >
         {this.props.showTopics && this.props.topic && (
-          <span className="ds-card-topic">{this.props.topic}</span>
+          <span
+            className="ds-card-topic"
+            data-l10n-id={`newtab-topic-label-${this.props.topic}`}
+          />
         )}
         <div className="img-wrapper">
           <DSImage
@@ -599,6 +638,7 @@ export class _DSCard extends React.PureComponent {
                 scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
                 recommended_at: this.props.recommended_at,
                 received_rank: this.props.received_rank,
+                topic: this.props.topic,
               },
             ]}
             dispatch={this.props.dispatch}

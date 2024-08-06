@@ -1131,7 +1131,6 @@ void nsGlobalWindowInner::FreeInnerObjects() {
   // Make sure that this is called before we null out the document and
   // other members that the window destroyed observers could
   // re-create.
-  NotifyDOMWindowDestroyed(this);
   if (auto* reporter = nsWindowMemoryReporter::Get()) {
     reporter->ObserveDOMWindowDetached(this);
   }
@@ -3650,25 +3649,6 @@ bool nsGlobalWindowInner::GetFullScreen() {
   return fullscreen;
 }
 
-void nsGlobalWindowInner::MaybeResolvePendingCredentialPromise(
-    const RefPtr<mozilla::dom::Credential>& aCredential) {
-  if (!mPendingCredential) {
-    // If we don't have a pending promise, that is okay.
-    return;
-  }
-  mPendingCredential->MaybeResolve(aCredential);
-  mPendingCredential = nullptr;
-}
-
-nsresult nsGlobalWindowInner::SetPendingCredentialPromise(
-    const RefPtr<mozilla::dom::Promise>& aPromise) {
-  if (mPendingCredential) {
-    return nsresult::NS_ERROR_DOM_INVALID_STATE_ERR;
-  }
-  mPendingCredential = aPromise;
-  return NS_OK;
-}
-
 void nsGlobalWindowInner::Dump(const nsAString& aStr) {
   if (!nsJSUtils::DumpEnabled()) {
     return;
@@ -4070,44 +4050,10 @@ bool nsGlobalWindowInner::IsInModalState() {
   FORWARD_TO_OUTER(IsInModalState, (), false);
 }
 
-// static
-void nsGlobalWindowInner::NotifyDOMWindowDestroyed(
-    nsGlobalWindowInner* aWindow) {
-  nsCOMPtr<nsIObserverService> observerService = services::GetObserverService();
-  if (observerService) {
-    observerService->NotifyObservers(ToSupports(aWindow),
-                                     DOM_WINDOW_DESTROYED_TOPIC, nullptr);
-  }
-}
-
 void nsGlobalWindowInner::NotifyWindowIDDestroyed(const char* aTopic) {
   nsCOMPtr<nsIRunnable> runnable =
       new WindowDestroyedEvent(this, mWindowID, aTopic);
   Dispatch(runnable.forget());
-}
-
-// static
-void nsGlobalWindowInner::NotifyDOMWindowFrozen(nsGlobalWindowInner* aWindow) {
-  if (aWindow) {
-    nsCOMPtr<nsIObserverService> observerService =
-        services::GetObserverService();
-    if (observerService) {
-      observerService->NotifyObservers(ToSupports(aWindow),
-                                       DOM_WINDOW_FROZEN_TOPIC, nullptr);
-    }
-  }
-}
-
-// static
-void nsGlobalWindowInner::NotifyDOMWindowThawed(nsGlobalWindowInner* aWindow) {
-  if (aWindow) {
-    nsCOMPtr<nsIObserverService> observerService =
-        services::GetObserverService();
-    if (observerService) {
-      observerService->NotifyObservers(ToSupports(aWindow),
-                                       DOM_WINDOW_THAWED_TOPIC, nullptr);
-    }
-  }
 }
 
 Element* nsGlobalWindowInner::GetFrameElement(nsIPrincipal& aSubjectPrincipal,
@@ -5691,7 +5637,6 @@ void nsGlobalWindowInner::FreezeInternal(bool aIncludeSubWindows) {
     mClientSource->Freeze();
   }
 
-  NotifyDOMWindowFrozen(this);
   NotifyGlobalFrozen();
 }
 
@@ -5730,7 +5675,6 @@ void nsGlobalWindowInner::ThawInternal(bool aIncludeSubWindows) {
     pinnedWorker->Thaw();
   }
 
-  NotifyDOMWindowThawed(this);
   NotifyGlobalThawed();
 }
 
@@ -6119,7 +6063,7 @@ bool WindowScriptTimeoutHandler::Call(const char* aExecutionReason) {
   nsAutoMicroTask mt;
   AutoEntryScript aes(mGlobal, aExecutionReason, true);
   JS::CompileOptions options(aes.cx());
-  options.setFileAndLine(mFileName.get(), mLineNo);
+  options.setFileAndLine(mCaller.FileName().get(), mCaller.mLine);
   options.setNoScriptRval(true);
   options.setIntroductionType("domTimer");
   JS::Rooted<JSObject*> global(aes.cx(), mGlobal->GetGlobalJSObject());
@@ -7648,7 +7592,7 @@ void nsGlobalWindowInner::SetCurrentPasteDataTransfer(
     DataTransfer* aDataTransfer) {
   MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->GetEventMessage() == ePaste);
   MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->ClipboardType() ==
-                                   nsIClipboard::kGlobalClipboard);
+                                   Some(nsIClipboard::kGlobalClipboard));
   MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->GetClipboardDataSnapshot());
   mCurrentPasteDataTransfer = aDataTransfer;
 }

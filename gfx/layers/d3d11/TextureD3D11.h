@@ -121,7 +121,7 @@ class D3D11TextureData final : public TextureData {
     return mGpuProcessTextureId;
   }
 
-  void RegisterQuery(RefPtr<ID3D11Query> aQuery);
+  void RegisterQuery(RefPtr<ID3D11Query> aQuery, bool aOnlyForOverlay = false);
 
  private:
   D3D11TextureData(ID3D11Texture2D* aTexture, uint32_t aArrayIndex,
@@ -402,7 +402,7 @@ class DXGIYCbCrTextureHostD3D11 : public TextureHost {
   void DeallocateDeviceData() override {}
 
   gfx::SurfaceFormat GetFormat() const override {
-    return gfx::SurfaceFormat::YUV;
+    return gfx::SurfaceFormat::YUV420;
   }
 
   gfx::ColorDepth GetColorDepth() const override { return mColorDepth; }

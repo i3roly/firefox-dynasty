@@ -4,6 +4,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "TrackBuffersManager.h"
+
+#include <limits>
+
 #include "ContainerParser.h"
 #include "MP4Demuxer.h"
 #include "MediaInfo.h"
@@ -12,7 +16,6 @@
 #include "SourceBuffer.h"
 #include "SourceBufferResource.h"
 #include "SourceBufferTask.h"
-#include "TrackBuffersManager.h"
 #include "WebMDemuxer.h"
 #include "mozilla/ErrorResult.h"
 #include "mozilla/Preferences.h"
@@ -20,8 +23,6 @@
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/StaticPrefs_media.h"
 #include "nsMimeTypes.h"
-
-#include <limits>
 
 extern mozilla::LogModule* GetMediaSourceLog();
 
@@ -51,19 +52,6 @@ using media::TimeIntervals;
 using media::TimeUnit;
 using AppendBufferResult = SourceBufferTask::AppendBufferResult;
 using AppendState = SourceBufferAttributes::AppendState;
-
-static const char* AppendStateToStr(AppendState aState) {
-  switch (aState) {
-    case AppendState::WAITING_FOR_SEGMENT:
-      return "WAITING_FOR_SEGMENT";
-    case AppendState::PARSING_INIT_SEGMENT:
-      return "PARSING_INIT_SEGMENT";
-    case AppendState::PARSING_MEDIA_SEGMENT:
-      return "PARSING_MEDIA_SEGMENT";
-    default:
-      return "IMPOSSIBLE";
-  }
-}
 
 static Atomic<uint32_t> sStreamSourceID(0u);
 
@@ -2780,8 +2768,9 @@ TrackBuffersManager::GetTracksList() const {
 
 void TrackBuffersManager::SetAppendState(AppendState aAppendState) {
   MSE_DEBUG("AppendState changed from %s to %s",
-            AppendStateToStr(mSourceBufferAttributes->GetAppendState()),
-            AppendStateToStr(aAppendState));
+            SourceBufferAttributes::EnumValueToString(
+                mSourceBufferAttributes->GetAppendState()),
+            SourceBufferAttributes::EnumValueToString(aAppendState));
   mSourceBufferAttributes->SetAppendState(aAppendState);
 }
 

@@ -4,6 +4,8 @@
 
 package org.mozilla.fenix.components.menu
 
+import android.app.AlertDialog
+import android.app.PendingIntent
 import android.content.Intent
 import kotlinx.coroutines.runBlocking
 import mozilla.appservices.places.BookmarkRoot
@@ -27,6 +29,7 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.test.rule.MainCoroutineRule
 import mozilla.components.support.test.rule.runTestOnMain
 import mozilla.components.support.test.whenever
+import mozilla.components.ui.widgets.withCenterAlignedButtons
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -67,6 +70,7 @@ class MenuDialogMiddlewareTest {
     private val addonManager: AddonManager = mock()
     private val onDeleteAndQuit: () -> Unit = mock()
 
+    private lateinit var alertDialogBuilder: AlertDialog.Builder
     private lateinit var pinnedSiteStorage: PinnedSiteStorage
     private lateinit var addPinnedSiteUseCase: TopSitesUseCases.AddPinnedSiteUseCase
     private lateinit var removePinnedSiteUseCase: TopSitesUseCases.RemoveTopSiteUseCase
@@ -80,6 +84,7 @@ class MenuDialogMiddlewareTest {
 
     @Before
     fun setup() {
+        alertDialogBuilder = mock()
         pinnedSiteStorage = mock()
         addPinnedSiteUseCase = mock()
         removePinnedSiteUseCase = mock()
@@ -525,6 +530,10 @@ class MenuDialogMiddlewareTest {
 
         whenever(pinnedSiteStorage.getPinnedSites()).thenReturn(pinnedSitesList)
 
+        val newAlertDialog: AlertDialog = mock()
+        whenever(alertDialogBuilder.create()).thenReturn(newAlertDialog)
+        whenever(newAlertDialog.withCenterAlignedButtons()).thenReturn(null)
+
         val browserMenuState = BrowserMenuState(
             selectedTab = createTab(
                 url = url,
@@ -555,7 +564,7 @@ class MenuDialogMiddlewareTest {
         verify(appStore, never()).dispatch(
             AppAction.ShortcutAction.ShortcutAdded,
         )
-        assertFalse(dismissedWasCalled)
+        assertTrue(dismissedWasCalled)
     }
 
     @Test
@@ -852,6 +861,41 @@ class MenuDialogMiddlewareTest {
     }
 
     @Test
+    fun `WHEN custom menu item action is dispatched THEN pending intent is sent with url`() = runTestOnMain {
+        val url = "https://www.mozilla.org"
+        val mockIntent: PendingIntent = mock()
+        var dismissWasCalled = false
+        var sentIntent: PendingIntent? = null
+        var sentUrl: String? = null
+
+        val store = spy(
+            createStore(
+                onDismiss = { dismissWasCalled = true },
+                onSendPendingIntentWithUrl = { _, _ ->
+                    sentIntent = mockIntent
+                    sentUrl = url
+                },
+            ),
+        )
+        store.waitUntilIdle()
+
+        assertNull(sentIntent)
+        assertNull(sentUrl)
+
+        store.dispatch(
+            MenuAction.CustomMenuItemAction(
+                intent = mockIntent,
+                url = url,
+            ),
+        )
+        store.waitUntilIdle()
+
+        assertEquals(sentIntent, mockIntent)
+        assertEquals(sentUrl, url)
+        assertTrue(dismissWasCalled)
+    }
+
+    @Test
     fun `GIVEN menu is accessed from the browser WHEN request desktop mode action is dispatched THEN request desktop site use case is invoked`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
@@ -946,6 +990,7 @@ class MenuDialogMiddlewareTest {
         appStore: AppStore = AppStore(),
         menuState: MenuState = MenuState(),
         onDismiss: suspend () -> Unit = {},
+        onSendPendingIntentWithUrl: (intent: PendingIntent, url: String?) -> Unit = { _: PendingIntent, _: String? -> },
     ) = MenuStore(
         initialState = menuState,
         middleware = listOf(
@@ -960,9 +1005,11 @@ class MenuDialogMiddlewareTest {
                 addPinnedSiteUseCase = addPinnedSiteUseCase,
                 removePinnedSitesUseCase = removePinnedSiteUseCase,
                 requestDesktopSiteUseCase = requestDesktopSiteUseCase,
+                alertDialogBuilder = alertDialogBuilder,
                 topSitesMaxLimit = TOP_SITES_MAX_COUNT,
                 onDeleteAndQuit = onDeleteAndQuit,
                 onDismiss = onDismiss,
+                onSendPendingIntentWithUrl = onSendPendingIntentWithUrl,
                 scope = scope,
             ),
         ),

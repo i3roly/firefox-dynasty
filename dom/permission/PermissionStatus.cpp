@@ -95,7 +95,7 @@ RefPtr<PermissionStatus::SimplePromise> PermissionStatus::UpdateState() {
     return SimplePromise::CreateAndReject(rv, __func__);
   }
 
-  mState = ActionToPermissionState(action);
+  mState = ActionToPermissionState(action, mName, *document);
   return SimplePromise::CreateAndResolve(NS_OK, __func__);
 }
 

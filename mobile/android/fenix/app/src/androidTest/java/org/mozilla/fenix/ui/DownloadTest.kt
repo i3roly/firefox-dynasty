@@ -7,7 +7,6 @@ package org.mozilla.fenix.ui
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.core.net.toUri
 import androidx.test.espresso.intent.rule.IntentsRule
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.mozilla.fenix.customannotations.SmokeTest
@@ -54,7 +53,7 @@ class DownloadTest : TestSetup() {
     @get:Rule
     val intentsTestRule = IntentsRule()
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/243844
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/243844
     @Test
     fun verifyTheDownloadPromptsTest() {
         downloadRobot {
@@ -66,8 +65,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2299405
-    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1900733")
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2299405
     @Test
     fun verifyTheDownloadFailedNotificationsTest() {
         downloadRobot {
@@ -84,7 +82,7 @@ class DownloadTest : TestSetup() {
         }.closeNotificationTray {}
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2298616
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2298616
     @Test
     fun verifyDownloadCompleteNotificationTest() {
         downloadRobot {
@@ -108,7 +106,7 @@ class DownloadTest : TestSetup() {
         }.closeNotificationTray {}
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/451563
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/451563
     @SmokeTest
     @Test
     fun pauseResumeCancelDownloadTest() {
@@ -133,7 +131,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2301474
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2301474
     @Test
     fun openDownloadedFileFromDownloadsMenuTest() {
         downloadRobot {
@@ -150,7 +148,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/1114970
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1114970
     @Test
     fun deleteDownloadedFileTest() {
         downloadRobot {
@@ -168,7 +166,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2302662
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2302662
     @Test
     fun deleteMultipleDownloadedFilesTest() {
         val firstDownloadedFile = "smallZip.zip"
@@ -203,7 +201,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2301537
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2301537
     @Test
     fun fileDeletedFromStorageIsDeletedEverywhereTest() {
         downloadRobot {
@@ -233,7 +231,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/457112
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/457112
     @Test
     fun systemNotificationCantBeDismissedWhileInProgressTest() {
         downloadRobot {
@@ -250,8 +248,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2299297
-    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1842154")
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2299297
     @Test
     fun notificationCanBeDismissedIfDownloadIsInterruptedTest() {
         downloadRobot {
@@ -263,7 +260,11 @@ class DownloadTest : TestSetup() {
         browserScreen {
         }.openNotificationShade {
             verifySystemNotificationExists("Download failed")
-            swipeDownloadNotification("Left", true)
+            swipeDownloadNotification(
+                direction = "Left",
+                shouldDismissNotification = true,
+                canExpandNotification = true,
+            )
             verifySystemNotificationDoesNotExist("Firefox Fenix")
         }.closeNotificationTray {}
 
@@ -273,7 +274,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/1632384
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1632384
     @Test
     fun warningWhenClosingPrivateTabsWhileDownloadingTest() {
         homeScreen {
@@ -293,7 +294,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2302663
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2302663
     @Test
     fun cancelActivePrivateBrowsingDownloadsTest() {
         homeScreen {
@@ -313,7 +314,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2048448
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2048448
     // Save edited PDF file from the share overlay
     @SmokeTest
     @Test
@@ -337,7 +338,7 @@ class DownloadTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/244125
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/244125
     @Test
     fun restartDownloadFromAppNotificationAfterConnectionIsInterruptedTest() {
         downloadFile = "3GB.zip"

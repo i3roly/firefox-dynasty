@@ -3693,7 +3693,8 @@ void nsIFrame::BuildDisplayListForStackingContext(
     }
 
     nsDisplayTransform* transformItem = MakeDisplayItem<nsDisplayTransform>(
-        aBuilder, this, &resultList, visibleRect, prerenderInfo.mDecision);
+        aBuilder, this, &resultList, visibleRect, prerenderInfo.mDecision,
+        usingBackdropFilter);
     if (transformItem) {
       resultList.AppendToTop(transformItem);
       createdContainer = true;
@@ -4824,6 +4825,7 @@ nsresult nsIFrame::MoveCaretToEventPoint(nsPresContext* aPresContext,
             curDetail->mSelectionType != SelectionType::eURLSecondary &&
             curDetail->mSelectionType != SelectionType::eURLStrikeout &&
             curDetail->mSelectionType != SelectionType::eHighlight &&
+            curDetail->mSelectionType != SelectionType::eTargetText &&
             curDetail->mStart <= offsets.StartOffset() &&
             offsets.EndOffset() <= curDetail->mEnd) {
           inSelection = true;
@@ -5996,14 +5998,8 @@ void nsIFrame::MarkSubtreeDirty() {
 }
 
 /* virtual */
-nscoord nsIFrame::GetMinISize(gfxContext* aRenderingContext) { return 0; }
-
-/* virtual */
-nscoord nsIFrame::GetPrefISize(gfxContext* aRenderingContext) { return 0; }
-
-/* virtual */
 void nsIFrame::AddInlineMinISize(gfxContext* aRenderingContext,
-                                 nsIFrame::InlineMinISizeData* aData) {
+                                 InlineMinISizeData* aData) {
   nscoord isize = nsLayoutUtils::IntrinsicForContainer(
       aRenderingContext, this, IntrinsicISizeType::MinISize);
   aData->DefaultAddInlineMinISize(this, isize);
@@ -6725,6 +6721,24 @@ nscoord nsIFrame::ShrinkISizeToFit(gfxContext* aRenderingContext,
     }
   }
   return result;
+}
+
+nscoord nsIFrame::IntrinsicISizeFromInline(gfxContext* aContext,
+                                           IntrinsicISizeType aType) {
+  MOZ_ASSERT(!IsContainerForFontSizeInflation(),
+             "Should not be a container for font size inflation!");
+
+  if (aType == IntrinsicISizeType::MinISize) {
+    InlineMinISizeData data;
+    AddInlineMinISize(aContext, &data);
+    data.ForceBreak();
+    return data.mPrevLines;
+  }
+
+  InlinePrefISizeData data;
+  AddInlinePrefISize(aContext, &data);
+  data.ForceBreak();
+  return data.mPrevLines;
 }
 
 nscoord nsIFrame::ComputeISizeValueFromAspectRatio(
@@ -7692,9 +7706,6 @@ void nsIFrame::InvalidateFrameWithRect(const nsRect& aRect,
 
   *rect = rect->Union(aRect);
 }
-
-/*static*/
-uint8_t nsIFrame::sLayerIsPrerenderedDataKey;
 
 bool nsIFrame::IsInvalid(nsRect& aRect) {
   if (!HasAnyStateBits(NS_FRAME_NEEDS_PAINT)) {

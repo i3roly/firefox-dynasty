@@ -468,8 +468,8 @@ void ClientWebGLContext::EndComposition() {
 layers::TextureType ClientWebGLContext::GetTexTypeForSwapChain() const {
   const RefPtr<layers::ImageBridgeChild> imageBridge =
       layers::ImageBridgeChild::GetSingleton();
-  return layers::TexTypeForWebgl(imageBridge,
-                                 mNotLost->outOfProcess != nullptr);
+  const bool isOutOfProcess = mNotLost && mNotLost->outOfProcess != nullptr;
+  return layers::TexTypeForWebgl(imageBridge, isOutOfProcess);
 }
 
 void ClientWebGLContext::Present(WebGLFramebufferJS* const xrFb,
@@ -5860,7 +5860,7 @@ void ClientWebGLContext::ProvokingVertex(const GLenum rawMode) const {
   const FuncScope funcScope(*this, "provokingVertex");
   if (IsContextLost()) return;
 
-  const auto mode = webgl::AsEnumCase<webgl::ProvokingVertex>(rawMode);
+  const auto mode = AsEnumCase<webgl::ProvokingVertex>(rawMode);
   if (!mode) {
     EnqueueError_ArgEnum("mode", rawMode);
     return;

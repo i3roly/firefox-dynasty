@@ -7,21 +7,6 @@ import { useDispatch, useSelector } from "react-redux";
 import { ModalOverlayWrapper } from "content-src/components/ModalOverlay/ModalOverlay";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 
-// TODO: move strings to newtab.ftl once strings have been approved
-const TOPIC_LABELS = {
-  "newtab-topic-business": "Business",
-  "newtab-topic-arts": "Entertainment",
-  "newtab-topic-food": "Food",
-  "newtab-topic-health": "Health",
-  "newtab-topic-finance": "Money",
-  "newtab-topic-government": "Politics",
-  "newtab-topic-sports": "Sports",
-  "newtab-topic-tech": "Tech",
-  "newtab-topic-travel": "Travel",
-  "newtab-topic-education": "Science",
-  "newtab-topic-society": "Life Hacks",
-};
-
 const EMOJI_LABELS = {
   business: "💼",
   arts: "🎭",
@@ -36,31 +21,110 @@ const EMOJI_LABELS = {
   society: "💡",
 };
 
-function TopicSelection() {
+function TopicSelection({ supportUrl }) {
   const dispatch = useDispatch();
   const inputRef = useRef(null);
   const modalRef = useRef(null);
   const checkboxWrapperRef = useRef(null);
-  const topics = useSelector(
-    state => state.Prefs.values["discoverystream.topicSelection.topics"]
-  ).split(", ");
-  const selectedTopics = useSelector(
-    state => state.Prefs.values["discoverystream.topicSelection.selectedTopics"]
-  );
-  const suggestedTopics = useSelector(
-    state =>
-      state.Prefs.values["discoverystream.topicSelection.suggestedTopics"]
-  ).split(", ");
+  const prefs = useSelector(state => state.Prefs.values);
+  const topics = prefs["discoverystream.topicSelection.topics"].split(", ");
+  const selectedTopics = prefs["discoverystream.topicSelection.selectedTopics"];
+  const suggestedTopics =
+    prefs["discoverystream.topicSelection.suggestedTopics"]?.split(", ");
+  const displayCount =
+    prefs["discoverystream.topicSelection.onboarding.displayCount"];
+  const topicsHaveBeenPreviouslySet =
+    prefs["discoverystream.topicSelection.hasBeenUpdatedPreviously"];
+  const [isFirstRun] = useState(displayCount === 0);
+  const displayCountRef = useRef(displayCount);
+  const preselectedTopics = () => {
+    if (selectedTopics) {
+      return selectedTopics.split(", ");
+    }
+    return isFirstRun ? suggestedTopics : [];
+  };
+  const [topicsToSelect, setTopicsToSelect] = useState(preselectedTopics);
 
-  // TODO: only show suggested topics during the first run
-  // if selectedTopics is empty - default to using the suggestedTopics as a starting value
-  const [topicsToSelect, setTopicsToSelect] = useState(
-    selectedTopics ? selectedTopics.split(", ") : suggestedTopics
-  );
+  function isFirstSave() {
+    // Only return true if the user has not previous set prefs
+    // and the selected topics pref is empty
+    if (selectedTopics === "" && !topicsHaveBeenPreviouslySet) {
+      return true;
+    }
+
+    return false;
+  }
 
   function handleModalClose() {
-    dispatch(ac.AlsoToMain({ type: at.TOPIC_SELECTION_SPOTLIGHT_TOGGLE }));
+    dispatch(ac.OnlyToMain({ type: at.TOPIC_SELECTION_USER_DISMISS }));
+    dispatch(
+      ac.BroadcastToContent({ type: at.TOPIC_SELECTION_SPOTLIGHT_CLOSE })
+    );
   }
+
+  function handleUserClose(e) {
+    const id = e?.target?.id;
+
+    if (id === "first-run") {
+      dispatch(ac.AlsoToMain({ type: at.TOPIC_SELECTION_MAYBE_LATER }));
+      dispatch(
+        ac.SetPref(
+          "discoverystream.topicSelection.onboarding.maybeDisplay",
+          true
+        )
+      );
+    } else {
+      dispatch(
+        ac.SetPref(
+          "discoverystream.topicSelection.onboarding.maybeDisplay",
+          false
+        )
+      );
+    }
+    handleModalClose();
+  }
+
+  // By doing this, the useEffect that sets up the IntersectionObserver
+  // will not re-run every time displayCount changes,
+  // but the observer callback will always have access
+  // to the latest displayCount value through the ref.
+  useEffect(() => {
+    displayCountRef.current = displayCount;
+  }, [displayCount]);
+
+  useEffect(() => {
+    const { current } = modalRef;
+    let observer;
+    if (current) {
+      observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) {
+          // if the user has seen the modal more than 3 times,
+          // automatically remove them from onboarding
+          if (displayCountRef.current > 3) {
+            dispatch(
+              ac.SetPref(
+                "discoverystream.topicSelection.onboarding.maybeDisplay",
+                false
+              )
+            );
+          }
+          observer.unobserve(modalRef.current);
+          dispatch(
+            ac.AlsoToMain({
+              type: at.TOPIC_SELECTION_IMPRESSION,
+            })
+          );
+        }
+      });
+      observer.observe(current);
+    }
+
+    return () => {
+      if (current) {
+        observer.unobserve(current);
+      }
+    };
+  }, [modalRef, dispatch]);
 
   // when component mounts, set focus to input
   useEffect(() => {
@@ -139,31 +203,53 @@ function TopicSelection() {
   }
 
   function handleSubmit() {
+    const topicsString = topicsToSelect.join(", ");
+    dispatch(
+      ac.SetPref("discoverystream.topicSelection.selectedTopics", topicsString)
+    );
     dispatch(
       ac.SetPref(
-        "discoverystream.topicSelection.selectedTopics",
-        topicsToSelect.join(", ")
+        "discoverystream.topicSelection.onboarding.maybeDisplay",
+        false
       )
+    );
+    if (!topicsHaveBeenPreviouslySet) {
+      dispatch(
+        ac.SetPref(
+          "discoverystream.topicSelection.hasBeenUpdatedPreviously",
+          true
+        )
+      );
+    }
+    dispatch(
+      ac.OnlyToMain({
+        type: at.TOPIC_SELECTION_USER_SAVE,
+        data: {
+          topics: topicsString,
+          previous_topics: selectedTopics,
+          first_save: isFirstSave(),
+        },
+      })
     );
     handleModalClose();
   }
 
   return (
     <ModalOverlayWrapper
-      onClose={handleModalClose}
+      onClose={handleUserClose}
       innerClassName="topic-selection-container"
     >
       <div className="topic-selection-form" ref={modalRef}>
         <button
           className="dismiss-button"
           title="dismiss"
-          onClick={handleModalClose}
+          onClick={handleUserClose}
         />
-        <h1 className="title">Select topics you care about</h1>
-        <p className="subtitle">
-          Tell us what you are interested in and we’ll recommend you great
-          stories!
-        </p>
+        <h1 className="title" data-l10n-id="newtab-topic-selection-title" />
+        <p
+          className="subtitle"
+          data-l10n-id="newtab-topic-selection-subtitle"
+        />
         <div className="topic-list" ref={checkboxWrapperRef}>
           {topics.map((topic, i) => {
             const checked = topicsToSelect.includes(topic);
@@ -183,21 +269,31 @@ function TopicSelection() {
                   <span className="topic-icon">{EMOJI_LABELS[`${topic}`]}</span>
                   <span className="topic-checked" />
                 </div>
-                <span className="topic-item-label">
-                  {TOPIC_LABELS[`newtab-topic-${topic}`]}
-                </span>
+                <span
+                  className="topic-item-label"
+                  data-l10n-id={`newtab-topic-label-${topic}`}
+                />
               </label>
             );
           })}
         </div>
         <div className="modal-footer">
-          <a href="https://support.mozilla.org/en-US/kb/pocket-recommendations-firefox-new-tab">
-            How we protect your data and privacy
-          </a>
+          <a
+            href={supportUrl}
+            data-l10n-id="newtab-topic-selection-privacy-link"
+          />
           <moz-button-group className="button-group">
-            <moz-button label="Remove topics" onClick={handleModalClose} />
             <moz-button
-              label="Save topics"
+              id={isFirstRun ? "first-run" : ""}
+              data-l10n-id={
+                isFirstRun
+                  ? "newtab-topic-selection-button-maybe-later"
+                  : "newtab-topic-selection-cancel-button"
+              }
+              onClick={handleUserClose}
+            />
+            <moz-button
+              data-l10n-id="newtab-topic-selection-save-button"
               type="primary"
               onClick={handleSubmit}
             />

@@ -3050,6 +3050,11 @@ static void SubmitDowngradeTelemetry(const nsCString& aLastVersion,
   rv = prefBranch->GetCharPref("toolkit.telemetry.cachedClientID", clientId);
   NS_ENSURE_SUCCESS_VOID(rv);
 
+  nsCString profileGroupId;
+  rv = prefBranch->GetCharPref("toolkit.telemetry.cachedProfileGroupID",
+                               profileGroupId);
+  NS_ENSURE_SUCCESS_VOID(rv);
+
   rv = prefSvc->GetDefaultBranch(nullptr, getter_AddRefs(prefBranch));
   NS_ENSURE_SUCCESS_VOID(rv);
 
@@ -3132,6 +3137,7 @@ static void SubmitDowngradeTelemetry(const nsCString& aLastVersion,
     w.StringProperty("creationDate", MakeStringSpan(date));
     w.IntProperty("version", TELEMETRY_PING_FORMAT_VERSION);
     w.StringProperty("clientId", clientId);
+    w.StringProperty("profileGroupId", profileGroupId);
     w.StartObjectProperty("application");
     {
       w.StringProperty("architecture", arch);
@@ -4928,8 +4934,12 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
       // Try to remote the entire command line. If this fails, start up
       // normally.
 #  ifdef MOZ_WIDGET_GTK
-      const auto& startupToken =
+      auto& startupToken =
           GdkIsWaylandDisplay() ? mXDGActivationToken : mDesktopStartupID;
+#    ifdef MOZ_X11
+      if (GdkIsX11Display() && startupToken.IsEmpty())
+        startupToken = SynthesizeStartupToken();
+#    endif /* MOZ_X11 */
 #  else
       const nsCString startupToken;
 #  endif

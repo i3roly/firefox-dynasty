@@ -30,10 +30,10 @@ import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.readerview.ReaderViewFeature
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.tabs.WindowFeature
-import mozilla.components.service.glean.private.NoExtras
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.utils.ext.isLandscape
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.AddressToolbar
 import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Shopping
@@ -58,8 +58,6 @@ import org.mozilla.fenix.settings.quicksettings.protections.cookiebanners.getCoo
 import org.mozilla.fenix.shopping.DefaultShoppingExperienceFeature
 import org.mozilla.fenix.shopping.ReviewQualityCheckFeature
 import org.mozilla.fenix.shortcut.PwaOnboardingObserver
-import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
-import org.mozilla.fenix.snackbar.SnackbarBinding
 import org.mozilla.fenix.theme.ThemeManager
 
 /**
@@ -69,11 +67,8 @@ import org.mozilla.fenix.theme.ThemeManager
 class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     private val windowFeature = ViewBoundFeatureWrapper<WindowFeature>()
     private val openInAppOnboardingObserver = ViewBoundFeatureWrapper<OpenInAppOnboardingObserver>()
-    private val standardSnackbarErrorBinding =
-        ViewBoundFeatureWrapper<StandardSnackbarErrorBinding>()
     private val reviewQualityCheckFeature = ViewBoundFeatureWrapper<ReviewQualityCheckFeature>()
     private val translationsBinding = ViewBoundFeatureWrapper<TranslationsBinding>()
-    private val snackbarBinding = ViewBoundFeatureWrapper<SnackbarBinding>()
 
     private var readerModeAvailable = false
     private var reviewQualityCheckAvailable = false
@@ -204,28 +199,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 view = view,
             )
         }
-
-        standardSnackbarErrorBinding.set(
-            feature = StandardSnackbarErrorBinding(
-                requireActivity(),
-                requireActivity().components.appStore,
-            ),
-            owner = viewLifecycleOwner,
-            view = binding.root,
-        )
-
-        snackbarBinding.set(
-            feature = SnackbarBinding(
-                context = context,
-                browserStore = context.components.core.store,
-                appStore = context.components.appStore,
-                snackbarDelegate = FenixSnackbarDelegate(binding.dynamicSnackbarContainer),
-                navController = findNavController(),
-                customTabSessionId = customTabSessionId,
-            ),
-            owner = this,
-            view = view,
-        )
     }
 
     private fun initSharePageAction(context: Context) {
@@ -819,7 +792,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 FenixSnackbar.make(
                     view = binding.dynamicSnackbarContainer,
                     duration = Snackbar.LENGTH_SHORT,
-                    isDisplayedWithBrowserToolbar = true,
                 )
                     .setText(view.context.getString(messageStringRes))
                     .setAction(requireContext().getString(R.string.create_collection_view)) {

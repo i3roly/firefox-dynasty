@@ -1622,6 +1622,21 @@ bool CanvasRenderingContext2D::EnsureTarget(ErrorResult& aError,
     newTarget->ClearRect(canvasRect);
   }
 
+  // Ensure any Path state is compatible with the type of DrawTarget used. This
+  // may require making a copy with the correct type if they (rarely) mismatch.
+  if (mPathBuilder &&
+      mPathBuilder->GetBackendType() != newTarget->GetBackendType()) {
+    RefPtr<Path> path = mPathBuilder->Finish();
+    mPathBuilder = newTarget->CreatePathBuilder(path->GetFillRule());
+    path->StreamToSink(mPathBuilder);
+  }
+  if (mPath && mPath->GetBackendType() != newTarget->GetBackendType()) {
+    RefPtr<PathBuilder> builder =
+        newTarget->CreatePathBuilder(mPath->GetFillRule());
+    mPath->StreamToSink(builder);
+    mPath = builder->Finish();
+  }
+
   mTarget = std::move(newTarget);
   mBufferProvider = std::move(newProvider);
   mBufferNeedsClear = false;
@@ -5446,6 +5461,10 @@ MaybeGetSurfaceDescriptorForRemoteCanvas(
     if (subdescType ==
         layers::RemoteDecoderVideoSubDescriptor::TSurfaceDescriptorD3D10) {
       auto& descD3D10 = subdesc.get_SurfaceDescriptorD3D10();
+      if (descD3D10.gpuProcessQueryId().isSome() &&
+          descD3D10.gpuProcessQueryId().ref().mOnlyForOverlay) {
+        return Nothing();
+      }
       // Clear FileHandleWrapper, since FileHandleWrapper::mHandle could not be
       // cross process delivered by using Shmem. Cross-process delivery of
       // FileHandleWrapper::mHandle is not possible simply by using shmen. When

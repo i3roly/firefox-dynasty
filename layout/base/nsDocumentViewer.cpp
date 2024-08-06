@@ -78,6 +78,7 @@
 #include "nsCopySupport.h"
 #include "nsXULPopupManager.h"
 
+#include "nsIClipboard.h"
 #include "nsIClipboardHelper.h"
 
 #include "nsPIDOMWindow.h"
@@ -1965,6 +1966,12 @@ nsDocumentViewer::SetBoundsWithFlags(const nsIntRect& aBounds,
         nsIFrame* f = rootView->GetFrame();
         if (f) {
           f->InvalidateFrame();
+
+          // Forcibly refresh the viewport sizes even if the view size is not
+          // changed since it is possible that the |mBounds| change means that
+          // the software keyboard appeared/disappered, in such cases we might
+          // need to fire visual viewport events.
+          mPresShell->RefreshViewportSize();
         }
       }
     }
@@ -2418,7 +2425,7 @@ MOZ_CAN_RUN_SCRIPT_BOUNDARY NS_IMETHODIMP nsDocumentViewer::SelectAll() {
 
 NS_IMETHODIMP nsDocumentViewer::CopySelection() {
   RefPtr<PresShell> presShell = mPresShell;
-  nsCopySupport::FireClipboardEvent(eCopy, nsIClipboard::kGlobalClipboard,
+  nsCopySupport::FireClipboardEvent(eCopy, Some(nsIClipboard::kGlobalClipboard),
                                     presShell, nullptr);
   return NS_OK;
 }

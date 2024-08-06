@@ -102,6 +102,7 @@ web-platform-tests:
             - --exclude-tag=webgpu
             - --exclude-tag=canvas
             - --exclude-tag=webcodecs
+            - --exclude-tag=eme
 
 web-platform-tests-backlog:
     description: "Web platform test (backlog) run"
@@ -138,6 +139,7 @@ web-platform-tests-backlog:
             - --backlog
             - --exclude-tag=webgpu
             - --exclude-tag=webcodecs
+            - --exclude-tag=eme
 
 web-platform-tests-privatebrowsing:
     description: "Web platform privatebrowsing test run"
@@ -183,6 +185,34 @@ web-platform-tests-webcodecs:
             - --test-type=testharness
             - --default-exclude
             - --tag=webcodecs
+
+web-platform-tests-eme:
+    description: "Web platform EME test run"
+    suite: web-platform-tests
+    treeherder-symbol: W(eme)
+    tier: default
+    chunks: 1
+    max-run-time: 1800
+    variants:
+        - eme-wmf
+    run-on-projects:
+        by-variant:
+            eme-wmf:
+                by-test-platform:
+                    windows1.*-64.*: ['autoland', 'mozilla-central']
+                    default: []
+            default:
+                by-test-platform:
+                    android.*: []
+                    .*wayland.*: []
+                    windows1.*: []
+                    default: built-projects
+    mozharness:
+        chunked: true
+        extra-options:
+            - --test-type=testharness
+            - --default-exclude
+            - --tag=eme
 
 web-platform-tests-reftest:
     description: "Web platform reftest run"
@@ -449,6 +479,7 @@ web-platform-tests-reftest-backlog:
             - --backlog
             - --exclude-tag=webgpu
             - --exclude-tag=webcodecs
+            - --exclude-tag=eme
 
 web-platform-tests-wdspec:
     description: "Web platform webdriver-spec run"

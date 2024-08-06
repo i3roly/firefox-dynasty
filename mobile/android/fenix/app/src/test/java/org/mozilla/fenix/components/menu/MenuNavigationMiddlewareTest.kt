@@ -411,6 +411,9 @@ class MenuNavigationMiddlewareTest {
             navController.nav(
                 R.id.menuDialogFragment,
                 MenuDialogFragmentDirections.actionMenuDialogFragmentToTranslationsDialogFragment(),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.browserFragment, false)
+                    .build(),
             )
         }
     }
@@ -448,6 +451,9 @@ class MenuNavigationMiddlewareTest {
                     ),
                     showPage = true,
                 ),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.browserFragment, false)
+                    .build(),
             )
         }
     }
@@ -483,6 +489,9 @@ class MenuNavigationMiddlewareTest {
                     ),
                     showPage = true,
                 ),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.browserFragment, false)
+                    .build(),
             )
         }
     }

@@ -94,6 +94,7 @@ const MOCK_MINIDUMP_EXTRA: &str = r#"{
                             "ServerURL": "https://reports.example.com",
                             "TelemetryServerURL": "https://telemetry.example.com",
                             "TelemetryClientId": "telemetry_client",
+                            "TelemetryProfileGroupId": "telemetry_profile_group",
                             "TelemetrySessionId": "telemetry_session",
                             "SomeNestedJson": { "foo": "bar" },
                             "URL": "https://url.example.com"
@@ -338,6 +339,7 @@ impl AssertFiles {
                 "version": 4,
                 "creationDate": MOCK_CURRENT_TIME,
                 "clientId": "telemetry_client",
+                "profileGroupId": "telemetry_profile_group",
                 "payload": {
                     "sessionId": "telemetry_session",
                     "version": 1,
@@ -526,6 +528,7 @@ fn no_restart_with_windows_error_reporting() {
                             "ServerURL": "https://reports.example.com",
                             "TelemetryServerURL": "https://telemetry.example.com",
                             "TelemetryClientId": "telemetry_client",
+                            "TelemetryProfileGroupId": "telemetry_profile_group",
                             "TelemetrySessionId": "telemetry_session",
                             "SomeNestedJson": { "foo": "bar" },
                             "URL": "https://url.example.com",
@@ -802,6 +805,7 @@ fn details_window() {
              SomeNestedJson: {\"foo\":\"bar\"}\n\
              SubmittedFrom: Client\n\
              TelemetryClientId: telemetry_client\n\
+             TelemetryProfileGroupId: telemetry_profile_group\n\
              TelemetryServerURL: https://telemetry.example.com\n\
              TelemetrySessionId: telemetry_session\n\
              Throttleable: 1\n\
@@ -1094,6 +1098,19 @@ fn response_stop_sending_reports() {
         .submitted()
         .pending()
         .check_exists("data_dir/EndOfLife100.0");
+}
+
+#[test]
+fn rename_failure_uses_copy() {
+    let mut test = GuiTest::new();
+    test.mock.set(mock::MockHook::new("rename_fail"), true);
+    test.run(|interact| {
+        interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
+    });
+    test.assert_files()
+        .saved_settings(Settings::default())
+        .submitted()
+        .pending();
 }
 
 /// A real temporary directory in the host filesystem.

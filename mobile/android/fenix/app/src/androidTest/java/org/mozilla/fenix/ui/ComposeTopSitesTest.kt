@@ -41,7 +41,7 @@ class ComposeTopSitesTest : TestSetup() {
             ),
         ) { it.activity }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/532598
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/532598
     @SmokeTest
     @Test
     fun addAWebsiteAsATopSiteTest() {
@@ -64,7 +64,7 @@ class ComposeTopSitesTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/532599
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/532599
     @Test
     fun openTopSiteInANewTabTest() {
         val defaultWebPage = getGenericAsset(mockWebServer, 1)
@@ -96,7 +96,7 @@ class ComposeTopSitesTest : TestSetup() {
         mDevice.pressBack()
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/532600
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/532600
     @Test
     fun openTopSiteInANewPrivateTabTest() {
         val defaultWebPage = getGenericAsset(mockWebServer, 1)
@@ -122,9 +122,39 @@ class ComposeTopSitesTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/1110321
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1110321
     @Test
-    fun renameATopSiteTest() {
+    fun editTopSiteTest() {
+        val defaultWebPage = getGenericAsset(mockWebServer, 1)
+        val genericWebPage = getGenericAsset(mockWebServer, 2)
+        val newPageTitle = generateRandomString(5)
+
+        homeScreenWithComposeTopSites(composeTestRule) {
+            verifyExistingTopSitesList()
+        }
+        navigationToolbar {
+        }.enterURLAndEnterToBrowser(defaultWebPage.url) {
+            waitForPageToLoad()
+        }.openThreeDotMenu {
+            expandMenuFully()
+            verifyAddToShortcutsButton(true)
+        }.addToFirefoxHome {
+            verifySnackBarText(getStringResource(R.string.snackbar_added_to_shortcuts))
+        }.goToHomescreenWithComposeTopSites(composeTestRule) {
+            verifyExistingTopSitesList()
+            verifyExistingTopSiteItem(defaultWebPage.title)
+        }.openContextMenuOnTopSitesWithTitle(defaultWebPage.title) {
+            verifyTopSiteContextMenuItems()
+        }.editTopSite(newPageTitle, genericWebPage.url.toString()) {
+            verifyExistingTopSitesList()
+            verifyExistingTopSiteItem(newPageTitle)
+        }.openTopSiteTabWithTitle(newPageTitle) {
+            verifyUrl(genericWebPage.url.toString())
+        }
+    }
+
+    @Test
+    fun editTopSiteTestWithInvalidURL() {
         val defaultWebPage = getGenericAsset(mockWebServer, 1)
         val newPageTitle = generateRandomString(5)
 
@@ -144,13 +174,12 @@ class ComposeTopSitesTest : TestSetup() {
             verifyExistingTopSiteItem(defaultWebPage.title)
         }.openContextMenuOnTopSitesWithTitle(defaultWebPage.title) {
             verifyTopSiteContextMenuItems()
-        }.renameTopSite(newPageTitle) {
-            verifyExistingTopSitesList()
-            verifyExistingTopSiteItem(newPageTitle)
+        }.editTopSite(newPageTitle, "gl") {
+            verifyTopSiteContextMenuUrlErrorMessage()
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/532601
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/532601
     @Test
     fun removeTopSiteUsingMenuButtonTest() {
         val defaultWebPage = getGenericAsset(mockWebServer, 1)
@@ -181,7 +210,7 @@ class ComposeTopSitesTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2323641
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2323641
     @Test
     fun removeTopSiteFromMainMenuTest() {
         val defaultWebPage = getGenericAsset(mockWebServer, 1)
@@ -209,7 +238,7 @@ class ComposeTopSitesTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/561582
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/561582
     // Expected for en-us defaults
     @Test
     fun verifyENLocalesDefaultTopSitesListTest() {
@@ -222,7 +251,7 @@ class ComposeTopSitesTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/1050642
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1050642
     @SmokeTest
     @Test
     fun addAndRemoveMostViewedTopSiteTest() {

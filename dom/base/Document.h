@@ -246,7 +246,6 @@ class FeaturePolicy;
 class FontFaceSet;
 class FragmentDirective;
 class FrameRequestCallback;
-class ImageTracker;
 class HighlightRegistry;
 class HTMLAllCollection;
 class HTMLBodyElement;
@@ -254,7 +253,10 @@ class HTMLInputElement;
 class HTMLMetaElement;
 class HTMLDialogElement;
 class HTMLSharedElement;
+class HTMLVideoElement;
 class HTMLImageElement;
+class ImageTracker;
+enum class InteractiveWidget : uint8_t;
 struct LifecycleCallbackArgs;
 class Link;
 class Location;
@@ -3047,12 +3049,22 @@ class Document : public nsINode,
                                         uint32_t* aHandle);
   void CancelFrameRequestCallback(uint32_t aHandle);
 
+  void ScheduleVideoFrameCallbacks(HTMLVideoElement* aElement);
+  void CancelVideoFrameCallbacks(HTMLVideoElement* aElement);
+
   /**
    * Returns true if the handle refers to a callback that was canceled that
    * we did not find in our list of callbacks (e.g. because it is one of those
    * in the set of callbacks currently queued to be run).
    */
   bool IsCanceledFrameRequestCallback(uint32_t aHandle) const;
+
+  /**
+   * Put this document's video frame request callbacks into the provided
+   * list, and forget about them.
+   */
+  void TakeVideoFrameRequestCallbacks(
+      nsTArray<RefPtr<HTMLVideoElement>>& aVideoCallbacks);
 
   /**
    * Put this document's frame request callbacks into the provided
@@ -3946,6 +3958,10 @@ class Document : public nsINode,
 
  public:
   const OriginTrials& Trials() const { return mTrials; }
+
+  dom::InteractiveWidget InteractiveWidget() const {
+    return mInteractiveWidgetMode;
+  }
 
  private:
   void DoCacheAllKnownLangPrefs();
@@ -5161,6 +5177,9 @@ class Document : public nsINode,
   // viewport-fit described by
   // https://drafts.csswg.org/css-round-display/#viewport-fit-descriptor
   ViewportFitType mViewportFit;
+
+  // https://drafts.csswg.org/css-viewport/#interactive-widget-section
+  dom::InteractiveWidget mInteractiveWidgetMode;
 
   // XXXdholbert This should really be modernized to a nsTHashMap or similar,
   // though note that the modernization will need to take care to also convert

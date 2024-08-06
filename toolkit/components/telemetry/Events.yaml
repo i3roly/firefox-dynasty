@@ -1505,6 +1505,7 @@ messaging_experiments:
       "infobar",
       "spotlight",
       "featureCallout",
+      "fxms_bmb_button",
       "fxms_message_1",
       "fxms_message_2",
       "fxms_message_3",
@@ -2860,7 +2861,7 @@ pictureinpicture:
     expiry_version: "never"
     release_channel_collection: opt-out
   opened_method:
-    objects: ["toggle", "contextMenu", "urlBar", "shortcut"]
+    objects: ["toggle", "contextMenu", "urlBar", "shortcut", "autoToggle"]
     description: >
       Records the method for opening the Picture-in-Picture window.
     extra_keys:
@@ -2881,7 +2882,7 @@ pictureinpicture:
     expiry_version: "never"
     release_channel_collection: opt-out
   closed_method:
-    objects: ["closeButton", "unpip", "pagehide", "fullscreen", "setupFailure", "closePlayerShortcut", "contextMenu", "videoElRemove", "videoElEmptied", "urlBar", "shortcut"]
+    objects: ["closeButton", "unpip", "pagehide", "foregrounded","fullscreen", "setupFailure", "closePlayerShortcut", "contextMenu", "videoElRemove", "videoElEmptied", "urlBar", "shortcut"]
     description: >
       Records the method for closing the Picture-in-Picture window.
     notification_emails:

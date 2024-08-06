@@ -16,6 +16,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
+import androidx.annotation.DrawableRes
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -37,8 +39,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
-import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.getColor
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -76,6 +78,7 @@ import mozilla.components.concept.storage.FrecencyThresholdOption
 import mozilla.components.concept.sync.AccountObserver
 import mozilla.components.concept.sync.AuthType
 import mozilla.components.concept.sync.OAuthAccount
+import mozilla.components.feature.accounts.push.SendTabUseCases
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.top.sites.TopSite
 import mozilla.components.feature.top.sites.TopSitesConfig
@@ -84,10 +87,10 @@ import mozilla.components.feature.top.sites.TopSitesFrecencyConfig
 import mozilla.components.feature.top.sites.TopSitesProviderConfig
 import mozilla.components.lib.state.ext.consumeFlow
 import mozilla.components.lib.state.ext.consumeFrom
-import mozilla.components.service.glean.private.NoExtras
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.ui.colors.PhotonColors
 import mozilla.components.ui.tabcounter.TabCounterMenu
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.GleanMetrics.HomeScreen
 import org.mozilla.fenix.GleanMetrics.Homepage
@@ -113,7 +116,6 @@ import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerIntegration
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerView
 import org.mozilla.fenix.components.toolbar.FenixTabCounterMenu
-import org.mozilla.fenix.components.toolbar.ToolbarPosition
 import org.mozilla.fenix.components.toolbar.navbar.HomeNavBar
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.components.toolbar.navbar.updateNavBarForConfigurationChange
@@ -159,11 +161,14 @@ import org.mozilla.fenix.microsurvey.ui.MicrosurveyRequestPrompt
 import org.mozilla.fenix.microsurvey.ui.ext.MicrosurveyUIData
 import org.mozilla.fenix.microsurvey.ui.ext.toMicrosurveyUIData
 import org.mozilla.fenix.nimbus.FxNimbus
+import org.mozilla.fenix.onboarding.HomeScreenPopupManager
 import org.mozilla.fenix.perf.MarkersFragmentLifecycleCallbacks
 import org.mozilla.fenix.perf.StartupTimeline
 import org.mozilla.fenix.search.SearchDialogFragment
 import org.mozilla.fenix.search.toolbar.DefaultSearchSelectorController
 import org.mozilla.fenix.search.toolbar.SearchSelectorMenu
+import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
+import org.mozilla.fenix.snackbar.SnackbarBinding
 import org.mozilla.fenix.tabstray.Page
 import org.mozilla.fenix.tabstray.TabsTrayAccessPoint
 import org.mozilla.fenix.theme.FirefoxTheme
@@ -184,14 +189,9 @@ class HomeFragment : Fragment() {
     @Suppress("VariableNaming")
     internal var _binding: FragmentHomeBinding? = null
     internal val binding get() = _binding!!
+    private val snackbarBinding = ViewBoundFeatureWrapper<SnackbarBinding>()
 
     private val homeViewModel: HomeScreenViewModel by activityViewModels()
-
-    private val snackbarAnchorView: View?
-        get() = when (requireContext().settings().toolbarPosition) {
-            ToolbarPosition.BOTTOM -> binding.toolbarLayout
-            ToolbarPosition.TOP -> null
-        }
 
     private var _bottomToolbarContainerView: BottomToolbarContainerView? = null
     private val bottomToolbarContainerView: BottomToolbarContainerView
@@ -229,12 +229,10 @@ class HomeFragment : Fragment() {
                 }
 
                 FenixSnackbar.make(
-                    view = it,
+                    view = binding.dynamicSnackbarContainer,
                     duration = Snackbar.LENGTH_LONG,
-                    isDisplayedWithBrowserToolbar = false,
                 )
                     .setText(it.context.getString(message))
-                    .setAnchorView(snackbarAnchorView)
                     .show()
             }
         }
@@ -269,6 +267,7 @@ class HomeFragment : Fragment() {
     private val searchSelectorBinding = ViewBoundFeatureWrapper<SearchSelectorBinding>()
     private val searchSelectorMenuBinding = ViewBoundFeatureWrapper<SearchSelectorMenuBinding>()
     private val bottomToolbarContainerIntegration = ViewBoundFeatureWrapper<BottomToolbarContainerIntegration>()
+    private val homeScreenPopupManager = ViewBoundFeatureWrapper<HomeScreenPopupManager>()
 
     private lateinit var savedLoginsLauncher: ActivityResultLauncher<Intent>
 
@@ -411,6 +410,20 @@ class HomeFragment : Fragment() {
             )
         }
 
+        snackbarBinding.set(
+            feature = SnackbarBinding(
+                context = requireContext(),
+                browserStore = requireContext().components.core.store,
+                appStore = requireContext().components.appStore,
+                snackbarDelegate = FenixSnackbarDelegate(binding.dynamicSnackbarContainer),
+                navController = findNavController(),
+                sendTabUseCases = SendTabUseCases(requireComponents.backgroundServices.accountManager),
+                customTabSessionId = null,
+            ),
+            owner = this,
+            view = binding.root,
+        )
+
         _sessionControlInteractor = SessionControlInteractor(
             controller = DefaultSessionControlController(
                 activity = activity,
@@ -464,6 +477,7 @@ class HomeFragment : Fragment() {
             pocketStoriesController = DefaultPocketStoriesController(
                 homeActivity = activity,
                 appStore = components.appStore,
+                settings = components.settings,
             ),
             privateBrowsingController = DefaultPrivateBrowsingController(
                 activity = activity,
@@ -544,7 +558,7 @@ class HomeFragment : Fragment() {
                 toolbarView = binding.toolbarLayout,
                 bottomToolbarContainerView = _bottomToolbarContainerView?.toolbarContainerView,
                 reinitializeNavBar = ::reinitializeNavBar,
-                reinitializeMicrosurveyPrompt = { initializeMicrosurveyPrompt(requireContext()) },
+                reinitializeMicrosurveyPrompt = { initializeMicrosurveyPrompt() },
             )
             toolbarView?.updateButtonVisibility()
         }
@@ -554,7 +568,7 @@ class HomeFragment : Fragment() {
             updateMicrosurveyPromptForConfigurationChange(
                 parent = binding.homeLayout,
                 bottomToolbarContainerView = _bottomToolbarContainerView?.toolbarContainerView,
-                reinitializeMicrosurveyPrompt = { initializeMicrosurveyPrompt(requireContext()) },
+                reinitializeMicrosurveyPrompt = { initializeMicrosurveyPrompt() },
             )
         }
 
@@ -603,6 +617,8 @@ class HomeFragment : Fragment() {
             content = {
                 FirefoxTheme {
                     Column {
+                        Divider()
+
                         if (!activity.isMicrosurveyPromptDismissed.value &&
                             !context.settings().shouldShowNavigationBarCFR
                         ) {
@@ -610,6 +626,10 @@ class HomeFragment : Fragment() {
                                 if (it == null) {
                                     binding.bottomBarShadow.visibility = View.VISIBLE
                                 } else {
+                                    if (isToolbarAtBottom) {
+                                        updateToolbarViewUIForMicrosurveyPrompt()
+                                    }
+
                                     MicrosurveyRequestPrompt(
                                         microsurvey = it,
                                         activity = activity,
@@ -627,10 +647,12 @@ class HomeFragment : Fragment() {
                                                 MicrosurveyAction.Dismissed(it.id),
                                             )
                                             context.settings().shouldShowMicrosurveyPrompt = false
+                                            activity.isMicrosurveyPromptDismissed.value = true
+
+                                            resetToolbarViewUI()
+                                            reinitializeNavBar()
                                         },
                                     )
-
-                                    binding.bottomBarShadow.visibility = View.GONE
                                 }
                             }
                         }
@@ -641,8 +663,11 @@ class HomeFragment : Fragment() {
                             Divider()
                         }
 
+                        val showCFR =
+                            homeScreenPopupManager.get()?.navBarCFRVisibility?.collectAsState()?.value ?: false
+
                         CFRPopupLayout(
-                            showCFR = context.settings().shouldShowNavigationBarCFR,
+                            showCFR = showCFR,
                             properties = CFRPopupProperties(
                                 popupBodyColors = listOf(
                                     FirefoxTheme.colors.layerGradientEnd.toArgb(),
@@ -656,7 +681,7 @@ class HomeFragment : Fragment() {
                             onCFRShown = { NavigationBar.navigationBarCfrShown.record(NoExtras()) },
                             onDismiss = {
                                 NavigationBar.navigationBarCfrDismissed.record(NoExtras())
-                                context.settings().shouldShowNavigationBarCFR = false
+                                homeScreenPopupManager.get()?.setNavbarCFRShown(true)
                             },
                             title = {
                                 FirefoxTheme {
@@ -693,6 +718,7 @@ class HomeFragment : Fragment() {
                                     },
                                     iconColor = when (activity.browsingModeManager.mode.isPrivate) {
                                         true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
+
                                         else -> null
                                     },
                                 ).also {
@@ -775,7 +801,9 @@ class HomeFragment : Fragment() {
         }
     }
 
-    private fun initializeMicrosurveyPrompt(context: Context) {
+    private fun initializeMicrosurveyPrompt() {
+        val context = requireContext()
+
         val isToolbarAtTheBottom = context.isToolbarAtBottom()
         // The toolbar view has already been added directly to the container.
         // See initializeNavBar for more details on improving this.
@@ -789,8 +817,9 @@ class HomeFragment : Fragment() {
             content = {
                 FirefoxTheme {
                     Column {
-                        val activity = requireActivity() as HomeActivity
+                        Divider()
 
+                        val activity = requireActivity() as HomeActivity
                         val shouldShowNavBarCFR =
                             context.shouldAddNavigationBar() && context.settings().shouldShowNavigationBarCFR
 
@@ -799,6 +828,10 @@ class HomeFragment : Fragment() {
                                 if (it == null) {
                                     binding.bottomBarShadow.visibility = View.VISIBLE
                                 } else {
+                                    if (isToolbarAtTheBottom) {
+                                        updateToolbarViewUIForMicrosurveyPrompt()
+                                    }
+
                                     MicrosurveyRequestPrompt(
                                         microsurvey = it,
                                         activity = activity,
@@ -814,10 +847,12 @@ class HomeFragment : Fragment() {
                                                 MicrosurveyAction.Dismissed(it.id),
                                             )
                                             context.settings().shouldShowMicrosurveyPrompt = false
+                                            activity.isMicrosurveyPromptDismissed.value = true
+
+                                            resetToolbarViewUI()
+                                            initializeMicrosurveyPrompt()
                                         },
                                     )
-
-                                    binding.bottomBarShadow.visibility = View.GONE
                                 }
                             }
                         }
@@ -832,6 +867,28 @@ class HomeFragment : Fragment() {
             },
         )
     }
+
+    private fun updateToolbarViewUIForMicrosurveyPrompt() {
+        updateToolbarViewUI(R.drawable.home_bottom_bar_background_no_divider, View.GONE, 0.0f)
+    }
+
+    private fun resetToolbarViewUI() {
+        _binding?.homeLayout?.removeView(bottomToolbarContainerView.toolbarContainerView)
+        updateToolbarViewUI(
+            R.drawable.home_bottom_bar_background,
+            View.VISIBLE,
+            requireContext().resources.getDimension(R.dimen.browser_fragment_toolbar_elevation),
+        )
+    }
+
+    private fun updateToolbarViewUI(@DrawableRes id: Int, visibility: Int, elevation: Float) {
+        _binding?.bottomBar?.background = compatDrawableFor(id)
+        _binding?.bottomBarShadow?.visibility = visibility
+        _binding?.toolbarLayout?.elevation = elevation
+    }
+
+    private fun compatDrawableFor(@DrawableRes id: Int) =
+        ResourcesCompat.getDrawable(resources, id, null)
 
     private var currentMicrosurvey: MicrosurveyUIData? = null
 
@@ -852,7 +909,7 @@ class HomeFragment : Fragment() {
                             }
                             reinitializeNavBar()
                         } else {
-                            initializeMicrosurveyPrompt(requireContext())
+                            initializeMicrosurveyPrompt()
                         }
                     }
                 }
@@ -892,7 +949,7 @@ class HomeFragment : Fragment() {
     @VisibleForTesting
     internal fun showUndoSnackbarForTopSite(topSite: TopSite) {
         lifecycleScope.allowUndo(
-            view = requireView(),
+            view = binding.dynamicSnackbarContainer,
             message = getString(R.string.snackbar_top_site_removed),
             undoActionTitle = getString(R.string.snackbar_deleted_undo),
             onCancel = {
@@ -902,9 +959,7 @@ class HomeFragment : Fragment() {
                 )
             },
             operation = { },
-            anchorView = snackbarAnchorView,
             elevation = TOAST_ELEVATION,
-            paddedForBottomToolbar = true,
         )
     }
 
@@ -965,6 +1020,15 @@ class HomeFragment : Fragment() {
 
         observeSearchEngineNameChanges()
         observeWallpaperUpdates()
+
+        homeScreenPopupManager.set(
+            feature = HomeScreenPopupManager(
+                appStore = requireComponents.appStore,
+                settings = requireContext().settings(),
+            ),
+            owner = viewLifecycleOwner,
+            view = binding.root,
+        )
 
         val shouldAddNavigationBar = requireContext().shouldAddNavigationBar()
         if (shouldAddNavigationBar) {
@@ -1149,14 +1213,13 @@ class HomeFragment : Fragment() {
         }
 
         viewLifecycleOwner.lifecycleScope.allowUndo(
-            requireView(),
+            binding.dynamicSnackbarContainer,
             snackbarMessage,
             requireContext().getString(R.string.snackbar_deleted_undo),
             {
                 requireComponents.useCases.tabsUseCases.undo.invoke()
             },
             operation = { },
-            anchorView = snackbarAnchorView,
         )
     }
 
@@ -1168,7 +1231,7 @@ class HomeFragment : Fragment() {
 
     private fun showUndoSnackbar(message: String) {
         viewLifecycleOwner.lifecycleScope.allowUndo(
-            requireView(),
+            binding.dynamicSnackbarContainer,
             message,
             requireContext().getString(R.string.snackbar_deleted_undo),
             {
@@ -1178,7 +1241,6 @@ class HomeFragment : Fragment() {
                 )
             },
             operation = { },
-            anchorView = snackbarAnchorView,
         )
     }
 
@@ -1219,12 +1281,10 @@ class HomeFragment : Fragment() {
                         if (authType != AuthType.Existing) {
                             view?.let {
                                 FenixSnackbar.make(
-                                    view = it,
+                                    view = binding.dynamicSnackbarContainer,
                                     duration = Snackbar.LENGTH_SHORT,
-                                    isDisplayedWithBrowserToolbar = false,
                                 )
                                     .setText(it.context.getString(R.string.onboarding_firefox_account_sync_is_on))
-                                    .setAnchorView(binding.toolbarLayout)
                                     .show()
                             }
                         }
@@ -1255,7 +1315,7 @@ class HomeFragment : Fragment() {
         val snackbarMessage = getString(R.string.snackbar_collection_deleted)
 
         lifecycleScope.allowUndo(
-            requireView(),
+            binding.dynamicSnackbarContainer,
             snackbarMessage,
             getString(R.string.snackbar_deleted_undo),
             {
@@ -1263,7 +1323,6 @@ class HomeFragment : Fragment() {
             },
             operation = { },
             elevation = TOAST_ELEVATION,
-            anchorView = snackbarAnchorView,
         )
 
         lifecycleScope.launch(IO) {
@@ -1297,12 +1356,7 @@ class HomeFragment : Fragment() {
         super.onPause()
         if (browsingModeManager.mode == BrowsingMode.Private) {
             activity?.window?.setBackgroundDrawable(
-                ColorDrawable(
-                    ContextCompat.getColor(
-                        requireContext(),
-                        R.color.fx_mobile_private_layer_color_1,
-                    ),
-                ),
+                ColorDrawable(getColor(requireContext(), R.color.fx_mobile_private_layer_color_1)),
             )
         }
 
@@ -1431,12 +1485,10 @@ class HomeFragment : Fragment() {
         view?.let { view ->
             val string = view.context.getString(R.string.snackbar_collection_renamed)
             FenixSnackbar.make(
-                view = view,
+                view = binding.dynamicSnackbarContainer,
                 duration = Snackbar.LENGTH_LONG,
-                isDisplayedWithBrowserToolbar = false,
             )
                 .setText(string)
-                .setAnchorView(snackbarAnchorView)
                 .show()
         }
     }
@@ -1487,7 +1539,7 @@ class HomeFragment : Fragment() {
                         with(binding.wallpaperImageView) {
                             isVisible = false
                             showSnackBar(
-                                view = this,
+                                view = binding.dynamicSnackbarContainer,
                                 text = resources.getString(R.string.wallpaper_select_error_snackbar_message),
                             )
                         }

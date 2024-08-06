@@ -49,6 +49,7 @@
 #include "mozilla/dom/HTMLVideoElement.h"
 #include "mozilla/dom/InspectorFontFace.h"
 #include "mozilla/dom/ImageBitmap.h"
+#include "mozilla/dom/InteractiveWidget.h"
 #include "mozilla/dom/KeyframeEffect.h"
 #include "mozilla/dom/SVGViewportElement.h"
 #include "mozilla/dom/UIEvent.h"
@@ -4818,9 +4819,7 @@ nscoord nsLayoutUtils::IntrinsicForAxis(
         result = aFrame->BSize();
       }
     } else {
-      result = aType == IntrinsicISizeType::MinISize
-                   ? aFrame->GetMinISize(aRenderingContext)
-                   : aFrame->GetPrefISize(aRenderingContext);
+      result = aFrame->IntrinsicISize(aRenderingContext, aType);
     }
 #ifdef DEBUG_INTRINSIC_WIDTH
     --gNoiseIndent;
@@ -5013,16 +5012,15 @@ nscoord nsLayoutUtils::IntrinsicForAxis(
 }
 
 /* static */
-nscoord nsLayoutUtils::IntrinsicForContainer(gfxContext* aRenderingContext,
-                                             nsIFrame* aFrame,
-                                             IntrinsicISizeType aType,
-                                             uint32_t aFlags) {
+nscoord nsLayoutUtils::IntrinsicForContainer(
+    gfxContext* aRenderingContext, nsIFrame* aFrame, IntrinsicISizeType aType,
+    const Maybe<LogicalSize>& aPercentageBasis, uint32_t aFlags) {
   MOZ_ASSERT(aFrame && aFrame->GetParent());
   // We want the size aFrame will contribute to its parent's inline-size.
   PhysicalAxis axis =
       aFrame->GetParent()->GetWritingMode().PhysicalAxis(LogicalAxis::Inline);
-  return IntrinsicForAxis(axis, aRenderingContext, aFrame, aType, Nothing(),
-                          aFlags);
+  return IntrinsicForAxis(axis, aRenderingContext, aFrame, aType,
+                          aPercentageBasis, aFlags);
 }
 
 /* static */
@@ -5286,30 +5284,6 @@ nsSize nsLayoutUtils::ComputeAutoSizeWithIntrinsicDimensions(
   }
 
   return nsSize(width, height);
-}
-
-/* static */
-nscoord nsLayoutUtils::MinISizeFromInline(nsIFrame* aFrame,
-                                          gfxContext* aRenderingContext) {
-  NS_ASSERTION(!aFrame->IsContainerForFontSizeInflation(),
-               "should not be container for font size inflation");
-
-  nsIFrame::InlineMinISizeData data;
-  aFrame->AddInlineMinISize(aRenderingContext, &data);
-  data.ForceBreak();
-  return data.mPrevLines;
-}
-
-/* static */
-nscoord nsLayoutUtils::PrefISizeFromInline(nsIFrame* aFrame,
-                                           gfxContext* aRenderingContext) {
-  NS_ASSERTION(!aFrame->IsContainerForFontSizeInflation(),
-               "should not be container for font size inflation");
-
-  nsIFrame::InlinePrefISizeData data;
-  aFrame->AddInlinePrefISize(aRenderingContext, &data);
-  data.ForceBreak();
-  return data.mPrevLines;
 }
 
 static nscolor DarkenColor(nscolor aColor) {
@@ -8251,6 +8225,17 @@ bool nsLayoutUtils::UpdateCompositionBoundsForRCDRSF(
   if (!GetDocumentViewerSize(aPresContext, contentSize,
                              shouldSubtractDynamicToolbar)) {
     return false;
+  }
+
+  // Add the keyboard height in the case of
+  // `interactive-widget=overlays-content` so that contents being overlaid by
+  // the keyboard can NOT be reachable by scrolling.
+  if (aPresContext->GetKeyboardHeight() &&
+      aPresContext->Document()->InteractiveWidget() ==
+          InteractiveWidget::OverlaysContent) {
+    contentSize.height += ViewAs<LayoutDevicePixel>(
+        aPresContext->GetKeyboardHeight(),
+        PixelCastJustification::LayoutDeviceIsScreenForBounds);
   }
   aCompBounds.SizeTo(ViewAs<ParentLayerPixel>(
       LayoutDeviceSize(contentSize),

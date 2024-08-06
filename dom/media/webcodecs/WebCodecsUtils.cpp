@@ -320,12 +320,13 @@ Maybe<VideoPixelFormat> SurfaceFormatToVideoPixelFormat(
       return Some(VideoPixelFormat::RGBA);
     case gfx::SurfaceFormat::R8G8B8X8:
       return Some(VideoPixelFormat::RGBX);
-    case gfx::SurfaceFormat::YUV:
+    case gfx::SurfaceFormat::YUV420:
       return Some(VideoPixelFormat::I420);
+    case gfx::SurfaceFormat::YUV422P10:
+      return Some(VideoPixelFormat::I422P10);
     case gfx::SurfaceFormat::NV12:
       return Some(VideoPixelFormat::NV12);
-    case gfx::SurfaceFormat::YUV422:
-      return Some(VideoPixelFormat::I422);
+
     default:
       break;
   }

@@ -11,6 +11,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PersistentCache: "resource://activity-stream/lib/PersistentCache.sys.mjs",
   Region: "resource://gre/modules/Region.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
+  ProfileAge: "resource://gre/modules/ProfileAge.sys.mjs",
 });
 
 // We use importESModule here instead of static import so that
@@ -35,6 +36,14 @@ const SPOCS_FEEDS_UPDATE_TIME = 30 * 60 * 1000; // 30 minutes
 const DEFAULT_RECS_EXPIRE_TIME = 60 * 60 * 1000; // 1 hour
 const MAX_LIFETIME_CAP = 500; // Guard against misconfiguration on the server
 const FETCH_TIMEOUT = 45 * 1000;
+const TOPIC_LOADING_TIMEOUT = 1 * 1000;
+const TOPIC_SELECTION_DISPLAY_COUNT =
+  "discoverystream.topicSelection.onboarding.displayCount";
+const TOPIC_SELECTION_LAST_DISPLAYED =
+  "discoverystream.topicSelection.onboarding.lastDisplayed";
+const TOPIC_SELECTION_DISPLAY_TIMEOUT =
+  "discoverystream.topicSelection.onboarding.displayTimeout";
+
 const SPOCS_URL = "https://spocs.getpocket.com/spocs";
 const FEED_URL =
   "https://getpocket.cdn.mozilla.net/v3/firefox/global-recs?version=3&consumer_key=$apiKey&locale_lang=$locale&region=$region&count=30";
@@ -67,6 +76,11 @@ const PREF_POCKET_BUTTON = "extensions.pocket.enabled";
 const PREF_COLLECTION_DISMISSIBLE = "discoverystream.isCollectionDismissible";
 const PREF_SELECTED_TOPICS = "discoverystream.topicSelection.selectedTopics";
 const PREF_TOPIC_SELECTION_ENABLED = "discoverystream.topicSelection.enabled";
+const PREF_TOPIC_SELECTION_PREVIOUS_SELECTED =
+  "discoverystream.topicSelection.hasBeenUpdatedPreviously";
+const PREF_SPOCS_CACHE_TIMEOUT = "discoverystream.spocs.cacheTimeout";
+const PREF_SPOCS_STARTUP_CACHE_ENABLED =
+  "discoverystream.spocs.startupCache.enabled";
 
 let getHardcodedLayout;
 
@@ -415,8 +429,8 @@ export class DiscoveryStreamFeed {
   }
 
   setupSpocsCacheUpdateTime() {
-    const nimbusConfig = this.store.getState().Prefs.values?.pocketConfig || {};
-    const { spocsCacheTimeout } = nimbusConfig;
+    const spocsCacheTimeout =
+      this.store.getState().Prefs.values[PREF_SPOCS_CACHE_TIMEOUT];
     const MAX_TIMEOUT = 30;
     const MIN_TIMEOUT = 5;
     // We do a bit of min max checking the the configured value is between
@@ -443,47 +457,25 @@ export class DiscoveryStreamFeed {
    */
   isExpired({ cachedData, key, url, isStartup }) {
     const { spocs, feeds } = cachedData;
-
+    const updateTimePerComponent = {
+      spocs: this.spocsCacheUpdateTime,
+      feed: COMPONENT_FEEDS_UPDATE_TIME,
+    };
+    const EXPIRATION_TIME = isStartup
+      ? STARTUP_CACHE_EXPIRE_TIME
+      : updateTimePerComponent[key];
     switch (key) {
-      case "spocs": {
-        const nimbusConfig =
-          this.store.getState().Prefs.values?.pocketConfig || {};
-        const { spocsStartupCacheTimeout } = nimbusConfig;
-        // Min and max times are 7 days and whatever the spoc cache time is.
-        // We don't want our startup spoc cache to be faster than the regular spoc cache.
-        const MAX_TIMEOUT = STARTUP_CACHE_EXPIRE_TIME;
-        const MIN_TIMEOUT = this.spocsCacheUpdateTime;
-        let expirationTime = isStartup
-          ? STARTUP_CACHE_EXPIRE_TIME
-          : this.spocsCacheUpdateTime;
-        if (isStartup && spocsStartupCacheTimeout) {
-          // This value is in minutes, but we want ms.
-          const spocsStartupCacheTimeoutMs =
-            spocsStartupCacheTimeout * 60 * 1000;
-          if (
-            spocsStartupCacheTimeoutMs <= MAX_TIMEOUT &&
-            spocsStartupCacheTimeoutMs >= MIN_TIMEOUT
-          ) {
-            expirationTime = spocsStartupCacheTimeoutMs;
-          }
-        }
-        // isExpired returns true if cache has expired or is missing.
-        return !spocs || !(Date.now() - spocs.lastUpdated < expirationTime);
-      }
-      case "feed": {
-        const expirationTime = isStartup
-          ? STARTUP_CACHE_EXPIRE_TIME
-          : COMPONENT_FEEDS_UPDATE_TIME;
+      case "spocs":
+        return !spocs || !(Date.now() - spocs.lastUpdated < EXPIRATION_TIME);
+      case "feed":
         return (
           !feeds ||
           !feeds[url] ||
-          !(Date.now() - feeds[url].lastUpdated < expirationTime)
+          !(Date.now() - feeds[url].lastUpdated < EXPIRATION_TIME)
         );
-      }
-      default: {
+      default:
         // istanbul ignore next
         throw new Error(`${key} is not a valid key`);
-      }
     }
   }
 
@@ -654,6 +646,23 @@ export class DiscoveryStreamFeed {
     ) {
       ctaButtonVariant = pocketConfig.ctaButtonVariant;
     }
+
+    const topicSelectionHasBeenUpdatedPreviously =
+      this.store.getState().Prefs.values[
+        PREF_TOPIC_SELECTION_PREVIOUS_SELECTED
+      ];
+
+    const selectedTopics =
+      this.store.getState().Prefs.values[PREF_SELECTED_TOPICS];
+
+    // Note: This requires a cache update to react to a pref update
+    const pocketStoriesHeadlineId =
+      topicSelectionHasBeenUpdatedPreviously || selectedTopics
+        ? "newtab-section-header-todays-picks"
+        : "newtab-section-header-stories";
+
+    pocketConfig.pocketStoriesHeadlineId = pocketStoriesHeadlineId;
+
     let spocMessageVariant = "";
     if (
       pocketConfig.spocMessageVariant === "variant-a" ||
@@ -739,6 +748,7 @@ export class DiscoveryStreamFeed {
       spocMessageVariant: this.locale.startsWith("en-")
         ? spocMessageVariant
         : "",
+      pocketStoriesHeadlineId: pocketConfig.pocketStoriesHeadlineId,
     });
 
     sendUpdate({
@@ -1465,6 +1475,7 @@ export class DiscoveryStreamFeed {
       }
 
       const feedResponse = await this.fetchFromEndpoint(feedUrl, options);
+
       if (feedResponse) {
         const { settings = {} } = feedResponse;
         let { recommendations } = feedResponse;
@@ -1639,11 +1650,17 @@ export class DiscoveryStreamFeed {
 
     this.loadLayout(dispatch, isStartup);
     if (this.showStories || this.showTopsites) {
+      const spocsStartupCacheEnabled =
+        this.store.getState().Prefs.values[PREF_SPOCS_STARTUP_CACHE_ENABLED];
       const promises = [];
+
       // We could potentially have either or both sponsored topsites or stories.
       // We only make one fetch, and control which to request when we fetch.
       // So for now we only care if we need to make this request at all.
-      const spocsPromise = this.loadSpocs(dispatch, isStartup).catch(error =>
+      const spocsPromise = this.loadSpocs(
+        dispatch,
+        spocsStartupCacheEnabled
+      ).catch(error =>
         console.error("Error trying to load spocs feeds:", error)
       );
       promises.push(spocsPromise);
@@ -1862,6 +1879,38 @@ export class DiscoveryStreamFeed {
     this.loadLayout(dispatch, false);
   }
 
+  async retreiveProfileAge() {
+    let profileAccessor = await lazy.ProfileAge();
+    let profileCreateTime = await profileAccessor.created;
+    let timeNow = new Date().getTime();
+    let profileAge = timeNow - profileCreateTime;
+    // Convert milliseconds to days
+    return profileAge / 1000 / 60 / 60 / 24;
+  }
+
+  topicSelectionImpressionEvent() {
+    let counter =
+      this.store.getState().Prefs.values[TOPIC_SELECTION_DISPLAY_COUNT];
+
+    const newCount = counter + 1;
+    this.store.dispatch(ac.SetPref(TOPIC_SELECTION_DISPLAY_COUNT, newCount));
+    this.store.dispatch(
+      ac.SetPref(TOPIC_SELECTION_LAST_DISPLAYED, `${new Date().getTime()}`)
+    );
+  }
+
+  topicSelectionMaybeLaterEvent() {
+    const age = this.retreiveProfileAge();
+    const newProfile = age <= 1;
+    const day = 24 * 60 * 60 * 1000;
+    this.store.dispatch(
+      ac.SetPref(
+        TOPIC_SELECTION_DISPLAY_TIMEOUT,
+        newProfile ? 3 * day : 7 * day
+      )
+    );
+  }
+
   async onPrefChangedAction(action) {
     switch (action.data.name) {
       case PREF_CONFIG:
@@ -1878,13 +1927,34 @@ export class DiscoveryStreamFeed {
         this.onCollectionsChanged();
         break;
       case PREF_SELECTED_TOPICS:
-        {
-          // when topics have been updated, make a new request from merino and clear impression cap
-          this.resetContentFeed();
-          this.writeDataPref(PREF_REC_IMPRESSIONS, {});
-          const url = this.generateFeedUrl();
-          this.retryFeed({ url });
-        }
+        this.store.dispatch(
+          ac.BroadcastToContent({ type: at.DISCOVERY_STREAM_LAYOUT_RESET })
+        );
+        // Ensure at least a little bit of loading is seen, if this is too fast,
+        // it's not clear to the user what just happened.
+        this.store.dispatch(
+          ac.BroadcastToContent({
+            type: at.DISCOVERY_STREAM_TOPICS_LOADING,
+            data: true,
+          })
+        );
+        setTimeout(() => {
+          this.store.dispatch(
+            ac.BroadcastToContent({
+              type: at.DISCOVERY_STREAM_TOPICS_LOADING,
+              data: false,
+            })
+          );
+        }, TOPIC_LOADING_TIMEOUT);
+        this.loadLayout(
+          a => this.store.dispatch(ac.BroadcastToContent(a)),
+          false
+        );
+
+        // when topics have been updated, make a new request from merino and clear impression cap
+        this.writeDataPref(PREF_REC_IMPRESSIONS, {});
+        await this.resetContentFeed();
+        this.refreshAll({ updateOpenTabs: true });
         break;
       case PREF_USER_TOPSITES:
       case PREF_SYSTEM_TOPSITES:
@@ -1957,6 +2027,9 @@ export class DiscoveryStreamFeed {
           await this.enable({ updateOpenTabs: true, isStartup: true });
         }
         Services.prefs.addObserver(PREF_POCKET_BUTTON, this);
+        break;
+      case at.TOPIC_SELECTION_MAYBE_LATER:
+        this.topicSelectionMaybeLaterEvent();
         break;
       case at.DISCOVERY_STREAM_DEV_SYSTEM_TICK:
       case at.SYSTEM_TICK:
@@ -2181,6 +2254,9 @@ export class DiscoveryStreamFeed {
           this.setupPrefs(false /* isStartup */);
         }
         break;
+      case at.TOPIC_SELECTION_IMPRESSION:
+        this.topicSelectionImpressionEvent();
+        break;
     }
   }
 }
@@ -2234,6 +2310,7 @@ getHardcodedLayout = ({
   ctaButtonSponsors = [],
   ctaButtonVariant = "",
   spocMessageVariant = "",
+  pocketStoriesHeadlineId = "newtab-section-header-stories",
 }) => ({
   lastUpdate: Date.now(),
   spocs: {
@@ -2306,13 +2383,13 @@ getHardcodedLayout = ({
           editorsPicksHeader,
           header: {
             title: {
-              id: "newtab-section-header-stories",
+              id: pocketStoriesHeadlineId,
             },
             subtitle: "",
             link_text: {
               id: "newtab-pocket-learn-more",
             },
-            link_url: "https://getpocket.com/firefox/new_tab_learn_more",
+            link_url: "",
             icon: "chrome://global/skin/icons/pocket.svg",
           },
           properties: {

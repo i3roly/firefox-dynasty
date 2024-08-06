@@ -83,11 +83,6 @@ android {
     project.configureProductFlavors.delegate = it
     project.configureProductFlavors()
 
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-
     lintOptions {
         abortOnError false
     }
@@ -189,7 +184,6 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
 
     kotlinOptions {
         allWarningsAsErrors = true
-        jvmTarget = JavaVersion.VERSION_17
     }
 
     doFirst {
@@ -232,8 +226,9 @@ dependencies {
     implementation ComponentsDependencies.androidx_collection
     implementation ComponentsDependencies.androidx_core
 
-    implementation "com.google.android.gms:play-services-fido:21.1.0"
+    implementation ComponentsDependencies.play_services_fido
     implementation "org.yaml:snakeyaml:2.2"
+    implementation 'androidx.core:core:1.12.0'
 
     implementation ComponentsDependencies.androidx_lifecycle_common
     implementation ComponentsDependencies.androidx_lifecycle_process

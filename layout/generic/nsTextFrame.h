@@ -393,8 +393,10 @@ class nsTextFrame : public nsIFrame {
   void SetFontSizeInflation(float aInflation);
 
   void MarkIntrinsicISizesDirty() final;
-  nscoord GetMinISize(gfxContext* aRenderingContext) final;
-  nscoord GetPrefISize(gfxContext* aRenderingContext) final;
+
+  nscoord IntrinsicISize(gfxContext* aContext,
+                         mozilla::IntrinsicISizeType aType) final;
+
   void AddInlineMinISize(gfxContext* aRenderingContext,
                          InlineMinISizeData* aData) override;
   void AddInlinePrefISize(gfxContext* aRenderingContext,
@@ -443,7 +445,7 @@ class nsTextFrame : public nsIFrame {
   };
 
   void AddInlineMinISizeForFlow(gfxContext* aRenderingContext,
-                                nsIFrame::InlineMinISizeData* aData,
+                                InlineMinISizeData* aData,
                                 TextRunType aTextRunType);
   void AddInlinePrefISizeForFlow(gfxContext* aRenderingContext,
                                  InlinePrefISizeData* aData,

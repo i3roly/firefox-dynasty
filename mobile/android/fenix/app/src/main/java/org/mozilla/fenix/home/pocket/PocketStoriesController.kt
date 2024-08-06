@@ -4,17 +4,19 @@
 
 package org.mozilla.fenix.home.pocket
 
-import mozilla.components.service.glean.private.NoExtras
 import mozilla.components.service.pocket.PocketStory
 import mozilla.components.service.pocket.PocketStory.PocketRecommendedStory
 import mozilla.components.service.pocket.PocketStory.PocketSponsoredStory
 import mozilla.components.service.pocket.ext.getCurrentFlightImpressions
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.GleanMetrics.Pings
 import org.mozilla.fenix.GleanMetrics.Pocket
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction
+import org.mozilla.fenix.ext.settings
+import org.mozilla.fenix.utils.Settings
 
 /**
  * Contract for how all user interactions with the Pocket stories feature are to be handled.
@@ -70,10 +72,12 @@ interface PocketStoriesController {
  *
  * @param homeActivity [HomeActivity] used to open URLs in a new tab.
  * @param appStore [AppStore] from which to read the current Pocket recommendations and dispatch new actions on.
+ * @param settings [Settings] used to check the application shared preferences.
  */
 internal class DefaultPocketStoriesController(
     private val homeActivity: HomeActivity,
     private val appStore: AppStore,
+    private val settings: Settings,
 ) : PocketStoriesController {
     override fun handleStoryShown(
         storyShown: PocketStory,
@@ -149,7 +153,12 @@ internal class DefaultPocketStoriesController(
         storyClicked: PocketStory,
         storyPosition: Pair<Int, Int>,
     ) {
-        homeActivity.openToBrowserAndLoad(storyClicked.url, true, BrowserDirection.FromHome)
+        val newTab = homeActivity.settings().enableHomepageAsNewTab.not()
+        homeActivity.openToBrowserAndLoad(
+            searchTermOrURL = storyClicked.url,
+            newTab = newTab,
+            from = BrowserDirection.FromHome,
+        )
 
         when (storyClicked) {
             is PocketRecommendedStory -> {

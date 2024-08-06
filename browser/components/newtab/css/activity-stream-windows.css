@@ -544,6 +544,13 @@ main section {
   font-size: 14px;
   color: var(--newtab-contextual-text-primary-color);
 }
+@media (min-width: 866px) {
+  .no-search .no-sections .wallpaper-attribution, .only-search .wallpaper-attribution, .only-topsites .wallpaper-attribution {
+    position: fixed;
+    inset-block-end: var(--space-large);
+    inset-inline-start: 0;
+  }
+}
 .lightWallpaper .wallpaper-attribution {
   color-scheme: light;
 }
@@ -2199,11 +2206,11 @@ main section {
   }
 }
 
-.has-weather.has-search .outer-wrapper {
+.has-weather.has-search .outer-wrapper:not(.only-search) {
   padding-top: 0;
 }
 @media (min-width: 610px) {
-  .has-weather.has-search .outer-wrapper {
+  .has-weather.has-search .outer-wrapper:not(.only-search) {
     padding-top: 30px;
   }
 }
@@ -3002,6 +3009,20 @@ main section {
 @media (min-width: 610px) and (max-width: 865px) {
   .collapsible-section[data-section-id=topstories] .card-outer:first-child {
     display: none;
+  }
+}
+.lightWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button), .darkWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button) {
+  background-color: var(--newtab-weather-background-color);
+}
+.lightWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button):hover, .darkWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button):hover {
+  background-color: var(--newtab-button-static-hover-background);
+}
+.lightWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button):hover:active, .darkWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button):hover:active {
+  background-color: var(--newtab-button-static-active-background);
+}
+@media (prefers-contrast) {
+  .lightWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button), .darkWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button) {
+    background-color: var(--background-color-box);
   }
 }
 
@@ -5558,6 +5579,18 @@ main section {
   justify-content: space-between;
   align-items: center;
 }
+.topic-selection-container .modal-footer > a {
+  color: var(--link-color);
+}
+.topic-selection-container .modal-footer > a:hover {
+  color: var(--link-color-hover);
+}
+.topic-selection-container .modal-footer > a:hover:active {
+  color: var(--link-color-active);
+}
+.topic-selection-container .modal-footer > a:visited {
+  color: var(--link-color-visited);
+}
 .topic-selection-container .modal-footer .button-group {
   gap: var(--space-medium);
   display: flex;
@@ -5573,14 +5606,15 @@ main section {
   width: fit-content;
 }
 .topic-list .topic-item {
+  align-items: center;
   border-radius: 40px;
-  padding-inline: 6px var(--size-item-small);
-  padding-block: 6px;
   border: 1px solid var(--color-gray-60);
   display: flex;
-  align-items: center;
   justify-self: center;
   max-width: fit-content;
+  padding-block: 6px;
+  padding-inline: 6px var(--size-item-small);
+  position: relative;
 }
 .topic-list .topic-item:hover {
   cursor: pointer;
@@ -5616,12 +5650,10 @@ main section {
   display: none;
 }
 .topic-list .topic-item input[type=checkbox] {
+  height: 100%;
   opacity: 0;
-  width: 1em;
-  height: 1em;
   position: absolute;
-  inset-inline-start: 0.5em;
-  top: 0.4em;
+  width: 90%;
 }
 .topic-list .topic-item input[type=checkbox]:checked ~ .topic-custom-checkbox {
   background-color: var(--color-accent-primary);

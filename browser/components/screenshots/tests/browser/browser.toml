@@ -1,15 +1,16 @@
 [DEFAULT]
 support-files = [
   "head.js",
-  "iframe-test-page.html",
   "first-iframe.html",
-  "second-iframe.html",
-  "test-page.html",
-  "short-test-page.html",
+  "iframe-test-page.html",
   "large-test-page.html",
-  "test-page-resize.html",
-  "test-selectionAPI-page.html",
   "rtl-test-page.html",
+  "second-iframe.html",
+  "short-test-page.html",
+  "test-page-resize.html",
+  "test-page-shadowRoot.html",
+  "test-page.html",
+  "test-selectionAPI-page.html",
 ]
 
 prefs = [
@@ -41,6 +42,8 @@ skip-if = [
 
 ["browser_screenshots_drag_test.js"]
 
+["browser_screenshots_face_focusable.js"]
+
 ["browser_screenshots_focus_test.js"]
 skip-if = [
   "os == 'linux' && os_version == '18.04'", # Bug 1803618
@@ -70,6 +73,8 @@ skip-if = ["!crashreporter"]
 ["browser_screenshots_test_toolbar_button.js"]
 
 ["browser_screenshots_test_visible.js"]
+
+["browser_shadowRoot_test.js"]
 
 ["browser_test_element_picker.js"]
 

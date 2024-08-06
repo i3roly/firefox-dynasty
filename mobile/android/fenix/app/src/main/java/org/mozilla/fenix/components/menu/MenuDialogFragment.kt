@@ -4,7 +4,10 @@
 
 package org.mozilla.fenix.components.menu
 
+import android.app.AlertDialog
 import android.app.Dialog
+import android.app.PendingIntent
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -14,6 +17,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -23,6 +30,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.selector.findCustomTab
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.concept.engine.translate.TranslationSupport
 import mozilla.components.concept.engine.translate.findLanguage
@@ -77,6 +85,12 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
         super.onCreateDialog(savedInstanceState).apply {
             setOnShowListener {
+                window?.navigationBarColor = if (browsingModeManager.mode.isPrivate) {
+                    ContextCompat.getColor(context, R.color.fx_mobile_private_layer_color_3)
+                } else {
+                    ContextCompat.getColor(context, R.color.fx_mobile_layer_color_3)
+                }
+
                 val bottomSheet = findViewById<View?>(R.id.design_bottom_sheet)
                 bottomSheet?.setBackgroundResource(android.R.color.transparent)
                 BottomSheetBehavior.from(bottomSheet).apply {
@@ -100,7 +114,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
         setContent {
             FirefoxTheme {
-                MenuDialogBottomSheet(onRequestDismiss = {}) {
+                MenuDialogBottomSheet(onRequestDismiss = { dismiss() }) {
                     val appStore = components.appStore
                     val browserStore = components.core.store
                     val syncStore = components.backgroundServices.syncStore
@@ -119,12 +133,17 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         components.useCases.sessionUseCases.requestDesktopSite
                     val saveToPdfUseCase = components.useCases.sessionUseCases.saveToPdf
                     val selectedTab = browserStore.state.selectedTab
-                    val isTranslationSupported = browserStore.state.translationEngine.isEngineSupported ?: false
+                    val isTranslationEngineSupported =
+                        browserStore.state.translationEngine.isEngineSupported ?: false
+                    val isTranslationSupported =
+                        isTranslationEngineSupported &&
+                            FxNimbus.features.translations.value().mainFlowBrowserMenuEnabled
                     val isReaderable = selectedTab?.readerState?.readerable ?: false
                     val settings = components.settings
                     val supportedLanguages = components.core.store.state.translationEngine.supportedLanguages
                     val translateLanguageCode = selectedTab?.translationsState?.translationEngineState
                         ?.requestedTranslationPair?.toLanguage
+                    val isExtensionsProcessDisabled = browserStore.state.extensionsProcessDisabled
 
                     val navHostController = rememberNavController()
                     val coroutineScope = rememberCoroutineScope()
@@ -154,12 +173,16 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     addPinnedSiteUseCase = addPinnedSiteUseCase,
                                     removePinnedSitesUseCase = removePinnedSiteUseCase,
                                     requestDesktopSiteUseCase = requestDesktopSiteUseCase,
+                                    alertDialogBuilder = AlertDialog.Builder(context),
                                     topSitesMaxLimit = topSitesMaxLimit,
                                     onDeleteAndQuit = {
                                         deleteAndQuit(
                                             activity = activity as HomeActivity,
-                                            coroutineScope = coroutineScope,
-                                            snackbar = null,
+                                            // This menu's coroutineScope would cancel all in progress operations
+                                            // when the dialog is closed.
+                                            // Need to use a scope that will ensure the background operation
+                                            // will continue even if the dialog is closed.
+                                            coroutineScope = (activity as LifecycleOwner).lifecycleScope,
                                         )
                                     },
                                     onDismiss = {
@@ -167,6 +190,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                             this@MenuDialogFragment.dismiss()
                                         }
                                     },
+                                    onSendPendingIntentWithUrl = ::sendPendingIntentWithUrl,
                                     scope = coroutineScope,
                                 ),
                                 MenuNavigationMiddleware(
@@ -228,7 +252,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 accountState = accountState,
                                 isPrivate = browsingModeManager.mode.isPrivate,
                                 isDesktopMode = isDesktopMode,
+                                isTranslationSupported = isTranslationSupported,
                                 showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
+                                isExtensionsProcessDisabled = isExtensionsProcessDisabled,
                                 onMozillaAccountButtonClick = {
                                     store.dispatch(
                                         MenuAction.Navigate.MozillaAccount(
@@ -305,8 +331,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 hasExternalApp = appLinksRedirect?.hasExternalApp() ?: false,
                                 externalAppName = appLinksRedirect?.appName ?: "",
                                 isTranslated = selectedTab?.translationsState?.isTranslated ?: false,
-                                isTranslationSupported = isTranslationSupported &&
-                                    FxNimbus.features.translations.value().mainFlowBrowserMenuEnabled,
+                                isTranslationSupported = isTranslationSupported,
                                 translatedLanguage = if (translateLanguageCode != null && supportedLanguages != null) {
                                     TranslationSupport(
                                         fromLanguages = supportedLanguages.fromLanguages,
@@ -404,7 +429,20 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         }
 
                         composable(route = CUSTOM_TAB_MENU_ROUTE) {
+                            val customTab = args.customTabSessionId?.let {
+                                browserStore.state.findCustomTab(it)
+                            }
+
                             CustomTabMenu(
+                                customTabMenuItems = customTab?.config?.menuItems,
+                                onCustomMenuItemClick = { intent: PendingIntent ->
+                                    store.dispatch(
+                                        MenuAction.CustomMenuItemAction(
+                                            intent = intent,
+                                            url = customTab?.content?.url,
+                                        ),
+                                    )
+                                },
                                 onSwitchToDesktopSiteMenuClick = {},
                                 onFindInPageMenuClick = {
                                     store.dispatch(MenuAction.FindInPage)
@@ -433,6 +471,16 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                 searchTermOrURL = url,
                 newTab = true,
                 from = BrowserDirection.FromMenuDialogFragment,
+            )
+        }
+    }
+
+    private fun sendPendingIntentWithUrl(intent: PendingIntent, url: String?) = runIfFragmentIsAttached {
+        url?.let { url ->
+            intent.send(
+                requireContext(),
+                0,
+                Intent(null, url.toUri()),
             )
         }
     }

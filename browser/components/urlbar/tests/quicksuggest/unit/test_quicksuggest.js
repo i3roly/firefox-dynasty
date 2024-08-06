@@ -1526,7 +1526,9 @@ add_tasks_with_rust(async function tabToSearch() {
       makeSearchResult(context, {
         engineName: engine.name,
         engineIconUri: UrlbarUtils.ICON.SEARCH_GLASS,
-        uri: UrlbarUtils.stripPublicSuffixFromHost(engine.searchUrlDomain),
+        searchUrlDomainWithoutSuffix: UrlbarUtils.stripPublicSuffixFromHost(
+          engine.searchUrlDomain
+        ),
         providesSearchMode: true,
         query: "",
         providerName: "TabToSearch",
@@ -1641,8 +1643,8 @@ add_task(async function rustProviders() {
           "suggest.quicksuggest.sponsored": true,
         },
         expectedUrls: [
-          "http://example.com/amp",
-          "http://example.com/wikipedia",
+          "https://example.com/amp",
+          "https://example.com/wikipedia",
         ],
       },
       {
@@ -1650,14 +1652,14 @@ add_task(async function rustProviders() {
           "suggest.quicksuggest.nonsponsored": true,
           "suggest.quicksuggest.sponsored": false,
         },
-        expectedUrls: ["http://example.com/wikipedia"],
+        expectedUrls: ["https://example.com/wikipedia"],
       },
       {
         prefs: {
           "suggest.quicksuggest.nonsponsored": false,
           "suggest.quicksuggest.sponsored": true,
         },
-        expectedUrls: ["http://example.com/amp"],
+        expectedUrls: ["https://example.com/amp"],
       },
       {
         prefs: {

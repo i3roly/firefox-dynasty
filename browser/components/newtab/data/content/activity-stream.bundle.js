@@ -149,6 +149,7 @@ for (const type of [
   "DISCOVERY_STREAM_SPOCS_UPDATE",
   "DISCOVERY_STREAM_SPOC_BLOCKED",
   "DISCOVERY_STREAM_SPOC_IMPRESSION",
+  "DISCOVERY_STREAM_TOPICS_LOADING",
   "DISCOVERY_STREAM_USER_EVENT",
   "DOWNLOAD_CHANGED",
   "FAKE_FOCUS_SEARCH",
@@ -217,7 +218,13 @@ for (const type of [
   "SYSTEM_TICK",
   "TELEMETRY_IMPRESSION_STATS",
   "TELEMETRY_USER_EVENT",
-  "TOPIC_SELECTION_SPOTLIGHT_TOGGLE",
+  "TOPIC_SELECTION_IMPRESSION",
+  "TOPIC_SELECTION_MAYBE_LATER",
+  "TOPIC_SELECTION_SPOTLIGHT_CLOSE",
+  "TOPIC_SELECTION_SPOTLIGHT_OPEN",
+  "TOPIC_SELECTION_USER_DISMISS",
+  "TOPIC_SELECTION_USER_OPEN",
+  "TOPIC_SELECTION_USER_SAVE",
   "TOP_SITES_CANCEL_EDIT",
   "TOP_SITES_CLOSE_SEARCH_SHORTCUTS_MODAL",
   "TOP_SITES_EDIT",
@@ -681,6 +688,7 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     this.onStoryToggle = this.onStoryToggle.bind(this);
     this.handleWeatherSubmit = this.handleWeatherSubmit.bind(this);
     this.handleWeatherUpdate = this.handleWeatherUpdate.bind(this);
+    this.refreshTopicSelectionCache = this.refreshTopicSelectionCache.bind(this);
     this.state = {
       toggledStories: {},
       weatherQuery: ""
@@ -708,6 +716,10 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       type: actionTypes.DISCOVERY_STREAM_CONFIG_CHANGE,
       data: config
     }));
+  }
+  refreshTopicSelectionCache() {
+    this.props.dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.displayCount", 0));
+    this.props.dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.maybeDisplay", true));
   }
   dispatchSimpleAction(type) {
     this.props.dispatch(actionCreators.OnlyToMain({
@@ -873,7 +885,10 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     }, "Trigger Idle Daily"), /*#__PURE__*/external_React_default().createElement("br", null), /*#__PURE__*/external_React_default().createElement("button", {
       className: "button",
       onClick: this.syncRemoteSettings
-    }, "Sync Remote Settings"), /*#__PURE__*/external_React_default().createElement("br", null), /*#__PURE__*/external_React_default().createElement("button", {
+    }, "Sync Remote Settings"), " ", /*#__PURE__*/external_React_default().createElement("button", {
+      className: "button",
+      onClick: this.refreshTopicSelectionCache
+    }, "Refresh Topic selection count"), /*#__PURE__*/external_React_default().createElement("br", null), /*#__PURE__*/external_React_default().createElement("button", {
       className: "button",
       onClick: this.showPlaceholder
     }, "Show Placeholder Cards"), /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, prefToggles.map(pref => /*#__PURE__*/external_React_default().createElement(Row, {
@@ -2199,7 +2214,8 @@ class ImpressionStats_ImpressionStats extends (external_React_default()).PureCom
           fetchTimestamp: link.fetchTimestamp,
           scheduled_corpus_item_id: link.scheduled_corpus_item_id,
           recommended_at: link.recommended_at,
-          received_rank: link.received_rank
+          received_rank: link.received_rank,
+          topic: link.topic
         })),
         firstVisibleTimestamp: this.props.firstVisibleTimestamp
       }));
@@ -2874,6 +2890,7 @@ class _DSCard extends (external_React_default()).PureComponent {
   constructor(props) {
     super(props);
     this.onLinkClick = this.onLinkClick.bind(this);
+    this.doesLinkTopicMatchSelectedTopic = this.doesLinkTopicMatchSelectedTopic.bind(this);
     this.onSaveClick = this.onSaveClick.bind(this);
     this.onMenuUpdate = this.onMenuUpdate.bind(this);
     this.onMenuShow = this.onMenuShow.bind(this);
@@ -2919,7 +2936,23 @@ class _DSCard extends (external_React_default()).PureComponent {
       height: 101
     }];
   }
+  doesLinkTopicMatchSelectedTopic() {
+    // Edge case for clicking on a card when topic selections have not be set
+    if (this.props.selectedTopics === "") {
+      return "not-set";
+    }
+
+    // Edge case the topic of the card is not one of the available topics
+    if (!this.props.availableTopics.includes(this.props.topic)) {
+      return "topic-not-selectable";
+    }
+    if (this.props.selectedTopics.includes(this.props.topic)) {
+      return "true";
+    }
+    return "false";
+  }
   onLinkClick() {
+    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
     if (this.props.dispatch) {
       this.props.dispatch(actionCreators.DiscoveryStreamUserEvent({
         event: "CLICK",
@@ -2936,7 +2969,10 @@ class _DSCard extends (external_React_default()).PureComponent {
           firstVisibleTimestamp: this.props.firstVisibleTimestamp,
           scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
           recommended_at: this.props.recommended_at,
-          received_rank: this.props.received_rank
+          received_rank: this.props.received_rank,
+          topic: this.props.topic,
+          matches_selected_topic: matchesSelectedTopic,
+          selected_topics: this.props.selectedTopics
         }
       }));
       this.props.dispatch(actionCreators.ImpressionStats({
@@ -2951,12 +2987,15 @@ class _DSCard extends (external_React_default()).PureComponent {
             shim: this.props.shim.click
           } : {}),
           type: this.props.flightId ? "spoc" : "organic",
-          recommendation_id: this.props.recommendation_id
+          recommendation_id: this.props.recommendation_id,
+          topic: this.props.topic,
+          selected_topics: this.props.selectedTopics
         }]
       }));
     }
   }
   onSaveClick() {
+    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
     if (this.props.dispatch) {
       this.props.dispatch(actionCreators.AlsoToMain({
         type: actionTypes.SAVE_TO_POCKET,
@@ -2982,7 +3021,10 @@ class _DSCard extends (external_React_default()).PureComponent {
           firstVisibleTimestamp: this.props.firstVisibleTimestamp,
           scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
           recommended_at: this.props.recommended_at,
-          received_rank: this.props.received_rank
+          received_rank: this.props.received_rank,
+          topic: this.props.topic,
+          matches_selected_topic: matchesSelectedTopic,
+          selected_topics: this.props.selectedTopics
         }
       }));
       this.props.dispatch(actionCreators.ImpressionStats({
@@ -2994,7 +3036,9 @@ class _DSCard extends (external_React_default()).PureComponent {
           ...(this.props.shim && this.props.shim.save ? {
             shim: this.props.shim.save
           } : {}),
-          recommendation_id: this.props.recommendation_id
+          recommendation_id: this.props.recommendation_id,
+          topic: this.props.topic,
+          selected_topics: this.props.selectedTopics
         }]
       }));
     }
@@ -3022,7 +3066,8 @@ class _DSCard extends (external_React_default()).PureComponent {
         recommended_at: this.props.recommended_at,
         received_rank: this.props.received_rank,
         thumbs_up: true,
-        thumbs_down: false
+        thumbs_down: false,
+        topic: this.props.topic
       }
     }));
 
@@ -3086,7 +3131,8 @@ class _DSCard extends (external_React_default()).PureComponent {
           recommended_at: this.props.recommended_at,
           received_rank: this.props.received_rank,
           thumbs_up: false,
-          thumbs_down: true
+          thumbs_down: true,
+          topic: this.props.topic
         }
       }));
 
@@ -3230,8 +3276,9 @@ class _DSCard extends (external_React_default()).PureComponent {
       className: `ds-card ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
       ref: this.setContextMenuButtonHostRef
     }, this.props.showTopics && this.props.topic && /*#__PURE__*/external_React_default().createElement("span", {
-      className: "ds-card-topic"
-    }, this.props.topic), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "ds-card-topic",
+      "data-l10n-id": `newtab-topic-label-${this.props.topic}`
+    }), /*#__PURE__*/external_React_default().createElement("div", {
       className: "img-wrapper"
     }, /*#__PURE__*/external_React_default().createElement(DSImage, {
       extraClassNames: "img",
@@ -3259,7 +3306,8 @@ class _DSCard extends (external_React_default()).PureComponent {
         fetchTimestamp: this.props.fetchTimestamp,
         scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
         recommended_at: this.props.recommended_at,
-        received_rank: this.props.received_rank
+        received_rank: this.props.received_rank,
+        topic: this.props.topic
       }],
       dispatch: this.props.dispatch,
       source: this.props.type,
@@ -3597,6 +3645,9 @@ const TopicsWidget = (0,external_ReactRedux_namespaceObject.connect)(state => ({
 const PREF_ONBOARDING_EXPERIENCE_DISMISSED = "discoverystream.onboardingExperience.dismissed";
 const PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
 const PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
+const PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
+const PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
+const PREF_SPOCS_STARTUPCACHE_ENABLED = "discoverystream.spocs.startupCache.enabled";
 const CardGrid_INTERSECTION_RATIO = 0.5;
 const CardGrid_VISIBLE = "visible";
 const CardGrid_VISIBILITY_CHANGE_EVENT = "visibilitychange";
@@ -3865,19 +3916,23 @@ class _CardGrid extends (external_React_default()).PureComponent {
       DiscoveryStream
     } = this.props;
     const {
-      saveToPocketCard
+      saveToPocketCard,
+      topicsLoading
     } = DiscoveryStream;
     const showRecentSaves = prefs.showRecentSaves && recentSavesEnabled;
     const isOnboardingExperienceDismissed = prefs[PREF_ONBOARDING_EXPERIENCE_DISMISSED];
     const mayHaveThumbsUpDown = prefs[PREF_THUMBS_UP_DOWN_ENABLED];
     const showTopics = prefs[PREF_TOPICS_ENABLED];
+    const selectedTopics = prefs[PREF_TOPICS_SELECTED];
+    const availableTopics = prefs[PREF_TOPICS_AVAILABLE];
+    const spocsStartupCacheEnabled = prefs[PREF_SPOCS_STARTUPCACHE_ENABLED];
     const recs = this.props.data.recommendations.slice(0, items);
     const cards = [];
     let essentialReadsCards = [];
     let editorsPicksCards = [];
     for (let index = 0; index < items; index++) {
       const rec = recs[index];
-      cards.push(!rec || rec.placeholder ? /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
+      cards.push(topicsLoading || !rec || rec.placeholder || rec.flight_id && !spocsStartupCacheEnabled && this.props.App.isForStartupCache ? /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
         key: `dscard-${index}`
       }) : /*#__PURE__*/external_React_default().createElement(DSCard, {
         key: `dscard-${rec.id}`,
@@ -3890,6 +3945,8 @@ class _CardGrid extends (external_React_default()).PureComponent {
         title: rec.title,
         topic: rec.topic,
         showTopics: showTopics,
+        selectedTopics: selectedTopics,
+        availableTopics: availableTopics,
         excerpt: rec.excerpt,
         url: rec.url,
         id: rec.id,
@@ -4025,6 +4082,7 @@ _CardGrid.defaultProps = {
 };
 const CardGrid = (0,external_ReactRedux_namespaceObject.connect)(state => ({
   Prefs: state.Prefs,
+  App: state.App,
   DiscoveryStream: state.DiscoveryStream
 }))(_CardGrid);
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CollectionCardGrid/CollectionCardGrid.jsx
@@ -4306,8 +4364,16 @@ class _CollapsibleSection extends (external_React_default()).PureComponent {
     });
   }
   handleTopicSelectionButtonClick() {
-    this.props.dispatch(actionCreators.AlsoToMain({
-      type: actionTypes.TOPIC_SELECTION_SPOTLIGHT_TOGGLE
+    const maybeDisplay = this.props.Prefs.values["discoverystream.topicSelection.onboarding.maybeDisplay"];
+    this.props.dispatch(actionCreators.OnlyToMain({
+      type: actionTypes.TOPIC_SELECTION_USER_OPEN
+    }));
+    if (maybeDisplay) {
+      // if still part of onboarding, remove user from onboarding flow
+      this.props.dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.maybeDisplay", false));
+    }
+    this.props.dispatch(actionCreators.BroadcastToContent({
+      type: actionTypes.TOPIC_SELECTION_SPOTLIGHT_OPEN
     }));
   }
   render() {
@@ -4320,10 +4386,10 @@ class _CollapsibleSection extends (external_React_default()).PureComponent {
     const {
       id,
       collapsed,
-      learnMore,
       title,
       subTitle,
-      mayHaveSponsoredStories
+      mayHaveSponsoredStories,
+      mayHaveTopicsSelection
     } = this.props;
     const active = menuButtonHover || showContextMenu;
     let bodyStyle;
@@ -4343,7 +4409,9 @@ class _CollapsibleSection extends (external_React_default()).PureComponent {
       };
     }
     const hasSubtitleClassName = subTitle ? `has-subtitle` : ``;
-    const topicSelectionEnabled = this.props.Prefs.values["discoverystream.topicSelection.enabled"];
+    const hasBeenUpdatedPreviously = this.props.Prefs.values["discoverystream.topicSelection.hasBeenUpdatedPreviously"];
+    const selectedTopics = this.props.Prefs.values["discoverystream.topicSelection.selectedTopics"];
+    const topicsHaveBeenPreviouslySet = hasBeenUpdatedPreviously || selectedTopics;
     return /*#__PURE__*/external_React_default().createElement("section", {
       className: `collapsible-section ${this.props.className}${active ? " active" : ""}`
       // Note: data-section-id is used for web extension api tests in mozilla central
@@ -4358,26 +4426,20 @@ class _CollapsibleSection extends (external_React_default()).PureComponent {
       className: "section-title"
     }, /*#__PURE__*/external_React_default().createElement(FluentOrText, {
       message: title
-    })), /*#__PURE__*/external_React_default().createElement("span", {
-      className: "learn-more-link-wrapper"
-    }, learnMore && /*#__PURE__*/external_React_default().createElement("span", {
-      className: "learn-more-link"
-    }, /*#__PURE__*/external_React_default().createElement(FluentOrText, {
-      message: learnMore.link.message
-    }, /*#__PURE__*/external_React_default().createElement("a", {
-      href: learnMore.link.href
-    })))), subTitle && /*#__PURE__*/external_React_default().createElement("span", {
+    })), subTitle && /*#__PURE__*/external_React_default().createElement("span", {
       className: "section-sub-title"
     }, /*#__PURE__*/external_React_default().createElement(FluentOrText, {
       message: subTitle
     })), mayHaveSponsoredStories && this.props.spocMessageVariant === "variant-a" && /*#__PURE__*/external_React_default().createElement(SponsoredContentHighlight, {
       position: "inset-block-start inset-inline-start",
       dispatch: this.props.dispatch
-    })), topicSelectionEnabled && /*#__PURE__*/external_React_default().createElement("moz-button", {
-      label: "Personalize my feed",
-      type: "primary",
+    })), mayHaveTopicsSelection && /*#__PURE__*/external_React_default().createElement("div", {
+      className: "button-topic-selection"
+    }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+      "data-l10n-id": topicsHaveBeenPreviouslySet ? "newtab-topic-selection-button-update-interests" : "newtab-topic-selection-button-pick-interests",
+      type: topicsHaveBeenPreviouslySet ? "default" : "primary",
       onClick: this.handleTopicSelectionButtonClick
-    })), /*#__PURE__*/external_React_default().createElement(ErrorBoundary, {
+    }))), /*#__PURE__*/external_React_default().createElement(ErrorBoundary, {
       className: "section-body-fallback"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       ref: this.onBodyMount,
@@ -5816,6 +5878,7 @@ const INITIAL_STATE = {
     layout: [],
     isPrivacyInfoModalVisible: false,
     isCollectionDismissible: false,
+    topicsLoading: false,
     feeds: {
       data: {
         // "https://foo.com/feed1": {lastUpdated: 123, data: [], personalized: false}
@@ -5896,6 +5959,12 @@ function App(prevState = INITIAL_STATE.App, action) {
     case actionTypes.TOP_SITES_UPDATED:
       // Toggle `isForStartupCache` when receiving the `TOP_SITES_UPDATE` action
       // so that sponsored tiles can be rendered as usual. See Bug 1826360.
+      return Object.assign({}, prevState, action.data || {}, {
+        isForStartupCache: false,
+      });
+    case actionTypes.DISCOVERY_STREAM_SPOCS_UPDATE:
+      // Toggle `isForStartupCache` when receiving the `DISCOVERY_STREAM_SPOCS_UPDATE_STARTUPCACHE` action
+      // so that spoc cards can be rendered as usual.
       return Object.assign({}, prevState, action.data || {}, {
         isForStartupCache: false,
       });
@@ -6421,6 +6490,11 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
         ...prevState,
         isCollectionDismissible: action.data.value,
       };
+    case actionTypes.DISCOVERY_STREAM_TOPICS_LOADING:
+      return {
+        ...prevState,
+        topicsLoading: action.data,
+      };
     case actionTypes.DISCOVERY_STREAM_PREFS_SETUP:
       return {
         ...prevState,
@@ -6601,10 +6675,15 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
         };
       }
       return prevState;
-    case actionTypes.TOPIC_SELECTION_SPOTLIGHT_TOGGLE:
+    case actionTypes.TOPIC_SELECTION_SPOTLIGHT_OPEN:
       return {
         ...prevState,
-        showTopicSelection: !prevState.showTopicSelection,
+        showTopicSelection: true,
+      };
+    case actionTypes.TOPIC_SELECTION_SPOTLIGHT_CLOSE:
+      return {
+        ...prevState,
+        showTopicSelection: false,
       };
     default:
       return prevState;
@@ -9126,6 +9205,7 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
     const {
       config
     } = this.props.DiscoveryStream;
+    const topicSelectionEnabled = this.props.Prefs.values["discoverystream.topicSelection.enabled"];
 
     // Allow rendering without extracting special components
     if (!config.collapsible) {
@@ -9209,6 +9289,7 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
       title: sectionTitle,
       subTitle: subTitle,
       mayHaveSponsoredStories: mayHaveSponsoredStories,
+      mayHaveTopicsSelection: topicSelectionEnabled,
       spocMessageVariant: message?.properties?.spocMessageVariant,
       eventSource: "CARDGRID"
     }, this.renderLayout(layoutRender)), this.renderLayout([{
@@ -10572,21 +10653,6 @@ function Notifications_Notifications({
 
 
 
-
-// TODO: move strings to newtab.ftl once strings have been approved
-const TOPIC_LABELS = {
-  "newtab-topic-business": "Business",
-  "newtab-topic-arts": "Entertainment",
-  "newtab-topic-food": "Food",
-  "newtab-topic-health": "Health",
-  "newtab-topic-finance": "Money",
-  "newtab-topic-government": "Politics",
-  "newtab-topic-sports": "Sports",
-  "newtab-topic-tech": "Tech",
-  "newtab-topic-travel": "Travel",
-  "newtab-topic-education": "Science",
-  "newtab-topic-society": "Life Hacks"
-};
 const EMOJI_LABELS = {
   business: "💼",
   arts: "🎭",
@@ -10600,23 +10666,91 @@ const EMOJI_LABELS = {
   education: "🧪",
   society: "💡"
 };
-function TopicSelection() {
+function TopicSelection({
+  supportUrl
+}) {
   const dispatch = (0,external_ReactRedux_namespaceObject.useDispatch)();
   const inputRef = (0,external_React_namespaceObject.useRef)(null);
   const modalRef = (0,external_React_namespaceObject.useRef)(null);
   const checkboxWrapperRef = (0,external_React_namespaceObject.useRef)(null);
-  const topics = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values["discoverystream.topicSelection.topics"]).split(", ");
-  const selectedTopics = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values["discoverystream.topicSelection.selectedTopics"]);
-  const suggestedTopics = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values["discoverystream.topicSelection.suggestedTopics"]).split(", ");
-
-  // TODO: only show suggested topics during the first run
-  // if selectedTopics is empty - default to using the suggestedTopics as a starting value
-  const [topicsToSelect, setTopicsToSelect] = (0,external_React_namespaceObject.useState)(selectedTopics ? selectedTopics.split(", ") : suggestedTopics);
+  const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
+  const topics = prefs["discoverystream.topicSelection.topics"].split(", ");
+  const selectedTopics = prefs["discoverystream.topicSelection.selectedTopics"];
+  const suggestedTopics = prefs["discoverystream.topicSelection.suggestedTopics"]?.split(", ");
+  const displayCount = prefs["discoverystream.topicSelection.onboarding.displayCount"];
+  const topicsHaveBeenPreviouslySet = prefs["discoverystream.topicSelection.hasBeenUpdatedPreviously"];
+  const [isFirstRun] = (0,external_React_namespaceObject.useState)(displayCount === 0);
+  const displayCountRef = (0,external_React_namespaceObject.useRef)(displayCount);
+  const preselectedTopics = () => {
+    if (selectedTopics) {
+      return selectedTopics.split(", ");
+    }
+    return isFirstRun ? suggestedTopics : [];
+  };
+  const [topicsToSelect, setTopicsToSelect] = (0,external_React_namespaceObject.useState)(preselectedTopics);
+  function isFirstSave() {
+    // Only return true if the user has not previous set prefs
+    // and the selected topics pref is empty
+    if (selectedTopics === "" && !topicsHaveBeenPreviouslySet) {
+      return true;
+    }
+    return false;
+  }
   function handleModalClose() {
-    dispatch(actionCreators.AlsoToMain({
-      type: actionTypes.TOPIC_SELECTION_SPOTLIGHT_TOGGLE
+    dispatch(actionCreators.OnlyToMain({
+      type: actionTypes.TOPIC_SELECTION_USER_DISMISS
+    }));
+    dispatch(actionCreators.BroadcastToContent({
+      type: actionTypes.TOPIC_SELECTION_SPOTLIGHT_CLOSE
     }));
   }
+  function handleUserClose(e) {
+    const id = e?.target?.id;
+    if (id === "first-run") {
+      dispatch(actionCreators.AlsoToMain({
+        type: actionTypes.TOPIC_SELECTION_MAYBE_LATER
+      }));
+      dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.maybeDisplay", true));
+    } else {
+      dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.maybeDisplay", false));
+    }
+    handleModalClose();
+  }
+
+  // By doing this, the useEffect that sets up the IntersectionObserver
+  // will not re-run every time displayCount changes,
+  // but the observer callback will always have access
+  // to the latest displayCount value through the ref.
+  (0,external_React_namespaceObject.useEffect)(() => {
+    displayCountRef.current = displayCount;
+  }, [displayCount]);
+  (0,external_React_namespaceObject.useEffect)(() => {
+    const {
+      current
+    } = modalRef;
+    let observer;
+    if (current) {
+      observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) {
+          // if the user has seen the modal more than 3 times,
+          // automatically remove them from onboarding
+          if (displayCountRef.current > 3) {
+            dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.maybeDisplay", false));
+          }
+          observer.unobserve(modalRef.current);
+          dispatch(actionCreators.AlsoToMain({
+            type: actionTypes.TOPIC_SELECTION_IMPRESSION
+          }));
+        }
+      });
+      observer.observe(current);
+    }
+    return () => {
+      if (current) {
+        observer.unobserve(current);
+      }
+    };
+  }, [modalRef, dispatch]);
 
   // when component mounts, set focus to input
   (0,external_React_namespaceObject.useEffect)(() => {
@@ -10675,11 +10809,24 @@ function TopicSelection() {
     }
   }
   function handleSubmit() {
-    dispatch(actionCreators.SetPref("discoverystream.topicSelection.selectedTopics", topicsToSelect.join(", ")));
+    const topicsString = topicsToSelect.join(", ");
+    dispatch(actionCreators.SetPref("discoverystream.topicSelection.selectedTopics", topicsString));
+    dispatch(actionCreators.SetPref("discoverystream.topicSelection.onboarding.maybeDisplay", false));
+    if (!topicsHaveBeenPreviouslySet) {
+      dispatch(actionCreators.SetPref("discoverystream.topicSelection.hasBeenUpdatedPreviously", true));
+    }
+    dispatch(actionCreators.OnlyToMain({
+      type: actionTypes.TOPIC_SELECTION_USER_SAVE,
+      data: {
+        topics: topicsString,
+        previous_topics: selectedTopics,
+        first_save: isFirstSave()
+      }
+    }));
     handleModalClose();
   }
   return /*#__PURE__*/external_React_default().createElement(ModalOverlayWrapper, {
-    onClose: handleModalClose,
+    onClose: handleUserClose,
     innerClassName: "topic-selection-container"
   }, /*#__PURE__*/external_React_default().createElement("div", {
     className: "topic-selection-form",
@@ -10687,12 +10834,14 @@ function TopicSelection() {
   }, /*#__PURE__*/external_React_default().createElement("button", {
     className: "dismiss-button",
     title: "dismiss",
-    onClick: handleModalClose
+    onClick: handleUserClose
   }), /*#__PURE__*/external_React_default().createElement("h1", {
-    className: "title"
-  }, "Select topics you care about"), /*#__PURE__*/external_React_default().createElement("p", {
-    className: "subtitle"
-  }, "Tell us what you are interested in and we\u2019ll recommend you great stories!"), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "title",
+    "data-l10n-id": "newtab-topic-selection-title"
+  }), /*#__PURE__*/external_React_default().createElement("p", {
+    className: "subtitle",
+    "data-l10n-id": "newtab-topic-selection-subtitle"
+  }), /*#__PURE__*/external_React_default().createElement("div", {
     className: "topic-list",
     ref: checkboxWrapperRef
   }, topics.map((topic, i) => {
@@ -10716,19 +10865,22 @@ function TopicSelection() {
     }, EMOJI_LABELS[`${topic}`]), /*#__PURE__*/external_React_default().createElement("span", {
       className: "topic-checked"
     })), /*#__PURE__*/external_React_default().createElement("span", {
-      className: "topic-item-label"
-    }, TOPIC_LABELS[`newtab-topic-${topic}`]));
+      className: "topic-item-label",
+      "data-l10n-id": `newtab-topic-label-${topic}`
+    }));
   })), /*#__PURE__*/external_React_default().createElement("div", {
     className: "modal-footer"
   }, /*#__PURE__*/external_React_default().createElement("a", {
-    href: "https://support.mozilla.org/en-US/kb/pocket-recommendations-firefox-new-tab"
-  }, "How we protect your data and privacy"), /*#__PURE__*/external_React_default().createElement("moz-button-group", {
+    href: supportUrl,
+    "data-l10n-id": "newtab-topic-selection-privacy-link"
+  }), /*#__PURE__*/external_React_default().createElement("moz-button-group", {
     className: "button-group"
   }, /*#__PURE__*/external_React_default().createElement("moz-button", {
-    label: "Remove topics",
-    onClick: handleModalClose
+    id: isFirstRun ? "first-run" : "",
+    "data-l10n-id": isFirstRun ? "newtab-topic-selection-button-maybe-later" : "newtab-topic-selection-cancel-button",
+    onClick: handleUserClose
   }), /*#__PURE__*/external_React_default().createElement("moz-button", {
-    label: "Save topics",
+    "data-l10n-id": "newtab-topic-selection-save-button",
     type: "primary",
     onClick: handleSubmit
   })))));
@@ -10970,6 +11122,7 @@ class BaseContent extends (external_React_default()).PureComponent {
     this.updateWallpaper = this.updateWallpaper.bind(this);
     this.prefersDarkQuery = null;
     this.handleColorModeChange = this.handleColorModeChange.bind(this);
+    this.shouldDisplayTopicSelectionModal = this.shouldDisplayTopicSelectionModal.bind(this);
     this.state = {
       fixedSearch: false,
       firstVisibleTimestamp: null,
@@ -10988,10 +11141,12 @@ class BaseContent extends (external_React_default()).PureComponent {
     __webpack_require__.g.addEventListener("keydown", this.handleOnKeyDown);
     if (this.props.document.visibilityState === Base_VISIBLE) {
       this.setFirstVisibleTimestamp();
+      this.shouldDisplayTopicSelectionModal();
     } else {
       this._onVisibilityChange = () => {
         if (this.props.document.visibilityState === Base_VISIBLE) {
           this.setFirstVisibleTimestamp();
+          this.shouldDisplayTopicSelectionModal();
           this.props.document.removeEventListener(Base_VISIBILITY_CHANGE_EVENT, this._onVisibilityChange);
           this._onVisibilityChange = null;
         }
@@ -11197,6 +11352,29 @@ class BaseContent extends (external_React_default()).PureComponent {
   isWallpaperColorDark([r, g, b]) {
     return 0.2125 * r + 0.7154 * g + 0.0721 * b <= 110;
   }
+  shouldDisplayTopicSelectionModal() {
+    const prefs = this.props.Prefs.values;
+    const pocketEnabled = prefs["feeds.section.topstories"] && prefs["feeds.system.topstories"];
+    const topicSelectionOnboardingEnabled = prefs["discoverystream.topicSelection.onboarding.enabled"] && pocketEnabled;
+    const maybeShowModal = prefs["discoverystream.topicSelection.onboarding.maybeDisplay"];
+    const displayTimeout = prefs["discoverystream.topicSelection.onboarding.displayTimeout"];
+    const lastDisplayed = prefs["discoverystream.topicSelection.onboarding.lastDisplayed"];
+    const displayCount = prefs["discoverystream.topicSelection.onboarding.displayCount"];
+    if (!maybeShowModal || !prefs["discoverystream.topicSelection.enabled"] || !topicSelectionOnboardingEnabled) {
+      return;
+    }
+    const day = 24 * 60 * 60 * 1000;
+    const now = new Date().getTime();
+    const timeoutOccured = now - parseFloat(lastDisplayed) > displayTimeout;
+    if (displayCount < 3) {
+      if (displayCount === 0 || timeoutOccured) {
+        this.props.dispatch(actionCreators.BroadcastToContent({
+          type: actionTypes.TOPIC_SELECTION_SPOTLIGHT_OPEN
+        }));
+        this.setPref("discoverystream.topicSelection.onboarding.displayTimeout", day);
+      }
+    }
+  }
   render() {
     const {
       props
@@ -11246,11 +11424,13 @@ class BaseContent extends (external_React_default()).PureComponent {
     const {
       mayHaveSponsoredTopSites
     } = prefs;
+    const supportUrl = prefs["support.url"];
     const hasThumbsUpDownLayout = prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
+    const hasThumbsUpDown = prefs["discoverystream.thumbsUpDown.enabled"];
     const featureClassName = [weatherEnabled && mayHaveWeather && "has-weather",
     // Show is weather is enabled/visible
     prefs.showSearch ? "has-search" : "no-search"].filter(v => v).join(" ");
-    const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["logowordmark.alwaysVisible"] && "visible-logo", hasThumbsUpDownLayout && "thumbs-ui-compact"].filter(v => v).join(" ");
+    const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["feeds.topsites"] && !pocketEnabled && !prefs.showSearch && "only-topsites", noSectionsEnabled && "no-sections", prefs["logowordmark.alwaysVisible"] && "visible-logo", hasThumbsUpDownLayout && hasThumbsUpDown && "thumbs-ui-compact"].filter(v => v).join(" ");
     if (wallpapersEnabled || wallpapersV2Enabled) {
       this.updateWallpaper();
     }
@@ -11296,7 +11476,9 @@ class BaseContent extends (external_React_default()).PureComponent {
       firstVisibleTimestamp: this.state.firstVisibleTimestamp
     })) : /*#__PURE__*/external_React_default().createElement(Sections_Sections, null)), /*#__PURE__*/external_React_default().createElement(ConfirmDialog, null), wallpapersEnabled && this.renderWallpaperAttribution()), /*#__PURE__*/external_React_default().createElement("aside", null, this.props.Notifications?.showNotifications && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Notifications_Notifications, {
       dispatch: this.props.dispatch
-    }))), mayShowTopicSelection && /*#__PURE__*/external_React_default().createElement(TopicSelection, null)));
+    }))), mayShowTopicSelection && pocketEnabled && /*#__PURE__*/external_React_default().createElement(TopicSelection, {
+      supportUrl: supportUrl
+    })));
   }
 }
 BaseContent.defaultProps = {

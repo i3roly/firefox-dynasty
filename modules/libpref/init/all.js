@@ -2492,9 +2492,9 @@ pref("font.size.monospace.x-math", 13);
   pref("font.name-list.sans-serif.th", "Thonburi");
   pref("font.name-list.monospace.th", "Menlo, Ayuthaya");
 
-  pref("font.name-list.serif.x-armn", "Mshtakan");
-  pref("font.name-list.sans-serif.x-armn", "Mshtakan");
-  pref("font.name-list.monospace.x-armn", "Menlo, Mshtakan");
+  pref("font.name-list.serif.x-armn", "Noto Sans Armenian");
+  pref("font.name-list.sans-serif.x-armn", "Noto Sans Armenian");
+  pref("font.name-list.monospace.x-armn", "Menlo, Noto Sans Armenian");
 
   // SolaimanLipi, Rupali http://ekushey.org/?page/mac_download
   pref("font.name-list.serif.x-beng", "Bangla MN");
@@ -3236,10 +3236,6 @@ pref("geo.provider.network.timeout", 60000);
   pref("geo.provider.ms-windows-location", true);
 #endif
 
-#if defined(MOZ_WIDGET_GTK) && defined(MOZ_GPSD)
-  pref("geo.provider.use_gpsd", true);
-#endif
-
 // Region
 pref("browser.region.log", false);
 pref("browser.region.network.url", "https://location.services.mozilla.com/v1/country?key=%MOZILLA_API_KEY%");
@@ -3807,6 +3803,8 @@ pref("browser.ml.logLevel", "Error");
 pref("browser.ml.modelHubRootUrl", "https://model-hub.mozilla.org/");
 // Model URL template
 pref("browser.ml.modelHubUrlTemplate", "{model}/{revision}");
+// Maximum disk size for ML model cache (in bytes)
+pref("browser.ml.modelCacheMaxSizeBytes", 1073741824);
 // Model cache timeout in ms
 pref("browser.ml.modelCacheTimeout", 120000);
 

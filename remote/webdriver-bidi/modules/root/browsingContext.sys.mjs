@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { Module } from "chrome://remote/content/shared/messagehandler/Module.sys.mjs";
+import { RootBiDiModule } from "chrome://remote/content/webdriver-bidi/modules/RootBiDiModule.sys.mjs";
 
 const lazy = {};
 
@@ -156,7 +156,7 @@ const WaitCondition = {
   Complete: "complete",
 };
 
-class BrowsingContextModule extends Module {
+class BrowsingContextModule extends RootBiDiModule {
   #contextListener;
   #navigationListener;
   #promptListener;
@@ -175,8 +175,6 @@ class BrowsingContextModule extends Module {
     this.#contextListener.on("attached", this.#onContextAttached);
     this.#contextListener.on("discarded", this.#onContextDiscarded);
 
-    // Create the navigation listener and listen to "fragment-navigated" and
-    // "navigation-started" events.
     this.#navigationListener = new lazy.NavigationListener(
       this.messageHandler.navigationManager
     );
@@ -184,6 +182,7 @@ class BrowsingContextModule extends Module {
       "fragment-navigated",
       this.#onFragmentNavigated
     );
+    this.#navigationListener.on("navigation-failed", this.#onNavigationFailed);
     this.#navigationListener.on(
       "navigation-started",
       this.#onNavigationStarted
@@ -1132,6 +1131,7 @@ class BrowsingContextModule extends Module {
         });
       },
       {
+        targetURI,
         wait,
       }
     );
@@ -1538,6 +1538,8 @@ class BrowsingContextModule extends Module {
    * @param {Function} startNavigationFn
    *     A callback that starts a navigation.
    * @param {object} options
+   * @param {string=} options.targetURI
+   *     The target URI for the navigation.
    * @param {WaitCondition} options.wait
    *     The WaitCondition to use to wait for the navigation.
    *
@@ -1545,7 +1547,7 @@ class BrowsingContextModule extends Module {
    *     A Promise that resolves to navigate results when the navigation is done.
    */
   async #awaitNavigation(webProgress, startNavigationFn, options) {
-    const { wait } = options;
+    const { targetURI, wait } = options;
 
     const context = webProgress.browsingContext;
     const browserId = context.browserId;
@@ -1554,6 +1556,7 @@ class BrowsingContextModule extends Module {
     const listener = new lazy.ProgressListener(webProgress, {
       expectNavigation: true,
       resolveWhenStarted,
+      targetURI,
       // In case the webprogress is already navigating, always wait for an
       // explicit start flag.
       waitForExplicitStart: true,
@@ -1965,6 +1968,28 @@ class BrowsingContextModule extends Module {
     }
   };
 
+  #onNavigationFailed = async (eventName, data) => {
+    const { navigableId, navigationId, url, contextId } = data;
+
+    if (this.#subscribedEvents.has("browsingContext.navigationFailed")) {
+      const contextInfo = {
+        contextId,
+        type: lazy.WindowGlobalMessageHandler.type,
+      };
+
+      this.emitEvent(
+        "browsingContext.navigationFailed",
+        {
+          context: navigableId,
+          navigation: navigationId,
+          timestamp: Date.now(),
+          url,
+        },
+        contextInfo
+      );
+    }
+  };
+
   #onNavigationStarted = async (eventName, data) => {
     const { navigableId, navigationId, url } = data;
     const context = this.#getBrowsingContext(navigableId);
@@ -2014,6 +2039,7 @@ class BrowsingContextModule extends Module {
 
     const hasNavigationEvent =
       this.#subscribedEvents.has("browsingContext.fragmentNavigated") ||
+      this.#subscribedEvents.has("browsingContext.navigationFailed") ||
       this.#subscribedEvents.has("browsingContext.navigationStarted");
 
     if (!hasNavigationEvent) {
@@ -2042,6 +2068,7 @@ class BrowsingContextModule extends Module {
         break;
       }
       case "browsingContext.fragmentNavigated":
+      case "browsingContext.navigationFailed":
       case "browsingContext.navigationStarted": {
         this.#navigationListener.startListening();
         this.#subscribedEvents.add(event);
@@ -2064,6 +2091,7 @@ class BrowsingContextModule extends Module {
         break;
       }
       case "browsingContext.fragmentNavigated":
+      case "browsingContext.navigationFailed":
       case "browsingContext.navigationStarted": {
         this.#stopListeningToNavigationEvent(event);
         break;
@@ -2127,6 +2155,7 @@ class BrowsingContextModule extends Module {
       "browsingContext.domContentLoaded",
       "browsingContext.fragmentNavigated",
       "browsingContext.load",
+      "browsingContext.navigationFailed",
       "browsingContext.navigationStarted",
       "browsingContext.userPromptClosed",
       "browsingContext.userPromptOpened",

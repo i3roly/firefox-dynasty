@@ -880,6 +880,13 @@ static bool GCParameter(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static bool FinishBackgroundFree(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  cx->runtime()->gc.waitBackgroundFreeEnd();
+  args.rval().setUndefined();
+  return true;
+}
+
 static bool RelazifyFunctions(JSContext* cx, unsigned argc, Value* vp) {
   // Relazifying functions on GC is usually only done for compartments that are
   // not active. To aid fuzzing, this testing function allows us to relazify
@@ -9438,6 +9445,12 @@ static bool FdLibM_Pow(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static bool HadOutOfMemory(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  args.rval().setBoolean(cx->runtime()->hadOutOfMemory);
+  return true;
+}
+
 // clang-format off
 static const JSFunctionSpecWithHelp TestingFunctions[] = {
     JS_FN_HELP("gc", ::GC, 0, 0,
@@ -9461,6 +9474,10 @@ static const JSFunctionSpecWithHelp TestingFunctions[] = {
     JS_FN_HELP("gcparam", GCParameter, 2, 0,
 "gcparam(name [, value])",
 "  Wrapper for JS_[GS]etGCParameter. The name is one of:" GC_PARAMETER_ARGS_LIST),
+
+    JS_FN_HELP("finishBackgroundFree", FinishBackgroundFree, 0, 0,
+"finishBackgroundFree()",
+"  Wait for the GC's background free task to finish.\n"),
 
     JS_FN_HELP("hasDisassembler", HasDisassembler, 0, 0,
 "hasDisassembler()",
@@ -10529,6 +10546,11 @@ JS_FN_HELP("isSmallFunction", IsSmallFunction, 1, 0,
     JS_FN_HELP("getPrefValue", GetPrefValue, 1, 0,
 "getPrefValue(name)",
 "  Return the value of the JS pref with the given name."),
+
+  JS_FN_HELP("hadOutOfMemory", HadOutOfMemory, 0, 0,
+"hadOutOfMemory()",
+"  Return the runtime's internal hadOutOfMemory flag that is set when\n"
+"  out of memory is hit with an exception being propagated. "),
 
   JS_FS_HELP_END
 };

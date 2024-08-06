@@ -465,6 +465,7 @@ body {
 }
 
 toolbarpaletteitem > #personal-bookmarks > #PlacesToolbar,
+toolbarpaletteitem:has(> toolbarbutton.fxms-bmb-button),
 #personal-bookmarks:is([overflowedItem=true], [cui-areatype="panel"]) > #PlacesToolbar {
   display: none;
 }
@@ -495,7 +496,7 @@ toolbarpaletteitem > #personal-bookmarks > #PlacesToolbar,
        new tab page and sidebar contents. We do not put this padding on #browser
        as that would resize the content area for all tabs including background
        tabs, which is what we explicitly want to avoid doing here. */
-    padding-top: var(--bookmarks-toolbar-overlapping-browser-height);
+    margin-top: var(--bookmarks-toolbar-overlapping-browser-height);
   }
 }
 

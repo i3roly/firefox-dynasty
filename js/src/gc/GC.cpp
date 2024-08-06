@@ -2241,10 +2241,12 @@ void GCRuntime::queueAllLifoBlocksForFreeAfterMinorGC(LifoAlloc* lifo) {
   lifoBlocksToFreeAfterFullMinorGC.ref().transferFrom(lifo);
 }
 
-void GCRuntime::queueBuffersForFreeAfterMinorGC(Nursery::BufferSet& buffers) {
+void GCRuntime::queueBuffersForFreeAfterMinorGC(
+    Nursery::BufferSet& buffers, Nursery::StringBufferVector& stringBuffers) {
   AutoLockHelperThreadState lock;
 
-  if (!buffersToFreeAfterMinorGC.ref().empty()) {
+  if (!buffersToFreeAfterMinorGC.ref().empty() ||
+      !stringBuffersToReleaseAfterMinorGC.ref().empty()) {
     // In the rare case that this hasn't processed the buffers from a previous
     // minor GC we have to wait here.
     MOZ_ASSERT(!freeTask.isIdle(lock));
@@ -2253,6 +2255,9 @@ void GCRuntime::queueBuffersForFreeAfterMinorGC(Nursery::BufferSet& buffers) {
 
   MOZ_ASSERT(buffersToFreeAfterMinorGC.ref().empty());
   std::swap(buffersToFreeAfterMinorGC.ref(), buffers);
+
+  MOZ_ASSERT(stringBuffersToReleaseAfterMinorGC.ref().empty());
+  std::swap(stringBuffersToReleaseAfterMinorGC.ref(), stringBuffers);
 }
 
 void Realm::destroy(JS::GCContext* gcx) {
@@ -4864,8 +4869,7 @@ void GCRuntime::startBackgroundFreeAfterMinorGC() {
         &lifoBlocksToFreeAfterFullMinorGC.ref());
   }
 
-  if (lifoBlocksToFree.ref().isEmpty() &&
-      buffersToFreeAfterMinorGC.ref().empty()) {
+  if (!hasBuffersForBackgroundFree()) {
     return;
   }
 

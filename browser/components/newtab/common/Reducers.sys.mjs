@@ -60,6 +60,7 @@ export const INITIAL_STATE = {
     layout: [],
     isPrivacyInfoModalVisible: false,
     isCollectionDismissible: false,
+    topicsLoading: false,
     feeds: {
       data: {
         // "https://foo.com/feed1": {lastUpdated: 123, data: [], personalized: false}
@@ -140,6 +141,12 @@ function App(prevState = INITIAL_STATE.App, action) {
     case at.TOP_SITES_UPDATED:
       // Toggle `isForStartupCache` when receiving the `TOP_SITES_UPDATE` action
       // so that sponsored tiles can be rendered as usual. See Bug 1826360.
+      return Object.assign({}, prevState, action.data || {}, {
+        isForStartupCache: false,
+      });
+    case at.DISCOVERY_STREAM_SPOCS_UPDATE:
+      // Toggle `isForStartupCache` when receiving the `DISCOVERY_STREAM_SPOCS_UPDATE_STARTUPCACHE` action
+      // so that spoc cards can be rendered as usual.
       return Object.assign({}, prevState, action.data || {}, {
         isForStartupCache: false,
       });
@@ -665,6 +672,11 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
         ...prevState,
         isCollectionDismissible: action.data.value,
       };
+    case at.DISCOVERY_STREAM_TOPICS_LOADING:
+      return {
+        ...prevState,
+        topicsLoading: action.data,
+      };
     case at.DISCOVERY_STREAM_PREFS_SETUP:
       return {
         ...prevState,
@@ -845,10 +857,15 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
         };
       }
       return prevState;
-    case at.TOPIC_SELECTION_SPOTLIGHT_TOGGLE:
+    case at.TOPIC_SELECTION_SPOTLIGHT_OPEN:
       return {
         ...prevState,
-        showTopicSelection: !prevState.showTopicSelection,
+        showTopicSelection: true,
+      };
+    case at.TOPIC_SELECTION_SPOTLIGHT_CLOSE:
+      return {
+        ...prevState,
+        showTopicSelection: false,
       };
     default:
       return prevState;

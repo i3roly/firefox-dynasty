@@ -44,6 +44,7 @@ import android.widget.FrameLayout
 import androidx.annotation.VisibleForTesting
 import androidx.annotation.VisibleForTesting.Companion.PRIVATE
 import androidx.core.net.toUri
+import androidx.core.view.ViewCompat
 import kotlinx.coroutines.runBlocking
 import mozilla.components.browser.engine.system.matcher.UrlMatcher
 import mozilla.components.browser.engine.system.permission.SystemPermissionRequest
@@ -605,7 +606,11 @@ class SystemEngineView @JvmOverloads constructor(
     internal fun createDownloadListener(): DownloadListener {
         return DownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
             session?.internalNotifyObservers {
-                val fileName = DownloadUtils.guessFileName(contentDisposition, null, url, mimetype)
+                val fileName = DownloadUtils.guessFileName(
+                    contentDisposition = contentDisposition,
+                    url = url,
+                    mimeType = mimetype,
+                )
                 val cookie = CookieManager.getInstance().getCookie(url)
                 onExternalResource(url, fileName, contentLength, mimetype, cookie, userAgent)
             }
@@ -703,6 +708,18 @@ class SystemEngineView @JvmOverloads constructor(
 
     override fun setActivityContext(context: Context?) {
         // no-op
+    }
+
+    override fun addWindowInsetsListener(
+        key: String,
+        listener: androidx.core.view.OnApplyWindowInsetsListener?,
+    ) {
+        val rootView = (context as Activity).window.decorView.rootView
+        ViewCompat.setOnApplyWindowInsetsListener(rootView, listener)
+    }
+
+    override fun removeWindowInsetsListener(key: String) {
+        ViewCompat.setOnApplyWindowInsetsListener(rootView, null)
     }
 
     override fun canScrollVerticallyUp() = session?.webView?.canScrollVertically(-1) ?: false

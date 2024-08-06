@@ -24,6 +24,18 @@ export default class TabHoverPreviewPanel {
     this._tab = null;
     this._thumbnailElement = null;
 
+    // Observe changes to this tab's DOM, and
+    // update the preview if the tab title changes
+    this._tabObserver = new this._win.MutationObserver(
+      (mutationList, _observer) => {
+        for (const mutation of mutationList) {
+          if (mutation.attributeName === "label") {
+            this._updatePreview();
+          }
+        }
+      }
+    );
+
     this._setExternalPopupListeners();
 
     XPCOMUtils.defineLazyPreferenceGetter(
@@ -89,12 +101,13 @@ export default class TabHoverPreviewPanel {
       return;
     }
     let thumbnailCanvas = this._win.document.createElement("canvas");
+    thumbnailCanvas.width = 280 * this._win.devicePixelRatio;
+    thumbnailCanvas.height = 140 * this._win.devicePixelRatio;
 
-    this._win.PageThumbs.captureToCanvas(tab.linkedBrowser, thumbnailCanvas, {
-      fullViewport: true,
-      targetWidth: 280 * this._win.devicePixelRatio,
-      preserveAspectRatio: true,
-    })
+    this._win.PageThumbs.captureTabPreviewThumbnail(
+      tab.linkedBrowser,
+      thumbnailCanvas
+    )
       .then(() => {
         // in case we've changed tabs after capture started, ensure we still want to show the thumbnail
         if (this._tab == tab && this._hasValidThumbnailState(tab)) {
@@ -114,6 +127,9 @@ export default class TabHoverPreviewPanel {
     }
 
     this._tab = tab;
+    this._tabObserver.observe(this._tab, {
+      attributes: true,
+    });
 
     // Calling `moveToAnchor` in advance of the call to `openPopup` ensures
     // that race conditions can be avoided in cases where the user hovers
@@ -147,6 +163,7 @@ export default class TabHoverPreviewPanel {
       return;
     }
     this._tab = null;
+    this._tabObserver.disconnect();
     this._thumbnailElement = null;
     this._panel.removeEventListener("popupshowing", this);
     this._win.removeEventListener("TabSelect", this);
@@ -185,6 +202,10 @@ export default class TabHoverPreviewPanel {
 
     let thumbnailContainer = this._panel.querySelector(
       ".tab-preview-thumbnail-container"
+    );
+    thumbnailContainer.classList.toggle(
+      "hide-thumbnail",
+      !this._hasValidThumbnailState(this._tab)
     );
     if (thumbnailContainer.firstChild != this._thumbnailElement) {
       thumbnailContainer.replaceChildren();

@@ -6342,10 +6342,12 @@ nsresult nsDocShell::EndPageLoad(nsIWebProgress* aProgress,
         DisplayLoadError(aStatus, url, nullptr, aChannel);
       }
     } else if (skippedUnknownProtocolNavigation) {
+      nsAutoCString sanitized;
       nsTArray<nsString> params;
-      if (NS_FAILED(
-              NS_GetSanitizedURIStringFromURI(url, *params.AppendElement()))) {
-        params.LastElement().AssignLiteral(u"(unknown uri)");
+      if (NS_SUCCEEDED(NS_GetSanitizedURIStringFromURI(url, sanitized))) {
+        params.AppendElement(NS_ConvertUTF8toUTF16(sanitized));
+      } else {
+        params.AppendElement(u"(unknown uri)"_ns);
       }
       nsContentUtils::ReportToConsole(
           nsIScriptError::warningFlag, "DOM"_ns, GetExtantDocument(),
@@ -12957,7 +12959,8 @@ nsresult nsDocShell::OnLinkClickSync(nsIContent* aContent,
               /* aTriggeredExternally */
               false,
               /* aHasValidUserGestureActivation */
-              aContent->OwnerDoc()->HasValidTransientUserGestureActivation());
+              aContent->OwnerDoc()->HasValidTransientUserGestureActivation(),
+              /* aNewWindowTarget */ false);
         }
       }
     }

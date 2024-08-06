@@ -1213,6 +1213,12 @@ void BrowserParent::DynamicToolbarOffsetChanged(ScreenIntCoord aOffset) {
     Unused << SendDynamicToolbarOffsetChanged(aOffset);
   }
 }
+
+void BrowserParent::KeyboardHeightChanged(ScreenIntCoord aHeight) {
+  if (!mIsDestroyed) {
+    Unused << SendKeyboardHeightChanged(aHeight);
+  }
+}
 #endif
 
 void BrowserParent::HandleAccessKey(const WidgetKeyboardEvent& aEvent,
@@ -3920,7 +3926,7 @@ void BrowserParent::GetIPCTransferableData(
   if (!transfer) {
     // Pass eDrop to get DataTransfer with external
     // drag formats cached.
-    transfer = new DataTransfer(nullptr, eDrop, true, -1);
+    transfer = new DataTransfer(nullptr, eDrop, true, Nothing());
     aSession->SetDataTransfer(transfer);
   }
   // Note, even though this fills the DataTransfer object with
