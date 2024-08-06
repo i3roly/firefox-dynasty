@@ -1197,7 +1197,7 @@ int32_t nsCocoaWindow::GetWorkspaceID() {
   if ([spaceIDs count]) {
     // When spaces are found, return the first one.
     // We don't support a single window painted across multiple places for now.
-    sid = [spaceIDs[0] integerValue];
+    sid = [[spaceIDs objectAtIndex:0] integerValue];
   } else {
     // Fall back to the workspace that's currently active, which is '1' in the
     // common case.
@@ -1256,7 +1256,7 @@ void nsCocoaWindow::MoveToWorkspace(const nsAString& workspaceIDStr) {
   BOOL found = false;
   for (NSDictionary<NSString*, id>* spacesInfo in displaySpacesInfo) {
     NSArray<NSNumber*>* sids =
-        [spacesInfo[CGSSpacesKey] valueForKey:CGSSpaceIDKey];
+        [[spacesInfo objectForKey:CGSSpacesKey] valueForKey:CGSSpaceIDKey];
     for (NSNumber* sid in sids) {
       // If we found our space in the list, we're good to go and can jump out of
       // this loop.
@@ -2374,10 +2374,13 @@ void nsCocoaWindow::SetColorScheme(const Maybe<ColorScheme>& aScheme) {
   if (!mWindow) {
     return;
   }
-  NSAppearance* appearance =
-      aScheme ? NSAppearanceForColorScheme(*aScheme) : nil;
-  if (mWindow.appearance != appearance) {
-    mWindow.appearance = appearance;
+  //10.7 complains if we don't have this check.
+  if(@available(macOS 10.8, *)) {
+    NSAppearance* appearance =
+        aScheme ? NSAppearanceForColorScheme(*aScheme) : nil;
+    if (mWindow.appearance != appearance) {
+      mWindow.appearance = appearance;
+    }
   }
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
@@ -3919,7 +3922,7 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
                        context:(void*)context {
   if ([keyPath isEqualToString:@"revealAmount"]) {
     [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
-    NSNumber* revealAmount = (change[NSKeyValueChangeNewKey]);
+    NSNumber* revealAmount = ([change objectForKey:NSKeyValueChangeNewKey]);
     [self updateTitlebarShownAmount:[revealAmount doubleValue]];
   } else {
     [super observeValueForKeyPath:keyPath

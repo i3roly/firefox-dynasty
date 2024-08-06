@@ -259,7 +259,7 @@ nsresult xpcAccessibleMacInterface::NSObjectToJsValue(
       return NS_ERROR_FAILURE;
     }
     for (size_t i = 0; i < [objArr count]; ++i) {
-      nsresult rv = NSObjectToJsValue(objArr[i], aCx, v[i]);
+      nsresult rv = NSObjectToJsValue([objArr objectAtIndex:i], aCx, v[i]);
       NS_ENSURE_SUCCESS(rv, rv);
     }
 

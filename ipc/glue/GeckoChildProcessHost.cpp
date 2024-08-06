@@ -1537,8 +1537,11 @@ Result<Ok, LaunchError> MacProcessLauncher::DoFinishLaunch() {
     return Err(LaunchError("MachReceivePortSendRight", kr));
   }
 
+  //instead of calling audit_token_to_pid, we simply compare the sixth member
+  //as shown by the openBSM group's patch:
+  //https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/libraries/openbsm/bsm-add-audit_token_to_pid.patch
   // Ensure the message was sent by the newly spawned child process.
-  if (audit_token_to_pid(audit_token) != base::GetProcId(mResults.mHandle)) {
+  if (((pid_t) audit_token.val[5]) != base::GetProcId(mResults.mHandle)) {
     CHROMIUM_LOG(ERROR) << "task_t was not sent by child process";
     return Err(LaunchError("audit_token_to_pid"));
   }

@@ -32,6 +32,15 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
   (define crashPort (param "CRASH_PORT"))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
 
+  ;; OS X 10.7 (Lion) compatibility
+  ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
+  (if (<= macosVersion 1007)
+    (begin
+    (define ipc-posix-shm* ipc-posix-shm)
+    (define ipc-posix-shm-read-data ipc-posix-shm)
+    (define ipc-posix-shm-read* ipc-posix-shm)
+    (define ipc-posix-shm-write-data ipc-posix-shm)))
+
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
       (deny feature)
@@ -173,8 +182,10 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
     (allow file-read*
            (home-regex (string-append "/Library/Preferences/" (regex-quote domain)))))
 
-  (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
-    (ipc-posix-name-regex #"^CFPBS:"))
+  (if (<= macosVersion 1007)
+   (allow ipc-posix-shm)
+   (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
+     (ipc-posix-name-regex #"^CFPBS:")))
 
   (allow signal (target self))
   (if (string? crashPort)
@@ -240,10 +251,12 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
         (iokit-property "syscfg-v2-data"))))
 
   ; depending on systems, the 1st, 2nd or both rules are necessary
-  (allow user-preference-read (preference-domain "com.apple.HIToolbox"))
+  (if (>= macosVersion 1008)
+  (allow user-preference-read (preference-domain "com.apple.HIToolbox")))
   (allow file-read-data (literal "/Library/Preferences/com.apple.HIToolbox.plist"))
 
-  (allow user-preference-read (preference-domain "com.apple.ATS"))
+  (if (>= macosVersion 1008)
+  (allow user-preference-read (preference-domain "com.apple.ATS")))
 
   ; Needed for some global preferences (such as scrolling behavior)
   (allow file-read-data
@@ -254,8 +267,10 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
   (allow mach-lookup
       (global-name "com.apple.cfprefsd.agent")
       (global-name "com.apple.cfprefsd.daemon"))
-  (allow ipc-posix-shm-read-data
-      (ipc-posix-name-regex #"^apple\.cfprefs\..*"))
+  (if (<= macosVersion 1007)
+   (allow ipc-posix-shm)
+   (allow ipc-posix-shm-read-data
+       (ipc-posix-name-regex #"^apple\.cfprefs\..*")))
 
   (allow file-read*
       (subpath "/Library/ColorSync/Profiles")
@@ -347,8 +362,11 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
       (profile-subpath "/chrome")))
 
 ; accelerated graphics
-  (allow user-preference-read (preference-domain "com.apple.opengl"))
-  (allow user-preference-read (preference-domain "com.nvidia.OpenGL"))
+  (if (>= macosVersion 1008)
+        (allow user-preference-read 
+         (preference-domain "com.apple.opengl")
+         (preference-domain "com.nvidia.OpenGL")))
+
   (allow mach-lookup
       (global-name "com.apple.cvmsServ"))
   (if (>= macosVersion 1014)
@@ -427,8 +445,19 @@ static const char SandboxPolicyContentFileAddend[] = R"SANDBOX_LITERAL(
 // audio remoting is not enabled. (Once audio remoting is always used these
 // will be deleted.)
 static const char SandboxPolicyContentAudioAddend[] = R"SANDBOX_LITERAL(
+  ;; OS X 10.7 (Lion) compatibility
+  ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
+  (if (<= macosVersion 1007)
+    (begin
+    (define ipc-posix-shm* ipc-posix-shm)
+    (define ipc-posix-shm-read-data ipc-posix-shm) 
+    (define ipc-posix-shm-read* ipc-posix-shm) 
+    (define ipc-posix-shm-write-data ipc-posix-shm)))
+
+  (if (<= macosVersion 1007)
+  (allow ipc-posix-shm)
   (allow ipc-posix-shm-read* ipc-posix-shm-write-data
-    (ipc-posix-name-regex #"^AudioIO"))
+    (ipc-posix-name-regex #"^AudioIO")))
 
   (allow mach-lookup
     (global-name "com.apple.audio.coreaudiod")

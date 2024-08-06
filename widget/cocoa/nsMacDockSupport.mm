@@ -248,11 +248,11 @@ NSString* GetPathForApp(NSDictionary* aPersistantApp) {
   if (![aPersistantApp isKindOfClass:[NSDictionary class]]) {
     return nil;
   }
-  NSDictionary* tileData = aPersistantApp[kDockTileDataKey];
+  NSDictionary* tileData = [aPersistantApp objectForKey:kDockTileDataKey];
   if (![tileData isKindOfClass:[NSDictionary class]]) {
     return nil;
   }
-  NSDictionary* fileData = tileData[kDockFileDataKey];
+  NSDictionary* fileData = [tileData objectForKey:kDockFileDataKey];
   if (![fileData isKindOfClass:[NSDictionary class]]) {
     // Some special tiles may not have DockFileData but we can ignore those.
     return nil;

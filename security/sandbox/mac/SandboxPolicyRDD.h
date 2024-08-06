@@ -10,6 +10,14 @@ namespace mozilla {
 
 static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (version 1)
+   ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
+
+   (if (<= macosVersion 1007)
+   (begin
+   (define ipc-posix-shm* ipc-posix-shm)
+   (define ipc-posix-shm-read-data ipc-posix-shm)
+   (define ipc-posix-shm-read* ipc-posix-shm)
+   (define ipc-posix-shm-write-data ipc-posix-shm)))
 
   (define should-log (param "SHOULD_LOG"))
   (define app-path (param "APP_PATH"))
@@ -130,8 +138,10 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (allow file-read*
            (home-regex (string-append "/Library/Preferences/" (regex-quote domain)))))
 
-  (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
-    (ipc-posix-name-regex #"^CFPBS:"))
+  (if (<= macosVersion 1007)
+   (allow ipc-posix-shm)
+   (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
+     (ipc-posix-name-regex #"^CFPBS:")))
 
   (allow mach-lookup
     (global-name "com.apple.CoreServices.coreservicesd")
@@ -178,8 +188,11 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (iokit-property "MetalPluginClassName")))
 
 ; accelerated graphics
-  (allow user-preference-read (preference-domain "com.apple.opengl"))
-  (allow user-preference-read (preference-domain "com.nvidia.OpenGL"))
+  (if (>= macosVersion 1008)
+       (allow user-preference-read 
+        (preference-domain "com.apple.opengl")
+        (preference-domain "com.nvidia.OpenGL")))
+  
   (allow mach-lookup
       (global-name "com.apple.cvmsServ"))
   (if (>= macosVersion 1014)
