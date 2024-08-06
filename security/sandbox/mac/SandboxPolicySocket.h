@@ -18,6 +18,16 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
   (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
 
+  ;; OS X 10.7 (Lion) compatibility
+  ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
+  (if (<= macosVersion 1007)
+    (begin
+    (define ipc-posix-shm* ipc-posix-shm)
+    (define ipc-posix-shm-read-data ipc-posix-shm)
+    (define ipc-posix-shm-read* ipc-posix-shm)
+    (define ipc-posix-shm-write-data ipc-posix-shm)))
+
+
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
       (deny feature)
@@ -106,8 +116,10 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
     (local udp))
 
   ; Distributed notifications memory.
-  (allow ipc-posix-shm-read-data
-    (ipc-posix-name "apple.shm.notification_center"))
+  (if (<= macosVersion 1007)
+   (allow ipc-posix-shm) 
+   (allow ipc-posix-shm-read-data
+    (ipc-posix-name "apple.shm.notification_center")))
 
   ; Notification data from the security server database.
   (allow ipc-posix-shm

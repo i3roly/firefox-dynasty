@@ -372,11 +372,11 @@ foreign_obj_type! {
 
 impl AttributeDescriptorArrayRef {
     pub fn object_at(&self, index: NSUInteger) -> Option<&AttributeDescriptorRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn set_object_at(&self, index: NSUInteger, buffer_desc: Option<&AttributeDescriptorRef>) {
-        unsafe { msg_send![self, setObject:buffer_desc atIndexedSubscript:index] }
+        unsafe { msg_send![self, setObject:buffer_desc atIndex:index] }
     }
 }
 
@@ -424,7 +424,7 @@ foreign_obj_type! {
 
 impl BufferLayoutDescriptorArrayRef {
     pub fn object_at(&self, index: NSUInteger) -> Option<&BufferLayoutDescriptorRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn set_object_at(
@@ -432,7 +432,7 @@ impl BufferLayoutDescriptorArrayRef {
         index: NSUInteger,
         buffer_desc: Option<&BufferLayoutDescriptorRef>,
     ) {
-        unsafe { msg_send![self, setObject:buffer_desc atIndexedSubscript:index] }
+        unsafe { msg_send![self, setObject:buffer_desc atIndex:index] }
     }
 }
 

@@ -886,10 +886,10 @@ struct RoleDescrComparator {
     // Our actual announcement should be stored as a child of the alert,
     // so we verify a child exists, and then query that child below.
     NSArray* children = [self moxChildren];
-    MOZ_ASSERT([children count] == 1 && children[0],
+    MOZ_ASSERT([children count] == 1 && [children objectAtIndex:0],
                "A11yUtil event received, but no announcement found?");
 
-    mozAccessible* announcement = children[0];
+    mozAccessible* announcement = [children objectAtIndex:0];
     NSString* key;
     if ([announcement providesLabelNotTitle]) {
       key = [announcement moxLabel];
@@ -968,7 +968,7 @@ struct RoleDescrComparator {
           static_cast<MOXTextMarkerDelegate*>([self moxTextMarkerDelegate]);
       NSMutableDictionary* userInfo =
           [[[delegate selectionChangeInfo] mutableCopy] autorelease];
-      userInfo[@"AXTextChangeElement"] = self;
+      [userInfo setObject:self forKey:@"AXTextChangeElement"];
 
       mozAccessible* webArea = [self topWebArea];
       [webArea

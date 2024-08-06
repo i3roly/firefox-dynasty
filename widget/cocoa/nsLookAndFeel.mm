@@ -364,12 +364,12 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
     case ColorID::MozEventreerow:
       // Background color of even list rows.
       color =
-          GetColorFromNSColor(NSColor.controlAlternatingRowBackgroundColors[0]);
+          GetColorFromNSColor([NSColor.controlAlternatingRowBackgroundColors objectAtIndex:0]);
       break;
     case ColorID::MozOddtreerow:
       // Background color of odd list rows.
       color =
-          GetColorFromNSColor(NSColor.controlAlternatingRowBackgroundColors[1]);
+          GetColorFromNSColor([NSColor.controlAlternatingRowBackgroundColors objectAtIndex:1]);
       break;
     case ColorID::MozNativehyperlinktext:
       if (@available(macOS 10.10, *))

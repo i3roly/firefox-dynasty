@@ -35,7 +35,7 @@ impl BlitPassSampleBufferAttachmentDescriptorArrayRef {
         &self,
         index: NSUInteger,
     ) -> Option<&BlitPassSampleBufferAttachmentDescriptorRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn set_object_at(
@@ -45,7 +45,7 @@ impl BlitPassSampleBufferAttachmentDescriptorArrayRef {
     ) {
         unsafe {
             msg_send![self, setObject:attachment
-                     atIndexedSubscript:index]
+                     atIndex:index]
         }
     }
 }

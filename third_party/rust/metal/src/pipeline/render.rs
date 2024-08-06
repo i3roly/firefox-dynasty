@@ -218,7 +218,7 @@ foreign_obj_type! {
 
 impl ArgumentArrayRef {
     pub fn object_at(&self, index: NSUInteger) -> Option<&ArgumentRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn count(&self) -> NSUInteger {
@@ -703,7 +703,7 @@ impl RenderPipelineColorAttachmentDescriptorArrayRef {
         &self,
         index: NSUInteger,
     ) -> Option<&RenderPipelineColorAttachmentDescriptorRef> {
-        unsafe { msg_send![self, objectAtIndexedSubscript: index] }
+        unsafe { msg_send![self, objectAtIndex: index] }
     }
 
     pub fn set_object_at(
@@ -713,7 +713,7 @@ impl RenderPipelineColorAttachmentDescriptorArrayRef {
     ) {
         unsafe {
             msg_send![self, setObject:attachment
-                   atIndexedSubscript:index]
+                   atIndex:index]
         }
     }
 }
