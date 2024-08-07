@@ -363,14 +363,14 @@ impl RecvMessage {
             .recv_closed(self.get_stream_info(), CloseType::Done);
     }
 
-    fn closing(&self) -> bool {
+    const fn closing(&self) -> bool {
         matches!(
             self.state,
             RecvMessageState::ClosePending | RecvMessageState::Closed
         )
     }
 
-    fn get_stream_info(&self) -> Http3StreamInfo {
+    const fn get_stream_info(&self) -> Http3StreamInfo {
         Http3StreamInfo::new(self.stream_id, Http3StreamType::Http)
     }
 }

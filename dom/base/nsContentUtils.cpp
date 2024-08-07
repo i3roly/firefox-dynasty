@@ -272,6 +272,7 @@
 #include "nsIBidiKeyboard.h"
 #include "nsIBrowser.h"
 #include "nsICacheInfoChannel.h"
+#include "nsICachingChannel.h"
 #include "nsICategoryManager.h"
 #include "nsIChannel.h"
 #include "nsIChannelEventSink.h"
@@ -3478,8 +3479,7 @@ void nsContentUtils::GenerateStateKey(nsIContent* aContent, Document* aDocument,
     // XXX We don't need to use index if name is there
     // XXXbz We don't?  Why not?  I don't follow.
     //
-    nsCOMPtr<nsIFormControl> control(do_QueryInterface(aContent));
-    if (control) {
+    if (const auto* control = nsIFormControl::FromNode(aContent)) {
       // Get the control number if this was a parser inserted element from the
       // network.
       int32_t controlNumber =
@@ -4531,7 +4531,7 @@ void nsContentUtils::LogSimpleConsoleError(const nsAString& aErrorText,
     nsCOMPtr<nsIConsoleService> console =
         do_GetService(NS_CONSOLESERVICE_CONTRACTID);
     if (console && NS_SUCCEEDED(scriptError->Init(
-                       aErrorText, u""_ns, u""_ns, 0, 0, aErrorFlags, aCategory,
+                       aErrorText, ""_ns, 0, 0, aErrorFlags, aCategory,
                        aFromPrivateWindow, aFromChromeContext))) {
       console->LogMessage(scriptError);
     }
@@ -4542,8 +4542,7 @@ void nsContentUtils::LogSimpleConsoleError(const nsAString& aErrorText,
 nsresult nsContentUtils::ReportToConsole(
     uint32_t aErrorFlags, const nsACString& aCategory,
     const Document* aDocument, PropertiesFile aFile, const char* aMessageName,
-    const nsTArray<nsString>& aParams, nsIURI* aURI,
-    const nsString& aSourceLine, uint32_t aLineNumber, uint32_t aColumnNumber) {
+    const nsTArray<nsString>& aParams, const SourceLocation& aLoc) {
   nsresult rv;
   nsAutoString errorText;
   if (!aParams.IsEmpty()) {
@@ -4552,10 +4551,8 @@ nsresult nsContentUtils::ReportToConsole(
     rv = GetLocalizedString(aFile, aMessageName, errorText);
   }
   NS_ENSURE_SUCCESS(rv, rv);
-
   return ReportToConsoleNonLocalized(errorText, aErrorFlags, aCategory,
-                                     aDocument, aURI, aSourceLine, aLineNumber,
-                                     aColumnNumber);
+                                     aDocument, aLoc);
 }
 
 /* static */
@@ -4567,55 +4564,42 @@ void nsContentUtils::ReportEmptyGetElementByIdArg(const Document* aDoc) {
 /* static */
 nsresult nsContentUtils::ReportToConsoleNonLocalized(
     const nsAString& aErrorText, uint32_t aErrorFlags,
-    const nsACString& aCategory, const Document* aDocument, nsIURI* aURI,
-    const nsString& aSourceLine, uint32_t aLineNumber, uint32_t aColumnNumber,
-    MissingErrorLocationMode aLocationMode) {
-  uint64_t innerWindowID = 0;
-  if (aDocument) {
-    if (!aURI) {
-      aURI = aDocument->GetDocumentURI();
-    }
-    innerWindowID = aDocument->InnerWindowID();
+    const nsACString& aCategory, const Document* aDocument,
+    const SourceLocation& aLoc) {
+  uint64_t innerWindowID = aDocument ? aDocument->InnerWindowID() : 0;
+  if (aLoc || !aDocument || !aDocument->GetDocumentURI()) {
+    return ReportToConsoleByWindowID(aErrorText, aErrorFlags, aCategory,
+                                     innerWindowID, aLoc);
   }
-
   return ReportToConsoleByWindowID(aErrorText, aErrorFlags, aCategory,
-                                   innerWindowID, aURI, aSourceLine,
-                                   aLineNumber, aColumnNumber, aLocationMode);
+                                   innerWindowID,
+                                   SourceLocation(aDocument->GetDocumentURI()));
 }
 
 /* static */
 nsresult nsContentUtils::ReportToConsoleByWindowID(
     const nsAString& aErrorText, uint32_t aErrorFlags,
-    const nsACString& aCategory, uint64_t aInnerWindowID, nsIURI* aURI,
-    const nsString& aSourceLine, uint32_t aLineNumber, uint32_t aColumnNumber,
-    MissingErrorLocationMode aLocationMode) {
+    const nsACString& aCategory, uint64_t aInnerWindowID,
+    const SourceLocation& aLocation) {
   nsresult rv;
   if (!sConsoleService) {  // only need to bother null-checking here
     rv = CallGetService(NS_CONSOLESERVICE_CONTRACTID, &sConsoleService);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
-  nsAutoString spec;
-  if (!aLineNumber && aLocationMode == eUSE_CALLING_LOCATION) {
-    JSContext* cx = GetCurrentJSContext();
-    if (cx) {
-      nsJSUtils::GetCallingLocation(cx, spec, &aLineNumber, &aColumnNumber);
-    }
-  }
-
   nsCOMPtr<nsIScriptError> errorObject =
       do_CreateInstance(NS_SCRIPTERROR_CONTRACTID, &rv);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  if (!spec.IsEmpty()) {
-    rv = errorObject->InitWithWindowID(aErrorText,
-                                       spec,  // file name
-                                       aSourceLine, aLineNumber, aColumnNumber,
-                                       aErrorFlags, aCategory, aInnerWindowID);
-  } else {
-    rv = errorObject->InitWithSourceURI(aErrorText, aURI, aSourceLine,
-                                        aLineNumber, aColumnNumber, aErrorFlags,
+  if (aLocation.mResource.is<nsCOMPtr<nsIURI>>()) {
+    nsIURI* uri = aLocation.mResource.as<nsCOMPtr<nsIURI>>();
+    rv = errorObject->InitWithSourceURI(aErrorText, uri, aLocation.mLine,
+                                        aLocation.mColumn, aErrorFlags,
                                         aCategory, aInnerWindowID);
+  } else {
+    rv = errorObject->InitWithWindowID(
+        aErrorText, aLocation.mResource.as<nsCString>(), aLocation.mLine,
+        aLocation.mColumn, aErrorFlags, aCategory, aInnerWindowID);
   }
   NS_ENSURE_SUCCESS(rv, rv);
 
@@ -5206,9 +5190,12 @@ bool nsContentUtils::HasNonEmptyAttr(const nsIContent* aContent,
 }
 
 /* static */
-bool nsContentUtils::HasMutationListeners(nsINode* aNode, uint32_t aType,
-                                          nsINode* aTargetForSubtreeModified) {
+bool nsContentUtils::WantMutationEvents(nsINode* aNode, uint32_t aType,
+                                        nsINode* aTargetForSubtreeModified) {
   Document* doc = aNode->OwnerDoc();
+  if (!doc->FireMutationEvents()) {
+    return false;
+  }
 
   // global object will be null for documents that don't have windows.
   nsPIDOMWindowInner* window = doc->GetInnerWindow();
@@ -5298,8 +5285,7 @@ void nsContentUtils::MaybeFireNodeRemoved(nsINode* aChild, nsINode* aParent) {
     }
   }
 
-  if (HasMutationListeners(aChild, NS_EVENT_BITS_MUTATION_NODEREMOVED,
-                           aParent)) {
+  if (WantMutationEvents(aChild, NS_EVENT_BITS_MUTATION_NODEREMOVED, aParent)) {
     InternalMutationEvent mutation(true, eLegacyNodeRemoved);
     mutation.mRelatedNode = aParent;
 
@@ -6402,8 +6388,8 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
     // means, for instance calling the drag service directly, or a drag
     // from another application. In either case, a new dataTransfer should
     // be created that reflects the data.
-    initialDataTransfer =
-        new DataTransfer(aDragEvent->mTarget, aDragEvent->mMessage, true, -1);
+    initialDataTransfer = new DataTransfer(
+        aDragEvent->mTarget, aDragEvent->mMessage, true, Nothing());
 
     // now set it in the drag session so we don't need to create it again
     dragSession->SetDataTransfer(initialDataTransfer);
@@ -7042,13 +7028,6 @@ void* nsContentUtils::AllocClassMatchingInfo(nsINode* aRootNode,
   return info;
 }
 
-// static
-bool nsContentUtils::IsFocusedContent(const nsIContent* aContent) {
-  nsFocusManager* fm = nsFocusManager::GetFocusManager();
-
-  return fm && fm->GetFocusedElement() == aContent;
-}
-
 bool nsContentUtils::HasScrollgrab(nsIContent* aContent) {
   // If we ever standardize this feature we'll want to hook this up properly
   // again. For now we're removing all the DOM-side code related to it but
@@ -7436,7 +7415,8 @@ bool nsContentUtils::ChannelShouldInheritPrincipal(
     // we're checking for things that will use the owner.
     inherit =
         (NS_SUCCEEDED(URIInheritsSecurityContext(aURI, &uriInherits)) &&
-         (uriInherits || (aInheritForAboutBlank && NS_IsAboutBlank(aURI)))) ||
+         (uriInherits || (aInheritForAboutBlank &&
+                          NS_IsAboutBlankAllowQueryAndFragment(aURI)))) ||
         //
         // file: uri special-casing
         //
@@ -11034,7 +11014,7 @@ bool nsContentUtils::IsOverridingWindowName(const nsAString& aName) {
 
 template <prototypes::ID PrototypeID, class NativeType, typename T>
 static Result<Ok, nsresult> ExtractExceptionValues(
-    JSContext* aCx, JS::Handle<JSObject*> aObj, nsAString& aSourceSpecOut,
+    JSContext* aCx, JS::Handle<JSObject*> aObj, nsACString& aSourceSpecOut,
     uint32_t* aLineOut, uint32_t* aColumnOut, nsString& aMessageOut) {
   AssertStaticUnwrapOK<PrototypeID>();
   RefPtr<T> exn;
@@ -11058,16 +11038,6 @@ static Result<Ok, nsresult> ExtractExceptionValues(
 /* static */
 void nsContentUtils::ExtractErrorValues(
     JSContext* aCx, JS::Handle<JS::Value> aValue, nsACString& aSourceSpecOut,
-    uint32_t* aLineOut, uint32_t* aColumnOut, nsString& aMessageOut) {
-  nsAutoString sourceSpec;
-  ExtractErrorValues(aCx, aValue, sourceSpec, aLineOut, aColumnOut,
-                     aMessageOut);
-  CopyUTF16toUTF8(sourceSpec, aSourceSpecOut);
-}
-
-/* static */
-void nsContentUtils::ExtractErrorValues(
-    JSContext* aCx, JS::Handle<JS::Value> aValue, nsAString& aSourceSpecOut,
     uint32_t* aLineOut, uint32_t* aColumnOut, nsString& aMessageOut) {
   MOZ_ASSERT(aLineOut);
   MOZ_ASSERT(aColumnOut);
@@ -11473,6 +11443,20 @@ nsContentUtils::GetSubresourceCacheValidationInfo(nsIRequest* aRequest,
   }
 
   return info;
+}
+
+/* static */
+bool nsContentUtils::ShouldBypassSubResourceCache(Document* aDoc) {
+  RefPtr<nsILoadGroup> lg = aDoc->GetDocumentLoadGroup();
+  if (!lg) {
+    return false;
+  }
+  nsLoadFlags flags;
+  if (NS_FAILED(lg->GetLoadFlags(&flags))) {
+    return false;
+  }
+  return flags & (nsIRequest::LOAD_BYPASS_CACHE |
+                  nsICachingChannel::LOAD_BYPASS_LOCAL_CACHE);
 }
 
 nsCString nsContentUtils::TruncatedURLForDisplay(nsIURI* aURL, size_t aMaxLen) {

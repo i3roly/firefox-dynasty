@@ -1189,7 +1189,7 @@ IPCResult ContentParent::RecvAttributionEvent(
 
 IPCResult ContentParent::RecvAttributionConversion(
     const nsACString& aHost, const nsAString& aTask, uint32_t aHistogramSize,
-    const Maybe<uint32_t>& aLoopbackDays,
+    const Maybe<uint32_t>& aLookbackDays,
     const Maybe<PrivateAttributionImpressionType>& aImpressionType,
     const nsTArray<nsString>& aAds, const nsTArray<nsCString>& aSourceHosts) {
   nsCOMPtr<nsIPrivateAttributionService> pa =
@@ -1198,7 +1198,7 @@ IPCResult ContentParent::RecvAttributionConversion(
     return IPC_OK();
   }
   pa->OnAttributionConversion(
-      aHost, aTask, aHistogramSize, aLoopbackDays.valueOr(0),
+      aHost, aTask, aHistogramSize, aLookbackDays.valueOr(0),
       aImpressionType ? GetEnumString(*aImpressionType) : EmptyCString(), aAds,
       aSourceHosts);
   return IPC_OK();
@@ -1461,18 +1461,18 @@ already_AddRefed<RemoteBrowser> ContentParent::CreateBrowser(
       new BrowserParent(constructorSender.get(), tabId, aContext,
                         aBrowsingContext->Canonical(), chromeFlags);
 
+  ContentProcessManager* cpm = ContentProcessManager::GetSingleton();
+  if (NS_WARN_IF(!cpm)) {
+    return nullptr;
+  }
+  cpm->RegisterRemoteFrame(browserParent);
+
   // Open a remote endpoint for our PBrowser actor.
   ManagedEndpoint<PBrowserChild> childEp =
       constructorSender->OpenPBrowserEndpoint(browserParent);
   if (NS_WARN_IF(!childEp.IsValid())) {
     return nullptr;
   }
-
-  ContentProcessManager* cpm = ContentProcessManager::GetSingleton();
-  if (NS_WARN_IF(!cpm)) {
-    return nullptr;
-  }
-  cpm->RegisterRemoteFrame(browserParent);
 
   nsCOMPtr<nsIPrincipal> initialPrincipal =
       NullPrincipal::Create(aBrowsingContext->OriginAttributesRef());
@@ -3114,7 +3114,8 @@ void ContentParent::OnVarChanged(const GfxVarUpdate& aVar) {
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvSetClipboard(
-    const IPCTransferable& aTransferable, const int32_t& aWhichClipboard,
+    const IPCTransferable& aTransferable,
+    const nsIClipboard::ClipboardType& aWhichClipboard,
     const MaybeDiscarded<WindowContext>& aRequestingWindowContext) {
   // aRequestingPrincipal is allowed to be nullptr here.
 
@@ -3174,7 +3175,8 @@ ContentParent::CreateClipboardTransferable(const nsTArray<nsCString>& aTypes) {
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvGetClipboard(
-    nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
+    nsTArray<nsCString>&& aTypes,
+    const nsIClipboard::ClipboardType& aWhichClipboard,
     const MaybeDiscarded<WindowContext>& aRequestingWindowContext,
     IPCTransferableDataOrError* aTransferableDataOrError) {
   nsresult rv;
@@ -3223,7 +3225,7 @@ mozilla::ipc::IPCResult ContentParent::RecvGetClipboard(
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvEmptyClipboard(
-    const int32_t& aWhichClipboard) {
+    const nsIClipboard::ClipboardType& aWhichClipboard) {
   nsresult rv;
   nsCOMPtr<nsIClipboard> clipboard(do_GetService(kCClipboardCID, &rv));
   NS_ENSURE_SUCCESS(rv, IPC_OK());
@@ -3234,8 +3236,8 @@ mozilla::ipc::IPCResult ContentParent::RecvEmptyClipboard(
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvClipboardHasType(
-    nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
-    bool* aHasType) {
+    nsTArray<nsCString>&& aTypes,
+    const nsIClipboard::ClipboardType& aWhichClipboard, bool* aHasType) {
   nsresult rv;
   nsCOMPtr<nsIClipboard> clipboard(do_GetService(kCClipboardCID, &rv));
   NS_ENSURE_SUCCESS(rv, IPC_OK());
@@ -3313,7 +3315,8 @@ NS_IMPL_ISUPPORTS(ClipboardGetCallback, nsIClipboardGetDataSnapshotCallback)
 }  // namespace
 
 mozilla::ipc::IPCResult ContentParent::RecvGetClipboardDataSnapshot(
-    nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
+    nsTArray<nsCString>&& aTypes,
+    const nsIClipboard::ClipboardType& aWhichClipboard,
     const MaybeDiscarded<WindowContext>& aRequestingWindowContext,
     mozilla::NotNull<nsIPrincipal*> aRequestingPrincipal,
     GetClipboardDataSnapshotResolver&& aResolver) {
@@ -3356,7 +3359,8 @@ mozilla::ipc::IPCResult ContentParent::RecvGetClipboardDataSnapshot(
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvGetClipboardDataSnapshotSync(
-    nsTArray<nsCString>&& aTypes, const int32_t& aWhichClipboard,
+    nsTArray<nsCString>&& aTypes,
+    const nsIClipboard::ClipboardType& aWhichClipboard,
     const MaybeDiscarded<WindowContext>& aRequestingWindowContext,
     ClipboardReadRequestOrError* aRequestOrError) {
   // If the requesting context has been discarded, cancel the paste.
@@ -3399,7 +3403,7 @@ mozilla::ipc::IPCResult ContentParent::RecvGetClipboardDataSnapshotSync(
 
 already_AddRefed<PClipboardWriteRequestParent>
 ContentParent::AllocPClipboardWriteRequestParent(
-    const int32_t& aClipboardType,
+    const nsIClipboard::ClipboardType& aClipboardType,
     const MaybeDiscarded<WindowContext>& aSettingWindowContext) {
   WindowContext* settingWindowContext = nullptr;
   if (!aSettingWindowContext.IsDiscarded()) {
@@ -4140,21 +4144,17 @@ mozilla::ipc::IPCResult ContentParent::RecvConstructPopupBrowser(
   auto parent = MakeRefPtr<BrowserParent>(this, aTabId, tc.GetTabContext(),
                                           browsingContext, chromeFlags);
 
+  // The creation of PBrowser was triggered from content process through
+  // window.open().
+  // We need to register remote frame with the child generated tab id.
+  ContentProcessManager* cpm = ContentProcessManager::GetSingleton();
+  if (!cpm || !cpm->RegisterRemoteFrame(parent)) {
+    return IPC_FAIL(this, "RegisterRemoteFrame Failed");
+  }
+
   // Bind the created BrowserParent to IPC to actually link the actor.
   if (NS_WARN_IF(!BindPBrowserEndpoint(std::move(aBrowserEp), parent))) {
     return IPC_FAIL(this, "BindPBrowserEndpoint failed");
-  }
-
-  // XXX: Why are we checking these requirements? It seems we should register
-  // the created frame unconditionally?
-  if (openerTabId > 0) {
-    // The creation of PBrowser was triggered from content process through
-    // window.open().
-    // We need to register remote frame with the child generated tab id.
-    auto* cpm = ContentProcessManager::GetSingleton();
-    if (!cpm || !cpm->RegisterRemoteFrame(parent)) {
-      return IPC_FAIL(this, "RegisterRemoteFrame Failed");
-    }
   }
 
   if (NS_WARN_IF(!parent->BindPWindowGlobalEndpoint(std::move(aWindowEp),
@@ -4588,7 +4588,8 @@ mozilla::ipc::IPCResult ContentParent::RecvLoadURIExternal(
     nsIURI* uri, nsIPrincipal* aTriggeringPrincipal,
     nsIPrincipal* aRedirectPrincipal,
     const MaybeDiscarded<BrowsingContext>& aContext,
-    bool aWasExternallyTriggered, bool aHasValidUserGestureActivation) {
+    bool aWasExternallyTriggered, bool aHasValidUserGestureActivation,
+    bool aNewWindowTarget) {
   if (aContext.IsDiscarded()) {
     return IPC_OK();
   }
@@ -4606,7 +4607,7 @@ mozilla::ipc::IPCResult ContentParent::RecvLoadURIExternal(
   BrowsingContext* bc = aContext.get();
   extProtService->LoadURI(uri, aTriggeringPrincipal, aRedirectPrincipal, bc,
                           aWasExternallyTriggered,
-                          aHasValidUserGestureActivation);
+                          aHasValidUserGestureActivation, aNewWindowTarget);
   return IPC_OK();
 }
 
@@ -4836,33 +4837,33 @@ mozilla::ipc::IPCResult ContentParent::RecvReportFrameTimingData(
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvScriptError(
-    const nsAString& aMessage, const nsAString& aSourceName,
-    const nsAString& aSourceLine, const uint32_t& aLineNumber,
-    const uint32_t& aColNumber, const uint32_t& aFlags,
-    const nsACString& aCategory, const bool& aIsFromPrivateWindow,
-    const uint64_t& aInnerWindowId, const bool& aIsFromChromeContext) {
-  return RecvScriptErrorInternal(aMessage, aSourceName, aSourceLine,
-                                 aLineNumber, aColNumber, aFlags, aCategory,
-                                 aIsFromPrivateWindow, aIsFromChromeContext);
+    const nsAString& aMessage, const nsACString& aSourceName,
+    const uint32_t& aLineNumber, const uint32_t& aColNumber,
+    const uint32_t& aFlags, const nsACString& aCategory,
+    const bool& aIsFromPrivateWindow, const uint64_t& aInnerWindowId,
+    const bool& aIsFromChromeContext) {
+  return RecvScriptErrorInternal(aMessage, aSourceName, aLineNumber, aColNumber,
+                                 aFlags, aCategory, aIsFromPrivateWindow,
+                                 aIsFromChromeContext);
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvScriptErrorWithStack(
-    const nsAString& aMessage, const nsAString& aSourceName,
-    const nsAString& aSourceLine, const uint32_t& aLineNumber,
-    const uint32_t& aColNumber, const uint32_t& aFlags,
-    const nsACString& aCategory, const bool& aIsFromPrivateWindow,
-    const bool& aIsFromChromeContext, const ClonedMessageData& aStack) {
-  return RecvScriptErrorInternal(
-      aMessage, aSourceName, aSourceLine, aLineNumber, aColNumber, aFlags,
-      aCategory, aIsFromPrivateWindow, aIsFromChromeContext, &aStack);
+    const nsAString& aMessage, const nsACString& aSourceName,
+    const uint32_t& aLineNumber, const uint32_t& aColNumber,
+    const uint32_t& aFlags, const nsACString& aCategory,
+    const bool& aIsFromPrivateWindow, const bool& aIsFromChromeContext,
+    const ClonedMessageData& aStack) {
+  return RecvScriptErrorInternal(aMessage, aSourceName, aLineNumber, aColNumber,
+                                 aFlags, aCategory, aIsFromPrivateWindow,
+                                 aIsFromChromeContext, &aStack);
 }
 
 mozilla::ipc::IPCResult ContentParent::RecvScriptErrorInternal(
-    const nsAString& aMessage, const nsAString& aSourceName,
-    const nsAString& aSourceLine, const uint32_t& aLineNumber,
-    const uint32_t& aColNumber, const uint32_t& aFlags,
-    const nsACString& aCategory, const bool& aIsFromPrivateWindow,
-    const bool& aIsFromChromeContext, const ClonedMessageData* aStack) {
+    const nsAString& aMessage, const nsACString& aSourceName,
+    const uint32_t& aLineNumber, const uint32_t& aColNumber,
+    const uint32_t& aFlags, const nsACString& aCategory,
+    const bool& aIsFromPrivateWindow, const bool& aIsFromChromeContext,
+    const ClonedMessageData* aStack) {
   nsresult rv;
   nsCOMPtr<nsIConsoleService> consoleService =
       do_GetService(NS_CONSOLESERVICE_CONTRACTID, &rv);
@@ -4902,8 +4903,8 @@ mozilla::ipc::IPCResult ContentParent::RecvScriptErrorInternal(
     msg = new nsScriptError();
   }
 
-  rv = msg->Init(aMessage, aSourceName, aSourceLine, aLineNumber, aColNumber,
-                 aFlags, aCategory, aIsFromPrivateWindow, aIsFromChromeContext);
+  rv = msg->Init(aMessage, aSourceName, aLineNumber, aColNumber, aFlags,
+                 aCategory, aIsFromPrivateWindow, aIsFromChromeContext);
   if (NS_FAILED(rv)) return IPC_OK();
 
   msg->SetIsForwardedFromContentProcess(true);
@@ -5290,6 +5291,7 @@ mozilla::ipc::IPCResult ContentParent::CommonCreateWindow(
 
   MOZ_ASSERT(aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWTAB ||
              aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_BACKGROUND ||
+             aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_FOREGROUND ||
              aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWWINDOW ||
              aOpenLocation == nsIBrowserDOMWindow::OPEN_PRINT_BROWSER);
 
@@ -5300,6 +5302,7 @@ mozilla::ipc::IPCResult ContentParent::CommonCreateWindow(
 
   if (aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWTAB ||
       aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_BACKGROUND ||
+      aOpenLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_FOREGROUND ||
       aOpenLocation == nsIBrowserDOMWindow::OPEN_PRINT_BROWSER) {
     RefPtr<Element> openerElement = do_QueryObject(frame);
 
@@ -5531,7 +5534,8 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindow(
   // do this work.
   MOZ_ALWAYS_SUCCEEDS(newBC->SetHasSiblings(
       openLocation == nsIBrowserDOMWindow::OPEN_NEWTAB ||
-      openLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_BACKGROUND));
+      openLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_BACKGROUND ||
+      openLocation == nsIBrowserDOMWindow::OPEN_NEWTAB_FOREGROUND));
 
   newTab->SwapFrameScriptsFrom(cwi.frameScripts());
   newTab->MaybeShowFrame();

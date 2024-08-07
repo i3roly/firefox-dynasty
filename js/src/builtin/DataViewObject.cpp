@@ -405,7 +405,7 @@ NativeType DataViewObject::read(uint64_t offset, size_t length,
       getDataPointer<NativeType>(offset, length, &isSharedMemory);
   MOZ_ASSERT(data);
 
-  NativeType val = 0;
+  NativeType val{};
   if (isSharedMemory) {
     DataViewIO<NativeType, SharedMem<uint8_t*>>::fromBuffer(&val, data,
                                                             isLittleEndian);
@@ -414,14 +414,6 @@ NativeType DataViewObject::read(uint64_t offset, size_t length,
                                                  isLittleEndian);
   }
 
-  return val;
-}
-
-template <>
-float16 DataViewObject::read(uint64_t offset, size_t length,
-                             bool isLittleEndian) {
-  float16 val{};
-  val.val = read<uint16_t>(offset, length, isLittleEndian);
   return val;
 }
 
@@ -556,11 +548,9 @@ bool DataViewObject::write(JSContext* cx, Handle<DataViewObject*> obj,
   }
 
   // See the comment in ElementSpecific::doubleToNative.
-  if (js::SupportDifferentialTesting() && TypeIsFloatingPoint<NativeType>()) {
-    if constexpr (std::is_same_v<NativeType, float16>) {
-      value = JS::CanonicalizeNaN(value.toDouble());
-    } else {
-      value = JS::CanonicalizeNaN(value);
+  if constexpr (!std::numeric_limits<NativeType>::is_integer) {
+    if (js::SupportDifferentialTesting()) {
+      value = JS::CanonicalizeNaN(static_cast<double>(value));
     }
   }
 
@@ -774,7 +764,7 @@ bool DataViewObject::getFloat16Impl(JSContext* cx, const CallArgs& args) {
     return false;
   }
 
-  args.rval().setDouble(CanonicalizeNaN(val.toDouble()));
+  args.rval().setDouble(CanonicalizeNaN(static_cast<double>(val)));
   return true;
 }
 
@@ -1145,8 +1135,8 @@ const JSFunctionSpec DataViewObject::methods[] = {
                     DataViewGetInt32),
     JS_INLINABLE_FN("getUint32", DataViewObject::fun_getUint32, 1, 0,
                     DataViewGetUint32),
-    // TODO: See Bug 1835034 for JIT support for Float16Array
-    JS_FN("getFloat16", DataViewObject::fun_getFloat16, 1, 0),
+    JS_INLINABLE_FN("getFloat16", DataViewObject::fun_getFloat16, 1, 0,
+                    DataViewGetFloat16),
     JS_INLINABLE_FN("getFloat32", DataViewObject::fun_getFloat32, 1, 0,
                     DataViewGetFloat32),
     JS_INLINABLE_FN("getFloat64", DataViewObject::fun_getFloat64, 1, 0,
@@ -1167,8 +1157,8 @@ const JSFunctionSpec DataViewObject::methods[] = {
                     DataViewSetInt32),
     JS_INLINABLE_FN("setUint32", DataViewObject::fun_setUint32, 2, 0,
                     DataViewSetUint32),
-    // TODO: See Bug 1835034 for JIT support for Float16Array
-    JS_FN("setFloat16", DataViewObject::fun_setFloat16, 2, 0),
+    JS_INLINABLE_FN("setFloat16", DataViewObject::fun_setFloat16, 2, 0,
+                    DataViewSetFloat16),
     JS_INLINABLE_FN("setFloat32", DataViewObject::fun_setFloat32, 2, 0,
                     DataViewSetFloat32),
     JS_INLINABLE_FN("setFloat64", DataViewObject::fun_setFloat64, 2, 0,

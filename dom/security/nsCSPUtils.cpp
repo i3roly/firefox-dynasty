@@ -191,7 +191,7 @@ void CSP_LogStrMessage(const nsAString& aMsg) {
   console->LogStringMessage(msg.get());
 }
 
-void CSP_LogMessage(const nsAString& aMessage, const nsAString& aSourceName,
+void CSP_LogMessage(const nsAString& aMessage, const nsACString& aSourceName,
                     const nsAString& aSourceLine, uint32_t aLineNumber,
                     uint32_t aColumnNumber, uint32_t aFlags,
                     const nsACString& aCategory, uint64_t aInnerWindowID,
@@ -230,12 +230,12 @@ void CSP_LogMessage(const nsAString& aMessage, const nsAString& aSourceName,
 
   nsresult rv;
   if (aInnerWindowID > 0) {
-    rv = error->InitWithWindowID(cspMsg, aSourceName, aSourceLine, aLineNumber,
-                                 aColumnNumber, aFlags, category,
-                                 aInnerWindowID);
+    rv =
+        error->InitWithWindowID(cspMsg, aSourceName, aLineNumber, aColumnNumber,
+                                aFlags, category, aInnerWindowID);
   } else {
-    rv = error->Init(cspMsg, aSourceName, aSourceLine, aLineNumber,
-                     aColumnNumber, aFlags, category, aFromPrivateWindow,
+    rv = error->Init(cspMsg, aSourceName, aLineNumber, aColumnNumber, aFlags,
+                     category, aFromPrivateWindow,
                      true /* from chrome context */);
   }
   if (NS_FAILED(rv)) {
@@ -262,7 +262,7 @@ CSPDirective CSP_StringToCSPDirective(const nsAString& aDir) {
  * Combines CSP_LogMessage and CSP_GetLocalizedStr into one call.
  */
 void CSP_LogLocalizedStr(const char* aName, const nsTArray<nsString>& aParams,
-                         const nsAString& aSourceName,
+                         const nsACString& aSourceName,
                          const nsAString& aSourceLine, uint32_t aLineNumber,
                          uint32_t aColumnNumber, uint32_t aFlags,
                          const nsACString& aCategory, uint64_t aInnerWindowID,
@@ -999,6 +999,16 @@ void nsCSPReportURI::toString(nsAString& outStr) const {
   outStr.AppendASCII(spec.get());
 }
 
+/* ===== nsCSPReportGroup ===================== */
+
+nsCSPGroup::nsCSPGroup(const nsAString& aGroup) : mGroup(aGroup) {}
+
+nsCSPGroup::~nsCSPGroup() = default;
+
+bool nsCSPGroup::visit(nsCSPSrcVisitor* aVisitor) const { return false; }
+
+void nsCSPGroup::toString(nsAString& aOutStr) const { aOutStr.Append(mGroup); }
+
 /* ===== nsCSPSandboxFlags ===================== */
 
 nsCSPSandboxFlags::nsCSPSandboxFlags(const nsAString& aFlags) : mFlags(aFlags) {
@@ -1519,6 +1529,11 @@ void nsCSPDirective::toDomCSPStruct(mozilla::dom::CSP& outCSP) const {
       outCSP.mTrusted_types.Value() = std::move(srcs);
       return;
 
+    case nsIContentSecurityPolicy::REPORT_TO_DIRECTIVE:
+      outCSP.mReport_to.Construct();
+      outCSP.mReport_to.Value() = std::move(srcs);
+      return;
+
     default:
       NS_ASSERTION(false, "cannot find directive to convert CSP to JSON");
   }
@@ -1535,6 +1550,14 @@ void nsCSPDirective::getReportURIs(nsTArray<nsString>& outReportURIs) const {
     mSrcs[i]->toString(tmpReportURI);
     outReportURIs.AppendElement(tmpReportURI);
   }
+}
+
+void nsCSPDirective::getReportGroup(nsAString& outReportGroup) const {
+  NS_ASSERTION((mDirective == nsIContentSecurityPolicy::REPORT_TO_DIRECTIVE),
+               "not a report-to directive");
+
+  MOZ_ASSERT(mSrcs.Length() <= 1);
+  mSrcs[0]->toString(outReportGroup);
 }
 
 bool nsCSPDirective::visitSrcs(nsCSPSrcVisitor* aVisitor) const {
@@ -1882,6 +1905,15 @@ void nsCSPPolicy::getReportURIs(nsTArray<nsString>& outReportURIs) const {
     if (mDirectives[i]->equals(
             nsIContentSecurityPolicy::REPORT_URI_DIRECTIVE)) {
       mDirectives[i]->getReportURIs(outReportURIs);
+      return;
+    }
+  }
+}
+
+void nsCSPPolicy::getReportGroup(nsAString& outReportGroup) const {
+  for (uint32_t i = 0; i < mDirectives.Length(); i++) {
+    if (mDirectives[i]->equals(nsIContentSecurityPolicy::REPORT_TO_DIRECTIVE)) {
+      mDirectives[i]->getReportGroup(outReportGroup);
       return;
     }
   }

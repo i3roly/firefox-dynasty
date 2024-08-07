@@ -84,10 +84,6 @@ var gExceptionPaths = [
 
   // Strip on Share parameter lists
   "chrome://global/content/antitracking/",
-
-  // Expecting to integrate the UrlbarSearchTermsPersistence component in
-  // Bug 1903633
-  "resource:///modules/UrlbarSearchTermsPersistence.sys.mjs",
 ];
 
 // These are not part of the omni.ja file, so we find them only when running
@@ -303,10 +299,6 @@ if (AppConstants.NIGHTLY_BUILD) {
       // A debug tool that is only available in Nightly builds, and is accessed
       // directly by developers via the chrome URI (bug 1888491)
       { file: "chrome://browser/content/backup/debug.html" },
-
-      // The Transformers.js prod lib is not used in Nightly builds
-      { file: "chrome://global/content/ml/transformers.js" },
-      { file: "chrome://global/content/ml/ort.js" },
     ]
   );
 }

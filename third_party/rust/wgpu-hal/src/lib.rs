@@ -294,6 +294,7 @@ pub const QUERY_SIZE: wgt::BufferAddress = 8;
 pub type Label<'a> = Option<&'a str>;
 pub type MemoryRange = Range<wgt::BufferAddress>;
 pub type FenceValue = u64;
+pub type AtomicFenceValue = std::sync::atomic::AtomicU64;
 
 /// Drop guard to signal wgpu-hal is no longer using an externally created object.
 pub type DropGuard = Box<dyn std::any::Any + Send + Sync>;
@@ -447,7 +448,11 @@ pub trait Instance: Sized + WasmNotSendSync {
         window_handle: raw_window_handle::RawWindowHandle,
     ) -> Result<<Self::A as Api>::Surface, InstanceError>;
     unsafe fn destroy_surface(&self, surface: <Self::A as Api>::Surface);
-    unsafe fn enumerate_adapters(&self) -> Vec<ExposedAdapter<Self::A>>;
+    /// `surface_hint` is only used by the GLES backend targeting WebGL2
+    unsafe fn enumerate_adapters(
+        &self,
+        surface_hint: Option<&<Self::A as Api>::Surface>,
+    ) -> Vec<ExposedAdapter<Self::A>>;
 }
 
 pub trait Surface: WasmNotSendSync {
@@ -558,6 +563,7 @@ pub trait Adapter: WasmNotSendSync {
         &self,
         features: wgt::Features,
         limits: &wgt::Limits,
+        memory_hints: &wgt::MemoryHints,
     ) -> Result<OpenDevice<Self::A>, DeviceError>;
 
     /// Return the set of supported capabilities for a texture format.
@@ -709,9 +715,13 @@ pub trait Device: WasmNotSendSync {
     ///   be ordered, so it is meaningful to talk about what must occur
     ///   "between" them.
     ///
+    /// - Zero-sized mappings are not allowed.
+    ///
+    /// - The returned [`BufferMapping::ptr`] must not be used after a call to
+    /// [`Device::unmap_buffer`].
+    ///
     /// [`MAP_READ`]: BufferUses::MAP_READ
     /// [`MAP_WRITE`]: BufferUses::MAP_WRITE
-    //TODO: clarify if zero-sized mapping is allowed
     unsafe fn map_buffer(
         &self,
         buffer: &<Self::A as Api>::Buffer,
@@ -723,7 +733,7 @@ pub trait Device: WasmNotSendSync {
     /// # Safety
     ///
     /// - The given `buffer` must be currently mapped.
-    unsafe fn unmap_buffer(&self, buffer: &<Self::A as Api>::Buffer) -> Result<(), DeviceError>;
+    unsafe fn unmap_buffer(&self, buffer: &<Self::A as Api>::Buffer);
 
     /// Indicate that CPU writes to mapped buffer memory should be made visible to the GPU.
     ///
@@ -945,6 +955,9 @@ pub trait Queue: WasmNotSendSync {
     ///
     /// - All calls to this function that include a given [`SurfaceTexture`][st]
     ///   in `surface_textures` must use the same [`Fence`].
+    ///
+    /// - The [`Fence`] passed as `signal_fence.0` must remain alive until
+    ///   all submissions that will signal it have completed.
     ///
     /// [`Fence`]: Api::Fence
     /// [cb]: Api::CommandBuffer
@@ -2190,7 +2203,7 @@ pub struct BuildAccelerationStructureDescriptor<'a, A: Api> {
 /// - All buffers, buffer addresses and offsets will be ignored.
 /// - The build mode will be ignored.
 /// - Reducing the amount of Instances, Triangle groups or AABB groups (or the number of Triangles/AABBs in corresponding groups),
-/// may result in reduced size requirements.
+///   may result in reduced size requirements.
 /// - Any other change may result in a bigger or smaller size requirement.
 #[derive(Clone, Debug)]
 pub struct GetAccelerationStructureBuildSizesDescriptor<'a, A: Api> {

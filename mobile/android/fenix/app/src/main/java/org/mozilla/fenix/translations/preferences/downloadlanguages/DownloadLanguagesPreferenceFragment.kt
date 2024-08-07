@@ -46,7 +46,7 @@ class DownloadLanguagesPreferenceFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        showToolbar(getString(R.string.download_languages_toolbar_title_preference))
+        showToolbar(getString(R.string.download_languages_translations_toolbar_title_preference))
     }
 
     override fun onCreateView(
@@ -179,16 +179,11 @@ class DownloadLanguagesPreferenceFragment : Fragment() {
         val languageItemPreferenceList = mutableListOf<DownloadLanguageItemPreference>()
 
         languageModels?.let {
-            var allLanguagesSizeNotDownloaded = 0L
             var allLanguagesSizeDownloaded = 0L
 
             for (languageModel in languageModels) {
                 var size = 0L
                 languageModel.size?.let { size = it }
-
-                if (languageModel.status == ModelState.NOT_DOWNLOADED) {
-                    allLanguagesSizeNotDownloaded += size
-                }
 
                 if (
                     languageModel.status == ModelState.DOWNLOADED
@@ -196,11 +191,6 @@ class DownloadLanguagesPreferenceFragment : Fragment() {
                     allLanguagesSizeDownloaded += size
                 }
             }
-
-            addAllLanguagesNotDownloaded(
-                allLanguagesSizeNotDownloaded,
-                languageItemPreferenceList,
-            )
 
             addAllLanguagesDownloaded(
                 allLanguagesSizeDownloaded,
@@ -229,33 +219,13 @@ class DownloadLanguagesPreferenceFragment : Fragment() {
                         DownloadLanguageItemPreference(
                             languageModel = languageModel,
                             type = DownloadLanguageItemTypePreference.GeneralLanguage,
-                            enabled = !(
-                                languageModel.status == ModelState.DOWNLOAD_IN_PROGRESS ||
-                                    languageModel.status == ModelState.DELETION_IN_PROGRESS
-                                ),
+                            enabled = languageModel.status != ModelState.DELETION_IN_PROGRESS,
                         ),
                     )
                 }
             }
         }
         return languageItemPreferenceList
-    }
-
-    private fun addAllLanguagesNotDownloaded(
-        allLanguageSizeNotDownloaded: Long,
-        languageItemPreferenceList: MutableList<DownloadLanguageItemPreference>,
-    ) {
-        if (allLanguageSizeNotDownloaded != 0L) {
-            languageItemPreferenceList.add(
-                DownloadLanguageItemPreference(
-                    languageModel = LanguageModel(
-                        status = ModelState.NOT_DOWNLOADED,
-                        size = allLanguageSizeNotDownloaded,
-                    ),
-                    type = DownloadLanguageItemTypePreference.AllLanguages,
-                ),
-            )
-        }
     }
 
     private fun addAllLanguagesDownloaded(

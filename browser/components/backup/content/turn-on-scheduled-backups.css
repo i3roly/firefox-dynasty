@@ -3,6 +3,7 @@
 * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 @import url("chrome://global/skin/in-content/common.css");
+@import url("chrome://browser/content/backup/backup-common.css");
 
 :host {
   --margin-inline-start-checkbox-content: calc(var(--checkbox-margin-inline) + var(--checkbox-size));
@@ -52,24 +53,6 @@
       column-gap: var(--space-small);
       align-items: center;
     }
-
-    .backup-location-filepicker-input {
-      flex: 1;
-      margin-block: var(--space-xsmall);
-      margin-inline-start: 0;
-      padding-inline-start: var(--space-xxlarge);
-      background-repeat: no-repeat;
-      background-size: var(--icon-size-default);
-      background-position: var(--space-small) 50%;
-
-      /* For the placeholder icon */
-      fill: currentColor;
-      -moz-context-properties: fill;
-
-      &:dir(rtl) {
-        background-position: calc(100% - var(--space-small)) 50%;
-      }
-    }
   }
 
   #sensitive-data-controls {
@@ -99,21 +82,7 @@
   }
 
   #passwords {
-    display: flex;
-    flex-direction: column;
     margin-inline-start: var(--margin-inline-start-checkbox-content);
-    row-gap: var(--space-large);
-
-    > #new-password-label,
-    > #repeat-password-label {
-      display: flex;
-      flex-direction: column;
-    }
-
-    > #new-password-label > input,
-    > #repeat-password-label > input {
-      margin-inline-start: 0;
-    }
   }
 
   #backup-turn-on-scheduled-button-group {

@@ -483,6 +483,19 @@ class JSString : public js::gc::CellWithLengthAndFlags {
 
   static const JS::Latin1Char MAX_LATIN1_CHAR = 0xff;
 
+  // Allocate a StringBuffer instead of using raw malloc for strings with
+  // length * sizeof(CharT) >= MIN_BYTES_FOR_BUFFER.
+  //
+  // StringBuffers can be shared more efficiently with DOM code, but have some
+  // additional overhead (StringBuffer header, null terminator) so for short
+  // strings we prefer malloc.
+  //
+  // Note that 514 was picked as a pretty conservative initial value. The value
+  // is just above 512 to ensure a Latin1 string of length 512 isn't bumped
+  // from jemalloc bucket size 512 to size 768. It's an even value because it's
+  // divided by 2 for char16_t strings.
+  static constexpr size_t MIN_BYTES_FOR_BUFFER = 514;
+
   /*
    * Helper function to validate that a string of a given length is
    * representable by a JSString. An allocation overflow is reported if false
@@ -570,8 +583,8 @@ class JSString : public js::gc::CellWithLengthAndFlags {
                                                       bool usesStringBuffer) {
 #ifdef MOZ_DEBUG
     // Check that the new buffer is located in the StringBufferArena.
-    // For now ignore this for StringBuffers because they're allocated in the
-    // main jemalloc arena.
+    // For now ignore this for StringBuffers because they can be allocated in
+    // the main jemalloc arena.
     if (!usesStringBuffer) {
       js::AssertJSStringBufferInCorrectArena(chars);
     }
@@ -1508,9 +1521,8 @@ class JSAtom : public JSLinearString {
 
  public:
   template <typename CharT>
-  static inline JSAtom* newValidLength(
-      JSContext* cx, js::UniquePtr<CharT[], JS::FreePolicy> chars,
-      size_t length, js::HashNumber hash);
+  static inline JSAtom* newValidLength(JSContext* cx, OwnedChars<CharT>& chars,
+                                       js::HashNumber hash);
 
   /* Returns the PropertyName for this.  isIndex() must be false. */
   inline js::PropertyName* asPropertyName();
@@ -1581,9 +1593,9 @@ class NormalAtom : public JSAtom {
   // For subclasses to call.
   explicit NormalAtom(js::HashNumber hash) : hash_(hash) {}
 
-  // Out of line atoms, mimicking JSLinearString constructors.
-  NormalAtom(const char16_t* chars, size_t length, js::HashNumber hash);
-  NormalAtom(const JS::Latin1Char* chars, size_t length, js::HashNumber hash);
+  // Out of line atoms, mimicking JSLinearString constructor.
+  template <typename CharT>
+  NormalAtom(const OwnedChars<CharT>& chars, js::HashNumber hash);
 
  public:
   HashNumber hash() const { return hash_; }
@@ -1804,6 +1816,10 @@ static inline UniqueChars StringToNewUTF8CharsZ(JSContext* cx, JSString& str) {
           ? JS::CharsToNewUTF8CharsZ(cx, linear->latin1Range(nogc)).c_str()
           : JS::CharsToNewUTF8CharsZ(cx, linear->twoByteRange(nogc)).c_str());
 }
+
+template <typename CharT>
+extern JSString::OwnedChars<CharT> AllocAtomCharsValidLength(JSContext* cx,
+                                                             size_t length);
 
 /**
  * Allocate a string with the given contents.  If |allowGC == CanGC|, this may

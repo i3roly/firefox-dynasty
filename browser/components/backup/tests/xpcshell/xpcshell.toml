@@ -9,12 +9,12 @@ prefs = [
 ["test_AddonsBackupResource.js"]
 
 ["test_ArchiveEncryption.js"]
-skip-if = ["apple_silicon && automation"] # bug 1729538
 
 ["test_ArchiveEncryptionState.js"]
-skip-if = ["apple_silicon && automation"] # bug 1729538
 
 ["test_ArchiveEncryption_nonce.js"]
+
+["test_ArchiveUtils_countReplacementCharacters.js"]
 
 ["test_BackupResource.js"]
 support-files = ["data/test_xulstore.json"]
@@ -23,11 +23,14 @@ support-files = ["data/test_xulstore.json"]
 support-files = ["data/test_archive.template.html"]
 
 ["test_BackupService_archive.js"]
-support-files = ["data/corrupt.zip"]
-skip-if = ["apple_silicon && automation"] # bug 1729538
+support-files = [
+  "data/corrupt.zip",
+  "data/break_over_unicode.html",
+  "data/missing_binary_block.html",
+  "data/missing_json_block.html",
+]
 
 ["test_BackupService_enable_disable_encryption.js"]
-skip-if = ["apple_silicon && automation"] # bug 1729538
 
 ["test_BackupService_finalizeSingleFileArchive.js"]
 
@@ -36,6 +39,8 @@ skip-if = ["apple_silicon && automation"] # bug 1729538
 ["test_BackupService_renderTemplate.js"]
 
 ["test_BackupService_resolveArchiveDestFolderPath.js"]
+
+["test_BackupService_resolveDownloadLink.js"]
 
 ["test_BackupService_scheduler.js"]
 
@@ -56,5 +61,10 @@ skip-if = ["apple_silicon && automation"] # bug 1729538
 ["test_PlacesBackupResource.js"]
 
 ["test_PreferencesBackupResource.js"]
+
+["test_PreferencesBackupResource_searchEngines.js"]
+support-files = [
+  "search-data/search-config-v2.json",
+]
 
 ["test_SessionStoreBackupResource.js"]

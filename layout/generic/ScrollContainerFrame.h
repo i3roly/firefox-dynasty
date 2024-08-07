@@ -113,8 +113,8 @@ class ScrollContainerFrame : public nsContainerFrame,
                       nsIFrame::Sides aSkipSides,
                       nscoord aRadii[8]) const final;
 
-  nscoord GetMinISize(gfxContext* aRenderingContext) override;
-  nscoord GetPrefISize(gfxContext* aRenderingContext) override;
+  nscoord IntrinsicISize(gfxContext* aContext,
+                         IntrinsicISizeType aType) override;
 
   void Reflow(nsPresContext* aPresContext, ReflowOutput& aDesiredSize,
               const ReflowInput& aReflowInput,
@@ -286,6 +286,20 @@ class ScrollContainerFrame : public nsContainerFrame,
    * This is the area of this frame minus border and scrollbars.
    */
   nsRect GetScrollPortRect() const { return mScrollPort; }
+  nsRect GetScrollPortRectAccountingForDynamicToolbar() const {
+    auto rect = mScrollPort;
+    if (mIsRoot) {
+      rect.height += PresContext()->GetBimodalDynamicToolbarHeightInAppUnits();
+    }
+    return rect;
+  }
+  nsRect GetScrollPortRectAccountingForMaxDynamicToolbar() const {
+    auto rect = mScrollPort;
+    if (mIsRoot) {
+      rect.height += PresContext()->GetDynamicToolbarMaxHeightInAppUnits();
+    }
+    return rect;
+  }
 
   /**
    * Get the offset of the scrollport origin relative to the scrolled

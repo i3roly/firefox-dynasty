@@ -128,7 +128,10 @@
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">Usar contrasigno forte?</string>
     <!-- Content description for the suggest strong password confirmation dialog -->
-    <string name="mozac_feature_prompts_suggest_strong_password_description">Protege tu contos per un forte, contrasigno aleatorimente generate. Obtene accesso rapide a tu contrasignos reservante los in tu conto.</string>
+    <string name="mozac_feature_prompts_suggest_strong_password_description" moz:removedIn="130" tools:ignore="UnusedResources">Protege tu contos per un forte, contrasigno aleatorimente generate. Obtene accesso rapide a tu contrasignos reservante los in tu conto.</string>
+    <!-- Content description for the suggest strong password confirmation dialog -->
+    <string name="mozac_feature_prompts_suggest_strong_password_description_2">Protege tu contos per un forte, contrasigno aleatorimente generate. Illo sera salvate in tu conto pro uso futur.</string>
+
     <!-- Pressing this will use the suggested strong password -->
     <string name="mozac_feature_prompts_suggest_strong_password_use_password">Usar contrasigno</string>
     <!-- Pressing this will dismiss the suggested strong password dialog -->
@@ -138,6 +141,9 @@
     <!-- Title for showing the suggest strong password updated confirmation snackbar -->
     <string name="mozac_feature_prompts_suggest_strong_password_updated_snackbar_title">Contrasigno actualisate</string>
 
+
+    <!-- Title for showing the username updated confirmation snackbar -->
+    <string name="mozac_feature_prompt_login_snackbar_username_updated">Nomine de usator actualisate</string>
 
     <!-- Strings shown in a dialog that appear when users try to refresh a certain kind of webpages -->
     <string name="mozac_feature_prompt_repost_title">Reinviar le datos a iste sito?</string>

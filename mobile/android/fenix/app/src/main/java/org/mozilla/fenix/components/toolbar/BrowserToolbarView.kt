@@ -6,7 +6,6 @@ package org.mozilla.fenix.components.toolbar
 
 import android.content.Context
 import android.graphics.Color
-import android.net.Uri
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
@@ -35,7 +34,6 @@ import org.mozilla.fenix.customtabs.CustomTabToolbarIntegration
 import org.mozilla.fenix.customtabs.CustomTabToolbarMenu
 import org.mozilla.fenix.ext.bookmarkStorage
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.theme.ThemeManager
 import org.mozilla.fenix.utils.Settings
 import org.mozilla.fenix.utils.ToolbarPopupWindow
@@ -46,6 +44,7 @@ import mozilla.components.ui.widgets.behavior.ViewPosition as MozacToolbarPositi
 class BrowserToolbarView(
     private val context: Context,
     container: ViewGroup,
+    private val snackbarParent: ViewGroup,
     private val settings: Settings,
     private val interactor: BrowserToolbarInteractor,
     private val customTabSession: CustomTabSessionState?,
@@ -68,8 +67,6 @@ class BrowserToolbarView(
 
     var view: BrowserToolbar = layout
         .findViewById(R.id.toolbar)
-
-    private val isNavBarEnabled = context.settings().navigationToolbarEnabled
 
     val toolbarIntegration: ToolbarIntegration
     val menuToolbar: ToolbarMenu
@@ -95,6 +92,7 @@ class BrowserToolbarView(
         view.display.setOnUrlLongClickListener {
             ToolbarPopupWindow.show(
                 WeakReference(view),
+                WeakReference(snackbarParent),
                 customTabSession?.id,
                 interactor::onBrowserToolbarPasteAndGo,
                 interactor::onBrowserToolbarPaste,
@@ -125,11 +123,7 @@ class BrowserToolbarView(
                 }
 
                 display.urlFormatter = { url ->
-                    if (isNavBarEnabled) {
-                        Uri.parse(url.toString()).host ?: url
-                    } else {
-                        URLStringUtils.toDisplayUrl(url)
-                    }
+                    URLStringUtils.toDisplayUrl(url)
                 }
 
                 display.hint = context.getString(R.string.search_hint)

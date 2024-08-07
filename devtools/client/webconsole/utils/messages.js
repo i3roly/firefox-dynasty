@@ -24,6 +24,13 @@ loader.lazyRequireGetter(
   true
 );
 
+loader.lazyRequireGetter(
+  this,
+  "TRACER_LOG_METHODS",
+  "resource://devtools/shared/specs/tracer.js",
+  true
+);
+
 // URL Regex, common idioms:
 //
 // Lead-in (URL):
@@ -383,11 +390,11 @@ function transformNetworkEventResource(networkEventResource) {
 
 function transformTraceResource(traceResource) {
   const { targetFront } = traceResource;
-  const type = traceResource[0];
+  const type = traceResource[TRACER_FIELDS_INDEXES.TYPE];
   const collectedFrames = targetFront.getJsTracerCollectedFramesArray();
   switch (type) {
     case "frame":
-      collectedFrames.push(traceResource.slice(1));
+      collectedFrames.push(traceResource);
       return null;
     case "enter": {
       const [, prefix, frameIndex, timeStamp, depth, args] = traceResource;
@@ -493,7 +500,7 @@ function transformTraceResource(traceResource) {
       });
     }
     case "event": {
-      const [, prefix, timeStamp, eventName] = traceResource;
+      const [, prefix, , timeStamp, , eventName] = traceResource;
       return new ConsoleMessage({
         targetFront,
         source: MESSAGE_SOURCE.JSTRACER,
@@ -512,13 +519,17 @@ function transformTracerStateResource(stateResource) {
   const { targetFront, enabled, logMethod, timeStamp, reason } = stateResource;
   let message;
   if (enabled) {
-    if (logMethod == "stdout") {
+    if (logMethod == TRACER_LOG_METHODS.STDOUT) {
       message = l10n.getStr("webconsole.message.commands.startTracingToStdout");
     } else if (logMethod == "console") {
       message = l10n.getStr(
         "webconsole.message.commands.startTracingToWebConsole"
       );
-    } else if (logMethod == "profiler") {
+    } else if (logMethod == TRACER_LOG_METHODS.DEBUGGER_SIDEBAR) {
+      message = l10n.getStr(
+        "webconsole.message.commands.startTracingToDebuggerSidebar"
+      );
+    } else if (logMethod == TRACER_LOG_METHODS.PROFILER) {
       message = l10n.getStr(
         "webconsole.message.commands.startTracingToProfiler"
       );
@@ -1025,9 +1036,12 @@ function isTrackingProtectionMessage(message) {
  */
 function isCookieMessage(message) {
   const { category } = message;
-  return ["cookiesCHIPS", "cookiesOversize", "cookieSameSite"].includes(
-    category
-  );
+  return [
+    "cookiesCHIPS",
+    "cookiesOversize",
+    "cookieSameSite",
+    "cookieInvalidAttribute",
+  ].includes(category);
 }
 
 /**

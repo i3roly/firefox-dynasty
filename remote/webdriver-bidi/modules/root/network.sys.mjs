@@ -8,7 +8,11 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   assert: "chrome://remote/content/shared/webdriver/Assert.sys.mjs",
+  BeforeStopRequestListener:
+    "chrome://remote/content/shared/listeners/BeforeStopRequestListener.sys.mjs",
   CacheBehavior: "chrome://remote/content/shared/NetworkCacheManager.sys.mjs",
+  NetworkDecodedBodySizeMap:
+    "chrome://remote/content/shared/NetworkDecodedBodySizeMap.sys.mjs",
   error: "chrome://remote/content/shared/webdriver/Errors.sys.mjs",
   generateUUID: "chrome://remote/content/shared/UUID.sys.mjs",
   matchURLPattern:
@@ -295,7 +299,9 @@ const SameSite = {
 /* eslint-enable jsdoc/valid-types */
 
 class NetworkModule extends Module {
+  #beforeStopRequestListener;
   #blockedRequests;
+  #decodedBodySizeMap;
   #interceptMap;
   #networkListener;
   #subscribedEvents;
@@ -312,14 +318,23 @@ class NetworkModule extends Module {
     // Set of event names which have active subscriptions
     this.#subscribedEvents = new Set();
 
+    this.#decodedBodySizeMap = new lazy.NetworkDecodedBodySizeMap();
+
     this.#networkListener = new lazy.NetworkListener(
-      this.messageHandler.navigationManager
+      this.messageHandler.navigationManager,
+      this.#decodedBodySizeMap
     );
     this.#networkListener.on("auth-required", this.#onAuthRequired);
     this.#networkListener.on("before-request-sent", this.#onBeforeRequestSent);
     this.#networkListener.on("fetch-error", this.#onFetchError);
     this.#networkListener.on("response-completed", this.#onResponseEvent);
     this.#networkListener.on("response-started", this.#onResponseEvent);
+
+    this.#beforeStopRequestListener = new lazy.BeforeStopRequestListener();
+    this.#beforeStopRequestListener.on(
+      "beforeStopRequest",
+      this.#onBeforeStopRequest
+    );
   }
 
   destroy() {
@@ -330,6 +345,15 @@ class NetworkModule extends Module {
     this.#networkListener.off("response-started", this.#onResponseEvent);
     this.#networkListener.destroy();
 
+    this.#beforeStopRequestListener.off(
+      "beforeStopRequest",
+      this.#onBeforeStopRequest
+    );
+    this.#beforeStopRequestListener.destroy();
+
+    this.#decodedBodySizeMap.destroy();
+
+    this.#decodedBodySizeMap = null;
     this.#blockedRequests = null;
     this.#interceptMap = null;
     this.#subscribedEvents = null;
@@ -1056,14 +1080,12 @@ class NetworkModule extends Module {
    *     An enum value to set the network cache behavior.
    * @param {Array<string>=} options.contexts
    *     The list of browsing context ids where the network cache
-   *     should be bypassed.
+   *     behavior should be updated.
    *
    * @throws {InvalidArgumentError}
    *     Raised if an argument is of an invalid type or value.
    * @throws {NoSuchFrameError}
    *     If the browsing context cannot be found.
-   * @throws {UnsupportedOperationError}
-   *     If unsupported configuration is passed.
    */
   setCacheBehavior(options = {}) {
     const { cacheBehavior: behavior, contexts: contextIds = null } = options;
@@ -1266,24 +1288,24 @@ class NetworkModule extends Module {
     const deserializedHeaders = [];
     lazy.assert.array(
       headers,
-      `Expected "headers" to be an array got ${headers}`
+      lazy.pprint`Expected "headers" to be an array got ${headers}`
     );
 
     for (const header of headers) {
       this.#assertHeader(
         header,
-        `Expected values in "headers" to be network.Header, got ${header}`
+        lazy.pprint`Expected values in "headers" to be network.Header, got ${header}`
       );
 
       // Deserialize headers immediately to validate the value
       const deserializedHeader = this.#deserializeHeader(header);
       lazy.assert.that(
         value => this.#isValidHttpToken(value),
-        `Expected "header" name to be a valid HTTP token, got ${deserializedHeader[0]}`
+        lazy.pprint`Expected "header" name to be a valid HTTP token, got ${deserializedHeader[0]}`
       )(deserializedHeader[0]);
       lazy.assert.that(
         value => this.#isValidHeaderValue(value),
-        `Expected "header" value to be a valid header value, got ${deserializedHeader[1]}`
+        lazy.pprint`Expected "header" value to be a valid header value, got ${deserializedHeader[1]}`
       )(deserializedHeader[1]);
 
       deserializedHeaders.push(deserializedHeader);
@@ -1696,6 +1718,13 @@ class NetworkModule extends Module {
     }
   };
 
+  #onBeforeStopRequest = (event, data) => {
+    this.#decodedBodySizeMap.setDecodedBodySize(
+      data.channel.channelId,
+      data.decodedBodySize
+    );
+  };
+
   #onFetchError = (name, data) => {
     const { request } = data;
 
@@ -1751,7 +1780,7 @@ class NetworkModule extends Module {
     );
   };
 
-  #onResponseEvent = (name, data) => {
+  #onResponseEvent = async (name, data) => {
     const { request, response } = data;
 
     const browsingContext = lazy.TabManager.getBrowsingContextById(
@@ -1943,6 +1972,7 @@ class NetworkModule extends Module {
   #startListening(event) {
     if (this.#subscribedEvents.size == 0) {
       this.#networkListener.startListening();
+      this.#beforeStopRequestListener.startListening();
     }
     this.#subscribedEvents.add(event);
   }
@@ -1951,6 +1981,7 @@ class NetworkModule extends Module {
     this.#subscribedEvents.delete(event);
     if (this.#subscribedEvents.size == 0) {
       this.#networkListener.stopListening();
+      this.#beforeStopRequestListener.stopListening();
     }
   }
 
@@ -1993,6 +2024,11 @@ class NetworkModule extends Module {
         this.#subscribeEvent(value);
       }
     }
+  }
+
+  _setDecodedBodySize(params) {
+    const { channelId, decodedBodySize } = params;
+    this.#decodedBodySizeMap.setDecodedBodySize(channelId, decodedBodySize);
   }
 
   static get supportedEvents() {

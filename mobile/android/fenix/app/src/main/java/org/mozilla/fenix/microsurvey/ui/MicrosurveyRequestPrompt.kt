@@ -25,30 +25,36 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
+import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.Divider
-import org.mozilla.fenix.compose.annotation.LightDarkPreview
+import org.mozilla.fenix.compose.annotation.FlexibleWindowLightDarkPreview
 import org.mozilla.fenix.compose.button.PrimaryButton
 import org.mozilla.fenix.compose.utils.KeyboardState
 import org.mozilla.fenix.compose.utils.keyboardAsState
 import org.mozilla.fenix.microsurvey.ui.ext.MicrosurveyUIData
 import org.mozilla.fenix.theme.FirefoxTheme
 
+private const val TABLET_WIDTH_FRACTION = 0.5f
+private const val NON_TABLET_WIDTH_FRACTION = 1.0f
+
 /**
  * Initial microsurvey prompt displayed to the user to request completion of feedback.
  *
  * @param microsurvey Contains the required microsurvey data for the UI.
+ * @param activity [HomeActivity] used to have access to [isMicrosurveyPromptDismissed]
  * @param onStartSurveyClicked Handles the on click event of the start survey button.
  * @param onCloseButtonClicked Invoked when the user clicks on the close button.
  */
 @Composable
 fun MicrosurveyRequestPrompt(
     microsurvey: MicrosurveyUIData,
+    activity: HomeActivity,
     onStartSurveyClicked: () -> Unit = {},
     onCloseButtonClicked: () -> Unit,
 ) {
@@ -56,21 +62,35 @@ fun MicrosurveyRequestPrompt(
     var isMicrosurveyVisible by remember { mutableStateOf(true) }
     isMicrosurveyVisible = isKeyboardVisible == KeyboardState.Closed
 
+    activity.isMicrosurveyPromptDismissed = remember { mutableStateOf(false) }
+
     // Animation properties for the microsurvey's visibility transitions.
     AnimatedVisibility(
-        visible = isMicrosurveyVisible,
+        visible = isMicrosurveyVisible && !activity.isMicrosurveyPromptDismissed.value,
         enter = slideInVertically(initialOffsetY = { it }),
         exit = slideOutVertically(targetOffsetY = { it }),
     ) {
-        Column {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.background(color = FirefoxTheme.colors.layer1),
+        ) {
             Divider()
 
             Column(
                 modifier = Modifier
-                    .background(color = FirefoxTheme.colors.layer1)
-                    .padding(all = 16.dp),
+                    .padding(all = 16.dp)
+                    .fillMaxWidth(
+                        if (FirefoxTheme.windowSize.isNotSmall()) {
+                            TABLET_WIDTH_FRACTION
+                        } else {
+                            NON_TABLET_WIDTH_FRACTION
+                        },
+                    ),
             ) {
-                Header(microsurvey.promptTitle) { onCloseButtonClicked() }
+                Header(microsurvey.promptTitle) {
+                    onCloseButtonClicked()
+                    activity.isMicrosurveyPromptDismissed.value = true
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -118,8 +138,7 @@ private fun Header(
     }
 }
 
-@PreviewScreenSizes
-@LightDarkPreview
+@FlexibleWindowLightDarkPreview
 @Composable
 private fun MicrosurveyRequestPromptPreview() {
     FirefoxTheme {
@@ -131,6 +150,7 @@ private fun MicrosurveyRequestPromptPreview() {
                 question = "",
                 answers = emptyList(),
             ),
+            activity = HomeActivity(),
             onStartSurveyClicked = {},
             onCloseButtonClicked = {},
         )

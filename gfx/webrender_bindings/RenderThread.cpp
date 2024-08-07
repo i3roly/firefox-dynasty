@@ -685,10 +685,12 @@ void RenderThread::HandleFrameOneDocInner(wr::WindowId aWindowId, bool aRender,
     SetFramePublishId(aWindowId, aPublishId.ref());
   }
 
+  RendererStats stats = {0};
+
   UpdateAndRender(aWindowId, frame.mStartId, frame.mStartTime, render,
                   /* aReadbackSize */ Nothing(),
                   /* aReadbackFormat */ Nothing(),
-                  /* aReadbackBuffer */ Nothing());
+                  /* aReadbackBuffer */ Nothing(), &stats);
 
   // The start time is from WebRenderBridgeParent::CompositeToTarget. From that
   // point until now (when the frame is finally pushed to the screen) is
@@ -697,6 +699,12 @@ void RenderThread::HandleFrameOneDocInner(wr::WindowId aWindowId, bool aRender,
   mozilla::glean::gfx::composite_time.AccumulateRawDuration(compositeDuration);
   PerfStats::RecordMeasurement(PerfStats::Metric::Compositing,
                                compositeDuration);
+  if (stats.frame_build_time > 0.0) {
+    TimeDuration fbTime =
+        TimeDuration::FromMilliseconds(stats.frame_build_time);
+    mozilla::glean::wr::framebuild_time.AccumulateRawDuration(fbTime);
+    PerfStats::RecordMeasurement(PerfStats::Metric::FrameBuilding, fbTime);
+  }
 }
 
 void RenderThread::SetClearColor(wr::WindowId aWindowId, wr::ColorF aColor) {
@@ -808,7 +816,8 @@ void RenderThread::UpdateAndRender(
     const TimeStamp& aStartTime, bool aRender,
     const Maybe<gfx::IntSize>& aReadbackSize,
     const Maybe<wr::ImageFormat>& aReadbackFormat,
-    const Maybe<Range<uint8_t>>& aReadbackBuffer, bool* aNeedsYFlip) {
+    const Maybe<Range<uint8_t>>& aReadbackBuffer, RendererStats* aStats,
+    bool* aNeedsYFlip) {
   AUTO_PROFILER_LABEL("RenderThread::UpdateAndRender", GRAPHICS);
   MOZ_ASSERT(IsInRenderThread());
   MOZ_ASSERT(aRender || aReadbackBuffer.isNothing());
@@ -839,10 +848,9 @@ void RenderThread::UpdateAndRender(
                           renderer->GetCompositorBridge()));
 
   wr::RenderedFrameId latestFrameId;
-  RendererStats stats = {0};
   if (aRender) {
     latestFrameId = renderer->UpdateAndRender(
-        aReadbackSize, aReadbackFormat, aReadbackBuffer, aNeedsYFlip, &stats);
+        aReadbackSize, aReadbackFormat, aReadbackBuffer, aNeedsYFlip, aStats);
   } else {
     renderer->Update();
   }
@@ -857,7 +865,7 @@ void RenderThread::UpdateAndRender(
   layers::CompositorThread()->Dispatch(
       NewRunnableFunction("NotifyDidRenderRunnable", &NotifyDidRender,
                           renderer->GetCompositorBridge(), info, aStartId,
-                          aStartTime, start, end, aRender, stats));
+                          aStartTime, start, end, aRender, *aStats));
 
   ipc::FileDescriptor fenceFd;
 
@@ -1183,6 +1191,22 @@ void RenderThread::HandleRenderTextureOps() {
   }
 }
 
+RefPtr<RenderTextureHostUsageInfo> RenderThread::GetOrMergeUsageInfo(
+    const wr::ExternalImageId& aExternalImageId,
+    RefPtr<RenderTextureHostUsageInfo> aUsageInfo) {
+  MutexAutoLock lock(mRenderTextureMapLock);
+  if (mHasShutdown) {
+    return nullptr;
+  }
+  auto it = mRenderTextures.find(aExternalImageId);
+  if (it == mRenderTextures.end()) {
+    return nullptr;
+  }
+
+  auto& texture = it->second;
+  return texture->GetOrMergeUsageInfo(lock, aUsageInfo);
+}
+
 void RenderThread::UnregisterExternalImageDuringShutdown(
     const wr::ExternalImageId& aExternalImageId) {
   MOZ_ASSERT(IsInRenderThread());
@@ -1211,6 +1235,18 @@ RenderTextureHost* RenderThread::GetRenderTexture(
     return nullptr;
   }
   return it->second;
+}
+
+std::tuple<RenderTextureHost*, RefPtr<RenderTextureHostUsageInfo>>
+RenderThread::GetRenderTextureAndUsageInfo(
+    const wr::ExternalImageId& aExternalImageId) {
+  MutexAutoLock lock(mRenderTextureMapLock);
+  auto it = mRenderTextures.find(aExternalImageId);
+  MOZ_ASSERT(it != mRenderTextures.end());
+  if (it == mRenderTextures.end()) {
+    return {};
+  }
+  return {it->second, it->second->GetTextureHostUsageInfo(lock)};
 }
 
 void RenderThread::InitDeviceTask() {

@@ -8,7 +8,7 @@
 # documentation and how to modify this file.
 repo: mozilla-central
 created_at: '2021-10-14T12:50:40.073465'
-updated_at: '2024-06-28T15:23:29.920061+00:00'
+updated_at: '2024-08-02T14:33:27.873770+00:00'
 export:
   path: ./docs/mots/index.rst
   format: rst
@@ -43,6 +43,10 @@ people:
     bmo_id: 382067
     name: Andrew Halberstadt
     nick: ahal
+  - &ahochheiden
+    bmo_id: 693303
+    name: Alex Hochheiden
+    nick: ahochheiden
   - &allstarschh
     bmo_id: 434670
     name: Yoshi Cheng-Hao Huang
@@ -95,10 +99,6 @@ people:
     bmo_id: 446257
     name: Andrea Marchesini
     nick: baku
-  - &barret
-    bmo_id: 529428
-    name: Barret Rennie
-    nick: barret
   - &basschouten
     bmo_id: 272464
     name: Bas Schouten
@@ -115,6 +115,10 @@ people:
     bmo_id: 424312
     name: Ben Bangert
     nick: benbangert
+  - &beth
+    bmo_id: 529428
+    name: Beth Rennie
+    nick: beth
   - &beurdouche
     bmo_id: 622637
     name: Benjamin Beurdouche
@@ -827,6 +831,10 @@ people:
     bmo_id: 404637
     name: Paul Adenot
     nick: padenot
+  - &pbone
+    bmo_id: 595166
+    name: Paul Bone
+    nick: pbone
   - &pbz
     bmo_id: 636491
     name: Paul Zühlcke
@@ -1268,6 +1276,7 @@ modules:
       - *glandium
     peers:
       - *andi
+      - *ahochheiden
     submodules:
 
       - name: 'Core: Build Config - Fennec'
@@ -1482,12 +1491,14 @@ modules:
       owners_emeritus:
         - Aaron Klotz
         - *toshi
+      peers_emeritus:
+        - *molly
       components:
         - Core::DLL Services
     owners:
       - *handyman
     peers:
-      - *molly
+      - *gstoll
     machine_name: core_dll_services
 
   - name: 'Core: docshell'
@@ -1641,6 +1652,7 @@ modules:
       - *ahal
     peers:
       - *Sylvestre
+      - *marco
     meta:
       components:
         - Developer Infrastructure::Source Documentation
@@ -1660,7 +1672,7 @@ modules:
         - Nicholas Nethercote
         - Gerald Squelart
         - Kannan Vijayan
-        - Barret Rennie
+        - Beth Rennie
         - Greg Tatum
       group: dev-platform
       url: https://firefox-source-docs.mozilla.org/tools/profiler/
@@ -2109,7 +2121,6 @@ modules:
       - media/libnestegg/**/*
       - media/libogg/**/*
       - media/libopus/**/*
-      - media/libtheora/**/*
       - media/libtremor/**/*
       - media/libvorbis/**/*
       - media/libvpx/**/*
@@ -2164,7 +2175,8 @@ modules:
         - Core::jemalloc
     owners:
       - *glandium
-    peers: []
+    peers:
+      - *pbone
     machine_name: core_memory_allocator
 
   - name: 'Core: mfbt'
@@ -2434,6 +2446,7 @@ modules:
     meta:
       owners_emeritus:
         - Nicholas Nethercote
+        - *KrisWright
       peers_emeritus:
         - Felipe Gomes
         - Eric Rahm
@@ -2441,10 +2454,8 @@ modules:
       components:
         - 'Core::Preferences: Backend'
     owners:
-      - *KrisWright
     peers:
       - *glandium
-      - *KrisWright
     machine_name: core_preferences
 
   - name: 'Core: Private Browsing'
@@ -2655,7 +2666,7 @@ modules:
     machine_name: core_static_analysis_rewriting_for_c
 
   - name: 'Core: storage'
-    description: Storage APIs with a SQLite backend
+    description: Storage APIs, SQLite backend
     includes:
       - third_party/sqlite3/**/*
       - storage/**/*
@@ -2671,6 +2682,7 @@ modules:
     peers:
       - *asuth
       - *janv
+      - *lina
     machine_name: core_storage
 
   - name: 'Core: String'
@@ -3152,6 +3164,7 @@ modules:
         - Doug Turner
         - Eric Rahm
         - Simon Giesecke
+        - *KrisWright
       group: dev-platform
       url: :ref:`XPCOM`
       components:
@@ -3161,9 +3174,8 @@ modules:
       - *nika
     peers:
       - *kmag
-      - *barret
+      - *beth
       - *jstutte
-      - *KrisWright
       - *mccr8
       - *emilio
     machine_name: core_xpcom
@@ -3452,7 +3464,7 @@ modules:
             - Firefox::Nimbus Desktop Client
           url: https://experimenter.info/
         owners:
-          - *barret
+          - *beth
         peers:
           - *Gijs
           - *emcminn
@@ -3845,9 +3857,10 @@ modules:
       such as lint configurations, formatting and naming style.
     includes:
       - .eslintrc-test-paths.js
-      - '**/.eslintignore'
-      - '**/.eslintrc.js'
+      - '**/.eslintrc*.js'
       - tools/lint/eslint/**/*
+      - .prettier*
+      - .stylelint*
     excludes: []
     owners:
       - *mossop
@@ -4359,5 +4372,5 @@ modules:
         - Ryan Tilder
       group: dev-platform
 hashes:
-  config: de15e04637a519add2f6af14f301607271f0e4d3
-  export: d861fc2cbd0107ada2e09d09b8358bedcd2e44e7
+  config: 6410cc12ee3bad1c67d4d797975e16bb4339cab7
+  export: c3de175b04f17bbfeff4fd79b44521be63f74b51

@@ -764,6 +764,21 @@ void nsHTTPSOnlyUtils::TestSitePermissionAndPotentiallyAddExemption(
     httpsOnlyStatus |= nsILoadInfo::HTTPS_ONLY_EXEMPT;
   }
   loadInfo->SetHttpsOnlyStatus(httpsOnlyStatus);
+
+  // For the telemetry we do not want downgrade values to be overwritten
+  // in the loadinfo. We only want e.g. a reload() or a back() click
+  // to carry the upgrade exception.
+  if (httpsOnlyStatus & nsILoadInfo::HTTPS_ONLY_EXEMPT) {
+    nsILoadInfo::HTTPSUpgradeTelemetryType httpsTelemetry =
+        nsILoadInfo::NOT_INITIALIZED;
+    loadInfo->GetHttpsUpgradeTelemetry(&httpsTelemetry);
+    if (httpsTelemetry != nsILoadInfo::HTTPS_ONLY_UPGRADE_DOWNGRADE &&
+        httpsTelemetry != nsILoadInfo::HTTPS_FIRST_UPGRADE_DOWNGRADE &&
+        httpsTelemetry !=
+            nsILoadInfo::HTTPS_FIRST_SCHEMELESS_UPGRADE_DOWNGRADE) {
+      loadInfo->SetHttpsUpgradeTelemetry(nsILoadInfo::UPGRADE_EXCEPTION);
+    }
+  }
 }
 
 /* static */
@@ -828,8 +843,8 @@ void nsHTTPSOnlyUtils::LogMessage(const nsAString& aMessage, uint32_t aFlags,
   }
   if (windowId) {
     // Send to content console
-    nsContentUtils::ReportToConsoleByWindowID(message, aFlags, category,
-                                              windowId, aURI);
+    nsContentUtils::ReportToConsoleByWindowID(
+        message, aFlags, category, windowId, mozilla::SourceLocation(aURI));
   } else {
     // Send to browser console
     bool isPrivateWin = aLoadInfo->GetOriginAttributes().IsPrivateBrowsing();
@@ -1166,7 +1181,19 @@ TestHTTPAnswerRunnable::Notify(nsITimer* aTimer) {
       origHttpsOnlyStatus & nsILoadInfo::HTTPS_ONLY_TOP_LEVEL_LOAD_IN_PROGRESS;
   uint32_t downloadInProgress =
       origHttpsOnlyStatus & nsILoadInfo::HTTPS_ONLY_DOWNLOAD_IN_PROGRESS;
-  if (topLevelLoadInProgress || downloadInProgress) {
+  // If the upgrade is caused by HSTS we do not allow downgrades so we do not
+  // need to start a racing request.
+  // TODO: We should do the same for HTTPS RR but it is more difficult
+  // and the spec hasn't decided yet.
+  // https://bugzilla.mozilla.org/show_bug.cgi?id=1906590
+  bool isClientRequestedUpgrade =
+      origHttpsOnlyStatus &
+      (nsILoadInfo::HTTPS_ONLY_UPGRADED_LISTENER_NOT_REGISTERED |
+       nsILoadInfo::HTTPS_ONLY_UPGRADED_LISTENER_REGISTERED |
+       nsILoadInfo::HTTPS_ONLY_UPGRADED_HTTPS_FIRST);
+
+  if (topLevelLoadInProgress || downloadInProgress ||
+      !isClientRequestedUpgrade) {
     return NS_OK;
   }
 

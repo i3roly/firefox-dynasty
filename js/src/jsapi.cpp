@@ -816,12 +816,12 @@ JS_PUBLIC_API bool JS_RefreshCrossCompartmentWrappers(JSContext* cx,
   return RemapAllWrappersForObject(cx, obj, obj);
 }
 
-typedef struct JSStdName {
+struct JSStdName {
   size_t atomOffset; /* offset of atom pointer in JSAtomState */
   JSProtoKey key;
   bool isDummy() const { return key == JSProto_Null; }
   bool isSentinel() const { return key == JSProto_LIMIT; }
-} JSStdName;
+};
 
 static const JSStdName* LookupStdName(const JSAtomState& names, JSAtom* name,
                                       const JSStdName* table) {
@@ -4426,6 +4426,12 @@ JS_PUBLIC_API void JS_SetGlobalJitCompilerOption(JSContext* cx,
       jit::JitOptions.js_regexp_duplicate_named_groups = !!value;
       break;
 
+#ifdef NIGHTLY_BUILD
+    case JSJITCOMPILER_REGEXP_MODIFIERS:
+      jit::JitOptions.js_regexp_modifiers = !!value;
+      break;
+#endif
+
 #ifdef DEBUG
     case JSJITCOMPILER_FULL_DEBUG_CHECKS:
       jit::JitOptions.fullDebugChecks = !!value;
@@ -4844,6 +4850,18 @@ JS_PUBLIC_API bool JS::FinishIncrementalEncoding(JSContext* cx,
     return false;
   }
   if (!script->scriptSource()->xdrFinalizeEncoder(cx, buffer)) {
+    return false;
+  }
+  return true;
+}
+
+JS_PUBLIC_API bool JS::FinishIncrementalEncoding(JSContext* cx,
+                                                 JS::HandleScript script,
+                                                 JS::Stencil** stencilOut) {
+  if (!script) {
+    return false;
+  }
+  if (!script->scriptSource()->xdrFinalizeEncoder(cx, stencilOut)) {
     return false;
   }
   return true;

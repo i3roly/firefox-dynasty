@@ -652,7 +652,8 @@ TextureFlags D3D11TextureData::GetTextureFlags() const {
   return TextureFlags::WAIT_HOST_USAGE_END;
 }
 
-void D3D11TextureData::RegisterQuery(RefPtr<ID3D11Query> aQuery) {
+void D3D11TextureData::RegisterQuery(RefPtr<ID3D11Query> aQuery,
+                                     bool aOnlyForOverlay) {
   MOZ_ASSERT(XRE_IsGPUProcess());
   MOZ_ASSERT(GpuProcessD3D11QueryMap::Get());
 
@@ -663,6 +664,7 @@ void D3D11TextureData::RegisterQuery(RefPtr<ID3D11Query> aQuery) {
   if (mGpuProcessQueryId.isNothing()) {
     mGpuProcessQueryId = Some(GpuProcessQueryId::GetNext());
   }
+  mGpuProcessQueryId.ref().mOnlyForOverlay = aOnlyForOverlay;
   GpuProcessD3D11QueryMap::Get()->Register(mGpuProcessQueryId.ref(), aQuery);
 }
 
@@ -1221,17 +1223,23 @@ void DXGITextureHostD3D11::PushDisplayItems(
     return;
   }
 
+  bool preferExternalCompositing =
+      SupportsExternalCompositing(aBuilder.GetBackendType());
+  if (aFlags.contains(PushDisplayItemFlag::EXTERNAL_COMPOSITING_DISABLED)) {
+    MOZ_ASSERT(aBuilder.GetBackendType() != WebRenderBackend::SOFTWARE);
+    preferExternalCompositing = false;
+  }
+
   switch (GetFormat()) {
     case gfx::SurfaceFormat::R8G8B8X8:
     case gfx::SurfaceFormat::R8G8B8A8:
     case gfx::SurfaceFormat::B8G8R8A8:
     case gfx::SurfaceFormat::B8G8R8X8: {
       MOZ_ASSERT(aImageKeys.length() == 1);
-      aBuilder.PushImage(
-          aBounds, aClip, true, false, aFilter, aImageKeys[0],
-          !(mFlags & TextureFlags::NON_PREMULTIPLIED),
-          wr::ColorF{1.0f, 1.0f, 1.0f, 1.0f}, preferCompositorSurface,
-          SupportsExternalCompositing(aBuilder.GetBackendType()));
+      aBuilder.PushImage(aBounds, aClip, true, false, aFilter, aImageKeys[0],
+                         !(mFlags & TextureFlags::NON_PREMULTIPLIED),
+                         wr::ColorF{1.0f, 1.0f, 1.0f, 1.0f},
+                         preferCompositorSurface, preferExternalCompositing);
       break;
     }
     case gfx::SurfaceFormat::P010:
@@ -1249,7 +1257,7 @@ void DXGITextureHostD3D11::PushDisplayItems(
                                                   : wr::ColorDepth::Color16,
           wr::ToWrYuvColorSpace(ToYUVColorSpace(mColorSpace)),
           wr::ToWrColorRange(mColorRange), aFilter, preferCompositorSurface,
-          SupportsExternalCompositing(aBuilder.GetBackendType()));
+          preferExternalCompositing);
       break;
     }
     default: {

@@ -6,6 +6,16 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BackupService: "resource:///modules/backup/BackupService.sys.mjs",
+  ERRORS: "chrome://browser/content/backup/backup-constants.mjs",
+});
+
+ChromeUtils.defineLazyGetter(lazy, "logConsole", function () {
+  return console.createInstance({
+    prefix: "BackupUIParent",
+    maxLogLevel: Services.prefs.getBoolPref("browser.backup.log", false)
+      ? "Debug"
+      : "Warn",
+  });
 });
 
 /**
@@ -75,23 +85,34 @@ export class BackupUIParent extends JSWindowActorParent {
     } else if (message.name == "ToggleScheduledBackups") {
       let { isScheduledBackupsEnabled, parentDirPath, password } = message.data;
 
-      if (isScheduledBackupsEnabled && parentDirPath) {
-        this.#bs.setParentDirPath(parentDirPath);
-        /**
-         * TODO: display an error and do not attempt to toggle scheduled backups if there
-         * is a problem with setting the parent directory (bug 1901308).
-         */
-      }
-
-      if (password) {
-        try {
-          await this.#bs.enableEncryption(password);
-        } catch (e) {
+      if (isScheduledBackupsEnabled) {
+        if (parentDirPath) {
+          this.#bs.setParentDirPath(parentDirPath);
           /**
-           * TODO: display en error and do not attempt to toggle scheduled backups if there is a
-           * problem with enabling encryption (bug 1901308)
+           * TODO: display an error and do not attempt to toggle scheduled backups if there
+           * is a problem with setting the parent directory (bug 1901308).
            */
-          return null;
+        }
+
+        if (password) {
+          try {
+            await this.#bs.enableEncryption(password);
+          } catch (e) {
+            /**
+             * TODO: display en error and do not attempt to toggle scheduled backups if there is a
+             * problem with enabling encryption (bug 1901308)
+             */
+            return null;
+          }
+        }
+      } else {
+        try {
+          if (this.#bs.state.encryptionEnabled) {
+            await this.#bs.disableEncryption();
+          }
+          await this.#bs.deleteLastBackup();
+        } catch (e) {
+          // no-op so that scheduled backups can still be turned off
         }
       }
 
@@ -166,10 +187,10 @@ export class BackupUIParent extends JSWindowActorParent {
           true /* shouldLaunch */
         );
       } catch (e) {
-        /**
-         * TODO: (Bug 1905156) display a localized version of error in the restore dialog.
-         */
+        lazy.logConsole.error(`Failed to restore file: ${backupFile}`, e);
+        return { success: false, errorCode: e.cause || lazy.ERRORS.UNKNOWN };
       }
+      return { success: true };
     } else if (message.name == "ToggleEncryption") {
       let { isEncryptionEnabled, password } = message.data;
 
@@ -216,6 +237,11 @@ export class BackupUIParent extends JSWindowActorParent {
          * re-encryption.
          */
       }
+    } else if (message.name == "ShowBackupLocation") {
+      this.#bs.showBackupLocation();
+    } else if (message.name == "EditBackupLocation") {
+      const window = this.browsingContext.topChromeWindow;
+      this.#bs.editBackupLocation(window);
     }
 
     return null;

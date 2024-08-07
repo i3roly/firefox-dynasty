@@ -5996,6 +5996,11 @@ already_AddRefed<nsIURI> nsDocShell::AttemptURIFixup(
           //
           // Since we don't have access to the exact original string
           // that was entered by the user, this will just have to do.
+          //
+          // XXX: Since we are not trying to use the result as an
+          // actual domain name, label-wise Punycode decode would
+          // likely be more appropriate than the full ToUnicode
+          // operation.
           bool isACE;
           nsAutoCString utf8Host;
           nsCOMPtr<nsIIDNService> idnSrv =
@@ -6337,10 +6342,12 @@ nsresult nsDocShell::EndPageLoad(nsIWebProgress* aProgress,
         DisplayLoadError(aStatus, url, nullptr, aChannel);
       }
     } else if (skippedUnknownProtocolNavigation) {
+      nsAutoCString sanitized;
       nsTArray<nsString> params;
-      if (NS_FAILED(
-              NS_GetSanitizedURIStringFromURI(url, *params.AppendElement()))) {
-        params.LastElement().AssignLiteral(u"(unknown uri)");
+      if (NS_SUCCEEDED(NS_GetSanitizedURIStringFromURI(url, sanitized))) {
+        params.AppendElement(NS_ConvertUTF8toUTF16(sanitized));
+      } else {
+        params.AppendElement(u"(unknown uri)"_ns);
       }
       nsContentUtils::ReportToConsole(
           nsIScriptError::warningFlag, "DOM"_ns, GetExtantDocument(),
@@ -10069,7 +10076,7 @@ nsIPrincipal* nsDocShell::GetInheritedPrincipal(
 
 bool nsDocShell::IsAboutBlankLoadOntoInitialAboutBlank(
     nsIURI* aURI, bool aInheritPrincipal, nsIPrincipal* aPrincipalToInherit) {
-  return NS_IsAboutBlank(aURI) && aInheritPrincipal &&
+  return NS_IsAboutBlankAllowQueryAndFragment(aURI) && aInheritPrincipal &&
          (aPrincipalToInherit == GetInheritedPrincipal(false)) &&
          (!mDocumentViewer || !mDocumentViewer->GetDocument() ||
           mDocumentViewer->GetDocument()->IsInitialDocument());
@@ -12952,7 +12959,8 @@ nsresult nsDocShell::OnLinkClickSync(nsIContent* aContent,
               /* aTriggeredExternally */
               false,
               /* aHasValidUserGestureActivation */
-              aContent->OwnerDoc()->HasValidTransientUserGestureActivation());
+              aContent->OwnerDoc()->HasValidTransientUserGestureActivation(),
+              /* aNewWindowTarget */ false);
         }
       }
     }

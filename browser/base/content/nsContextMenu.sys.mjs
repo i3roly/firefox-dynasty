@@ -162,12 +162,7 @@ export function openContextMenu(aMessage, aBrowser, aActor) {
   // We don't have access to the original event here, as that happened in
   // another process. Therefore we synthesize a new MouseEvent to propagate the
   // inputSource to the subsequently triggered popupshowing event.
-  const ContextMenuEventConstructor = Services.prefs.getBoolPref(
-    "dom.w3c_pointer_events.dispatch_click_as_pointer_event"
-  )
-    ? PointerEvent
-    : MouseEvent;
-  let newEvent = new ContextMenuEventConstructor("contextmenu", {
+  let newEvent = new PointerEvent("contextmenu", {
     bubbles: true,
     cancelable: true,
     screenX: context.screenXDevPx / win.devicePixelRatio,
@@ -2635,24 +2630,6 @@ export class nsContextMenu {
   }
 
   /**
-   * Determines if Full Page Translations is currently active on this page.
-   *
-   * @returns {boolean}
-   */
-  #isFullPageTranslationsActive() {
-    try {
-      const { requestedTranslationPair } =
-        lazy.TranslationsParent.getTranslationsActor(
-          this.browser
-        ).languageState;
-      return requestedTranslationPair !== null;
-    } catch {
-      // Failed to retrieve the Full Page Translations actor, do nothing.
-    }
-    return false;
-  }
-
-  /**
    * Opens the SelectTranslationsPanel singleton instance.
    *
    * @param {Event} event - The triggering event for opening the panel.
@@ -2697,6 +2674,7 @@ export class nsContextMenu {
       }
 
       if (displayName) {
+        translateSelectionItem.setAttribute("target-language", toLanguage);
         this.document.l10n.setAttributes(
           translateSelectionItem,
           this.isTextSelected
@@ -2710,6 +2688,7 @@ export class nsContextMenu {
 
     // Either no to-language exists, or an error occurred,
     // so localize the menuitem without a target language.
+    translateSelectionItem.removeAttribute("target-language");
     this.document.l10n.setAttributes(
       translateSelectionItem,
       this.isTextSelected
@@ -2769,11 +2748,10 @@ export class nsContextMenu {
       // Only show the item if Translations is supported on this hardware.
       !lazy.TranslationsParent.getIsTranslationsEngineSupported() ||
       // If there is no text to translate, we have nothing to do.
-      textToTranslate.length === 0 ||
-      // We do not allow translating selections on top of Full Page Translations.
-      this.#isFullPageTranslationsActive();
+      textToTranslate.length === 0;
 
     if (translateSelectionItem.hidden) {
+      translateSelectionItem.removeAttribute("target-language");
       return;
     }
 

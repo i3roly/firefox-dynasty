@@ -959,10 +959,8 @@ void nsWindow::ApplySizeConstraints() {
 
     uint32_t hints = 0;
     if (mSizeConstraints.mMinSize != LayoutDeviceIntSize()) {
-      if (GdkIsWaylandDisplay()) {
-        gtk_widget_set_size_request(GTK_WIDGET(mContainer), geometry.min_width,
-                                    geometry.min_height);
-      }
+      gtk_widget_set_size_request(GTK_WIDGET(mContainer), geometry.min_width,
+                                  geometry.min_height);
       AddCSDDecorationSize(&geometry.min_width, &geometry.min_height);
       hints |= GDK_HINT_MIN_SIZE;
     }
@@ -3124,6 +3122,18 @@ void nsWindow::SetFocus(Raise aRaise, mozilla::dom::CallerType aCallerType) {
             return t;
           }
         }
+#if defined(MOZ_X11)
+        // If it's X11 and there's a startup token, use GDK_CURRENT_TIME, so
+        // gtk_window_present_with_time will pull the timestamp from the startup
+        // token.
+        if (GdkIsX11Display()) {
+          nsGTKToolkit* toolkit = nsGTKToolkit::GetToolkit();
+          const auto& startupToken = toolkit->GetStartupToken();
+          if (!startupToken.IsEmpty()) {
+            return static_cast<uint32_t>(GDK_CURRENT_TIME);
+          }
+        }
+#endif
         return GetLastUserInputTime();
       }();
 
@@ -4640,15 +4650,7 @@ void nsWindow::DispatchContextMenuEventFromMouseEvent(
     uint16_t domButton, GdkEventButton* aEvent,
     const LayoutDeviceIntPoint& aRefPoint) {
   if (domButton == MouseButton::eSecondary && MOZ_LIKELY(!mIsDestroyed)) {
-    Maybe<WidgetPointerEvent> pointerEvent;
-    Maybe<WidgetMouseEvent> mouseEvent;
-    if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-      pointerEvent.emplace(true, eContextMenu, this);
-    } else {
-      mouseEvent.emplace(true, eContextMenu, this, WidgetMouseEvent::eReal);
-    }
-    WidgetMouseEvent& contextMenuEvent =
-        pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+    WidgetPointerEvent contextMenuEvent(true, eContextMenu, this);
     InitButtonEvent(contextMenuEvent, aEvent, aRefPoint);
     contextMenuEvent.mPressure = mLastMotionPressure;
     DispatchInputEvent(&contextMenuEvent);
@@ -6000,6 +6002,15 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   }
   mShell = gtk_window_new(type);
 
+  // It is important that this happens before the realize() call below, so that
+  // we don't get bogus CSD margins on Wayland, see bug 1794577.
+  mUndecorated = IsAlwaysUndecoratedWindow();
+  if (mUndecorated) {
+    LOG("    Is undecorated Window\n");
+    gtk_window_set_titlebar(GTK_WINDOW(mShell), gtk_fixed_new());
+    gtk_window_set_decorated(GTK_WINDOW(mShell), false);
+  }
+
   // Ensure gfxPlatform is initialized, since that is what initializes
   // gfxVars, used below.
   Unused << gfxPlatform::GetPlatform();
@@ -6181,15 +6192,6 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
 
   if (mAlwaysOnTop) {
     gtk_window_set_keep_above(GTK_WINDOW(mShell), TRUE);
-  }
-
-  // It is important that this happens before the realize() call below, so that
-  // we don't get bogus CSD margins on Wayland, see bug 1794577.
-  mUndecorated = IsAlwaysUndecoratedWindow();
-  if (mUndecorated) {
-    LOG("    Is undecorated Window\n");
-    gtk_window_set_titlebar(GTK_WINDOW(mShell), gtk_fixed_new());
-    gtk_window_set_decorated(GTK_WINDOW(mShell), false);
   }
 
   // Create a container to hold child windows and child GtkWidgets.
@@ -7992,7 +7994,7 @@ static GdkCursor* get_gtk_cursor_legacy(nsCursor aCursor) {
       }
       break;
     case eCursor_all_scroll:
-      gdkcursor = gdk_cursor_new_for_display(defaultDisplay, GDK_FLEUR);
+      gdkcursor = gdk_cursor_new_from_name(defaultDisplay, "all-scroll");
       break;
     case eCursor_nesw_resize:
       gdkcursor = gdk_cursor_new_from_name(defaultDisplay, "size_bdiag");
@@ -8153,7 +8155,7 @@ static GdkCursor* get_gtk_cursor_from_name(nsCursor aCursor) {
       }
       break;
     case eCursor_all_scroll:
-      gdkcursor = gdk_cursor_new_from_name(defaultDisplay, "move");
+      gdkcursor = gdk_cursor_new_from_name(defaultDisplay, "all-scroll");
       break;
     case eCursor_nesw_resize:
       gdkcursor = gdk_cursor_new_from_name(defaultDisplay, "nesw-resize");
@@ -10089,7 +10091,7 @@ void nsWindow::OnMap() {
     OnScaleChanged(/* aNotify = */ false);
 
     if (mIsAlert) {
-      gdk_window_set_override_redirect(mGdkWindow, TRUE);
+      gdk_window_set_override_redirect(GetToplevelGdkWindow(), TRUE);
     }
 
 #ifdef MOZ_X11
@@ -10275,4 +10277,12 @@ void nsWindow::SetDragSource(GdkDragContext* aSourceDragContext) {
       menuPopupFrame->SetIsDragSource(!!aSourceDragContext);
     }
   }
+}
+
+UniquePtr<MozContainerSurfaceLock> nsWindow::LockSurface() {
+  if (mIsDestroyed) {
+    return nullptr;
+  }
+  LOG_WAYLAND("nsWindow::LockSurface()");
+  return MakeUnique<MozContainerSurfaceLock>(mContainer);
 }

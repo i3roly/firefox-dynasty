@@ -675,7 +675,8 @@ int32_t nsTextFrame::GetInFlowContentLength() {
           ? static_cast<FlowLengthProperty*>(
                 mContent->GetProperty(nsGkAtoms::flowlength))
           : nullptr;
-
+  MOZ_ASSERT(mContent->HasFlag(NS_HAS_FLOWLENGTH_PROPERTY) == !!flowLength,
+             "incorrect NS_HAS_FLOWLENGTH_PROPERTY flag");
   /**
    * This frame must start inside the cached flow. If the flow starts at
    * mContentOffset but this frame is empty, logically it might be before the
@@ -704,8 +705,9 @@ int32_t nsTextFrame::GetInFlowContentLength() {
             nsINode::DeleteProperty<FlowLengthProperty>))) {
       delete flowLength;
       flowLength = nullptr;
+    } else {
+      mContent->SetFlags(NS_HAS_FLOWLENGTH_PROPERTY);
     }
-    mContent->SetFlags(NS_HAS_FLOWLENGTH_PROPERTY);
   }
   if (flowLength) {
     flowLength->mStartOffset = mContentOffset;
@@ -4251,9 +4253,13 @@ class nsContinuingTextFrame final : public nsTextFrame {
   };
 
   void AddInlineMinISize(gfxContext* aRenderingContext,
-                         InlineMinISizeData* aData) final;
+                         InlineMinISizeData* aData) final {
+    // Do nothing, since the first-in-flow accounts for everything.
+  }
   void AddInlinePrefISize(gfxContext* aRenderingContext,
-                          InlinePrefISizeData* aData) final;
+                          InlinePrefISizeData* aData) final {
+    // Do nothing, since the first-in-flow accounts for everything.
+  }
 
  protected:
   explicit nsContinuingTextFrame(ComputedStyle* aStyle,
@@ -4373,28 +4379,9 @@ nsIFrame* nsContinuingTextFrame::FirstInFlow() const {
 // XXX We really need to make :first-letter happen during frame
 // construction.
 
-// Needed for text frames in XUL.
-/* virtual */
-nscoord nsTextFrame::GetMinISize(gfxContext* aRenderingContext) {
-  return nsLayoutUtils::MinISizeFromInline(this, aRenderingContext);
-}
-
-// Needed for text frames in XUL.
-/* virtual */
-nscoord nsTextFrame::GetPrefISize(gfxContext* aRenderingContext) {
-  return nsLayoutUtils::PrefISizeFromInline(this, aRenderingContext);
-}
-
-/* virtual */
-void nsContinuingTextFrame::AddInlineMinISize(gfxContext* aRenderingContext,
-                                              InlineMinISizeData* aData) {
-  // Do nothing, since the first-in-flow accounts for everything.
-}
-
-/* virtual */
-void nsContinuingTextFrame::AddInlinePrefISize(gfxContext* aRenderingContext,
-                                               InlinePrefISizeData* aData) {
-  // Do nothing, since the first-in-flow accounts for everything.
+nscoord nsTextFrame::IntrinsicISize(gfxContext* aContext,
+                                    IntrinsicISizeType aType) {
+  return IntrinsicISizeFromInline(aContext, aType);
 }
 
 //----------------------------------------------------------------------
@@ -8611,7 +8598,7 @@ void nsTextFrame::MarkIntrinsicISizesDirty() {
 // XXX this doesn't handle characters shaped by line endings. We need to
 // temporarily override the "current line ending" settings.
 void nsTextFrame::AddInlineMinISizeForFlow(gfxContext* aRenderingContext,
-                                           nsIFrame::InlineMinISizeData* aData,
+                                           InlineMinISizeData* aData,
                                            TextRunType aTextRunType) {
   uint32_t flowEndInTextRun;
   gfxSkipCharsIterator iter =
@@ -8853,7 +8840,7 @@ static bool IsUnreflowedLetterFrame(nsIFrame* aFrame) {
 // first-line changing min-width
 /* virtual */
 void nsTextFrame::AddInlineMinISize(gfxContext* aRenderingContext,
-                                    nsIFrame::InlineMinISizeData* aData) {
+                                    InlineMinISizeData* aData) {
   // Check if this textframe belongs to a first-letter frame that has not yet
   // been reflowed; if so, we need to deal with splitting off a continuation
   // before we can measure the advance correctly.
@@ -8899,9 +8886,9 @@ void nsTextFrame::AddInlineMinISize(gfxContext* aRenderingContext,
 
 // XXX this doesn't handle characters shaped by line endings. We need to
 // temporarily override the "current line ending" settings.
-void nsTextFrame::AddInlinePrefISizeForFlow(
-    gfxContext* aRenderingContext, nsIFrame::InlinePrefISizeData* aData,
-    TextRunType aTextRunType) {
+void nsTextFrame::AddInlinePrefISizeForFlow(gfxContext* aRenderingContext,
+                                            InlinePrefISizeData* aData,
+                                            TextRunType aTextRunType) {
   if (IsUnreflowedLetterFrame(GetParent())) {
     MaybeSplitFramesForFirstLetter();
   }
@@ -9020,7 +9007,7 @@ void nsTextFrame::AddInlinePrefISizeForFlow(
 // first-line and first-letter changing pref-width
 /* virtual */
 void nsTextFrame::AddInlinePrefISize(gfxContext* aRenderingContext,
-                                     nsIFrame::InlinePrefISizeData* aData) {
+                                     InlinePrefISizeData* aData) {
   float inflation = nsLayoutUtils::FontSizeInflationFor(this);
   TextRunType trtype = (inflation == 1.0f) ? eNotInflated : eInflated;
 

@@ -164,7 +164,7 @@ fn cubeb_init_from_context_params() -> cubeb::Result<cubeb::Context> {
     let r = cubeb::Context::init(context_name, backend_name);
     r.map_err(|e| {
         info!("cubeb::Context::init failed r={:?}", e);
-        e
+    e
     })
 }
 

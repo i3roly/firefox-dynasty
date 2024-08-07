@@ -369,22 +369,25 @@ class JavaScriptTracer {
       signal: this.abortController.signal,
       capture: true,
     };
+    // When used for the parent process target, `tracedGlobal` is browser.xhtml's window, which doesn't have a chromeEventHandler.
+    const eventHandler =
+      this.tracedGlobal.docShell.chromeEventHandler || this.tracedGlobal;
     if (this.traceDOMMutations.includes(DOM_MUTATIONS.ADD)) {
-      this.tracedGlobal.docShell.chromeEventHandler.addEventListener(
+      eventHandler.addEventListener(
         "devtoolschildinserted",
         this.#onDOMMutation,
         eventOptions
       );
     }
     if (this.traceDOMMutations.includes(DOM_MUTATIONS.ATTRIBUTES)) {
-      this.tracedGlobal.docShell.chromeEventHandler.addEventListener(
+      eventHandler.addEventListener(
         "devtoolsattrmodified",
         this.#onDOMMutation,
         eventOptions
       );
     }
     if (this.traceDOMMutations.includes(DOM_MUTATIONS.REMOVE)) {
-      this.tracedGlobal.docShell.chromeEventHandler.addEventListener(
+      eventHandler.addEventListener(
         "devtoolschildremoved",
         this.#onDOMMutation,
         eventOptions
@@ -424,13 +427,17 @@ class JavaScriptTracer {
     }
 
     let shouldLogToStdout = true;
+
+    // The depth is the depth of the parent frame, consider the dom mutation as nested to it
+    const depth = this.depth + 1;
+
     if (listeners.size > 0) {
       shouldLogToStdout = false;
       for (const listener of listeners) {
         // If any listener return true, also log to stdout
         if (typeof listener.onTracingDOMMutation == "function") {
           shouldLogToStdout |= listener.onTracingDOMMutation({
-            depth: this.depth,
+            depth,
             prefix: this.prefix,
 
             type,
@@ -442,7 +449,7 @@ class JavaScriptTracer {
     }
 
     if (shouldLogToStdout) {
-      const padding = "—".repeat(this.depth + 1);
+      const padding = "—".repeat(depth + 1);
       this.loggingMethod(
         this.prefix +
           padding +
@@ -757,6 +764,8 @@ class JavaScriptTracer {
       }
 
       frame.onPop = completion => {
+        this.depth--;
+
         // Special case async frames. We are exiting the current frame because of waiting for an async task.
         // (this is typically a `await foo()` from an async function)
         // This frame should later be "entered" again.

@@ -98,7 +98,7 @@ bool wasm::DecodeLocalEntriesWithParams(Decoder& d,
     return d.fail("failed to read number of local entries");
   }
 
-  if (!locals->appendAll(codeMeta.funcs[funcIndex].type->args())) {
+  if (!locals->appendAll(codeMeta.getFuncType(funcIndex).args())) {
     return false;
   }
 
@@ -113,7 +113,7 @@ bool wasm::DecodeLocalEntriesWithParams(Decoder& d,
     }
 
     ValType type;
-    if (!d.readValType(*codeMeta.types, codeMeta.features, &type)) {
+    if (!d.readValType(*codeMeta.types, codeMeta.features(), &type)) {
       return false;
     }
 
@@ -1567,7 +1567,8 @@ static bool DecodeValTypeVector(Decoder& d, CodeMetadata* codeMeta,
   }
 
   for (uint32_t i = 0; i < count; i++) {
-    if (!d.readValType(*codeMeta->types, codeMeta->features, &(*valTypes)[i])) {
+    if (!d.readValType(*codeMeta->types, codeMeta->features(),
+                       &(*valTypes)[i])) {
       return false;
     }
   }
@@ -1625,7 +1626,7 @@ static bool DecodeStructType(Decoder& d, CodeMetadata* codeMeta,
   }
 
   for (uint32_t i = 0; i < numFields; i++) {
-    if (!d.readStorageType(*codeMeta->types, codeMeta->features,
+    if (!d.readStorageType(*codeMeta->types, codeMeta->features(),
                            &fields[i].type)) {
       return false;
     }
@@ -1656,7 +1657,8 @@ static bool DecodeArrayType(Decoder& d, CodeMetadata* codeMeta,
   }
 
   StorageType elementType;
-  if (!d.readStorageType(*codeMeta->types, codeMeta->features, &elementType)) {
+  if (!d.readStorageType(*codeMeta->types, codeMeta->features(),
+                         &elementType)) {
     return false;
   }
 
@@ -1932,7 +1934,7 @@ static bool DecodeLimits(Decoder& d, LimitsKind kind, Limits* limits) {
                    uint32_t(flags & ~uint8_t(mask)));
   }
 
-  // Memory limits may be shared or specify an alternate index type
+  // Memory limits may be shared
   if (kind == LimitsKind::Memory) {
     if ((flags & uint8_t(LimitsFlags::IsShared)) &&
         !(flags & uint8_t(LimitsFlags::HasMaximum))) {
@@ -1942,20 +1944,19 @@ static bool DecodeLimits(Decoder& d, LimitsKind kind, Limits* limits) {
     limits->shared = (flags & uint8_t(LimitsFlags::IsShared))
                          ? Shareable::True
                          : Shareable::False;
-
-#ifdef ENABLE_WASM_MEMORY64
-    limits->indexType =
-        (flags & uint8_t(LimitsFlags::IsI64)) ? IndexType::I64 : IndexType::I32;
-#else
-    limits->indexType = IndexType::I32;
-    if (flags & uint8_t(LimitsFlags::IsI64)) {
-      return d.fail("i64 is not supported for memory limits");
-    }
-#endif
   } else {
     limits->shared = Shareable::False;
-    limits->indexType = IndexType::I32;
   }
+
+#ifdef ENABLE_WASM_MEMORY64
+  limits->indexType =
+      (flags & uint8_t(LimitsFlags::IsI64)) ? IndexType::I64 : IndexType::I32;
+#else
+  limits->indexType = IndexType::I32;
+  if (flags & uint8_t(LimitsFlags::IsI64)) {
+    return d.fail("i64 is not supported for memory or table limits");
+  }
+#endif
 
   uint64_t initial;
   if (!DecodeLimitBound(d, limits->indexType, &initial)) {
@@ -1971,9 +1972,10 @@ static bool DecodeLimits(Decoder& d, LimitsKind kind, Limits* limits) {
 
     if (limits->initial > maximum) {
       return d.failf(
-          "memory size minimum must not be greater than maximum; "
+          "%s size minimum must not be greater than maximum; "
           "maximum length %" PRIu64 " is less than initial length %" PRIu64,
-          maximum, limits->initial);
+          kind == LimitsKind::Memory ? "memory" : "table", maximum,
+          limits->initial);
     }
 
     limits->maximum.emplace(maximum);
@@ -1998,7 +2000,7 @@ static bool DecodeTableTypeAndLimits(Decoder& d, CodeMetadata* codeMeta) {
   }
 
   RefType tableElemType;
-  if (!d.readRefType(*codeMeta->types, codeMeta->features, &tableElemType)) {
+  if (!d.readRefType(*codeMeta->types, codeMeta->features(), &tableElemType)) {
     return false;
   }
 
@@ -2007,8 +2009,9 @@ static bool DecodeTableTypeAndLimits(Decoder& d, CodeMetadata* codeMeta) {
     return false;
   }
 
-  // Decoding limits for a table only supports i32
-  MOZ_ASSERT(limits.indexType == IndexType::I32);
+  if (limits.indexType == IndexType::I64 && !codeMeta->memory64Enabled()) {
+    return d.fail("memory64 is disabled");
+  }
 
   // If there's a maximum, check it is in range.  The check to exclude
   // initial > maximum is carried out by the DecodeLimits call above, so
@@ -2025,12 +2028,6 @@ static bool DecodeTableTypeAndLimits(Decoder& d, CodeMetadata* codeMeta) {
 
   // The rest of the runtime expects table limits to be within a 32-bit range.
   static_assert(MaxTableLimitField <= UINT32_MAX, "invariant");
-  uint32_t initialLength = uint32_t(limits.initial);
-  Maybe<uint32_t> maximumLength;
-  if (limits.maximum) {
-    maximumLength = Some(uint32_t(*limits.maximum));
-  }
-
   Maybe<InitExpr> initExpr;
   if (initExprPresent) {
     InitExpr initializer;
@@ -2045,8 +2042,8 @@ static bool DecodeTableTypeAndLimits(Decoder& d, CodeMetadata* codeMeta) {
     }
   }
 
-  return codeMeta->tables.emplaceBack(tableElemType, initialLength,
-                                      maximumLength, std::move(initExpr),
+  return codeMeta->tables.emplaceBack(limits, tableElemType,
+                                      std::move(initExpr),
                                       /* isAsmJS */ false);
 }
 
@@ -2072,7 +2069,7 @@ static bool DecodeGlobalType(Decoder& d, const SharedTypeContext& types,
 
 static bool DecodeMemoryTypeAndLimits(Decoder& d, CodeMetadata* codeMeta,
                                       MemoryDescVector* memories) {
-  if (!codeMeta->features.multiMemory && codeMeta->numMemories() == 1) {
+  if (!codeMeta->features().multiMemory && codeMeta->numMemories() == 1) {
     return d.fail("already have default memory");
   }
 
@@ -2159,9 +2156,7 @@ static bool DecodeImport(Decoder& d, CodeMetadata* codeMeta,
       if (!DecodeFuncTypeIndex(d, codeMeta->types, &funcTypeIndex)) {
         return false;
       }
-      if (!codeMeta->funcs.append(
-              FuncDesc(&codeMeta->types->type(funcTypeIndex).funcType(),
-                       funcTypeIndex))) {
+      if (!codeMeta->funcs.append(FuncDesc(funcTypeIndex))) {
         return false;
       }
       if (codeMeta->funcs.length() > MaxFuncs) {
@@ -2185,7 +2180,7 @@ static bool DecodeImport(Decoder& d, CodeMetadata* codeMeta,
     case DefinitionKind::Global: {
       ValType type;
       bool isMutable;
-      if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features, &type,
+      if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features(), &type,
                             &isMutable)) {
         return false;
       }
@@ -2232,7 +2227,7 @@ static bool DecodeImport(Decoder& d, CodeMetadata* codeMeta,
 static bool CheckImportsAgainstBuiltinModules(Decoder& d,
                                               CodeMetadata* codeMeta,
                                               ModuleMetadata* moduleMeta) {
-  const BuiltinModuleIds& builtinModules = codeMeta->features.builtinModules;
+  const BuiltinModuleIds& builtinModules = codeMeta->features().builtinModules;
 
   // Skip this pass if there are no builtin modules enabled
   if (builtinModules.hasNone()) {
@@ -2240,6 +2235,7 @@ static bool CheckImportsAgainstBuiltinModules(Decoder& d,
   }
 
   uint32_t importFuncIndex = 0;
+  uint32_t importGlobalIndex = 0;
   for (auto& import : moduleMeta->imports) {
     Maybe<BuiltinModuleId> builtinModule =
         ImportMatchesBuiltinModule(import.module.utf8Bytes(), builtinModules);
@@ -2267,6 +2263,31 @@ static bool CheckImportsAgainstBuiltinModules(Decoder& d,
         if (!TypeDef::isSubTypeOf((*builtinFunc)->typeDef(), &importTypeDef)) {
           return d.failf("type mismatch in %s", (*builtinFunc)->exportName());
         }
+        break;
+      }
+      case DefinitionKind::Global: {
+        const GlobalDesc& global = codeMeta->globals[importGlobalIndex];
+        importGlobalIndex += 1;
+
+        // Skip this import if it doesn't refer to a builtin module. We do have
+        // to increment the import global index regardless though.
+        if (!builtinModule) {
+          continue;
+        }
+
+        // Only the imported string constants module has globals defined.
+        if (*builtinModule != BuiltinModuleId::JSStringConstants) {
+          return d.fail("unrecognized builtin module field");
+        }
+
+        // All imported globals must match a provided global type of
+        // `(global (ref extern))`.
+        if (global.isMutable() ||
+            !ValType::isSubTypeOf(ValType(RefType::extern_().asNonNullable()),
+                                  global.type())) {
+          return d.failf("type mismatch");
+        }
+
         break;
       }
       default: {
@@ -2344,8 +2365,7 @@ static bool DecodeFunctionSection(Decoder& d, CodeMetadata* codeMeta) {
     if (!DecodeFuncTypeIndex(d, codeMeta->types, &funcTypeIndex)) {
       return false;
     }
-    codeMeta->funcs.infallibleAppend(FuncDesc(
-        &codeMeta->types->type(funcTypeIndex).funcType(), funcTypeIndex));
+    codeMeta->funcs.infallibleAppend(funcTypeIndex);
   }
 
   return d.finishSection(*range, "function");
@@ -2388,7 +2408,7 @@ static bool DecodeMemorySection(Decoder& d, CodeMetadata* codeMeta) {
     return d.fail("failed to read number of memories");
   }
 
-  if (!codeMeta->features.multiMemory && numMemories > 1) {
+  if (!codeMeta->features().multiMemory && numMemories > 1) {
     return d.fail("the number of memories must be at most one");
   }
 
@@ -2428,7 +2448,7 @@ static bool DecodeGlobalSection(Decoder& d, CodeMetadata* codeMeta) {
   for (uint32_t i = 0; i < numDefs; i++) {
     ValType type;
     bool isMutable;
-    if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features, &type,
+    if (!DecodeGlobalType(d, codeMeta->types, codeMeta->features(), &type,
                           &isMutable)) {
       return false;
     }
@@ -2530,8 +2550,8 @@ static bool DecodeExport(Decoder& d, CodeMetadata* codeMeta,
         return d.fail("exported function index out of bounds");
       }
 
-      codeMeta->declareFuncExported(funcIndex, /* eager */ true,
-                                    /* canRefFunc */ true);
+      codeMeta->funcs[funcIndex].declareFuncExported(/* eager */ true,
+                                                     /* canRefFunc */ true);
       return moduleMeta->exports.emplaceBack(std::move(fieldName), funcIndex,
                                              DefinitionKind::Function);
     }
@@ -2646,7 +2666,7 @@ static bool DecodeStartSection(Decoder& d, CodeMetadata* codeMeta,
     return d.fail("unknown start function");
   }
 
-  const FuncType& funcType = *codeMeta->funcs[funcIndex].type;
+  const FuncType& funcType = codeMeta->getFuncType(funcIndex);
   if (funcType.results().length() > 0) {
     return d.fail("start function must not return anything");
   }
@@ -2655,8 +2675,8 @@ static bool DecodeStartSection(Decoder& d, CodeMetadata* codeMeta,
     return d.fail("start function must be nullary");
   }
 
-  codeMeta->declareFuncExported(funcIndex, /* eager */ true,
-                                /* canFuncRef */ false);
+  codeMeta->funcs[funcIndex].declareFuncExported(/* eager */ true,
+                                                 /* canFuncRef */ false);
   codeMeta->startFuncIndex = Some(funcIndex);
 
   return d.finishSection(*range, "start");
@@ -2713,7 +2733,9 @@ static bool DecodeElemSegment(Decoder& d, CodeMetadata* codeMeta,
     seg.tableIndex = tableIndex;
 
     InitExpr offset;
-    if (!InitExpr::decodeAndValidate(d, codeMeta, ValType::I32, &offset)) {
+    if (!InitExpr::decodeAndValidate(
+            d, codeMeta, ToValType(codeMeta->tables[tableIndex].indexType()),
+            &offset)) {
       return false;
     }
     seg.offsetIfActive.emplace(std::move(offset));
@@ -2737,7 +2759,7 @@ static bool DecodeElemSegment(Decoder& d, CodeMetadata* codeMeta,
   } else {
     switch (payload) {
       case ElemSegmentPayload::Expressions: {
-        if (!d.readRefType(*codeMeta->types, codeMeta->features, &elemType)) {
+        if (!d.readRefType(*codeMeta->types, codeMeta->features(), &elemType)) {
           return false;
         }
       } break;
@@ -2797,8 +2819,8 @@ static bool DecodeElemSegment(Decoder& d, CodeMetadata* codeMeta,
 
         seg.elemIndices.infallibleAppend(elemIndex);
         if (!isAsmJS) {
-          codeMeta->declareFuncExported(elemIndex, /*eager=*/false,
-                                        /*canRefFunc=*/true);
+          codeMeta->funcs[elemIndex].declareFuncExported(/*eager=*/false,
+                                                         /*canRefFunc=*/true);
         }
       }
     } break;
@@ -2985,7 +3007,9 @@ static bool DecodeBranchHintingSection(Decoder& d, CodeMetadata* codeMeta) {
   }
 
   // Skip this custom section if errors are encountered during parsing.
-  codeMeta->parsedBranchHints = ParseBranchHintingSection(d, codeMeta);
+  if (!ParseBranchHintingSection(d, codeMeta)) {
+    codeMeta->branchHints.setFailedAndClear();
+  }
 
   d.finishCustomSection(BranchHintingSectionName, *range);
   return true;
@@ -3375,14 +3399,15 @@ bool wasm::Validate(JSContext* cx, const ShareableBytes& bytecode,
   Decoder d(bytecode.bytes, 0, error);
 
   FeatureArgs features = FeatureArgs::build(cx, options);
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(features);
-  if (!codeMeta || !codeMeta->init()) {
+  SharedCompileArgs compileArgs = CompileArgs::buildForValidation(features);
+  if (!compileArgs) {
     return false;
   }
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*compileArgs)) {
     return false;
   }
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
 
   if (!DecodeModuleEnvironment(d, codeMeta, moduleMeta)) {
     return false;

@@ -1292,6 +1292,9 @@ nsresult EventStateManager::PreHandleEvent(nsPresContext* aPresContext,
     case eContentCommandInsertText:
       DoContentCommandInsertTextEvent(aEvent->AsContentCommandEvent());
       break;
+    case eContentCommandReplaceText:
+      DoContentCommandReplaceTextEvent(aEvent->AsContentCommandEvent());
+      break;
     case eContentCommandScroll:
       DoContentCommandScrollEvent(aEvent->AsContentCommandEvent());
       break;
@@ -1411,6 +1414,13 @@ void EventStateManager::NotifyTargetUserActivation(WidgetEvent* aEvent,
       }
       if (inputEvent->IsAlt()) {
         modifiers.SetAlt();
+      }
+
+      WidgetMouseEvent* mouseEvent = inputEvent->AsMouseEvent();
+      if (mouseEvent) {
+        if (mouseEvent->mButton == MouseButton::eMiddle) {
+          modifiers.SetMiddleMouse();
+        }
       }
     }
   }
@@ -2271,9 +2281,8 @@ void EventStateManager::FireContextClick() {
         }
       }
     } else if (mGestureDownContent->IsHTMLElement()) {
-      nsCOMPtr<nsIFormControl> formCtrl(do_QueryInterface(mGestureDownContent));
-
-      if (formCtrl) {
+      if (const auto* formCtrl =
+              nsIFormControl::FromNode(mGestureDownContent)) {
         allowedToDispatch =
             formCtrl->IsTextControl(/*aExcludePassword*/ false) ||
             formCtrl->ControlType() == FormControlType::InputFile;
@@ -2285,17 +2294,7 @@ void EventStateManager::FireContextClick() {
 
     if (allowedToDispatch) {
       // init the event while mCurrentTarget is still good
-      Maybe<WidgetPointerEvent> pointerEvent;
-      Maybe<WidgetMouseEvent> mouseEvent;
-      if (StaticPrefs::
-              dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-        pointerEvent.emplace(true, eContextMenu, targetWidget);
-      } else {
-        mouseEvent.emplace(true, eContextMenu, targetWidget,
-                           WidgetMouseEvent::eReal);
-      }
-      WidgetMouseEvent& event =
-          pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+      WidgetPointerEvent event(true, eContextMenu, targetWidget);
       event.mClickCount = 1;
       FillInEventFromGestureDown(&event);
 
@@ -2582,7 +2581,8 @@ void EventStateManager::GenerateDragGesture(nsPresContext* aPresContext,
   if (!window) return;
 
   RefPtr<DataTransfer> dataTransfer =
-      new DataTransfer(window, eDragStart, false, -1);
+      new DataTransfer(window, eDragStart, /* aIsExternal */ false,
+                       /* aClipboardType */ Nothing());
   auto protectDataTransfer = MakeScopeExit([&] {
     if (dataTransfer) {
       dataTransfer->Disconnect();
@@ -2904,9 +2904,9 @@ bool EventStateManager::DoDefaultDragStart(
   // use InvokeDragSessionWithImage if a custom image was set or something
   // other than a selection is being dragged.
   if (!dragImage && aSelection) {
-    dragService->InvokeDragSessionWithSelection(aSelection, aPrincipal, aCsp,
-                                                aCookieJarSettings, transArray,
-                                                action, event, dataTransfer);
+    dragService->InvokeDragSessionWithSelection(
+        aSelection, aPrincipal, aCsp, aCookieJarSettings, transArray, action,
+        event, dataTransfer, dragTarget);
   } else if (aDragStartData) {
     MOZ_ASSERT(XRE_IsParentProcess());
     dragService->InvokeDragSessionWithRemoteImage(
@@ -6142,7 +6142,7 @@ nsresult EventStateManager::HandleMiddleClickPaste(
   // Don't modify selection here because we've already set caret to the point
   // at "mousedown" event.
 
-  int32_t clipboardType = nsIClipboard::kGlobalClipboard;
+  nsIClipboard::ClipboardType clipboardType = nsIClipboard::kGlobalClipboard;
   nsCOMPtr<nsIClipboard> clipboardService =
       do_GetService("@mozilla.org/widget/clipboard;1");
   if (clipboardService && clipboardService->IsClipboardTypeSupported(
@@ -6153,8 +6153,8 @@ nsresult EventStateManager::HandleMiddleClickPaste(
   // Fire ePaste event by ourselves since we need to dispatch "paste" event
   // even if the middle click event was consumed for compatibility with
   // Chromium.
-  if (!nsCopySupport::FireClipboardEvent(ePaste, clipboardType, aPresShell,
-                                         selection)) {
+  if (!nsCopySupport::FireClipboardEvent(ePaste, Some(clipboardType),
+                                         aPresShell, selection)) {
     *aStatus = nsEventStatus_eConsumeNoDefault;
     return NS_OK;
   }
@@ -6838,6 +6838,85 @@ nsresult EventStateManager::DoContentCommandInsertTextEvent(
   nsresult rv = activeEditor->InsertTextAsAction(aEvent->mString.ref());
   aEvent->mIsEnabled = rv != NS_SUCCESS_DOM_NO_OPERATION;
   aEvent->mSucceeded = NS_SUCCEEDED(rv);
+  return NS_OK;
+}
+
+nsresult EventStateManager::DoContentCommandReplaceTextEvent(
+    WidgetContentCommandEvent* aEvent) {
+  MOZ_ASSERT(aEvent);
+  MOZ_ASSERT(aEvent->mMessage == eContentCommandReplaceText);
+  MOZ_DIAGNOSTIC_ASSERT(aEvent->mString.isSome());
+  MOZ_DIAGNOSTIC_ASSERT(!aEvent->mString.ref().IsEmpty());
+
+  aEvent->mIsEnabled = false;
+  aEvent->mSucceeded = false;
+
+  NS_ENSURE_TRUE(mPresContext, NS_ERROR_NOT_AVAILABLE);
+
+  if (XRE_IsParentProcess()) {
+    // Handle it in focused content process if there is.
+    if (BrowserParent* remote = BrowserParent::GetFocused()) {
+      Unused << remote->SendReplaceText(
+          aEvent->mSelection.mReplaceSrcString, aEvent->mString.ref(),
+          aEvent->mSelection.mOffset, aEvent->mSelection.mPreventSetSelection);
+      aEvent->mIsEnabled = true;  // XXX it can be a lie...
+      aEvent->mSucceeded = true;
+      return NS_OK;
+    }
+  }
+
+  // If there is no active editor in this process, we should treat the command
+  // is disabled.
+  RefPtr<EditorBase> activeEditor =
+      nsContentUtils::GetActiveEditor(mPresContext);
+  if (NS_WARN_IF(!activeEditor)) {
+    aEvent->mSucceeded = true;
+    return NS_OK;
+  }
+
+  RefPtr<TextComposition> composition =
+      IMEStateManager::GetTextCompositionFor(mPresContext);
+  if (NS_WARN_IF(composition)) {
+    // We don't support replace text action during composition.
+    aEvent->mSucceeded = true;
+    return NS_OK;
+  }
+
+  ContentEventHandler handler(mPresContext);
+  RefPtr<nsRange> range = handler.GetRangeFromFlatTextOffset(
+      aEvent, aEvent->mSelection.mOffset,
+      aEvent->mSelection.mReplaceSrcString.Length());
+  if (NS_WARN_IF(!range)) {
+    aEvent->mSucceeded = false;
+    return NS_OK;
+  }
+
+  // If original replacement text isn't matched with selection text, throws
+  // error.
+  nsAutoString targetStr;
+  nsresult rv = handler.GenerateFlatTextContent(range, targetStr);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aEvent->mSucceeded = false;
+    return NS_OK;
+  }
+  if (!aEvent->mSelection.mReplaceSrcString.Equals(targetStr)) {
+    aEvent->mSucceeded = false;
+    return NS_OK;
+  }
+
+  rv = activeEditor->ReplaceTextAsAction(
+      aEvent->mString.ref(), range,
+      TextEditor::AllowBeforeInputEventCancelable::Yes,
+      aEvent->mSelection.mPreventSetSelection
+          ? EditorBase::PreventSetSelection::Yes
+          : EditorBase::PreventSetSelection::No);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aEvent->mSucceeded = false;
+    return NS_OK;
+  }
+
+  aEvent->mIsEnabled = rv != NS_SUCCESS_DOM_NO_OPERATION;
+  aEvent->mSucceeded = true;
   return NS_OK;
 }
 

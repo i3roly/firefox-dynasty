@@ -37,7 +37,8 @@ nsClipboardProxy::nsClipboardProxy() : mClipboardCaps(false, false, false) {}
 
 NS_IMETHODIMP
 nsClipboardProxy::SetData(nsITransferable* aTransferable,
-                          nsIClipboardOwner* anOwner, int32_t aWhichClipboard,
+                          nsIClipboardOwner* anOwner,
+                          nsIClipboard::ClipboardType aWhichClipboard,
                           mozilla::dom::WindowContext* aWindowContext) {
 #if defined(ACCESSIBILITY) && defined(XP_WIN)
   a11y::Compatibility::SuppressA11yForClipboardCopy();
@@ -53,7 +54,8 @@ nsClipboardProxy::SetData(nsITransferable* aTransferable,
 }
 
 NS_IMETHODIMP nsClipboardProxy::AsyncSetData(
-    int32_t aWhichClipboard, mozilla::dom::WindowContext* aSettingWindowContext,
+    nsIClipboard::ClipboardType aWhichClipboard,
+    mozilla::dom::WindowContext* aSettingWindowContext,
     nsIAsyncClipboardRequestCallback* aCallback,
     nsIAsyncSetClipboardData** _retval) {
   RefPtr<ClipboardWriteRequestChild> request =
@@ -66,7 +68,7 @@ NS_IMETHODIMP nsClipboardProxy::AsyncSetData(
 
 NS_IMETHODIMP
 nsClipboardProxy::GetData(nsITransferable* aTransferable,
-                          int32_t aWhichClipboard,
+                          nsIClipboard::ClipboardType aWhichClipboard,
                           mozilla::dom::WindowContext* aWindowContext) {
   MOZ_DIAGNOSTIC_ASSERT(aWindowContext && aWindowContext->IsInProcess(),
                         "content clipboard reads must be associated with an "
@@ -228,7 +230,8 @@ CreateClipboardDataSnapshotProxy(
 }  // namespace
 
 NS_IMETHODIMP nsClipboardProxy::GetDataSnapshot(
-    const nsTArray<nsCString>& aFlavorList, int32_t aWhichClipboard,
+    const nsTArray<nsCString>& aFlavorList,
+    nsIClipboard::ClipboardType aWhichClipboard,
     mozilla::dom::WindowContext* aRequestingWindowContext,
     nsIPrincipal* aRequestingPrincipal,
     nsIClipboardGetDataSnapshotCallback* aCallback) {
@@ -269,7 +272,8 @@ NS_IMETHODIMP nsClipboardProxy::GetDataSnapshot(
 }
 
 NS_IMETHODIMP nsClipboardProxy::GetDataSnapshotSync(
-    const nsTArray<nsCString>& aFlavorList, int32_t aWhichClipboard,
+    const nsTArray<nsCString>& aFlavorList,
+    nsIClipboard::ClipboardType aWhichClipboard,
     mozilla::dom::WindowContext* aRequestingWindowContext,
     nsIClipboardDataSnapshot** _retval) {
   *_retval = nullptr;
@@ -298,15 +302,15 @@ NS_IMETHODIMP nsClipboardProxy::GetDataSnapshotSync(
 }
 
 NS_IMETHODIMP
-nsClipboardProxy::EmptyClipboard(int32_t aWhichClipboard) {
+nsClipboardProxy::EmptyClipboard(nsIClipboard::ClipboardType aWhichClipboard) {
   ContentChild::GetSingleton()->SendEmptyClipboard(aWhichClipboard);
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsClipboardProxy::HasDataMatchingFlavors(const nsTArray<nsCString>& aFlavorList,
-                                         int32_t aWhichClipboard,
-                                         bool* aHasType) {
+nsClipboardProxy::HasDataMatchingFlavors(
+    const nsTArray<nsCString>& aFlavorList,
+    nsIClipboard::ClipboardType aWhichClipboard, bool* aHasType) {
   *aHasType = false;
 
   ContentChild::GetSingleton()->SendClipboardHasType(aFlavorList,
@@ -316,8 +320,8 @@ nsClipboardProxy::HasDataMatchingFlavors(const nsTArray<nsCString>& aFlavorList,
 }
 
 NS_IMETHODIMP
-nsClipboardProxy::IsClipboardTypeSupported(int32_t aWhichClipboard,
-                                           bool* aIsSupported) {
+nsClipboardProxy::IsClipboardTypeSupported(
+    nsIClipboard::ClipboardType aWhichClipboard, bool* aIsSupported) {
   switch (aWhichClipboard) {
     case kGlobalClipboard:
       // We always support the global clipboard.

@@ -15,7 +15,7 @@
 #include "nsCOMPtr.h"
 #include "nsView.h"
 #include "nsCaret.h"
-#include "nsITextControlFrame.h"
+#include "nsFocusManager.h"
 #include "nsContentCreatorFunctions.h"
 #include "nsTextControlFrame.h"
 #include "nsIControllers.h"
@@ -61,7 +61,6 @@ namespace mozilla {
 using namespace dom;
 using ValueSetterOption = TextControlState::ValueSetterOption;
 using ValueSetterOptions = TextControlState::ValueSetterOptions;
-using SelectionDirection = nsITextControlFrame::SelectionDirection;
 
 /*****************************************************************************
  * TextControlElement
@@ -860,7 +859,7 @@ void TextInputListener::OnSelectionChange(Selection& aSelection,
   mSelectionWasCollapsed = collapsed;
 
   if (!weakFrame.IsAlive() || !mFrame ||
-      !nsContentUtils::IsFocusedContent(mFrame->GetContent())) {
+      nsFocusManager::GetFocusedElementStatic() != mFrame->GetContent()) {
     return;
   }
 
@@ -1264,10 +1263,9 @@ class MOZ_STACK_CLASS AutoTextControlHandlingState {
     }
     // The new value never includes line breaks caused by hard-wrap.
     // So, mCachedValue can always cache the new value.
-    nsITextControlFrame* textControlFrame =
+    nsTextControlFrame* textControlFrame =
         do_QueryFrame(mTextControlFrame.GetFrame());
-    return static_cast<nsTextControlFrame*>(textControlFrame)
-                   ->CacheValue(mSettingValue, fallible)
+    return textControlFrame->CacheValue(mSettingValue, fallible)
                ? NS_OK
                : NS_ERROR_OUT_OF_MEMORY;
   }
@@ -2399,8 +2397,7 @@ void TextControlState::UnbindFromFrame(nsTextControlFrame* aFrame) {
     uint32_t start = 0, end = 0;
     GetSelectionRange(&start, &end, IgnoreErrors());
 
-    nsITextControlFrame::SelectionDirection direction =
-        GetSelectionDirection(IgnoreErrors());
+    SelectionDirection direction = GetSelectionDirection(IgnoreErrors());
 
     SelectionProperties& props = GetSelectionProperties();
     props.SetMaxLength(value.Length());
@@ -2812,8 +2809,7 @@ bool TextControlState::SetValueWithTextEditor(
         aHandlingSetValue.GetSettingValue(), nullptr,
         StaticPrefs::dom_input_event_allow_to_cancel_set_user_input()
             ? TextEditor::AllowBeforeInputEventCancelable::Yes
-            : TextEditor::AllowBeforeInputEventCancelable::No,
-        nullptr);
+            : TextEditor::AllowBeforeInputEventCancelable::No);
     NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                          "EditorBase::ReplaceTextAsAction() failed");
     return rv != NS_ERROR_OUT_OF_MEMORY;

@@ -23,10 +23,30 @@ backup-file-name = { -brand-product-name }Backup
 
 settings-data-backup-header = Backup
 settings-data-backup-toggle = Manage backup
+settings-data-backup-scheduled-backups-on = Backup: ON
+settings-data-backup-scheduled-backups-off = Backup: OFF
+settings-data-backup-scheduled-backups-description = Automatically protect your bookmarks, history, and other data. <a data-l10n-name="support-link">Learn more</a>
+settings-data-backup-last-backup-date = Last backup: { DATETIME($date, timeStyle: "short") }, { DATETIME($date, dateStyle: "short") }
+# "Location" refers to the folder where backups are being written to.
+settings-data-backup-last-backup-location = Location
+settings-data-backup-last-backup-location-show-in-folder = Show in folder
+settings-data-backup-last-backup-location-edit = Edit…
+
+# Variables:
+#   $fileName (String) - The file name of the last backup that was created.
+settings-data-backup-last-backup-filename = Filename: { $fileName }
 
 settings-data-backup-restore-header = Restore your data
-settings-data-backup-restore-description = Use a { -brand-short-name } backup from another device to restore your data.
-settings-data-backup-restore-choose = Choose backup file…
+
+## These strings are shown under the header if scheduled backups are disabled.
+
+settings-data-backup-scheduled-backups-off-restore-description = Use a { -brand-product-name } backup from another device to restore your data.
+settings-data-backup-scheduled-backups-off-restore-choose = Choose backup file…
+
+## These strings are shown under the header if scheduled backups are enabled.
+
+settings-data-backup-scheduled-backups-on-restore-description = Recover your { -brand-product-name } data back from the last time it was backed up.
+settings-data-backup-scheduled-backups-on-restore-choose = Restore…
 
 settings-data-toggle-encryption-label = Back up your sensitive data
 settings-data-toggle-encryption-description = Back up your passwords, payment methods, and cookies with encryption.
@@ -90,6 +110,51 @@ restore-from-backup-password-description = This unlocks your encrypted backup.
 
 restore-from-backup-cancel-button = Cancel
 restore-from-backup-confirm-button = Restore and restart
+restore-from-backup-restoring-button = Restoring…
+
+## These strings are displayed in a small error message bar in the settings
+## menu if there was an error when trying to restore a backed up profile
+
+# User is not authorized to restore a particular backup file, usually because
+# the backup file is encrypted and the user provided a recovery password that
+# was different than the password the user configured for their backup file
+restore-from-backup-error-incorrect-password =
+    .heading = Unauthorized
+    .message = The password you entered was incorrect. Please try again.
+
+# The backup file (or specific data files within the backup file) could not be
+# loaded and parsed correctly, most likely due to data corruption of the
+# backup file itself
+restore-from-backup-error-corrupt-file =
+    .heading = This file isn’t working
+    .message = There was a problem with your backup file. Choose a different file and try again.
+
+# The backup file cannot be restored. The currently running application may
+# be too old and may not support features in the backed up profile.
+# Alternatively, the backup file may be too old and some of the feature in
+# the backed up profile may no longer be supported.
+restore-from-backup-error-unsupported-version =
+    .heading = This file isn’t working
+    .message = The file you chose isn’t compatible with this version of { -brand-short-name }. Choose a different file and try again.
+
+# The backup file cannot be restored. The currently running application is not
+# the same application that created the backup file (e.g. Firefox cannot
+# restore a Thunderbird profile backup).
+restore-from-backup-error-unsupported-application =
+    .heading = This file isn’t working
+    .message = The file you chose was not created by { -brand-short-name }. Choose a different file and try again.
+
+# Recovery from backup did not succeed. Potential causes could be file system
+# errors, internal code errors, decryption errors, etc.
+restore-from-backup-error-recovery-failed =
+    .heading = { -brand-short-name } couldn’t restore
+    .message = Restart { -brand-short-name } and try restoring your backup again.
+
+# There was some error in the backup service but we don't have a more specific
+# idea of what went wrong
+restore-from-backup-error-went-wrong =
+    .heading = Something went wrong
+    .message = There was a problem restoring { -brand-short-name }. Please try again or restart { -brand-short-name }.
 
 ## These strings are displayed in a modal when users want to enable encryption or change the password for an existing backup.
 
@@ -105,6 +170,21 @@ enable-backup-encryption-cancel-button = Cancel
 enable-backup-encryption-confirm-button = Save
 
 change-backup-encryption-header = Change backup password
+
+## These strings are displayed in a tooltip showing what requirements are met while creating a password.
+
+password-rules-header = Password requirements
+password-rules-length-description = At least 8 characters
+password-rules-email-description = Not your email address
+password-rules-common-description = Not a commonly used password
+password-rules-disclaimer = Stay safe — don’t reuse passwords. See more tips to <a data-l10n-name="password-support-link">create strong passwords</a>.
+
+## These strings are only used for assistive technologies, like screen readers, in the password requirements tooltip.
+
+password-rules-a11y-success =
+    .alt = Success
+password-rules-a11y-warning =
+    .alt = Warning
 
 ## These strings are displayed in a modal when users want to disable encryption for an existing backup.
 

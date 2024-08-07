@@ -51,6 +51,11 @@ pub enum RequestBuilder<'a> {
     /// Gzip and POST a file's contents.
     #[allow(unused)]
     GzipAndPostFile { file: &'a Path },
+    /// Send a POST.
+    Post {
+        body: &'a [u8],
+        headers: &'a [(String, String)],
+    },
 }
 
 /// A single mime part to send.
@@ -169,6 +174,14 @@ impl RequestBuilder<'_> {
                 let encoder = flate2::read::GzEncoder::new(File::open(file)?, Default::default());
                 stdin = Some(Box::new(encoder));
             }
+            Self::Post { body, headers } => {
+                for (k, v) in headers.iter() {
+                    cmd.args(["--header", &format!("{k}: {v}")]);
+                }
+
+                cmd.args(["--data-binary", "@-"]);
+                stdin = Some(Box::new(std::io::Cursor::new(body.to_vec())));
+            }
         }
 
         cmd.arg(url);
@@ -213,6 +226,15 @@ impl RequestBuilder<'_> {
                 let mut data = Vec::new();
                 encoder.read_to_end(&mut data)?;
                 easy.set_postfields(data)?;
+            }
+            Self::Post { body, headers } => {
+                let mut header_list = easy.slist();
+                for (k, v) in headers.iter() {
+                    header_list.append(&format!("{k}: {v}"))?;
+                }
+                easy.set_headers(header_list)?;
+
+                easy.set_postfields(*body)?;
             }
         }
 

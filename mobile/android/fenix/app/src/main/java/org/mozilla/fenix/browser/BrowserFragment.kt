@@ -25,15 +25,16 @@ import mozilla.components.browser.thumbnails.BrowserThumbnails
 import mozilla.components.browser.toolbar.BrowserToolbar
 import mozilla.components.concept.engine.permission.SitePermissions
 import mozilla.components.concept.toolbar.Toolbar
+import mozilla.components.feature.accounts.push.SendTabUseCases
 import mozilla.components.feature.app.links.AppLinksUseCases
 import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.readerview.ReaderViewFeature
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.tabs.WindowFeature
-import mozilla.components.service.glean.private.NoExtras
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.utils.ext.isLandscape
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.AddressToolbar
 import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Shopping
@@ -208,6 +209,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         standardSnackbarErrorBinding.set(
             feature = StandardSnackbarErrorBinding(
                 requireActivity(),
+                binding.dynamicSnackbarContainer,
                 requireActivity().components.appStore,
             ),
             owner = viewLifecycleOwner,
@@ -216,10 +218,12 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
 
         snackbarBinding.set(
             feature = SnackbarBinding(
+                context = context,
                 browserStore = context.components.core.store,
                 appStore = context.components.appStore,
                 snackbarDelegate = FenixSnackbarDelegate(binding.dynamicSnackbarContainer),
                 navController = findNavController(),
+                sendTabUseCases = SendTabUseCases(requireComponents.backgroundServices.accountManager),
                 customTabSessionId = customTabSessionId,
             ),
             owner = this,
@@ -410,37 +414,40 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         )
     }
 
-    // Adds a home button to BrowserToolbar or, if FeltPrivateBrowsing is enabled, a clear data button instead.
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun addLeadingAction(
         context: Context,
-        feltPrivateBrowsingEnabled: Boolean,
-        isPrivate: Boolean,
+        showHomeButton: Boolean,
+        showEraseButton: Boolean,
     ) {
-        if (leadingAction == null) {
-            leadingAction = if (isPrivate && feltPrivateBrowsingEnabled) {
-                BrowserToolbar.Button(
-                    imageDrawable = AppCompatResources.getDrawable(
-                        context,
-                        R.drawable.mozac_ic_data_clearance_24,
-                    )!!,
-                    contentDescription = context.getString(R.string.browser_toolbar_erase),
-                    iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                    listener = browserToolbarInteractor::onEraseButtonClicked,
-                )
-            } else {
-                BrowserToolbar.Button(
-                    imageDrawable = AppCompatResources.getDrawable(
-                        context,
-                        R.drawable.mozac_ic_home_24,
-                    )!!,
-                    contentDescription = context.getString(R.string.browser_toolbar_home),
-                    iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                    listener = browserToolbarInteractor::onHomeButtonClicked,
-                )
-            }.also {
-                browserToolbarView.view.addNavigationAction(it)
-            }
+        if (leadingAction != null) return
+
+        leadingAction = if (showEraseButton) {
+            BrowserToolbar.Button(
+                imageDrawable = AppCompatResources.getDrawable(
+                    context,
+                    R.drawable.mozac_ic_data_clearance_24,
+                )!!,
+                contentDescription = context.getString(R.string.browser_toolbar_erase),
+                iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
+                listener = browserToolbarInteractor::onEraseButtonClicked,
+            )
+        } else if (showHomeButton) {
+            BrowserToolbar.Button(
+                imageDrawable = AppCompatResources.getDrawable(
+                    context,
+                    R.drawable.mozac_ic_home_24,
+                )!!,
+                contentDescription = context.getString(R.string.browser_toolbar_home),
+                iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
+                listener = browserToolbarInteractor::onHomeButtonClicked,
+            )
+        } else {
+            null
+        }
+
+        leadingAction?.let {
+            browserToolbarView.view.addNavigationAction(it)
         }
     }
 
@@ -510,11 +517,14 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         feltPrivateBrowsingEnabled: Boolean,
         context: Context,
     ) {
-        if (!redesignEnabled || isLandscape || isTablet) {
+        val showHomeButton = !redesignEnabled
+        val showEraseButton = feltPrivateBrowsingEnabled && isPrivate && (isLandscape || isTablet)
+
+        if (showHomeButton || showEraseButton) {
             addLeadingAction(
-                isPrivate = isPrivate,
-                feltPrivateBrowsingEnabled = feltPrivateBrowsingEnabled,
                 context = context,
+                showHomeButton = showHomeButton,
+                showEraseButton = showEraseButton,
             )
         } else {
             removeLeadingAction()
@@ -812,7 +822,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 FenixSnackbar.make(
                     view = binding.dynamicSnackbarContainer,
                     duration = Snackbar.LENGTH_SHORT,
-                    isDisplayedWithBrowserToolbar = true,
                 )
                     .setText(view.context.getString(messageStringRes))
                     .setAction(requireContext().getString(R.string.create_collection_view)) {

@@ -276,6 +276,7 @@
   MACRO_(ignorePunctuation, "ignorePunctuation")                               \
   MACRO_(implements, "implements")                                             \
   MACRO_(import, "import")                                                     \
+  MACRO_(importedStringConstants, "importedStringConstants")                   \
   MACRO2(in, "in")                                                             \
   MACRO_(includes, "includes")                                                 \
   MACRO_(incumbentGlobal, "incumbentGlobal")                                   \
@@ -445,6 +446,7 @@
   MACRO2(of, "of")                                                             \
   MACRO_(offset, "offset")                                                     \
   MACRO2(ok, "ok")                                                             \
+  MACRO_(omitPadding, "omitPadding")                                           \
   MACRO_(one, "one")                                                           \
   MACRO_(optimizedOut, "optimizedOut")                                         \
   MACRO_(other, "other")                                                       \

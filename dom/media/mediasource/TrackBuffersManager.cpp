@@ -4,6 +4,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "TrackBuffersManager.h"
+
+#include <limits>
+
 #include "ContainerParser.h"
 #include "MP4Demuxer.h"
 #include "MediaInfo.h"
@@ -12,7 +16,6 @@
 #include "SourceBuffer.h"
 #include "SourceBufferResource.h"
 #include "SourceBufferTask.h"
-#include "TrackBuffersManager.h"
 #include "WebMDemuxer.h"
 #include "mozilla/ErrorResult.h"
 #include "mozilla/Preferences.h"
@@ -20,8 +23,6 @@
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/StaticPrefs_media.h"
 #include "nsMimeTypes.h"
-
-#include <limits>
 
 extern mozilla::LogModule* GetMediaSourceLog();
 
@@ -51,19 +52,6 @@ using media::TimeIntervals;
 using media::TimeUnit;
 using AppendBufferResult = SourceBufferTask::AppendBufferResult;
 using AppendState = SourceBufferAttributes::AppendState;
-
-static const char* AppendStateToStr(AppendState aState) {
-  switch (aState) {
-    case AppendState::WAITING_FOR_SEGMENT:
-      return "WAITING_FOR_SEGMENT";
-    case AppendState::PARSING_INIT_SEGMENT:
-      return "PARSING_INIT_SEGMENT";
-    case AppendState::PARSING_MEDIA_SEGMENT:
-      return "PARSING_MEDIA_SEGMENT";
-    default:
-      return "IMPOSSIBLE";
-  }
-}
 
 static Atomic<uint32_t> sStreamSourceID(0u);
 
@@ -622,7 +610,7 @@ void TrackBuffersManager::DoEvictData(const TimeUnit& aPlaybackTime,
         if (frame->mKeyframe) {
           lastKeyFrameIndex = i;
           toEvict -= partialEvict;
-          if (toEvict < 0) {
+          if (toEvict <= 0) {
             break;
           }
           partialEvict = 0;
@@ -656,7 +644,7 @@ void TrackBuffersManager::DoEvictData(const TimeUnit& aPlaybackTime,
     if (frame->mKeyframe) {
       lastKeyFrameIndex = i;
       toEvict -= partialEvict;
-      if (toEvict < 0) {
+      if (toEvict <= 0) {
         break;
       }
       partialEvict = 0;
@@ -704,9 +692,9 @@ void TrackBuffersManager::DoEvictData(const TimeUnit& aPlaybackTime,
   // Don't evict before the end of the current segment
   TimeUnit upperLimit = futureBuffered[0].mEnd;
   uint32_t evictedFramesStartIndex = buffer.Length();
-  for (uint32_t i = buffer.Length() - 1; i-- > 0;) {
+  for (uint32_t i = buffer.Length(); i-- > 0;) {
     const auto& frame = buffer[i];
-    if (frame->mTime <= upperLimit || toEvict < 0) {
+    if (frame->mTime <= upperLimit || toEvict <= 0) {
       // We've reached a frame that shouldn't be evicted -> Evict after it ->
       // i+1. Or the previous loop reached the eviction threshold -> Evict from
       // it -> i+1.
@@ -2780,8 +2768,9 @@ TrackBuffersManager::GetTracksList() const {
 
 void TrackBuffersManager::SetAppendState(AppendState aAppendState) {
   MSE_DEBUG("AppendState changed from %s to %s",
-            AppendStateToStr(mSourceBufferAttributes->GetAppendState()),
-            AppendStateToStr(aAppendState));
+            SourceBufferAttributes::EnumValueToString(
+                mSourceBufferAttributes->GetAppendState()),
+            SourceBufferAttributes::EnumValueToString(aAppendState));
   mSourceBufferAttributes->SetAppendState(aAppendState);
 }
 
@@ -3010,7 +2999,7 @@ uint32_t TrackBuffersManager::SkipToNextRandomAccessPoint(
   } else if (i > 0) {
     // Go back to the previous keyframe or the original position so the next
     // demux can succeed and be decoded.
-    for (uint32_t j = i - 1; j-- > originalPos;) {
+    for (uint32_t j = i; j-- > originalPos;) {
       const RefPtr<MediaRawData>& sample = track[j];
       if (sample->mKeyframe) {
         trackData.mNextSampleTimecode = sample->mTimecode;

@@ -85,18 +85,13 @@ static void ReportTier2ResultsOffThread(bool success,
 }
 
 class Module::Tier2GeneratorTaskImpl : public Tier2GeneratorTask {
-  SharedCompileArgs compileArgs_;
   SharedBytes bytecode_;
   SharedModule module_;
   Atomic<bool> cancelled_;
 
  public:
-  Tier2GeneratorTaskImpl(const CompileArgs& compileArgs,
-                         const ShareableBytes& bytecode, Module& module)
-      : compileArgs_(&compileArgs),
-        bytecode_(&bytecode),
-        module_(&module),
-        cancelled_(false) {}
+  Tier2GeneratorTaskImpl(const ShareableBytes& bytecode, Module& module)
+      : bytecode_(&bytecode), module_(&module), cancelled_(false) {}
 
   ~Tier2GeneratorTaskImpl() override {
     module_->tier2Listener_ = nullptr;
@@ -116,14 +111,14 @@ class Module::Tier2GeneratorTaskImpl : public Tier2GeneratorTask {
       // okay.
       UniqueChars error;
       UniqueCharsVector warnings;
-      bool success = CompileTier2(*compileArgs_, bytecode_->bytes, *module_,
-                                  &error, &warnings, &cancelled_);
+      bool success = CompileCompleteTier2(bytecode_->bytes, *module_, &error,
+                                          &warnings, &cancelled_);
       if (!cancelled_) {
         // We could try to dispatch a runnable to the thread that started this
         // compilation, so as to report the warning/error using a JSContext*.
         // For now we just report to stderr.
-        ReportTier2ResultsOffThread(success, compileArgs_->scriptedCaller,
-                                    error, warnings);
+        ReportTier2ResultsOffThread(
+            success, module_->codeMeta().scriptedCaller(), error, warnings);
       }
     }
 
@@ -148,11 +143,11 @@ Module::~Module() {
   MOZ_ASSERT(!testingTier2Active_);
 }
 
-void Module::startTier2(const CompileArgs& args, const ShareableBytes& bytecode,
+void Module::startTier2(const ShareableBytes& bytecode,
                         JS::OptimizedEncodingListener* listener) {
   MOZ_ASSERT(!testingTier2Active_);
 
-  auto task = MakeUnique<Tier2GeneratorTaskImpl>(args, bytecode, *this);
+  auto task = MakeUnique<Tier2GeneratorTaskImpl>(bytecode, *this);
   if (!task) {
     return;
   }
@@ -165,10 +160,10 @@ void Module::startTier2(const CompileArgs& args, const ShareableBytes& bytecode,
   StartOffThreadWasmTier2Generator(std::move(task));
 }
 
-bool Module::finishTier2(const LinkData& sharedStubsLinkData,
-                         const LinkData& linkData2,
-                         UniqueCodeBlock code2) const {
-  if (!code_->finishCompleteTier2(linkData2, std::move(code2))) {
+bool Module::finishTier2(UniqueCodeBlock tier2CodeBlock,
+                         UniqueLinkData tier2LinkData) const {
+  if (!code_->finishTier2(std::move(tier2CodeBlock),
+                          std::move(tier2LinkData))) {
     return false;
   }
 
@@ -176,9 +171,9 @@ bool Module::finishTier2(const LinkData& sharedStubsLinkData,
   // purposes so that wasmHasTier2CompilationCompleted() only returns true
   // after tier-2 has been fully cached.
 
-  if (tier2Listener_) {
+  if (tier2Listener_ && code_->codeMeta().features().builtinModules.hasNone()) {
     Bytes bytes;
-    if (serialize(sharedStubsLinkData, linkData2, &bytes)) {
+    if (serialize(&bytes)) {
       tier2Listener_->storeOptimizedEncoding(bytes.begin(), bytes.length());
     }
     tier2Listener_ = nullptr;
@@ -393,8 +388,8 @@ bool Module::instantiateFunctions(JSContext* cx,
     Instance& instance = ExportedFunctionToInstance(f);
 
     const TypeDef& exportFuncType =
-        instance.code().getFuncExportTypeDef(funcIndex);
-    const TypeDef& importFuncType = code().getFuncImportTypeDef(i);
+        instance.code().codeMeta().getFuncTypeDef(funcIndex);
+    const TypeDef& importFuncType = code().codeMeta().getFuncTypeDef(i);
 
     if (!TypeDef::isSubTypeOf(&exportFuncType, &importFuncType)) {
       const Import& import = FindImportFunction(moduleMeta().imports, i);
@@ -571,7 +566,13 @@ bool Module::instantiateImportedTable(JSContext* cx, const TableDesc& td,
   MOZ_ASSERT(!codeMeta().isAsmJS());
 
   Table& table = tableObj->table();
-  if (!CheckLimits(cx, td.initialLength, td.maximumLength,
+  if (table.indexType() != td.indexType()) {
+    JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
+                             JSMSG_WASM_BAD_IMP_INDEX,
+                             ToString(tableObj->table().indexType()));
+    return false;
+  }
+  if (!CheckLimits(cx, td.initialLength(), td.maximumLength(),
                    /* declaredMin */ MaxTableLimitField,
                    /* actualLength */ table.length(), table.maximum(),
                    codeMeta().isAsmJS(), "Table")) {
@@ -594,7 +595,7 @@ bool Module::instantiateImportedTable(JSContext* cx, const TableDesc& td,
 bool Module::instantiateLocalTable(JSContext* cx, const TableDesc& td,
                                    WasmTableObjectVector* tableObjs,
                                    SharedTableVector* tables) const {
-  if (td.initialLength > MaxTableLength) {
+  if (td.initialLength() > MaxTableLength) {
     JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                              JSMSG_WASM_TABLE_IMP_LIMIT);
     return false;
@@ -604,8 +605,7 @@ bool Module::instantiateLocalTable(JSContext* cx, const TableDesc& td,
   Rooted<WasmTableObject*> tableObj(cx);
   if (td.isExported) {
     RootedObject proto(cx, &cx->global()->getPrototype(JSProto_WasmTable));
-    tableObj.set(WasmTableObject::create(cx, td.initialLength, td.maximumLength,
-                                         td.elemType, proto));
+    tableObj.set(WasmTableObject::create(cx, td.limits, td.elemType, proto));
     if (!tableObj) {
       return false;
     }
@@ -639,6 +639,7 @@ bool Module::instantiateTables(JSContext* cx,
   for (const TableDesc& td : codeMeta().tables) {
     if (tableIndex < tableImports.length()) {
       Rooted<WasmTableObject*> tableObj(cx, tableImports[tableIndex]);
+
       if (!instantiateImportedTable(cx, td, tableObj, &tableObjs.get(),
                                     tables)) {
         return false;
@@ -975,9 +976,10 @@ bool Module::instantiate(JSContext* cx, ImportValues& imports,
   JSUseCounter useCounter =
       codeMeta().isAsmJS() ? JSUseCounter::ASMJS : JSUseCounter::WASM;
   cx->runtime()->setUseCounter(instance, useCounter);
-  SetUseCountersForFeatureUsage(cx, instance, codeMeta().featureUsage);
+  SetUseCountersForFeatureUsage(cx, instance, moduleMeta().featureUsage);
 
-  if (cx->options().testWasmAwaitTier2()) {
+  if (cx->options().testWasmAwaitTier2() &&
+      code().mode() != CompileMode::LazyTiering) {
     testingBlockOnTier2Complete();
   }
 

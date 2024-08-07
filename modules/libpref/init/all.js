@@ -240,6 +240,7 @@ pref("media.videocontrols.keyboard-tab-to-all-controls", true);
   pref("media.navigator.video.use_transport_cc", true);
   pref("media.peerconnection.video.use_rtx", true);
   pref("media.peerconnection.video.use_rtx.blocklist", "doxy.me,*.doxy.me");
+  pref("media.peerconnection.sdp.quirk.duplicate_fingerprint.allowlist", "");
   pref("media.navigator.video.use_tmmbr", false);
   pref("media.navigator.audio.use_fec", true);
   pref("media.navigator.video.offer_rtcp_rsize", true);
@@ -918,6 +919,9 @@ pref("javascript.options.mem.gc_incremental_slice_ms", 5);
 // JSGC_COMPACTING_ENABLED
 pref("javascript.options.mem.gc_compacting", true);
 
+// JSGC_NURSERY_ENABLED
+pref("javascript.options.mem.gc_generational", true);
+
 #ifdef NIGHTLY_BUILD
 // JSGC_SEMISPACE_NURSERY_ENABLED
 pref("javascript.options.mem.gc_experimental_semispace_nursery", false);
@@ -1125,7 +1129,7 @@ pref("network.http.response.timeout", 300);
 // Note: the socket transport service will clamp the number below this if the OS
 // cannot allocate that many FDs
 #ifdef ANDROID
-  pref("network.http.max-connections", 40);
+  pref("network.http.max-connections", 128);
 #else
   pref("network.http.max-connections", 900);
 #endif
@@ -1597,6 +1601,7 @@ pref("intl.hyphenation-alias.af-*", "af");
 pref("intl.hyphenation-alias.bg-*", "bg");
 pref("intl.hyphenation-alias.bn-*", "bn");
 pref("intl.hyphenation-alias.ca-*", "ca");
+pref("intl.hyphenation-alias.cs-*", "cs");
 pref("intl.hyphenation-alias.cy-*", "cy");
 pref("intl.hyphenation-alias.da-*", "da");
 pref("intl.hyphenation-alias.eo-*", "eo");
@@ -1638,6 +1643,10 @@ pref("intl.hyphenation-alias.as-*", "bn");
 pref("intl.hyphenation-alias.mr", "hi");
 pref("intl.hyphenation-alias.mr-*", "hi");
 
+// Czech patterns are also used for Slovak
+pref("intl.hyphenation-alias.sk", "cs");
+pref("intl.hyphenation-alias.sk-*", "cs");
+
 // use reformed (1996) German patterns by default unless specifically tagged as de-1901
 // (these prefs may soon be obsoleted by better BCP47-based tag matching, but for now...)
 pref("intl.hyphenation-alias.de", "de-1996");
@@ -1662,12 +1671,18 @@ pref("intl.hyphenation-alias.no-*", "nb");
 pref("intl.hyphenation-alias.nb-*", "nb");
 pref("intl.hyphenation-alias.nn-*", "nn");
 
-// In German and Finnish, we allow hyphenation of capitalized words; otherwise not.
-// (Should this be extended to other languages? Should the default be changed?)
+// In German, where all proper nouns are capitalized, we allow hyphenation of
+// capitalized words.
 pref("intl.hyphenate-capitalized.de-1996", true);
 pref("intl.hyphenate-capitalized.de-1901", true);
 pref("intl.hyphenate-capitalized.de-CH", true);
+
+// Also allow hyphenation of capitalized words in some languages that tend to
+// have a a lot of long compound words.
+// (Should this be extended to other languages? Should the default be changed?)
+pref("intl.hyphenate-capitalized.af", true);
 pref("intl.hyphenate-capitalized.fi", true);
+pref("intl.hyphenate-capitalized.nl", true);
 
 // All prefs of default font should be "auto".
 pref("font.name.serif.ar", "");
@@ -1985,6 +2000,9 @@ pref("dom.ipc.processCount.webIsolated", 1);
 #else
 pref("dom.ipc.processCount.webIsolated", 4);
 #endif
+
+// For now we allow a single inference process
+pref("dom.ipc.processCount.inference", 1);
 
 // Keep a single privileged about process alive for performance reasons.
 // e.g. we do not want to throw content processes out every time we navigate
@@ -2474,9 +2492,9 @@ pref("font.size.monospace.x-math", 13);
   pref("font.name-list.sans-serif.th", "Thonburi");
   pref("font.name-list.monospace.th", "Menlo, Ayuthaya");
 
-  pref("font.name-list.serif.x-armn", "Mshtakan");
-  pref("font.name-list.sans-serif.x-armn", "Mshtakan");
-  pref("font.name-list.monospace.x-armn", "Menlo, Mshtakan");
+  pref("font.name-list.serif.x-armn", "Noto Sans Armenian");
+  pref("font.name-list.sans-serif.x-armn", "Noto Sans Armenian");
+  pref("font.name-list.monospace.x-armn", "Menlo, Noto Sans Armenian");
 
   // SolaimanLipi, Rupali http://ekushey.org/?page/mac_download
   pref("font.name-list.serif.x-beng", "Bangla MN");
@@ -2493,9 +2511,9 @@ pref("font.size.monospace.x-math", 13);
   pref("font.name-list.cursive.x-cyrillic", "Geneva");
   pref("font.name-list.fantasy.x-cyrillic", "Charcoal CY");
 
-  pref("font.name-list.serif.x-devanagari", "Devanagari MT");
-  pref("font.name-list.sans-serif.x-devanagari", "Devanagari Sangam MN, Devanagari MT");
-  pref("font.name-list.monospace.x-devanagari", "Menlo, Devanagari Sangam MN, Devanagari MT");
+  pref("font.name-list.serif.x-devanagari", "ITF Devanagari, Devanagari MT");
+  pref("font.name-list.sans-serif.x-devanagari", "Kohinoor Devanagari, Devanagari Sangam MN, Devanagari MT");
+  pref("font.name-list.monospace.x-devanagari", "Menlo, Kohinoor Devanagari, Devanagari Sangam MN, Devanagari MT");
 
   // Abyssinica SIL http://scripts.sil.org/AbyssinicaSIL_Download
   pref("font.name-list.serif.x-ethi", "Kefa, Abyssinica SIL");
@@ -2679,9 +2697,9 @@ pref("font.size.monospace.x-math", 13);
   pref("font.name-list.sans-serif.x-cyrillic", "Arial");
   pref("font.name-list.monospace.x-cyrillic", "Menlo");
 
-  pref("font.name-list.serif.x-devanagari", "Devanagari Sangam MN");
-  pref("font.name-list.sans-serif.x-devanagari", "Devanagari Sangam MN");
-  pref("font.name-list.monospace.x-devanagari", "Menlo, Devanagari Sangam MN");
+  pref("font.name-list.serif.x-devanagari", "Kohinoor Devanagari, Devanagari Sangam MN");
+  pref("font.name-list.sans-serif.x-devanagari", "Kohinoor Devanagari, Devanagari Sangam MN");
+  pref("font.name-list.monospace.x-devanagari", "Menlo, Kohinoor Devanagari, Devanagari Sangam MN");
 
   pref("font.name-list.serif.x-ethi", "Kefa");
   pref("font.name-list.sans-serif.x-ethi", "Kefa");
@@ -2767,7 +2785,6 @@ pref("font.size.monospace.x-math", 13);
 
   // Middle-mouse handling
   pref("middlemouse.paste", true);
-  pref("middlemouse.openNewWindow", true);
   pref("middlemouse.scrollbarPosition", true);
 
   // Tab focus model bit field:
@@ -2798,7 +2815,6 @@ pref("font.size.monospace.x-math", 13);
 
   // Middle-mouse handling
   pref("middlemouse.paste", true);
-  pref("middlemouse.openNewWindow", true);
   pref("middlemouse.scrollbarPosition", true);
 
   // Tab focus model bit field:
@@ -3791,6 +3807,8 @@ pref("browser.ml.logLevel", "Error");
 pref("browser.ml.modelHubRootUrl", "https://model-hub.mozilla.org/");
 // Model URL template
 pref("browser.ml.modelHubUrlTemplate", "{model}/{revision}");
+// Maximum disk size for ML model cache (in bytes)
+pref("browser.ml.modelCacheMaxSizeBytes", 1073741824);
 // Model cache timeout in ms
 pref("browser.ml.modelCacheTimeout", 120000);
 

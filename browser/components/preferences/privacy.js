@@ -511,6 +511,15 @@ var gPrivacyPane = {
     let httpsOnlyExceptionButton = document.getElementById(
       "httpsOnlyExceptionButton"
     );
+    let httpsOnlyRadioEnabled = document.getElementById(
+      "httpsOnlyRadioEnabled"
+    );
+    let httpsOnlyRadioEnabledPBM = document.getElementById(
+      "httpsOnlyRadioEnabledPBM"
+    );
+    let httpsOnlyRadioDisabled = document.getElementById(
+      "httpsOnlyRadioDisabled"
+    );
 
     if (httpsOnlyOnPref) {
       httpsOnlyRadioGroup.value = "enabled";
@@ -532,6 +541,23 @@ var gPrivacyPane = {
     ) {
       httpsOnlyRadioGroup.disabled = true;
     }
+
+    document.l10n.setAttributes(
+      httpsOnlyRadioEnabled,
+      httpsFirstOnPref ? "httpsonly-radio-enabled2" : "httpsonly-radio-enabled"
+    );
+    document.l10n.setAttributes(
+      httpsOnlyRadioEnabledPBM,
+      httpsFirstOnPref
+        ? "httpsonly-radio-enabled-pbm2"
+        : "httpsonly-radio-enabled-pbm"
+    );
+    document.l10n.setAttributes(
+      httpsOnlyRadioDisabled,
+      httpsFirstOnPref
+        ? "httpsonly-radio-disabled2"
+        : "httpsonly-radio-disabled"
+    );
   },
 
   syncToHttpsOnlyPref() {
@@ -1232,11 +1258,6 @@ var gPrivacyPane = {
         "command",
         gPrivacyPane.updateSubmitHealthReport
       );
-      setEventListener(
-        "telemetryDataDeletionLearnMore",
-        "click",
-        gPrivacyPane.showDataDeletion
-      );
       if (AppConstants.MOZ_NORMANDY) {
         this.initOptOutStudyCheckbox();
       }
@@ -1265,6 +1286,22 @@ var gPrivacyPane = {
     if (!PrivateBrowsingUtils.enabled) {
       document.getElementById("privateBrowsingAutoStart").hidden = true;
       document.querySelector("menuitem[value='dontremember']").hidden = true;
+    }
+
+    let privateBrowsingPref = Preferences.get(
+      "browser.privatebrowsing.autostart"
+    );
+
+    if (privateBrowsingPref.locked) {
+      // If permanent private browsing mode is locked to off,
+      // disable the "Never Remember History" option
+      document.querySelector("menuitem[value='dontremember']").disabled =
+        !privateBrowsingPref.value;
+
+      // If we're locked in permanent private browsing mode,
+      // disable the dropdown menu completely
+      document.getElementById("historyMode").disabled =
+        privateBrowsingPref.value;
     }
 
     /* init HTTPS-Only mode */
@@ -3362,16 +3399,6 @@ var gPrivacyPane = {
    */
   showSecurityDevices() {
     gSubDialog.open("chrome://pippki/content/device_manager.xhtml");
-  },
-
-  /**
-   * Displays the learn more health report page when a user opts out of data collection.
-   */
-  showDataDeletion() {
-    let url =
-      Services.urlFormatter.formatURLPref("app.support.baseURL") +
-      "telemetry-clientid";
-    window.open(url, "_blank");
   },
 
   initDataCollection() {

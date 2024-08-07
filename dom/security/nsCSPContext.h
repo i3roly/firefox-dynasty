@@ -74,7 +74,7 @@ class nsCSPContext : public nsIContentSecurityPolicy {
   void flushConsoleMessages();
 
   void logToConsole(const char* aName, const nsTArray<nsString>& aParams,
-                    const nsAString& aSourceName, const nsAString& aSourceLine,
+                    const nsACString& aSourceName, const nsAString& aSourceLine,
                     uint32_t aLineNumber, uint32_t aColumnNumber,
                     uint32_t aSeverityFlag);
 
@@ -99,6 +99,16 @@ class nsCSPContext : public nsIContentSecurityPolicy {
   nsresult SendReports(
       const mozilla::dom::SecurityPolicyViolationEventInit& aViolationEventInit,
       uint32_t aViolatedPolicyIndex);
+
+  nsresult SendReportsToEndpoints(
+      nsAutoString& reportGroup,
+      const mozilla::dom::SecurityPolicyViolationEventInit&
+          aViolationEventInit);
+
+  nsresult SendReportsToURIs(
+      const nsTArray<nsString>& reportURIs,
+      const mozilla::dom::SecurityPolicyViolationEventInit&
+          aViolationEventInit);
 
   nsresult FireViolationEvent(
       mozilla::dom::Element* aTriggeringElement,

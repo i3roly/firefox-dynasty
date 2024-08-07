@@ -65,7 +65,6 @@ import org.mozilla.fenix.tabstray.browser.TabSorter
 import org.mozilla.fenix.tabstray.ext.anchorWithAction
 import org.mozilla.fenix.tabstray.ext.bookmarkMessage
 import org.mozilla.fenix.tabstray.ext.collectionMessage
-import org.mozilla.fenix.tabstray.ext.make
 import org.mozilla.fenix.tabstray.ext.showWithTheme
 import org.mozilla.fenix.tabstray.syncedtabs.SyncedTabsIntegration
 import org.mozilla.fenix.theme.FirefoxTheme
@@ -167,7 +166,7 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                     selectedTabId = requireComponents.core.store.state.selectedTabId,
                 ),
                 middlewares = listOf(
-                    TabsTrayMiddleware(),
+                    TabsTrayTelemetryMiddleware(),
                 ),
             )
         }
@@ -278,7 +277,7 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                         onInactiveTabsHeaderClick = tabsTrayInteractor::onInactiveTabsHeaderClicked,
                         onDeleteAllInactiveTabsClick = tabsTrayInteractor::onDeleteAllInactiveTabsClicked,
                         onInactiveTabsAutoCloseDialogShown = {
-                            TabsTray.autoCloseSeen.record(NoExtras())
+                            tabsTrayStore.dispatch(TabsTrayAction.TabAutoCloseDialogShown)
                         },
                         onInactiveTabAutoCloseDialogCloseButtonClick =
                         tabsTrayInteractor::onAutoCloseDialogCloseButtonClicked,
@@ -293,7 +292,12 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                         onSaveToCollectionClick = tabsTrayInteractor::onAddSelectedTabsToCollectionClicked,
                         onShareSelectedTabsClick = tabsTrayInteractor::onShareSelectedTabs,
                         onShareAllTabsClick = {
-                            TabsTray.shareAllTabs.record(NoExtras())
+                            if (tabsTrayStore.state.selectedPage == Page.NormalTabs) {
+                                tabsTrayStore.dispatch(TabsTrayAction.ShareAllNormalTabs)
+                            } else if (tabsTrayStore.state.selectedPage == Page.PrivateTabs) {
+                                tabsTrayStore.dispatch(TabsTrayAction.ShareAllPrivateTabs)
+                            }
+
                             navigationInteractor.onShareTabsOfTypeClicked(
                                 private = tabsTrayStore.state.selectedPage == Page.PrivateTabs,
                             )
@@ -302,7 +306,12 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                         onRecentlyClosedClick = navigationInteractor::onOpenRecentlyClosedClicked,
                         onAccountSettingsClick = navigationInteractor::onAccountSettingsClicked,
                         onDeleteAllTabsClick = {
-                            TabsTray.closeAllTabs.record(NoExtras())
+                            if (tabsTrayStore.state.selectedPage == Page.NormalTabs) {
+                                tabsTrayStore.dispatch(TabsTrayAction.CloseAllNormalTabs)
+                            } else if (tabsTrayStore.state.selectedPage == Page.PrivateTabs) {
+                                tabsTrayStore.dispatch(TabsTrayAction.CloseAllPrivateTabs)
+                            }
+
                             navigationInteractor.onCloseAllTabsClicked(
                                 private = tabsTrayStore.state.selectedPage == Page.PrivateTabs,
                             )
@@ -314,13 +323,13 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                         onTabAutoCloseBannerViewOptionsClick = {
                             navigationInteractor.onTabSettingsClicked()
                             requireContext().settings().shouldShowAutoCloseTabsBanner = false
+                            requireContext().settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
                         },
                         onTabAutoCloseBannerDismiss = {
                             requireContext().settings().shouldShowAutoCloseTabsBanner = false
-                        },
-                        onTabAutoCloseBannerShown = {
                             requireContext().settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
                         },
+                        onTabAutoCloseBannerShown = {},
                         onMove = tabsTrayInteractor::onTabsMove,
                         shouldShowInactiveTabsCFR = {
                             requireContext().settings().shouldShowInactiveTabsOnboardingPopup &&
@@ -331,12 +340,14 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                         },
                         onInactiveTabsCFRClick = {
                             requireContext().settings().shouldShowInactiveTabsOnboardingPopup = false
+                            requireContext().settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
                             navigationInteractor.onTabSettingsClicked()
                             TabsTray.inactiveTabsCfrSettings.record(NoExtras())
                             onTabsTrayDismissed()
                         },
                         onInactiveTabsCFRDismiss = {
                             requireContext().settings().shouldShowInactiveTabsOnboardingPopup = false
+                            requireContext().settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
                             TabsTray.inactiveTabsCfrDismissed.record(NoExtras())
                         },
                     )
@@ -865,7 +876,6 @@ class TabsTrayFragment : AppCompatDialogFragment() {
         val snackbar = FenixSnackbar.make(
             view = tabsTrayComposeBinding.root,
             duration = FenixSnackbar.LENGTH_SHORT,
-            isDisplayedWithBrowserToolbar = true,
         ).setText(text)
         snackbar.view.elevation = ELEVATION
         snackbar.show()

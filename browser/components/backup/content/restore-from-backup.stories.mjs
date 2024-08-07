@@ -22,12 +22,16 @@ const Template = ({
   backupFilePath,
   backupFileToRestore,
   backupFileInfo,
+  recoveryInProgress,
+  recoveryErrorCode,
 }) => html`
   <moz-card style="width: fit-content;">
     <restore-from-backup
       .backupFilePath=${backupFilePath}
       .backupFileToRestore=${backupFileToRestore}
       .backupFileInfo=${backupFileInfo}
+      .recoveryInProgress=${recoveryInProgress}
+      .recoveryErrorCode=${recoveryErrorCode}
     ></restore-from-backup>
   </moz-card>
 `;
@@ -37,6 +41,7 @@ BackupFound.args = {
   backupFilePath: "/Some/User/Documents",
   backupFileToRestore: "/Some/User/Documents/Firefox Backup/backup.html",
   backupFileInfo: { date: new Date(), isEncrypted: null },
+  recoveryErrorCode: 0,
 };
 
 export const EncryptedBackupFound = Template.bind({});
@@ -44,6 +49,15 @@ EncryptedBackupFound.args = {
   backupFilePath: "/Some/User/Documents",
   backupFileToRestore: "/Some/User/Documents/Firefox Backup/backup.html",
   backupFileInfo: { date: new Date(), isEncrypted: true },
+  recoveryErrorCode: 0,
+};
+
+export const RecoveryInProgress = Template.bind({});
+RecoveryInProgress.args = {
+  backupFilePath: "/Some/User/Documents",
+  backupFileToRestore: "/Some/User/Documents/Firefox Backup/backup.html",
+  backupFileInfo: { date: new Date() },
+  recoveryInProgress: true,
 };
 
 export const NoBackupFound = Template.bind({});

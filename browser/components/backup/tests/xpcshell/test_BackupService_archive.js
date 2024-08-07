@@ -6,9 +6,6 @@ https://creativecommons.org/publicdomain/zero/1.0/ */
 const { ArchiveEncryptionState } = ChromeUtils.importESModule(
   "resource:///modules/backup/ArchiveEncryptionState.sys.mjs"
 );
-const { OSKeyStoreTestUtils } = ChromeUtils.importESModule(
-  "resource://testing-common/OSKeyStoreTestUtils.sys.mjs"
-);
 const { ArchiveUtils } = ChromeUtils.importESModule(
   "resource:///modules/backup/ArchiveUtils.sys.mjs"
 );
@@ -429,5 +426,59 @@ add_task(async function test_createArchive_corrupt_zip() {
   Assert.ok(
     !(await IOUtils.exists(CORRUPT_ZIP_SOURCE)),
     "Corrupt zip was deleted."
+  );
+});
+
+/**
+ * Tests that if the archive file does not contain a JSON block that
+ * BackupService.sampleArchive will reject.
+ */
+add_task(async function test_missing_JSON_block() {
+  let bs = new BackupService();
+  let missingJSONBlockFile = do_get_file("data/missing_json_block.html");
+  await Assert.rejects(
+    bs.sampleArchive(missingJSONBlockFile.path),
+    /Could not find JSON block/
+  );
+});
+
+/**
+ * Tests that if the archive file does not contain a binary block that
+ * BackupService.extractCompressedSnapshotFromArchive will reject.
+ */
+add_task(async function test_missing_binary_block() {
+  let bs = new BackupService();
+  let fakeRecoveryPath = await IOUtils.createUniqueDirectory(
+    PathUtils.tempDir,
+    "testCreateArchiveMissingBinaryBlockDest"
+  );
+
+  let missingBinaryBlockFile = do_get_file("data/missing_binary_block.html");
+  await Assert.rejects(
+    bs.extractCompressedSnapshotFromArchive(
+      missingBinaryBlockFile.path,
+      fakeRecoveryPath
+    ),
+    /Could not find binary block/
+  );
+
+  await IOUtils.remove(fakeRecoveryPath);
+});
+
+/**
+ * Tests that if the archive file is constructed in such a way that the
+ * worker ends up breaking Unicode characters in half when finding the
+ * JSON block, that we can still extract the JSON block.
+ *
+ * See bug 1906912.
+ */
+add_task(async function test_broken_unicode_characters() {
+  let bs = new BackupService();
+  let specialUnicodeFile = do_get_file("data/break_over_unicode.html");
+  let { archiveJSON } = await bs.sampleArchive(specialUnicodeFile.path);
+  Assert.ok(
+    archiveJSON,
+    "Was able to extract the JSON from the specially created file with " +
+      "unicode characters"
   );
 });

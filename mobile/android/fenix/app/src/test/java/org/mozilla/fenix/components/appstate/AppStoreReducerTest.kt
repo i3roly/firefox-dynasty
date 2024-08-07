@@ -173,4 +173,72 @@ class AppStoreReducerTest {
             appStore.state.snackbarState,
         )
     }
+
+    @Test
+    fun `WHEN bookmark deleted action is dispatched THEN snackbar state is updated`() {
+        val appStore = AppStore()
+        val bookmarkTitle = "test"
+
+        appStore.dispatch(AppAction.BookmarkAction.BookmarkDeleted(title = bookmarkTitle))
+            .joinBlocking()
+
+        assertEquals(
+            SnackbarState.BookmarkDeleted(title = bookmarkTitle),
+            appStore.state.snackbarState,
+        )
+    }
+
+    @Test
+    fun `WHEN delete and quit selected action is dispatched THEN snackbar state is updated`() {
+        val appStore = AppStore()
+
+        appStore.dispatch(
+            AppAction.DeleteAndQuitStarted,
+        ).joinBlocking()
+
+        assertEquals(
+            SnackbarState.DeletingBrowserDataInProgress,
+            appStore.state.snackbarState,
+        )
+    }
+
+    @Test
+    fun `WHEN open in firefox started action is dispatched THEN open in firefox requested is true`() {
+        val appStore = AppStore()
+        assertFalse(appStore.state.openInFirefoxRequested)
+
+        appStore.dispatch(AppAction.OpenInFirefoxStarted)
+            .joinBlocking()
+
+        assertTrue(appStore.state.openInFirefoxRequested)
+    }
+
+    @Test
+    fun `WHEN open in firefox finished action is dispatched THEN open in firefox requested is false`() {
+        val appStore = AppStore(
+            initialState = AppState(
+                openInFirefoxRequested = true,
+            ),
+        )
+        assertTrue(appStore.state.openInFirefoxRequested)
+
+        appStore.dispatch(AppAction.OpenInFirefoxFinished)
+            .joinBlocking()
+
+        assertFalse(appStore.state.openInFirefoxRequested)
+    }
+
+    @Test
+    fun `WHEN UserAccountAuthenticated action is dispatched THEN snackbar state is updated`() {
+        val appStore = AppStore()
+
+        appStore.dispatch(
+            AppAction.UserAccountAuthenticated,
+        ).joinBlocking()
+
+        assertEquals(
+            SnackbarState.UserAccountAuthenticated,
+            appStore.state.snackbarState,
+        )
+    }
 }

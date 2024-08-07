@@ -20,6 +20,7 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.compose.list.IconListItem
+import org.mozilla.fenix.compose.list.TextListItem
 import org.mozilla.fenix.theme.FirefoxTheme
 
 private val MENU_ITEM_HEIGHT_WITHOUT_DESC = 52.dp
@@ -34,6 +35,7 @@ private val MENU_ITEM_HEIGHT_WITH_DESC = 56.dp
  * @param beforeIconDescription Content description of the icon.
  * @param description An optional description text below the label.
  * @param state The state of the menu item to display.
+ * @param descriptionState The state of menu item description to display.
  * @param onClick Invoked when the user clicks on the item.
  * @param showDivider Whether or not to display a vertical divider line before the [IconButton]
  * at the end.
@@ -49,6 +51,7 @@ internal fun MenuItem(
     beforeIconDescription: String? = null,
     description: String? = null,
     state: MenuItemState = MenuItemState.ENABLED,
+    descriptionState: MenuItemState = MenuItemState.ENABLED,
     onClick: (() -> Unit)? = null,
     showDivider: Boolean = false,
     afterIconPainter: Painter? = null,
@@ -56,6 +59,7 @@ internal fun MenuItem(
     onAfterIconClick: (() -> Unit)? = null,
 ) {
     val labelTextColor = getLabelTextColor(state = state)
+    val descriptionTextColor = getDescriptionTextColor(state = descriptionState)
     val iconTint = getIconTint(state = state)
     val enabled = state != MenuItemState.DISABLED
 
@@ -64,6 +68,7 @@ internal fun MenuItem(
         labelTextColor = labelTextColor,
         maxLabelLines = 2,
         description = description,
+        descriptionTextColor = descriptionTextColor,
         enabled = enabled,
         minHeight = if (description != null) {
             MENU_ITEM_HEIGHT_WITH_DESC
@@ -79,6 +84,32 @@ internal fun MenuItem(
         afterIconDescription = afterIconDescription,
         afterIconTint = iconTint,
         onAfterIconClick = onAfterIconClick,
+    )
+}
+
+/**
+ * An [IconListItem] wrapper for menu items in a [MenuGroup] with an optional icon at the end.
+ *
+ * @param label The label in the menu item.
+ * @param description An optional description text below the label.
+ * @param onClick Invoked when the user clicks on the item.
+ */
+@Composable
+internal fun MenuTextItem(
+    label: String,
+    description: String? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    TextListItem(
+        label = label,
+        maxLabelLines = 2,
+        description = description,
+        minHeight = if (description != null) {
+            MENU_ITEM_HEIGHT_WITH_DESC
+        } else {
+            MENU_ITEM_HEIGHT_WITHOUT_DESC
+        },
+        onClick = onClick,
     )
 }
 
@@ -113,6 +144,16 @@ private fun getLabelTextColor(state: MenuItemState): Color {
         MenuItemState.ACTIVE -> FirefoxTheme.colors.textAccent
         MenuItemState.WARNING -> FirefoxTheme.colors.textCritical
         else -> FirefoxTheme.colors.textPrimary
+    }
+}
+
+@Composable
+private fun getDescriptionTextColor(state: MenuItemState): Color {
+    return when (state) {
+        MenuItemState.ACTIVE -> FirefoxTheme.colors.textAccent
+        MenuItemState.WARNING -> FirefoxTheme.colors.textCritical
+        MenuItemState.DISABLED -> FirefoxTheme.colors.textDisabled
+        else -> FirefoxTheme.colors.textSecondary
     }
 }
 

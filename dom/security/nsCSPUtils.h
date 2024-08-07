@@ -11,11 +11,9 @@
 #include "nsIContentSecurityPolicy.h"
 #include "nsILoadInfo.h"
 #include "nsIURI.h"
-#include "nsLiteralString.h"
 #include "nsString.h"
 #include "nsTArray.h"
 #include "nsUnicharUtils.h"
-#include "mozilla/Logging.h"
 
 class nsIChannel;
 
@@ -27,7 +25,7 @@ class Document;
 /* =============== Logging =================== */
 
 void CSP_LogLocalizedStr(const char* aName, const nsTArray<nsString>& aParams,
-                         const nsAString& aSourceName,
+                         const nsACString& aSourceName,
                          const nsAString& aSourceLine, uint32_t aLineNumber,
                          uint32_t aColumnNumber, uint32_t aFlags,
                          const nsACString& aCategory, uint64_t aInnerWindowID,
@@ -38,7 +36,7 @@ void CSP_GetLocalizedStr(const char* aName, const nsTArray<nsString>& aParams,
 
 void CSP_LogStrMessage(const nsAString& aMsg);
 
-void CSP_LogMessage(const nsAString& aMessage, const nsAString& aSourceName,
+void CSP_LogMessage(const nsAString& aMessage, const nsACString& aSourceName,
                     const nsAString& aSourceLine, uint32_t aLineNumber,
                     uint32_t aColumnNumber, uint32_t aFlags,
                     const nsACString& aCategory, uint64_t aInnerWindowID,
@@ -97,6 +95,7 @@ static const char* CSPStrDirectives[] = {
     "style-src-attr",             // STYLE_SRC_ATTR_DIRECTIVE
     "require-trusted-types-for",  // REQUIRE_TRUSTED_TYPES_FOR_DIRECTIVE
     "trusted-types",              // TRUSTED_TYPES_DIRECTIVE
+    "report-to",                  // REPORT_TO_DIRECTIVE
 };
 
 inline const char* CSP_CSPDirectiveToString(CSPDirective aDir) {
@@ -377,6 +376,20 @@ class nsCSPReportURI : public nsCSPBaseSrc {
   nsCOMPtr<nsIURI> mReportURI;
 };
 
+/* =============== nsCSPGroup ============ */
+
+class nsCSPGroup : public nsCSPBaseSrc {
+ public:
+  explicit nsCSPGroup(const nsAString& aGroup);
+  virtual ~nsCSPGroup();
+
+  bool visit(nsCSPSrcVisitor* aVisitor) const override;
+  void toString(nsAString& aOutStr) const override;
+
+ private:
+  nsString mGroup;
+};
+
 /* =============== nsCSPSandboxFlags ================== */
 
 class nsCSPSandboxFlags : public nsCSPBaseSrc {
@@ -477,6 +490,8 @@ class nsCSPDirective {
   virtual bool equals(CSPDirective aDirective) const;
 
   void getReportURIs(nsTArray<nsString>& outReportURIs) const;
+
+  void getReportGroup(nsAString& outReportGroup) const;
 
   bool visitSrcs(nsCSPSrcVisitor* aVisitor) const;
 
@@ -697,6 +712,8 @@ class nsCSPPolicy {
   }
 
   void getReportURIs(nsTArray<nsString>& outReportURIs) const;
+
+  void getReportGroup(nsAString& outReportGroup) const;
 
   void getViolatedDirectiveInformation(CSPDirective aDirective,
                                        nsAString& aDirectiveName,

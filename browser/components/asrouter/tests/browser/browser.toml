@@ -5,6 +5,7 @@ support-files = [
 ]
 
 ["browser_asrouter_bug1761522.js"]
+tags = "remote-settings"
 
 ["browser_asrouter_bug1800087.js"]
 
@@ -36,6 +37,8 @@ tags = "remote-settings"
 ["browser_asrouter_toolbarbadge.js"]
 tags = "remote-settings"
 skip-if = ["a11y_checks"] # Bug 1854515 and 1858041 to investigate intermittent a11y_checks results (fails on Autoland, passes on Try)
+
+["browser_bookmarks_bar_button.js"]
 
 ["browser_feature_callout_in_chrome.js"]
 skip-if = [

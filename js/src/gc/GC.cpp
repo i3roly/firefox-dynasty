@@ -474,6 +474,7 @@ GCRuntime::GCRuntime(JSRuntime* rt)
 #endif
       defaultTimeBudgetMS_(TuningDefaults::DefaultTimeBudgetMS),
       compactingEnabled(TuningDefaults::CompactingEnabled),
+      nurseryEnabled(TuningDefaults::NurseryEnabled),
       parallelMarkingEnabled(TuningDefaults::ParallelMarkingEnabled),
       rootsRemoved(false),
 #ifdef JS_GC_ZEAL
@@ -1122,6 +1123,11 @@ bool GCRuntime::setParameter(JSGCParamKey key, uint32_t value,
     case JSGC_COMPACTING_ENABLED:
       compactingEnabled = value != 0;
       break;
+    case JSGC_NURSERY_ENABLED: {
+      AutoUnlockGC unlock(lock);
+      setNurseryEnabled(value != 0);
+      break;
+    }
     case JSGC_PARALLEL_MARKING_ENABLED:
       setParallelMarkingEnabled(value != 0);
       break;
@@ -1212,6 +1218,9 @@ void GCRuntime::resetParameter(JSGCParamKey key, AutoLockGC& lock) {
       break;
     case JSGC_COMPACTING_ENABLED:
       compactingEnabled = TuningDefaults::CompactingEnabled;
+      break;
+    case JSGC_NURSERY_ENABLED:
+      setNurseryEnabled(TuningDefaults::NurseryEnabled);
       break;
     case JSGC_PARALLEL_MARKING_ENABLED:
       setParallelMarkingEnabled(TuningDefaults::ParallelMarkingEnabled);
@@ -1306,6 +1315,8 @@ uint32_t GCRuntime::getParameter(JSGCParamKey key, const AutoLockGC& lock) {
       return maxEmptyChunkCount(lock);
     case JSGC_COMPACTING_ENABLED:
       return compactingEnabled;
+    case JSGC_NURSERY_ENABLED:
+      return nursery().isEnabled();
     case JSGC_PARALLEL_MARKING_ENABLED:
       return parallelMarkingEnabled;
     case JSGC_INCREMENTAL_WEAKMAP_ENABLED:
@@ -1349,6 +1360,17 @@ void GCRuntime::setMarkStackLimit(size_t limit, AutoLockGC& lock) {
 
 void GCRuntime::setIncrementalGCEnabled(bool enabled) {
   incrementalGCEnabled = enabled;
+}
+
+void GCRuntime::setNurseryEnabled(bool enabled) {
+  if (enabled) {
+    nursery().enable();
+  } else {
+    if (nursery().isEnabled()) {
+      minorGC(JS::GCReason::EVICT_NURSERY);
+      nursery().disable();
+    }
+  }
 }
 
 void GCRuntime::updateHelperThreadCount() {
@@ -2219,10 +2241,12 @@ void GCRuntime::queueAllLifoBlocksForFreeAfterMinorGC(LifoAlloc* lifo) {
   lifoBlocksToFreeAfterFullMinorGC.ref().transferFrom(lifo);
 }
 
-void GCRuntime::queueBuffersForFreeAfterMinorGC(Nursery::BufferSet& buffers) {
+void GCRuntime::queueBuffersForFreeAfterMinorGC(
+    Nursery::BufferSet& buffers, Nursery::StringBufferVector& stringBuffers) {
   AutoLockHelperThreadState lock;
 
-  if (!buffersToFreeAfterMinorGC.ref().empty()) {
+  if (!buffersToFreeAfterMinorGC.ref().empty() ||
+      !stringBuffersToReleaseAfterMinorGC.ref().empty()) {
     // In the rare case that this hasn't processed the buffers from a previous
     // minor GC we have to wait here.
     MOZ_ASSERT(!freeTask.isIdle(lock));
@@ -2231,6 +2255,9 @@ void GCRuntime::queueBuffersForFreeAfterMinorGC(Nursery::BufferSet& buffers) {
 
   MOZ_ASSERT(buffersToFreeAfterMinorGC.ref().empty());
   std::swap(buffersToFreeAfterMinorGC.ref(), buffers);
+
+  MOZ_ASSERT(stringBuffersToReleaseAfterMinorGC.ref().empty());
+  std::swap(stringBuffersToReleaseAfterMinorGC.ref(), stringBuffers);
 }
 
 void Realm::destroy(JS::GCContext* gcx) {
@@ -4842,8 +4869,7 @@ void GCRuntime::startBackgroundFreeAfterMinorGC() {
         &lifoBlocksToFreeAfterFullMinorGC.ref());
   }
 
-  if (lifoBlocksToFree.ref().isEmpty() &&
-      buffersToFreeAfterMinorGC.ref().empty()) {
+  if (!hasBuffersForBackgroundFree()) {
     return;
   }
 

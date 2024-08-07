@@ -5412,8 +5412,13 @@ GeneralParser<ParseHandler, Unit>::importDeclarationOrImportExpr(
 template <typename Unit>
 bool Parser<FullParseHandler, Unit>::checkExportedName(
     TaggedParserAtomIndex exportName) {
-  if (!pc_->sc()->asModuleContext()->builder.hasExportedName(exportName)) {
-    return true;
+  switch (pc_->sc()->asModuleContext()->builder.noteExportedName(exportName)) {
+    case ModuleBuilder::NoteExportedNameResult::Success:
+      return true;
+    case ModuleBuilder::NoteExportedNameResult::OutOfMemory:
+      return false;
+    case ModuleBuilder::NoteExportedNameResult::AlreadyDeclared:
+      break;
   }
 
   UniqueChars str = this->parserAtoms().toPrintableString(exportName);
@@ -7709,19 +7714,19 @@ bool GeneralParser<ParseHandler, Unit>::classMember(
       propType == PropertyType::FieldWithAccessor) {
     if (isStatic) {
       if (propAtom == TaggedParserAtomIndex::WellKnown::prototype()) {
-        errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+        errorAt(propNameOffset, JSMSG_CLASS_STATIC_PROTO);
         return false;
       }
     }
 
     if (propAtom == TaggedParserAtomIndex::WellKnown::constructor()) {
-      errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+      errorAt(propNameOffset, JSMSG_BAD_CONSTRUCTOR_DEF);
       return false;
     }
 
     if (handler_.isPrivateName(propName)) {
       if (propAtom == TaggedParserAtomIndex::WellKnown::hash_constructor_()) {
-        errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+        errorAt(propNameOffset, JSMSG_BAD_CONSTRUCTOR_DEF);
         return false;
       }
 
@@ -7865,7 +7870,7 @@ bool GeneralParser<ParseHandler, Unit>::classMember(
       propType != PropertyType::GeneratorMethod &&
       propType != PropertyType::AsyncMethod &&
       propType != PropertyType::AsyncGeneratorMethod) {
-    errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+    errorAt(propNameOffset, JSMSG_BAD_CLASS_MEMBER_DEF);
     return false;
   }
 
@@ -7873,11 +7878,11 @@ bool GeneralParser<ParseHandler, Unit>::classMember(
       !isStatic && propAtom == TaggedParserAtomIndex::WellKnown::constructor();
   if (isConstructor) {
     if (propType != PropertyType::Method) {
-      errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+      errorAt(propNameOffset, JSMSG_BAD_CONSTRUCTOR_DEF);
       return false;
     }
     if (classStmt.constructorBox) {
-      errorAt(propNameOffset, JSMSG_DUPLICATE_PROPERTY, "constructor");
+      errorAt(propNameOffset, JSMSG_DUPLICATE_CONSTRUCTOR);
       return false;
     }
     propType = hasHeritage == HasHeritage::Yes
@@ -7885,7 +7890,7 @@ bool GeneralParser<ParseHandler, Unit>::classMember(
                    : PropertyType::Constructor;
   } else if (isStatic &&
              propAtom == TaggedParserAtomIndex::WellKnown::prototype()) {
-    errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+    errorAt(propNameOffset, JSMSG_CLASS_STATIC_PROTO);
     return false;
   }
 
@@ -7969,7 +7974,7 @@ bool GeneralParser<ParseHandler, Unit>::classMember(
   if (handler_.isPrivateName(propName)) {
     if (propAtom == TaggedParserAtomIndex::WellKnown::hash_constructor_()) {
       // #constructor is an invalid private name.
-      errorAt(propNameOffset, JSMSG_BAD_METHOD_DEF);
+      errorAt(propNameOffset, JSMSG_BAD_CONSTRUCTOR_DEF);
       return false;
     }
 

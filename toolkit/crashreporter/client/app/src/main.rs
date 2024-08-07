@@ -61,6 +61,7 @@ macro_rules! ekey {
 mod async_task;
 mod config;
 mod data;
+mod glean;
 mod lang;
 mod logging;
 mod logic;
@@ -81,6 +82,8 @@ fn main() {
     let mut config = Config::new();
     let config_result = config.read_from_environment();
     config.log_target = Some(log_target);
+
+    glean::init(&config);
 
     let mut config = Arc::new(config);
 
@@ -126,6 +129,7 @@ fn main() {
                             "ServerURL": "https://reports.example",
                             "TelemetryServerURL": "https://telemetry.example",
                             "TelemetryClientId": "telemetry_client",
+                            "TelemetryProfileGroupId": "telemetry_profile_group",
                             "TelemetrySessionId": "telemetry_session",
                             "URL": "https://url.example"
                         }"#;
@@ -135,6 +139,10 @@ fn main() {
     const MOCK_CURRENT_TIME: &str = "2004-11-09T12:34:56Z";
     const MOCK_PING_UUID: uuid::Uuid = uuid::Uuid::nil();
     const MOCK_REMOTE_CRASH_ID: &str = "8cbb847c-def2-4f68-be9e-000000000000";
+
+    // Initialize logging but don't set it in the configuration, so that it won't be redirected to
+    // a file (only shown on stderr).
+    logging::init();
 
     // Create a default set of files which allow successful operation.
     let mock_files = MockFiles::new();
@@ -186,6 +194,9 @@ fn main() {
         cfg.dump_file = Some("minidump.dmp".into());
         cfg.restart_command = Some("mockfox".into());
         cfg.strings = Some(lang::load().unwrap());
+
+        glean::init(&cfg);
+
         let mut cfg = Arc::new(cfg);
         try_run(&mut cfg)
     });

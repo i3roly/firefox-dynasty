@@ -13,6 +13,7 @@ import {
   SponsorLabel,
   DSMessageFooter,
 } from "../DSContextFooter/DSContextFooter.jsx";
+import { DSThumbsUpDownButtons } from "../DSThumbsUpDownButtons/DSThumbsUpDownButtons.jsx";
 import { FluentOrText } from "../../FluentOrText/FluentOrText.jsx";
 import { connect } from "react-redux";
 import { LinkMenuOptions } from "content-src/lib/link-menu-options";
@@ -106,27 +107,13 @@ export const DefaultMeta = ({
       {excerpt && <p className="excerpt clamp">{excerpt}</p>}
     </div>
     {mayHaveThumbsUpDown && (
-      <div className="card-stp-thumbs-buttons-wrapper">
-        {/* Only show to non-sponsored content */}
-        {!sponsor && (
-          <div className="card-stp-thumbs-buttons">
-            <button
-              onClick={onThumbsUpClick}
-              className={`card-stp-thumbs-button icon icon-thumbs-up ${
-                state.isThumbsUpActive ? "is-active" : null
-              }`}
-              data-l10n-id="newtab-pocket-thumbs-up-tooltip"
-            ></button>
-            <button
-              onClick={onThumbsDownClick}
-              className={`card-stp-thumbs-button icon icon-thumbs-down ${
-                state.isThumbsDownActive ? "is-active" : null
-              }`}
-              data-l10n-id="newtab-pocket-thumbs-down-tooltip"
-            ></button>
-          </div>
-        )}
-      </div>
+      <DSThumbsUpDownButtons
+        onThumbsDownClick={onThumbsDownClick}
+        onThumbsUpClick={onThumbsUpClick}
+        sponsor={sponsor}
+        isThumbsDownActive={state.isThumbsDownActive}
+        isThumbsUpActive={state.isThumbsUpActive}
+      />
     )}
     {!newSponsoredLabel && (
       <DSContextFooter
@@ -158,6 +145,8 @@ export class _DSCard extends React.PureComponent {
     super(props);
 
     this.onLinkClick = this.onLinkClick.bind(this);
+    this.doesLinkTopicMatchSelectedTopic =
+      this.doesLinkTopicMatchSelectedTopic.bind(this);
     this.onSaveClick = this.onSaveClick.bind(this);
     this.onMenuUpdate = this.onMenuUpdate.bind(this);
     this.onMenuShow = this.onMenuShow.bind(this);
@@ -212,7 +201,27 @@ export class _DSCard extends React.PureComponent {
     ];
   }
 
+  doesLinkTopicMatchSelectedTopic() {
+    // Edge case for clicking on a card when topic selections have not be set
+    if (this.props.selectedTopics === "") {
+      return "not-set";
+    }
+
+    // Edge case the topic of the card is not one of the available topics
+    if (!this.props.availableTopics.includes(this.props.topic)) {
+      return "topic-not-selectable";
+    }
+
+    if (this.props.selectedTopics.includes(this.props.topic)) {
+      return "true";
+    }
+
+    return "false";
+  }
+
   onLinkClick() {
+    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
+
     if (this.props.dispatch) {
       this.props.dispatch(
         ac.DiscoveryStreamUserEvent({
@@ -231,6 +240,9 @@ export class _DSCard extends React.PureComponent {
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
+            topic: this.props.topic,
+            matches_selected_topic: matchesSelectedTopic,
+            selected_topics: this.props.selectedTopics,
           },
         })
       );
@@ -250,6 +262,8 @@ export class _DSCard extends React.PureComponent {
                 : {}),
               type: this.props.flightId ? "spoc" : "organic",
               recommendation_id: this.props.recommendation_id,
+              topic: this.props.topic,
+              selected_topics: this.props.selectedTopics,
             },
           ],
         })
@@ -258,6 +272,8 @@ export class _DSCard extends React.PureComponent {
   }
 
   onSaveClick() {
+    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
+
     if (this.props.dispatch) {
       this.props.dispatch(
         ac.AlsoToMain({
@@ -283,6 +299,9 @@ export class _DSCard extends React.PureComponent {
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
+            topic: this.props.topic,
+            matches_selected_topic: matchesSelectedTopic,
+            selected_topics: this.props.selectedTopics,
           },
         })
       );
@@ -299,6 +318,8 @@ export class _DSCard extends React.PureComponent {
                 ? { shim: this.props.shim.save }
                 : {}),
               recommendation_id: this.props.recommendation_id,
+              topic: this.props.topic,
+              selected_topics: this.props.selectedTopics,
             },
           ],
         })
@@ -330,6 +351,7 @@ export class _DSCard extends React.PureComponent {
           received_rank: this.props.received_rank,
           thumbs_up: true,
           thumbs_down: false,
+          topic: this.props.topic,
         },
       })
     );
@@ -407,6 +429,7 @@ export class _DSCard extends React.PureComponent {
             received_rank: this.props.received_rank,
             thumbs_up: false,
             thumbs_down: true,
+            topic: this.props.topic,
           },
         })
       );
@@ -501,7 +524,12 @@ export class _DSCard extends React.PureComponent {
   render() {
     if (this.props.placeholder || !this.state.isSeen) {
       return (
-        <div className="ds-card placeholder" ref={this.setPlaceholderRef} />
+        <div className="ds-card placeholder" ref={this.setPlaceholderRef}>
+          <div className="placeholder-image placeholder-fill" />
+          <div className="placeholder-label placeholder-fill" />
+          <div className="placeholder-header placeholder-fill" />
+          <div className="placeholder-description placeholder-fill" />
+        </div>
       );
     }
 
@@ -572,6 +600,12 @@ export class _DSCard extends React.PureComponent {
         className={`ds-card ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
         ref={this.setContextMenuButtonHostRef}
       >
+        {this.props.showTopics && this.props.topic && (
+          <span
+            className="ds-card-topic"
+            data-l10n-id={`newtab-topic-label-${this.props.topic}`}
+          />
+        )}
         <div className="img-wrapper">
           <DSImage
             extraClassNames="img"
@@ -604,6 +638,7 @@ export class _DSCard extends React.PureComponent {
                 scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
                 recommended_at: this.props.recommended_at,
                 received_rank: this.props.received_rank,
+                topic: this.props.topic,
               },
             ]}
             dispatch={this.props.dispatch}

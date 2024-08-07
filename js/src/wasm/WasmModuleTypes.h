@@ -87,6 +87,7 @@ struct CacheableName {
   [[nodiscard]] static bool fromUTF8Chars(const char* utf8Chars,
                                           CacheableName* name);
 
+  [[nodiscard]] JSString* toJSString(JSContext* cx) const;
   [[nodiscard]] JSAtom* toAtom(JSContext* cx) const;
   [[nodiscard]] bool toPropertyKey(JSContext* cx,
                                    MutableHandleId propertyKey) const;
@@ -197,18 +198,33 @@ enum class FuncFlags : uint8_t {
 // A FuncDesc describes a single function definition.
 
 struct FuncDesc {
-  const FuncType* type;
   // Bit pack to keep this struct small on 32-bit systems
   uint32_t typeIndex : 24;
   FuncFlags flags : 8;
+
+  WASM_CHECK_CACHEABLE_POD(typeIndex, flags);
 
   // Assert that the bit packing scheme is viable
   static_assert(MaxTypes <= (1 << 24) - 1);
   static_assert(sizeof(FuncFlags) == sizeof(uint8_t));
 
   FuncDesc() = default;
-  FuncDesc(const FuncType* type, uint32_t typeIndex)
-      : type(type), typeIndex(typeIndex), flags(FuncFlags::None) {}
+  explicit FuncDesc(uint32_t typeIndex)
+      : typeIndex(typeIndex), flags(FuncFlags::None) {}
+
+  void declareFuncExported(bool eager, bool canRefFunc) {
+    // Set the `Exported` flag, if not set.
+    flags = FuncFlags(uint8_t(flags) | uint8_t(FuncFlags::Exported));
+
+    // Merge in the `Eager` and `CanRefFunc` flags, if they're set. Be sure
+    // to not unset them if they've already been set.
+    if (eager) {
+      flags = FuncFlags(uint8_t(flags) | uint8_t(FuncFlags::Eager));
+    }
+    if (canRefFunc) {
+      flags = FuncFlags(uint8_t(flags) | uint8_t(FuncFlags::CanRefFunc));
+    }
+  }
 
   bool isExported() const {
     return uint8_t(flags) & uint8_t(FuncFlags::Exported);
@@ -219,7 +235,25 @@ struct FuncDesc {
   }
 };
 
+WASM_DECLARE_CACHEABLE_POD(FuncDesc);
+
 using FuncDescVector = Vector<FuncDesc, 0, SystemAllocPolicy>;
+
+struct FuncDefRange {
+  explicit FuncDefRange(uint32_t bytecodeOffset, uint32_t bodyLength)
+      : bytecodeOffset(bytecodeOffset), bodyLength(bodyLength) {}
+
+  // Bytecode offset of the beginning of the function body
+  uint32_t bytecodeOffset = 0;
+  // Length of the body, in bytes
+  uint32_t bodyLength = 0;
+
+  WASM_CHECK_CACHEABLE_POD(bytecodeOffset, bodyLength);
+};
+
+WASM_DECLARE_CACHEABLE_POD(FuncDefRange);
+
+using FuncDefRangeVector = Vector<FuncDefRange, 0, SystemAllocPolicy>;
 
 enum class BranchHint : uint8_t { Unlikely = 0, Likely = 1, Invalid = 2 };
 
@@ -236,37 +270,47 @@ struct BranchHintEntry {
 // Branch hint sorted vector for a function,
 // stores tuples of <BranchOffset, BranchHint>
 using BranchHintVector = Vector<BranchHintEntry, 0, SystemAllocPolicy>;
+using BranchHintFuncMap = HashMap<uint32_t, BranchHintVector,
+                                  DefaultHasher<uint32_t>, SystemAllocPolicy>;
 
 struct BranchHintCollection {
  private:
-  // Map from function index to their collection of branch hints
-  HashMap<uint32_t, BranchHintVector, DefaultHasher<uint32_t>,
-          SystemAllocPolicy>
-      branchHintsMap;
-
- public:
   // Used for lookups into the collection if a function
   // doesn't contain any hints.
-  static BranchHintVector invalidVector;
+  static BranchHintVector invalidVector_;
 
+  // Map from function index to their collection of branch hints
+  BranchHintFuncMap branchHintsMap_;
+  // Whether the module had branch hints, but we failed to parse them. This
+  // is not semantically visible to user code, but used for internal testing.
+  bool failedParse_ = false;
+
+ public:
   // Add all the branch hints for a function
   [[nodiscard]] bool addHintsForFunc(uint32_t functionIndex,
                                      BranchHintVector&& branchHints) {
-    return branchHintsMap.put(functionIndex, std::move(branchHints));
+    return branchHintsMap_.put(functionIndex, std::move(branchHints));
   }
 
   // Return the vector with branch hints for a funcIndex.
   // If this function doesn't contain any hints, return an empty vector.
   BranchHintVector& getHintVector(uint32_t funcIndex) const {
-    if (auto hintsVector = branchHintsMap.readonlyThreadsafeLookup(funcIndex)) {
+    if (auto hintsVector =
+            branchHintsMap_.readonlyThreadsafeLookup(funcIndex)) {
       return hintsVector->value();
     }
 
     // If not found, return the empty invalid Vector
-    return invalidVector;
+    return invalidVector_;
   }
 
-  bool isEmpty() const { return branchHintsMap.empty(); }
+  bool isEmpty() const { return branchHintsMap_.empty(); }
+
+  void setFailedAndClear() {
+    failedParse_ = true;
+    branchHintsMap_.clearAndCompact();
+  }
+  bool failedParse() const { return failedParse_; }
 };
 
 enum class GlobalKind { Import, Constant, Variable };
@@ -553,7 +597,12 @@ struct CustomSectionRange {
   uint32_t nameLength;
   uint32_t payloadOffset;
   uint32_t payloadLength;
+
+  WASM_CHECK_CACHEABLE_POD(nameOffset, nameLength, payloadOffset,
+                           payloadLength);
 };
+
+WASM_DECLARE_CACHEABLE_POD(CustomSectionRange);
 
 using CustomSectionRangeVector =
     Vector<CustomSectionRange, 0, SystemAllocPolicy>;
@@ -596,8 +645,7 @@ enum class LimitsKind {
 // Represents the resizable limits of memories and tables.
 
 struct Limits {
-  // `indexType` will always be I32 for tables, but may be I64 for memories
-  // when memory64 is enabled.
+  // `indexType` may be I64 when memory64 is enabled.
   IndexType indexType;
 
   // The initial and maximum limit. The unit is pages for memories and elements
@@ -676,36 +724,43 @@ using MemoryDescVector = Vector<MemoryDesc, 1, SystemAllocPolicy>;
 // using a uint64_t.
 static_assert(MaxMemory32LimitField <= UINT64_MAX / PageSize);
 
-// TableDesc describes a table as well as the offset of the table's base pointer
-// in global memory.
-//
-// A TableDesc contains the element type and whether the table is for asm.js,
-// which determines the table representation.
-//  - ExternRef: a wasm anyref word (wasm::AnyRef)
-//  - FuncRef: a two-word FunctionTableElem (wasm indirect call ABI)
-//  - FuncRef (if `isAsmJS`): a two-word FunctionTableElem (asm.js ABI)
-// Eventually there should be a single unified AnyRef representation.
-
 struct TableDesc {
+  Limits limits;
   RefType elemType;
   bool isImported;
   bool isExported;
   bool isAsmJS;
-  uint32_t initialLength;
-  Maybe<uint32_t> maximumLength;
   Maybe<InitExpr> initExpr;
 
   TableDesc() = default;
-  TableDesc(RefType elemType, uint32_t initialLength,
-            Maybe<uint32_t> maximumLength, Maybe<InitExpr>&& initExpr,
+  TableDesc(Limits limits, RefType elemType, Maybe<InitExpr>&& initExpr,
             bool isAsmJS, bool isImported = false, bool isExported = false)
-      : elemType(elemType),
+      : limits(limits),
+        elemType(elemType),
         isImported(isImported),
         isExported(isExported),
         isAsmJS(isAsmJS),
-        initialLength(initialLength),
-        maximumLength(maximumLength),
-        initExpr(std::move(initExpr)) {}
+        initExpr(std::move(initExpr)) {
+    // Table limits are enforced by validation to never be greater than
+    // UINT32_MAX. This means that we can always safely convert table limits to
+    // uint32_t (unlike with memories, which are the other main use of Limits.)
+    static_assert(MaxTableLimitField <= UINT32_MAX);
+    MOZ_ASSERT(limits.initial <= UINT32_MAX);
+    MOZ_ASSERT_IF(limits.maximum.isSome(),
+                  limits.maximum.value() <= UINT32_MAX);
+  }
+
+  IndexType indexType() const { return limits.indexType; }
+
+  uint32_t initialLength() const {
+    // Note the conversion to uint32_t.
+    return limits.initial;
+  }
+
+  Maybe<uint32_t> maximumLength() const {
+    // Note the conversion to uint32_t.
+    return limits.maximum;
+  }
 };
 
 using TableDescVector = Vector<TableDesc, 0, SystemAllocPolicy>;

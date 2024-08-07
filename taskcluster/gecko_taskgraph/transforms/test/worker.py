@@ -108,6 +108,8 @@ MACOSX_WORKER_TYPES = {
     "macosx1015-64": "t-osx-1015-r8",
     "macosx1100-64": "t-osx-1100-m1",
     "macosx1400-64": "t-osx-1400-m2",
+    "macosx1100-aarch64": "t-osx-1100-m1",
+    "macosx1400-aarch64": "t-osx-1400-m2",
 }
 
 transforms = TransformSequence()
@@ -128,8 +130,12 @@ def set_worker_type(config, tasks):
             task["worker-type"] = MACOSX_WORKER_TYPES["macosx1015-64"]
         elif test_platform.startswith("macosx1100-64"):
             task["worker-type"] = MACOSX_WORKER_TYPES["macosx1100-64"]
+        elif test_platform.startswith("macosx1100-aarch64"):
+            task["worker-type"] = MACOSX_WORKER_TYPES["macosx1100-aarch64"]
         elif test_platform.startswith("macosx1400-64"):
             task["worker-type"] = MACOSX_WORKER_TYPES["macosx1400-64"]
+        elif test_platform.startswith("macosx1400-aarch64"):
+            task["worker-type"] = MACOSX_WORKER_TYPES["macosx1400-aarch64"]
         elif test_platform.startswith("win"):
             # figure out what platform the job needs to run on
             if task["virtualization"] == "hardware":
@@ -152,10 +158,8 @@ def set_worker_type(config, tasks):
                 if task[
                     "virtualization"
                 ] == "virtual-with-gpu" and test_platform.startswith("windows1"):
-                    # some unittests can run on hardware, no need for --requires-gpu
-                    if not test_platform.startswith("windows11-64-2009-hw-ref"):
-                        # add in `--requires-gpu` to the mozharness options
-                        task["mozharness"]["extra-options"].append("--requires-gpu")
+                    # add in `--requires-gpu` to the mozharness options
+                    task["mozharness"]["extra-options"].append("--requires-gpu")
 
             # now we have the right platform set the worker type accordingly
             task["worker-type"] = win_worker_type_platform[task["virtualization"]]
@@ -179,6 +183,11 @@ def set_worker_type(config, tasks):
                 task["worker-type"] = "t-bitbar-gw-unit-a51"
             else:
                 task["worker-type"] = "t-bitbar-gw-perf-a51"
+        elif test_platform.startswith("android-hw-a55"):
+            if task["suite"] != "raptor":
+                task["worker-type"] = "t-bitbar-gw-unit-a55"
+            else:
+                task["worker-type"] = "t-bitbar-gw-perf-a55"
         elif test_platform.startswith("android-em-7.0-x86"):
             task["worker-type"] = "t-linux-kvm"
         elif test_platform.startswith("linux") or test_platform.startswith("android"):

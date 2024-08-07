@@ -411,14 +411,17 @@ static void MoveChildTo(nsIFrame* aChild, LogicalPoint aOrigin, WritingMode aWM,
   nsContainerFrame::PlaceFrameView(aChild);
 }
 
-nscoord nsColumnSetFrame::GetMinISize(gfxContext* aRenderingContext) {
+nscoord nsColumnSetFrame::IntrinsicISize(gfxContext* aContext,
+                                         IntrinsicISizeType aType) {
+  return aType == IntrinsicISizeType::MinISize ? MinISize(aContext)
+                                               : PrefISize(aContext);
+}
+
+nscoord nsColumnSetFrame::MinISize(gfxContext* aContext) {
   nscoord iSize = 0;
 
   if (mFrames.FirstChild()) {
-    // We want to ignore this in the case that we're size contained
-    // because our children should not contribute to our
-    // intrinsic size.
-    iSize = mFrames.FirstChild()->GetMinISize(aRenderingContext);
+    iSize = mFrames.FirstChild()->GetMinISize(aContext);
   }
   const nsStyleColumn* colStyle = StyleColumn();
   if (colStyle->mColumnWidth.IsLength()) {
@@ -443,7 +446,7 @@ nscoord nsColumnSetFrame::GetMinISize(gfxContext* aRenderingContext) {
   return iSize;
 }
 
-nscoord nsColumnSetFrame::GetPrefISize(gfxContext* aRenderingContext) {
+nscoord nsColumnSetFrame::PrefISize(gfxContext* aContext) {
   // Our preferred width is our desired column width, if specified, otherwise
   // the child's preferred width, times the number of columns, plus the width
   // of any required column gaps
@@ -455,10 +458,7 @@ nscoord nsColumnSetFrame::GetPrefISize(gfxContext* aRenderingContext) {
     colISize =
         ColumnUtils::ClampUsedColumnWidth(colStyle->mColumnWidth.AsLength());
   } else if (mFrames.FirstChild()) {
-    // We want to ignore this in the case that we're size contained
-    // because our children should not contribute to our
-    // intrinsic size.
-    colISize = mFrames.FirstChild()->GetPrefISize(aRenderingContext);
+    colISize = mFrames.FirstChild()->GetPrefISize(aContext);
   } else {
     colISize = 0;
   }
@@ -746,7 +746,7 @@ nsColumnSetFrame::ColumnBalanceData nsColumnSetFrame::ReflowColumns(
           "childContentBEnd=%d, CarriedOutBEndMargin=%d (ignored)",
           __func__, colData.mColCount, child, ToString(aStatus).c_str(),
           kidDesiredSize.ISize(wm), kidDesiredSize.BSize(wm), childContentBEnd,
-          kidDesiredSize.mCarriedOutBEndMargin.get());
+          kidDesiredSize.mCarriedOutBEndMargin.Get());
     }
 
     contentRect.UnionRect(contentRect, child->GetRect());

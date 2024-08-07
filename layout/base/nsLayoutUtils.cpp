@@ -3531,27 +3531,30 @@ struct BoxToRect : public nsLayoutUtils::BoxCallback {
         r = aFrame->GetRectRelativeToSelf();
       }
     }
-    if (mFlags.contains(
-            nsLayoutUtils::GetAllInFlowRectsFlag::AccountForTransforms)) {
-      const bool isAncestorKnown = [&] {
-        if (mRelativeToIsRoot) {
-          return true;
+    if (outer != mRelativeTo) {
+      if (mFlags.contains(
+              nsLayoutUtils::GetAllInFlowRectsFlag::AccountForTransforms)) {
+        const bool isAncestorKnown = [&] {
+          if (mRelativeToIsRoot) {
+            return true;
+          }
+          if (mRelativeToIsTarget && !mInTargetContinuation) {
+            return !usingSVGOuterFrame;
+          }
+          return false;
+        }();
+        if (isAncestorKnown) {
+          r = nsLayoutUtils::TransformFrameRectToAncestor(outer, r,
+                                                          mRelativeTo);
+        } else {
+          nsLayoutUtils::TransformRect(outer, mRelativeTo, r);
         }
-        if (mRelativeToIsTarget && !mInTargetContinuation) {
-          return !usingSVGOuterFrame;
+      } else {
+        if (aFrame->PresContext() != mRelativeTo->PresContext()) {
+          r += outer->GetOffsetToCrossDoc(mRelativeTo);
+        } else {
+          r += outer->GetOffsetTo(mRelativeTo);
         }
-        return false;
-      }();
-      if (isAncestorKnown) {
-        r = nsLayoutUtils::TransformFrameRectToAncestor(outer, r, mRelativeTo);
-      } else {
-        nsLayoutUtils::TransformRect(outer, mRelativeTo, r);
-      }
-    } else {
-      if (aFrame->PresContext() != mRelativeTo->PresContext()) {
-        r += outer->GetOffsetToCrossDoc(mRelativeTo);
-      } else {
-        r += outer->GetOffsetTo(mRelativeTo);
       }
     }
     mCallback->AddRect(r);
@@ -4355,7 +4358,8 @@ static Maybe<nscoord> GetIntrinsicSize(nsIFrame::ExtremumLength aLength,
                                        Maybe<nscoord> aISizeFromAspectRatio,
                                        nsIFrame::SizeProperty aProperty,
                                        nscoord aContentBoxToBoxSizingDiff) {
-  if (aLength == nsIFrame::ExtremumLength::MozAvailable) {
+  if (aLength == nsIFrame::ExtremumLength::MozAvailable ||
+      aLength == nsIFrame::ExtremumLength::Stretch) {
     return Nothing();
   }
 
@@ -4814,9 +4818,7 @@ nscoord nsLayoutUtils::IntrinsicForAxis(
         result = aFrame->BSize();
       }
     } else {
-      result = aType == IntrinsicISizeType::MinISize
-                   ? aFrame->GetMinISize(aRenderingContext)
-                   : aFrame->GetPrefISize(aRenderingContext);
+      result = aFrame->IntrinsicISize(aRenderingContext, aType);
     }
 #ifdef DEBUG_INTRINSIC_WIDTH
     --gNoiseIndent;
@@ -5009,16 +5011,15 @@ nscoord nsLayoutUtils::IntrinsicForAxis(
 }
 
 /* static */
-nscoord nsLayoutUtils::IntrinsicForContainer(gfxContext* aRenderingContext,
-                                             nsIFrame* aFrame,
-                                             IntrinsicISizeType aType,
-                                             uint32_t aFlags) {
+nscoord nsLayoutUtils::IntrinsicForContainer(
+    gfxContext* aRenderingContext, nsIFrame* aFrame, IntrinsicISizeType aType,
+    const Maybe<LogicalSize>& aPercentageBasis, uint32_t aFlags) {
   MOZ_ASSERT(aFrame && aFrame->GetParent());
   // We want the size aFrame will contribute to its parent's inline-size.
   PhysicalAxis axis =
       aFrame->GetParent()->GetWritingMode().PhysicalAxis(LogicalAxis::Inline);
-  return IntrinsicForAxis(axis, aRenderingContext, aFrame, aType, Nothing(),
-                          aFlags);
+  return IntrinsicForAxis(axis, aRenderingContext, aFrame, aType,
+                          aPercentageBasis, aFlags);
 }
 
 /* static */
@@ -5282,30 +5283,6 @@ nsSize nsLayoutUtils::ComputeAutoSizeWithIntrinsicDimensions(
   }
 
   return nsSize(width, height);
-}
-
-/* static */
-nscoord nsLayoutUtils::MinISizeFromInline(nsIFrame* aFrame,
-                                          gfxContext* aRenderingContext) {
-  NS_ASSERTION(!aFrame->IsContainerForFontSizeInflation(),
-               "should not be container for font size inflation");
-
-  nsIFrame::InlineMinISizeData data;
-  aFrame->AddInlineMinISize(aRenderingContext, &data);
-  data.ForceBreak();
-  return data.mPrevLines;
-}
-
-/* static */
-nscoord nsLayoutUtils::PrefISizeFromInline(nsIFrame* aFrame,
-                                           gfxContext* aRenderingContext) {
-  NS_ASSERTION(!aFrame->IsContainerForFontSizeInflation(),
-               "should not be container for font size inflation");
-
-  nsIFrame::InlinePrefISizeData data;
-  aFrame->AddInlinePrefISize(aRenderingContext, &data);
-  data.ForceBreak();
-  return data.mPrevLines;
 }
 
 static nscolor DarkenColor(nscolor aColor) {
@@ -7002,7 +6979,7 @@ SurfaceFromElementResult nsLayoutUtils::SurfaceFromOffscreenCanvas(
     RefPtr<DrawTarget>& aTarget) {
   SurfaceFromElementResult result;
 
-  IntSize size = aOffscreenCanvas->GetWidthHeight();
+  IntSize size = aOffscreenCanvas->GetWidthHeight().ToUnknownSize();
   if (size.IsEmpty()) {
     return result;
   }
@@ -7355,7 +7332,7 @@ SurfaceFromElementResult nsLayoutUtils::SurfaceFromElement(
     RefPtr<DrawTarget>& aTarget) {
   SurfaceFromElementResult result;
 
-  IntSize size = aElement->GetSize();
+  IntSize size = aElement->GetSize().ToUnknownSize();
   if (size.IsEmpty()) {
     return result;
   }

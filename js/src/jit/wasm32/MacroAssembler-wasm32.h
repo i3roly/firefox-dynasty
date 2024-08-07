@@ -57,6 +57,8 @@ class MacroAssemblerWasm32 : public Assembler {
   static bool SupportsFloatingPoint() { return true; }
   static bool SupportsUnalignedAccesses() { return false; }
   static bool SupportsFastUnalignedFPAccesses() { return false; }
+  static bool SupportsFloat64To16() { return false; }
+  static bool SupportsFloat32To16() { return false; }
 
   void executableCopy(void* buffer);
 
@@ -251,6 +253,11 @@ class MacroAssemblerWasm32 : public Assembler {
 
   template <typename T>
   void load32Unaligned(T, Register) {
+    MOZ_CRASH();
+  }
+
+  template <typename T>
+  void loadFloat16(T, FloatRegister, Register) {
     MOZ_CRASH();
   }
 
@@ -479,6 +486,12 @@ class MacroAssemblerWasm32 : public Assembler {
 
   void convertFloat32ToDouble(FloatRegister, FloatRegister) { MOZ_CRASH(); }
 
+  void convertDoubleToFloat16(FloatRegister, FloatRegister) { MOZ_CRASH(); }
+  void convertFloat16ToDouble(FloatRegister, FloatRegister) { MOZ_CRASH(); }
+  void convertFloat32ToFloat16(FloatRegister, FloatRegister) { MOZ_CRASH(); }
+  void convertFloat16ToFloat32(FloatRegister, FloatRegister) { MOZ_CRASH(); }
+  void convertInt32ToFloat16(Register, FloatRegister) { MOZ_CRASH(); }
+
   void loadConstantDouble(double, FloatRegister) { MOZ_CRASH(); }
   void loadConstantFloat32(float, FloatRegister) { MOZ_CRASH(); }
   Condition testInt32Truthy(bool, ValueOperand) { MOZ_CRASH(); }
@@ -498,7 +511,7 @@ class MacroAssemblerWasm32 : public Assembler {
   void convertUInt32ToDouble(Register, FloatRegister) { MOZ_CRASH(); }
   void convertUInt32ToFloat32(Register, FloatRegister) { MOZ_CRASH(); }
   void incrementInt32Value(Address) { MOZ_CRASH(); }
-  void handleFailureWithHandlerTail(Label*, Label*) { MOZ_CRASH(); }
+  void handleFailureWithHandlerTail(Label*, Label*, uint32_t*) { MOZ_CRASH(); }
 
   void buildFakeExitFrame(Register, uint32_t*) { MOZ_CRASH(); }
   bool buildOOLFakeExitFrame(void*) { MOZ_CRASH(); }
@@ -518,7 +531,7 @@ class MacroAssemblerWasm32 : public Assembler {
 #endif
 };
 
-typedef MacroAssemblerWasm32 MacroAssemblerSpecific;
+using MacroAssemblerSpecific = MacroAssemblerWasm32;
 
 static inline bool GetTempRegForIntArg(uint32_t, uint32_t, Register*) {
   MOZ_CRASH();

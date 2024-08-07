@@ -23,6 +23,7 @@
 #include "mozilla/StoragePrincipalHelper.h"
 #include "mozilla/TaskQueue.h"
 #include "mozilla/Telemetry.h"
+#include "nsAboutProtocolUtils.h"
 #include "nsBufferedStreams.h"
 #include "nsCategoryCache.h"
 #include "nsComponentManagerUtils.h"
@@ -709,20 +710,6 @@ int32_t NS_GetRealPort(nsIURI* aURI) {
   if (NS_FAILED(rv)) return -1;
 
   return NS_GetDefaultPort(scheme.get());
-}
-
-nsresult NS_DomainToASCII(const nsACString& aHost, nsACString& aASCII) {
-  return nsStandardURL::GetIDNService()->ConvertUTF8toACE(aHost, aASCII);
-}
-
-nsresult NS_DomainToDisplay(const nsACString& aHost, nsACString& aDisplay) {
-  bool ignored;
-  return nsStandardURL::GetIDNService()->ConvertToDisplayIDN(aHost, &ignored,
-                                                             aDisplay);
-}
-
-nsresult NS_DomainToUnicode(const nsACString& aHost, nsACString& aUnicode) {
-  return nsStandardURL::GetIDNService()->ConvertACEtoUTF8(aHost, aUnicode);
 }
 
 nsresult NS_NewInputStreamChannelInternal(
@@ -2079,7 +2066,7 @@ nsresult NS_NewURI(nsIURI** aURI, const nsACString& aSpec,
 }
 
 nsresult NS_GetSanitizedURIStringFromURI(nsIURI* aUri,
-                                         nsAString& aSanitizedSpec) {
+                                         nsACString& aSanitizedSpec) {
   aSanitizedSpec.Truncate();
 
   nsCOMPtr<nsISensitiveInfoHiddenURI> safeUri = do_QueryInterface(aUri);
@@ -2092,7 +2079,7 @@ nsresult NS_GetSanitizedURIStringFromURI(nsIURI* aUri,
   }
 
   if (NS_SUCCEEDED(rv)) {
-    aSanitizedSpec.Assign(NS_ConvertUTF8toUTF16(cSpec));
+    aSanitizedSpec.Assign(cSpec);
   }
   return rv;
 }
@@ -2843,6 +2830,20 @@ bool NS_IsAboutBlank(nsIURI* uri) {
   return spec.EqualsLiteral("about:blank");
 }
 
+bool NS_IsAboutBlankAllowQueryAndFragment(nsIURI* uri) {
+  // GetSpec can be expensive for some URIs, so check the scheme first.
+  if (!uri->SchemeIs("about")) {
+    return false;
+  }
+
+  nsAutoCString name;
+  if (NS_FAILED(NS_GetAboutModuleName(uri, name))) {
+    return false;
+  }
+
+  return name.EqualsLiteral("blank");
+}
+
 bool NS_IsAboutSrcdoc(nsIURI* uri) {
   // GetSpec can be expensive for some URIs, so check the scheme first.
   if (!uri->SchemeIs("about")) {
@@ -2992,13 +2993,14 @@ static bool ShouldSecureUpgradeNoHSTS(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
     AutoTArray<nsString, 2> params = {reportSpec, reportScheme};
     uint64_t innerWindowId = aLoadInfo->GetInnerWindowID();
     CSP_LogLocalizedStr("upgradeInsecureRequest", params,
-                        u""_ns,  // aSourceFile
+                        ""_ns,   // aSourceFile
                         u""_ns,  // aScriptSample
                         0,       // aLineNumber
                         1,       // aColumnNumber
                         nsIScriptError::warningFlag,
                         "upgradeInsecureRequest"_ns, innerWindowId,
                         aLoadInfo->GetOriginAttributes().IsPrivateBrowsing());
+    aLoadInfo->SetHttpsUpgradeTelemetry(nsILoadInfo::CSP_UIR);
     return true;
   }
   // 3. Mixed content auto upgrading
@@ -3025,7 +3027,7 @@ static bool ShouldSecureUpgradeNoHSTS(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
     uint64_t innerWindowId = aLoadInfo->GetInnerWindowID();
     nsContentUtils::ReportToConsoleByWindowID(
         message, nsIScriptError::warningFlag, "Mixed Content Message"_ns,
-        innerWindowId, aURI);
+        innerWindowId, SourceLocation(aURI));
 
     // Set this flag so we know we'll upgrade because of
     // 'security.mixed_content.upgrade_display_content'.

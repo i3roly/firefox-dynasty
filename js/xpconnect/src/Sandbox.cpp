@@ -59,6 +59,7 @@
 #include "mozilla/dom/HeadersBinding.h"
 #include "mozilla/dom/IOUtilsBinding.h"
 #include "mozilla/dom/InspectorUtilsBinding.h"
+#include "mozilla/dom/LockManager.h"
 #include "mozilla/dom/MessageChannelBinding.h"
 #include "mozilla/dom/MessagePortBinding.h"
 #include "mozilla/dom/MIDIInputMapBinding.h"
@@ -405,6 +406,17 @@ bool xpc::SandboxCreateStructuredClone(JSContext* cx, HandleObject obj) {
 
   return JS_DefineFunction(cx, obj, "structuredClone", SandboxStructuredClone,
                            1, 0);
+}
+
+bool xpc::SandboxCreateLocks(JSContext* cx, JS::Handle<JSObject*> obj) {
+  MOZ_ASSERT(JS_IsGlobalObject(obj));
+
+  nsIGlobalObject* native = xpc::NativeGlobal(obj);
+  MOZ_ASSERT(native);
+
+  RefPtr<dom::LockManager> lockManager = dom::LockManager::Create(*native);
+  JS::RootedObject wrapped(cx, lockManager->WrapObject(cx, nullptr));
+  return JS_DefineProperty(cx, obj, "locks", wrapped, JSPROP_ENUMERATE);
 }
 
 static bool SandboxIsProxy(JSContext* cx, unsigned argc, Value* vp) {
@@ -984,6 +996,8 @@ bool xpc::GlobalProperties::Parse(JSContext* cx, JS::HandleObject obj) {
       storage = true;
     } else if (JS_LinearStringEqualsLiteral(nameStr, "structuredClone")) {
       structuredClone = true;
+    } else if (JS_LinearStringEqualsLiteral(nameStr, "locks")) {
+      locks = true;
     } else if (JS_LinearStringEqualsLiteral(nameStr, "indexedDB")) {
       indexedDB = true;
     } else if (JS_LinearStringEqualsLiteral(nameStr, "isSecureContext")) {
@@ -1174,6 +1188,10 @@ bool xpc::GlobalProperties::Define(JSContext* cx, JS::HandleObject obj) {
   }
 
   if (structuredClone && !SandboxCreateStructuredClone(cx, obj)) {
+    return false;
+  }
+
+  if (locks && !SandboxCreateLocks(cx, obj)) {
     return false;
   }
 
@@ -1500,7 +1518,10 @@ nsresult xpc::CreateSandboxObject(JSContext* cx, MutableHandleValue vp,
   // about:memory may use that information
   xpc::SetLocationForGlobal(sandbox, options.sandboxName);
 
-  xpc::SetSandboxMetadata(cx, sandbox, options.metadata);
+  nsresult rv = xpc::SetSandboxMetadata(cx, sandbox, options.metadata);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
 
   JSAutoRealm ar(cx, sandbox);
   JS_FireOnNewGlobalObject(cx, sandbox);
@@ -1989,12 +2010,12 @@ static nsresult AssembleSandboxMemoryReporterName(JSContext* cx,
 
   // Append the caller's location information.
   if (frame) {
-    nsString location;
+    nsAutoCString location;
     frame->GetFilename(cx, location);
     int32_t lineNumber = frame->GetLineNumber(cx);
 
     sandboxName.AppendLiteral(" (from: ");
-    sandboxName.Append(NS_ConvertUTF16toUTF8(location));
+    sandboxName.Append(location);
     sandboxName.Append(':');
     sandboxName.AppendInt(lineNumber);
     sandboxName.Append(')');

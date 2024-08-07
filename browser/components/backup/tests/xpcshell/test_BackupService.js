@@ -16,6 +16,14 @@ const { ClientID } = ChromeUtils.importESModule(
   "resource://gre/modules/ClientID.sys.mjs"
 );
 
+const LAST_BACKUP_TIMESTAMP_PREF_NAME =
+  "browser.backup.scheduled.last-backup-timestamp";
+const LAST_BACKUP_FILE_NAME_PREF_NAME =
+  "browser.backup.scheduled.last-backup-file";
+
+/** @type {nsIToolkitProfile} */
+let currentProfile;
+
 add_setup(function () {
   // FOG needs to be initialized in order for data to flow.
   Services.fog.initializeFOG();
@@ -58,28 +66,24 @@ add_setup(function () {
     createdProfile.value,
     "Profile set to current"
   );
+
+  currentProfile = createdProfile.value;
 });
 
 /**
  * A utility function for testing BackupService.createBackup. This helper
  * function:
  *
- * 1. Ensures that `backup` will be called on BackupResources with the service
- * 2. Ensures that a backup-manifest.json will be written and contain the
- *    ManifestEntry data returned by each BackupResource.
- * 3. Ensures that a `staging` folder will be written to and renamed properly
- *    once the backup creation is complete.
- *
- * Once this is done, a task function can be run. The task function is passed
- * the parsed backup-manifest.json object as its only argument.
+ * 1. Produces a backup of fake resources
+ * 2. Recovers the backup into a new profile directory
+ * 3. Ensures that the resources had their backup/recovery methods called
  *
  * @param {object} sandbox
  *   The Sinon sandbox to be used stubs and mocks. The test using this helper
  *   is responsible for creating and resetting this sandbox.
- * @param {Function} taskFn
- *   A function that is run once all default checks are done on the manifest
- *   and staging folder. After this function returns, the staging folder will
- *   be cleaned up.
+ * @param {function(BackupService, BackupManifest): void} taskFn
+ *   A function that is run once all default checks are done.
+ *   After this function returns, all resources will be cleaned up.
  * @returns {Promise<undefined>}
  */
 async function testCreateBackupHelper(sandbox, taskFn) {
@@ -88,21 +92,36 @@ async function testCreateBackupHelper(sandbox, taskFn) {
   let totalBackupSizeHistogram = TelemetryTestUtils.getAndClearHistogram(
     "BROWSER_BACKUP_TOTAL_BACKUP_SIZE"
   );
+  // Handle for the metric for total byte size of single-file archive
+  let compressedArchiveSizeHistogram = TelemetryTestUtils.getAndClearHistogram(
+    "BROWSER_BACKUP_COMPRESSED_ARCHIVE_SIZE"
+  );
+  // Handle for the metric for total time taking by profile backup
+  let backupTimerHistogram = TelemetryTestUtils.getAndClearHistogram(
+    "BROWSER_BACKUP_TOTAL_BACKUP_TIME_MS"
+  );
+
   const EXPECTED_CLIENT_ID = await ClientID.getClientID();
 
   let fake1ManifestEntry = { fake1: "hello from 1" };
   sandbox
     .stub(FakeBackupResource1.prototype, "backup")
     .resolves(fake1ManifestEntry);
+  sandbox.stub(FakeBackupResource1.prototype, "recover").resolves();
 
   sandbox
     .stub(FakeBackupResource2.prototype, "backup")
     .rejects(new Error("Some failure to backup"));
+  sandbox.stub(FakeBackupResource2.prototype, "recover");
 
   let fake3ManifestEntry = { fake3: "hello from 3" };
+  let fake3PostRecoveryEntry = { someData: "hello again from 3" };
   sandbox
     .stub(FakeBackupResource3.prototype, "backup")
     .resolves(fake3ManifestEntry);
+  sandbox
+    .stub(FakeBackupResource3.prototype, "recover")
+    .resolves(fake3PostRecoveryEntry);
 
   let bs = new BackupService({
     FakeBackupResource1,
@@ -115,82 +134,113 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     "createBackupTest"
   );
 
+  let testTelemetryStateObject = {
+    clientID: "ed209123-04a1-04a1-04a1-c0ffeec0ffee",
+  };
+  await IOUtils.writeJSON(
+    PathUtils.join(PathUtils.profileDir, "datareporting", "state.json"),
+    testTelemetryStateObject
+  );
+
   Assert.ok(!bs.state.lastBackupDate, "No backup date is stored in state.");
-  await bs.createBackup({ profilePath: fakeProfilePath });
+  let { manifest, archivePath: backupFilePath } = await bs.createBackup({
+    profilePath: fakeProfilePath,
+  });
   Assert.ok(bs.state.lastBackupDate, "The backup date was recorded.");
 
-  // We expect the staging folder to exist then be renamed under the fakeProfilePath.
-  // We should also find a folder for each fake BackupResource.
-  let backupsFolderPath = PathUtils.join(
+  // Validate total backup time metrics were recorded
+  assertSingleTimeMeasurement(
+    Glean.browserBackup.totalBackupTime.testGetValue()
+  );
+  assertHistogramMeasurementQuantity(
+    backupTimerHistogram,
+    1,
+    "Should have collected a single measurement for total backup time"
+  );
+
+  Assert.ok(await IOUtils.exists(backupFilePath), "The backup file exists");
+
+  let archiveDateSuffix = bs.generateArchiveDateSuffix(
+    new Date(manifest.meta.date)
+  );
+
+  // We also expect the HTML file to have been written to the folder pointed
+  // at by browser.backups.location, within backupDirPath folder.
+  const EXPECTED_ARCHIVE_PATH = PathUtils.join(
+    bs.state.backupDirPath,
+    `${BackupService.BACKUP_FILE_NAME}_${manifest.meta.profileName}_${archiveDateSuffix}.html`
+  );
+  Assert.ok(
+    await IOUtils.exists(EXPECTED_ARCHIVE_PATH),
+    "Single-file backup archive was written."
+  );
+  Assert.equal(
+    backupFilePath,
+    EXPECTED_ARCHIVE_PATH,
+    "Backup was written to the configured destination folder"
+  );
+
+  let snapshotsDirectoryPath = PathUtils.join(
     fakeProfilePath,
     BackupService.PROFILE_FOLDER_NAME,
     BackupService.SNAPSHOTS_FOLDER_NAME
   );
-  let stagingPath = PathUtils.join(backupsFolderPath, "staging");
-
-  // For now, we expect a single backup only to be saved. There should also be
-  // a single compressed file for the staging folder.
-  let backupsChildren = await IOUtils.getChildren(backupsFolderPath);
+  let snapshotsDirectoryContentsPaths = await IOUtils.getChildren(
+    snapshotsDirectoryPath
+  );
+  let snapshotsDirectoryContents = await Promise.all(
+    snapshotsDirectoryContentsPaths.map(IOUtils.stat)
+  );
+  let snapshotsDirectorySubdirectories = snapshotsDirectoryContents.filter(
+    file => file.type === "directory"
+  );
   Assert.equal(
-    backupsChildren.length,
-    2,
-    "There should only be 2 items in the backups folder"
+    snapshotsDirectorySubdirectories.length,
+    0,
+    "Snapshots directory should have had all staging folders cleaned up"
   );
 
-  // The folder and the compressed file should have the same filename, but
-  // the compressed file should have a `.zip` file extension. We sort the
-  // list of directory children to make sure that the folder is first in
-  // the array.
-  backupsChildren.sort();
+  // 1 mebibyte minimum recorded value if total data size is under 1 mebibyte
+  // This assumes that these BackupService tests do not create sizable fake files
+  const SMALLEST_BACKUP_SIZE_BYTES = 1048576;
+  const SMALLEST_BACKUP_SIZE_MEBIBYTES = 1;
 
-  let renamedFilename = await PathUtils.filename(backupsChildren[0]);
-  let expectedFormatRegex = /^\d{4}(-\d{2}){2}T(\d{2}-){2}\d{2}Z$/;
-  Assert.ok(
-    renamedFilename.match(expectedFormatRegex),
-    "Renamed staging folder should have format YYYY-MM-DDTHH-mm-ssZ"
-  );
-
-  // We also expect a zipped version of that same folder to exist in the
-  // directory, with the same name along with a .zip extension.
-  let archiveFilename = await PathUtils.filename(backupsChildren[1]);
+  // Validate total (uncompressed profile data) size
+  let totalBackupSize = Glean.browserBackup.totalBackupSize.testGetValue();
   Assert.equal(
-    archiveFilename,
-    `${renamedFilename}.zip`,
-    "Compressed staging folder exists."
+    totalBackupSize.count,
+    1,
+    "Should have collected a single measurement for the total backup size"
+  );
+  Assert.equal(
+    totalBackupSize.sum,
+    SMALLEST_BACKUP_SIZE_BYTES,
+    "Should have collected the right value for the total backup size"
+  );
+  TelemetryTestUtils.assertHistogram(
+    totalBackupSizeHistogram,
+    SMALLEST_BACKUP_SIZE_MEBIBYTES,
+    1
   );
 
-  let stagingPathRenamed = PathUtils.join(backupsFolderPath, renamedFilename);
-
-  for (let backupResourceClass of [
-    FakeBackupResource1,
-    FakeBackupResource2,
-    FakeBackupResource3,
-  ]) {
-    let expectedResourceFolderBeforeRename = PathUtils.join(
-      stagingPath,
-      backupResourceClass.key
-    );
-    let expectedResourceFolderAfterRename = PathUtils.join(
-      stagingPathRenamed,
-      backupResourceClass.key
-    );
-
-    Assert.ok(
-      await IOUtils.exists(expectedResourceFolderAfterRename),
-      `BackupResource folder exists for ${backupResourceClass.key} after rename`
-    );
-    Assert.ok(
-      backupResourceClass.prototype.backup.calledOnce,
-      `Backup was called for ${backupResourceClass.key}`
-    );
-    Assert.ok(
-      backupResourceClass.prototype.backup.calledWith(
-        expectedResourceFolderBeforeRename,
-        fakeProfilePath
-      ),
-      `Backup was called in the staging folder for ${backupResourceClass.key} before rename`
-    );
-  }
+  // Validate final archive (compressed/encrypted profile data + HTML) size
+  let compressedArchiveSize =
+    Glean.browserBackup.compressedArchiveSize.testGetValue();
+  Assert.equal(
+    compressedArchiveSize.count,
+    1,
+    "Should have collected a single measurement for the backup compressed archive size"
+  );
+  Assert.equal(
+    compressedArchiveSize.sum,
+    SMALLEST_BACKUP_SIZE_BYTES,
+    "Should have collected the right value for the backup compressed archive size"
+  );
+  TelemetryTestUtils.assertHistogram(
+    compressedArchiveSizeHistogram,
+    SMALLEST_BACKUP_SIZE_MEBIBYTES,
+    1
+  );
 
   // Check that resources were called from highest to lowest backup priority.
   sinon.assert.callOrder(
@@ -198,14 +248,6 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     FakeBackupResource2.prototype.backup,
     FakeBackupResource1.prototype.backup
   );
-
-  let manifestPath = PathUtils.join(
-    stagingPathRenamed,
-    BackupService.MANIFEST_FILE_NAME
-  );
-
-  Assert.ok(await IOUtils.exists(manifestPath), "Manifest file exists");
-  let manifest = await IOUtils.readJSON(manifestPath);
 
   let schema = await BackupService.MANIFEST_SCHEMA;
   let validationResult = JsonSchema.validate(manifest, schema);
@@ -230,52 +272,156 @@ async function testCreateBackupHelper(sandbox, taskFn) {
     EXPECTED_CLIENT_ID,
     "The client ID was stored properly."
   );
-
-  // 1 mebibyte minimum recorded value if staging folder is under 1 mebibyte
-  // This assumes that these BackupService tests do not create sizable fake files
-  const SMALLEST_BACKUP_SIZE_BYTES = 1048576;
-  const SMALLEST_BACKUP_SIZE_MEBIBYTES = 1;
-
-  let totalBackupSize = Glean.browserBackup.totalBackupSize.testGetValue();
   Assert.equal(
-    totalBackupSize.count,
-    1,
-    "Should have collected a single measurement for the total backup size"
-  );
-  Assert.equal(
-    totalBackupSize.sum,
-    SMALLEST_BACKUP_SIZE_BYTES,
-    "Should have collected the right value for the total backup size"
-  );
-  TelemetryTestUtils.assertHistogram(
-    totalBackupSizeHistogram,
-    SMALLEST_BACKUP_SIZE_MEBIBYTES,
-    1
+    manifest.meta.profileName,
+    currentProfile.name,
+    "The profile name was stored properly"
   );
 
-  let archiveDateSuffix = bs.generateArchiveDateSuffix(
-    new Date(manifest.meta.date)
+  let recoveredProfilePath = await IOUtils.createUniqueDirectory(
+    PathUtils.tempDir,
+    "createBackupTestRecoveredProfile"
   );
 
-  // We also expect the HTML file to have been written to the folder pointed
-  // at by browser.backups.location, within backupDirPath folder.
-  const EXPECTED_ARCHIVE_PATH = PathUtils.join(
-    bs.state.backupDirPath,
-    `${BackupService.BACKUP_FILE_NAME}_${manifest.meta.profileName}_${archiveDateSuffix}.html`
+  let recoveredProfile = await bs.recoverFromBackupArchive(
+    backupFilePath,
+    null,
+    false,
+    fakeProfilePath,
+    recoveredProfilePath
+  );
+
+  Assert.ok(
+    recoveredProfile.name.startsWith(currentProfile.name),
+    "Should maintain profile name across backup and restore"
+  );
+
+  // Check that resources were recovered from highest to lowest backup priority.
+  sinon.assert.callOrder(
+    FakeBackupResource3.prototype.recover,
+    FakeBackupResource1.prototype.recover
+  );
+
+  let postRecoveryFilePath = PathUtils.join(
+    recoveredProfilePath,
+    BackupService.POST_RECOVERY_FILE_NAME
   );
   Assert.ok(
-    await IOUtils.exists(EXPECTED_ARCHIVE_PATH),
-    "Single-file backup archive was written."
+    await IOUtils.exists(postRecoveryFilePath),
+    "Should have created post-recovery data file"
+  );
+  let postRecoveryData = await IOUtils.readJSON(postRecoveryFilePath);
+  Assert.deepEqual(
+    postRecoveryData.fake3,
+    fake3PostRecoveryEntry,
+    "Should have post-recovery data from fake backup 3"
   );
 
-  taskFn(manifest);
+  let newProfileTelemetryStateObject = await IOUtils.readJSON(
+    PathUtils.join(recoveredProfilePath, "datareporting", "state.json")
+  );
+  Assert.deepEqual(
+    testTelemetryStateObject,
+    newProfileTelemetryStateObject,
+    "Recovered profile inherited telemetry state from the profile that " +
+      "initiated recovery"
+  );
 
-  // After createBackup is more fleshed out, we're going to want to make sure
-  // that we're writing the manifest file and that it contains the expected
-  // ManifestEntry objects, and that the staging folder was successfully
-  // renamed with the current date.
-  await IOUtils.remove(fakeProfilePath, { recursive: true });
-  await IOUtils.remove(EXPECTED_ARCHIVE_PATH);
+  taskFn(bs, manifest);
+
+  await maybeRemovePath(backupFilePath);
+  await maybeRemovePath(fakeProfilePath);
+  await maybeRemovePath(recoveredProfilePath);
+  await maybeRemovePath(EXPECTED_ARCHIVE_PATH);
+}
+
+/**
+ * A utility function for testing BackupService.deleteLastBackup. This helper
+ * function:
+ *
+ * 1. Clears any pre-existing cached preference values for the last backup
+ *    date and file name.
+ * 2. Uses testCreateBackupHelper to create a backup file.
+ * 3. Ensures that the state has been updated to reflect the created backup,
+ *    and that the backup date and file name are cached to preferences.
+ * 4. Runs an optional async taskFn
+ * 5. Calls deleteLastBackup on the testCreateBackupHelper BackupService
+ *    instance.
+ * 6. Checks that the BackupService state for the last backup date and file name
+ *    have been cleared, and that the preferences caches of those values have
+ *    also been cleared.
+ *
+ * @param {function(string): Promise<void>|null} taskFn
+ *   An optional function that is run after we've created a backup, but just
+ *   before calling deleteLastBackup(). It is passed the path to the created
+ *   backup file.
+ * @returns {Promise<undefined>}
+ */
+async function testDeleteLastBackupHelper(taskFn) {
+  let sandbox = sinon.createSandbox();
+
+  // Clear any last backup filenames and timestamps that might be lingering
+  // from prior tests.
+  Services.prefs.clearUserPref(LAST_BACKUP_TIMESTAMP_PREF_NAME);
+  Services.prefs.clearUserPref(LAST_BACKUP_FILE_NAME_PREF_NAME);
+
+  await testCreateBackupHelper(sandbox, async (bs, _manifest) => {
+    Assert.ok(
+      bs.state.lastBackupDate,
+      "Should have a last backup date recorded."
+    );
+    Assert.ok(
+      bs.state.lastBackupFileName,
+      "Should have a last backup file name recorded."
+    );
+    Assert.ok(
+      Services.prefs.prefHasUserValue(LAST_BACKUP_TIMESTAMP_PREF_NAME),
+      "Last backup date was cached in preferences."
+    );
+    Assert.ok(
+      Services.prefs.prefHasUserValue(LAST_BACKUP_FILE_NAME_PREF_NAME),
+      "Last backup file name was cached in preferences."
+    );
+    const LAST_BACKUP_FILE_PATH = PathUtils.join(
+      bs.state.backupDirPath,
+      bs.state.lastBackupFileName
+    );
+    Assert.ok(
+      await IOUtils.exists(LAST_BACKUP_FILE_PATH),
+      "The backup file was created and is still on the disk."
+    );
+
+    if (taskFn) {
+      await taskFn(LAST_BACKUP_FILE_PATH);
+    }
+
+    await bs.deleteLastBackup();
+
+    Assert.equal(
+      bs.state.lastBackupDate,
+      null,
+      "Should have cleared the last backup date"
+    );
+    Assert.equal(
+      bs.state.lastBackupFileName,
+      "",
+      "Should have cleared the last backup file name"
+    );
+    Assert.ok(
+      !Services.prefs.prefHasUserValue(LAST_BACKUP_TIMESTAMP_PREF_NAME),
+      "Last backup date was cleared in preferences."
+    );
+    Assert.ok(
+      !Services.prefs.prefHasUserValue(LAST_BACKUP_FILE_NAME_PREF_NAME),
+      "Last backup file name was cleared in preferences."
+    );
+    Assert.ok(
+      !(await IOUtils.exists(LAST_BACKUP_FILE_PATH)),
+      "The backup file was deleted."
+    );
+  });
+
+  sandbox.restore();
 }
 
 /**
@@ -289,7 +435,7 @@ add_task(async function test_createBackup_signed_out() {
   sandbox
     .stub(UIState, "get")
     .returns({ status: UIState.STATUS_NOT_CONFIGURED });
-  await testCreateBackupHelper(sandbox, manifest => {
+  await testCreateBackupHelper(sandbox, (_bs, manifest) => {
     Assert.equal(
       manifest.meta.accountID,
       undefined,
@@ -322,7 +468,7 @@ add_task(async function test_createBackup_signed_in() {
     email: TEST_EMAIL,
   });
 
-  await testCreateBackupHelper(sandbox, manifest => {
+  await testCreateBackupHelper(sandbox, (_bs, manifest) => {
     Assert.equal(
       manifest.meta.accountID,
       TEST_UID,
@@ -339,138 +485,66 @@ add_task(async function test_createBackup_signed_in() {
 });
 
 /**
- * Creates a directory that looks a lot like a decompressed backup archive,
- * and then tests that BackupService.recoverFromSnapshotFolder can create a new
- * profile and recover into it.
+ * Tests that any internal file system errors in BackupService.createBackup
+ * do not bubble up any errors.
  */
-add_task(async function test_recoverFromSnapshotFolder() {
-  let sandbox = sinon.createSandbox();
-  let fakeEntryMap = new Map();
-  let backupResourceClasses = [
-    FakeBackupResource1,
-    FakeBackupResource2,
-    FakeBackupResource3,
-  ];
+add_task(
+  {
+    // Bug 1905724 - Need to find a way to deny write access to backup directory on Windows
+    skip_if: () => AppConstants.platform == "win",
+  },
+  async function test_createBackup_robustToFileSystemErrors() {
+    let sandbox = sinon.createSandbox();
+    Services.fog.testResetFOG();
+    // Handle for the metric for total time taking by profile backup
+    let backupTimerHistogram = TelemetryTestUtils.getAndClearHistogram(
+      "BROWSER_BACKUP_TOTAL_BACKUP_TIME_MS"
+    );
 
-  let i = 1;
-  for (let backupResourceClass of backupResourceClasses) {
-    let fakeManifestEntry = { [`fake${i}`]: `hello from backup - ${i}` };
-    sandbox
-      .stub(backupResourceClass.prototype, "backup")
-      .resolves(fakeManifestEntry);
+    const TEST_UID = "ThisIsMyTestUID";
+    const TEST_EMAIL = "foxy@mozilla.org";
 
-    let fakePostRecoveryEntry = { [`fake${i}`]: `hello from recover - ${i}` };
-    sandbox
-      .stub(backupResourceClass.prototype, "recover")
-      .resolves(fakePostRecoveryEntry);
-
-    fakeEntryMap.set(backupResourceClass, {
-      manifestEntry: fakeManifestEntry,
-      postRecoveryEntry: fakePostRecoveryEntry,
+    sandbox.stub(UIState, "get").returns({
+      status: UIState.STATUS_SIGNED_IN,
+      uid: TEST_UID,
+      email: TEST_EMAIL,
     });
 
-    ++i;
+    // Create a read-only fake profile folder to which the backup service
+    // won't be able to make writes
+    let inaccessibleProfilePath = await IOUtils.createUniqueDirectory(
+      PathUtils.tempDir,
+      "createBackupErrorInaccessible"
+    );
+    IOUtils.setPermissions(inaccessibleProfilePath, 0o444);
+
+    const bs = new BackupService({});
+
+    await bs
+      .createBackup({ profilePath: inaccessibleProfilePath })
+      .then(result => {
+        Assert.equal(result, null, "Should return null on error");
+
+        // Validate total backup time metrics were recorded
+        const totalBackupTime =
+          Glean.browserBackup.totalBackupTime.testGetValue();
+        Assert.equal(
+          totalBackupTime,
+          null,
+          "Should not have measured total backup time for failed backup"
+        );
+        assertHistogramMeasurementQuantity(backupTimerHistogram, 0);
+      })
+      .catch(() => {
+        // Trigger failure if there was an uncaught error
+        Assert.ok(false, "Should not have bubbled up an error");
+      })
+      .finally(async () => {
+        await IOUtils.remove(inaccessibleProfilePath, { recursive: true });
+        sandbox.restore();
+      });
   }
-
-  let bs = new BackupService({
-    FakeBackupResource1,
-    FakeBackupResource2,
-    FakeBackupResource3,
-  });
-
-  let oldProfilePath = await IOUtils.createUniqueDirectory(
-    PathUtils.tempDir,
-    "recoverFromSnapshotFolderTest"
-  );
-  let newProfileRootPath = await IOUtils.createUniqueDirectory(
-    PathUtils.tempDir,
-    "recoverFromSnapshotFolderTest-newProfileRoot"
-  );
-
-  let { stagingPath } = await bs.createBackup({ profilePath: oldProfilePath });
-
-  // Ensure that the appName in the written manifest matches the current
-  // MOZ_APP_NAME.
-  let manifest = await IOUtils.readJSON(
-    PathUtils.join(stagingPath, BackupService.MANIFEST_FILE_NAME)
-  );
-  Assert.equal(
-    manifest.meta.appName,
-    AppConstants.MOZ_APP_NAME,
-    "appName matches MOZ_APP_NAME"
-  );
-  // And that appVersion matches MOZ_APP_VERSION
-  Assert.equal(
-    manifest.meta.appVersion,
-    AppConstants.MOZ_APP_VERSION,
-    "appVersion matches MOZ_APP_VERSION"
-  );
-
-  let testTelemetryStateObject = {
-    clientID: "ed209123-04a1-04a1-04a1-c0ffeec0ffee",
-  };
-  await IOUtils.writeJSON(
-    PathUtils.join(PathUtils.profileDir, "datareporting", "state.json"),
-    testTelemetryStateObject
-  );
-
-  let profile = await bs.recoverFromSnapshotFolder(
-    stagingPath,
-    false /* shouldLaunch */,
-    newProfileRootPath,
-    null /* encState */
-  );
-  Assert.ok(profile, "An nsIToolkitProfile was created.");
-  let newProfilePath = profile.rootDir.path;
-
-  let postRecoveryFilePath = PathUtils.join(
-    newProfilePath,
-    "post-recovery.json"
-  );
-  let postRecovery = await IOUtils.readJSON(postRecoveryFilePath);
-
-  for (let backupResourceClass of backupResourceClasses) {
-    let expectedResourceFolder = PathUtils.join(
-      stagingPath,
-      backupResourceClass.key
-    );
-
-    let { manifestEntry, postRecoveryEntry } =
-      fakeEntryMap.get(backupResourceClass);
-
-    Assert.ok(
-      backupResourceClass.prototype.recover.calledOnce,
-      `Recover was called for ${backupResourceClass.key}`
-    );
-    Assert.ok(
-      backupResourceClass.prototype.recover.calledWith(
-        manifestEntry,
-        expectedResourceFolder,
-        newProfilePath
-      ),
-      `Recover was passed the right arguments for ${backupResourceClass.key}`
-    );
-    Assert.deepEqual(
-      postRecoveryEntry,
-      postRecovery[backupResourceClass.key],
-      "The post recovery data is as expected"
-    );
-  }
-
-  let newProfileTelemetryStateObject = await IOUtils.readJSON(
-    PathUtils.join(newProfileRootPath, "datareporting", "state.json")
-  );
-  Assert.deepEqual(
-    testTelemetryStateObject,
-    newProfileTelemetryStateObject,
-    "Recovered profile inherited telemetry state from the profile that " +
-      "initiated recovery"
-  );
-
-  await IOUtils.remove(oldProfilePath, { recursive: true });
-  await IOUtils.remove(newProfileRootPath, { recursive: true });
-  sandbox.restore();
-});
+);
 
 /**
  * Tests that if there's a post-recovery.json file in the profile directory
@@ -573,4 +647,26 @@ add_task(async function test_getBackupFileInfo() {
   );
 
   sandbox.restore();
+});
+
+/**
+ * Tests that deleting the last backup will delete the last known backup file if
+ * it exists, and will clear the last backup timestamp and filename state
+ * properties and preferences.
+ */
+add_task(async function test_deleteLastBackup_file_exists() {
+  await testDeleteLastBackupHelper();
+});
+
+/**
+ * Tests that deleting the last backup does not reject if the last backup file
+ * does not exist, and will still clear the last backup timestamp and filename
+ * state properties and preferences.
+ */
+add_task(async function test__deleteLastBackup_file_does_not_exist() {
+  // Now delete the file ourselves before we call deleteLastBackup,
+  // so that it's missing from the disk.
+  await testDeleteLastBackupHelper(async lastBackupFilePath => {
+    await IOUtils.remove(lastBackupFilePath);
+  });
 });

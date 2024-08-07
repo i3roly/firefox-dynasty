@@ -18,7 +18,7 @@ use crate::{Error, RecvStream, Res};
 
 const MAX_READ_SIZE: usize = 4096;
 
-pub(crate) trait FrameDecoder<T> {
+pub trait FrameDecoder<T> {
     fn is_known_type(frame_type: u64) -> bool;
     /// # Errors
     ///
@@ -33,7 +33,7 @@ pub(crate) trait FrameDecoder<T> {
     fn decode(frame_type: u64, frame_len: u64, data: Option<&[u8]>) -> Res<Option<T>>;
 }
 
-pub(crate) trait StreamReader {
+pub trait StreamReader {
     /// # Errors
     ///
     /// An error may happen while reading a stream, e.g. early close, protocol error, etc.
@@ -144,7 +144,7 @@ impl FrameReader {
         }
     }
 
-    fn decoding_in_progress(&self) -> bool {
+    const fn decoding_in_progress(&self) -> bool {
         if let FrameReaderState::GetType { decoder } = &self.state {
             decoder.decoding_in_progress()
         } else {

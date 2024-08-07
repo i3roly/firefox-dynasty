@@ -35,8 +35,9 @@ class nsFirstLetterFrame : public nsContainerFrame {
 
   bool IsFloating() const { return HasAnyStateBits(NS_FRAME_OUT_OF_FLOW); }
 
-  nscoord GetMinISize(gfxContext* aRenderingContext) final;
-  nscoord GetPrefISize(gfxContext* aRenderingContext) final;
+  nscoord IntrinsicISize(gfxContext* aContext,
+                         mozilla::IntrinsicISizeType aType) final;
+
   void AddInlineMinISize(gfxContext* aRenderingContext,
                          InlineMinISizeData* aData) final;
   void AddInlinePrefISize(gfxContext* aRenderingContext,

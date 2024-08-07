@@ -14,7 +14,10 @@ ChromeUtils.defineESModuleGetters(
 );
 
 const { Actor } = require("resource://devtools/shared/protocol.js");
-const { tracerSpec } = require("resource://devtools/shared/specs/tracer.js");
+const {
+  tracerSpec,
+  TRACER_LOG_METHODS,
+} = require("resource://devtools/shared/specs/tracer.js");
 
 loader.lazyRequireGetter(
   this,
@@ -24,8 +27,8 @@ loader.lazyRequireGetter(
 );
 loader.lazyRequireGetter(
   this,
-  "ConsoleTracingListener",
-  "resource://devtools/server/actors/tracer/console.js",
+  "ResourcesTracingListener",
+  "resource://devtools/server/actors/tracer/resources.js",
   true
 );
 loader.lazyRequireGetter(
@@ -35,23 +38,39 @@ loader.lazyRequireGetter(
   true
 );
 
-// Indexes of each data type within the array describing a frame
+// Indexes of each data type within the array describing a trace
 exports.TRACER_FIELDS_INDEXES = {
-  FRAME_IMPLEMENTATION: 0,
-  FRAME_NAME: 1,
-  FRAME_SOURCEID: 2,
-  FRAME_LINE: 3,
-  FRAME_COLUMN: 4,
-  FRAME_URL: 5,
+  // This is shared with all the data types
+  TYPE: 0,
+
+  // Frame traces are slightly special and do not share any field with the other data types
+  FRAME_IMPLEMENTATION: 1,
+  FRAME_NAME: 2,
+  FRAME_SOURCEID: 3,
+  FRAME_LINE: 4,
+  FRAME_COLUMN: 5,
+  FRAME_URL: 6,
+
+  // These fields are shared with all but frame data types
+  PREFIX: 1,
+  FRAME_INDEX: 2,
+  TIMESTAMP: 3,
+  DEPTH: 4,
+
+  EVENT_NAME: 5,
+
+  ENTER_ARGS: 5,
+  ENTER_ARG_NAMES: 6,
+
+  EXIT_PARENT_FRAME_ID: 5,
+  EXIT_RETURNED_VALUE: 6,
+  EXIT_WHY: 7,
+
+  DOM_MUTATION_TYPE: 5,
+  DOM_MUTATION_ELEMENT: 6,
 };
 
-const LOG_METHODS = {
-  STDOUT: "stdout",
-  CONSOLE: "console",
-  PROFILER: "profiler",
-};
-exports.LOG_METHODS = LOG_METHODS;
-const VALID_LOG_METHODS = Object.values(LOG_METHODS);
+const VALID_LOG_METHODS = Object.values(TRACER_LOG_METHODS);
 
 class TracerActor extends Actor {
   constructor(conn, targetActor) {
@@ -98,6 +117,7 @@ class TracerActor extends Actor {
    *        Options used to configure JavaScriptTracer.
    *        See `JavaScriptTracer.startTracing`.
    */
+  // eslint-disable-next-line complexity
   startTracing(options = {}) {
     if (options.logMethod && !VALID_LOG_METHODS.includes(options.logMethod)) {
       throw new Error(
@@ -132,17 +152,20 @@ class TracerActor extends Actor {
       return;
     }
 
-    this.logMethod = options.logMethod || LOG_METHODS.STDOUT;
+    this.logMethod = options.logMethod || TRACER_LOG_METHODS.STDOUT;
 
     let ListenerClass = null;
     switch (this.logMethod) {
-      case LOG_METHODS.STDOUT:
+      case TRACER_LOG_METHODS.STDOUT:
         ListenerClass = StdoutTracingListener;
         break;
-      case LOG_METHODS.CONSOLE:
-        ListenerClass = ConsoleTracingListener;
+      case TRACER_LOG_METHODS.CONSOLE:
+      case TRACER_LOG_METHODS.DEBUGGER_SIDEBAR:
+        // Console and debugger sidebar are both using JSTRACE_STATE/JSTRACE_TRACE resources
+        // to receive tracing data.
+        ListenerClass = ResourcesTracingListener;
         break;
-      case LOG_METHODS.PROFILER:
+      case TRACER_LOG_METHODS.PROFILER:
         ListenerClass = ProfilerTracingListener;
         // Recording function returns is mandatory when recording profiler output.
         // Otherwise frames are not closed and mixed up in the profiler frontend.

@@ -118,6 +118,7 @@ class IdleRequestCallback;
 class InstallTriggerImpl;
 class IntlUtils;
 class MediaQueryList;
+class Navigation;
 class OwningExternalOrWindowProxy;
 class Promise;
 class PostMessageEvent;
@@ -600,6 +601,7 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
   void SetName(const nsAString& aName, mozilla::ErrorResult& aError);
   mozilla::dom::Location* Location() override;
   nsHistory* GetHistory(mozilla::ErrorResult& aError);
+  mozilla::dom::Navigation* Navigation();
   mozilla::dom::CustomElementRegistry* CustomElements() override;
   mozilla::dom::CustomElementRegistry* GetExistingCustomElements();
   mozilla::dom::BarProp* GetLocationbar(mozilla::ErrorResult& aError);
@@ -765,8 +767,12 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
   void ResizeBy(int32_t aWidthDif, int32_t aHeightDif,
                 mozilla::dom::CallerType aCallerType,
                 mozilla::ErrorResult& aError);
-  void Scroll(double aXScroll, double aYScroll);
-  void Scroll(const mozilla::dom::ScrollToOptions& aOptions);
+  void Scroll(double aXScroll, double aYScroll) {
+    ScrollTo(aXScroll, aYScroll);
+  }
+  void Scroll(const mozilla::dom::ScrollToOptions& aOptions) {
+    ScrollTo(aOptions);
+  }
   void ScrollTo(double aXScroll, double aYScroll);
   void ScrollTo(const mozilla::dom::ScrollToOptions& aOptions);
   void ScrollBy(double aXScrollDif, double aYScrollDif);
@@ -812,11 +818,11 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
                       mozilla::ErrorResult& aError);
 
   MOZ_CAN_RUN_SCRIPT
-  int32_t RequestAnimationFrame(mozilla::dom::FrameRequestCallback& aCallback,
-                                mozilla::ErrorResult& aError);
+  uint32_t RequestAnimationFrame(mozilla::dom::FrameRequestCallback& aCallback,
+                                 mozilla::ErrorResult& aError);
 
   MOZ_CAN_RUN_SCRIPT
-  void CancelAnimationFrame(int32_t aHandle, mozilla::ErrorResult& aError);
+  void CancelAnimationFrame(uint32_t aHandle, mozilla::ErrorResult& aError);
 
   uint32_t RequestIdleCallback(JSContext* aCx,
                                mozilla::dom::IdleRequestCallback& aCallback,
@@ -864,11 +870,6 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
 
   bool DidFireDocElemInserted() const { return mDidFireDocElemInserted; }
   void SetDidFireDocElemInserted() { mDidFireDocElemInserted = true; }
-
-  void MaybeResolvePendingCredentialPromise(
-      const RefPtr<mozilla::dom::Credential>& aCredential);
-  nsresult SetPendingCredentialPromise(
-      const RefPtr<mozilla::dom::Promise>& aPromise);
 
   mozilla::dom::Nullable<mozilla::dom::WindowProxyHolder> OpenDialog(
       JSContext* aCx, const nsAString& aUrl, const nsAString& aName,
@@ -1129,11 +1130,7 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
   RefPtr<mozilla::GenericPromise> StorageAccessPermissionChanged(bool aGranted);
 
  protected:
-  static void NotifyDOMWindowDestroyed(nsGlobalWindowInner* aWindow);
   void NotifyWindowIDDestroyed(const char* aTopic);
-
-  static void NotifyDOMWindowFrozen(nsGlobalWindowInner* aWindow);
-  static void NotifyDOMWindowThawed(nsGlobalWindowInner* aWindow);
 
   virtual void UpdateParentTarget() override;
 
@@ -1386,11 +1383,10 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
   RefPtr<mozilla::EventListenerManager> mListenerManager;
   RefPtr<mozilla::dom::Location> mLocation;
   RefPtr<nsHistory> mHistory;
+  RefPtr<mozilla::dom::Navigation> mNavigation;
   RefPtr<mozilla::dom::CustomElementRegistry> mCustomElements;
 
   nsTObserverArray<RefPtr<mozilla::dom::SharedWorker>> mSharedWorkers;
-
-  RefPtr<mozilla::dom::Promise> mPendingCredential;
 
   RefPtr<mozilla::dom::VisualViewport> mVisualViewport;
 

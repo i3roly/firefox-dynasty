@@ -12,10 +12,69 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
   position: relative;
 
   &.placeholder {
-    background: transparent;
-    box-shadow: inset $inner-box-shadow;
-    border-radius: 4px;
-    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-small);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 15%);
+    border-radius: var(--border-radius-medium);
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      display: block;
+      position: absolute;
+      top: 0;
+      inset-inline-start: -100%;
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0%) 0%, var(--newtab-background-color-secondary) 50%, rgba(255, 255, 255, 0%) 100%);
+
+      @media (prefers-reduced-motion: no-preference) {
+        animation: loading 1.5s infinite;
+      }
+    }
+
+    .placeholder-fill {
+      background: var(--newtab-button-active-background);
+      border-radius: var(--border-radius-small);
+    }
+
+    .placeholder-image {
+      width: 100%;
+      height: 140px;
+      border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
+    }
+
+    .placeholder-label {
+      width: 40%;
+      height: var(--size-item-small);
+      margin-bottom: var(--space-small);
+      margin-inline: var(--space-large);
+    }
+
+    .placeholder-header {
+      width: 80%;
+      height: 20px;
+      margin-inline: var(--space-large);
+    }
+
+    .placeholder-description {
+      height: 60px;
+      margin-inline: var(--space-large);
+      margin-block-end: var(--space-large);
+    }
+
+    @keyframes loading {
+      0% {
+        inset-inline-start: -100%;
+      }
+
+      // We apply the same frame from 50-100% to account for a delay in a repeating animation.
+      50%, 100% {
+        inset-inline-start: 100%;
+      }
+    }
   }
 
   .img-wrapper {
@@ -93,59 +152,6 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
     }
   }
 
-  .card-stp-thumbs-buttons-wrapper {
-    margin-top: var(--space-medium);
-    z-index: 1;
-    visibility: hidden;
-    opacity: 0;
-
-    .card-stp-thumbs-buttons {
-      display: flex;
-      height: 100%;
-      align-items: center;
-      justify-content: end;
-      gap: var(--space-medium);
-    }
-
-    .card-stp-thumbs-button {
-      pointer-events: auto;
-      opacity: 0.8;
-      -moz-context-properties: fill;
-
-      &:hover,
-      &:focus-visible {
-        opacity: 1;
-      }
-    }
-
-    .icon-thumbs-up,
-    .icon-thumbs-down {
-      display: block;
-      border: 0;
-      background-color: transparent;
-      background-size: var(--icon-size-default);
-      background-position: center;
-      padding: var(--space-small);
-      fill: light-dark(var(--color-gray-70), var(--color-gray-05));
-      transition: fill 0.3s ease-in-out;
-
-      &:hover {
-        fill: light-dark(var(--color-gray-100), var(--text-color));
-      }
-
-      &:hover:active {
-        fill: var(--color-accent-primary);
-      }
-
-      &.is-active {
-        animation: iconBounce 0.2s ease-in-out;
-        fill: var(--color-accent-primary);
-      }
-    }
-  }
-
-
-
   // Override note: The colors set here are intentionally static
   // due to transparency issues over images.
   .context-menu-button {
@@ -177,6 +183,7 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
     }
   }
 
+  // Note: `.ds-card .active,:focus-within,:hover` is also utilized by DSThumbsUpDownButtons
   // The active class is added when the context menu is open.
   &.active,
   &:focus-within,
@@ -190,11 +197,6 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
         opacity: 1;
         transform: scale(1);
       }
-    }
-
-    .card-stp-thumbs-buttons-wrapper {
-      visibility: visible;
-      opacity: 1;
     }
 
     header {
@@ -229,6 +231,16 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
 
       transition: none;
     }
+  }
+
+  .ds-card-topic {
+    position: absolute;
+    z-index: 1;
+    background: light-dark(#F0F0F4, var(--newtab-background-color-secondary));
+    border-radius: var(--border-radius-small);
+    padding: var(--space-small);
+    margin: var(--space-small);
+    font-size: 14px;
   }
 
   .meta {
@@ -373,15 +385,3 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
     margin: 0;
   }
 }
-
-// Animations for thumbs up/down
-@keyframes iconBounce {
-  0%, 100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(0.6);
-  }
-}
-

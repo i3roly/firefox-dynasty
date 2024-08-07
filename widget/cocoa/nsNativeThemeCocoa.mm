@@ -2272,6 +2272,7 @@ Maybe<nsNativeThemeCocoa::WidgetInfo> nsNativeThemeCocoa::ComputeWidgetInfo(
     case StyleAppearance::Separator:
       return Some(WidgetInfo::Separator());
 
+    case StyleAppearance::MozSidebar:
     case StyleAppearance::MozWindowTitlebar: {
       NSWindow* win = NativeWindowForFrame(aFrame);
       bool isMain = [win isMainWindow];
@@ -2633,7 +2634,6 @@ bool nsNativeThemeCocoa::CreateWebRenderCommandsForWidget(
     case StyleAppearance::SpinnerDownbutton:
     case StyleAppearance::Toolbarbutton:
     case StyleAppearance::Separator:
-    case StyleAppearance::MozWindowTitlebar:
     case StyleAppearance::Statusbar:
     case StyleAppearance::Menulist:
     case StyleAppearance::MenulistButton:
@@ -2697,14 +2697,6 @@ LayoutDeviceIntMargin nsNativeThemeCocoa::GetWidgetBorder(
 
     case StyleAppearance::Toolbarbutton: {
       result = DirectionAwareMargin(LayoutDeviceIntMargin(1, 4, 1, 4), aFrame);
-      break;
-    }
-
-    case StyleAppearance::Checkbox:
-    case StyleAppearance::Radio: {
-      // nsCheckboxRadioFrame::GetIntrinsicWidth and
-      // nsCheckboxRadioFrame::GetIntrinsicHeight assume a border width of 2px.
-      result.SizeTo(2, 2, 2, 2);
       break;
     }
 
@@ -3004,6 +2996,7 @@ nsNativeThemeCocoa::WidgetStateChanged(nsIFrame* aFrame,
   // Some widget types just never change state.
   switch (aAppearance) {
     case StyleAppearance::MozWindowTitlebar:
+    case StyleAppearance::MozSidebar:
     case StyleAppearance::Statusbar:
     case StyleAppearance::Tooltip:
     case StyleAppearance::Tabpanels:
@@ -3075,6 +3068,7 @@ bool nsNativeThemeCocoa::ThemeSupportsWidget(nsPresContext* aPresContext,
     case StyleAppearance::Listbox:
     case StyleAppearance::MozWindowButtonBox:
     case StyleAppearance::MozWindowTitlebar:
+    case StyleAppearance::MozSidebar:
     case StyleAppearance::Menupopup:
     case StyleAppearance::Tooltip:
     case StyleAppearance::MozMacFullscreenButton:
@@ -3181,6 +3175,8 @@ bool nsNativeThemeCocoa::WidgetAppearanceDependsOnWindowFocus(
 nsITheme::ThemeGeometryType nsNativeThemeCocoa::ThemeGeometryTypeForWidget(
     nsIFrame* aFrame, StyleAppearance aAppearance) {
   switch (aAppearance) {
+    case StyleAppearance::MozSidebar:
+      return eThemeGeometryTypeSidebar;
     case StyleAppearance::MozWindowTitlebar:
       return eThemeGeometryTypeTitlebar;
     case StyleAppearance::MozWindowButtonBox:

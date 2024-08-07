@@ -321,7 +321,7 @@ class HTMLTextAreaElement final : public TextControlElement,
   /** The state of the text editor (selection controller and the editor) **/
   TextControlState* mState;
 
-  NS_IMETHOD SelectAll(nsPresContext* aPresContext);
+  MOZ_CAN_RUN_SCRIPT void SelectAll();
   /**
    * Get the value, whether it is from the content or the frame.
    * @param aValue the value [out]
@@ -350,9 +350,6 @@ class HTMLTextAreaElement final : public TextControlElement,
   void AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
                     const nsAttrValue* aValue, const nsAttrValue* aOldValue,
                     nsIPrincipal* aSubjectPrincipal, bool aNotify) override;
-
-  void SetDirectionFromValue(bool aNotify,
-                             const nsAString* aKnownValue = nullptr);
 
   /**
    * Get the mutable state of the element.

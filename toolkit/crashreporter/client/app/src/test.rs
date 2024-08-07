@@ -94,6 +94,7 @@ const MOCK_MINIDUMP_EXTRA: &str = r#"{
                             "ServerURL": "https://reports.example.com",
                             "TelemetryServerURL": "https://telemetry.example.com",
                             "TelemetryClientId": "telemetry_client",
+                            "TelemetryProfileGroupId": "telemetry_profile_group",
                             "TelemetrySessionId": "telemetry_session",
                             "SomeNestedJson": { "foo": "bar" },
                             "URL": "https://url.example.com"
@@ -140,6 +141,17 @@ fn test_config() -> Config {
     cfg
 }
 
+fn init_test_logger() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        env_logger::builder()
+            .target(env_logger::Target::Stderr)
+            .filter(Some("crashreporter"), log::LevelFilter::Debug)
+            .is_test(true)
+            .init();
+    })
+}
+
 /// A test fixture to make configuration, mocking, and assertions easier.
 struct GuiTest {
     /// The configuration used in the test. Initialized to [`test_config`].
@@ -149,11 +161,15 @@ struct GuiTest {
     pub mock: mock::Builder,
     /// The mocked filesystem, which can be used for mock setup and assertions after completion.
     pub files: MockFiles,
+    /// Whether glean should be initialized.
+    enable_glean: bool,
 }
 
 impl GuiTest {
     /// Create a new GuiTest with enough configured for the application to run
     pub fn new() -> Self {
+        init_test_logger();
+
         // Create a default set of files which allow successful operation.
         let mock_files = MockFiles::new();
         mock_files
@@ -192,13 +208,21 @@ impl GuiTest {
             "work_dir/crashreporter".into(),
         )
         .set(crate::std::time::MockCurrentTime, current_system_time())
+        .set(mock::MockHook::new("enable_glean_pings"), false)
         .set(mock::MockHook::new("ping_uuid"), MOCK_PING_UUID);
 
         GuiTest {
             config: test_config(),
             mock,
             files: mock_files,
+            enable_glean: false,
         }
+    }
+
+    pub fn enable_glean_pings(&mut self) {
+        self.enable_glean = true;
+        self.mock
+            .set(mock::MockHook::new("enable_glean_pings"), true);
     }
 
     /// Run the test as configured, using the given function to interact with the GUI.
@@ -211,12 +235,20 @@ impl GuiTest {
         let GuiTest {
             ref mut config,
             ref mut mock,
+            ref enable_glean,
             ..
         } = self;
         let mut config = Arc::new(std::mem::take(config));
 
         // Run the mock environment.
-        mock.run(move || gui_interact(move || try_run(&mut config), interact))
+        mock.run(move || {
+            let _glean = if *enable_glean {
+                Some(glean::test_init(&config))
+            } else {
+                None
+            };
+            gui_interact(move || try_run(&mut config), interact)
+        })
     }
 
     /// Run the test as configured, using the given function to interact with the GUI.
@@ -270,12 +302,6 @@ impl AssertFiles {
         self
     }
 
-    /// Ignore the generated log file.
-    pub fn ignore_log(&mut self) -> &mut Self {
-        self.inner.ignore(self.data("submit.log"));
-        self
-    }
-
     /// Assert that the crash report was submitted according to the filesystem.
     pub fn submitted(&mut self) -> &mut Self {
         self.inner.check(
@@ -313,6 +339,7 @@ impl AssertFiles {
                 "version": 4,
                 "creationDate": MOCK_CURRENT_TIME,
                 "clientId": "telemetry_client",
+                "profileGroupId": "telemetry_profile_group",
                 "payload": {
                     "sessionId": "telemetry_session",
                     "version": 1,
@@ -455,7 +482,7 @@ fn auto_submit() {
     test.mock.run(|| {
         assert!(try_run(&mut Arc::new(std::mem::take(&mut test.config))).is_ok());
     });
-    test.assert_files().ignore_log().submitted().pending();
+    test.assert_files().submitted().pending();
 }
 
 #[test]
@@ -477,7 +504,6 @@ fn restart() {
         interact.element("restart", |_style, b: &model::Button| b.click.fire(&()));
     });
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted()
         .pending();
@@ -502,10 +528,11 @@ fn no_restart_with_windows_error_reporting() {
                             "ServerURL": "https://reports.example.com",
                             "TelemetryServerURL": "https://telemetry.example.com",
                             "TelemetryClientId": "telemetry_client",
+                            "TelemetryProfileGroupId": "telemetry_profile_group",
                             "TelemetrySessionId": "telemetry_session",
                             "SomeNestedJson": { "foo": "bar" },
                             "URL": "https://url.example.com",
-                            "WindowsErrorReporting": 1
+                            "WindowsErrorReporting": "1"
                         }"#;
     test.files = {
         let mock_files = MockFiles::new();
@@ -542,10 +569,7 @@ fn no_restart_with_windows_error_reporting() {
         });
     });
     let mut assert_files = test.assert_files();
-    assert_files
-        .ignore_log()
-        .saved_settings(Settings::default())
-        .submitted();
+    assert_files.saved_settings(Settings::default()).submitted();
     {
         let dmp = assert_files.data("pending/minidump.dmp");
         let extra = assert_files.data("pending/minidump.extra");
@@ -564,7 +588,6 @@ fn quit() {
         interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
     });
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted()
         .pending();
@@ -578,7 +601,6 @@ fn delete_dump() {
         interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
     });
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted();
 }
@@ -620,7 +642,6 @@ fn no_submit() {
         interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
     });
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings {
             submit_report: false,
             include_url: false,
@@ -645,7 +666,6 @@ fn ping_and_event_files() {
         interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
     });
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted()
         .pending()
@@ -689,7 +709,6 @@ fn pingsender_failure() {
         interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
     });
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted()
         .pending()
@@ -713,6 +732,31 @@ fn pingsender_failure() {
 }
 
 #[test]
+fn glean_ping() {
+    let mut test = GuiTest::new();
+    test.enable_glean_pings();
+    let received_glean_ping = Counter::new();
+    test.mock.set(
+        net::http::MockHttp,
+        Box::new(cc! { (received_glean_ping)
+            move | _request, url | {
+                if url.starts_with("https://incoming.glean.example.com")
+                {
+                    received_glean_ping.inc();
+                    Ok(Ok(vec![]))
+                } else {
+                    net::http::MockHttp::try_others()
+                }
+            }
+        }),
+    );
+    test.run(|interact| {
+        interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
+    });
+    received_glean_ping.assert_one();
+}
+
+#[test]
 fn eol_version() {
     let mut test = GuiTest::new();
     test.files
@@ -725,7 +769,6 @@ fn eol_version() {
         "Version end of life: crash reports are no longer accepted."
     );
     test.assert_files()
-        .ignore_log()
         .pending()
         .ignore("data_dir/EndOfLife100.0");
 }
@@ -762,6 +805,7 @@ fn details_window() {
              SomeNestedJson: {\"foo\":\"bar\"}\n\
              SubmittedFrom: Client\n\
              TelemetryClientId: telemetry_client\n\
+             TelemetryProfileGroupId: telemetry_profile_group\n\
              TelemetryServerURL: https://telemetry.example.com\n\
              TelemetrySessionId: telemetry_session\n\
              Throttleable: 1\n\
@@ -781,7 +825,6 @@ fn data_dir_default() {
     });
     test.assert_files()
         .set_data_dir("data_dir/FooCorp/Bar/Crash Reports")
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted()
         .pending();
@@ -932,7 +975,6 @@ fn report_not_sent() {
     });
 
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submission_event(false)
         .pending();
@@ -951,7 +993,6 @@ fn report_response_failed() {
     });
 
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submission_event(false)
         .pending();
@@ -993,10 +1034,7 @@ fn response_indicates_discarded() {
     });
 
     let mut assert_files = test.assert_files();
-    assert_files
-        .ignore_log()
-        .saved_settings(Settings::default())
-        .pending();
+    assert_files.saved_settings(Settings::default()).pending();
     for i in SHOULD_BE_PRUNED..MINIDUMP_PRUNE_SAVE_COUNT + SHOULD_BE_PRUNED - 1 {
         assert_files.check_exists(format!("data_dir/pending/minidump{i}.dmp"));
         if i % 2 == 0 {
@@ -1025,7 +1063,6 @@ fn response_view_url() {
     });
 
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .pending()
         .check(
@@ -1057,11 +1094,23 @@ fn response_stop_sending_reports() {
     });
 
     test.assert_files()
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted()
         .pending()
         .check_exists("data_dir/EndOfLife100.0");
+}
+
+#[test]
+fn rename_failure_uses_copy() {
+    let mut test = GuiTest::new();
+    test.mock.set(mock::MockHook::new("rename_fail"), true);
+    test.run(|interact| {
+        interact.element("quit", |_style, b: &model::Button| b.click.fire(&()));
+    });
+    test.assert_files()
+        .saved_settings(Settings::default())
+        .submitted()
+        .pending();
 }
 
 /// A real temporary directory in the host filesystem.
@@ -1218,7 +1267,6 @@ fn real_curl_binary() {
 
     test.assert_files()
         .set_data_dir(data_dir.display())
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted();
 }
@@ -1259,7 +1307,6 @@ fn real_curl_library() {
 
     test.assert_files()
         .set_data_dir(data_dir.display())
-        .ignore_log()
         .saved_settings(Settings::default())
         .submitted();
 }

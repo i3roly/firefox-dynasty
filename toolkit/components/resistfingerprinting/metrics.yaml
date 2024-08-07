@@ -2405,3 +2405,253 @@ characteristics:
     expires: never
     data_sensitivity:
       - technical
+
+  mathml1:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml2:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+
+  mathml3:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+
+  mathml4:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml5:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml6:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml7:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml8:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml9:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  mathml10:
+    type: quantity
+    unit: int
+    description: >
+      Width of the drawn MathML element
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907654#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  monochrome:
+    type: boolean
+    description: >
+      Whether the user's device is monochrome
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907164
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907164#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  oscpu:
+    type: string
+    description: >
+      User's OS CPU reported by the navigator
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907170
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907170#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  pdf_viewer:
+    type: boolean
+    description: >
+      PDF viewer support reported by the navigator
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907170
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907170#c1
+    expires: never
+    data_sensitivity:
+      - technical
+
+  platform:
+    type: string
+    description: >
+      Platform reported by the navigator
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907170
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1907170#c1
+    expires: never
+    data_sensitivity:
+      - technical

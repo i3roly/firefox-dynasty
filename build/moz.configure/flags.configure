@@ -98,6 +98,8 @@ with only_when(building_with_gnu_compatible_cc):
     add_flag("-fno-math-errno")
     add_flag("-fno-exceptions", compiler=cxx_compiler)
 
+add_flag("-D_HAS_EXCEPTIONS=0", when=target_is_windows)
+
 # We only use -faddrsig with clang on android, and all version of clang we
 # support have it.
 add_addrsig_flag = depends(c_compiler, when=target_is_android)(
@@ -399,11 +401,9 @@ def add_gnu_specific_dso_flags(
     dso_flags.ldopts.extend(ldopts)
 
 
-@depends(
-    dso_flags, target, win32_subsystem_version, when=~building_with_gnu_compatible_cc
-)
-def add_non_gnu_dso_flags(dso_flags, target, win32_subsystem_version):
-    ldopts = [f"-SUBSYSTEM:WINDOWS,{win32_subsystem_version}"]
+@depends(dso_flags, target, when=~building_with_gnu_compatible_cc)
+def add_non_gnu_dso_flags(dso_flags, target):
+    ldopts = ["-SUBSYSTEM:WINDOWS,{}".format(win32_subsystem_version())]
     if target.cpu == "x86":
         ldopts.append("-MACHINE:X86")
     if target.cpu == "x86_64":
@@ -523,6 +523,19 @@ def moz_program_ldflags(building_with_gnu_compatible_cc, target):
 set_config("MOZ_PROGRAM_LDFLAGS", moz_program_ldflags)
 
 
+@depends(host, when=depends(c_compiler)(lambda c: c.type == "clang-cl"))
+def moz_debug_ldflags(host):
+    flags = ["-DEBUG"]
+    if host.kernel != "WINNT":
+        # %_PDB% is a special signal to emit only the PDB basename. This
+        # avoids problems in Windows tools that don't like forward-slashes.
+        flags.append("-PDBALTPATH:%_PDB%")
+    return flags
+
+
+set_config("MOZ_DEBUG_LDFLAGS", moz_debug_ldflags)
+
+
 # Objective-C/ Objective-C++ flags.
 # ---------------------------------
 @depends(compilation_flags, toolkit)
@@ -617,9 +630,53 @@ def os_cppflags(env_cppflags):
     return flags
 
 
-@depends("ASFLAGS", asm_flags, android_flags, all_arm_flags)
+@depends("CFLAGS", compilation_flags, android_flags, all_arm_flags)
 @imports(_from="mozbuild.shellutil", _import="split")
-def os_asflags(env_asflags, asm_flags, android_flags, all_arm_flags):
+def os_cflags(env_cflags, compilation_flags, android_flags, all_arm_flags):
+    flags = []
+    if android_flags:
+        flags.extend(android_flags.cflags)
+    if all_arm_flags:
+        flags.extend(all_arm_flags)
+    flags.extend(compilation_flags.cflags)
+    if env_cflags:
+        flags.extend(split(env_cflags[0]))
+    return flags
+
+
+@depends("CXXFLAGS", compilation_flags, android_flags, all_arm_flags)
+@imports(_from="mozbuild.shellutil", _import="split")
+def os_cxxflags(env_cxxflags, compilation_flags, android_flags, all_arm_flags):
+    flags = []
+    if android_flags:
+        flags.extend(android_flags.cxxflags)
+    if all_arm_flags:
+        flags.extend(all_arm_flags)
+    flags.extend(compilation_flags.cxxflags)
+    if env_cxxflags:
+        flags.extend(split(env_cxxflags[0]))
+    return flags
+
+
+@depends(
+    "ASFLAGS",
+    asm_flags,
+    android_flags,
+    all_arm_flags,
+    defines_cpp_flags,
+    c_compiler,
+    build_project,
+)
+@imports(_from="mozbuild.shellutil", _import="split")
+def os_asflags(
+    env_asflags,
+    asm_flags,
+    android_flags,
+    all_arm_flags,
+    defines_cpp_flags,
+    c_compiler,
+    build_project,
+):
     flags = []
     if android_flags:
         flags.extend(android_flags.asflags)
@@ -627,26 +684,48 @@ def os_asflags(env_asflags, asm_flags, android_flags, all_arm_flags):
     if all_arm_flags:
         flags.extend(all_arm_flags)
     flags.extend(asm_flags.asflags)
+    if build_project != "js" and c_compiler.type != "clang-cl":
+        flags.extend(defines_cpp_flags)
     if env_asflags:
         flags.extend(split(env_asflags[0]))
     return flags
 
 
+# VS2012+ defaults to -arch:SSE2. We want to target nothing more recent, so set
+# that explicitly here unless another target arch has already been set.
+@template
+def add_sse2_flag_if_needed(flags):
+    @depends(
+        flags,
+        when=~building_with_gnu_compatible_cc
+        & depends(target.cpu)(lambda cpu: cpu == "x86"),
+    )
+    def add_sse2_flag(flags):
+        is_arch_flag = lambda flag: flag.lower().startswith(("-arch:", "/arch:"))
+        if not any(is_arch_flag(flag) for flag in flags):
+            flags.append("-arch:SSE2")
+
+
+add_sse2_flag_if_needed(os_cflags)
+add_sse2_flag_if_needed(os_cxxflags)
+
+
+@depends(compilation_flags, when=depends(target.os)(lambda os: os == "WASI"))
+def add_thread_model_single(compilation_flags):
+    compilation_flags.cxxflags.extend(["-mthread-model", "single"])
+
+
 # Please keep these last in this file.
-add_old_configure_assignment("_COMPILATION_LDFLAGS", linker_flags.ldflags)
-add_old_configure_assignment(
-    "_COMPILATION_OPTIMIZE_LDFLAGS", linker_optimize_flags.ldflags
-)
-
 add_old_configure_assignment("CPPFLAGS", os_cppflags)
-
-add_old_configure_assignment("_COMPILATION_CFLAGS", compilation_flags.cflags)
-add_old_configure_assignment("_COMPILATION_CXXFLAGS", compilation_flags.cxxflags)
+add_old_configure_assignment("CFLAGS", os_cflags)
+add_old_configure_assignment("CXXFLAGS", os_cxxflags)
 
 set_config("HOST_CPPFLAGS", host_cppflags)
 set_config("HOST_CFLAGS", host_cflags)
 set_config("HOST_CXXFLAGS", host_cxxflags)
 set_config("HOST_LDFLAGS", host_ldflags)
 set_config("OS_CPPFLAGS", os_cppflags)
+set_config("OS_CFLAGS", os_cflags)
+set_config("OS_CXXFLAGS", os_cxxflags)
 set_config("ASFLAGS", os_asflags)
 set_config("DSO_LDOPTS", dso_flags.ldopts)

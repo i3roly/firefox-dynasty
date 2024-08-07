@@ -1420,8 +1420,6 @@ class MOZ_STACK_CLASS ModuleValidatorShared {
   }
 
  protected:
-  [[nodiscard]] bool initCodeMetadata() { return codeMeta_->init(); }
-
   [[nodiscard]] bool addStandardLibraryMathInfo() {
     static constexpr struct {
       const char* name;
@@ -2005,9 +2003,6 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
     codeMetaForAsmJS_->alwaysUseFdlibm = parser_.options().alwaysUseFdlibm();
     codeMetaForAsmJS_->source = do_AddRef(parser_.ss);
 
-    if (!initCodeMetadata()) {
-      return false;
-    }
     return addStandardLibraryMathInfo();
   }
 
@@ -2064,8 +2059,9 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
       return false;
     }
 
+    Limits limits = Limits(mask + 1, Nothing(), Shareable::False);
     codeMeta_->asmJSSigToTableIndex[sigIndex] = codeMeta_->tables.length();
-    if (!codeMeta_->tables.emplaceBack(RefType::func(), mask + 1, Nothing(),
+    if (!codeMeta_->tables.emplaceBack(limits, RefType::func(),
                                        /* initExpr */ Nothing(),
                                        /*isAsmJS*/ true)) {
       return false;
@@ -2140,24 +2136,20 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
          r.popFront()) {
       uint32_t funcIndex = r.front().value();
       uint32_t funcTypeIndex = r.front().key().sigIndex();
-      MOZ_ASSERT(!codeMeta_->funcs[funcIndex].type);
-      codeMeta_->funcs[funcIndex] = FuncDesc(
-          &codeMeta_->types->type(funcTypeIndex).funcType(), funcTypeIndex);
+      codeMeta_->funcs[funcIndex] = FuncDesc(funcTypeIndex);
     }
     for (const Func& func : funcDefs_) {
       uint32_t funcIndex = funcImportMap_.count() + func.funcDefIndex();
       uint32_t funcTypeIndex = func.sigIndex();
-      MOZ_ASSERT(!codeMeta_->funcs[funcIndex].type);
-      codeMeta_->funcs[funcIndex] = FuncDesc(
-          &codeMeta_->types->type(funcTypeIndex).funcType(), funcTypeIndex);
+      codeMeta_->funcs[funcIndex] = FuncDesc(funcTypeIndex);
     }
     for (const Export& exp : moduleMeta_->exports) {
       if (exp.kind() != DefinitionKind::Function) {
         continue;
       }
       uint32_t funcIndex = exp.funcIndex();
-      codeMeta_->declareFuncExported(funcIndex, /* eager */ true,
-                                     /* canRefFunc */ false);
+      codeMeta_->funcs[funcIndex].declareFuncExported(/* eager */ true,
+                                                      /* canRefFunc */ false);
     }
 
     codeMeta_->numFuncImports = funcImportMap_.count();
@@ -2188,23 +2180,6 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
     codeMetaForAsmJS_->srcLengthWithRightBrace =
         endAfterCurly - codeMetaForAsmJS_->srcStart;
 
-    ScriptedCaller scriptedCaller;
-    if (parser_.ss->filename()) {
-      scriptedCaller.line = 0;  // unused
-      scriptedCaller.filename = DuplicateString(parser_.ss->filename());
-      if (!scriptedCaller.filename) {
-        return nullptr;
-      }
-    }
-
-    // The default options are fine for asm.js
-    SharedCompileArgs args =
-        CompileArgs::buildForAsmJS(std::move(scriptedCaller));
-    if (!args) {
-      ReportOutOfMemory(fc_);
-      return nullptr;
-    }
-
     uint32_t codeSectionSize = 0;
     for (const Func& func : funcDefs_) {
       codeSectionSize += func.bytes().length();
@@ -2222,9 +2197,13 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
       return nullptr;
     }
 
-    ModuleGenerator mg(*args, codeMeta_, &compilerEnv_, nullptr, nullptr,
-                       nullptr);
-    if (!mg.init(codeMetaForAsmJS_.get())) {
+    if (!moduleMeta_->prepareForCompile(compilerEnv_.mode())) {
+      return nullptr;
+    }
+
+    ModuleGenerator mg(*codeMeta_, compilerEnv_, compilerEnv_.initialState(),
+                       nullptr, nullptr, nullptr);
+    if (!mg.initializeCompleteTier(codeMetaForAsmJS_.get())) {
       return nullptr;
     }
 
@@ -6440,15 +6419,28 @@ static SharedModule CheckModule(FrontendContext* fc,
                                 unsigned* time) {
   int64_t before = PRMJ_Now();
 
+  ScriptedCaller scriptedCaller;
+  if (parser.ss->filename()) {
+    scriptedCaller.line = 0;  // unused
+    scriptedCaller.filename = DuplicateString(parser.ss->filename());
+    if (!scriptedCaller.filename) {
+      return nullptr;
+    }
+  }
+
+  // The default options are fine for asm.js
+  SharedCompileArgs args =
+      CompileArgs::buildForAsmJS(std::move(scriptedCaller));
+  if (!args) {
+    ReportOutOfMemory(fc);
+    return nullptr;
+  }
+
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*args, ModuleKind::AsmJS)) {
     return nullptr;
   }
-  MutableCodeMetadata codeMeta =
-      js_new<CodeMetadata>(FeatureArgs(), ModuleKind::AsmJS);
-  if (!codeMeta) {
-    return nullptr;
-  }
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
 
   FunctionNode* moduleFunctionNode = parser.pc_->functionBox()->functionNode;
 

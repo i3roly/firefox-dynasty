@@ -9,10 +9,13 @@
 
 #include <atomic>
 #include <cstring>
+#include "mozilla/CheckedInt.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/AlreadyAddRefed.h"
+#include "mozilla/Maybe.h"
 #include "mozilla/RefCounted.h"
+#include "mozmemory.h"
 
 namespace mozilla {
 
@@ -50,19 +53,52 @@ class StringBuffer {
    *
    * @return new string buffer or null if out of memory.
    */
-  static already_AddRefed<StringBuffer> Alloc(size_t aSize) {
+  static already_AddRefed<StringBuffer> Alloc(
+      size_t aSize, mozilla::Maybe<arena_id_t> aArena = mozilla::Nothing()) {
     MOZ_ASSERT(aSize != 0, "zero capacity allocation not allowed");
     MOZ_ASSERT(sizeof(StringBuffer) + aSize <= size_t(uint32_t(-1)) &&
                    sizeof(StringBuffer) + aSize > aSize,
                "mStorageSize will truncate");
 
-    auto* hdr = (StringBuffer*)malloc(sizeof(StringBuffer) + aSize);
-    if (hdr) {
-      hdr->mRefCount = 1;
-      hdr->mStorageSize = aSize;
-      detail::RefCountLogger::logAddRef(hdr, 1);
+    size_t bytes = sizeof(StringBuffer) + aSize;
+    void* hdr = aArena ? moz_arena_malloc(*aArena, bytes) : malloc(bytes);
+    if (!hdr) {
+      return nullptr;
     }
+    return ConstructInPlace(hdr, aSize);
+  }
+
+  /**
+   * Like Alloc, but use aBuffer instead of allocating a new buffer. This can
+   * be used when the caller already has a malloced buffer of the right size and
+   * allocating a new one would be too expensive.
+   *
+   * aStorageSize must be the string's length in bytes (including the null
+   * terminator). The caller must initialize all of these bytes either before or
+   * after calling this function.
+   *
+   * @return the new StringBuffer header.
+   */
+  static already_AddRefed<StringBuffer> ConstructInPlace(void* aBuffer,
+                                                         size_t aStorageSize) {
+    MOZ_ASSERT(aBuffer, "must have a valid buffer");
+    MOZ_ASSERT(aStorageSize != 0, "zero capacity StringBuffer not allowed");
+    auto* hdr = new (aBuffer) StringBuffer();
+    hdr->mRefCount = 1;
+    hdr->mStorageSize = aStorageSize;
+    detail::RefCountLogger::logAddRef(hdr, 1);
     return already_AddRefed(hdr);
+  }
+
+  /**
+   * Returns true if (aLength + 1) * sizeof(CharT) is a valid allocation size
+   * for Alloc. Adds +1 to aLength for the null-terminator.
+   */
+  template <typename CharT>
+  static bool IsValidLength(size_t aLength) {
+    auto checkedSize =
+        (CheckedUint32(aLength) + 1) * sizeof(CharT) + sizeof(StringBuffer);
+    return checkedSize.isValid();
   }
 
   /**

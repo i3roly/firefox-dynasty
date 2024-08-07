@@ -41,6 +41,7 @@ import org.mozilla.fenix.components.settings.counterPreference
 import org.mozilla.fenix.components.settings.featureFlagPreference
 import org.mozilla.fenix.components.settings.lazyFeatureFlagPreference
 import org.mozilla.fenix.components.toolbar.ToolbarPosition
+import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
 import org.mozilla.fenix.nimbus.CookieBannersSection
@@ -851,6 +852,30 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         true,
     )
 
+    val blockSuspectedFingerprintersInCustomTrackingProtection by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_tracking_protection_suspected_fingerprinters),
+        true,
+    )
+
+    val blockSuspectedFingerprintersSelectionInCustomTrackingProtection by stringPreference(
+        appContext.getPreferenceKey(R.string.pref_key_tracking_protection_suspected_fingerprinters_select),
+        "private",
+    )
+
+    val blockSuspectedFingerprinters: Boolean
+        get() {
+            return blockSuspectedFingerprintersInCustomTrackingProtection &&
+                blockSuspectedFingerprintersSelectionInCustomTrackingProtection == appContext.getString(R.string.all)
+        }
+
+    val blockSuspectedFingerprintersPrivateBrowsing: Boolean
+        get() {
+            return blockSuspectedFingerprintersInCustomTrackingProtection &&
+                blockSuspectedFingerprintersSelectionInCustomTrackingProtection == appContext.getString(
+                    R.string.private_string,
+                )
+        }
+
     /**
      * Prefer to use a fixed top toolbar when:
      * - a talkback service is enabled or
@@ -1284,6 +1309,16 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     )
 
     fun incrementNumTimesPrivateModeOpened() = numTimesPrivateModeOpened.increment()
+
+    /**
+     * Updates the number of times that private mode has been opened.
+     *
+     * @param newVal The new value to set [numTimesPrivateModeOpened] to.
+     */
+    @VisibleForTesting
+    internal fun setNumTimesPrivateModeOpened(newVal: Int) {
+        numTimesPrivateModeOpened.value = newVal
+    }
 
     var showedPrivateModeContextualFeatureRecommender by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_showed_private_mode_cfr),
@@ -1765,6 +1800,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     )
 
     /**
+     * Indicates Navigation Bar's Navigation buttons CFR should be displayed to the user.
+     */
+    var shouldShowNavigationButtonsCFR by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_toolbar_navigation_cfr),
+        default = true,
+    )
+
+    /**
      * Time in milliseconds when the user was first presented the review quality check feature CFR.
      */
     var reviewQualityCheckCfrDisplayTimeInMillis by longPreference(
@@ -1893,9 +1936,10 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     /**
      * Indicates if the menu redesign is enabled.
      */
-    var enableMenuRedesign by booleanPreference(
+    var enableMenuRedesign by lazyFeatureFlagPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_enable_menu_redesign),
-        default = FeatureFlags.menuRedesignEnabled,
+        default = { FxNimbus.features.menuRedesign.value().enabled },
+        featureFlag = true,
     )
 
     /**
@@ -1968,15 +2012,6 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     )
 
     /**
-     * Indicates if SuggestStrongPassword feature is enabled.
-     */
-    var enableSuggestStrongPassword by lazyFeatureFlagPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_suggest_strong_password),
-        default = { FxNimbus.features.fxStrongPassword.value().enabled },
-        featureFlag = FeatureFlags.suggestStrongPassword,
-    )
-
-    /**
      * Indicates first time engaging with signup
      */
     var isFirstTimeEngagingWithSignup: Boolean by booleanPreference(
@@ -2029,9 +2064,11 @@ class Settings(private val appContext: Context) : PreferencesHolder {
      *  - a combination of a navigation and address bar & a microsurvey.
      *  - a combination of address bar & a microsurvey.
      *  - be absent.
+     *
+     *  @param context to be used for [shouldAddNavigationBar] function
      */
-    fun getBottomToolbarHeight(): Int {
-        val isNavbarEnabled = navigationToolbarEnabled
+    fun getBottomToolbarHeight(context: Context): Int {
+        val isNavbarVisible = context.shouldAddNavigationBar()
         val isMicrosurveyEnabled = shouldShowMicrosurveyPrompt
         val isToolbarAtBottom = toolbarPosition == ToolbarPosition.BOTTOM
 
@@ -2042,14 +2079,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
             appContext.resources.getDimensionPixelSize(R.dimen.browser_toolbar_height)
 
         return when {
-            isNavbarEnabled && isMicrosurveyEnabled && isToolbarAtBottom ->
+            isNavbarVisible && isMicrosurveyEnabled && isToolbarAtBottom ->
                 navbarHeight + microsurveyHeight + toolbarHeight
 
-            isNavbarEnabled && isMicrosurveyEnabled -> navbarHeight + microsurveyHeight
-            isNavbarEnabled && isToolbarAtBottom -> navbarHeight + toolbarHeight
+            isNavbarVisible && isMicrosurveyEnabled -> navbarHeight + microsurveyHeight
+            isNavbarVisible && isToolbarAtBottom -> navbarHeight + toolbarHeight
             isMicrosurveyEnabled && isToolbarAtBottom -> microsurveyHeight + toolbarHeight
 
-            isNavbarEnabled -> navbarHeight
+            isNavbarVisible -> navbarHeight
             isMicrosurveyEnabled -> microsurveyHeight
             isToolbarAtBottom -> toolbarHeight
 
@@ -2109,8 +2146,8 @@ class Settings(private val appContext: Context) : PreferencesHolder {
      * Indicates if the microsurvey feature is enabled.
      */
     var microsurveyFeatureEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_microsurvey_feature_enabled),
-        default = false,
+        key = appContext.getPreferenceKey(R.string.pref_key_microsurvey_feature_enabled),
+        default = FxNimbus.features.microsurveys.value().enabled,
     )
 
     /**

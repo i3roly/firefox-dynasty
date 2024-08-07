@@ -9,6 +9,8 @@ import { PromiseWorker } from "resource://gre/modules/workers/PromiseWorker.mjs"
 /* eslint-disable mozilla/reject-import-system-module-from-non-system */
 import { ArchiveUtils } from "resource:///modules/backup/ArchiveUtils.sys.mjs";
 import { ArchiveEncryptor } from "resource:///modules/backup/ArchiveEncryption.sys.mjs";
+import { BackupError } from "resource:///modules/backup/BackupError.mjs";
+import { ERRORS } from "chrome://browser/content/backup/backup-constants.mjs";
 
 /**
  * An ArchiveWorker is a PromiseWorker that tries to do most of the heavy
@@ -216,8 +218,9 @@ Content-Length: ${totalBase64Bytes}
     while (currentIndex < totalBytesToRead) {
       let bytesToRead = Math.min(chunkSize, totalBytesToRead - currentIndex);
       if (bytesToRead <= 0) {
-        throw new Error(
-          "Failed to calculate the right number of bytes to read."
+        throw new BackupError(
+          "Failed to calculate the right number of bytes to read.",
+          ERRORS.FILE_SYSTEM_ERROR
         );
       }
 
@@ -305,14 +308,17 @@ ${ArchiveUtils.INLINE_MIME_END_MARKER}
       /^<!DOCTYPE html>[\r\n]+<!-- Version: (\d+) -->[\r\n]+/;
     let headerMatches = decodedHeader.match(EXPECTED_HEADER);
     if (!headerMatches) {
-      throw new Error("Corrupt archive header");
+      throw new BackupError("Corrupt archive header", ERRORS.CORRUPTED_ARCHIVE);
     }
 
     let version = parseInt(headerMatches[1], 10);
     // In the future, if we ever bump the ARCHIVE_FILE_VERSION, this is where we
     // could place migrations / handlers for older archive versions.
     if (version != ArchiveUtils.ARCHIVE_FILE_VERSION) {
-      throw new Error("Unsupported archive version: " + version);
+      throw new BackupError(
+        "Unsupported archive version: " + version,
+        ERRORS.UNSUPPORTED_BACKUP_VERSION
+      );
     }
 
     // Now we have to scan forward, looking for the INLINE_MIME_MARKER_START
@@ -340,9 +346,10 @@ ${ArchiveUtils.INLINE_MIME_END_MARKER}
 
       // This shouldn't happen, but better safe than sorry.
       if (bytesToRead <= 0) {
-        throw new Error(
+        throw new BackupError(
           "Failed to calculate the proper number of bytes to read: " +
-            bytesToRead
+            bytesToRead,
+          ERRORS.UNKNOWN
         );
       }
 
@@ -368,19 +375,31 @@ ${ArchiveUtils.INLINE_MIME_END_MARKER}
         // which might be displayed in the markup of the page, are multiple
         // bytes long). To work around this, we use a TextEncoder to encode
         // everything leading up to the marker, and count the number of bytes.
-        // Then we count the number of bytes in our match. The sum of these
-        // two values, plus the priorIndex gives us the byte index of the point
-        // right after our regular expression match in a Unicode-character
-        // compatible way.
+        // Since the buffer may have cut through a multibyte character, we
+        // also need to work around the workaround by discounting undecoded
+        // characters (which TextDecoder replaces with �).Then we count the
+        // number of bytes in our match. The sum of these two values, plus
+        // the priorIndex gives us the byte index of the point right after
+        // our regular expression match in a Unicode-character compatible way.
         //
         // This all presumes that the archive file was encoded as UTF-8. Since
         // we control the generation of this file, this is a safe assumption.
+
         let match = markerMatches[0];
+        let matchBytes = textEncoder.encode(match).byteLength;
         let matchIndex = decodedString.indexOf(match);
-        let substringUpToMatch = decodedString.slice(0, matchIndex);
+
+        let numberOfUndecodedCharacters =
+          ArchiveUtils.countReplacementCharacters(decodedString);
+        // Skip the undecoded characters at the start of the string,
+        // if necessary
+        let substringUpToMatch = decodedString.slice(
+          numberOfUndecodedCharacters,
+          matchIndex
+        );
         let substringUpToMatchBytes =
           textEncoder.encode(substringUpToMatch).byteLength;
-        let matchBytes = textEncoder.encode(markerMatches[0]).byteLength;
+
         startByteOffset = priorIndex + substringUpToMatchBytes + matchBytes;
         contentType = markerMatches[1];
         break;
@@ -390,6 +409,14 @@ ${ArchiveUtils.INLINE_MIME_END_MARKER}
       currentIndex += bytesToRead;
       oldBuffer = buffer;
     }
+
+    if (!contentType) {
+      throw new BackupError(
+        "Failed to find embedded data in archive",
+        ERRORS.CORRUPTED_ARCHIVE
+      );
+    }
+
     return { startByteOffset, contentType };
   }
 
@@ -401,7 +428,10 @@ ${ArchiveUtils.INLINE_MIME_END_MARKER}
     this.#worker = new PromiseWorker.AbstractWorker();
     this.#worker.dispatch = (method, args = []) => {
       if (!this[method]) {
-        throw new Error("Method does not exist: " + method);
+        throw new BackupError(
+          "Method does not exist: " + method,
+          ERRORS.INTERNAL_ERROR
+        );
       }
       return this[method](...args);
     };

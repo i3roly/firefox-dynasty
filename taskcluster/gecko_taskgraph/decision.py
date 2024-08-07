@@ -35,7 +35,7 @@ from .actions import render_actions_json
 from .files_changed import get_changed_files
 from .parameters import get_app_version, get_version
 from .try_option_syntax import parse_message
-from .util.backstop import BACKSTOP_INDEX, is_backstop
+from .util.backstop import ANDROID_PERFTEST_BACKSTOP_INDEX, BACKSTOP_INDEX, is_backstop
 from .util.bugbug import push_schedules
 from .util.chunking import resolver
 from .util.hg import get_hg_commit_message, get_hg_revision_branch
@@ -234,7 +234,15 @@ def taskgraph_decision(options, parameters=None):
     # cache run-task, misc/fetch-content & robustcheckout.py
     scripts_root_dir = os.path.join(GECKO, "taskcluster/scripts")
     run_task_file_path = os.path.join(scripts_root_dir, "run-task")
-    fetch_content_file_path = os.path.join(scripts_root_dir, "misc/fetch-content")
+    fetch_content_file_path = os.path.join(
+        GECKO,
+        "third_party",
+        "python",
+        "taskcluster_taskgraph",
+        "taskgraph",
+        "run-task",
+        "fetch-content",
+    )
     robustcheckout_path = os.path.join(
         GECKO,
         "testing/mozharness/external_tools/robustcheckout.py",
@@ -399,6 +407,14 @@ def get_decision_parameters(graph_config, options):
     # Determine if this should be a backstop push.
     parameters["backstop"] = is_backstop(parameters)
 
+    # For the android perf tasks, run them half as often
+    parameters["android_perftest_backstop"] = is_backstop(
+        parameters,
+        push_interval=40,
+        time_interval=60 * 8,
+        backstop_strategy="android_perftest_backstop",
+    )
+
     if "decision-parameters" in graph_config["taskgraph"]:
         find_object(graph_config["taskgraph"]["decision-parameters"])(
             graph_config, parameters
@@ -459,6 +475,8 @@ def set_try_config(parameters, task_config_file):
 
 def set_decision_indexes(decision_task_id, params, graph_config):
     index_paths = []
+    if params["android_perftest_backstop"]:
+        index_paths.insert(0, ANDROID_PERFTEST_BACKSTOP_INDEX)
     if params["backstop"]:
         # When two Decision tasks run at nearly the same time, it's possible
         # they both end up being backstops if the second checks the backstop

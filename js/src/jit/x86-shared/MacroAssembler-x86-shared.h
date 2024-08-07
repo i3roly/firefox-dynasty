@@ -28,17 +28,15 @@ class MacroAssemblerX86Shared : public Assembler {
 
  public:
 #ifdef JS_CODEGEN_X64
-  typedef X86Encoding::JmpSrc UsesItem;
+  using UsesItem = X86Encoding::JmpSrc;
 #else
-  typedef CodeOffset UsesItem;
+  using UsesItem = CodeOffset;
 #endif
 
-  typedef Vector<UsesItem, 0, SystemAllocPolicy> UsesVector;
+  using UsesVector = Vector<UsesItem, 0, SystemAllocPolicy>;
   static_assert(sizeof(UsesItem) == 4);
 
  protected:
-  // For Double, Float and SimdData, make the move ctors explicit so that MSVC
-  // knows what to use instead of copying these data structures.
   template <class T>
   struct Constant {
     using Pod = T;
@@ -47,9 +45,10 @@ class MacroAssemblerX86Shared : public Assembler {
     UsesVector uses;
 
     explicit Constant(const T& value) : value(value) {}
-    Constant(Constant<T>&& other)
-        : value(other.value), uses(std::move(other.uses)) {}
-    explicit Constant(const Constant<T>&) = delete;
+
+    // Allow move operations, but not copying.
+    Constant(Constant<T>&&) = default;
+    Constant(const Constant<T>&) = delete;
   };
 
   // Containers use SystemAllocPolicy since wasm releases memory after each
@@ -57,14 +56,14 @@ class MacroAssemblerX86Shared : public Assembler {
   // are compiled.
   using Double = Constant<double>;
   Vector<Double, 0, SystemAllocPolicy> doubles_;
-  typedef HashMap<double, size_t, DefaultHasher<double>, SystemAllocPolicy>
-      DoubleMap;
+  using DoubleMap =
+      HashMap<double, size_t, DefaultHasher<double>, SystemAllocPolicy>;
   DoubleMap doubleMap_;
 
   using Float = Constant<float>;
   Vector<Float, 0, SystemAllocPolicy> floats_;
-  typedef HashMap<float, size_t, DefaultHasher<float>, SystemAllocPolicy>
-      FloatMap;
+  using FloatMap =
+      HashMap<float, size_t, DefaultHasher<float>, SystemAllocPolicy>;
   FloatMap floatMap_;
 
   struct SimdData : public Constant<SimdConstant> {
@@ -75,8 +74,8 @@ class MacroAssemblerX86Shared : public Assembler {
   };
 
   Vector<SimdData, 0, SystemAllocPolicy> simds_;
-  typedef HashMap<SimdConstant, size_t, SimdConstant, SystemAllocPolicy>
-      SimdMap;
+  using SimdMap =
+      HashMap<SimdConstant, size_t, SimdConstant, SystemAllocPolicy>;
   SimdMap simdMap_;
 
   template <class T, class Map>
@@ -396,6 +395,37 @@ class MacroAssemblerX86Shared : public Assembler {
   }
   void convertDoubleToFloat32(FloatRegister src, FloatRegister dest) {
     vcvtsd2ss(src, dest, dest);
+  }
+
+  void convertDoubleToFloat16(FloatRegister src, FloatRegister dest) {
+    MOZ_CRASH("Not supported for this target");
+  }
+  void convertFloat16ToDouble(FloatRegister src, FloatRegister dest) {
+    convertFloat16ToFloat32(src, dest);
+    convertFloat32ToDouble(dest, dest);
+  }
+  void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest) {
+    vcvtps2ph(src, dest);
+  }
+  void convertFloat16ToFloat32(FloatRegister src, FloatRegister dest) {
+    // Zero extend word to quadword. This ensures all high words in the result
+    // are zeroed after vcvtph2ps.
+    vpmovzxwq(Operand(dest), dest);
+
+    // Convert Float16 to Float32.
+    vcvtph2ps(dest, dest);
+  }
+  void convertInt32ToFloat16(Register src, FloatRegister dest) {
+    // Clear the output register first to break dependencies; see above;
+    //
+    // This also ensures all high words in the result are zeroed.
+    zeroFloat32(dest);
+
+    // Convert Int32 to Float32.
+    vcvtsi2ss(src, dest, dest);
+
+    // Convert Float32 to Float16.
+    vcvtps2ph(dest, dest);
   }
 
   void loadInt32x4(const Address& addr, FloatRegister dest) {
@@ -762,6 +792,25 @@ class MacroAssemblerX86Shared : public Assembler {
   void moveFloat32(FloatRegister src, FloatRegister dest) {
     // Use vmovaps instead of vmovss to avoid dependencies.
     vmovaps(src, dest);
+  }
+
+  FaultingCodeOffset loadFloat16(const Address& addr, FloatRegister dest,
+                                 Register scratch) {
+    auto fco = load16ZeroExtend(addr, scratch);
+
+    // Move from GPR to FloatRegister.
+    vmovd(scratch, dest);
+
+    return fco;
+  }
+  FaultingCodeOffset loadFloat16(const BaseIndex& src, FloatRegister dest,
+                                 Register scratch) {
+    auto fco = load16ZeroExtend(src, scratch);
+
+    // Move from GPR to FloatRegister.
+    vmovd(scratch, dest);
+
+    return fco;
   }
 
   // Checks whether a double is representable as a 32-bit integer. If so, the

@@ -118,6 +118,9 @@
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the navigation bar. -->
     <string name="navbar_cfr_message_2">تور بېكەتتە بەتنى دومىلاتقىنىڭىزدا بۇ بالداق ئۆزلۈكىدىن يوشۇرۇلۇپ كۆز يۈگۈرتۈشكە تېخىمۇ كۆپ بوشلۇق ئاجرىتىدۇ. </string>
 
+    <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
+    <string name="navbar_navigation_buttons_cfr_message">يا ئوقنى چېكىپ بېسىپ تۇرۇلسا بۇ بەتكۈچنىڭ تارىخىدىكى بەتلىرى ئارىسىدا ئاتلايدۇ.</string>
+
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">كامېرا ئىجازىتى زۆرۈر. ئاندىرويىد تەڭشىكىگە يۆتكىلىپ، ئىجازەتنى چېكىپ، ئاندىن يول قوينى چېكىڭ.</string>
     <!-- Text for the positive action button to go to Android Settings to grant permissions. -->
@@ -251,6 +254,8 @@
     <string name="browser_menu_open_app_link">ئەپتە ئاچ</string>
     <!-- Browser menu button to show reader view appearance controls e.g. the used font type and size -->
     <string name="browser_menu_customize_reader_view">ئوقۇرمەن كۆرۈنۈشىنى خاسلاشتۇر</string>
+    <!-- Browser menu button to show reader view appearance controls e.g. the used font type and size -->
+    <string name="browser_menu_customize_reader_view_2">ئوقۇرمەن كۆرۈنۈشىنى خاسلاشتۇر</string>
     <!-- Browser menu label for adding a bookmark -->
     <string name="browser_menu_add">قوشۇش</string>
     <!-- Browser menu label for editing a bookmark -->
@@ -278,12 +283,20 @@
 
     <!-- Browser menu label that toggles the request for the desktop site of the currently visited page -->
     <string name="browser_menu_switch_to_desktop_site">ئۈستەل يۈزى تور بېكىتىگە ئالماشتۇر</string>
+    <!-- Browser menu label that toggles the request for the mobile site of the currently visited page -->
+    <string name="browser_menu_switch_to_mobile_site">كۆچمە بېكەتكە ئالماشتۇر</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">قوراللار</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">ئوقۇرمەن كۆرۈنۈشى، تەرجىمە، بېسىش، ھەمبەھىر، ئەپ ئېچىش</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">ئوقۇرمەن كۆرۈنۈشى، بېسىش، ھەمبەھىر، ئەپ ئېچىش</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">ساقلا</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">خەتكۈچ، تېزلەتمە، باش بەت، توپلام، PDF قوشىدۇ</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">بۇ بەتنى خەتكۈچكە قوش</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -421,7 +434,10 @@
     <string name="juno_onboarding_sign_in_title_2">ئۈسكۈنىلەر ئارا ئالماشتۇرغاندا شىفىرلىنىدۇ</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_2">تىزىمغا كىرىپ قەدەمداشلىسىڭىز، تېخىمۇ بىخەتەر بولىسىز. Firefox ئىم، خەتكۈچ ۋە باشقىلارنى مەخپىيلەشتۈرىدۇ.</string>
+    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="UnusedResources">تىزىمغا كىرىپ قەدەمداشلىسىڭىز، تېخىمۇ بىخەتەر بولىسىز. Firefox ئىم، خەتكۈچ ۋە باشقىلارنى مەخپىيلەشتۈرىدۇ.</string>
+    <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
+     Note: The word "Firefox" should NOT be translated -->
+    <string name="juno_onboarding_sign_in_description_3">قەدەمداشلىسىڭىز Firefox ئىم، خەتكۈچلىرىڭىزنى شىفىرلايدۇ.</string>
     <!-- Text for the button to sign in to sync on the device -->
     <string name="juno_onboarding_sign_in_positive_button" tools:ignore="UnusedResources">تىزىمغا كىرىڭ</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
@@ -1086,7 +1102,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">يىغقۇچ ئىسمى</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">ئىسىم ئۆزگەرتىش</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">ئىسىم ئۆزگەرتىش</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">چىقىرىۋەت</string>
 
@@ -1219,6 +1235,17 @@
     <string name="bookmark_undo_deletion">يېنىۋال</string>
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">ئىزدەيدىغان ئاتالغۇ كىرگۈزۈلىدۇ</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">كەينىگە قايت</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">يېڭى قىسقۇچ قوش</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">خەتكۈچنى تاقا</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">خەتكۈچ ئىزدەيدۇ</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">%s نىڭ تۈر تىزىملىكى</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2156,8 +2183,10 @@
     <string name="top_sites_rename_dialog_title">ئىسمى</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">تېزلەتمە ئىسمى</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">تېزلەتمە تور ئادرېسى</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">جەزملە</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">جەزملە</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">ۋاز كەچ</string>
     <!-- Text for the menu button to open the homepage settings. -->
@@ -2167,6 +2196,17 @@
     <string name="top_sites_menu_sponsor_privacy">قوللىغۇچىلىرىمىز ۋە شەخسىيىتىڭىز</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">قوللىغان</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">تەھرىر</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">تېزلەتمە تەھرىر</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">ساقلا</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">ئىناۋەتلىك تور ئادرېسى كىرگۈزۈلىدۇ</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">تور ئادرېسى</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2379,7 +2419,7 @@
     <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
     <string name="review_quality_check_second_cfr_action" tools:ignore="UnusedResources">باھالاش تەكشۈرگۈچنى ئاچ</string>
     <!-- Flag showing that the review quality check feature is work in progress. -->
-    <string name="review_quality_check_beta_flag">Beta</string>
+    <string name="review_quality_check_beta_flag" moz:removedIn="130" tools:ignore="UnusedResources">Beta</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
     <string name="review_quality_check_open_handle_content_description">باھالاش تەكشۈرگۈچنى ئاچ</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
@@ -2574,7 +2614,9 @@
 
     <!-- Download languages preference screen -->
     <!-- Title of the download languages preference screen toolbar.-->
-    <string name="download_languages_toolbar_title_preference">تىللارنى چۈشۈرۈش</string>
+    <string name="download_languages_toolbar_title_preference" moz:removedIn="130" tools:ignore="UnusedResources">تىللارنى چۈشۈرۈش</string>
+    <!-- Title of the toolbar for the translation feature screen where users may download different languages for translation. -->
+    <string name="download_languages_translations_toolbar_title_preference">تىل چۈشۈر</string>
     <!-- Screen header presenting the download language preference feature. It will appear under the toolbar.The first parameter is "Learn More," a clickable text with a link. Talkback will append this to say "Double tap to open link to learn more". -->
     <string name="download_languages_header_preference">تېخىمۇ تېز ۋە تورسىز تەرجىمە قىلىش ئۈچۈن تىلنى تولۇق چۈشۈرۈڭ. %1$s</string>
     <!-- Clickable text from the screen header that links to a website. -->
@@ -2741,11 +2783,13 @@
     <!-- Option for likert scale -->
     <string name="likert_scale_option_6" tools:ignore="UnusedResources">ئىشلەتمەيمەن</string>
     <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources">سىزنىڭ Firefox ئىشلىتىشتىكى مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources" moz:removedIn="130">سىزنىڭ Firefox ئىشلىتىشتىكى مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
     <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
     <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Firefox نىڭ بېسىشىنى ياخشىلاشقا ياردەم بېرىڭ. ئازراقلا ۋاقىت كېتىدۇ</string>
     <!-- Text shown in prompt for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
     <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Firefox نىڭ بېسىش ئىقتىدارىغا بولغان رازىمەنلىكىڭىز قانداق؟</string>
+    <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_homepage_title" tools:ignore="UnusedResources">سىزنىڭ Firefox باش بېتىگە بولغان مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
     <!-- Accessibility -->
     <!-- Content description for the survey application icon. Note: The word "Firefox" should NOT be translated.  -->
     <string name="microsurvey_app_icon_content_description">Firefox تۇغى</string>
@@ -2779,4 +2823,8 @@
     <string name="exit_fullscreen_with_gesture">پۈتۈن ئېكران ھالىتىدىن چېكىنىشتە، چوققىسىدىن سۆرەپ، قايت قول ئىشارىتى ئىشلىتىلىدۇ</string>
     <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
     <string name="exit_fullscreen_with_back_button">پۈتۈن ئېكران ھالىتىدىن چېكىنىشتە، چوققىسىدىن سۆرەپ، قايت چېكىلىدۇ</string>
+
+    <!-- Beta Label Component !-->
+    <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->
+    <string name="beta_feature">سىناق نەشرى</string>
 </resources>

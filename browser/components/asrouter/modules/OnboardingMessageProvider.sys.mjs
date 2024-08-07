@@ -56,6 +56,9 @@ const L10N = new Localization([
 const HOMEPAGE_PREF = "browser.startup.homepage";
 const NEWTAB_PREF = "browser.newtabpage.enabled";
 const FOURTEEN_DAYS_IN_MS = 14 * 24 * 60 * 60 * 1000;
+const isMSIX =
+  AppConstants.platform === "win" &&
+  Services.sysinfo.getProperty("hasWinPackageId", false);
 
 const BASE_MESSAGES = () => [
   {
@@ -145,11 +148,23 @@ const BASE_MESSAGES = () => [
             },
             primary_button: {
               label: {
-                string_id: "mr2022-onboarding-pin-primary-button-label",
+                string_id: isMSIX
+                  ? "mr2022-onboarding-pin-primary-button-label-msix"
+                  : "mr2022-onboarding-pin-primary-button-label",
               },
               action: {
+                type: "MULTI_ACTION",
                 navigate: true,
-                type: "PIN_FIREFOX_TO_TASKBAR",
+                data: {
+                  actions: [
+                    {
+                      type: "PIN_FIREFOX_TO_TASKBAR",
+                    },
+                    {
+                      type: "PIN_FIREFOX_TO_START_MENU",
+                    },
+                  ],
+                },
               },
             },
             checkbox: {
@@ -170,6 +185,9 @@ const BASE_MESSAGES = () => [
                     },
                     {
                       type: "PIN_FIREFOX_TO_TASKBAR",
+                    },
+                    {
+                      type: "PIN_FIREFOX_TO_START_MENU",
                     },
                   ],
                 },
@@ -477,8 +495,18 @@ const BASE_MESSAGES = () => [
                 string_id: "fx100-thank-you-pin-primary-button-label",
               },
               action: {
+                type: "MULTI_ACTION",
                 navigate: true,
-                type: "PIN_FIREFOX_TO_TASKBAR",
+                data: {
+                  actions: [
+                    {
+                      type: "PIN_FIREFOX_TO_TASKBAR",
+                    },
+                    {
+                      type: "PIN_FIREFOX_TO_START_MENU",
+                    },
+                  ],
+                },
               },
             },
             secondary_button: {

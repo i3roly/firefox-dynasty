@@ -151,6 +151,11 @@ class Nursery {
   std::tuple<void*, bool> allocateBuffer(JS::Zone* zone, size_t nbytes,
                                          arena_id_t arenaId);
 
+  // Like allocateBuffer, but returns nullptr if the buffer can't be allocated
+  // in the nursery.
+  void* tryAllocateNurseryBuffer(JS::Zone* zone, size_t nbytes,
+                                 arena_id_t arenaId);
+
   // Allocate a buffer for a given Cell, using the nursery if possible and
   // owner is in the nursery.
   void* allocateBuffer(JS::Zone* zone, gc::Cell* owner, size_t nbytes,
@@ -725,9 +730,14 @@ class Nursery {
   // string and the StringBuffer to simplify interaction with AtomRefs and
   // string deduplication.
   using StringAndBuffer = std::pair<JSLinearString*, mozilla::StringBuffer*>;
-  using StringBufferVector =
+  using StringAndBufferVector =
       JS::GCVector<StringAndBuffer, 8, SystemAllocPolicy>;
-  StringBufferVector stringBuffers_;
+  StringAndBufferVector stringBuffers_;
+
+  // List of StringBuffers to release off-thread.
+  using StringBufferVector =
+      Vector<mozilla::StringBuffer*, 8, SystemAllocPolicy>;
+  StringBufferVector stringBuffersToReleaseAfterMinorGC_;
 
   UniquePtr<NurseryDecommitTask> decommitTask;
 

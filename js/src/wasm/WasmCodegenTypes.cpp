@@ -167,7 +167,6 @@ CodeRange::CodeRange(Kind kind, Offsets offsets)
 CodeRange::CodeRange(Kind kind, uint32_t funcIndex, Offsets offsets)
     : begin_(offsets.begin), ret_(0), end_(offsets.end), kind_(kind) {
   u.funcIndex_ = funcIndex;
-  u.func.lineOrBytecode_ = 0;
   u.func.beginToUncheckedCallEntry_ = 0;
   u.func.beginToTierEntry_ = 0;
   u.func.hasUnwindInfo_ = false;
@@ -182,8 +181,9 @@ CodeRange::CodeRange(Kind kind, CallableOffsets offsets)
   PodZero(&u);
 #ifdef DEBUG
   switch (kind_) {
-    case DebugTrap:
+    case DebugStub:
     case BuiltinThunk:
+    case RequestTierUpStub:
       break;
     default:
       MOZ_CRASH("should use more specific constructor");
@@ -197,14 +197,24 @@ CodeRange::CodeRange(Kind kind, uint32_t funcIndex, CallableOffsets offsets)
   MOZ_ASSERT(begin_ < ret_);
   MOZ_ASSERT(ret_ < end_);
   u.funcIndex_ = funcIndex;
-  u.func.lineOrBytecode_ = 0;
   u.func.beginToUncheckedCallEntry_ = 0;
   u.func.beginToTierEntry_ = 0;
   u.func.hasUnwindInfo_ = false;
 }
 
-CodeRange::CodeRange(uint32_t funcIndex, uint32_t funcLineOrBytecode,
-                     FuncOffsets offsets, bool hasUnwindInfo)
+CodeRange::CodeRange(Kind kind, uint32_t funcIndex, ImportOffsets offsets)
+    : begin_(offsets.begin), ret_(offsets.ret), end_(offsets.end), kind_(kind) {
+  MOZ_ASSERT(isImportJitExit());
+  MOZ_ASSERT(begin_ < ret_);
+  MOZ_ASSERT(ret_ < end_);
+  uint32_t entry = offsets.afterFallbackCheck;
+  MOZ_ASSERT(begin_ <= entry && entry <= ret_);
+  u.funcIndex_ = funcIndex;
+  u.jitExitEntry_ = entry - begin_;
+}
+
+CodeRange::CodeRange(uint32_t funcIndex, FuncOffsets offsets,
+                     bool hasUnwindInfo)
     : begin_(offsets.begin),
       ret_(offsets.ret),
       end_(offsets.end),
@@ -214,7 +224,6 @@ CodeRange::CodeRange(uint32_t funcIndex, uint32_t funcLineOrBytecode,
   MOZ_ASSERT(offsets.uncheckedCallEntry - begin_ <= UINT16_MAX);
   MOZ_ASSERT(offsets.tierEntry - begin_ <= UINT16_MAX);
   u.funcIndex_ = funcIndex;
-  u.func.lineOrBytecode_ = funcLineOrBytecode;
   u.func.beginToUncheckedCallEntry_ = offsets.uncheckedCallEntry - begin_;
   u.func.beginToTierEntry_ = offsets.tierEntry - begin_;
   u.func.hasUnwindInfo_ = hasUnwindInfo;
@@ -293,8 +302,8 @@ CalleeDesc CalleeDesc::wasmTable(const CodeMetadata& codeMeta,
   c.which_ = WasmTable;
   c.u.table.instanceDataOffset_ =
       codeMeta.offsetOfTableInstanceData(tableIndex);
-  c.u.table.minLength_ = desc.initialLength;
-  c.u.table.maxLength_ = desc.maximumLength;
+  c.u.table.minLength_ = desc.initialLength();
+  c.u.table.maxLength_ = desc.maximumLength();
   c.u.table.callIndirectId_ = callIndirectId;
   return c;
 }

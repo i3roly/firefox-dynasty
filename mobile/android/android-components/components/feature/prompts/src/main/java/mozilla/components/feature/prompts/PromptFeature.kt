@@ -193,14 +193,15 @@ class PromptFeature private constructor(
     private val loginDelegate: LoginDelegate = object : LoginDelegate {},
     private val suggestStrongPasswordDelegate: SuggestStrongPasswordDelegate = object :
         SuggestStrongPasswordDelegate {},
-    private val isSuggestStrongPasswordEnabled: Boolean = false,
     private var shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
     private val onFirstTimeEngagedWithSignup: () -> Unit = {},
     private val onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
-    private val onSavedGeneratedPassword: () -> Unit = {},
+    private val onSaveLogin: (Boolean) -> Unit = { _ -> },
     private val passwordGeneratorColorsProvider: PasswordGeneratorDialogColorsProvider = PasswordGeneratorDialogColorsProvider {
         PasswordGeneratorDialogColors.default()
     },
+    private val hideUpdateFragmentAfterSavingGeneratedPassword: (String, String) -> Boolean = { _, _ -> true },
+    private val removeLastSavedGeneratedPassword: () -> Unit = {},
     private val creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
     private val addressDelegate: AddressDelegate = DefaultAddressDelegate(),
     private val fileUploadsDirCleaner: FileUploadsDirCleaner,
@@ -249,14 +250,15 @@ class PromptFeature private constructor(
         loginDelegate: LoginDelegate = object : LoginDelegate {},
         suggestStrongPasswordDelegate: SuggestStrongPasswordDelegate = object :
             SuggestStrongPasswordDelegate {},
-        isSuggestStrongPasswordEnabled: Boolean = false,
         shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
         onFirstTimeEngagedWithSignup: () -> Unit = {},
         onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
-        onSavedGeneratedPassword: () -> Unit = {},
+        onSaveLogin: (Boolean) -> Unit = { _ -> },
         passwordGeneratorColorsProvider: PasswordGeneratorDialogColorsProvider = PasswordGeneratorDialogColorsProvider {
             PasswordGeneratorDialogColors.default()
         },
+        hideUpdateFragmentAfterSavingGeneratedPassword: (String, String) -> Boolean = { _, _ -> true },
+        removeLastSavedGeneratedPassword: () -> Unit = {},
         creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
         addressDelegate: AddressDelegate = DefaultAddressDelegate(),
         fileUploadsDirCleaner: FileUploadsDirCleaner,
@@ -282,12 +284,13 @@ class PromptFeature private constructor(
         onNeedToRequestPermissions = onNeedToRequestPermissions,
         loginDelegate = loginDelegate,
         suggestStrongPasswordDelegate = suggestStrongPasswordDelegate,
-        isSuggestStrongPasswordEnabled = isSuggestStrongPasswordEnabled,
         shouldAutomaticallyShowSuggestedPassword = shouldAutomaticallyShowSuggestedPassword,
         onFirstTimeEngagedWithSignup = onFirstTimeEngagedWithSignup,
         onSaveLoginWithStrongPassword = onSaveLoginWithStrongPassword,
-        onSavedGeneratedPassword = onSavedGeneratedPassword,
+        onSaveLogin = onSaveLogin,
         passwordGeneratorColorsProvider = passwordGeneratorColorsProvider,
+        hideUpdateFragmentAfterSavingGeneratedPassword = hideUpdateFragmentAfterSavingGeneratedPassword,
+        removeLastSavedGeneratedPassword = removeLastSavedGeneratedPassword,
         creditCardDelegate = creditCardDelegate,
         addressDelegate = addressDelegate,
         androidPhotoPicker = androidPhotoPicker,
@@ -311,11 +314,12 @@ class PromptFeature private constructor(
         loginDelegate: LoginDelegate = object : LoginDelegate {},
         suggestStrongPasswordDelegate: SuggestStrongPasswordDelegate = object :
             SuggestStrongPasswordDelegate {},
-        isSuggestStrongPasswordEnabled: Boolean = false,
         shouldAutomaticallyShowSuggestedPassword: () -> Boolean = { false },
         onFirstTimeEngagedWithSignup: () -> Unit = {},
         onSaveLoginWithStrongPassword: (String, String) -> Unit = { _, _ -> },
-        onSavedGeneratedPassword: () -> Unit = {},
+        onSaveLogin: (Boolean) -> Unit = { _ -> },
+        hideUpdateFragmentAfterSavingGeneratedPassword: (String, String) -> Boolean = { _, _ -> true },
+        removeLastSavedGeneratedPassword: () -> Unit = {},
         creditCardDelegate: CreditCardDelegate = object : CreditCardDelegate {},
         addressDelegate: AddressDelegate = DefaultAddressDelegate(),
         fileUploadsDirCleaner: FileUploadsDirCleaner,
@@ -338,11 +342,12 @@ class PromptFeature private constructor(
         loginExceptionStorage = loginExceptionStorage,
         loginDelegate = loginDelegate,
         suggestStrongPasswordDelegate = suggestStrongPasswordDelegate,
-        isSuggestStrongPasswordEnabled = isSuggestStrongPasswordEnabled,
         shouldAutomaticallyShowSuggestedPassword = shouldAutomaticallyShowSuggestedPassword,
         onFirstTimeEngagedWithSignup = onFirstTimeEngagedWithSignup,
         onSaveLoginWithStrongPassword = onSaveLoginWithStrongPassword,
-        onSavedGeneratedPassword = onSavedGeneratedPassword,
+        onSaveLogin = onSaveLogin,
+        hideUpdateFragmentAfterSavingGeneratedPassword = hideUpdateFragmentAfterSavingGeneratedPassword,
+        removeLastSavedGeneratedPassword = removeLastSavedGeneratedPassword,
         creditCardDelegate = creditCardDelegate,
         addressDelegate = addressDelegate,
         fileUploadsDirCleaner = fileUploadsDirCleaner,
@@ -594,7 +599,8 @@ class PromptFeature private constructor(
         // Some requests are handle with intents
         session.content.promptRequests.lastOrNull()?.let { promptRequest ->
             if (session.content.permissionRequestsList.isNotEmpty()) {
-                onCancel(session.id, promptRequest.uid)
+                val value: Any? = if (promptRequest is Popup) false else null
+                onCancel(session.id, promptRequest.uid, value)
             } else {
                 processPromptRequest(promptRequest, session)
             }
@@ -628,7 +634,7 @@ class PromptFeature private constructor(
                 if (!isLoginAutofillEnabled()) {
                     return
                 }
-                if (promptRequest.generatedPassword != null && isSuggestStrongPasswordEnabled) {
+                if (promptRequest.generatedPassword != null) {
                     if (shouldAutomaticallyShowSuggestedPassword.invoke()) {
                         onFirstTimeEngagedWithSignup.invoke()
                         handleDialogsRequest(
@@ -815,7 +821,7 @@ class PromptFeature private constructor(
     /**
      * Called from on [onPromptRequested] to handle requests for showing native dialogs.
      */
-    @Suppress("ComplexMethod", "LongMethod")
+    @Suppress("ComplexMethod", "LongMethod", "ReturnCount")
     @VisibleForTesting(otherwise = PRIVATE)
     internal fun handleDialogsRequest(
         promptRequest: PromptRequest,
@@ -836,12 +842,13 @@ class PromptFeature private constructor(
                     dismissDialogRequest(promptRequest, session)
                     return
                 }
+
                 PasswordGeneratorDialogFragment.newInstance(
                     sessionId = session.id,
                     promptRequestUID = promptRequest.uid,
                     generatedPassword = generatedPassword,
                     currentUrl = currentUrl,
-                    onSavedGeneratedPassword = onSavedGeneratedPassword,
+                    onSavedGeneratedPassword = onSaveLogin,
                     colorsProvider = passwordGeneratorColorsProvider,
                 )
             }
@@ -886,6 +893,15 @@ class PromptFeature private constructor(
                     }
 
                     return
+                } else if (hideUpdateFragmentAfterSavingGeneratedPassword(
+                        promptRequest.logins[0].username,
+                        promptRequest.logins[0].password,
+                    )
+                ) {
+                    removeLastSavedGeneratedPassword()
+                    dismissDialogRequest(promptRequest, session)
+
+                    return
                 }
 
                 SaveLoginDialogFragment.newInstance(
@@ -896,6 +912,7 @@ class PromptFeature private constructor(
                     // For v1, we only handle a single login and drop all others on the floor
                     entry = promptRequest.logins[0],
                     icon = session.content.icon,
+                    onShowSnackbarAfterLoginChange = onSaveLogin,
                 )
             }
 
@@ -1206,6 +1223,15 @@ class PromptFeature private constructor(
             loginPicker?.let { loginPicker ->
                 if (loginDelegate.loginPickerView?.asView()?.isVisible == true) {
                     loginPicker.dismissCurrentLoginSelect(selectLoginPrompt)
+                    result = true
+                }
+            }
+
+            strongPasswordPromptViewListener?.let { strongPasswordPromptViewListener ->
+                if (suggestStrongPasswordDelegate.strongPasswordPromptViewListenerView?.isVisible() == true) {
+                    strongPasswordPromptViewListener.dismissCurrentSuggestStrongPassword(
+                        selectLoginPrompt,
+                    )
                     result = true
                 }
             }

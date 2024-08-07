@@ -45,6 +45,7 @@ export const MultiStageProtonScreen = props => {
       id={props.id}
       order={props.order}
       activeTheme={props.activeTheme}
+      installedAddons={props.installedAddons}
       screenMultiSelects={props.screenMultiSelects}
       setScreenMultiSelects={props.setScreenMultiSelects}
       activeMultiSelect={props.activeMultiSelect}
@@ -238,19 +239,19 @@ export class ProtonScreen extends React.PureComponent {
       <picture className={className} style={{ marginInline, marginBlock }}>
         {darkModeReducedMotionImageURL ? (
           <source
-            srcSet={darkModeReducedMotionImageURL}
+            srcset={darkModeReducedMotionImageURL}
             media="(prefers-color-scheme: dark) and (prefers-reduced-motion: reduce)"
           />
         ) : null}
         {darkModeImageURL ? (
           <source
-            srcSet={darkModeImageURL}
+            srcset={darkModeImageURL}
             media="(prefers-color-scheme: dark)"
           />
         ) : null}
         {reducedMotionImageURL ? (
           <source
-            srcSet={reducedMotionImageURL}
+            srcset={reducedMotionImageURL}
             media="(prefers-reduced-motion: reduce)"
           />
         ) : null}
@@ -278,6 +279,7 @@ export class ProtonScreen extends React.PureComponent {
         content.tiles.data ? (
           <AddonsPicker
             content={content}
+            installedAddons={this.props.installedAddons}
             message_id={this.props.messageId}
             handleAction={this.props.handleAction}
           />

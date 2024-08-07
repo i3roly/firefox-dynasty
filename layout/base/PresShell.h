@@ -1798,7 +1798,37 @@ class PresShell final : public nsStubDocumentObserver,
 #endif
   }
 
-  void PushCurrentEventInfo(nsIFrame* aFrame, nsIContent* aContent);
+  struct EventTargetInfo {
+    EventTargetInfo() = default;
+    EventTargetInfo(EventMessage aEventMessage, nsIFrame* aFrame,
+                    nsIContent* aContent)
+        : mFrame(aFrame), mContent(aContent), mEventMessage(aEventMessage) {}
+
+    [[nodiscard]] bool IsSet() const { return mFrame || mContent; }
+    void Clear() {
+      mEventMessage = eVoidEvent;
+      mFrame = nullptr;
+      mContent = nullptr;
+    }
+    void ClearFrame() { mFrame = nullptr; }
+    void UpdateFrameAndContent(nsIFrame* aFrame, nsIContent* aContent) {
+      mFrame = aFrame;
+      mContent = aContent;
+    }
+    void SetFrameAndContent(EventMessage aEventMessage, nsIFrame* aFrame,
+                            nsIContent* aContent) {
+      mEventMessage = aEventMessage;
+      mFrame = aFrame;
+      mContent = aContent;
+    }
+
+    nsIFrame* mFrame = nullptr;
+    nsCOMPtr<nsIContent> mContent;
+    EventMessage mEventMessage = eVoidEvent;
+  };
+
+  void PushCurrentEventInfo(const EventTargetInfo& aInfo);
+  void PushCurrentEventInfo(EventTargetInfo&& aInfo);
   void PopCurrentEventInfo();
   nsIContent* GetCurrentEventContent();
 
@@ -2616,7 +2646,8 @@ class PresShell final : public nsStubDocumentObserver,
     nsresult HandleRetargetedEvent(WidgetGUIEvent* aGUIEvent,
                                    nsEventStatus* aEventStatus,
                                    nsIContent* aTarget) {
-      AutoCurrentEventInfoSetter eventInfoSetter(*this, nullptr, aTarget);
+      AutoCurrentEventInfoSetter eventInfoSetter(
+          *this, EventTargetInfo(aGUIEvent->mMessage, nullptr, aTarget));
       if (!mPresShell->GetCurrentEventFrame()) {
         return NS_OK;
       }
@@ -2819,22 +2850,32 @@ class PresShell final : public nsStubDocumentObserver,
           : mEventHandler(aEventHandler) {
         MOZ_DIAGNOSTIC_ASSERT(!mEventHandler.mCurrentEventInfoSetter);
         mEventHandler.mCurrentEventInfoSetter = this;
-        mEventHandler.mPresShell->PushCurrentEventInfo(nullptr, nullptr);
+        mEventHandler.mPresShell->PushCurrentEventInfo(EventTargetInfo());
       }
-      AutoCurrentEventInfoSetter(EventHandler& aEventHandler, nsIFrame* aFrame,
-                                 nsIContent* aContent)
+      AutoCurrentEventInfoSetter(EventHandler& aEventHandler,
+                                 const EventTargetInfo& aInfo)
           : mEventHandler(aEventHandler) {
         MOZ_DIAGNOSTIC_ASSERT(!mEventHandler.mCurrentEventInfoSetter);
         mEventHandler.mCurrentEventInfoSetter = this;
-        mEventHandler.mPresShell->PushCurrentEventInfo(aFrame, aContent);
+        mEventHandler.mPresShell->PushCurrentEventInfo(aInfo);
       }
       AutoCurrentEventInfoSetter(EventHandler& aEventHandler,
+                                 EventTargetInfo&& aInfo)
+          : mEventHandler(aEventHandler) {
+        MOZ_DIAGNOSTIC_ASSERT(!mEventHandler.mCurrentEventInfoSetter);
+        mEventHandler.mCurrentEventInfoSetter = this;
+        mEventHandler.mPresShell->PushCurrentEventInfo(
+            std::forward<EventTargetInfo>(aInfo));
+      }
+      AutoCurrentEventInfoSetter(EventHandler& aEventHandler,
+                                 EventMessage aEventMessage,
                                  EventTargetData& aEventTargetData)
           : mEventHandler(aEventHandler) {
         MOZ_DIAGNOSTIC_ASSERT(!mEventHandler.mCurrentEventInfoSetter);
         mEventHandler.mCurrentEventInfoSetter = this;
         mEventHandler.mPresShell->PushCurrentEventInfo(
-            aEventTargetData.GetFrame(), aEventTargetData.GetContent());
+            EventTargetInfo(aEventMessage, aEventTargetData.GetFrame(),
+                            aEventTargetData.GetContent()));
       }
       ~AutoCurrentEventInfoSetter() {
         mEventHandler.mPresShell->PopCurrentEventInfo();
@@ -2989,6 +3030,11 @@ class PresShell final : public nsStubDocumentObserver,
 
   nsCOMPtr<nsIContent> mLastAnchorScrolledTo;
 
+  // Text directives are supposed to be scrolled to the center of the viewport.
+  // Since `ScrollToAnchor()` might get called after `GoToAnchor()` during a
+  // load, the vertical view position should be preserved.
+  WhereToScroll mLastAnchorVerticalScrollViewPosition;
+
   // Information needed to properly handle scrolling content into view if the
   // pre-scroll reflow flush can be interrupted.  mContentToScrollTo is non-null
   // between the initial scroll attempt and the first time we finish processing
@@ -3000,10 +3046,8 @@ class PresShell final : public nsStubDocumentObserver,
   a11y::DocAccessible* mDocAccessible;
 #endif  // #ifdef ACCESSIBILITY
 
-  nsIFrame* mCurrentEventFrame;
-  nsCOMPtr<nsIContent> mCurrentEventContent;
-  nsTArray<nsIFrame*> mCurrentEventFrameStack;
-  nsCOMArray<nsIContent> mCurrentEventContentStack;
+  EventTargetInfo mCurrentEventTarget;
+  nsTArray<EventTargetInfo> mCurrentEventTargetStack;
   // Set of frames that we should mark with NS_FRAME_HAS_DIRTY_CHILDREN after
   // we finish reflowing mCurrentReflowRoot.
   nsTHashSet<nsIFrame*> mFramesToDirty;

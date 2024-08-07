@@ -5,6 +5,44 @@
 import { html, ifDefined } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
+// eslint-disable-next-line import/no-unassigned-import
+import "chrome://global/content/elements/moz-message-bar.mjs";
+
+import { ERRORS } from "chrome://browser/content/backup/backup-constants.mjs";
+
+/**
+ * Any recovery error messaging should be defined in Fluent with both
+ * a `heading` attribute and a `message` attribute.
+ */
+const RECOVERY_ERROR_L10N_IDS = Object.freeze({
+  [ERRORS.UNAUTHORIZED]: "restore-from-backup-error-incorrect-password",
+  [ERRORS.CORRUPTED_ARCHIVE]: "restore-from-backup-error-corrupt-file",
+  [ERRORS.UNSUPPORTED_BACKUP_VERSION]:
+    "restore-from-backup-error-unsupported-version",
+  [ERRORS.UNINITIALIZED]: "restore-from-backup-error-recovery-failed",
+  [ERRORS.FILE_SYSTEM_ERROR]: "restore-from-backup-error-recovery-failed",
+  [ERRORS.DECRYPTION_FAILED]: "restore-from-backup-error-recovery-failed",
+  [ERRORS.RECOVERY_FAILED]: "restore-from-backup-error-recovery-failed",
+  [ERRORS.UNKNOWN]: "restore-from-backup-error-went-wrong",
+  [ERRORS.INTERNAL_ERROR]: "restore-from-backup-error-went-wrong",
+  [ERRORS.UNSUPPORTED_APPLICATION]:
+    "restore-from-backup-error-unsupported-application",
+});
+
+/**
+ * @param {number} errorCode
+ *   Error code from backup-constants.mjs:ERRORS
+ * @returns {string}
+ *   L10N ID for error messaging for the given error code; the L10N
+ *   ID should have both a `heading` and a `message` attribute
+ */
+function getRecoveryErrorL10nId(errorCode) {
+  return (
+    RECOVERY_ERROR_L10N_IDS[errorCode] ??
+    RECOVERY_ERROR_L10N_IDS[ERRORS.UNKNOWN]
+  );
+}
+
 /**
  * The widget for allowing users to select and restore from a
  * a backup file.
@@ -17,6 +55,8 @@ export default class RestoreFromBackup extends MozLitElement {
     backupFileToRestore: { type: String, reflect: true },
     backupFileInfo: { type: Object },
     _fileIconURL: { type: String },
+    recoveryInProgress: { type: Boolean },
+    recoveryErrorCode: { type: Number },
   };
 
   static get queries() {
@@ -26,6 +66,7 @@ export default class RestoreFromBackup extends MozLitElement {
       cancelButtonEl: "#restore-from-backup-cancel-button",
       confirmButtonEl: "#restore-from-backup-confirm-button",
       chooseButtonEl: "#backup-filepicker-button",
+      errorMessageEl: "#restore-from-backup-error",
     };
   }
 
@@ -106,7 +147,7 @@ export default class RestoreFromBackup extends MozLitElement {
 
   handleConfirm() {
     let backupFile = this.backupFileToRestore;
-    if (!backupFile) {
+    if (!backupFile || this.recoveryInProgress) {
       return;
     }
     let backupPassword = this.passwordInput?.value;
@@ -177,6 +218,10 @@ export default class RestoreFromBackup extends MozLitElement {
   }
 
   contentTemplate() {
+    let buttonL10nId = !this.recoveryInProgress
+      ? "restore-from-backup-confirm-button"
+      : "restore-from-backup-restoring-button";
+
     return html`
       <div
         id="restore-from-backup-wrapper"
@@ -189,6 +234,7 @@ export default class RestoreFromBackup extends MozLitElement {
           data-l10n-id="restore-from-backup-header"
         ></h1>
         <main id="restore-from-backup-content">
+          ${this.recoveryErrorCode ? this.errorTemplate() : null}
           ${this.backupFileInfo ? this.descriptionTemplate() : null}
           ${this.controlsTemplate()}
         </main>
@@ -203,7 +249,8 @@ export default class RestoreFromBackup extends MozLitElement {
             id="restore-from-backup-confirm-button"
             @click=${this.handleConfirm}
             type="primary"
-            data-l10n-id="restore-from-backup-confirm-button"
+            data-l10n-id="${buttonL10nId}"
+            ?disabled=${!this.backupFileToRestore || this.recoveryInProgress}
           ></moz-button>
         </moz-button-group>
       </div>
@@ -229,6 +276,18 @@ export default class RestoreFromBackup extends MozLitElement {
           data-l10n-id="restore-from-backup-support-link"
         ></a>
       </div>
+    `;
+  }
+
+  errorTemplate() {
+    return html`
+      <moz-message-bar
+        id="restore-from-backup-error"
+        type="error"
+        data-l10n-id="${getRecoveryErrorL10nId(this.recoveryErrorCode)}"
+        data-l10n-attrs="heading, message"
+      >
+      </moz-message-bar>
     `;
   }
 

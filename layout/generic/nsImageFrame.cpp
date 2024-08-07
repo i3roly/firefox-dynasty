@@ -341,6 +341,7 @@ static bool DependsOnIntrinsicSize(const SizeOrMaxSize& aMinOrMaxSize) {
     case nsIFrame::ExtremumLength::FitContentFunction:
       return true;
     case nsIFrame::ExtremumLength::MozAvailable:
+    case nsIFrame::ExtremumLength::Stretch:
       return false;
   }
   MOZ_ASSERT_UNREACHABLE("Unknown sizing keyword?");
@@ -1466,14 +1467,8 @@ nscoord nsImageFrame::GetContinuationOffset() const {
   return offset;
 }
 
-nscoord nsImageFrame::GetMinISize(gfxContext* aRenderingContext) {
-  // XXX The caller doesn't account for constraints of the block-size,
-  // min-block-size, and max-block-size properties.
-  EnsureIntrinsicSizeAndRatio();
-  return mIntrinsicSize.ISize(GetWritingMode()).valueOr(0);
-}
-
-nscoord nsImageFrame::GetPrefISize(gfxContext* aRenderingContext) {
+nscoord nsImageFrame::IntrinsicISize(gfxContext* aContext,
+                                     IntrinsicISizeType aType) {
   // XXX The caller doesn't account for constraints of the block-size,
   // min-block-size, and max-block-size properties.
   EnsureIntrinsicSizeAndRatio();
@@ -2853,7 +2848,7 @@ static bool IsInAutoWidthTableCellForQuirk(nsIFrame* aFrame) {
 }
 
 void nsImageFrame::AddInlineMinISize(gfxContext* aRenderingContext,
-                                     nsIFrame::InlineMinISizeData* aData) {
+                                     InlineMinISizeData* aData) {
   nscoord isize = nsLayoutUtils::IntrinsicForContainer(
       aRenderingContext, this, IntrinsicISizeType::MinISize);
   bool canBreak = !IsInAutoWidthTableCellForQuirk(this);

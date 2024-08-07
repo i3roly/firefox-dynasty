@@ -880,6 +880,13 @@ static bool GCParameter(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static bool FinishBackgroundFree(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  cx->runtime()->gc.waitBackgroundFreeEnd();
+  args.rval().setUndefined();
+  return true;
+}
+
 static bool RelazifyFunctions(JSContext* cx, unsigned argc, Value* vp) {
   // Relazifying functions on GC is usually only done for compartments that are
   // not active. To aid fuzzing, this testing function allows us to relazify
@@ -1664,9 +1671,9 @@ static bool ConvertToTier(JSContext* cx, HandleValue value,
   }
 
   if (stableTier) {
-    *tier = code.stableTier();
+    *tier = code.stableCompleteTier();
   } else if (bestTier) {
-    *tier = code.bestTier();
+    *tier = code.bestCompleteTier();
   } else if (baselineTier) {
     *tier = wasm::Tier::Baseline;
   } else if (ionTier) {
@@ -1699,7 +1706,7 @@ static bool WasmExtractCode(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  wasm::Tier tier = module->module().code().stableTier();
+  wasm::Tier tier = module->module().code().stableCompleteTier();
   if (args.length() > 1 &&
       !ConvertToTier(cx, args[1], module->module().code(), &tier)) {
     args.rval().setNull();
@@ -1876,7 +1883,7 @@ static bool DisassembleNative(JSContext* cx, unsigned argc, Value* vp) {
 
 static bool ComputeTier(JSContext* cx, const wasm::Code& code,
                         HandleValue tierSelection, wasm::Tier* tier) {
-  *tier = code.stableTier();
+  *tier = code.stableCompleteTier();
   if (!tierSelection.isUndefined() &&
       !ConvertToTier(cx, tierSelection, code, tier)) {
     JS_ReportErrorASCII(cx, "invalid tier");
@@ -2083,11 +2090,8 @@ static bool WasmDumpIon(JSContext* cx, unsigned argc, Value* vp) {
 
   args.rval().set(UndefinedValue());
 
-  SharedMem<uint8_t*> dataPointer;
-  size_t byteLength;
-  if (!args.get(0).isObject() || !IsBufferSource(args.get(0).toObjectOrNull(),
-                                                 &dataPointer, &byteLength)) {
-    JS_ReportErrorASCII(cx, "argument is not a buffer source");
+  if (!args.get(0).isObject()) {
+    JS_ReportErrorASCII(cx, "argument is not an object");
     return false;
   }
 
@@ -2100,6 +2104,14 @@ static bool WasmDumpIon(JSContext* cx, unsigned argc, Value* vp) {
   wasm::IonDumpContents contents = wasm::IonDumpContents::Default;
   if (args.length() > 2 && !ToIonDumpContents(cx, args.get(2), &contents)) {
     JS_ReportErrorASCII(cx, "argument is not a valid dump contents");
+    return false;
+  }
+
+  SharedMem<uint8_t*> dataPointer;
+  size_t byteLength;
+  if (!IsBufferSource(args.get(0).toObjectOrNull(), &dataPointer,
+                      &byteLength)) {
+    JS_ReportErrorASCII(cx, "argument is not a buffer source");
     return false;
   }
 
@@ -2165,7 +2177,7 @@ static bool WasmReturnFlag(JSContext* cx, unsigned argc, Value* vp, Flag flag) {
       b = module->module().loggingDeserialized();
       break;
     case Flag::ParsedBranchHints:
-      b = module->module().codeMeta().parsedBranchHints;
+      b = !module->module().codeMeta().branchHints.failedParse();
       break;
   }
 
@@ -9433,6 +9445,12 @@ static bool FdLibM_Pow(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static bool HadOutOfMemory(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  args.rval().setBoolean(cx->runtime()->hadOutOfMemory);
+  return true;
+}
+
 // clang-format off
 static const JSFunctionSpecWithHelp TestingFunctions[] = {
     JS_FN_HELP("gc", ::GC, 0, 0,
@@ -9456,6 +9474,10 @@ static const JSFunctionSpecWithHelp TestingFunctions[] = {
     JS_FN_HELP("gcparam", GCParameter, 2, 0,
 "gcparam(name [, value])",
 "  Wrapper for JS_[GS]etGCParameter. The name is one of:" GC_PARAMETER_ARGS_LIST),
+
+    JS_FN_HELP("finishBackgroundFree", FinishBackgroundFree, 0, 0,
+"finishBackgroundFree()",
+"  Wait for the GC's background free task to finish.\n"),
 
     JS_FN_HELP("hasDisassembler", HasDisassembler, 0, 0,
 "hasDisassembler()",
@@ -10524,6 +10546,11 @@ JS_FN_HELP("isSmallFunction", IsSmallFunction, 1, 0,
     JS_FN_HELP("getPrefValue", GetPrefValue, 1, 0,
 "getPrefValue(name)",
 "  Return the value of the JS pref with the given name."),
+
+  JS_FN_HELP("hadOutOfMemory", HadOutOfMemory, 0, 0,
+"hadOutOfMemory()",
+"  Return the runtime's internal hadOutOfMemory flag that is set when\n"
+"  out of memory is hit with an exception being propagated. "),
 
   JS_FS_HELP_END
 };

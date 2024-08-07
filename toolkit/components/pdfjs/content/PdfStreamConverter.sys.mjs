@@ -19,8 +19,9 @@ const PDF_VIEWER_WEB_PAGE = "resource://pdf.js/web/viewer.html";
 const MAX_NUMBER_OF_PREFS = 50;
 const PDF_CONTENT_TYPE = "application/pdf";
 
-// Preferences
+// Preferences to observe
 const caretBrowsingModePref = "accessibility.browsewithcaret";
+const toolbarDensityPref = "browser.uidensity";
 
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
@@ -184,17 +185,19 @@ PdfDataListener.prototype = {
 class PrefObserver {
   #domWindow;
 
-  constructor(domWindow) {
+  constructor(domWindow, isMobile) {
     this.#domWindow = domWindow;
-    this.#init();
+    this.#init(isMobile);
   }
 
-  #init() {
-    Services.prefs.addObserver(
-      caretBrowsingModePref,
-      this,
-      /* aHoldWeak = */ true
-    );
+  #init(isMobile) {
+    const prefs = [caretBrowsingModePref];
+    if (!isMobile) {
+      prefs.push(toolbarDensityPref);
+    }
+    for (const pref of prefs) {
+      Services.prefs.addObserver(pref, this, /* aHoldWeak = */ true);
+    }
   }
 
   observe(_aSubject, aTopic, aPrefName) {
@@ -214,6 +217,13 @@ class PrefObserver {
           value: Services.prefs.getBoolPref(caretBrowsingModePref),
         });
         break;
+      case toolbarDensityPref: {
+        actor.dispatchEvent(eventName, {
+          name: "toolbarDensity",
+          value: Services.prefs.getIntPref(toolbarDensityPref),
+        });
+        break;
+      }
     }
   }
 
@@ -236,7 +246,7 @@ class ChromeActions {
     this.contentDispositionFilename = contentDispositionFilename;
     this.sandbox = null;
     this.unloadListener = null;
-    this.observer = new PrefObserver(domWindow);
+    this.observer = new PrefObserver(domWindow, this.isMobile());
   }
 
   createSandbox(data, sendResponse) {
@@ -303,6 +313,16 @@ class ChromeActions {
     }
   }
 
+  async mlDelete(data, sendResponse) {
+    const actor = getActor(this.domWindow);
+    if (!actor) {
+      sendResponse(null);
+      return;
+    }
+    const response = await actor.sendQuery("PDFJS:Parent:mlDelete", data);
+    sendResponse(response);
+  }
+
   async mlGuess(data, sendResponse) {
     const actor = getActor(this.domWindow);
     if (!actor) {
@@ -313,8 +333,17 @@ class ChromeActions {
     sendResponse(response);
   }
 
+  async loadAIEngine(data, sendResponse) {
+    const actor = getActor(this.domWindow);
+    if (!actor) {
+      sendResponse(null);
+      return;
+    }
+    sendResponse(await actor.sendQuery("PDFJS:Parent:loadAIEngine", data));
+  }
+
   download(data) {
-    const { originalUrl, options } = data;
+    const { originalUrl } = data;
     const blobUrl = data.blobUrl || originalUrl;
     let { filename } = data;
     if (
@@ -323,22 +352,20 @@ class ChromeActions {
     ) {
       filename = "document.pdf";
     }
-
     const actor = getActor(this.domWindow);
     actor.sendAsyncMessage("PDFJS:Parent:saveURL", {
       blobUrl,
       originalUrl,
       filename,
-      options: options || {},
     });
   }
 
-  getLocaleProperties(_data, sendResponse) {
+  getLocaleProperties() {
     const { requestedLocale, defaultLocale, isAppLocaleRTL } = Services.locale;
-    sendResponse({
+    return {
       lang: requestedLocale || defaultLocale,
       isRTL: isAppLocaleRTL,
-    });
+    };
   }
 
   supportsIntegratedFind() {
@@ -346,10 +373,18 @@ class ChromeActions {
     return this.domWindow.windowGlobalChild.browsingContext.parent === null;
   }
 
-  getBrowserPrefs() {
+  async getBrowserPrefs() {
+    const isMobile = this.isMobile();
+    const nimbusDataStr = isMobile
+      ? await this.getNimbusExperimentData()
+      : null;
+
     return {
+      allowedGlobalEvents: this.#allowedGlobalEvents,
       canvasMaxAreaInBytes: Services.prefs.getIntPref("gfx.max-alloc-size"),
       isInAutomation: Cu.isInAutomation,
+      localeProperties: this.getLocaleProperties(),
+      nimbusDataStr,
       supportsDocumentFonts:
         !!Services.prefs.getIntPref("browser.display.use_document_fonts") &&
         Services.prefs.getBoolPref("gfx.downloadable_fonts.enabled"),
@@ -362,6 +397,9 @@ class ChromeActions {
       supportsCaretBrowsingMode: Services.prefs.getBoolPref(
         caretBrowsingModePref
       ),
+      toolbarDensity: isMobile
+        ? 0
+        : Services.prefs.getIntPref(toolbarDensityPref),
     };
   }
 
@@ -369,11 +407,12 @@ class ChromeActions {
     return AppConstants.platform === "android";
   }
 
-  getNimbusExperimentData(_data, sendResponse) {
+  async getNimbusExperimentData() {
     if (!this.isMobile()) {
-      sendResponse(null);
-      return;
+      return null;
     }
+    const { promise, resolve } = Promise.withResolvers();
+
     const actor = getActor(this.domWindow);
     actor.sendAsyncMessage("PDFJS:Parent:getNimbus");
     Services.obs.addObserver(
@@ -381,16 +420,13 @@ class ChromeActions {
         observe(aSubject, aTopic) {
           if (aTopic === "pdfjs-getNimbus") {
             Services.obs.removeObserver(this, aTopic);
-            sendResponse(aSubject && JSON.stringify(aSubject.wrappedJSObject));
+            resolve(aSubject && JSON.stringify(aSubject.wrappedJSObject));
           }
         },
       },
       "pdfjs-getNimbus"
     );
-  }
-
-  getGlobalEventNames(_data, sendResponse) {
-    sendResponse(this.#allowedGlobalEvents);
+    return promise;
   }
 
   async dispatchGlobalEvent({ eventName, detail }) {
@@ -464,7 +500,9 @@ class ChromeActions {
     actor?.sendAsyncMessage("PDFJS:Parent:updateMatchesCount", data);
   }
 
-  getPreferences(prefs, sendResponse) {
+  async getPreferences(prefs, sendResponse) {
+    const browserPrefs = await this.getBrowserPrefs();
+
     var defaultBranch = Services.prefs.getDefaultBranch("pdfjs.");
     var currentPrefs = {},
       numberOfPrefs = 0;
@@ -488,15 +526,27 @@ class ChromeActions {
           currentPrefs[key] = Services.prefs.getIntPref(prefName, prefValue);
           break;
         case "string":
-          currentPrefs[key] = Services.prefs.getStringPref(prefName, prefValue);
+          // The URL contains some dynamic values (%VERSION%, ...), so we need to
+          // format it.
+          currentPrefs[key] =
+            key === "altTextLearnMoreUrl"
+              ? Services.urlFormatter.formatURLPref(prefName)
+              : Services.prefs.getStringPref(prefName, prefValue);
           break;
       }
     }
 
     sendResponse({
-      browserPrefs: this.getBrowserPrefs(),
+      browserPrefs,
       prefs: currentPrefs,
     });
+  }
+
+  async setPreferences(data, sendResponse) {
+    const actor = getActor(this.domWindow);
+    await actor?.sendQuery("PDFJS:Parent:setPreferences", data);
+
+    sendResponse(null);
   }
 
   /**

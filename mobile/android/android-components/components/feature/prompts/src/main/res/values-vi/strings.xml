@@ -127,7 +127,10 @@
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">Sử dụng mật khẩu mạnh?</string>
     <!-- Content description for the suggest strong password confirmation dialog -->
-    <string name="mozac_feature_prompts_suggest_strong_password_description">Bảo vệ tài khoản của bạn bằng cách sử dụng mật khẩu mạnh, được tạo ngẫu nhiên. Truy cập nhanh vào mật khẩu của bạn bằng cách lưu nó vào tài khoản của bạn.</string>
+    <string name="mozac_feature_prompts_suggest_strong_password_description" moz:removedIn="130" tools:ignore="UnusedResources">Bảo vệ tài khoản của bạn bằng cách sử dụng mật khẩu mạnh, được tạo ngẫu nhiên. Truy cập nhanh vào mật khẩu của bạn bằng cách lưu nó vào tài khoản của bạn.</string>
+    <!-- Content description for the suggest strong password confirmation dialog -->
+    <string name="mozac_feature_prompts_suggest_strong_password_description_2">Bảo vệ tài khoản của bạn bằng cách sử dụng mật khẩu mạnh, được tạo ngẫu nhiên. Nó sẽ được lưu vào tài khoản của bạn để sử dụng trong tương lai.</string>
+
     <!-- Pressing this will use the suggested strong password -->
     <string name="mozac_feature_prompts_suggest_strong_password_use_password">Sử dụng mật khẩu</string>
     <!-- Pressing this will dismiss the suggested strong password dialog -->
@@ -137,6 +140,9 @@
     <!-- Title for showing the suggest strong password updated confirmation snackbar -->
     <string name="mozac_feature_prompts_suggest_strong_password_updated_snackbar_title">Đã cập nhật mật khẩu</string>
 
+
+    <!-- Title for showing the username updated confirmation snackbar -->
+    <string name="mozac_feature_prompt_login_snackbar_username_updated">Đã cập nhật tên người dùng</string>
 
     <!-- Strings shown in a dialog that appear when users try to refresh a certain kind of webpages -->
     <string name="mozac_feature_prompt_repost_title">Gửi lại dữ liệu cho trang web này?</string>
