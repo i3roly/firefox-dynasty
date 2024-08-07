@@ -21,10 +21,11 @@ import mozilla.components.browser.state.selector.getNormalOrPrivateTabs
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.thumbnails.loader.ThumbnailLoader
 import mozilla.components.concept.base.images.ImageLoadRequest
+import mozilla.components.ui.tabcounter.TabCounterMenu
+import org.mozilla.fenix.FeatureFlags
 import org.mozilla.fenix.R
-import org.mozilla.fenix.components.toolbar.IncompleteRedesignToolbarFeature
+import org.mozilla.fenix.components.toolbar.BottomToolbarContainerView
 import org.mozilla.fenix.components.toolbar.ToolbarPosition
-import org.mozilla.fenix.components.toolbar.navbar.BottomToolbarContainerView
 import org.mozilla.fenix.components.toolbar.navbar.BrowserNavBar
 import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.databinding.TabPreviewBinding
@@ -61,7 +62,7 @@ class TabPreview @JvmOverloads constructor(
             )
         }
 
-        val isNavBarEnabled = IncompleteRedesignToolbarFeature(context.settings()).isEnabled
+        val isNavBarEnabled = context.settings().navigationToolbarEnabled
         binding.tabButton.isVisible = !isNavBarEnabled
         binding.menuButton.isVisible = !isNavBarEnabled
 
@@ -70,7 +71,7 @@ class TabPreview @JvmOverloads constructor(
             BottomToolbarContainerView(
                 context = context,
                 parent = this,
-                composableContent = {
+                content = {
                     FirefoxTheme {
                         Column {
                             if (!isToolbarAtTop) {
@@ -81,8 +82,11 @@ class TabPreview @JvmOverloads constructor(
 
                             BrowserNavBar(
                                 isPrivateMode = browserStore.state.selectedTab?.content?.private ?: false,
+                                isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
+                                showNewTabButton = FeatureFlags.navigationToolbarNewTabButtonEnabled,
                                 browserStore = browserStore,
                                 menuButton = MenuButton(context),
+                                tabsCounterMenu = TabCounterMenu(context, onItemTapped = {}),
                                 onBackButtonClick = {
                                     // no-op
                                 },
@@ -98,7 +102,13 @@ class TabPreview @JvmOverloads constructor(
                                 onHomeButtonClick = {
                                     // no-op
                                 },
+                                onNewTabButtonClick = {
+                                    // no-op
+                                },
                                 onTabsButtonClick = {
+                                    // no-op
+                                },
+                                onTabsButtonLongPress = {
                                     // no-op
                                 },
                                 onMenuButtonClick = {

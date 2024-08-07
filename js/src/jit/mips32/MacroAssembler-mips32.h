@@ -438,15 +438,10 @@ class MacroAssemblerMIPSCompat : public MacroAssemblerMIPS {
     return value.typeReg();
   }
 
-  void boolValueToDouble(const ValueOperand& operand, FloatRegister dest);
-  void int32ValueToDouble(const ValueOperand& operand, FloatRegister dest);
   void loadInt32OrDouble(const Address& address, FloatRegister dest);
   void loadInt32OrDouble(Register base, Register index, FloatRegister dest,
                          int32_t shift = defaultShift);
   void loadConstantDouble(double dp, FloatRegister dest);
-
-  void boolValueToFloat32(const ValueOperand& operand, FloatRegister dest);
-  void int32ValueToFloat32(const ValueOperand& operand, FloatRegister dest);
   void loadConstantFloat32(float f, FloatRegister dest);
 
   void testNullSet(Condition cond, const ValueOperand& value, Register dest);
@@ -770,11 +765,6 @@ class MacroAssemblerMIPSCompat : public MacroAssemblerMIPS {
   void alignStackPointer();
   void restoreStackPointer();
   static void calculateAlignedStackPointer(void** stackPointer);
-
-  // If source is a double, load it into dest. If source is int32,
-  // convert it to double. Else, branch to failure.
-  void ensureDouble(const ValueOperand& source, FloatRegister dest,
-                    Label* failure);
 
   void cmp64Set(Condition cond, Register64 lhs, Register64 rhs, Register dest);
   void cmp64Set(Condition cond, Register64 lhs, Imm64 val, Register dest);

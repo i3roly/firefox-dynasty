@@ -221,7 +221,7 @@ class DefaultBrowserToolbarMenuController(
                 val sessionId = currentSession?.id
                 val url = sessionId?.let {
                     store.state.findTab(it)?.getUrl()
-                }
+                } ?: currentSession?.content?.url
                 val directions = NavGraphDirections.actionGlobalShareFragment(
                     sessionId = sessionId,
                     data = arrayOf(
@@ -373,7 +373,7 @@ class DefaultBrowserToolbarMenuController(
                     BrowserFragmentDirections.actionGlobalHistoryFragment(),
                 )
             }
-            is ToolbarMenu.Item.Passwords -> browserAnimator.captureEngineViewAndDrawStatically {
+            is ToolbarMenu.Item.Passwords -> {
                 fragment.view?.let { view ->
                     bindBiometricsCredentialsPromptOrShowWarning(
                         view = view,

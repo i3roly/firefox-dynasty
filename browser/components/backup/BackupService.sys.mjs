@@ -5,8 +5,29 @@
 import * as DefaultBackupResources from "resource:///modules/backup/BackupResources.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
+import { BackupResource } from "resource:///modules/backup/BackupResource.sys.mjs";
+import {
+  MeasurementUtils,
+  BYTES_IN_KILOBYTE,
+  BYTES_IN_MEGABYTE,
+  BYTES_IN_MEBIBYTE,
+} from "resource:///modules/backup/MeasurementUtils.sys.mjs";
+import { ERRORS } from "resource:///modules/backup/BackupConstants.mjs";
 
+const BACKUP_DIR_PREF_NAME = "browser.backup.location";
 const SCHEDULED_BACKUPS_ENABLED_PREF_NAME = "browser.backup.scheduled.enabled";
+const IDLE_THRESHOLD_SECONDS_PREF_NAME =
+  "browser.backup.scheduled.idle-threshold-seconds";
+const MINIMUM_TIME_BETWEEN_BACKUPS_SECONDS_PREF_NAME =
+  "browser.backup.scheduled.minimum-time-between-backups-seconds";
+const LAST_BACKUP_TIMESTAMP_PREF_NAME =
+  "browser.backup.scheduled.last-backup-timestamp";
+
+const SCHEMAS = Object.freeze({
+  BACKUP_MANIFEST: 1,
+  ARCHIVE_JSON_BLOCK: 2,
+});
+
 const lazy = {};
 
 ChromeUtils.defineLazyGetter(lazy, "logConsole", function () {
@@ -25,17 +46,54 @@ ChromeUtils.defineLazyGetter(lazy, "fxAccounts", () => {
 });
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  ArchiveDecryptor: "resource:///modules/backup/ArchiveEncryption.sys.mjs",
   ArchiveEncryptionState:
     "resource:///modules/backup/ArchiveEncryptionState.sys.mjs",
+  ArchiveUtils: "resource:///modules/backup/ArchiveUtils.sys.mjs",
+  BasePromiseWorker: "resource://gre/modules/PromiseWorker.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
-  JsonSchemaValidator:
-    "resource://gre/modules/components-utils/JsonSchemaValidator.sys.mjs",
+  DownloadPaths: "resource://gre/modules/DownloadPaths.sys.mjs",
+  FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
+  JsonSchema: "resource://gre/modules/JsonSchema.sys.mjs",
+  NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
   UIState: "resource://services-sync/UIState.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "ZipWriter", () =>
   Components.Constructor("@mozilla.org/zipwriter;1", "nsIZipWriter", "open")
 );
+ChromeUtils.defineLazyGetter(lazy, "ZipReader", () =>
+  Components.Constructor(
+    "@mozilla.org/libjar/zip-reader;1",
+    "nsIZipReader",
+    "open"
+  )
+);
+ChromeUtils.defineLazyGetter(lazy, "BinaryInputStream", () =>
+  Components.Constructor(
+    "@mozilla.org/binaryinputstream;1",
+    "nsIBinaryInputStream",
+    "setInputStream"
+  )
+);
+
+ChromeUtils.defineLazyGetter(lazy, "gFluentStrings", function () {
+  return new Localization(
+    ["branding/brand.ftl", "preview/backupSettings.ftl"],
+    true
+  );
+});
+
+ChromeUtils.defineLazyGetter(lazy, "gDOMLocalization", function () {
+  return new DOMLocalization([
+    "branding/brand.ftl",
+    "preview/backupSettings.ftl",
+  ]);
+});
+
+ChromeUtils.defineLazyGetter(lazy, "defaultParentDirPath", function () {
+  return Services.dirsvc.get("Docs", Ci.nsIFile).path;
+});
 
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
@@ -49,6 +107,387 @@ XPCOMUtils.defineLazyPreferenceGetter(
     }
   }
 );
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "backupDirPref",
+  BACKUP_DIR_PREF_NAME,
+  /**
+   * To avoid disk access upon startup, do not set DEFAULT_PARENT_DIR_PATH
+   * as a fallback value here. Let registered widgets prompt BackupService
+   * to update the parentDirPath.
+   *
+   * @see BackupService.state
+   * @see DEFAULT_PARENT_DIR_PATH
+   * @see setParentDirPath
+   */
+  null,
+  async function onUpdateLocationDirPath(_pref, _prevVal, newVal) {
+    let bs = BackupService.get();
+    if (bs) {
+      await bs.onUpdateLocationDirPath(newVal);
+    }
+  }
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "minimumTimeBetweenBackupsSeconds",
+  MINIMUM_TIME_BETWEEN_BACKUPS_SECONDS_PREF_NAME,
+  3600 /* 1 hour */
+);
+
+XPCOMUtils.defineLazyServiceGetter(
+  lazy,
+  "idleService",
+  "@mozilla.org/widget/useridleservice;1",
+  "nsIUserIdleService"
+);
+
+/**
+ * A class that wraps a multipart/mixed stream converter instance, and streams
+ * in the binary part of a single-file archive (which should be at the second
+ * index of the attachments) as a ReadableStream.
+ *
+ * The bytes that are read in are text decoded, but are not guaranteed to
+ * represent a "full chunk" of base64 data. Consumers should ensure to buffer
+ * the strings emitted by this stream, and to search for `\n` characters, which
+ * indicate the end of a (potentially encrypted and) base64 encoded block.
+ */
+class BinaryReadableStream {
+  #channel = null;
+
+  /**
+   * Constructs a BinaryReadableStream.
+   *
+   * @param {nsIChannel} channel
+   *   The channel through which to begin the flow of bytes from the
+   *   inputStream
+   */
+  constructor(channel) {
+    this.#channel = channel;
+  }
+
+  /**
+   * Implements `start` from the `underlyingSource` of a ReadableStream
+   *
+   * @param {ReadableStreamDefaultController} controller
+   *   The controller for the ReadableStream to feed strings into.
+   */
+  start(controller) {
+    let streamConv = Cc["@mozilla.org/streamConverters;1"].getService(
+      Ci.nsIStreamConverterService
+    );
+
+    let textDecoder = new TextDecoder();
+
+    // The attachment index that should contain the binary data.
+    const EXPECTED_CONTENT_TYPE = "application/octet-stream";
+
+    // This is fairly clumsy, but by using an object nsIStreamListener like
+    // this, I can keep from stashing the `controller` somewhere, as it's
+    // available in the closure.
+    let multipartListenerForBinary = {
+      /**
+       * True once we've found an attachment matching our EXPECTED_CONTENT_TYPE.
+       * Once this is true, bytes flowing into onDataAvailable will be
+       * enqueued through the controller.
+       *
+       * @type {boolean}
+       */
+      _enabled: false,
+
+      /**
+       * True once onStopRequest has been called once the listener is enabled.
+       * After this, the listener will not attempt to read any data passed
+       * to it through onDataAvailable.
+       *
+       * @type {boolean}
+       */
+      _done: false,
+
+      QueryInterface: ChromeUtils.generateQI([
+        "nsIStreamListener",
+        "nsIRequestObserver",
+      ]),
+
+      /**
+       * Called when we begin to load an attachment from the MIME message.
+       *
+       * @param {nsIRequest} request
+       *   The request corresponding to the source of the data.
+       */
+      onStartRequest(request) {
+        if (!(request instanceof Ci.nsIChannel)) {
+          throw Components.Exception(
+            "onStartRequest expected an nsIChannel request",
+            Cr.NS_ERROR_UNEXPECTED
+          );
+        }
+        this._enabled = request.contentType == EXPECTED_CONTENT_TYPE;
+      },
+
+      /**
+       * Called when data is flowing in for an attachment.
+       *
+       * @param {nsIRequest} request
+       *   The request corresponding to the source of the data.
+       * @param {nsIInputStream} stream
+       *   The input stream containing the data chunk.
+       * @param {number} offset
+       *   The number of bytes that were sent in previous onDataAvailable calls
+       *   for this request. In other words, the sum of all previous count
+       *   parameters.
+       * @param {number} count
+       *   The number of bytes available in the stream
+       */
+      onDataAvailable(request, stream, offset, count) {
+        if (!this._enabled) {
+          // We don't care about this data, just move on.
+          return;
+        }
+
+        let binStream = new lazy.BinaryInputStream(stream);
+        let bytes = new Uint8Array(count);
+        binStream.readArrayBuffer(count, bytes.buffer);
+        let string = textDecoder.decode(bytes);
+        controller.enqueue(string);
+      },
+
+      /**
+       * Called when the load of an attachment finishes.
+       */
+      onStopRequest() {
+        if (this._enabled && !this._done) {
+          this._enabled = false;
+          this._done = true;
+
+          controller.close();
+
+          // No need to load anything else - abort reading in more
+          // attachments.
+          throw Components.Exception(
+            "Got binary block - cancelling loading the multipart stream.",
+            Cr.NS_BINDING_ABORTED
+          );
+        }
+      },
+    };
+
+    let conv = streamConv.asyncConvertData(
+      "multipart/mixed",
+      "*/*",
+      multipartListenerForBinary,
+      null
+    );
+
+    this.#channel.asyncOpen(conv);
+  }
+}
+
+/**
+ * A TransformStream class that takes in chunks of base64 encoded data,
+ * decodes (and eventually, decrypts) them before passing the resulting
+ * bytes along to the next step in the pipe.
+ *
+ * The BinaryReadableStream feeds strings into this TransformStream, but the
+ * buffering of these streams means that we cannot be certain that the string
+ * that was passed is the entirety of a base64 encoded block. ArchiveWorker
+ * puts every block on its own line, meaning that we must simply look for
+ * newlines to indicate when a break between full blocks is, and buffer chunks
+ * until we see those breaks - only decoding once we have a full block.
+ */
+export class DecoderDecryptorTransformer {
+  #buffer = "";
+  #decryptor = null;
+
+  /**
+   * Constructs the DecoderDecryptorTransformer.
+   *
+   * @param {ArchiveDecryptor|null} decryptor
+   *   An initialized ArchiveDecryptor, if this stream of bytes is presumed to
+   *   be encrypted.
+   */
+  constructor(decryptor) {
+    this.#decryptor = decryptor;
+  }
+
+  /**
+   * Consumes a single chunk of a base64 encoded string sent by
+   * BinaryReadableStream.
+   *
+   * @param {string} chunkPart
+   *   A part of a chunk of a base64 encoded string sent by
+   *   BinaryReadableStream.
+   * @param {TransformStreamDefaultController} controller
+   *   The controller to send decoded bytes to.
+   * @returns {Promise<undefined>}
+   */
+  async transform(chunkPart, controller) {
+    // A small optimization, but considering the size of these strings, it's
+    // likely worth it.
+    if (this.#buffer) {
+      this.#buffer += chunkPart;
+    } else {
+      this.#buffer = chunkPart;
+    }
+
+    // If the compressed archive was large enough, then it got split up over
+    // several chunks. In that case, each chunk is separated by a newline. We
+    // also filter out any extraneous newlines that might have been included
+    // at the end.
+    let chunks = this.#buffer.split("\n").filter(chunk => chunk != "");
+
+    this.#buffer = chunks.pop();
+    // If there were any remaining parts that we split out from the buffer,
+    // they must constitute full blocks that we can decode.
+    for (let chunk of chunks) {
+      await this.#processChunk(controller, chunk);
+    }
+  }
+
+  /**
+   * Called once BinaryReadableStream signals that it has sent all of its
+   * strings, in which case we know that whatever is in the buffer should be
+   * a valid block.
+   *
+   * @param {TransformStreamDefaultController} controller
+   *   The controller to send decoded bytes to.
+   * @returns {Promise<undefined>}
+   */
+  async flush(controller) {
+    await this.#processChunk(controller, this.#buffer, true);
+    this.#buffer = "";
+  }
+
+  /**
+   * Decodes (and potentially decrypts) a valid base64 encoded chunk into a
+   * Uint8Array and sends it to the next step in the pipe.
+   *
+   * @param {TransformStreamDefaultController} controller
+   *   The controller to send decoded bytes to.
+   * @param {string} chunk
+   *   The base64 encoded string to decode and potentially decrypt.
+   * @param {boolean} [isLastChunk=false]
+   *   True if this is the last chunk to be processed.
+   * @returns {Promise<undefined>}
+   */
+  async #processChunk(controller, chunk, isLastChunk = false) {
+    try {
+      let bytes = lazy.ArchiveUtils.stringToArray(chunk);
+
+      if (this.#decryptor) {
+        let plaintextBytes = await this.#decryptor.decrypt(bytes, isLastChunk);
+        controller.enqueue(plaintextBytes);
+      } else {
+        controller.enqueue(bytes);
+      }
+    } catch (e) {
+      // Something went wrong base64 decoding or decrypting. Tell the controller
+      // that we're done, so that it can destroy anything that was decoded /
+      // decrypted already.
+      controller.error("Corrupted archive.");
+    }
+  }
+}
+
+/**
+ * A class that lets us construct a WritableStream that writes bytes to a file
+ * on disk somewhere.
+ */
+export class FileWriterStream {
+  /**
+   * @type {string}
+   */
+  #destPath = null;
+
+  /**
+   * @type {nsIOutputStream}
+   */
+  #outStream = null;
+
+  /**
+   * @type {nsIBinaryOutputStream}
+   */
+  #binStream = null;
+
+  /**
+   * @type {ArchiveDecryptor}
+   */
+  #decryptor = null;
+
+  /**
+   * Constructor for FileWriterStream.
+   *
+   * @param {string} destPath
+   *   The path to write the incoming bytes to.
+   * @param {ArchiveDecryptor|null} decryptor
+   *   An initialized ArchiveDecryptor, if this stream of bytes is presumed to
+   *   be encrypted.
+   */
+  constructor(destPath, decryptor) {
+    this.#destPath = destPath;
+    this.#decryptor = decryptor;
+  }
+
+  /**
+   * Called once the first set of bytes comes in from the
+   * DecoderDecryptorTransformer. This creates the file, and sets up the
+   * underlying nsIOutputStream mechanisms to let us write bytes to the file.
+   */
+  async start() {
+    let extractionDestFile = await IOUtils.getFile(this.#destPath);
+    this.#outStream =
+      lazy.FileUtils.openSafeFileOutputStream(extractionDestFile);
+    this.#binStream = Cc["@mozilla.org/binaryoutputstream;1"].createInstance(
+      Ci.nsIBinaryOutputStream
+    );
+    this.#binStream.setOutputStream(this.#outStream);
+  }
+
+  /**
+   * Writes bytes to the destination on the file system.
+   *
+   * @param {Uint8Array} chunk
+   *   The bytes to stream to the destination file.
+   */
+  write(chunk) {
+    this.#binStream.writeByteArray(chunk);
+  }
+
+  /**
+   * Called once the stream of bytes finishes flowing in and closes the stream.
+   *
+   * @param {WritableStreamDefaultController} controller
+   *   The controller for the WritableStream.
+   */
+  close(controller) {
+    lazy.FileUtils.closeSafeFileOutputStream(this.#outStream);
+    if (this.#decryptor && !this.#decryptor.isDone()) {
+      lazy.logConsole.error(
+        "Decryptor was not done when the stream was closed."
+      );
+      controller.error("Corrupted archive.");
+    }
+  }
+
+  /**
+   * Called if something went wrong while decoding / decrypting the stream of
+   * bytes. This destroys any bytes that may have been decoded / decrypted
+   * prior to the error.
+   *
+   * @param {string} reason
+   *   The reported reason for aborting the decoding / decrpytion.
+   */
+  async abort(reason) {
+    lazy.logConsole.error(`Writing to ${this.#destPath} failed: `, reason);
+    lazy.FileUtils.closeSafeFileOutputStream(this.#outStream);
+    await IOUtils.remove(this.#destPath, {
+      ignoreAbsent: true,
+      retryReadonly: true,
+    });
+  }
+}
 
 /**
  * The BackupService class orchestrates the scheduling and creation of profile
@@ -70,6 +509,20 @@ export class BackupService extends EventTarget {
    * @type {Map<string, BackupResource>}
    */
   #resources = new Map();
+
+  /**
+   * The name of the backup folder. Should be localized.
+   *
+   * @see BACKUP_DIR_NAME
+   */
+  static #backupFolderName = null;
+
+  /**
+   * The name of the backup archive file. Should be localized.
+   *
+   * @see BACKUP_FILE_NAME
+   */
+  static #backupFileName = null;
 
   /**
    * Set to true if a backup is currently in progress. Causes stateUpdate()
@@ -112,10 +565,15 @@ export class BackupService extends EventTarget {
    * @type {object}
    */
   #_state = {
-    backupFilePath: "Documents", // TODO: make save location configurable (bug 1895943)
+    backupDirPath: lazy.backupDirPref,
+    defaultParent: {},
+    backupFileToRestore: null,
+    backupFileInfo: null,
     backupInProgress: false,
     scheduledBackupsEnabled: lazy.scheduledBackupsPref,
     encryptionEnabled: false,
+    /** @type {number?} Number of seconds since UNIX epoch */
+    lastBackupDate: null,
   };
 
   /**
@@ -153,6 +611,45 @@ export class BackupService extends EventTarget {
   #encState = undefined;
 
   /**
+   * The path of the default parent directory for saving backups.
+   * The current default is the Documents directory.
+   *
+   * @returns {string} The path of the default parent directory
+   */
+  static get DEFAULT_PARENT_DIR_PATH() {
+    return lazy.defaultParentDirPath;
+  }
+
+  /**
+   * The localized name for the user's backup folder.
+   *
+   * @returns {string} The localized backup folder name
+   */
+  static get BACKUP_DIR_NAME() {
+    if (!BackupService.#backupFolderName) {
+      BackupService.#backupFolderName = lazy.DownloadPaths.sanitize(
+        lazy.gFluentStrings.formatValueSync("backup-folder-name")
+      );
+    }
+    return BackupService.#backupFolderName;
+  }
+
+  /**
+   * The localized name for the user's backup archive file. This will have
+   * `.html` appended to it before writing the archive file.
+   *
+   * @returns {string} The localized backup file name
+   */
+  static get BACKUP_FILE_NAME() {
+    if (!BackupService.#backupFileName) {
+      BackupService.#backupFileName = lazy.DownloadPaths.sanitize(
+        lazy.gFluentStrings.formatValueSync("backup-file-name")
+      );
+    }
+    return BackupService.#backupFileName;
+  }
+
+  /**
    * The name of the folder within the profile folder where this service reads
    * and writes state to.
    *
@@ -163,22 +660,22 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * The name of the folder within the PROFILE_FOLDER_NAME where the staging
+   * folder / prior backups will be stored.
+   *
+   * @type {string}
+   */
+  static get SNAPSHOTS_FOLDER_NAME() {
+    return "snapshots";
+  }
+
+  /**
    * The name of the backup manifest file.
    *
    * @type {string}
    */
   static get MANIFEST_FILE_NAME() {
     return "backup-manifest.json";
-  }
-
-  /**
-   * The current schema version of the backup manifest that this BackupService
-   * uses when creating a backup.
-   *
-   * @type {number}
-   */
-  static get MANIFEST_SCHEMA_VERSION() {
-    return 1;
   }
 
   /**
@@ -198,8 +695,9 @@ export class BackupService extends EventTarget {
    */
   static get MANIFEST_SCHEMA() {
     if (!BackupService.#manifestSchemaPromise) {
-      BackupService.#manifestSchemaPromise = BackupService._getSchemaForVersion(
-        BackupService.MANIFEST_SCHEMA_VERSION
+      BackupService.#manifestSchemaPromise = BackupService.getSchemaForVersion(
+        SCHEMAS.BACKUP_MANIFEST,
+        lazy.ArchiveUtils.SCHEMA_VERSION
       );
     }
 
@@ -227,22 +725,46 @@ export class BackupService extends EventTarget {
   }
 
   /**
-   * Returns the schema for the backup manifest for a given version.
+   * Returns the SCHEMAS constants, which is a key/value store of constants.
    *
-   * This should really be #getSchemaForVersion, but for some reason,
-   * sphinx-js seems to choke on static async private methods (bug 1893362).
-   * We workaround this breakage by using the `_` prefix to indicate that this
-   * method should be _considered_ private, and ask that you not use this method
-   * outside of this class. The sphinx-js issue is tracked at
-   * https://github.com/mozilla/sphinx-js/issues/240.
+   * @type {object}
+   */
+  static get SCHEMAS() {
+    return SCHEMAS;
+  }
+
+  /**
+   * Returns the filename used for the intermediary compressed ZIP file that
+   * is extracted from archives during recovery.
    *
-   * @private
+   * @type {string}
+   */
+  static get RECOVERY_ZIP_FILE_NAME() {
+    return "recovery.zip";
+  }
+
+  /**
+   * Returns the schema for the schemaType for a given version.
+   *
+   * @param {number} schemaType
+   *   One of the constants from SCHEMAS.
    * @param {number} version
    *   The version of the schema to return.
    * @returns {Promise<object>}
    */
-  static async _getSchemaForVersion(version) {
-    let schemaURL = `chrome://browser/content/backup/BackupManifest.${version}.schema.json`;
+  static async getSchemaForVersion(schemaType, version) {
+    let schemaURL;
+
+    if (schemaType == SCHEMAS.BACKUP_MANIFEST) {
+      schemaURL = `chrome://browser/content/backup/BackupManifest.${version}.schema.json`;
+    } else if (schemaType == SCHEMAS.ARCHIVE_JSON_BLOCK) {
+      schemaURL = `chrome://browser/content/backup/ArchiveJSONBlock.${version}.schema.json`;
+    } else {
+      throw new Error(`Did not recognize SCHEMAS constant: ${schemaType}`, {
+        cause: ERRORS.UNKNOWN,
+      });
+    }
+
     let response = await fetch(schemaURL);
     return response.json();
   }
@@ -254,6 +776,16 @@ export class BackupService extends EventTarget {
    */
   static get COMPRESSION_LEVEL() {
     return Ci.nsIZipWriter.COMPRESSION_BEST;
+  }
+
+  /**
+   * Returns the chrome:// URI string for the template that should be used to
+   * construct the single-file archive.
+   *
+   * @type {string}
+   */
+  static get ARCHIVE_TEMPLATE() {
+    return "chrome://browser/content/backup/archive.template.html";
   }
 
   /**
@@ -274,6 +806,7 @@ export class BackupService extends EventTarget {
       this.#instance.takeMeasurements();
     });
 
+    this.#instance.initBackupScheduler();
     return this.#instance;
   }
 
@@ -286,7 +819,9 @@ export class BackupService extends EventTarget {
    */
   static get() {
     if (!this.#instance) {
-      throw new Error("BackupService not initialized");
+      throw new Error("BackupService not initialized", {
+        cause: ERRORS.UNINITIALIZED,
+      });
     }
     return this.#instance;
   }
@@ -331,13 +866,101 @@ export class BackupService extends EventTarget {
    * @type {object}
    */
   get state() {
+    if (!Object.keys(this.#_state.defaultParent).length) {
+      let defaultPath = BackupService.DEFAULT_PARENT_DIR_PATH;
+      this.#_state.defaultParent = {
+        path: defaultPath,
+        fileName: PathUtils.filename(defaultPath),
+        iconURL: this.getIconFromFilePath(defaultPath),
+      };
+    }
+
     return Object.freeze(structuredClone(this.#_state));
+  }
+
+  /**
+   * Attempts to find the right folder to write the single-file archive to, and
+   * if it does not exist, to create it.
+   *
+   * If the configured destination's parent folder does not exist and cannot
+   * be recreated, we will fall back to the `defaultParentDirPath`. If
+   * `defaultParentDirPath` happens to not exist or cannot be created, we will
+   * fall back to the home directory. If _that_ folder does not exist and cannot
+   * be recreated, this method will reject.
+   *
+   * @param {string} configuredDestFolderPath
+   *   The currently configured destination folder for the archive.
+   * @returns {Promise<string, Error>}
+   */
+  async resolveArchiveDestFolderPath(configuredDestFolderPath) {
+    lazy.logConsole.log(
+      "Resolving configured archive destination folder: ",
+      configuredDestFolderPath
+    );
+
+    // Try to create the configured folder ancestry. If that fails, we clear
+    // configuredDestFolderPath so that we can try the fallback paths, as
+    // if the folder was never set.
+    try {
+      await IOUtils.makeDirectory(configuredDestFolderPath, {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      return configuredDestFolderPath;
+    } catch (e) {
+      lazy.logConsole.warn("Could not create configured destination path: ", e);
+    }
+
+    lazy.logConsole.warn(
+      "The destination directory was invalid. Attempting to fall back to " +
+        "default parent folder: ",
+      BackupService.DEFAULT_PARENT_DIR_PATH
+    );
+    let fallbackFolderPath = PathUtils.join(
+      BackupService.DEFAULT_PARENT_DIR_PATH,
+      BackupService.BACKUP_DIR_NAME
+    );
+    try {
+      await IOUtils.makeDirectory(fallbackFolderPath, {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      return fallbackFolderPath;
+    } catch (e) {
+      lazy.logConsole.warn("Could not create fallback destination path: ", e);
+    }
+
+    let homeDirPath = PathUtils.join(
+      Services.dirsvc.get("Home", Ci.nsIFile).path,
+      BackupService.BACKUP_DIR_NAME
+    );
+    lazy.logConsole.warn(
+      "The destination directory was invalid. Attempting to fall back to " +
+        "Home folder: ",
+      homeDirPath
+    );
+    try {
+      await IOUtils.makeDirectory(homeDirPath, {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      return homeDirPath;
+    } catch (e) {
+      lazy.logConsole.warn("Could not create Home destination path: ", e);
+      throw new Error(
+        "Could not resolve to a writable destination folder path."
+      );
+    }
   }
 
   /**
    * @typedef {object} CreateBackupResult
    * @property {string} stagingPath
    *   The staging path for where the backup was created.
+   * @property {string} compressedStagingPath
+   *   The path to the file containing the compressed staging path.
+   * @property {string} archivePath
+   *   The path to the single file archive that was created.
    */
 
   /**
@@ -363,19 +986,31 @@ export class BackupService extends EventTarget {
 
     try {
       lazy.logConsole.debug(`Creating backup for profile at ${profilePath}`);
+
+      let archiveDestFolderPath = await this.resolveArchiveDestFolderPath(
+        lazy.backupDirPref
+      );
+      lazy.logConsole.debug(
+        `Destination for archive: ${archiveDestFolderPath}`
+      );
+
       let manifest = await this.#createBackupManifest();
 
       // First, check to see if a `backups` directory already exists in the
       // profile.
       let backupDirPath = PathUtils.join(
         profilePath,
-        BackupService.PROFILE_FOLDER_NAME
+        BackupService.PROFILE_FOLDER_NAME,
+        BackupService.SNAPSHOTS_FOLDER_NAME
       );
       lazy.logConsole.debug("Creating backups folder");
 
       // ignoreExisting: true is the default, but we're being explicit that it's
       // okay if this folder already exists.
-      await IOUtils.makeDirectory(backupDirPath, { ignoreExisting: true });
+      await IOUtils.makeDirectory(backupDirPath, {
+        ignoreExisting: true,
+        createAncestors: true,
+      });
 
       let stagingPath = await this.#prepareStagingFolder(backupDirPath);
 
@@ -413,7 +1048,8 @@ export class BackupService extends EventTarget {
           // we're just going to log it.
           let manifestEntry = await new resourceClass().backup(
             resourcePath,
-            profilePath
+            profilePath,
+            encryptionEnabled
           );
 
           if (manifestEntry === undefined) {
@@ -444,7 +1080,7 @@ export class BackupService extends EventTarget {
       // case, a user so-inclined could theoretically repair the manifest
       // to make it valid.
       let manifestSchema = await BackupService.MANIFEST_SCHEMA;
-      let schemaValidationResult = lazy.JsonSchemaValidator.validate(
+      let schemaValidationResult = lazy.JsonSchema.validate(
         manifest,
         manifestSchema
       );
@@ -471,15 +1107,141 @@ export class BackupService extends EventTarget {
         renamedStagingPath
       );
 
+      // Record the total size of the backup staging directory
+      let totalSizeKilobytes = await BackupResource.getDirectorySize(
+        renamedStagingPath
+      );
+      let totalSizeBytesNearestMebibyte = MeasurementUtils.fuzzByteSize(
+        totalSizeKilobytes * BYTES_IN_KILOBYTE,
+        1 * BYTES_IN_MEBIBYTE
+      );
+      lazy.logConsole.debug(
+        "total staging directory size in bytes: " +
+          totalSizeBytesNearestMebibyte
+      );
+
+      Glean.browserBackup.totalBackupSize.accumulate(
+        totalSizeBytesNearestMebibyte / BYTES_IN_MEBIBYTE
+      );
+
       let compressedStagingPath = await this.#compressStagingFolder(
         renamedStagingPath,
         backupDirPath
       );
 
-      return { stagingPath: renamedStagingPath, compressedStagingPath };
+      // Now create the single-file archive. For now, we'll stash this in the
+      // backups folder while it gets written. Once that's done, we'll attempt
+      // to move it to the user's configured backup path.
+      let archiveTmpPath = PathUtils.join(backupDirPath, "archive.html");
+      lazy.logConsole.log("Exporting single-file archive to ", archiveTmpPath);
+      await this.createArchive(
+        archiveTmpPath,
+        BackupService.ARCHIVE_TEMPLATE,
+        compressedStagingPath,
+        this.#encState,
+        manifest.meta
+      );
+
+      let archivePath = await this.finalizeSingleFileArchive(
+        archiveTmpPath,
+        archiveDestFolderPath,
+        manifest.meta
+      );
+
+      let nowSeconds = Math.floor(Date.now() / 1000);
+      Services.prefs.setIntPref(LAST_BACKUP_TIMESTAMP_PREF_NAME, nowSeconds);
+      this.#_state.lastBackupDate = nowSeconds;
+
+      return {
+        stagingPath: renamedStagingPath,
+        compressedStagingPath,
+        archivePath,
+      };
     } finally {
       this.#backupInProgress = false;
     }
+  }
+
+  /**
+   * Generates a string from a Date in the form of:
+   *
+   * YYYYMMDD-HHMM
+   *
+   * @param {Date} date
+   *   The date to convert into the archive date suffix.
+   * @returns {string}
+   */
+  generateArchiveDateSuffix(date) {
+    let year = date.getFullYear().toString();
+
+    // In all cases, months or days with single digits are expected to start
+    // with a 0.
+
+    // Note that getMonth() is 0-indexed for some reason, so we increment by 1.
+    let month = `${date.getMonth() + 1}`.padStart(2, "0");
+
+    let day = `${date.getDate()}`.padStart(2, "0");
+    let hours = `${date.getHours()}`.padStart(2, "0");
+    let minutes = `${date.getMinutes()}`.padStart(2, "0");
+
+    return `${year}${month}${day}-${hours}${minutes}`;
+  }
+
+  /**
+   * Moves the single-file archive into its configured location with a filename
+   * that is sanitized and contains a timecode. This also removes any existing
+   * single-file archives in that same folder after the move completes.
+   *
+   * @param {string} sourcePath
+   *   The file system location of the single-file archive prior to the move.
+   * @param {string} destFolder
+   *   The folder that the single-file archive is configured to be eventually
+   *   written to.
+   * @param {object} metadata
+   *   The metadata for the backup. See the BackupManifest schema for details.
+   * @returns {Promise<string>}
+   *   Resolves with the path that the single-file archive was moved to.
+   */
+  async finalizeSingleFileArchive(sourcePath, destFolder, metadata) {
+    let archiveDateSuffix = this.generateArchiveDateSuffix(
+      new Date(metadata.date)
+    );
+
+    let existingChildren = await IOUtils.getChildren(destFolder);
+
+    const FILENAME_PREFIX = `${BackupService.BACKUP_FILE_NAME}_${metadata.profileName}`;
+    const FILENAME = `${FILENAME_PREFIX}_${archiveDateSuffix}.html`;
+    let destPath = PathUtils.join(destFolder, FILENAME);
+    lazy.logConsole.log("Moving single-file archive to ", destPath);
+    await IOUtils.move(sourcePath, destPath);
+
+    for (let childFilePath of existingChildren) {
+      let childFileName = PathUtils.filename(childFilePath);
+      // We check both the prefix and the suffix, because the prefix encodes
+      // the profile name in it. If there are other profiles from the same
+      // application performing backup, we don't want to accidentally remove
+      // those.
+      if (
+        childFileName.startsWith(FILENAME_PREFIX) &&
+        childFileName.endsWith(".html")
+      ) {
+        if (childFileName == FILENAME) {
+          // Since filenames don't include seconds, this might occur if a
+          // backup was created seconds after the last one during the same
+          // minute. That tends not to happen in practice, but might occur
+          // during testing, in which case, we'll skip clearing this file.
+          lazy.logConsole.warn(
+            "Collided with a pre-existing archive name, so not clearing: ",
+            FILENAME
+          );
+          continue;
+        }
+        lazy.logConsole.debug("Getting rid of ", childFilePath);
+        await IOUtils.remove(childFilePath);
+      }
+    }
+
+    return destPath;
   }
 
   /**
@@ -590,6 +1352,673 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * Decompressed a compressed recovery file into recoveryFolderDestPath.
+   *
+   * @param {string} recoveryFilePath
+   *   The path to the compressed recovery file to decompress.
+   * @param {string} recoveryFolderDestPath
+   *   The path to the folder that the compressed recovery file should be
+   *   decompressed within.
+   * @returns {Promise<undefined>}
+   */
+  async decompressRecoveryFile(recoveryFilePath, recoveryFolderDestPath) {
+    let recoveryFile = await IOUtils.getFile(recoveryFilePath);
+    let recoveryArchive = new lazy.ZipReader(recoveryFile);
+    lazy.logConsole.log(
+      "Decompressing recovery folder to ",
+      recoveryFolderDestPath
+    );
+    try {
+      // null is passed to test if we're meant to CRC test the entire
+      // ZIP file. If an exception is thrown, this means we failed the CRC
+      // check. See the nsIZipReader.idl documentation for details.
+      recoveryArchive.test(null);
+    } catch (e) {
+      recoveryArchive.close();
+      lazy.logConsole.error("Compressed recovery file was corrupt.");
+      await IOUtils.remove(recoveryFilePath, {
+        retryReadonly: true,
+      });
+      throw new Error("Corrupt archive.", { cause: ERRORS.CORRUPTED_ARCHIVE });
+    }
+
+    await this.#decompressChildren(recoveryFolderDestPath, "", recoveryArchive);
+    recoveryArchive.close();
+  }
+
+  /**
+   * A helper method that recursively decompresses any children within a folder
+   * within a compressed archive.
+   *
+   * @param {string} rootPath
+   *   The path to the root folder that is being decompressed into.
+   * @param {string} parentEntryName
+   *   The name of the parent folder within the compressed archive that is
+   *   having its children decompressed.
+   * @param {nsIZipReader} reader
+   *   The nsIZipReader for the compressed archive.
+   * @returns {Promise<undefined>}
+   */
+  async #decompressChildren(rootPath, parentEntryName, reader) {
+    // nsIZipReader.findEntries has an interesting querying language that is
+    // documented in the nsIZipReader IDL file, in case you're curious about
+    // what these symbols mean.
+    let childEntryNames = reader.findEntries(
+      parentEntryName + "?*~" + parentEntryName + "?*/?*"
+    );
+
+    for (let childEntryName of childEntryNames) {
+      let childEntry = reader.getEntry(childEntryName);
+      if (childEntry.isDirectory) {
+        await this.#decompressChildren(rootPath, childEntryName, reader);
+      } else {
+        let inputStream = reader.getInputStream(childEntryName);
+        // ZIP files all use `/` as their path separators, regardless of
+        // platform.
+        let fileNameParts = childEntryName.split("/");
+        let outputFilePath = PathUtils.join(rootPath, ...fileNameParts);
+        let outputFile = await IOUtils.getFile(outputFilePath);
+        let outputStream = Cc[
+          "@mozilla.org/network/file-output-stream;1"
+        ].createInstance(Ci.nsIFileOutputStream);
+
+        outputStream.init(
+          outputFile,
+          -1,
+          -1,
+          Ci.nsIFileOutputStream.DEFER_OPEN
+        );
+
+        await new Promise(resolve => {
+          lazy.logConsole.debug("Writing ", outputFilePath);
+          lazy.NetUtil.asyncCopy(inputStream, outputStream, () => {
+            lazy.logConsole.debug("Done writing ", outputFilePath);
+            outputStream.close();
+            resolve();
+          });
+        });
+      }
+    }
+  }
+
+  /**
+   * Given a URI to an HTML template for the single-file backup archive,
+   * produces the static markup that will then be used as the beginning of that
+   * single-file backup archive.
+   *
+   * @param {string} templateURI
+   *   A URI pointing at a template for the HTML content for the page. This is
+   *   what is visible if the file is loaded in a web browser.
+   * @param {boolean} isEncrypted
+   *   True if the template should indicate that the backup is encrypted.
+   * @param {object} backupMetadata
+   *   The metadata for the backup, which is also stored in the backup manifest
+   *   of the compressed backup snapshot.
+   * @returns {Promise<string>}
+   */
+  async renderTemplate(templateURI, isEncrypted, backupMetadata) {
+    const ARCHIVE_STYLES = "chrome://browser/content/backup/archive.css";
+    const ARCHIVE_SCRIPT = "chrome://browser/content/backup/archive.js";
+    const LOGO = "chrome://branding/content/icon128.png";
+
+    let templateResponse = await fetch(templateURI);
+    let templateString = await templateResponse.text();
+    let templateDOM = new DOMParser().parseFromString(
+      templateString,
+      "text/html"
+    );
+
+    // Set the lang attribute on the <html> element
+    templateDOM.documentElement.setAttribute(
+      "lang",
+      Services.locale.appLocaleAsBCP47
+    );
+
+    // TODO: insert download link (bug 1903117)
+    let supportLinkHref =
+      Services.urlFormatter.formatURLPref("app.support.baseURL") +
+      "recover-from-backup";
+    let supportLink = templateDOM.querySelector("#support-link");
+    supportLink.href = supportLinkHref;
+
+    // Now insert the logo as a dataURL, since we want the single-file backup
+    // archive to be entirely self-contained.
+    let logoResponse = await fetch(LOGO);
+    let logoBlob = await logoResponse.blob();
+    let logoDataURL = await new Promise((resolve, reject) => {
+      let reader = new FileReader();
+      reader.addEventListener("load", () => resolve(reader.result));
+      reader.addEventListener("error", reject);
+      reader.readAsDataURL(logoBlob);
+    });
+
+    let logoNode = templateDOM.querySelector("#logo");
+    logoNode.src = logoDataURL;
+
+    let encStateNode = templateDOM.querySelector("#encryption-state");
+    lazy.gDOMLocalization.setAttributes(
+      encStateNode,
+      isEncrypted
+        ? "backup-file-encryption-state-encrypted"
+        : "backup-file-encryption-state-not-encrypted"
+    );
+
+    let lastBackedUpNode = templateDOM.querySelector("#last-backed-up");
+    lazy.gDOMLocalization.setArgs(lastBackedUpNode, {
+      // It's very unlikely that backupMetadata.date isn't a valid Date string,
+      // but if it _is_, then Fluent will cause us to crash in debug builds.
+      // We fallback to the current date if all else fails.
+      date: new Date(backupMetadata.date).getTime() || new Date().getTime(),
+    });
+
+    let creationDeviceNode = templateDOM.querySelector("#creation-device");
+    lazy.gDOMLocalization.setArgs(creationDeviceNode, {
+      machineName: backupMetadata.machineName,
+    });
+
+    try {
+      await lazy.gDOMLocalization.translateFragment(
+        templateDOM.documentElement
+      );
+    } catch (_) {
+      // This shouldn't happen, but we don't want a missing locale string to
+      // cause backup creation to fail.
+    }
+
+    // We have to insert styles and scripts after we serialize to XML, otherwise
+    // the XMLSerializer will escape things like descendent selectors in CSS
+    // with &gt;.
+    let stylesResponse = await fetch(ARCHIVE_STYLES);
+    let scriptResponse = await fetch(ARCHIVE_SCRIPT);
+
+    // These days, we don't really support CSS preprocessor directives, so we
+    // can't ifdef out the MPL license header in styles before writing it into
+    // the archive file. Instead, we'll ensure that the license header is there,
+    // and then manually remove it here at runtime.
+    let stylesText = await stylesResponse.text();
+    const MPL_LICENSE = `/**
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */`;
+    if (!stylesText.includes(MPL_LICENSE)) {
+      throw new Error("Expected the MPL license block within archive.css", {
+        cause: ERRORS.UNKNOWN,
+      });
+    }
+
+    stylesText = stylesText.replace(MPL_LICENSE, "");
+
+    let serializer = new XMLSerializer();
+    return serializer
+      .serializeToString(templateDOM)
+      .replace("{{styles}}", stylesText)
+      .replace("{{script}}", await scriptResponse.text());
+  }
+
+  /**
+   * Creates a portable, potentially encrypted single-file archive containing
+   * a compressed backup snapshot. The single-file archive is a specially
+   * crafted HTML file that embeds the compressed backup snapshot and
+   * backup metadata.
+   *
+   * @param {string} archivePath
+   *   The path to write the single-file archive to.
+   * @param {string} templateURI
+   *   A URI pointing at a template for the HTML content for the page. This is
+   *   what is visible if the file is loaded in a web browser.
+   * @param {string} compressedBackupSnapshotPath
+   *   The path on the file system where the compressed backup snapshot exists.
+   * @param {ArchiveEncryptionState|null} encState
+   *   The ArchiveEncryptionState to encrypt the backup with, if encryption is
+   *   enabled. If null is passed, the backup will not be encrypted.
+   * @param {object} backupMetadata
+   *   The metadata for the backup, which is also stored in the backup manifest
+   *   of the compressed backup snapshot.
+   * @param {object} options
+   *   Options to pass to the worker, mainly for testing.
+   * @param {object} [options.chunkSize=ArchiveUtils.ARCHIVE_CHUNK_MAX_BYTES_SIZE]
+   *   The chunk size to break the bytes into.
+   */
+  async createArchive(
+    archivePath,
+    templateURI,
+    compressedBackupSnapshotPath,
+    encState,
+    backupMetadata,
+    options = {}
+  ) {
+    let markup = await this.renderTemplate(
+      templateURI,
+      !!encState,
+      backupMetadata
+    );
+
+    let worker = new lazy.BasePromiseWorker(
+      "resource:///modules/backup/Archive.worker.mjs",
+      { type: "module" }
+    );
+
+    let chunkSize =
+      options.chunkSize || lazy.ArchiveUtils.ARCHIVE_CHUNK_MAX_BYTES_SIZE;
+
+    try {
+      let encryptionArgs = encState
+        ? {
+            publicKey: encState.publicKey,
+            salt: encState.salt,
+            nonce: encState.nonce,
+            backupAuthKey: encState.backupAuthKey,
+            wrappedSecrets: encState.wrappedSecrets,
+          }
+        : null;
+
+      await worker.post("constructArchive", [
+        {
+          archivePath,
+          markup,
+          backupMetadata,
+          compressedBackupSnapshotPath,
+          encryptionArgs,
+          chunkSize,
+        },
+      ]);
+    } catch (e) {
+      // TODO: Bug 1906169 - errors in archive service worker should be more
+      // specific than a general "unknown" error cause
+      throw new Error("Backup archive creation failed", {
+        cause: ERRORS.UNKNOWN,
+      });
+    } finally {
+      worker.terminate();
+    }
+  }
+
+  /**
+   * Constructs an nsIChannel that serves the bytes from an nsIInputStream -
+   * specifically, a nsIInputStream of bytes being streamed from a file.
+   *
+   * @see BackupService.#extractMetadataFromArchive()
+   * @param {nsIInputStream} inputStream
+   *   The nsIInputStream to create the nsIChannel for.
+   * @param {string} contentType
+   *   The content type for the nsIChannel. This is provided by
+   *   BackupService.#extractMetadataFromArchive().
+   * @returns {nsIChannel}
+   */
+  #createExtractionChannel(inputStream, contentType) {
+    let uri = "http://localhost";
+    let httpChan = lazy.NetUtil.newChannel({
+      uri,
+      loadUsingSystemPrincipal: true,
+    });
+
+    let channel = Cc["@mozilla.org/network/input-stream-channel;1"]
+      .createInstance(Ci.nsIInputStreamChannel)
+      .QueryInterface(Ci.nsIChannel);
+
+    channel.setURI(httpChan.URI);
+    channel.loadInfo = httpChan.loadInfo;
+
+    channel.contentStream = inputStream;
+    channel.contentType = contentType;
+    return channel;
+  }
+
+  /**
+   * A helper for BackupService.extractCompressedSnapshotFromArchive() that
+   * reads in the JSON block from the MIME message embedded within an
+   * archiveFile.
+   *
+   * @see BackupService.extractCompressedSnapshotFromArchive()
+   * @param {nsIFile} archiveFile
+   *   The file to read the MIME message out from.
+   * @param {number} startByteOffset
+   *   The start byte offset of the MIME message.
+   * @param {string} contentType
+   *   The Content-Type of the MIME message.
+   * @returns {Promise<object>}
+   */
+  async #extractJSONFromArchive(archiveFile, startByteOffset, contentType) {
+    let fileInputStream = Cc[
+      "@mozilla.org/network/file-input-stream;1"
+    ].createInstance(Ci.nsIFileInputStream);
+    fileInputStream.init(
+      archiveFile,
+      -1,
+      -1,
+      Ci.nsIFileInputStream.CLOSE_ON_EOF
+    );
+    fileInputStream.seek(Ci.nsISeekableStream.NS_SEEK_SET, startByteOffset);
+
+    const EXPECTED_CONTENT_TYPE = "application/json";
+
+    let extractionChannel = this.#createExtractionChannel(
+      fileInputStream,
+      contentType
+    );
+    let textDecoder = new TextDecoder();
+    return new Promise((resolve, reject) => {
+      let streamConv = Cc["@mozilla.org/streamConverters;1"].getService(
+        Ci.nsIStreamConverterService
+      );
+      let multipartListenerForJSON = {
+        /**
+         * True once we've found an attachment matching our
+         * EXPECTED_CONTENT_TYPE. Once this is true, bytes flowing into
+         * onDataAvailable will be enqueued through the controller.
+         *
+         * @type {boolean}
+         */
+        _enabled: false,
+
+        /**
+         * True once onStopRequest has been called once the listener is enabled.
+         * After this, the listener will not attempt to read any data passed
+         * to it through onDataAvailable.
+         *
+         * @type {boolean}
+         */
+        _done: false,
+
+        /**
+         * A buffer with which we will cobble together the JSON string that
+         * will get parsed once the attachment finishes being read in.
+         *
+         * @type {string}
+         */
+        _buffer: "",
+
+        QueryInterface: ChromeUtils.generateQI([
+          "nsIStreamListener",
+          "nsIRequestObserver",
+        ]),
+
+        /**
+         * Called when we begin to load an attachment from the MIME message.
+         *
+         * @param {nsIRequest} request
+         *   The request corresponding to the source of the data.
+         */
+        onStartRequest(request) {
+          if (!(request instanceof Ci.nsIChannel)) {
+            throw Components.Exception(
+              "onStartRequest expected an nsIChannel request",
+              Cr.NS_ERROR_UNEXPECTED
+            );
+          }
+          this._enabled = request.contentType == EXPECTED_CONTENT_TYPE;
+        },
+
+        /**
+         * Called when data is flowing in for an attachment.
+         *
+         * @param {nsIRequest} request
+         *   The request corresponding to the source of the data.
+         * @param {nsIInputStream} stream
+         *   The input stream containing the data chunk.
+         * @param {number} offset
+         *   The number of bytes that were sent in previous onDataAvailable
+         *   calls for this request. In other words, the sum of all previous
+         *   count parameters.
+         * @param {number} count
+         *   The number of bytes available in the stream
+         */
+        onDataAvailable(request, stream, offset, count) {
+          if (!this._enabled) {
+            // We don't care about this data, just move on.
+            return;
+          }
+
+          let binStream = new lazy.BinaryInputStream(stream);
+          let arrBuffer = new ArrayBuffer(count);
+          binStream.readArrayBuffer(count, arrBuffer);
+          let jsonBytes = new Uint8Array(arrBuffer);
+          this._buffer += textDecoder.decode(jsonBytes);
+        },
+
+        /**
+         * Called when the load of an attachment finishes.
+         */
+        onStopRequest() {
+          if (this._enabled && !this._done) {
+            this._enabled = false;
+            this._done = true;
+
+            try {
+              let archiveMetadata = JSON.parse(this._buffer);
+              resolve(archiveMetadata);
+            } catch (e) {
+              reject(
+                new Error("Could not parse archive metadata.", {
+                  cause: ERRORS.CORRUPTED_ARCHIVE,
+                })
+              );
+            }
+            // No need to load anything else - abort reading in more
+            // attachments.
+            throw Components.Exception(
+              "Got JSON block. Aborting further reads.",
+              Cr.NS_BINDING_ABORTED
+            );
+          }
+        },
+      };
+      let conv = streamConv.asyncConvertData(
+        "multipart/mixed",
+        "*/*",
+        multipartListenerForJSON,
+        null
+      );
+
+      extractionChannel.asyncOpen(conv);
+    });
+  }
+
+  /**
+   * A helper for BackupService.#extractCompressedSnapshotFromArchive that
+   * constructs a BinaryReadableStream for a single-file archive on the
+   * file system. The BinaryReadableStream will be used to read out the binary
+   * attachment from the archive.
+   *
+   * @param {nsIFile} archiveFile
+   *   The single-file archive to create the BinaryReadableStream for.
+   * @param {number} startByteOffset
+   *   The start byte offset of the MIME message.
+   * @param {string} contentType
+   *   The Content-Type of the MIME message.
+   * @returns {ReadableStream}
+   */
+  async createBinaryReadableStream(archiveFile, startByteOffset, contentType) {
+    let fileInputStream = Cc[
+      "@mozilla.org/network/file-input-stream;1"
+    ].createInstance(Ci.nsIFileInputStream);
+    fileInputStream.init(
+      archiveFile,
+      -1,
+      -1,
+      Ci.nsIFileInputStream.CLOSE_ON_EOF
+    );
+    fileInputStream.seek(Ci.nsISeekableStream.NS_SEEK_SET, startByteOffset);
+
+    let extractionChannel = this.#createExtractionChannel(
+      fileInputStream,
+      contentType
+    );
+
+    return new ReadableStream(new BinaryReadableStream(extractionChannel));
+  }
+
+  /**
+   * @typedef {object} SampleArchiveResult
+   * @property {boolean} isEncrypted
+   *   True if the archive claims to be encrypted, and has the necessary data
+   *   within the JSON block to attempt to initialize an ArchiveDecryptor.
+   * @property {number} startByteOffset
+   *   The start byte offset of the MIME message.
+   * @property {string} contentType
+   *   The Content-Type of the MIME message.
+   * @property {object} archiveJSON
+   *   The deserialized JSON block from the archive. See the ArchiveJSONBlock
+   *   schema for details of its structure.
+   */
+
+  /**
+   * Reads from a file to determine if it seems to be a backup archive, and if
+   * so, resolves with some information about the archive without actually
+   * unpacking it. The returned Promise may reject if the file does not appear
+   * to be a backup archive, or the backup archive appears to have been
+   * corrupted somehow.
+   *
+   * @param {string} archivePath
+   *   The path to the archive file to sample.
+   * @returns {Promise<SampleArchiveResult, Error>}
+   */
+  async sampleArchive(archivePath) {
+    let worker = new lazy.BasePromiseWorker(
+      "resource:///modules/backup/Archive.worker.mjs",
+      { type: "module" }
+    );
+
+    if (!(await IOUtils.exists(archivePath))) {
+      throw new Error("Archive file does not exist at path " + archivePath, {
+        cause: ERRORS.UNKNOWN,
+      });
+    }
+
+    try {
+      let { startByteOffset, contentType } = await worker.post(
+        "parseArchiveHeader",
+        [archivePath]
+      );
+      let archiveFile = await IOUtils.getFile(archivePath);
+      let archiveJSON;
+      try {
+        archiveJSON = await this.#extractJSONFromArchive(
+          archiveFile,
+          startByteOffset,
+          contentType
+        );
+
+        if (!archiveJSON.version) {
+          throw new Error("Missing version in the archive JSON block.", {
+            cause: ERRORS.CORRUPTED_ARCHIVE,
+          });
+        }
+        if (archiveJSON.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
+          throw new Error(
+            `Archive JSON block is a version newer than we can interpret: ${archiveJSON.version}`,
+            {
+              cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+            }
+          );
+        }
+
+        let archiveJSONSchema = await BackupService.getSchemaForVersion(
+          SCHEMAS.ARCHIVE_JSON_BLOCK,
+          archiveJSON.version
+        );
+
+        let manifestSchema = await BackupService.getSchemaForVersion(
+          SCHEMAS.BACKUP_MANIFEST,
+          archiveJSON.version
+        );
+
+        let validator = new lazy.JsonSchema.Validator(archiveJSONSchema);
+        validator.addSchema(manifestSchema);
+
+        let schemaValidationResult = validator.validate(archiveJSON);
+        if (!schemaValidationResult.valid) {
+          lazy.logConsole.error(
+            "Archive JSON block does not conform to schema:",
+            archiveJSON,
+            archiveJSONSchema,
+            schemaValidationResult
+          );
+
+          // TODO: Collect telemetry for this case. (bug 1891817)
+          throw new Error(
+            `Archive JSON block does not conform to schema version ${archiveJSON.version}`,
+            { cause: ERRORS.CORRUPTED_ARCHIVE }
+          );
+        }
+      } catch (e) {
+        lazy.logConsole.error(e);
+        throw e;
+      }
+
+      lazy.logConsole.debug("Read out archive JSON: ", archiveJSON);
+
+      return {
+        isEncrypted: !!archiveJSON.encConfig,
+        startByteOffset,
+        contentType,
+        archiveJSON,
+      };
+    } finally {
+      worker.terminate();
+    }
+  }
+
+  /**
+   * Attempts to extract the compressed backup snapshot from a single-file
+   * archive, and write the extracted file to extractionDestPath. This may
+   * reject if the single-file archive appears malformed or cannot be
+   * properly decrypted.
+   *
+   * NOTE: Currently, this base64 decoding currently occurs on the main thread.
+   * We may end up moving all of this into the Archive Worker if we can modify
+   * IOUtils to allow writing via a stream.
+   *
+   * @param {string} archivePath
+   *   The single-file archive that contains the backup.
+   * @param {string} extractionDestPath
+   *   The path to write the extracted file to.
+   * @param {string} [recoveryCode=null]
+   *   The recovery code to decrypt an encrypted backup with.
+   * @returns {Promise<undefined, Error>}
+   */
+  async extractCompressedSnapshotFromArchive(
+    archivePath,
+    extractionDestPath,
+    recoveryCode = null
+  ) {
+    let { isEncrypted, startByteOffset, contentType, archiveJSON } =
+      await this.sampleArchive(archivePath);
+
+    let decryptor = null;
+    if (isEncrypted) {
+      if (!recoveryCode) {
+        throw new Error(
+          "A recovery code is required to decrypt this archive.",
+          { cause: ERRORS.UNAUTHORIZED }
+        );
+      }
+      decryptor = await lazy.ArchiveDecryptor.initialize(
+        recoveryCode,
+        archiveJSON
+      );
+    }
+
+    await IOUtils.remove(extractionDestPath, { ignoreAbsent: true });
+
+    let archiveFile = await IOUtils.getFile(archivePath);
+    let archiveStream = await this.createBinaryReadableStream(
+      archiveFile,
+      startByteOffset,
+      contentType
+    );
+
+    let binaryDecoder = new TransformStream(
+      new DecoderDecryptorTransformer(decryptor)
+    );
+    let fileWriter = new WritableStream(
+      new FileWriterStream(extractionDestPath, decryptor)
+    );
+    await archiveStream.pipeThrough(binaryDecoder).pipeTo(fileWriter);
+  }
+
+  /**
    * Renames the staging folder to an ISO 8601 date string with dashes replacing colons and fractional seconds stripped off.
    * The ISO date string should be formatted from YYYY-MM-DDTHH:mm:ss.sssZ to YYYY-MM-DDTHH-mm-ssZ
    *
@@ -646,7 +2075,9 @@ export class BackupService extends EventTarget {
       lazy.logConsole.error(
         `Something went wrong while finalizing the staging folder. ${e}`
       );
-      throw e;
+      throw new Error("Failed to finalize staging folder", {
+        cause: ERRORS.FILE_SYSTEM_ERROR,
+      });
     }
   }
 
@@ -689,10 +2120,104 @@ export class BackupService extends EventTarget {
     }
 
     return {
-      version: BackupService.MANIFEST_SCHEMA_VERSION,
+      version: lazy.ArchiveUtils.SCHEMA_VERSION,
       meta,
       resources: {},
     };
+  }
+
+  /**
+   * Given a backup archive at archivePath, this method does the
+   * following:
+   *
+   * 1. Potentially decrypts, and then extracts the compressed backup snapshot
+   *    from the archive to a file named BackupService.RECOVERY_ZIP_FILE_NAME in
+   *    the PROFILE_FOLDER_NAME folder.
+   * 2. Decompresses that file into a subdirectory of PROFILE_FOLDER_NAME named
+   *    "recovery".
+   * 3. Deletes the BackupService.RECOVERY_ZIP_FILE_NAME file.
+   * 4. Calls into recoverFromSnapshotFolder on the decompressed "recovery"
+   *    folder.
+   * 5. Optionally launches the newly created profile.
+   * 6. Returns the name of the newly created profile directory.
+   *
+   * @see BackupService.recoverFromSnapshotFolder
+   * @param {string} archivePath
+   *   The path to the single-file backup archive on the file system.
+   * @param {string|null} recoveryCode
+   *   The recovery code to use to attempt to decrypt the archive if it was
+   *   encrypted.
+   * @param {boolean} [shouldLaunch=false]
+   *   An optional argument that specifies whether an instance of the app
+   *   should be launched with the newly recovered profile after recovery is
+   *   complete.
+   * @param {boolean} [profilePath=PathUtils.profileDir]
+   *   The profile path where the recovery files will be written to within the
+   *   PROFILE_FOLDER_NAME. This is only used for testing.
+   * @param {string} [profileRootPath=null]
+   *   An optional argument that specifies the root directory where the new
+   *   profile directory should be created. If not provided, the default
+   *   profile root directory will be used. This is primarily meant for
+   *   testing.
+   * @returns {Promise<nsIToolkitProfile>}
+   *   The nsIToolkitProfile that was created for the recovered profile.
+   * @throws {Exception}
+   *   In the event that unpacking the archive, decompressing the snapshot, or
+   *   recovery from the snapshot somehow failed.
+   */
+  async recoverFromBackupArchive(
+    archivePath,
+    recoveryCode = null,
+    shouldLaunch = false,
+    profilePath = PathUtils.profileDir,
+    profileRootPath = null
+  ) {
+    const RECOVERY_FILE_DEST_PATH = PathUtils.join(
+      profilePath,
+      BackupService.PROFILE_FOLDER_NAME,
+      BackupService.RECOVERY_ZIP_FILE_NAME
+    );
+    await this.extractCompressedSnapshotFromArchive(
+      archivePath,
+      RECOVERY_FILE_DEST_PATH,
+      recoveryCode
+    );
+
+    let encState = null;
+    if (recoveryCode) {
+      // We were passed a recovery code and made it to this line. That implies
+      // that the backup was encrypted, and the recovery code was the correct
+      // one to decrypt it. We now generate a new ArchiveEncryptionState with
+      // that recovery code to write into the recovered profile.
+      ({ instance: encState } = await lazy.ArchiveEncryptionState.initialize(
+        recoveryCode
+      ));
+    }
+
+    const RECOVERY_FOLDER_DEST_PATH = PathUtils.join(
+      profilePath,
+      BackupService.PROFILE_FOLDER_NAME,
+      "recovery"
+    );
+    await this.decompressRecoveryFile(
+      RECOVERY_FILE_DEST_PATH,
+      RECOVERY_FOLDER_DEST_PATH
+    );
+
+    // Now that we've decompressed it, reclaim some disk space by getting rid of
+    // the ZIP file.
+    try {
+      await IOUtils.remove(RECOVERY_FILE_DEST_PATH);
+    } catch (_) {
+      lazy.logConsole.warn("Could not remove ", RECOVERY_FILE_DEST_PATH);
+    }
+
+    return this.recoverFromSnapshotFolder(
+      RECOVERY_FOLDER_DEST_PATH,
+      shouldLaunch,
+      profileRootPath,
+      encState
+    );
   }
 
   /**
@@ -722,15 +2247,23 @@ export class BackupService extends EventTarget {
    *   profile directory should be created. If not provided, the default
    *   profile root directory will be used. This is primarily meant for
    *   testing.
+   * @param {ArchiveEncryptionState} [encState=null]
+   *   Set if the backup being recovered was encrypted. This implies that the
+   *   profile being recovered was configured to create encrypted backups. This
+   *   ArchiveEncryptionState is therefore needed to generate the
+   *   ARCHIVE_ENCRYPTION_STATE_FILE for the recovered profile (since the
+   *   original ARCHIVE_ENCRYPTION_STATE_FILE was intentionally not backed up,
+   *   as the recovery device might have a different OSKeyStore secret).
    * @returns {Promise<nsIToolkitProfile>}
    *   The nsIToolkitProfile that was created for the recovered profile.
    * @throws {Exception}
    *   In the event that recovery somehow failed.
    */
-  async recoverFromBackup(
+  async recoverFromSnapshotFolder(
     recoveryPath,
     shouldLaunch = false,
-    profileRootPath = null
+    profileRootPath = null,
+    encState = null
   ) {
     lazy.logConsole.debug("Recovering from backup at ", recoveryPath);
 
@@ -742,20 +2275,26 @@ export class BackupService extends EventTarget {
       );
       let manifest = await IOUtils.readJSON(manifestPath);
       if (!manifest.version) {
-        throw new Error("Backup manifest version not found");
+        throw new Error("Backup manifest version not found", {
+          cause: ERRORS.CORRUPTED_ARCHIVE,
+        });
       }
 
-      if (manifest.version > BackupService.MANIFEST_SCHEMA_VERSION) {
+      if (manifest.version > lazy.ArchiveUtils.SCHEMA_VERSION) {
         throw new Error(
-          "Cannot recover from a manifest newer than the current schema version"
+          "Cannot recover from a manifest newer than the current schema version",
+          {
+            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+          }
         );
       }
 
       // Make sure that it conforms to the schema.
-      let manifestSchema = await BackupService._getSchemaForVersion(
+      let manifestSchema = await BackupService.getSchemaForVersion(
+        SCHEMAS.BACKUP_MANIFEST,
         manifest.version
       );
-      let schemaValidationResult = lazy.JsonSchemaValidator.validate(
+      let schemaValidationResult = lazy.JsonSchema.validate(
         manifest,
         manifestSchema
       );
@@ -767,14 +2306,36 @@ export class BackupService extends EventTarget {
           schemaValidationResult
         );
         // TODO: Collect telemetry for this case. (bug 1891817)
-        throw new Error("Cannot recover from an invalid backup manifest");
+        throw new Error("Cannot recover from an invalid backup manifest", {
+          cause: ERRORS.CORRUPTED_ARCHIVE,
+        });
       }
 
-      // In the future, if we ever bump the MANIFEST_SCHEMA_VERSION and need to
-      // do any special behaviours to interpret older schemas, this is where we
-      // can do that, and we can remove this comment.
+      // In the future, if we ever bump the ArchiveUtils.SCHEMA_VERSION and need
+      // to do any special behaviours to interpret older schemas, this is where
+      // we can do that, and we can remove this comment.
 
       let meta = manifest.meta;
+
+      if (meta.appName != AppConstants.MOZ_APP_NAME) {
+        throw new Error(
+          `Cannot recover a backup from ${meta.appName} in ${AppConstants.MOZ_APP_NAME}`,
+          {
+            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+          }
+        );
+      }
+
+      if (
+        Services.vc.compare(AppConstants.MOZ_APP_VERSION, meta.appVersion) < 0
+      ) {
+        throw new Error(
+          `Cannot recover a backup created on version ${meta.appVersion} in ${AppConstants.MOZ_APP_VERSION}`,
+          {
+            cause: ERRORS.UNSUPPORTED_BACKUP_VERSION,
+          }
+        );
+      }
 
       // Okay, we have a valid backup-manifest.json. Let's create a new profile
       // and start invoking the recover() method on each BackupResource.
@@ -846,6 +2407,21 @@ export class BackupService extends EventTarget {
           TELEMETRY_STATE_FILENAME
         )
       );
+
+      if (encState) {
+        // The backup we're recovering was originally encrypted, meaning that
+        // the recovered profile is configured to create encrypted backups. Our
+        // caller passed us a _new_ ArchiveEncryptionState generated for this
+        // device with the backup's recovery code so that we can serialize the
+        // ArchiveEncryptionState for the recovered profile.
+        let encStatePath = PathUtils.join(
+          profile.rootDir.path,
+          BackupService.PROFILE_FOLDER_NAME,
+          BackupService.ARCHIVE_ENCRYPTION_STATE_FILE
+        );
+        let encStateObject = await encState.serialize();
+        await IOUtils.writeJSON(encStatePath, encStateObject);
+      }
 
       let postRecoveryPath = PathUtils.join(
         profile.rootDir.path,
@@ -925,6 +2501,65 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * Sets the parent directory of the backups folder. Calling this function will update
+   * browser.backup.location.
+   *
+   * @param {string} parentDirPath directory path
+   */
+  setParentDirPath(parentDirPath) {
+    try {
+      if (!parentDirPath || !PathUtils.filename(parentDirPath)) {
+        throw new Error("Parent directory path is invalid.");
+      }
+      // Recreate the backups path with the new parent directory.
+      let fullPath = PathUtils.join(
+        parentDirPath,
+        BackupService.BACKUP_DIR_NAME
+      );
+      Services.prefs.setStringPref(BACKUP_DIR_PREF_NAME, fullPath);
+    } catch (e) {
+      lazy.logConsole.error(
+        `Failed to set parent directory ${parentDirPath}. ${e}`
+      );
+    }
+  }
+
+  /**
+   * Updates backupDirPath in the backup service state. Should be called every time the value
+   * for browser.backup.location changes.
+   *
+   * @param {string} newDirPath the new directory path for storing backups
+   */
+  async onUpdateLocationDirPath(newDirPath) {
+    lazy.logConsole.debug(`Updating backup location to ${newDirPath}`);
+
+    this.#_state.backupDirPath = newDirPath;
+    this.stateUpdate();
+  }
+
+  /**
+   * Returns the moz-icon URL of a file. To get the moz-icon URL, the
+   * file path is convered to a fileURI. If there is a problem retreiving
+   * the moz-icon due to an invalid file path, return null instead.
+   *
+   * @param {string} path Path of the file to read its icon from.
+   * @returns {string|null} The moz-icon URL of the specified file, or
+   *  null if the icon cannot be retreived.
+   */
+  getIconFromFilePath(path) {
+    if (!path) {
+      return null;
+    }
+
+    try {
+      let fileURI = PathUtils.toFileURI(path);
+      return `moz-icon:${fileURI}?size=16`;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
    * Sets browser.backup.scheduled.enabled to true or false.
    *
    * @param { boolean } shouldEnableScheduledBackups true if scheduled backups should be enabled. Else, false.
@@ -961,11 +2596,6 @@ export class BackupService extends EventTarget {
   async takeMeasurements() {
     lazy.logConsole.debug("Taking Telemetry measurements");
 
-    // Note: We're talking about kilobytes here, not kibibytes. That means
-    // 1000 bytes, and not 1024 bytes.
-    const BYTES_IN_KB = 1000;
-    const BYTES_IN_MB = 1000000;
-
     // We'll start by measuring the available disk space on the storage
     // device that the profile directory is on.
     let profileDir = await IOUtils.getFile(PathUtils.profileDir);
@@ -973,12 +2603,16 @@ export class BackupService extends EventTarget {
     let profDDiskSpaceBytes = profileDir.diskSpaceAvailable;
 
     // Make the measurement fuzzier by rounding to the nearest 10MB.
-    let profDDiskSpaceMB =
-      Math.round(profDDiskSpaceBytes / BYTES_IN_MB / 100) * 100;
+    let profDDiskSpaceFuzzed = MeasurementUtils.fuzzByteSize(
+      profDDiskSpaceBytes,
+      10 * BYTES_IN_MEGABYTE
+    );
 
     // And then record the value in kilobytes, since that's what everything
     // else is going to be measured in.
-    Glean.browserBackup.profDDiskSpace.set(profDDiskSpaceMB * BYTES_IN_KB);
+    Glean.browserBackup.profDDiskSpace.set(
+      profDDiskSpaceFuzzed / BYTES_IN_KILOBYTE
+    );
 
     // Measure the size of each file we are going to backup.
     for (let resourceClass of this.#resources.values()) {
@@ -1076,15 +2710,21 @@ export class BackupService extends EventTarget {
     lazy.logConsole.debug("Enabling encryption.");
     let encState = await this.loadEncryptionState(profilePath);
     if (encState) {
-      throw new Error("Encryption is already enabled.");
+      throw new Error("Encryption is already enabled.", {
+        cause: ERRORS.ENCRYPTION_ALREADY_ENABLED,
+      });
     }
 
     if (!password) {
-      throw new Error("Cannot supply a blank password.");
+      throw new Error("Cannot supply a blank password.", {
+        cause: ERRORS.INVALID_PASSWORD,
+      });
     }
 
     if (password.length < 8) {
-      throw new Error("Password must be at least 8 characters.");
+      throw new Error("Password must be at least 8 characters.", {
+        cause: ERRORS.INVALID_PASSWORD,
+      });
     }
 
     // TODO: Enforce other password rules here, such as ensuring that the
@@ -1093,7 +2733,9 @@ export class BackupService extends EventTarget {
       password
     ));
     if (!encState) {
-      throw new Error("Failed to construct ArchiveEncryptionState");
+      throw new Error("Failed to construct ArchiveEncryptionState", {
+        cause: ERRORS.UNKNOWN,
+      });
     }
 
     this.#encState = encState;
@@ -1124,7 +2766,9 @@ export class BackupService extends EventTarget {
     lazy.logConsole.debug("Disabling encryption.");
     let encState = await this.loadEncryptionState(profilePath);
     if (!encState) {
-      throw new Error("Encryption is already disabled.");
+      throw new Error("Encryption is already disabled.", {
+        cause: ERRORS.ENCRYPTION_ALREADY_DISABLED,
+      });
     }
 
     let encStateFile = PathUtils.join(
@@ -1139,6 +2783,223 @@ export class BackupService extends EventTarget {
 
     this.#encState = null;
     this.#_state.encryptionEnabled = false;
+    this.stateUpdate();
+  }
+
+  /**
+   * The value of IDLE_THRESHOLD_SECONDS_PREF_NAME at the time that
+   * initBackupScheduler was called. This is recorded so that if the preference
+   * changes at runtime, that we properly remove the idle observer in
+   * uninitBackupScheduler, since it's mapped to the idle time value.
+   *
+   * @see BackupService.initBackupScheduler()
+   * @see BackupService.uninitBackupScheduler()
+   * @type {number}
+   */
+  #idleThresholdSeconds = null;
+
+  /**
+   * An ES6 class that extends EventTarget cannot, apparently, be coerced into
+   * a nsIObserver, even when we define QueryInterface. We work around this
+   * limitation by having the observer be a function that we define at
+   * registration time. We hold a reference to the observer so that we can
+   * properly unregister.
+   *
+   * @see BackupService.initBackupScheduler()
+   * @type {Function}
+   */
+  #observer = null;
+
+  /**
+   * True if the backup scheduler system has been initted via
+   * initBackupScheduler().
+   *
+   * @see BackupService.initBackupScheduler()
+   * @type {boolean}
+   */
+  #backupSchedulerInitted = false;
+
+  /**
+   * Initializes the backup scheduling system. This should be done shortly
+   * after startup. It is exposed as a public method mainly for ease in testing.
+   *
+   * The scheduler will automatically uninitialize itself on the
+   * quit-application-granted observer notification.
+   *
+   * @returns {Promise<undefined>}
+   */
+  async initBackupScheduler() {
+    if (this.#backupSchedulerInitted) {
+      lazy.logConsole.warn(
+        "BackupService scheduler already initting or initted."
+      );
+      return;
+    }
+
+    this.#backupSchedulerInitted = true;
+
+    let lastBackupPrefValue = Services.prefs.getIntPref(
+      LAST_BACKUP_TIMESTAMP_PREF_NAME,
+      0
+    );
+    if (!lastBackupPrefValue) {
+      this.#_state.lastBackupDate = null;
+    } else {
+      this.#_state.lastBackupDate = lastBackupPrefValue;
+    }
+
+    this.stateUpdate();
+
+    // We'll default to 5 minutes of idle time unless otherwise configured.
+    const FIVE_MINUTES_IN_SECONDS = 5 * 60;
+
+    this.#idleThresholdSeconds = Services.prefs.getIntPref(
+      IDLE_THRESHOLD_SECONDS_PREF_NAME,
+      FIVE_MINUTES_IN_SECONDS
+    );
+    this.#observer = (subject, topic, data) => {
+      this.onObserve(subject, topic, data);
+    };
+    lazy.logConsole.debug(
+      `Registering idle observer for ${
+        this.#idleThresholdSeconds
+      } seconds of idle time`
+    );
+    lazy.idleService.addIdleObserver(
+      this.#observer,
+      this.#idleThresholdSeconds
+    );
+    lazy.logConsole.debug("Idle observer registered.");
+
+    Services.obs.addObserver(this.#observer, "quit-application-granted");
+  }
+
+  /**
+   * Uninitializes the backup scheduling system.
+   *
+   * @returns {Promise<undefined>}
+   */
+  async uninitBackupScheduler() {
+    if (!this.#backupSchedulerInitted) {
+      lazy.logConsole.warn(
+        "Tried to uninitBackupScheduler when it wasn't yet enabled."
+      );
+      return;
+    }
+
+    lazy.idleService.removeIdleObserver(
+      this.#observer,
+      this.#idleThresholdSeconds
+    );
+    Services.obs.removeObserver(this.#observer, "quit-application-granted");
+    this.#observer = null;
+  }
+
+  /**
+   * Called by this.#observer on idle from the nsIUserIdleService or
+   * quit-application-granted from the nsIObserverService. Exposed as a public
+   * method mainly for ease in testing.
+   *
+   * @param {nsISupports|null} _subject
+   *   The nsIUserIdleService for the idle notification, and null for the
+   *   quit-application-granted topic.
+   * @param {string} topic
+   *   The topic that the notification belongs to.
+   */
+  onObserve(_subject, topic) {
+    switch (topic) {
+      case "idle": {
+        this.onIdle();
+        break;
+      }
+      case "quit-application-granted": {
+        this.uninitBackupScheduler();
+        break;
+      }
+    }
+  }
+
+  /**
+   * Called when the nsIUserIdleService reports that user input events have
+   * not been sent to the application for at least
+   * IDLE_THRESHOLD_SECONDS_PREF_NAME seconds.
+   */
+  onIdle() {
+    lazy.logConsole.debug("Saw idle callback");
+    if (lazy.scheduledBackupsPref) {
+      lazy.logConsole.debug("Scheduled backups enabled.");
+      let now = Math.floor(Date.now() / 1000);
+      let lastBackupDate = this.#_state.lastBackupDate;
+      if (lastBackupDate && lastBackupDate > now) {
+        lazy.logConsole.error(
+          "Last backup was somehow in the future. Resetting the preference."
+        );
+        lastBackupDate = null;
+        this.#_state.lastBackupDate = null;
+        this.stateUpdate();
+      }
+
+      if (!lastBackupDate) {
+        lazy.logConsole.debug("No last backup time recorded in prefs.");
+      } else {
+        lazy.logConsole.debug(
+          "Last backup was: ",
+          new Date(lastBackupDate * 1000)
+        );
+      }
+
+      if (
+        !lastBackupDate ||
+        now - lastBackupDate > lazy.minimumTimeBetweenBackupsSeconds
+      ) {
+        lazy.logConsole.debug(
+          "Last backup exceeded minimum time between backups. Queing a " +
+            "backup via idleDispatch."
+        );
+        // Just because the user hasn't sent us events in a while doesn't mean
+        // that the browser itself isn't busy. It might be, for example, playing
+        // video or doing a complex calculation that the user is actively
+        // waiting to complete, and we don't want to draw resources from that.
+        // Instead, we'll use ChromeUtils.idleDispatch to wait until the event
+        // loop in the parent process isn't so busy with higher priority things.
+        this.createBackupOnIdleDispatch();
+      } else {
+        lazy.logConsole.debug(
+          "Last backup was too recent. Not creating one for now."
+        );
+      }
+    }
+  }
+
+  /**
+   * Calls BackupService.createBackup at the next moment when the event queue
+   * is not busy with higher priority events. This is intentionally broken out
+   * into its own method to make it easier to stub out in tests.
+   */
+  createBackupOnIdleDispatch() {
+    ChromeUtils.idleDispatch(() => {
+      lazy.logConsole.debug(
+        "idleDispatch fired. Attempting to create a backup."
+      );
+      this.createBackup();
+    });
+  }
+
+  /**
+   * Gets a sample from a given backup file and sets a subset of that as
+   * the backupFileInfo in the backup service state.
+   *
+   * Called when getting a info for an archive to potentially restore.
+   *
+   * @param {string} backupFilePath path to the backup file to sample.
+   */
+  async getBackupFileInfo(backupFilePath) {
+    lazy.logConsole.debug(`Getting info from backup file at ${backupFilePath}`);
+    let { archiveJSON, isEncrypted } = await this.sampleArchive(backupFilePath);
+    this.#_state.backupFileInfo = {
+      isEncrypted,
+      date: archiveJSON?.meta?.date,
+    };
     this.stateUpdate();
   }
 }

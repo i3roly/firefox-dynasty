@@ -8,10 +8,12 @@ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
+  InterruptKind: "resource://gre/modules/RustSuggest.sys.mjs",
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
-  RemoteSettingsConfig: "resource://gre/modules/RustRemoteSettings.sys.mjs",
+  RemoteSettingsServer: "resource://gre/modules/RustSuggest.sys.mjs",
   SuggestIngestionConstraints: "resource://gre/modules/RustSuggest.sys.mjs",
-  SuggestStore: "resource://gre/modules/RustSuggest.sys.mjs",
+  SuggestStoreBuilder: "resource://gre/modules/RustSuggest.sys.mjs",
   Suggestion: "resource://gre/modules/RustSuggest.sys.mjs",
   SuggestionProvider: "resource://gre/modules/RustSuggest.sys.mjs",
   SuggestionQuery: "resource://gre/modules/RustSuggest.sys.mjs",
@@ -26,7 +28,7 @@ XPCOMUtils.defineLazyServiceGetter(
   "nsIUpdateTimerManager"
 );
 
-const SUGGEST_STORE_BASENAME = "suggest.sqlite";
+const SUGGEST_DATA_STORE_BASENAME = "suggest.sqlite";
 
 // This ID is used to register our ingest timer with nsIUpdateTimerManager.
 const INGEST_TIMER_ID = "suggest-ingest";
@@ -153,7 +155,7 @@ export class SuggestBackendRust extends BaseFeature {
   }
 
   cancelQuery() {
-    this.#store?.interrupt();
+    this.#store?.interrupt(lazy.InterruptKind.READ);
   }
 
   /**
@@ -178,10 +180,10 @@ export class SuggestBackendRust extends BaseFeature {
     this.#ingest();
   }
 
-  get #storePath() {
+  get #storeDataPath() {
     return PathUtils.join(
-      Services.dirsvc.get("ProfLD", Ci.nsIFile).path,
-      SUGGEST_STORE_BASENAME
+      Services.dirsvc.get("ProfD", Ci.nsIFile).path,
+      SUGGEST_DATA_STORE_BASENAME
     );
   }
 
@@ -232,18 +234,16 @@ export class SuggestBackendRust extends BaseFeature {
     // the Rust backend is enabled, including on startup.)
 
     // Initialize the store.
-    let path = this.#storePath;
-    this.logger.info("Initializing SuggestStore: " + path);
+    this.logger.info(
+      `Initializing SuggestStore with data path ${this.#storeDataPath}`
+    );
+
+    let builder = lazy.SuggestStoreBuilder.init()
+      .dataPath(this.#storeDataPath)
+      .remoteSettingsServer(this.#remoteSettingsServer)
+      .remoteSettingsBucketName(this.#remoteSettingsBucketName);
     try {
-      this.#store = lazy.SuggestStore.init(
-        path,
-        this.#test_remoteSettingsConfig ??
-          new lazy.RemoteSettingsConfig({
-            collectionName: "quicksuggest",
-            bucketName: lazy.Utils.actualBucketName("main"),
-            serverUrl: lazy.Utils.SERVER_URL,
-          })
-      );
+      this.#store = builder.build();
     } catch (error) {
       this.logger.error("Error initializing SuggestStore:");
       this.logger.error(error);
@@ -265,6 +265,16 @@ export class SuggestBackendRust extends BaseFeature {
       this.logger.debug("Last ingest time: none");
     }
 
+    // Interrupt any ongoing ingests (WRITE) and queries (READ) on shutdown.
+    // Note that `interrupt()` runs on the main thread and is not async; see
+    // toolkit/components/uniffi-bindgen-gecko-js/config.toml
+    this.#shutdownBlocker = () =>
+      this.#store?.interrupt(lazy.InterruptKind.READ_WRITE);
+    lazy.AsyncShutdown.profileBeforeChange.addBlocker(
+      "QuickSuggest: Interrupt the Rust component",
+      this.#shutdownBlocker
+    );
+
     // Register the ingest timer.
     lazy.timerManager.registerTimer(
       INGEST_TIMER_ID,
@@ -281,6 +291,9 @@ export class SuggestBackendRust extends BaseFeature {
     this.#store = null;
     this.#configsBySuggestionType.clear();
     lazy.timerManager.unregisterTimer(INGEST_TIMER_ID);
+
+    lazy.AsyncShutdown.profileBeforeChange.removeBlocker(this.#shutdownBlocker);
+    this.#shutdownBlocker = null;
   }
 
   async #ingest() {
@@ -347,8 +360,15 @@ export class SuggestBackendRust extends BaseFeature {
     this.logger.info("Finished ingest and configs fetch");
   }
 
-  async _test_setRemoteSettingsConfig(config) {
-    this.#test_remoteSettingsConfig = config;
+  get _test_store() {
+    return this.#store;
+  }
+
+  async _test_setRemoteSettingsConfig({ serverUrl, bucketName }) {
+    this.#remoteSettingsServer = new lazy.RemoteSettingsServer.Custom(
+      serverUrl
+    );
+    this.#remoteSettingsBucketName = bucketName;
 
     if (this.isEnabled) {
       // Recreate the store and re-ingest.
@@ -374,7 +394,11 @@ export class SuggestBackendRust extends BaseFeature {
 
   #ingestPromise;
   #ingestInstance;
-  #test_remoteSettingsConfig;
+  #shutdownBlocker;
+  #remoteSettingsServer = new lazy.RemoteSettingsServer.Custom(
+    lazy.Utils.SERVER_URL
+  );
+  #remoteSettingsBucketName = lazy.Utils.actualBucketName("main");
 }
 
 /**

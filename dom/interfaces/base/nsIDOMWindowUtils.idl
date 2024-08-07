@@ -31,6 +31,7 @@ native nscolor(nscolor);
 
 interface nsIArray;
 interface nsICycleCollectorListener;
+interface nsIDragSession;
 interface nsIPreloadedStyleSheet;
 interface nsITransferable;
 interface nsIQueryContentEventResult;
@@ -416,6 +417,29 @@ interface nsIDOMWindowUtils : nsISupports {
                          in Array<long> aTwists,
                          in long aModifiers,
                          [optional] in boolean aIgnoreRootScrollFrame);
+
+  /**
+   * The same as sendTouchEvent but sets input source to "pen" to mock Windows behavior.
+   *
+   * NOTE(krosylight):
+   * This is currently a separate function solely because of the PARAM_BUFFER_COUNT cap,
+   * but we might ultimately want to make this to a separate sendPenEvent that selects
+   * either sendMouseEvent or sendTouchEvent.
+   */
+  [can_run_script]
+  boolean sendTouchEventAsPen(in AString aType,
+                              in uint32_t aIdentifier,
+                              in int32_t aX,
+                              in int32_t aY,
+                              in uint32_t aRx,
+                              in uint32_t aRy,
+                              in float aRotationAngle,
+                              in float aForce,
+                              in long aTiltX,
+                              in long aTiltY,
+                              in long aTwist,
+                              in long aModifier,
+                              [optional] in boolean aIgnoreRootScrollFrame);
 
   /** The same as sendMouseEvent but ensures that the event is dispatched to
    *  this DOM window or one of its children.
@@ -1087,6 +1111,13 @@ interface nsIDOMWindowUtils : nsISupports {
    */
   DOMRect toScreenRect(in float aX, in float aY,
                        in float aWidth, in float aHeight);
+
+  /**
+   * Transform a rectangle given in coordinates relative to the top level widget
+   * coordinates of this document (i.e. browser.xhml).
+   */
+  DOMRect toTopLevelWidgetRect(in float aX, in float aY,
+                          in float aWidth, in float aHeight);
 
   /**
    * Transform a rectangle given in coordinates relative to the top level
@@ -2071,26 +2102,6 @@ interface nsIDOMWindowUtils : nsISupports {
   readonly attribute int32_t gpuProcessPid;
 
   /**
-   * Adds an ElementState bit to the element.
-   *
-   * The state string must be one of the following:
-   *   * (none yet; but for example "higlighted" for ElementState::HIGHLIGHTED)
-   *
-   * The supported state strings are defined in kManuallyManagedStates
-   * in nsDOMWindowUtils.cpp.
-   */
-  void addManuallyManagedState(in Element element,
-                               in AString state);
-
-  /**
-   * Removes the specified ElementState bits from the element.
-   *
-   * See above for the strings that can be passed for |state|.
-   */
-  void removeManuallyManagedState(in Element element,
-                                  in AString state);
-
-  /**
    * Returns usage data for a given storage object.
    *
    * @param aStorage
@@ -2290,6 +2301,9 @@ interface nsIDOMWindowUtils : nsISupports {
 
   // Returns an element currently scrolling by wheel.
   Element getWheelScrollTarget();
+
+  // The current drag session on this widget of this window (if any).
+  readonly attribute nsIDragSession dragSession;
 };
 
 [scriptable, uuid(c694e359-7227-4392-a138-33c0cc1f15a6)]

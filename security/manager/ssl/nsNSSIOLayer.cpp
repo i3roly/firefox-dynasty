@@ -44,7 +44,6 @@
 #include "nsContentUtils.h"
 #include "nsISocketProvider.h"
 #include "nsIWebProgressListener.h"
-#include "nsNSSCertHelper.h"
 #include "nsNSSComponent.h"
 #include "nsNSSHelper.h"
 #include "nsPrintfCString.h"
@@ -59,6 +58,7 @@
 #include "sslproto.h"
 #include "zlib.h"
 #include "brotli/decode.h"
+#include "zstd/zstd.h"
 
 #if defined(__arm__)
 #  include "mozilla/arm.h"
@@ -1333,7 +1333,8 @@ static const SSLSignatureScheme sEnabledSignatureSchemes[] = {
 
 enum CertificateCompressionAlgorithms {
   zlib = 0x01,
-  brotli = 0x2,
+  brotli = 0x02,
+  zstd = 0x03
 };
 
 void GatherCertificateCompressionTelemetry(SECStatus rv,
@@ -1349,6 +1350,9 @@ void GatherCertificateCompressionTelemetry(SECStatus rv,
     case brotli:
       decoder.AssignLiteral("brotli");
       break;
+    case zstd:
+      decoder.AssignLiteral("zstd");
+      break;
   }
 
   mozilla::glean::cert_compression::used.Get(decoder).Add(1);
@@ -1358,16 +1362,21 @@ void GatherCertificateCompressionTelemetry(SECStatus rv,
     return;
   }
 
+  PRUint64 diffActualEncodedLen = actualCertLen - encodedCertLen;
   if (actualCertLen >= encodedCertLen) {
     switch (alg) {
       case zlib:
         mozilla::glean::cert_compression::zlib_saved_bytes
-            .AccumulateSingleSample(actualCertLen - encodedCertLen);
+            .AccumulateSingleSample(diffActualEncodedLen);
         break;
 
       case brotli:
         mozilla::glean::cert_compression::brotli_saved_bytes
-            .AccumulateSingleSample(actualCertLen - encodedCertLen);
+            .AccumulateSingleSample(diffActualEncodedLen);
+        break;
+      case zstd:
+        mozilla::glean::cert_compression::zstd_saved_bytes
+            .AccumulateSingleSample(diffActualEncodedLen);
         break;
     }
   }
@@ -1434,6 +1443,31 @@ SECStatus brotliCertificateDecode(const SECItem* input, unsigned char* output,
   }
 
   *usedLen = uncompressedSize;
+  rv = SECSuccess;
+  return rv;
+}
+
+SECStatus zstdCertificateDecode(const SECItem* input, unsigned char* output,
+                                size_t outputLen, size_t* usedLen) {
+  SECStatus rv = SECFailure;
+
+  if (!input || !input->data || input->len == 0 || !output || outputLen == 0) {
+    PR_SetError(SEC_ERROR_INVALID_ARGS, 0);
+    return rv;
+  }
+
+  auto cleanup = MakeScopeExit([&] {
+    GatherCertificateCompressionTelemetry(rv, zstd, *usedLen, input->len);
+  });
+
+  size_t result = ZSTD_decompress(output, outputLen, input->data, input->len);
+
+  if (ZSTD_isError(result)) {
+    PR_SetError(SEC_ERROR_BAD_DATA, 0);
+    return rv;
+  }
+
+  *usedLen = result;
   rv = SECSuccess;
   return rv;
 }
@@ -1553,9 +1587,11 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
     }
   }
 
-  // Include a modest set of named groups.
-  // Please change getKeaGroupName in nsNSSCallbacks.cpp when changing the lists
-  // here.
+  // Include a modest set of named groups in supported_groups and determine how
+  // many key shares to send. Please change getKeaGroupName in
+  // nsNSSCallbacks.cpp when changing the lists here.
+  unsigned int additional_shares =
+      StaticPrefs::security_tls_client_hello_send_p256_keyshare();
   if (StaticPrefs::security_tls_enable_kyber() &&
       range.max >= SSL_LIBRARY_VERSION_TLS_1_3 &&
       !(infoObject->GetProviderFlags() &
@@ -1568,11 +1604,7 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
                                            mozilla::ArrayLength(namedGroups))) {
       return NS_ERROR_FAILURE;
     }
-    // This ensures that we send key shares for Xyber768D00, X25519, and P-256
-    // in TLS 1.3, so that servers are less likely to use HelloRetryRequest.
-    if (SECSuccess != SSL_SendAdditionalKeyShares(fd, 2)) {
-      return NS_ERROR_FAILURE;
-    }
+    additional_shares += 1;
     infoObject->WillSendXyberShare();
   } else {
     const SSLNamedGroup namedGroups[] = {
@@ -1583,11 +1615,13 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
                                            mozilla::ArrayLength(namedGroups))) {
       return NS_ERROR_FAILURE;
     }
-    // This ensures that we send key shares for X25519 and P-256 in TLS 1.3, so
-    // that servers are less likely to use HelloRetryRequest.
-    if (SECSuccess != SSL_SendAdditionalKeyShares(fd, 1)) {
-      return NS_ERROR_FAILURE;
-    }
+  }
+
+  // If additional_shares == 2, send Xyber768D00, X25519, and P-256.
+  // If additional_shares == 1, send {Xyber768D00, X25519} or {X25519, P-256}.
+  // If additional_shares == 0, send X25519.
+  if (SECSuccess != SSL_SendAdditionalKeyShares(fd, additional_shares)) {
+    return NS_ERROR_FAILURE;
   }
 
   // Enabling Certificate Compression Decoding mechanisms.
@@ -1600,6 +1634,9 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
     SSLCertificateCompressionAlgorithm brotliAlg = {2, "brotli", nullptr,
                                                     brotliCertificateDecode};
 
+    SSLCertificateCompressionAlgorithm zstdAlg = {3, "zstd", nullptr,
+                                                  zstdCertificateDecode};
+
     if (StaticPrefs::security_tls_enable_certificate_compression_zlib() &&
         SSL_SetCertificateCompressionAlgorithm(fd, zlibAlg) != SECSuccess) {
       return NS_ERROR_FAILURE;
@@ -1607,6 +1644,11 @@ static nsresult nsSSLIOLayerSetOptions(PRFileDesc* fd, bool forSTARTTLS,
 
     if (StaticPrefs::security_tls_enable_certificate_compression_brotli() &&
         SSL_SetCertificateCompressionAlgorithm(fd, brotliAlg) != SECSuccess) {
+      return NS_ERROR_FAILURE;
+    }
+
+    if (StaticPrefs::security_tls_enable_certificate_compression_zstd() &&
+        SSL_SetCertificateCompressionAlgorithm(fd, zstdAlg) != SECSuccess) {
       return NS_ERROR_FAILURE;
     }
   }
@@ -1726,8 +1768,7 @@ nsresult nsSSLIOLayerAddToSocket(int32_t family, const char* host, int32_t port,
     sharedState = allocatedState.get();
   } else {
     bool isPrivate = providerFlags & nsISocketProvider::NO_PERMANENT_STORAGE ||
-                     originAttributes.mPrivateBrowsingId !=
-                         OriginAttributes().mPrivateBrowsingId;
+                     originAttributes.IsPrivateBrowsing();
     sharedState = isPrivate ? PrivateSSLState() : PublicSSLState();
   }
 

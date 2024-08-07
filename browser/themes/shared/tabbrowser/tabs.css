@@ -17,6 +17,7 @@
   --tab-border-radius: 4px;
   --tab-shadow-max-size: 6px;
   --tab-block-margin: 4px;
+  --tab-loading-fill: #0A84FF;
   --tab-selected-textcolor: var(--toolbar-color);
   --tab-selected-bgcolor: var(--toolbar-bgcolor);
   --tab-selected-color-scheme: var(--toolbar-color-scheme);
@@ -39,7 +40,6 @@
 
 #tabbrowser-tabs {
   --tab-min-width: 76px;
-  --tab-loading-fill: #0A84FF;
   --tab-overflow-pinned-tabs-width: 0px;
   padding-inline: var(--tab-overflow-pinned-tabs-width) 0;
   /* Use a bigger flex value than the searchbar to prevent it from
@@ -501,7 +501,7 @@
   list-style-image: url(chrome://global/skin/icons/close-12.svg);
 
   &[pinned],
-  #tabbrowser-tabs[closebuttons="activetab"] > #tabbrowser-arrowscrollbox > .tabbrowser-tab > .tab-stack > .tab-content > &:not([selected]) {
+  #tabbrowser-tabs[closebuttons="activetab"]:not([orient="vertical"]) > #tabbrowser-arrowscrollbox > .tabbrowser-tab > .tab-stack > .tab-content > &:not([selected]) {
     display: none;
   }
 }
@@ -715,6 +715,41 @@
   }
 }
 
+/* Vertical tabs styling */
+#tabbrowser-arrowscrollbox[orient="vertical"] {
+  overflow-y: auto;
+
+  &::part(scrollbutton-up),
+  &::part(scrollbutton-down) {
+    display: none;
+  }
+
+  &::part(scrollbox-clip) {
+    min-height: inherit;
+  }
+}
+
+#vertical-tabs {
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  display: none;
+
+  &[activated] {
+    display: flex;
+  }
+}
+
+sidebar-main:not([expanded]) > #vertical-tabs > #tabbrowser-tabs[orient="vertical"] .tabbrowser-tab {
+  /* TODO look into handlings this by setting --tab-min-width in tabs.js in bug 1899336. */
+  min-width: inherit;
+  width: inherit;
+}
+
+sidebar-main:not([expanded]) > #vertical-tabs > #tabbrowser-tabs[orient="vertical"] .tab-close-button,
+sidebar-main[expanded] > #vertical-tabs > #tabbrowser-tabs[orient="vertical"] .tab-close-button:not([selected]) {
+  display: none;
+}
+
 /* Tab drag and drop */
 
 .tab-drop-indicator {
@@ -757,6 +792,7 @@
   margin-inline-start: 2px;
 }
 
+:root[firefoxviewhidden] :is(#firefox-view-button, #wrapper-firefox-view-button),
 :root[privatebrowsingmode] :is(#firefox-view-button, #menu_openFirefoxView) {
   display: none;
 }
@@ -788,7 +824,7 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
 #tabbrowser-tabs[hasadjacentnewtabbutton]:not([overflow]) ~ #new-tab-button,
 #tabbrowser-tabs[overflow] > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
 #tabbrowser-tabs:not([hasadjacentnewtabbutton]) > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
-#TabsToolbar[customizing="true"] #tabs-newtab-button {
+#TabsToolbar[customizing] #tabs-newtab-button {
   display: none;
 }
 

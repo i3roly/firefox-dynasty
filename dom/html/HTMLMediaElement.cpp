@@ -103,6 +103,7 @@
 #include "nsError.h"
 #include "nsGenericHTMLElement.h"
 #include "nsGkAtoms.h"
+#include "nsGlobalWindowInner.h"
 #include "nsIAsyncVerifyRedirectCallback.h"
 #include "nsICachingChannel.h"
 #include "nsIClassOfService.h"
@@ -3154,6 +3155,7 @@ MediaResult HTMLMediaElement::LoadResource() {
     if (NS_SUCCEEDED(rv)) return rv;
   }
 
+  LOG(LogLevel::Debug, ("%p LoadResource", this));
   if (mMediaSource) {
     MediaDecoderInit decoderInit(
         this, this, mMuted ? 0.0 : mVolume, mPreservesPitch,
@@ -3670,11 +3672,11 @@ void HTMLMediaElement::AddOutputTrackSourceToOutputStream(
   RefPtr<MediaStreamTrack> domTrack;
   if (aSource->Track()->mType == MediaSegment::AUDIO) {
     domTrack = new AudioStreamTrack(
-        aOutputStream.mStream->GetOwner(), aSource->Track(), aSource,
+        aOutputStream.mStream->GetOwnerWindow(), aSource->Track(), aSource,
         MediaStreamTrackState::Live, aSource->Muted());
   } else {
     domTrack = new VideoStreamTrack(
-        aOutputStream.mStream->GetOwner(), aSource->Track(), aSource,
+        aOutputStream.mStream->GetOwnerWindow(), aSource->Track(), aSource,
         MediaStreamTrackState::Live, aSource->Muted());
   }
 
@@ -4766,7 +4768,7 @@ void HTMLMediaElement::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
     // content, since we always do that for touchstart.
     case eTouchMove:
     case eTouchStart:
-    case eMouseClick:
+    case ePointerClick:
     case eMouseDoubleClick:
     case eMouseDown:
     case eMouseUp:

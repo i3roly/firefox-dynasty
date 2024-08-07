@@ -14,6 +14,7 @@
 #include "wasm/WasmFeatures.h"  // AnyCompilerAvailable
 #include "wasm/WasmGenerator.h"
 #include "wasm/WasmSignalHandlers.h"  // EnsureFullSignalHandlers
+#include "wasm/WasmValidate.h"
 #include "wasm/WasmValType.h"
 
 using namespace js;
@@ -41,11 +42,14 @@ BEGIN_TEST(testWasmEncodeBasic) {
   SharedCompileArgs compileArgs =
       CompileArgs::buildAndReport(cx, std::move(scriptedCaller), options);
 
-  ModuleEnvironment moduleEnv(compileArgs->features);
+  MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
+  MOZ_ALWAYS_TRUE(moduleMeta);
+  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(compileArgs->features);
+  MOZ_ALWAYS_TRUE(codeMeta);
   CompilerEnvironment compilerEnv(CompileMode::Once, Tier::Optimized,
                                   DebugEnabled::False);
   compilerEnv.computeParameters();
-  MOZ_ALWAYS_TRUE(moduleEnv.init());
+  MOZ_ALWAYS_TRUE(codeMeta->init());
 
   ValTypeVector paramsImp, resultsImp;
   MOZ_ALWAYS_TRUE(paramsImp.emplaceBack(ValType::F64) &&
@@ -54,7 +58,7 @@ BEGIN_TEST(testWasmEncodeBasic) {
   CacheableName ns;
   CacheableName impName;
   MOZ_ALWAYS_TRUE(CacheableName::fromUTF8Chars("t", &impName));
-  MOZ_ALWAYS_TRUE(moduleEnv.addImportedFunc(std::move(paramsImp),
+  MOZ_ALWAYS_TRUE(codeMeta->addImportedFunc(moduleMeta, std::move(paramsImp),
                                             std::move(resultsImp),
                                             std::move(ns), std::move(impName)));
 
@@ -62,11 +66,11 @@ BEGIN_TEST(testWasmEncodeBasic) {
   MOZ_ALWAYS_TRUE(results.emplaceBack(ValType::I32));
   CacheableName expName;
   MOZ_ALWAYS_TRUE(CacheableName::fromUTF8Chars("r", &expName));
-  MOZ_ALWAYS_TRUE(moduleEnv.addDefinedFunc(std::move(params),
+  MOZ_ALWAYS_TRUE(codeMeta->addDefinedFunc(moduleMeta, std::move(params),
                                            std::move(results), true,
                                            mozilla::Some(std::move(expName))));
 
-  ModuleGenerator mg(*compileArgs, &moduleEnv, &compilerEnv, nullptr, nullptr,
+  ModuleGenerator mg(*compileArgs, codeMeta, &compilerEnv, nullptr, nullptr,
                      nullptr);
   MOZ_ALWAYS_TRUE(mg.init(nullptr));
 
@@ -86,11 +90,12 @@ BEGIN_TEST(testWasmEncodeBasic) {
 
   SharedBytes shareableBytes = js_new<ShareableBytes>();
   MOZ_ALWAYS_TRUE(shareableBytes);
-  SharedModule module = mg.finishModule(*shareableBytes);
+  SharedModule module = mg.finishModule(*shareableBytes, moduleMeta,
+                                        /*maybeTier2Listener=*/nullptr);
   MOZ_ALWAYS_TRUE(module);
 
-  MOZ_ASSERT(module->imports().length() == 1);
-  MOZ_ASSERT(module->exports().length() == 1);
+  MOZ_ASSERT(module->moduleMeta().imports.length() == 1);
+  MOZ_ASSERT(module->moduleMeta().exports.length() == 1);
 
   // Instantiate and run.
   {

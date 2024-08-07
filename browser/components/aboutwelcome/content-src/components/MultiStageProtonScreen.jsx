@@ -360,13 +360,20 @@ export class ProtonScreen extends React.PureComponent {
   }
 
   renderStepsIndicator() {
-    const currentStep = (this.props.order ?? 0) + 1;
-    const previousStep = (this.props.previousOrder ?? -1) + 1;
-    const { content, totalNumberOfScreens: total } = this.props;
+    const {
+      order,
+      previousOrder,
+      content,
+      totalNumberOfScreens: total,
+      aboveButtonStepsIndicator,
+    } = this.props;
+    const currentStep = (order ?? 0) + 1;
+    const previousStep = (previousOrder ?? -1) + 1;
     return (
       <div
         id="steps"
         className={`steps${content.progress_bar ? " progress-bar" : ""}`}
+        above-button={aboveButtonStepsIndicator ? "" : null}
         data-l10n-id={
           content.steps_indicator?.string_id ||
           "onboarding-welcome-steps-indicator-label"
@@ -388,10 +395,7 @@ export class ProtonScreen extends React.PureComponent {
             totalNumberOfScreens={total}
           />
         ) : (
-          <StepsIndicator
-            order={this.props.order}
-            totalNumberOfScreens={total}
-          />
+          <StepsIndicator order={order} totalNumberOfScreens={total} />
         )}
       </div>
     );
@@ -507,6 +511,7 @@ export class ProtonScreen extends React.PureComponent {
         className={`screen ${this.props.id || ""}
           ${screenClassName} ${textColorClass}`}
         reverse-split={content.reverse_split ? "" : null}
+        fullscreen={content.fullscreen ? "" : null}
         role={ariaRole ?? "alertdialog"}
         layout={content.layout}
         pos={content.position || "center"}
@@ -559,7 +564,9 @@ export class ProtonScreen extends React.PureComponent {
                 : null,
             }}
           >
-            {content.logo ? this.renderPicture(content.logo) : null}
+            {content.logo && !content.fullscreen
+              ? this.renderPicture(content.logo)
+              : null}
 
             {isRtamo ? (
               <div className="rtamo-icon">
@@ -581,6 +588,9 @@ export class ProtonScreen extends React.PureComponent {
                 justifyContent: content.split_content_justify_content,
               }}
             >
+              {content.logo && content.fullscreen
+                ? this.renderPicture(content.logo)
+                : null}
               {content.title || content.subtitle ? (
                 <div className={`welcome-text ${content.title_style || ""}`}>
                   {content.title ? this.renderTitle(content) : null}

@@ -503,7 +503,7 @@ static bool WasmHandleDebugTrap() {
   Frame* fp = activation->wasmExitFP();
   Instance* instance = GetNearestEffectiveInstance(fp);
   const Code& code = instance->code();
-  MOZ_ASSERT(code.metadata().debugEnabled);
+  MOZ_ASSERT(code.codeMeta().debugEnabled);
 
   // The debug trap stub is the innermost frame. It's return address is the
   // actual trap site.
@@ -639,14 +639,13 @@ static WasmExceptionObject* GetOrWrapWasmException(JitActivation* activation,
   return nullptr;
 }
 
-static const wasm::TryNote* FindNonDelegateTryNote(const wasm::Code& code,
-                                                   const uint8_t* pc,
-                                                   Tier* tier) {
-  const wasm::TryNote* tryNote = code.lookupTryNote((void*)pc, tier);
+static const wasm::TryNote* FindNonDelegateTryNote(
+    const wasm::Code& code, const uint8_t* pc, const CodeBlock** codeBlock) {
+  const wasm::TryNote* tryNote = code.lookupTryNote((void*)pc, codeBlock);
   while (tryNote && tryNote->isDelegate()) {
-    const wasm::CodeTier& codeTier = code.codeTier(*tier);
-    pc = codeTier.segment().base() + tryNote->delegateOffset();
-    const wasm::TryNote* delegateTryNote = code.lookupTryNote((void*)pc, tier);
+    pc = (*codeBlock)->segment->base() + tryNote->delegateOffset();
+    const wasm::TryNote* delegateTryNote =
+        code.lookupTryNote((void*)pc, codeBlock);
     MOZ_RELEASE_ASSERT(delegateTryNote == nullptr ||
                        delegateTryNote->tryBodyBegin() <
                            tryNote->tryBodyBegin());
@@ -655,18 +654,15 @@ static const wasm::TryNote* FindNonDelegateTryNote(const wasm::Code& code,
   return tryNote;
 }
 
-// Unwind the entire activation in response to a thrown exception. This function
-// is responsible for notifying the debugger of each unwound frame. The return
-// value is the new stack address which the calling stub will set to the sp
-// register before executing a return instruction.
+// Unwind the activation in response to a thrown exception. This function is
+// responsible for notifying the debugger of each unwound frame.
 //
-// This function will also look for try-catch handlers and, if not trapping or
-// throwing an uncatchable exception, will write the handler info in the return
-// argument and return true.
+// This function will look for try-catch handlers and, if not trapping or
+// throwing an uncatchable exception, will write the handler info in |*rfe|.
 //
-// Returns false if a handler isn't found or shouldn't be used (e.g., traps).
-
-bool wasm::HandleThrow(JSContext* cx, WasmFrameIter& iter,
+// If no try-catch handler is found, initialize |*rfe| for a return to the entry
+// frame that called into Wasm.
+void wasm::HandleThrow(JSContext* cx, WasmFrameIter& iter,
                        jit::ResumeFromException* rfe) {
   // WasmFrameIter iterates down wasm frames in the activation starting at
   // JitActivation::wasmExitFP(). Calling WasmFrameIter::startUnwinding pops
@@ -710,10 +706,11 @@ bool wasm::HandleThrow(JSContext* cx, WasmFrameIter& iter,
 
     // Only look for an exception handler if there's a catchable exception.
     if (wasmExn) {
-      Tier tier;
       const wasm::Code& code = iter.instance()->code();
       const uint8_t* pc = iter.resumePCinCurrentFrame();
-      const wasm::TryNote* tryNote = FindNonDelegateTryNote(code, pc, &tier);
+      const wasm::CodeBlock* codeBlock = nullptr;
+      const wasm::TryNote* tryNote =
+          FindNonDelegateTryNote(code, pc, &codeBlock);
 
       if (tryNote) {
 #ifdef ENABLE_WASM_TAIL_CALLS
@@ -736,15 +733,14 @@ bool wasm::HandleThrow(JSContext* cx, WasmFrameIter& iter,
         rfe->stackPointer =
             (uint8_t*)(rfe->framePointer - tryNote->landingPadFramePushed());
         rfe->target =
-            iter.instance()->codeBase(tier) + tryNote->landingPadEntryPoint();
+            codeBlock->segment->base() + tryNote->landingPadEntryPoint();
 
         // Make sure to clear trapping state if we got here due to a trap.
         if (activation->isWasmTrapping()) {
           activation->finishWasmTrap();
         }
         activation->setWasmExitFP(nullptr);
-
-        return true;
+        return;
       }
     }
 
@@ -802,7 +798,6 @@ bool wasm::HandleThrow(JSContext* cx, WasmFrameIter& iter,
   rfe->stackPointer = (uint8_t*)iter.unwoundAddressOfReturnAddress();
   rfe->instance = (Instance*)FailInstanceReg;
   rfe->target = nullptr;
-  return false;
 }
 
 static void* WasmHandleThrow(jit::ResumeFromException* rfe) {
@@ -965,14 +960,12 @@ static void* BoxValue_Anyref(Value* rawVal) {
   return result.get().forCompiledCode();
 }
 
-static int32_t CoerceInPlace_JitEntry(int funcExportIndex, Instance* instance,
+static int32_t CoerceInPlace_JitEntry(int funcIndex, Instance* instance,
                                       Value* argv) {
   JSContext* cx = TlsContext.get();  // Cold code
 
   const Code& code = instance->code();
-  const FuncExport& fe =
-      code.metadata(code.stableTier()).funcExports[funcExportIndex];
-  const FuncType& funcType = code.metadata().getFuncExportType(fe);
+  const FuncType& funcType = code.getFuncExportType(funcIndex);
 
   for (size_t i = 0; i < funcType.args().length(); i++) {
     HandleValue arg = HandleValue::fromMarkedLocation(&argv[i]);
@@ -1906,6 +1899,12 @@ Mutex initBuiltinThunks(mutexid::WasmInitBuiltinThunks);
 Atomic<const BuiltinThunks*> builtinThunks;
 
 bool wasm::EnsureBuiltinThunksInitialized() {
+  AutoMarkJitCodeWritableForThread writable;
+  return EnsureBuiltinThunksInitialized(writable);
+}
+
+bool wasm::EnsureBuiltinThunksInitialized(
+    AutoMarkJitCodeWritableForThread& writable) {
   LockGuard<Mutex> guard(initBuiltinThunks);
   if (builtinThunks) {
     return true;
@@ -2009,8 +2008,6 @@ bool wasm::EnsureBuiltinThunksInitialized() {
   if (!thunks->codeBase) {
     return false;
   }
-
-  AutoMarkJitCodeWritableForThread writable;
 
   masm.executableCopy(thunks->codeBase);
   memset(thunks->codeBase + masm.bytesNeeded(), 0,
@@ -2148,7 +2145,7 @@ void* wasm::MaybeGetBuiltinThunk(JSFunction* f, const FuncType& funcType) {
 }
 
 bool wasm::LookupBuiltinThunk(void* pc, const CodeRange** codeRange,
-                              uint8_t** codeBase) {
+                              const uint8_t** codeBase) {
   if (!builtinThunks) {
     return false;
   }

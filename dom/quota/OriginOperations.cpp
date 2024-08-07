@@ -27,6 +27,7 @@
 #include "mozilla/dom/quota/Client.h"
 #include "mozilla/dom/quota/Constants.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
+#include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "mozilla/dom/quota/PQuota.h"
 #include "mozilla/dom/quota/PQuotaRequest.h"
@@ -77,7 +78,8 @@ class OpenStorageDirectoryHelper : public Base {
   RefPtr<BoolPromise> OpenStorageDirectory(
       const Nullable<PersistenceType>& aPersistenceType,
       const OriginScope& aOriginScope,
-      const Nullable<Client::Type>& aClientType, bool aExclusive);
+      const Nullable<Client::Type>& aClientType, bool aExclusive,
+      DirectoryLockCategory aCategory = DirectoryLockCategory::None);
 
   RefPtr<UniversalDirectoryLock> mDirectoryLock;
 };
@@ -505,10 +507,13 @@ class ClearStorageOp final
 
 class ClearRequestBase
     : public OpenStorageDirectoryHelper<ResolvableNormalOriginOp<bool>> {
+  Atomic<uint64_t> mIterations;
+
  protected:
   ClearRequestBase(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
                    const char* aName)
-      : OpenStorageDirectoryHelper(std::move(aQuotaManager), aName) {
+      : OpenStorageDirectoryHelper(std::move(aQuotaManager), aName),
+        mIterations(0) {
     AssertIsOnOwningThread();
   }
 
@@ -528,6 +533,17 @@ class ClearRequestBase
                            const OriginScope& aOriginScope,
                            const Nullable<Client::Type>& aClientType,
                            const FileCollector& aFileCollector);
+
+  void DoStringify(nsACString& aData) override {
+    aData.Append("ClearRequestBase "_ns +
+                 //
+                 kStringifyStartInstance +
+                 //
+                 "Iterations:"_ns +
+                 IntToCString(static_cast<uint64_t>(mIterations)) +
+                 //
+                 kStringifyEndInstance);
+  }
 };
 
 class ClearOriginOp final : public ClearRequestBase {
@@ -877,10 +893,10 @@ template <class Base>
 RefPtr<BoolPromise> OpenStorageDirectoryHelper<Base>::OpenStorageDirectory(
     const Nullable<PersistenceType>& aPersistenceType,
     const OriginScope& aOriginScope, const Nullable<Client::Type>& aClientType,
-    bool aExclusive) {
+    bool aExclusive, const DirectoryLockCategory aCategory) {
   return Base::mQuotaManager
       ->OpenStorageDirectory(aPersistenceType, aOriginScope, aClientType,
-                             aExclusive)
+                             aExclusive, aCategory)
       ->Then(GetCurrentSerialEventTarget(), __func__,
              [self = RefPtr(this)](
                  UniversalDirectoryLockPromise::ResolveOrRejectValue&& aValue) {
@@ -923,6 +939,9 @@ void FinalizeOriginEvictionOp::UnblockOpen() {
   NoteActorDestroyed();
 #endif
 
+  for (const auto& lock : mLocks) {
+    lock->Drop();
+  }
   mLocks.Clear();
 }
 
@@ -973,7 +992,7 @@ void SaveOriginAccessTimeOp::SendResults() {
 void SaveOriginAccessTimeOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 RefPtr<BoolPromise> ClearPrivateRepositoryOp::OpenDirectory() {
@@ -1013,7 +1032,7 @@ nsresult ClearPrivateRepositoryOp::DoDirectoryWork(
 void ClearPrivateRepositoryOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 RefPtr<BoolPromise> ShutdownStorageOp::OpenDirectory() {
@@ -1028,7 +1047,7 @@ RefPtr<BoolPromise> ShutdownStorageOp::OpenDirectory() {
   mDirectoryLock = mQuotaManager->CreateDirectoryLockInternal(
       Nullable<PersistenceType>(), OriginScope::FromNull(),
       Nullable<Client::Type>(),
-      /* aExclusive */ true);
+      /* aExclusive */ true, DirectoryLockCategory::UninitStorage);
 
   return mDirectoryLock->Acquire();
 }
@@ -1059,7 +1078,7 @@ nsresult ShutdownStorageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
 void ShutdownStorageOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  DropDirectoryLockIfNotDropped(mDirectoryLock);
 }
 
 nsresult TraverseRepositoryHelper::TraverseRepository(
@@ -1257,7 +1276,7 @@ void GetUsageOp::GetResponse(UsageRequestResponse& aResponse) {
 void GetUsageOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 GetOriginUsageOp::GetOriginUsageOp(
@@ -1346,7 +1365,7 @@ void GetOriginUsageOp::GetResponse(UsageRequestResponse& aResponse) {
 void GetOriginUsageOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 StorageNameOp::StorageNameOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager)
@@ -1460,7 +1479,7 @@ bool InitOp::GetResolveValue() { return true; }
 void InitOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  DropDirectoryLock(mDirectoryLock);
 }
 
 InitTemporaryStorageOp::InitTemporaryStorageOp(
@@ -1502,7 +1521,7 @@ bool InitTemporaryStorageOp::GetResolveValue() {
 void InitTemporaryStorageOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  DropDirectoryLock(mDirectoryLock);
 }
 
 InitializeOriginRequestBase::InitializeOriginRequestBase(
@@ -1541,7 +1560,7 @@ RefPtr<BoolPromise> InitializeOriginRequestBase::OpenDirectory() {
 void InitializeOriginRequestBase::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  DropDirectoryLockIfNotDropped(mDirectoryLock);
 }
 
 InitializePersistentOriginOp::InitializePersistentOriginOp(
@@ -1661,7 +1680,7 @@ RefPtr<BoolPromise> InitializeClientBase::OpenDirectory() {
 void InitializeClientBase::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  DropDirectoryLockIfNotDropped(mDirectoryLock);
 }
 
 InitializePersistentClientOp::InitializePersistentClientOp(
@@ -1804,7 +1823,7 @@ void GetFullOriginMetadataOp::GetResponse(RequestResponse& aResponse) {
 void GetFullOriginMetadataOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 ClearStorageOp::ClearStorageOp(
@@ -1868,7 +1887,8 @@ RefPtr<BoolPromise> ClearStorageOp::OpenDirectory() {
 
   return OpenStorageDirectory(Nullable<PersistenceType>(),
                               OriginScope::FromNull(), Nullable<Client::Type>(),
-                              /* aExclusive */ true);
+                              /* aExclusive */ true,
+                              DirectoryLockCategory::UninitStorage);
 }
 
 nsresult ClearStorageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
@@ -1897,7 +1917,7 @@ bool ClearStorageOp::GetResolveValue() {
 void ClearStorageOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 void ClearRequestBase::DeleteFiles(QuotaManager& aQuotaManager,
@@ -1971,7 +1991,8 @@ void ClearRequestBase::DeleteFilesInternal(
   QM_TRY(
       aFileCollector([&aClientType, &originScope = aOriginScope,
                       aPersistenceType, &aQuotaManager,
-                      &directoriesForRemovalRetry](nsCOMPtr<nsIFile>&& file)
+                      &directoriesForRemovalRetry,
+                      this](nsCOMPtr<nsIFile>&& file)
                          -> mozilla::Result<Ok, nsresult> {
         QM_TRY_INSPECT(const auto& dirEntryKind, GetDirEntryKind(*file));
 
@@ -2073,6 +2094,8 @@ void ClearRequestBase::DeleteFilesInternal(
             // Ignore files that got removed externally while iterating.
             break;
         }
+
+        mIterations++;
 
         return Ok{};
       }),
@@ -2190,7 +2213,7 @@ bool ClearOriginOp::GetResolveValue() {
 void ClearOriginOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 ClearStoragesForOriginPrefixOp::ClearStoragesForOriginPrefixOp(
@@ -2244,7 +2267,7 @@ bool ClearStoragesForOriginPrefixOp::GetResolveValue() {
 void ClearStoragesForOriginPrefixOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 ClearDataOp::ClearDataOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
@@ -2283,7 +2306,7 @@ bool ClearDataOp::GetResolveValue() {
 void ClearDataOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 ResetOriginOp::ResetOriginOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
@@ -2338,7 +2361,7 @@ void ResetOriginOp::GetResponse(RequestResponse& aResponse) {
 void ResetOriginOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  DropDirectoryLockIfNotDropped(mDirectoryLock);
 }
 
 PersistRequestBase::PersistRequestBase(
@@ -2376,7 +2399,7 @@ RefPtr<BoolPromise> PersistRequestBase::OpenDirectory() {
 void PersistRequestBase::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 PersistedOp::PersistedOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
@@ -2579,7 +2602,7 @@ void EstimateOp::GetResponse(RequestResponse& aResponse) {
 void EstimateOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 ListOriginsOp::ListOriginsOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager)
@@ -2678,7 +2701,7 @@ void ListOriginsOp::GetResponse(RequestResponse& aResponse) {
 void ListOriginsOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
-  mDirectoryLock = nullptr;
+  SafeDropDirectoryLock(mDirectoryLock);
 }
 
 }  // namespace mozilla::dom::quota

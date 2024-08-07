@@ -487,9 +487,6 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
     return scratch;
   }
 
-  inline void ensureDouble(const ValueOperand& source, FloatRegister dest,
-                           Label* failure);
-
   void emitSet(Condition cond, Register dest) {
     Cset(ARMRegister(dest, 64), cond);
   }
@@ -1098,27 +1095,6 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
     Add(scratch64, base, Operand(index, vixl::LSL, unsigned(src.scale)));
     return Ldr(ARMFPRegister(dest, 64), MemOperand(scratch64, src.offset));
   }
-  void loadFloatAsDouble(const Address& addr, FloatRegister dest) {
-    Ldr(ARMFPRegister(dest, 32), toMemOperand(addr));
-    fcvt(ARMFPRegister(dest, 64), ARMFPRegister(dest, 32));
-  }
-  void loadFloatAsDouble(const BaseIndex& src, FloatRegister dest) {
-    ARMRegister base = toARMRegister(src.base, 64);
-    ARMRegister index(src.index, 64);
-    if (src.offset == 0) {
-      Ldr(ARMFPRegister(dest, 32),
-          MemOperand(base, index, vixl::LSL, unsigned(src.scale)));
-    } else {
-      vixl::UseScratchRegisterScope temps(this);
-      const ARMRegister scratch64 = temps.AcquireX();
-      MOZ_ASSERT(scratch64.asUnsized() != src.base);
-      MOZ_ASSERT(scratch64.asUnsized() != src.index);
-
-      Add(scratch64, base, Operand(index, vixl::LSL, unsigned(src.scale)));
-      Ldr(ARMFPRegister(dest, 32), MemOperand(scratch64, src.offset));
-    }
-    fcvt(ARMFPRegister(dest, 64), ARMFPRegister(dest, 32));
-  }
 
   FaultingCodeOffset loadFloat32(const Address& addr, FloatRegister dest) {
     return Ldr(ARMFPRegister(dest, 32), toMemOperand(addr));
@@ -1152,9 +1128,6 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
 
   void moveFloat32(FloatRegister src, FloatRegister dest) {
     fmov(ARMFPRegister(dest, 32), ARMFPRegister(src, 32));
-  }
-  void moveFloatAsDouble(Register src, FloatRegister dest) {
-    MOZ_CRASH("moveFloatAsDouble");
   }
 
   void moveSimd128(FloatRegister src, FloatRegister dest) {
@@ -1499,20 +1472,6 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
   }
   void unboxBigInt(const Address& src, Register dest) {
     unboxNonDouble(src, dest, JSVAL_TYPE_BIGINT);
-  }
-  // These two functions use the low 32-bits of the full value register.
-  void boolValueToDouble(const ValueOperand& operand, FloatRegister dest) {
-    convertInt32ToDouble(operand.valueReg(), dest);
-  }
-  void int32ValueToDouble(const ValueOperand& operand, FloatRegister dest) {
-    convertInt32ToDouble(operand.valueReg(), dest);
-  }
-
-  void boolValueToFloat32(const ValueOperand& operand, FloatRegister dest) {
-    convertInt32ToFloat32(operand.valueReg(), dest);
-  }
-  void int32ValueToFloat32(const ValueOperand& operand, FloatRegister dest) {
-    convertInt32ToFloat32(operand.valueReg(), dest);
   }
 
   void loadConstantDouble(double d, FloatRegister dest) {

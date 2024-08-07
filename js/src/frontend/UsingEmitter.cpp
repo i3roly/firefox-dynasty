@@ -6,140 +6,73 @@
 
 #include "frontend/BytecodeEmitter.h"
 #include "frontend/EmitterScope.h"
-#include "frontend/IfEmitter.h"
-#include "vm/ThrowMsgKind.h"
+#include "vm/DisposeJumpKind.h"
 
 using namespace js;
 using namespace js::frontend;
 
 UsingEmitter::UsingEmitter(BytecodeEmitter* bce) : bce_(bce) {}
 
-bool UsingEmitter::emitCheckDisposeMethod(JS::SymbolCode hint) {
-  // [stack] VAL
-
-  // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-getdisposemethod
-  // Step 2. Else,
-  // Step 2.a. Let method be ? GetMethod(V, @@dispose).
-  if (!bce_->emit1(JSOp::Dup)) {
-    //        [stack] VAL VAL
+bool UsingEmitter::prepareForDisposableScopeBody() {
+  depthAtDisposables_ = bce_->bytecodeSection().stackDepth();
+  disposableStart_ = bce_->bytecodeSection().offset();
+  if (!bce_->emit1(JSOp::TryUsing)) {
     return false;
   }
+  return true;
+}
 
-  if (!bce_->emit2(JSOp::Symbol, uint8_t(hint))) {
-    //        [stack] VAL VAL @@dispose
-    return false;
-  }
+bool UsingEmitter::prepareForAssignment(Kind kind) {
+  MOZ_ASSERT(kind == Kind::Sync);
 
-  if (!bce_->emit1(JSOp::GetElem)) {
-    //          [stack] VAL VAL[@@dispose]
-    return false;
-  }
+  MOZ_ASSERT(bce_->innermostEmitterScope()->hasDisposables());
 
-  if (!bce_->emitCheckIsCallable()) {
-    //          [stack] VAL VAL[@@dispose] IS_CALLABLE_RESULT
-    return false;
-  }
-
-  InternalIfEmitter ifCallable(bce_);
-
-  if (!ifCallable.emitThenElse()) {
-    //          [stack] VAL VAL[@@dispose]
-    return false;
-  }
-
-  if (!bce_->emit1(JSOp::Pop)) {
-    //          [stack] VAL
-    return false;
-  }
-
-  if (!ifCallable.emitElse()) {
-    //          [stack] VAL VAL[@@dispose]
-    return false;
-  }
-
-  if (!bce_->emit1(JSOp::Pop)) {
-    //          [stack] VAL
-    return false;
-  }
-
-  if (!bce_->emit2(JSOp::ThrowMsg,
-                   uint8_t(ThrowMsgKind::UsingWithoutDispose))) {
-    //          [stack] VAL
-    return false;
-  }
-
-  if (!ifCallable.emitEnd()) {
-    //          [stack] VAL
+  if (!bce_->emit1(JSOp::AddDisposable)) {
+    //        [stack] VAL
     return false;
   }
 
   return true;
 }
 
-bool UsingEmitter::prepareForAssignment(Kind kind) {
-  JS::SymbolCode symdispose;
-  switch (kind) {
-    case Kind::Sync:
-      symdispose = JS::SymbolCode::dispose;
-      break;
-    case Kind::Async:
-      MOZ_CRASH("Async disposal not implemented");
-    default:
-      MOZ_CRASH("Invalid kind");
+bool UsingEmitter::prepareForForOfLoopIteration() {
+  MOZ_ASSERT(bce_->innermostEmitterScopeNoCheck()->hasDisposables());
+  if (!bce_->emit2(JSOp::DisposeDisposables,
+                   uint8_t(DisposeJumpKind::JumpOnError))) {
+    return false;
   }
+  return true;
+}
 
-  bce_->innermostEmitterScope()->setHasDisposables();
+bool UsingEmitter::prepareForForOfIteratorCloseOnThrow() {
+  MOZ_ASSERT(bce_->innermostEmitterScopeNoCheck()->hasDisposables());
+  if (!bce_->emit2(JSOp::DisposeDisposables,
+                   uint8_t(DisposeJumpKind::NoJumpOnError))) {
+    return false;
+  }
+  return true;
+}
 
-  // [stack] VAL
+bool UsingEmitter::emitNonLocalJump(EmitterScope* present) {
+  MOZ_ASSERT(present->hasDisposables());
+  if (!bce_->emit2(JSOp::DisposeDisposables,
+                   uint8_t(DisposeJumpKind::JumpOnError))) {
+    return false;
+  }
+  return true;
+}
 
-  // Explicit Resource Management Proposal
-  // CreateDisposableResource ( V, hint [ , method ] )
-  // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-createdisposableresource
-  // Step 1. If method is not present, then
-  // (implicit)
-  // Step 1.a. If V is either null or undefined, then
-  if (!bce_->emit1(JSOp::IsNullOrUndefined)) {
-    //         [stack] VAL IS_NULL_OR_UNDEFINED_RESULT
+bool UsingEmitter::emitEnd() {
+  MOZ_ASSERT(bce_->innermostEmitterScopeNoCheck()->hasDisposables());
+  MOZ_ASSERT(disposableStart_.valid());
+
+  if (!bce_->addTryNote(TryNoteKind::Using, depthAtDisposables_,
+                        disposableStart_, bce_->bytecodeSection().offset())) {
     return false;
   }
 
-  InternalIfEmitter ifValueNullOrUndefined(bce_);
-
-  // Step 1.b. Else,
-  if (!ifValueNullOrUndefined.emitThen(IfEmitter::ConditionKind::Negative)) {
-    //        [stack] VAL
-    return false;
-  }
-
-  // Step 1.b.i. If V is not an Object, throw a TypeError exception.
-  if (!bce_->emitCheckIsObj(CheckIsObjectKind::Disposable)) {
-    //        [stack] VAL
-    return false;
-  }
-
-  // Step 1.b.ii. Set method to ? GetDisposeMethod(V, hint).
-  // Step 1.b.iii. If method is undefined, throw a TypeError exception.
-  if (!emitCheckDisposeMethod(symdispose)) {
-    //        [stack] VAL
-    return false;
-  }
-
-  if (!ifValueNullOrUndefined.emitEnd()) {
-    //        [stack] VAL
-    return false;
-  }
-
-  // Step 1.a.i. Set V to undefined.
-  // Step 3. Return the DisposableResource Record { [[ResourceValue]]: V,
-  //         [[Hint]]: hint, [[DisposeMethod]]: method }.
-  //
-  // AddDisposableResource ( disposeCapability, V, hint [ , method ] )
-  // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-adddisposableresource
-  // Step 3. Append resource to disposeCapability.[[DisposableResourceStack]].
-  // TODO: All the steps performed by the generated bytecode here would need to
-  // be unified into this AddDisposableResource opcode. (Bug 1899717)
-  if (!bce_->emit1(JSOp::AddDisposable)) {
-    //        [stack] VAL
+  if (!bce_->emit2(JSOp::DisposeDisposables,
+                   uint8_t(DisposeJumpKind::JumpOnError))) {
     return false;
   }
 

@@ -1126,8 +1126,15 @@ const BASE_MESSAGES = () => [
     frequency: {
       lifetime: 2,
     },
-    targeting:
-      "source == 'startup' && !isMajorUpgrade && !activeNotifications && !isDefaultBrowser && !willShowDefaultPrompt && 'browser.shell.checkDefaultBrowser'|preferenceValue && (currentDate|date - profileAgeCreated|date) / 86400000 >= 28 && userPrefs.cfrFeatures == true",
+    targeting: `source == 'startup'
+    && !isMajorUpgrade
+    && !activeNotifications
+    && !isDefaultBrowser
+    && !willShowDefaultPrompt
+    && 'browser.shell.checkDefaultBrowser'|preferenceValue
+    && (currentDate|date - profileAgeCreated|date) / 86400000 >= 28
+    && previousSessionEnd
+    && userPrefs.cfrFeatures == true`,
     trigger: {
       id: "defaultBrowserCheck",
     },
@@ -1202,8 +1209,16 @@ const BASE_MESSAGES = () => [
     frequency: {
       lifetime: 1,
     },
-    targeting:
-      "source == 'startup' && !isMajorUpgrade && !activeNotifications && !isDefaultBrowser && !willShowDefaultPrompt && 'browser.shell.checkDefaultBrowser'|preferenceValue && (currentDate|date - profileAgeCreated|date) / 86400000 <= 28 && (currentDate|date - profileAgeCreated|date) / 86400000 >= 7 && userPrefs.cfrFeatures == true",
+    targeting: `source == 'startup'
+    && !isMajorUpgrade
+    && !activeNotifications
+    && !isDefaultBrowser
+    && !willShowDefaultPrompt
+    && 'browser.shell.checkDefaultBrowser'|preferenceValue
+    && (currentDate|date - profileAgeCreated|date) / 86400000 <= 28
+    && (currentDate|date - profileAgeCreated|date) / 86400000 >= 7
+    && previousSessionEnd
+    && userPrefs.cfrFeatures == true`,
     trigger: {
       id: "defaultBrowserCheck",
     },
@@ -1307,6 +1322,20 @@ const BASE_MESSAGES = () => [
     targeting:
       "os.isWindows && os.windowsVersion >= 10.0 && os.windowsBuildNumber >= 22000",
     trigger: { id: "deeplinkedToWindowsSettingsUI" },
+  },
+  {
+    id: "FXA_ACCOUNTS_BADGE_REVISED",
+    template: "toolbar_badge",
+    content: {
+      delay: 1000,
+      target: "fxa-toolbar-menu-button",
+    },
+    skip_in_tests: "covered by browser_asrouter_toolbarbadge.js",
+    targeting:
+      "source == 'newtab' && !hasAccessedFxAPanel && !usesFirefoxSync && isFxAEnabled && !isFxASignedIn",
+    trigger: {
+      id: "defaultBrowserCheck",
+    },
   },
 ];
 

@@ -22,6 +22,10 @@ import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.compose.list.IconListItem
 import org.mozilla.fenix.theme.FirefoxTheme
 
+private val MENU_ITEM_HEIGHT_WITHOUT_DESC = 52.dp
+
+private val MENU_ITEM_HEIGHT_WITH_DESC = 56.dp
+
 /**
  * An [IconListItem] wrapper for menu items in a [MenuGroup] with an optional icon at the end.
  *
@@ -31,8 +35,12 @@ import org.mozilla.fenix.theme.FirefoxTheme
  * @param description An optional description text below the label.
  * @param state The state of the menu item to display.
  * @param onClick Invoked when the user clicks on the item.
+ * @param showDivider Whether or not to display a vertical divider line before the [IconButton]
+ * at the end.
  * @param afterIconPainter [Painter] used to display an [IconButton] after the list item.
  * @param afterIconDescription Content description of the icon.
+ * @param onAfterIconClick Invoked when the user clicks on the icon. An [IconButton] will be
+ * displayed if this is provided. Otherwise, an [Icon] will be displayed.
  */
 @Composable
 internal fun MenuItem(
@@ -42,8 +50,10 @@ internal fun MenuItem(
     description: String? = null,
     state: MenuItemState = MenuItemState.ENABLED,
     onClick: (() -> Unit)? = null,
+    showDivider: Boolean = false,
     afterIconPainter: Painter? = null,
     afterIconDescription: String? = null,
+    onAfterIconClick: (() -> Unit)? = null,
 ) {
     val labelTextColor = getLabelTextColor(state = state)
     val iconTint = getIconTint(state = state)
@@ -52,59 +62,23 @@ internal fun MenuItem(
     IconListItem(
         label = label,
         labelTextColor = labelTextColor,
+        maxLabelLines = 2,
         description = description,
         enabled = enabled,
+        minHeight = if (description != null) {
+            MENU_ITEM_HEIGHT_WITH_DESC
+        } else {
+            MENU_ITEM_HEIGHT_WITHOUT_DESC
+        },
         onClick = onClick,
         beforeIconPainter = beforeIconPainter,
         beforeIconDescription = beforeIconDescription,
         beforeIconTint = iconTint,
+        showDivider = showDivider,
         afterIconPainter = afterIconPainter,
         afterIconDescription = afterIconDescription,
         afterIconTint = iconTint,
-    )
-}
-
-/**
- * An [IconListItem] wrapper for menu items in a [MenuGroup] with an optional text button at the end.
- *
- * @param label The label in the menu item.
- * @param beforeIconPainter [Painter] used to display an [Icon] before the list item.
- * @param beforeIconDescription Content description of the icon.
- * @param description An optional description text below the label.
- * @param state The state of the menu item to display.
- * @param onClick Invoked when the user clicks on the item.
- * @param afterButtonText The button text to be displayed after the list item.
- * @param afterButtonTextColor [Color] to apply to [afterButtonText].
- * @param onAfterButtonClick Called when the user clicks on the text button.
- */
-@Composable
-internal fun MenuItem(
-    label: String,
-    beforeIconPainter: Painter,
-    beforeIconDescription: String? = null,
-    description: String? = null,
-    state: MenuItemState = MenuItemState.ENABLED,
-    onClick: (() -> Unit)? = null,
-    afterButtonText: String? = null,
-    afterButtonTextColor: Color = FirefoxTheme.colors.actionPrimary,
-    onAfterButtonClick: (() -> Unit)? = null,
-) {
-    val labelTextColor = getLabelTextColor(state = state)
-    val iconTint = getIconTint(state = state)
-    val enabled = state != MenuItemState.DISABLED
-
-    IconListItem(
-        label = label,
-        labelTextColor = labelTextColor,
-        description = description,
-        enabled = enabled,
-        onClick = onClick,
-        beforeIconPainter = beforeIconPainter,
-        beforeIconDescription = beforeIconDescription,
-        beforeIconTint = iconTint,
-        afterButtonText = afterButtonText,
-        afterButtonTextColor = afterButtonTextColor,
-        onAfterButtonClick = onAfterButtonClick,
+        onAfterIconClick = onAfterIconClick,
     )
 }
 
@@ -186,12 +160,13 @@ private fun MenuItemPreview() {
 
                 for (state in MenuItemState.entries) {
                     MenuItem(
-                        label = stringResource(id = R.string.library_bookmarks),
-                        beforeIconPainter = painterResource(id = R.drawable.mozac_ic_bookmark_tray_fill_24),
+                        label = stringResource(id = R.string.browser_menu_extensions),
+                        beforeIconPainter = painterResource(id = R.drawable.mozac_ic_extension_24),
                         state = state,
                         onClick = {},
-                        afterButtonText = stringResource(id = R.string.browser_menu_edit),
-                        onAfterButtonClick = {},
+                        showDivider = true,
+                        afterIconPainter = painterResource(id = R.drawable.mozac_ic_plus_24),
+                        onAfterIconClick = {},
                     )
 
                     Divider(color = FirefoxTheme.colors.borderSecondary)

@@ -47,14 +47,12 @@ export const WEBDRIVER_CLASSIC_CAPABILITIES = [
   "pageLoadStrategy",
   "strictFileInteractability",
   "timeouts",
-  "unhandledPromptBehavior",
   "webSocketUrl",
 
   // Gecko specific capabilities
   "moz:accessibilityChecks",
   "moz:debuggerAddress",
   "moz:firefoxOptions",
-  "moz:useNonSpecCompliantPointerOrigin",
   "moz:webdriverClick",
 
   // Extension capabilities
@@ -666,14 +664,6 @@ export class Capabilities extends Map {
         // of the Remote Agent's debugger (HTTP server).
         case "moz:debuggerAddress":
           continue;
-
-        case "moz:useNonSpecCompliantPointerOrigin":
-          if (v !== undefined) {
-            throw new lazy.error.InvalidArgumentError(
-              `Since Firefox 116 the capability ${k} is no longer supported`
-            );
-          }
-          break;
 
         case "moz:webdriverClick":
           lazy.assert.boolean(

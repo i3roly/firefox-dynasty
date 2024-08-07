@@ -31,7 +31,7 @@ SPHINX_TREES["resistfingerprinting"] = "docs"
 
 FINAL_LIBRARY = "xul"
 
-EXPORTS += ["nsRFPService.h", "RFPTargets.inc"]
+EXPORTS += ["nsRFPService.h", "nsUserCharacteristics.h", "RFPTargets.inc"]
 EXPORTS.mozilla += [
     "RelativeTimeline.h",
     "RFPTargetIPCUtils.h",
@@ -58,6 +58,14 @@ XPIDL_SOURCES += [
 ]
 
 include("/ipc/chromium/chromium-config.mozbuild")
+
+if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+    CXXFLAGS += CONFIG["MOZ_GTK3_CFLAGS"]
+    CFLAGS += CONFIG["MOZ_GTK3_CFLAGS"]
+
+if CONFIG["MOZ_WAYLAND"]:
+    CFLAGS += CONFIG["MOZ_WAYLAND_CFLAGS"]
+    CXXFLAGS += CONFIG["MOZ_WAYLAND_CFLAGS"]
 
 GeneratedFile(
     "RFPTargetConstants.sys.mjs",

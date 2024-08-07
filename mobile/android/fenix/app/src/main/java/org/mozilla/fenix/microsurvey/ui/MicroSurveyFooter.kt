@@ -30,19 +30,19 @@ import org.mozilla.fenix.theme.FirefoxTheme
  *
  * @param isSubmitted Whether the user has "Submitted" the survey or not.
  * @param isContentAnswerSelected Whether the user clicked on one of the answers or not.
- * @param onLinkClick Invoked when the link is clicked.
+ * @param onPrivacyPolicyLinkClick Invoked when the privacy policy link is clicked.
  * @param onButtonClick Invoked when the "Submit"/"Close" button is clicked.
  */
 @Composable
 fun MicroSurveyFooter(
     isSubmitted: Boolean,
     isContentAnswerSelected: Boolean,
-    onLinkClick: () -> Unit,
+    onPrivacyPolicyLinkClick: () -> Unit,
     onButtonClick: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
     ) {
         if (!isSubmitted) {
             PrimaryButton(
@@ -60,9 +60,7 @@ fun MicroSurveyFooter(
                 LinkTextState(
                     text = stringResource(id = R.string.micro_survey_privacy_notice_2),
                     url = "",
-                    onClick = {
-                        onLinkClick()
-                    },
+                    onClick = { onPrivacyPolicyLinkClick() },
                 ),
             ),
             style = FirefoxTheme.typography.caption,
@@ -85,21 +83,21 @@ private fun ReviewQualityCheckFooterPreview() {
             MicroSurveyFooter(
                 isSubmitted = false,
                 isContentAnswerSelected = false,
-                onLinkClick = {},
+                onPrivacyPolicyLinkClick = {},
                 onButtonClick = {},
             )
 
             MicroSurveyFooter(
                 isSubmitted = false,
                 isContentAnswerSelected = true,
-                onLinkClick = {},
+                onPrivacyPolicyLinkClick = {},
                 onButtonClick = {},
             )
 
             MicroSurveyFooter(
                 isSubmitted = true,
                 isContentAnswerSelected = true,
-                onLinkClick = {},
+                onPrivacyPolicyLinkClick = {},
                 onButtonClick = {},
             )
         }

@@ -73,6 +73,7 @@ nsDocShellLoadState::nsDocShellLoadState(
   mInternalLoadFlags = aLoadState.InternalLoadFlags();
   mFirstParty = aLoadState.FirstParty();
   mHasValidUserGestureActivation = aLoadState.HasValidUserGestureActivation();
+  mTextDirectiveUserActivation = aLoadState.TextDirectiveUserActivation();
   mAllowFocusMove = aLoadState.AllowFocusMove();
   mTypeHint = aLoadState.TypeHint();
   mFileName = aLoadState.FileName();
@@ -91,6 +92,7 @@ nsDocShellLoadState::nsDocShellLoadState(
   mTriggeringStorageAccess = aLoadState.TriggeringStorageAccess();
   mTriggeringRemoteType = aLoadState.TriggeringRemoteType();
   mWasSchemelessInput = aLoadState.WasSchemelessInput();
+  mHttpsUpgradeTelemetry = aLoadState.HttpsUpgradeTelemetry();
   mCsp = aLoadState.Csp();
   mOriginalURIString = aLoadState.OriginalURIString();
   mCancelContentJSEpoch = aLoadState.CancelContentJSEpoch();
@@ -182,6 +184,7 @@ nsDocShellLoadState::nsDocShellLoadState(const nsDocShellLoadState& aOther)
       mInternalLoadFlags(aOther.mInternalLoadFlags),
       mFirstParty(aOther.mFirstParty),
       mHasValidUserGestureActivation(aOther.mHasValidUserGestureActivation),
+      mTextDirectiveUserActivation(aOther.mTextDirectiveUserActivation),
       mAllowFocusMove(aOther.mAllowFocusMove),
       mTypeHint(aOther.mTypeHint),
       mFileName(aOther.mFileName),
@@ -196,7 +199,8 @@ nsDocShellLoadState::nsDocShellLoadState(const nsDocShellLoadState& aOther)
       mUnstrippedURI(aOther.mUnstrippedURI),
       mRemoteTypeOverride(aOther.mRemoteTypeOverride),
       mTriggeringRemoteType(aOther.mTriggeringRemoteType),
-      mWasSchemelessInput(aOther.mWasSchemelessInput) {
+      mWasSchemelessInput(aOther.mWasSchemelessInput),
+      mHttpsUpgradeTelemetry(aOther.mHttpsUpgradeTelemetry) {
   MOZ_DIAGNOSTIC_ASSERT(
       XRE_IsParentProcess(),
       "Cloning a nsDocShellLoadState with the same load identifier is only "
@@ -242,6 +246,11 @@ nsDocShellLoadState::nsDocShellLoadState(nsIURI* aURI, uint64_t aLoadIdentifier)
                                 : NOT_REMOTE_TYPE),
       mWasSchemelessInput(false) {
   MOZ_ASSERT(aURI, "Cannot create a LoadState with a null URI!");
+  if (aURI->SchemeIs("https")) {
+    mHttpsUpgradeTelemetry = nsILoadInfo::ALREADY_HTTPS;
+  } else {
+    mHttpsUpgradeTelemetry = nsILoadInfo::NO_UPGRADE;
+  }
 }
 
 nsDocShellLoadState::~nsDocShellLoadState() {
@@ -453,6 +462,8 @@ nsresult nsDocShellLoadState::CreateFromLoadURIOptions(
   loadState->SetFirstParty(true);
   loadState->SetHasValidUserGestureActivation(
       aLoadURIOptions.mHasValidUserGestureActivation);
+  loadState->SetTextDirectiveUserActivation(
+      aLoadURIOptions.mTextDirectiveUserActivation);
   loadState->SetTriggeringSandboxFlags(aLoadURIOptions.mTriggeringSandboxFlags);
   loadState->SetTriggeringWindowId(aLoadURIOptions.mTriggeringWindowId);
   loadState->SetTriggeringStorageAccess(
@@ -900,6 +911,15 @@ void nsDocShellLoadState::SetHasValidUserGestureActivation(
   mHasValidUserGestureActivation = aHasValidUserGestureActivation;
 }
 
+void nsDocShellLoadState::SetTextDirectiveUserActivation(
+    bool aTextDirectiveUserActivation) {
+  mTextDirectiveUserActivation = aTextDirectiveUserActivation;
+}
+
+bool nsDocShellLoadState::GetTextDirectiveUserActivation() {
+  return mTextDirectiveUserActivation;
+}
+
 const nsCString& nsDocShellLoadState::TypeHint() const { return mTypeHint; }
 
 void nsDocShellLoadState::SetTypeHint(const nsCString& aTypeHint) {
@@ -1291,6 +1311,7 @@ DocShellLoadStateInit nsDocShellLoadState::Serialize(
   loadState.InternalLoadFlags() = mInternalLoadFlags;
   loadState.FirstParty() = mFirstParty;
   loadState.HasValidUserGestureActivation() = mHasValidUserGestureActivation;
+  loadState.TextDirectiveUserActivation() = mTextDirectiveUserActivation;
   loadState.AllowFocusMove() = mAllowFocusMove;
   loadState.TypeHint() = mTypeHint;
   loadState.FileName() = mFileName;
@@ -1308,6 +1329,7 @@ DocShellLoadStateInit nsDocShellLoadState::Serialize(
   loadState.TriggeringStorageAccess() = mTriggeringStorageAccess;
   loadState.TriggeringRemoteType() = mTriggeringRemoteType;
   loadState.WasSchemelessInput() = mWasSchemelessInput;
+  loadState.HttpsUpgradeTelemetry() = mHttpsUpgradeTelemetry;
   loadState.Csp() = mCsp;
   loadState.OriginalURIString() = mOriginalURIString;
   loadState.CancelContentJSEpoch() = mCancelContentJSEpoch;

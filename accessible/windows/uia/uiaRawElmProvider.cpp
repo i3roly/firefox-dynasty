@@ -13,6 +13,7 @@
 #include "AccessibleWrap.h"
 #include "ApplicationAccessible.h"
 #include "ARIAMap.h"
+#include "ia2AccessibleHypertext.h"
 #include "ia2AccessibleTable.h"
 #include "ia2AccessibleTableCell.h"
 #include "LocalAccessible-inl.h"
@@ -154,8 +155,13 @@ void uiaRawElmProvider::RaiseUiaEventForGeckoEvent(Accessible* aAcc,
     case nsIAccessibleEvent::EVENT_SELECTION_WITHIN:
       ::UiaRaiseAutomationEvent(uia, UIA_Selection_InvalidatedEventId);
       return;
+    case nsIAccessibleEvent::EVENT_TEXT_CARET_MOVED:
+    case nsIAccessibleEvent::EVENT_TEXT_SELECTION_CHANGED:
+      ::UiaRaiseAutomationEvent(uia, UIA_Text_TextSelectionChangedEventId);
+      return;
     case nsIAccessibleEvent::EVENT_TEXT_INSERTED:
     case nsIAccessibleEvent::EVENT_TEXT_REMOVED:
+      ::UiaRaiseAutomationEvent(uia, UIA_Text_TextChangedEventId);
       MaybeRaiseUiaLiveRegionEvent(aAcc, aGeckoEvent);
       return;
     case nsIAccessibleEvent::EVENT_TEXT_VALUE_CHANGE:
@@ -433,6 +439,20 @@ uiaRawElmProvider::GetPatternProvider(
         item.forget(aPatternProvider);
       }
       return S_OK;
+    case UIA_TextPatternId: {
+      // Only documents and editable text controls should have the Text pattern.
+      // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-textpattern-and-embedded-objects-overview#webpage-and-text-input-controls-in-edge
+      constexpr uint64_t editableRootStates =
+          states::EDITABLE | states::FOCUSABLE;
+      if (acc->IsDoc() ||
+          (acc->IsHyperText() &&
+           (acc->State() & editableRootStates) == editableRootStates)) {
+        auto text =
+            GetPatternFromDerived<ia2AccessibleHypertext, ITextProvider>();
+        text.forget(aPatternProvider);
+      }
+      return S_OK;
+    }
     case UIA_TogglePatternId:
       if (HasTogglePattern()) {
         RefPtr<IToggleProvider> toggle = this;

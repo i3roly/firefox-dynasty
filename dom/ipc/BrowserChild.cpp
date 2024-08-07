@@ -84,6 +84,7 @@
 #include "nsDeviceContext.h"
 #include "nsDocShell.h"
 #include "nsDocShellLoadState.h"
+#include "nsDragServiceProxy.h"
 #include "nsExceptionHandler.h"
 #include "nsFilePickerProxy.h"
 #include "nsFocusManager.h"
@@ -112,6 +113,7 @@
 #include "nsRefreshDriver.h"
 #include "nsThreadManager.h"
 #include "nsThreadUtils.h"
+#include "nsVariant.h"
 #include "nsViewManager.h"
 #include "nsWebBrowser.h"
 #include "nsWindowWatcher.h"
@@ -501,6 +503,7 @@ NS_IMPL_CYCLE_COLLECTION_TRACE_BEGIN(BrowserChild)
 NS_IMPL_CYCLE_COLLECTION_TRACE_END
 
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(BrowserChild)
+  NS_INTERFACE_MAP_ENTRY_CONCRETE(BrowserChild)
   NS_INTERFACE_MAP_ENTRY(nsIWebBrowserChrome)
   NS_INTERFACE_MAP_ENTRY(nsIInterfaceRequestor)
   NS_INTERFACE_MAP_ENTRY(nsIWindowProvider)
@@ -1596,10 +1599,24 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealMouseButtonEvent(
   return IPC_OK();
 }
 
+mozilla::ipc::IPCResult BrowserChild::RecvRealPointerButtonEvent(
+    const WidgetPointerEvent& aEvent, const ScrollableLayerGuid& aGuid,
+    const uint64_t& aInputBlockId) {
+  return RecvRealMouseButtonEvent(aEvent, aGuid, aInputBlockId);
+}
+
 void BrowserChild::HandleRealMouseButtonEvent(const WidgetMouseEvent& aEvent,
                                               const ScrollableLayerGuid& aGuid,
                                               const uint64_t& aInputBlockId) {
-  WidgetMouseEvent localEvent(aEvent);
+  Maybe<WidgetPointerEvent> pointerEvent;
+  Maybe<WidgetMouseEvent> mouseEvent;
+  if (aEvent.mClass == ePointerEventClass) {
+    pointerEvent.emplace(aEvent);
+  } else {
+    mouseEvent.emplace(aEvent);
+  }
+  WidgetMouseEvent& localEvent =
+      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
   localEvent.mWidget = mPuppetWidget;
 
   // We need one InputAPZContext here to propagate |aGuid| to places in
@@ -1645,6 +1662,12 @@ mozilla::ipc::IPCResult BrowserChild::RecvNormalPriorityRealMouseButtonEvent(
     const WidgetMouseEvent& aEvent, const ScrollableLayerGuid& aGuid,
     const uint64_t& aInputBlockId) {
   return RecvRealMouseButtonEvent(aEvent, aGuid, aInputBlockId);
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvNormalPriorityRealPointerButtonEvent(
+    const WidgetPointerEvent& aEvent, const ScrollableLayerGuid& aGuid,
+    const uint64_t& aInputBlockId) {
+  return RecvNormalPriorityRealMouseButtonEvent(aEvent, aGuid, aInputBlockId);
 }
 
 mozilla::ipc::IPCResult BrowserChild::RecvRealMouseEnterExitWidgetEvent(
@@ -1872,7 +1895,7 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
   WidgetDragEvent localEvent(aEvent);
   localEvent.mWidget = mPuppetWidget;
 
-  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
   if (dragSession) {
     dragSession->SetDragAction(aDragAction);
     dragSession->SetTriggeringPrincipal(aPrincipal);
@@ -1890,16 +1913,117 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
       localEvent.mMessage = eDragExit;
     }
   } else if (aEvent.mMessage == eDragOver) {
-    nsCOMPtr<nsIDragService> dragService =
-        do_GetService("@mozilla.org/widget/dragservice;1");
-    if (dragService) {
+    if (dragSession) {
       // This will dispatch 'drag' event at the source if the
       // drag transaction started in this process.
-      dragService->FireDragEventAtSource(eDrag, aEvent.mModifiers);
+      dragSession->FireDragEventAtSource(eDrag, aEvent.mModifiers);
     }
   }
 
   DispatchWidgetEventViaAPZ(localEvent);
+
+  if (aEvent.mMessage == eDragLeave || aEvent.mMessage == eDragExit) {
+    // If session is still active, remove its target.
+    dragSession = GetDragSession();
+    if (dragSession) {
+      static_cast<nsDragSessionProxy*>(dragSession.get())
+          ->SetDragTarget(nullptr);
+    }
+  }
+  return IPC_OK();
+}
+
+static already_AddRefed<DataTransfer> ConvertToDataTransfer(
+    nsTArray<IPCTransferableData>&& aTransferables, EventMessage aMessage) {
+  // Check if we are receiving any file objects. If we are we will want
+  // to hide any of the other objects coming in from content.
+  bool hasFiles = false;
+  for (uint32_t i = 0; i < aTransferables.Length() && !hasFiles; ++i) {
+    auto& items = aTransferables[i].items();
+    for (uint32_t j = 0; j < items.Length() && !hasFiles; ++j) {
+      if (items[j].data().type() ==
+          IPCTransferableDataType::TIPCTransferableDataBlob) {
+        hasFiles = true;
+      }
+    }
+  }
+  // Add the entries from the IPC to the new DataTransfer
+  RefPtr<DataTransfer> dataTransfer =
+      new DataTransfer(nullptr, aMessage, false, -1);
+  for (uint32_t i = 0; i < aTransferables.Length(); ++i) {
+    auto& items = aTransferables[i].items();
+    for (uint32_t j = 0; j < items.Length(); ++j) {
+      const IPCTransferableDataItem& item = items[j];
+      RefPtr<nsVariantCC> variant = new nsVariantCC();
+      nsresult rv =
+          nsContentUtils::IPCTransferableDataItemToVariant(item, variant);
+      if (NS_FAILED(rv)) {
+        continue;
+      }
+
+      // We should hide this data from content if we have a file, and we
+      // aren't a file.
+      bool hidden =
+          hasFiles && item.data().type() !=
+                          IPCTransferableDataType::TIPCTransferableDataBlob;
+      dataTransfer->SetDataWithPrincipalFromOtherProcess(
+          NS_ConvertUTF8toUTF16(item.flavor()), variant, i,
+          nsContentUtils::GetSystemPrincipal(), hidden);
+    }
+  }
+  return dataTransfer.forget();
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvInvokeChildDragSession(
+    const MaybeDiscarded<WindowContext>& aSourceWindowContext,
+    const MaybeDiscarded<WindowContext>& aSourceTopWindowContext,
+    nsTArray<IPCTransferableData>&& aTransferables, const uint32_t& aAction) {
+  if (nsCOMPtr<nsIDragService> dragService =
+          do_GetService("@mozilla.org/widget/dragservice;1")) {
+    nsIWidget* widget = WebWidget();
+    dragService->StartDragSession(widget);
+    if (RefPtr<nsIDragSession> session = GetDragSession()) {
+      session->SetSourceWindowContext(aSourceWindowContext.GetMaybeDiscarded());
+      session->SetSourceTopWindowContext(
+          aSourceTopWindowContext.GetMaybeDiscarded());
+      session->SetDragAction(aAction);
+
+      RefPtr<DataTransfer> dataTransfer =
+          ConvertToDataTransfer(std::move(aTransferables), eDragStart);
+      session->SetDataTransfer(dataTransfer);
+    }
+  }
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvUpdateDragSession(
+    nsTArray<IPCTransferableData>&& aTransferables,
+    EventMessage aEventMessage) {
+  if (RefPtr<nsIDragSession> session = GetDragSession()) {
+    nsCOMPtr<DataTransfer> dataTransfer =
+        ConvertToDataTransfer(std::move(aTransferables), aEventMessage);
+    session->SetDataTransfer(dataTransfer);
+  }
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvEndDragSession(
+    const bool& aDoneDrag, const bool& aUserCancelled,
+    const LayoutDeviceIntPoint& aDragEndPoint, const uint32_t& aKeyModifiers,
+    const uint32_t& aDropEffect) {
+  RefPtr<nsIDragSession> dragSession = GetDragSession();
+  if (dragSession) {
+    if (aUserCancelled) {
+      dragSession->UserCancelled();
+    }
+
+    RefPtr<DataTransfer> dataTransfer = dragSession->GetDataTransfer();
+    if (dataTransfer) {
+      dataTransfer->SetDropEffectInt(aDropEffect);
+    }
+    dragSession->SetDragEndPoint(aDragEndPoint.x, aDragEndPoint.y);
+    dragSession->EndDragSession(aDoneDrag, aKeyModifiers);
+  }
   return IPC_OK();
 }
 
@@ -3773,6 +3897,14 @@ BrowserChild::ContentTransformsReceived(JSContext* aCx,
   MOZ_ASSERT(globalObject == mContentTransformPromise->GetGlobalObject());
   NS_IF_ADDREF(*aPromise = mContentTransformPromise);
   return rv.StealNSResult();
+}
+
+already_AddRefed<nsIDragSession> BrowserChild::GetDragSession() {
+  return RefPtr(mDragSession).forget();
+}
+
+void BrowserChild::SetDragSession(nsIDragSession* aSession) {
+  mDragSession = aSession;
 }
 
 BrowserChildMessageManager::BrowserChildMessageManager(

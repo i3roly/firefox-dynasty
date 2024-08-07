@@ -98,6 +98,7 @@
 #include "mozilla/dom/BindingUtils.h"
 #include "mozilla/dom/BrowserChild.h"
 #include "mozilla/dom/BrowsingContext.h"
+#include "mozilla/dom/Credential.h"
 #include "mozilla/dom/CSPEvalChecker.h"
 #include "mozilla/dom/CallbackDebuggerNotification.h"
 #include "mozilla/dom/ChromeMessageBroadcaster.h"
@@ -606,7 +607,7 @@ nsresult IdleRequestExecutor::Cancel() {
   MOZ_ASSERT(NS_IsMainThread());
 
   if (mDelayedExecutorHandle && mWindow) {
-    mWindow->TimeoutManager().ClearTimeout(
+    mWindow->GetTimeoutManager()->ClearTimeout(
         mDelayedExecutorHandle.value(), Timeout::Reason::eIdleCallbackTimeout);
   }
 
@@ -671,7 +672,7 @@ void IdleRequestExecutor::DelayedDispatch(uint32_t aDelay) {
   MOZ_ASSERT(mWindow);
   MOZ_ASSERT(mDelayedExecutorHandle.isNothing());
   int32_t handle;
-  mWindow->TimeoutManager().SetTimeout(
+  mWindow->GetTimeoutManager()->SetTimeout(
       mDelayedExecutorDispatcher, aDelay, false,
       Timeout::Reason::eIdleCallbackTimeout, &handle);
   mDelayedExecutorHandle = Some(handle);
@@ -2773,12 +2774,12 @@ bool nsPIDOMWindowInner::IsPlayingAudio() {
 
 bool nsPIDOMWindowInner::IsDocumentLoaded() const { return mIsDocumentLoaded; }
 
-mozilla::dom::TimeoutManager& nsPIDOMWindowInner::TimeoutManager() {
-  return *mTimeoutManager;
+mozilla::dom::TimeoutManager* nsGlobalWindowInner::GetTimeoutManager() {
+  return mTimeoutManager.get();
 }
 
-bool nsPIDOMWindowInner::IsRunningTimeout() {
-  return TimeoutManager().IsRunningTimeout();
+bool nsGlobalWindowInner::IsRunningTimeout() {
+  return GetTimeoutManager()->IsRunningTimeout();
 }
 
 void nsPIDOMWindowInner::TryToCacheTopInnerWindow() {
@@ -3639,6 +3640,25 @@ bool nsGlobalWindowInner::GetFullScreen() {
   bool fullscreen = GetFullScreen(dummy);
   dummy.SuppressException();
   return fullscreen;
+}
+
+void nsGlobalWindowInner::MaybeResolvePendingCredentialPromise(
+    const RefPtr<mozilla::dom::Credential>& aCredential) {
+  if (!mPendingCredential) {
+    // If we don't have a pending promise, that is okay.
+    return;
+  }
+  mPendingCredential->MaybeResolve(aCredential);
+  mPendingCredential = nullptr;
+}
+
+nsresult nsGlobalWindowInner::SetPendingCredentialPromise(
+    const RefPtr<mozilla::dom::Promise>& aPromise) {
+  if (mPendingCredential) {
+    return nsresult::NS_ERROR_DOM_INVALID_STATE_ERR;
+  }
+  mPendingCredential = aPromise;
+  return NS_OK;
 }
 
 void nsGlobalWindowInner::Dump(const nsAString& aStr) {
@@ -5781,6 +5801,8 @@ void nsGlobalWindowInner::UpdateBackgroundState() {
     devices->BackgroundStateChanged();
   }
   mTimeoutManager->UpdateBackgroundState();
+
+  UpdateWorkersBackgroundState(*this, IsBackgroundInternal());
 }
 
 template <typename Method, typename... Args>
@@ -7639,7 +7661,7 @@ void nsGlobalWindowInner::SetCurrentPasteDataTransfer(
   MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->GetEventMessage() == ePaste);
   MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->ClipboardType() ==
                                    nsIClipboard::kGlobalClipboard);
-  MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->GetAsyncGetClipboardData());
+  MOZ_ASSERT_IF(aDataTransfer, aDataTransfer->GetClipboardDataSnapshot());
   mCurrentPasteDataTransfer = aDataTransfer;
 }
 

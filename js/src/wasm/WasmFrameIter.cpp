@@ -305,17 +305,21 @@ void WasmFrameIter::popFrame() {
 
 const char* WasmFrameIter::filename() const {
   MOZ_ASSERT(!done());
-  return code_->metadata().filename.get();
+  return code_->codeMeta().filename.get();
 }
 
 const char16_t* WasmFrameIter::displayURL() const {
   MOZ_ASSERT(!done());
-  return code_->metadata().displayURL();
+  return code_->codeMetaForAsmJS()
+             ? code_->codeMetaForAsmJS()->displayURL()  // asm.js
+             : nullptr;                                 // wasm
 }
 
 bool WasmFrameIter::mutedErrors() const {
   MOZ_ASSERT(!done());
-  return code_->metadata().mutedErrors();
+  return code_->codeMetaForAsmJS()
+             ? code_->codeMetaForAsmJS()->mutedErrors()  // asm.js
+             : false;                                    // wasm
 }
 
 JSAtom* WasmFrameIter::functionDisplayAtom() const {
@@ -374,7 +378,7 @@ bool WasmFrameIter::debugEnabled() const {
   // Metadata::debugEnabled is only set if debugging is actually enabled (both
   // requested, and available via baseline compilation), and Tier::Debug code
   // will be available.
-  if (!code_->metadata().debugEnabled) {
+  if (!code_->codeMeta().debugEnabled) {
     return false;
   }
 
@@ -385,8 +389,7 @@ bool WasmFrameIter::debugEnabled() const {
   }
 
   // Only non-imported functions can have debug frames.
-  if (codeRange_->funcIndex() <
-      code_->metadata(Tier::Debug).funcImports.length()) {
+  if (codeRange_->funcIndex() < code_->funcImports().length()) {
     return false;
   }
 
@@ -459,7 +462,7 @@ static const unsigned BeforePushRetAddr = 0;
 static const unsigned PushedRetAddr = 8;
 static const unsigned PushedFP = 12;
 static const unsigned SetFP = 16;
-static const unsigned PoppedFP = 4;
+static const unsigned PoppedFP = 8;
 static const unsigned PoppedFPJitEntry = 8;
 static_assert(BeforePushRetAddr == 0, "Required by StartUnwinding");
 static_assert(PushedFP > PushedRetAddr, "Required by StartUnwinding");
@@ -671,12 +674,10 @@ static void GenerateCallableEpilogue(MacroAssembler& masm, unsigned framePushed,
 
   AutoForbidPoolsAndNops afp(&masm, /* number of instructions in scope = */ 5);
 
+  masm.Ldr(ARMRegister(lr, 64), MemOperand(sp, Frame::returnAddressOffset()));
   masm.Ldr(ARMRegister(FramePointer, 64),
            MemOperand(sp, Frame::callerFPOffset()));
   poppedFP = masm.currentOffset();
-
-  masm.Ldr(ARMRegister(lr, 64), MemOperand(sp, Frame::returnAddressOffset()));
-  *ret = masm.currentOffset();
 
   masm.Add(sp, sp, sizeof(Frame));
 
@@ -686,6 +687,7 @@ static void GenerateCallableEpilogue(MacroAssembler& masm, unsigned framePushed,
   // use it.  Hence we have to do it "by hand".
   masm.Mov(PseudoStackPointer64, vixl::sp);
 
+  *ret = masm.currentOffset();
   masm.Ret(ARMRegister(lr, 64));
 
   // See comment at equivalent place in |GenerateCallablePrologue| above.
@@ -1181,18 +1183,14 @@ static bool CanUnwindSignatureCheck(uint8_t* fp) {
   return code && !codeRange->isEntry();
 }
 
-static bool GetUnwindInfo(const CodeSegment* codeSegment,
+static bool GetUnwindInfo(const CodeBlock* codeBlock,
                           const CodeRange* codeRange, uint8_t* pc,
                           const CodeRangeUnwindInfo** info) {
-  if (!codeSegment->isModule()) {
-    return false;
-  }
   if (!codeRange->isFunction() || !codeRange->funcHasUnwindInfo()) {
     return false;
   }
 
-  const ModuleSegment* segment = codeSegment->asModule();
-  *info = segment->code().lookupUnwindInfo(pc);
+  *info = codeBlock->code->lookupUnwindInfo(pc);
   return *info;
 }
 
@@ -1249,13 +1247,13 @@ bool js::wasm::StartUnwinding(const RegisterState& registers,
   // thunk, then execution must be entering from or leaving to the C++ caller
   // that pushed the JitActivation.
   const CodeRange* codeRange;
-  uint8_t* codeBase;
+  const uint8_t* codeBase;
   const Code* code = nullptr;
 
-  const CodeSegment* codeSegment = LookupCodeSegment(pc, &codeRange);
-  if (codeSegment) {
-    code = &codeSegment->code();
-    codeBase = codeSegment->base();
+  const CodeBlock* codeBlock = LookupCodeBlock(pc, &codeRange);
+  if (codeBlock) {
+    code = codeBlock->code;
+    codeBase = codeBlock->segment->base();
     MOZ_ASSERT(codeRange);
   } else if (!LookupBuiltinThunk(pc, &codeRange, &codeBase)) {
     return false;
@@ -1427,7 +1425,7 @@ bool js::wasm::StartUnwinding(const RegisterState& registers,
         // been restored so several cases can be coalesced here.
       } else if (offsetInCode >= codeRange->ret() - PoppedFP &&
                  offsetInCode <= codeRange->ret()) {
-        fixedPC = Frame::fromUntaggedWasmExitFP(sp)->returnAddress();
+        fixedPC = (uint8_t*)registers.lr;
         fixedFP = fp;
         AssertMatchesCallSite(fixedPC, fixedFP);
 #else
@@ -1456,8 +1454,7 @@ bool js::wasm::StartUnwinding(const RegisterState& registers,
         }
 
         const CodeRangeUnwindInfo* unwindInfo;
-        if (codeSegment &&
-            GetUnwindInfo(codeSegment, codeRange, pc, &unwindInfo)) {
+        if (codeBlock && GetUnwindInfo(codeBlock, codeRange, pc, &unwindInfo)) {
           switch (unwindInfo->unwindHow()) {
             case CodeRangeUnwindInfo::RestoreFpRa:
               fixedPC = (uint8_t*)registers.tempRA;

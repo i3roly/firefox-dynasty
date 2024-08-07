@@ -14,6 +14,8 @@ import { createLocation } from "./../../utils/location";
 import { getIndentation } from "../../utils/indentation";
 import { isWasm } from "../../utils/wasm";
 import { features } from "../../utils/prefs";
+import { markerTypes } from "../../constants";
+import { asSettled, isFulfilled, isRejected } from "../../utils/async-value";
 
 import {
   getActiveSearch,
@@ -56,8 +58,6 @@ import {
   setDocument,
   resetLineNumberFormat,
   getEditor,
-  getCursorLine,
-  getCursorColumn,
   lineAtHeight,
   toSourceLine,
   getDocument,
@@ -241,7 +241,21 @@ class Editor extends PureComponent {
     } else {
       editor.setUpdateListener(this.onEditorUpdated);
       editor.setGutterEventListeners({
-        click: (event, cm, line) => this.onGutterClick(cm, line, null, event),
+        click: (event, cm, line) => {
+          // Ignore clicks on the code folding button
+          if (
+            event.target.className.includes("cm6-dt-foldgutter__toggle-button")
+          ) {
+            return;
+          }
+          // Clicking any where on the fold gutter (except on a code folding button)
+          // should toggle the breakpoint for this line, if possible.
+          if (event.target.className.includes("cm-foldGutter")) {
+            this.props.toggleBreakpointAtLine(line);
+            return;
+          }
+          this.onGutterClick(cm, line, null, event);
+        },
         contextmenu: (event, cm, line) => this.openMenu(event, line),
       });
       editor.addEditorDOMEventListeners({
@@ -256,27 +270,22 @@ class Editor extends PureComponent {
   }
 
   componentDidMount() {
-    if (!features.codemirrorNext) {
-      const { shortcuts } = this.context;
+    const { shortcuts } = this.context;
 
-      shortcuts.on(
-        L10N.getStr("toggleBreakpoint.key"),
-        this.onToggleBreakpoint
-      );
-      shortcuts.on(
-        L10N.getStr("toggleCondPanel.breakpoint.key"),
-        this.onToggleConditionalPanel
-      );
-      shortcuts.on(
-        L10N.getStr("toggleCondPanel.logPoint.key"),
-        this.onToggleConditionalPanel
-      );
-      shortcuts.on(
-        L10N.getStr("sourceTabs.closeTab.key"),
-        this.onCloseShortcutPress
-      );
-      shortcuts.on("Esc", this.onEscape);
-    }
+    shortcuts.on(L10N.getStr("toggleBreakpoint.key"), this.onToggleBreakpoint);
+    shortcuts.on(
+      L10N.getStr("toggleCondPanel.breakpoint.key"),
+      this.onToggleConditionalPanel
+    );
+    shortcuts.on(
+      L10N.getStr("toggleCondPanel.logPoint.key"),
+      this.onToggleLogPanel
+    );
+    shortcuts.on(
+      L10N.getStr("sourceTabs.closeTab.key"),
+      this.onCloseShortcutPress
+    );
+    shortcuts.on("Esc", this.onEscape);
   }
 
   onCloseShortcutPress = e => {
@@ -314,7 +323,7 @@ class Editor extends PureComponent {
       if (shouldUpdateBreakableLines) {
         editor.setLineGutterMarkers([
           {
-            id: "empty-line-marker",
+            id: markerTypes.EMPTY_LINE_MARKER,
             lineClassName: "empty-line",
             condition: line => {
               const lineNumber = fromEditorLine(
@@ -328,45 +337,63 @@ class Editor extends PureComponent {
         ]);
       }
 
-      function condition(line) {
-        const lineNumber = fromEditorLine(selectedSource.id, line);
-
-        return isLineBlackboxed(
-          blackboxedRanges[selectedSource.url],
-          lineNumber,
-          isSourceOnIgnoreList
-        );
-      }
-
       editor.setLineGutterMarkers([
         {
-          id: "blackboxed-line-gutter-marker",
+          id: markerTypes.BLACKBOX_LINE_GUTTER_MARKER,
           lineClassName: "blackboxed-line",
-          condition,
+          condition: line => {
+            const lineNumber = fromEditorLine(selectedSource.id, line);
+            return isLineBlackboxed(
+              blackboxedRanges[selectedSource.url],
+              lineNumber,
+              isSourceOnIgnoreList
+            );
+          },
         },
       ]);
-      editor.setLineContentMarker({
-        id: "blackboxed-line-marker",
-        lineClassName: "blackboxed-line",
-        condition,
-      });
+
+      if (
+        prevProps.selectedSource?.id !== selectedSource.id ||
+        prevProps.blackboxedRanges[selectedSource.url]?.length !==
+          blackboxedRanges[selectedSource.url]?.length ||
+        (!prevState.editor && !!editor)
+      ) {
+        if (blackboxedRanges[selectedSource.url] == undefined) {
+          editor.removeLineContentMarker(markerTypes.BLACKBOX_LINE_MARKER);
+          return;
+        }
+
+        const lines = [];
+        for (const range of blackboxedRanges[selectedSource.url]) {
+          for (let i = range.start.line; i <= range.end.line; i++) {
+            lines.push(i);
+          }
+        }
+
+        editor.setLineContentMarker({
+          id: markerTypes.BLACKBOX_LINE_MARKER,
+          lineClassName: "blackboxed-line",
+          // If the the whole source is blackboxed, lets just mark all positions.
+          shouldMarkAllLines: !blackboxedRanges[selectedSource.url].length,
+          lines,
+        });
+      }
     }
   }
 
   componentWillUnmount() {
     const { editor } = this.state;
-    if (!features.codemirrorNext) {
-      const { shortcuts } = this.context;
-      shortcuts.off(L10N.getStr("sourceTabs.closeTab.key"));
-      shortcuts.off(L10N.getStr("toggleBreakpoint.key"));
-      shortcuts.off(L10N.getStr("toggleCondPanel.breakpoint.key"));
-      shortcuts.off(L10N.getStr("toggleCondPanel.logPoint.key"));
+    const { shortcuts } = this.context;
+    shortcuts.off(L10N.getStr("sourceTabs.closeTab.key"));
+    shortcuts.off(L10N.getStr("toggleBreakpoint.key"));
+    shortcuts.off(L10N.getStr("toggleCondPanel.breakpoint.key"));
+    shortcuts.off(L10N.getStr("toggleCondPanel.logPoint.key"));
 
-      if (this.abortController) {
-        this.abortController.abort();
-        this.abortController = null;
-      }
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
     }
+
     if (editor) {
       if (!features.codemirrorNext) {
         editor.codeMirror.off("scroll", this.onEditorScroll);
@@ -376,33 +403,46 @@ class Editor extends PureComponent {
     }
   }
 
-  getCurrentLine() {
-    const { codeMirror } = this.state.editor;
+  getCurrentPosition() {
+    const { editor } = this.state;
     const { selectedSource } = this.props;
     if (!selectedSource) {
       return null;
     }
 
-    const line = getCursorLine(codeMirror);
-    return toSourceLine(selectedSource.id, line);
+    const selectionCursor = editor.getSelectionCursor().from;
+    return {
+      line: toSourceLine(selectedSource.id, selectionCursor.line),
+      // Add one to column for correct position in editor.
+      column: selectionCursor.ch + 1,
+    };
   }
 
   onToggleBreakpoint = e => {
     e.preventDefault();
     e.stopPropagation();
 
-    const line = this.getCurrentLine();
-    if (typeof line !== "number") {
+    const currentPosition = this.getCurrentPosition();
+    if (!currentPosition || typeof currentPosition.line !== "number") {
       return;
     }
 
-    this.props.toggleBreakpointAtLine(line);
+    this.props.toggleBreakpointAtLine(currentPosition.line);
+  };
+
+  onToggleLogPanel = e => {
+    e.stopPropagation();
+    e.preventDefault();
+    this.toggleBreakpointPanel(true);
   };
 
   onToggleConditionalPanel = e => {
     e.stopPropagation();
     e.preventDefault();
+    this.toggleBreakpointPanel(false);
+  };
 
+  toggleBreakpointPanel(logPanel) {
     const {
       conditionalPanelLocation,
       closeConditionalPanel,
@@ -410,29 +450,25 @@ class Editor extends PureComponent {
       selectedSource,
     } = this.props;
 
-    const line = this.getCurrentLine();
-
-    const { codeMirror } = this.state.editor;
-    // add one to column for correct position in editor.
-    const column = getCursorColumn(codeMirror) + 1;
+    const currentPosition = this.getCurrentPosition();
 
     if (conditionalPanelLocation) {
       return closeConditionalPanel();
     }
 
-    if (!selectedSource || typeof line !== "number") {
+    if (!selectedSource || typeof currentPosition?.line !== "number") {
       return null;
     }
 
     return openConditionalPanel(
       createLocation({
-        line,
-        column,
+        line: currentPosition.line,
+        column: currentPosition.column,
         source: selectedSource,
       }),
-      false
+      logPanel
     );
-  };
+  }
 
   onEditorScroll = debounce(this.props.updateViewport, 75);
 
@@ -464,10 +500,12 @@ class Editor extends PureComponent {
       return;
     }
 
-    const { codeMirror } = this.state.editor;
-    if (codeMirror.listSelections().length > 1) {
-      codeMirror.execCommand("singleSelection");
-      e.preventDefault();
+    if (!features.codemirrorNext) {
+      const { codeMirror } = this.state.editor;
+      if (codeMirror.listSelections().length > 1) {
+        codeMirror.execCommand("singleSelection");
+        e.preventDefault();
+      }
     }
   };
   // Note: The line is optional, if not passed (as is likely for codemirror 6)
@@ -504,8 +542,8 @@ class Editor extends PureComponent {
 
     if (
       // handles codemirror 6
-      (target.classList.contains("cm-gutterElement") &&
-        target.closest(".cm-gutter.cm-lineNumbers")) ||
+      target.classList.contains("cm-gutter") ||
+      target.classList.contains("cm-gutterElement") ||
       // handles codemirror 5
       target.classList.contains("CodeMirror-linenumber")
     ) {
@@ -723,7 +761,7 @@ class Editor extends PureComponent {
       return;
     }
 
-    if (selectedSourceTextContent.state === "rejected") {
+    if (isRejected(selectedSourceTextContent)) {
       let { value } = selectedSourceTextContent;
       if (typeof value !== "string") {
         value = "Unexpected source error";
@@ -821,6 +859,7 @@ class Editor extends PureComponent {
       isSourceOnIgnoreList,
       selectedSourceIsBlackBoxed,
       mapScopesEnabled,
+      selectedSourceTextContent,
     } = this.props;
     const { editor } = this.state;
 
@@ -829,6 +868,14 @@ class Editor extends PureComponent {
     }
 
     if (features.codemirrorNext) {
+      // Only load the sub components if the content has loaded without issues.
+      if (
+        selectedSourceTextContent &&
+        !isFulfilled(selectedSourceTextContent)
+      ) {
+        return null;
+      }
+
       return React.createElement(
         React.Fragment,
         null,
@@ -969,10 +1016,14 @@ const mapStateToProps = state => {
   const selectedSource = getSelectedSource(state);
   const selectedLocation = getSelectedLocation(state);
 
+  const selectedSourceTextContent = getSelectedSourceTextContent(state);
+
   return {
     selectedLocation,
     selectedSource,
-    selectedSourceTextContent: getSelectedSourceTextContent(state),
+    // Settled means the content loaded succesfully (fulfilled) or the there was
+    // error (rejected)
+    selectedSourceTextContent: asSettled(selectedSourceTextContent),
     selectedSourceIsBlackBoxed: selectedSource
       ? isSourceBlackBoxed(state, selectedSource)
       : null,

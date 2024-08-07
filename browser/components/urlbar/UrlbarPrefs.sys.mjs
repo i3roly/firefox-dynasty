@@ -113,9 +113,6 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Whether the heuristic result is hidden.
   ["experimental.hideHeuristic", false],
 
-  // Whether the urlbar displays a permanent search button.
-  ["experimental.searchButton", false],
-
   // Comma-separated list of `source.providers` combinations, that are used to
   // determine if an exposure event should be fired. This can be set by a
   // Nimbus variable and is expected to be set via nimbus experiment
@@ -443,19 +440,11 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // The number of times the user has been shown the onboarding search tip.
   ["tipShownCount.searchTip_onboard", 0],
 
-  // The number of times the user has been shown the urlbar persisted search tip.
-  ["tipShownCount.searchTip_persist", 0],
-
   // The number of times the user has been shown the redirect search tip.
   ["tipShownCount.searchTip_redirect", 0],
 
   // Feature gate pref for trending suggestions in the urlbar.
   ["trending.featureGate", true],
-
-  // Only enable trending suggestions if the users browser locale is contained
-  // in this list; enable in all locales if empty.
-  // (if the value was "en-US", trending would only be enabled for en-US users).
-  ["trending.enabledLocales", ""],
 
   // The maximum number of trending results to show while not in search mode.
   ["trending.maxResultsNoSearchMode", 10],
@@ -501,7 +490,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // The minimum prefix length of a Yelp keyword the user must type to trigger
   // the suggestion. 0 means the min length should be taken from Nimbus.
-  ["yelp.minKeywordLength", 0],
+  ["yelp.minKeywordLength", 4],
 
   // Whether Yelp suggestions should be shown as top picks. This is a fallback
   // pref for the `yelpSuggestPriority` Nimbus variable.
@@ -510,11 +499,6 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // The number of times the user has clicked the "Show less frequently" command
   // for Yelp suggestions.
   ["yelp.showLessFrequentlyCount", 0],
-
-  // The group-relative suggestedIndex of Yelp suggestions within the Firefox
-  // Suggest section. Ignored when Yelp suggestions are shown as top picks. This
-  // is a fallback pref for the `yelpSuggestNonPriorityIndex` Nimbus variable.
-  ["yelp.suggestedIndex", 0],
 ]);
 
 const PREF_OTHER_DEFAULTS = new Map([
@@ -534,6 +518,7 @@ const NIMBUS_DEFAULTS = {
   addonsShowLessFrequentlyCap: 0,
   experimentType: "",
   pocketShowLessFrequentlyCap: 0,
+  pocketSuggestIndex: null,
   quickSuggestRemoteSettingsDataType: "data",
   quickSuggestScoreMap: null,
   recordNavigationalSuggestionTelemetry: false,
@@ -541,7 +526,8 @@ const NIMBUS_DEFAULTS = {
   weatherKeywordsMinimumLength: 0,
   weatherKeywordsMinimumLengthCap: 0,
   weatherSimpleUI: false,
-  yelpMinKeywordLength: 0,
+  yelpMinKeywordLength: null,
+  yelpSuggestNonPriorityIndex: null,
 };
 
 // Maps preferences under browser.urlbar.suggest to behavior names, as defined

@@ -58,6 +58,7 @@ gecko_metrics = [
 # Order is lexicographical, enforced by t/c/glean/tests/pytest/test_yaml_indices.py
 firefox_desktop_metrics = [
     "browser/components/backup/metrics.yaml",
+    "browser/components/genai/metrics.yaml",
     "browser/components/metrics.yaml",
     "browser/components/migration/metrics.yaml",
     "browser/components/newtab/metrics.yaml",
@@ -71,6 +72,7 @@ firefox_desktop_metrics = [
     "browser/modules/metrics.yaml",
     "dom/media/platforms/wmf/metrics.yaml",
     "dom/privateattribution/metrics.yaml",
+    "services/fxaccounts/metrics.yaml",
     "toolkit/components/contentrelevancy/metrics.yaml",
     "toolkit/components/crashes/metrics.yaml",
     "toolkit/components/nimbus/metrics.yaml",
@@ -122,6 +124,7 @@ metrics_yamls = sorted(
 # Order is lexicographical, enforced by t/c/glean/tests/pytest/test_yaml_indices.py
 gecko_pings = [
     "dom/pings.yaml",
+    "toolkit/components/antitracking/bouncetrackingprotection/pings.yaml",
     "toolkit/components/glean/pings.yaml",
     "toolkit/components/reportbrokensite/pings.yaml",
 ]
@@ -134,6 +137,7 @@ firefox_desktop_pings = [
     "browser/components/search/pings.yaml",
     "browser/components/urlbar/pings.yaml",
     "browser/modules/pings.yaml",
+    "services/fxaccounts/pings.yaml",
     "toolkit/components/crashes/pings.yaml",
     "toolkit/components/resistfingerprinting/pings.yaml",
     "toolkit/components/telemetry/pings.yaml",

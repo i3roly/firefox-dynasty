@@ -297,6 +297,13 @@ bool js::Nursery::init(AutoLockGCBgAlloc& lock) {
       "JS_GC_REPORT_STATS=1\n"
       "\tAfter a minor GC, report how many strings were deduplicated.\n");
 
+#ifdef JS_GC_ZEAL
+  reportPromotion_ = GetBoolEnvVar(
+      "JS_GC_REPORT_PROMOTE",
+      "JS_GC_REPORT_PROMOTE=1\n"
+      "\tAfter a minor GC, report what kinds of things were promoted.\n");
+#endif
+
   ReadReportPretenureEnv(
       "JS_GC_REPORT_PRETENURE",
       "JS_GC_REPORT_PRETENURE=FILTER\n"
@@ -1508,6 +1515,11 @@ js::Nursery::CollectionResult js::Nursery::doCollection(AutoGCSession& session,
   // Move objects pointed to by roots from the nursery to the major heap.
   tenuredEverything = shouldTenureEverything(reason);
   TenuringTracer mover(rt, this, tenuredEverything);
+#ifdef JS_GC_ZEAL
+  if (reportPromotion_) {
+    mover.initPromotionReport();
+  }
+#endif
 
   // Trace everything considered as a root by a minor GC.
   traceRoots(session, mover);
@@ -1527,6 +1539,14 @@ js::Nursery::CollectionResult js::Nursery::doCollection(AutoGCSession& session,
   startProfile(ProfileKey::CollectToStrFP);
   mover.collectToStringFixedPoint();
   endProfile(ProfileKey::CollectToStrFP);
+
+#ifdef JS_GC_ZEAL
+  if (reportPromotion_ && options != JS::GCOptions::Shutdown) {
+    JSContext* cx = runtime()->mainContextFromOwnThread();
+    JS::AutoAssertNoGC nogc(cx);
+    mover.printPromotionReport(cx, reason, nogc);
+  }
+#endif
 
   // Sweep to update any pointers to nursery objects that have now been
   // tenured.
@@ -1902,6 +1922,31 @@ void js::Nursery::sweep() {
     }
 
     cell = dst;
+    return false;
+  });
+
+  // Drop references to all StringBuffers. Strings we tenured must have an
+  // additional refcount at this point.
+  stringBuffers_.mutableEraseIf([&](StringAndBuffer& entry) {
+    auto [str, buffer] = entry;
+    MOZ_ASSERT(inCollectedRegion(str));
+
+    if (!IsForwarded(str)) {
+      MOZ_ASSERT(str->hasStringBuffer() || str->isAtomRef());
+      MOZ_ASSERT_IF(str->hasStringBuffer(), str->stringBuffer() == buffer);
+      buffer->Release();
+      return true;
+    }
+
+    JSLinearString* dst = Forwarded(str);
+    if (!IsInsideNursery(dst)) {
+      MOZ_ASSERT_IF(dst->hasStringBuffer() && dst->stringBuffer() == buffer,
+                    buffer->RefCount() > 1);
+      buffer->Release();
+      return true;
+    }
+
+    entry.first = dst;
     return false;
   });
 

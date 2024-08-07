@@ -16,9 +16,11 @@
 #  include "mozilla/intl/TimeZone.h"
 #endif
 #include "mozilla/Maybe.h"
+#include "mozilla/RefPtr.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Span.h"
 #include "mozilla/Sprintf.h"
+#include "mozilla/StringBuffer.h"
 #include "mozilla/TextUtils.h"
 #include "mozilla/ThreadLocal.h"
 
@@ -161,8 +163,10 @@ using mozilla::Span;
 
 using JS::AutoStableStringChars;
 using JS::CompileOptions;
+using JS::SliceBudget;
 using JS::SourceOwnership;
 using JS::SourceText;
+using JS::WorkBudget;
 
 // If fuzzingSafe is set, remove functionality that could cause problems with
 // fuzzers. Set this via the environment variable MOZ_FUZZING_SAFE.
@@ -1696,7 +1700,6 @@ static bool WasmExtractCode(JSContext* cx, unsigned argc, Value* vp) {
   }
 
   wasm::Tier tier = module->module().code().stableTier();
-  ;
   if (args.length() > 1 &&
       !ConvertToTier(cx, args[1], module->module().code(), &tier)) {
     args.rval().setNull();
@@ -1768,14 +1771,11 @@ static bool DisassembleNative(JSContext* cx, unsigned argc, Value* vp) {
 
     js::wasm::Instance& inst = fun->wasmInstance();
     const js::wasm::Code& code = inst.code();
-    js::wasm::Tier tier = code.bestTier();
-
-    const js::wasm::MetadataTier& meta = inst.metadata(tier);
-
-    const js::wasm::CodeSegment& segment = code.segment(tier);
     const uint32_t funcIndex = code.getFuncIndex(&*fun);
-    const js::wasm::FuncExport& func = meta.lookupFuncExport(funcIndex);
-    const js::wasm::CodeRange& codeRange = meta.codeRange(func);
+    const js::wasm::CodeBlock& codeBlock = inst.code().funcCodeBlock(funcIndex);
+    const js::wasm::CodeSegment& segment = *codeBlock.segment;
+    const js::wasm::FuncExport& func = codeBlock.lookupFuncExport(funcIndex);
+    const js::wasm::CodeRange& codeRange = codeBlock.codeRange(func);
 
     jit_begin = segment.base() + codeRange.begin();
     jit_end = segment.base() + codeRange.end();
@@ -1883,11 +1883,6 @@ static bool ComputeTier(JSContext* cx, const wasm::Code& code,
     return false;
   }
 
-  if (!code.hasTier(*tier)) {
-    JS_ReportErrorASCII(cx, "function missing selected tier");
-    return false;
-  }
-
   return true;
 }
 
@@ -1920,13 +1915,18 @@ static bool WasmDisassembleFunction(JSContext* cx, const HandleFunction& func,
                                     HandleValue tierSelection, bool asString,
                                     MutableHandleValue rval) {
   wasm::Instance& instance = wasm::ExportedFunctionToInstance(func);
+  uint32_t funcIndex = wasm::ExportedFunctionToFuncIndex(func);
   wasm::Tier tier;
 
   if (!ComputeTier(cx, instance.code(), tierSelection, &tier)) {
     return false;
   }
 
-  uint32_t funcIndex = wasm::ExportedFunctionToFuncIndex(func);
+  if (!instance.code().funcHasTier(funcIndex, tier)) {
+    JS_ReportErrorASCII(cx, "function missing selected tier");
+    return false;
+  }
+
   return DisassembleIt(
       cx, asString, rval, [&](void (*captureText)(const char*)) {
         instance.disassembleExport(cx, funcIndex, tier, captureText);
@@ -2165,7 +2165,7 @@ static bool WasmReturnFlag(JSContext* cx, unsigned argc, Value* vp, Flag flag) {
       b = module->module().loggingDeserialized();
       break;
     case Flag::ParsedBranchHints:
-      b = module->module().metadata().parsedBranchHints;
+      b = module->module().codeMeta().parsedBranchHints;
       break;
   }
 
@@ -3586,6 +3586,8 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
   bool wantTwoByte = false;
   bool forceExternal = false;
   bool maybeExternal = false;
+  bool newStringBuffer = false;
+  bool shareStringBuffer = false;
   uint32_t capacity = 0;
 
   if (args.get(1).isObject()) {
@@ -3600,7 +3602,9 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
          {BoolSetting{"tenured", &requestTenured},
           BoolSetting{"twoByte", &wantTwoByte},
           BoolSetting{"external", &forceExternal},
-          BoolSetting{"maybeExternal", &maybeExternal}}) {
+          BoolSetting{"maybeExternal", &maybeExternal},
+          BoolSetting{"newStringBuffer", &newStringBuffer},
+          BoolSetting{"shareStringBuffer", &shareStringBuffer}}) {
       if (!JS_GetProperty(cx, options, name, &v)) {
         return false;
       }
@@ -3628,11 +3632,14 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
     heap = requestTenured ? gc::Heap::Tenured : gc::Heap::Default;
     if (forceExternal || maybeExternal) {
       wantTwoByte = true;
-      if (capacity != 0) {
-        JS_ReportErrorASCII(cx,
-                            "strings cannot be both external and extensible");
-        return false;
-      }
+    }
+    unsigned kinds = forceExternal + maybeExternal + (capacity != 0) +
+                     newStringBuffer + shareStringBuffer;
+    if (kinds > 1) {
+      JS_ReportErrorASCII(cx,
+                          "external, capacity, and stringBuffer options can "
+                          "not be used at the same time");
+      return false;
     }
   }
 
@@ -3661,6 +3668,21 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
     if (dest && isExternal) {
       (void)buf.release();  // Ownership was transferred.
     }
+  } else if (shareStringBuffer) {
+    if (!src->isLinear() || !src->asLinear().hasStringBuffer()) {
+      JS_ReportErrorASCII(cx, "source string must have a string buffer");
+      return false;
+    }
+    RefPtr<mozilla::StringBuffer> buffer = src->asLinear().stringBuffer();
+    if (src->hasLatin1Chars()) {
+      Rooted<JSString::OwnedChars<Latin1Char>> owned(cx, std::move(buffer),
+                                                     len);
+      dest =
+          JSLinearString::newValidLength<CanGC, Latin1Char>(cx, &owned, heap);
+    } else {
+      Rooted<JSString::OwnedChars<char16_t>> owned(cx, std::move(buffer), len);
+      dest = JSLinearString::newValidLength<CanGC, char16_t>(cx, &owned, heap);
+    }
   } else {
     AutoStableStringChars stable(cx);
     if (!wantTwoByte && src->hasLatin1Chars()) {
@@ -3672,7 +3694,32 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
         return false;
       }
     }
-    if (capacity) {
+    if (newStringBuffer) {
+      auto allocString = [&](const auto* chars) -> JSLinearString* {
+        using CharT =
+            std::remove_const_t<std::remove_pointer_t<decltype(chars)>>;
+
+        if (JSInlineString::lengthFits<CharT>(len)) {
+          JS_ReportErrorASCII(cx, "Cannot create small non-inline strings");
+          return nullptr;
+        }
+
+        RefPtr<mozilla::StringBuffer> buffer =
+            mozilla::StringBuffer::Create(chars, len);
+        if (!buffer) {
+          ReportOutOfMemory(cx);
+          return nullptr;
+        }
+
+        Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(buffer), len);
+        return JSLinearString::newValidLength<CanGC, CharT>(cx, &owned, heap);
+      };
+      if (stable.isLatin1()) {
+        dest = allocString(stable.latin1Chars());
+      } else {
+        dest = allocString(stable.twoByteChars());
+      }
+    } else if (capacity) {
       if (capacity < len) {
         capacity = len;
       }
@@ -3696,8 +3743,7 @@ static bool NewString(JSContext* cx, unsigned argc, Value* vp) {
           return nullptr;
         }
         mozilla::PodCopy(news.get(), chars, len);
-        Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(news), len,
-                                                  true);
+        Rooted<JSString::OwnedChars<CharT>> owned(cx, std::move(news), len);
         return JSLinearString::newValidLength<CanGC, CharT>(cx, &owned, heap);
       };
 
@@ -9351,6 +9397,19 @@ static bool NukeCCW(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static bool IsCCW(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  if (args.length() != 1 || !args[0].isObject()) {
+    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr, JSMSG_INVALID_ARGS,
+                              "IsCCW");
+    return false;
+  }
+
+  args.rval().setBoolean(IsCrossCompartmentWrapper(&args[0].toObject()));
+  return true;
+}
+
 static bool FdLibM_Pow(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
@@ -9532,6 +9591,11 @@ static const JSFunctionSpecWithHelp TestingFunctions[] = {
 "   - twoByte: create a \"two byte\" string, not a latin1 string, regardless of the\n"
 "      input string's characters. Latin1 will be used by default if possible\n"
 "      (again regardless of the input string.)\n"
+"  \n"
+"   - newStringBuffer: create a new string that uses a refcounted StringBuffer for\n"
+"     the characters.\n"
+"  \n"
+"   - shareStringBuffer: create a new string that shares str's StringBuffer.\n"
 "  \n"
 "   - external: create an external string. External strings are always twoByte and\n"
 "     tenured.\n"
@@ -9959,15 +10023,6 @@ JS_FOR_WASM_FEATURES(WASM_FEATURE)
 "      ImportInterpExit - wasm-to-C++ stubs\n"
 "      ImportJitExit    - wasm-to-jitted-JS stubs\n"
 "      all              - all kinds, including obscure ones\n"),
-
-    JS_FN_HELP("wasmDumpIon", WasmDumpIon, 2, 0,
-"wasmDumpIon(bytecode, funcIndex, [, contents])\n",
-"wasmDumpIon(bytecode, funcIndex, [, contents])"
-"  Returns a dump of compiling a function in the specified module with Ion."
-"  The `contents` flag controls what is dumped. one of:"
-"    `mir` | `unopt-mir`: Unoptimized MIR (the default)"
-"    `opt-mir`: Optimized MIR"
-"    `lir`: LIR"),
 
     JS_FN_HELP("wasmHasTier2CompilationCompleted", WasmHasTier2CompilationCompleted, 1, 0,
 "wasmHasTier2CompilationCompleted(module)",
@@ -10454,6 +10509,10 @@ JS_FN_HELP("isSmallFunction", IsSmallFunction, 1, 0,
   " Runs the realm's fuse invariant checks -- these will crash on failure. "
   " Only available in fuzzing or debug builds, so usage should be guarded. "),
 
+    JS_FN_HELP("isCCW", IsCCW, 1, 0,
+"isCCW(object)",
+"  Return true if an object is a CCW."),
+
   JS_FN_HELP("popAllFusesInRealm", PopAllFusesInRealm, 0, 0,
   "popAllFusesInRealm()",
   " Pops all the fuses in the current realm"),
@@ -10544,8 +10603,16 @@ JS_FN_HELP("getEnvironmentObjectType", GetEnvironmentObjectType, 1, 0,
     JS_FN_HELP("stringRepresentation", GetStringRepresentation, 1, 0,
 "stringRepresentation(str)",
 "  Return a human-readable description of how the string |str| is represented.\n"),
-
 #endif
+
+    JS_FN_HELP("wasmDumpIon", WasmDumpIon, 2, 0,
+"wasmDumpIon(bytecode, funcIndex, [, contents])\n",
+"wasmDumpIon(bytecode, funcIndex, [, contents])"
+"  Returns a dump of compiling a function in the specified module with Ion."
+"  The `contents` flag controls what is dumped. one of:"
+"    `mir` | `unopt-mir`: Unoptimized MIR (the default)"
+"    `opt-mir`: Optimized MIR"
+"    `lir`: LIR"),
 
     JS_FS_HELP_END
 };

@@ -881,7 +881,13 @@ export var UrlbarTestUtils = {
     // names that are not usually included in actual search mode objects.  For
     // convenience, ignore those properties if they aren't also present in the
     // urlbar's actual search mode object.
-    let ignoreProperties = ["icon", "pref", "restrict", "telemetryLabel"];
+    let ignoreProperties = [
+      "icon",
+      "pref",
+      "restrict",
+      "telemetryLabel",
+      "uiLabel",
+    ];
     for (let prop of ignoreProperties) {
       if (prop in expectedSearchMode && !(prop in window.gURLBar.searchMode)) {
         this.info(
@@ -1345,7 +1351,7 @@ export var UrlbarTestUtils = {
    * @param {int} [options.selectionType]
    *   The selectionType for which the input should be checked.
    */
-  checkFormatting(
+  async checkFormatting(
     win,
     urlFormatString,
     {
@@ -1354,6 +1360,7 @@ export var UrlbarTestUtils = {
       selectionType = Ci.nsISelectionController.SELECTION_URLSECONDARY,
     } = {}
   ) {
+    await new Promise(resolve => win.requestAnimationFrame(resolve));
     let selectionController = win.gURLBar.editor.selectionController;
     let selection = selectionController.getSelection(selectionType);
     let value = win.gURLBar.editor.rootElement.textContent;
@@ -1370,6 +1377,30 @@ export var UrlbarTestUtils = {
       clobberedURLString || urlFormatString,
       "Correct part of the URL is de-emphasized" +
         (additionalMsg ? ` (${additionalMsg})` : "")
+    );
+  },
+
+  searchModeSwitcherPopup(win) {
+    return win.document.getElementById("searchmode-switcher-popup");
+  },
+
+  async openSearchModeSwitcher(win) {
+    let popup = this.searchModeSwitcherPopup(win);
+    let promiseMenuOpen = lazy.BrowserTestUtils.waitForEvent(
+      popup,
+      "popupshown"
+    );
+    let button = win.document.getElementById("urlbar-searchmode-switcher");
+    this.Assert.ok(lazy.BrowserTestUtils.isVisible(button));
+    await this.EventUtils.promiseElementReadyForUserInput(button, win);
+    this.EventUtils.synthesizeMouseAtCenter(button, {}, win);
+    return promiseMenuOpen;
+  },
+
+  searchModeSwitcherPopupClosed(win) {
+    return lazy.BrowserTestUtils.waitForEvent(
+      this.searchModeSwitcherPopup(win),
+      "popuphidden"
     );
   },
 };

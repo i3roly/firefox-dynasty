@@ -30,10 +30,6 @@ for (const type of [
   "ADDONS_INFO_REQUEST",
   "ADDONS_INFO_RESPONSE",
   "ARCHIVE_FROM_POCKET",
-  "AS_ROUTER_INITIALIZED",
-  "AS_ROUTER_PREF_CHANGED",
-  "AS_ROUTER_TARGETING_UPDATE",
-  "AS_ROUTER_TELEMETRY_USER_EVENT",
   "BLOCK_URL",
   "BOOKMARK_URL",
   "CLEAR_PREF",
@@ -86,6 +82,7 @@ for (const type of [
   "HANDOFF_SEARCH_TO_AWESOMEBAR",
   "HIDE_PERSONALIZE",
   "HIDE_PRIVACY_INFO",
+  "HIDE_TOAST_MESSAGE",
   "INIT",
   "NEW_TAB_INIT",
   "NEW_TAB_INITIAL_STATE",
@@ -109,6 +106,8 @@ for (const type of [
   "POCKET_CTA",
   "POCKET_LINK_DELETED_OR_ARCHIVED",
   "POCKET_LOGGED_IN",
+  "POCKET_THUMBS_DOWN",
+  "POCKET_THUMBS_UP",
   "POCKET_WAITING_FOR_SPOC",
   "PREFS_INITIAL_VALUES",
   "PREF_CHANGED",
@@ -136,6 +135,7 @@ for (const type of [
   "SHOW_PERSONALIZE",
   "SHOW_PRIVACY_INFO",
   "SHOW_SEARCH",
+  "SHOW_TOAST_MESSAGE",
   "SKIPPED_SIGNIN",
   "SOV_UPDATED",
   "SUBMIT_EMAIL",
@@ -326,20 +326,6 @@ function DiscoveryStreamUserEvent(data) {
 }
 
 /**
- * ASRouterUserEvent - A telemetry ping indicating a user action from AS router. This should only
- *                     be sent from the UI during a user session.
- *
- * @param  {object} data Fields to include in the ping (source, etc.)
- * @return {object} An AlsoToMain action
- */
-function ASRouterUserEvent(data) {
-  return AlsoToMain({
-    type: actionTypes.AS_ROUTER_TELEMETRY_USER_EVENT,
-    data,
-  });
-}
-
-/**
  * ImpressionStats - A telemetry ping indicating an impression stats.
  *
  * @param  {object} data Fields to include in the ping
@@ -412,7 +398,6 @@ export const actionCreators = {
   BroadcastToContent,
   UserEvent,
   DiscoveryStreamUserEvent,
-  ASRouterUserEvent,
   ImpressionStats,
   AlsoToOneContent,
   OnlyToOneContent,

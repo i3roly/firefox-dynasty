@@ -575,8 +575,15 @@ static void WebRenderDebugPrefChangeCallback(const char* aPrefName, void*) {
   GFX_WEBRENDER_DEBUG(".window-visibility",
                       wr::DebugFlags::WINDOW_VISIBILITY_DBG)
   GFX_WEBRENDER_DEBUG(".restrict-blob-size", wr::DebugFlags::RESTRICT_BLOB_SIZE)
+  GFX_WEBRENDER_DEBUG(".surface-promotion-logging",
+                      wr::DebugFlags::SURFACE_PROMOTION_LOGGING)
 #undef GFX_WEBRENDER_DEBUG
   gfx::gfxVars::SetWebRenderDebugFlags(flags._0);
+
+  uint32_t threshold = Preferences::GetFloat(
+      StaticPrefs::GetPrefName_gfx_webrender_debug_slow_cpu_frame_threshold(),
+      10.0);
+  gfx::gfxVars::SetWebRenderSlowCpuFrameThreshold(threshold);
 }
 
 static void WebRenderQualityPrefChangeCallback(const char* aPref, void*) {
@@ -3663,11 +3670,21 @@ void gfxPlatform::GetOverlayInfo(mozilla::widget::InfoObject& aObj) {
     MOZ_CRASH("Incomplete switch");
   };
 
-  nsPrintfCString value("NV12=%s YUV2=%s BGRA8=%s RGB10A2=%s",
-                        toString(mOverlayInfo.ref().mNv12Overlay),
-                        toString(mOverlayInfo.ref().mYuy2Overlay),
-                        toString(mOverlayInfo.ref().mBgra8Overlay),
-                        toString(mOverlayInfo.ref().mRgb10a2Overlay));
+  auto toStringBool = [](bool aSupported) -> const char* {
+    if (aSupported) {
+      return "Supported";
+    }
+    return "Not Supported";
+  };
+
+  nsPrintfCString value(
+      "NV12=%s YUV2=%s BGRA8=%s RGB10A2=%s VpSR=%s VpAutoHDR=%s",
+      toString(mOverlayInfo.ref().mNv12Overlay),
+      toString(mOverlayInfo.ref().mYuy2Overlay),
+      toString(mOverlayInfo.ref().mBgra8Overlay),
+      toString(mOverlayInfo.ref().mRgb10a2Overlay),
+      toStringBool(mOverlayInfo.ref().mSupportsVpSuperResolution),
+      toStringBool(mOverlayInfo.ref().mSupportsVpAutoHDR));
 
   aObj.DefineProperty("OverlaySupport", NS_ConvertUTF8toUTF16(value));
 }

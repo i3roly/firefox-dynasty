@@ -17,6 +17,7 @@
 #include "jit/CacheIROpsGenerated.h"
 #include "jit/CacheIRReader.h"
 #include "jit/LIR.h"
+#include "jit/MIR-wasm.h"
 #include "jit/MIR.h"
 #include "jit/MIRGenerator.h"
 #include "jit/MIRGraph.h"
@@ -724,10 +725,22 @@ bool WarpCacheIRTranspiler::emitMegamorphicLoadSlotResult(ObjOperandId objId,
   PropertyName* name = stringStubField(nameOffset)->asAtom().asPropertyName();
 
   auto* ins = MMegamorphicLoadSlot::New(alloc(), obj, NameToId(name));
-  add(ins);
 
+  add(ins);
   pushResult(ins);
   return true;
+}
+
+bool WarpCacheIRTranspiler::emitMegamorphicLoadSlotPermissiveResult(
+    ObjOperandId objId, uint32_t nameOffset) {
+  MDefinition* obj = getOperand(objId);
+  PropertyName* name = stringStubField(nameOffset)->asAtom().asPropertyName();
+
+  auto* ins = MMegamorphicLoadSlotPermissive::New(alloc(), obj, NameToId(name));
+
+  addEffectful(ins);
+  pushResult(ins);
+  return resumeAfter(ins);
 }
 
 bool WarpCacheIRTranspiler::emitMegamorphicLoadSlotByValueResult(
@@ -736,10 +749,22 @@ bool WarpCacheIRTranspiler::emitMegamorphicLoadSlotByValueResult(
   MDefinition* id = getOperand(idId);
 
   auto* ins = MMegamorphicLoadSlotByValue::New(alloc(), obj, id);
-  add(ins);
 
+  add(ins);
   pushResult(ins);
   return true;
+}
+
+bool WarpCacheIRTranspiler::emitMegamorphicLoadSlotByValuePermissiveResult(
+    ObjOperandId objId, ValOperandId idId) {
+  MDefinition* obj = getOperand(objId);
+  MDefinition* id = getOperand(idId);
+
+  auto* ins = MMegamorphicLoadSlotByValuePermissive::New(alloc(), obj, id);
+
+  addEffectful(ins);
+  pushResult(ins);
+  return resumeAfter(ins);
 }
 
 bool WarpCacheIRTranspiler::emitMegamorphicStoreSlot(ObjOperandId objId,
@@ -5967,7 +5992,7 @@ bool WarpCacheIRTranspiler::emitCallWasmFunction(
   auto* wasmInstanceObj = &instanceObject->as<WasmInstanceObject>();
   const wasm::FuncExport* funcExport = wasmFuncExportField(funcExportOffset);
   const wasm::FuncType& sig =
-      wasmInstanceObj->instance().metadata().getFuncExportType(*funcExport);
+      wasmInstanceObj->instance().code().getFuncExportType(*funcExport);
 
   if (!updateCallInfo(callee, flags)) {
     return false;

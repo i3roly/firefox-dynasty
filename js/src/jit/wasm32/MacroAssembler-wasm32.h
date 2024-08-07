@@ -479,11 +479,6 @@ class MacroAssemblerWasm32 : public Assembler {
 
   void convertFloat32ToDouble(FloatRegister, FloatRegister) { MOZ_CRASH(); }
 
-  void boolValueToDouble(ValueOperand, FloatRegister) { MOZ_CRASH(); }
-  void boolValueToFloat32(ValueOperand, FloatRegister) { MOZ_CRASH(); }
-  void int32ValueToDouble(ValueOperand, FloatRegister) { MOZ_CRASH(); }
-  void int32ValueToFloat32(ValueOperand, FloatRegister) { MOZ_CRASH(); }
-
   void loadConstantDouble(double, FloatRegister) { MOZ_CRASH(); }
   void loadConstantFloat32(float, FloatRegister) { MOZ_CRASH(); }
   Condition testInt32Truthy(bool, ValueOperand) { MOZ_CRASH(); }
@@ -503,7 +498,6 @@ class MacroAssemblerWasm32 : public Assembler {
   void convertUInt32ToDouble(Register, FloatRegister) { MOZ_CRASH(); }
   void convertUInt32ToFloat32(Register, FloatRegister) { MOZ_CRASH(); }
   void incrementInt32Value(Address) { MOZ_CRASH(); }
-  void ensureDouble(ValueOperand, FloatRegister, Label*) { MOZ_CRASH(); }
   void handleFailureWithHandlerTail(Label*, Label*) { MOZ_CRASH(); }
 
   void buildFakeExitFrame(Register, uint32_t*) { MOZ_CRASH(); }

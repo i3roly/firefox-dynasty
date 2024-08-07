@@ -500,6 +500,24 @@ class ThawRunnable final : public WorkerControlRunnable {
   }
 };
 
+class ChangeBackgroundStateRunnable final : public WorkerControlRunnable {
+ public:
+  ChangeBackgroundStateRunnable() = delete;
+  explicit ChangeBackgroundStateRunnable(WorkerPrivate* aWorkerPrivate) =
+      delete;
+  ChangeBackgroundStateRunnable(WorkerPrivate* aWorkerPrivate,
+                                bool aIsBackground)
+      : WorkerControlRunnable("ChangeBackgroundStateRunnable"),
+        mIsBackground(aIsBackground) {}
+
+ private:
+  bool mIsBackground = false;
+  virtual bool WorkerRun(JSContext* aCx,
+                         WorkerPrivate* aWorkerPrivate) override {
+    return aWorkerPrivate->ChangeBackgroundStateInternal(mIsBackground);
+  }
+};
+
 class PropagateStorageAccessPermissionGrantedRunnable final
     : public WorkerControlRunnable {
  public:
@@ -1624,7 +1642,6 @@ nsresult WorkerPrivate::DispatchLockHeld(
            this, runnable.get()));
       RefPtr<WorkerThreadRunnable> workerThreadRunnable =
           static_cast<WorkerThreadRunnable*>(runnable.get());
-      workerThreadRunnable->mWorkerPrivateForPreStartCleaning = this;
       mPreStartRunnables.AppendElement(workerThreadRunnable);
       return NS_OK;
     }
@@ -2473,6 +2490,7 @@ WorkerPrivate::WorkerPrivate(
       mIsSecureContext(
           IsNewWorkerSecureContext(mParent, mWorkerKind, mLoadInfo)),
       mDebuggerRegistered(false),
+      mIsInBackground(false),
       mDebuggerReady(true),
       mExtensionAPIAllowed(false),
       mIsInAutomation(false),
@@ -2498,6 +2516,10 @@ WorkerPrivate::WorkerPrivate(
 
     if (aParent->mParentFrozen) {
       Freeze(nullptr);
+    }
+
+    if (aParent->IsRunningInBackground()) {
+      mIsInBackground = true;
     }
 
     mIsPrivilegedAddonGlobal = aParent->mIsPrivilegedAddonGlobal;
@@ -2569,6 +2591,11 @@ WorkerPrivate::WorkerPrivate(
 
     if (mLoadInfo.mWindow && mLoadInfo.mWindow->IsFrozen()) {
       Freeze(mLoadInfo.mWindow);
+    }
+
+    if (mLoadInfo.mWindow && mLoadInfo.mWindow->GetOuterWindow() &&
+        mLoadInfo.mWindow->GetOuterWindow()->IsBackground()) {
+      mIsInBackground = true;
     }
   }
 
@@ -2788,6 +2815,28 @@ already_AddRefed<WorkerPrivate> WorkerPrivate::Constructor(
   }
 
   return worker.forget();
+}
+
+// Mark worker private as running in the background tab
+// for further throttling
+void WorkerPrivate::SetIsRunningInBackground() {
+  AssertIsOnParentThread();
+
+  RefPtr<ChangeBackgroundStateRunnable> runnable =
+      new ChangeBackgroundStateRunnable(this, true);
+  runnable->Dispatch(this);
+
+  LOG(WorkerLog(), ("SetIsRunningInBackground [%p]", this));
+}
+
+void WorkerPrivate::SetIsRunningInForeground() {
+  AssertIsOnParentThread();
+
+  RefPtr<ChangeBackgroundStateRunnable> runnable =
+      new ChangeBackgroundStateRunnable(this, false);
+  runnable->Dispatch(this);
+
+  LOG(WorkerLog(), ("SetIsRunningInForeground [%p]", this));
 }
 
 nsresult WorkerPrivate::SetIsDebuggerReady(bool aReady) {
@@ -3216,12 +3265,14 @@ void WorkerPrivate::RunLoopNeverRan() {
   RefPtr<WorkerThread> thread;
   {
     MutexAutoLock lock(mMutex);
-    // WorkerPrivate::DoRunLoop() is never called, so CompileScriptRunnable
-    // should not execute yet. However, the Worker is going to "Dead", flip the
-    // mCancelBeforeWorkerScopeConstructed to true for the dispatched runnables
-    // to indicate runnables there is no valid WorkerGlobalScope for executing.
-    MOZ_ASSERT(!data->mCancelBeforeWorkerScopeConstructed);
-    data->mCancelBeforeWorkerScopeConstructed.Flip();
+
+    if (!mPreStartRunnables.IsEmpty()) {
+      for (const RefPtr<WorkerThreadRunnable>& runnable : mPreStartRunnables) {
+        runnable->mCleanPreStartDispatching = true;
+      }
+      mPreStartRunnables.Clear();
+    }
+
     // Switch State to Dead
     mStatus = Dead;
     thread = mThread;
@@ -3279,6 +3330,10 @@ void WorkerPrivate::DoRunLoop(JSContext* aCx) {
 
     MOZ_ASSERT(mStatus == Pending);
     mStatus = Running;
+
+    // Now, start to run the event loop, mPreStartRunnables can be cleared,
+    // since when get here, Worker initialization has done successfully.
+    mPreStartRunnables.Clear();
   }
 
   // Now that we've done that, we can go ahead and set up our AutoJSAPI.  We
@@ -4192,7 +4247,7 @@ void WorkerPrivate::ShutdownModuleLoader() {
 }
 
 void WorkerPrivate::ClearPreStartRunnables() {
-  nsTArray<RefPtr<WorkerRunnable>> prestart;
+  nsTArray<RefPtr<WorkerThreadRunnable>> prestart;
   {
     MutexAutoLock lock(mMutex);
     mPreStartRunnables.SwapElements(prestart);
@@ -4292,6 +4347,20 @@ bool WorkerPrivate::ThawInternal() {
     data->mScope->MutableClientSourceRef().Thaw();
   }
 
+  return true;
+}
+
+bool WorkerPrivate::ChangeBackgroundStateInternal(bool aIsBackground) {
+  AssertIsOnWorkerThread();
+  mIsInBackground = aIsBackground;
+  auto data = mWorkerThreadAccessible.Access();
+  for (uint32_t index = 0; index < data->mChildWorkers.Length(); index++) {
+    if (aIsBackground) {
+      data->mChildWorkers[index]->SetIsRunningInBackground();
+    } else {
+      data->mChildWorkers[index]->SetIsRunningInForeground();
+    }
+  }
   return true;
 }
 
@@ -5856,9 +5925,10 @@ void WorkerPrivate::SetWorkerPrivateInWorkerThread(
   if (!mPreStartRunnables.IsEmpty()) {
     for (uint32_t index = 0; index < mPreStartRunnables.Length(); index++) {
       MOZ_ALWAYS_SUCCEEDS(mThread->DispatchAnyThread(
-          WorkerThreadFriendKey{}, mPreStartRunnables[index].forget()));
+          WorkerThreadFriendKey{}, mPreStartRunnables[index]));
     }
-    mPreStartRunnables.Clear();
+    // Don't clear mPreStartRunnables here, it will be cleared in the beginning
+    // of WorkerPrivate::DoRunLoop() or when in WorkerPrivate::RunLoopNeverRan()
   }
 }
 
@@ -6071,9 +6141,8 @@ PerformanceStorage* WorkerPrivate::GetPerformanceStorage() {
 bool WorkerPrivate::ShouldResistFingerprinting(RFPTarget aTarget) const {
   return mLoadInfo.mShouldResistFingerprinting &&
          nsRFPService::IsRFPEnabledFor(
-             mLoadInfo.mOriginAttributes.mPrivateBrowsingId >
-                 nsIScriptSecurityManager::DEFAULT_PRIVATE_BROWSING_ID,
-             aTarget, mLoadInfo.mOverriddenFingerprintingSettings);
+             mLoadInfo.mOriginAttributes.IsPrivateBrowsing(), aTarget,
+             mLoadInfo.mOverriddenFingerprintingSettings);
 }
 
 void WorkerPrivate::SetRemoteWorkerController(RemoteWorkerChild* aController) {
@@ -6374,18 +6443,91 @@ WorkerPrivate::EventTarget::IsOnCurrentThreadInfallible() {
 }
 
 WorkerPrivate::AutoPushEventLoopGlobal::AutoPushEventLoopGlobal(
-    WorkerPrivate* aWorkerPrivate, JSContext* aCx)
-    : mWorkerPrivate(aWorkerPrivate) {
-  auto data = mWorkerPrivate->mWorkerThreadAccessible.Access();
+    WorkerPrivate* aWorkerPrivate, JSContext* aCx) {
+  auto data = aWorkerPrivate->mWorkerThreadAccessible.Access();
   mOldEventLoopGlobal = std::move(data->mCurrentEventLoopGlobal);
   if (JSObject* global = JS::CurrentGlobalOrNull(aCx)) {
     data->mCurrentEventLoopGlobal = xpc::NativeGlobal(global);
   }
+#ifdef DEBUG
+  mNewEventLoopGlobal = data->mCurrentEventLoopGlobal;
+#endif
 }
 
 WorkerPrivate::AutoPushEventLoopGlobal::~AutoPushEventLoopGlobal() {
-  auto data = mWorkerPrivate->mWorkerThreadAccessible.Access();
+  WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
+  // We are popping out the event loop global, WorkerPrivate is supposed to be
+  // alive and in a valid status(Running or Canceling)
+  MOZ_ASSERT(workerPrivate);
+  auto data = workerPrivate->mWorkerThreadAccessible.Access();
+#ifdef DEBUG
+  // Saved event loop global should be matched.
+  MOZ_ASSERT(data->mCurrentEventLoopGlobal == mNewEventLoopGlobal);
+  mNewEventLoopGlobal = nullptr;
+#endif
   data->mCurrentEventLoopGlobal = std::move(mOldEventLoopGlobal);
+}
+
+// -----------------------------------------------------------------------------
+// AutoSyncLoopHolder
+
+AutoSyncLoopHolder::AutoSyncLoopHolder(WorkerPrivate* aWorkerPrivate,
+                                       WorkerStatus aFailStatus,
+                                       const char* const aName)
+    : mTarget(aWorkerPrivate->CreateNewSyncLoop(aFailStatus)),
+      mIndex(aWorkerPrivate->mSyncLoopStack.Length() - 1) {
+  aWorkerPrivate->AssertIsOnWorkerThread();
+  LOGV(
+      ("AutoSyncLoopHolder::AutoSyncLoopHolder [%p] creator: %s", this, aName));
+  if (aFailStatus < Canceling) {
+    mWorkerRef = StrongWorkerRef::Create(aWorkerPrivate, aName, [aName]() {
+      // Do nothing with the shutdown callback here since we need to wait for
+      // the underlying SyncLoop to complete by itself.
+      LOGV(
+          ("AutoSyncLoopHolder::AutoSyncLoopHolder Worker starts to shutdown "
+           "with a AutoSyncLoopHolder(%s).",
+           aName));
+    });
+  } else {
+    LOGV(
+        ("AutoSyncLoopHolder::AutoSyncLoopHolder [%p] Create "
+         "AutoSyncLoopHolder(%s) while Worker is shutting down",
+         this, aName));
+    mWorkerRef = StrongWorkerRef::CreateForcibly(aWorkerPrivate, aName);
+  }
+  // mWorkerRef can be nullptr here.
+}
+
+AutoSyncLoopHolder::~AutoSyncLoopHolder() {
+  if (mWorkerRef && mTarget) {
+    mWorkerRef->Private()->AssertIsOnWorkerThread();
+    mWorkerRef->Private()->StopSyncLoop(mTarget, NS_ERROR_FAILURE);
+    mWorkerRef->Private()->DestroySyncLoop(mIndex);
+  }
+}
+
+nsresult AutoSyncLoopHolder::Run() {
+  if (mWorkerRef) {
+    WorkerPrivate* workerPrivate = mWorkerRef->Private();
+    MOZ_ASSERT(workerPrivate);
+
+    workerPrivate->AssertIsOnWorkerThread();
+
+    nsresult rv = workerPrivate->RunCurrentSyncLoop();
+
+    // The sync loop is done, sync loop has already destroyed in the end of
+    // WorkerPrivate::RunCurrentSyncLoop(). So, release mWorkerRef here to
+    // avoid destroying sync loop again in the ~AutoSyncLoopHolder();
+    mWorkerRef = nullptr;
+
+    return rv;
+  }
+  return NS_OK;
+}
+
+nsISerialEventTarget* AutoSyncLoopHolder::GetSerialEventTarget() const {
+  // This can be null if CreateNewSyncLoop() fails.
+  return mTarget;
 }
 
 // -----------------------------------------------------------------------------

@@ -212,6 +212,7 @@ export var UrlbarUtils = {
         icon: "chrome://browser/skin/bookmark.svg",
         pref: "shortcuts.bookmarks",
         telemetryLabel: "bookmarks",
+        uiLabel: "urlbar-searchmode-bookmarks",
       },
       {
         source: UrlbarUtils.RESULT_SOURCE.TABS,
@@ -219,6 +220,7 @@ export var UrlbarUtils = {
         icon: "chrome://browser/skin/tab.svg",
         pref: "shortcuts.tabs",
         telemetryLabel: "tabs",
+        uiLabel: "urlbar-searchmode-tabs",
       },
       {
         source: UrlbarUtils.RESULT_SOURCE.HISTORY,
@@ -226,6 +228,7 @@ export var UrlbarUtils = {
         icon: "chrome://browser/skin/history.svg",
         pref: "shortcuts.history",
         telemetryLabel: "history",
+        uiLabel: "urlbar-searchmode-history",
       },
     ];
   },
@@ -1314,21 +1317,29 @@ export var UrlbarUtils = {
    * @param {object} [options] Preparation options.
    * @param {boolean} [options.trimURL] Whether the displayed URL should be
    *                  trimmed or not.
+   * @param {boolean} [options.schemeless] Trim `http(s)://`.
    * @returns {string} Prepared url.
    */
-  prepareUrlForDisplay(url, { trimURL = true } = {}) {
+  prepareUrlForDisplay(url, { trimURL = true, schemeless = false } = {}) {
     // Some domains are encoded in punycode. The following ensures we display
     // the url in utf-8.
     try {
       url = new URL(url).URI.displaySpec;
     } catch {} // In some cases url is not a valid url.
 
-    if (url && trimURL && lazy.UrlbarPrefs.get("trimURLs")) {
-      url = lazy.BrowserUIUtils.removeSingleTrailingSlashFromURL(url);
-      if (url.startsWith("https://")) {
-        url = url.substring(8);
-        if (url.startsWith("www.")) {
-          url = url.substring(4);
+    if (url) {
+      if (schemeless) {
+        url = UrlbarUtils.stripPrefixAndTrim(url, {
+          stripHttp: true,
+          stripHttps: true,
+        })[0];
+      } else if (trimURL && lazy.UrlbarPrefs.get("trimURLs")) {
+        url = lazy.BrowserUIUtils.removeSingleTrailingSlashFromURL(url);
+        if (url.startsWith("https://")) {
+          url = url.substring(8);
+          if (url.startsWith("www.")) {
+            url = url.substring(4);
+          }
         }
       }
     }
@@ -1485,8 +1496,6 @@ export var UrlbarUtils = {
         switch (result.payload.type) {
           case lazy.UrlbarProviderSearchTips.TIP_TYPE.ONBOARD:
             return "tip_onboard";
-          case lazy.UrlbarProviderSearchTips.TIP_TYPE.PERSIST:
-            return "tip_persist";
           case lazy.UrlbarProviderSearchTips.TIP_TYPE.REDIRECT:
             return "tip_redirect";
           case "dismissalAcknowledgment":
@@ -1519,6 +1528,15 @@ export var UrlbarUtils = {
     }
 
     return "unknown";
+  },
+
+  searchEngagementTelemetryAction(result, index) {
+    let action =
+      index == 0
+        ? lazy.UrlbarProvidersManager.getGlobalAction()
+        : result.payload.action;
+
+    return action?.key ?? "none";
   },
 
   _getQuickSuggestTelemetryType(result) {
@@ -2054,7 +2072,6 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
           "intervention_update_restart",
           "intervention_update_web",
           "searchTip_onboard",
-          "searchTip_persist",
           "searchTip_redirect",
           "test", // for tests only
         ],

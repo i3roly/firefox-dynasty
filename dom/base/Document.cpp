@@ -46,6 +46,7 @@
 #include "mozilla/AsyncEventDispatcher.h"
 #include "mozilla/Base64.h"
 #include "mozilla/BasePrincipal.h"
+#include "mozilla/BounceTrackingProtection.h"
 #include "mozilla/CSSEnabledState.h"
 #include "mozilla/ContentBlockingAllowList.h"
 #include "mozilla/ContentBlockingNotifier.h"
@@ -1398,6 +1399,7 @@ Document::Document(const char* aContentType)
       mCloningForSVGUse(false),
       mAllowDeclarativeShadowRoots(false),
       mSuspendDOMNotifications(false),
+      mForceLoadAtTop(false),
       mXMLDeclarationBits(0),
       mOnloadBlockCount(0),
       mWriteLevel(0),
@@ -1639,6 +1641,14 @@ void Document::GetNetErrorInfo(NetErrorInfo& aInfo, ErrorResult& aRv) {
     return;
   }
   aInfo.mErrorCodeString.Assign(errorCodeString);
+
+  nsresult channelStatus;
+  rv = mFailedChannel->GetStatus(&channelStatus);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aRv.Throw(rv);
+    return;
+  }
+  aInfo.mChannelStatus = static_cast<uint32_t>(channelStatus);
 }
 
 bool Document::CallerIsTrustedAboutCertError(JSContext* aCx,
@@ -1709,6 +1719,14 @@ void Document::GetFailedCertSecurityInfo(FailedCertSecurityInfo& aInfo,
     return;
   }
   aInfo.mErrorCodeString.Assign(errorCodeString);
+
+  nsresult channelStatus;
+  rv = mFailedChannel->GetStatus(&channelStatus);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    aRv.Throw(rv);
+    return;
+  }
+  aInfo.mChannelStatus = static_cast<uint32_t>(channelStatus);
 
   nsITransportSecurityInfo::OverridableErrorCategory errorCategory;
   rv = tsi->GetOverridableErrorCategory(&errorCategory);
@@ -2007,6 +2025,56 @@ void Document::RecordPageLoadEventTelemetry(
   }
 }
 
+#ifndef ANDROID
+static void AccumulateHttp3FcpGleanPref(const nsCString& http3Key,
+                                        const TimeDuration& duration) {
+  if (http3Key == "http3"_ns) {
+    glean::performance_pageload::http3_fcp_http3.AccumulateRawDuration(
+        duration);
+  } else if (http3Key == "supports_http3"_ns) {
+    glean::performance_pageload::http3_fcp_supports_http3.AccumulateRawDuration(
+        duration);
+  } else {
+    MOZ_ASSERT_UNREACHABLE("Unknown value for http3Key");
+  }
+}
+
+static void AccumulatePriorityFcpGleanPref(
+    const nsCString& http3WithPriorityKey, const TimeDuration& duration) {
+  if (http3WithPriorityKey == "with_priority"_ns) {
+    glean::performance_pageload::h3p_fcp_with_priority.AccumulateRawDuration(
+        duration);
+  } else if (http3WithPriorityKey == "without_priority"_ns) {
+    glean::performance_pageload::http3_fcp_without_priority
+        .AccumulateRawDuration(duration);
+  } else {
+    MOZ_ASSERT_UNREACHABLE("Unknown value for http3WithPriorityKey");
+  }
+}
+
+static void AccumulateEarlyHintFcpGleanPref(const nsCString& earlyHintKey,
+                                            const TimeDuration& duration) {
+  if (earlyHintKey == "preload_1"_ns) {
+    glean::performance_pageload::eh_fcp_preload_with_eh.AccumulateRawDuration(
+        duration);
+  } else if (earlyHintKey == "preload_0"_ns) {
+    glean::performance_pageload::eh_fcp_preload_without_eh
+        .AccumulateRawDuration(duration);
+  } else if (earlyHintKey == "preconnect_"_ns) {
+    glean::performance_pageload::eh_fcp_preconnect.AccumulateRawDuration(
+        duration);
+  } else if (earlyHintKey == "preconnect_preload_1"_ns) {
+    glean::performance_pageload::eh_fcp_preconnect_preload_with_eh
+        .AccumulateRawDuration(duration);
+  } else if (earlyHintKey == "preconnect_preload_0"_ns) {
+    glean::performance_pageload::eh_fcp_preconnect_preload_without_eh
+        .AccumulateRawDuration(duration);
+  } else {
+    MOZ_ASSERT_UNREACHABLE("Unknown value for earlyHintKey");
+  }
+}
+#endif
+
 void Document::AccumulatePageLoadTelemetry(
     glean::perf::PageLoadExtra& aEventTelemetryDataOut) {
   // Interested only in top level documents for real websites that are in the
@@ -2146,18 +2214,30 @@ void Document::AccumulatePageLoadTelemetry(
       Telemetry::AccumulateTimeDelta(
           Telemetry::HTTP3_PERF_FIRST_CONTENTFUL_PAINT_MS, http3Key,
           navigationStart, firstContentfulComposite);
+#ifndef ANDROID
+      AccumulateHttp3FcpGleanPref(http3Key,
+                                  firstContentfulComposite - navigationStart);
+#endif
     }
 
     if (!http3WithPriorityKey.IsEmpty()) {
       Telemetry::AccumulateTimeDelta(
           Telemetry::H3P_PERF_FIRST_CONTENTFUL_PAINT_MS, http3WithPriorityKey,
           navigationStart, firstContentfulComposite);
+#ifndef ANDROID
+      AccumulatePriorityFcpGleanPref(
+          http3WithPriorityKey, firstContentfulComposite - navigationStart);
+#endif
     }
 
     if (!earlyHintKey.IsEmpty()) {
       Telemetry::AccumulateTimeDelta(
           Telemetry::EH_PERF_FIRST_CONTENTFUL_PAINT_MS, earlyHintKey,
           navigationStart, firstContentfulComposite);
+#ifndef ANDROID
+      AccumulateEarlyHintFcpGleanPref(
+          earlyHintKey, firstContentfulComposite - navigationStart);
+#endif
     }
 
     Telemetry::AccumulateTimeDelta(
@@ -3583,6 +3663,9 @@ nsresult Document::StartDocumentLoad(const char* aCommand, nsIChannel* aChannel,
   rv = InitCSP(aChannel);
   NS_ENSURE_SUCCESS(rv, rv);
 
+  rv = InitDocPolicy(aChannel);
+  NS_ENSURE_SUCCESS(rv, rv);
+
   // Initialize FeaturePolicy
   rv = InitFeaturePolicy(aChannel);
   NS_ENSURE_SUCCESS(rv, rv);
@@ -3882,6 +3965,35 @@ static FeaturePolicy* GetFeaturePolicyFromElement(Element* aElement) {
   }
 
   return aElement->OwnerDoc()->FeaturePolicy();
+}
+
+nsresult Document::InitDocPolicy(nsIChannel* aChannel) {
+  // We only use document policy to implement the text fragments spec, so leave
+  // everything at the default value if it isn't enabled. This includes the
+  // behavior for element fragments.
+  if (!StaticPrefs::dom_text_fragments_enabled()) {
+    return NS_OK;
+  }
+
+  nsCOMPtr<nsIHttpChannel> httpChannel;
+  nsresult rv = GetHttpChannelHelper(aChannel, getter_AddRefs(httpChannel));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return rv;
+  }
+
+  nsAutoCString docPolicyString;
+  if (httpChannel) {
+    Unused << httpChannel->GetResponseHeader("Document-Policy"_ns,
+                                             docPolicyString);
+  }
+
+  if (docPolicyString.IsEmpty()) {
+    return NS_OK;
+  }
+
+  mForceLoadAtTop = NS_GetForceLoadAtTopFromHeader(docPolicyString);
+
+  return NS_OK;
 }
 
 void Document::InitFeaturePolicy(
@@ -5403,9 +5515,20 @@ bool Document::ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
   // Next, consider context of command handling which is automatically resolved
   // by order of controllers in `nsCommandManager::GetControllerForCommand()`.
   AutoEditorCommandTarget editCommandTarget(*this, commandData);
-  if (commandData.IsAvailableOnlyWhenEditable() &&
-      !editCommandTarget.IsEditable(this)) {
-    return false;
+  if (commandData.IsAvailableOnlyWhenEditable()) {
+    if (!editCommandTarget.IsEditable(this)) {
+      return false;
+    }
+    // If currently the editor cannot dispatch `input` events, it means that the
+    // editor value is being set and that caused unexpected composition events.
+    // In this case, the value will be updated to the setting value soon and
+    // Chromium does not dispatch any events during the sequence but we dispatch
+    // `compositionupdate` and `compositionend` events to conform to the UI
+    // Events spec.  Therefore, this execCommand must be called accidentally.
+    EditorBase* targetEditor = editCommandTarget.GetTargetEditor();
+    if (targetEditor && targetEditor->IsSuppressingDispatchingInputEvent()) {
+      return false;
+    }
   }
 
   if (editCommandTarget.DoNothing()) {
@@ -13085,31 +13208,57 @@ void Document::ScrollToRef() {
   if (!presShell) {
     return;
   }
+
+  // https://wicg.github.io/scroll-to-text-fragment/#invoking-text-directives
+  // Monkeypatching HTML § 7.4.6.3 Scrolling to a fragment:
+  // 1. Let text directives be the document's pending text directives.
+  const RefPtr fragmentDirective = FragmentDirective();
+  const nsTArray<RefPtr<nsRange>> textDirectives =
+      fragmentDirective->FindTextFragmentsInDocument();
+  // 2. If ranges is non-empty, then:
+  // 2.1 Let firstRange be the first item of ranges
+  const RefPtr<nsRange> textDirectiveToScroll =
+      !textDirectives.IsEmpty() ? textDirectives[0] : nullptr;
+  // 2.2 Visually indicate each range in ranges in an implementation-defined
+  // way. The indication must not be observable from author script. See § 3.7
+  // Indicating The Text Match.
+  fragmentDirective->HighlightTextDirectives(textDirectives);
+
+  // In a subsequent call to `ScrollToRef()` during page load, `textDirectives`
+  // would only contain text directives that were not found in the previous
+  // runs. If an earlier call during the same page load already found a text
+  // directive to scroll to, only highlighting of the text directives needs to
+  // be done.
+  // This is indicated by `mScrolledToRefAlready`.
   if (mScrolledToRefAlready) {
     presShell->ScrollToAnchor();
     return;
   }
-
-  // If text directives is non-null, then highlight the text directives and
-  // scroll to the last one.
-  // XXX(:jjaschke): Document policy integration should happen here
-  // as soon as https://bugzil.la/1860915 lands.
-  // XXX(:jjaschke): Same goes for User Activation and security aspects,
-  // tracked in https://bugzil.la/1888756.
-  const bool didScrollToTextFragment =
-      presShell->HighlightAndGoToTextFragment(true);
-
-  FragmentDirective()->ClearUninvokedDirectives();
-
   // 2. If fragment is the empty string and no text directives have been
   // scrolled to, then return the special value top of the document.
-  if (didScrollToTextFragment || mScrollToRef.IsEmpty()) {
+  if (!textDirectiveToScroll && mScrollToRef.IsEmpty()) {
     return;
   }
+
+  // TODO(mccr8): This will incorrectly block scrolling from a same-document
+  // navigation triggered before the document is full loaded. See bug 1898630.
+  if (ForceLoadAtTop()) {
+    return;
+  }
+
   // 3. Let potentialIndicatedElement be the result of finding a potential
   // indicated element given document and fragment.
   NS_ConvertUTF8toUTF16 ref(mScrollToRef);
-  auto rv = presShell->GoToAnchor(ref, mChangeScrollPosWhenScrollingToRef);
+  // This also covers 2.3 of the Monkeypatch for text fragments mentioned above:
+  // 2.3 Set firstRange as document's indicated part, return.
+
+  const bool scrollToTextDirective =
+      textDirectiveToScroll
+          ? fragmentDirective->IsTextDirectiveAllowedToBeScrolledTo()
+          : mChangeScrollPosWhenScrollingToRef;
+
+  auto rv =
+      presShell->GoToAnchor(ref, textDirectiveToScroll, scrollToTextDirective);
 
   // 4. If potentialIndicatedElement is not null, then return
   // potentialIndicatedElement.
@@ -13137,7 +13286,7 @@ void Document::ScrollToRef() {
 
   // 7. Set potentialIndicatedElement to the result of finding a potential
   // indicated element given document and decodedFragment.
-  rv = presShell->GoToAnchor(decodedFragment,
+  rv = presShell->GoToAnchor(decodedFragment, nullptr,
                              mChangeScrollPosWhenScrollingToRef);
   if (NS_SUCCEEDED(rv)) {
     mScrolledToRefAlready = true;
@@ -13350,8 +13499,8 @@ static void CachePrintSelectionRanges(const Document& aSourceDoc,
     const nsRange* range = sourceDocIsStatic ? origRanges->ElementAt(i).get()
                                              : origSelection->GetRangeAt(i);
     MOZ_ASSERT(range);
-    nsINode* startContainer = range->GetStartContainer();
-    nsINode* endContainer = range->GetEndContainer();
+    nsINode* startContainer = range->GetMayCrossShadowBoundaryStartContainer();
+    nsINode* endContainer = range->GetMayCrossShadowBoundaryEndContainer();
 
     if (!startContainer || !endContainer) {
       continue;
@@ -13366,10 +13515,11 @@ static void CachePrintSelectionRanges(const Document& aSourceDoc,
       continue;
     }
 
-    RefPtr<nsRange> clonedRange =
-        nsRange::Create(startNode, range->StartOffset(), endNode,
-                        range->EndOffset(), IgnoreErrors());
-    if (clonedRange && !clonedRange->Collapsed()) {
+    RefPtr<nsRange> clonedRange = nsRange::Create(
+        startNode, range->MayCrossShadowBoundaryStartOffset(), endNode,
+        range->MayCrossShadowBoundaryEndOffset(), IgnoreErrors());
+    if (clonedRange &&
+        !clonedRange->AreNormalRangeAndCrossShadowBoundaryRangeCollapsed()) {
       printRanges->AppendElement(std::move(clonedRange));
     }
   }
@@ -13667,6 +13817,7 @@ void Document::DoUpdateSVGUseElementShadowTrees() {
   MOZ_ASSERT(!mSVGUseElementsNeedingShadowTreeUpdate.IsEmpty());
 
   MOZ_ASSERT(!mCloningForSVGUse);
+  nsAutoScriptBlockerSuppressNodeRemoved blocker;
   mCloningForSVGUse = true;
 
   do {
@@ -13730,8 +13881,9 @@ already_AddRefed<TouchList> Document::CreateTouchList(
   return retval.forget();
 }
 
+// https://drafts.csswg.org/cssom-view/Overview#dom-document-caretpositionfrompoint
 already_AddRefed<nsDOMCaretPosition> Document::CaretPositionFromPoint(
-    float aX, float aY) {
+    float aX, float aY, const CaretPositionFromPointOptions& aOptions) {
   using FrameForPointOption = nsLayoutUtils::FrameForPointOption;
 
   nscoord x = nsPresContext::CSSPixelsToAppUnits(aX);
@@ -13771,34 +13923,59 @@ already_AddRefed<nsDOMCaretPosition> Document::CaretPositionFromPoint(
   nsIFrame::ContentOffsets offsets =
       ptFrame->GetContentOffsetsFromPoint(adjustedPoint);
 
-  nsCOMPtr<nsIContent> node = offsets.content;
+  nsCOMPtr<nsINode> node = offsets.content;
   uint32_t offset = offsets.offset;
-  nsCOMPtr<nsIContent> anonNode = node;
+  nsCOMPtr<nsINode> anonNode = node;
   bool nodeIsAnonymous = node && node->IsInNativeAnonymousSubtree();
   if (nodeIsAnonymous) {
     node = ptFrame->GetContent();
-    nsIContent* nonanon = node->FindFirstNonChromeOnlyAccessContent();
-    HTMLTextAreaElement* textArea = HTMLTextAreaElement::FromNode(nonanon);
-    nsITextControlFrame* textFrame = do_QueryFrame(nonanon->GetPrimaryFrame());
-    if (textFrame) {
-      // If the anonymous content node has a child, then we need to make sure
-      // that we get the appropriate child, as otherwise the offset may not be
-      // correct when we construct a range for it.
-      nsCOMPtr<nsIContent> firstChild = anonNode->GetFirstChild();
-      if (firstChild) {
-        anonNode = firstChild;
-      }
+    nsINode* nonChrome =
+        node->AsContent()->FindFirstNonChromeOnlyAccessContent();
+    HTMLTextAreaElement* textArea = HTMLTextAreaElement::FromNode(nonChrome);
+    nsITextControlFrame* textFrame =
+        do_QueryFrame(nonChrome->AsContent()->GetPrimaryFrame());
 
-      if (textArea) {
-        offset =
-            nsContentUtils::GetAdjustedOffsetInTextControl(ptFrame, offset);
-      }
-
-      node = nonanon;
-    } else {
-      node = nullptr;
-      offset = 0;
+    if (!textFrame) {
+      return nullptr;
     }
+
+    // If the anonymous content node has a child, then we need to make sure
+    // that we get the appropriate child, as otherwise the offset may not be
+    // correct when we construct a range for it.
+    nsCOMPtr<nsINode> firstChild = anonNode->GetFirstChild();
+    if (firstChild) {
+      anonNode = firstChild;
+    }
+
+    if (textArea) {
+      offset = nsContentUtils::GetAdjustedOffsetInTextControl(ptFrame, offset);
+    }
+
+    node = nonChrome;
+  }
+
+  bool offsetAndNodeNeedsAdjustment = false;
+
+  if (StaticPrefs::
+          dom_shadowdom_new_caretPositionFromPoint_behavior_enabled()) {
+    while (node->IsInShadowTree() &&
+           !aOptions.mShadowRoots.Contains(node->GetContainingShadow())) {
+      node = node->GetContainingShadowHost();
+      offsetAndNodeNeedsAdjustment = true;
+    }
+  }
+
+  if (offsetAndNodeNeedsAdjustment) {
+    const Maybe<uint32_t> maybeIndex = node->ComputeIndexInParentContent();
+    if (MOZ_UNLIKELY(maybeIndex.isNothing())) {
+      // Unlikely to happen, but still return nullptr to avoid leaking
+      // information about the shadow tree.
+      return nullptr;
+    }
+    // 5.3.1: Set startOffset to index of startNode’s root's host.
+    offset = maybeIndex.value();
+    // 5.3.2: Set startNode to startNode’s root's host's parent.
+    node = node->GetParentNode();
   }
 
   RefPtr<nsDOMCaretPosition> aCaretPos = new nsDOMCaretPosition(node, offset);
@@ -16610,15 +16787,17 @@ nsAutoSyncOperation::nsAutoSyncOperation(Document* aDoc,
 }
 
 void nsAutoSyncOperation::SuppressDocument(Document* aDoc) {
-  if (nsCOMPtr<nsPIDOMWindowInner> win = aDoc->GetInnerWindow()) {
-    win->TimeoutManager().BeginSyncOperation();
+  if (RefPtr<nsGlobalWindowInner> win =
+          nsGlobalWindowInner::Cast(aDoc->GetInnerWindow())) {
+    win->GetTimeoutManager()->BeginSyncOperation();
   }
   aDoc->SetIsInSyncOperation(true);
 }
 
 void nsAutoSyncOperation::UnsuppressDocument(Document* aDoc) {
-  if (nsCOMPtr<nsPIDOMWindowInner> win = aDoc->GetInnerWindow()) {
-    win->TimeoutManager().EndSyncOperation();
+  if (RefPtr<nsGlobalWindowInner> win =
+          nsGlobalWindowInner::Cast(aDoc->GetInnerWindow())) {
+    win->GetTimeoutManager()->EndSyncOperation();
   }
   aDoc->SetIsInSyncOperation(false);
 }
@@ -16853,6 +17032,20 @@ bool Document::HasBeenUserGestureActivated() {
   return wc && wc->HasBeenUserGestureActivated();
 }
 
+bool Document::ConsumeTextDirectiveUserActivation() {
+  if (!mChannel) {
+    return false;
+  }
+  nsCOMPtr<nsILoadInfo> loadInfo = mChannel->LoadInfo();
+  if (!loadInfo) {
+    return false;
+  }
+  const bool textDirectiveUserActivation =
+      loadInfo->GetTextDirectiveUserActivation();
+  loadInfo->SetTextDirectiveUserActivation(false);
+  return textDirectiveUserActivation;
+}
+
 DOMHighResTimeStamp Document::LastUserGestureTimeStamp() {
   if (RefPtr<WindowContext> wc = GetWindowContext()) {
     if (nsGlobalWindowInner* innerWindow = wc->GetInnerWindow()) {
@@ -17001,6 +17194,17 @@ class UserInteractionTimer final : public Runnable,
     // the document could be already gone.
     mBlockerName.AppendPrintf("UserInteractionTimer %d for document %p",
                               ++userInteractionTimerId, aDocument);
+
+    // For ContentBlockingUserInteraction we care about user-interaction stored
+    // only for top-level documents and documents with access to the Storage
+    // Access API
+    if (aDocument->IsTopLevelContentDocument()) {
+      mShouldRecordContentBlockingUserInteraction = true;
+    } else {
+      bool hasSA;
+      nsresult rv = aDocument->HasStorageAccessSync(hasSA);
+      mShouldRecordContentBlockingUserInteraction = NS_SUCCEEDED(rv) && hasSA;
+    }
   }
 
   // Runnable interface
@@ -17074,7 +17278,11 @@ class UserInteractionTimer final : public Runnable,
     // If the document is not gone, let's reset its timer flag.
     nsCOMPtr<Document> document(mDocument);
     if (document) {
-      ContentBlockingUserInteraction::Observe(mPrincipal);
+      if (mShouldRecordContentBlockingUserInteraction) {
+        ContentBlockingUserInteraction::Observe(mPrincipal);
+      }
+      Unused << BounceTrackingProtection::RecordUserActivation(
+          mDocument->GetWindowContext());
       document->ResetUserInteractionTimer();
     }
   }
@@ -17101,6 +17309,7 @@ class UserInteractionTimer final : public Runnable,
 
   nsCOMPtr<nsIPrincipal> mPrincipal;
   WeakPtr<Document> mDocument;
+  bool mShouldRecordContentBlockingUserInteraction = false;
 
   nsCOMPtr<nsITimer> mTimer;
 
@@ -17113,18 +17322,21 @@ NS_IMPL_ISUPPORTS_INHERITED(UserInteractionTimer, Runnable, nsITimerCallback,
 }  // namespace
 
 void Document::MaybeStoreUserInteractionAsPermission() {
-  // We care about user-interaction stored only for top-level documents
-  // and documents with access to the Storage Access API
-  if (!IsTopLevelContentDocument()) {
-    bool hasSA;
-    nsresult rv = HasStorageAccessSync(hasSA);
-    if (NS_FAILED(rv) || !hasSA) {
-      return;
-    }
-  }
-
   if (!mUserHasInteracted) {
     // First interaction, let's store this info now.
+    Unused << BounceTrackingProtection::RecordUserActivation(
+        GetWindowContext());
+
+    // For ContentBlockingUserInteraction we care about user-interaction stored
+    // only for top-level documents and documents with access to the Storage
+    // Access API
+    if (!IsTopLevelContentDocument()) {
+      bool hasSA;
+      nsresult rv = HasStorageAccessSync(hasSA);
+      if (NS_FAILED(rv) || !hasSA) {
+        return;
+      }
+    }
     ContentBlockingUserInteraction::Observe(NodePrincipal());
     return;
   }
@@ -17150,16 +17362,6 @@ void Document::ResetUserInteractionTimer() {
 
 bool Document::IsExtensionPage() const {
   return BasePrincipal::Cast(NodePrincipal())->AddonPolicy();
-}
-
-void Document::AddResizeObserver(ResizeObserver& aObserver) {
-  MOZ_ASSERT(!mResizeObservers.Contains(&aObserver));
-  mResizeObservers.AppendElement(&aObserver);
-}
-
-void Document::RemoveResizeObserver(ResizeObserver& aObserver) {
-  MOZ_ASSERT(mResizeObservers.Contains(&aObserver));
-  mResizeObservers.RemoveElement(&aObserver);
 }
 
 PermissionDelegateHandler* Document::GetPermissionDelegateHandler() {

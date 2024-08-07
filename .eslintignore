@@ -40,6 +40,8 @@ browser/branding/**/firefox-branding.js
 # Gzipped test file.
 browser/base/content/test/general/gZipOfflineChild.html
 browser/base/content/test/urlbar/file_blank_but_not_blank.html
+# Pre-processed template file
+browser/components/backup/content/archive.template.html
 # Test files that are really json not js, and don't need to be linted.
 browser/components/sessionstore/test/unit/data/sessionstore_valid.js
 browser/components/sessionstore/test/unit/data/sessionstore_invalid.js
@@ -194,20 +196,9 @@ mobile/android/locales/
 mobile/android/android-components/components/feature/readerview/src/main/assets/extensions/readerview/manifest.json
 mobile/android/android-components/samples/browser/src/main/assets/extensions/test/manifest.json
 
-# TODO - Bug 1881094: temporarily ignored for firefox-android migration
-mobile/android/android-components/components/browser/errorpages/src/main/assets/errorPageScripts.js
-mobile/android/android-components/components/browser/icons/src/main/assets/extensions/browser-icons/icons.js
-mobile/android/android-components/components/feature/accounts/src/main/assets/extensions/fxawebchannel/background.js
-mobile/android/android-components/components/feature/accounts/src/main/assets/extensions/fxawebchannel/fxawebchannel.js
-mobile/android/android-components/components/feature/readerview/src/main/assets/extensions/readerview/
-mobile/android/android-components/components/feature/search/src/main/assets/extensions/ads/adsTelemetry.js
-mobile/android/android-components/components/feature/search/src/main/assets/extensions/search/searchTelemetry.js
-mobile/android/android-components/components/feature/webcompat/src/main/assets/extensions/webcompat/
+# Bug 1903138: remaining issues from the firefox-android migration
 mobile/android/android-components/docs/assets/js/icon-js.js
-mobile/android/android-components/samples/browser/src/main/assets/extensions/test/background.js
 mobile/android/fenix/app/src/androidTest/assets/
-mobile/android/fenix/app/src/androidTest/java/org/mozilla/fenix/syncintegration/
-mobile/android/fenix/app/src/main/assets/
 mobile/android/focus-android/app/src/androidTest/assets/
 
 # Pre-processed/pref files
@@ -269,6 +260,8 @@ toolkit/mozapps/extensions/test/xpcshell/data/test_AddonRepository_fail.json
 # Built files
 toolkit/components/pdfjs/content/build
 toolkit/components/pdfjs/content/web
+
+toolkit/components/pdfjs/PdfJsOverridePrefs.js
 
 # Uses preprocessing
 toolkit/components/reader/Readerable.sys.mjs

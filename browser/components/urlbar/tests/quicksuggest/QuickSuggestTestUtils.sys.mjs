@@ -229,13 +229,10 @@ class _QuickSuggestTestUtils {
     }
 
     // Tell the Rust backend to use the local remote setting server.
-    await lazy.QuickSuggest.rustBackend._test_setRemoteSettingsConfig(
-      new lazy.RemoteSettingsConfig({
-        collectionName: "quicksuggest",
-        bucketName: "main",
-        serverUrl: this.#remoteSettingsServer.url.toString(),
-      })
-    );
+    await lazy.QuickSuggest.rustBackend._test_setRemoteSettingsConfig({
+      bucketName: "main",
+      serverUrl: this.#remoteSettingsServer.url.toString(),
+    });
 
     // Wait for the current backend to finish syncing.
     await this.forceSync();
@@ -380,7 +377,7 @@ class _QuickSuggestTestUtils {
     url = "http://example.com/amp",
     title = "Amp Suggestion",
     score = 0.3,
-  }) {
+  } = {}) {
     return {
       keywords,
       url,
@@ -407,7 +404,7 @@ class _QuickSuggestTestUtils {
     url = "http://example.com/wikipedia",
     title = "Wikipedia Suggestion",
     score = 0.2,
-  }) {
+  } = {}) {
     return {
       keywords,
       url,
@@ -434,7 +431,7 @@ class _QuickSuggestTestUtils {
     url = "http://example.com/amo",
     title = "Amo Suggestion",
     score = 0.2,
-  }) {
+  } = {}) {
     return {
       keywords,
       url,

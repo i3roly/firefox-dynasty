@@ -47,8 +47,10 @@ import org.mozilla.fenix.components.TabCollectionStorage
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.metrics.MetricsUtils
+import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.nav
+import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.home.HomeFragment
 import org.mozilla.fenix.home.HomeFragmentDirections
 import org.mozilla.fenix.messaging.MessageController
@@ -379,30 +381,39 @@ class DefaultSessionControlController(
             )
         }
 
-        val existingTabForUrl = when (topSite) {
-            is TopSite.Frecent, is TopSite.Pinned -> {
-                store.state.tabs.firstOrNull { topSite.url == it.content.url }
-            }
-
-            else -> null
-        }
-
-        if (existingTabForUrl == null) {
-            TopSites.openInNewTab.record(NoExtras())
-
-            val tabId = addTabUseCase.invoke(
-                url = appendSearchAttributionToUrlIfNeeded(topSite.url),
-                selectTab = true,
-                startLoading = true,
+        if (settings.enableHomepageAsNewTab) {
+            activity.openToBrowserAndLoad(
+                searchTermOrURL = appendSearchAttributionToUrlIfNeeded(topSite.url),
+                newTab = false,
+                from = BrowserDirection.FromHome,
             )
-
-            if (settings.openNextTabInDesktopMode) {
-                activity.handleRequestDesktopMode(tabId)
-            }
         } else {
-            selectTabUseCase.invoke(existingTabForUrl.id)
+            val existingTabForUrl = when (topSite) {
+                is TopSite.Frecent, is TopSite.Pinned -> {
+                    store.state.tabs.firstOrNull { topSite.url == it.content.url }
+                }
+
+                else -> null
+            }
+
+            if (existingTabForUrl == null) {
+                TopSites.openInNewTab.record(NoExtras())
+
+                val tabId = addTabUseCase.invoke(
+                    url = appendSearchAttributionToUrlIfNeeded(topSite.url),
+                    selectTab = true,
+                    startLoading = true,
+                )
+
+                if (settings.openNextTabInDesktopMode) {
+                    activity.handleRequestDesktopMode(tabId)
+                }
+            } else {
+                selectTabUseCase.invoke(existingTabForUrl.id)
+            }
+
+            navController.navigate(R.id.browserFragment)
         }
-        navController.navigate(R.id.browserFragment)
     }
 
     @VisibleForTesting
@@ -470,7 +481,9 @@ class DefaultSessionControlController(
     }
 
     override fun handleShowWallpapersOnboardingDialog(state: WallpaperState): Boolean {
-        return if (activity.browsingModeManager.mode.isPrivate) {
+        val shouldShowNavBarCFR =
+            activity.shouldAddNavigationBar() && settings.shouldShowNavigationBarCFR
+        return if (activity.browsingModeManager.mode.isPrivate || shouldShowNavBarCFR) {
             false
         } else {
             state.availableWallpapers.filter { wallpaper ->

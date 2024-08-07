@@ -177,10 +177,9 @@ class Notification : public DOMEventTargetHelper,
 
   void Close();
 
-  nsPIDOMWindowInner* GetParentObject() { return GetOwner(); }
+  nsIGlobalObject* GetParentObject() const { return GetOwnerGlobal(); }
 
-  virtual JSObject* WrapObject(JSContext* aCx,
-                               JS::Handle<JSObject*> aGivenProto) override;
+  JSObject* WrapObject(JSContext*, JS::Handle<JSObject*> aGivenProto) override;
 
   bool RequireInteraction() const;
 
@@ -327,7 +326,8 @@ class Notification : public DOMEventTargetHelper,
 
   bool CreateWorkerRef();
 
-  nsresult ResolveIconAndSoundURL(nsString&, nsString&);
+  static nsresult ResolveIconAndSoundURL(nsIGlobalObject* aGlobal,
+                                         nsString& iconUrl, nsString& soundUrl);
 
   // Only used for Notifications on Workers, worker thread only.
   RefPtr<StrongWorkerRef> mWorkerRef;

@@ -18,6 +18,7 @@
 #include "util/Memory.h"
 #include "vm/JitActivation.h"  // js::jit::JitActivation
 #include "vm/JSContext.h"
+#include "wasm/WasmStubs.h"
 
 #include "jit/MacroAssembler-inl.h"
 
@@ -2112,18 +2113,6 @@ FaultingCodeOffset MacroAssemblerLOONG64::loadDouble(const Address& address,
 FaultingCodeOffset MacroAssemblerLOONG64::loadDouble(const BaseIndex& src,
                                                      FloatRegister dest) {
   return asMasm().ma_fld_d(dest, src);
-}
-
-void MacroAssemblerLOONG64::loadFloatAsDouble(const Address& address,
-                                              FloatRegister dest) {
-  asMasm().ma_fld_s(dest, address);
-  as_fcvt_d_s(dest, dest);
-}
-
-void MacroAssemblerLOONG64::loadFloatAsDouble(const BaseIndex& src,
-                                              FloatRegister dest) {
-  asMasm().loadFloat32(src, dest);
-  as_fcvt_d_s(dest, dest);
 }
 
 FaultingCodeOffset MacroAssemblerLOONG64::loadFloat32(const Address& address,
@@ -5151,30 +5140,6 @@ void MacroAssemblerLOONG64Compat::boxNonDouble(JSValueType type, Register src,
   boxValue(type, src, dest.valueReg());
 }
 
-void MacroAssemblerLOONG64Compat::boolValueToDouble(const ValueOperand& operand,
-                                                    FloatRegister dest) {
-  ScratchRegisterScope scratch(asMasm());
-  convertBoolToInt32(operand.valueReg(), scratch);
-  convertInt32ToDouble(scratch, dest);
-}
-
-void MacroAssemblerLOONG64Compat::int32ValueToDouble(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToDouble(operand.valueReg(), dest);
-}
-
-void MacroAssemblerLOONG64Compat::boolValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  ScratchRegisterScope scratch(asMasm());
-  convertBoolToInt32(operand.valueReg(), scratch);
-  convertInt32ToFloat32(scratch, dest);
-}
-
-void MacroAssemblerLOONG64Compat::int32ValueToFloat32(
-    const ValueOperand& operand, FloatRegister dest) {
-  convertInt32ToFloat32(operand.valueReg(), dest);
-}
-
 void MacroAssemblerLOONG64Compat::loadConstantFloat32(float f,
                                                       FloatRegister dest) {
   ma_lis(dest, f);
@@ -5486,12 +5451,7 @@ void MacroAssemblerLOONG64Compat::handleFailureWithHandlerTail(
 
   // Found a wasm catch handler, restore state and jump to it.
   bind(&wasmCatch);
-  loadPtr(Address(sp, ResumeFromException::offsetOfTarget()), a1);
-  loadPtr(Address(StackPointer, ResumeFromException::offsetOfFramePointer()),
-          FramePointer);
-  loadPtr(Address(StackPointer, ResumeFromException::offsetOfStackPointer()),
-          StackPointer);
-  jump(a1);
+  wasm::GenerateJumpToCatchHandler(asMasm(), sp, a1, a2);
 }
 
 CodeOffset MacroAssemblerLOONG64Compat::toggledJump(Label* label) {

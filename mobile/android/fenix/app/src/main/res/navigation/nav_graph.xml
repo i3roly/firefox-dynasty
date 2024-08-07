@@ -49,6 +49,10 @@
         app:popUpTo="@id/homeFragment" />
 
     <action
+        android:id="@+id/action_global_microsurvey_dialog"
+        app:destination="@id/microsurveyDialogFragment" />
+
+    <action
         android:id="@+id/action_global_search_dialog"
         app:destination="@id/searchDialogFragment"
         app:popUpTo="@id/searchDialogFragment"
@@ -249,6 +253,15 @@
     <dialog
         android:id="@+id/wallpaperOnboardingDialogFragment"
         android:name="org.mozilla.fenix.onboarding.WallpaperOnboardingDialogFragment" />
+
+    <dialog
+        android:id="@+id/microsurveyDialogFragment"
+        android:name="org.mozilla.fenix.microsurvey.ui.MicrosurveyBottomSheetFragment">
+        <argument
+            android:name="microsurvey_id"
+            app:argType="string"
+            app:nullable="false" />
+    </dialog>
 
     <dialog
         android:id="@+id/searchDialogFragment"
@@ -1117,6 +1130,14 @@
             app:argType="string"
             app:nullable="true" />
     </dialog>
+    <fragment
+        android:id="@+id/addonDetailsFragment"
+        android:name="org.mozilla.fenix.addons.AddonDetailsFragment"
+        tools:layout="@layout/fragment_add_on_details">
+        <argument
+            android:name="addon"
+            app:argType="mozilla.components.feature.addons.Addon" />
+    </fragment>
 
     <navigation
         android:id="@+id/site_permissions_exceptions_graph"
@@ -1217,14 +1238,6 @@
             android:id="@+id/addonInternalSettingsFragment"
             android:name="org.mozilla.fenix.addons.AddonInternalSettingsFragment"
             tools:layout="@layout/fragment_add_on_internal_settings">
-            <argument
-                android:name="addon"
-                app:argType="mozilla.components.feature.addons.Addon" />
-        </fragment>
-        <fragment
-            android:id="@+id/addonDetailsFragment"
-            android:name="org.mozilla.fenix.addons.AddonDetailsFragment"
-            tools:layout="@layout/fragment_add_on_details">
             <argument
                 android:name="addon"
                 app:argType="mozilla.components.feature.addons.Addon" />
@@ -1553,6 +1566,12 @@
             <action
                 android:id="@+id/action_menuDialogFragment_to_translationsDialogFragment"
                 app:destination="@id/translationsDialogFragment" />
+            <action
+                android:id="@+id/action_menuDialogFragment_to_createShortcutFragment"
+                app:destination="@id/createShortcutFragment" />
+            <action
+                android:id="@+id/action_menuDialogFragmen_to_addonDetailsFragment"
+                app:destination="@id/addonDetailsFragment" />
         </dialog>
     </navigation>
 </navigation>

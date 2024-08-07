@@ -2581,7 +2581,7 @@ bool JSStructuredCloneReader::readTypedArray(uint32_t arrayType,
                                              uint64_t nelems,
                                              MutableHandleValue vp,
                                              bool v1Read) {
-  if (arrayType > (v1Read ? Scalar::Uint8Clamped : Scalar::BigUint64)) {
+  if (arrayType > (v1Read ? Scalar::Uint8Clamped : Scalar::Float16)) {
     JS_ReportErrorNumberASCII(context(), GetErrorMessage, nullptr,
                               JSMSG_SC_BAD_SERIALIZED_DATA,
                               "unhandled typed array element type");
@@ -2986,6 +2986,11 @@ bool JSStructuredCloneReader::startRead(MutableHandleValue vp,
                                         ShouldAtomizeStrings atomizeStrings) {
   uint32_t tag, data;
   bool alreadAppended = false;
+
+  AutoCheckRecursionLimit recursion(in.context());
+  if (!recursion.check(in.context())) {
+    return false;
+  }
 
   if (!in.readPair(&tag, &data)) {
     return false;

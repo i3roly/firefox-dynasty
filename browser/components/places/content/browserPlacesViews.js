@@ -41,6 +41,10 @@ class PlacesViewBase {
   // The xul element that represents the root container.
   _rootElt = null;
 
+  get rootElement() {
+    return this._rootElt;
+  }
+
   // Set to true for views that are represented by native widgets (i.e.
   // the native mac menu).
   _nativeView = false;
@@ -933,6 +937,8 @@ class PlacesToolbar extends PlacesViewBase {
       this._chevron._placesView.uninit();
     }
 
+    this._chevronPopup.uninit();
+
     if (this._otherBookmarks?._placesView) {
       this._otherBookmarks._placesView.uninit();
     }
@@ -1531,7 +1537,7 @@ class PlacesToolbar extends PlacesViewBase {
    *   - folderElt: the folder to drop into, if applicable.
    */
   _getDropPoint(aEvent) {
-    if (!PlacesUtils.nodeIsFolder(this._resultNode)) {
+    if (!PlacesUtils.nodeIsFolderOrShortcut(this._resultNode)) {
       return null;
     }
 
@@ -1545,7 +1551,7 @@ class PlacesToolbar extends PlacesViewBase {
       let eltRect = elt.getBoundingClientRect();
       let eltIndex = Array.prototype.indexOf.call(this._rootElt.children, elt);
       if (
-        PlacesUtils.nodeIsFolder(elt._placesNode) &&
+        PlacesUtils.nodeIsFolderOrShortcut(elt._placesNode) &&
         !PlacesUIUtils.isFolderReadOnly(elt._placesNode)
       ) {
         // This is a folder.
@@ -1909,7 +1915,7 @@ class PlacesToolbar extends PlacesViewBase {
       PlacesUIUtils.getViewForNode(popup) == this &&
       // UI performance: folder queries are cheap, keep the resultnode open
       // so we don't rebuild its contents whenever the popup is reopened.
-      !PlacesUtils.nodeIsFolder(placesNode)
+      !PlacesUtils.nodeIsFolderOrShortcut(placesNode)
     ) {
       placesNode.containerOpen = false;
     }
@@ -2036,7 +2042,7 @@ class PlacesMenu extends PlacesViewBase {
 
     // UI performance: folder queries are cheap, keep the resultnode open
     // so we don't rebuild its contents whenever the popup is reopened.
-    if (!PlacesUtils.nodeIsFolder(placesNode)) {
+    if (!PlacesUtils.nodeIsFolderOrShortcut(placesNode)) {
       placesNode.containerOpen = false;
     }
 
@@ -2249,7 +2255,7 @@ this.PlacesPanelview = class PlacesPanelview extends PlacesViewBase {
       PlacesUIUtils.getViewForNode(panelview) == this &&
       // UI performance: folder queries are cheap, keep the resultnode open
       // so we don't rebuild its contents whenever the popup is reopened.
-      !PlacesUtils.nodeIsFolder(placesNode)
+      !PlacesUtils.nodeIsFolderOrShortcut(placesNode)
     ) {
       placesNode.containerOpen = false;
     }

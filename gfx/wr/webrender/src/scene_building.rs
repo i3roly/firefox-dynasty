@@ -37,7 +37,7 @@
 
 use api::{AlphaType, BorderDetails, BorderDisplayItem, BuiltDisplayListIter, BuiltDisplayList, PrimitiveFlags};
 use api::{ClipId, ColorF, CommonItemProperties, ComplexClipRegion, ComponentTransferFuncType, RasterSpace};
-use api::{DisplayItem, DisplayItemRef, ExtendMode, ExternalScrollId, FilterData};
+use api::{DebugFlags, DisplayItem, DisplayItemRef, ExtendMode, ExternalScrollId, FilterData};
 use api::{FilterOp, FilterPrimitive, FontInstanceKey, FontSize, GlyphInstance, GlyphOptions, GradientStop};
 use api::{IframeDisplayItem, ImageKey, ImageRendering, ItemRange, ColorDepth, QualitySettings};
 use api::{LineOrientation, LineStyle, NinePatchBorderSource, PipelineId, MixBlendMode, StackingContextFlags};
@@ -540,6 +540,7 @@ impl<'a> SceneBuilder<'a> {
         interners: &mut Interners,
         spatial_tree: &mut SceneSpatialTree,
         stats: &SceneStats,
+        debug_flags: DebugFlags,
     ) -> BuiltScene {
         profile_scope!("build_scene");
 
@@ -575,6 +576,7 @@ impl<'a> SceneBuilder<'a> {
             tile_cache_builder: TileCacheBuilder::new(
                 root_reference_frame_index,
                 frame_builder_config.background_color,
+                debug_flags,
             ),
             snap_to_device,
             picture_graph: PictureGraph::new(),
@@ -1193,10 +1195,12 @@ impl<'a> SceneBuilder<'a> {
 
         self.id_to_index_mapper_stack.push(NodeIdToIndexMapper::default());
 
-        let bounds = self.snap_rect(
-            &info.bounds.translate(external_scroll_offset),
+        let mut bounds = self.snap_rect(
+            &info.bounds,
             spatial_node_index,
         );
+
+        bounds = bounds.translate(external_scroll_offset);
 
         let spatial_node_index = self.push_reference_frame(
             SpatialId::root_reference_frame(iframe_pipeline_id),
@@ -1239,7 +1243,7 @@ impl<'a> SceneBuilder<'a> {
             self.root_iframe_clip = Some(ClipId::root(iframe_pipeline_id));
             self.add_tile_cache_barrier_if_needed(SliceFlags::empty());
         }
-        self.iframe_size.push(info.bounds.size());
+        self.iframe_size.push(bounds.size());
 
         self.build_spatial_tree_for_display_list(
             &pipeline.display_list.display_list,
@@ -1269,26 +1273,20 @@ impl<'a> SceneBuilder<'a> {
     fn process_common_properties(
         &mut self,
         common: &CommonItemProperties,
-        bounds: Option<&LayoutRect>,
+        bounds: Option<LayoutRect>,
     ) -> (LayoutPrimitiveInfo, LayoutRect, SpatialNodeIndex, ClipNodeId) {
         let spatial_node_index = self.get_space(common.spatial_id);
-        let current_offset = self.current_external_scroll_offset(spatial_node_index);
-
-        let unsnapped_clip_rect = common.clip_rect.translate(current_offset);
-        let unsnapped_rect = bounds.map(|bounds| {
-            bounds.translate(current_offset)
-        });
 
         // If no bounds rect is given, default to clip rect.
         let (rect, clip_rect) = if common.flags.contains(PrimitiveFlags::ANTIALISED) {
-            (unsnapped_rect.unwrap_or(unsnapped_clip_rect), unsnapped_clip_rect)
+            (bounds.unwrap_or(common.clip_rect), common.clip_rect)
         } else {
             let clip_rect = self.snap_rect(
-                &unsnapped_clip_rect,
+                &common.clip_rect,
                 spatial_node_index,
             );
 
-            let rect = unsnapped_rect.map_or(clip_rect, |bounds| {
+            let rect = bounds.map_or(clip_rect, |bounds| {
                 self.snap_rect(
                     &bounds,
                     spatial_node_index,
@@ -1297,6 +1295,12 @@ impl<'a> SceneBuilder<'a> {
 
             (rect, clip_rect)
         };
+
+        let current_offset = self.current_external_scroll_offset(spatial_node_index);
+
+        let rect = rect.translate(current_offset);
+        let clip_rect = clip_rect.translate(current_offset);
+        let unsnapped_rect = bounds.unwrap_or(common.clip_rect).translate(current_offset);
 
         let clip_node_id = self.get_clip_node(
             common.clip_chain_id,
@@ -1308,13 +1312,13 @@ impl<'a> SceneBuilder<'a> {
             flags: common.flags,
         };
 
-        (layout, unsnapped_rect.unwrap_or(unsnapped_clip_rect), spatial_node_index, clip_node_id)
+        (layout, unsnapped_rect, spatial_node_index, clip_node_id)
     }
 
     fn process_common_properties_with_bounds(
         &mut self,
         common: &CommonItemProperties,
-        bounds: &LayoutRect,
+        bounds: LayoutRect,
     ) -> (LayoutPrimitiveInfo, LayoutRect, SpatialNodeIndex, ClipNodeId) {
         self.process_common_properties(
             common,
@@ -1344,7 +1348,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 self.add_image(
@@ -1364,7 +1368,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, unsnapped_rect, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 let stretch_size = process_repeat_size(
@@ -1390,7 +1394,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 self.add_yuv_image(
@@ -1415,7 +1419,7 @@ impl<'a> SceneBuilder<'a> {
                 // error throughout the layers). We should fix this at some point.
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 self.add_text(
@@ -1434,7 +1438,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 self.add_primitive(
@@ -1494,7 +1498,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 self.add_clear_rectangle(
@@ -1508,7 +1512,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.area,
+                    info.area,
                 );
 
                 self.add_line(
@@ -1530,7 +1534,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (mut layout, unsnapped_rect, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 let mut tile_size = process_repeat_size(
@@ -1608,7 +1612,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (mut layout, unsnapped_rect, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 let mut center = info.gradient.center;
@@ -1686,7 +1690,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (mut layout, unsnapped_rect, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 let tile_size = process_repeat_size(
@@ -1731,7 +1735,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.box_bounds,
+                    info.box_bounds,
                 );
 
                 self.add_box_shadow(
@@ -1751,7 +1755,7 @@ impl<'a> SceneBuilder<'a> {
 
                 let (layout, _, spatial_node_index, clip_node_id) = self.process_common_properties_with_bounds(
                     &info.common,
-                    &info.bounds,
+                    info.bounds,
                 );
 
                 self.add_border(
@@ -3791,6 +3795,9 @@ impl<'a> SceneBuilder<'a> {
         // For each filter, create a new image with that composite mode.
         let mut current_filter_data_index = 0;
         // Check if the filter chain is actually an SVGFE filter graph DAG
+        //
+        // TODO: We technically could translate all CSS filters to SVGFE here if
+        // we want to reduce redundant code.
         if let Some(Filter::SVGGraphNode(..)) = filter_ops.first() {
             // The interesting parts of the handling of SVG filters are:
             // * scene_building.rs : wrap_prim_with_filters (you are here)
@@ -3804,9 +3811,6 @@ impl<'a> SceneBuilder<'a> {
             // Easily tunable for debugging proper handling of inflated rects,
             // this should normally be 1
             const SVGFE_INFLATE: i16 = 1;
-            // Easily tunable for debugging proper handling of inflated rects,
-            // this should normally be 0
-            const SVGFE_INFLATE_OUTPUT: i16 = 0;
 
             // Validate inputs to all filters.
             //
@@ -3842,14 +3846,14 @@ impl<'a> SceneBuilder<'a> {
             let mut filters: Vec<(FilterGraphNode, FilterGraphOp)> = Vec::new();
             filters.reserve(BUFFER_LIMIT);
             for (original_id, parsefilter) in filter_ops.iter().enumerate() {
-                match parsefilter {
-                    Filter::SVGGraphNode(parsenode, op) => {
-                        if filters.len() >= BUFFER_LIMIT {
-                            // If the DAG is too large we drop it entirely, the spec
-                            // allows this.
-                            return source;
-                        }
+                if filters.len() >= BUFFER_LIMIT {
+                    // If the DAG is too large to process, the spec requires
+                    // that we drop all filters and display source image as-is.
+                    return source;
+                }
 
+                let newfilter = match parsefilter {
+                    Filter::SVGGraphNode(parsenode, op) => {
                         // We need to offset the subregion by the stacking context
                         // offset or we'd be in the wrong coordinate system, prims
                         // are already offset by this same amount.
@@ -3919,7 +3923,7 @@ impl<'a> SceneBuilder<'a> {
                             FilterGraphOp::SVGFETurbulenceWithTurbulenceNoiseWithNoStitching{..} |
                             FilterGraphOp::SVGFETurbulenceWithTurbulenceNoiseWithStitching{..} => {
                                 assert!(remapped_inputs.len() == 0);
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             }
                             FilterGraphOp::SVGFEColorMatrix{..} |
                             FilterGraphOp::SVGFEIdentity |
@@ -3928,7 +3932,7 @@ impl<'a> SceneBuilder<'a> {
                             FilterGraphOp::SVGFEToAlpha => {
                                 assert!(remapped_inputs.len() == 1);
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             }
                             FilterGraphOp::SVGFEComponentTransfer => {
                                 assert!(remapped_inputs.len() == 1);
@@ -3973,7 +3977,7 @@ impl<'a> SceneBuilder<'a> {
                                     .intern(&filter_data_key, || ());
 
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), FilterGraphOp::SVGFEComponentTransferInterned{handle, creates_pixels}));
+                                (newnode.clone(), FilterGraphOp::SVGFEComponentTransferInterned{handle, creates_pixels})
                             }
                             FilterGraphOp::SVGFEComponentTransferInterned{..} => unreachable!(),
                             FilterGraphOp::SVGFETile => {
@@ -3984,7 +3988,7 @@ impl<'a> SceneBuilder<'a> {
                                 remapped_inputs[0].target_padding =
                                     LayoutRect::max_rect();
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             }
                             FilterGraphOp::SVGFEConvolveMatrixEdgeModeDuplicate{kernel_unit_length_x, kernel_unit_length_y, ..} |
                             FilterGraphOp::SVGFEConvolveMatrixEdgeModeNone{kernel_unit_length_x, kernel_unit_length_y, ..} |
@@ -4006,7 +4010,7 @@ impl<'a> SceneBuilder<'a> {
                                     remapped_inputs[0].target_padding
                                     .inflate(padding.width, padding.height);
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             },
                             FilterGraphOp::SVGFEDiffuseLightingDistant{kernel_unit_length_x, kernel_unit_length_y, ..} |
                             FilterGraphOp::SVGFEDiffuseLightingPoint{kernel_unit_length_x, kernel_unit_length_y, ..} |
@@ -4031,7 +4035,7 @@ impl<'a> SceneBuilder<'a> {
                                     remapped_inputs[0].target_padding
                                     .inflate(padding.width, padding.height);
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             },
                             FilterGraphOp::SVGFEDisplacementMap { scale, .. } => {
                                 assert!(remapped_inputs.len() == 2);
@@ -4056,7 +4060,7 @@ impl<'a> SceneBuilder<'a> {
                                     remapped_inputs[1].target_padding
                                     .inflate(padding.width, padding.height);
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             },
                             FilterGraphOp::SVGFEDropShadow{ dx, dy, std_deviation_x, std_deviation_y, .. } => {
                                 assert!(remapped_inputs.len() == 1);
@@ -4086,7 +4090,7 @@ impl<'a> SceneBuilder<'a> {
                                             )
                                     );
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             },
                             FilterGraphOp::SVGFEGaussianBlur{std_deviation_x, std_deviation_y} => {
                                 assert!(remapped_inputs.len() == 1);
@@ -4103,7 +4107,7 @@ impl<'a> SceneBuilder<'a> {
                                     remapped_inputs[0].target_padding
                                     .inflate(padding.width, padding.height);
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode.clone(), op.clone())
                             }
                             FilterGraphOp::SVGFEBlendColor |
                             FilterGraphOp::SVGFEBlendColorBurn |
@@ -4130,62 +4134,59 @@ impl<'a> SceneBuilder<'a> {
                             FilterGraphOp::SVGFECompositeXOR => {
                                 assert!(remapped_inputs.len() == 2);
                                 newnode.inputs = remapped_inputs;
-                                filters.push((newnode.clone(), op.clone()));
+                                (newnode, op.clone())
                             }
                         }
-
-                        // Set the reference remapping for the last (or only) node
-                        // that we just pushed
-                        let id = (filters.len() - 1) as i16;
-                        if let Some(pic) = reference_for_buffer_id.get_mut(original_id as usize) {
-                            *pic = FilterGraphPictureReference {
-                                buffer_id: FilterOpGraphPictureBufferId::BufferId(id),
-                                subregion: newnode.subregion,
-                                offset: LayoutVector2D::zero(),
-                                inflate: newnode.inflate,
-                                source_padding: LayoutRect::zero(),
-                                target_padding: LayoutRect::zero(),
-                            };
-                        }
+                    }
+                    Filter::Opacity(valuebinding, value) => {
+                        // Opacity filter is sometimes appended by
+                        // wr_dp_push_stacking_context before we get here,
+                        // convert to SVGFEOpacity in the graph.  Note that
+                        // linear is set to false because it has no meaning for
+                        // opacity (which scales all of the RGBA uniformly).
+                        let pic = reference_for_buffer_id[original_id as usize - 1];
+                        (
+                            FilterGraphNode {
+                                kept_by_optimizer: false,
+                                linear: false,
+                                inflate: SVGFE_INFLATE,
+                                inputs: [pic].to_vec(),
+                                subregion: pic.subregion,
+                            },
+                            FilterGraphOp::SVGFEOpacity{
+                                valuebinding: *valuebinding,
+                                value: *value,
+                            },
+                        )
                     }
                     _ => {
-                        panic!("wrap_prim_with_filters: Mixed SVG and CSS filters?")
+                        log!(Level::Warn, "wrap_prim_with_filters: unexpected filter after SVG filters filter[{:?}]={:?}", original_id, parsefilter);
+                        // If we can't figure out how to process the graph, spec
+                        // requires that we drop all filters and display source
+                        // image as-is.
+                        return source;
                     }
-                }
+                };
+                let id = filters.len();
+                filters.push(newfilter);
+
+                // Set the reference remapping for the last (or only) node
+                // that we just pushed
+                reference_for_buffer_id[original_id] = FilterGraphPictureReference {
+                    buffer_id: FilterOpGraphPictureBufferId::BufferId(id as i16),
+                    subregion: filters[id].0.subregion,
+                    offset: LayoutVector2D::zero(),
+                    inflate: filters[id].0.inflate,
+                    source_padding: LayoutRect::zero(),
+                    target_padding: LayoutRect::zero(),
+                };
             }
 
-            // Push a special output node at the end, this will correctly handle
-            // the final subregion, which may not have the same bounds as the
-            // surface it is being blitted into, so it needs to properly handle
-            // the cropping and UvRectKind, it also has no inflate.
             if filters.len() >= BUFFER_LIMIT {
-                // If the DAG is too large we drop it entirely
+                // If the DAG is too large to process, the spec requires
+                // that we drop all filters and display source image as-is.
                 return source;
             }
-            let mut outputnode = FilterGraphNode {
-                kept_by_optimizer: true,
-                linear: false,
-                inflate: SVGFE_INFLATE_OUTPUT,
-                inputs: Vec::new(),
-                subregion: LayoutRect::max_rect(),
-            };
-            outputnode.inputs.push(reference_for_buffer_id[filter_ops.len() - 1]);
-            filters.push((
-                outputnode,
-                FilterGraphOp::SVGFEIdentity,
-            ));
-
-            // We want to optimize the filter DAG and then wrap it in a single
-            // picture, we will use a custom RenderTask method to process the
-            // DAG later, there's not really an easy way to keep it as a series
-            // of pictures like CSS filters use.
-            //
-            // The main optimization we can do here is looking for feOffset
-            // filters we can merge away - because all of the node inputs
-            // support offset capability implicitly.  We can also remove no-op
-            // filters (identity) if Gecko produced any.
-            //
-            // TODO: optimize the graph here
 
             // Mark used graph nodes, starting at the last graph node, since
             // this is a DAG in sorted order we can just iterate backwards and
@@ -4219,8 +4220,8 @@ impl<'a> SceneBuilder<'a> {
                 }
             }
 
-            // Validate the DAG nature of the graph again - if we find anything
-            // wrong here it means the above code is bugged.
+            // Validate the DAG nature of the graph - if we find anything wrong
+            // here it means the above code is bugged.
             let mut invalid_dag = false;
             for (id, (node, _op)) in filters.iter().enumerate() {
                 for input in &node.inputs {

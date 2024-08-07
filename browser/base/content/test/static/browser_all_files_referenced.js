@@ -84,6 +84,10 @@ var gExceptionPaths = [
 
   // Strip on Share parameter lists
   "chrome://global/content/antitracking/",
+
+  // Expecting to integrate the UrlbarSearchTermsPersistence component in
+  // Bug 1903633
+  "resource:///modules/UrlbarSearchTermsPersistence.sys.mjs",
 ];
 
 // These are not part of the omni.ja file, so we find them only when running
@@ -287,6 +291,7 @@ var allowlist = [
 
   // Referenced programmatically
   { file: "chrome://browser/content/backup/BackupManifest.1.schema.json" },
+  { file: "chrome://browser/content/backup/ArchiveJSONBlock.1.schema.json" },
 ];
 
 if (AppConstants.NIGHTLY_BUILD) {

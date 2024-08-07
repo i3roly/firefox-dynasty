@@ -1131,7 +1131,7 @@
     }
 
     get _isCustomizing() {
-      return document.documentElement.getAttribute("customizing") == "true";
+      return document.documentElement.hasAttribute("customizing");
     }
 
     // This overrides the TabsBase _selectNewTab method so that we can
@@ -1145,6 +1145,7 @@
 
     _initializeArrowScrollbox() {
       let arrowScrollbox = this.arrowScrollbox;
+      let previewElement = document.getElementById("tab-preview-panel");
       arrowScrollbox.shadowRoot.addEventListener(
         "underflow",
         event => {
@@ -1161,6 +1162,7 @@
           }
 
           this.removeAttribute("overflow");
+          previewElement?.removeAttribute("rolluponmousewheel");
 
           if (this._lastTabClosedByMouse) {
             this._expandSpacerBy(this._scrollButtonWidth);
@@ -1182,12 +1184,14 @@
         // - for vertical orientation
         if (
           event.originalTarget != arrowScrollbox.scrollbox ||
-          event.detail == 0
+          event.detail == 0 ||
+          event.originalTarget.getAttribute("orient") == "vertical"
         ) {
           return;
         }
 
         this.toggleAttribute("overflow", true);
+        previewElement?.setAttribute("rolluponmousewheel", true);
         this._positionPinnedTabs();
         this._updateCloseButtons();
         this._handleTabSelect(true);
@@ -1243,6 +1247,7 @@
               popup.removeAttribute("id");
               popup.className = "new-tab-popup";
               popup.setAttribute("position", "after_end");
+              popup.addEventListener("popupshowing", CreateContainerTabMenu);
               parent.prepend(popup);
               parent.setAttribute("type", "menu");
               // Update tooltip text

@@ -13,6 +13,7 @@ import React from "react";
 import { Search } from "content-src/components/Search/Search";
 import { Sections } from "content-src/components/Sections/Sections";
 import { Weather } from "content-src/components/Weather/Weather";
+import { Notifications } from "content-src/components/Notifications/Notifications";
 import { WallpaperFeatureHighlight } from "../DiscoveryStreamComponents/FeatureHighlight/WallpaperFeatureHighlight";
 
 const VISIBLE = "visible";
@@ -433,6 +434,16 @@ export class BaseContent extends React.PureComponent {
     const mayHaveWeather = prefs["system.showWeather"];
     const { mayHaveSponsoredTopSites } = prefs;
 
+    const hasThumbsUpDownLayout =
+      prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
+
+    const featureClassName = [
+      weatherEnabled && mayHaveWeather && "has-weather", // Show is weather is enabled/visible
+      prefs.showSearch ? "has-search" : "no-search",
+    ]
+      .filter(v => v)
+      .join(" ");
+
     const outerClassName = [
       "outer-wrapper",
       isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment",
@@ -443,6 +454,7 @@ export class BaseContent extends React.PureComponent {
         "fixed-search",
       prefs.showSearch && noSectionsEnabled && "only-search",
       prefs["logowordmark.alwaysVisible"] && "visible-logo",
+      hasThumbsUpDownLayout && "thumbs-ui-compact",
     ]
       .filter(v => v)
       .join(" ");
@@ -451,7 +463,7 @@ export class BaseContent extends React.PureComponent {
     }
 
     return (
-      <div>
+      <div className={featureClassName}>
         {/* Floating menu for customize menu toggle */}
         <menu className="personalizeButtonWrapper">
           <CustomizeMenu
@@ -477,6 +489,13 @@ export class BaseContent extends React.PureComponent {
             />
           )}
         </menu>
+        <div className="weatherWrapper">
+          {weatherEnabled && (
+            <ErrorBoundary>
+              <Weather />
+            </ErrorBoundary>
+          )}
+        </div>
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions*/}
         <div className={outerClassName} onClick={this.closeCustomizationMenu}>
           <main>
@@ -510,9 +529,9 @@ export class BaseContent extends React.PureComponent {
             {wallpapersEnabled && this.renderWallpaperAttribution()}
           </main>
           <aside>
-            {weatherEnabled && (
+            {this.props.Notifications?.showNotifications && (
               <ErrorBoundary>
-                <Weather />
+                <Notifications dispatch={this.props.dispatch} />
               </ErrorBoundary>
             )}
           </aside>
@@ -531,6 +550,7 @@ export const Base = connect(state => ({
   Prefs: state.Prefs,
   Sections: state.Sections,
   DiscoveryStream: state.DiscoveryStream,
+  Notifications: state.Notifications,
   Search: state.Search,
   Wallpapers: state.Wallpapers,
   Weather: state.Weather,

@@ -108,6 +108,8 @@
     <string name="pref_key_sync_credit_cards" translatable="false">pref_key_sync_credit_cards</string>
     <!-- Key for Address sync preference in the account settings fragment -->
     <string name="pref_key_sync_address" translatable="false">pref_key_sync_address</string>
+    <!-- Key for engaging first time with signup -->
+    <string name="pref_key_first_time_engage_with_signup" translatable="false">pref_key_first_time_engage_with_signup</string>
 
     <!-- Search Settings -->
     <string name="pref_key_search_engine_list" translatable="false">pref_key_search_engine_list</string>
@@ -143,10 +145,10 @@
     <!-- Toolbar Settings -->
     <string name="pref_key_toolbar_top" translatable="false">pref_key_toolbar_top</string>
     <string name="pref_key_toolbar_bottom" translatable="false">pref_key_toolbar_bottom</string>
+    <string name="pref_key_should_navbar_cfr">pref_key_should_show_navbar_cfr</string>
 
-    <!-- Toolbar Redesign -->
-    <string name="pref_key_toolbar_use_redesign" translatable="false">pref_key_toolbar_use_redesign</string>
-    <string name="pref_key_toolbar_use_redesign_incomplete" translatable="false">pref_key_toolbar_use_redesign_incomplete</string>
+    <!-- Navigation Toolbar -->
+    <string name="pref_key_toolbar_show_navigation_toolbar" translatable="false">pref_key_toolbar_use_redesign_incomplete</string>
 
     <!-- Privacy Pop Window -->
     <string name="pref_key_privacy_pop_window" translatable="false">pref_key_privacy_pop_window</string>
@@ -373,7 +375,9 @@
     <string name="pref_key_custom_sponsored_stories_country" translatable="false">pref_key_custom_sponsored_stories_country</string>
     <string name="pref_key_custom_sponsored_stories_city" translatable="false">pref_key_custom_sponsored_stories_city</string>
     <string name="pref_key_enable_compose_top_sites" translatable="false">pref_key_enable_compose_top_sites</string>
+    <string name="pref_key_enable_compose_homepage" translatable="false">pref_key_enable_compose_homepage</string>
     <string name="pref_key_enable_menu_redesign" translatable="false">pref_key_enable_menu_redesign</string>
+    <string name="pref_key_enable_homepage_as_new_tab" translatable="false">pref_key_enable_homepage_as_new_tab</string>
 
     <!-- Growth Data -->
     <string name="pref_key_growth_set_as_default" translatable="false">pref_key_growth_set_as_default</string>
@@ -395,4 +399,9 @@
 
     <!--Translations -->
     <string name="pref_key_ignore_translations_data_saver_warning" translatable="false">pref_key_ignore_translations_data_saver_warning</string>
+
+    <!-- Microsurvey -->
+    <string name="pref_key_should_show_microsurvey_prompt" translatable="false">pref_key_should_show_microsurvey_prompt</string>
+    <string name="pref_key_microsurvey_feature_enabled" translatable="false">pref_key_microsurvey_feature_enabled</string>
+
 </resources>

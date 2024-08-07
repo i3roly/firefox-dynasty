@@ -58,14 +58,20 @@ function showSpocs({ geo }) {
   return spocsGeo.includes(geo);
 }
 
-function showWeather({ geo }) {
+function showWeather({ geo, locale }) {
   const weatherGeoString =
     lazy.NimbusFeatures.pocketNewtab.getVariable("regionWeatherConfig") || "";
+  const weatherLocaleString =
+    lazy.NimbusFeatures.pocketNewtab.getVariable("localeWeatherConfig") || "";
   const weatherGeo = weatherGeoString
     .split(",")
     .map(s => s.trim())
     .filter(item => item);
-  return weatherGeo.includes(geo);
+  const weatherLocale = weatherLocaleString
+    .split(",")
+    .map(s => s.trim())
+    .filter(item => item);
+  return weatherGeo.includes(geo) && weatherLocale.includes(locale);
 }
 
 // Configure default Activity Stream prefs with a plain `value` or a `getValue`
@@ -414,21 +420,6 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
-    "asrouter.providers.onboarding",
-    {
-      title: "Configuration for onboarding provider",
-      value: JSON.stringify({
-        id: "onboarding",
-        type: "local",
-        localProvider: "OnboardingMessageProvider",
-        enabled: true,
-        // Block specific messages from this local provider
-        exclude: [],
-      }),
-    },
-  ],
-  // See browser/app/profile/firefox.js for other ASR preferences. They must be defined there to enable roll-outs.
-  [
     "discoverystream.flight.blocks",
     {
       title: "Track flight blocks",
@@ -455,7 +446,7 @@ export const PREFS_CONFIG = new Map([
       title:
         "Endpoint prefixes (comma-separated) that are allowed to be requested",
       value:
-        "https://getpocket.cdn.mozilla.net/,https://firefox-api-proxy.cdn.mozilla.net/,https://spocs.getpocket.com/",
+        "https://getpocket.cdn.mozilla.net/,https://firefox-api-proxy.cdn.mozilla.net/,https://spocs.getpocket.com/,https://merino.services.mozilla.com/",
     },
   ],
   [
@@ -471,6 +462,21 @@ export const PREFS_CONFIG = new Map([
       title: "Allows the user to dismiss the new Pocket onboarding experience",
       skipBroadcast: true,
       alsoToPreloaded: true,
+      value: false,
+    },
+  ],
+  [
+    "discoverystream.thumbsUpDown.enabled",
+    {
+      title: "Allow users to give thumbs up/down on recommended stories",
+      value: false,
+    },
+  ],
+  [
+    "discoverystream.thumbsUpDown.searchTopsitesCompact",
+    {
+      title:
+        "A compact layout of the search/topsites/stories sections to account for new height from thumbs up/down icons ",
       value: false,
     },
   ],
@@ -518,6 +524,13 @@ export const PREFS_CONFIG = new Map([
       title: "Track rec impressions",
       skipBroadcast: true,
       value: "{}",
+    },
+  ],
+  [
+    "discoverystream.topicSelection.enabled",
+    {
+      title: "Enables topic selection for discovery stream",
+      value: false,
     },
   ],
   [

@@ -779,7 +779,6 @@ PresShell::PresShell(Document* aDocument)
       mIsDocumentGone(false),
       mHaveShutDown(false),
       mPaintingSuppressed(false),
-      mLastRootReflowHadUnconstrainedBSize(false),
       mShouldUnsuppressPainting(false),
       mIgnoreFrameDestruction(false),
       mIsActive(true),
@@ -1927,6 +1926,7 @@ bool PresShell::SimpleResizeReflow(nscoord aWidth, nscoord aHeight) {
       wm.IsVertical() ? oldSize.width != aWidth : oldSize.height != aHeight;
   if (isBSizeChanging) {
     nsLayoutUtils::MarkIntrinsicISizesDirtyIfDependentOnBSize(rootFrame);
+    rootFrame->SetHasBSizeChange(true);
   }
   FrameNeedsReflow(rootFrame, IntrinsicDirty::None,
                    NS_FRAME_HAS_DIRTY_CHILDREN);
@@ -2037,6 +2037,9 @@ bool PresShell::ResizeReflowIgnoreOverride(nscoord aWidth, nscoord aHeight,
   // intrinsic sizes can't depend on them. So the only other case is
   // viewport-controlled BSizes which we handle here.
   nsLayoutUtils::MarkIntrinsicISizesDirtyIfDependentOnBSize(rootFrame);
+  rootFrame->SetHasBSizeChange(true);
+  FrameNeedsReflow(rootFrame, IntrinsicDirty::None,
+                   NS_FRAME_HAS_DIRTY_CHILDREN);
 
   {
     nsAutoCauseReflowNotifier crNotifier(this);
@@ -2055,6 +2058,7 @@ bool PresShell::ResizeReflowIgnoreOverride(nscoord aWidth, nscoord aHeight,
 
     if (reflowAgain) {
       mPresContext->SetVisibleArea(nsRect(0, 0, aWidth, aHeight));
+      rootFrame->SetHasBSizeChange(true);
       DoReflow(rootFrame, true, nullptr);
     }
   }
@@ -3062,7 +3066,8 @@ UniquePtr<gfxContext> PresShell::CreateReferenceRenderingContext() {
 }
 
 // https://html.spec.whatwg.org/#scroll-to-the-fragment-identifier
-nsresult PresShell::GoToAnchor(const nsAString& aAnchorName, bool aScroll,
+nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
+                               const nsRange* aFirstTextDirective, bool aScroll,
                                ScrollFlags aAdditionalScrollFlags) {
   if (!mDocument) {
     return NS_ERROR_FAILURE;
@@ -3081,12 +3086,31 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName, bool aScroll,
   // Hold a reference to the ESM in case event dispatch tears us down.
   RefPtr<EventStateManager> esm = mPresContext->EventStateManager();
 
+  // https://wicg.github.io/scroll-to-text-fragment/#invoking-text-directives
+  // From "Monkeypatching HTML § 7.4.6.3 Scrolling to a fragment:"
+  // 3.4. If target is a range, then:
+  // 3.4.1 Set target to be the first common ancestor of target's start node and
+  //       end node.
+  // 3.4.2 While target is non-null and is not an element, set target to
+  //       target's parent.
+  Element* textFragmentTargetElement = [&aFirstTextDirective]() -> Element* {
+    nsINode* node =
+        aFirstTextDirective
+            ? aFirstTextDirective->GetClosestCommonInclusiveAncestor()
+            : nullptr;
+    while (node && !node->IsElement()) {
+      node = node->GetParent();
+    }
+    return Element::FromNodeOrNull(node);
+  }();
+  const bool thereIsATextFragment = !!textFragmentTargetElement;
+
   // 1. If there is no indicated part of the document, set the Document's target
   //    element to null.
   //
   // FIXME(emilio): Per spec empty fragment string should take the same
   // code-path as "top"!
-  if (aAnchorName.IsEmpty()) {
+  if (aAnchorName.IsEmpty() && !thereIsATextFragment) {
     NS_ASSERTION(!aScroll, "can't scroll to empty anchor name");
     esm->SetContentState(nullptr, ElementState::URLTARGET);
     return NS_OK;
@@ -3100,8 +3124,10 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName, bool aScroll,
   //
   // https://html.spec.whatwg.org/#target-element
   // https://html.spec.whatwg.org/#find-a-potential-indicated-element
-  RefPtr<Element> target =
-      nsContentUtils::GetTargetElement(mDocument, aAnchorName);
+  RefPtr<Element> target = textFragmentTargetElement;
+  if (!target) {
+    target = nsContentUtils::GetTargetElement(mDocument, aAnchorName);
+  }
 
   // 1. If there is no indicated part of the document, set the Document's
   //    target element to null.
@@ -3120,6 +3146,13 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName, bool aScroll,
 
   if (target) {
     if (aScroll) {
+      // https://wicg.github.io/scroll-to-text-fragment/#invoking-text-directives
+      // From "Monkeypatching HTML § 7.4.6.3 Scrolling to a fragment:"
+      // 3.9 Let blockPosition be "center" if scrollTarget is a range, "start"
+      //     otherwise.
+      const auto verticalScrollPosition =
+          thereIsATextFragment ? WhereToScroll(WhereToScroll::Center)
+                               : WhereToScroll(WhereToScroll::Start);
       // 3.3. TODO: Run the ancestor details revealing algorithm on target.
       // 3.4. Scroll target into view, with behavior set to "auto", block set to
       //      "start", and inline set to "nearest".
@@ -3127,7 +3160,7 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName, bool aScroll,
       // smooth scroll for `top` regardless below, so maybe they should!).
       ScrollingInteractionContext scrollToAnchorContext(true);
       MOZ_TRY(ScrollContentIntoView(
-          target, ScrollAxis(WhereToScroll::Start, WhenToScroll::Always),
+          target, ScrollAxis(verticalScrollPosition, WhenToScroll::Always),
           ScrollAxis(),
           ScrollFlags::AnchorScrollFlags | aAdditionalScrollFlags));
 
@@ -3243,46 +3276,6 @@ nsresult PresShell::ScrollToAnchor() {
   return ScrollContentIntoView(
       lastAnchor, ScrollAxis(WhereToScroll::Start, WhenToScroll::Always),
       ScrollAxis(), ScrollFlags::AnchorScrollFlags);
-}
-
-bool PresShell::HighlightAndGoToTextFragment(bool aScrollToTextFragment) {
-  MOZ_ASSERT(mDocument);
-  if (!StaticPrefs::dom_text_fragments_enabled()) {
-    return false;
-  }
-  const RefPtr<FragmentDirective> fragmentDirective =
-      mDocument->FragmentDirective();
-
-  nsTArray<RefPtr<nsRange>> textDirectiveRanges =
-      fragmentDirective->FindTextFragmentsInDocument();
-  if (textDirectiveRanges.IsEmpty()) {
-    return false;
-  }
-
-  const RefPtr<Selection> targetTextSelection =
-      GetCurrentSelection(SelectionType::eTargetText);
-  if (!targetTextSelection) {
-    return false;
-  }
-  for (RefPtr<nsRange> range : textDirectiveRanges) {
-    targetTextSelection->AddRangeAndSelectFramesAndNotifyListeners(
-        *range, IgnoreErrors());
-  }
-  if (!aScrollToTextFragment) {
-    return false;
-  }
-
-  // Scroll the last text directive into view.
-  nsRange* lastRange = textDirectiveRanges.LastElement();
-  MOZ_ASSERT(lastRange);
-  if (RefPtr<nsIContent> lastRangeStartContent =
-          nsIContent::FromNode(lastRange->GetStartContainer())) {
-    return ScrollContentIntoView(
-               lastRangeStartContent,
-               ScrollAxis(WhereToScroll::Center, WhenToScroll::Always),
-               ScrollAxis(), ScrollFlags::AnchorScrollFlags) == NS_OK;
-  }
-  return false;
 }
 
 /*
@@ -5769,7 +5762,13 @@ static BrowserBridgeChild* GetChildBrowser(nsView* aView) {
 
 void PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll) {
   // If drag session has started, we shouldn't synthesize mousemove event.
-  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+  nsView* rootView = mViewManager ? mViewManager->GetRootView() : nullptr;
+  if (!rootView || !rootView->HasWidget()) {
+    mSynthMouseMoveEvent.Forget();
+    return;
+  }
+  nsCOMPtr<nsIDragSession> dragSession =
+      nsContentUtils::GetDragSession(rootView->GetWidget());
   if (dragSession) {
     mSynthMouseMoveEvent.Forget();
     return;
@@ -5781,9 +5780,8 @@ void PresShell::ProcessSynthMouseMoveEvent(bool aFromScroll) {
     mSynthMouseMoveEvent.Forget();
   }
 
-  nsView* rootView = mViewManager ? mViewManager->GetRootView() : nullptr;
   if (mMouseLocation == nsPoint(NS_UNCONSTRAINEDSIZE, NS_UNCONSTRAINEDSIZE) ||
-      !rootView || !rootView->HasWidget() || !mPresContext) {
+      !mPresContext) {
     mSynthMouseMoveEvent.Forget();
     return;
   }
@@ -7315,7 +7313,7 @@ nsIFrame* PresShell::EventHandler::GetFrameToHandleNonTouchEvent(
       nsLayoutUtils::GetEventCoordinatesRelativeTo(aGUIEvent, relativeTo);
 
   uint32_t flags = 0;
-  if (aGUIEvent->mClass == eMouseEventClass) {
+  if (aGUIEvent->IsMouseEventClassOrHasClickRelatedPointerEvent()) {
     WidgetMouseEvent* mouseEvent = aGUIEvent->AsMouseEvent();
     if (mouseEvent && mouseEvent->mIgnoreRootScrollFrame) {
       flags |= INPUT_IGNORE_ROOT_SCROLL_FRAME;
@@ -7453,7 +7451,7 @@ bool PresShell::EventHandler::DispatchPrecedingPointerEvent(
   // If the target is no longer participating in its ownerDocument's tree,
   // fire the event at the original target's nearest ancestor node.
   if (!mouseOrTouchEventTargetContent) {
-    MOZ_ASSERT(aGUIEvent->mClass == eMouseEventClass);
+    MOZ_ASSERT(aGUIEvent->IsMouseEventClassOrHasClickRelatedPointerEvent());
     return false;
   }
 
@@ -7520,7 +7518,7 @@ bool PresShell::EventHandler::MaybeHandleEventWithAccessibleCaret(
   }
 
   // AccessibleCaretEventHub handles only mouse, touch, and keyboard events.
-  if (aGUIEvent->mClass != eMouseEventClass &&
+  if (!aGUIEvent->IsMouseEventClassOrHasClickRelatedPointerEvent() &&
       aGUIEvent->mClass != eTouchEventClass &&
       aGUIEvent->mClass != eKeyboardEventClass) {
     return false;
@@ -7627,8 +7625,7 @@ void PresShell::EventHandler::MaybeSynthesizeCompatMouseEventsForTouchEnd(
     if (!frameForPresShell) {
       break;
     }
-    WidgetMouseEvent event(true, message, widget, WidgetMouseEvent::eReal,
-                           WidgetMouseEvent::eNormal);
+    WidgetMouseEvent event(true, message, widget, WidgetMouseEvent::eReal);
     event.mRefPoint = aTouchEndEvent->mTouches[0]->mRefPoint;
     event.mButton = MouseButton::ePrimary;
     event.mButtons = message == eMouseDown ? MouseButtonsFlag::ePrimaryFlag
@@ -7734,7 +7731,7 @@ bool PresShell::EventHandler::GetRetargetEventDocument(
 
 #ifdef ANDROID
   if (aGUIEvent->mClass == eTouchEventClass ||
-      aGUIEvent->mClass == eMouseEventClass ||
+      aGUIEvent->IsMouseEventClassOrHasClickRelatedPointerEvent() ||
       aGUIEvent->mClass == eWheelEventClass) {
     RefPtr<Document> retargetEventDoc = mPresShell->GetPrimaryContentDocument();
     retargetEventDoc.forget(aRetargetEventDocument);
@@ -7869,7 +7866,7 @@ bool PresShell::EventHandler::MaybeDiscardOrDelayMouseEvent(
   MOZ_ASSERT(aFrameToHandleEvent);
   MOZ_ASSERT(aGUIEvent);
 
-  if (aGUIEvent->mClass != eMouseEventClass) {
+  if (!aGUIEvent->IsMouseEventClassOrHasClickRelatedPointerEvent()) {
     return false;
   }
 
@@ -7887,15 +7884,23 @@ bool PresShell::EventHandler::MaybeDiscardOrDelayMouseEvent(
 
   if (aGUIEvent->mMessage == eMouseDown) {
     ps->mNoDelayedMouseEvents = true;
-  } else if (!ps->mNoDelayedMouseEvents &&
-             (aGUIEvent->mMessage == eMouseUp ||
-              // contextmenu is triggered after right mouseup on Windows and
-              // right mousedown on other platforms.
-              aGUIEvent->mMessage == eContextMenu ||
-              aGUIEvent->mMessage == eMouseExitFromWidget)) {
-    UniquePtr<DelayedMouseEvent> delayedMouseEvent =
-        MakeUnique<DelayedMouseEvent>(aGUIEvent->AsMouseEvent());
-    ps->mDelayedEvents.AppendElement(std::move(delayedMouseEvent));
+  } else if (!ps->mNoDelayedMouseEvents) {
+    if ((aGUIEvent->mMessage == eMouseUp ||
+         aGUIEvent->mMessage == eMouseExitFromWidget ||
+         (aGUIEvent->mMessage == eContextMenu &&
+          !StaticPrefs::
+              dom_w3c_pointer_events_dispatch_click_as_pointer_event()))) {
+      UniquePtr<DelayedMouseEvent> delayedMouseEvent =
+          MakeUnique<DelayedMouseEvent>(aGUIEvent->AsMouseEvent());
+      ps->mDelayedEvents.AppendElement(std::move(delayedMouseEvent));
+    }
+    // contextmenu is triggered after right mouseup on Windows and right
+    // mousedown on other platforms.
+    else if (aGUIEvent->mMessage == eContextMenu) {
+      UniquePtr<DelayedPointerEvent> delayedPointerEvent =
+          MakeUnique<DelayedPointerEvent>(aGUIEvent->AsPointerEvent());
+      ps->mDelayedEvents.AppendElement(std::move(delayedPointerEvent));
+    }
   }
 
   // If there is a suppressed event listener associated with the document,
@@ -8525,7 +8530,8 @@ bool PresShell::EventHandler::PrepareToDispatchEvent(
       return true;
     }
     case eDrop: {
-      nsCOMPtr<nsIDragSession> session = nsContentUtils::GetDragSession();
+      nsCOMPtr<nsIDragSession> session =
+          nsContentUtils::GetDragSession(GetPresContext());
       if (session) {
         bool onlyChromeDrop = false;
         session->GetOnlyChromeDrop(&onlyChromeDrop);
@@ -8918,7 +8924,7 @@ nsresult PresShell::EventHandler::DispatchEventToDOM(
           eventTarget, presContext, browserParent, aEvent->AsCompositionEvent(),
           aEventStatus, eventCBPtr);
     } else {
-      if (aEvent->mClass == eMouseEventClass) {
+      if (aEvent->IsMouseEventClassOrHasClickRelatedPointerEvent()) {
         PresShell::sMouseButtons = aEvent->AsMouseEvent()->mButtons;
       }
       RefPtr<nsPresContext> presContext = GetPresContext();
@@ -9785,21 +9791,6 @@ bool PresShell::DoReflow(nsIFrame* target, bool aInterruptible,
 
   if (isRoot) {
     reflowInput.Init(mPresContext);
-
-    // When the root frame is being reflowed with unconstrained block-size
-    // (which happens when we're called from
-    // nsDocumentViewer::SizeToContent), we're effectively doing a
-    // resize in the block direction, since it changes the meaning of
-    // percentage block-sizes even if no block-sizes actually changed.
-    // The same applies when we reflow again after that computation. This is
-    // an unusual case, and isn't caught by ReflowInput::InitResizeFlags.
-    bool hasUnconstrainedBSize = size.BSize(wm) == NS_UNCONSTRAINEDSIZE;
-
-    if (hasUnconstrainedBSize || mLastRootReflowHadUnconstrainedBSize) {
-      reflowInput.SetBResize(true);
-    }
-
-    mLastRootReflowHadUnconstrainedBSize = hasUnconstrainedBSize;
   } else {
     // Initialize reflow input with current used border and padding,
     // in case this was set specially by the parent frame when the reflow root
@@ -10191,6 +10182,16 @@ PresShell::DelayedMouseEvent::DelayedMouseEvent(WidgetMouseEvent* aEvent) {
                            aEvent->mReason, aEvent->mContextMenuTrigger);
   mouseEvent->AssignMouseEventData(*aEvent, false);
   mEvent = mouseEvent;
+}
+
+PresShell::DelayedPointerEvent::DelayedPointerEvent(
+    WidgetPointerEvent* aEvent) {
+  MOZ_DIAGNOSTIC_ASSERT(aEvent->IsTrusted());
+  MOZ_ASSERT(aEvent->mMessage == eContextMenu);
+  WidgetPointerEvent* pointerEvent = new WidgetPointerEvent(
+      true, aEvent->mMessage, aEvent->mWidget, aEvent->mContextMenuTrigger);
+  pointerEvent->AssignPointerEventData(*aEvent, false);
+  mEvent = pointerEvent;
 }
 
 PresShell::DelayedKeyEvent::DelayedKeyEvent(WidgetKeyboardEvent* aEvent) {

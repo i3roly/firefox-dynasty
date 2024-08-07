@@ -34,6 +34,7 @@
 #include "nsUnicharUtils.h"
 #include "Pivot.h"
 #include "TextAttrs.h"
+#include "TextRange.h"
 
 using mozilla::intl::WordBreaker;
 using FindWordOptions = mozilla::intl::WordBreaker::FindWordOptions;
@@ -995,69 +996,94 @@ TextLeafPoint TextLeafPoint::FindNextWordStartSameAcc(
   return TextLeafPoint(mAcc, wordStart);
 }
 
-bool TextLeafPoint::IsCaretAtEndOfLine() const {
-  MOZ_ASSERT(IsCaret());
-  if (LocalAccessible* acc = mAcc->AsLocal()) {
-    HyperTextAccessible* ht = HyperTextFor(acc);
-    if (!ht) {
-      return false;
-    }
-    // Use HyperTextAccessible::IsCaretAtEndOfLine. Eventually, we'll want to
-    // move that code into TextLeafPoint, but existing code depends on it living
-    // in HyperTextAccessible (including caret events).
-    return ht->IsCaretAtEndOfLine();
-  }
-  return mAcc->AsRemote()->Document()->IsCaretAtEndOfLine();
-}
-
-TextLeafPoint TextLeafPoint::ActualizeCaret(bool aAdjustAtEndOfLine) const {
-  MOZ_ASSERT(IsCaret());
-  HyperTextAccessibleBase* ht;
-  int32_t htOffset;
-  if (LocalAccessible* acc = mAcc->AsLocal()) {
+/* static */
+TextLeafPoint TextLeafPoint::GetCaret(Accessible* aAcc) {
+  if (LocalAccessible* localAcc = aAcc->AsLocal()) {
     // Use HyperTextAccessible::CaretOffset. Eventually, we'll want to move
     // that code into TextLeafPoint, but existing code depends on it living in
     // HyperTextAccessible (including caret events).
-    ht = HyperTextFor(acc);
+    HyperTextAccessible* ht = HyperTextFor(localAcc);
     if (!ht) {
       return TextLeafPoint();
     }
-    htOffset = ht->CaretOffset();
+    int32_t htOffset = ht->CaretOffset();
     if (htOffset == -1) {
       return TextLeafPoint();
     }
-  } else {
-    // Ideally, we'd cache the caret as a leaf, but our events are based on
-    // HyperText for now.
-    std::tie(ht, htOffset) = mAcc->AsRemote()->Document()->GetCaret();
-    if (!ht) {
-      return TextLeafPoint();
+    TextLeafPoint point = ht->ToTextLeafPoint(htOffset);
+    if (!point) {
+      // Bug 1905021: This happens in the wild, but we don't understand why.
+      // ToTextLeafPoint should only fail if the HyperText offset is invalid,
+      // but CaretOffset shouldn't return an invalid offset.
+      MOZ_ASSERT_UNREACHABLE(
+          "Got HyperText CaretOffset but ToTextLeafPoint failed");
+      return point;
     }
+    nsIFrame* frame = ht->GetFrame();
+    RefPtr<nsFrameSelection> sel = frame ? frame->GetFrameSelection() : nullptr;
+    if (sel && sel->GetHint() == CaretAssociationHint::Before) {
+      // CaretAssociationHint::Before can mean that the caret is at the end of
+      // a line. However, it can also mean that the caret is before the start
+      // of a node in the middle of a line. This happens when moving the cursor
+      // forward to a new node.
+      if (point.mOffset == 0) {
+        // The caret is before the start of a node. The caret is at the end of a
+        // line if the node is at the start of a line but not at the start of a
+        // paragraph.
+        point.mIsEndOfLineInsertionPoint =
+            IsLocalAccAtLineStart(point.mAcc->AsLocal()) &&
+            !point.IsParagraphStart();
+      } else {
+        // This isn't the start of a node, so we must be at the end of a line.
+        point.mIsEndOfLineInsertionPoint = true;
+      }
+    }
+    return point;
   }
-  if (aAdjustAtEndOfLine && htOffset > 0 && IsCaretAtEndOfLine()) {
-    // It is the same character offset when the caret is visually at the very
-    // end of a line or the start of a new line (soft line break). Getting text
-    // at the line should provide the line with the visual caret. Otherwise,
-    // screen readers will announce the wrong line as the user presses up or
-    // down arrow and land at the end of a line.
-    --htOffset;
+
+  // Ideally, we'd cache the caret as a leaf, but our events are based on
+  // HyperText for now.
+  DocAccessibleParent* remoteDoc = aAcc->AsRemote()->Document();
+  auto [ht, htOffset] = remoteDoc->GetCaret();
+  if (!ht) {
+    return TextLeafPoint();
   }
-  return ht->ToTextLeafPoint(htOffset);
+  TextLeafPoint point = ht->ToTextLeafPoint(htOffset);
+  point.mIsEndOfLineInsertionPoint = remoteDoc->IsCaretAtEndOfLine();
+  return point;
+}
+
+TextLeafPoint TextLeafPoint::AdjustEndOfLine() const {
+  MOZ_ASSERT(mIsEndOfLineInsertionPoint);
+  // Use the last character on the line so that we search for word and line
+  // boundaries on the current line, not the next line.
+  return TextLeafPoint(mAcc, mOffset)
+      .FindBoundary(nsIAccessibleText::BOUNDARY_CHAR, eDirPrevious);
 }
 
 TextLeafPoint TextLeafPoint::FindBoundary(AccessibleTextBoundary aBoundaryType,
                                           nsDirection aDirection,
                                           BoundaryFlags aFlags) const {
-  if (IsCaret()) {
+  if (mIsEndOfLineInsertionPoint) {
+    // In this block, we deliberately don't propagate mIsEndOfLineInsertionPoint
+    // to derived points because otherwise, a call to FindBoundary on the
+    // returned point would also return the same point.
     if (aBoundaryType == nsIAccessibleText::BOUNDARY_CHAR ||
         aBoundaryType == nsIAccessibleText::BOUNDARY_CLUSTER) {
-      if (IsCaretAtEndOfLine()) {
-        // The caret is at the end of the line. Return no character.
-        return ActualizeCaret(/* aAdjustAtEndOfLine */ false);
+      if (aDirection == eDirNext || (aDirection == eDirPrevious &&
+                                     aFlags & BoundaryFlags::eIncludeOrigin)) {
+        // The caller wants the current or next character/cluster. Return no
+        // character, since otherwise, this would move past the first character
+        // on the next line.
+        return TextLeafPoint(mAcc, mOffset);
       }
+      // The caller wants the previous character/cluster. Return that as normal.
+      return TextLeafPoint(mAcc, mOffset)
+          .FindBoundary(aBoundaryType, aDirection, aFlags);
     }
-    return ActualizeCaret().FindBoundary(
-        aBoundaryType, aDirection, aFlags & BoundaryFlags::eIncludeOrigin);
+    // For any other boundary, we need to start on this line, not the next, even
+    // though mOffset refers to the next.
+    return AdjustEndOfLine().FindBoundary(aBoundaryType, aDirection, aFlags);
   }
 
   bool inEditableAndStopInIt = (aFlags & BoundaryFlags::eStopInEditable) &&
@@ -1746,8 +1772,8 @@ already_AddRefed<AccAttributes> TextLeafPoint::GetTextAttributes(
 
 TextLeafPoint TextLeafPoint::FindTextAttrsStart(nsDirection aDirection,
                                                 bool aIncludeOrigin) const {
-  if (IsCaret()) {
-    return ActualizeCaret().FindTextAttrsStart(aDirection, aIncludeOrigin);
+  if (mIsEndOfLineInsertionPoint) {
+    return AdjustEndOfLine().FindTextAttrsStart(aDirection, aIncludeOrigin);
   }
   const bool isRemote = mAcc->IsRemote();
   RefPtr<const AccAttributes> lastAttrs =
@@ -2014,6 +2040,30 @@ bool TextLeafRange::SetSelection(int32_t aSelectionNum) const {
   }
 
   return false;
+}
+
+/* static */
+void TextLeafRange::GetSelection(Accessible* aAcc,
+                                 nsTArray<TextLeafRange>& aRanges) {
+  // Use HyperTextAccessibleBase::SelectionRanges. Eventually, we'll want to
+  // move that code into TextLeafPoint, but events and caching are based on
+  // HyperText offsets for now.
+  HyperTextAccessibleBase* hyp = aAcc->AsHyperTextBase();
+  if (!hyp) {
+    return;
+  }
+  AutoTArray<TextRange, 1> hypRanges;
+  hyp->CroppedSelectionRanges(hypRanges);
+  aRanges.SetCapacity(hypRanges.Length());
+  for (TextRange& hypRange : hypRanges) {
+    TextLeafPoint start =
+        hypRange.StartContainer()->AsHyperTextBase()->ToTextLeafPoint(
+            hypRange.StartOffset());
+    TextLeafPoint end =
+        hypRange.EndContainer()->AsHyperTextBase()->ToTextLeafPoint(
+            hypRange.EndOffset());
+    aRanges.EmplaceBack(start, end);
+  }
 }
 
 void TextLeafRange::ScrollIntoView(uint32_t aScrollType) const {

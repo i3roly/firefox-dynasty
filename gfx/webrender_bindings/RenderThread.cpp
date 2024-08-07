@@ -97,10 +97,17 @@ static bool sRenderThreadEverStarted = false;
 size_t RenderThread::sRendererCount = 0;
 size_t RenderThread::sActiveRendererCount = 0;
 
+#if defined(MOZ_WIDGET_ANDROID) || defined(MOZ_WIDGET_GTK)
+static bool USE_DEDICATED_GLYPH_RASTER_THREAD = true;
+#else
+static bool USE_DEDICATED_GLYPH_RASTER_THREAD = false;
+#endif
+
 RenderThread::RenderThread(RefPtr<nsIThread> aThread)
     : mThread(std::move(aThread)),
       mThreadPool(false),
       mThreadPoolLP(true),
+      mGlyphRasterThread(USE_DEDICATED_GLYPH_RASTER_THREAD),
       mSingletonGLIsForHardwareWebRender(true),
       mBatteryInfo("RenderThread.mBatteryInfo"),
       mWindowInfos("RenderThread.mWindowInfos"),
@@ -144,6 +151,11 @@ void RenderThread::Start(uint32_t aNamespace) {
   if (stackSize && !gfx::gfxVars::SupportsThreadsafeGL()) {
     stackSize = std::max(stackSize, 4096U << 10);
   }
+#if !defined(__OPTIMIZE__)
+  // swgl's draw_quad_spans will allocate ~1.5MB in no-opt builds
+  // and the default thread stack size on macOS is 512KB
+  stackSize = std::max(stackSize, 4 * 1024 * 1024U);
+#endif
 
 #if !defined(__OPTIMIZE__)
   // swgl's draw_quad_spans will allocate ~1.5MB in no-opt builds
@@ -1497,6 +1509,20 @@ void WebRenderThreadPool::Release() {
   if (mThreadPool) {
     wr_thread_pool_delete(mThreadPool);
     mThreadPool = nullptr;
+  }
+}
+
+MaybeWebRenderGlyphRasterThread::MaybeWebRenderGlyphRasterThread(bool aEnable) {
+  if (aEnable) {
+    mThread = wr_glyph_raster_thread_new();
+  } else {
+    mThread = nullptr;
+  }
+}
+
+MaybeWebRenderGlyphRasterThread::~MaybeWebRenderGlyphRasterThread() {
+  if (mThread) {
+    wr_glyph_raster_thread_delete(mThread);
   }
 }
 

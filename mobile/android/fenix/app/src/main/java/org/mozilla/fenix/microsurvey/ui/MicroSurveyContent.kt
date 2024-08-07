@@ -5,6 +5,7 @@
 package org.mozilla.fenix.microsurvey.ui
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,15 +25,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.compose.list.RadioButtonListItem
 import org.mozilla.fenix.theme.FirefoxTheme
 
-private val shape = RoundedCornerShape(16.dp)
-private val elevation: Dp = 5.dp
+private val shape = RoundedCornerShape(8.dp)
 
 /**
  * The micro survey content UI to hold question and answer data.
@@ -48,18 +47,20 @@ private val elevation: Dp = 5.dp
 fun MicroSurveyContent(
     question: String,
     answers: List<String>,
-    @DrawableRes icon: Int = R.drawable.ic_print, // todo currently unknown what the default will be if any.
+    @DrawableRes icon: Int = R.drawable.ic_print,
     backgroundColor: Color = FirefoxTheme.colors.layer2,
     selectedAnswer: String? = null,
     onSelectionChange: (String) -> Unit,
 ) {
     Card(
+        border = BorderStroke(1.dp, FirefoxTheme.colors.borderPrimary),
+        elevation = 0.dp,
         shape = shape,
         backgroundColor = backgroundColor,
-        elevation = elevation,
         modifier = Modifier
             .wrapContentHeight()
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
     ) {
         Column(modifier = Modifier.wrapContentHeight()) {
             Header(icon, question)
@@ -85,7 +86,7 @@ private fun Header(icon: Int, question: String) {
     ) {
         Image(
             painter = painterResource(icon),
-            contentDescription = null,
+            contentDescription = stringResource(id = R.string.microsurvey_feature_icon_content_description),
             modifier = Modifier.size(24.dp),
         )
 

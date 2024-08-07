@@ -788,6 +788,11 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
     accessTokenLevel = sandbox::USER_LOCKDOWN;
     initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
     delayedIntegrityLevel = sandbox::INTEGRITY_LEVEL_UNTRUSTED;
+  } else if (aSandboxLevel >= 8) {
+    jobLevel = sandbox::JOB_LOCKDOWN;
+    accessTokenLevel = sandbox::USER_RESTRICTED;
+    initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
+    delayedIntegrityLevel = sandbox::INTEGRITY_LEVEL_UNTRUSTED;
   } else if (aSandboxLevel >= 7) {
     jobLevel = sandbox::JOB_LOCKDOWN;
     accessTokenLevel = sandbox::USER_LIMITED;
@@ -974,7 +979,7 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
       sandbox::SBOX_ALL_OK == result,
       "With these static arguments AddRule should never fail, what happened?");
 
-  if (aSandboxLevel >= 20) {
+  if (aSandboxLevel >= 8) {
     // Content process still needs to be able to read fonts.
     wchar_t* fontsPath;
     if (SUCCEEDED(
@@ -998,6 +1003,39 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
         NS_ERROR("Failed to add fonts read access policy rule.");
         LOG_E("Failed (ResultCode %d) to add read access to: %S", result,
               fontsStr.c_str());
+      }
+
+      // Read access for MF Media Source Activate and subkeys/values.
+      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
+                                sandbox::TargetPolicy::REG_ALLOW_READONLY,
+                                L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID"
+                                L"\\{e79167d7-1b85-4d78-b603-798e0e1a4c67}*");
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_ERROR("Failed to add rule for MFStartup CLSID.");
+        LOG_E("Failed (ResultCode %d) to add rule for MFStartup CLSID.",
+              result);
+      }
+
+      // Read access for other Media Foundation Classes.
+      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
+                                sandbox::TargetPolicy::REG_ALLOW_READONLY,
+                                L"HKEY_LOCAL_MACHINE\\"
+                                L"Software\\Classes\\MediaFoundation\\*");
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_ERROR("Failed to add rule for MFStartup CLSID.");
+        LOG_E("Failed (ResultCode %d) to add rule for MFStartup CLSID.",
+              result);
+      }
+
+      // Read access for MF H264 Encoder and subkeys/values.
+      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
+                                sandbox::TargetPolicy::REG_ALLOW_READONLY,
+                                L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID"
+                                L"\\{6CA50344-051A-4DED-9779-A43305165E35}*");
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_ERROR("Failed to add rule for MF H264 Encoder CLSID.");
+        LOG_E("Failed (ResultCode %d) to add rule for MF H264 Encoder CLSID.",
+              result);
       }
     }
 

@@ -49,7 +49,7 @@ interface nsIAsyncClipboardRequestCallback : nsISupports
 };
 
 [scriptable, builtinclass, uuid(c18ea2f7-6b6f-4a38-9ab3-a8781fdfcc39)]
-interface nsIAsyncGetClipboardData : nsISupports {
+interface nsIClipboardDataSnapshot : nsISupports {
   /**
    * Determines whether this request is still valid (e.g., the clipboard content
    * associated with this request is not stale).
@@ -80,12 +80,12 @@ interface nsIAsyncGetClipboardData : nsISupports {
 };
 
 [scriptable, uuid(ce23c1c4-58fd-4c33-8579-fa0796d9652c)]
-interface nsIAsyncClipboardGetCallback : nsISupports
+interface nsIClipboardGetDataSnapshotCallback : nsISupports
 {
   /**
    * Indicates that the clipboard get request has succeeded.
    */
-  void onSuccess(in nsIAsyncGetClipboardData aAsyncGetClipboardData);
+  void onSuccess(in nsIClipboardDataSnapshot aClipboardDataSnapshot);
 
   /**
    * Indicates that the clipboard get request has rejected.
@@ -181,11 +181,11 @@ interface nsIClipboard : nsISupports
      *         The callback object that will be notified upon completion.
      * @result NS_OK if no errors
      */
-    void asyncGetData(in Array<ACString> aFlavorList,
-                      in long aWhichClipboard,
-                      in WindowContext aRequestingWindowContext,
-                      in nsIPrincipal aRequestingPrincipal,
-                      in nsIAsyncClipboardGetCallback aCallback);
+    void getDataSnapshot(in Array<ACString> aFlavorList,
+                         in long aWhichClipboard,
+                         in WindowContext aRequestingWindowContext,
+                         in nsIPrincipal aRequestingPrincipal,
+                         in nsIClipboardGetDataSnapshotCallback aCallback);
 
     /**
      * Requests getting data from the native clipboard. This does not actually
@@ -208,7 +208,7 @@ interface nsIClipboard : nsISupports
      * @return nsIAsyncSetClipboardData if successful.
      * @throws if the request can not be made.
      */
-    nsIAsyncGetClipboardData getDataSnapshotSync(in Array<ACString> aFlavorList,
+    nsIClipboardDataSnapshot getDataSnapshotSync(in Array<ACString> aFlavorList,
                                                  in long aWhichClipboard,
                                                  [optional] in WindowContext aRequestingWindowContext);
 

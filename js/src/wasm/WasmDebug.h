@@ -21,6 +21,7 @@
 
 #include "js/ColumnNumber.h"  // JS::LimitedColumnNumberOneOrigin
 #include "js/HashTable.h"
+#include "wasm/AsmJS.h"  // CodeMetadataForAsmJS::SeenSet
 #include "wasm/WasmCode.h"
 #include "wasm/WasmCodegenTypes.h"
 #include "wasm/WasmConstants.h"
@@ -36,8 +37,6 @@ class WasmBreakpointSite;
 class WasmInstanceObject;
 
 namespace wasm {
-
-struct MetadataTier;
 
 // The generated source location for the AST node/expression. The offset field
 // refers an offset in an binary format file.
@@ -162,22 +161,24 @@ class DebugState {
 
   // Accessors for commonly used elements of linked structures.
 
-  const MetadataTier& metadata(Tier t) const { return code_->metadata(t); }
-  const Metadata& metadata() const { return code_->metadata(); }
-  const CodeRangeVector& codeRanges(Tier t) const {
-    return metadata(t).codeRanges;
+  const CodeBlock& debugCode() const { return code_->debugCodeBlock(); }
+  const CodeSegment& debugSegment() const {
+    return *code_->debugCodeBlock().segment;
   }
-  const CallSiteVector& callSites(Tier t) const {
-    return metadata(t).callSites;
+  const CodeMetadata& codeMeta() const { return code_->codeMeta(); }
+  const CodeMetadataForAsmJS* codeMetaForAsmJS() const {
+    return code_->codeMetaForAsmJS();
   }
 
   uint32_t funcToCodeRangeIndex(uint32_t funcIndex) const {
-    return metadata(Tier::Debug).funcToCodeRange[funcIndex];
+    return debugCode().funcToCodeRange[funcIndex];
   }
 
   // about:memory reporting:
 
-  void addSizeOfMisc(MallocSizeOf mallocSizeOf, Metadata::SeenSet* seenMetadata,
+  void addSizeOfMisc(MallocSizeOf mallocSizeOf,
+                     CodeMetadata::SeenSet* seenCodeMeta,
+                     CodeMetadataForAsmJS::SeenSet* seenCodeMetaForAsmJS,
                      Code::SeenSet* seenCode, size_t* code, size_t* data) const;
 };
 

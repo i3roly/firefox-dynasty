@@ -272,6 +272,7 @@ struct PrivateCapabilities {
     timestamp_query_support: TimestampQuerySupport,
     supports_simd_scoped_operations: bool,
     int64: bool,
+    int64_atomics: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -338,6 +339,7 @@ impl Queue {
 pub struct Device {
     shared: Arc<AdapterShared>,
     features: wgt::Features,
+    counters: wgt::HalCounters,
 }
 
 pub struct Surface {

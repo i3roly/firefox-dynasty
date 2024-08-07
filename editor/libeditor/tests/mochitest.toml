@@ -1,6 +1,7 @@
 [DEFAULT]
 prefs = [
   "apz.zoom-to-focused-input.enabled=false",
+  "test.ime_content_observer.assert_invalid_cache=true",
   "ui.dragThresholdX=4", # Bug 1873142
   "ui.dragThresholdY=4", # Bug 1873142
 ]
@@ -626,3 +627,7 @@ skip-if = ["os == 'android'"]
 ["test_undo_redo_stack_after_setting_value.html"]
 
 ["test_undo_with_editingui.html"]
+
+["test_updating_input_value_during_composition_from_async_input.html"]
+
+["test_updating_input_value_during_composition_from_input.html"]

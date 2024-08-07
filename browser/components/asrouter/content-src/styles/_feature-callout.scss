@@ -18,6 +18,7 @@
   accent-color: var(--fc-accent-color);
   // Make sure HTML content uses non-native theming, even in chrome windows.
   -moz-theme: non-native;
+  -moz-window-shadow: none;
 
   @media (prefers-color-scheme: dark) {
     @include dark-theme;

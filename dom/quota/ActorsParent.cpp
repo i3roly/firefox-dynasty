@@ -95,6 +95,7 @@
 #include "mozilla/dom/quota/Config.h"
 #include "mozilla/dom/quota/Constants.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
+#include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/FileUtils.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "mozilla/dom/quota/QuotaManagerService.h"
@@ -1359,6 +1360,22 @@ bool IsOriginUnaccessed(const FullOriginMetadata& aFullOriginMetadata,
          StaticPrefs::dom_quotaManager_unaccessedForLongTimeThresholdSec();
 }
 
+bool IsDirectoryLockBlockedBy(
+    const RefPtr<DirectoryLock>& aDirectoryLock,
+    const EnumSet<DirectoryLockCategory>& aCategories) {
+  const auto locks = aDirectoryLock->LocksMustWaitFor();
+  return std::any_of(locks.cbegin(), locks.cend(),
+                     [&aCategories](const auto& lock) {
+                       return aCategories.contains(lock->Category());
+                     });
+}
+
+bool IsDirectoryLockBlockedByUninitStorageOperation(
+    const RefPtr<DirectoryLock>& aDirectoryLock) {
+  return IsDirectoryLockBlockedBy(aDirectoryLock,
+                                  DirectoryLockCategory::UninitStorage);
+}
+
 }  // namespace
 
 /*******************************************************************************
@@ -1674,7 +1691,6 @@ QuotaManager::QuotaManager(const nsAString& aBasePath,
       mStorageName(aStorageName),
       mTemporaryStorageUsage(0),
       mNextDirectoryLockId(0),
-      mShutdownStorageOpCount(0),
       mStorageInitialized(false),
       mTemporaryStorageInitialized(false),
       mTemporaryStorageInitializedInternal(false),
@@ -2267,11 +2283,17 @@ void QuotaManager::Shutdown() {
     if (gNormalOriginOps) {
       annotation.AppendPrintf("QM: %zu normal origin ops pending\n",
                               gNormalOriginOps->Length());
-#ifdef QM_COLLECTING_OPERATION_TELEMETRY
+
       for (const auto& op : *gNormalOriginOps) {
+#ifdef QM_COLLECTING_OPERATION_TELEMETRY
         annotation.AppendPrintf("Op: %s pending\n", op->Name());
-      }
 #endif
+
+        nsCString data;
+        op->Stringify(data);
+
+        annotation.AppendPrintf("Op details:\n%s\n", data.get());
+      }
     }
     {
       MutexAutoLock lock(quotaManager->mQuotaMutex);
@@ -4950,18 +4972,19 @@ Result<Ok, nsresult> QuotaManager::CreateEmptyLocalStorageArchive(
 RefPtr<BoolPromise> QuotaManager::InitializeStorage() {
   AssertIsOnOwningThread();
 
-  // If storage is initialized but there's a clear storage or shutdown storage
-  // operation already scheduled, we can't immediately resolve the promise and
-  // return from the function because the clear or shutdown storage operation
-  // uninitializes storage.
-  if (mStorageInitialized && !mShutdownStorageOpCount) {
-    return BoolPromise::CreateAndResolve(true, __func__);
-  }
-
   RefPtr<UniversalDirectoryLock> directoryLock = CreateDirectoryLockInternal(
       Nullable<PersistenceType>(), OriginScope::FromNull(),
       Nullable<Client::Type>(),
       /* aExclusive */ false);
+
+  // If storage is initialized but there's a clear storage or shutdown storage
+  // operation already scheduled, we can't immediately resolve the promise and
+  // return from the function because the clear or shutdown storage operation
+  // uninitializes storage.
+  if (mStorageInitialized &&
+      !IsDirectoryLockBlockedByUninitStorageOperation(directoryLock)) {
+    return BoolPromise::CreateAndResolve(true, __func__);
+  }
 
   return directoryLock->Acquire()->Then(
       GetCurrentSerialEventTarget(), __func__,
@@ -4979,8 +5002,15 @@ RefPtr<BoolPromise> QuotaManager::InitializeStorage(
     RefPtr<UniversalDirectoryLock> aDirectoryLock) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(aDirectoryLock);
+  MOZ_ASSERT(aDirectoryLock->Acquired());
 
-  if (mStorageInitialized && !mShutdownStorageOpCount) {
+  // If storage is initialized and the directory lock for the initialize
+  // storage operation is acquired, we can immediately resolve the promise and
+  // return from the function because there can't be a clear storage or
+  // shutdown storage operation which would uninitialize storage.
+  if (mStorageInitialized) {
+    DropDirectoryLock(aDirectoryLock);
+
     return BoolPromise::CreateAndResolve(true, __func__);
   }
 
@@ -5124,18 +5154,19 @@ RefPtr<UniversalDirectoryLockPromise> QuotaManager::OpenStorageDirectory(
     Maybe<RefPtr<UniversalDirectoryLock>&> aPendingDirectoryLockOut) {
   AssertIsOnOwningThread();
 
-  RefPtr<UniversalDirectoryLock> storageDirectoryLock;
+  RefPtr<UniversalDirectoryLock> storageDirectoryLock =
+      CreateDirectoryLockInternal(Nullable<PersistenceType>(),
+                                  OriginScope::FromNull(),
+                                  Nullable<Client::Type>(),
+                                  /* aExclusive */ false);
 
   RefPtr<BoolPromise> storageDirectoryLockPromise;
 
-  if (mStorageInitialized && !mShutdownStorageOpCount) {
+  if (mStorageInitialized &&
+      !IsDirectoryLockBlockedByUninitStorageOperation(storageDirectoryLock)) {
+    storageDirectoryLock = nullptr;
     storageDirectoryLockPromise = BoolPromise::CreateAndResolve(true, __func__);
   } else {
-    storageDirectoryLock = CreateDirectoryLockInternal(
-        Nullable<PersistenceType>(), OriginScope::FromNull(),
-        Nullable<Client::Type>(),
-        /* aExclusive */ false);
-
     storageDirectoryLockPromise = storageDirectoryLock->Acquire();
   }
 
@@ -5156,6 +5187,8 @@ RefPtr<UniversalDirectoryLockPromise> QuotaManager::OpenStorageDirectory(
               storageDirectoryLock = std::move(storageDirectoryLock)](
                  const BoolPromise::ResolveOrRejectValue& aValue) mutable {
                if (aValue.IsReject()) {
+                 SafeDropDirectoryLockIfNotDropped(storageDirectoryLock);
+
                  return BoolPromise::CreateAndReject(aValue.RejectValue(),
                                                      __func__);
                }
@@ -5181,6 +5214,8 @@ RefPtr<UniversalDirectoryLockPromise> QuotaManager::OpenStorageDirectory(
              [universalDirectoryLock = std::move(universalDirectoryLock)](
                  const BoolPromise::ResolveOrRejectValue& aValue) mutable {
                if (aValue.IsReject()) {
+                 DropDirectoryLockIfNotDropped(universalDirectoryLock);
+
                  return UniversalDirectoryLockPromise::CreateAndReject(
                      aValue.RejectValue(), __func__);
                }
@@ -5197,13 +5232,16 @@ RefPtr<ClientDirectoryLockPromise> QuotaManager::OpenClientDirectory(
 
   nsTArray<RefPtr<BoolPromise>> promises;
 
-  RefPtr<UniversalDirectoryLock> storageDirectoryLock;
+  RefPtr<UniversalDirectoryLock> storageDirectoryLock =
+      CreateDirectoryLockInternal(Nullable<PersistenceType>(),
+                                  OriginScope::FromNull(),
+                                  Nullable<Client::Type>(),
+                                  /* aExclusive */ false);
 
-  if (!mStorageInitialized || mShutdownStorageOpCount) {
-    storageDirectoryLock = CreateDirectoryLockInternal(
-        Nullable<PersistenceType>(), OriginScope::FromNull(),
-        Nullable<Client::Type>(),
-        /* aExclusive */ false);
+  if (mStorageInitialized &&
+      !IsDirectoryLockBlockedByUninitStorageOperation(storageDirectoryLock)) {
+    storageDirectoryLock = nullptr;
+  } else {
     promises.AppendElement(storageDirectoryLock->Acquire());
   }
 
@@ -5219,22 +5257,35 @@ RefPtr<ClientDirectoryLockPromise> QuotaManager::OpenClientDirectory(
   return BoolPromise::All(GetCurrentSerialEventTarget(), promises)
       ->Then(
           GetCurrentSerialEventTarget(), __func__,
-          [self = RefPtr(this),
-           storageDirectoryLock = std::move(storageDirectoryLock)](
-              const CopyableTArray<bool>& aResolveValues) mutable {
-            if (!storageDirectoryLock) {
-              return BoolPromise::CreateAndResolve(true, __func__);
-            }
-
-            return self->InitializeStorage(std::move(storageDirectoryLock));
+          [](const CopyableTArray<bool>& aResolveValues) {
+            return BoolPromise::CreateAndResolve(true, __func__);
           },
           [](nsresult aRejectValue) {
             return BoolPromise::CreateAndReject(aRejectValue, __func__);
           })
       ->Then(GetCurrentSerialEventTarget(), __func__,
+             [self = RefPtr(this),
+              storageDirectoryLock = std::move(storageDirectoryLock)](
+                 const BoolPromise::ResolveOrRejectValue& aValue) mutable {
+               if (aValue.IsReject()) {
+                 SafeDropDirectoryLockIfNotDropped(storageDirectoryLock);
+
+                 return BoolPromise::CreateAndReject(aValue.RejectValue(),
+                                                     __func__);
+               }
+
+               if (!storageDirectoryLock) {
+                 return BoolPromise::CreateAndResolve(true, __func__);
+               }
+
+               return self->InitializeStorage(std::move(storageDirectoryLock));
+             })
+      ->Then(GetCurrentSerialEventTarget(), __func__,
              [clientDirectoryLock = std::move(clientDirectoryLock)](
                  const BoolPromise::ResolveOrRejectValue& aValue) mutable {
                if (aValue.IsReject()) {
+                 DropDirectoryLockIfNotDropped(clientDirectoryLock);
+
                  return ClientDirectoryLockPromise::CreateAndReject(
                      aValue.RejectValue(), __func__);
                }
@@ -5454,18 +5505,19 @@ QuotaManager::EnsureTemporaryClientIsInitialized(
 RefPtr<BoolPromise> QuotaManager::InitializeTemporaryStorage() {
   AssertIsOnOwningThread();
 
-  // If temporary storage is initialized but there's a clear storage or
-  // shutdown storage operation already scheduled, we can't immediately resolve
-  // the promise and return from the function because the clear or shutdown
-  // storage operation uninitializes storage.
-  if (mTemporaryStorageInitialized && !mShutdownStorageOpCount) {
-    return BoolPromise::CreateAndResolve(true, __func__);
-  }
-
   RefPtr<UniversalDirectoryLock> directoryLock = CreateDirectoryLockInternal(
       Nullable<PersistenceType>(), OriginScope::FromNull(),
       Nullable<Client::Type>(),
       /* aExclusive */ false);
+
+  // If temporary storage is initialized but there's a clear storage or
+  // shutdown storage operation already scheduled, we can't immediately resolve
+  // the promise and return from the function because the clear or shutdown
+  // storage operation uninitializes storage.
+  if (mTemporaryStorageInitialized &&
+      !IsDirectoryLockBlockedByUninitStorageOperation(directoryLock)) {
+    return BoolPromise::CreateAndResolve(true, __func__);
+  }
 
   return directoryLock->Acquire()->Then(
       GetCurrentSerialEventTarget(), __func__,
@@ -5483,8 +5535,16 @@ RefPtr<BoolPromise> QuotaManager::InitializeTemporaryStorage(
     RefPtr<UniversalDirectoryLock> aDirectoryLock) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(aDirectoryLock);
+  MOZ_ASSERT(aDirectoryLock->Acquired());
 
-  if (mTemporaryStorageInitialized && !mShutdownStorageOpCount) {
+  // If temporary storage is initialized and the directory lock for the
+  // initialize temporary storage operation is acquired, we can immediately
+  // resolve the promise and return from the function because there can't be a
+  // clear storage or shutdown storage operation which would uninitialize
+  // temporary storage.
+  if (mTemporaryStorageInitialized) {
+    DropDirectoryLock(aDirectoryLock);
+
     return BoolPromise::CreateAndResolve(true, __func__);
   }
 
@@ -5621,15 +5681,9 @@ RefPtr<BoolPromise> QuotaManager::ClearStorage() {
 
   clearStorageOp->RunImmediately();
 
-  // Storage clearing also shuts it down, so we need to increses the counter
-  // here as well.
-  mShutdownStorageOpCount++;
-
   return clearStorageOp->OnResults()->Then(
       GetCurrentSerialEventTarget(), __func__,
       [self = RefPtr(this)](const BoolPromise::ResolveOrRejectValue& aValue) {
-        self->mShutdownStorageOpCount--;
-
         if (aValue.IsReject()) {
           return BoolPromise::CreateAndReject(aValue.RejectValue(), __func__);
         }
@@ -5641,7 +5695,9 @@ RefPtr<BoolPromise> QuotaManager::ClearStorage() {
       });
 }
 
-RefPtr<BoolPromise> QuotaManager::ShutdownStorage() {
+RefPtr<BoolPromise> QuotaManager::ShutdownStorage(
+    Maybe<OriginOperationCallbackOptions> aCallbackOptions,
+    Maybe<OriginOperationCallbacks&> aCallbacks) {
   AssertIsOnOwningThread();
 
   auto shutdownStorageOp =
@@ -5651,13 +5707,13 @@ RefPtr<BoolPromise> QuotaManager::ShutdownStorage() {
 
   shutdownStorageOp->RunImmediately();
 
-  mShutdownStorageOpCount++;
+  if (aCallbackOptions.isSome() && aCallbacks.isSome()) {
+    aCallbacks.ref() = shutdownStorageOp->GetCallbacks(aCallbackOptions.ref());
+  }
 
   return shutdownStorageOp->OnResults()->Then(
       GetCurrentSerialEventTarget(), __func__,
       [self = RefPtr(this)](const BoolPromise::ResolveOrRejectValue& aValue) {
-        self->mShutdownStorageOpCount--;
-
         if (aValue.IsReject()) {
           return BoolPromise::CreateAndReject(aValue.RejectValue(), __func__);
         }
@@ -5886,6 +5942,20 @@ void QuotaManager::NotifyStoragePressure(uint64_t aUsage) {
   MOZ_ALWAYS_SUCCEEDS(NS_DispatchToMainThread(storagePressureRunnable));
 }
 
+void QuotaManager::NotifyMaintenanceStarted() {
+  AssertIsOnOwningThread();
+
+  MOZ_ALWAYS_SUCCEEDS(NS_DispatchToMainThread(NS_NewRunnableFunction(
+      "dom::quota::QuotaManager::NotifyMaintenanceStarted", []() {
+        nsCOMPtr<nsIObserverService> observerService =
+            mozilla::services::GetObserverService();
+        QM_TRY(MOZ_TO_RESULT(observerService), QM_VOID);
+
+        observerService->NotifyObservers(
+            nullptr, "QuotaManager::MaintenanceStarted", u"");
+      })));
+}
+
 // static
 void QuotaManager::GetStorageId(PersistenceType aPersistenceType,
                                 const nsACString& aOrigin,
@@ -6016,14 +6086,14 @@ QuotaManager::GetInfoFromValidatedPrincipalInfo(
 
       principalMetadata.mOrigin = origin;
 
-      if (info.attrs().mPrivateBrowsingId != 0) {
+      if (info.attrs().IsPrivateBrowsing()) {
         QM_TRY_UNWRAP(principalMetadata.mStorageOrigin,
                       EnsureStorageOriginFromOrigin(origin));
       } else {
         principalMetadata.mStorageOrigin = origin;
       }
 
-      principalMetadata.mIsPrivate = info.attrs().mPrivateBrowsingId != 0;
+      principalMetadata.mIsPrivate = info.attrs().IsPrivateBrowsing();
 
       return principalMetadata;
     }
