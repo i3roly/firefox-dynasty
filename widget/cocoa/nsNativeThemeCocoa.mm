@@ -218,7 +218,7 @@ static void DrawCellIncludingFocusRing(NSCell* aCell, NSRect aWithFrame,
 }
 
 - (void)drawWithFrame:(NSRect)cellFrame inView:(NSView*)controlView {
-  CGContext* cgContext = [[NSGraphicsContext currentContext] CGContext];
+  CGContext* cgContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort]; 
 
   HIThemeTrackDrawInfo tdi;
 
@@ -848,7 +848,7 @@ static void RenderWithCoreUI(CGRect aRect, CGContextRef cgContext,
     // CUIDraw with a CoreUI renderer that will give us the correct 10.10
     // style. Calling CUIDraw directly with [NSWindow coreUIRenderer] still
     // renders 10.9-style widgets on 10.10.
-    [appearance _drawInRect:aRect context:cgContext options:aOptions];
+    [appearance _drawInRect:aRect context:(CGContextRef)cgContext options:aOptions];
   } else {
     // 10.9 and below
     CUIRendererRef renderer =
