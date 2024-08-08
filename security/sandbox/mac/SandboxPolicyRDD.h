@@ -12,19 +12,20 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (version 1)
    ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
 
-   (if (<= macosVersion 1007)
-   (begin
-   (define ipc-posix-shm* ipc-posix-shm)
-   (define ipc-posix-shm-read-data ipc-posix-shm)
-   (define ipc-posix-shm-read* ipc-posix-shm)
-   (define ipc-posix-shm-write-data ipc-posix-shm)))
-
   (define should-log (param "SHOULD_LOG"))
   (define app-path (param "APP_PATH"))
   (define macosVersion (string->number (param "MAC_OS_VERSION")))
   (define home-path (param "HOME_PATH"))
   (define crashPort (param "CRASH_PORT"))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
+   
+  (if (<= macosVersion 1007)
+  (begin
+  (define ipc-posix-shm* ipc-posix-shm)
+  (define ipc-posix-shm-read-data ipc-posix-shm)
+  (define ipc-posix-shm-read* ipc-posix-shm)
+  (define ipc-posix-shm-write-data ipc-posix-shm)))
+
 
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
