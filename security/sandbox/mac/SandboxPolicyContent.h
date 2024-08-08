@@ -449,6 +449,7 @@ static const char SandboxPolicyContentFileAddend[] = R"SANDBOX_LITERAL(
 // audio remoting is not enabled. (Once audio remoting is always used these
 // will be deleted.)
 static const char SandboxPolicyContentAudioAddend[] = R"SANDBOX_LITERAL(
+  (define macosVersion (string->number (param "MAC_OS_VERSION")))
   ;; OS X 10.7 (Lion) compatibility
   ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
   (if (<= macosVersion 1007)
