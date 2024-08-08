@@ -3522,7 +3522,7 @@ void HttpBaseChannel::BlockOpaqueResponseAfterSniff(
     const OpaqueResponseBlockedTelemetryReason aTelemetryReason) {
   MOZ_DIAGNOSTIC_ASSERT(mORB);
   LogORBError(aReason, aTelemetryReason);
-  mORB->BlockResponse(this, NS_ERROR_FAILURE);
+  mORB->BlockResponse(this, NS_BINDING_ABORTED);
 }
 
 void HttpBaseChannel::AllowOpaqueResponseAfterSniff() {
@@ -6686,6 +6686,11 @@ NS_IMETHODIMP
 HttpBaseChannel::GetRenderBlocking(bool* aRenderBlocking) {
   *aRenderBlocking = mRenderBlocking;
   return NS_OK;
+}
+
+NS_IMETHODIMP HttpBaseChannel::GetLastTransportStatus(
+    nsresult* aLastTransportStatus) {
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 }  // namespace net

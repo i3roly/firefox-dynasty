@@ -3473,6 +3473,12 @@
   value: -1
   mirror: always
 
+# A pref that is used to slow down origin operations for testing purposes.
+- name: dom.quotaManager.originOperations.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
 # A pref that is used to enable testing features.
 - name: dom.quotaManager.testing
   type: SequentiallyConsistentAtomicBool
@@ -4076,6 +4082,11 @@
 - name: dom.workers.modules.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+- name: dom.workers.throttling.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 - name: dom.workers.serialized-sab-access
@@ -5787,8 +5798,6 @@
   value: true
 #elif defined(MOZ_WIDGET_ANDROID)
   value: true
-#elif defined(XP_WIN)
-  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
@@ -5973,6 +5982,11 @@
   value: true
   mirror: always
 
+- name: gfx.canvas.remote.use-draw-image-fast-path-d3d
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 - name: gfx.canvas.remote.recycle-used-data-surface
   type: RelaxedAtomicBool
   value: true
@@ -6148,7 +6162,7 @@
 # Whether to disable the automatic detection and use of direct2d.
 - name: gfx.direct2d.disabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: false
   mirror: once
 
 # Whether to attempt to enable Direct2D regardless of automatic detection or
@@ -7961,14 +7975,15 @@
   mirror: always
   set_spidermonkey_pref: startup
 
-#ifdef NIGHTLY_BUILD
-  # Experimental support for Iterator Helpers in JavaScript.
--   name: javascript.options.experimental.iterator_helpers
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
 
+# Experimental support for Iterator Helpers in JavaScript.
+- name: javascript.options.experimental.iterator_helpers
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
+#ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
 -   name: javascript.options.experimental.async_iterator_helpers
     type: bool
@@ -8009,6 +8024,13 @@
     type: bool
     value: false
     mirror: always
+
+  # Experimental support for RegExp.escape in JavaScript.
+-   name: javascript.options.experimental.regexp_escape
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
 #endif  // NIGHTLY_BUILD
 
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE
@@ -12311,6 +12333,12 @@
   value: true
   mirror: always
 
+# Whether network error logging is enabled.
+- name: network.http.network_error_logging.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # Hard code the User-Agent string's CPU architecture. This pref can be removed
 # after we're confident there are no webcompat problems.
 #
@@ -13559,11 +13587,6 @@
 # by quinn-udp, are disallowed by seccomp. Future fix and further details
 # tracked in https://github.com/quinn-rs/quinn/issues/1947.
 #if defined(ANDROID) && !defined(HAVE_64BIT_BUILD)
-  value: true
-# Always use NSPR on Windows. Windows is failing with a zero-size read. Future
-# fix and further details tracked in
-# https://bugzilla.mozilla.org/show_bug.cgi?id=1911658.
-#elif defined(XP_WIN)
   value: true
 #else
   value: @IS_NOT_NIGHTLY_BUILD@

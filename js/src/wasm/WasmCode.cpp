@@ -47,8 +47,10 @@ using namespace js::jit;
 using namespace js::wasm;
 using mozilla::BinarySearch;
 using mozilla::BinarySearchIf;
+using mozilla::DebugOnly;
 using mozilla::MakeEnumeratedRange;
-using mozilla::PodAssign;
+using mozilla::MallocSizeOf;
+using mozilla::Maybe;
 
 size_t LinkData::SymbolicLinkArray::sizeOfExcludingThis(
     MallocSizeOf mallocSizeOf) const {
@@ -558,7 +560,7 @@ bool Code::createManyLazyEntryStubs(const WriteGuard& guard,
                                     size_t* stubBlockIndex) const {
   MOZ_ASSERT(funcExportIndices.length());
 
-  LifoAlloc lifo(LAZY_STUB_LIFO_DEFAULT_CHUNK_SIZE);
+  LifoAlloc lifo(LAZY_STUB_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena);
   TempAllocator alloc(&lifo);
   JitContext jitContext;
   WasmMacroAssembler masm(alloc);

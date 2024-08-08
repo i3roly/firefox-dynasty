@@ -18,7 +18,6 @@
 
 #include "wasm/WasmGenerator.h"
 
-#include "mozilla/CheckedInt.h"
 #include "mozilla/EnumeratedRange.h"
 #include "mozilla/SHA1.h"
 
@@ -43,7 +42,7 @@ using namespace js;
 using namespace js::jit;
 using namespace js::wasm;
 
-using mozilla::CheckedInt;
+using mozilla::EnumeratedArray;
 using mozilla::MakeEnumeratedRange;
 
 bool CompiledCode::swap(MacroAssembler& masm) {
@@ -74,7 +73,7 @@ ModuleGenerator::MacroAssemblerScope::MacroAssemblerScope(LifoAlloc& lifo)
 ModuleGenerator::ModuleGenerator(const CodeMetadata& codeMeta,
                                  const CompilerEnvironment& compilerEnv,
                                  CompileState compileState,
-                                 const Atomic<bool>* cancelled,
+                                 const mozilla::Atomic<bool>* cancelled,
                                  UniqueChars* error,
                                  UniqueCharsVector* warnings)
     : compileArgs_(codeMeta.compileArgs.get()),
@@ -87,7 +86,7 @@ ModuleGenerator::ModuleGenerator(const CodeMetadata& codeMeta,
       featureUsage_(FeatureUsage::None),
       codeBlock_(nullptr),
       linkData_(nullptr),
-      lifo_(GENERATOR_LIFO_DEFAULT_CHUNK_SIZE),
+      lifo_(GENERATOR_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena),
       masm_(nullptr),
       debugStubCodeOffset_(0),
       requestTierUpStubCodeOffset_(0),
@@ -212,7 +211,7 @@ static bool InRange(uint32_t caller, uint32_t callee) {
 using OffsetMap =
     HashMap<uint32_t, uint32_t, DefaultHasher<uint32_t>, SystemAllocPolicy>;
 using TrapMaybeOffsetArray =
-    EnumeratedArray<Trap, Maybe<uint32_t>, size_t(Trap::Limit)>;
+    EnumeratedArray<Trap, mozilla::Maybe<uint32_t>, size_t(Trap::Limit)>;
 
 bool ModuleGenerator::linkCallSites() {
   AutoCreatedBy acb(*masm_, "linkCallSites");
@@ -804,12 +803,12 @@ static void CheckCodeBlock(const CodeBlock& codeBlock) {
 
 #  if (defined(JS_CODEGEN_X64) || defined(JS_CODEGEN_X86) ||   \
        defined(JS_CODEGEN_ARM64) || defined(JS_CODEGEN_ARM) || \
-       defined(JS_CODEGEN_LOONG64))
+       defined(JS_CODEGEN_LOONG64) || defined(JS_CODEGEN_MIPS64))
   // Check that each trapsite is associated with a plausible instruction.  The
   // required instruction kind depends on the trapsite kind.
   //
-  // NOTE: currently only enabled on x86_{32,64} and arm{32,64}.  Ideally it
-  // should be extended to riscv, loongson, mips.
+  // NOTE: currently enabled on x86_{32,64}, arm{32,64}, loongson64 and mips64.
+  // Ideally it should be extended to riscv64 too.
   //
   for (Trap trap : MakeEnumeratedRange(Trap::Limit)) {
     const TrapSiteVector& trapSites = codeBlock.trapSites[trap];
@@ -959,7 +958,7 @@ UniqueCodeBlock ModuleGenerator::finishCodeBlock(UniqueLinkData* linkData) {
 
   // Free the macro assembler scope, and reset our masm pointer
   masm_ = nullptr;
-  masmScope_ = Nothing();
+  masmScope_ = mozilla::Nothing();
 
   *linkData = std::move(linkData_);
   return std::move(codeBlock_);

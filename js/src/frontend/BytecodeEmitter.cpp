@@ -13,9 +13,8 @@
 #include "mozilla/Casting.h"    // mozilla::AssertedCast
 #include "mozilla/DebugOnly.h"  // mozilla::DebugOnly
 #include "mozilla/FloatingPoint.h"  // mozilla::NumberEqualsInt32, mozilla::NumberIsInt32
-#include "mozilla/HashTable.h"      // mozilla::HashSet
-#include "mozilla/Maybe.h"          // mozilla::{Maybe,Nothing,Some}
-#include "mozilla/PodOperations.h"  // mozilla::PodCopy
+#include "mozilla/HashTable.h"  // mozilla::HashSet
+#include "mozilla/Maybe.h"      // mozilla::{Maybe,Nothing,Some}
 #include "mozilla/Saturate.h"
 #include "mozilla/Variant.h"  // mozilla::AsVariant
 
@@ -85,7 +84,6 @@ using mozilla::Maybe;
 using mozilla::Nothing;
 using mozilla::NumberEqualsInt32;
 using mozilla::NumberIsInt32;
-using mozilla::PodCopy;
 using mozilla::Some;
 
 static bool ParseNodeRequiresSpecialLineNumberNotes(ParseNode* pn) {

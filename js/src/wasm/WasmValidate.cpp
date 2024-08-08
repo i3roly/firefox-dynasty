@@ -36,8 +36,10 @@ using namespace js::wasm;
 
 using mozilla::AsChars;
 using mozilla::CheckedInt;
-using mozilla::CheckedInt32;
 using mozilla::IsUtf8;
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
 using mozilla::Span;
 
 // Misc helpers.

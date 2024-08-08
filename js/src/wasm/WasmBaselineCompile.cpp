@@ -83,6 +83,10 @@ namespace wasm {
 
 using namespace js::jit;
 
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
+
 ////////////////////////////////////////////////////////////
 //
 // Out of line code management.
@@ -507,7 +511,7 @@ bool BaseCompiler::beginFunction() {
         fr.storeLocalI64(RegI64(i->gpr64()), l);
         break;
       case MIRType::WasmAnyRef: {
-        DebugOnly<uint32_t> offs = fr.localOffsetFromSp(l);
+        mozilla::DebugOnly<uint32_t> offs = fr.localOffsetFromSp(l);
         MOZ_ASSERT(0 == (offs % sizeof(void*)));
         fr.storeLocalRef(RegRef(i->gpr()), l);
         // We should have just visited this local in the preceding loop.
@@ -8266,7 +8270,7 @@ bool BaseCompiler::emitArrayFill() {
   // - .. to spill/reload from a spill slot, we need a register to point at
   //   the instance.  That makes it even worse on x86 since there's no
   //   reserved instance reg; hence we have to use one of our 3 for it.  This
-  //   is indicated explictly in the code below.
+  //   is indicated explicitly in the code below.
   //
   // There are many comment lines indicating the current disposition of the 3
   // regs.

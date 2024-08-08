@@ -260,7 +260,6 @@ using mozilla::Some;
 using mozilla::TimeDuration;
 using mozilla::TimeStamp;
 
-using JS::AutoGCRooter;
 using JS::SliceBudget;
 using JS::TimeBudget;
 using JS::WorkBudget;
@@ -450,11 +449,14 @@ GCRuntime::GCRuntime(JSRuntime* rt)
       hadShutdownGC(false),
 #endif
       requestSliceAfterBackgroundTask(false),
-      lifoBlocksToFree((size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE),
+      lifoBlocksToFree((size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE,
+                       js::BackgroundMallocArena),
       lifoBlocksToFreeAfterFullMinorGC(
-          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE),
+          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE,
+          js::BackgroundMallocArena),
       lifoBlocksToFreeAfterNextMinorGC(
-          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE),
+          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE,
+          js::BackgroundMallocArena),
       sweepGroupIndex(0),
       sweepGroups(nullptr),
       currentSweepGroup(nullptr),

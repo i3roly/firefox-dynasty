@@ -19,7 +19,6 @@
 #include "wasm/WasmTable.h"
 
 #include "mozilla/CheckedInt.h"
-#include "mozilla/PodOperations.h"
 
 #include "vm/JSContext.h"
 #include "vm/Realm.h"
@@ -33,7 +32,6 @@
 using namespace js;
 using namespace js::wasm;
 using mozilla::CheckedInt;
-using mozilla::PodZero;
 
 Table::Table(JSContext* cx, const TableDesc& desc,
              Handle<WasmTableObject*> maybeObject, FuncRefVector&& functions)
@@ -496,7 +494,7 @@ void Table::assertRangeNotNull(uint32_t index, uint32_t length) const {
 }
 #endif  // DEBUG
 
-size_t Table::sizeOfExcludingThis(MallocSizeOf mallocSizeOf) const {
+size_t Table::sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
   if (isFunction()) {
     return functions_.sizeOfExcludingThis(mallocSizeOf);
   }

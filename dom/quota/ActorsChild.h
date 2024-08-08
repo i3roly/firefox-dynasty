@@ -63,12 +63,6 @@ class QuotaChild final : public PQuotaChild {
   // IPDL methods are only called by IPDL.
   virtual void ActorDestroy(ActorDestroyReason aWhy) override;
 
-  virtual PQuotaUsageRequestChild* AllocPQuotaUsageRequestChild(
-      const UsageRequestParams& aParams) override;
-
-  virtual bool DeallocPQuotaUsageRequestChild(
-      PQuotaUsageRequestChild* aActor) override;
-
   virtual PQuotaRequestChild* AllocPQuotaRequestChild(
       const RequestParams& aParams) override;
 
@@ -90,6 +84,8 @@ class QuotaUsageRequestChild final : public PQuotaUsageRequestChild {
   }
 #endif
 
+  NS_INLINE_DECL_REFCOUNTING(QuotaUsageRequestChild, override)
+
  private:
   // Only created by QuotaManagerService.
   explicit QuotaUsageRequestChild(UsageRequest* aRequest);
@@ -99,7 +95,7 @@ class QuotaUsageRequestChild final : public PQuotaUsageRequestChild {
 
   void HandleResponse(nsresult aResponse);
 
-  void HandleResponse(const nsTArray<OriginUsage>& aResponse);
+  void HandleResponse(const OriginUsageMetadataArray& aResponse);
 
   void HandleResponse(const OriginUsageResponse& aResponse);
 
@@ -107,7 +103,7 @@ class QuotaUsageRequestChild final : public PQuotaUsageRequestChild {
   virtual void ActorDestroy(ActorDestroyReason aWhy) override;
 
   virtual mozilla::ipc::IPCResult Recv__delete__(
-      const UsageRequestResponse& aResponse) override;
+      UsageRequestResponse&& aResponse) override;
 };
 
 class QuotaRequestChild final : public PQuotaRequestChild {

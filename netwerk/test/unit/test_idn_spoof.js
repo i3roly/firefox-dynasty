@@ -221,7 +221,7 @@ let testCases = [
   // Latin 'o' in Armenian.
   ["xn--o-ybcg0cu0cq.com", "o\u0580\u0574\u0578\u0582\u0566\u0568.com", kUnsafe],
   // Hiragana HE(U+3078) mixed with Katakana
-  ["xn--49jxi3as0d0fpc.com", "\u30e2\u30d2\u30fc\u30c8\u3078\u30d6\u30f3.com", kUnsafe, "DISABLED"],
+  ["xn--49jxi3as0d0fpc.com", "\u30e2\u30d2\u30fc\u30c8\u3078\u30d6\u30f3.com", kUnsafe],
 
   // U+30FC should be preceded by a Hiragana/Katakana.
   // Katakana + U+30FC + Han
@@ -251,21 +251,21 @@ let testCases = [
   // Katakana + U+30FD
   ["xn--lck2i.jp", "\u30ab\u30fd.jp", kSafe],
   // Hiragana + U+30FD
-  ["xn--u8j7t.jp", "\u304b\u30fd.jp", kUnsafe, "DISABLED"],
+  ["xn--u8j7t.jp", "\u304b\u30fd.jp", kUnsafe],
   // Han + U+30FD
-  ["xn--xek368f.jp", "\u4e00\u30fd.jp", kUnsafe, "DISABLED"],
-  ["xn--a-mju.jp", "a\u30fd.jp", kUnsafe, "DISABLED"],
-  ["xn--a1-bo4a.jp", "a1\u30fd.jp", kUnsafe, "DISABLED"],
+  ["xn--xek368f.jp", "\u4e00\u30fd.jp", kUnsafe],
+  ["xn--a-mju.jp", "a\u30fd.jp", kUnsafe],
+  ["xn--a1-bo4a.jp", "a1\u30fd.jp", kUnsafe],
 
   // U+30FE (ヾ) is allowed only after Katakana.
   // Katakana + U+30FE
   ["xn--lck4i.jp", "\u30ab\u30fe.jp", kSafe],
   // Hiragana + U+30FE
-  ["xn--u8j9t.jp", "\u304b\u30fe.jp", kUnsafe, "DISABLED"],
+  ["xn--u8j9t.jp", "\u304b\u30fe.jp", kUnsafe],
   // Han + U+30FE
-  ["xn--yek168f.jp", "\u4e00\u30fe.jp", kUnsafe, "DISABLED"],
-  ["xn--a-oju.jp", "a\u30fe.jp", kUnsafe, "DISABLED"],
-  ["xn--a1-eo4a.jp", "a1\u30fe.jp", kUnsafe, "DISABLED"],
+  ["xn--yek168f.jp", "\u4e00\u30fe.jp", kUnsafe],
+  ["xn--a-oju.jp", "a\u30fe.jp", kUnsafe],
+  ["xn--a1-eo4a.jp", "a1\u30fe.jp", kUnsafe],
 
   // Cyrillic labels made of Latin-look-alike Cyrillic letters.
   // 1) ѕсоре.com with ѕсоре in Cyrillic.
@@ -326,10 +326,10 @@ let testCases = [
   ["xn--googl-3we.xn--3e0b707e", "xn--googl-3we.\ud55c\uad6d", kSafe],
 
   // Combining Diacritic marks after a script other than Latin-Greek-Cyrillic
-  ["xn--rsa2568fvxya.com", "\ud55c\u0307\uae00.com", kUnsafe, "DISABLED"],  // 한́글.com
-  ["xn--rsa0336bjom.com", "\u6f22\u0307\u5b57.com", kUnsafe, "DISABLED"],  // 漢̇字.com
+  ["xn--rsa2568fvxya.com", "\ud55c\u0307\uae00.com", kUnsafe],  // 한́글.com
+  ["xn--rsa0336bjom.com", "\u6f22\u0307\u5b57.com", kUnsafe],  // 漢̇字.com
   // नागरी́.com
-  ["xn--lsa922apb7a6do.com", "\u0928\u093e\u0917\u0930\u0940\u0301.com", kUnsafe, "DISABLED"],
+  ["xn--lsa922apb7a6do.com", "\u0928\u093e\u0917\u0930\u0940\u0301.com", kUnsafe],
 
   // Similarity checks against the list of top domains. "digklmo68.com" and
   // 'digklmo68.co.uk" are listed for unittest in the top domain list.
@@ -655,7 +655,7 @@ let testCases = [
   // Tibetan transliteration characters.
   ["xn--com-lum.test.pl", "com\u0f8c.test.pl", kUnsafe],
   // Arabic letter KASHMIRI YEH
-  ["xn--fgb.com", "\u0620.com", kUnsafe, "DISABLED"],
+  ["xn--fgb.com", "\u0620.com", kUnsafe, "macosx"],
 // #endif
 
   // Hyphens (http://unicode.org/cldr/utility/confusables.jsp?a=-)
@@ -719,7 +719,7 @@ let testCases = [
   // Two Katakana-Hiragana combining mark in a row
   ["google.xn--com-oh4ba.evil.jp", "google.com\u309a\u309a.evil.jp", kUnsafe],
   // Katakana Letter No not enclosed by {Han,Hiragana,Katakana}.
-  ["google.xn--comevil-v04f.jp", "google.com\u30ceevil.jp", kUnsafe, "DISABLED"],
+  ["google.xn--comevil-v04f.jp", "google.com\u30ceevil.jp", kUnsafe],
   // TODO(jshin): Review the danger of allowing the following two.
   // Hiragana 'No' by itself is allowed.
   ["xn--ldk.jp", "\u30ce.jp", kSafe],
@@ -829,13 +829,13 @@ let testCases = [
   ["xn--o-tka.com", "o\u0138.com", kUnsafe],
 
   // U+4E00 and U+3127 should be blocked when next to non-CJK.
-  ["xn--ipaddress-w75n.com", "ip\u4e00address.com", kUnsafe, "DISABLED"],
-  ["xn--ipaddress-wx5h.com", "ip\u3127address.com", kUnsafe, "DISABLED"],
+  ["xn--ipaddress-w75n.com", "ip\u4e00address.com", kUnsafe],
+  ["xn--ipaddress-wx5h.com", "ip\u3127address.com", kUnsafe],
   // U+4E00 and U+3127 at the beginning and end of a string.
-  ["xn--google-gg5e.com", "google\u3127.com", kUnsafe, "DISABLED"],
-  ["xn--google-9f5e.com", "\u3127google.com", kUnsafe, "DISABLED"],
-  ["xn--google-gn7i.com", "google\u4e00.com", kUnsafe, "DISABLED"],
-  ["xn--google-9m7i.com", "\u4e00google.com", kUnsafe, "DISABLED"],
+  ["xn--google-gg5e.com", "google\u3127.com", kUnsafe],
+  ["xn--google-9f5e.com", "\u3127google.com", kUnsafe],
+  ["xn--google-gn7i.com", "google\u4e00.com", kUnsafe],
+  ["xn--google-9m7i.com", "\u4e00google.com", kUnsafe],
   // These are allowed because U+4E00 and U+3127 are not immediately next to
   // non-CJK.
   ["xn--gamer-fg1hz05u.com", "\u4e00\u751fgamer.com", kSafe],
@@ -849,10 +849,10 @@ let testCases = [
 
   // CJK ideographs looking like slashes should be blocked when next to
   // non-CJK.
-  ["example.xn--comtest-k63k", "example.com\u4e36test", kUnsafe, "DISABLED"],
-  ["example.xn--comtest-u83k", "example.com\u4e40test", kUnsafe, "DISABLED"],
-  ["example.xn--comtest-283k", "example.com\u4e41test", kUnsafe, "DISABLED"],
-  ["example.xn--comtest-m83k", "example.com\u4e3ftest", kUnsafe, "DISABLED"],
+  ["example.xn--comtest-k63k", "example.com\u4e36test", kUnsafe],
+  ["example.xn--comtest-u83k", "example.com\u4e40test", kUnsafe],
+  ["example.xn--comtest-283k", "example.com\u4e41test", kUnsafe],
+  ["example.xn--comtest-m83k", "example.com\u4e3ftest", kUnsafe],
   // This is allowed because the ideographs are not immediately next to
   // non-CJK.
   ["xn--oiqsace.com", "\u4e36\u4e40\u4e41\u4e3f.com", kSafe],
@@ -864,10 +864,10 @@ let testCases = [
   // Small letter theta looks like a zero.
   ["xn--123456789-yzg.com", "123456789\u03b8.com", kUnsafe, "DISABLED"],
 
-  ["xn--est-118d.net", "\u4e03est.net", kUnsafe, "DISABLED"],
-  ["xn--est-918d.net", "\u4e05est.net", kUnsafe, "DISABLED"],
+  ["xn--est-118d.net", "\u4e03est.net", kUnsafe],
+  ["xn--est-918d.net", "\u4e05est.net", kUnsafe],
   ["xn--est-e28d.net", "\u4e06est.net", kUnsafe, "DISABLED"],
-  ["xn--est-t18d.net", "\u4e01est.net", kUnsafe, "DISABLED"],
+  ["xn--est-t18d.net", "\u4e01est.net", kUnsafe],
   ["xn--3-cq6a.com", "\u4e293.com", kUnsafe, "DISABLED"],
   ["xn--cxe-n68d.com", "c\u4e2bxe.com", kUnsafe, "DISABLED"],
   ["xn--cye-b98d.com", "cy\u4e42e.com", kUnsafe, "DISABLED"],
@@ -882,7 +882,7 @@ let testCases = [
   ["xn--mnpqr-jta.is", "mn\u00f0pqr.is", kSafe],
 
   // U+0259 (ə) is only allowed under the .az TLD.
-  ["xn--xample-vyc.com", "\u0259xample.com", kUnsafe, "DISABLED"],
+  ["xn--xample-vyc.com", "\u0259xample.com", kUnsafe],
   ["xn--xample-vyc.az", "\u0259xample.az", kSafe],
 
   // U+00B7 is only allowed on Catalan domains between two l's.
@@ -894,26 +894,26 @@ let testCases = [
   ["xn--l-fda.cat", "\u00b7l.cat", kUnsafe],
   ["xn--l-gda.cat", "l\u00b7.cat", kUnsafe],
 
-  ["xn--googlecom-gk6n.com", "google\u4e28com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-0y6n.com", "google\u4e5bcom.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-v85n.com", "google\u4e03com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-g95n.com", "google\u4e05com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-go6n.com", "google\u4e36com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-b76o.com", "google\u5341com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-ql3h.com", "google\u3007com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-0r5h.com", "google\u3112com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-bu5h.com", "google\u311acom.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-qv5h.com", "google\u311fcom.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-0x5h.com", "google\u3127com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-by5h.com", "google\u3128com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-ly5h.com", "google\u3129com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-5o5h.com", "google\u3108com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-075n.com", "google\u4e00com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-046h.com", "google\u31bacom.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-026h.com", "google\u31b3com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-lg9q.com", "google\u5de5com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-g040a.com", "google\u8ba0com.com", kUnsafe, "DISABLED"],
-  ["xn--googlecom-b85n.com", "google\u4e01com.com", kUnsafe, "DISABLED"],
+  ["xn--googlecom-gk6n.com", "google\u4e28com.com", kUnsafe],
+  ["xn--googlecom-0y6n.com", "google\u4e5bcom.com", kUnsafe],
+  ["xn--googlecom-v85n.com", "google\u4e03com.com", kUnsafe],
+  ["xn--googlecom-g95n.com", "google\u4e05com.com", kUnsafe],
+  ["xn--googlecom-go6n.com", "google\u4e36com.com", kUnsafe],
+  ["xn--googlecom-b76o.com", "google\u5341com.com", kUnsafe],
+  ["xn--googlecom-ql3h.com", "google\u3007com.com", kUnsafe],
+  ["xn--googlecom-0r5h.com", "google\u3112com.com", kUnsafe],
+  ["xn--googlecom-bu5h.com", "google\u311acom.com", kUnsafe],
+  ["xn--googlecom-qv5h.com", "google\u311fcom.com", kUnsafe],
+  ["xn--googlecom-0x5h.com", "google\u3127com.com", kUnsafe],
+  ["xn--googlecom-by5h.com", "google\u3128com.com", kUnsafe],
+  ["xn--googlecom-ly5h.com", "google\u3129com.com", kUnsafe],
+  ["xn--googlecom-5o5h.com", "google\u3108com.com", kUnsafe],
+  ["xn--googlecom-075n.com", "google\u4e00com.com", kUnsafe],
+  ["xn--googlecom-046h.com", "google\u31bacom.com", kUnsafe],
+  ["xn--googlecom-026h.com", "google\u31b3com.com", kUnsafe],
+  ["xn--googlecom-lg9q.com", "google\u5de5com.com", kUnsafe],
+  ["xn--googlecom-g040a.com", "google\u8ba0com.com", kUnsafe],
+  ["xn--googlecom-b85n.com", "google\u4e01com.com", kUnsafe],
 
   // Whole-script-confusables. Cyrillic is sufficiently handled in cases above
   // so it's not included here.
@@ -1027,7 +1027,10 @@ add_task(async function test_chrome_spoofs() {
     try {
       result = idnService.convertToDisplayIDN(test[0]);
     } catch (e) {}
-    let expectedFail = test.length == 4 && test[3] == "DISABLED";
+    // If test[3] is set to a platform, the test is expected to pass only on that platform
+    let expectedFail =
+      test.length == 4 &&
+      (test[3] == "DISABLED" || test[3] != AppConstants.platform);
     if (test[2] == kSafe) {
       checkEquals(
         result,

@@ -36,6 +36,7 @@ using mozilla::Preferences;
 #define NS_NET_PREF_EXTRAALLOWED "network.IDN.extra_allowed_chars"
 #define NS_NET_PREF_EXTRABLOCKED "network.IDN.extra_blocked_chars"
 #define NS_NET_PREF_IDNRESTRICTION "network.IDN.restriction_profile"
+#define ISNUMERIC(c) ((c) >= '0' && (c) <= '9')
 
 template <int N>
 static inline bool TLDEqualsLiteral(mozilla::Span<const char32_t> aTLD,
@@ -68,6 +69,50 @@ static inline bool isOnlySafeChars(mozilla::Span<const char32_t> aLabel,
     }
   }
   return true;
+}
+
+static bool isCJKSlashConfusable(char32_t aChar) {
+  switch (aChar) {
+    case 0x30CE:  // ノ
+    case 0x30BD:  // ソ
+    case 0x30BE:  // ゾ
+    case 0x30F3:  // ン
+    case 0x4E36:  // 丶
+    case 0x4E40:  // 乀
+    case 0x4E41:  // 乁
+    case 0x4E3F:  // 丿
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool isCJKIdeograph(char32_t aChar) {
+  switch (aChar) {
+    case 0x4E00:  // 一
+    case 0x3127:  // ㄧ
+    case 0x4E28:  // 丨
+    case 0x4E5B:  // 乛
+    case 0x4E03:  // 七
+    case 0x4E05:  // 丅
+    case 0x5341:  // 十
+    case 0x3007:  // 〇
+    case 0x3112:  // ㄒ
+    case 0x311A:  // ㄚ
+    case 0x311F:  // ㄟ
+    case 0x3128:  // ㄨ
+    case 0x3129:  // ㄩ
+    case 0x3108:  // ㄈ
+    case 0x31BA:  // ㆺ
+    case 0x31B3:  // ㆳ
+    case 0x5DE5:  // 工
+    case 0x31B2:  // ㆲ
+    case 0x8BA0:  // 讠
+    case 0x4E01:  // 丁
+      return true;
+    default:
+      return false;
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -258,6 +303,15 @@ bool nsIDNService::IsLabelSafe(mozilla::Span<const char32_t> aLabel,
       }
     }
 
+#ifdef XP_MACOSX
+    // U+0620, U+0f8c, U+0f8d, U+0f8e, U+0f8f and are blocked due to a font
+    // issue on macOS
+    if (ch == 0x620 || ch == 0xf8c || ch == 0xf8d || ch == 0xf8e ||
+        ch == 0xf8f) {
+      return false;
+    }
+#endif
+
     // U+30FC should be preceded by a Hiragana/Katakana.
     if (ch == 0x30fc && lastScript != Script::HIRAGANA &&
         lastScript != Script::KATAKANA) {
@@ -269,8 +323,41 @@ bool nsIDNService::IsLabelSafe(mozilla::Span<const char32_t> aLabel,
       nextScript = UnicodeProperties::GetScriptCode(*current);
     }
 
+    // U+3078 to U+307A (へ, べ, ぺ) in Hiragana mixed with Katakana should be
+    // unsafe
+    if (ch >= 0x3078 && ch <= 0x307A &&
+        (lastScript == Script::KATAKANA || nextScript == Script::KATAKANA)) {
+      return false;
+    }
+    // U+30D8 to U+30DA (ヘ, ベ, ペ) in Katakana mixed with Hiragana should be
+    // unsafe
+    if (ch >= 0x30D8 && ch <= 0x30DA &&
+        (lastScript == Script::HIRAGANA || nextScript == Script::HIRAGANA)) {
+      return false;
+    }
+    // U+30FD and U+30FE are allowed only after Katakana
+    if ((ch == 0x30FD || ch == 0x30FE) && lastScript != Script::KATAKANA) {
+      return false;
+    }
+
+    // Slash confusables not enclosed by {Han,Hiragana,Katakana} should be
+    // unsafe but by itself should be allowed.
+    if (isCJKSlashConfusable(ch) && aLabel.Length() > 1 &&
+        lastScript != Script::HAN && lastScript != Script::HIRAGANA &&
+        lastScript != Script::KATAKANA && nextScript != Script::HAN &&
+        nextScript != Script::HIRAGANA && nextScript != Script::KATAKANA) {
+      return false;
+    }
+
     if (ch == 0x30FB &&
         (lastScript == Script::LATIN || nextScript == Script::LATIN)) {
+      return false;
+    }
+
+    // Combining Diacritic marks (U+0300-U+0339) after a script other than
+    // Latin-Greek-Cyrillic is unsafe
+    if (ch >= 0x300 && ch <= 0x339 && lastScript != Script::LATIN &&
+        lastScript != Script::GREEK && lastScript != Script::CYRILLIC) {
       return false;
     }
 
@@ -292,9 +379,34 @@ bool nsIDNService::IsLabelSafe(mozilla::Span<const char32_t> aLabel,
       return false;
     }
 
+    // Disallow U+0259 for domains outside Azerbaijani ccTLD (.az)
+    if (ch == 0x259 && !TLDEqualsLiteral(aTLD, "az")) {
+      return false;
+    }
+
     // Block single/double-quote-like characters.
     if (ch == 0x2BB || ch == 0x2BC) {
       return false;
+    }
+
+    // Block these CJK ideographs if they are adjacent to non-CJK characters.
+    // These characters can be used to spoof Latin characters/punctuation marks.
+    if (isCJKIdeograph(ch)) {
+      // Check if there is a non-Bopomofo, non-Hiragana, non-Katakana, non-Han,
+      // and non-Numeric character on the left. previousChar is 0 when ch is the
+      // first character.
+      if (lastScript != Script::BOPOMOFO && lastScript != Script::HIRAGANA &&
+          lastScript != Script::KATAKANA && lastScript != Script::HAN &&
+          previousChar && !ISNUMERIC(previousChar)) {
+        return false;
+      }
+      // Check if there is a non-Bopomofo, non-Hiragana, non-Katakana, non-Han,
+      // and non-Numeric character on the right.
+      if (nextScript != Script::BOPOMOFO && nextScript != Script::HIRAGANA &&
+          nextScript != Script::KATAKANA && nextScript != Script::HAN &&
+          current != aLabel.end() && !ISNUMERIC(*current)) {
+        return false;
+      }
     }
 
     // Check for mixed numbering systems

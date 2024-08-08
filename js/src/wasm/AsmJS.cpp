@@ -89,7 +89,6 @@ using namespace js::wasm;
 using JS::AsmJSOption;
 using JS::AutoStableStringChars;
 using JS::GenericNaN;
-using JS::SourceOwnership;
 using JS::SourceText;
 using mozilla::Abs;
 using mozilla::AsVariant;
@@ -98,6 +97,7 @@ using mozilla::HashGeneric;
 using mozilla::IsNegativeZero;
 using mozilla::IsPositiveZero;
 using mozilla::IsPowerOfTwo;
+using mozilla::Maybe;
 using mozilla::Nothing;
 using mozilla::PodZero;
 using mozilla::PositiveInfinity;
@@ -1405,7 +1405,7 @@ class MOZ_STACK_CLASS ModuleValidatorShared {
         moduleFunctionNode_(moduleFunctionNode),
         moduleFunctionName_(FunctionName(moduleFunctionNode)),
         standardLibraryMathNames_(fc),
-        validationLifo_(VALIDATION_LIFO_DEFAULT_CHUNK_SIZE),
+        validationLifo_(VALIDATION_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena),
         funcDefs_(fc),
         tables_(fc),
         globalMap_(fc),

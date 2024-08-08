@@ -12199,6 +12199,7 @@ bool InitOptionParser(OptionParser& op) {
                         "Enable Duplicate Named Capture Groups") ||
       !op.addBoolOption('\0', "enable-regexp-modifiers",
                         "Enable Pattern Modifiers") ||
+      !op.addBoolOption('\0', "enable-regexp-escape", "Enable RegExp.escape") ||
       !op.addBoolOption('\0', "enable-top-level-await",
                         "Enable top-level await") ||
       !op.addBoolOption('\0', "enable-import-assertions",
@@ -12580,10 +12581,10 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-float16array")) {
     JS::Prefs::setAtStartup_experimental_float16array(true);
   }
-#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_iterator_helpers(true);
   }
+#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-async-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_async_iterator_helpers(true);
   }
@@ -12598,6 +12599,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-regexp-modifiers")) {
     JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
+  }
+  if (op.getBoolOption("enable-regexp-escape")) {
+    JS::Prefs::setAtStartup_experimental_regexp_escape(true);
   }
 #endif
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE

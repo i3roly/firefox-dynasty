@@ -57,8 +57,12 @@ using namespace js;
 using namespace jit;
 using namespace wasm;
 
+using mozilla::EnumeratedArray;
 using mozilla::HashGeneric;
 using mozilla::MakeEnumeratedRange;
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
 
 static const unsigned BUILTIN_THUNK_LIFO_SIZE = 64 * 1024;
 
@@ -1937,7 +1941,7 @@ struct BuiltinThunks {
 };
 
 Mutex initBuiltinThunks(mutexid::WasmInitBuiltinThunks);
-Atomic<const BuiltinThunks*> builtinThunks;
+mozilla::Atomic<const BuiltinThunks*> builtinThunks;
 
 bool wasm::EnsureBuiltinThunksInitialized() {
   AutoMarkJitCodeWritableForThread writable;
@@ -1956,7 +1960,7 @@ bool wasm::EnsureBuiltinThunksInitialized(
     return false;
   }
 
-  LifoAlloc lifo(BUILTIN_THUNK_LIFO_SIZE);
+  LifoAlloc lifo(BUILTIN_THUNK_LIFO_SIZE, js::MallocArena);
   TempAllocator tempAlloc(&lifo);
   WasmMacroAssembler masm(tempAlloc);
   AutoCreatedBy acb(masm, "wasm::EnsureBuiltinThunksInitialized");

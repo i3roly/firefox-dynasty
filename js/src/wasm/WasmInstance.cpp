@@ -75,9 +75,11 @@ using namespace js;
 using namespace js::jit;
 using namespace js::wasm;
 
-using mozilla::BitwiseCast;
 using mozilla::CheckedUint32;
 using mozilla::DebugOnly;
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
 
 // Instance must be aligned at least as much as any of the integer, float,
 // or SIMD values that we'd like to store in it.
@@ -3456,7 +3458,7 @@ void Instance::disassembleExport(JSContext* cx, uint32_t funcIndex, Tier tier,
 }
 
 void Instance::addSizeOfMisc(
-    MallocSizeOf mallocSizeOf, CodeMetadata::SeenSet* seenCodeMeta,
+    mozilla::MallocSizeOf mallocSizeOf, CodeMetadata::SeenSet* seenCodeMeta,
     CodeMetadataForAsmJS::SeenSet* seenCodeMetaForAsmJS,
     Code::SeenSet* seenCode, Table::SeenSet* seenTables, size_t* code,
     size_t* data) const {

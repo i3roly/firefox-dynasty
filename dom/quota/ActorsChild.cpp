@@ -75,22 +75,6 @@ void QuotaChild::ActorDestroy(ActorDestroyReason aWhy) {
   }
 }
 
-PQuotaUsageRequestChild* QuotaChild::AllocPQuotaUsageRequestChild(
-    const UsageRequestParams& aParams) {
-  AssertIsOnOwningThread();
-
-  MOZ_CRASH("PQuotaUsageRequestChild actors should be manually constructed!");
-}
-
-bool QuotaChild::DeallocPQuotaUsageRequestChild(
-    PQuotaUsageRequestChild* aActor) {
-  AssertIsOnOwningThread();
-  MOZ_ASSERT(aActor);
-
-  delete static_cast<QuotaUsageRequestChild*>(aActor);
-  return true;
-}
-
 PQuotaRequestChild* QuotaChild::AllocPQuotaRequestChild(
     const RequestParams& aParams) {
   AssertIsOnOwningThread();
@@ -134,14 +118,15 @@ void QuotaUsageRequestChild::AssertIsOnOwningThread() const {
 
 void QuotaUsageRequestChild::HandleResponse(nsresult aResponse) {
   AssertIsOnOwningThread();
-  MOZ_ASSERT(NS_FAILED(aResponse));
   MOZ_ASSERT(mRequest);
 
-  mRequest->SetError(aResponse);
+  if (NS_FAILED(aResponse)) {
+    mRequest->SetError(aResponse);
+  }
 }
 
 void QuotaUsageRequestChild::HandleResponse(
-    const nsTArray<OriginUsage>& aResponse) {
+    const OriginUsageMetadataArray& aResponse) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(mRequest);
 
@@ -154,8 +139,8 @@ void QuotaUsageRequestChild::HandleResponse(
 
     for (const auto& originUsage : aResponse) {
       usageResults.AppendElement(MakeRefPtr<UsageResult>(
-          originUsage.origin(), originUsage.persisted(), originUsage.usage(),
-          originUsage.lastAccessed()));
+          originUsage.mOrigin, originUsage.mPersisted, originUsage.mUsage,
+          originUsage.mLastAccessTime));
     }
 
     variant->SetAsArray(nsIDataType::VTYPE_INTERFACE_IS,
@@ -192,7 +177,7 @@ void QuotaUsageRequestChild::ActorDestroy(ActorDestroyReason aWhy) {
 }
 
 mozilla::ipc::IPCResult QuotaUsageRequestChild::Recv__delete__(
-    const UsageRequestResponse& aResponse) {
+    UsageRequestResponse&& aResponse) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(mRequest);
 

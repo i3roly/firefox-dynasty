@@ -39,7 +39,7 @@
 #include "nsTArray.h"
 #include "nsString.h"
 #include "mozilla/dom/WebGLRenderingContextBinding.h"
-#include "mozilla/ipc/SharedMemoryBasic.h"
+#include "mozilla/ipc/SharedMemory.h"
 #include "TiedFields.h"
 
 // Manual reflection of WebIDL typedefs that are different from their
@@ -390,8 +390,10 @@ struct WebGLContextOptions final {
 
   dom::WebGLPowerPreference powerPreference =
       dom::WebGLPowerPreference::Default;
+  bool forceSoftwareRendering = false;
   bool shouldResistFingerprinting = true;
   bool enableDebugRendererInfo = false;
+  PaddingField<bool, 7> _padding;
 
   auto MutTiedFields() {
     // clang-format off
@@ -407,8 +409,10 @@ struct WebGLContextOptions final {
       xrCompatible,
 
       powerPreference,
+      forceSoftwareRendering,
       shouldResistFingerprinting,
-      enableDebugRendererInfo);
+      enableDebugRendererInfo,
+      _padding);
     // clang-format on
   }
 

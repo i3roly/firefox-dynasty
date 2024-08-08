@@ -7,52 +7,46 @@
 #ifndef DOM_QUOTA_QUOTAUSAGEREQUESTBASE_H_
 #define DOM_QUOTA_QUOTAUSAGEREQUESTBASE_H_
 
-#include "NormalOriginOperationBase.h"
-#include "mozilla/dom/quota/PersistenceType.h"
+#include "mozilla/dom/quota/BackgroundThreadObject.h"
 #include "mozilla/dom/quota/PQuotaUsageRequestParent.h"
 
-class nsIFile;
+namespace mozilla::dom::quota {
 
-namespace mozilla {
-
-template <typename V, typename E>
-class Result;
-
-namespace dom::quota {
-
-struct OriginMetadata;
-class UsageInfo;
-class UsageRequestResponse;
-
-class QuotaUsageRequestBase : public NormalOriginOperationBase,
+class QuotaUsageRequestBase : public BackgroundThreadObject,
                               public PQuotaUsageRequestParent {
- protected:
-  QuotaUsageRequestBase(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
-                        const char* aName)
-      : NormalOriginOperationBase(std::move(aQuotaManager), aName) {}
+ public:
+  QuotaUsageRequestBase() : mActorDestroyed(false) {}
 
-  mozilla::Result<UsageInfo, nsresult> GetUsageForOrigin(
-      QuotaManager& aQuotaManager, PersistenceType aPersistenceType,
-      const OriginMetadata& aOriginMetadata);
+  NS_INLINE_DECL_REFCOUNTING(QuotaUsageRequestBase, override)
 
-  // Subclasses use this override to set the IPDL response value.
-  virtual void GetResponse(UsageRequestResponse& aResponse) = 0;
+  void NoteActorDestroyed() {
+    AssertIsOnOwningThread();
+
+    mActorDestroyed = true;
+  }
+
+  bool IsActorDestroyed() const {
+    AssertIsOnOwningThread();
+
+    return mActorDestroyed;
+  }
+
+  RefPtr<BoolPromise> OnCancel();
+
+  void Destroy();
 
  private:
-  mozilla::Result<UsageInfo, nsresult> GetUsageForOriginEntries(
-      QuotaManager& aQuotaManager, PersistenceType aPersistenceType,
-      const OriginMetadata& aOriginMetadata, nsIFile& aDirectory,
-      bool aInitialized);
-
-  void SendResults() override;
+  virtual ~QuotaUsageRequestBase();
 
   // IPDL methods.
   void ActorDestroy(ActorDestroyReason aWhy) override;
 
   mozilla::ipc::IPCResult RecvCancel() final;
+
+  MozPromiseHolder<BoolPromise> mCancelPromiseHolder;
+  bool mActorDestroyed;
 };
 
-}  // namespace dom::quota
-}  // namespace mozilla
+}  // namespace mozilla::dom::quota
 
 #endif  // DOM_QUOTA_QUOTAUSAGEREQUESTBASE_H_

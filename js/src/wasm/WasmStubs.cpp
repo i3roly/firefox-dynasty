@@ -38,6 +38,11 @@ using namespace js;
 using namespace js::jit;
 using namespace js::wasm;
 
+using mozilla::DebugOnly;
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
+
 using MIRTypeVector = Vector<jit::MIRType, 8, SystemAllocPolicy>;
 using ABIArgMIRTypeIter = jit::ABIArgIter<MIRTypeVector>;
 
@@ -2930,7 +2935,7 @@ static bool GenerateRequestTierUpStub(MacroAssembler& masm,
 bool wasm::GenerateEntryStubs(const CodeMetadata& codeMeta,
                               const FuncExportVector& exports,
                               CompiledCode* code) {
-  LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE);
+  LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena);
   TempAllocator alloc(&lifo);
   JitContext jcx;
   WasmMacroAssembler masm(alloc);
@@ -3034,7 +3039,7 @@ bool wasm::GenerateProvisionalLazyJitEntryStub(MacroAssembler& masm,
 bool wasm::GenerateStubs(const CodeMetadata& codeMeta,
                          const FuncImportVector& imports,
                          const FuncExportVector& exports, CompiledCode* code) {
-  LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE);
+  LifoAlloc lifo(STUBS_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena);
   TempAllocator alloc(&lifo);
   JitContext jcx;
   WasmMacroAssembler masm(alloc);

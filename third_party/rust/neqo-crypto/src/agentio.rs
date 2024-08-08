@@ -88,7 +88,6 @@ impl RecordList {
         self.records.push(Record::new(epoch, ct, data));
     }
 
-    #[allow(clippy::unused_self)]
     unsafe extern "C" fn ingest(
         _fd: *mut ssl::PRFileDesc,
         epoch: ssl::PRUint16,
@@ -221,7 +220,6 @@ impl AgentIo {
     }
 
     unsafe fn borrow(fd: &mut PrFd) -> &mut Self {
-        #[allow(clippy::cast_ptr_alignment)]
         (**fd).secret.cast::<Self>().as_mut().unwrap()
     }
 

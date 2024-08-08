@@ -384,6 +384,24 @@ nsresult nsHttpHandler::Init() {
       return qlogDir->HumanReadablePath();
     };
     mHttp3QlogDir = initQLogDir();
+
+    if (const char* origin = PR_GetEnv("MOZ_FORCE_QUIC_ON")) {
+      nsCCharSeparatedTokenizer tokens(nsDependentCString(origin), ':');
+      nsAutoCString host;
+      int32_t port = 443;
+      if (tokens.hasMoreTokens()) {
+        host = tokens.nextToken();
+        if (tokens.hasMoreTokens()) {
+          nsresult res;
+          int32_t tmp = tokens.nextToken().ToInteger(&res);
+          if (NS_SUCCEEDED(res)) {
+            port = tmp;
+          }
+        }
+        mAltSvcMappingTemptativeMap.InsertOrUpdate(
+            host, MakeUnique<nsCString>(nsPrintfCString("h3=:%d", port)));
+      }
+    }
   }
 
   // monitor some preference changes
@@ -574,15 +592,15 @@ nsresult nsHttpHandler::InitConnectionMgr() {
     auto task = [self]() {
       RefPtr<HttpConnectionMgrParent> parent =
           self->mConnMgr->AsHttpConnectionMgrParent();
-      Unused << SocketProcessParent::GetSingleton()
-                    ->SendPHttpConnectionMgrConstructor(
-                        parent,
-                        HttpHandlerInitArgs(
-                            self->mLegacyAppName, self->mLegacyAppVersion,
-                            self->mPlatform, self->mOscpu, self->mMisc,
-                            self->mProduct, self->mProductSub, self->mAppName,
-                            self->mAppVersion, self->mCompatFirefox,
-                            self->mCompatDevice, self->mDeviceModelId));
+      RefPtr<SocketProcessParent> socketParent =
+          SocketProcessParent::GetSingleton();
+      Unused << socketParent->SendPHttpConnectionMgrConstructor(
+          parent,
+          HttpHandlerInitArgs(self->mLegacyAppName, self->mLegacyAppVersion,
+                              self->mPlatform, self->mOscpu, self->mMisc,
+                              self->mProduct, self->mProductSub, self->mAppName,
+                              self->mAppVersion, self->mCompatFirefox,
+                              self->mCompatDevice, self->mDeviceModelId));
     };
     gIOService->CallOrWaitForSocketProcess(std::move(task));
   } else {
@@ -1152,8 +1170,9 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
       if (!XRE_IsSocketProcess()) {
         mDeviceModelId = mozilla::net::GetDeviceModelId();
         if (gIOService->SocketProcessReady()) {
-          Unused << SocketProcessParent::GetSingleton()
-                        ->SendUpdateDeviceModelId(mDeviceModelId);
+          RefPtr<SocketProcessParent> socketParent =
+              SocketProcessParent::GetSingleton();
+          Unused << socketParent->SendUpdateDeviceModelId(mDeviceModelId);
         }
       }
     } else {
