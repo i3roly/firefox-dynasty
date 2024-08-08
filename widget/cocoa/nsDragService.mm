@@ -49,6 +49,19 @@ already_AddRefed<nsIDragSession> nsDragService::CreateDragSession() {
   return sess.forget();
 }
 
+
+#if !defined(MAC_OS_X_VERSION_10_8) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_8
+/* this imagewithSize, unlike the one in nsCocoaWindow.mm, 
+ * was added after 10.7 support was dropped. so, i am adding 
+ * it here because i saw an exception and it has to be here*/
+@interface NSImage (ImageCreationWithDrawingHandler)
++ (NSImage*)imageWithSize:(NSSize)size
+                  flipped:(BOOL)drawingHandlerShouldBeCalledWithFlippedContext
+           drawingHandler:(BOOL (^)(NSRect dstRect))drawingHandler;
+@end
+
+#endif
+
 NSImage* nsDragSession::ConstructDragImage(nsINode* aDOMNode,
                                            const Maybe<CSSIntRegion>& aRegion,
                                            NSPoint* aDragPoint) {
