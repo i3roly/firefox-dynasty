@@ -2414,9 +2414,10 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
   // Also set the cell draw window's appearance; this is respected by
   // NSTextFieldCell (and its subclass NSSearchFieldCell).
   if (mCellDrawWindow) {
-    mCellDrawWindow.appearance = NSAppearance.currentAppearance;
+    if(@available(macOS 10.9, *)) {
+      mCellDrawWindow.appearance = NSAppearance.currentAppearance;
+    }
   }
-
   const Widget widget = aWidgetInfo.Widget();
 
   // Some widgets render using DrawTarget, and some using CGContext.
