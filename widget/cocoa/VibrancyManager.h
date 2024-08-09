@@ -20,8 +20,6 @@ class ViewRegion;
 enum class VibrancyType {
   Sidebar,
   // Add new values here, or update MaxEnumValue below if you add them after.
-  TOOLTIP,
-  MENU,
   Titlebar,
 };
 

@@ -58,7 +58,7 @@ enum : OSType {
 
 #endif
 
-#if !defined(MAC_OS_X_VERSION_10_14) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_15
+#if !defined(MAC_OS_X_VERSION_10_14) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_14
 
 const NSAppearanceName NSAppearanceNameDarkAqua = @"NSAppearanceNameDarkAqua";
 
@@ -80,6 +80,10 @@ const NSAppearanceName NSAppearanceNameDarkAqua = @"NSAppearanceNameDarkAqua";
 // Available in 10.10, but retroactively made public in 10.14.
 @property(class, strong, readonly) NSColor* linkColor NS_AVAILABLE_MAC(10_10);
 @end
+
+enum {
+  NSVisualEffectMaterialToolTip NS_ENUM_AVAILABLE_MAC(10_14) = 17,
+};
 
 
 #endif

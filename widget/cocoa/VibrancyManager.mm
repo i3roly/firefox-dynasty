@@ -37,14 +37,7 @@ using namespace mozilla;
 static NSVisualEffectState VisualEffectStateForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
-     case VibrancyType::TOOLTIP:
-     case VibrancyType::MENU:
-       // Tooltip and menu windows are never "key", so we need to tell the
-       // vibrancy effect to look active regardless of window state.
-       return NSVisualEffectStateActive;
-    default:
-      return NSVisualEffectStateFollowsWindowActiveState;
-   case VibrancyType::Titlebar:
+    case VibrancyType::Titlebar:
       break;
   }
   return NSVisualEffectStateFollowsWindowActiveState;
@@ -53,14 +46,6 @@ static NSVisualEffectState VisualEffectStateForVibrancyType(
 static NSVisualEffectMaterial VisualEffectMaterialForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
-    case VibrancyType::TOOLTIP:
-      if (@available(macOS 10.14, *)) {
-        return (NSVisualEffectMaterial)NSVisualEffectMaterialToolTip;
-      } else {
-        return NSVisualEffectMaterialMenu;
-      }
-    case VibrancyType::MENU:
-      return NSVisualEffectMaterialMenu;
     case VibrancyType::Titlebar:
       return NSVisualEffectMaterialTitlebar;
   }
@@ -69,13 +54,10 @@ static NSVisualEffectMaterial VisualEffectMaterialForVibrancyType(
 static NSVisualEffectBlendingMode VisualEffectBlendingModeForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
-    case VibrancyType::TOOLTIP:
-    case VibrancyType::MENU:
-      return NSVisualEffectBlendingModeBehindWindow;
     case VibrancyType::Titlebar:
       return StaticPrefs::widget_macos_titlebar_blend_mode_behind_window()
                  ? NSVisualEffectBlendingModeBehindWindow
-                 : NSVisualEffectBlendingModeWithinWindow;
+                 : NSVisualEffectBlendingModeWithinWindow;  
   }
 }
 

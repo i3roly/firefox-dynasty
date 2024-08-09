@@ -347,9 +347,7 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
       color = GetColorFromNSColor(NSColor.secondarySelectedControlColor);
       break;
     case ColorID::MozColheadertext:
-      DISPATCH_FALLTHROUGH;
     case ColorID::MozColheaderhovertext:
-      DISPATCH_FALLTHROUGH;
     case ColorID::MozColheaderactivetext:
       color = GetColorFromNSColor(NSColor.headerTextColor);
       break;
