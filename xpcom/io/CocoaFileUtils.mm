@@ -5,6 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "CocoaFileUtils.h"
+#include "nsCocoaFeatures.h"
 #include "nsCocoaUtils.h"
 #include <Cocoa/Cocoa.h>
 #include "nsObjCExceptions.h"
@@ -215,6 +216,13 @@ void AddOriginMetadataToFile(const CFStringRef filePath,
   ::CFRelease(mdItem);
 }
 
+static CFStringRef GetQuarantinePropKey() {
+  if (nsCocoaFeatures::OnYosemiteOrLater()) {
+    return kCFURLQuarantinePropertiesKey;
+  }
+  return kLSItemQuarantineProperties;
+}
+
 // Can be called off of the main thread.
 static CFMutableDictionaryRef CreateQuarantineDictionary(
     const CFURLRef aFileURL, const bool aCreateProps) {
@@ -227,7 +235,7 @@ static CFMutableDictionaryRef CreateQuarantineDictionary(
                                            &kCFTypeDictionaryValueCallBacks);
   } else {
     Boolean success = ::CFURLCopyResourcePropertyForKey(
-        aFileURL, kCFURLQuarantinePropertiesKey, &quarantineProps, NULL);
+        aFileURL, GetQuarantinePropKey(), &quarantineProps, NULL);
     // If there aren't any quarantine properties then the user probably
     // set up an exclusion and we don't need to add metadata.
     if (!success || !quarantineProps) {

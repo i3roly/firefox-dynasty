@@ -3309,6 +3309,10 @@ static NSImage* GetMenuMaskImage() {
 // Add an effect view wrapper if needed so that the OS draws the appropriate
 // vibrancy effect and window border.
 - (void)setEffectViewWrapperForStyle:(WindowShadow)aStyle {
+  if (!VibrancyManager::SystemSupportsVibrancy()) {
+    return;
+  }
+
   NSView* wrapper = [&]() -> NSView* {
     if (aStyle == WindowShadow::Menu || aStyle == WindowShadow::Tooltip) {
       const bool isMenu = aStyle == WindowShadow::Menu;
@@ -3321,7 +3325,9 @@ static NSImage* GetMenuMaskImage() {
       effectView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
       if (isMenu) {
         // Turn on rounded corner masking.
+        if ([effectView respondsToSelector:@selector(setMaskImage:)]) {
         effectView.maskImage = GetMenuMaskImage();
+        }
         effectView.material = NSVisualEffectMaterialMenu;
       } else {
         if(@available(macOS 10.14, *)) {

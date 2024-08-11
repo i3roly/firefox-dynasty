@@ -71,6 +71,13 @@ class VibrancyManager {
   LayoutDeviceIntRegion GetUnionOfVibrantRegions() const;
 
   /**
+   * Check whether the operating system supports vibrancy at all.
+   * You may only create a VibrancyManager instance if this returns true.
+   * @return Whether VibrancyManager can be used on this OS.
+   */
+  static bool SystemSupportsVibrancy();
+
+  /**
    * Create an NSVisualEffectView for the specified vibrancy type. The return
    * value is not autoreleased. We return an object of type NSView* because we
    * compile with an SDK that does not contain a definition for
