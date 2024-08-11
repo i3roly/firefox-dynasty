@@ -41,14 +41,12 @@ nsMacUserActivityUpdater::UpdateLocation(const nsAString& aPageUrl,
       pageTitle = pageUrl.absoluteString;
     }
 
-    if(__builtin_available(macOS 10.10, *)) {
-      NSUserActivity* userActivity = [[NSUserActivity alloc]
-          initWithActivityType:NSUserActivityTypeBrowsingWeb];
-      userActivity.webpageURL = pageUrl;
-      userActivity.title = pageTitle;
-      cocoaWin.userActivity = userActivity;
-      [userActivity release];
-    }
+    NSUserActivity* userActivity = [[NSUserActivity alloc]
+        initWithActivityType:NSUserActivityTypeBrowsingWeb];
+    userActivity.webpageURL = pageUrl;
+    userActivity.title = pageTitle;
+    cocoaWin.userActivity = userActivity;
+    [userActivity release];
   }
   return NS_OK;
 
