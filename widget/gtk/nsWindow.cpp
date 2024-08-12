@@ -1008,7 +1008,9 @@ void nsWindow::Show(bool aState) {
   if (!aState) mNeedsShow = false;
 
 #ifdef ACCESSIBILITY
-  if (aState && a11y::ShouldA11yBeEnabled()) CreateRootAccessible();
+  if (aState && a11y::ShouldA11yBeEnabled()) {
+    CreateRootAccessible();
+  }
 #endif
 
   NativeShow(aState);
@@ -8860,6 +8862,10 @@ gboolean WindowDragDropHandler(GtkWidget* aWidget, GdkDragContext* aDragContext,
   RefPtr<nsDragService> dragService = nsDragService::GetInstance();
   nsDragSession* dragSession =
       static_cast<nsDragSession*>(dragService->GetCurrentSession(window));
+  if (!dragSession) {
+    LOGDRAG("    Received dragdrop after drag end.\n");
+    return FALSE;
+  }
   nsDragSession::AutoEventLoop loop(dragSession);
   return dragSession->ScheduleDropEvent(
       window, aDragContext, GetWindowDropPosition(window, aX, aY), aTime);
@@ -8914,9 +8920,9 @@ void nsWindow::DispatchEventToRootAccessible(uint32_t aEventType) {
   }
 
   // Get the root document accessible and fire event to it.
-  a11y::LocalAccessible* acc = GetRootAccessible();
-  if (acc) {
-    accService->FireAccessibleEvent(aEventType, acc);
+  CreateRootAccessible();
+  if (mRootAccessible) {
+    accService->FireAccessibleEvent(aEventType, mRootAccessible);
   }
 }
 

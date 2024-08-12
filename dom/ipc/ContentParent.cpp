@@ -553,9 +553,6 @@ static bool sCreatedFirstContentProcess = false;
 static bool sInProcessSelector = false;
 #endif
 
-// The first content child has ID 1, so the chrome process can have ID 0.
-static uint64_t gContentChildID = 1;
-
 static const char* sObserverTopics[] = {
     NS_IPC_IOSERVICE_SET_OFFLINE_TOPIC,
     NS_IPC_IOSERVICE_SET_CONNECTIVITY_TOPIC,
@@ -1156,8 +1153,8 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateGMPService() {
   }
 
   nsresult rv;
-  rv = PGMPService::CreateEndpoints(base::GetCurrentProcId(), OtherPid(),
-                                    &parent, &child);
+  rv = PGMPService::CreateEndpoints(EndpointProcInfo::Current(),
+                                    OtherEndpointProcInfo(), &parent, &child);
   if (NS_FAILED(rv)) {
     return IPC_FAIL(this, "CreateEndpoints failed");
   }
@@ -2368,7 +2365,6 @@ bool ContentParent::BeginSubprocessLaunch(ProcessPriority aPriority) {
   }
 
   std::vector<std::string> extraArgs;
-  geckoargs::sChildID.Put(mChildID, extraArgs);
   geckoargs::sIsForBrowser.Put(IsForBrowser(), extraArgs);
   geckoargs::sNotForBrowser.Put(!IsForBrowser(), extraArgs);
 
@@ -2541,14 +2537,19 @@ bool ContentParent::LaunchSubprocessResolve(bool aIsSync,
   return true;
 }
 
+static bool IsFileContent(const nsACString& aRemoteType) {
+  return aRemoteType == FILE_REMOTE_TYPE;
+}
+
 ContentParent::ContentParent(const nsACString& aRemoteType)
-    : mSubprocess(nullptr),
+    : mSubprocess(new GeckoChildProcessHost(GeckoProcessType_Content,
+                                            IsFileContent(aRemoteType))),
       mLaunchTS(TimeStamp::Now()),
       mLaunchYieldTS(mLaunchTS),
       mActivateTS(mLaunchTS),
       mIsAPreallocBlocker(false),
       mRemoteType(aRemoteType),
-      mChildID(gContentChildID++),
+      mChildID(mSubprocess->GetChildID()),
       mGeolocationWatchID(-1),
       mThreadsafeHandle(
           new ThreadsafeContentParentHandle(this, mChildID, mRemoteType)),
@@ -2569,6 +2570,8 @@ ContentParent::ContentParent(const nsACString& aRemoteType)
       mBlockShutdownCalled(false),
 #endif
       mHangMonitorActor(nullptr) {
+  MOZ_ASSERT(NS_IsMainThread(), "Wrong thread!");
+
   mRemoteTypeIsolationPrincipal =
       CreateRemoteTypeIsolationPrincipal(aRemoteType);
 
@@ -2588,13 +2591,9 @@ ContentParent::ContentParent(const nsACString& aRemoteType)
       MessageChannel::REQUIRE_DEFERRED_MESSAGE_PROTECTION);
 #endif
 
-  NS_ASSERTION(NS_IsMainThread(), "Wrong thread!");
-  bool isFile = mRemoteType == FILE_REMOTE_TYPE;
-  mSubprocess = new GeckoChildProcessHost(GeckoProcessType_Content, isFile);
   MOZ_LOG(ContentParent::GetLog(), LogLevel::Verbose,
-          ("CreateSubprocess: ContentParent %p mSubprocess %p handle %" PRIuPTR,
-           this, mSubprocess,
-           mSubprocess ? (uintptr_t)mSubprocess->GetChildProcessHandle() : -1));
+          ("CreateSubprocess: ContentParent %p mSubprocess %p childID %d", this,
+           mSubprocess, mSubprocess->GetChildID()));
 }
 
 ContentParent::~ContentParent() {
@@ -2886,9 +2885,9 @@ bool ContentParent::InitInternal(ProcessPriority aInitialPriority) {
   Endpoint<PRemoteDecoderManagerChild> videoManager;
   AutoTArray<uint32_t, 3> namespaces;
 
-  if (!gpm->CreateContentBridges(OtherPid(), &compositor, &imageBridge,
-                                 &vrBridge, &videoManager, mChildID,
-                                 &namespaces)) {
+  if (!gpm->CreateContentBridges(OtherEndpointProcInfo(), &compositor,
+                                 &imageBridge, &vrBridge, &videoManager,
+                                 mChildID, &namespaces)) {
     // This can fail if we've already started shutting down the compositor
     // thread. See Bug 1562763 comment 8.
     MOZ_ASSERT(AppShutdown::IsInOrBeyond(ShutdownPhase::AppShutdown));
@@ -3055,9 +3054,9 @@ void ContentParent::OnCompositorUnexpectedShutdown() {
   Endpoint<PRemoteDecoderManagerChild> videoManager;
   AutoTArray<uint32_t, 3> namespaces;
 
-  if (!gpm->CreateContentBridges(OtherPid(), &compositor, &imageBridge,
-                                 &vrBridge, &videoManager, mChildID,
-                                 &namespaces)) {
+  if (!gpm->CreateContentBridges(OtherEndpointProcInfo(), &compositor,
+                                 &imageBridge, &vrBridge, &videoManager,
+                                 mChildID, &namespaces)) {
     MOZ_ASSERT(AppShutdown::IsInOrBeyond(ShutdownPhase::AppShutdown));
     return;
   }
@@ -3248,7 +3247,6 @@ mozilla::ipc::IPCResult ContentParent::RecvClipboardHasType(
 }
 
 namespace {
-
 static Result<ClipboardReadRequest, nsresult> CreateClipboardReadRequest(
     ContentParent& aContentParent,
     nsIClipboardDataSnapshot& aClipboardDataSnapshot) {
@@ -3893,8 +3891,13 @@ ContentParent::Observe(nsISupports* aSubject, const char* aTopic,
     nsCOMPtr<nsIDNSService> dns = do_GetService(NS_DNSSERVICE_CONTRACTID);
     nsIDNSService::ResolverMode mode;
     dns->GetCurrentTrrMode(&mode);
-    Unused << SendSetTRRMode(mode, static_cast<nsIDNSService::ResolverMode>(
-                                       StaticPrefs::network_trr_mode()));
+    nsIDNSService::ResolverMode modeFromPref =
+        static_cast<nsIDNSService::ResolverMode>(
+            StaticPrefs::network_trr_mode());
+    if (modeFromPref > nsIDNSService::MODE_TRROFF) {
+      modeFromPref = nsIDNSService::MODE_TRROFF;
+    }
+    Unused << SendSetTRRMode(mode, modeFromPref);
   }
 
   return NS_OK;
@@ -4242,9 +4245,9 @@ void ContentParent::HandleOrphanedMinidump(nsString* aDumpId) {
     CrashReporterHost::RecordCrash(GeckoProcessType_Content,
                                    nsICrashService::CRASH_TYPE_CRASH, *aDumpId);
   } else {
-    NS_WARNING(nsPrintfCString("content process pid = %" PRIPID
+    NS_WARNING(nsPrintfCString("content process childid = %d pid = %" PRIPID
                                " crashed without leaving a minidump behind",
-                               OtherPid())
+                               OtherChildID(), OtherPid())
                    .get());
   }
 }

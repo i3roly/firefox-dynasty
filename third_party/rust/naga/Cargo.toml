@@ -43,7 +43,7 @@ path = "tests/root.rs"
 
 [dependencies]
 arrayvec = "0.7"
-bit-set = "0.6"
+bit-set = "0.8.0"
 bitflags = "2.6"
 log = "0.4"
 rustc-hash = "1.1.0"

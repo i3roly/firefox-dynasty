@@ -33,6 +33,7 @@
 #include "mozilla/Variant.h"
 #include "mozilla/dom/quota/PQuota.h"
 #include "mozilla/dom/quota/PersistenceType.h"
+#include "mozilla/dom/quota/QuotaUsageRequestChild.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
 #include "mozilla/fallible.h"
 #include "mozilla/hal_sandbox/PHal.h"
@@ -257,19 +258,6 @@ class QuotaManagerService::PendingRequestInfo {
   RequestBase* GetRequest() const { return mRequest; }
 
   virtual nsresult InitiateRequest(QuotaChild* aActor) = 0;
-};
-
-class QuotaManagerService::UsageRequestInfo : public PendingRequestInfo {
-  UsageRequestParams mParams;
-
- public:
-  UsageRequestInfo(UsageRequest* aRequest, const UsageRequestParams& aParams)
-      : PendingRequestInfo(aRequest), mParams(aParams) {
-    MOZ_ASSERT(aRequest);
-    MOZ_ASSERT(aParams.type() != UsageRequestParams::T__None);
-  }
-
-  virtual nsresult InitiateRequest(QuotaChild* aActor) override;
 };
 
 class QuotaManagerService::RequestInfo : public PendingRequestInfo {
@@ -1308,24 +1296,6 @@ QuotaManagerService::Observe(nsISupports* aSubject, const char* aTopic,
 void QuotaManagerService::Notify(const hal::BatteryInformation& aBatteryInfo) {
   // This notification is received when battery data changes. We don't need to
   // deal with this notification.
-}
-
-nsresult QuotaManagerService::UsageRequestInfo::InitiateRequest(
-    QuotaChild* aActor) {
-  MOZ_ASSERT(aActor);
-
-  auto request = static_cast<UsageRequest*>(mRequest.get());
-
-  auto actor = new QuotaUsageRequestChild(request);
-
-  if (!aActor->SendPQuotaUsageRequestConstructor(actor, mParams)) {
-    request->SetError(NS_ERROR_FAILURE);
-    return NS_ERROR_FAILURE;
-  }
-
-  request->SetBackgroundActor(actor);
-
-  return NS_OK;
 }
 
 nsresult QuotaManagerService::RequestInfo::InitiateRequest(QuotaChild* aActor) {

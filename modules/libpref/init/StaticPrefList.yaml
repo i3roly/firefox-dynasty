@@ -2680,6 +2680,19 @@
   value: false
   mirror: always
 
+
+# The maximum number of pending fetch keepalive requests per browser instance
+- name: dom.fetchKeepalive.total_request_limit
+  type: RelaxedAtomicUint32
+  value: 30
+  mirror: always
+
+# The maximum number of pending fetch keepalive requests per origin
+- name: dom.fetchKeepalive.request_limit_per_origin
+  type: RelaxedAtomicUint32
+  value: 10
+  mirror: always
+
 - name: dom.fetchObserver.enabled
   type: RelaxedAtomicBool
   value: false
@@ -3156,7 +3169,11 @@
 # WebCodecs API
 - name: dom.media.webcodecs.enabled
   type: RelaxedAtomicBool
+#if defined(MOZ_WIDGET_ANDROID)
   value: @IS_NIGHTLY_BUILD@
+#else
+  value: true
+#endif
   mirror: always
 
 # WebCodecs API - Image decoder
@@ -3357,12 +3374,6 @@
 
 # Is support for PerformanceTiming.timeToNonBlankPaint enabled?
 - name: dom.performance.time_to_non_blank_paint.enabled
-  type: bool
-  value: false
-  mirror: always
-
-# Is support for Permissions.revoke enabled?
-- name: dom.permissions.revoke.enable
   type: bool
   value: false
   mirror: always
@@ -10826,7 +10837,7 @@
 
 -   name: media.wmf.allow-unsupported-resolutions
     type: RelaxedAtomicBool
-    value: false
+    value: true
     mirror: always
 
 -   name: media.wmf.vp9.enabled
@@ -10935,11 +10946,7 @@
 # 0 : disabled, 1 : enabled allowed list, 2 : enabled blocked list
 -   name: media.eme.mfcdm.origin-filter.enabled
     type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
     value: 0
-#else
-    value: 1
-#endif
     mirror: always
 
 #endif  # MOZ_WMF
@@ -12061,7 +12068,7 @@
 # This pref will only be consulted if CHIPS itself is enabled
 - name: network.cookie.chips.partitionLimitEnabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # CHIPS partition limit DryRun mode disables purging/rejection
@@ -12098,7 +12105,7 @@
 
 - name: network.cookie.sameSite.noneRequiresSecure
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 - name: network.cookie.sameSite.schemeful
@@ -14490,16 +14497,6 @@
 # of FPP overrides
 - name: privacy.fingerprintingProtection.remoteOverrides.enabled
   type: RelaxedAtomicBool
-  value: true
-  mirror: always
-
-# We automatically decline canvas permission requests if they are not initiated
-# from user input. Just in case that breaks something, we allow the user to
-# revert this behavior with this obscure pref. We do not intend to support this
-# long term. If you do set it, to work around some broken website, please file
-# a bug with information so we can understand why it is needed.
-- name: privacy.resistFingerprinting.autoDeclineNoUserInputCanvasPrompts
-  type: bool
   value: true
   mirror: always
 

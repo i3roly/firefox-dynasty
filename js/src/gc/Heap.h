@@ -157,7 +157,6 @@ class alignas(ArenaSize) Arena {
    */
   FreeSpan firstFreeSpan;
 
- public:
   /*
    * One of the AllocKind constants or AllocKind::LIMIT when the arena does
    * not contain any GC things and is on the list of empty arenas in the GC
@@ -170,8 +169,9 @@ class alignas(ArenaSize) Arena {
    * of this field must match the ArenaZoneOffset stored in js/HeapAPI.h,
    * as is statically asserted below.
    */
-  JS::Zone* zone;
+  JS::Zone* zone_;
 
+ public:
   /*
    * Arena::next has two purposes: when unallocated, it points to the next
    * available Arena. When allocated, it points to the next Arena in the same
@@ -228,7 +228,10 @@ class alignas(ArenaSize) Arena {
    */
   uint8_t data[ArenaSize - ArenaHeaderSize];
 
-  void init(JS::Zone* zoneArg, AllocKind kind, const AutoLockGC& lock);
+  void init(GCRuntime* gc, JS::Zone* zoneArg, AllocKind kind,
+            const AutoLockGC& lock);
+
+  JS::Zone* zone() const { return zone_; }
 
   // Sets |firstFreeSpan| to the Arena's entire valid range, and
   // also sets the next span stored at |firstFreeSpan.last| as empty.
@@ -246,7 +249,7 @@ class alignas(ArenaSize) Arena {
     firstFreeSpan.initAsEmpty();
 
     // Poison zone pointer to highlight UAF on released arenas in crash data.
-    AlwaysPoison(&zone, JS_FREED_ARENA_PATTERN, sizeof(zone),
+    AlwaysPoison(&zone_, JS_FREED_ARENA_PATTERN, sizeof(zone_),
                  MemCheckKind::MakeNoAccess);
 
     allocKind = AllocKind::LIMIT;
@@ -260,7 +263,7 @@ class alignas(ArenaSize) Arena {
   }
 
   // Return an allocated arena to its unallocated state.
-  inline void release(const AutoLockGC& lock);
+  inline void release(GCRuntime* gc, const AutoLockGC& lock);
 
   uintptr_t address() const {
     checkAddress();
@@ -435,16 +438,6 @@ class alignas(ArenaSize) Arena {
 #endif
 };
 
-static_assert(ArenaZoneOffset == offsetof(Arena, zone),
-              "The hardcoded API zone offset must match the actual offset.");
-
-static_assert(sizeof(Arena) == ArenaSize,
-              "ArenaSize must match the actual size of the Arena structure.");
-
-static_assert(
-    offsetof(Arena, data) == ArenaHeaderSize,
-    "ArenaHeaderSize must match the actual size of the header fields.");
-
 inline Arena* FreeSpan::getArena() {
   Arena* arena = getArenaUnchecked();
   arena->checkAddress();
@@ -482,152 +475,6 @@ inline void FreeSpan::checkRange(uintptr_t first, uintptr_t last,
   MOZ_ASSERT(last <= Arena::lastThingOffset(thingKind));
   MOZ_ASSERT((last - first) % Arena::thingSize(thingKind) == 0);
 #endif
-}
-
-// Mark bitmap API:
-
-MOZ_ALWAYS_INLINE bool MarkBitmap::markBit(const TenuredCell* cell,
-                                           ColorBit colorBit) {
-  MarkBitmapWord* word;
-  uintptr_t mask;
-  getMarkWordAndMask(cell, colorBit, &word, &mask);
-  return *word & mask;
-}
-
-MOZ_ALWAYS_INLINE bool MarkBitmap::isMarkedAny(const TenuredCell* cell) {
-  return markBit(cell, ColorBit::BlackBit) ||
-         markBit(cell, ColorBit::GrayOrBlackBit);
-}
-
-MOZ_ALWAYS_INLINE bool MarkBitmap::isMarkedBlack(const TenuredCell* cell) {
-  return markBit(cell, ColorBit::BlackBit);
-}
-
-MOZ_ALWAYS_INLINE bool MarkBitmap::isMarkedGray(const TenuredCell* cell) {
-  return !markBit(cell, ColorBit::BlackBit) &&
-         markBit(cell, ColorBit::GrayOrBlackBit);
-}
-
-// The following methods that update the mark bits are not thread safe and must
-// not be called in parallel with each other.
-//
-// They use separate read and write operations to avoid an unnecessarily strict
-// atomic update on the marking bitmap.
-//
-// They may be called in parallel with read operations on the mark bitmap where
-// there is no required ordering between the operations. This happens when gray
-// unmarking occurs in parallel with background sweeping.
-
-// The return value indicates if the cell went from unmarked to marked.
-MOZ_ALWAYS_INLINE bool MarkBitmap::markIfUnmarked(const TenuredCell* cell,
-                                                  MarkColor color) {
-  MarkBitmapWord* word;
-  uintptr_t mask;
-  getMarkWordAndMask(cell, ColorBit::BlackBit, &word, &mask);
-  if (*word & mask) {
-    return false;
-  }
-  if (color == MarkColor::Black) {
-    uintptr_t bits = *word;
-    *word = bits | mask;
-  } else {
-    // We use getMarkWordAndMask to recalculate both mask and word as doing just
-    // mask << color may overflow the mask.
-    getMarkWordAndMask(cell, ColorBit::GrayOrBlackBit, &word, &mask);
-    if (*word & mask) {
-      return false;
-    }
-    uintptr_t bits = *word;
-    *word = bits | mask;
-  }
-  return true;
-}
-
-MOZ_ALWAYS_INLINE bool MarkBitmap::markIfUnmarkedAtomic(const TenuredCell* cell,
-                                                        MarkColor color) {
-  // This version of the method is safe in the face of concurrent writes to the
-  // mark bitmap but may return false positives. The extra synchronisation
-  // necessary to avoid this resulted in worse performance overall.
-
-  MarkBitmapWord* word;
-  uintptr_t mask;
-  getMarkWordAndMask(cell, ColorBit::BlackBit, &word, &mask);
-  if (*word & mask) {
-    return false;
-  }
-  if (color == MarkColor::Black) {
-    *word |= mask;
-  } else {
-    // We use getMarkWordAndMask to recalculate both mask and word as doing just
-    // mask << color may overflow the mask.
-    getMarkWordAndMask(cell, ColorBit::GrayOrBlackBit, &word, &mask);
-    if (*word & mask) {
-      return false;
-    }
-    *word |= mask;
-  }
-  return true;
-}
-
-MOZ_ALWAYS_INLINE void MarkBitmap::markBlack(const TenuredCell* cell) {
-  MarkBitmapWord* word;
-  uintptr_t mask;
-  getMarkWordAndMask(cell, ColorBit::BlackBit, &word, &mask);
-  uintptr_t bits = *word;
-  *word = bits | mask;
-}
-
-MOZ_ALWAYS_INLINE void MarkBitmap::markBlackAtomic(const TenuredCell* cell) {
-  MarkBitmapWord* word;
-  uintptr_t mask;
-  getMarkWordAndMask(cell, ColorBit::BlackBit, &word, &mask);
-  *word |= mask;
-}
-
-MOZ_ALWAYS_INLINE void MarkBitmap::copyMarkBit(TenuredCell* dst,
-                                               const TenuredCell* src,
-                                               ColorBit colorBit) {
-  TenuredChunkBase* srcChunk = detail::GetCellChunkBase(src);
-  MarkBitmapWord* srcWord;
-  uintptr_t srcMask;
-  srcChunk->markBits.getMarkWordAndMask(src, colorBit, &srcWord, &srcMask);
-
-  MarkBitmapWord* dstWord;
-  uintptr_t dstMask;
-  getMarkWordAndMask(dst, colorBit, &dstWord, &dstMask);
-
-  uintptr_t bits = *dstWord;
-  bits &= ~dstMask;
-  if (*srcWord & srcMask) {
-    bits |= dstMask;
-  }
-  *dstWord = bits;
-}
-
-MOZ_ALWAYS_INLINE void MarkBitmap::unmark(const TenuredCell* cell) {
-  MarkBitmapWord* word;
-  uintptr_t mask;
-  uintptr_t bits;
-  getMarkWordAndMask(cell, ColorBit::BlackBit, &word, &mask);
-  bits = *word;
-  *word = bits & ~mask;
-  getMarkWordAndMask(cell, ColorBit::GrayOrBlackBit, &word, &mask);
-  bits = *word;
-  *word = bits & ~mask;
-}
-
-inline MarkBitmapWord* MarkBitmap::arenaBits(Arena* arena) {
-  static_assert(
-      ArenaBitmapBits == ArenaBitmapWords * JS_BITS_PER_WORD,
-      "We assume that the part of the bitmap corresponding to the arena "
-      "has the exact number of words so we do not need to deal with a word "
-      "that covers bits from two arenas.");
-
-  MarkBitmapWord* word;
-  uintptr_t unused;
-  getMarkWordAndMask(reinterpret_cast<TenuredCell*>(arena->address()),
-                     ColorBit::BlackBit, &word, &unused);
-  return word;
 }
 
 /*

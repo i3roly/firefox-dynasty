@@ -77,6 +77,14 @@ export class MLEngineParent extends JSWindowActorParent {
   modelHub = null;
 
   /**
+   * Tracks the most recent revision for each task and model pair that are marked for deletion.
+   * Keys are task names and model names. Values contain their respective revisions.
+   *
+   * @type {Map<string, object>}
+   */
+  #modelFilesInUse = new Map();
+
+  /**
    * The callback to call for updating about notifications such as dowload progress status.
    *
    * @type {?function(ProgressAndStatusCallbackParams):void}
@@ -115,7 +123,7 @@ export class MLEngineParent extends JSWindowActorParent {
   async getEngine(pipelineOptions, notificationsCallback = null) {
     const engineId = pipelineOptions.engineId;
 
-    // Allow notifications callback changes eveb when reusing engine.
+    // Allow notifications callback changes even when reusing engine.
     this.notificationsCallback = notificationsCallback;
 
     if (MLEngineParent.engineLocks.has(engineId)) {
@@ -143,7 +151,7 @@ export class MLEngineParent extends JSWindowActorParent {
       }
 
       lazy.console.debug("Creating a new engine");
-      const engine = new MLEngine({
+      const engine = await MLEngine.initialize({
         mlEngineParent: this,
         pipelineOptions,
         notificationsCallback,
@@ -217,6 +225,43 @@ export class MLEngineParent extends JSWindowActorParent {
   }
 
   /**
+   * Deletes all previous revisions for the current task and model used by the engine.
+   *
+   * @returns {Promise<void>}
+   */
+  async deletePreviousModelRevisions() {
+    if (!this.modelHub) {
+      lazy.console.debug(
+        "Ignored attempt to delete previous models when the engine is not fully initialized."
+      );
+    }
+
+    const deletePromises = [];
+
+    for (const [
+      key,
+      { taskName, model, revision },
+    ] of this.#modelFilesInUse.entries()) {
+      lazy.console.debug("Deleting previous version for ", {
+        taskName,
+        model,
+        revision,
+      });
+      deletePromises.push(
+        this.modelHub
+          .deleteNonMatchingModelRevisions({
+            taskName,
+            model,
+            targetRevision: revision,
+          })
+          .then(() => this.#modelFilesInUse.delete(key))
+      );
+    }
+
+    await Promise.all(deletePromises);
+  }
+
+  /**
    * Retrieves a model file as an ArrayBuffer from the specified URL.
    * This function normalizes the URL, extracts the organization, model name, and file path,
    * then fetches the model file using the ModelHub API. The `modelHub` instance is created
@@ -257,7 +302,15 @@ export class MLEngineParent extends JSWindowActorParent {
     const [data, headers] = await this.modelHub.getModelFileAsArrayBuffer({
       taskName,
       ...parsedUrl,
+      modelHubRootUrl: rootUrl,
+      modelHubUrlTemplate: urlTemplate,
       progressCallback: this.notificationsCallback?.bind(this),
+    });
+
+    // Keep the latest revision for each task, model
+    this.#modelFilesInUse.set(`${taskName}-${parsedUrl.model}`, {
+      taskName,
+      ...parsedUrl,
     });
 
     return [data, headers];
@@ -494,10 +547,12 @@ class MLEngine {
   }
 
   /**
+   * Private constructor for an ML Engine.
+   *
    * @param {object} config - The configuration object for the instance.
    * @param {object} config.mlEngineParent - The parent machine learning engine associated with this instance.
    * @param {object} config.pipelineOptions - The options for configuring the pipeline associated with this instance.
-   * @param {?function(ProgressAndStatshutdownusCallbackParams):void} config.notificationsCallback - The initialization progress callback function to call.
+   * @param {?function(ProgressAndStatusCallbackParams):void} config.notificationsCallback - The initialization progress callback function to call.
    */
   constructor({ mlEngineParent, pipelineOptions, notificationsCallback }) {
     const engineId = pipelineOptions.engineId;
@@ -509,8 +564,33 @@ class MLEngine {
     this.mlEngineParent = mlEngineParent;
     this.pipelineOptions = pipelineOptions;
     this.notificationsCallback = notificationsCallback;
-    this.#setupPortCommunication();
-    this.setEngineStatus("ready");
+  }
+
+  /**
+   * Initialize the MLEngine.
+   *
+   * @param {object} config - The configuration object for the instance.
+   * @param {object} config.mlEngineParent - The parent machine learning engine associated with this instance.
+   * @param {object} config.pipelineOptions - The options for configuring the pipeline associated with this instance.
+   * @param {?function(ProgressAndStatusCallbackParams):void} config.notificationsCallback - The initialization progress callback function to call.
+   */
+  static async initialize({
+    mlEngineParent,
+    pipelineOptions,
+    notificationsCallback,
+  }) {
+    const mlEngine = new MLEngine({
+      mlEngineParent,
+      pipelineOptions,
+      notificationsCallback,
+    });
+
+    await mlEngine.setupPortCommunication();
+
+    // Delete previous model revisions.
+    await mlEngine.mlEngineParent.deletePreviousModelRevisions();
+
+    return mlEngine;
   }
 
   /**
@@ -567,12 +647,15 @@ class MLEngine {
 
   /**
    * Create a MessageChannel to communicate with the engine directly.
+   * And ensure the engine is fully initialized with all required files for the current model version downloaded.
    */
-  #setupPortCommunication() {
+  async setupPortCommunication() {
     const { port1: childPort, port2: parentPort } = new MessageChannel();
     const transferables = [childPort];
     this.#port = parentPort;
-    this.#port.onmessage = this.handlePortMessage;
+    const newPortResolvers = Promise.withResolvers();
+    this.#port.onmessage = message =>
+      this.handlePortMessage(message, newPortResolvers);
     this.mlEngineParent.sendAsyncMessage(
       "MLEngine:NewPort",
       {
@@ -581,6 +664,9 @@ class MLEngine {
       },
       transferables
     );
+    await newPortResolvers.promise;
+
+    this.setEngineStatus("ready");
   }
 
   /**
@@ -588,9 +674,19 @@ class MLEngine {
    *
    * @param {object} event - The message event.
    * @param {object} event.data - The data of the message event.
+   * @param {object} newPortResolvers - An object containing a promise for mlEngine new port setup, along with two functions to resolve or reject it.
    */
-  handlePortMessage = ({ data }) => {
+  handlePortMessage = ({ data }, newPortResolvers) => {
     switch (data.type) {
+      case "EnginePort:EngineReady": {
+        if (data.error) {
+          newPortResolvers.reject(data.error);
+        } else {
+          newPortResolvers.resolve();
+        }
+
+        break;
+      }
       case "EnginePort:ModelRequest": {
         if (this.#port) {
           this.getModel().then(

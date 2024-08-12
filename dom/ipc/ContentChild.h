@@ -114,7 +114,7 @@ class ContentChild final : public PContentChild,
       BrowsingContext** aReturn);
 
   void Init(mozilla::ipc::UntypedEndpoint&& aEndpoint,
-            const char* aParentBuildID, uint64_t aChildID, bool aIsForBrowser);
+            const char* aParentBuildID, bool aIsForBrowser);
 
   void InitXPCOM(XPCOMInitData&& aXPCOMInit,
                  const mozilla::dom::ipc::StructuredCloneData& aInitialData,
@@ -446,7 +446,9 @@ class ContentChild final : public PContentChild,
   // cache the value
   nsString& GetIndexedDBPath();
 
-  ContentParentId GetID() const { return mID; }
+  ContentParentId GetID() const {
+    return ContentParentId{static_cast<uint64_t>(XRE_GetChildID())};
+  }
 
   bool IsForBrowser() const { return mIsForBrowser; }
 
@@ -564,7 +566,7 @@ class ContentChild final : public PContentChild,
    * GPU process crashes.
    */
   static void FatalErrorIfNotUsingGPUProcess(const char* const aErrorMsg,
-                                             base::ProcessId aOtherPid);
+                                             GeckoChildID aOtherChildID);
 
   using AnonymousTemporaryFileCallback = std::function<void(PRFileDesc*)>;
   nsresult AsyncOpenAnonymousTemporaryFile(
@@ -624,7 +626,7 @@ class ContentChild final : public PContentChild,
   void ShutdownInternal();
 
   mozilla::ipc::IPCResult GetResultForRenderingInitFailure(
-      base::ProcessId aOtherPid);
+      GeckoChildID aOtherChildID);
 
   virtual void ActorDestroy(ActorDestroyReason why) override;
 
@@ -826,15 +828,6 @@ class ContentChild final : public PContentChild,
   FullLookAndFeel mLookAndFeelData;
   // Temporary storage for list of shared-fontlist memory blocks.
   nsTArray<base::SharedMemoryHandle> mSharedFontListBlocks;
-
-  /**
-   * An ID unique to the process containing our corresponding
-   * content parent.
-   *
-   * We expect our content parent to set this ID immediately after opening a
-   * channel to us.
-   */
-  ContentParentId mID;
 
   AppInfo mAppInfo;
 

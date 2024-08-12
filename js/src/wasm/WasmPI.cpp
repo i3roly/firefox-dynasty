@@ -293,7 +293,8 @@ static_assert(SuspenderObjectDataSlot == SuspenderObject::DataSlot);
 const JSClass SuspenderObject::class_ = {
     "SuspenderObject",
     JSCLASS_HAS_RESERVED_SLOTS(SlotCount) | JSCLASS_BACKGROUND_FINALIZE,
-    &SuspenderObject::classOps_};
+    &SuspenderObject::classOps_,
+};
 
 const JSClassOps SuspenderObject::classOps_ = {
     nullptr,   // addProperty
@@ -1755,7 +1756,7 @@ JSObject* GetSuspendingPromiseResult(Instance* instance,
   Rooted<WasmStructObject*> results(
       cx, instance->constantStructNewDefault(
               cx, SuspendingFunctionModuleFactory::ResultsTypeIndex));
-  const StructFieldVector& fields = results->typeDef().structType().fields_;
+  const FieldTypeVector& fields = results->typeDef().structType().fields_;
 
   if (fields.length() > 0) {
     RootedValue jsValue(cx, promise->value());

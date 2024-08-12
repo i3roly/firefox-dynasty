@@ -27,9 +27,11 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -87,6 +89,7 @@ import mozilla.components.feature.top.sites.TopSitesFrecencyConfig
 import mozilla.components.feature.top.sites.TopSitesProviderConfig
 import mozilla.components.lib.state.ext.consumeFlow
 import mozilla.components.lib.state.ext.consumeFrom
+import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.ui.colors.PhotonColors
 import mozilla.components.ui.tabcounter.TabCounterMenu
@@ -112,6 +115,7 @@ import org.mozilla.fenix.components.TabCollectionStorage
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.MicrosurveyAction
+import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerIntegration
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerView
@@ -149,6 +153,7 @@ import org.mozilla.fenix.home.sessioncontrol.DefaultSessionControlController
 import org.mozilla.fenix.home.sessioncontrol.SessionControlInteractor
 import org.mozilla.fenix.home.sessioncontrol.SessionControlView
 import org.mozilla.fenix.home.sessioncontrol.viewholders.CollectionHeaderViewHolder
+import org.mozilla.fenix.home.store.HomepageState
 import org.mozilla.fenix.home.toolbar.DefaultToolbarController
 import org.mozilla.fenix.home.toolbar.SearchSelectorBinding
 import org.mozilla.fenix.home.toolbar.SearchSelectorMenuBinding
@@ -438,8 +443,9 @@ class HomeFragment : Fragment() {
                 tabCollectionStorage = components.core.tabCollectionStorage,
                 addTabUseCase = components.useCases.tabsUseCases.addTab,
                 restoreUseCase = components.useCases.tabsUseCases.restore,
-                reloadUrlUseCase = components.useCases.sessionUseCases.reload,
                 selectTabUseCase = components.useCases.tabsUseCases.selectTab,
+                reloadUrlUseCase = components.useCases.sessionUseCases.reload,
+                topSitesUseCases = components.useCases.topSitesUseCase,
                 appStore = components.appStore,
                 navController = findNavController(),
                 viewLifecycleScope = viewLifecycleOwner.lifecycleScope,
@@ -702,11 +708,8 @@ class HomeFragment : Fragment() {
                                 }
                             },
                         ) {
-                            HomeNavBar(
-                                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
-                                browserStore = context.components.core.store,
-                                menuButton = menuButton,
-                                tabsCounterMenu = FenixTabCounterMenu(
+                            val tabCounterMenu = lazy {
+                                FenixTabCounterMenu(
                                     context = context,
                                     onItemTapped = { item ->
                                         if (item is TabCounterMenu.Item.NewTab) {
@@ -722,7 +725,14 @@ class HomeFragment : Fragment() {
                                     },
                                 ).also {
                                     it.updateMenu()
-                                },
+                                }
+                            }
+
+                            HomeNavBar(
+                                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                                browserStore = context.components.core.store,
+                                menuButton = menuButton,
+                                tabsCounterMenu = tabCounterMenu,
                                 onSearchButtonClick = {
                                     NavigationBar.homeSearchTapped.record(NoExtras())
                                     val directions =
@@ -1138,8 +1148,19 @@ class HomeFragment : Fragment() {
 
             setContent {
                 FirefoxTheme {
+                    val settings = LocalContext.current.settings()
+                    val appState by components.appStore.observeAsState(
+                        initialValue = components.appStore.state,
+                    ) { it }
+
                     Homepage(
-                        interactor = sessionControlInteractor,
+                        state = HomepageState.build(
+                            appState = appState,
+                            settings = settings,
+                        ),
+                        privateBrowsingInteractor = sessionControlInteractor,
+                        topSiteInteractor = sessionControlInteractor,
+                        recentTabInteractor = sessionControlInteractor,
                         onTopSitesItemBound = {
                             StartupTimeline.onTopSitesItemBound(activity = (requireActivity() as HomeActivity))
                         },

@@ -301,6 +301,7 @@ class OutputParser {
     let varData;
     let varFallbackValue;
     let varSubsitutedValue;
+    let varComputedValue;
 
     // Get the variable value if it is in use.
     if (tokens && tokens.length === 1) {
@@ -321,6 +322,8 @@ class OutputParser {
       varSubsitutedValue = options.inStartingStyleRule
         ? varStartingStyleValue
         : varValue;
+
+      varComputedValue = varData.computedValue;
     }
 
     // Get the variable name.
@@ -336,6 +339,16 @@ class OutputParser {
       );
       firstOpts.class = options.matchedVariableClass;
       secondOpts.class = options.unmatchedClass;
+
+      // Display computed value when it exists, is different from the substituted value
+      // we computed, and we're not inside a starting-style rule
+      if (
+        !options.inStartingStyleRule &&
+        typeof varComputedValue === "string" &&
+        varComputedValue !== varSubsitutedValue
+      ) {
+        firstOpts["data-variable-computed"] = varComputedValue;
+      }
 
       // Display starting-style value when not in a starting style rule
       if (
@@ -491,12 +504,20 @@ class OutputParser {
               options
             );
 
-            if (value && colorOK() && InspectorUtils.isValidCSSColor(value)) {
+            // InspectorUtils.isValidCSSColor returns true for `light-dark()` function,
+            // but `#isValidColor` returns false. As the latter is used in #appendColor,
+            // we need to check that both functions return true.
+            const colorObj =
+              value && colorOK() && InspectorUtils.isValidCSSColor(value)
+                ? new colorUtils.CssColor(value)
+                : null;
+            if (colorObj && this.#isValidColor(colorObj)) {
               const colorFunctionEntry = this.#stack.findLast(
                 entry => entry.isColorTakingFunction
               );
               this.#appendColor(value, {
                 ...options,
+                colorObj,
                 variableContainer: variableNode,
                 colorFunction: colorFunctionEntry?.functionName,
               });
@@ -1817,14 +1838,18 @@ class OutputParser {
   /**
    * Append a color to the output.
    *
-   * @param  {String} color
+   * @param {String} color
    *         Color to append
-   * @param  {Object} [options]
-   *         Options object. For valid options and default values see
-   *         #mergeOptions().
+   * @param {Object} [options]
+   * @param {CSSColor} options.colorObj: A css color for the passed color. Will be computed
+   *         if not passed.
+   * @param {DOMNode} options.variableContainer: A DOM Node that is the result of parsing
+   *        a CSS variable
+   * @param {String} options.colorFunction: The color function that is used to produce this color
+   * @param {*} For all the other valid options and default values see #mergeOptions().
    */
   #appendColor(color, options = {}) {
-    const colorObj = new colorUtils.CssColor(color);
+    const colorObj = options.colorObj || new colorUtils.CssColor(color);
 
     if (this.#isValidColor(colorObj)) {
       const container = this.#createNode("span", {
@@ -2109,7 +2134,8 @@ class OutputParser {
     const attrs = Object.getOwnPropertyNames(attributes);
 
     for (const attr of attrs) {
-      if (attributes[attr]) {
+      const attrValue = attributes[attr];
+      if (attrValue !== null && attrValue !== undefined) {
         node.setAttribute(attr, attributes[attr]);
       }
     }
@@ -2238,20 +2264,20 @@ class OutputParser {
     const defaults = {
       useDefaultColorUnit: true,
       defaultColorUnit: "authored",
-      angleClass: "",
-      angleSwatchClass: "",
-      bezierClass: "",
-      bezierSwatchClass: "",
-      colorClass: "",
-      colorSwatchClass: "",
+      angleClass: null,
+      angleSwatchClass: null,
+      bezierClass: null,
+      bezierSwatchClass: null,
+      colorClass: null,
+      colorSwatchClass: null,
       filterSwatch: false,
-      flexClass: "",
-      gridClass: "",
-      shapeClass: "",
-      shapeSwatchClass: "",
+      flexClass: null,
+      gridClass: null,
+      shapeClass: null,
+      shapeSwatchClass: null,
       supportsColor: false,
-      urlClass: "",
-      fontFamilyClass: "",
+      urlClass: null,
+      fontFamilyClass: null,
       baseURI: undefined,
       getVariableData: null,
       unmatchedClass: null,

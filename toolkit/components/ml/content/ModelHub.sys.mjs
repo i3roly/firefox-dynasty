@@ -485,36 +485,53 @@ export class IndexedDBCache {
   }
 
   /**
-   * Generate an indexedDB query to retrieve entries from a task,model,revision index.
+   * Generates an IndexedDB query to retrieve entries from the appropriate index.
    *
-   * @param {object} config
-   * @param {?string} config.taskName - Name of the inference task.. If null, we retrieve all tasks.
-   * @param {?string} config.model - The model name (organization/name). If null, we retrieve all models.
-   * @param {?string} config.revision - The model revision. If null, we retrieve all revisions.
-   * @returns {?string} The query to use for retrieving entries from the index.
+   * @param {object} config - Configuration object.
+   * @param {?string} config.taskName - The name of the inference task. Retrieves all tasks if null.
+   * @param {?string} config.model - The model name (organization/name). Retrieves all models if null.
+   * @param {?string} config.revision - The model revision. Retrieves all revisions if null.
+   *
+   * @returns {object} queryIndex - The query and index for retrieving entries.
+   * @returns {?string} queryIndex.query - The query.
+   * @returns {?string} queryIndex.indexName - The index name.
    */
   #getFileQuery({ taskName, model, revision }) {
-    // See https://developer.mozilla.org/en-US/docs/Web/API/IDBKeyRange
-    // for explanation on the query.
+    // See https://developer.mozilla.org/en-US/docs/Web/API/IDBKeyRange for explanation on the query.
+
+    // Case 1: Query to retrieve all entries matching taskName, model, and revision
     if (taskName && model && revision) {
-      // Query to retrieve all entries matching taskName, model and revision
-      return [taskName, model, revision];
+      return {
+        key: [taskName, model, revision],
+        indexName: this.#indices.taskModelRevisionIndex.name,
+      };
     }
+    // Case 2: Query to retrieve all entries with taskName
     if (taskName && !model && !revision) {
-      // Query to retrieve all entries with taskName
-      return IDBKeyRange.bound([taskName], [taskName, []]);
+      return {
+        key: IDBKeyRange.bound([taskName], [taskName, []]),
+        indexName: this.#indices.taskModelRevisionIndex.name,
+      };
     }
+    // Case 3: Query to retrieve all entries matching model and revision
     if (!taskName && model && revision) {
-      // Query to retrieve all entries matching model and revision
-      return IDBKeyRange.bound([0, model, revision], [[], model, revision]);
+      return {
+        key: [model, revision],
+        indexName: this.#indices.modelRevisionIndex.name,
+      };
     }
+    // Case 4: Query to retrieve all entries
     if (!taskName && !model && !revision) {
-      // Query to retrieve all entries
-      return null;
+      return { key: null, indexName: null };
     }
-    throw new Error(
-      "If the model is defined, so must the revision. If the model is not defined, neither should the revision."
-    );
+    // Case 5: Query to retrieve all entries matching taskName and model
+    if (taskName && model && !revision) {
+      return {
+        key: IDBKeyRange.bound([taskName, model], [taskName, model, []]),
+        indexName: this.#indices.taskModelRevisionIndex.name,
+      };
+    }
+    throw new Error("Invalid query configuration.");
   }
 
   /**
@@ -713,22 +730,27 @@ export class IndexedDBCache {
    * @param {?string} config.taskName - name of the inference task to delete.
    *                                    If null, delete specified models for all tasks.
    *
-   * @throws {Error} If a model is defined, the revision must also be defined.
+   * @param {?function(IDBCursor):boolean} config.filterFn - A function to execute for each model file candidate for deletion.
+   * It should return a truthy value to delete the model file, and a falsy value otherwise.
+   *
+   * @throws {Error} If a revision is defined, the model must also be defined.
    *                 If the model is not defined, the revision should also not be defined.
    *                 Otherwise, an error will be thrown.
 
    * @returns {Promise<void>}
    */
-  async deleteModels({ taskName, model, revision }) {
+  async deleteModels({ taskName, model, revision, filterFn }) {
     const tasks = await this.#getData({
       storeName: this.taskStoreName,
-      indexName: this.#indices.taskModelRevisionIndex.name,
-      key: this.#getFileQuery({ taskName, model, revision }),
+      ...this.#getFileQuery({ taskName, model, revision }),
     });
 
     let deletePromises = [];
     const filesToMaybeDelete = new Set();
     for (const { taskName, model, revision, file } of tasks) {
+      if (filterFn && !filterFn({ taskName, model, revision, file })) {
+        continue;
+      }
       filesToMaybeDelete.add(JSON.stringify([model, revision, file]));
       deletePromises.push(
         this.#deleteData(this.taskStoreName, [taskName, model, revision, file])
@@ -785,8 +807,7 @@ export class IndexedDBCache {
       // Get all model/revision associated to this task.
       const data = await this.#getKeys({
         storeName: this.taskStoreName,
-        indexName: this.#indices.taskModelRevisionIndex.name,
-        key: this.#getFileQuery({ taskName, model, revision }),
+        ...this.#getFileQuery({ taskName, model, revision }),
       });
 
       modelRevisions = [];
@@ -846,6 +867,7 @@ export class ModelHub {
    * @param {string} config.urlTemplate - The template to retrieve the full URL using a model name and revision.
    */
   constructor({ rootUrl, urlTemplate = DEFAULT_URL_TEMPLATE } = {}) {
+    // Early error when the hub is created on a disallowed url - #fileURL also checks this so API calls with custom hubs are also covered.
     if (!allowedHub(rootUrl)) {
       throw new Error(`Invalid model hub root url: ${rootUrl}`);
     }
@@ -935,13 +957,22 @@ export class ModelHub {
 
   /** Creates the file URL from the organization, model, and version.
    *
-   * @param {string} model
-   * @param {string} revision
-   * @param {string} file
+   * @param {object} config - The configuration object to be updated.
+   * @param {string} config.model - model name
+   * @param {string} config.revision - model revision
+   * @param {string} config.file - filename
+   * @param {string} config.modelHubRootUrl - root url of the model hub
+   * @param {string} config.modelHubUrlTemplate - url template of the model hub
    * @returns {string} The full URL
    */
-  #fileUrl(model, revision, file) {
-    const baseUrl = new URL(this.rootUrl);
+  #fileUrl({ model, revision, file, modelHubRootUrl, modelHubUrlTemplate }) {
+    const rootUrl = modelHubRootUrl || this.rootUrl;
+    if (!allowedHub(rootUrl)) {
+      throw new Error(`Invalid model hub root url: ${rootUrl}`);
+    }
+    const urlTemplate = modelHubUrlTemplate || this.urlTemplate;
+    const baseUrl = new URL(rootUrl);
+
     if (!baseUrl.pathname.endsWith("/")) {
       baseUrl.pathname += "/";
     }
@@ -952,7 +983,7 @@ export class ModelHub {
       model,
       revision,
     };
-    let path = this.urlTemplate.replace(
+    let path = urlTemplate.replace(
       /\{(\w+)\}/g,
       (match, key) => data[key] || match
     );
@@ -1032,6 +1063,32 @@ export class ModelHub {
   }
 
   /**
+   * Deletes all model files for the specified task and model, except for the specified revision.
+   *
+   * @param {object} config - Configuration object.
+   * @param {string} config.taskName - The name of the inference task.
+   * @param {string} config.model - The model name (organization/name).
+   * @param {string} config.targetRevision - The revision to keep.
+   *
+   * @returns {Promise<void>}
+   */
+  async deleteNonMatchingModelRevisions({ taskName, model, targetRevision }) {
+    // Ensure all required parameters are provided
+    if (!taskName || !model || !targetRevision) {
+      throw new Error("taskName, model, and targetRevision are required.");
+    }
+
+    await this.#initCache();
+
+    // Delete models with revisions that do not match the targetRevision
+    return this.cache.deleteModels({
+      taskName,
+      model,
+      filterFn: record => record.revision !== targetRevision,
+    });
+  }
+
+  /**
    * Returns the ETag value given an URL
    *
    * @param {string} url
@@ -1065,14 +1122,25 @@ export class ModelHub {
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model revision.
    * @param {string} config.file - The file name.
+   * @param {string} config.modelHubRootUrl - root url of the model hub
+   * @param {string} config.modelHubUrlTemplate - url template of the model hub
    * @returns {Promise<Response>} The file content
    */
-  async getModelFileAsResponse({ taskName, model, revision, file }) {
+  async getModelFileAsResponse({
+    taskName,
+    model,
+    revision,
+    file,
+    modelHubRootUrl,
+    modelHubUrlTemplate,
+  }) {
     const [blob, headers] = await this.getModelFileAsBlob({
       taskName,
       model,
       revision,
       file,
+      modelHubRootUrl,
+      modelHubUrlTemplate,
     });
 
     return new Response(blob, { headers });
@@ -1086,14 +1154,25 @@ export class ModelHub {
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model revision.
    * @param {string} config.file - The file name.
+   * @param {string} config.modelHubRootUrl - root url of the model hub
+   * @param {string} config.modelHubUrlTemplate - url template of the model hub
    * @returns {Promise<[Blob, object]>} The file content
    */
-  async getModelFileAsBlob({ taskName, model, revision, file }) {
+  async getModelFileAsBlob({
+    taskName,
+    model,
+    revision,
+    file,
+    modelHubRootUrl,
+    modelHubUrlTemplate,
+  }) {
     const [buffer, headers] = await this.getModelFileAsArrayBuffer({
       taskName,
       model,
       revision,
       file,
+      modelHubRootUrl,
+      modelHubUrlTemplate,
     });
     return [new Blob([buffer]), headers];
   }
@@ -1107,6 +1186,8 @@ export class ModelHub {
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model revision.
    * @param {string} config.file - The file name.
+   * @param {string} config.modelHubRootUrl - root url of the model hub
+   * @param {string} config.modelHubUrlTemplate - url template of the model hub
    * @param {?function(ProgressAndStatusCallbackParams):void} config.progressCallback A function to call to indicate progress status.
    * @returns {Promise<[ArrayBuffer, headers]>} The file content
    */
@@ -1115,6 +1196,8 @@ export class ModelHub {
     model,
     revision,
     file,
+    modelHubRootUrl,
+    modelHubUrlTemplate,
     progressCallback,
   }) {
     // Make sure inputs are clean. We don't sanitize them but throw an exception
@@ -1122,7 +1205,13 @@ export class ModelHub {
     if (checkError) {
       throw checkError;
     }
-    const url = this.#fileUrl(model, revision, file);
+    const url = this.#fileUrl({
+      model,
+      revision,
+      file,
+      modelHubRootUrl,
+      modelHubUrlTemplate,
+    });
     lazy.console.debug(`Getting model file from ${url}`);
 
     await this.#initCache();

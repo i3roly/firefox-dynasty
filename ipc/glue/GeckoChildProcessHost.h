@@ -132,8 +132,9 @@ class GeckoChildProcessHost : public SupportsWeakPtr,
 
   UntypedEndpoint TakeInitialEndpoint() {
     return UntypedEndpoint{PrivateIPDLInterface{}, std::move(mInitialPort),
-                           mInitialChannelId, base::GetCurrentProcId(),
-                           GetChildProcessId()};
+                           mInitialChannelId, EndpointProcInfo::Current(),
+                           EndpointProcInfo{.mPid = GetChildProcessId(),
+                                            .mChildID = GetChildID()}};
   }
 
   // Returns a "borrowed" handle to the child process - the handle returned
@@ -152,6 +153,11 @@ class GeckoChildProcessHost : public SupportsWeakPtr,
   // The null value here is also 0; this matches the result of
   // GetProcId on a zero or (on Windows) invalid handle.
   ProcessId GetChildProcessId();
+
+  // Return the child's GeckoChildID. This is a unique identifier given out to
+  // each process started with `GeckoChildProcessHost` which will only ever
+  // identify this process.
+  GeckoChildID GetChildID() const { return mChildID; }
 
   GeckoProcessType GetProcessType() { return mProcessType; }
 
@@ -213,6 +219,7 @@ class GeckoChildProcessHost : public SupportsWeakPtr,
  protected:
   virtual ~GeckoChildProcessHost();
   GeckoProcessType mProcessType;
+  GeckoChildID mChildID;
   bool mIsFileContent;
   Monitor mMonitor;
   FilePath mProcessPath;

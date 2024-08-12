@@ -578,8 +578,15 @@ static void MaybeScheduleReflowSVGNonDisplayText(nsIFrame* aFrame) {
       IntrinsicDirty::FrameAncestorsAndDescendants);
 }
 
-bool nsIFrame::IsPrimaryFrameOfRootOrBodyElement() const {
+bool nsIFrame::ShouldPropagateRepaintsToRoot() const {
   if (!IsPrimaryFrame()) {
+    // special case for table frames because style images are associated to the
+    // table frame, but the table wrapper frame is the primary frame
+    if (IsTableFrame()) {
+      MOZ_ASSERT(GetParent() && GetParent()->IsTableWrapperFrame());
+      return GetParent()->ShouldPropagateRepaintsToRoot();
+    }
+
     return false;
   }
   nsIContent* content = GetContent();
@@ -2401,8 +2408,17 @@ already_AddRefed<ComputedStyle> nsIFrame::ComputeTargetTextStyle() const {
   if (!element) {
     return nullptr;
   }
-  return PresContext()->StyleSet()->ProbePseudoElementStyle(
+  RefPtr pseudoStyle = PresContext()->StyleSet()->ProbePseudoElementStyle(
       *element, PseudoStyleType::targetText, nullptr, Style());
+  if (!pseudoStyle) {
+    return nullptr;
+  }
+  if (PresContext()->ForcingColors() &&
+      pseudoStyle->StyleText()->mForcedColorAdjust !=
+          StyleForcedColorAdjust::None) {
+    return nullptr;
+  }
+  return pseudoStyle.forget();
 }
 
 bool nsIFrame::CanBeDynamicReflowRoot() const {
@@ -7408,7 +7424,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
 
   if (isTransformed || zoomedContentRoot) {
     MOZ_ASSERT(GetParent());
-    Matrix4x4 result;
+    Matrix4x4Flagged result;
     int32_t scaleFactor =
         ((aFlags & IN_CSS_UNITS) ? AppUnitsPerCSSPixel()
                                  : PresContext()->AppUnitsPerDevPixel());
@@ -7417,6 +7433,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
      * coordinates to our parent.
      */
     if (isTransformed) {
+      // Note: this converts from Matrix4x4 to Matrix4x4Flagged.
       result = nsDisplayTransform::GetResultingTransformMatrix(
           this, nsPoint(), scaleFactor,
           nsDisplayTransform::INCLUDE_PERSPECTIVE);
@@ -7432,7 +7449,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
                          NSAppUnitsToFloatPixels(delta.y, scaleFactor), 0.0f);
 
     if (zoomedContentRoot) {
-      Matrix4x4 layoutToVisual;
+      Matrix4x4Flagged layoutToVisual;
       ScrollableLayerGuid::ViewID targetScrollId =
           nsLayoutUtils::FindOrCreateIDFor(zoomedContentRoot->GetContent());
       if (aFlags & nsIFrame::IN_CSS_UNITS) {

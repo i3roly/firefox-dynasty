@@ -46,8 +46,18 @@ const badHubs = [
   "https://model-hub.mozilla.org.hack", // Domain that contains allowed domain
 ];
 
+function createRandomBlob(blockSize = 8, count = 1) {
+  const blocks = Array.from({ length: count }, () =>
+    Uint32Array.from(
+      { length: blockSize / 4 },
+      () => Math.random() * 4294967296
+    )
+  );
+  return new Blob(blocks, { type: "application/octet-stream" });
+}
+
 function createBlob(size = 8) {
-  return new Blob([new ArrayBuffer(size)]);
+  return createRandomBlob(size);
 }
 
 /**
@@ -722,6 +732,91 @@ add_task(async function test_DeleteModels() {
 });
 
 /**
+ * Test that after deleting a model from the cache, the remaing models are still there.
+ */
+add_task(async function test_nonDeletedModels() {
+  const cache = await initializeCache();
+
+  const testData = createRandomBlob();
+
+  await Promise.all([
+    cache.put({
+      taskName: "task1",
+      model: "org/model",
+      revision: "v1",
+      file: "file.txt",
+      data: testData,
+      headers: {
+        ETag: "ETAG123",
+      },
+    }),
+    cache.put({
+      taskName: "task2",
+      model: "org/model2",
+      revision: "v1",
+      file: "file.txt",
+      data: createRandomBlob(),
+      headers: {
+        ETag: "ETAG1234",
+      },
+    }),
+
+    cache.put({
+      taskName: "task3",
+      model: "org/model2",
+      revision: "v1",
+      file: "file2.txt",
+      data: createRandomBlob(),
+      headers: {
+        ETag: "ETAG1234",
+      },
+    }),
+  ]);
+
+  await cache.deleteModels({ model: "org/model2", revision: "v1" });
+
+  const [retrievedData, headers] = await cache.getFile({
+    model: "org/model",
+    revision: "v1",
+    file: "file.txt",
+  });
+  Assert.deepEqual(
+    retrievedData,
+    testData,
+    "The retrieved data should match the stored data."
+  );
+  Assert.equal(
+    headers.ETag,
+    "ETAG123",
+    "The retrieved ETag should match the stored ETag."
+  );
+
+  const dataAfterDelete = await cache.getFile({
+    model: "org/model2",
+    revision: "v1",
+    file: "file.txt",
+  });
+  Assert.equal(
+    dataAfterDelete,
+    null,
+    "The data for the deleted model should not exist."
+  );
+
+  const dataAfterDelete2 = await cache.getFile({
+    model: "org/model2",
+    revision: "v1",
+    file: "file2.txt",
+  });
+  Assert.equal(
+    dataAfterDelete2,
+    null,
+    "The data for the deleted model should not exist."
+  );
+
+  await deleteCache(cache);
+});
+
+/**
  * Test deleting a model and its data from the cache using a task name.
  */
 add_task(async function test_DeleteModelsUsingTaskName() {
@@ -783,6 +878,125 @@ add_task(async function test_DeleteModelsUsingNonExistingTaskName() {
   const models = await cache.listModels();
   const expected = [{ name: model, revision }];
   Assert.deepEqual(models, expected, "All models should be listed");
+
+  await deleteCache(cache);
+});
+
+/**
+ * Test that after deleting a model from the cache, the remaing models are still there.
+ */
+add_task(async function test_deleteNonMatchingModelRevisions() {
+  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+
+  const cache = await initializeCache();
+
+  hub.cache = cache;
+
+  const testData = createRandomBlob();
+
+  const testData2 = createRandomBlob();
+
+  const taskName = "task";
+
+  const file = "file.txt";
+
+  await Promise.all([
+    cache.put({
+      taskName,
+      model: "org/model",
+      revision: "v1",
+      file,
+      data: testData,
+      headers: {
+        ETag: "ETAG123",
+      },
+    }),
+    cache.put({
+      taskName,
+      model: "org/model2",
+      revision: "v1",
+      file,
+      data: createRandomBlob(),
+      headers: {
+        ETag: "ETAG1234",
+      },
+    }),
+
+    cache.put({
+      taskName,
+      model: "org/model2",
+      revision: "v2",
+      file,
+      data: createRandomBlob(),
+      headers: {
+        ETag: "ETAG1234",
+      },
+    }),
+
+    cache.put({
+      taskName,
+      model: "org/model2",
+      revision: "v3",
+      file,
+      data: testData2,
+      headers: {
+        ETag: "ETAG1234",
+      },
+    }),
+  ]);
+
+  await hub.deleteNonMatchingModelRevisions({
+    taskName,
+    model: "org/model2",
+    targetRevision: "v3",
+  });
+
+  const [retrievedData, headers] = await cache.getFile({
+    model: "org/model",
+    revision: "v1",
+    file,
+  });
+  Assert.deepEqual(
+    retrievedData,
+    testData,
+    "The retrieved data should match the stored data."
+  );
+  Assert.equal(
+    headers.ETag,
+    "ETAG123",
+    "The retrieved ETag should match the stored ETag."
+  );
+
+  const dataAfterDelete = await cache.getFile({
+    model: "org/model2",
+    revision: "v1",
+    file,
+  });
+  Assert.equal(dataAfterDelete, null, "The data for v1 should not exist.");
+
+  const dataAfterDelete2 = await cache.getFile({
+    model: "org/model2",
+    revision: "v2",
+    file,
+  });
+  Assert.equal(dataAfterDelete2, null, "The data for v2 should not exist.");
+
+  const [retrievedData2, headers2] = await cache.getFile({
+    model: "org/model2",
+    revision: "v3",
+    file,
+  });
+  Assert.deepEqual(
+    retrievedData2,
+    testData2,
+    "The retrieved data for v3 should match the stored data."
+  );
+
+  Assert.equal(
+    headers2.ETag,
+    "ETAG1234",
+    "The retrieved ETag for v3 should match the stored ETag."
+  );
 
   await deleteCache(cache);
 });
@@ -1225,4 +1439,102 @@ add_task(async function test_initDbFromExistingElseWhereStoreChanges() {
   Assert.deepEqual(files, expected);
 
   await deleteCache(cache2);
+});
+
+/**
+ * Test that we can use a custom hub on every API call to get files.
+ */
+add_task(async function test_getting_file_custom_hub() {
+  // The hub is configured to use localhost
+  const hub = new ModelHub({
+    rootUrl: "https://localhost",
+    urlTemplate: "{model}/boo/revision",
+  });
+
+  // but we can use APIs against another hub
+  const args = {
+    model: "acme/bert",
+    revision: "main",
+    file: "config.json",
+    taskName: "task_model",
+    modelHubRootUrl: FAKE_HUB,
+    modelHubUrlTemplate: "{model}/{revision}",
+  };
+
+  let [array, headers] = await hub.getModelFileAsArrayBuffer(args);
+
+  Assert.equal(headers["Content-Type"], "application/json");
+
+  // check the content of the file.
+  let jsonData = JSON.parse(
+    String.fromCharCode.apply(null, new Uint8Array(array))
+  );
+
+  Assert.equal(jsonData.hidden_size, 768);
+
+  let res = await hub.getModelFileAsBlob(args);
+  Assert.equal(res[0].size, 562);
+
+  let response = await hub.getModelFileAsResponse(args);
+  Assert.equal((await response.blob()).size, 562);
+});
+
+/**
+ * Make sure that we can't pass a rootUrl that is not allowed when using the API calls
+ */
+add_task(async function test_getting_file_disallowed_custom_hub() {
+  // The hub is configured to use localhost
+  const hub = new ModelHub({
+    rootUrl: "https://localhost",
+    urlTemplate: "{model}/boo/revision",
+  });
+
+  // and we can't use APIs against another hub if it's not allowed
+  const args = {
+    model: "acme/bert",
+    revision: "main",
+    file: "config.json",
+    taskName: "task_model",
+    modelHubRootUrl: "https://forbidden.com",
+    modelHubUrlTemplate: "{model}/{revision}",
+  };
+
+  try {
+    await hub.getModelFileAsArrayBuffer(args);
+    throw new Error("Expected method to reject.");
+  } catch (error) {
+    Assert.throws(
+      () => {
+        throw error;
+      },
+      new RegExp(`Error: Invalid model hub root url: https://forbidden.com`),
+      `Should throw with https://forbidden.com`
+    );
+  }
+
+  try {
+    await hub.getModelFileAsBlob(args);
+    throw new Error("Expected method to reject.");
+  } catch (error) {
+    Assert.throws(
+      () => {
+        throw error;
+      },
+      new RegExp(`Error: Invalid model hub root url: https://forbidden.com`),
+      `Should throw with https://forbidden.com`
+    );
+  }
+
+  try {
+    await hub.getModelFileAsResponse(args);
+    throw new Error("Expected method to reject.");
+  } catch (error) {
+    Assert.throws(
+      () => {
+        throw error;
+      },
+      new RegExp(`Error: Invalid model hub root url: https://forbidden.com`),
+      `Should throw with https://forbidden.com`
+    );
+  }
 });
