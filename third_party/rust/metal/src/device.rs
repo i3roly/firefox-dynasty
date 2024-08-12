@@ -9,8 +9,36 @@ use super::*;
 
 use block::{Block, ConcreteBlock};
 use objc::runtime::{NO, YES};
-
+use std::str::FromStr;
 use std::{ffi::CStr, os::raw::c_char, path::Path, ptr};
+
+
+#[derive(Debug, PartialOrd, PartialEq)]
+enum ParseMacOSKernelVersionError {
+    SysCtl,
+    Malformed,
+    Parsing,
+}
+
+fn macos_kernel_major_version() -> std::result::Result<u32, ParseMacOSKernelVersionError> {
+    let ver = whatsys::kernel_version();
+    if ver.is_none() {
+        return Err(ParseMacOSKernelVersionError::SysCtl);
+    }
+    let ver = ver.unwrap();
+    let major = ver.split('.').next();
+    if major.is_none() {
+        return Err(ParseMacOSKernelVersionError::Malformed);
+    }
+    let parsed_major = u32::from_str(major.unwrap());
+    if parsed_major.is_err() {
+        return Err(ParseMacOSKernelVersionError::Parsing);
+    }
+    Ok(parsed_major.unwrap())
+}
+
+
+const MACOS_KERNEL_MAJOR_VERSION_ELCAPITAN: u32 = 15;
 
 /// Available on macOS 10.11+, iOS 8.0+, tvOS 9.0+
 ///
@@ -1523,8 +1551,12 @@ impl Device {
         }
         #[cfg(not(target_os = "ios"))]
         unsafe {
-            let array = MTLCopyAllDevices();
+            let mut array: *mut Object = ptr::null_mut();
+            if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_ELCAPITAN) { 
+                let array = MTLCopyAllDevices();
+            }
             let count: NSUInteger = msg_send![array, count];
+
             let ret = (0..count)
                 .map(|i| msg_send![array, objectAtIndex: i])
                 // The elements of this array are references---we convert them to owned references
