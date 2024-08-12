@@ -3653,6 +3653,7 @@ dependencies = [
  "log",
  "objc",
  "paste",
+ "whatsys",
 ]
 
 [[package]]
