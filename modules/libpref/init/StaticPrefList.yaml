@@ -5975,6 +5975,11 @@
   value: true
   mirror: always
 
+- name: gfx.canvas.remote.use-draw-image-fast-path-d3d
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 - name: gfx.canvas.remote.recycle-used-data-surface
   type: RelaxedAtomicBool
   value: true
@@ -10915,11 +10920,7 @@
 # 0 : disabled, 1 : enabled allowed list, 2 : enabled blocked list
 -   name: media.eme.mfcdm.origin-filter.enabled
     type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
     value: 0
-#else
-    value: 1
-#endif
     mirror: always
 
 #endif  # MOZ_WMF

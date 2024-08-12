@@ -1,6 +1,13 @@
 /* Any copyright is dedicated to the Public Domain.
  * http://creativecommons.org/publicdomain/zero/1.0/ */
 
+const { GenAI } = ChromeUtils.importESModule(
+  "resource:///modules/GenAI.sys.mjs"
+);
+const { sinon } = ChromeUtils.importESModule(
+  "resource://testing-common/Sinon.sys.mjs"
+);
+
 /**
  * Check that shortcuts aren't shown by default
  */
@@ -24,20 +31,27 @@ add_task(async function test_no_shortcuts() {
 add_task(async function test_show_shortcuts() {
   Services.fog.testResetFOG();
   await SpecialPowers.pushPrefEnv({
-    set: [
-      ["browser.ml.chat.shortcuts", true],
-      ["browser.ml.chat.shortcutsDebounce", 0],
-    ],
+    set: [["browser.ml.chat.shortcuts", true]],
   });
   await BrowserTestUtils.withNewTab("data:text/plain,hi", async browser => {
     await SimpleTest.promiseFocus(browser);
+    const selectPromise = SpecialPowers.spawn(browser, [], () => {
+      ContentTaskUtils.waitForCondition(() => content.getSelection());
+    });
     goDoCommand("cmd_selectAll");
+    await selectPromise;
+    BrowserTestUtils.synthesizeMouseAtCenter(
+      browser,
+      { type: "mouseup" },
+      browser
+    );
     const shortcuts = await TestUtils.waitForCondition(() =>
       document.querySelector(".content-shortcuts[shown]")
     );
     Assert.ok(shortcuts, "Shortcuts added on select");
     let events = Glean.genaiChatbot.shortcutsDisplayed.testGetValue();
-    Assert.ok(events.length, "Shortcuts shown");
+    Assert.equal(events.length, 1, "Shortcuts shown once");
+    Assert.ok(events[0].extra.delay, "Waited some time");
     Assert.equal(events[0].extra.selection, 2, "Selected hi");
 
     const popup = document.getElementById("ask-chat-shortcuts");
@@ -63,4 +77,42 @@ add_task(async function test_show_shortcuts() {
 
     SidebarController.hide();
   });
+});
+
+/**
+ * Check that only plain clicks would show shortcuts
+ */
+add_task(async function test_plain_clicks() {
+  const sandbox = sinon.createSandbox();
+  const stub = sandbox
+    .stub(GenAI, "handleShortcutsMessage")
+    .withArgs("GenAI:ShowShortcuts");
+
+  await BrowserTestUtils.withNewTab("data:text/plain,click", async browser => {
+    await BrowserTestUtils.synthesizeMouseAtCenter(
+      browser,
+      { type: "mouseup" },
+      browser
+    );
+
+    Assert.equal(stub.callCount, 1, "Plain click handled");
+
+    await BrowserTestUtils.synthesizeMouseAtCenter(
+      browser,
+      { button: 1, type: "mouseup" },
+      browser
+    );
+
+    Assert.equal(stub.callCount, 1, "Middle click ignored");
+
+    await BrowserTestUtils.synthesizeMouseAtCenter(
+      browser,
+      { shiftKey: true, type: "mouseup" },
+      browser
+    );
+
+    Assert.equal(stub.callCount, 1, "Modified click ignored");
+  });
+
+  sandbox.restore();
 });
