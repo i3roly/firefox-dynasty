@@ -1207,18 +1207,12 @@ pref("network.manage-offline-status", true);
 
 // We want to make sure mail URLs are handled externally...
 pref("network.protocol-handler.external.mailto", true); // for mail
-pref("network.protocol-handler.external.news", true);   // for news
-pref("network.protocol-handler.external.snews", true);  // for secure news
-pref("network.protocol-handler.external.nntp", true);   // also news
 #ifdef XP_WIN
   pref("network.protocol-handler.external.ms-windows-store", true);
 #endif
 
 // ...without warning dialogs
 pref("network.protocol-handler.warn-external.mailto", false);
-pref("network.protocol-handler.warn-external.news", false);
-pref("network.protocol-handler.warn-external.snews", false);
-pref("network.protocol-handler.warn-external.nntp", false);
 #ifdef XP_WIN
   pref("network.protocol-handler.warn-external.ms-windows-store", false);
 #endif
@@ -1957,7 +1951,7 @@ pref("sidebar.visibility", "always-show");
 
 pref("browser.ml.chat.enabled", false);
 pref("browser.ml.chat.hideLocalhost", true);
-pref("browser.ml.chat.prompt.prefix", 'I’m on page "%tabTitle%" with "%selection|12000%" selected. ');
+pref("browser.ml.chat.prompt.prefix", '{"l10nId":"genai-prompt-prefix-selection"}');
 pref("browser.ml.chat.prompts.0", '{"id":"summarize","l10nId":"genai-prompts-summarize"}');
 pref("browser.ml.chat.prompts.1", '{"id":"simplify","l10nId":"genai-prompts-simplify"}');
 pref("browser.ml.chat.prompts.2", '{"id":"quiz","l10nId":"genai-prompts-quiz","targeting":"!provider|regExpMatch(\'gemini\')"}');
