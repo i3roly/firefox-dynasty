@@ -273,7 +273,7 @@ class QuotaManager final : public BackgroundThreadObject {
       const ClientMetadata& aClientMetadata) const;
 
   RefPtr<UniversalDirectoryLockPromise> OpenStorageDirectory(
-      const Nullable<PersistenceType>& aPersistenceType,
+      const PersistenceScope& aPersistenceScope,
       const OriginScope& aOriginScope,
       const Nullable<Client::Type>& aClientType, bool aExclusive,
       DirectoryLockCategory aCategory = DirectoryLockCategory::None,
@@ -304,7 +304,7 @@ class QuotaManager final : public BackgroundThreadObject {
 
   // XXX RemoveMe once bug 1170279 gets fixed.
   RefPtr<UniversalDirectoryLock> CreateDirectoryLockInternal(
-      const Nullable<PersistenceType>& aPersistenceType,
+      const PersistenceScope& aPersistenceScope,
       const OriginScope& aOriginScope,
       const Nullable<Client::Type>& aClientType, bool aExclusive,
       DirectoryLockCategory aCategory = DirectoryLockCategory::None);
@@ -422,8 +422,11 @@ class QuotaManager final : public BackgroundThreadObject {
       bool aGetAll, RefPtr<BoolPromise> aOnCancelPromise = nullptr);
 
   RefPtr<UsageInfoPromise> GetOriginUsage(
-      const PrincipalInfo& aPrincipalInfo, bool aFromMemory,
+      const PrincipalInfo& aPrincipalInfo,
       RefPtr<BoolPromise> aOnCancelPromise = nullptr);
+
+  RefPtr<UInt64Promise> GetCachedOriginUsage(
+      const PrincipalInfo& aPrincipalInfo);
 
   RefPtr<BoolPromise> ClearStoragesForOrigin(
       const Maybe<PersistenceType>& aPersistenceType,
@@ -450,10 +453,9 @@ class QuotaManager final : public BackgroundThreadObject {
   // Returns a bool indicating whether the directory was newly created.
   Result<bool, nsresult> EnsureOriginDirectory(nsIFile& aDirectory);
 
-  nsresult AboutToClearOrigins(
-      const Nullable<PersistenceType>& aPersistenceType,
-      const OriginScope& aOriginScope,
-      const Nullable<Client::Type>& aClientType);
+  nsresult AboutToClearOrigins(const PersistenceScope& aPersistenceScope,
+                               const OriginScope& aOriginScope,
+                               const Nullable<Client::Type>& aClientType);
 
   void OriginClearCompleted(PersistenceType aPersistenceType,
                             const nsACString& aOrigin,

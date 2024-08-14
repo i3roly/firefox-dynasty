@@ -300,12 +300,23 @@ function getUsage(usageHandler, getAll) {
   return request;
 }
 
-function getOriginUsage(principal, fromMemory = false) {
-  let request = Services.qms.getUsageForPrincipal(
+function getOriginUsage(principal) {
+  let request = Services.qms.getUsageForPrincipal(principal, function () {});
+
+  return request;
+}
+
+function getCachedOriginUsage(principal) {
+  let request = Services.qms.getCachedUsageForPrincipal(
     principal,
-    function () {},
-    fromMemory
+    function () {}
   );
+
+  return request;
+}
+
+function getCachedOriginUsage(principal) {
+  let request = Services.qms.getCachedUsageForPrincipal(principal);
 
   return request;
 }

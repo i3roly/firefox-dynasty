@@ -268,6 +268,7 @@ class FunctionCompiler {
   const FuncCompileInput& func_;
   const ValTypeVector& locals_;
   size_t lastReadCallSite_;
+  size_t numCallRefs_;
 
   TempAllocator& alloc_;
   MIRGraph& graph_;
@@ -319,6 +320,7 @@ class FunctionCompiler {
         func_(func),
         locals_(locals),
         lastReadCallSite_(0),
+        numCallRefs_(0),
         alloc_(mirGen.alloc()),
         graph_(mirGen.graph()),
         info_(compileInfo),
@@ -345,6 +347,7 @@ class FunctionCompiler {
         func_(func),
         locals_(locals),
         lastReadCallSite_(0),
+        numCallRefs_(0),
         alloc_(callerCompiler_->alloc_),
         graph_(callerCompiler_->graph_),
         info_(compileInfo),
@@ -519,6 +522,9 @@ class FunctionCompiler {
     MOZ_ASSERT(inDeadCode());
     MOZ_ASSERT(done());
     MOZ_ASSERT(func_.callSiteLineNums.length() == lastReadCallSite_);
+    MOZ_ASSERT_IF(
+        compilerEnv().mode() == CompileMode::LazyTiering,
+        codeMeta_.getFuncDefCallRefs(funcIndex()).length == numCallRefs_);
   }
 
   /************************* Read-only interface (after local scope setup) */
@@ -1932,6 +1938,20 @@ class FunctionCompiler {
                                                    v, instancePointer_);
     curBlock_->add(store);
     return true;
+  }
+
+  // Load the slot on the instance where the result of `ref.func` is cached.
+  // This may be null if a function reference for this function has not been
+  // asked for yet.
+  MDefinition* loadCachedRefFunc(uint32_t funcIndex) {
+    uint32_t exportedFuncIndex = codeMeta().findFuncExportIndex(funcIndex);
+    MWasmLoadInstanceDataField* refFunc = MWasmLoadInstanceDataField::New(
+        alloc(), MIRType::WasmAnyRef,
+        codeMeta_.offsetOfFuncExportInstanceData(exportedFuncIndex) +
+            offsetof(FuncExportInstanceData, func),
+        true, instancePointer_);
+    curBlock_->add(refFunc);
+    return refFunc;
   }
 
   MDefinition* loadTableField(uint32_t tableIndex, unsigned fieldOffset,
@@ -5058,6 +5078,25 @@ class FunctionCompiler {
     return TrapSiteInfo(wasm::BytecodeOffset(readBytecodeOffset()));
   }
 
+  CallRefHint readCallRefHint() {
+    // We don't track anything if we're not using lazy tiering
+    if (compilerEnv_.mode() != CompileMode::LazyTiering) {
+      return CallRefHint::unknown();
+    }
+
+    // We don't track anything when inside dead code
+    if (inDeadCode()) {
+      return CallRefHint::unknown();
+    }
+
+    CallRefMetricsRange rangeInModule =
+        codeMeta_.getFuncDefCallRefs(funcIndex());
+    uint32_t localIndex = numCallRefs_++;
+    MOZ_RELEASE_ASSERT(localIndex < rangeInModule.length);
+    uint32_t moduleIndex = rangeInModule.begin + localIndex;
+    return codeMeta_.getCallRefHint(moduleIndex);
+  }
+
 #if DEBUG
   bool done() const { return iter_.done(); }
 #endif
@@ -7695,9 +7734,95 @@ static bool EmitBrOnNonNull(FunctionCompiler& f) {
   return f.brOnNonNull(relativeDepth, values, type, condition);
 }
 
-static bool EmitCallRef(FunctionCompiler& f) {
-  uint32_t lineOrBytecode = f.readCallSiteLineOrBytecode();
+// Speculatively inline a call_ref that is likely to target the expected
+// function index in this module. A fallback for if the actual callee is not
+// the speculated expected callee is always generated. This leads to a control
+// flow diamond that is roughly:
+//
+// if (ref.func $expectedFuncIndex) == actualCalleeFunc:
+//   (call_inline $expectedFuncIndex)
+// else:
+//   (call_ref actualCalleeFunc)
+static bool EmitSpeculativeInlineCallRef(
+    FunctionCompiler& f, uint32_t bytecodeOffset, const FuncType& funcType,
+    uint32_t expectedFuncIndex, MDefinition* actualCalleeFunc,
+    const DefVector& args, DefVector* results) {
+  // Perform an up front null check on the callee function reference.
+  if (!f.refAsNonNull(actualCalleeFunc)) {
+    return false;
+  }
 
+  // Load the cached value of `ref.func $expectedFuncIndex` for comparing
+  // against `actualCalleeFunc`. This cached value may be null if the `ref.func`
+  // for the expected function has not been executed in this runtime session.
+  //
+  // This is okay because we have done a null check on the `actualCalleeFunc`
+  // already and so comparing it against a null expected callee func will
+  // return false and fall back to the general case. This can only happen if
+  // we've deserialized a cached module in a different session, and then run
+  // the code without ever acquiring a reference to the expected function. In
+  // that case, the expected callee could never be the target of this call_ref,
+  // so performing the fallback path is the right thing to do anyways.
+  MDefinition* expectedCalleeFunc = f.loadCachedRefFunc(expectedFuncIndex);
+  if (!expectedCalleeFunc) {
+    return false;
+  }
+
+  // Check if the callee funcref we have is equals to the expected callee
+  // funcref we're inlining.
+  MDefinition* isExpectedCallee =
+      f.compare(actualCalleeFunc, expectedCalleeFunc, JSOp::Eq,
+                MCompare::Compare_WasmAnyRef);
+  if (!isExpectedCallee) {
+    return false;
+  }
+
+  // Start the 'then' block which will have the inlined code
+  MBasicBlock* elseBlock;
+  if (!f.branchAndStartThen(isExpectedCallee, &elseBlock)) {
+    return false;
+  }
+
+  // Inline the expected callee as we do with direct calls
+  DefVector inlineResults;
+  if (!EmitInlineCall(f, funcType, expectedFuncIndex, args, &inlineResults)) {
+    return false;
+  }
+
+  // Push the results for joining with the 'else' block
+  if (!f.pushDefs(inlineResults)) {
+    return false;
+  }
+
+  // Switch to the 'else' block which will have the fallback `call_ref`
+  if (!f.switchToElse(elseBlock, &elseBlock)) {
+    return false;
+  }
+
+  // Perform a general indirect call to the callee func we have
+  CallCompileState call;
+  if (!EmitCallArgs(f, funcType, args, &call)) {
+    return false;
+  }
+
+  DefVector callResults;
+  if (!f.callRef(funcType, actualCalleeFunc, bytecodeOffset, call,
+                 &callResults)) {
+    return false;
+  }
+
+  // Push the results for joining with the 'then' block
+  if (!f.pushDefs(callResults)) {
+    return false;
+  }
+
+  // Join the two branches together
+  return f.joinIfElse(elseBlock, results);
+}
+
+static bool EmitCallRef(FunctionCompiler& f) {
+  uint32_t bytecodeOffset = f.readBytecodeOffset();
+  CallRefHint hint = f.readCallRefHint();
   const FuncType* funcType;
   MDefinition* callee;
   DefVector args;
@@ -7710,13 +7835,24 @@ static bool EmitCallRef(FunctionCompiler& f) {
     return true;
   }
 
+  if (hint.isInlineFunc() && f.shouldInlineCallDirect(hint.inlineFuncIndex())) {
+    DefVector results;
+    if (!EmitSpeculativeInlineCallRef(f, bytecodeOffset, *funcType,
+                                      hint.inlineFuncIndex(), callee, args,
+                                      &results)) {
+      return false;
+    }
+    f.iter().setResults(results.length(), results);
+    return true;
+  }
+
   CallCompileState call;
   if (!EmitCallArgs(f, *funcType, args, &call)) {
     return false;
   }
 
   DefVector results;
-  if (!f.callRef(*funcType, callee, lineOrBytecode, call, &results)) {
+  if (!f.callRef(*funcType, callee, bytecodeOffset, call, &results)) {
     return false;
   }
 

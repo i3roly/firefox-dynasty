@@ -46,7 +46,7 @@
 #include "js/PropertySpec.h"
 #include "js/Wrapper.h"
 #include "util/DifferentialTesting.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/DateObject.h"
 #include "vm/DateTime.h"
@@ -3475,7 +3475,7 @@ static bool date_toSource(JSContext* cx, unsigned argc, Value* vp) {
 
   JSStringBuilder sb(cx);
   if (!sb.append("(new Date(") ||
-      !NumberValueToStringBuffer(unwrapped->UTCTime(), sb) ||
+      !NumberValueToStringBuilder(unwrapped->UTCTime(), sb) ||
       !sb.append("))")) {
     return false;
   }

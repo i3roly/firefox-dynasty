@@ -14,7 +14,7 @@
 #include "frontend/ParserAtom.h"  // frontend::ParserAtomsTable, frontend::ParserAtom
 #include "frontend/ScriptIndex.h"  // ScriptIndex
 #include "frontend/Stencil.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "vm/EnvironmentObject.h"
 #include "vm/ErrorReporting.h"  // MaybePrintAndClearPendingException
 #include "vm/JSScript.h"
@@ -693,11 +693,11 @@ template <size_t ArrayLength>
 static JSAtom* GenerateWasmName(JSContext* cx,
                                 const char (&prefix)[ArrayLength],
                                 uint32_t index) {
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (!sb.append(prefix)) {
     return nullptr;
   }
-  if (!NumberValueToStringBuffer(NumberValue(index), sb)) {
+  if (!NumberValueToStringBuilder(NumberValue(index), sb)) {
     return nullptr;
   }
 

@@ -250,8 +250,7 @@ void QuotaManagerDependencyFixture::GetOriginUsage(
         QuotaManager* quotaManager = QuotaManager::Get();
         ASSERT_TRUE(quotaManager);
 
-        auto value = Await(quotaManager->GetOriginUsage(
-            principalInfo, /* aFromMemory */ false));
+        auto value = Await(quotaManager->GetOriginUsage(principalInfo));
         if (value.IsResolve()) {
           *aResult = value.ResolveValue();
         } else {
@@ -274,10 +273,9 @@ void QuotaManagerDependencyFixture::GetCachedOriginUsage(
         QuotaManager* quotaManager = QuotaManager::Get();
         ASSERT_TRUE(quotaManager);
 
-        auto value = Await(quotaManager->GetOriginUsage(
-            principalInfo, /* aFromMemory */ true));
+        auto value = Await(quotaManager->GetCachedOriginUsage(principalInfo));
         if (value.IsResolve()) {
-          *aResult = value.ResolveValue();
+          *aResult = UsageInfo(DatabaseUsageType(Some(value.ResolveValue())));
         } else {
           *aResult = UsageInfo();
         }

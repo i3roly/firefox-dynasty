@@ -159,10 +159,17 @@ class OutputParser {
       name === "shape-outside" ||
       name === "offset-path";
     options.expectFont = name === "font-family";
+    options.isVariable = name.startsWith("--");
     options.supportsColor =
       this.#cssProperties.supportsType(name, "color") ||
       this.#cssProperties.supportsType(name, "gradient") ||
-      (name.startsWith("--") && InspectorUtils.isValidCSSColor(value));
+      // Parse colors for CSS variables declaration if the declaration value or the computed
+      // value are valid colors.
+      (options.isVariable &&
+        (InspectorUtils.isValidCSSColor(value) ||
+          InspectorUtils.isValidCSSColor(
+            options.getVariableData?.(name).computedValue
+          )));
 
     // The filter property is special in that we want to show the
     // swatch even if the value is invalid, because this way the user
@@ -233,13 +240,9 @@ class OutputParser {
         options.getVariableData
       ) {
         sawVariable = true;
-        const { node, value, fallbackValue } = this.#parseVariable(
-          token,
-          text,
-          tokenStream,
-          options
-        );
-        functionData.push({ node, value, fallbackValue });
+        const { node, value, computedValue, fallbackValue } =
+          this.#parseVariable(token, text, tokenStream, options);
+        functionData.push({ node, value, computedValue, fallbackValue });
       } else if (token.tokenType === "Function") {
         ++depth;
       }
@@ -408,6 +411,7 @@ class OutputParser {
     return {
       node: variableNode,
       value: varSubsitutedValue,
+      computedValue: varComputedValue,
       fallbackValue: varFallbackValue,
     };
   }
@@ -436,7 +440,7 @@ class OutputParser {
     const colorOK = () => {
       return (
         options.supportsColor ||
-        (options.expectFilter &&
+        ((options.expectFilter || options.isVariable) &&
           this.#stack.length !== 0 &&
           this.#stack.at(-1).isColorTakingFunction)
       );
@@ -497,25 +501,28 @@ class OutputParser {
             lowerCaseFunctionName === "var" &&
             options.getVariableData
           ) {
-            const { node: variableNode, value } = this.#parseVariable(
-              token,
-              text,
-              tokenStream,
-              options
-            );
+            const {
+              node: variableNode,
+              value,
+              computedValue,
+            } = this.#parseVariable(token, text, tokenStream, options);
 
+            const variableValue = computedValue ?? value;
             // InspectorUtils.isValidCSSColor returns true for `light-dark()` function,
             // but `#isValidColor` returns false. As the latter is used in #appendColor,
             // we need to check that both functions return true.
             const colorObj =
-              value && colorOK() && InspectorUtils.isValidCSSColor(value)
-                ? new colorUtils.CssColor(value)
+              value &&
+              colorOK() &&
+              InspectorUtils.isValidCSSColor(variableValue)
+                ? new colorUtils.CssColor(variableValue)
                 : null;
+
             if (colorObj && this.#isValidColor(colorObj)) {
               const colorFunctionEntry = this.#stack.findLast(
                 entry => entry.isColorTakingFunction
               );
-              this.#appendColor(value, {
+              this.#appendColor(variableValue, {
                 ...options,
                 colorObj,
                 variableContainer: variableNode,
@@ -541,7 +548,9 @@ class OutputParser {
                     if (typeof data === "string") {
                       return data;
                     }
-                    return data.value ?? data.fallbackValue;
+                    return (
+                      data.computedValue ?? data.value ?? data.fallbackValue
+                    );
                   })
                   .join("") +
                 ")";

@@ -8270,6 +8270,12 @@
   mirror: always
   set_spidermonkey_pref: always
 
+- name: javascript.options.wasm_experimental_inline_call_ref_threshold
+  type: uint32_t
+  value: 1
+  mirror: always
+  set_spidermonkey_pref: always
+
 # Support for pretenuring allocations based on their allocation site.
 - name: javascript.options.site_based_pretenuring
   type: bool
@@ -8873,12 +8879,6 @@
 
 # Is the codepath for using cached scrollbar styles enabled?
 - name: layout.css.cached-scrollbar-styles.enabled
-  type: bool
-  value: true
-  mirror: always
-
-# Whether we cache inline styles in a document unconditionally or not.
-- name: layout.css.inline-style-caching.always-enabled
   type: bool
   value: true
   mirror: always
@@ -12389,14 +12389,6 @@
   value: 393216
   mirror: always
 
-# This preference, if true, causes all UTF-8 domain names to be normalized to
-# punycode.  The intention is to allow UTF-8 domain names as input, but never
-# generate them from punycode.
-- name: network.IDN_show_punycode
-  type: RelaxedAtomicBool
-  value: false
-  mirror: always
-
 # If set to true, IOService.offline depends on IOService.connectivity.
 - name: network.offline-mirrors-connectivity
   type: RelaxedAtomicBool
@@ -14779,11 +14771,17 @@
   value: ""
   mirror: never
 
-# Main pref to enable / disable the feature.
-- name: privacy.bounceTrackingProtection.enabled
-  type: bool
-  value: true
-  mirror: once
+# Controls Bounce Tracking Protection behavior.
+# Set to 0 to fully disable. See nsIBounceTrackingProtection.idl for
+# documentation.
+- name: privacy.bounceTrackingProtection.mode
+  type: uint32_t
+#ifdef NIGHTLY_BUILD
+  value: 1
+#else
+  value: 3
+#endif
+  mirror: always
 
 # How long to wait for a client redirect after a navigation ends.
 - name: privacy.bounceTrackingProtection.clientBounceDetectionTimerPeriodMS
@@ -14815,14 +14813,6 @@
 - name: privacy.bounceTrackingProtection.requireStatefulBounces
   type: bool
   value: true
-  mirror: always
-
-# Enables a mode where if bounce tracking protection is enabled it classifies
-# but does not purge trackers. This mode is helpful for testing the feature
-# without risking data loss. Telemetry is still collected normally.
-- name: privacy.bounceTrackingProtection.enableDryRunMode
-  type: bool
-  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # To be used in automated test environments to enable observer messages.

@@ -25,7 +25,7 @@
 #include "js/PropertySpec.h"
 #include "js/UniquePtr.h"
 #include "util/Identifier.h"  // js::IsIdentifier
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BooleanObject.h"
 #include "vm/DateObject.h"
@@ -745,7 +745,7 @@ bool js::obj_toString(JSContext* cx, unsigned argc, Value* vp) {
   }
 
   // Step 17.
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (!sb.append("[object ") || !sb.append(tag.toString()) || !sb.append(']')) {
     return false;
   }

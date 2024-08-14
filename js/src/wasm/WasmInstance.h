@@ -53,6 +53,7 @@ namespace wasm {
 struct FuncDefInstanceData;
 class FuncImport;
 struct FuncImportInstanceData;
+struct FuncExportInstanceData;
 struct MemoryDesc;
 struct MemoryInstanceData;
 class GlobalDesc;
@@ -61,6 +62,7 @@ struct TableInstanceData;
 struct TagDesc;
 struct TagInstanceData;
 struct TypeDefInstanceData;
+struct CallRefMetrics;
 class WasmFrameIter;
 
 // Instance represents a wasm instance and provides all the support for runtime
@@ -194,6 +196,11 @@ class alignas(16) Instance {
   // worthwhile.
   uint32_t* debugFilter_;
 
+  // A pointer to an array of metrics for all the call_ref's in this instance.
+  // This is only used with lazy tiering for collecting speculative inlining
+  // information.
+  CallRefMetrics* callRefMetrics_;
+
   // The exclusive maximum index of a global that has been initialized so far.
   uint32_t maxInitializedGlobalsIndexPlus1_;
 
@@ -220,7 +227,8 @@ class alignas(16) Instance {
   FuncDefInstanceData* funcDefInstanceData(uint32_t funcIndex) const;
   TypeDefInstanceData* typeDefInstanceData(uint32_t typeIndex) const;
   const void* addressOfGlobalCell(const GlobalDesc& globalDesc) const;
-  FuncImportInstanceData& funcImportInstanceData(const FuncImport& fi);
+  FuncImportInstanceData& funcImportInstanceData(uint32_t funcIndex);
+  FuncExportInstanceData& funcExportInstanceData(uint32_t funcExportIndex);
   MemoryInstanceData& memoryInstanceData(uint32_t memoryIndex) const;
   TableInstanceData& tableInstanceData(uint32_t tableIndex) const;
   TagInstanceData& tagInstanceData(uint32_t tagIndex) const;
@@ -336,6 +344,9 @@ class alignas(16) Instance {
   static constexpr size_t offsetOfDebugFilter() {
     return offsetof(Instance, debugFilter_);
   }
+  static constexpr size_t offsetOfCallRefMetrics() {
+    return offsetof(Instance, callRefMetrics_);
+  }
   static constexpr size_t offsetOfData() { return offsetof(Instance, data_); }
   static constexpr size_t offsetInData(size_t offset) {
     return offsetOfData() + offset;
@@ -376,6 +387,7 @@ class alignas(16) Instance {
   void resetTemporaryStackLimit(JSContext* cx);
 
   void resetHotnessCounter(uint32_t funcIndex);
+  void submitCallRefHints(uint32_t funcIndex);
 
   bool debugFilter(uint32_t funcIndex) const;
   void setDebugFilter(uint32_t funcIndex, bool value);
@@ -392,6 +404,11 @@ class alignas(16) Instance {
 
   WasmInstanceObject* object() const;
   WasmInstanceObject* objectUnbarriered() const;
+
+  // Get or create the exported function wrapper for a function index.
+
+  [[nodiscard]] bool getExportedFunction(JSContext* cx, uint32_t funcIndex,
+                                         MutableHandleFunction result);
 
   // Execute the given export given the JS call arguments, storing the return
   // value in args.rval.

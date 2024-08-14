@@ -38,7 +38,7 @@ object Versions {
     const val detekt = "1.23.6"
     const val ktlint = "0.49.1"
 
-    const val sentry = "7.11.0"
+    const val sentry = "7.14.0"
 
     const val zxing = "3.5.3"
 
@@ -55,13 +55,13 @@ object Versions {
 
     object AndroidX {
         const val activity = "1.7.2"
-        const val annotation = "1.8.1"
+        const val annotation = "1.8.2"
         const val appcompat = "1.7.0"
         const val autofill = "1.1.0"
         const val browser = "1.8.0"
         const val biometric = "1.1.0"
         const val cardview = "1.0.0"
-        const val collection = "1.4.2"
+        const val collection = "1.4.3"
         const val compose_bom = "2024.06.00"
         const val constraintlayout = "2.1.4"
         const val coordinatorlayout = "1.2.0"
@@ -71,7 +71,7 @@ object Versions {
         const val recyclerview = "1.3.2"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"
-        const val paging = "3.3.1"
+        const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
         const val lifecycle = "2.8.4"
@@ -79,7 +79,7 @@ object Versions {
         const val navigation = "2.7.7"
         const val transition = "1.5.1"
         const val tracing = "1.2.0"
-        const val work = "2.9.0"
+        const val work = "2.9.1"
         const val arch = "2.2.0"
         const val localbroadcastmanager = "1.0.0"
         const val swiperefreshlayout = "1.1.0"
