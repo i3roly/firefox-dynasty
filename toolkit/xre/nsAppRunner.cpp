@@ -317,7 +317,7 @@ extern const char gToolkitBuildID[];
 
 static nsIProfileLock* gProfileLock;
 #if defined(MOZ_HAS_REMOTE)
-static nsRemoteService* gRemoteService;
+static RefPtr<nsRemoteService> gRemoteService;
 #endif
 
 int gRestartArgc;
@@ -2043,6 +2043,13 @@ nsresult ScopedXPCOMStartup::SetWindowCreator(nsINativeAppSupport* native) {
   return do_AddRef(ScopedXPCOMStartup::gNativeAppSupport);
 }
 
+#ifdef MOZ_HAS_REMOTE
+/* static */ already_AddRefed<nsIRemoteService> GetRemoteService() {
+  nsCOMPtr<nsIRemoteService> remoteService = gRemoteService.get();
+  return remoteService.forget();
+}
+#endif
+
 nsINativeAppSupport* ScopedXPCOMStartup::gNativeAppSupport;
 
 static void DumpArbitraryHelp() {
@@ -2772,7 +2779,6 @@ static ReturnAbortOnError ProfileLockedDialog(nsIFile* aProfileDir,
 #if defined(MOZ_HAS_REMOTE)
         if (gRemoteService) {
           gRemoteService->UnlockStartup();
-          gRemoteService = nullptr;
         }
 #endif
         return LaunchChild(false, true);
@@ -2786,11 +2792,9 @@ static ReturnAbortOnError ProfileLockedDialog(nsIFile* aProfileDir,
   }
 }
 
-static const char kProfileManagerURL[] =
-    "chrome://mozapps/content/profile/profileSelection.xhtml";
-
-static ReturnAbortOnError ShowProfileManager(
-    nsIToolkitProfileService* aProfileSvc, nsINativeAppSupport* aNative) {
+static ReturnAbortOnError ShowProfileDialog(
+    nsIToolkitProfileService* aProfileSvc, nsINativeAppSupport* aNative,
+    const char* aDialogURL, const char* aTelemetryEnvVar) {
   nsresult rv;
 
   nsCOMPtr<nsIFile> profD, profLD;
@@ -2835,9 +2839,9 @@ static ReturnAbortOnError ShowProfileManager(
         features.AppendLiteral(",private");
       }
       nsCOMPtr<mozIDOMWindowProxy> newWindow;
-      rv = windowWatcher->OpenWindow(
-          nullptr, nsDependentCString(kProfileManagerURL), "_blank"_ns,
-          features, ioParamBlock, getter_AddRefs(newWindow));
+      rv = windowWatcher->OpenWindow(nullptr, nsDependentCString(aDialogURL),
+                                     "_blank"_ns, features, ioParamBlock,
+                                     getter_AddRefs(newWindow));
 
       NS_ENSURE_SUCCESS_LOG(rv, rv);
 
@@ -2867,13 +2871,12 @@ static ReturnAbortOnError ShowProfileManager(
   // User requested that we restart back into the profile manager.
   if (dialogReturn == nsIToolkitProfileService::restart) {
     SaveToEnv("XRE_RESTART_TO_PROFILE_MANAGER=1");
-    SaveToEnv("XRE_RESTARTED_BY_PROFILE_MANAGER=1");
   } else {
     MOZ_ASSERT(dialogReturn == nsIToolkitProfileService::launchWithProfile);
     SaveFileToEnv("XRE_PROFILE_PATH", profD);
     SaveFileToEnv("XRE_PROFILE_LOCAL_PATH", profLD);
-    SaveToEnv("XRE_RESTARTED_BY_PROFILE_MANAGER=1");
   }
+  SaveToEnv(aTelemetryEnvVar);
 
   if (gRestartedByOS) {
     // Re-add this argument when actually starting the application.
@@ -2887,10 +2890,28 @@ static ReturnAbortOnError ShowProfileManager(
 #if defined(MOZ_HAS_REMOTE)
   if (gRemoteService) {
     gRemoteService->UnlockStartup();
-    gRemoteService = nullptr;
   }
 #endif
   return LaunchChild(false, true);
+}
+
+static ReturnAbortOnError ShowProfileManager(
+    nsIToolkitProfileService* aProfileSvc, nsINativeAppSupport* aNative) {
+  static const char kProfileManagerURL[] =
+      "chrome://mozapps/content/profile/profileSelection.xhtml";
+  static const char kTelemetryEnv[] = "XRE_RESTARTED_BY_PROFILE_MANAGER=1";
+
+  return ShowProfileDialog(aProfileSvc, aNative, kProfileManagerURL,
+                           kTelemetryEnv);
+}
+
+static ReturnAbortOnError ShowProfileSelector(
+    nsIToolkitProfileService* aProfileSvc, nsINativeAppSupport* aNative) {
+  static const char kProfileSelectorURL[] = "about:profilemanager";
+  static const char kTelemetryEnv[] = "XRE_RESTARTED_BY_PROFILE_SELECTOR=1";
+
+  return ShowProfileDialog(aProfileSvc, aNative, kProfileSelectorURL,
+                           kTelemetryEnv);
 }
 
 static bool gDoMigration = false;
@@ -3678,9 +3699,6 @@ class XREMain {
   nsCOMPtr<nsIFile> mProfD;
   nsCOMPtr<nsIFile> mProfLD;
   nsCOMPtr<nsIProfileLock> mProfileLock;
-#if defined(MOZ_HAS_REMOTE)
-  RefPtr<nsRemoteService> mRemoteService;
-#endif
 
   UniquePtr<ScopedXPCOMStartup> mScopedXPCOM;
   UniquePtr<XREAppData> mAppData;
@@ -4837,10 +4855,9 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
 #endif
 #if defined(MOZ_HAS_REMOTE)
   // handle --remote now that xpcom is fired up
-  mRemoteService = new nsRemoteService(gAppData->remotingName);
-  if (mRemoteService) {
-    mRemoteService->LockStartup();
-    gRemoteService = mRemoteService;
+  gRemoteService = new nsRemoteService(gAppData->remotingName);
+  if (gRemoteService) {
+    gRemoteService->LockStartup();
   }
 #endif
 #if defined(MOZ_WIDGET_GTK)
@@ -4907,46 +4924,61 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
   }
 
 #if defined(MOZ_HAS_REMOTE)
-  if (mRemoteService) {
-    // We want a unique profile name to identify the remote instance.
-    nsCString profileName;
-    if (profile) {
-      rv = profile->GetName(profileName);
-    }
-    if (!profile || NS_FAILED(rv) || profileName.IsEmpty()) {
-      // Couldn't get a name from the profile. Use the directory name?
-      nsString leafName;
-      rv = mProfD->GetLeafName(leafName);
-      if (NS_SUCCEEDED(rv)) {
-        CopyUTF16toUTF8(leafName, profileName);
-      }
-    }
+  if (gRemoteService) {
+    // Use the full profile path to identify the profile.
+    nsCString profilePath;
 
-    mRemoteService->SetProfile(profileName);
-
-    if (!mDisableRemoteClient) {
-      // Try to remote the entire command line. If this fails, start up
-      // normally.
-#  ifdef MOZ_WIDGET_GTK
-      auto& startupToken =
-          GdkIsWaylandDisplay() ? mXDGActivationToken : mDesktopStartupID;
-#    ifdef MOZ_X11
-      if (GdkIsX11Display() && startupToken.IsEmpty())
-        startupToken = SynthesizeStartupToken();
-#    endif /* MOZ_X11 */
+#  ifdef XP_WIN
+    nsString path;
+    rv = mProfD->GetPath(path);
+    if (NS_SUCCEEDED(rv)) {
+      CopyUTF16toUTF8(path, profilePath);
+    }
 #  else
-      const nsCString startupToken;
+    rv = mProfD->GetNativePath(profilePath);
 #  endif
-      RemoteResult rr = mRemoteService->StartClient(
-          startupToken.IsEmpty() ? nullptr : startupToken.get());
-      if (rr == REMOTE_FOUND) {
-        *aExitFlag = true;
-        mRemoteService->UnlockStartup();
-        return 0;
-      }
-      if (rr == REMOTE_ARG_BAD) {
-        mRemoteService->UnlockStartup();
-        return 1;
+
+    if (NS_SUCCEEDED(rv)) {
+      gRemoteService->SetProfile(profilePath);
+
+      if (!mDisableRemoteClient) {
+        // Try to remote the entire command line. If this fails, start up
+        // normally.
+#  ifdef MOZ_WIDGET_GTK
+        auto& startupToken =
+            GdkIsWaylandDisplay() ? mXDGActivationToken : mDesktopStartupID;
+#    ifdef MOZ_X11
+        if (GdkIsX11Display() && startupToken.IsEmpty()) {
+          startupToken = SynthesizeStartupToken();
+        }
+#    endif /* MOZ_X11 */
+        gRemoteService->SetStartupToken(startupToken);
+#  endif
+        rv = gRemoteService->StartClient();
+
+        if (rv == NS_ERROR_NOT_AVAILABLE && profile) {
+          // Older versions would use the profile name in preference to the
+          // path.
+          nsCString profileName;
+          profile->GetName(profileName);
+          gRemoteService->SetProfile(profileName);
+
+          rv = gRemoteService->StartClient();
+
+          // Reset back to the path.
+          gRemoteService->SetProfile(profilePath);
+        }
+
+        if (NS_SUCCEEDED(rv)) {
+          *aExitFlag = true;
+          gRemoteService->UnlockStartup();
+          return 0;
+        }
+
+        if (rv == NS_ERROR_INVALID_ARG) {
+          gRemoteService->UnlockStartup();
+          return 1;
+        }
       }
     }
   }
@@ -5052,24 +5084,31 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
   }
 #endif
 
+  bool useSelectedProfile;
+  rv = mProfileSvc->GetStartWithLastProfile(&useSelectedProfile);
+  NS_ENSURE_SUCCESS(rv, 1);
+
   // We now know there is no existing instance using the selected profile. If
   // the profile wasn't selected by specific command line arguments and the
   // user has chosen to show the profile manager on startup then do that.
-  if (wasDefaultSelection) {
-    bool useSelectedProfile;
-    rv = mProfileSvc->GetStartWithLastProfile(&useSelectedProfile);
-    NS_ENSURE_SUCCESS(rv, 1);
-
-    if (!useSelectedProfile) {
-      rv = ShowProfileManager(mProfileSvc, mNativeApp);
-      if (rv == NS_ERROR_LAUNCHED_CHILD_PROCESS || rv == NS_ERROR_ABORT) {
-        *aExitFlag = true;
-        return 0;
-      }
-      if (NS_FAILED(rv)) {
-        return 1;
-      }
+  if (wasDefaultSelection && !useSelectedProfile) {
+    rv = ShowProfileManager(mProfileSvc, mNativeApp);
+  } else if (profile) {
+    bool showSelector = false;
+    profile->GetShowProfileSelector(&showSelector);
+    if (showSelector) {
+      rv = ShowProfileSelector(mProfileSvc, mNativeApp);
+    } else {
+      rv = NS_OK;
     }
+  }
+
+  if (rv == NS_ERROR_LAUNCHED_CHILD_PROCESS || rv == NS_ERROR_ABORT) {
+    *aExitFlag = true;
+    return 0;
+  }
+  if (NS_FAILED(rv)) {
+    return 1;
   }
 
   // We always want to lock the profile even if we're actually going to reset
@@ -5701,10 +5740,9 @@ nsresult XREMain::XRE_mainRun() {
 #if defined(MOZ_HAS_REMOTE)
       // if we have X remote support, start listening for requests on the
       // proxy window.
-      if (mRemoteService) {
-        mRemoteService->StartupServer();
-        mRemoteService->UnlockStartup();
-        gRemoteService = nullptr;
+      if (gRemoteService) {
+        gRemoteService->StartupServer();
+        gRemoteService->UnlockStartup();
       }
 #endif /* MOZ_WIDGET_GTK */
 
@@ -6045,8 +6083,9 @@ int XREMain::XRE_main(int argc, char* argv[], const BootstrapConfig& aConfig) {
   // Shut down the remote service. We must do this before calling LaunchChild
   // if we're restarting because otherwise the new instance will attempt to
   // remote to this instance.
-  if (mRemoteService) {
-    mRemoteService->ShutdownServer();
+  if (gRemoteService) {
+    gRemoteService->ShutdownServer();
+    gRemoteService = nullptr;
   }
 #endif /* MOZ_WIDGET_GTK */
 

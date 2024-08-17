@@ -420,7 +420,7 @@ export class UrlbarInput {
     ) {
       if (this.window.gBrowser.selectedBrowser.searchTerms) {
         value = this.window.gBrowser.selectedBrowser.searchTerms;
-        valid = !dueToSessionRestore;
+        valid = !dueToSessionRestore && !this.window.gBrowser.userTypedValue;
         if (!isSameDocument) {
           Services.telemetry.scalarAdd(
             "urlbar.persistedsearchterms.view_count",
@@ -491,6 +491,12 @@ export class UrlbarInput {
     this.value = value;
     this.valueIsTyped = !valid;
     this.toggleAttribute("usertyping", !valid && value);
+    this.toggleAttribute(
+      "persistsearchterms",
+      lazy.UrlbarPrefs.isPersistedSearchTermsEnabled() &&
+        !!this.window.gBrowser.selectedBrowser.searchTerms &&
+        valid
+    );
 
     if (this.focused && value != previousUntrimmedValue) {
       if (
@@ -3576,7 +3582,10 @@ export class UrlbarInput {
     this._isHandoffSession = false;
     this.removeAttribute("focused");
 
-    if (this._revertOnBlurValue == this.value) {
+    if (
+      this._revertOnBlurValue == this.value &&
+      !this.window.gBrowser.selectedBrowser.searchTerms
+    ) {
       this.handleRevert();
     } else if (
       this._autofillPlaceholder &&
@@ -3624,6 +3633,7 @@ export class UrlbarInput {
       this.window.gBrowser.selectedBrowser.searchTerms &&
       this.window.gBrowser.userTypedValue == null
     ) {
+      this.toggleAttribute("persistsearchterms", true);
       this.setPageProxyState("valid", true);
     }
 
@@ -3693,6 +3703,7 @@ export class UrlbarInput {
       if (this.focusedViaMousedown) {
         this.#setProxyStateToInvalidOnMouseUp = true;
       } else {
+        this.removeAttribute("persistsearchterms");
         this.setPageProxyState("invalid", true);
       }
     }
@@ -3845,6 +3856,7 @@ export class UrlbarInput {
     if (this.#setProxyStateToInvalidOnMouseUp) {
       this.#setProxyStateToInvalidOnMouseUp = false;
       this.setPageProxyState("invalid", true);
+      this.removeAttribute("persistsearchterms");
     }
   }
 
