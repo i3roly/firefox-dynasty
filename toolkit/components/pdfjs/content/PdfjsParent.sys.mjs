@@ -14,23 +14,26 @@
  */
 
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
+import { PdfJsTelemetry } from "resource://pdf.js/PdfJsTelemetry.sys.mjs";
 
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  clearTimeout: "resource://gre/modules/Timer.sys.mjs",
   createEngine: "chrome://global/content/ml/EngineProcess.sys.mjs",
   EngineProcess: "chrome://global/content/ml/EngineProcess.sys.mjs",
   IndexedDBCache: "chrome://global/content/ml/ModelHub.sys.mjs",
   MultiProgressAggregator: "chrome://global/content/ml/Utils.sys.mjs",
   Progress: "chrome://global/content/ml/Utils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
-  PdfJsTelemetry: "resource://pdf.js/PdfJsTelemetry.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SetClipboardSearchString: "resource://gre/modules/Finder.sys.mjs",
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
 const IMAGE_TO_TEXT_TASK = "moz-image-to-text";
 const ML_ENGINE_ID = "pdfjs";
+const ML_ENGINE_MAX_TIMEOUT = 60000;
 
 var Svc = {};
 XPCOMUtils.defineLazyServiceGetter(
@@ -66,6 +69,20 @@ export class PdfjsParent extends JSWindowActorParent {
     super();
     this._boundToFindbar = null;
     this._findFailedString = null;
+
+    const guessAltText =
+      Services.prefs.getBoolPref("pdfjs.enableAltText", false) &&
+      Services.prefs.getBoolPref("pdfjs.enableGuessAltText", false) &&
+      Services.prefs.getBoolPref("pdfjs.enableAltTextModelDownload", false) &&
+      Services.prefs.getBoolPref("browser.ml.enable", false);
+    PdfJsTelemetry.report({
+      type: "editing",
+      data: {
+        type: "stamp",
+        action: "pdfjs.image.alt_text_edit",
+        data: { guessAltText },
+      },
+    });
   }
 
   didDestroy() {
@@ -139,8 +156,8 @@ export class PdfjsParent extends JSWindowActorParent {
     lazy.NimbusFeatures.pdfjs.recordExposureEvent({ once: true });
   }
 
-  _reportTelemetry(aMsg) {
-    lazy.PdfJsTelemetry.report(aMsg.data);
+  _reportTelemetry({ data }) {
+    PdfJsTelemetry.report(data);
   }
 
   async _mlGuess({ data: { service, request } }) {
@@ -148,8 +165,27 @@ export class PdfjsParent extends JSWindowActorParent {
       return null;
     }
     try {
-      const engine = await this.#createAIEngine(service, null);
-      return await engine.run(request);
+      const now = Cu.now();
+
+      let response;
+      if (Cu.isInAutomation) {
+        response = { output: "In Automation" };
+      } else {
+        const engine = await this.#createAIEngine(service, null);
+        response = await engine.run(request);
+      }
+
+      const time = Cu.now() - now;
+      const length = response?.output.length ?? 0;
+      PdfJsTelemetry.report({
+        type: "editing",
+        data: {
+          type: "stamp",
+          action: "pdfjs.image.alt_text.model_result",
+          data: { time, length },
+        },
+      });
+      return response;
     } catch (e) {
       console.error("Failed to run AI engine", e);
       return { error: true };
@@ -160,10 +196,75 @@ export class PdfjsParent extends JSWindowActorParent {
     if (service !== IMAGE_TO_TEXT_TASK) {
       throw new Error("Invalid service");
     }
-    const { promise, resolve } = Promise.withResolvers();
+
+    if (Cu.isInAutomation) {
+      PdfJsTelemetry.report({
+        type: "editing",
+        data: {
+          type: "stamp",
+          action: "pdfjs.image.alt_text.model_download_start",
+        },
+      });
+      PdfJsTelemetry.report({
+        type: "editing",
+        data: {
+          type: "stamp",
+          action: "pdfjs.image.alt_text.model_download_complete",
+        },
+      });
+      return true;
+    }
+
+    let hasDownloadStarted = false;
     const self = this;
+    const timeoutCallback = () => {
+      lazy.clearTimeout(timeoutId);
+      timeoutId = null;
+      if (hasDownloadStarted) {
+        PdfJsTelemetry.report({
+          type: "editing",
+          data: {
+            type: "stamp",
+            action: "pdfjs.image.alt_text.model_download_error",
+          },
+        });
+      }
+      if (!listenToProgress) {
+        return;
+      }
+      self.sendAsyncMessage("PDFJS:Child:handleEvent", {
+        type: "loadAIEngineProgress",
+        detail: {
+          service,
+          ok: false,
+          finished: true,
+        },
+      });
+    };
+    let timeoutId = lazy.setTimeout(timeoutCallback, ML_ENGINE_MAX_TIMEOUT);
     const aggregator = new lazy.MultiProgressAggregator({
-      progressCallback({ ok, total, totalLoaded, statusText }) {
+      progressCallback({ ok, total, totalLoaded, statusText, type }) {
+        if (timeoutId !== null) {
+          lazy.clearTimeout(timeoutId);
+          timeoutId = lazy.setTimeout(timeoutCallback, ML_ENGINE_MAX_TIMEOUT);
+        } else {
+          // The timeout has already fired, so we don't need to do anything.
+          this.progressCallback = null;
+          return;
+        }
+        if (
+          !hasDownloadStarted &&
+          type === lazy.Progress.ProgressType.DOWNLOAD
+        ) {
+          hasDownloadStarted = true;
+          PdfJsTelemetry.report({
+            type: "editing",
+            data: {
+              type: "stamp",
+              action: "pdfjs.image.alt_text.model_download_start",
+            },
+          });
+        }
         const finished = statusText === lazy.Progress.ProgressStatusText.DONE;
         if (listenToProgress) {
           self.sendAsyncMessage("PDFJS:Child:handleEvent", {
@@ -178,9 +279,24 @@ export class PdfjsParent extends JSWindowActorParent {
           });
         }
         if (finished) {
+          if (
+            hasDownloadStarted &&
+            type === lazy.Progress.ProgressType.DOWNLOAD
+          ) {
+            PdfJsTelemetry.report({
+              type: "editing",
+              data: {
+                type: "stamp",
+                action: `pdfjs.image.alt_text.model_download_${
+                  ok ? "complete" : "error"
+                }`,
+              },
+            });
+          }
+
+          lazy.clearTimeout(timeoutId);
           // Once we're done, we can remove the progress callback.
           this.progressCallback = null;
-          resolve(ok);
         }
       },
       watchedTypes: [
@@ -188,20 +304,21 @@ export class PdfjsParent extends JSWindowActorParent {
         lazy.Progress.ProgressType.LOAD_FROM_CACHE,
       ],
     });
-
-    if (Cu.isInAutomation) {
-      return !!(await this.#createAIEngine("moz-eco", null));
-    }
-
-    const [engine, ok] = await Promise.all([
-      this.#createAIEngine(service, aggregator),
-      promise,
-    ]);
-    return !!engine && ok;
+    return !!(await this.#createAIEngine(service, aggregator));
   }
 
   async _mlDelete({ data: service }) {
     if (service !== IMAGE_TO_TEXT_TASK) {
+      return null;
+    }
+    PdfJsTelemetry.report({
+      type: "editing",
+      data: {
+        type: "stamp",
+        action: "pdfjs.image.alt_text.model_deleted",
+      },
+    });
+    if (Cu.isInAutomation) {
       return null;
     }
     try {
@@ -210,8 +327,7 @@ export class PdfjsParent extends JSWindowActorParent {
       await lazy.EngineProcess.destroyMLEngine();
       const cache = await lazy.IndexedDBCache.init();
       await cache.deleteModels({
-        model: "mozilla/distilvit",
-        revision: "main",
+        taskName: service,
       });
     } catch (e) {
       console.error("Failed to delete AI model", e);
