@@ -167,9 +167,6 @@ struct Imm64 {
   Imm32 low() const { return Imm32(int32_t(value)); }
 
   Imm32 hi() const { return Imm32(int32_t(value >> 32)); }
-
-  inline Imm32 firstHalf() const;
-  inline Imm32 secondHalf() const;
 };
 
 #ifdef DEBUG
@@ -308,6 +305,12 @@ struct Address {
 #endif
 
   Address() = delete;
+
+  bool operator==(const Address& other) const {
+    return base == other.base && offset == other.offset;
+  }
+
+  bool operator!=(const Address& other) const { return !(*this == other); }
 };
 
 #if JS_BITS_PER_WORD == 32

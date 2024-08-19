@@ -2815,6 +2815,7 @@ class MCompare : public MBinaryInstruction, public ComparePolicy::Data {
   [[nodiscard]] MDefinition* tryFoldStringCompare(TempAllocator& alloc);
   [[nodiscard]] MDefinition* tryFoldStringSubstring(TempAllocator& alloc);
   [[nodiscard]] MDefinition* tryFoldStringIndexOf(TempAllocator& alloc);
+  [[nodiscard]] MDefinition* tryFoldBigInt(TempAllocator& alloc);
 
  public:
   bool congruentTo(const MDefinition* ins) const override {
@@ -5392,6 +5393,8 @@ class MBigIntPow : public MBigIntBinaryArithInstruction {
     }
     return AliasSet::None();
   }
+
+  MDefinition* foldsTo(TempAllocator& alloc) override;
 
   [[nodiscard]] bool writeRecoverData(
       CompactBufferWriter& writer) const override;

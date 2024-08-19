@@ -40,22 +40,6 @@ class CodeGeneratorNone : public CodeGeneratorShared {
   void bailout(LSnapshot*) { MOZ_CRASH(); }
   void bailoutIf(Assembler::Condition, LSnapshot*) { MOZ_CRASH(); }
   bool generateOutOfLineCode() { MOZ_CRASH(); }
-  void testNullEmitBranch(Assembler::Condition, ValueOperand, MBasicBlock*,
-                          MBasicBlock*) {
-    MOZ_CRASH();
-  }
-  void testUndefinedEmitBranch(Assembler::Condition, ValueOperand, MBasicBlock*,
-                               MBasicBlock*) {
-    MOZ_CRASH();
-  }
-  void testObjectEmitBranch(Assembler::Condition, ValueOperand, MBasicBlock*,
-                            MBasicBlock*) {
-    MOZ_CRASH();
-  }
-  void testZeroEmitBranch(Assembler::Condition, Register, MBasicBlock*,
-                          MBasicBlock*) {
-    MOZ_CRASH();
-  }
   void emitTableSwitchDispatch(MTableSwitch*, Register, Register) {
     MOZ_CRASH();
   }

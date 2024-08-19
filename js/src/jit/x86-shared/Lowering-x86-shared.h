@@ -34,14 +34,9 @@ class LIRGeneratorX86Shared : public LIRGeneratorShared {
       LInstructionHelper<INT64_PIECES, INT64_PIECES + 1, Temps>* ins,
       MDefinition* mir, MDefinition* lhs, MDefinition* rhs);
 
-  void lowerForCompareI64AndBranch(MTest* mir, MCompare* comp, JSOp op,
-                                   MDefinition* left, MDefinition* right,
-                                   MBasicBlock* ifTrue, MBasicBlock* ifFalse);
   template <size_t Temps>
   void lowerForFPU(LInstructionHelper<1, 2, Temps>* ins, MDefinition* mir,
                    MDefinition* lhs, MDefinition* rhs);
-  void lowerForBitAndAndBranch(LBitAndAndBranch* baab, MInstruction* mir,
-                               MDefinition* lhs, MDefinition* rhs);
   void lowerNegI(MInstruction* ins, MDefinition* input);
   void lowerNegI64(MInstruction* ins, MDefinition* input);
   void lowerMulI(MMul* mul, MDefinition* lhs, MDefinition* rhs);

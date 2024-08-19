@@ -1004,6 +1004,7 @@ class LTestI64AndBranch : public LControlInstructionHelper<2, INT64_PIECES, 0> {
     setSuccessor(1, ifFalse);
   }
 
+  LInt64Allocation input() const { return getInt64Operand(0); }
   MBasicBlock* ifTrue() const { return getSuccessor(0); }
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
 };
@@ -1150,6 +1151,8 @@ class LCompareI64 : public LInstructionHelper<1, 2 * INT64_PIECES, 0> {
   }
 
   JSOp jsop() const { return jsop_; }
+  LInt64Allocation left() const { return getInt64Operand(LCompareI64::Lhs); }
+  LInt64Allocation right() const { return getInt64Operand(LCompareI64::Rhs); }
   MCompare* mir() { return mir_->toCompare(); }
   const char* extraName() const { return CodeName(jsop_); }
 };
@@ -1179,6 +1182,12 @@ class LCompareI64AndBranch
   JSOp jsop() const { return jsop_; }
   MBasicBlock* ifTrue() const { return getSuccessor(0); }
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
+  LInt64Allocation left() const {
+    return getInt64Operand(LCompareI64AndBranch::Lhs);
+  }
+  LInt64Allocation right() const {
+    return getInt64Operand(LCompareI64AndBranch::Rhs);
+  }
   MTest* mir() const { return mir_->toTest(); }
   MCompare* cmpMir() const { return cmpMir_; }
   const char* extraName() const { return CodeName(jsop_); }
@@ -1259,17 +1268,21 @@ class LCompareFAndBranch : public LControlInstructionHelper<2, 2, 0> {
   MCompare* cmpMir() const { return cmpMir_; }
 };
 
-class LBitAndAndBranch : public LControlInstructionHelper<2, 2, 0> {
-  // This denotes only a single-word AND on the target.  Hence `is64_` is
-  // required to be `false` on a 32-bit target.
-  bool is64_;
-  Assembler::Condition cond_;
+class LCompareBigIntInt32AndBranch : public LControlInstructionHelper<2, 2, 2> {
+  MCompare* cmpMir_;
 
  public:
-  LIR_HEADER(BitAndAndBranch)
-  LBitAndAndBranch(MBasicBlock* ifTrue, MBasicBlock* ifFalse, bool is64,
-                   Assembler::Condition cond = Assembler::NonZero)
-      : LControlInstructionHelper(classOpcode), is64_(is64), cond_(cond) {
+  LIR_HEADER(CompareBigIntInt32AndBranch)
+  LCompareBigIntInt32AndBranch(MCompare* cmpMir, const LAllocation& left,
+                               const LAllocation& right,
+                               const LDefinition& temp1,
+                               const LDefinition& temp2, MBasicBlock* ifTrue,
+                               MBasicBlock* ifFalse)
+      : LControlInstructionHelper(classOpcode), cmpMir_(cmpMir) {
+    setOperand(0, left);
+    setOperand(1, right);
+    setTemp(0, temp1);
+    setTemp(1, temp2);
     setSuccessor(0, ifTrue);
     setSuccessor(1, ifFalse);
   }
@@ -1278,7 +1291,62 @@ class LBitAndAndBranch : public LControlInstructionHelper<2, 2, 0> {
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
   const LAllocation* left() { return getOperand(0); }
   const LAllocation* right() { return getOperand(1); }
-  bool is64() const { return is64_; }
+  const LDefinition* temp1() { return getTemp(0); }
+  const LDefinition* temp2() { return getTemp(1); }
+  MTest* mir() const { return mir_->toTest(); }
+  MCompare* cmpMir() const { return cmpMir_; }
+};
+
+class LBitAndAndBranch : public LControlInstructionHelper<2, 2, 0> {
+  Assembler::Condition cond_;
+
+ public:
+  LIR_HEADER(BitAndAndBranch)
+  LBitAndAndBranch(const LAllocation& left, const LAllocation& right,
+                   MBasicBlock* ifTrue, MBasicBlock* ifFalse,
+                   Assembler::Condition cond = Assembler::NonZero)
+      : LControlInstructionHelper(classOpcode), cond_(cond) {
+    setOperand(0, left);
+    setOperand(1, right);
+    setSuccessor(0, ifTrue);
+    setSuccessor(1, ifFalse);
+  }
+
+  MBasicBlock* ifTrue() const { return getSuccessor(0); }
+  MBasicBlock* ifFalse() const { return getSuccessor(1); }
+  const LAllocation* left() { return getOperand(0); }
+  const LAllocation* right() { return getOperand(1); }
+  Assembler::Condition cond() const {
+    MOZ_ASSERT(cond_ == Assembler::Zero || cond_ == Assembler::NonZero);
+    return cond_;
+  }
+};
+
+class LBitAnd64AndBranch
+    : public LControlInstructionHelper<2, 2 * INT64_PIECES, 0> {
+  Assembler::Condition cond_;
+
+ public:
+  LIR_HEADER(BitAnd64AndBranch)
+
+  static const size_t Lhs = 0;
+  static const size_t Rhs = INT64_PIECES;
+
+  LBitAnd64AndBranch(const LInt64Allocation& left,
+                     const LInt64Allocation& right, MBasicBlock* ifTrue,
+                     MBasicBlock* ifFalse,
+                     Assembler::Condition cond = Assembler::NonZero)
+      : LControlInstructionHelper(classOpcode), cond_(cond) {
+    setInt64Operand(Lhs, left);
+    setInt64Operand(Rhs, right);
+    setSuccessor(0, ifTrue);
+    setSuccessor(1, ifFalse);
+  }
+
+  MBasicBlock* ifTrue() const { return getSuccessor(0); }
+  MBasicBlock* ifFalse() const { return getSuccessor(1); }
+  LInt64Allocation left() const { return getInt64Operand(LCompareI64::Lhs); }
+  LInt64Allocation right() const { return getInt64Operand(LCompareI64::Rhs); }
   Assembler::Condition cond() const {
     MOZ_ASSERT(cond_ == Assembler::Zero || cond_ == Assembler::NonZero);
     return cond_;

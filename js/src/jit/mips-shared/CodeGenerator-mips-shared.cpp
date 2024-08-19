@@ -88,88 +88,6 @@ void OutOfLineBailout::accept(CodeGeneratorMIPSShared* codegen) {
   codegen->visitOutOfLineBailout(this);
 }
 
-void CodeGenerator::visitTestIAndBranch(LTestIAndBranch* test) {
-  const LAllocation* opd = test->getOperand(0);
-  MBasicBlock* ifTrue = test->ifTrue();
-  MBasicBlock* ifFalse = test->ifFalse();
-
-  emitBranch(ToRegister(opd), Imm32(0), Assembler::NonZero, ifTrue, ifFalse);
-}
-
-void CodeGenerator::visitCompare(LCompare* comp) {
-  MCompare* mir = comp->mir();
-  Assembler::Condition cond = JSOpToCondition(mir->compareType(), comp->jsop());
-  const LAllocation* left = comp->getOperand(0);
-  const LAllocation* right = comp->getOperand(1);
-  const LDefinition* def = comp->getDef(0);
-
-#ifdef JS_CODEGEN_MIPS64
-  if (mir->compareType() == MCompare::Compare_Object ||
-      mir->compareType() == MCompare::Compare_Symbol ||
-      mir->compareType() == MCompare::Compare_UIntPtr ||
-      mir->compareType() == MCompare::Compare_WasmAnyRef) {
-    if (right->isConstant()) {
-      MOZ_ASSERT(mir->compareType() == MCompare::Compare_UIntPtr);
-      masm.cmpPtrSet(cond, ToRegister(left), Imm32(ToInt32(right)),
-                     ToRegister(def));
-    } else if (right->isGeneralReg()) {
-      masm.cmpPtrSet(cond, ToRegister(left), ToRegister(right),
-                     ToRegister(def));
-    } else {
-      masm.cmpPtrSet(cond, ToRegister(left), ToAddress(right), ToRegister(def));
-    }
-    return;
-  }
-#endif
-
-  if (right->isConstant()) {
-    masm.cmp32Set(cond, ToRegister(left), Imm32(ToInt32(right)),
-                  ToRegister(def));
-  } else if (right->isGeneralReg()) {
-    masm.cmp32Set(cond, ToRegister(left), ToRegister(right), ToRegister(def));
-  } else {
-    masm.cmp32Set(cond, ToRegister(left), ToAddress(right), ToRegister(def));
-  }
-}
-
-void CodeGenerator::visitCompareAndBranch(LCompareAndBranch* comp) {
-  MCompare* mir = comp->cmpMir();
-  Assembler::Condition cond = JSOpToCondition(mir->compareType(), comp->jsop());
-
-#ifdef JS_CODEGEN_MIPS64
-  if (mir->compareType() == MCompare::Compare_Object ||
-      mir->compareType() == MCompare::Compare_Symbol ||
-      mir->compareType() == MCompare::Compare_UIntPtr ||
-      mir->compareType() == MCompare::Compare_WasmAnyRef) {
-    if (comp->right()->isConstant()) {
-      MOZ_ASSERT(mir->compareType() == MCompare::Compare_UIntPtr);
-      emitBranch(ToRegister(comp->left()), Imm32(ToInt32(comp->right())), cond,
-                 comp->ifTrue(), comp->ifFalse());
-    } else if (comp->right()->isGeneralReg()) {
-      emitBranch(ToRegister(comp->left()), ToRegister(comp->right()), cond,
-                 comp->ifTrue(), comp->ifFalse());
-    } else {
-      masm.loadPtr(ToAddress(comp->right()), ScratchRegister);
-      emitBranch(ToRegister(comp->left()), ScratchRegister, cond,
-                 comp->ifTrue(), comp->ifFalse());
-    }
-    return;
-  }
-#endif
-
-  if (comp->right()->isConstant()) {
-    emitBranch(ToRegister(comp->left()), Imm32(ToInt32(comp->right())), cond,
-               comp->ifTrue(), comp->ifFalse());
-  } else if (comp->right()->isGeneralReg()) {
-    emitBranch(ToRegister(comp->left()), ToRegister(comp->right()), cond,
-               comp->ifTrue(), comp->ifFalse());
-  } else {
-    masm.load32(ToAddress(comp->right()), ScratchRegister);
-    emitBranch(ToRegister(comp->left()), ScratchRegister, cond, comp->ifTrue(),
-               comp->ifFalse());
-  }
-}
-
 bool CodeGeneratorMIPSShared::generateOutOfLineCode() {
   if (!CodeGeneratorShared::generateOutOfLineCode()) {
     return false;
@@ -1010,36 +928,6 @@ void CodeGenerator::visitUrshD(LUrshD* ins) {
   masm.convertUInt32ToDouble(temp, out);
 }
 
-void CodeGenerator::visitClzI(LClzI* ins) {
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-
-  masm.as_clz(output, input);
-}
-
-void CodeGenerator::visitCtzI(LCtzI* ins) {
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-
-  masm.ma_ctz(output, input);
-}
-
-void CodeGenerator::visitPopcntI(LPopcntI* ins) {
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-  Register tmp = ToRegister(ins->temp0());
-
-  masm.popcnt32(input, output, tmp);
-}
-
-void CodeGenerator::visitPopcntI64(LPopcntI64* ins) {
-  Register64 input = ToRegister64(ins->getInt64Operand(0));
-  Register64 output = ToOutRegister64(ins);
-  Register tmp = ToRegister(ins->getTemp(0));
-
-  masm.popcnt64(input, output, tmp);
-}
-
 void CodeGenerator::visitPowHalfD(LPowHalfD* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
   FloatRegister output = ToFloatRegister(ins->output());
@@ -1244,23 +1132,6 @@ void CodeGenerator::visitCopySignD(LCopySignD* ins) {
   masm.moveToDoubleHi(rhsi, output);
 }
 
-void CodeGenerator::visitValue(LValue* value) {
-  const ValueOperand out = ToOutValue(value);
-
-  masm.moveValue(value->value(), out);
-}
-
-void CodeGenerator::visitDouble(LDouble* ins) {
-  const LDefinition* out = ins->getDef(0);
-
-  masm.loadConstantDouble(ins->value(), ToFloatRegister(out));
-}
-
-void CodeGenerator::visitFloat32(LFloat32* ins) {
-  const LDefinition* out = ins->getDef(0);
-  masm.loadConstantFloat32(ins->value(), ToFloatRegister(out));
-}
-
 void CodeGenerator::visitTestDAndBranch(LTestDAndBranch* test) {
   FloatRegister input = ToFloatRegister(test->input());
 
@@ -1351,18 +1222,6 @@ void CodeGenerator::visitCompareFAndBranch(LCompareFAndBranch* comp) {
                   Assembler::InvertCondition(cond));
     jumpToBlock(ifTrue);
   }
-}
-
-void CodeGenerator::visitBitAndAndBranch(LBitAndAndBranch* lir) {
-  if (lir->right()->isConstant()) {
-    masm.ma_and(ScratchRegister, ToRegister(lir->left()),
-                Imm32(ToInt32(lir->right())));
-  } else {
-    masm.as_and(ScratchRegister, ToRegister(lir->left()),
-                ToRegister(lir->right()));
-  }
-  emitBranch(ScratchRegister, ScratchRegister, lir->cond(), lir->ifTrue(),
-             lir->ifFalse());
 }
 
 void CodeGenerator::visitWasmUint32ToDouble(LWasmUint32ToDouble* lir) {

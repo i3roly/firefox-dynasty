@@ -2630,15 +2630,9 @@ static void XorImmI64(MacroAssembler& masm, int64_t c, RegI64 rsd) {
   masm.xor64(Imm64(c), rsd);
 }
 
-static void ClzI64(BaseCompiler& bc, RegI64 rsd) {
-  bc.masm.clz64(rsd, bc.lowPart(rsd));
-  bc.maybeClearHighPart(rsd);
-}
+static void ClzI64(BaseCompiler& bc, RegI64 rsd) { bc.masm.clz64(rsd, rsd); }
 
-static void CtzI64(BaseCompiler& bc, RegI64 rsd) {
-  bc.masm.ctz64(rsd, bc.lowPart(rsd));
-  bc.maybeClearHighPart(rsd);
-}
+static void CtzI64(BaseCompiler& bc, RegI64 rsd) { bc.masm.ctz64(rsd, rsd); }
 
 static void PopcntI64(BaseCompiler& bc, RegI64 rsd, RegI32 temp) {
   bc.masm.popcnt64(rsd, rsd, temp);
@@ -3013,8 +3007,7 @@ void BaseCompiler::emitQuotientI64() {
     if (power != 0) {
       RegI64 r = popI64();
       Label positive;
-      masm.branchTest64(Assembler::NotSigned, r, r, RegI32::Invalid(),
-                        &positive);
+      masm.branchTest64(Assembler::NotSigned, r, r, &positive);
       masm.add64(Imm64(c - 1), r);
       masm.bind(&positive);
 
@@ -3063,8 +3056,7 @@ void BaseCompiler::emitRemainderI64() {
     moveI64(r, temp);
 
     Label positive;
-    masm.branchTest64(Assembler::NotSigned, temp, temp, RegI32::Invalid(),
-                      &positive);
+    masm.branchTest64(Assembler::NotSigned, temp, temp, &positive);
     masm.add64(Imm64(c - 1), temp);
     masm.bind(&positive);
 

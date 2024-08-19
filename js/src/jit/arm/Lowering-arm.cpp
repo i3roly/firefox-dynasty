@@ -224,17 +224,6 @@ void LIRGeneratorARM::lowerForMulInt64(LMulI64* ins, MMul* mir,
   defineInt64ReuseInput(ins, mir, 0);
 }
 
-void LIRGeneratorARM::lowerForCompareI64AndBranch(MTest* mir, MCompare* comp,
-                                                  JSOp op, MDefinition* left,
-                                                  MDefinition* right,
-                                                  MBasicBlock* ifTrue,
-                                                  MBasicBlock* ifFalse) {
-  LCompareI64AndBranch* lir = new (alloc())
-      LCompareI64AndBranch(comp, op, useInt64Register(left),
-                           useInt64OrConstant(right), ifTrue, ifFalse);
-  add(lir, mir);
-}
-
 void LIRGeneratorARM::lowerForFPU(LInstructionHelper<1, 1, 0>* ins,
                                   MDefinition* mir, MDefinition* input) {
   ins->setOperand(0, useRegisterAtStart(input));
@@ -260,15 +249,6 @@ template void LIRGeneratorARM::lowerForFPU(LInstructionHelper<1, 2, 0>* ins,
 template void LIRGeneratorARM::lowerForFPU(LInstructionHelper<1, 2, 1>* ins,
                                            MDefinition* mir, MDefinition* lhs,
                                            MDefinition* rhs);
-
-void LIRGeneratorARM::lowerForBitAndAndBranch(LBitAndAndBranch* baab,
-                                              MInstruction* mir,
-                                              MDefinition* lhs,
-                                              MDefinition* rhs) {
-  baab->setOperand(0, useRegisterAtStart(lhs));
-  baab->setOperand(1, useRegisterOrConstantAtStart(rhs));
-  add(baab, mir);
-}
 
 void LIRGeneratorARM::lowerWasmBuiltinTruncateToInt32(
     MWasmBuiltinTruncateToInt32* ins) {

@@ -92,6 +92,7 @@
 #include "jit/shared/CodeGenerator-shared-inl.h"
 #include "jit/TemplateObject-inl.h"
 #include "jit/VMFunctionList-inl.h"
+#include "vm/BytecodeUtil-inl.h"
 #include "vm/JSScript-inl.h"
 #include "wasm/WasmInstance-inl.h"
 
@@ -1469,18 +1470,266 @@ void CodeGenerator::testValueTruthy(const ValueOperand& value,
   // We fall through if the final test is truthy.
 }
 
-void CodeGenerator::visitTestBIAndBranch(LTestBIAndBranch* lir) {
-  Label* ifTrueLabel = getJumpLabelForBranch(lir->ifTrue());
-  Label* ifFalseLabel = getJumpLabelForBranch(lir->ifFalse());
-  Register input = ToRegister(lir->input());
+void CodeGenerator::visitTestIAndBranch(LTestIAndBranch* test) {
+  Register input = ToRegister(test->input());
+  MBasicBlock* ifTrue = test->ifTrue();
+  MBasicBlock* ifFalse = test->ifFalse();
 
-  if (isNextBlock(lir->ifFalse()->lir())) {
-    masm.branchIfBigIntIsNonZero(input, ifTrueLabel);
-  } else if (isNextBlock(lir->ifTrue()->lir())) {
-    masm.branchIfBigIntIsZero(input, ifFalseLabel);
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchTest32(Assembler::NonZero, input, input,
+                      getJumpLabelForBranch(ifTrue));
   } else {
-    masm.branchIfBigIntIsZero(input, ifFalseLabel);
-    jumpToBlock(lir->ifTrue());
+    masm.branchTest32(Assembler::Zero, input, input,
+                      getJumpLabelForBranch(ifFalse));
+    jumpToBlock(ifTrue);
+  }
+}
+
+void CodeGenerator::visitTestI64AndBranch(LTestI64AndBranch* test) {
+  Register64 input = ToRegister64(test->input());
+  MBasicBlock* ifTrue = test->ifTrue();
+  MBasicBlock* ifFalse = test->ifFalse();
+
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchTest64(Assembler::NonZero, input, input,
+                      getJumpLabelForBranch(ifTrue));
+  } else if (isNextBlock(ifTrue->lir())) {
+    masm.branchTest64(Assembler::Zero, input, input,
+                      getJumpLabelForBranch(ifFalse));
+  } else {
+    masm.branchTest64(Assembler::NonZero, input, input,
+                      getJumpLabelForBranch(ifTrue),
+                      getJumpLabelForBranch(ifFalse));
+  }
+}
+
+void CodeGenerator::visitTestBIAndBranch(LTestBIAndBranch* lir) {
+  Register input = ToRegister(lir->input());
+  MBasicBlock* ifTrue = lir->ifTrue();
+  MBasicBlock* ifFalse = lir->ifFalse();
+
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchIfBigIntIsNonZero(input, getJumpLabelForBranch(ifTrue));
+  } else {
+    masm.branchIfBigIntIsZero(input, getJumpLabelForBranch(ifFalse));
+    jumpToBlock(ifTrue);
+  }
+}
+
+static Assembler::Condition ReverseCondition(Assembler::Condition condition) {
+  switch (condition) {
+    case Assembler::Equal:
+    case Assembler::NotEqual:
+      return condition;
+    case Assembler::Above:
+      return Assembler::Below;
+    case Assembler::AboveOrEqual:
+      return Assembler::BelowOrEqual;
+    case Assembler::Below:
+      return Assembler::Above;
+    case Assembler::BelowOrEqual:
+      return Assembler::AboveOrEqual;
+    case Assembler::GreaterThan:
+      return Assembler::LessThan;
+    case Assembler::GreaterThanOrEqual:
+      return Assembler::LessThanOrEqual;
+    case Assembler::LessThan:
+      return Assembler::GreaterThan;
+    case Assembler::LessThanOrEqual:
+      return Assembler::GreaterThanOrEqual;
+    default:
+      break;
+  }
+  MOZ_CRASH("unhandled condition");
+}
+
+void CodeGenerator::visitCompare(LCompare* comp) {
+  MCompare::CompareType compareType = comp->mir()->compareType();
+  Assembler::Condition cond = JSOpToCondition(compareType, comp->jsop());
+  Register left = ToRegister(comp->left());
+  const LAllocation* right = comp->right();
+  Register output = ToRegister(comp->output());
+
+  if (compareType == MCompare::Compare_Object ||
+      compareType == MCompare::Compare_Symbol ||
+      compareType == MCompare::Compare_UIntPtr ||
+      compareType == MCompare::Compare_WasmAnyRef) {
+    if (right->isConstant()) {
+      MOZ_ASSERT(compareType == MCompare::Compare_UIntPtr);
+      masm.cmpPtrSet(cond, left, ImmWord(ToInt32(right)), output);
+    } else if (right->isRegister()) {
+      masm.cmpPtrSet(cond, left, ToRegister(right), output);
+    } else {
+      masm.cmpPtrSet(ReverseCondition(cond), ToAddress(right), left, output);
+    }
+    return;
+  }
+
+  MOZ_ASSERT(compareType == MCompare::Compare_Int32 ||
+             compareType == MCompare::Compare_UInt32);
+
+  if (right->isConstant()) {
+    masm.cmp32Set(cond, left, Imm32(ToInt32(right)), output);
+  } else if (right->isRegister()) {
+    masm.cmp32Set(cond, left, ToRegister(right), output);
+  } else {
+    masm.cmp32Set(ReverseCondition(cond), ToAddress(right), left, output);
+  }
+}
+
+void CodeGenerator::visitCompareAndBranch(LCompareAndBranch* comp) {
+  MCompare::CompareType compareType = comp->cmpMir()->compareType();
+  Assembler::Condition cond = JSOpToCondition(compareType, comp->jsop());
+  Register left = ToRegister(comp->left());
+  const LAllocation* right = comp->right();
+
+  MBasicBlock* ifTrue = comp->ifTrue();
+  MBasicBlock* ifFalse = comp->ifFalse();
+
+  // If the next block is the true case, invert the condition to fall through.
+  Label* label;
+  if (isNextBlock(ifTrue->lir())) {
+    cond = Assembler::InvertCondition(cond);
+    label = getJumpLabelForBranch(ifFalse);
+  } else {
+    label = getJumpLabelForBranch(ifTrue);
+  }
+
+  if (compareType == MCompare::Compare_Object ||
+      compareType == MCompare::Compare_Symbol ||
+      compareType == MCompare::Compare_UIntPtr ||
+      compareType == MCompare::Compare_WasmAnyRef) {
+    if (right->isConstant()) {
+      MOZ_ASSERT(compareType == MCompare::Compare_UIntPtr);
+      masm.branchPtr(cond, left, ImmWord(ToInt32(right)), label);
+    } else if (right->isRegister()) {
+      masm.branchPtr(cond, left, ToRegister(right), label);
+    } else {
+      masm.branchPtr(ReverseCondition(cond), ToAddress(right), left, label);
+    }
+  } else {
+    MOZ_ASSERT(compareType == MCompare::Compare_Int32 ||
+               compareType == MCompare::Compare_UInt32);
+
+    if (right->isConstant()) {
+      masm.branch32(cond, left, Imm32(ToInt32(right)), label);
+    } else if (right->isRegister()) {
+      masm.branch32(cond, left, ToRegister(right), label);
+    } else {
+      masm.branch32(ReverseCondition(cond), ToAddress(right), left, label);
+    }
+  }
+
+  if (!isNextBlock(ifTrue->lir())) {
+    jumpToBlock(ifFalse);
+  }
+}
+
+void CodeGenerator::visitCompareI64(LCompareI64* lir) {
+  MCompare::CompareType compareType = lir->mir()->compareType();
+  MOZ_ASSERT(compareType == MCompare::Compare_Int64 ||
+             compareType == MCompare::Compare_UInt64);
+  bool isSigned = compareType == MCompare::Compare_Int64;
+  Assembler::Condition cond = JSOpToCondition(lir->jsop(), isSigned);
+  Register64 left = ToRegister64(lir->left());
+  LInt64Allocation right = lir->right();
+  Register output = ToRegister(lir->output());
+
+  if (IsConstant(right)) {
+    masm.cmp64Set(cond, left, Imm64(ToInt64(right)), output);
+  } else if (IsRegister64(right)) {
+    masm.cmp64Set(cond, left, ToRegister64(right), output);
+  } else {
+    masm.cmp64Set(ReverseCondition(cond), ToAddress(right), left, output);
+  }
+}
+
+void CodeGenerator::visitCompareI64AndBranch(LCompareI64AndBranch* lir) {
+  MCompare::CompareType compareType = lir->cmpMir()->compareType();
+  MOZ_ASSERT(compareType == MCompare::Compare_Int64 ||
+             compareType == MCompare::Compare_UInt64);
+  bool isSigned = compareType == MCompare::Compare_Int64;
+  Assembler::Condition cond = JSOpToCondition(lir->jsop(), isSigned);
+  Register64 left = ToRegister64(lir->left());
+  LInt64Allocation right = lir->right();
+
+  MBasicBlock* ifTrue = lir->ifTrue();
+  MBasicBlock* ifFalse = lir->ifFalse();
+
+  Label* trueLabel = getJumpLabelForBranch(ifTrue);
+  Label* falseLabel = getJumpLabelForBranch(ifFalse);
+
+  // If the next block is the true case, invert the condition to fall through.
+  if (isNextBlock(ifTrue->lir())) {
+    cond = Assembler::InvertCondition(cond);
+    trueLabel = falseLabel;
+    falseLabel = nullptr;
+  } else if (isNextBlock(ifFalse->lir())) {
+    falseLabel = nullptr;
+  }
+
+  if (IsConstant(right)) {
+    masm.branch64(cond, left, Imm64(ToInt64(right)), trueLabel, falseLabel);
+  } else if (IsRegister64(right)) {
+    masm.branch64(cond, left, ToRegister64(right), trueLabel, falseLabel);
+  } else {
+    masm.branch64(ReverseCondition(cond), ToAddress(right), left, trueLabel,
+                  falseLabel);
+  }
+}
+
+void CodeGenerator::visitBitAndAndBranch(LBitAndAndBranch* baab) {
+  Assembler::Condition cond = baab->cond();
+  Register left = ToRegister(baab->left());
+  const LAllocation* right = baab->right();
+
+  MBasicBlock* ifTrue = baab->ifTrue();
+  MBasicBlock* ifFalse = baab->ifFalse();
+
+  // If the next block is the true case, invert the condition to fall through.
+  Label* label;
+  if (isNextBlock(ifTrue->lir())) {
+    cond = Assembler::InvertCondition(cond);
+    label = getJumpLabelForBranch(ifFalse);
+  } else {
+    label = getJumpLabelForBranch(ifTrue);
+  }
+
+  if (right->isConstant()) {
+    masm.branchTest32(cond, left, Imm32(ToInt32(right)), label);
+  } else {
+    masm.branchTest32(cond, left, ToRegister(right), label);
+  }
+
+  if (!isNextBlock(ifTrue->lir())) {
+    jumpToBlock(ifFalse);
+  }
+}
+
+void CodeGenerator::visitBitAnd64AndBranch(LBitAnd64AndBranch* baab) {
+  Assembler::Condition cond = baab->cond();
+  Register64 left = ToRegister64(baab->left());
+  LInt64Allocation right = baab->right();
+
+  MBasicBlock* ifTrue = baab->ifTrue();
+  MBasicBlock* ifFalse = baab->ifFalse();
+
+  Label* trueLabel = getJumpLabelForBranch(ifTrue);
+  Label* falseLabel = getJumpLabelForBranch(ifFalse);
+
+  // If the next block is the true case, invert the condition to fall through.
+  if (isNextBlock(ifTrue->lir())) {
+    cond = Assembler::InvertCondition(cond);
+    trueLabel = falseLabel;
+    falseLabel = nullptr;
+  } else if (isNextBlock(ifFalse->lir())) {
+    falseLabel = nullptr;
+  }
+
+  if (IsConstant(right)) {
+    masm.branchTest64(cond, left, Imm64(ToInt64(right)), trueLabel, falseLabel);
+  } else {
+    masm.branchTest64(cond, left, ToRegister64(right), trueLabel, falseLabel);
   }
 }
 
@@ -3964,6 +4213,19 @@ void CodeGenerator::visitInteger64(LInteger64* lir) {
 
 void CodeGenerator::visitPointer(LPointer* lir) {
   masm.movePtr(ImmGCPtr(lir->gcptr()), ToRegister(lir->output()));
+}
+
+void CodeGenerator::visitDouble(LDouble* ins) {
+  masm.loadConstantDouble(ins->value(), ToFloatRegister(ins->output()));
+}
+
+void CodeGenerator::visitFloat32(LFloat32* ins) {
+  masm.loadConstantFloat32(ins->value(), ToFloatRegister(ins->output()));
+}
+
+void CodeGenerator::visitValue(LValue* value) {
+  ValueOperand result = ToOutValue(value);
+  masm.moveValue(value->value(), result);
 }
 
 void CodeGenerator::visitNurseryObject(LNurseryObject* lir) {
@@ -10986,6 +11248,52 @@ void CodeGenerator::visitWasmBuiltinModD(LWasmBuiltinModD* ins) {
   masm.Pop(InstanceReg);
 }
 
+void CodeGenerator::visitClzI(LClzI* ins) {
+  Register input = ToRegister(ins->input());
+  Register output = ToRegister(ins->output());
+  bool knownNotZero = ins->mir()->operandIsNeverZero();
+
+  masm.clz32(input, output, knownNotZero);
+}
+
+void CodeGenerator::visitCtzI(LCtzI* ins) {
+  Register input = ToRegister(ins->input());
+  Register output = ToRegister(ins->output());
+  bool knownNotZero = ins->mir()->operandIsNeverZero();
+
+  masm.ctz32(input, output, knownNotZero);
+}
+
+void CodeGenerator::visitPopcntI(LPopcntI* ins) {
+  Register input = ToRegister(ins->input());
+  Register output = ToRegister(ins->output());
+  Register temp = ToRegister(ins->temp0());
+
+  masm.popcnt32(input, output, temp);
+}
+
+void CodeGenerator::visitClzI64(LClzI64* ins) {
+  Register64 input = ToRegister64(ins->num());
+  Register64 output = ToOutRegister64(ins);
+
+  masm.clz64(input, output);
+}
+
+void CodeGenerator::visitCtzI64(LCtzI64* ins) {
+  Register64 input = ToRegister64(ins->num());
+  Register64 output = ToOutRegister64(ins);
+
+  masm.ctz64(input, output);
+}
+
+void CodeGenerator::visitPopcntI64(LPopcntI64* ins) {
+  Register64 input = ToRegister64(ins->num());
+  Register64 output = ToOutRegister64(ins);
+  Register temp = ToRegister(ins->temp0());
+
+  masm.popcnt64(input, output, temp);
+}
+
 void CodeGenerator::visitBigIntAdd(LBigIntAdd* ins) {
   Register lhs = ToRegister(ins->lhs());
   Register rhs = ToRegister(ins->rhs());
@@ -12228,13 +12536,23 @@ void CodeGenerator::visitCompareBigInt(LCompareBigInt* lir) {
 void CodeGenerator::visitCompareBigIntInt32(LCompareBigIntInt32* lir) {
   JSOp op = lir->mir()->jsop();
   Register left = ToRegister(lir->left());
-  Register right = ToRegister(lir->right());
   Register temp0 = ToRegister(lir->temp0());
-  Register temp1 = ToRegister(lir->temp1());
+  Register temp1 = ToTempRegisterOrInvalid(lir->temp1());
   Register output = ToRegister(lir->output());
 
   Label ifTrue, ifFalse;
-  masm.compareBigIntAndInt32(op, left, right, temp0, temp1, &ifTrue, &ifFalse);
+  if (lir->right()->isConstant()) {
+    MOZ_ASSERT(temp1 == InvalidReg);
+
+    Imm32 right = Imm32(ToInt32(lir->right()));
+    masm.compareBigIntAndInt32(op, left, right, temp0, &ifTrue, &ifFalse);
+  } else {
+    MOZ_ASSERT(temp1 != InvalidReg);
+
+    Register right = ToRegister(lir->right());
+    masm.compareBigIntAndInt32(op, left, right, temp0, temp1, &ifTrue,
+                               &ifFalse);
+  }
 
   Label done;
   masm.bind(&ifFalse);
@@ -12243,6 +12561,40 @@ void CodeGenerator::visitCompareBigIntInt32(LCompareBigIntInt32* lir) {
   masm.bind(&ifTrue);
   masm.move32(Imm32(1), output);
   masm.bind(&done);
+}
+
+void CodeGenerator::visitCompareBigIntInt32AndBranch(
+    LCompareBigIntInt32AndBranch* lir) {
+  JSOp op = lir->cmpMir()->jsop();
+  Register left = ToRegister(lir->left());
+  Register temp1 = ToRegister(lir->temp1());
+  Register temp2 = ToTempRegisterOrInvalid(lir->temp2());
+
+  Label* ifTrue = getJumpLabelForBranch(lir->ifTrue());
+  Label* ifFalse = getJumpLabelForBranch(lir->ifFalse());
+
+  // compareBigIntAndInt32 falls through to the false case. If the next block
+  // is the true case, negate the comparison so we can fall through.
+  if (isNextBlock(lir->ifTrue()->lir())) {
+    op = NegateCompareOp(op);
+    std::swap(ifTrue, ifFalse);
+  }
+
+  if (lir->right()->isConstant()) {
+    MOZ_ASSERT(temp2 == InvalidReg);
+
+    Imm32 right = Imm32(ToInt32(lir->right()));
+    masm.compareBigIntAndInt32(op, left, right, temp1, ifTrue, ifFalse);
+  } else {
+    MOZ_ASSERT(temp2 != InvalidReg);
+
+    Register right = ToRegister(lir->right());
+    masm.compareBigIntAndInt32(op, left, right, temp1, temp2, ifTrue, ifFalse);
+  }
+
+  if (!isNextBlock(lir->ifTrue()->lir())) {
+    jumpToBlock(lir->ifFalse());
+  }
 }
 
 void CodeGenerator::visitCompareBigIntDouble(LCompareBigIntDouble* lir) {
@@ -12621,7 +12973,17 @@ void CodeGenerator::visitIsNullAndBranch(LIsNullAndBranch* lir) {
   const ValueOperand value = ToValue(lir, LIsNullAndBranch::Value);
 
   Assembler::Condition cond = JSOpToCondition(compareType, op);
-  testNullEmitBranch(cond, value, lir->ifTrue(), lir->ifFalse());
+
+  MBasicBlock* ifTrue = lir->ifTrue();
+  MBasicBlock* ifFalse = lir->ifFalse();
+
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchTestNull(cond, value, getJumpLabelForBranch(ifTrue));
+  } else {
+    masm.branchTestNull(Assembler::InvertCondition(cond), value,
+                        getJumpLabelForBranch(ifFalse));
+    jumpToBlock(ifTrue);
+  }
 }
 
 void CodeGenerator::visitIsUndefinedAndBranch(LIsUndefinedAndBranch* lir) {
@@ -12634,7 +12996,17 @@ void CodeGenerator::visitIsUndefinedAndBranch(LIsUndefinedAndBranch* lir) {
   const ValueOperand value = ToValue(lir, LIsUndefinedAndBranch::Value);
 
   Assembler::Condition cond = JSOpToCondition(compareType, op);
-  testUndefinedEmitBranch(cond, value, lir->ifTrue(), lir->ifFalse());
+
+  MBasicBlock* ifTrue = lir->ifTrue();
+  MBasicBlock* ifFalse = lir->ifFalse();
+
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchTestUndefined(cond, value, getJumpLabelForBranch(ifTrue));
+  } else {
+    masm.branchTestUndefined(Assembler::InvertCondition(cond), value,
+                             getJumpLabelForBranch(ifFalse));
+    jumpToBlock(ifTrue);
+  }
 }
 
 void CodeGenerator::visitSameValueDouble(LSameValueDouble* lir) {
@@ -19473,7 +19845,18 @@ void CodeGenerator::visitIsObject(LIsObject* ins) {
 
 void CodeGenerator::visitIsObjectAndBranch(LIsObjectAndBranch* ins) {
   ValueOperand value = ToValue(ins, LIsObjectAndBranch::Input);
-  testObjectEmitBranch(Assembler::Equal, value, ins->ifTrue(), ins->ifFalse());
+
+  MBasicBlock* ifTrue = ins->ifTrue();
+  MBasicBlock* ifFalse = ins->ifFalse();
+
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchTestObject(Assembler::Equal, value,
+                          getJumpLabelForBranch(ifTrue));
+  } else {
+    masm.branchTestObject(Assembler::NotEqual, value,
+                          getJumpLabelForBranch(ifFalse));
+    jumpToBlock(ifTrue);
+  }
 }
 
 void CodeGenerator::visitIsNullOrUndefined(LIsNullOrUndefined* ins) {

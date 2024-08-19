@@ -149,24 +149,6 @@ template void LIRGeneratorLOONG64::lowerForFPU(LInstructionHelper<1, 2, 1>* ins,
                                                MDefinition* lhs,
                                                MDefinition* rhs);
 
-void LIRGeneratorLOONG64::lowerForCompareI64AndBranch(
-    MTest* mir, MCompare* comp, JSOp op, MDefinition* left, MDefinition* right,
-    MBasicBlock* ifTrue, MBasicBlock* ifFalse) {
-  LCompareI64AndBranch* lir = new (alloc())
-      LCompareI64AndBranch(comp, op, useInt64Register(left),
-                           useInt64OrConstant(right), ifTrue, ifFalse);
-  add(lir, mir);
-}
-
-void LIRGeneratorLOONG64::lowerForBitAndAndBranch(LBitAndAndBranch* baab,
-                                                  MInstruction* mir,
-                                                  MDefinition* lhs,
-                                                  MDefinition* rhs) {
-  baab->setOperand(0, useRegisterAtStart(lhs));
-  baab->setOperand(1, useRegisterOrConstantAtStart(rhs));
-  add(baab, mir);
-}
-
 LBoxAllocation LIRGeneratorLOONG64::useBoxFixed(MDefinition* mir, Register reg1,
                                                 Register reg2,
                                                 bool useAtStart) {

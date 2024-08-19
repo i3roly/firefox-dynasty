@@ -40,11 +40,6 @@ Operand CodeGeneratorX64::ToOperand64(const LInt64Allocation& a64) {
   return Operand(ToAddress(a));
 }
 
-void CodeGenerator::visitValue(LValue* value) {
-  ValueOperand result = ToOutValue(value);
-  masm.moveValue(value->value(), result);
-}
-
 void CodeGenerator::visitBox(LBox* box) {
   const LAllocation* in = box->getOperand(0);
   ValueOperand result = ToOutValue(box);
@@ -129,64 +124,6 @@ void CodeGenerator::visitUnbox(LUnbox* unbox) {
     default:
       MOZ_CRASH("Given MIRType cannot be unboxed.");
   }
-}
-
-void CodeGenerator::visitCompareI64(LCompareI64* lir) {
-  MCompare* mir = lir->mir();
-  MOZ_ASSERT(mir->compareType() == MCompare::Compare_Int64 ||
-             mir->compareType() == MCompare::Compare_UInt64);
-
-  const LInt64Allocation lhs = lir->getInt64Operand(LCompareI64::Lhs);
-  const LInt64Allocation rhs = lir->getInt64Operand(LCompareI64::Rhs);
-  Register lhsReg = ToRegister64(lhs).reg;
-  Register output = ToRegister(lir->output());
-
-  if (IsConstant(rhs)) {
-    masm.cmpPtr(lhsReg, ImmWord(ToInt64(rhs)));
-  } else {
-    masm.cmpPtr(lhsReg, ToOperand64(rhs));
-  }
-
-  bool isSigned = mir->compareType() == MCompare::Compare_Int64;
-  masm.emitSet(JSOpToCondition(lir->jsop(), isSigned), output);
-}
-
-void CodeGenerator::visitCompareI64AndBranch(LCompareI64AndBranch* lir) {
-  MCompare* mir = lir->cmpMir();
-  MOZ_ASSERT(mir->compareType() == MCompare::Compare_Int64 ||
-             mir->compareType() == MCompare::Compare_UInt64);
-
-  LInt64Allocation lhs = lir->getInt64Operand(LCompareI64::Lhs);
-  LInt64Allocation rhs = lir->getInt64Operand(LCompareI64::Rhs);
-  Register lhsReg = ToRegister64(lhs).reg;
-
-  if (IsConstant(rhs)) {
-    masm.cmpPtr(lhsReg, ImmWord(ToInt64(rhs)));
-  } else {
-    masm.cmpPtr(lhsReg, ToOperand64(rhs));
-  }
-
-  bool isSigned = mir->compareType() == MCompare::Compare_Int64;
-  emitBranch(JSOpToCondition(lir->jsop(), isSigned), lir->ifTrue(),
-             lir->ifFalse());
-}
-
-void CodeGenerator::visitBitAndAndBranch(LBitAndAndBranch* baab) {
-  Register regL = ToRegister(baab->left());
-  if (baab->is64()) {
-    if (baab->right()->isConstant()) {
-      masm.test64(regL, Imm64(ToInt64(baab->right())));
-    } else {
-      masm.test64(regL, ToRegister(baab->right()));
-    }
-  } else {
-    if (baab->right()->isConstant()) {
-      masm.test32(regL, Imm32(ToInt32(baab->right())));
-    } else {
-      masm.test32(regL, ToRegister(baab->right()));
-    }
-  }
-  emitBranch(baab->cond(), baab->ifTrue(), baab->ifFalse());
 }
 
 void CodeGenerator::visitDivOrModI64(LDivOrModI64* lir) {
@@ -965,28 +902,10 @@ void CodeGenerator::visitNotI64(LNotI64* lir) {
   masm.emitSet(Assembler::Equal, ToRegister(lir->output()));
 }
 
-void CodeGenerator::visitClzI64(LClzI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register64 output = ToOutRegister64(lir);
-  masm.clz64(input, output.reg);
-}
-
-void CodeGenerator::visitCtzI64(LCtzI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register64 output = ToOutRegister64(lir);
-  masm.ctz64(input, output.reg);
-}
-
 void CodeGenerator::visitBitNotI64(LBitNotI64* ins) {
   const LAllocation* input = ins->getOperand(0);
   MOZ_ASSERT(!input->isConstant());
   Register inputR = ToRegister(input);
   MOZ_ASSERT(inputR == ToRegister(ins->output()));
   masm.notq(inputR);
-}
-
-void CodeGenerator::visitTestI64AndBranch(LTestI64AndBranch* lir) {
-  Register input = ToRegister(lir->input());
-  masm.testq(input, input);
-  emitBranch(Assembler::NonZero, lir->ifTrue(), lir->ifFalse());
 }

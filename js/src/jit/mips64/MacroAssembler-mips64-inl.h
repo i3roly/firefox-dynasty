@@ -432,12 +432,12 @@ void MacroAssembler::cmp64Set(Condition cond, Address lhs, Imm64 rhs,
 // ===============================================================
 // Bit counting functions
 
-void MacroAssembler::clz64(Register64 src, Register dest) {
-  as_dclz(dest, src.reg);
+void MacroAssembler::clz64(Register64 src, Register64 dest) {
+  as_dclz(dest.reg, src.reg);
 }
 
-void MacroAssembler::ctz64(Register64 src, Register dest) {
-  ma_dctz(dest, src.reg);
+void MacroAssembler::ctz64(Register64 src, Register64 dest) {
+  ma_dctz(dest.reg, src.reg);
 }
 
 void MacroAssembler::popcnt64(Register64 input, Register64 output,
@@ -503,19 +503,25 @@ void MacroAssembler::branch64(Condition cond, Register64 lhs, Register64 rhs,
 }
 
 void MacroAssembler::branch64(Condition cond, const Address& lhs, Imm64 val,
-                              Label* label) {
+                              Label* success, Label* fail) {
   MOZ_ASSERT(cond == Assembler::NotEqual || cond == Assembler::Equal,
              "other condition codes not supported");
 
-  branchPtr(cond, lhs, ImmWord(val.value), label);
+  branchPtr(cond, lhs, ImmWord(val.value), success);
+  if (fail) {
+    jump(fail);
+  }
 }
 
 void MacroAssembler::branch64(Condition cond, const Address& lhs,
-                              Register64 rhs, Label* label) {
+                              Register64 rhs, Label* success, Label* fail) {
   MOZ_ASSERT(cond == Assembler::NotEqual || cond == Assembler::Equal,
              "other condition codes not supported");
 
-  branchPtr(cond, lhs, rhs.reg, label);
+  branchPtr(cond, lhs, rhs.reg, success);
+  if (fail) {
+    jump(fail);
+  }
 }
 
 void MacroAssembler::branch64(Condition cond, const Address& lhs,
@@ -535,10 +541,13 @@ void MacroAssembler::branchPrivatePtr(Condition cond, const Address& lhs,
   branchPtr(cond, lhs, rhs, label);
 }
 
-template <class L>
 void MacroAssembler::branchTest64(Condition cond, Register64 lhs,
-                                  Register64 rhs, Register temp, L label) {
-  branchTestPtr(cond, lhs.reg, rhs.reg, label);
+                                  Register64 rhs, Register temp, Label* success,
+                                  Label* fail) {
+  branchTestPtr(cond, lhs.reg, rhs.reg, success);
+  if (fail) {
+    jump(fail);
+  }
 }
 
 void MacroAssembler::branchTestUndefined(Condition cond,
@@ -666,9 +675,8 @@ void MacroAssembler::branchTestPrimitive(Condition cond,
   branchTestPrimitive(cond, scratch2, label);
 }
 
-template <class L>
 void MacroAssembler::branchTestMagic(Condition cond, const ValueOperand& value,
-                                     L label) {
+                                     Label* label) {
   SecondScratchRegisterScope scratch2(*this);
   splitTag(value, scratch2);
   ma_b(scratch2, ImmTag(JSVAL_TAG_MAGIC), label, cond);

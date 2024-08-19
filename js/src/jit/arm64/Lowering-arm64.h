@@ -67,10 +67,6 @@ class LIRGeneratorARM64 : public LIRGeneratorShared {
       LInstructionHelper<INT64_PIECES, INT64_PIECES + 1, Temps>* ins,
       MDefinition* mir, MDefinition* lhs, MDefinition* rhs);
 
-  void lowerForCompareI64AndBranch(MTest* mir, MCompare* comp, JSOp op,
-                                   MDefinition* left, MDefinition* right,
-                                   MBasicBlock* ifTrue, MBasicBlock* ifFalse);
-
   void lowerForFPU(LInstructionHelper<1, 1, 0>* ins, MDefinition* mir,
                    MDefinition* input);
 
@@ -80,8 +76,6 @@ class LIRGeneratorARM64 : public LIRGeneratorShared {
 
   void lowerBuiltinInt64ToFloatingPoint(MBuiltinInt64ToFloatingPoint* ins);
   void lowerWasmBuiltinTruncateToInt64(MWasmBuiltinTruncateToInt64* ins);
-  void lowerForBitAndAndBranch(LBitAndAndBranch* baab, MInstruction* mir,
-                               MDefinition* lhs, MDefinition* rhs);
   void lowerWasmBuiltinTruncateToInt32(MWasmBuiltinTruncateToInt32* ins);
   void lowerTruncateDToInt32(MTruncateToInt32* ins);
   void lowerTruncateFToInt32(MTruncateToInt32* ins);

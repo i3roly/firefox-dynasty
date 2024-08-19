@@ -158,15 +158,6 @@ template void LIRGeneratorMIPSShared::lowerForShiftInt64(
     LInstructionHelper<INT64_PIECES, INT64_PIECES + 1, 1>* ins,
     MDefinition* mir, MDefinition* lhs, MDefinition* rhs);
 
-void LIRGeneratorMIPSShared::lowerForCompareI64AndBranch(
-    MTest* mir, MCompare* comp, JSOp op, MDefinition* left, MDefinition* right,
-    MBasicBlock* ifTrue, MBasicBlock* ifFalse) {
-  LCompareI64AndBranch* lir = new (alloc())
-      LCompareI64AndBranch(comp, op, useInt64Register(left),
-                           useInt64OrConstant(right), ifTrue, ifFalse);
-  add(lir, mir);
-}
-
 void LIRGeneratorMIPSShared::lowerForFPU(LInstructionHelper<1, 1, 0>* ins,
                                          MDefinition* mir, MDefinition* input) {
   ins->setOperand(0, useRegister(input));
@@ -192,15 +183,6 @@ template void LIRGeneratorMIPSShared::lowerForFPU(
 template void LIRGeneratorMIPSShared::lowerForFPU(
     LInstructionHelper<1, 2, 1>* ins, MDefinition* mir, MDefinition* lhs,
     MDefinition* rhs);
-
-void LIRGeneratorMIPSShared::lowerForBitAndAndBranch(LBitAndAndBranch* baab,
-                                                     MInstruction* mir,
-                                                     MDefinition* lhs,
-                                                     MDefinition* rhs) {
-  baab->setOperand(0, useRegisterAtStart(lhs));
-  baab->setOperand(1, useRegisterOrConstantAtStart(rhs));
-  add(baab, mir);
-}
 
 void LIRGeneratorMIPSShared::lowerWasmBuiltinTruncateToInt32(
     MWasmBuiltinTruncateToInt32* ins) {

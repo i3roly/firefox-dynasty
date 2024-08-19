@@ -111,10 +111,6 @@ class CodeGeneratorLOONG64 : public CodeGeneratorShared {
       jumpToBlock(mirTrue);
     }
   }
-  void testZeroEmitBranch(Assembler::Condition cond, Register reg,
-                          MBasicBlock* ifTrue, MBasicBlock* ifFalse) {
-    emitBranch(reg, Imm32(0), cond, ifTrue, ifFalse);
-  }
 
   void emitTableSwitchDispatch(MTableSwitch* mir, Register index,
                                Register base);
@@ -148,29 +144,6 @@ class CodeGeneratorLOONG64 : public CodeGeneratorShared {
   void visitOutOfLineWasmTruncateCheck(OutOfLineWasmTruncateCheck* ool);
 
  protected:
-  void testNullEmitBranch(Assembler::Condition cond, const ValueOperand& value,
-                          MBasicBlock* ifTrue, MBasicBlock* ifFalse) {
-    MOZ_ASSERT(value.valueReg() != SecondScratchReg);
-    masm.splitTag(value.valueReg(), SecondScratchReg);
-    emitBranch(SecondScratchReg, ImmTag(JSVAL_TAG_NULL), cond, ifTrue, ifFalse);
-  }
-  void testUndefinedEmitBranch(Assembler::Condition cond,
-                               const ValueOperand& value, MBasicBlock* ifTrue,
-                               MBasicBlock* ifFalse) {
-    MOZ_ASSERT(value.valueReg() != SecondScratchReg);
-    masm.splitTag(value.valueReg(), SecondScratchReg);
-    emitBranch(SecondScratchReg, ImmTag(JSVAL_TAG_UNDEFINED), cond, ifTrue,
-               ifFalse);
-  }
-  void testObjectEmitBranch(Assembler::Condition cond,
-                            const ValueOperand& value, MBasicBlock* ifTrue,
-                            MBasicBlock* ifFalse) {
-    MOZ_ASSERT(value.valueReg() != SecondScratchReg);
-    masm.splitTag(value.valueReg(), SecondScratchReg);
-    emitBranch(SecondScratchReg, ImmTag(JSVAL_TAG_OBJECT), cond, ifTrue,
-               ifFalse);
-  }
-
   void emitBigIntDiv(LBigIntDiv* ins, Register dividend, Register divisor,
                      Register output, Label* fail);
   void emitBigIntMod(LBigIntMod* ins, Register dividend, Register divisor,

@@ -1455,8 +1455,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void ctz32(Register src, Register dest,
                     bool knownNotZero) PER_SHARED_ARCH;
 
-  inline void clz64(Register64 src, Register dest) PER_ARCH;
-  inline void ctz64(Register64 src, Register dest) PER_ARCH;
+  inline void clz64(Register64 src, Register64 dest) PER_ARCH;
+  inline void ctz64(Register64 src, Register64 dest) PER_ARCH;
 
   // On x86_shared, temp may be Invalid only if the chip has the POPCNT
   // instruction. On ARM, temp may never be Invalid.
@@ -1480,7 +1480,15 @@ class MacroAssembler : public MacroAssemblerSpecific {
       DEFINED_ON(x86_shared, arm, arm64, mips32, mips64, loong64, riscv64,
                  wasm32);
 
-  // Only the NotEqual and Equal conditions are allowed.
+  inline void cmp64Set(Condition cond, Register64 lhs, Register64 rhs,
+                       Register dest) PER_ARCH;
+
+  inline void cmp64Set(Condition cond, Register64 lhs, Imm64 rhs,
+                       Register dest) PER_ARCH;
+
+  inline void cmp64Set(Condition cond, Address lhs, Register64 rhs,
+                       Register dest) PER_ARCH;
+
   inline void cmp64Set(Condition cond, Address lhs, Imm64 rhs,
                        Register dest) PER_ARCH;
 
@@ -1503,12 +1511,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void branch16(Condition cond, const Address& lhs, Imm32 rhs,
                        Label* label) PER_SHARED_ARCH;
 
-  template <class L>
   inline void branch32(Condition cond, Register lhs, Register rhs,
-                       L label) PER_SHARED_ARCH;
-  template <class L>
+                       Label* label) PER_SHARED_ARCH;
   inline void branch32(Condition cond, Register lhs, Imm32 rhs,
-                       L label) PER_SHARED_ARCH;
+                       Label* label) PER_SHARED_ARCH;
 
   inline void branch32(Condition cond, Register lhs, const Address& rhs,
                        Label* label) DEFINED_ON(arm64);
@@ -1547,21 +1553,19 @@ class MacroAssembler : public MacroAssemblerSpecific {
                        Label* success, Label* fail = nullptr) PER_ARCH;
   inline void branch64(Condition cond, Register64 lhs, Register64 rhs,
                        Label* success, Label* fail = nullptr) PER_ARCH;
-  // Only the NotEqual and Equal conditions are allowed for the branch64
-  // variants with Address as lhs.
   inline void branch64(Condition cond, const Address& lhs, Imm64 val,
-                       Label* label) PER_ARCH;
+                       Label* success, Label* fail = nullptr) PER_ARCH;
   inline void branch64(Condition cond, const Address& lhs, Register64 rhs,
-                       Label* label) PER_ARCH;
+                       Label* success, Label* fail = nullptr) PER_ARCH;
 
   // Compare the value at |lhs| with the value at |rhs|.  The scratch
   // register *must not* be the base of |lhs| or |rhs|.
+  // Only the NotEqual and Equal conditions are allowed.
   inline void branch64(Condition cond, const Address& lhs, const Address& rhs,
                        Register scratch, Label* label) PER_ARCH;
 
-  template <class L>
   inline void branchPtr(Condition cond, Register lhs, Register rhs,
-                        L label) PER_SHARED_ARCH;
+                        Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, Register lhs, Imm32 rhs,
                         Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, Register lhs, ImmPtr rhs,
@@ -1571,9 +1575,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void branchPtr(Condition cond, Register lhs, ImmWord rhs,
                         Label* label) PER_SHARED_ARCH;
 
-  template <class L>
   inline void branchPtr(Condition cond, const Address& lhs, Register rhs,
-                        L label) PER_SHARED_ARCH;
+                        Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, const Address& lhs, ImmPtr rhs,
                         Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, const Address& lhs, ImmGCPtr rhs,
@@ -1690,33 +1693,40 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
                            Label* label) PER_SHARED_ARCH;
 
-  template <class L>
   inline void branchTest32(Condition cond, Register lhs, Register rhs,
-                           L label) PER_SHARED_ARCH;
-  template <class L>
+                           Label* label) PER_SHARED_ARCH;
   inline void branchTest32(Condition cond, Register lhs, Imm32 rhs,
-                           L label) PER_SHARED_ARCH;
+                           Label* label) PER_SHARED_ARCH;
   inline void branchTest32(Condition cond, const Address& lhs, Imm32 rhh,
                            Label* label) PER_SHARED_ARCH;
   inline void branchTest32(Condition cond, const AbsoluteAddress& lhs,
                            Imm32 rhs, Label* label)
       DEFINED_ON(arm, arm64, mips_shared, x86, x64, loong64, riscv64, wasm32);
 
-  template <class L>
   inline void branchTestPtr(Condition cond, Register lhs, Register rhs,
-                            L label) PER_SHARED_ARCH;
+                            Label* label) PER_SHARED_ARCH;
   inline void branchTestPtr(Condition cond, Register lhs, Imm32 rhs,
                             Label* label) PER_SHARED_ARCH;
+  inline void branchTestPtr(Condition cond, Register lhs, ImmWord rhs,
+                            Label* label) PER_ARCH;
   inline void branchTestPtr(Condition cond, const Address& lhs, Imm32 rhs,
                             Label* label) PER_SHARED_ARCH;
 
-  template <class L>
+  // When a fail label is not defined it will fall through to next instruction,
+  // else jump to the fail label.
+  //
+  // On x86 if |lhs == rhs|, |temp| is used to generate a single branch
+  // instruction. Otherwise |temp| is unused and can be |InvalidReg|.
   inline void branchTest64(Condition cond, Register64 lhs, Register64 rhs,
-                           Register temp, L label) PER_ARCH;
+                           Register temp, Label* success,
+                           Label* fail = nullptr) PER_ARCH;
+  inline void branchTest64(Condition cond, Register64 lhs, Register64 rhs,
+                           Label* success, Label* fail = nullptr);
+  inline void branchTest64(Condition cond, Register64 lhs, Imm64 rhs,
+                           Label* success, Label* fail = nullptr) PER_ARCH;
 
   // Branches to |label| if |reg| is false. |reg| should be a C++ bool.
-  template <class L>
-  inline void branchIfFalseBool(Register reg, L label);
+  inline void branchIfFalseBool(Register reg, Label* label);
 
   // Branches to |label| if |reg| is true. |reg| should be a C++ bool.
   inline void branchIfTrueBool(Register reg, Label* label);
@@ -2014,9 +2024,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
                               Label* label) PER_SHARED_ARCH;
   inline void branchTestMagic(Condition cond, const BaseIndex& address,
                               Label* label) PER_SHARED_ARCH;
-  template <class L>
   inline void branchTestMagic(Condition cond, const ValueOperand& value,
-                              L label)
+                              Label* label)
       DEFINED_ON(arm, arm64, mips32, mips64, loong64, riscv64, wasm32,
                  x86_shared);
 
@@ -5073,6 +5082,12 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void compareBigIntAndInt32(JSOp op, Register bigInt, Register int32,
                              Register scratch1, Register scratch2,
                              Label* ifTrue, Label* ifFalse);
+
+  /**
+   * Compare a BigInt and an Int32 value. Falls through to the false case.
+   */
+  void compareBigIntAndInt32(JSOp op, Register bigInt, Imm32 int32,
+                             Register scratch, Label* ifTrue, Label* ifFalse);
 
   /**
    * Compare two BigInts for equality. Falls through if both BigInts are equal

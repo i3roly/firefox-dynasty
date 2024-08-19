@@ -51,11 +51,6 @@ ValueOperand CodeGeneratorX86::ToTempValue(LInstruction* ins, size_t pos) {
   return ValueOperand(typeReg, payloadReg);
 }
 
-void CodeGenerator::visitValue(LValue* value) {
-  const ValueOperand out = ToOutValue(value);
-  masm.moveValue(value->value(), out);
-}
-
 void CodeGenerator::visitBox(LBox* box) {
   const LDefinition* type = box->getDef(TYPE_INDEX);
 
@@ -1031,66 +1026,6 @@ void CodeGeneratorX86::visitOutOfLineTruncateFloat32(
   masm.jump(ool->rejoin());
 }
 
-void CodeGenerator::visitCompareI64(LCompareI64* lir) {
-  MCompare* mir = lir->mir();
-  MOZ_ASSERT(mir->compareType() == MCompare::Compare_Int64 ||
-             mir->compareType() == MCompare::Compare_UInt64);
-
-  const LInt64Allocation lhs = lir->getInt64Operand(LCompareI64::Lhs);
-  const LInt64Allocation rhs = lir->getInt64Operand(LCompareI64::Rhs);
-  Register64 lhsRegs = ToRegister64(lhs);
-  Register output = ToRegister(lir->output());
-
-  bool isSigned = mir->compareType() == MCompare::Compare_Int64;
-  Assembler::Condition condition = JSOpToCondition(lir->jsop(), isSigned);
-  Label done;
-
-  masm.move32(Imm32(1), output);
-
-  if (IsConstant(rhs)) {
-    Imm64 imm = Imm64(ToInt64(rhs));
-    masm.branch64(condition, lhsRegs, imm, &done);
-  } else {
-    Register64 rhsRegs = ToRegister64(rhs);
-    masm.branch64(condition, lhsRegs, rhsRegs, &done);
-  }
-
-  masm.xorl(output, output);
-  masm.bind(&done);
-}
-
-void CodeGenerator::visitCompareI64AndBranch(LCompareI64AndBranch* lir) {
-  MCompare* mir = lir->cmpMir();
-  MOZ_ASSERT(mir->compareType() == MCompare::Compare_Int64 ||
-             mir->compareType() == MCompare::Compare_UInt64);
-
-  const LInt64Allocation lhs = lir->getInt64Operand(LCompareI64::Lhs);
-  const LInt64Allocation rhs = lir->getInt64Operand(LCompareI64::Rhs);
-  Register64 lhsRegs = ToRegister64(lhs);
-
-  bool isSigned = mir->compareType() == MCompare::Compare_Int64;
-  Assembler::Condition condition = JSOpToCondition(lir->jsop(), isSigned);
-
-  Label* trueLabel = getJumpLabelForBranch(lir->ifTrue());
-  Label* falseLabel = getJumpLabelForBranch(lir->ifFalse());
-
-  if (isNextBlock(lir->ifFalse()->lir())) {
-    falseLabel = nullptr;
-  } else if (isNextBlock(lir->ifTrue()->lir())) {
-    condition = Assembler::InvertCondition(condition);
-    trueLabel = falseLabel;
-    falseLabel = nullptr;
-  }
-
-  if (IsConstant(rhs)) {
-    Imm64 imm = Imm64(ToInt64(rhs));
-    masm.branch64(condition, lhsRegs, imm, trueLabel, falseLabel);
-  } else {
-    Register64 rhsRegs = ToRegister64(rhs);
-    masm.branch64(condition, lhsRegs, rhsRegs, trueLabel, falseLabel);
-  }
-}
-
 void CodeGenerator::visitDivOrModI64(LDivOrModI64* lir) {
   MOZ_ASSERT(gen->compilingWasm());
   MOZ_ASSERT(ToRegister(lir->getOperand(LDivOrModI64::Instance)) ==
@@ -1382,22 +1317,6 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
   MOZ_ASSERT(ToRegister(lir->input()) == ToRegister(lir->output()));
 }
 
-void CodeGenerator::visitClzI64(LClzI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register64 output = ToOutRegister64(lir);
-
-  masm.clz64(input, output.low);
-  masm.xorl(output.high, output.high);
-}
-
-void CodeGenerator::visitCtzI64(LCtzI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register64 output = ToOutRegister64(lir);
-
-  masm.ctz64(input, output.low);
-  masm.xorl(output.high, output.high);
-}
-
 void CodeGenerator::visitNotI64(LNotI64* lir) {
   Register64 input = ToRegister64(lir->getInt64Operand(0));
   Register output = ToRegister(lir->output());
@@ -1480,26 +1399,4 @@ void CodeGenerator::visitBitNotI64(LBitNotI64* ins) {
   MOZ_ASSERT(inputR == ToOutRegister64(ins));
   masm.notl(inputR.high);
   masm.notl(inputR.low);
-}
-
-void CodeGenerator::visitTestI64AndBranch(LTestI64AndBranch* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-
-  masm.testl(input.high, input.high);
-  jumpToBlock(lir->ifTrue(), Assembler::NonZero);
-  masm.testl(input.low, input.low);
-  emitBranch(Assembler::NonZero, lir->ifTrue(), lir->ifFalse());
-}
-
-void CodeGenerator::visitBitAndAndBranch(LBitAndAndBranch* baab) {
-  // LBitAndAndBranch only represents single-word ANDs, hence it can't be
-  // 64-bit here.
-  MOZ_ASSERT(!baab->is64());
-  Register regL = ToRegister(baab->left());
-  if (baab->right()->isConstant()) {
-    masm.test32(regL, Imm32(ToInt32(baab->right())));
-  } else {
-    masm.test32(regL, ToRegister(baab->right()));
-  }
-  emitBranch(baab->cond(), baab->ifTrue(), baab->ifFalse());
 }
