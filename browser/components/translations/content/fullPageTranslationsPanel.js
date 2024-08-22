@@ -295,8 +295,9 @@ var FullPageTranslationsPanel = new (class {
         errorMessage: "full-page-translations-panel-error-message",
         errorMessageHint: "full-page-translations-panel-error-message-hint",
         errorHintAction: "full-page-translations-panel-translate-hint-action",
-        fromMenuList: "full-page-translations-panel-from",
         fromLabel: "full-page-translations-panel-from-label",
+        fromMenuList: "full-page-translations-panel-from",
+        fromMenuPopup: "full-page-translations-panel-from-menupopup",
         header: "full-page-translations-panel-header",
         intro: "full-page-translations-panel-intro",
         introLearnMoreLink:
@@ -309,6 +310,7 @@ var FullPageTranslationsPanel = new (class {
         restoreButton: "full-page-translations-panel-restore-button",
         toLabel: "full-page-translations-panel-to-label",
         toMenuList: "full-page-translations-panel-to",
+        toMenuPopup: "full-page-translations-panel-to-menupopup",
         translateButton: "full-page-translations-panel-translate",
         unsupportedHeader:
           "full-page-translations-panel-unsupported-language-header",
@@ -1390,16 +1392,25 @@ var FullPageTranslationsPanel = new (class {
    * @param {CustomEvent} event
    */
   handleEvent = event => {
+    const target = event.target;
+    let { id } = target;
+
+    // If a menuitem within a menulist is the target, it will not have an id,
+    // so we want to grab the closest relevant id.
+    if (!id) {
+      id = target.closest("[id]")?.id;
+    }
+
     switch (event.type) {
       case "command": {
-        switch (event.target.id) {
+        switch (id) {
           case "translations-panel-settings":
-            this.openSettingsPopup(event.target);
+            this.openSettingsPopup(target);
             break;
-          case "full-page-translations-panel-from":
+          case "full-page-translations-panel-from-menupopup":
             this.onChangeFromLanguage(event);
             break;
-          case "full-page-translations-panel-to":
+          case "full-page-translations-panel-to-menupopup":
             this.onChangeToLanguage(event);
             break;
           case "full-page-translations-panel-restore-button":
@@ -1419,7 +1430,7 @@ var FullPageTranslationsPanel = new (class {
         break;
       }
       case "click": {
-        switch (event.target.id) {
+        switch (id) {
           case "full-page-translations-panel-intro-learn-more-link":
           case "full-page-translations-panel-unsupported-learn-more-link":
             FullPageTranslationsPanel.onLearnMoreLink();
