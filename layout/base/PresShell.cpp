@@ -25,7 +25,6 @@
 #include "mozilla/ContentIterator.h"
 #include "mozilla/css/ImageLoader.h"
 #include "mozilla/DisplayPortUtils.h"
-#include "mozilla/layout/LayoutTelemetryTools.h"
 #include "mozilla/dom/AncestorIterator.h"
 #include "mozilla/dom/BrowserBridgeChild.h"
 #include "mozilla/dom/BrowserChild.h"
@@ -4368,7 +4367,6 @@ void PresShell::DoFlushPendingNotifications(mozilla::ChangesToFlush aFlush) {
     AutoProfilerStyleMarker tracingStyleFlush(std::move(mStyleCause),
                                               innerWindowID);
     PerfStats::AutoMetricRecording<PerfStats::Metric::Styling> autoRecording;
-    LAYOUT_TELEMETRY_RECORD(Restyle);
 
     mPresContext->RestyleManager()->ProcessPendingRestyles();
     mNeedStyleFlush = false;
@@ -7174,7 +7172,6 @@ nsresult PresShell::EventHandler::HandleEventUsingCoordinates(
   //     content outdated?
   nsCOMPtr<nsIContent> capturingContent =
       EventHandler::GetCapturingContentFor(aGUIEvent);
-
   if (GetDocument() && aGUIEvent->mClass == eTouchEventClass) {
     PointerLockManager::Unlock();
   }
@@ -7215,7 +7212,7 @@ nsresult PresShell::EventHandler::HandleEventUsingCoordinates(
   }
 
   // Only capture mouse events and pointer events.
-  RefPtr<Element> pointerCapturingElement =
+  const RefPtr<Element> pointerCapturingElement =
       PointerEventHandler::GetPointerCapturingElement(aGUIEvent);
 
   if (pointerCapturingElement) {
@@ -7760,11 +7757,23 @@ bool PresShell::EventHandler::MaybeDiscardEvent(WidgetGUIEvent* aGUIEvent) {
 // static
 nsIContent* PresShell::EventHandler::GetCapturingContentFor(
     WidgetGUIEvent* aGUIEvent) {
-  return (aGUIEvent->mClass == ePointerEventClass ||
-          aGUIEvent->mClass == eWheelEventClass ||
-          aGUIEvent->HasMouseEventMessage())
-             ? PresShell::GetCapturingContent()
-             : nullptr;
+  if (aGUIEvent->mClass != ePointerEventClass &&
+      aGUIEvent->mClass != eWheelEventClass &&
+      !aGUIEvent->HasMouseEventMessage()) {
+    return nullptr;
+  }
+
+  // PointerEventHandler may synthesize ePointerMove event before releasing the
+  // mouse capture (it's done by a default handler of eMouseUp) after handling
+  // ePointerUp.  Then, we need to dispatch pointer boundary events for the
+  // element under the pointer to emulate a pointer move after a pointer
+  // capture.  Therefore, we need to ignore the capturing element if the event
+  // dispatcher requests it.
+  if (aGUIEvent->ShouldIgnoreCapturingContent()) {
+    return nullptr;
+  }
+
+  return PresShell::GetCapturingContent();
 }
 
 bool PresShell::EventHandler::GetRetargetEventDocument(
@@ -7799,8 +7808,10 @@ bool PresShell::EventHandler::GetRetargetEventDocument(
     return true;
   }
 
-  nsIContent* capturingContent =
-      EventHandler::GetCapturingContentFor(aGUIEvent);
+  const nsIContent* const capturingContent =
+      aGUIEvent->ShouldIgnoreCapturingContent()
+          ? nullptr
+          : EventHandler::GetCapturingContentFor(aGUIEvent);
   if (capturingContent) {
     // if the mouse is being captured then retarget the mouse event at the
     // document that is being captured.
@@ -8496,8 +8507,6 @@ nsresult PresShell::EventHandler::HandleEventWithCurrentEventInfo(
   // bug 329430
   aEvent->mTarget = nullptr;
 
-  HandlingTimeAccumulator handlingTimeAccumulator(*this, aEvent);
-
   nsresult rv = DispatchEvent(manager, aEvent, touchIsNew, aEventStatus,
                               aOverrideClickTarget);
 
@@ -8691,15 +8700,15 @@ void PresShell::EventHandler::FinalizeHandlingEvent(
       if (aEvent->mMessage == eKeyDown) {
         mPresShell->mIsLastKeyDownCanceled = aEvent->mFlags.mDefaultPrevented;
       }
-      return;
+      break;
     }
     case eMouseUp:
       // reset the capturing content now that the mouse button is up
       PresShell::ReleaseCapturingContent();
-      return;
+      break;
     case eMouseMove:
       PresShell::AllowMouseCapture(false);
-      return;
+      break;
     case eDrag:
     case eDragEnd:
     case eDragEnter:
@@ -8714,7 +8723,7 @@ void PresShell::EventHandler::FinalizeHandlingEvent(
       if (dataTransfer) {
         dataTransfer->Disconnect();
       }
-      return;
+      break;
     }
     case eTouchStart:
     case eTouchMove:
@@ -8727,7 +8736,13 @@ void PresShell::EventHandler::FinalizeHandlingEvent(
       break;
     }
     default:
-      return;
+      break;
+  }
+
+  if (WidgetMouseEvent* mouseEvent = aEvent->AsMouseEvent()) {
+    if (mouseEvent->mSynthesizeMoveAfterDispatch) {
+      PointerEventHandler::SynthesizeMoveToDispatchBoundaryEvents(mouseEvent);
+    }
   }
 }
 
@@ -8833,29 +8848,9 @@ void PresShell::EventHandler::RecordEventPreparationPerformance(
       return;
 
     case eMouseMove:
-      if (aEvent->mFlags.mHandledByAPZ) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::INPUT_EVENT_QUEUED_APZ_MOUSE_MOVE_MS,
-            aEvent->mTimeStamp);
-      }
       GetPresContext()->RecordInteractionTime(
           nsPresContext::InteractionType::MouseMoveInteraction,
           aEvent->mTimeStamp);
-      return;
-
-    case eWheel:
-      if (aEvent->mFlags.mHandledByAPZ) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::INPUT_EVENT_QUEUED_APZ_WHEEL_MS, aEvent->mTimeStamp);
-      }
-      return;
-
-    case eTouchMove:
-      if (aEvent->mFlags.mHandledByAPZ) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::INPUT_EVENT_QUEUED_APZ_TOUCH_MOVE_MS,
-            aEvent->mTimeStamp);
-      }
       return;
 
     default:
@@ -8905,13 +8900,6 @@ void PresShell::EventHandler::RecordEventHandlingResponsePerformance(
               break;
           }
         }
-      }
-      if (MOZ_LIKELY(PresShell::sProcessInteractable)) {
-        Telemetry::Accumulate(Telemetry::INPUT_EVENT_RESPONSE_POST_STARTUP_MS,
-                              lastMillis);
-      } else {
-        Telemetry::Accumulate(Telemetry::INPUT_EVENT_RESPONSE_STARTUP_MS,
-                              lastMillis);
       }
     }
     sLastInputCreated = aEvent->mTimeStamp;
@@ -9820,8 +9808,6 @@ bool PresShell::DoReflow(nsIFrame* target, bool aInterruptible,
   [[maybe_unused]] nsIURI* uri = mDocument->GetDocumentURI();
   AUTO_PROFILER_LABEL_DYNAMIC_NSCSTRING_RELEVANT_FOR_JS(
       "Reflow", LAYOUT_Reflow, uri ? uri->GetSpecOrDefault() : "N/A"_ns);
-
-  LAYOUT_TELEMETRY_RECORD(Reflow);
 
   PerfStats::AutoMetricRecording<PerfStats::Metric::Reflowing> autoRecording;
 
@@ -11989,6 +11975,10 @@ bool PresShell::EventHandler::EventTargetData::MaybeRetargetToActiveDocument(
     return false;
   }
 
+  if (aGUIEvent->ShouldIgnoreCapturingContent()) {
+    return false;
+  }
+
   nsPresContext* activePresContext = activeESM->GetPresContext();
   if (!activePresContext) {
     return false;
@@ -12088,64 +12078,6 @@ void PresShell::EventHandler::EventTargetData::UpdateTouchEventTarget(
   // Touch events (except touchstart) are dispatching to the captured
   // element. Get correct shell from it.
   mPresShell = newPresShell;
-}
-
-/******************************************************************************
- * PresShell::EventHandler::HandlingTimeAccumulator
- ******************************************************************************/
-
-PresShell::EventHandler::HandlingTimeAccumulator::HandlingTimeAccumulator(
-    const PresShell::EventHandler& aEventHandler, const WidgetEvent* aEvent)
-    : mEventHandler(aEventHandler),
-      mEvent(aEvent),
-      mHandlingStartTime(TimeStamp::Now()) {
-  MOZ_ASSERT(mEvent);
-  MOZ_ASSERT(mEvent->IsTrusted());
-}
-
-PresShell::EventHandler::HandlingTimeAccumulator::~HandlingTimeAccumulator() {
-  if (mEvent->mTimeStamp <= mEventHandler.mPresShell->mLastOSWake) {
-    return;
-  }
-
-  switch (mEvent->mMessage) {
-    case eKeyPress:
-    case eKeyDown:
-    case eKeyUp:
-      Telemetry::AccumulateTimeDelta(Telemetry::INPUT_EVENT_HANDLED_KEYBOARD_MS,
-                                     mHandlingStartTime);
-      return;
-    case eMouseDown:
-      Telemetry::AccumulateTimeDelta(
-          Telemetry::INPUT_EVENT_HANDLED_MOUSE_DOWN_MS, mHandlingStartTime);
-      return;
-    case eMouseUp:
-      Telemetry::AccumulateTimeDelta(Telemetry::INPUT_EVENT_HANDLED_MOUSE_UP_MS,
-                                     mHandlingStartTime);
-      return;
-    case eMouseMove:
-      if (mEvent->mFlags.mHandledByAPZ) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::INPUT_EVENT_HANDLED_APZ_MOUSE_MOVE_MS,
-            mHandlingStartTime);
-      }
-      return;
-    case eWheel:
-      if (mEvent->mFlags.mHandledByAPZ) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::INPUT_EVENT_HANDLED_APZ_WHEEL_MS, mHandlingStartTime);
-      }
-      return;
-    case eTouchMove:
-      if (mEvent->mFlags.mHandledByAPZ) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::INPUT_EVENT_HANDLED_APZ_TOUCH_MOVE_MS,
-            mHandlingStartTime);
-      }
-      return;
-    default:
-      return;
-  }
 }
 
 void PresShell::EndPaint() {

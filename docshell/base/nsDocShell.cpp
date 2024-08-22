@@ -1610,8 +1610,6 @@ nsDocShell::ForceEncodingDetection() {
       case kCharsetFromInitialAutoDetectionASCII:
         // Deliberately no final version
         LOGCHARSETMENU(("TEXT:UnlabeledAscii"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::UnlabeledAscii);
         break;
       case kCharsetFromInitialAutoDetectionWouldNotHaveBeenUTF8Generic:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8Generic:
@@ -1620,40 +1618,25 @@ nsDocShell::ForceEncodingDetection() {
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8Content:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8ContentInitialWasASCII:
         LOGCHARSETMENU(("TEXT:UnlabeledNonUtf8"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::
-                UnlabeledNonUtf8);
         break;
       case kCharsetFromInitialAutoDetectionWouldNotHaveBeenUTF8DependedOnTLD:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8DependedOnTLD:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8DependedOnTLDInitialWasASCII:
         LOGCHARSETMENU(("TEXT:UnlabeledNonUtf8TLD"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::
-                UnlabeledNonUtf8TLD);
         break;
       case kCharsetFromInitialAutoDetectionWouldHaveBeenUTF8:
       case kCharsetFromFinalAutoDetectionWouldHaveBeenUTF8InitialWasASCII:
         LOGCHARSETMENU(("TEXT:UnlabeledUtf8"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::UnlabeledUtf8);
         break;
       case kCharsetFromChannel:
         if (encoding == UTF_8_ENCODING) {
           LOGCHARSETMENU(("TEXT:ChannelUtf8"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::ChannelUtf8);
         } else {
           LOGCHARSETMENU(("TEXT:ChannelNonUtf8"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::
-                  ChannelNonUtf8);
         }
         break;
       default:
         LOGCHARSETMENU(("TEXT:Bug"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_TEXT::Bug);
         break;
     }
   } else {
@@ -1661,8 +1644,6 @@ nsDocShell::ForceEncodingDetection() {
       case kCharsetFromInitialAutoDetectionASCII:
         // Deliberately no final version
         LOGCHARSETMENU(("HTML:UnlabeledAscii"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::UnlabeledAscii);
         break;
       case kCharsetFromInitialAutoDetectionWouldNotHaveBeenUTF8Generic:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8Generic:
@@ -1671,57 +1652,35 @@ nsDocShell::ForceEncodingDetection() {
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8Content:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8ContentInitialWasASCII:
         LOGCHARSETMENU(("HTML:UnlabeledNonUtf8"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::
-                UnlabeledNonUtf8);
         break;
       case kCharsetFromInitialAutoDetectionWouldNotHaveBeenUTF8DependedOnTLD:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8DependedOnTLD:
       case kCharsetFromFinalAutoDetectionWouldNotHaveBeenUTF8DependedOnTLDInitialWasASCII:
         LOGCHARSETMENU(("HTML:UnlabeledNonUtf8TLD"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::
-                UnlabeledNonUtf8TLD);
         break;
       case kCharsetFromInitialAutoDetectionWouldHaveBeenUTF8:
       case kCharsetFromFinalAutoDetectionWouldHaveBeenUTF8InitialWasASCII:
         LOGCHARSETMENU(("HTML:UnlabeledUtf8"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::UnlabeledUtf8);
         break;
       case kCharsetFromChannel:
         if (encoding == UTF_8_ENCODING) {
           LOGCHARSETMENU(("HTML:ChannelUtf8"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::ChannelUtf8);
         } else {
           LOGCHARSETMENU(("HTML:ChannelNonUtf8"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::
-                  ChannelNonUtf8);
         }
         break;
       case kCharsetFromXmlDeclaration:
       case kCharsetFromMetaTag:
         if (isFileURL) {
           LOGCHARSETMENU(("HTML:LocalLabeled"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::LocalLabeled);
         } else if (encoding == UTF_8_ENCODING) {
           LOGCHARSETMENU(("HTML:MetaUtf8"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::InternalUtf8);
         } else {
           LOGCHARSETMENU(("HTML:MetaNonUtf8"));
-          Telemetry::AccumulateCategorical(
-              Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::
-                  InternalNonUtf8);
         }
         break;
       default:
         LOGCHARSETMENU(("HTML:Bug"));
-        Telemetry::AccumulateCategorical(
-            Telemetry::LABELS_ENCODING_OVERRIDE_SITUATION_HTML::Bug);
         break;
     }
   }
@@ -8394,7 +8353,7 @@ nsresult nsDocShell::PerformRetargeting(nsDocShellLoadState* aLoadState) {
       loadState->SetPostDataStream(aLoadState->PostDataStream());
       loadState->SetIsFormSubmission(aLoadState->IsFormSubmission());
 
-      rv = win->Open(NS_ConvertUTF8toUTF16(spec),
+      rv = win->Open(spec,
                      aLoadState->Target(),  // window name
                      u""_ns,                // Features
                      loadState,
@@ -8404,7 +8363,7 @@ nsresult nsDocShell::PerformRetargeting(nsDocShellLoadState* aLoadState) {
       return rv;
     }
 
-    rv = win->OpenNoNavigate(NS_ConvertUTF8toUTF16(spec),
+    rv = win->OpenNoNavigate(spec,
                              aLoadState->Target(),  // window name
                              u""_ns,                // Features
                              getter_AddRefs(newBC));

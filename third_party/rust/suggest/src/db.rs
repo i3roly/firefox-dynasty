@@ -1224,7 +1224,7 @@ impl<'a> SuggestDao<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct IngestedRecord {
+pub(crate) struct IngestedRecord {
     pub id: SuggestRecordId,
     pub collection: String,
     pub record_type: String,

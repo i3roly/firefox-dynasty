@@ -2001,10 +2001,6 @@ BrowserGlue.prototype = {
       this._updateCBCategory
     );
     Services.prefs.addObserver(
-      "media.autoplay.default",
-      this._updateAutoplayPref
-    );
-    Services.prefs.addObserver(
       "privacy.trackingprotection",
       this._setPrefExpectations
     );
@@ -2063,17 +2059,6 @@ BrowserGlue.prototype = {
           this._resetProfileNotification("uninstall");
         }
       }
-    }
-  },
-
-  _updateAutoplayPref() {
-    const blocked = Services.prefs.getIntPref("media.autoplay.default", 1);
-    const telemetry = Services.telemetry.getHistogramById(
-      "AUTOPLAY_DEFAULT_SETTING_CHANGE"
-    );
-    const labels = { 0: "allow", 1: "blockAudible", 5: "blockAll" };
-    if (blocked in labels) {
-      telemetry.add(labels[blocked]);
     }
   },
 
@@ -5831,35 +5816,6 @@ ContentPermissionPrompt.prototype = {
       request.cancel();
       throw ex;
     }
-
-    let schemeHistogram = Services.telemetry.getKeyedHistogramById(
-      "PERMISSION_REQUEST_ORIGIN_SCHEME"
-    );
-    let scheme = 0;
-    try {
-      if (request.principal.schemeIs("http")) {
-        scheme = 1;
-      } else if (request.principal.schemeIs("https")) {
-        scheme = 2;
-      }
-    } catch (ex) {
-      // If the request principal is not available at this point,
-      // the request has likely been cancelled before being shown to the
-      // user. We shouldn't record this request.
-      if (ex.result != Cr.NS_ERROR_FAILURE) {
-        console.error(ex);
-      }
-      return;
-    }
-    schemeHistogram.add(type, scheme);
-
-    let userInputHistogram = Services.telemetry.getKeyedHistogramById(
-      "PERMISSION_REQUEST_HANDLING_USER_INPUT"
-    );
-    userInputHistogram.add(
-      type,
-      request.hasValidTransientUserGestureActivation
-    );
   },
 };
 

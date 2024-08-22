@@ -4877,21 +4877,74 @@ bool BaselineCodeGen<Handler>::emit_LeaveWith() {
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_AddDisposable() {
-  // TODO: AddDisposable to be implemented for Baseline (Bug 1899500)
-  MOZ_CRASH("AddDisposable has not been implemented for baseline");
+  frame.syncStack(0);
+
+  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
+  MOZ_ASSERT(!regs.has(FramePointer));
+  prepareVMCall();
+
+  Register needsClosure = regs.takeAny();
+  Register method = regs.takeAny();
+  Register value = regs.takeAny();
+  Register baselineFrame = regs.takeAny();
+  Register hint = regs.takeAny();
+
+  masm.loadBaselineFramePtr(FramePointer, baselineFrame);
+  masm.loadValue(frame.addressOfStackValue(-1), needsClosure);
+  masm.loadValue(frame.addressOfStackValue(-2), method);
+  masm.loadValue(frame.addressOfStackValue(-3), value);
+
+  pushUint8BytecodeOperandArg(hint);
+  pushArg(needsClosure);
+  pushArg(method);
+  pushArg(value);
+  pushArg(baselineFrame);
+
+  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::Handle<JS::Value>,
+                      JS::Handle<JS::Value>, JS::Handle<JS::Value>, UsingHint);
+  if (!callVM<Fn, jit::AddDisposableResource>()) {
+    return false;
+  }
+  frame.popn(3);
+  return true;
 }
 
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_TakeDisposeCapability() {
-  // TODO: TakeDisposeCapability to be implemented for Baseline (Bug 1899500)
-  MOZ_CRASH("TakeDisposeCapability has not been implemented for baseline");
+  frame.syncStack(0);
+  prepareVMCall();
+  masm.loadBaselineFramePtr(FramePointer, R0.scratchReg());
+
+  pushArg(R0.scratchReg());
+
+  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::MutableHandle<JS::Value>);
+  if (!callVM<Fn, jit::TakeDisposeCapability>()) {
+    return false;
+  }
+  frame.push(R0);
+  return true;
 }
 
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_CreateSuppressedError() {
-  // TODO: CreateSuppressedError to be implemented for Baseline (Bug
-  // 1899500)
-  MOZ_CRASH("CreateSuppressedError has not been implemented for baseline");
+  frame.popRegsAndSync(2);
+  prepareVMCall();
+
+  masm.loadBaselineFramePtr(FramePointer, R2.scratchReg());
+
+  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::Handle<JS::Value>,
+                      JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>);
+
+  pushArg(R1);  // suppressed
+  pushArg(R0);  // error
+  pushArg(R2.scratchReg());
+
+  if (!callVM<Fn, jit::CreateSuppressedError>()) {
+    return false;
+  }
+
+  frame.push(R0);
+  return true;
 }
 #endif
 

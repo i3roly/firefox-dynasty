@@ -1330,6 +1330,38 @@ bool PushVarEnv(JSContext* cx, BaselineFrame* frame, Handle<Scope*> scope) {
   return frame->pushVarEnvironment(cx, scope);
 }
 
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+bool AddDisposableResource(JSContext* cx, BaselineFrame* frame,
+                           JS::Handle<JS::Value> val,
+                           JS::Handle<JS::Value> method,
+                           JS::Handle<JS::Value> needsClosure, UsingHint hint) {
+  JS::Rooted<ArrayObject*> disposeCapability(
+      cx, frame->getOrCreateDisposeCapability(cx));
+  if (!disposeCapability) {
+    return false;
+  }
+  return js::AddDisposableResourceToCapability(cx, disposeCapability, val,
+                                               method, needsClosure, hint);
+}
+
+bool TakeDisposeCapability(JSContext* cx, BaselineFrame* frame,
+                           JS::MutableHandle<JS::Value> capability) {
+  return frame->takeDisposeCapability(cx, capability);
+}
+
+bool CreateSuppressedError(JSContext* cx, BaselineFrame* frame,
+                           JS::Handle<JS::Value> error,
+                           JS::Handle<JS::Value> suppressed,
+                           JS::MutableHandle<JS::Value> rval) {
+  ErrorObject* errorObj = js::CreateSuppressedError(cx, error, suppressed);
+  if (!errorObj) {
+    return false;
+  }
+  rval.setObject(*errorObj);
+  return true;
+}
+#endif
+
 bool EnterWith(JSContext* cx, BaselineFrame* frame, HandleValue val,
                Handle<WithScope*> templ) {
   return EnterWithOperation(cx, frame, val, templ);

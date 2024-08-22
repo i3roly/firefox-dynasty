@@ -1358,11 +1358,8 @@
         newTab.attention = false;
 
         // The tab has been selected, it's not unselected anymore.
-        // (1) Call the current tab's finishUnselectedTabHoverTimer()
-        //     to save a telemetry record.
-        // (2) Call the current browser's unselectedTabHover() with false
-        //     to dispatch an event.
-        newTab.finishUnselectedTabHoverTimer();
+        // Call the current browser's unselectedTabHover() with false
+        // to dispatch an event.
         newBrowser.unselectedTabHover(false);
       }
 
@@ -2692,6 +2689,8 @@
         globalHistoryOptions,
         triggeringRemoteType,
         wasSchemelessInput,
+        hasValidUserGestureActivation = false,
+        textDirectiveUserActivation = false,
       } = {}
     ) {
       // all callers of addTab that pass a params object need to pass
@@ -2880,8 +2879,10 @@
           triggeringRemoteType,
           wasSchemelessInput,
           hasValidUserGestureActivation:
+            hasValidUserGestureActivation ||
             !!openWindowInfo?.hasValidUserGestureActivation,
           textDirectiveUserActivation:
+            textDirectiveUserActivation ||
             !!openWindowInfo?.textDirectiveUserActivation,
         });
       }
@@ -6572,10 +6573,6 @@
         if (tab.hasAttribute("activemedia-blocked")) {
           tab.removeAttribute("activemedia-blocked");
           this._tabAttrModified(tab, ["activemedia-blocked"]);
-          let hist = Services.telemetry.getHistogramById(
-            "TAB_AUDIO_INDICATOR_USED"
-          );
-          hist.add(2 /* unblockByVisitingTab */);
         }
       });
 

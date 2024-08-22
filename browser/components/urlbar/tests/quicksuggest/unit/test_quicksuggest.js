@@ -76,6 +76,29 @@ const REMOTE_SETTINGS_RESULTS = [
     title: "Suggestion with 1-char keyword",
     url: "http://example.com/1-char-keyword",
   }),
+  QuickSuggestTestUtils.ampRemoteSettings({
+    keywords: [
+      "amp full key",
+      "amp full keyw",
+      "amp full keywo",
+      "amp full keywor",
+      "amp full keyword",
+      "xyz",
+    ],
+    title: "AMP suggestion with full keyword and prefix keywords",
+    url: "https://example.com/amp-full-keyword",
+  }),
+  QuickSuggestTestUtils.wikipediaRemoteSettings({
+    keywords: [
+      "wikipedia full key",
+      "wikipedia full keyw",
+      "wikipedia full keywo",
+      "wikipedia full keywor",
+      "wikipedia full keyword",
+    ],
+    title: "Wikipedia suggestion with full keyword and prefix keywords",
+    url: "https://example.com/wikipedia-full-keyword",
+  }),
 ];
 
 function expectedNonSponsoredResult() {
@@ -384,7 +407,7 @@ add_tasks_with_rust(async function emptySearchStringsAndSpaces() {
 
 // Results should be returned even when `browser.search.suggest.enabled` is
 // false.
-add_tasks_with_rust(async function browser_search_suggest_enabled() {
+add_tasks_with_rust(async function browser_search_suggest_disabled() {
   UrlbarPrefs.set("suggest.quicksuggest.nonsponsored", true);
   UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
   UrlbarPrefs.set("browser.search.suggest.enabled", false);
@@ -396,7 +419,7 @@ add_tasks_with_rust(async function browser_search_suggest_enabled() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult()],
+    matches: [expectedSponsoredResult({ suggestedIndex: -1 })],
   });
 
   UrlbarPrefs.clear("browser.search.suggest.enabled");
@@ -404,7 +427,7 @@ add_tasks_with_rust(async function browser_search_suggest_enabled() {
 
 // Results should be returned even when `browser.urlbar.suggest.searches` is
 // false.
-add_tasks_with_rust(async function browser_search_suggest_enabled() {
+add_tasks_with_rust(async function browser_suggest_searches_disabled() {
   UrlbarPrefs.set("suggest.quicksuggest.nonsponsored", true);
   UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
   UrlbarPrefs.set("suggest.searches", false);
@@ -416,7 +439,7 @@ add_tasks_with_rust(async function browser_search_suggest_enabled() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult()],
+    matches: [expectedSponsoredResult({ suggestedIndex: -1 })],
   });
 
   UrlbarPrefs.clear("suggest.searches");
@@ -694,8 +717,11 @@ async function doDedupeAgainstURLTest({
   otherPrefix,
   expectOther,
 }) {
-  // Disable search suggestions.
+  // Disable search suggestions. This means the expected suggestedIndex for
+  // sponsored suggestions will now be -1. We assume expectedQuickSuggestResult
+  // is sponsored, so set its suggestedIndex now.
   UrlbarPrefs.set("suggest.searches", false);
+  expectedQuickSuggestResult.suggestedIndex = -1;
 
   // Add a visit that will match our query below.
   let otherURL = otherPrefix + PREFIX_SUGGESTIONS_STRIPPED_URL;
@@ -737,8 +763,6 @@ async function doDedupeAgainstURLTest({
     }),
   ];
 
-  expectedResults.push(expectedQuickSuggestResult);
-
   if (expectOther) {
     expectedResults.push(
       makeVisitResult(context, {
@@ -747,6 +771,9 @@ async function doDedupeAgainstURLTest({
       })
     );
   }
+
+  // The expected result is last since its expected suggestedIndex is -1.
+  expectedResults.push(expectedQuickSuggestResult);
 
   info("Doing second query");
   await check_results({ context, matches: expectedResults });
@@ -948,7 +975,8 @@ add_tasks_with_rust(async function timestamps() {
 // the two URLs should be treated as dupes and only the quick suggest should be
 // shown, not the URL from history.
 add_tasks_with_rust(async function dedupeAgainstURL_timestamps() {
-  // Disable search suggestions.
+  // Disable search suggestions. This means the expected suggestedIndex for
+  // sponsored suggestions will now be -1.
   UrlbarPrefs.set("suggest.searches", false);
 
   // Add a visit that will match the query below and dupe the quick suggest.
@@ -1025,14 +1053,14 @@ add_tasks_with_rust(async function dedupeAgainstURL_timestamps() {
     blockId: 5,
     advertiser: "TestAdvertiserTimestamp",
     iabCategory: "22 - Shopping",
+    // suggestedIndex is -1 since search suggestions are disabled.
+    suggestedIndex: -1,
   });
 
-  const QUICK_SUGGEST_INDEX = 1;
-  let expectedResults = [
-    expectedHeuristic,
-    expectedQuickSuggest,
-    ...expectedBadTimestampResults,
-  ];
+  let expectedResults = [expectedHeuristic, ...expectedBadTimestampResults];
+
+  const QUICK_SUGGEST_INDEX = expectedResults.length;
+  expectedResults.push(expectedQuickSuggest);
 
   let controller = UrlbarTestUtils.newMockController();
   await controller.startQuery(context);
@@ -1702,4 +1730,139 @@ add_tasks_with_rust(async function keywordLengthThreshold() {
           ],
     });
   }
+});
+
+// AMP should be a top pick when `quicksuggest.ampTopPickCharThreshold` is
+// non-zero and a typed keyword's length is over the threshold or a full keyword
+// is typed.
+add_tasks_with_rust(async function ampTopPickCharThreshold() {
+  UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
+  UrlbarPrefs.set("suggest.quicksuggest.nonsponsored", true);
+  await QuickSuggestTestUtils.forceSync();
+
+  UrlbarPrefs.set(
+    "quicksuggest.ampTopPickCharThreshold",
+    "amp full keywo".length
+  );
+
+  let tests = [
+    { keyword: "amp full key", amp: true, isTopPick: false },
+    { keyword: "amp full keyw", amp: true, isTopPick: false },
+    { keyword: "amp full keywo", amp: true, isTopPick: true },
+    { keyword: "amp full keywor", amp: true, isTopPick: true },
+    { keyword: "amp full keyword", amp: true, isTopPick: true },
+    { keyword: "AmP FuLl KeYwOrD", amp: true, isTopPick: true },
+    // "xyz" is shorter than the threshold, but since it's a full keyword it
+    // should trigger a top pick.
+    { keyword: "xyz", fullKeyword: "xyz", amp: true, isTopPick: true },
+    { keyword: "XyZ", fullKeyword: "xyz", amp: true, isTopPick: true },
+    { keyword: "wikipedia full key", isTopPick: false },
+    { keyword: "wikipedia full keyw", isTopPick: false },
+    { keyword: "wikipedia full keywo", isTopPick: false },
+    { keyword: "wikipedia full keywor", isTopPick: false },
+    { keyword: "wikipedia full keyword", isTopPick: false },
+  ];
+
+  for (let { keyword, fullKeyword, amp, isTopPick } of tests) {
+    fullKeyword ??= amp ? "amp full keyword" : "wikipedia full keyword";
+    info(
+      "Running subtest: " +
+        JSON.stringify({ keyword, fullKeyword, amp, isTopPick })
+    );
+
+    let expectedResult;
+    if (!amp) {
+      expectedResult = makeWikipediaResult({
+        keyword,
+        fullKeyword,
+        title: "Wikipedia suggestion with full keyword and prefix keywords",
+        url: "https://example.com/wikipedia-full-keyword",
+      });
+    } else if (isTopPick) {
+      expectedResult = makeAmpResult({
+        keyword,
+        fullKeyword,
+        title: "AMP suggestion with full keyword and prefix keywords",
+        url: "https://example.com/amp-full-keyword",
+        suggestedIndex: 1,
+        isSuggestedIndexRelativeToGroup: false,
+        isBestMatch: true,
+        descriptionL10n: null,
+      });
+    } else {
+      expectedResult = makeAmpResult({
+        keyword,
+        fullKeyword,
+        title: "AMP suggestion with full keyword and prefix keywords",
+        url: "https://example.com/amp-full-keyword",
+      });
+    }
+
+    await check_results({
+      context: createContext(keyword, {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [expectedResult],
+    });
+  }
+
+  UrlbarPrefs.clear("quicksuggest.ampTopPickCharThreshold");
+});
+
+// AMP should not be shown as a top pick when the threshold is zero.
+add_tasks_with_rust(async function ampTopPickCharThreshold_zero() {
+  UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
+  UrlbarPrefs.set("suggest.quicksuggest.nonsponsored", true);
+  await QuickSuggestTestUtils.forceSync();
+
+  UrlbarPrefs.set("quicksuggest.ampTopPickCharThreshold", 0);
+
+  let tests = [
+    { keyword: "amp full key", amp: true },
+    { keyword: "amp full keyw", amp: true },
+    { keyword: "amp full keywo", amp: true },
+    { keyword: "amp full keywor", amp: true },
+    { keyword: "amp full keyword", amp: true },
+    { keyword: "AmP FuLl KeYwOrD", amp: true },
+    { keyword: "xyz", fullKeyword: "xyz", amp: true },
+    { keyword: "XyZ", fullKeyword: "xyz", amp: true },
+    { keyword: "wikipedia full key" },
+    { keyword: "wikipedia full keyw" },
+    { keyword: "wikipedia full keywo" },
+    { keyword: "wikipedia full keywor" },
+    { keyword: "wikipedia full keyword" },
+  ];
+
+  for (let { keyword, fullKeyword, amp } of tests) {
+    fullKeyword ??= amp ? "amp full keyword" : "wikipedia full keyword";
+    info("Running subtest: " + JSON.stringify({ keyword, fullKeyword, amp }));
+
+    let expectedResult;
+    if (!amp) {
+      expectedResult = makeWikipediaResult({
+        keyword,
+        fullKeyword,
+        title: "Wikipedia suggestion with full keyword and prefix keywords",
+        url: "https://example.com/wikipedia-full-keyword",
+      });
+    } else {
+      expectedResult = makeAmpResult({
+        keyword,
+        fullKeyword,
+        title: "AMP suggestion with full keyword and prefix keywords",
+        url: "https://example.com/amp-full-keyword",
+      });
+    }
+
+    await check_results({
+      context: createContext(keyword, {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [expectedResult],
+    });
+  }
+
+  UrlbarPrefs.clear("quicksuggest.ampTopPickCharThreshold");
 });
