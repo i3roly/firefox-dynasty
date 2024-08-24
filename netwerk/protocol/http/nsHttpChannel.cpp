@@ -825,7 +825,7 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
   }
 
   auto dnsStrategy = GetProxyDNSStrategy();
-  if (!(dnsStrategy & DNS_PREFETCH_ORIGIN)) {
+  if (dnsStrategy != ProxyDNSStrategy::ORIGIN) {
     return ContinueOnBeforeConnect(aShouldUpgrade, aStatus);
   }
 
@@ -6773,29 +6773,16 @@ nsHttpChannel::GetOrCreateChannelClassifier() {
   return classifier.forget();
 }
 
-uint16_t nsHttpChannel::GetProxyDNSStrategy() {
-  // This function currently only supports returning DNS_PREFETCH_ORIGIN.
-  // Support for the rest of the DNS_* flags will be added later.
-
+ProxyDNSStrategy nsHttpChannel::GetProxyDNSStrategy() {
   // When network_dns_force_use_https_rr is true, return DNS_PREFETCH_ORIGIN.
   // This ensures that we always perform HTTPS RR query.
-  if (!mProxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
-    return DNS_PREFETCH_ORIGIN;
+  nsCOMPtr<nsProxyInfo> proxyInfo(static_cast<nsProxyInfo*>(mProxyInfo.get()));
+  if (!proxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
+    return ProxyDNSStrategy::ORIGIN;
   }
-
-  uint32_t flags = 0;
-  nsAutoCString type;
-  mProxyInfo->GetFlags(&flags);
-  mProxyInfo->GetType(type);
 
   // If the proxy is not to perform name resolution itself.
-  if (!(flags & nsIProxyInfo::TRANSPARENT_PROXY_RESOLVES_HOST)) {
-    if (type.EqualsLiteral("socks")) {
-      return DNS_PREFETCH_ORIGIN;
-    }
-  }
-
-  return 0;
+  return GetProxyDNSStrategyHelper(proxyInfo->Type(), proxyInfo->Flags());
 }
 
 // BeginConnect() SHOULD NOT call AsyncAbort(). AsyncAbort will be called by
@@ -7096,16 +7083,7 @@ nsresult nsHttpChannel::BeginConnect() {
     ReEvaluateReferrerAfterTrackingStatusIsKnown();
   }
 
-  rv = MaybeStartDNSPrefetch();
-  if (NS_FAILED(rv)) {
-    auto dnsStrategy = GetProxyDNSStrategy();
-    if (dnsStrategy & DNS_BLOCK_ON_ORIGIN_RESOLVE) {
-      // TODO: Should this be fatal?
-      return rv;
-    }
-    // Otherwise this shouldn't be fatal.
-    return NS_OK;
-  }
+  MaybeStartDNSPrefetch();
 
   rv = CallOrWaitForResume(
       [](nsHttpChannel* self) { return self->PrepareToConnect(); });
@@ -7125,7 +7103,7 @@ nsresult nsHttpChannel::BeginConnect() {
   return NS_OK;
 }
 
-nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
+void nsHttpChannel::MaybeStartDNSPrefetch() {
   // Start a DNS lookup very early in case the real open is queued the DNS can
   // happen in parallel. Do not do so in the presence of an HTTP proxy as
   // all lookups other than for the proxy itself are done by the proxy.
@@ -7141,7 +7119,7 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
   // timing we used.
   if ((mLoadFlags & (LOAD_NO_NETWORK_IO | LOAD_ONLY_FROM_CACHE)) ||
       LoadAuthRedirectedChannel()) {
-    return NS_OK;
+    return;
   }
 
   auto dnsStrategy = GetProxyDNSStrategy();
@@ -7149,10 +7127,10 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
   LOG(
       ("nsHttpChannel::MaybeStartDNSPrefetch [this=%p, strategy=%u] "
        "prefetching%s\n",
-       this, dnsStrategy,
+       this, static_cast<uint32_t>(dnsStrategy),
        mCaps & NS_HTTP_REFRESH_DNS ? ", refresh requested" : ""));
 
-  if (dnsStrategy & DNS_PREFETCH_ORIGIN) {
+  if (dnsStrategy == ProxyDNSStrategy::ORIGIN) {
     OriginAttributes originAttributes;
     StoragePrincipalHelper::GetOriginAttributesForNetworkState(
         this, originAttributes);
@@ -7164,20 +7142,8 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
     if (mCaps & NS_HTTP_REFRESH_DNS) {
       dnsFlags |= nsIDNSService::RESOLVE_BYPASS_CACHE;
     }
-    nsresult rv = mDNSPrefetch->PrefetchHigh(dnsFlags);
 
-    if (dnsStrategy & DNS_BLOCK_ON_ORIGIN_RESOLVE) {
-      LOG(("  blocking on prefetching origin"));
-
-      if (NS_WARN_IF(NS_FAILED(rv))) {
-        LOG(("  lookup failed with 0x%08" PRIx32 ", aborting request",
-             static_cast<uint32_t>(rv)));
-        return rv;
-      }
-
-      // Resolved in OnLookupComplete.
-      mDNSBlockingThenable = mDNSBlockingPromise.Ensure(__func__);
-    }
+    Unused << mDNSPrefetch->PrefetchHigh(dnsFlags);
 
     if (StaticPrefs::network_dns_use_https_rr_as_altsvc() && !mHTTPSSVCRecord &&
         !(mCaps & NS_HTTP_DISALLOW_HTTPS_RR) && canUseHTTPSRRonNetwork()) {
@@ -7195,8 +7161,6 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
                                         });
     }
   }
-
-  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -8314,6 +8278,10 @@ nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
   // honor the cancelation status even if the underlying transaction
   // completed.
   if (mCanceled || NS_FAILED(mStatus)) status = mStatus;
+
+  if (mLoadInfo->TriggeringPrincipal()->IsSystemPrincipal()) {
+    ReportSystemChannelTelemetry(status);
+  }
 
   if (LoadCachedContentIsPartial()) {
     if (NS_SUCCEEDED(status)) {
@@ -10391,6 +10359,97 @@ void nsHttpChannel::ReportNetVSCacheTelemetry() {
     Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_LARGE_V2,
                           onStopDiff);
   }
+}
+
+void nsHttpChannel::ReportSystemChannelTelemetry(nsresult status) {
+  // Use status and httpStatus to determine
+  // if it was successful, and if we had connectivity / offline in this time
+  nsAutoCString domain;
+  mOriginalURI->GetHost(domain);
+
+  if (!LoadUsedNetwork()) {
+    // We're not really interested in any cached requests.
+    return;
+  }
+
+  if (!StringEndsWith(domain, ".mozilla.org"_ns) &&
+      !StringEndsWith(domain, ".mozilla.com"_ns)) {
+    return;
+  }
+
+  auto hasConnectivity = []() -> bool {
+    if (RefPtr<NetworkConnectivityService> ncs =
+            NetworkConnectivityService::GetSingleton()) {
+      nsINetworkConnectivityService::ConnectivityState state;
+      if (NS_SUCCEEDED(ncs->GetIPv4(&state)) &&
+          state == nsINetworkConnectivityService::NOT_AVAILABLE &&
+          NS_SUCCEEDED(ncs->GetIPv6(&state)) &&
+          state == nsINetworkConnectivityService::NOT_AVAILABLE) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  nsAutoCString label("ok"_ns);
+  if (NS_FAILED(status)) {
+    if (mCanceled) {
+      // The request was cancelled.
+      label = "cancel"_ns;
+    } else if (NS_IsOffline()) {
+      // The error occured while all interfaces are offline
+      label = "offline"_ns;
+    } else if (!hasConnectivity()) {
+      // The error occured while the browser didn't have connectivity
+      label = "connectivity"_ns;
+    } else if (status == NS_ERROR_UNKNOWN_HOST) {
+      // The failure was a DNS error
+      label = "dns"_ns;
+    } else if (NS_ERROR_GET_MODULE(status) == NS_ERROR_MODULE_SECURITY) {
+      // The error was due to TLS
+      label = "tls_fail"_ns;
+    } else if (status == NS_ERROR_NET_RESET) {
+      label = "reset"_ns;
+    } else if (status == NS_ERROR_NET_TIMEOUT) {
+      label = "timeout"_ns;
+    } else if (status == NS_ERROR_CONNECTION_REFUSED) {
+      label = "refused"_ns;
+    } else if (status == NS_ERROR_NET_PARTIAL_TRANSFER) {
+      label = "partial"_ns;
+    } else {
+      // Unspecified error. If this bucket is too big we might add other labels.
+      label = "other"_ns;
+    }
+  } else if (mResponseHead && mResponseHead->Status() / 100 != 2) {
+    // There was no channel error, but the server responded with a non-2XX
+    // status code.
+    label = "http_status";
+  }
+
+  if (StringEndsWith(domain, ".addons.mozilla.org"_ns)) {
+    mozilla::glean::network::system_channel_addon_status.Get(label).Add(1);
+    return;
+  }
+
+  if (domain == "aus5.mozilla.org"_ns) {
+    mozilla::glean::network::system_channel_update_status.Get(label).Add(1);
+    return;
+  }
+
+  if (domain == "firefox.settings.services.mozilla.com"_ns) {
+    mozilla::glean::network::system_channel_remote_settings_status.Get(label)
+        .Add(1);
+    return;
+  }
+
+  if (domain == "incoming.telemetry.mozilla.com"_ns) {
+    mozilla::glean::network::system_channel_telemetry_status.Get(label).Add(1);
+    return;
+  }
+
+  // Not one of the probes we recorded earlier.
+  mozilla::glean::network::system_channel_other_status.Get(label).Add(1);
 }
 
 NS_IMETHODIMP

@@ -982,6 +982,7 @@ bool wasm::CompilePartialTier2(const Code& code, uint32_t funcIndex) {
   const uint8_t* bodyBegin = bytecode.begin() + funcRange.bytecodeOffset;
   const uint8_t* bodyEnd = bodyBegin + funcRange.bodyLength;
   Decoder d(bytecode.begin(), bytecode.end(), 0, &error);
+  // The following sequence will compile/finish this function, on this thread.
   if (!mg.compileFuncDef(funcIndex, funcRange.bytecodeOffset, bodyBegin,
                          bodyEnd) ||
       !mg.finishFuncDefs() || !mg.finishPartialTier2()) {
@@ -1146,7 +1147,8 @@ SharedModule wasm::CompileStreaming(
     return nullptr;
   }
 
-  return mg.finishModule(*bytecode, moduleMeta, streamEnd.tier2Listener);
+  return mg.finishModule(*bytecode, moduleMeta,
+                         streamEnd.completeTier2Listener);
 }
 
 class DumpIonModuleGenerator {

@@ -8601,7 +8601,7 @@ void Document::RuleAdded(StyleSheet& aSheet, css::Rule& aRule) {
   }
 }
 
-void Document::ImportRuleLoaded(dom::CSSImportRule& aRule, StyleSheet& aSheet) {
+void Document::ImportRuleLoaded(StyleSheet& aSheet) {
   if (aSheet.IsApplicable()) {
     ApplicableStylesChanged();
   }
@@ -17804,6 +17804,12 @@ void Document::ClearStaleServoData() {
   while (Element* root = iter.GetNextStyleRoot()) {
     RestyleManager::ClearServoDataFromSubtree(root);
   }
+}
+
+ViewTransition* Document::StartViewTransition(
+    const Optional<OwningNonNull<ViewTransitionUpdateCallback>>&) {
+  // TODO(emilio): Not yet implemented
+  return nullptr;
 }
 
 Selection* Document::GetSelection(ErrorResult& aRv) {

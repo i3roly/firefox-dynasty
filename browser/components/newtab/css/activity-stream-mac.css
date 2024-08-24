@@ -510,6 +510,65 @@ main section {
   }
 }
 
+.layout-variant-a .ds-outer-wrapper-breakpoint-override main,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main {
+  width: 346px;
+}
+.layout-variant-a .ds-outer-wrapper-breakpoint-override main .ds-card,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .ds-card {
+  width: 296px;
+}
+.layout-variant-a .ds-outer-wrapper-breakpoint-override main .ds-card-grid,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .ds-card-grid {
+  grid-gap: var(--space-large);
+}
+@media (min-width: 610px) {
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main {
+    width: 346px;
+  }
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main .ds-card-grid,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .ds-card-grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+@media (min-width: 866px) {
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main {
+    width: 659px;
+  }
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main .ds-card-grid,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .ds-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 1122px) {
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main {
+    width: 989px;
+  }
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main .ds-card-grid,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .ds-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+    grid-gap: var(--space-xlarge);
+  }
+}
+@media (min-width: 1698px) {
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main {
+    width: 1311px;
+  }
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main .body-wrapper,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .body-wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+  .layout-variant-a .ds-outer-wrapper-breakpoint-override main .ds-card-grid,
+.layout-variant-b .ds-outer-wrapper-breakpoint-override main .ds-card-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
 .base-content-fallback {
   height: 100vh;
 }
@@ -2618,6 +2677,96 @@ main section {
   outline: 2px solid var(--focus-outline-color);
 }
 
+.has-weather.has-search.layout-variant-a .weatherIconCol,
+.has-weather.has-search.layout-variant-a .weatherCityRow,
+.has-weather.has-search.layout-variant-a .weatherButtonContextMenuWrapper,
+.has-weather.has-search.layout-variant-b .weatherIconCol,
+.has-weather.has-search.layout-variant-b .weatherCityRow,
+.has-weather.has-search.layout-variant-b .weatherButtonContextMenuWrapper,
+.layout-variant-a .weatherIconCol,
+.layout-variant-a .weatherCityRow,
+.layout-variant-a .weatherButtonContextMenuWrapper,
+.layout-variant-b .weatherIconCol,
+.layout-variant-b .weatherCityRow,
+.layout-variant-b .weatherButtonContextMenuWrapper {
+  display: none;
+}
+@media (min-width: 610px) {
+  .has-weather.has-search.layout-variant-a .weatherIconCol,
+.has-weather.has-search.layout-variant-a .weatherCityRow,
+.has-weather.has-search.layout-variant-a .weatherButtonContextMenuWrapper,
+.has-weather.has-search.layout-variant-b .weatherIconCol,
+.has-weather.has-search.layout-variant-b .weatherCityRow,
+.has-weather.has-search.layout-variant-b .weatherButtonContextMenuWrapper,
+.layout-variant-a .weatherIconCol,
+.layout-variant-a .weatherCityRow,
+.layout-variant-a .weatherButtonContextMenuWrapper,
+.layout-variant-b .weatherIconCol,
+.layout-variant-b .weatherCityRow,
+.layout-variant-b .weatherButtonContextMenuWrapper {
+    display: flex;
+  }
+}
+.has-weather.has-search.layout-variant-a .weatherCard,
+.has-weather.has-search.layout-variant-b .weatherCard,
+.layout-variant-a .weatherCard,
+.layout-variant-b .weatherCard {
+  min-height: 55px;
+}
+.has-weather.has-search.layout-variant-a .weatherInfoLink,
+.has-weather.has-search.layout-variant-b .weatherInfoLink,
+.layout-variant-a .weatherInfoLink,
+.layout-variant-b .weatherInfoLink {
+  min-width: auto;
+  max-width: none;
+}
+@media (min-width: 866px) {
+  .has-weather.has-search.layout-variant-a .weatherInfoLink,
+.has-weather.has-search.layout-variant-b .weatherInfoLink,
+.layout-variant-a .weatherInfoLink,
+.layout-variant-b .weatherInfoLink {
+    min-width: 130px;
+    max-width: 190px;
+  }
+}
+.has-weather.has-search.layout-variant-a .weatherForecastRow,
+.has-weather.has-search.layout-variant-b .weatherForecastRow,
+.layout-variant-a .weatherForecastRow,
+.layout-variant-b .weatherForecastRow {
+  margin-block: var(--space-small);
+}
+@media (min-width: 610px) {
+  .has-weather.has-search.layout-variant-a .weatherForecastRow,
+.has-weather.has-search.layout-variant-b .weatherForecastRow,
+.layout-variant-a .weatherForecastRow,
+.layout-variant-b .weatherForecastRow {
+    margin-block: unset;
+  }
+}
+.has-weather.has-search.layout-variant-a .weatherSponsorText,
+.has-weather.has-search.layout-variant-b .weatherSponsorText,
+.layout-variant-a .weatherSponsorText,
+.layout-variant-b .weatherSponsorText {
+  position: relative;
+}
+.has-weather.has-search.layout-variant-a .weatherSponsorText span,
+.has-weather.has-search.layout-variant-b .weatherSponsorText span,
+.layout-variant-a .weatherSponsorText span,
+.layout-variant-b .weatherSponsorText span {
+  position: absolute;
+  white-space: nowrap;
+  inset-block-start: var(--space-small);
+}
+@media (min-width: 610px) {
+  .has-weather.has-search.layout-variant-a .weatherSponsorText span,
+.has-weather.has-search.layout-variant-b .weatherSponsorText span,
+.layout-variant-a .weatherSponsorText span,
+.layout-variant-b .weatherSponsorText span {
+    inset-block-start: unset;
+    position: relative;
+  }
+}
+
 /* stylelint-disable max-nesting-depth */
 .card-outer {
   background: var(--newtab-background-color-secondary);
@@ -3013,6 +3162,14 @@ main section {
 @media (min-width: 610px) and (max-width: 865px) {
   .collapsible-section[data-section-id=topstories] .card-outer:first-child {
     display: none;
+  }
+}
+.layout-variant-a .collapsible-section .button-topic-selection, .layout-variant-b .collapsible-section .button-topic-selection {
+  display: none;
+}
+@media (min-width: 610px) {
+  .layout-variant-a .collapsible-section .button-topic-selection, .layout-variant-b .collapsible-section .button-topic-selection {
+    display: block;
   }
 }
 .lightWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button), .darkWallpaper .collapsible-section .button-topic-selection moz-button[type=default]::part(button) {

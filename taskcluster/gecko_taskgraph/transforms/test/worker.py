@@ -178,6 +178,11 @@ def set_worker_type(config, tasks):
                 task["worker-type"] = "t-bitbar-gw-unit-s21"
             else:
                 task["worker-type"] = "t-bitbar-gw-perf-s21"
+        elif test_platform.startswith("android-hw-s24"):
+            if task["suite"] != "raptor":
+                task["worker-type"] = "t-bitbar-gw-unit-s24"
+            else:
+                task["worker-type"] = "t-bitbar-gw-perf-s24"
         elif test_platform.startswith("android-hw-a51"):
             if task["suite"] != "raptor":
                 task["worker-type"] = "t-bitbar-gw-unit-a51"
@@ -199,7 +204,10 @@ def set_worker_type(config, tasks):
             elif task.get("suite", "") in ["talos", "raptor"] and not task[
                 "build-platform"
             ].startswith("linux64-ccov"):
-                task["worker-type"] = "t-linux-talos-1804"
+                if "browsertime-network-bench" in task.get("test-name"):
+                    task["worker-type"] = "t-linux-netperf-1804"
+                else:
+                    task["worker-type"] = "t-linux-talos-1804"
             else:
                 task["worker-type"] = LINUX_WORKER_TYPES[task["instance-size"]]
         else:

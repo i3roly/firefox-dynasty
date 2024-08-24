@@ -2158,10 +2158,13 @@
   num_temps: 2
   mir_op: true
 
-- name: LoadUnboxedBigInt
+- name: LoadUnboxedInt64
   gen_boilerplate: false
 
 - name: LoadDataViewElement
+  gen_boilerplate: false
+
+- name: LoadDataViewElement64
   gen_boilerplate: false
 
 - name: LoadTypedArrayElementHole
@@ -2184,10 +2187,13 @@
   num_temps: 1
   mir_op: true
 
-- name: StoreUnboxedBigInt
+- name: StoreUnboxedInt64
   gen_boilerplate: false
 
 - name: StoreDataViewElement
+  gen_boilerplate: false
+
+- name: StoreDataViewElement64
   gen_boilerplate: false
 
 - name: StoreTypedArrayElementHole
@@ -2199,7 +2205,7 @@
   num_temps: 1
   mir_op: true
 
-- name: StoreTypedArrayElementHoleBigInt
+- name: StoreTypedArrayElementHoleInt64
   gen_boilerplate: false
 
 - name: AtomicIsLockFree
@@ -2775,11 +2781,15 @@
 
 # Create a new BigInt* from an unboxed int64.
 - name: Int64ToBigInt
+  gen_boilerplate: false
+
+# Create a new BigInt* from an unboxed uint64.
+- name: Uint64ToBigInt
   result_type: WordSized
   operands:
     input: Int64
   num_temps: 1
-  mir_op: true
+  mir_op: Int64ToBigInt
 
 # Generational write barrier used when writing an object to another object.
 - name: PostWriteBarrierO

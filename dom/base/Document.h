@@ -281,6 +281,8 @@ class Touch;
 class TouchList;
 class TreeWalker;
 enum class ViewportFitType : uint8_t;
+class ViewTransition;
+class ViewTransitionUpdateCallback;
 class WakeLockSentinel;
 class WindowContext;
 class WindowGlobalChild;
@@ -2033,7 +2035,7 @@ class Document : public nsINode,
   void RuleAdded(StyleSheet&, css::Rule&);
   void RuleRemoved(StyleSheet&, css::Rule&);
   void SheetCloned(StyleSheet&) {}
-  void ImportRuleLoaded(CSSImportRule&, StyleSheet&);
+  void ImportRuleLoaded(StyleSheet&);
 
   /**
    * Flush notifications for this document and its parent documents
@@ -3811,6 +3813,9 @@ class Document : public nsINode,
    */
   MOZ_CAN_RUN_SCRIPT void
   DetermineProximityToViewportAndNotifyResizeObservers();
+
+  ViewTransition* StartViewTransition(
+      const Optional<OwningNonNull<ViewTransitionUpdateCallback>>&);
 
   // Getter for PermissionDelegateHandler. Performs lazy initialization.
   PermissionDelegateHandler* GetPermissionDelegateHandler();

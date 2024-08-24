@@ -10,6 +10,7 @@ import android.content.Intent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import mozilla.appservices.places.BookmarkRoot
 import mozilla.components.browser.state.ext.getUrl
 import mozilla.components.concept.engine.webextension.InstallationMethod
 import mozilla.components.concept.storage.BookmarksStorage
@@ -110,6 +111,7 @@ class MenuDialogMiddleware(
             is MenuAction.CustomMenuItemAction -> customMenuItemAction(action.intent, action.url)
             is MenuAction.ToggleReaderView -> toggleReaderView(state = currentState)
             is MenuAction.CustomizeReaderView -> customizeReaderView()
+            is MenuAction.DismissCFR -> dismissMenuCFR()
 
             is MenuAction.RequestDesktopSite,
             is MenuAction.RequestMobileSite,
@@ -197,14 +199,24 @@ class MenuDialogMiddleware(
         val selectedTab = browserMenuState.selectedTab
         val url = selectedTab.getUrl() ?: return@launch
 
+        val parentGuid = bookmarksStorage
+            .getRecentBookmarks(1)
+            .firstOrNull()
+            ?.parentGuid
+            ?: BookmarkRoot.Mobile.id
+
+        val parentNode = bookmarksStorage.getBookmark(parentGuid)
+
         val guidToEdit = addBookmarkUseCase(
             url = url,
             title = selectedTab.content.title,
+            parentGuid = parentGuid,
         )
 
         appStore.dispatch(
             BookmarkAction.BookmarkAdded(
                 guidToEdit = guidToEdit,
+                parentNode = parentNode,
             ),
         )
 
@@ -279,6 +291,11 @@ class MenuDialogMiddleware(
     private fun deleteBrowsingDataAndQuit() = scope.launch {
         onDeleteAndQuit()
         onDismiss()
+    }
+
+    private fun dismissMenuCFR() = scope.launch {
+        settings.shouldShowMenuCFR = false
+        settings.lastCfrShownTimeInMillis = System.currentTimeMillis()
     }
 
     private fun openInApp(

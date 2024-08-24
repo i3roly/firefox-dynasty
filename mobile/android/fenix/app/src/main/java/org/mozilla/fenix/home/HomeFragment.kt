@@ -283,6 +283,9 @@ class HomeFragment : Fragment() {
         super.onCreate(savedInstanceState)
 
         bundleArgs = args.toBundle()
+        if (savedInstanceState != null) {
+            bundleArgs.putBoolean(FOCUS_ON_ADDRESS_BAR, false)
+        }
         savedLoginsLauncher = registerForActivityResult { navigateToSavedLoginsFragment() }
 
         // DO NOT MOVE ANYTHING BELOW THIS addMarker CALL!
@@ -665,8 +668,6 @@ class HomeFragment : Fragment() {
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> binding.toolbarLayout })
-                        } else {
-                            Divider()
                         }
 
                         val showCFR =

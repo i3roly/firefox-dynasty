@@ -3992,8 +3992,12 @@ MDefinition* MTruncateBigIntToInt64::foldsTo(TempAllocator& alloc) {
 
   // If the operand converts an I32 to BigInt, extend the I32 to I64.
   if (input->isInt32ToBigInt()) {
-    return MExtendInt32ToInt64::New(alloc, input->getOperand(0),
-                                    /* isUnsigned = */ false);
+    auto* int32 = input->toInt32ToBigInt()->input();
+    if (int32->isConstant()) {
+      int32_t c = int32->toConstant()->toInt32();
+      return MConstant::NewInt64(alloc, int64_t(c));
+    }
+    return MExtendInt32ToInt64::New(alloc, int32, /* isUnsigned = */ false);
   }
 
   // Fold this operation if the input operand is constant.
@@ -4020,8 +4024,12 @@ MDefinition* MToInt64::foldsTo(TempAllocator& alloc) {
   // Unwrap Int32ToBigInt:
   // MToInt64(MInt32ToBigInt(int32)) = MExtendInt32ToInt64(int32).
   if (input->isInt32ToBigInt()) {
-    return MExtendInt32ToInt64::New(alloc, input->getOperand(0),
-                                    /* isUnsigned = */ false);
+    auto* int32 = input->toInt32ToBigInt()->input();
+    if (int32->isConstant()) {
+      int32_t c = int32->toConstant()->toInt32();
+      return MConstant::NewInt64(alloc, int64_t(c));
+    }
+    return MExtendInt32ToInt64::New(alloc, int32, /* isUnsigned = */ false);
   }
 
   // When the input is an Int64 already, just return it.
@@ -5078,6 +5086,124 @@ MDefinition* MCompare::tryFoldStringIndexOf(TempAllocator& alloc) {
   return MNot::New(alloc, startsWith);
 }
 
+MDefinition* MCompare::tryFoldBigInt64(TempAllocator& alloc) {
+  if (compareType() == Compare_BigInt) {
+    auto* left = lhs();
+    MOZ_ASSERT(left->type() == MIRType::BigInt);
+
+    auto* right = rhs();
+    MOZ_ASSERT(right->type() == MIRType::BigInt);
+
+    // At least one operand must be MInt64ToBigInt.
+    if (!left->isInt64ToBigInt() && !right->isInt64ToBigInt()) {
+      return this;
+    }
+
+    // Unwrap MInt64ToBigInt on both sides and perform a Int64 comparison.
+    if (left->isInt64ToBigInt() && right->isInt64ToBigInt()) {
+      auto* lhsInt64 = left->toInt64ToBigInt();
+      auto* rhsInt64 = right->toInt64ToBigInt();
+
+      // Don't optimize if Int64 against Uint64 comparison.
+      if (lhsInt64->elementType() != rhsInt64->elementType()) {
+        return this;
+      }
+
+      bool isSigned = lhsInt64->elementType() == Scalar::BigInt64;
+      auto compareType =
+          isSigned ? MCompare::Compare_Int64 : MCompare::Compare_UInt64;
+      return MCompare::New(alloc, lhsInt64->input(), rhsInt64->input(), jsop_,
+                           compareType);
+    }
+
+    // The other operand must be a constant.
+    if (!left->isConstant() && !right->isConstant()) {
+      return this;
+    }
+
+    auto* int64ToBigInt = left->isInt64ToBigInt() ? left->toInt64ToBigInt()
+                                                  : right->toInt64ToBigInt();
+    bool isSigned = int64ToBigInt->elementType() == Scalar::BigInt64;
+
+    auto* constant =
+        left->isConstant() ? left->toConstant() : right->toConstant();
+    auto* bigInt = constant->toBigInt();
+
+    // Extract the BigInt value if representable as Int64/Uint64.
+    mozilla::Maybe<int64_t> value;
+    if (isSigned) {
+      int64_t x;
+      if (BigInt::isInt64(bigInt, &x)) {
+        value = mozilla::Some(x);
+      }
+    } else {
+      uint64_t x;
+      if (BigInt::isUint64(bigInt, &x)) {
+        value = mozilla::Some(static_cast<int64_t>(x));
+      }
+    }
+
+    // The comparison is a constant if the BigInt has too many digits.
+    if (!value) {
+      int32_t repr = bigInt->isNegative() ? -1 : 1;
+
+      bool result;
+      if (left == int64ToBigInt) {
+        result = FoldComparison(jsop_, 0, repr);
+      } else {
+        result = FoldComparison(jsop_, repr, 0);
+      }
+      return MConstant::New(alloc, BooleanValue(result));
+    }
+
+    auto* cst = MConstant::NewInt64(alloc, *value);
+    block()->insertBefore(this, cst);
+
+    auto compareType =
+        isSigned ? MCompare::Compare_Int64 : MCompare::Compare_UInt64;
+    if (left == int64ToBigInt) {
+      return MCompare::New(alloc, int64ToBigInt->input(), cst, jsop_,
+                           compareType);
+    }
+    return MCompare::New(alloc, cst, int64ToBigInt->input(), jsop_,
+                         compareType);
+  }
+
+  if (compareType() == Compare_BigInt_Int32) {
+    auto* left = lhs();
+    MOZ_ASSERT(left->type() == MIRType::BigInt);
+
+    auto* right = rhs();
+    MOZ_ASSERT(right->type() == MIRType::Int32);
+
+    // Optimize MInt64ToBigInt against a constant int32.
+    if (!left->isInt64ToBigInt() || !right->isConstant()) {
+      return this;
+    }
+
+    auto* int64ToBigInt = left->toInt64ToBigInt();
+    bool isSigned = int64ToBigInt->elementType() == Scalar::BigInt64;
+
+    int32_t constInt32 = right->toConstant()->toInt32();
+
+    // The unsigned comparison against a negative operand is a constant.
+    if (!isSigned && constInt32 < 0) {
+      bool result = FoldComparison(jsop_, 0, constInt32);
+      return MConstant::New(alloc, BooleanValue(result));
+    }
+
+    auto* cst = MConstant::NewInt64(alloc, int64_t(constInt32));
+    block()->insertBefore(this, cst);
+
+    auto compareType =
+        isSigned ? MCompare::Compare_Int64 : MCompare::Compare_UInt64;
+    return MCompare::New(alloc, int64ToBigInt->input(), cst, jsop_,
+                         compareType);
+  }
+
+  return this;
+}
+
 MDefinition* MCompare::tryFoldBigInt(TempAllocator& alloc) {
   if (compareType() != Compare_BigInt) {
     return this;
@@ -5152,6 +5278,10 @@ MDefinition* MCompare::foldsTo(TempAllocator& alloc) {
     return folded;
   }
 
+  if (MDefinition* folded = tryFoldBigInt64(alloc); folded != this) {
+    return folded;
+  }
+
   if (MDefinition* folded = tryFoldBigInt(alloc); folded != this) {
     return folded;
   }
@@ -5199,6 +5329,11 @@ MDefinition* MNot::foldsTo(TempAllocator& alloc) {
   // Not of a symbol is always false.
   if (input()->type() == MIRType::Symbol) {
     return MConstant::New(alloc, BooleanValue(false));
+  }
+
+  // Drop the conversion in `Not(Int64ToBigInt(int64))` to `Not(int64)`.
+  if (input()->isInt64ToBigInt()) {
+    return MNot::New(alloc, input()->toInt64ToBigInt()->input());
   }
 
   return this;

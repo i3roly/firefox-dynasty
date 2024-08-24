@@ -104,6 +104,7 @@ async function openAboutTranslations({
       // Enabled by default.
       ["browser.translations.enable", !disabled],
       ["browser.translations.logLevel", "All"],
+      ["browser.translations.mostRecentTargetLanguages", ""],
       ...(prefs ?? []),
     ],
   });
@@ -660,6 +661,7 @@ async function loadTestPage({
         ["browser.translations.automaticallyPopup", true],
         ["browser.translations.alwaysTranslateLanguages", ""],
         ["browser.translations.neverTranslateLanguages", ""],
+        ["browser.translations.mostRecentTargetLanguages", ""],
         // Bug 1893100 - This is needed to ensure that switching focus
         // with tab works in tests independent of macOS settings that
         // would otherwise disable keyboard navigation at the OS level.
@@ -718,6 +720,11 @@ async function loadTestPage({
     remoteClients,
 
     /**
+     * Resolves the downloads for the pending count of requested language pairs.
+     * This should be used when resolving downloads immediately after requesting them.
+     *
+     * @see {resolveBulkDownloads} for requesting multiple translations prior to resolving.
+     *
      * @param {number} count - Count of the language pairs expected.
      */
     async resolveDownloads(count) {
@@ -728,12 +735,63 @@ async function loadTestPage({
     },
 
     /**
+     * Rejects the downloads for the pending count of requested language pairs.
+     * This should be used when rejecting downloads immediately after requesting them.
+     *
+     * @see {resolveBulkDownloads} for requesting multiple translations prior to rejecting.
+     *
      * @param {number} count - Count of the language pairs expected.
      */
     async rejectDownloads(count) {
       await remoteClients.translationsWasm.rejectPendingDownloads(1);
       await remoteClients.translationModels.rejectPendingDownloads(
         FILES_PER_LANGUAGE_PAIR * count
+      );
+    },
+
+    /**
+     * Resolves downloads for multiple pending translation requests.
+     *
+     * @see {resolveDownloads} for resolving downloads for just a single request.
+     *
+     * @param {object} expectations
+     * @param {number} expectations.expectedWasmDownloads
+     *  - The expected count of pending WASM binary download requests.
+     * @param {number} expectations.expectedLanguagePairDownloads
+     *  - The expected count of language-pair model-download requests.
+     */
+    async resolveBulkDownloads({
+      expectedWasmDownloads,
+      expectedLanguagePairDownloads,
+    }) {
+      await remoteClients.translationsWasm.resolvePendingDownloads(
+        expectedWasmDownloads
+      );
+      await remoteClients.translationModels.resolvePendingDownloads(
+        FILES_PER_LANGUAGE_PAIR * expectedLanguagePairDownloads
+      );
+    },
+
+    /**
+     * Rejects downloads for multiple pending translation requests.
+     *
+     * @see {rejectDownloads} for rejecting downloads for just a single request.
+     *
+     * @param {object} expectations
+     * @param {number} expectations.expectedWasmDownloads
+     *  - The expected count of pending WASM binary download requests.
+     * @param {number} expectations.expectedLanguagePairDownloads
+     *  - The expected count of language-pair model-download requests.
+     */
+    async rejectBulkDownloads({
+      expectedWasmDownloads,
+      expectedLanguagePairDownloads,
+    }) {
+      await remoteClients.translationsWasm.rejectPendingDownloads(
+        expectedWasmDownloads
+      );
+      await remoteClients.translationModels.rejectPendingDownloads(
+        FILES_PER_LANGUAGE_PAIR * expectedLanguagePairDownloads
       );
     },
 

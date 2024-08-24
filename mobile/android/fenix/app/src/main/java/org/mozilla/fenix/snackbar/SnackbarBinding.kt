@@ -29,6 +29,7 @@ import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.components.appstate.snackbar.SnackbarState
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.navigateWithBreadcrumb
+import org.mozilla.fenix.library.bookmarks.friendlyRootTitle
 
 /**
  * A binding for observing the [SnackbarState] in the [AppStore] and displaying the snackbar.
@@ -66,30 +67,7 @@ class SnackbarBinding(
             .collect { state ->
                 when (state) {
                     is SnackbarState.BookmarkAdded -> {
-                        if (state.guidToEdit != null) {
-                            snackbarDelegate.show(
-                                text = R.string.bookmark_saved_snackbar,
-                                duration = FenixSnackbar.LENGTH_LONG,
-                                action = R.string.edit_bookmark_snackbar_action,
-                            ) { view ->
-                                navController.navigateWithBreadcrumb(
-                                    directions = BrowserFragmentDirections.actionGlobalBookmarkEditFragment(
-                                        guidToEdit = state.guidToEdit,
-                                        requiresSnackbarPaddingForToolbar = true,
-                                    ),
-                                    navigateFrom = "BrowserFragment",
-                                    navigateTo = "ActionGlobalBookmarkEditFragment",
-                                    crashReporter = view.context.components.analytics.crashReporter,
-                                )
-                            }
-                        } else {
-                            snackbarDelegate.show(
-                                text = R.string.bookmark_invalid_url_error,
-                                duration = FenixSnackbar.LENGTH_LONG,
-                            )
-                        }
-
-                        appStore.dispatch(SnackbarAction.SnackbarShown)
+                        showBookmarkAddedSnackbarFor(state)
                     }
 
                     is SnackbarState.BookmarkDeleted -> {
@@ -227,5 +205,40 @@ class SnackbarBinding(
                     SnackbarState.None -> Unit
                 }
             }
+    }
+
+    private fun showBookmarkAddedSnackbarFor(state: SnackbarState.BookmarkAdded) {
+        Result.runCatching {
+            // We don't get smart compiler casts if we check these for nullity, so we'll just
+            // use runCatching to short-circuit. Since guidToEdit wouldn't get hit until the lambda
+            // invocation, we'll need to test them early.
+            val guidToEdit = state.guidToEdit!!
+            val parentNode = state.parentNode!!
+            snackbarDelegate.show(
+                text = context.getString(
+                    R.string.bookmark_saved_in_folder_snackbar,
+                    friendlyRootTitle(context, parentNode),
+                ),
+                duration = FenixSnackbar.LENGTH_LONG,
+                action = context.getString(R.string.edit_bookmark_snackbar_action),
+            ) { view ->
+                navController.navigateWithBreadcrumb(
+                    directions = BrowserFragmentDirections.actionGlobalBookmarkEditFragment(
+                        guidToEdit = guidToEdit,
+                        requiresSnackbarPaddingForToolbar = true,
+                    ),
+                    navigateFrom = "BrowserFragment",
+                    navigateTo = "ActionGlobalBookmarkEditFragment",
+                    crashReporter = view.context.components.analytics.crashReporter,
+                )
+            }
+        }.onFailure {
+            snackbarDelegate.show(
+                text = R.string.bookmark_invalid_url_error,
+                duration = FenixSnackbar.LENGTH_LONG,
+            )
+        }
+
+        appStore.dispatch(SnackbarAction.SnackbarShown)
     }
 }

@@ -620,12 +620,16 @@ bool ModuleGenerator::initTasks() {
 
   MOZ_ASSERT(GetHelperThreadCount() > 1);
 
-  uint32_t numTasks;
-  if (CanUseExtraThreads() && GetHelperThreadCPUCount() > 1) {
+  MOZ_ASSERT(!parallel_);
+  uint32_t numTasks = 1;
+  if (  // "obvious" prerequisites for doing off-thread compilation
+      CanUseExtraThreads() && GetHelperThreadCPUCount() > 1 &&
+      // For lazy tier 2 compilations, the current thread -- running a
+      // WasmPartialTier2CompileTask -- is already dedicated to compiling the
+      // to-be-tiered-up function.  So don't create a new task for it.
+      compileState_ != CompileState::LazyTier2) {
     parallel_ = true;
     numTasks = 2 * GetMaxWasmCompilationThreads();
-  } else {
-    numTasks = 1;
   }
 
   if (!tasks_.initCapacity(numTasks)) {
@@ -1202,7 +1206,7 @@ UniqueCodeBlock ModuleGenerator::finishTier(UniqueLinkData* linkData) {
 // we will need both codeMeta_ (and maybe codeMetaForAsmJS_) and moduleMeta_.
 SharedModule ModuleGenerator::finishModule(
     const ShareableBytes& bytecode, MutableModuleMetadata moduleMeta,
-    JS::OptimizedEncodingListener* maybeTier2Listener) {
+    JS::OptimizedEncodingListener* maybeCompleteTier2Listener) {
   MOZ_ASSERT(compilingTier1());
 
   UniqueLinkData tier1LinkData;
@@ -1348,20 +1352,22 @@ SharedModule ModuleGenerator::finishModule(
 
     // Perform storeOptimizedEncoding here instead of below so we don't have to
     // re-serialize the module.
-    if (maybeTier2Listener && codeMeta_->features().builtinModules.hasNone()) {
-      maybeTier2Listener->storeOptimizedEncoding(serializedBytes.begin(),
-                                                 serializedBytes.length());
-      maybeTier2Listener = nullptr;
+    if (maybeCompleteTier2Listener &&
+        codeMeta_->features().builtinModules.hasNone()) {
+      maybeCompleteTier2Listener->storeOptimizedEncoding(
+          serializedBytes.begin(), serializedBytes.length());
+      maybeCompleteTier2Listener = nullptr;
     }
   }
 
   if (compileState_ == CompileState::EagerTier1) {
-    module->startTier2(bytecode, maybeTier2Listener);
-  } else if (tier() == Tier::Serialized && maybeTier2Listener &&
+    module->startTier2(bytecode, maybeCompleteTier2Listener);
+  } else if (tier() == Tier::Serialized && maybeCompleteTier2Listener &&
              codeMeta_->features().builtinModules.hasNone()) {
     Bytes bytes;
     if (module->serialize(&bytes)) {
-      maybeTier2Listener->storeOptimizedEncoding(bytes.begin(), bytes.length());
+      maybeCompleteTier2Listener->storeOptimizedEncoding(bytes.begin(),
+                                                         bytes.length());
     }
   }
 
