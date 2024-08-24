@@ -16,14 +16,22 @@ void LaunchTask(NSString* aPath, NSArray* aArguments) {
   MacAutoreleasePool pool;
 
   @try {
-    NSTask* task = [[NSTask alloc] init];
-    [task setExecutableURL:[NSURL fileURLWithPath:aPath]];
-    if (aArguments) {
-      [task setArguments:aArguments];
+    if(@available(macOS 10.13, *)) {
+     NSTask* task = [[NSTask alloc] init];
+     [task setExecutableURL:[NSURL fileURLWithPath:aPath]];
+     if (aArguments) {
+       [task setArguments:aArguments];
+     }
+     [task launchAndReturnError:nil];
+     [task waitUntilExit];
+     [task release];
+    } else {
+      NSArray* arguments = aArguments;
+      if (!arguments) {
+        arguments = @[];
+      }
+      [NSTask launchedTaskWithLaunchPath:aPath arguments:arguments];
     }
-    [task launchAndReturnError:nil];
-    [task waitUntilExit];
-    [task release];
   } @catch (NSException* e) {
     NSLog(@"%@: %@", e.name, e.reason);
   }
