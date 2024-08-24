@@ -61,11 +61,11 @@ void LaunchMacAppWithBundle(NSString* aBundlePath, NSArray* aArguments) {
     StripQuarantineBit(launchPath);
     RegisterAppWithLaunchServices(launchPath);
 
+    if(@available(macOS 10.15, *)) {
     // We use NSWorkspace to register the application into the
     // `TALAppsToRelaunchAtLogin` list and allow for macOS session resume.
     // This API only works with `.app`s.
     __block dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-    if(@available(macOS 10.15, *)) {
       NSWorkspaceOpenConfiguration* config =
           [NSWorkspaceOpenConfiguration configuration];
       [config setArguments:aArguments];
@@ -82,16 +82,16 @@ void LaunchMacAppWithBundle(NSString* aBundlePath, NSArray* aArguments) {
                }
                dispatch_semaphore_signal(semaphore);
              }];
+      // We use a semaphore to wait for the application to launch.
+      dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
     } else {
       NSError *error=nil;
       [[NSWorkspace sharedWorkspace] launchApplicationAtURL:[NSBundle mainBundle].bundleURL
-                                                    options:NSWorkspaceLaunchNewInstance
+                                                    options:NSWorkspaceLaunchAsync|NSWorkspaceLaunchNewInstance
                                               configuration:@{NSWorkspaceLaunchConfigurationArguments:aArguments}
                                                       error:&error];
 
       }
-      // We use a semaphore to wait for the application to launch.
-      dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
   } @catch (NSException* e) {
     NSLog(@"%@: %@", e.name, e.reason);
   }
