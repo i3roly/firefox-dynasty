@@ -3,36 +3,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // Test that drag and drop events are sent at the right time.
-// Includes tests for dragging between domains, windows and iframes.
-//
-// Each source and target element is from one of the
-// places in the following list:
-//
-// 0. ".org" domain, window/tab #1
-// 1. window/tab #1 iframe in same domain
-// 2. ".com" domain, window/tab #2
-// 3. window/tab #2 iframe in same domain
-//
+// Supports dragging between domains, windows and iframes.
 // To avoid symmetric tests, the drag source must be in the first window.
+// iframe domains must match outer frame domains.
 
 "use strict";
 
 const { MockRegistrar } = ChromeUtils.importESModule(
   "resource://testing-common/MockRegistrar.sys.mjs"
 );
-
-// outer-frame domains
-const OUTER_BASE_1 = getRootDirectory(gTestPath).replace(
-  "chrome://mochitests/content",
-  "https://example.org"
-);
-const OUTER_BASE_2 = getRootDirectory(gTestPath).replace(
-  "chrome://mochitests/content",
-  "https://example.com"
-);
-// iframe domains
-const INNER_BASE_1 = OUTER_BASE_1;
-const INNER_BASE_2 = OUTER_BASE_2;
 
 // The tabs, each in their own widget.
 let tab1Cxt;
@@ -67,8 +46,8 @@ async function runDnd(
 async function openWindow(tabIdx) {
   let win =
     tabIdx == 0 ? window : await BrowserTestUtils.openNewBrowserWindow();
-  let url =
-    (tabIdx == 0 ? OUTER_BASE_1 : OUTER_BASE_2) + "browser_dragdrop_outer.html";
+  const OUTER_BASE_ARRAY = [OUTER_BASE_1, OUTER_BASE_2];
+  let url = OUTER_BASE_ARRAY[tabIdx] + "browser_dragdrop_outer.html";
   let tab = await BrowserTestUtils.openNewForegroundTab({
     gBrowser: win.gBrowser,
     url,
@@ -83,9 +62,10 @@ async function openWindow(tabIdx) {
   // Set the URL for the iframe.  Also set
   // neverAllowSessionIsSynthesizedForTests for both frames
   // (the second is redundant if they are in the same process).
+  const INNER_BASE_ARRAY = [INNER_BASE_1, INNER_BASE_2];
   await SpecialPowers.spawn(
     tab.linkedBrowser.browsingContext,
-    [tabIdx == 0 ? INNER_BASE_1 : INNER_BASE_2],
+    [INNER_BASE_ARRAY[tabIdx]],
     iframeUrl => {
       content.document.getElementById("iframe").src =
         iframeUrl + "browser_dragdrop_inner.html";
@@ -110,7 +90,7 @@ async function openWindow(tabIdx) {
   return tab.linkedBrowser.browsingContext;
 }
 
-add_setup(async function () {
+async function setup() {
   const oldDragService = SpecialPowers.Cc[
     "@mozilla.org/widget/dragservice;1"
   ].getService(SpecialPowers.Ci.nsIDragService);
@@ -132,7 +112,11 @@ add_setup(async function () {
 
   tab1Cxt = await openWindow(0);
   tab2Cxt = await openWindow(1);
-});
+}
+
+// ----------------------------------------------------------------------------
+// Test dragging between different frames and different domains
+// ----------------------------------------------------------------------------
 
 add_task(async function test_dnd_tab1_to_tab1() {
   await runDnd("tab1->tab1", tab1Cxt, tab1Cxt);
