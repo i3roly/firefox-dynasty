@@ -8,33 +8,27 @@ use crate::{
     },
     global::Global,
     hal_api::HalApi,
-    id::{
-        AdapterId, BufferId, CommandEncoderId, DeviceId, Id, Marker, SurfaceId, TextureId,
-        TextureViewId,
-    },
+    id::{AdapterId, BufferId, CommandEncoderId, DeviceId, SurfaceId, TextureId, TextureViewId},
     init_tracker::{BufferInitTracker, TextureInitTracker},
-    lock::{Mutex, RwLock},
+    lock::{rank, Mutex, RwLock},
     resource_log,
     snatch::{ExclusiveSnatchGuard, SnatchGuard, Snatchable},
     track::{SharedTrackerIndexAllocator, TextureSelector, TrackerIndex},
-    Label, SubmissionIndex,
+    Label, LabelHelpers, SubmissionIndex,
 };
 
 use hal::CommandEncoder;
 use smallvec::SmallVec;
 use thiserror::Error;
-use wgt::WasmNotSendSync;
 
 use std::{
     borrow::Borrow,
     fmt::Debug,
-    iter, mem,
+    iter,
+    mem::{self, ManuallyDrop},
     ops::Range,
     ptr::NonNull,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Weak,
-    },
+    sync::{atomic::Ordering, Arc, Weak},
 };
 
 /// Information about the wgpu-core resource.
@@ -57,10 +51,9 @@ use std::{
 /// [`Device`]: crate::device::resource::Device
 /// [`Buffer`]: crate::resource::Buffer
 #[derive(Debug)]
-pub(crate) struct ResourceInfo<T: Resource> {
-    id: Option<Id<T::Marker>>,
+pub(crate) struct TrackingData {
     tracker_index: TrackerIndex,
-    tracker_indices: Option<Arc<SharedTrackerIndexAllocator>>,
+    tracker_indices: Arc<SharedTrackerIndexAllocator>,
     /// The index of the last queue submission in which the resource
     /// was used.
     ///
@@ -68,69 +61,42 @@ pub(crate) struct ResourceInfo<T: Resource> {
     /// sequentially. Thus, when a queue submission completes, we know any
     /// resources used in that submission and any lower-numbered submissions are
     /// no longer in use by the GPU.
-    submission_index: AtomicUsize,
-
-    /// The `label` from the descriptor used to create the resource.
-    label: String,
+    submission_index: hal::AtomicFenceValue,
 }
 
-impl<T: Resource> Drop for ResourceInfo<T> {
+impl Drop for TrackingData {
     fn drop(&mut self) {
-        if let Some(indices) = &self.tracker_indices {
-            indices.free(self.tracker_index);
-        }
+        self.tracker_indices.free(self.tracker_index);
     }
 }
 
-impl<T: Resource> ResourceInfo<T> {
-    pub(crate) fn new(
-        label: &Label,
-        tracker_indices: Option<Arc<SharedTrackerIndexAllocator>>,
-    ) -> Self {
-        let tracker_index = tracker_indices
-            .as_ref()
-            .map(|indices| indices.alloc())
-            .unwrap_or(TrackerIndex::INVALID);
+impl TrackingData {
+    pub(crate) fn new(tracker_indices: Arc<SharedTrackerIndexAllocator>) -> Self {
         Self {
-            id: None,
-            tracker_index,
+            tracker_index: tracker_indices.alloc(),
             tracker_indices,
-            submission_index: AtomicUsize::new(0),
-            label: label
-                .as_ref()
-                .map(|label| label.to_string())
-                .unwrap_or_default(),
+            submission_index: hal::AtomicFenceValue::new(0),
         }
-    }
-
-    pub(crate) fn id(&self) -> Id<T::Marker> {
-        self.id.unwrap()
     }
 
     pub(crate) fn tracker_index(&self) -> TrackerIndex {
-        debug_assert!(self.tracker_index != TrackerIndex::INVALID);
         self.tracker_index
-    }
-
-    pub(crate) fn set_id(&mut self, id: Id<T::Marker>) {
-        self.id = Some(id);
     }
 
     /// Record that this resource will be used by the queue submission with the
     /// given index.
     pub(crate) fn use_at(&self, submit_index: SubmissionIndex) {
-        self.submission_index
-            .store(submit_index as _, Ordering::Release);
+        self.submission_index.store(submit_index, Ordering::Release);
     }
 
     pub(crate) fn submission_index(&self) -> SubmissionIndex {
-        self.submission_index.load(Ordering::Acquire) as _
+        self.submission_index.load(Ordering::Acquire)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct ResourceErrorIdent {
-    r#type: ResourceType,
+    r#type: &'static str,
     label: String,
 }
 
@@ -140,11 +106,15 @@ impl std::fmt::Display for ResourceErrorIdent {
     }
 }
 
-pub(crate) trait ParentDevice<A: HalApi>: Resource {
+pub(crate) trait ParentDevice<A: HalApi>: Labeled {
     fn device(&self) -> &Arc<Device<A>>;
 
+    fn is_equal(self: &Arc<Self>, other: &Arc<Self>) -> bool {
+        Arc::ptr_eq(self, other)
+    }
+
     fn same_device_as<O: ParentDevice<A>>(&self, other: &O) -> Result<(), DeviceError> {
-        if self.device().is_equal(other.device()) {
+        if Arc::ptr_eq(self.device(), other.device()) {
             Ok(())
         } else {
             Err(DeviceError::DeviceMismatch(Box::new(DeviceMismatch {
@@ -157,7 +127,7 @@ pub(crate) trait ParentDevice<A: HalApi>: Resource {
     }
 
     fn same_device(&self, device: &Arc<Device<A>>) -> Result<(), DeviceError> {
-        if self.device().is_equal(device) {
+        if Arc::ptr_eq(self.device(), device) {
             Ok(())
         } else {
             Err(DeviceError::DeviceMismatch(Box::new(DeviceMismatch {
@@ -170,38 +140,80 @@ pub(crate) trait ParentDevice<A: HalApi>: Resource {
     }
 }
 
-pub(crate) type ResourceType = &'static str;
+#[macro_export]
+macro_rules! impl_parent_device {
+    ($ty:ident) => {
+        impl<A: HalApi> $crate::resource::ParentDevice<A> for $ty<A> {
+            fn device(&self) -> &Arc<Device<A>> {
+                &self.device
+            }
+        }
+    };
+}
 
-pub(crate) trait Resource: 'static + Sized + WasmNotSendSync {
-    type Marker: Marker;
-    const TYPE: ResourceType;
-    fn as_info(&self) -> &ResourceInfo<Self>;
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self>;
+pub(crate) trait ResourceType {
+    const TYPE: &'static str;
+}
 
+#[macro_export]
+macro_rules! impl_resource_type {
+    ($ty:ident) => {
+        impl<A: HalApi> $crate::resource::ResourceType for $ty<A> {
+            const TYPE: &'static str = stringify!($ty);
+        }
+    };
+}
+
+pub(crate) trait Labeled: ResourceType {
     /// Returns a string identifying this resource for logging and errors.
     ///
     /// It may be a user-provided string or it may be a placeholder from wgpu.
     ///
     /// It is non-empty unless the user-provided string was empty.
-    fn label(&self) -> &str {
-        &self.as_info().label
-    }
+    fn label(&self) -> &str;
 
-    fn ref_count(self: &Arc<Self>) -> usize {
-        Arc::strong_count(self)
-    }
-    fn is_unique(self: &Arc<Self>) -> bool {
-        self.ref_count() == 1
-    }
-    fn is_equal(self: &Arc<Self>, other: &Arc<Self>) -> bool {
-        Arc::ptr_eq(self, other)
-    }
     fn error_ident(&self) -> ResourceErrorIdent {
         ResourceErrorIdent {
             r#type: Self::TYPE,
             label: self.label().to_owned(),
         }
     }
+}
+
+#[macro_export]
+macro_rules! impl_labeled {
+    ($ty:ident) => {
+        impl<A: HalApi> $crate::resource::Labeled for $ty<A> {
+            fn label(&self) -> &str {
+                &self.label
+            }
+        }
+    };
+}
+
+pub(crate) trait Trackable: Labeled {
+    fn tracker_index(&self) -> TrackerIndex;
+    /// Record that this resource will be used by the queue submission with the
+    /// given index.
+    fn use_at(&self, submit_index: SubmissionIndex);
+    fn submission_index(&self) -> SubmissionIndex;
+}
+
+#[macro_export]
+macro_rules! impl_trackable {
+    ($ty:ident) => {
+        impl<A: HalApi> $crate::resource::Trackable for $ty<A> {
+            fn tracker_index(&self) -> $crate::track::TrackerIndex {
+                self.tracking_data.tracker_index()
+            }
+            fn use_at(&self, submit_index: $crate::SubmissionIndex) {
+                self.tracking_data.use_at(submit_index)
+            }
+            fn submission_index(&self) -> $crate::SubmissionIndex {
+                self.tracking_data.submission_index()
+            }
+        }
+    };
 }
 
 /// The status code provided to the buffer mapping callback.
@@ -240,11 +252,7 @@ pub enum BufferMapAsyncStatus {
 #[derive(Debug)]
 pub(crate) enum BufferMapState<A: HalApi> {
     /// Mapped at creation.
-    Init {
-        ptr: NonNull<u8>,
-        stage_buffer: Arc<Buffer<A>>,
-        needs_flush: bool,
-    },
+    Init { staging_buffer: StagingBuffer<A> },
     /// Waiting for GPU to be done before mapping
     Waiting(BufferPendingMapping<A>),
     /// Mapped
@@ -449,7 +457,9 @@ pub struct Buffer<A: HalApi> {
     pub(crate) size: wgt::BufferAddress,
     pub(crate) initialization_status: RwLock<BufferInitTracker>,
     pub(crate) sync_mapped_writes: Mutex<Option<hal::MemoryRange>>,
-    pub(crate) info: ResourceInfo<Buffer<A>>,
+    /// The `label` from the descriptor used to create the resource.
+    pub(crate) label: String,
+    pub(crate) tracking_data: TrackingData,
     pub(crate) map_state: Mutex<BufferMapState<A>>,
     pub(crate) bind_groups: Mutex<Vec<Weak<BindGroup<A>>>>,
 }
@@ -467,7 +477,7 @@ impl<A: HalApi> Drop for Buffer<A> {
 }
 
 impl<A: HalApi> Buffer<A> {
-    pub(crate) fn raw(&self, guard: &SnatchGuard) -> Option<&A::Buffer> {
+    pub(crate) fn raw<'a>(&'a self, guard: &'a SnatchGuard) -> Option<&'a A::Buffer> {
         self.raw.get(guard)
     }
 
@@ -493,7 +503,7 @@ impl<A: HalApi> Buffer<A> {
     /// Checks that the given buffer usage contains the required buffer usage,
     /// returns an error otherwise.
     pub(crate) fn check_usage(
-        self: &Arc<Self>,
+        &self,
         expected: wgt::BufferUsages,
     ) -> Result<(), MissingBufferUsageError> {
         if self.usage.contains(expected) {
@@ -593,14 +603,13 @@ impl<A: HalApi> Buffer<A> {
             };
         }
 
-        let snatch_guard = device.snatchable_lock.read();
-        {
-            let mut trackers = device.as_ref().trackers.lock();
-            trackers.buffers.set_single(self, internal_use);
-            //TODO: Check if draining ALL buffers is correct!
-            let _ = trackers.buffers.drain_transitions(&snatch_guard);
-        }
-        drop(snatch_guard);
+        // TODO: we are ignoring the transition here, I think we need to add a barrier
+        // at the end of the submission
+        device
+            .trackers
+            .lock()
+            .buffers
+            .set_single(self, internal_use);
 
         device.lock_life().map(self);
 
@@ -635,16 +644,10 @@ impl<A: HalApi> Buffer<A> {
         let raw_buf = self.try_raw(&snatch_guard)?;
         log::debug!("{} map state -> Idle", self.error_ident());
         match mem::replace(&mut *self.map_state.lock(), BufferMapState::Idle) {
-            BufferMapState::Init {
-                ptr,
-                stage_buffer,
-                needs_flush,
-            } => {
+            BufferMapState::Init { staging_buffer } => {
                 #[cfg(feature = "trace")]
                 if let Some(ref mut trace) = *device.trace.lock() {
-                    let data = trace.make_binary("bin", unsafe {
-                        std::slice::from_raw_parts(ptr.as_ptr(), self.size as usize)
-                    });
+                    let data = trace.make_binary("bin", staging_buffer.get_data());
                     trace.add(trace::Action::WriteBuffer {
                         id: buffer_id,
                         data,
@@ -652,33 +655,26 @@ impl<A: HalApi> Buffer<A> {
                         queued: true,
                     });
                 }
-                let _ = ptr;
-                if needs_flush {
-                    unsafe {
-                        device.raw().flush_mapped_ranges(
-                            stage_buffer.raw(&snatch_guard).unwrap(),
-                            iter::once(0..self.size),
-                        );
-                    }
-                }
 
-                self.info
-                    .use_at(device.active_submission_index.load(Ordering::Relaxed) + 1);
+                let mut pending_writes = device.pending_writes.lock();
+                let pending_writes = pending_writes.as_mut().unwrap();
+
+                let staging_buffer = staging_buffer.flush();
+
+                self.use_at(device.active_submission_index.load(Ordering::Relaxed) + 1);
                 let region = wgt::BufferSize::new(self.size).map(|size| hal::BufferCopy {
                     src_offset: 0,
                     dst_offset: 0,
                     size,
                 });
                 let transition_src = hal::BufferBarrier {
-                    buffer: stage_buffer.raw(&snatch_guard).unwrap(),
+                    buffer: staging_buffer.raw(),
                     usage: hal::BufferUses::MAP_WRITE..hal::BufferUses::COPY_SRC,
                 };
                 let transition_dst = hal::BufferBarrier {
                     buffer: raw_buf,
                     usage: hal::BufferUses::empty()..hal::BufferUses::COPY_DST,
                 };
-                let mut pending_writes = device.pending_writes.lock();
-                let pending_writes = pending_writes.as_mut().unwrap();
                 let encoder = pending_writes.activate();
                 unsafe {
                     encoder.transition_buffers(
@@ -686,13 +682,13 @@ impl<A: HalApi> Buffer<A> {
                     );
                     if self.size > 0 {
                         encoder.copy_buffer_to_buffer(
-                            stage_buffer.raw(&snatch_guard).unwrap(),
+                            staging_buffer.raw(),
                             raw_buf,
                             region.into_iter(),
                         );
                     }
                 }
-                pending_writes.consume_temp(queue::TempResource::Buffer(stage_buffer));
+                pending_writes.consume(staging_buffer);
                 pending_writes.insert_buffer(self);
             }
             BufferMapState::Idle => {
@@ -718,12 +714,7 @@ impl<A: HalApi> Buffer<A> {
                     }
                     let _ = (ptr, range);
                 }
-                unsafe {
-                    device
-                        .raw()
-                        .unmap_buffer(raw_buf)
-                        .map_err(DeviceError::from)?
-                };
+                unsafe { device.raw().unmap_buffer(raw_buf) };
             }
         }
         Ok(None)
@@ -746,14 +737,12 @@ impl<A: HalApi> Buffer<A> {
                 mem::take(&mut *guard)
             };
 
-            queue::TempResource::DestroyedBuffer(Arc::new(DestroyedBuffer {
+            queue::TempResource::DestroyedBuffer(DestroyedBuffer {
                 raw: Some(raw),
                 device: Arc::clone(&self.device),
-                submission_index: self.info.submission_index(),
-                tracker_index: self.info.tracker_index(),
                 label: self.label().to_owned(),
                 bind_groups,
-            }))
+            })
         };
 
         let mut pending_writes = device.pending_writes.lock();
@@ -761,7 +750,7 @@ impl<A: HalApi> Buffer<A> {
         if pending_writes.contains_buffer(self) {
             pending_writes.consume_temp(temp);
         } else {
-            let last_submit_index = self.info.submission_index();
+            let last_submit_index = self.submission_index();
             device
                 .lock_life()
                 .schedule_resource_destruction(temp, last_submit_index);
@@ -790,25 +779,11 @@ pub enum CreateBufferError {
     MissingDownlevelFlags(#[from] MissingDownlevelFlags),
 }
 
-impl<A: HalApi> Resource for Buffer<A> {
-    const TYPE: ResourceType = "Buffer";
-
-    type Marker = crate::id::markers::Buffer;
-
-    fn as_info(&self) -> &ResourceInfo<Self> {
-        &self.info
-    }
-
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self> {
-        &mut self.info
-    }
-}
-
-impl<A: HalApi> ParentDevice<A> for Buffer<A> {
-    fn device(&self) -> &Arc<Device<A>> {
-        &self.device
-    }
-}
+crate::impl_resource_type!(Buffer);
+crate::impl_labeled!(Buffer);
+crate::impl_parent_device!(Buffer);
+crate::impl_storage_item!(Buffer);
+crate::impl_trackable!(Buffer);
 
 /// A buffer that has been marked as destroyed and is staged for actual deletion soon.
 #[derive(Debug)]
@@ -816,8 +791,6 @@ pub struct DestroyedBuffer<A: HalApi> {
     raw: Option<A::Buffer>,
     device: Arc<Device<A>>,
     label: String,
-    pub(crate) tracker_index: TrackerIndex,
-    pub(crate) submission_index: u64,
     bind_groups: Vec<Weak<BindGroup<A>>>,
 }
 
@@ -846,6 +819,11 @@ impl<A: HalApi> Drop for DestroyedBuffer<A> {
     }
 }
 
+#[cfg(send_sync)]
+unsafe impl<A: HalApi> Send for StagingBuffer<A> {}
+#[cfg(send_sync)]
+unsafe impl<A: HalApi> Sync for StagingBuffer<A> {}
+
 /// A temporary buffer, consumed by the command that uses it.
 ///
 /// A [`StagingBuffer`] is designed for one-shot uploads of data to the GPU. It
@@ -867,42 +845,126 @@ impl<A: HalApi> Drop for DestroyedBuffer<A> {
 /// [`Device::pending_writes`]: crate::device::Device
 #[derive(Debug)]
 pub struct StagingBuffer<A: HalApi> {
-    pub(crate) raw: Mutex<Option<A::Buffer>>,
-    pub(crate) device: Arc<Device<A>>,
-    pub(crate) size: wgt::BufferAddress,
-    pub(crate) is_coherent: bool,
-    pub(crate) info: ResourceInfo<StagingBuffer<A>>,
+    raw: A::Buffer,
+    device: Arc<Device<A>>,
+    pub(crate) size: wgt::BufferSize,
+    is_coherent: bool,
+    ptr: NonNull<u8>,
 }
 
-impl<A: HalApi> Drop for StagingBuffer<A> {
-    fn drop(&mut self) {
-        if let Some(raw) = self.raw.lock().take() {
-            resource_log!("Destroy raw {}", self.error_ident());
-            unsafe {
-                use hal::Device;
-                self.device.raw().destroy_buffer(raw);
-            }
+impl<A: HalApi> StagingBuffer<A> {
+    pub(crate) fn new(device: &Arc<Device<A>>, size: wgt::BufferSize) -> Result<Self, DeviceError> {
+        use hal::Device;
+        profiling::scope!("StagingBuffer::new");
+        let stage_desc = hal::BufferDescriptor {
+            label: crate::hal_label(Some("(wgpu internal) Staging"), device.instance_flags),
+            size: size.get(),
+            usage: hal::BufferUses::MAP_WRITE | hal::BufferUses::COPY_SRC,
+            memory_flags: hal::MemoryFlags::TRANSIENT,
+        };
+
+        let raw = unsafe { device.raw().create_buffer(&stage_desc)? };
+        let mapping = unsafe { device.raw().map_buffer(&raw, 0..size.get()) }?;
+
+        let staging_buffer = StagingBuffer {
+            raw,
+            device: device.clone(),
+            size,
+            is_coherent: mapping.is_coherent,
+            ptr: mapping.ptr,
+        };
+
+        Ok(staging_buffer)
+    }
+
+    /// SAFETY: You must not call any functions of `self`
+    /// until you stopped using the returned pointer.
+    pub(crate) unsafe fn ptr(&self) -> NonNull<u8> {
+        self.ptr
+    }
+
+    #[cfg(feature = "trace")]
+    pub(crate) fn get_data(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.size.get() as usize) }
+    }
+
+    pub(crate) fn write_zeros(&mut self) {
+        unsafe { core::ptr::write_bytes(self.ptr.as_ptr(), 0, self.size.get() as usize) };
+    }
+
+    pub(crate) fn write(&mut self, data: &[u8]) {
+        assert!(data.len() >= self.size.get() as usize);
+        // SAFETY: With the assert above, all of `copy_nonoverlapping`'s
+        // requirements are satisfied.
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                self.ptr.as_ptr(),
+                self.size.get() as usize,
+            );
+        }
+    }
+
+    /// SAFETY: The offsets and size must be in-bounds.
+    pub(crate) unsafe fn write_with_offset(
+        &mut self,
+        data: &[u8],
+        src_offset: isize,
+        dst_offset: isize,
+        size: usize,
+    ) {
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data.as_ptr().offset(src_offset),
+                self.ptr.as_ptr().offset(dst_offset),
+                size,
+            );
+        }
+    }
+
+    pub(crate) fn flush(self) -> FlushedStagingBuffer<A> {
+        use hal::Device;
+        let device = self.device.raw();
+        if !self.is_coherent {
+            unsafe { device.flush_mapped_ranges(&self.raw, iter::once(0..self.size.get())) };
+        }
+        unsafe { device.unmap_buffer(&self.raw) };
+
+        let StagingBuffer {
+            raw, device, size, ..
+        } = self;
+
+        FlushedStagingBuffer {
+            raw: ManuallyDrop::new(raw),
+            device,
+            size,
         }
     }
 }
 
-impl<A: HalApi> Resource for StagingBuffer<A> {
-    const TYPE: ResourceType = "StagingBuffer";
+crate::impl_resource_type!(StagingBuffer);
+crate::impl_storage_item!(StagingBuffer);
 
-    type Marker = crate::id::markers::StagingBuffer;
+#[derive(Debug)]
+pub struct FlushedStagingBuffer<A: HalApi> {
+    raw: ManuallyDrop<A::Buffer>,
+    device: Arc<Device<A>>,
+    pub(crate) size: wgt::BufferSize,
+}
 
-    fn as_info(&self) -> &ResourceInfo<Self> {
-        &self.info
-    }
-
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self> {
-        &mut self.info
+impl<A: HalApi> FlushedStagingBuffer<A> {
+    pub(crate) fn raw(&self) -> &A::Buffer {
+        &self.raw
     }
 }
 
-impl<A: HalApi> ParentDevice<A> for StagingBuffer<A> {
-    fn device(&self) -> &Arc<Device<A>> {
-        &self.device
+impl<A: HalApi> Drop for FlushedStagingBuffer<A> {
+    fn drop(&mut self) {
+        use hal::Device;
+        resource_log!("Destroy raw StagingBuffer");
+        // SAFETY: We are in the Drop impl and we don't use self.raw anymore after this point.
+        let raw = unsafe { ManuallyDrop::take(&mut self.raw) };
+        unsafe { self.device.raw().destroy_buffer(raw) };
     }
 }
 
@@ -954,13 +1016,49 @@ pub struct Texture<A: HalApi> {
     pub(crate) format_features: wgt::TextureFormatFeatures,
     pub(crate) initialization_status: RwLock<TextureInitTracker>,
     pub(crate) full_range: TextureSelector,
-    pub(crate) info: ResourceInfo<Texture<A>>,
+    /// The `label` from the descriptor used to create the resource.
+    pub(crate) label: String,
+    pub(crate) tracking_data: TrackingData,
     pub(crate) clear_mode: RwLock<TextureClearMode<A>>,
     pub(crate) views: Mutex<Vec<Weak<TextureView<A>>>>,
     pub(crate) bind_groups: Mutex<Vec<Weak<BindGroup<A>>>>,
 }
 
 impl<A: HalApi> Texture<A> {
+    pub(crate) fn new(
+        device: &Arc<Device<A>>,
+        inner: TextureInner<A>,
+        hal_usage: hal::TextureUses,
+        desc: &TextureDescriptor,
+        format_features: wgt::TextureFormatFeatures,
+        clear_mode: TextureClearMode<A>,
+        init: bool,
+    ) -> Self {
+        Texture {
+            inner: Snatchable::new(inner),
+            device: device.clone(),
+            desc: desc.map_label(|_| ()),
+            hal_usage,
+            format_features,
+            initialization_status: RwLock::new(
+                rank::TEXTURE_INITIALIZATION_STATUS,
+                if init {
+                    TextureInitTracker::new(desc.mip_level_count, desc.array_layer_count())
+                } else {
+                    TextureInitTracker::new(0, 0)
+                },
+            ),
+            full_range: TextureSelector {
+                mips: 0..desc.mip_level_count,
+                layers: 0..desc.array_layer_count(),
+            },
+            label: desc.label.to_string(),
+            tracking_data: TrackingData::new(device.tracker_indices.textures.clone()),
+            clear_mode: RwLock::new(rank::TEXTURE_CLEAR_MODE, clear_mode),
+            views: Mutex::new(rank::TEXTURE_VIEWS, Vec::new()),
+            bind_groups: Mutex::new(rank::TEXTURE_BIND_GROUPS, Vec::new()),
+        }
+    }
     /// Checks that the given texture usage contains the required texture usage,
     /// returns an error otherwise.
     pub(crate) fn check_usage(
@@ -1042,19 +1140,9 @@ impl<A: HalApi> Texture<A> {
             .ok_or_else(|| DestroyedResourceError(self.error_ident()))
     }
 
-    pub(crate) fn check_destroyed<'a>(
-        &'a self,
-        guard: &'a SnatchGuard,
-    ) -> Result<(), DestroyedResourceError> {
-        self.inner
-            .get(guard)
-            .map(|_| ())
-            .ok_or_else(|| DestroyedResourceError(self.error_ident()))
-    }
-
     pub(crate) fn inner_mut<'a>(
         &'a self,
-        guard: &mut ExclusiveSnatchGuard,
+        guard: &'a mut ExclusiveSnatchGuard,
     ) -> Option<&'a mut TextureInner<A>> {
         self.inner.get_mut(guard)
     }
@@ -1112,15 +1200,13 @@ impl<A: HalApi> Texture<A> {
                 mem::take(&mut *guard)
             };
 
-            queue::TempResource::DestroyedTexture(Arc::new(DestroyedTexture {
+            queue::TempResource::DestroyedTexture(DestroyedTexture {
                 raw: Some(raw),
                 views,
                 bind_groups,
                 device: Arc::clone(&self.device),
-                tracker_index: self.info.tracker_index(),
-                submission_index: self.info.submission_index(),
                 label: self.label().to_owned(),
-            }))
+            })
         };
 
         let mut pending_writes = device.pending_writes.lock();
@@ -1128,7 +1214,7 @@ impl<A: HalApi> Texture<A> {
         if pending_writes.contains_texture(self) {
             pending_writes.consume_temp(temp);
         } else {
-            let last_submit_index = self.info.submission_index();
+            let last_submit_index = self.submission_index();
             device
                 .lock_life()
                 .schedule_resource_destruction(temp, last_submit_index);
@@ -1150,15 +1236,14 @@ impl Global {
         profiling::scope!("Buffer::as_hal");
 
         let hub = A::hub(self);
-        let buffer_opt = { hub.buffers.try_get(id).ok().flatten() };
-        let buffer = buffer_opt.as_ref().unwrap();
 
-        let hal_buffer = {
+        if let Ok(buffer) = hub.buffers.get(id) {
             let snatch_guard = buffer.device.snatchable_lock.read();
-            buffer.raw(&snatch_guard)
-        };
-
-        hal_buffer_callback(hal_buffer)
+            let hal_buffer = buffer.raw(&snatch_guard);
+            hal_buffer_callback(hal_buffer)
+        } else {
+            hal_buffer_callback(None)
+        }
     }
 
     /// # Safety
@@ -1172,12 +1257,14 @@ impl Global {
         profiling::scope!("Texture::as_hal");
 
         let hub = A::hub(self);
-        let texture_opt = { hub.textures.try_get(id).ok().flatten() };
-        let texture = texture_opt.as_ref().unwrap();
-        let snatch_guard = texture.device.snatchable_lock.read();
-        let hal_texture = texture.raw(&snatch_guard);
 
-        hal_texture_callback(hal_texture)
+        if let Ok(texture) = hub.textures.get(id) {
+            let snatch_guard = texture.device.snatchable_lock.read();
+            let hal_texture = texture.raw(&snatch_guard);
+            hal_texture_callback(hal_texture)
+        } else {
+            hal_texture_callback(None)
+        }
     }
 
     /// # Safety
@@ -1191,12 +1278,14 @@ impl Global {
         profiling::scope!("TextureView::as_hal");
 
         let hub = A::hub(self);
-        let texture_view_opt = { hub.texture_views.try_get(id).ok().flatten() };
-        let texture_view = texture_view_opt.as_ref().unwrap();
-        let snatch_guard = texture_view.device.snatchable_lock.read();
-        let hal_texture_view = texture_view.raw(&snatch_guard);
 
-        hal_texture_view_callback(hal_texture_view)
+        if let Ok(texture_view) = hub.texture_views.get(id) {
+            let snatch_guard = texture_view.device.snatchable_lock.read();
+            let hal_texture_view = texture_view.raw(&snatch_guard);
+            hal_texture_view_callback(hal_texture_view)
+        } else {
+            hal_texture_view_callback(None)
+        }
     }
 
     /// # Safety
@@ -1210,7 +1299,7 @@ impl Global {
         profiling::scope!("Adapter::as_hal");
 
         let hub = A::hub(self);
-        let adapter = hub.adapters.try_get(id).ok().flatten();
+        let adapter = hub.adapters.get(id).ok();
         let hal_adapter = adapter.as_ref().map(|adapter| &adapter.raw.adapter);
 
         hal_adapter_callback(hal_adapter)
@@ -1227,7 +1316,7 @@ impl Global {
         profiling::scope!("Device::as_hal");
 
         let hub = A::hub(self);
-        let device = hub.devices.try_get(id).ok().flatten();
+        let device = hub.devices.get(id).ok();
         let hal_device = device.as_ref().map(|device| device.raw());
 
         hal_device_callback(hal_device)
@@ -1244,10 +1333,14 @@ impl Global {
         profiling::scope!("Device::fence_as_hal");
 
         let hub = A::hub(self);
-        let device = hub.devices.try_get(id).ok().flatten();
-        let hal_fence = device.as_ref().map(|device| device.fence.read());
 
-        hal_fence_callback(hal_fence.as_deref().unwrap().as_ref())
+        if let Ok(device) = hub.devices.get(id) {
+            let hal_fence = device.fence.read();
+            let hal_fence = hal_fence.as_ref();
+            hal_fence_callback(hal_fence)
+        } else {
+            hal_fence_callback(None)
+        }
     }
 
     /// # Safety
@@ -1282,15 +1375,15 @@ impl Global {
         profiling::scope!("CommandEncoder::as_hal");
 
         let hub = A::hub(self);
-        let cmd_buf = hub
-            .command_buffers
-            .get(id.into_command_buffer_id())
-            .unwrap();
-        let mut cmd_buf_data = cmd_buf.data.lock();
-        let cmd_buf_data = cmd_buf_data.as_mut().unwrap();
-        let cmd_buf_raw = cmd_buf_data.encoder.open().ok();
 
-        hal_command_encoder_callback(cmd_buf_raw)
+        if let Ok(cmd_buf) = hub.command_buffers.get(id.into_command_buffer_id()) {
+            let mut cmd_buf_data = cmd_buf.data.lock();
+            let cmd_buf_data = cmd_buf_data.as_mut().unwrap();
+            let cmd_buf_raw = cmd_buf_data.encoder.open().ok();
+            hal_command_encoder_callback(cmd_buf_raw)
+        } else {
+            hal_command_encoder_callback(None)
+        }
     }
 }
 
@@ -1302,8 +1395,6 @@ pub struct DestroyedTexture<A: HalApi> {
     bind_groups: Vec<Weak<BindGroup<A>>>,
     device: Arc<Device<A>>,
     label: String,
-    pub(crate) tracker_index: TrackerIndex,
-    pub(crate) submission_index: u64,
 }
 
 impl<A: HalApi> DestroyedTexture<A> {
@@ -1428,25 +1519,11 @@ pub enum CreateTextureError {
     MissingDownlevelFlags(#[from] MissingDownlevelFlags),
 }
 
-impl<A: HalApi> Resource for Texture<A> {
-    const TYPE: ResourceType = "Texture";
-
-    type Marker = crate::id::markers::Texture;
-
-    fn as_info(&self) -> &ResourceInfo<Self> {
-        &self.info
-    }
-
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self> {
-        &mut self.info
-    }
-}
-
-impl<A: HalApi> ParentDevice<A> for Texture<A> {
-    fn device(&self) -> &Arc<Device<A>> {
-        &self.device
-    }
-}
+crate::impl_resource_type!(Texture);
+crate::impl_labeled!(Texture);
+crate::impl_parent_device!(Texture);
+crate::impl_storage_item!(Texture);
+crate::impl_trackable!(Texture);
 
 impl<A: HalApi> Borrow<TextureSelector> for Texture<A> {
     fn borrow(&self) -> &TextureSelector {
@@ -1520,7 +1597,9 @@ pub struct TextureView<A: HalApi> {
     pub(crate) render_extent: Result<wgt::Extent3d, TextureViewNotRenderableReason>,
     pub(crate) samples: u32,
     pub(crate) selector: TextureSelector,
-    pub(crate) info: ResourceInfo<TextureView<A>>,
+    /// The `label` from the descriptor used to create the resource.
+    pub(crate) label: String,
+    pub(crate) tracking_data: TrackingData,
 }
 
 impl<A: HalApi> Drop for TextureView<A> {
@@ -1603,25 +1682,11 @@ pub enum CreateTextureViewError {
 #[non_exhaustive]
 pub enum TextureViewDestroyError {}
 
-impl<A: HalApi> Resource for TextureView<A> {
-    const TYPE: ResourceType = "TextureView";
-
-    type Marker = crate::id::markers::TextureView;
-
-    fn as_info(&self) -> &ResourceInfo<Self> {
-        &self.info
-    }
-
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self> {
-        &mut self.info
-    }
-}
-
-impl<A: HalApi> ParentDevice<A> for TextureView<A> {
-    fn device(&self) -> &Arc<Device<A>> {
-        &self.device
-    }
-}
+crate::impl_resource_type!(TextureView);
+crate::impl_labeled!(TextureView);
+crate::impl_parent_device!(TextureView);
+crate::impl_storage_item!(TextureView);
+crate::impl_trackable!(TextureView);
 
 /// Describes a [`Sampler`]
 #[derive(Clone, Debug, PartialEq)]
@@ -1656,7 +1721,9 @@ pub struct SamplerDescriptor<'a> {
 pub struct Sampler<A: HalApi> {
     pub(crate) raw: Option<A::Sampler>,
     pub(crate) device: Arc<Device<A>>,
-    pub(crate) info: ResourceInfo<Self>,
+    /// The `label` from the descriptor used to create the resource.
+    pub(crate) label: String,
+    pub(crate) tracking_data: TrackingData,
     /// `true` if this is a comparison sampler
     pub(crate) comparison: bool,
     /// `true` if this is a filtering sampler
@@ -1725,25 +1792,11 @@ pub enum CreateSamplerError {
     MissingFeatures(#[from] MissingFeatures),
 }
 
-impl<A: HalApi> Resource for Sampler<A> {
-    const TYPE: ResourceType = "Sampler";
-
-    type Marker = crate::id::markers::Sampler;
-
-    fn as_info(&self) -> &ResourceInfo<Self> {
-        &self.info
-    }
-
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self> {
-        &mut self.info
-    }
-}
-
-impl<A: HalApi> ParentDevice<A> for Sampler<A> {
-    fn device(&self) -> &Arc<Device<A>> {
-        &self.device
-    }
-}
+crate::impl_resource_type!(Sampler);
+crate::impl_labeled!(Sampler);
+crate::impl_parent_device!(Sampler);
+crate::impl_storage_item!(Sampler);
+crate::impl_trackable!(Sampler);
 
 #[derive(Clone, Debug, Error)]
 #[non_exhaustive]
@@ -1764,7 +1817,9 @@ pub type QuerySetDescriptor<'a> = wgt::QuerySetDescriptor<Label<'a>>;
 pub struct QuerySet<A: HalApi> {
     pub(crate) raw: Option<A::QuerySet>,
     pub(crate) device: Arc<Device<A>>,
-    pub(crate) info: ResourceInfo<Self>,
+    /// The `label` from the descriptor used to create the resource.
+    pub(crate) label: String,
+    pub(crate) tracking_data: TrackingData,
     pub(crate) desc: wgt::QuerySetDescriptor<()>,
 }
 
@@ -1780,25 +1835,11 @@ impl<A: HalApi> Drop for QuerySet<A> {
     }
 }
 
-impl<A: HalApi> ParentDevice<A> for QuerySet<A> {
-    fn device(&self) -> &Arc<Device<A>> {
-        &self.device
-    }
-}
-
-impl<A: HalApi> Resource for QuerySet<A> {
-    const TYPE: ResourceType = "QuerySet";
-
-    type Marker = crate::id::markers::QuerySet;
-
-    fn as_info(&self) -> &ResourceInfo<Self> {
-        &self.info
-    }
-
-    fn as_info_mut(&mut self) -> &mut ResourceInfo<Self> {
-        &mut self.info
-    }
-}
+crate::impl_resource_type!(QuerySet);
+crate::impl_labeled!(QuerySet);
+crate::impl_parent_device!(QuerySet);
+crate::impl_storage_item!(QuerySet);
+crate::impl_trackable!(QuerySet);
 
 impl<A: HalApi> QuerySet<A> {
     pub(crate) fn raw(&self) -> &A::QuerySet {

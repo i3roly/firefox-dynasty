@@ -181,7 +181,9 @@ var gBrowserInit = {
   },
 
   onLoad() {
-    gBrowser.addEventListener("DOMUpdateBlockedPopups", gPopupBlockerObserver);
+    gBrowser.addEventListener("DOMUpdateBlockedPopups", e =>
+      PopupBlockerObserver.handleEvent(e)
+    );
     gBrowser.addEventListener(
       "TranslationsParent:LanguageState",
       FullPageTranslationsPanel
@@ -383,7 +385,6 @@ var gBrowserInit = {
     BookmarkingUI.init();
     BrowserSearch.delayedStartupInit();
     SearchUIUtils.init();
-    SearchModeSwitcher.init(window);
     gProtectionsHandler.init();
     HomePage.delayedStartup().catch(console.error);
 

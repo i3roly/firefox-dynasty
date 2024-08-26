@@ -581,6 +581,9 @@
 - name: ToFloat32
   gen_boilerplate: false
 
+- name: ToFloat16
+  gen_boilerplate: false
+
 # Converts a uint32 to a double (coming from wasm).
 - name: WasmUnsignedToDouble
   operands:
@@ -3254,6 +3257,15 @@
   movable: true
   congruent_to: if_operands_equal
   folds_to: custom
+  type_policy: none
+  alias_set: none
+
+- name: WasmClampTable64Index
+  operands:
+    input: Int64
+  result_type: Int32
+  movable: true
+  congruent_to: if_operands_equal
   type_policy: none
   alias_set: none
 

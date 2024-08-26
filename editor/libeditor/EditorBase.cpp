@@ -9,6 +9,7 @@
 #include <string.h>  // for strcmp
 
 #include "AutoRangeArray.h"  // for AutoRangeArray
+#include "AutoSelectionRestorer.h"
 #include "ChangeAttributeTransaction.h"
 #include "CompositionTransaction.h"
 #include "DeleteContentTransactionBase.h"
@@ -58,6 +59,7 @@
 #include "mozilla/Preferences.h"            // for Preferences
 #include "mozilla/PresShell.h"              // for PresShell
 #include "mozilla/RangeBoundary.h"       // for RawRangeBoundary, RangeBoundary
+#include "mozilla/ScopeExit.h"           // for MakeScopeExit
 #include "mozilla/Services.h"            // for GetObserverService
 #include "mozilla/StaticPrefs_bidi.h"    // for StaticPrefs::bidi_*
 #include "mozilla/StaticPrefs_dom.h"     // for StaticPrefs::dom_*
@@ -1583,8 +1585,9 @@ bool EditorBase::CheckForClipboardCommandListener(
 }
 
 Result<EditorBase::ClipboardEventResult, nsresult>
-EditorBase::DispatchClipboardEventAndUpdateClipboard(EventMessage aEventMessage,
-                                                     int32_t aClipboardType) {
+EditorBase::DispatchClipboardEventAndUpdateClipboard(
+    EventMessage aEventMessage,
+    Maybe<nsIClipboard::ClipboardType> aClipboardType) {
   MOZ_ASSERT(IsEditActionDataAvailable());
 
   const bool isPasting =
@@ -1665,7 +1668,7 @@ nsresult EditorBase::CutAsAction(nsIPrincipal* aPrincipal) {
 
     Result<ClipboardEventResult, nsresult> ret =
         DispatchClipboardEventAndUpdateClipboard(
-            eCut, nsIClipboard::kGlobalClipboard);
+            eCut, Some(nsIClipboard::kGlobalClipboard));
     if (MOZ_UNLIKELY(ret.isErr())) {
       NS_WARNING(
           "EditorBase::DispatchClipboardEventAndUpdateClipboard(eCut, "
@@ -1754,8 +1757,8 @@ NS_IMETHODIMP EditorBase::Copy() {
   }
 
   Result<ClipboardEventResult, nsresult> ret =
-      DispatchClipboardEventAndUpdateClipboard(eCopy,
-                                               nsIClipboard::kGlobalClipboard);
+      DispatchClipboardEventAndUpdateClipboard(
+          eCopy, Some(nsIClipboard::kGlobalClipboard));
   if (MOZ_UNLIKELY(ret.isErr())) {
     NS_WARNING(
         "EditorBase::DispatchClipboardEventAndUpdateClipboard(eCopy, "
@@ -1796,7 +1799,10 @@ bool EditorBase::IsCopyCommandEnabled() const {
   return CheckForClipboardCommandListener(nsGkAtoms::oncopy, eCopy);
 }
 
-NS_IMETHODIMP EditorBase::Paste(int32_t aClipboardType) {
+NS_IMETHODIMP EditorBase::Paste(nsIClipboard::ClipboardType aClipboardType) {
+  if (uint32_t(aClipboardType) >= nsIClipboard::kClipboardTypeCount) {
+    return NS_ERROR_INVALID_ARG;
+  }
   const nsresult rv = PasteAsAction(aClipboardType, DispatchPasteEvent::Yes);
   NS_WARNING_ASSERTION(
       NS_SUCCEEDED(rv),
@@ -1804,7 +1810,7 @@ NS_IMETHODIMP EditorBase::Paste(int32_t aClipboardType) {
   return rv;
 }
 
-nsresult EditorBase::PasteAsAction(int32_t aClipboardType,
+nsresult EditorBase::PasteAsAction(nsIClipboard::ClipboardType aClipboardType,
                                    DispatchPasteEvent aDispatchPasteEvent,
                                    nsIPrincipal* aPrincipal /* = nullptr */) {
   if (IsHTMLEditor() && IsReadonly()) {
@@ -1825,7 +1831,7 @@ nsresult EditorBase::PasteAsAction(int32_t aClipboardType,
     const RefPtr<Element> focusedElement = focusManager->GetFocusedElement();
 
     Result<ClipboardEventResult, nsresult> ret =
-        DispatchClipboardEventAndUpdateClipboard(ePaste, aClipboardType);
+        DispatchClipboardEventAndUpdateClipboard(ePaste, Some(aClipboardType));
     if (MOZ_UNLIKELY(ret.isErr())) {
       NS_WARNING(
           "EditorBase::DispatchClipboardEventAndUpdateClipboard(ePaste) "
@@ -1877,7 +1883,8 @@ nsresult EditorBase::PasteAsAction(int32_t aClipboardType,
 }
 
 nsresult EditorBase::PasteAsQuotationAsAction(
-    int32_t aClipboardType, DispatchPasteEvent aDispatchPasteEvent,
+    nsIClipboard::ClipboardType aClipboardType,
+    DispatchPasteEvent aDispatchPasteEvent,
     nsIPrincipal* aPrincipal /* = nullptr */) {
   MOZ_ASSERT(aClipboardType == nsIClipboard::kGlobalClipboard ||
              aClipboardType == nsIClipboard::kSelectionClipboard);
@@ -1900,7 +1907,7 @@ nsresult EditorBase::PasteAsQuotationAsAction(
     const RefPtr<Element> focusedElement = focusManager->GetFocusedElement();
 
     Result<ClipboardEventResult, nsresult> ret =
-        DispatchClipboardEventAndUpdateClipboard(ePaste, aClipboardType);
+        DispatchClipboardEventAndUpdateClipboard(ePaste, Some(aClipboardType));
     if (MOZ_UNLIKELY(ret.isErr())) {
       NS_WARNING(
           "EditorBase::DispatchClipboardEventAndUpdateClipboard(ePaste) "
@@ -1974,12 +1981,13 @@ nsresult EditorBase::PasteTransferableAsAction(
     }
     const RefPtr<Element> focusedElement = focusManager->GetFocusedElement();
 
-    // Use an invalid value for the clipboard type as data comes from
+    // Use a nothing value for the clipboard type as data comes from
     // aTransferable and we don't currently implement a way to put that in the
     // data transfer in TextEditor yet.
     Result<ClipboardEventResult, nsresult> ret =
         DispatchClipboardEventAndUpdateClipboard(
-            ePaste, IsTextEditor() ? -1 : nsIClipboard::kGlobalClipboard);
+            ePaste,
+            IsTextEditor() ? Nothing() : Some(nsIClipboard::kGlobalClipboard));
     if (MOZ_UNLIKELY(ret.isErr())) {
       NS_WARNING(
           "EditorBase::DispatchClipboardEventAndUpdateClipboard(ePaste) "
@@ -2117,7 +2125,11 @@ NS_IMETHODIMP EditorBase::PasteTransferable(nsITransferable* aTransferable) {
   return rv;
 }
 
-NS_IMETHODIMP EditorBase::CanPaste(int32_t aClipboardType, bool* aCanPaste) {
+NS_IMETHODIMP EditorBase::CanPaste(nsIClipboard::ClipboardType aClipboardType,
+                                   bool* aCanPaste) {
+  if (uint32_t(aClipboardType) >= nsIClipboard::kClipboardTypeCount) {
+    return NS_ERROR_INVALID_ARG;
+  }
   if (NS_WARN_IF(!aCanPaste)) {
     return NS_ERROR_INVALID_ARG;
   }
@@ -4800,7 +4812,7 @@ nsresult EditorBase::HandleDropEvent(DragEvent* aDropEvent) {
   // TODO: We need to add automated tests when dropping something into an
   //       editing host for contenteditable which is in a shadow DOM tree
   //       and its host which is in design mode.
-  else if (!AsHTMLEditor()->IsInDesignMode()) {
+  else if (!droppedAt.ContainerAs<nsIContent>()->IsInDesignMode()) {
     focusedElement = AsHTMLEditor()->ComputeEditingHost();
     if (focusedElement &&
         droppedAt.ContainerAs<nsIContent>()->IsInclusiveDescendantOf(
@@ -5370,7 +5382,7 @@ nsresult EditorBase::OnInputText(const nsAString& aStringToInsert) {
 nsresult EditorBase::ReplaceTextAsAction(
     const nsAString& aString, nsRange* aReplaceRange,
     AllowBeforeInputEventCancelable aAllowBeforeInputEventCancelable,
-    nsIPrincipal* aPrincipal) {
+    PreventSetSelection aPreventSetSelection, nsIPrincipal* aPrincipal) {
   MOZ_ASSERT(aString.FindChar(nsCRT::CR) == kNotFound);
   MOZ_ASSERT_IF(!aReplaceRange, IsTextEditor());
 
@@ -5458,9 +5470,25 @@ nsresult EditorBase::ReplaceTextAsAction(
   // shouldn't receive such selectionchange before the first mutation.
   AutoUpdateViewBatch preventSelectionChangeEvent(*this, __FUNCTION__);
 
+  ErrorResult error;
+
+  AutoSelectionRestorer restorer(
+      aPreventSetSelection == PreventSetSelection::Yes ? this : nullptr);
+
+  auto raii = MakeScopeExit([&] {
+    if (aPreventSetSelection == PreventSetSelection::Yes) {
+      if (error.Failed()) {
+        restorer.Abort();
+        return;
+      }
+      if (NS_FAILED(rv)) {
+        restorer.Abort();
+      }
+    }
+  });
+
   // Select the range but as far as possible, we should not create new range
   // even if it's part of special Selection.
-  ErrorResult error;
   SelectionRef().RemoveAllRanges(error);
   if (error.Failed()) {
     NS_WARNING("Selection::RemoveAllRanges() failed");
@@ -5476,6 +5504,7 @@ nsresult EditorBase::ReplaceTextAsAction(
   rv = ReplaceSelectionAsSubAction(aString);
   NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                        "EditorBase::ReplaceSelectionAsSubAction() failed");
+
   return EditorBase::ToGenericNSResult(rv);
 }
 
@@ -5841,12 +5870,7 @@ Element* EditorBase::GetFocusedElement() const {
     return nullptr;
   }
 
-  nsFocusManager* focusManager = nsFocusManager::GetFocusManager();
-  if (NS_WARN_IF(!focusManager)) {
-    return nullptr;
-  }
-
-  Element* focusedElement = focusManager->GetFocusedElement();
+  Element* const focusedElement = nsFocusManager::GetFocusedElementStatic();
   MOZ_ASSERT((focusedElement == eventTarget) ==
              SameCOMIdentity(focusedElement, eventTarget));
 
@@ -5956,11 +5980,6 @@ bool EditorBase::CanKeepHandlingFocusEvent(
     return false;
   }
 
-  nsFocusManager* focusManager = nsFocusManager::GetFocusManager();
-  if (MOZ_UNLIKELY(!focusManager)) {
-    return false;
-  }
-
   // If the event target is document mode, we only need to handle the focus
   // event when the document is still in designMode.  Otherwise, the
   // mode has been disabled by somebody while we're handling the focus event.
@@ -5972,7 +5991,9 @@ bool EditorBase::CanKeepHandlingFocusEvent(
   // If nobody has focus, the focus event target has been blurred by somebody
   // else.  So the editor shouldn't initialize itself to start to handle
   // anything.
-  if (!focusManager->GetFocusedElement()) {
+  const Element* const focusedElement =
+      nsFocusManager::GetFocusedElementStatic();
+  if (!focusedElement) {
     return false;
   }
 
@@ -5992,7 +6013,7 @@ bool EditorBase::CanKeepHandlingFocusEvent(
       aOriginalEventTargetNode.AsContent()
           ->FindFirstNonChromeOnlyAccessContent();
   const nsIContent* exposedFocusedContent =
-      focusManager->GetFocusedElement()->FindFirstNonChromeOnlyAccessContent();
+      focusedElement->FindFirstNonChromeOnlyAccessContent();
   return exposedTargetContent && exposedFocusedContent &&
          exposedTargetContent == exposedFocusedContent;
 }
@@ -6557,7 +6578,8 @@ void EditorBase::AutoEditActionDataSetter::InitializeDataTransfer(
 }
 
 void EditorBase::AutoEditActionDataSetter::InitializeDataTransferWithClipboard(
-    SettingDataTransfer aSettingDataTransfer, int32_t aClipboardType) {
+    SettingDataTransfer aSettingDataTransfer,
+    nsIClipboard::ClipboardType aClipboardType) {
   MOZ_ASSERT(!HasTriedToDispatchBeforeInputEvent(),
              "It's too late to set dataTransfer since this may have already "
              "dispatched a beforeinput event");
@@ -6573,7 +6595,7 @@ void EditorBase::AutoEditActionDataSetter::InitializeDataTransferWithClipboard(
                        aSettingDataTransfer == SettingDataTransfer::eWithFormat
                            ? ePaste
                            : ePasteNoFormatting,
-                       true /* is external */, aClipboardType);
+                       true /* is external */, Some(aClipboardType));
 }
 
 void EditorBase::AutoEditActionDataSetter::AppendTargetRange(
@@ -7116,6 +7138,41 @@ nsISelectionController* EditorBase::GetSelectionController() const {
     return nullptr;
   }
   return mDocument->GetPresShell();
+}
+
+bool EditorBase::ArePreservingSelection() const {
+  return IsEditActionDataAvailable() && SavedSelectionRef().RangeCount();
+}
+
+void EditorBase::PreserveSelectionAcrossActions() {
+  MOZ_ASSERT(IsEditActionDataAvailable());
+
+  SavedSelectionRef().SaveSelection(SelectionRef());
+  RangeUpdaterRef().RegisterSelectionState(SavedSelectionRef());
+}
+
+nsresult EditorBase::RestorePreservedSelection() {
+  MOZ_ASSERT(IsEditActionDataAvailable());
+
+  if (!SavedSelectionRef().RangeCount()) {
+    // XXX Returning error when it does not store is odd because no selection
+    //     ranges is not illegal case in general.
+    return NS_ERROR_FAILURE;
+  }
+  DebugOnly<nsresult> rvIgnored =
+      SavedSelectionRef().RestoreSelection(SelectionRef());
+  NS_WARNING_ASSERTION(
+      NS_SUCCEEDED(rvIgnored),
+      "SelectionState::RestoreSelection() failed, but ignored");
+  StopPreservingSelection();
+  return NS_OK;
+}
+
+void EditorBase::StopPreservingSelection() {
+  MOZ_ASSERT(IsEditActionDataAvailable());
+
+  RangeUpdaterRef().DropSelectionState(SavedSelectionRef());
+  SavedSelectionRef().RemoveAllRanges();
 }
 
 }  // namespace mozilla

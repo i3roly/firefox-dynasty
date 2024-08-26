@@ -258,14 +258,7 @@ div#feature-callout.hidden {
 #feature-callout .onboardingContainer .outer-wrapper {
   --transition: none;
   height: auto;
-}
-#feature-callout:dir(rtl) {
   transform: none;
-  direction: ltr;
-}
-#feature-callout .outer-wrapper:dir(rtl) {
-  transform: none;
-  direction: rtl;
 }
 #feature-callout .screen:dir(rtl) {
   transform: none;
@@ -309,7 +302,7 @@ div#feature-callout.hidden {
   transform: rotateY(180deg);
 }
 #feature-callout .screen[pos=callout] .welcome-text {
-  align-items: baseline;
+  align-items: start;
   text-align: start;
   margin: 0;
   padding: 0;
@@ -1645,6 +1638,14 @@ html {
 .onboardingContainer .screen[pos=split] .multi-select-container {
   margin-inline: 0 10px;
 }
+.onboardingContainer .screen[pos=split] .multi-select-container .multi-select-item {
+  display: block;
+}
+.onboardingContainer .screen[pos=split] .multi-select-container .multi-select-item p {
+  margin-block: 0.5em 0;
+  margin-inline-start: calc(16px + var(--checkbox-margin-inline));
+  font-size: 12px;
+}
 @media only screen and (width <= 800px) {
   .onboardingContainer .screen[pos=split] .multi-select-container {
     flex-direction: column;
@@ -1655,6 +1656,9 @@ html {
     padding: 0 30px;
     margin-inline: 0;
     box-sizing: content-box;
+  }
+  .onboardingContainer .screen[pos=split] .multi-select-container .multi-select-item p {
+    margin-inline-start: 0;
   }
 }
 .onboardingContainer .screen[pos=split] .tiles-theme-container {

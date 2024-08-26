@@ -18,6 +18,7 @@
 webgpu:
     - mochitest-webgpu
     - web-platform-tests-webgpu
+    - web-platform-tests-webgpu-long
     - web-platform-tests-webgpu-backlog
 
 web-platform-tests:
@@ -29,6 +30,7 @@ web-platform-tests:
     - web-platform-tests-wdspec
     - web-platform-tests-canvas
     - web-platform-tests-webcodecs
+    - web-platform-tests-eme
 
 web-platform-tests-backlog:
     - web-platform-tests-backlog
@@ -152,6 +154,7 @@ linux32-gtest:
 linux32-tests:
     - web-platform-tests
     - web-platform-tests-webcodecs
+    - web-platform-tests-eme
 
 linux1804-tests:
     - cppunittest
@@ -264,6 +267,7 @@ windows11-64-2009-ccov-tests:
     - web-platform-tests-reftest
     - web-platform-tests-wdspec
     - web-platform-tests-webcodecs
+    - web-platform-tests-eme
 
 windows11-2009-tests:
     - cppunittest
@@ -376,6 +380,7 @@ macosx1100-64-qr-tests:
     - reftest
     - xpcshell
     - web-platform-tests-webcodecs
+    - web-platform-tests-eme
 
 macosx1100-aarch64-qr-tests:
     - cppunittest
@@ -457,6 +462,7 @@ android-x86_64-tests:
     - web-platform-tests-reftest
     - web-platform-tests-wdspec
     - web-platform-tests-webcodecs
+    - web-platform-tests-eme
     - xpcshell
 
 android-x86-tests:

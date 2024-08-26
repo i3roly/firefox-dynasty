@@ -698,11 +698,7 @@
 
 - name: apz.overscroll.enabled
   type: RelaxedAtomicBool
-#if defined(XP_MACOSX) || defined(XP_WIN)
   value: true
-#else
-  value: @IS_NIGHTLY_BUILD@
-#endif
   mirror: always
 
 # The "test async scroll offset" (used via reftest-async-scroll
@@ -1706,6 +1702,18 @@
   value: false
   mirror: always
 
+# If set, when a link is opened to a new tab, do not switch to the new tab.
+#
+# This pref is used when the link is opened with "Open Link in New Tab",
+# middle-click, etc.
+#
+# See also browser.tabs.loadDivertedInBackground, which is used when the website
+# diverts the link into a new tab.
+- name: browser.tabs.loadInBackground
+  type: bool
+  value: true
+  mirror: always
+
 # Whether we should draw the tabs on top of the titlebar.
 #
 # no (0), yes (1), or default (2), which is true everywhere except Linux.
@@ -1719,6 +1727,12 @@
 - name: browser.tabs.documentchannel.parent-controlled
   type: bool
   value: false
+  mirror: always
+
+# If set, middle clicking on a link opens the link in a new tab.
+- name: browser.tabs.opentabfor.middleclick
+  type: bool
+  value: true
   mirror: always
 
 # Testing-only pref which makes data: URIs be loaded in a "web" content process
@@ -2273,6 +2287,12 @@
   value: 20
   mirror: always
 
+# Enable experimental popup blocker changes.
+- name: dom.popup.experimental
+  type: bool
+  value: false
+  mirror: always
+
   # Enable CacheAPI in private browsing mode with encryption
 - name: dom.cache.privateBrowsing.enabled
   type: RelaxedAtomicBool
@@ -2339,6 +2359,11 @@
 # Make sure cases like bug 1795380 work before trying to turn this off. See
 # bug 1680721 for some other context that might be relevant.
 - name: dom.delay.block_external_protocol_in_iframes.enabled
+  type: bool
+  value: true
+  mirror: always
+
+- name: dom.details_group.enabled
   type: bool
   value: true
   mirror: always
@@ -2514,7 +2539,7 @@
 # Whether wheel event target's should be grouped. When enabled, all wheel
 # events that occur in a given wheel transaction have the same event target.
 - name: dom.event.wheel-event-groups.enabled
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -3033,6 +3058,14 @@
   value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
+# Does mousewheel-scrolling over a focused <input type="number"> or
+# <input type="range"> field cause the value to increase/decrease (rather
+# than scrolling the page)?
+- name: dom.input.number_and_range_modified_by_mousewheel
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # Whether to allow or disallow web apps to cancel `beforeinput` events caused
 # by MozEditableElement#setUserInput() which is used by autocomplete, autofill
 # and password manager.
@@ -3119,6 +3152,16 @@
 # WebCodecs API
 - name: dom.media.webcodecs.enabled
   type: RelaxedAtomicBool
+#if defined(MOZ_WIDGET_ANDROID)
+  value: @IS_NIGHTLY_BUILD@
+#else
+  value: true
+#endif
+  mirror: always
+
+# WebCodecs API - Image decoder
+- name: dom.media.webcodecs.image-decoder.enabled
+  type: RelaxedAtomicBool
   value: @IS_NIGHTLY_BUILD@
   mirror: always
 
@@ -3194,6 +3237,13 @@
   type: bool
   value: false
   mirror: always
+
+# Whether the navigation API will be exposed.
+- name: dom.navigation.webidl.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  do_not_use_directly: true
 
 # Network Information API
 # This feature is not available on Firefox desktop. It exposes too much
@@ -3667,6 +3717,12 @@
   value: false
   mirror: always
 
+# Cache stencil across navigation
+- name: dom.script_loader.navigation_cache
+  type: bool
+  value: false
+  mirror: always
+
 - name: dom.securecontext.allowlist_onions
   type: bool
   value: false
@@ -3857,6 +3913,13 @@
 
 # Logs elements and attributes removed by the Sanitizer API to the console.
 - name: dom.security.sanitizer.logging
+  type: bool
+  value: false
+  mirror: always
+
+# pref controls credential chooser UI for testing. When true, UI is not shown and
+# either a credential with ID `wpt-pick-me` is selected, or none.
+- name: dom.security.credentialmanagement.chooser.testing.enabled
   type: bool
   value: false
   mirror: always
@@ -4614,13 +4677,6 @@
   value: @IS_NIGHTLY_BUILD@
   mirror: always
 
-# Whether `click`, `auxclick` and `contextmenu` events are dispatched as a
-# PointerEvent or MouseEvent.
-- name: dom.w3c_pointer_events.dispatch_click_as_pointer_event
-  type: bool
-  value: true
-  mirror: always
-
 # In case Touch API is enabled, this pref controls whether to support
 # ontouch* event handlers, document.createTouch, document.createTouchList and
 # document.createEvent("TouchEvent").
@@ -4774,9 +4830,9 @@
   value: true
   mirror: always
 
-- name: dom.webnotifications.privateBrowsing.enableDespiteLimitations
+- name: dom.webnotifications.privateBrowsing.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 - name: dom.webnotifications.requireuserinteraction
@@ -5737,6 +5793,8 @@
   value: true
 #elif defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(XP_WIN)
+  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
@@ -6101,7 +6159,7 @@
 # Whether to disable the automatic detection and use of direct2d.
 - name: gfx.direct2d.disabled
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: once
 
 # Whether to attempt to enable Direct2D regardless of automatic detection or
@@ -7095,6 +7153,27 @@
 #endif
   mirror: once
 
+# Enable a dedicated arena on frame builder threads.
+- name: gfx.webrender.frame-builder-thread-local-arena
+  type: bool
+  rust: true
+  value: false
+  mirror: once
+
+# Enable a dedicated arena on scene builder threads.
+- name: gfx.webrender.scene-builder-thread-local-arena
+  type: bool
+  rust: true
+  value: false
+  mirror: once
+
+# Enable a dedicated arena on WebRender worker threads.
+- name: gfx.webrender.worker-thread-local-arena
+  type: bool
+  rust: true
+  value: true
+  mirror: once
+
 # Use vsync events generated by hardware
 - name: gfx.work-around-driver-bugs
   type: bool
@@ -7922,6 +8001,13 @@
     mirror: always
     set_spidermonkey_pref: startup
 
+  # Experimental support for Pattern Modifiers in JavaScript.
+-   name: javascript.options.experimental.regexp_modifiers
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
   # Experimental support for Import Assertions in JavaScript.
 -   name: javascript.options.experimental.import_attributes
     type: bool
@@ -8149,6 +8235,18 @@
     value: false
     mirror: always
     set_spidermonkey_pref: startup
+
+- name: javascript.options.wasm_experimental_inline_depth_limit
+  type: uint32_t
+  value: 2
+  mirror: always
+  set_spidermonkey_pref: always
+
+- name: javascript.options.wasm_experimental_inline_size_limit
+  type: uint32_t
+  value: 256
+  mirror: always
+  set_spidermonkey_pref: always
 
 # Support for pretenuring allocations based on their allocation site.
 - name: javascript.options.site_based_pretenuring
@@ -8846,13 +8944,6 @@
   mirror: always
   rust: true
 
-# Whether the `content-visibility` CSS property is enabled
-- name: layout.css.content-visibility.enabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-  rust: true
-
 # Whether the `contain-intrinsic-size` CSS property is enabled
 - name: layout.css.contain-intrinsic-size.enabled
   type: RelaxedAtomicBool
@@ -9160,7 +9251,7 @@
 # Is support for -moz-prefixed transform properties enabled?
 - name: layout.css.prefixes.transforms
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Is support for -moz-prefixed transition properties enabled?
@@ -9676,6 +9767,23 @@
   value: true
   mirror: always
 
+# Is the CSS 'stretch' keyword enabled, for size-valued properties like 'width'
+# and 'height'? (Note: this is unrelated to the 'stretch' value for the
+# various alignment properties like 'align-self'; this pref has has
+# no influence on the 'stretch' keyword for those alignment properties.)
+- name: layout.css.stretch-size-keyword.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  rust: true
+
+# Is the '-webkit-fill-available' keyword enabled, as an alias for 'stretch'?
+- name: layout.css.webkit-fill-available.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  rust: true
+
 # Is support for -webkit-line-clamp on regular blocks enabled?
 - name: layout.css.webkit-line-clamp.block.enabled
   type: bool
@@ -9843,7 +9951,7 @@
 # Whether table cells can generate scroll boxes.
 - name: layout.tables.scrollable-cells
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: false
   mirror: always
 
 # Whether to disable layer pixel alignment in scroll related stuff.
@@ -10125,6 +10233,12 @@
   value: false
   mirror: always
 
+# Whether to enable experimental requestVideoFrameCallback support
+- name: media.rvfc.enabled
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # VideoSink
 - name: media.ruin-av-sync.enabled
   type: RelaxedAtomicBool
@@ -10302,6 +10416,8 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
+#elif defined(XP_SOLARIS)
+  value: true
 #else
   value: false
 #endif
@@ -10344,6 +10460,8 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
+#elif defined(XP_SOLARIS)
+  value: true
 #else
   value: false
 #endif
@@ -10363,23 +10481,6 @@
   mirror: always
 #endif
 
-- name: media.rdd-theora.enabled
-  type: RelaxedAtomicBool
-#if defined(XP_WIN)
-  value: true
-#elif defined(XP_MACOSX)
-  value: true
-#elif defined(XP_LINUX) && !defined(ANDROID)
-  value: true
-#elif defined(XP_FREEBSD)
-  value: true
-#elif defined(XP_OPENBSD)
-  value: true
-#else
-  value: false
-#endif
-  mirror: always
-
 - name: media.rdd-vorbis.enabled
   type: RelaxedAtomicBool
 #if defined(XP_WIN)
@@ -10391,6 +10492,8 @@
 #elif defined(XP_FREEBSD)
   value: true
 #elif defined(XP_OPENBSD)
+  value: true
+#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -10409,6 +10512,8 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
+#elif defined(XP_SOLARIS)
+  value: true
 #else
   value: false
 #endif
@@ -10426,6 +10531,8 @@
   value: true
 #elif defined(XP_OPENBSD)
   value: true
+#elif defined(XP_SOLARIS)
+  value: true
 #else
   value: false
 #endif
@@ -10442,6 +10549,8 @@
 #elif defined(XP_FREEBSD)
   value: true
 #elif defined(XP_OPENBSD)
+  value: true
+#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -10471,6 +10580,8 @@
 #elif defined(XP_FREEBSD)
   value: true
 #elif defined(XP_OPENBSD)
+  value: true
+#elif defined(XP_SOLARIS)
   value: true
 #else
   value: false
@@ -10589,6 +10700,23 @@
 #else
     value: false
 #endif
+    mirror: always
+
+# A high quantizer value allows the encoder to use higher compression, but
+# resulting in lower quality for parts of the video. Using a lower value
+# restricts excessive compression, improving video quality but potentially
+# increasing file size. The quantizer's value range is controlled by the min
+# and max values below. The lower the value is, the finer the quantizer will be
+# Set AVCodecContext's qmin value to ffmpeg encoder
+-   name: media.ffmpeg.encoder.quantizer-min
+    type: RelaxedAtomicInt32
+    value: 10 # An empirical value for better performance
+    mirror: always
+
+# Set AVCodecContext's qmax value to ffmpeg encoder
+-   name: media.ffmpeg.encoder.quantizer-max
+    type: RelaxedAtomicInt32
+    value: 35 # An empirical value for better quality of the video output
     mirror: always
 
 # Allow using openh264 decoding with ffmpeg
@@ -11030,30 +11158,12 @@
 # AV1
 - name: media.av1.enabled
   type: RelaxedAtomicBool
-#if defined(XP_WIN) && !defined(_ARM64_)
   value: true
-#elif defined(XP_MACOSX)
-  value: true
-#elif defined(MOZ_WIDGET_ANDROID)
-  value: true
-#elif defined(XP_UNIX)
-  value: true
-#else
-  value: false
-#endif
   mirror: always
 
 - name: media.av1.use-dav1d
   type: RelaxedAtomicBool
-#if defined(XP_WIN) && !defined(_ARM64_)
   value: true
-#elif defined(XP_MACOSX)
-  value: true
-#elif defined(XP_UNIX)
-  value: true
-#else
-  value: false
-#endif
   mirror: always
 
 - name: media.av1.new-thread-count-strategy
@@ -11261,7 +11371,7 @@
 # Planned next steps: true → @IS_NOT_NIGHTLY_BUILD@ → false
 - name: media.devices.enumerate.legacy.enabled
   type: bool
-  value: true
+  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # WebRTC prefs follow
@@ -11630,12 +11740,6 @@
     mirror: always
 #endif
 
-# Bug 1860492 - Deprecate and remove theora
--  name: media.theora.enabled
-   type: RelaxedAtomicBool
-   value: @IS_NOT_NIGHTLY_BUILD@
-   mirror: always
-
 # When this is true, the protection mask that Firefox replies to Widevine API
 # QueryOutputProtectionStatus is `kProtectionHDCP` when no potential capturing.
 - name: media.widevine.hdcp-protection-mask
@@ -11685,6 +11789,21 @@
 - name: memory.phc.avg_delay.content.page_reuse
   type: uint32_t
   value: 262144
+  mirror: always
+
+#---------------------------------------------------------------------------
+# Prefs starting with "middlemouse."
+#---------------------------------------------------------------------------
+
+# If set and browser.tabs.opentabfor.middleclick is not set, middle clicking on
+# a link opens the link in a new window.
+- name: middlemouse.openNewWindow
+  type: bool
+#if defined(ANDROID) || !defined(XP_MACOSX) && defined(XP_UNIX)
+  value: true
+#else
+  value: false
+#endif
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -12270,6 +12389,13 @@
 - name: network.predictor.enabled
   type: bool
   value: true
+  mirror: always
+
+# Disable requests to 0.0.0.0
+# See Bug 1889130
+- name: network.socket.ip_addr_any.disabled
+  type: RelaxedAtomicBool
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # Set true to allow resolving proxy for localhost
@@ -13444,6 +13570,19 @@
   value: 1048576
   mirror: always
 
+# Use NSPR for HTTP3 UDP IO
+- name: network.http.http3.use_nspr_for_io
+  type: RelaxedAtomicBool
+# Always use NSPR on Android x86. On Android x86 sendmsg and recvmmsg, both used
+# by quinn-udp, are disallowed by seccomp. Future fix and further details
+# tracked in https://github.com/quinn-rs/quinn/issues/1947.
+#if defined(ANDROID) && !defined(HAVE_64BIT_BUILD)
+  value: true
+#else
+  value: @IS_NOT_NIGHTLY_BUILD@
+#endif
+  mirror: always
+
 - name: network.http.http3.enable_qlog
   type: RelaxedAtomicBool
   value: false
@@ -13467,13 +13606,13 @@
   value: 32
   mirror: always
 
-# Receive buffer size of QUIC socket
+# Connection-level flow control limit
 - name: network.http.http3.max_data
   type: RelaxedAtomicUint32
   value: 25165824
   mirror: always
 
-# Receive buffer size of QUIC socket
+# Stream-level flow control limit
 - name: network.http.http3.max_stream_data
   type: RelaxedAtomicUint32
   value: 12582912
@@ -13507,12 +13646,14 @@
   value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
-# This is for testing purpose. When true, nsUDPSocket::SendWithAddress will
-# return NS_ERROR_CONNECTION_REFUSED for address "::1".
+# This is for testing purpose. When true, nsUDPSocket::SendWithAddress and
+# neqo_http3conn_process_output_and_send will return NS_ERROR_CONNECTION_REFUSED
+# for address "::1".
 - name: network.http.http3.block_loopback_ipv6_addr
   type: RelaxedAtomicBool
   value: false
   mirror: always
+  rust: true
 
 # The congestion control algorithm with which to configure neqo.
 # 0 => NewReno
@@ -13857,6 +13998,12 @@
 - name: network.decompression_off_mainthread_min_size
   type: int32_t
   value: 512
+  mirror: always
+
+# Cached state of parental controls (enabled/disabled)
+- name: network.parental_controls_cached_state
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -14936,6 +15083,14 @@
     mirror: always
 #endif  // MOZ_WMF
 
+  # Whether CIG is applied pre-spawn or later when lowering the sandbox. We
+  # enable pre-spawn CIG only in Nightly for now because it caused a compat
+  # issue (bug 1682304 and 1704373).
+-   name: security.sandbox.cig.prespawn.enabled
+    type: RelaxedAtomicBool
+    value: @IS_NIGHTLY_BUILD@
+    mirror: always
+
   # This controls the depth of stack trace that is logged when Windows sandbox
   # logging is turned on. This is only currently available for the content
   # process because the only other sandbox (for GMP) has too strict a policy to
@@ -15162,16 +15317,6 @@
 - name: security.enterprise_roots.enabled
   type: RelaxedAtomicBool
   value: true
-  mirror: always
-
-- name: security.intermediate_preloading_healer.enabled
-  type: RelaxedAtomicBool
-  value: @IS_NOT_ANDROID@
-  mirror: always
-
-- name: security.intermediate_preloading_healer.timer_interval_ms
-  type: RelaxedAtomicUint32
-  value: 300000
   mirror: always
 
 # If true, attempt to load the osclientcerts PKCS#11 module at startup on a
@@ -16111,6 +16256,18 @@
   value: false
   mirror: always
 
+#ifdef XP_MACOSX
+# This will automatically enable text substitution for editable elements in HTML.
+# This value is like layout.spellCheckDefault.
+# 0 ... Disabled
+# 1 ... textarea, contenteditable and design mode
+# 2 ... text, textarea, contenteditable and design mode
+- name: ui.autocorrectDefault
+  type: uint32_t
+  value: 1
+  mirror: always
+#endif
+
 #---------------------------------------------------------------------------
 # Prefs starting with "urlclassifier."
 #---------------------------------------------------------------------------
@@ -16166,7 +16323,11 @@
 
 - name: webgl.1.request_es2
   type: RelaxedAtomicBool
+#ifdef XP_WIN
+  value: false
+#else
   value: true
+#endif
   mirror: always
 
 - name: webgl.angle.force-d3d11
@@ -16287,6 +16448,11 @@
   mirror: always
 
 - name: webgl.enable-renderer-query
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+- name: webgl.enable-egl-image
   type: RelaxedAtomicBool
   value: true
   mirror: always
@@ -16651,6 +16817,11 @@
   value: true
   mirror: always
 
+- name: widget.macos.sidebar-blend-mode.behind-window
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
 - name: widget.macos.titlebar-blend-mode.behind-window
   type: RelaxedAtomicBool
   value: false
@@ -16989,6 +17160,7 @@
 #  *  0: auto (possibly release-channel-dependent)
 #  *  1: remotely, falling back to locally
 #  *  2: remotely, no fallback
+#  *  3: remotely, falling back to locally except on crashes
 #  * -1: locally, no fallback
 - name: widget.windows.utility_process_file_picker
   type: RelaxedAtomicInt32
@@ -17010,6 +17182,14 @@
 - name: widget.windows.sync-clipboard-flush
   type: uint32_t
   value: 2
+  mirror: always
+
+# Whether to allow dragging and dropping tabs onto another application. This is
+# disallowed by default because most applications that say they can handle
+# Firefox tabs are lying (bug 1598915).
+- name: widget.windows.allow-external-tab-drag
+  type: bool
+  value: false
   mirror: always
 
 # Whether to apply a hack (adjusting the window height by -1px and back again)
@@ -17081,6 +17261,33 @@
   value: false
 #endif
   mirror: always
+
+#ifdef XP_MACOSX
+# The folllowing widget.macos.automatic.* prefs are whether Gecko turns on
+# text replacement features.
+- name: widget.macos.automatic.text_replacement
+  type: bool
+  value: false
+  mirror: always
+
+# Whether the smart dash feature is enabled
+- name: widget.macos.automatic.dash_substitution
+  type: bool
+  value: false
+  mirror: always
+
+# Whether the smart quote feature is enabled
+- name: widget.macos.automatic.quote_substitution
+  type: bool
+  value: false
+  mirror: always
+
+# fetching length when processing text substitution.
+- name: widget.macos.automatic.text_substitution_fetch_length
+  type: uint32_t
+  value: 20
+  mirror: always
+#endif
 
 # Whether to render in to a child SurfaceControl rather than directly into the SurfaceView
 - name: widget.android.use-surfacecontrol

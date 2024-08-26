@@ -1772,7 +1772,6 @@ const selectors = {
   stepOver: ".stepOver.active",
   stepOut: ".stepOut.active",
   stepIn: ".stepIn.active",
-  trace: ".debugger-trace-menu-button",
   prettyPrintButton: ".source-footer .prettyPrint",
   mappedSourceLink: ".source-footer .mapped-source",
   sourcesFooter: ".sources-panel .source-footer",
@@ -2206,13 +2205,8 @@ async function clickAtPos(dbg, pos) {
   info(
     `Clicking on token ${tokenEl.innerText} in line ${tokenEl.parentNode.innerText}`
   );
-  const ClickEventConstructor = Services.prefs.getBoolPref(
-    "dom.w3c_pointer_events.dispatch_click_as_pointer_event"
-  )
-    ? PointerEvent
-    : MouseEvent;
   tokenEl.dispatchEvent(
-    new ClickEventConstructor("click", {
+    new PointerEvent("click", {
       bubbles: true,
       cancelable: true,
       view: dbg.win,
@@ -3157,4 +3151,24 @@ async function checkAdditionalThreadCount(dbg, count) {
  */
 function findFooterNotificationMessage(dbg) {
   return findElement(dbg, "editorNotificationFooter")?.innerText;
+}
+
+/**
+ * Toggle a JavaScript Tracer settings via the toolbox toolbar button's context menu.
+ *
+ * @param {Object} dbg
+ * @param {String} selector
+ *        Selector for the menu item of the settings defined in devtools/client/framework/definitions.js.
+ */
+async function toggleJsTracerMenuItem(dbg, selector) {
+  const button = dbg.toolbox.doc.getElementById("command-button-jstracer");
+  EventUtils.synthesizeMouseAtCenter(
+    button,
+    { type: "contextmenu" },
+    dbg.toolbox.win
+  );
+  const popup = await waitForContextMenu(dbg);
+  const onHidden = BrowserTestUtils.waitForEvent(popup, "popuphidden");
+  selectContextMenuItem(dbg, selector);
+  await onHidden;
 }

@@ -1933,8 +1933,17 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
   return IPC_OK();
 }
 
-static already_AddRefed<DataTransfer> ConvertToDataTransfer(
-    nsTArray<IPCTransferableData>&& aTransferables, EventMessage aMessage) {
+already_AddRefed<DataTransfer> BrowserChild::ConvertToDataTransfer(
+    nsIPrincipal* aPrincipal, nsTArray<IPCTransferableData>&& aTransferables,
+    EventMessage aMessage) {
+  // The extension process should grant access to a protected DataTransfer if
+  // the principal permits it (and dom.events.datatransfer.protected.enabled is
+  // false).  Otherwise, protected DataTransfer access should only be given to
+  // the system.
+  if (!aPrincipal || Manager()->GetRemoteType() != EXTENSION_REMOTE_TYPE) {
+    aPrincipal = nsContentUtils::GetSystemPrincipal();
+  }
+
   // Check if we are receiving any file objects. If we are we will want
   // to hide any of the other objects coming in from content.
   bool hasFiles = false;
@@ -1949,7 +1958,7 @@ static already_AddRefed<DataTransfer> ConvertToDataTransfer(
   }
   // Add the entries from the IPC to the new DataTransfer
   RefPtr<DataTransfer> dataTransfer =
-      new DataTransfer(nullptr, aMessage, false, -1);
+      new DataTransfer(nullptr, aMessage, false, Nothing());
   for (uint32_t i = 0; i < aTransferables.Length(); ++i) {
     auto& items = aTransferables[i].items();
     for (uint32_t j = 0; j < items.Length(); ++j) {
@@ -1967,8 +1976,7 @@ static already_AddRefed<DataTransfer> ConvertToDataTransfer(
           hasFiles && item.data().type() !=
                           IPCTransferableDataType::TIPCTransferableDataBlob;
       dataTransfer->SetDataWithPrincipalFromOtherProcess(
-          NS_ConvertUTF8toUTF16(item.flavor()), variant, i,
-          nsContentUtils::GetSystemPrincipal(), hidden);
+          NS_ConvertUTF8toUTF16(item.flavor()), variant, i, aPrincipal, hidden);
     }
   }
   return dataTransfer.forget();
@@ -1977,7 +1985,8 @@ static already_AddRefed<DataTransfer> ConvertToDataTransfer(
 mozilla::ipc::IPCResult BrowserChild::RecvInvokeChildDragSession(
     const MaybeDiscarded<WindowContext>& aSourceWindowContext,
     const MaybeDiscarded<WindowContext>& aSourceTopWindowContext,
-    nsTArray<IPCTransferableData>&& aTransferables, const uint32_t& aAction) {
+    nsIPrincipal* aPrincipal, nsTArray<IPCTransferableData>&& aTransferables,
+    const uint32_t& aAction) {
   if (nsCOMPtr<nsIDragService> dragService =
           do_GetService("@mozilla.org/widget/dragservice;1")) {
     nsIWidget* widget = WebWidget();
@@ -1987,9 +1996,8 @@ mozilla::ipc::IPCResult BrowserChild::RecvInvokeChildDragSession(
       session->SetSourceTopWindowContext(
           aSourceTopWindowContext.GetMaybeDiscarded());
       session->SetDragAction(aAction);
-
-      RefPtr<DataTransfer> dataTransfer =
-          ConvertToDataTransfer(std::move(aTransferables), eDragStart);
+      RefPtr<DataTransfer> dataTransfer = ConvertToDataTransfer(
+          aPrincipal, std::move(aTransferables), eDragStart);
       session->SetDataTransfer(dataTransfer);
     }
   }
@@ -1997,11 +2005,11 @@ mozilla::ipc::IPCResult BrowserChild::RecvInvokeChildDragSession(
 }
 
 mozilla::ipc::IPCResult BrowserChild::RecvUpdateDragSession(
-    nsTArray<IPCTransferableData>&& aTransferables,
+    nsIPrincipal* aPrincipal, nsTArray<IPCTransferableData>&& aTransferables,
     EventMessage aEventMessage) {
   if (RefPtr<nsIDragSession> session = GetDragSession()) {
-    nsCOMPtr<DataTransfer> dataTransfer =
-        ConvertToDataTransfer(std::move(aTransferables), aEventMessage);
+    nsCOMPtr<DataTransfer> dataTransfer = ConvertToDataTransfer(
+        aPrincipal, std::move(aTransferables), aEventMessage);
     session->SetDataTransfer(dataTransfer);
   }
   return IPC_OK();
@@ -2257,6 +2265,27 @@ mozilla::ipc::IPCResult BrowserChild::RecvInsertText(
 mozilla::ipc::IPCResult BrowserChild::RecvNormalPriorityInsertText(
     const nsAString& aStringToInsert) {
   return RecvInsertText(aStringToInsert);
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvReplaceText(
+    const nsString& aReplaceSrcString, const nsString& aStringToInsert,
+    uint32_t aOffset, bool aPreventSetSelection) {
+  // Use normal event path to reach focused document.
+  WidgetContentCommandEvent localEvent(true, eContentCommandReplaceText,
+                                       mPuppetWidget);
+  localEvent.mString = Some(aStringToInsert);
+  localEvent.mSelection.mReplaceSrcString = aReplaceSrcString;
+  localEvent.mSelection.mOffset = aOffset;
+  localEvent.mSelection.mPreventSetSelection = aPreventSetSelection;
+  DispatchWidgetEventViaAPZ(localEvent);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvNormalPriorityReplaceText(
+    const nsString& aReplaceSrcString, const nsString& aStringToInsert,
+    uint32_t aOffset, bool aPreventSetSelection) {
+  return RecvReplaceText(aReplaceSrcString, aStringToInsert, aOffset,
+                         aPreventSetSelection);
 }
 
 mozilla::ipc::IPCResult BrowserChild::RecvPasteTransferable(

@@ -123,6 +123,12 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">按住箭头可在此标签页的历史页面间跳转。</string>
 
+    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_title">新功能：一触即达的后退和前进按钮</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_message">便捷浏览，一触即达。</string>
+
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">需要访问相机。请前往 Android 设置，点按“权限”，然后点按“允许”。</string>
     <!-- Text for the positive action button to go to Android Settings to grant permissions. -->
@@ -204,6 +210,14 @@
     <string name="browser_menu_stop">停止</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">扩展</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">让 %s 有你的个性</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">扩展可从方方面面提升您的浏览体验，例如更改 %s 的外观和运作方式、增强隐私保护和安全性。</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">详细了解</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">管理扩展</string>
     <!-- Browser menu button that opens AMO in a tab -->
@@ -297,10 +311,16 @@
     <string name="browser_menu_switch_to_mobile_site">切换到移动版网站</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">工具</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">阅读模式、翻译、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">阅读模式、打印、分享、在应用中打开</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">保存</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">添加书签、快捷方式、主页、收藏集、PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">将此页面加入书签</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -318,6 +338,10 @@
     <string name="browser_menu_translated_to">已翻译成%1$s</string>
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">打印…</string>
+
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">退出 %1$s</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -1122,7 +1146,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">收藏集名称</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">重命名</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">重命名</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">移除</string>
 
@@ -1257,6 +1281,17 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">输入搜索词</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">浏览上一页</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">添加新文件夹</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">关闭书签</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">搜索书签</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">“%s”项目菜单</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2230,8 +2265,10 @@
     <string name="top_sites_rename_dialog_title">名称</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">快捷方式名称</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">快捷方式网址</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">确定</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">确定</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">取消</string>
 
@@ -2241,6 +2278,17 @@
     <string name="top_sites_menu_sponsor_privacy">我们的赞助商＆您的隐私</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">赞助推广</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">编辑</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">编辑快捷方式</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">保存</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">请输入有效的网址</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">网址</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2655,7 +2703,7 @@
     <!-- Screen header presenting the download language preference feature. It will appear under the toolbar.The first parameter is "Learn More," a clickable text with a link. Talkback will append this to say "Double tap to open link to learn more". -->
     <string name="download_languages_header_preference">下载完整语言包以提高翻译速度，并可离线翻译。%1$s</string>
     <!-- Clickable text from the screen header that links to a website. -->
-    <string name="download_languages_header_learn_more_preference">了解更多</string>
+    <string name="download_languages_header_learn_more_preference">详细了解</string>
     <!-- The subhead of the download language preference screen will appear above the pivot language. -->
     <string name="download_languages_available_languages_preference">可用语言</string>
     <!-- Text that will appear beside a core or pivot language package name to show that the language is necessary for the translation feature to function. -->
@@ -2711,11 +2759,11 @@
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">确定要取消下载%1$s吗？</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">确定要取消下载%1$s吗？</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">是</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">是</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">否</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">否</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2739,7 +2787,7 @@
     <!-- The user-facing title of the Debug Drawer feature. -->
     <string name="debug_drawer_title">调试工具</string>
     <!-- Content description (not visible, for screen readers etc.): Navigate back within the debug drawer. -->
-    <string name="debug_drawer_back_button_content_description">向前导航</string>
+    <string name="debug_drawer_back_button_content_description">浏览上一页</string>
 
     <!-- Content description (not visible, for screen readers etc.): Open debug drawer. -->
     <string name="debug_drawer_fab_content_description">打开调试抽屉</string>
@@ -2797,8 +2845,6 @@
     <string name="micro_survey_privacy_notice_2">隐私声明</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">提交</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">关闭</string>
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">填写完毕</string>
     <!-- The survey completion confirmation text -->

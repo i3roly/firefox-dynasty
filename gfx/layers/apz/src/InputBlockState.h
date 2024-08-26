@@ -64,6 +64,7 @@ class InputBlockState : public RefCounted<InputBlockState> {
   virtual PanGestureBlockState* AsPanGestureBlock() { return nullptr; }
   virtual PinchGestureBlockState* AsPinchGestureBlock() { return nullptr; }
   virtual KeyboardBlockState* AsKeyboardBlock() { return nullptr; }
+  virtual Maybe<LayersId> WheelTransactionLayersId() const { return Nothing(); }
 
   virtual bool SetConfirmedTargetApzc(
       const RefPtr<AsyncPanZoomController>& aTargetApzc,
@@ -96,6 +97,8 @@ class InputBlockState : public RefCounted<InputBlockState> {
  protected:
   virtual void UpdateTargetApzc(
       const RefPtr<AsyncPanZoomController>& aTargetApzc);
+
+  const AsyncPanZoomController* TargetApzc() const { return mTargetApzc.get(); }
 
  private:
   // Checks whether |aA| is an ancestor of |aB| (or the same as |aB|) in
@@ -271,6 +274,8 @@ class WheelBlockState : public CancelableBlockState {
     return mAllowedScrollDirections;
   }
 
+  Maybe<LayersId> WheelTransactionLayersId() const override;
+
  protected:
   void UpdateTargetApzc(
       const RefPtr<AsyncPanZoomController>& aTargetApzc) override;
@@ -359,6 +364,7 @@ class PanGestureBlockState : public CancelableBlockState {
   bool IsWaitingForContentResponse() const {
     return mWaitingForContentResponse;
   }
+  Maybe<LayersId> WheelTransactionLayersId() const override;
 
  private:
   bool mInterrupted;

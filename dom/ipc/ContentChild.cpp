@@ -41,6 +41,7 @@
 #include "mozilla/SchedulerGroup.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/SharedStyleSheetCache.h"
+#include "mozilla/dom/SharedScriptCache.h"
 #include "mozilla/SimpleEnumerator.h"
 #include "mozilla/SpinEventLoopUntil.h"
 #include "mozilla/StaticPrefs_browser.h"
@@ -486,7 +487,8 @@ NS_IMPL_ISUPPORTS(ConsoleListener, nsIConsoleListener)
 // errors in particular share the memory for long lines with
 // repeated errors, but the IPC communication we're about to do
 // will break that sharing, so we better truncate now.
-static void TruncateString(nsAString& aString) {
+template <typename CharT>
+static void TruncateString(nsTSubstring<CharT>& aString) {
   if (aString.Length() > 1000) {
     aString.Truncate(1000);
   }
@@ -500,7 +502,8 @@ ConsoleListener::Observe(nsIConsoleMessage* aMessage) {
 
   nsCOMPtr<nsIScriptError> scriptError = do_QueryInterface(aMessage);
   if (scriptError) {
-    nsAutoString msg, sourceName, sourceLine;
+    nsAutoString msg;
+    nsAutoCString sourceName;
     nsCString category;
     uint32_t lineNum, colNum, flags;
     bool fromPrivateWindow, fromChromeContext;
@@ -511,9 +514,6 @@ ConsoleListener::Observe(nsIConsoleMessage* aMessage) {
     rv = scriptError->GetSourceName(sourceName);
     NS_ENSURE_SUCCESS(rv, rv);
     TruncateString(sourceName);
-    rv = scriptError->GetSourceLine(sourceLine);
-    NS_ENSURE_SUCCESS(rv, rv);
-    TruncateString(sourceLine);
 
     rv = scriptError->GetCategory(getter_Copies(category));
     NS_ENSURE_SUCCESS(rv, rv);
@@ -558,15 +558,15 @@ ConsoleListener::Observe(nsIConsoleMessage* aMessage) {
           return NS_ERROR_FAILURE;
         }
 
-        mChild->SendScriptErrorWithStack(
-            msg, sourceName, sourceLine, lineNum, colNum, flags, category,
-            fromPrivateWindow, fromChromeContext, cloned);
+        mChild->SendScriptErrorWithStack(msg, sourceName, lineNum, colNum,
+                                         flags, category, fromPrivateWindow,
+                                         fromChromeContext, cloned);
         return NS_OK;
       }
     }
 
-    mChild->SendScriptError(msg, sourceName, sourceLine, lineNum, colNum, flags,
-                            category, fromPrivateWindow, 0, fromChromeContext);
+    mChild->SendScriptError(msg, sourceName, lineNum, colNum, flags, category,
+                            fromPrivateWindow, 0, fromChromeContext);
     return NS_OK;
   }
 
@@ -1745,9 +1745,7 @@ mozilla::ipc::IPCResult ContentChild::RecvSetProcessSandbox(
     ::LoadLibraryW(L"softokn3.dll");
     // Library required by DirectWrite in some fall-back scenarios.
     ::LoadLibraryW(L"textshaping.dll");
-    // Libraries that are required for WMF software encoding.
-    ::LoadLibraryW(L"mozavcodec.dll");
-    ::LoadLibraryW(L"mozavutil.dll");
+    // Microsoft libraries that are required for WMF software encoding.
     ::LoadLibraryW(L"mfplat.dll");
     ::LoadLibraryW(L"mf.dll");
     ::LoadLibraryW(L"dxva2.dll");
@@ -2119,6 +2117,16 @@ mozilla::ipc::IPCResult ContentChild::RecvClearStyleSheetCache(
       aForPrincipal ? aForPrincipal.value().get() : nullptr;
   const nsCString* baseDomain = aBaseDomain ? aBaseDomain.ptr() : nullptr;
   SharedStyleSheetCache::Clear(principal, baseDomain);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult ContentChild::RecvClearScriptCache(
+    const Maybe<RefPtr<nsIPrincipal>>& aForPrincipal,
+    const Maybe<nsCString>& aBaseDomain) {
+  nsIPrincipal* principal =
+      aForPrincipal ? aForPrincipal.value().get() : nullptr;
+  const nsCString* baseDomain = aBaseDomain ? aBaseDomain.ptr() : nullptr;
+  SharedScriptCache::Clear(principal, baseDomain);
   return IPC_OK();
 }
 
@@ -2693,6 +2701,8 @@ mozilla::ipc::IPCResult ContentChild::RecvRemoteType(
     SetProcessName("Privileged Content"_ns, nullptr, &aProfile);
   } else if (aRemoteType == PRIVILEGEDMOZILLA_REMOTE_TYPE) {
     SetProcessName("Privileged Mozilla"_ns, nullptr, &aProfile);
+  } else if (aRemoteType == INFERENCE_REMOTE_TYPE) {
+    SetProcessName("Inference"_ns, nullptr, &aProfile);
   } else if (remoteTypePrefix == WITH_COOP_COEP_REMOTE_TYPE) {
     // The profiler can sanitize out the eTLD+1
     nsDependentCSubstring etld =
@@ -4216,11 +4226,11 @@ mozilla::ipc::IPCResult ContentChild::RecvDiscardWindowContext(
 }
 
 mozilla::ipc::IPCResult ContentChild::RecvScriptError(
-    const nsString& aMessage, const nsString& aSourceName,
-    const nsString& aSourceLine, const uint32_t& aLineNumber,
-    const uint32_t& aColNumber, const uint32_t& aFlags,
-    const nsCString& aCategory, const bool& aFromPrivateWindow,
-    const uint64_t& aInnerWindowId, const bool& aFromChromeContext) {
+    const nsString& aMessage, const nsCString& aSourceName,
+    const uint32_t& aLineNumber, const uint32_t& aColNumber,
+    const uint32_t& aFlags, const nsCString& aCategory,
+    const bool& aFromPrivateWindow, const uint64_t& aInnerWindowId,
+    const bool& aFromChromeContext) {
   nsresult rv = NS_OK;
   nsCOMPtr<nsIConsoleService> consoleService =
       do_GetService(NS_CONSOLESERVICE_CONTRACTID, &rv);
@@ -4231,8 +4241,8 @@ mozilla::ipc::IPCResult ContentChild::RecvScriptError(
   NS_ENSURE_TRUE(scriptError,
                  IPC_FAIL(this, "Failed to construct nsIScriptError"));
 
-  scriptError->InitWithWindowID(aMessage, aSourceName, aSourceLine, aLineNumber,
-                                aColNumber, aFlags, aCategory, aInnerWindowId,
+  scriptError->InitWithWindowID(aMessage, aSourceName, aLineNumber, aColNumber,
+                                aFlags, aCategory, aInnerWindowId,
                                 aFromChromeContext);
   rv = consoleService->LogMessage(scriptError);
   NS_ENSURE_SUCCESS(rv, IPC_FAIL(this, "Failed to log script error"));

@@ -1440,32 +1440,20 @@ mozilla::ipc::IPCResult WindowGlobalParent::RecvReloadWithHttpsOnlyException() {
   return IPC_OK();
 }
 
-IPCResult WindowGlobalParent::RecvDiscoverIdentityCredentialFromExternalSource(
+IPCResult WindowGlobalParent::RecvGetIdentityCredential(
     const IdentityCredentialRequestOptions& aOptions,
-    const DiscoverIdentityCredentialFromExternalSourceResolver& aResolver) {
-  IdentityCredential::DiscoverFromExternalSourceInMainProcess(
-      DocumentPrincipal(), this->BrowsingContext(), aOptions)
+    const CredentialMediationRequirement& aMediationRequirement,
+    const GetIdentityCredentialResolver& aResolver) {
+  IdentityCredential::GetCredentialInMainProcess(
+      DocumentPrincipal(), this->BrowsingContext(), aOptions,
+      aMediationRequirement)
       ->Then(
           GetCurrentSerialEventTarget(), __func__,
           [aResolver](const IPCIdentityCredential& aResult) {
-            return aResolver(Some(aResult));
-          },
-          [aResolver](nsresult aErr) { aResolver(Nothing()); });
-  return IPC_OK();
-}
-
-IPCResult WindowGlobalParent::RecvCollectIdentityCredentialFromCredentialStore(
-    const IdentityCredentialRequestOptions& aOptions,
-    const CollectIdentityCredentialFromCredentialStoreResolver& aResolver) {
-  IdentityCredential::CollectFromCredentialStoreInMainProcess(
-      DocumentPrincipal(), BrowsingContext(), aOptions)
-      ->Then(
-          GetCurrentSerialEventTarget(), __func__,
-          [aResolver](const nsTArray<IPCIdentityCredential>& aResult) {
-            aResolver(aResult);
+            return aResolver({Some(aResult), NS_OK});
           },
           [aResolver](nsresult aErr) {
-            aResolver(nsTArray<IPCIdentityCredential>());
+            aResolver({Maybe<IPCIdentityCredential>(Nothing()), aErr});
           });
   return IPC_OK();
 }
@@ -1481,23 +1469,26 @@ IPCResult WindowGlobalParent::RecvStoreIdentityCredential(
   return IPC_OK();
 }
 
-IPCResult WindowGlobalParent::RecvNotifyPendingIdentityCredentialDiscovery(
-    const IdentityCredentialRequestOptions& aOptions,
-    const NotifyPendingIdentityCredentialDiscoveryResolver& aResolver) {
-  IdentityCredentialRequestManager* icrm =
-      IdentityCredentialRequestManager::GetInstance();
-  if (!icrm) {
-    aResolver(NS_ERROR_NOT_AVAILABLE);
-    return IPC_OK();
+IPCResult WindowGlobalParent::RecvPreventSilentAccess(
+    const PreventSilentAccessResolver& aResolver) {
+  nsIPrincipal* principal = DocumentPrincipal();
+  if (principal) {
+    nsCOMPtr<nsIPermissionManager> permissionManager =
+        components::PermissionManager::Service();
+    if (permissionManager) {
+      permissionManager->RemoveFromPrincipal(
+          principal, "credential-allow-silent-access"_ns);
+      aResolver(NS_OK);
+      return IPC_OK();
+    }
   }
-  nsresult rv =
-      icrm->StorePendingRequest(this->TopWindowContext()->DocumentPrincipal(),
-                                aOptions, this->InnerWindowId());
-  aResolver(rv);
+
+  aResolver(NS_ERROR_NOT_AVAILABLE);
   return IPC_OK();
 }
 
 IPCResult WindowGlobalParent::RecvGetStorageAccessPermission(
+    bool aIncludeIdentityCredential,
     GetStorageAccessPermissionResolver&& aResolve) {
   WindowGlobalParent* top = TopWindowContext();
   if (!top) {
@@ -1511,6 +1502,24 @@ IPCResult WindowGlobalParent::RecvGetStorageAccessPermission(
   if (NS_WARN_IF(NS_FAILED(rv))) {
     aResolve(nsIPermissionManager::UNKNOWN_ACTION);
     return IPC_OK();
+  }
+  if (result == nsIPermissionManager::ALLOW_ACTION) {
+    aResolve(nsIPermissionManager::ALLOW_ACTION);
+    return IPC_OK();
+  }
+
+  if (aIncludeIdentityCredential) {
+    bool canCollect;
+    rv = IdentityCredential::CanSilentlyCollect(topPrincipal, principal,
+                                                &canCollect);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      aResolve(nsIPermissionManager::UNKNOWN_ACTION);
+      return IPC_OK();
+    }
+    if (canCollect) {
+      aResolve(nsIPermissionManager::ALLOW_ACTION);
+      return IPC_OK();
+    }
   }
 
   aResolve(result);

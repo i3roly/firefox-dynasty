@@ -11,6 +11,7 @@ import org.mozilla.fenix.GleanMetrics.AppMenu
 import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.HomeMenu
 import org.mozilla.fenix.GleanMetrics.HomeScreen
+import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Translations
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.menu.store.MenuAction
@@ -33,6 +34,8 @@ class MenuTelemetryMiddleware(
         next: (MenuAction) -> Unit,
         action: MenuAction,
     ) {
+        val currentState = context.state
+
         next(action)
 
         when (action) {
@@ -104,6 +107,12 @@ class MenuTelemetryMiddleware(
                 ),
             )
 
+            MenuAction.OpenInApp -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "open_in_app",
+                ),
+            )
+
             MenuAction.Navigate.Passwords -> Events.browserMenuAction.record(
                 Events.BrowserMenuActionExtra(
                     item = "passwords",
@@ -154,8 +163,40 @@ class MenuTelemetryMiddleware(
                 ),
             )
 
+            MenuAction.FindInPage -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "find_in_page",
+                ),
+            )
+
+            MenuAction.CustomizeReaderView -> ReaderMode.appearance.record(NoExtras())
+
+            MenuAction.ToggleReaderView -> {
+                val readerState = currentState.browserMenuState?.selectedTab?.readerState ?: return
+
+                if (readerState.active) {
+                    ReaderMode.closed.record(NoExtras())
+                } else {
+                    ReaderMode.opened.record(NoExtras())
+                }
+            }
+
+            is MenuAction.RequestDesktopSite -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "desktop_view_on",
+                ),
+            )
+
+            is MenuAction.RequestMobileSite -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "desktop_view_off",
+                ),
+            )
+
             MenuAction.InitAction,
+            MenuAction.OpenInFirefox,
             is MenuAction.InstallAddon,
+            is MenuAction.CustomMenuItemAction,
             is MenuAction.Navigate.AddonDetails,
             MenuAction.Navigate.Back,
             MenuAction.Navigate.DiscoverMoreExtensions,

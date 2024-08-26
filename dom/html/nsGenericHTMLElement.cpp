@@ -53,7 +53,6 @@
 #include "nsString.h"
 #include "nsGkAtoms.h"
 #include "nsDOMCSSDeclaration.h"
-#include "nsITextControlFrame.h"
 #include "nsIFormControl.h"
 #include "mozilla/dom/HTMLFormElement.h"
 #include "nsFocusManager.h"
@@ -447,7 +446,7 @@ bool nsGenericHTMLElement::Spellcheck() {
   }
 
   // Anything else that's not a form control is not spellchecked by default
-  nsCOMPtr<nsIFormControl> formControl = do_QueryObject(this);
+  const nsIFormControl* formControl = GetAsFormControl();
   if (!formControl) {
     return false;  // Not spellchecked by default
   }
@@ -1108,32 +1107,6 @@ bool nsGenericHTMLElement::IsAttributeMapped(const nsAtom* aAttribute) const {
 nsMapRuleToAttributesFunc nsGenericHTMLElement::GetAttributeMappingFunction()
     const {
   return &MapCommonAttributesInto;
-}
-
-nsIFormControlFrame* nsGenericHTMLElement::GetFormControlFrame(
-    bool aFlushFrames) {
-  auto flushType = aFlushFrames ? FlushType::Frames : FlushType::None;
-  nsIFrame* frame = GetPrimaryFrame(flushType);
-  if (!frame) {
-    return nullptr;
-  }
-
-  if (nsIFormControlFrame* f = do_QueryFrame(frame)) {
-    return f;
-  }
-
-  // If we have generated content, the primary frame will be a wrapper frame...
-  // Our real frame will be in its child list.
-  //
-  // FIXME(emilio): I don't think that's true... See bug 155957 for test-cases
-  // though, we should figure out whether this is still needed.
-  for (nsIFrame* kid : frame->PrincipalChildList()) {
-    if (nsIFormControlFrame* f = do_QueryFrame(kid)) {
-      return f;
-    }
-  }
-
-  return nullptr;
 }
 
 static const nsAttrValue::EnumTable kDivAlignTable[] = {
@@ -2303,17 +2276,8 @@ void nsGenericHTMLElement::Click(CallerType aCallerType) {
   SetHandlingClick();
 
   // Mark this event trusted if Click() is called from system code.
-  Maybe<WidgetPointerEvent> pointerEvent;
-  Maybe<WidgetMouseEvent> mouseEvent;
-  if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-    pointerEvent.emplace(aCallerType == CallerType::System, ePointerClick,
-                         nullptr);
-  } else {
-    mouseEvent.emplace(aCallerType == CallerType::System, ePointerClick,
-                       nullptr, WidgetMouseEvent::eReal);
-  }
-  WidgetMouseEvent& event =
-      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+  WidgetPointerEvent event(aCallerType == CallerType::System, ePointerClick,
+                           nullptr);
   event.mFlags.mIsPositionless = true;
   event.mInputSource = MouseEvent_Binding::MOZ_SOURCE_UNKNOWN;
   // pointerId definition in Pointer Events:
@@ -2472,16 +2436,7 @@ void nsGenericHTMLElement::HandleKeyboardActivation(
 nsresult nsGenericHTMLElement::DispatchSimulatedClick(
     nsGenericHTMLElement* aElement, bool aIsTrusted,
     nsPresContext* aPresContext) {
-  Maybe<WidgetPointerEvent> pointerEvent;
-  Maybe<WidgetMouseEvent> mouseEvent;
-  if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-    pointerEvent.emplace(aIsTrusted, ePointerClick, nullptr);
-  } else {
-    mouseEvent.emplace(aIsTrusted, ePointerClick, nullptr,
-                       WidgetMouseEvent::eReal);
-  }
-  WidgetMouseEvent& event =
-      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+  WidgetPointerEvent event(aIsTrusted, ePointerClick, nullptr);
   event.mFlags.mIsPositionless = true;
   event.mInputSource = MouseEvent_Binding::MOZ_SOURCE_KEYBOARD;
   // pointerId definition in Pointer Events:
@@ -2635,46 +2590,6 @@ bool nsGenericHTMLFormControlElement::IsHTMLFocusable(IsFocusableFlags aFlags,
 
   *aIsFocusable = *aIsFocusable && IsFormControlDefaultFocusable(aFlags);
   return false;
-}
-
-void nsGenericHTMLFormControlElement::GetEventTargetParent(
-    EventChainPreVisitor& aVisitor) {
-  if (aVisitor.mEvent->IsTrusted() && (aVisitor.mEvent->mMessage == eFocus ||
-                                       aVisitor.mEvent->mMessage == eBlur)) {
-    // We have to handle focus/blur event to change focus states in
-    // PreHandleEvent to prevent it breaks event target chain creation.
-    aVisitor.mWantsPreHandleEvent = true;
-  }
-  nsGenericHTMLFormElement::GetEventTargetParent(aVisitor);
-}
-
-nsresult nsGenericHTMLFormControlElement::PreHandleEvent(
-    EventChainVisitor& aVisitor) {
-  if (aVisitor.mEvent->IsTrusted()) {
-    switch (aVisitor.mEvent->mMessage) {
-      case eFocus: {
-        // Check to see if focus has bubbled up from a form control's
-        // child textfield or button.  If that's the case, don't focus
-        // this parent file control -- leave focus on the child.
-        nsIFormControlFrame* formControlFrame = GetFormControlFrame(true);
-        if (formControlFrame &&
-            aVisitor.mEvent->mOriginalTarget == static_cast<nsINode*>(this)) {
-          formControlFrame->SetFocus(true, true);
-        }
-        break;
-      }
-      case eBlur: {
-        nsIFormControlFrame* formControlFrame = GetFormControlFrame(true);
-        if (formControlFrame) {
-          formControlFrame->SetFocus(false, false);
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  return nsGenericHTMLFormElement::PreHandleEvent(aVisitor);
 }
 
 HTMLFieldSetElement* nsGenericHTMLFormControlElement::GetFieldSet() {
@@ -3776,4 +3691,58 @@ void nsGenericHTMLElement::GetPopover(nsString& aPopover) const {
   if (aPopover.IsEmpty() && !DOMStringIsNull(aPopover)) {
     aPopover.Assign(NS_ConvertUTF8toUTF16(kPopoverAttributeValueAuto));
   }
+}
+
+/******************************************************************************
+ *  nsIFormControl
+ *****************************************************************************/
+
+// static
+nsIFormControl* nsIFormControl::FromEventTarget(
+    mozilla::dom::EventTarget* aTarget) {
+  MOZ_ASSERT(aTarget);
+  return aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl() : nullptr;
+}
+
+// static
+nsIFormControl* nsIFormControl::FromEventTargetOrNull(
+    mozilla::dom::EventTarget* aTarget) {
+  return aTarget && aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl()
+                                      : nullptr;
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromEventTarget(
+    const mozilla::dom::EventTarget* aTarget) {
+  MOZ_ASSERT(aTarget);
+  return aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl() : nullptr;
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromEventTargetOrNull(
+    const mozilla::dom::EventTarget* aTarget) {
+  return aTarget && aTarget->IsNode() ? aTarget->AsNode()->GetAsFormControl()
+                                      : nullptr;
+}
+
+// static
+nsIFormControl* nsIFormControl::FromNode(nsINode* aNode) {
+  MOZ_ASSERT(aNode);
+  return aNode->GetAsFormControl();
+}
+
+// static
+nsIFormControl* nsIFormControl::FromNodeOrNull(nsINode* aNode) {
+  return aNode ? aNode->GetAsFormControl() : nullptr;
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromNode(const nsINode* aNode) {
+  MOZ_ASSERT(aNode);
+  return aNode->GetAsFormControl();
+}
+
+// static
+const nsIFormControl* nsIFormControl::FromNodeOrNull(const nsINode* aNode) {
+  return aNode ? aNode->GetAsFormControl() : nullptr;
 }

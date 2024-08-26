@@ -2304,6 +2304,11 @@ HttpBaseChannel::UpgradeToSecure() {
   NS_ENSURE_TRUE(LoadUpgradableToSecure(), NS_ERROR_NOT_AVAILABLE);
 
   StoreUpgradeToSecure(true);
+  // todo: Currently UpgradeToSecure() is called only by web extensions, if
+  // that ever changes, we need to update the following telemetry collection
+  // to reflect any future changes.
+  mLoadInfo->SetHttpsUpgradeTelemetry(nsILoadInfo::WEB_EXTENSION_UPGRADE);
+
   return NS_OK;
 }
 
@@ -3517,7 +3522,7 @@ void HttpBaseChannel::BlockOpaqueResponseAfterSniff(
     const OpaqueResponseBlockedTelemetryReason aTelemetryReason) {
   MOZ_DIAGNOSTIC_ASSERT(mORB);
   LogORBError(aReason, aTelemetryReason);
-  mORB->BlockResponse(this, NS_ERROR_FAILURE);
+  mORB->BlockResponse(this, NS_BINDING_ABORTED);
 }
 
 void HttpBaseChannel::AllowOpaqueResponseAfterSniff() {
@@ -3698,9 +3703,9 @@ nsresult HttpBaseChannel::AddSecurityMessage(
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIScriptError> error(do_CreateInstance(NS_SCRIPTERROR_CONTRACTID));
-  error->InitWithSourceURI(
-      errorText, mURI, u""_ns, 0, 0, nsIScriptError::warningFlag,
-      NS_ConvertUTF16toUTF8(aMessageCategory), innerWindowID);
+  error->InitWithSourceURI(errorText, mURI, 0, 0, nsIScriptError::warningFlag,
+                           NS_ConvertUTF16toUTF8(aMessageCategory),
+                           innerWindowID);
 
   console->LogMessage(error);
 
@@ -6634,7 +6639,8 @@ void HttpBaseChannel::LogORBError(
   if (contentWindowId) {
     nsContentUtils::ReportToConsoleByWindowID(
         u"A resource is blocked by OpaqueResponseBlocking, please check browser console for details."_ns,
-        nsIScriptError::warningFlag, "ORB"_ns, contentWindowId, mURI);
+        nsIScriptError::warningFlag, "ORB"_ns, contentWindowId,
+        SourceLocation(mURI.get()));
   }
 
   AutoTArray<nsString, 2> params;

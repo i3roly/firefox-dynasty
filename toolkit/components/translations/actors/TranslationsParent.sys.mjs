@@ -100,7 +100,11 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "alwaysTranslateLangTags",
   ALWAYS_TRANSLATE_LANGS_PREF,
   /* aDefaultPrefValue */ "",
-  /* onUpdate */ null,
+  /* onUpdate */ () =>
+    Services.obs.notifyObservers(
+      null,
+      "translations:always-translate-languages-changed"
+    ),
   /* aTransform */ rawLangTags =>
     rawLangTags ? new Set(rawLangTags.split(",")) : new Set()
 );
@@ -113,7 +117,11 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "neverTranslateLangTags",
   NEVER_TRANSLATE_LANGS_PREF,
   /* aDefaultPrefValue */ "",
-  /* onUpdate */ null,
+  /* onUpdate */ () =>
+    Services.obs.notifyObservers(
+      null,
+      "translations:never-translate-languages-changed"
+    ),
   /* aTransform */ rawLangTags =>
     rawLangTags ? new Set(rawLangTags.split(",")) : new Set()
 );
@@ -812,16 +820,19 @@ export class TranslationsParent extends JSWindowActorParent {
   /**
    * Requests a new translations port.
    *
-   * @param {number} innerWindowId - The id of the current window.
    * @param {string} fromLanguage - The BCP-47 from-language tag.
    * @param {string} toLanguage - The BCP-47 to-language tag.
+   * @param {number} [innerWindowId] - The id of the current window.
+   *   NOTE: This value should be provided only if your port is associated with Full Page Translations.
+   *   This will associate this translations port with the TranslationsParent actor instance for the provided id,
+   *   which will mean that changes in the translation state will affect the state of the Translations URL-bar button etc.
    *
    * @returns {Promise<MessagePort | undefined>} The port for communication with the translation engine, or undefined on failure.
    */
   static async requestTranslationsPort(
-    innerWindowId,
     fromLanguage,
-    toLanguage
+    toLanguage,
+    innerWindowId
   ) {
     let translationsEngineParent;
     try {
@@ -1159,6 +1170,21 @@ export class TranslationsParent extends JSWindowActorParent {
         displayName,
       }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
+
+  /**
+   * Get the display name for the given language Tag.
+   *
+   * @param {string} langTag
+   * @returns {string}
+   */
+  static getLanguageDisplayName(langTag) {
+    // Services.intl.getLanguageDisplayNames takes a list of language codes and
+    // returns a list of correspoding display names. Hence the langTag is sent as a list
+    let displayName = Services.intl.getLanguageDisplayNames(undefined, [
+      langTag,
+    ]);
+    return displayName[0];
   }
 
   /**
@@ -2202,6 +2228,23 @@ export class TranslationsParent extends JSWindowActorParent {
     return results;
   }
 
+  static async getLanguageSize(language) {
+    const records = [
+      ...(await TranslationsParent.#getTranslationModelRecords()).values(),
+    ];
+
+    let downloadSize = 0;
+    await Promise.all(
+      records.map(async record => {
+        if (record.fromLang !== language && record.toLang !== language) {
+          return;
+        }
+        downloadSize += parseInt(record.attachment.size);
+      })
+    );
+    return downloadSize;
+  }
+
   /**
    * Gets the expected download size that will occur (if any) if translate is called on two given languages for display purposes.
    *
@@ -2860,6 +2903,14 @@ export class TranslationsParent extends JSWindowActorParent {
     return true;
   }
 
+  static getAlwaysTranslateLanguages() {
+    return lazy.alwaysTranslateLangTags;
+  }
+
+  static getNeverTranslateLanguages() {
+    return lazy.neverTranslateLangTags;
+  }
+
   /**
    * Toggle the automatically popup pref, which will either
    * enable or disable translations being offered to the user.
@@ -3038,29 +3089,33 @@ export class TranslationsParent extends JSWindowActorParent {
  * Validate some simple Wasm that uses a SIMD operation.
  */
 function detectSimdSupport() {
-  return WebAssembly.validate(
-    new Uint8Array(
-      // ```
-      // ;; Detect SIMD support.
-      // ;; Compile by running: wat2wasm --enable-all simd-detect.wat
-      //
-      // (module
-      //   (func (result v128)
-      //     i32.const 0
-      //     i8x16.splat
-      //     i8x16.popcnt
-      //   )
-      // )
-      // ```
+  try {
+    return WebAssembly.validate(
+      new Uint8Array(
+        // ```
+        // ;; Detect SIMD support.
+        // ;; Compile by running: wat2wasm --enable-all simd-detect.wat
+        //
+        // (module
+        //   (func (result v128)
+        //     i32.const 0
+        //     i8x16.splat
+        //     i8x16.popcnt
+        //   )
+        // )
+        // ```
 
-      // prettier-ignore
-      [
+        // prettier-ignore
+        [
         0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x00,
         0x01, 0x7b, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0a, 0x01, 0x08, 0x00, 0x41, 0x00,
         0xfd, 0x0f, 0xfd, 0x62, 0x0b
       ]
-    )
-  );
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -3186,7 +3241,7 @@ class TranslationsLanguageState {
   }
 
   /**
-   * The last error that occured during translation.
+   * The last error that occurred during translation.
    */
   get error() {
     return this.#error;

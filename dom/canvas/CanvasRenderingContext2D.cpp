@@ -2397,7 +2397,7 @@ already_AddRefed<CanvasPattern> CanvasRenderingContext2D::CreatePattern(
     HTMLCanvasElement* canvas = &aSource.GetAsHTMLCanvasElement();
     element = canvas;
 
-    nsIntSize size = canvas->GetSize();
+    CSSIntSize size = canvas->GetSize();
     if (size.width == 0) {
       aError.ThrowInvalidStateError("Passed-in canvas has width 0");
       return nullptr;
@@ -2440,7 +2440,7 @@ already_AddRefed<CanvasPattern> CanvasRenderingContext2D::CreatePattern(
   } else if (aSource.IsOffscreenCanvas()) {
     offscreenCanvas = &aSource.GetAsOffscreenCanvas();
 
-    nsIntSize size = offscreenCanvas->GetWidthHeight();
+    CSSIntSize size = offscreenCanvas->GetWidthHeight();
     if (size.width == 0) {
       aError.ThrowInvalidStateError("Passed-in canvas has width 0");
       return nullptr;
@@ -5513,7 +5513,7 @@ void CanvasRenderingContext2D::DrawImage(const CanvasImageSource& aImage,
   if (aImage.IsHTMLCanvasElement()) {
     HTMLCanvasElement* canvas = &aImage.GetAsHTMLCanvasElement();
     element = canvas;
-    nsIntSize size = canvas->GetSize();
+    CSSIntSize size = canvas->GetSize();
     if (size.width == 0 || size.height == 0) {
       return aError.ThrowInvalidStateError("Passed-in canvas is empty");
     }
@@ -5523,7 +5523,7 @@ void CanvasRenderingContext2D::DrawImage(const CanvasImageSource& aImage,
     }
   } else if (aImage.IsOffscreenCanvas()) {
     offscreenCanvas = &aImage.GetAsOffscreenCanvas();
-    nsIntSize size = offscreenCanvas->GetWidthHeight();
+    CSSIntSize size = offscreenCanvas->GetWidthHeight();
     if (size.IsEmpty()) {
       return aError.ThrowInvalidStateError("Passed-in canvas is empty");
     }
@@ -5748,6 +5748,10 @@ void CanvasRenderingContext2D::DrawImage(const CanvasImageSource& aImage,
       // We avoid copying the whole canvas by manually copying just the part
       // that we need.
       srcSurf = ExtractSubrect(srcSurf, &sourceRect, mTarget);
+      // The SFE result may inadvertently keep the snapshot alive, forcing a
+      // copy when MarkChanged is called. Clear out possibly the last reference
+      // to the original snapshot to avoid this.
+      res.mSourceSurface = nullptr;
     }
 
     AdjustedTarget tempTarget(this, bounds.IsEmpty() ? nullptr : &bounds, true);

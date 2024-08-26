@@ -30,10 +30,10 @@ import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.readerview.ReaderViewFeature
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.tabs.WindowFeature
-import mozilla.components.service.glean.private.NoExtras
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.utils.ext.isLandscape
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.AddressToolbar
 import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Shopping
@@ -58,8 +58,6 @@ import org.mozilla.fenix.settings.quicksettings.protections.cookiebanners.getCoo
 import org.mozilla.fenix.shopping.DefaultShoppingExperienceFeature
 import org.mozilla.fenix.shopping.ReviewQualityCheckFeature
 import org.mozilla.fenix.shortcut.PwaOnboardingObserver
-import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
-import org.mozilla.fenix.snackbar.SnackbarBinding
 import org.mozilla.fenix.theme.ThemeManager
 
 /**
@@ -69,11 +67,8 @@ import org.mozilla.fenix.theme.ThemeManager
 class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     private val windowFeature = ViewBoundFeatureWrapper<WindowFeature>()
     private val openInAppOnboardingObserver = ViewBoundFeatureWrapper<OpenInAppOnboardingObserver>()
-    private val standardSnackbarErrorBinding =
-        ViewBoundFeatureWrapper<StandardSnackbarErrorBinding>()
     private val reviewQualityCheckFeature = ViewBoundFeatureWrapper<ReviewQualityCheckFeature>()
     private val translationsBinding = ViewBoundFeatureWrapper<TranslationsBinding>()
-    private val snackbarBinding = ViewBoundFeatureWrapper<SnackbarBinding>()
 
     private var readerModeAvailable = false
     private var reviewQualityCheckAvailable = false
@@ -204,27 +199,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 view = view,
             )
         }
-
-        standardSnackbarErrorBinding.set(
-            feature = StandardSnackbarErrorBinding(
-                requireActivity(),
-                requireActivity().components.appStore,
-            ),
-            owner = viewLifecycleOwner,
-            view = binding.root,
-        )
-
-        snackbarBinding.set(
-            feature = SnackbarBinding(
-                browserStore = context.components.core.store,
-                appStore = context.components.appStore,
-                snackbarDelegate = FenixSnackbarDelegate(binding.dynamicSnackbarContainer),
-                navController = findNavController(),
-                customTabSessionId = customTabSessionId,
-            ),
-            owner = this,
-            view = view,
-        )
     }
 
     private fun initSharePageAction(context: Context) {
@@ -410,37 +384,40 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         )
     }
 
-    // Adds a home button to BrowserToolbar or, if FeltPrivateBrowsing is enabled, a clear data button instead.
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun addLeadingAction(
         context: Context,
-        feltPrivateBrowsingEnabled: Boolean,
-        isPrivate: Boolean,
+        showHomeButton: Boolean,
+        showEraseButton: Boolean,
     ) {
-        if (leadingAction == null) {
-            leadingAction = if (isPrivate && feltPrivateBrowsingEnabled) {
-                BrowserToolbar.Button(
-                    imageDrawable = AppCompatResources.getDrawable(
-                        context,
-                        R.drawable.mozac_ic_data_clearance_24,
-                    )!!,
-                    contentDescription = context.getString(R.string.browser_toolbar_erase),
-                    iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                    listener = browserToolbarInteractor::onEraseButtonClicked,
-                )
-            } else {
-                BrowserToolbar.Button(
-                    imageDrawable = AppCompatResources.getDrawable(
-                        context,
-                        R.drawable.mozac_ic_home_24,
-                    )!!,
-                    contentDescription = context.getString(R.string.browser_toolbar_home),
-                    iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                    listener = browserToolbarInteractor::onHomeButtonClicked,
-                )
-            }.also {
-                browserToolbarView.view.addNavigationAction(it)
-            }
+        if (leadingAction != null) return
+
+        leadingAction = if (showEraseButton) {
+            BrowserToolbar.Button(
+                imageDrawable = AppCompatResources.getDrawable(
+                    context,
+                    R.drawable.mozac_ic_data_clearance_24,
+                )!!,
+                contentDescription = context.getString(R.string.browser_toolbar_erase),
+                iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
+                listener = browserToolbarInteractor::onEraseButtonClicked,
+            )
+        } else if (showHomeButton) {
+            BrowserToolbar.Button(
+                imageDrawable = AppCompatResources.getDrawable(
+                    context,
+                    R.drawable.mozac_ic_home_24,
+                )!!,
+                contentDescription = context.getString(R.string.browser_toolbar_home),
+                iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
+                listener = browserToolbarInteractor::onHomeButtonClicked,
+            )
+        } else {
+            null
+        }
+
+        leadingAction?.let {
+            browserToolbarView.view.addNavigationAction(it)
         }
     }
 
@@ -510,11 +487,14 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         feltPrivateBrowsingEnabled: Boolean,
         context: Context,
     ) {
-        if (!redesignEnabled || isLandscape || isTablet) {
+        val showHomeButton = !redesignEnabled
+        val showEraseButton = feltPrivateBrowsingEnabled && isPrivate && (isLandscape || isTablet)
+
+        if (showHomeButton || showEraseButton) {
             addLeadingAction(
-                isPrivate = isPrivate,
-                feltPrivateBrowsingEnabled = feltPrivateBrowsingEnabled,
                 context = context,
+                showHomeButton = showHomeButton,
+                showEraseButton = showEraseButton,
             )
         } else {
             removeLeadingAction()
@@ -812,7 +792,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 FenixSnackbar.make(
                     view = binding.dynamicSnackbarContainer,
                     duration = Snackbar.LENGTH_SHORT,
-                    isDisplayedWithBrowserToolbar = true,
                 )
                     .setText(view.context.getString(messageStringRes))
                     .setAction(requireContext().getString(R.string.create_collection_view)) {

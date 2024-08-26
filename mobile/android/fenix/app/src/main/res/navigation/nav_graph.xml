@@ -375,7 +375,7 @@
 
     <fragment
         android:id="@+id/downloadsFragment"
-        android:name="org.mozilla.fenix.library.downloads.DownloadFragment"
+        android:name="org.mozilla.fenix.downloads.listscreen.DownloadFragment"
         android:label="Downloads"
         tools:layout="@layout/fragment_downloads" />
 
@@ -788,10 +788,6 @@
         android:name="org.mozilla.fenix.settings.account.TurnOnSyncFragment"
         android:label="@string/preferences_sync_2"
         tools:layout="@layout/fragment_turn_on_sync">
-        <argument
-            android:name="padSnackbar"
-            android:defaultValue="false"
-            app:argType="boolean" />
         <action
             android:id="@+id/action_turnOnSyncFragment_to_pairFragment"
             app:destination="@id/pairFragment" />
@@ -1557,12 +1553,22 @@
         <argument
             android:name="accesspoint"
             app:argType="org.mozilla.fenix.components.menu.MenuAccessPoint" />
+        <argument
+            android:name="customTabSessionId"
+            android:defaultValue="@null"
+            app:nullable="true"
+            app:argType="string" />
         <dialog
             android:id="@+id/menuDialogFragment"
             android:name="org.mozilla.fenix.components.menu.MenuDialogFragment">
             <argument
                 android:name="accesspoint"
                 app:argType="org.mozilla.fenix.components.menu.MenuAccessPoint" />
+            <argument
+                android:name="customTabSessionId"
+                android:defaultValue="@null"
+                app:nullable="true"
+                app:argType="string" />
             <action
                 android:id="@+id/action_menuDialogFragment_to_translationsDialogFragment"
                 app:destination="@id/translationsDialogFragment" />

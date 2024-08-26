@@ -124,6 +124,12 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">이 탭 기록의 페이지를 이동하려면 화살표를 길게 누르세요.</string>
 
+    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_title">새로운 기능: 탭 한 번으로 앞뒤로 이동</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_message">손가락 하나만 움직여서 더 빠른게 탐색해 보세요.</string>
+
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">카메라 액세스가 필요합니다. Android 설정으로 이동하여 권한을 누른 다음 허용을 누르세요.</string>
     <!-- Text for the positive action button to go to Android Settings to grant permissions. -->
@@ -205,6 +211,14 @@
     <string name="browser_menu_stop">중지</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">확장 기능</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">나만의 %s 만들기</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">확장 프로그램을 사용하면 %s의 모양과 성능을 변경하고 개인정보 보호 및 안전성을 강화하는 등 탐색 수준을 한 단계 높일 수 있습니다.</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">더 알아보기</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">확장 기능 관리</string>
     <!-- Browser menu button that opens AMO in a tab -->
@@ -297,10 +311,16 @@
     <string name="browser_menu_switch_to_mobile_site">모바일 사이트로 전환</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">도구</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">리더뷰, 번역, 인쇄, 공유, 앱 열기</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">리더뷰, 인쇄, 공유, 앱 열기</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">저장</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">북마크, 바로 가기, 홈, 모음집, PDF 추가</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">이 페이지 북마크</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -318,6 +338,10 @@
     <string name="browser_menu_translated_to">%1$s 언어로 번역됨</string>
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">인쇄…</string>
+
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">%1$s 종료</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -753,11 +777,11 @@
     <string name="wallpaper_updated_snackbar_action">보기</string>
 
     <!-- Snackbar message for when wallpaper couldn't be downloaded -->
-    <string name="wallpaper_download_error_snackbar_message">배경 화면을 다운로드할 수 없습니다</string>
+    <string name="wallpaper_download_error_snackbar_message">배경 화면을 다운로드할 수 없음</string>
     <!-- Snackbar label for action to retry downloading the wallpaper -->
     <string name="wallpaper_download_error_snackbar_action">다시 시도</string>
     <!-- Snackbar message for when wallpaper couldn't be selected because of the disk error -->
-    <string name="wallpaper_select_error_snackbar_message">배경 화면을 변경할 수 없습니다</string>
+    <string name="wallpaper_select_error_snackbar_message">배경 화면을 변경할 수 없음</string>
     <!-- Text displayed that links to website containing documentation about the "Limited Edition" wallpapers. -->
     <string name="wallpaper_learn_more">더 알아보기</string>
 
@@ -926,9 +950,9 @@
     <string name="preference_gestures_swipe_toolbar_show_tabs">도구 모음을 위로 밀어서 탭 열기</string>
 
     <!-- Preference for using the dynamic toolbars -->
-    <string name="preference_gestures_dynamic_toolbar_2">주소 표시줄 및 도구 모음을 숨기려면 스크롤</string>
+    <string name="preference_gestures_dynamic_toolbar_2">스크롤 중 주소 표시줄 및 도구 모음 숨기기</string>
     <!-- Preference for switching tabs by swiping horizontally on the addressbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">탭을 전환하려면 주소 표시줄을 옆으로 스와이프</string>
+    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">주소 표시줄을 옆으로 밀어서 탭 전환</string>
 
     <!-- Library -->
     <!-- Option in Library to open Downloads page -->
@@ -1118,7 +1142,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">모음집 이름</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">이름 변경</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">이름 변경</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">삭제</string>
 
@@ -1192,7 +1216,7 @@
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">폴더 추가</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar">북마크가 저장되었습니다!</string>
+    <string name="bookmark_saved_snackbar">북마크 저장됨!</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">편집</string>
 
@@ -1255,6 +1279,17 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">검색어 입력</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">뒤로</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">새 폴더 추가</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">북마크 닫기</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">북마크 검색</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">%s 항목 메뉴</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -1446,7 +1481,7 @@
     <string name="sync_confirmation_button">확인</string>
 
     <!-- Share error message -->
-    <string name="share_error_snackbar">이 앱에 공유 할 수 없습니다</string>
+    <string name="share_error_snackbar">이 앱에 공유 할 수 없음</string>
     <!-- Add new device screen title -->
     <string name="sync_add_new_device_title">기기로 보내기</string>
     <!-- Text for the warning message on the Add new device screen -->
@@ -1526,9 +1561,9 @@
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">탭 닫힘: %1$s개</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved">북마크가 저장되었습니다!</string>
+    <string name="snackbar_message_bookmarks_saved">북마크 저장됨!</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
-    <string name="snackbar_added_to_shortcuts">바로 가기에 추가되었습니다!</string>
+    <string name="snackbar_added_to_shortcuts">바로 가기에 추가됨!</string>
     <!-- Text shown in snackbar when user closes a private tab -->
     <string name="snackbar_private_tab_closed">사생활 보호 탭 닫힘</string>
     <!-- Text shown in snackbar when user closes all private tabs -->
@@ -1590,7 +1625,7 @@
     <!-- Title for the cookies and site data items in Delete browsing data -->
     <string name="preferences_delete_browsing_data_cookies_and_site_data">쿠키 및 사이트 데이터</string>
     <!-- Subtitle for the cookies item in Delete browsing data -->
-    <string name="preferences_delete_browsing_data_cookies_subtitle">대부분 웹 사이트 자동 로그아웃</string>
+    <string name="preferences_delete_browsing_data_cookies_subtitle">대부분의 사이트에서 로그아웃됨</string>
     <!-- Title for the cached images and files item in Delete browsing data -->
     <string name="preferences_delete_browsing_data_cached_files">캐시된 이미지와 파일</string>
     <!-- Subtitle for the cached images and files item in Delete browsing data -->
@@ -2235,8 +2270,10 @@
 
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">바로 가기 이름</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">바로 가기 URL</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">확인</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">확인</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">취소</string>
 
@@ -2246,6 +2283,17 @@
     <string name="top_sites_menu_sponsor_privacy">스폰서 및 개인 정보 보호</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">스폰서</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">편집</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">바로 가기 편집</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">저장</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">올바른 URL을 입력하세요</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2708,11 +2756,11 @@
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">%1$s 다운로드를 취소하시겠습니까?</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">%1$s 다운로드를 취소하시겠습니까?</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">예</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">예</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">아니오</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">아니오</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2796,8 +2844,6 @@
     <string name="micro_survey_privacy_notice_2">개인정보처리방침</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">보내기</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">닫기</string>
 
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">설문 조사 완료</string>

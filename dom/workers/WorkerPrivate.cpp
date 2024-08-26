@@ -1368,20 +1368,11 @@ Document* WorkerPrivate::GetDocument() const {
 
 nsPIDOMWindowInner* WorkerPrivate::GetAncestorWindow() const {
   AssertIsOnMainThread();
-  if (mLoadInfo.mWindow) {
-    return mLoadInfo.mWindow;
-  }
-  // if we don't have a document, we should query the document
-  // from the parent in case of a nested worker
-  WorkerPrivate* parent = mParent;
-  while (parent) {
-    if (parent->mLoadInfo.mWindow) {
-      return parent->mLoadInfo.mWindow;
-    }
-    parent = parent->GetParent();
-  }
-  // couldn't query a window, give up and return nullptr
-  return nullptr;
+
+  // We should query the window from the top level worker in case of a nested
+  // worker, as only the top level one can have a window.
+  WorkerPrivate* top = GetTopLevelWorker();
+  return top->GetWindow();
 }
 
 class EvictFromBFCacheRunnable final : public WorkerProxyToMainThreadRunnable {
@@ -1660,6 +1651,20 @@ nsresult WorkerPrivate::DispatchLockHeld(
          this, runnable.get(), aSyncLoopTarget));
     rv = aSyncLoopTarget->Dispatch(runnable.forget(), NS_DISPATCH_NORMAL);
   } else {
+    // If mStatus is Pending, the WorkerPrivate initialization still can fail.
+    // Append this WorkerThreadRunnable to WorkerPrivate::mPreStartRunnables,
+    // such that this WorkerThreadRunnable can get the correct value of
+    // mCleanPreStartDispatching in WorkerPrivate::RunLoopNeverRan().
+    if (mStatus == Pending) {
+      LOGV(
+          ("WorkerPrivate::DispatchLockHeld [%p] runnable %p is append in "
+           "mPreStartRunnables",
+           this, runnable.get()));
+      RefPtr<WorkerThreadRunnable> workerThreadRunnable =
+          static_cast<WorkerThreadRunnable*>(runnable.get());
+      mPreStartRunnables.AppendElement(workerThreadRunnable);
+    }
+
     // WorkerDebuggeeRunnables don't need any special treatment here. True,
     // they should not be delivered to a frozen worker. But frozen workers
     // aren't drawing from the thread's main event queue anyway, only from
@@ -3288,7 +3293,6 @@ void WorkerPrivate::RunLoopNeverRan() {
   if (!mControlQueue.IsEmpty()) {
     WorkerRunnable* runnable = nullptr;
     while (mControlQueue.Pop(runnable)) {
-      runnable->Cancel();
       runnable->Release();
     }
   }
@@ -5198,7 +5202,7 @@ void WorkerPrivate::SetDebuggerImmediate(dom::Function& aHandler,
   }
 }
 
-void WorkerPrivate::ReportErrorToDebugger(const nsAString& aFilename,
+void WorkerPrivate::ReportErrorToDebugger(const nsACString& aFilename,
                                           uint32_t aLineno,
                                           const nsAString& aMessage) {
   mDebugger->ReportErrorToDebugger(aFilename, aLineno, aMessage);

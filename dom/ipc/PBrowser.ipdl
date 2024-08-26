@@ -854,6 +854,18 @@ child:
     async NormalPriorityInsertText(nsString aStringToInsert);
 
     /**
+     * Dispatch eContentCommandReplaceText event in the remote process.
+     */
+    [Priority=input] async ReplaceText(nsString aReplacementString,
+                                       nsString aStringToInsert,
+                                       uint32_t aOffset,
+				       bool aPreventSetSelection);
+    async NormalPriorityReplaceText(nsString aReplacementString,
+                                    nsString aStringToInsert,
+                                    uint32_t aOffset,
+				    bool aPreventSetSelection);
+
+    /**
      * Call PasteTransferable via a controller on the content process
      * to handle the command content event, "pasteTransferable".
      */
@@ -1006,9 +1018,12 @@ child:
     async InvokeChildDragSession(
         MaybeDiscardedWindowContext aSourceWindowContext,
         MaybeDiscardedWindowContext aSourceTopWindowContext,
+        nullable nsIPrincipal aPrincipal,
         IPCTransferableData[] transfers, uint32_t action);
 
-    async UpdateDragSession(IPCTransferableData[] transfers,
+    async UpdateDragSession(
+        nullable nsIPrincipal aPrincipal,
+        IPCTransferableData[] transfers,
                             EventMessage message);
 
     async EndDragSession(bool aDoneDrag, bool aUserCancelled,

@@ -139,7 +139,7 @@ export class HighlightLine extends Component {
       editor.setLineContentMarker({
         id: markerTypes.HIGHLIGHT_LINE_MARKER,
         lineClassName: "highlight-line",
-        lines: [selectedLocation.line],
+        lines: [{ line: selectedLocation.line }],
       });
     } else {
       const doc = getDocument(sourceId);
@@ -195,9 +195,8 @@ export class HighlightLine extends Component {
 
 export default connect(state => {
   const selectedLocation = getSelectedLocation(state);
-
   if (!selectedLocation) {
-    throw new Error("must have selected location");
+    return {};
   }
   return {
     pauseCommand: getPauseCommand(state, getCurrentThread(state)),

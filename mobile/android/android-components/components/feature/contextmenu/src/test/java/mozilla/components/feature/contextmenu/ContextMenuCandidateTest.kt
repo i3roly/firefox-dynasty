@@ -1632,15 +1632,15 @@ class ContextMenuCandidateTest {
         val getAppLinkRedirectMock: AppLinksUseCases.GetAppLinkRedirect = mock()
 
         doReturn(
-            AppLinkRedirect(mock(), null, null),
+            AppLinkRedirect(mock(), "", null, null),
         ).`when`(getAppLinkRedirectMock).invoke(eq("https://www.example.com"))
 
         doReturn(
-            AppLinkRedirect(null, null, mock()),
+            AppLinkRedirect(null, "", null, mock()),
         ).`when`(getAppLinkRedirectMock).invoke(eq("intent:www.example.com#Intent;scheme=https;package=org.mozilla.fenix;end"))
 
         doReturn(
-            AppLinkRedirect(null, null, null),
+            AppLinkRedirect(null, "", null, null),
         ).`when`(getAppLinkRedirectMock).invoke(eq("https://www.otherexample.com"))
 
         // This mock exists only to verify that it was called
@@ -1731,10 +1731,10 @@ class ContextMenuCandidateTest {
         val tab = createTab("https://www.mozilla.org")
         val getAppLinkRedirectMock: AppLinksUseCases.GetAppLinkRedirect = mock()
         doReturn(
-            AppLinkRedirect(mock(), null, null),
+            AppLinkRedirect(mock(), "", null, null),
         ).`when`(getAppLinkRedirectMock).invoke(eq("https://www.example.com"))
         doReturn(
-            AppLinkRedirect(null, null, mock()),
+            AppLinkRedirect(null, "", null, mock()),
         ).`when`(getAppLinkRedirectMock).invoke(eq("intent:www.example.com#Intent;scheme=https;package=org.mozilla.fenix;end"))
         val openAppLinkRedirectMock: AppLinksUseCases.OpenAppLinkRedirect = mock()
         val appLinksUseCasesMock: AppLinksUseCases = mock()
@@ -2088,8 +2088,24 @@ private class TestSnackbarDelegate : SnackbarDelegate {
     var hasShownSnackbar = false
     var lastActionListener: ((v: View) -> Unit)? = null
 
-    override fun show(snackBarParentView: View, text: Int, duration: Int, action: Int, listener: ((v: View) -> Unit)?) {
+    override fun show(
+        snackBarParentView: View,
+        text: Int,
+        duration: Int,
+        isError: Boolean,
+        action: Int,
+        listener: ((v: View) -> Unit)?,
+    ) {
         hasShownSnackbar = true
         lastActionListener = listener
     }
+
+    override fun show(
+        snackBarParentView: View,
+        text: String,
+        duration: Int,
+        isError: Boolean,
+        action: String?,
+        listener: ((v: View) -> Unit)?,
+    ) = show(snackBarParentView, 0, duration, isError, 0, listener)
 }

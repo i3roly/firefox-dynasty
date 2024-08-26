@@ -13,12 +13,11 @@
 #include "nsDirection.h"
 #include "nsIAccessibleText.h"
 
-class nsRange;
-
 namespace mozilla {
 namespace dom {
+class AbstractRange;
 class Document;
-}
+}  // namespace dom
 
 namespace a11y {
 class Accessible;
@@ -138,17 +137,18 @@ class TextLeafPoint final {
       bool aIncludeDefaults = true) const;
 
   /**
-   * Get the offsets of all spelling errors in a given LocalAccessible. This
-   * should only be used when pushing the cache. Most callers will want
-   * FindTextAttrsStart instead.
+   * Get all the attributes that apply to offset ranges in a given text leaf
+   * LocalAccessible. This should only be used when pushing the cache. Most
+   * callers will want FindTextAttrsStart instead.
    */
-  static nsTArray<int32_t> GetSpellingErrorOffsets(LocalAccessible* aAcc);
+  static nsTArray<TextOffsetAttribute> GetTextOffsetAttributes(
+      LocalAccessible* aAcc);
 
   /**
-   * Queue a cache update for a spelling error in a given DOM range.
+   * Queue a cache update for text offset attributes in a given DOM range.
    */
-  static void UpdateCachedSpellingError(dom::Document* aDocument,
-                                        const nsRange& aRange);
+  static void UpdateCachedTextOffsetAttributes(
+      dom::Document* aDocument, const dom::AbstractRange& aRange);
 
   /**
    * Find the start of a run of text attributes in a specific direction.
@@ -229,15 +229,17 @@ class TextLeafPoint final {
   TextLeafPoint FindClusterSameAcc(nsDirection aDirection,
                                    bool aIncludeOrigin) const;
 
-  bool IsInSpellingError() const;
+  void AddTextOffsetAttributes(AccAttributes* aAttrs) const;
 
   /**
-   * Find a spelling error boundary in the same Accessible. This function
+   * Find a text offset attribute boundary in the same Accessible. This function
    * searches for either start or end points, since either means a change in
-   * text attributes.
+   * text attributes. This only considers attributes such as spelling errors
+   * which are mapped to DOM selections. Most callers will want
+   * FindTextAttrsStart instead.
    */
-  TextLeafPoint FindSpellingErrorSameAcc(nsDirection aDirection,
-                                         bool aIncludeOrigin) const;
+  TextLeafPoint FindTextOffsetAttributeSameAcc(nsDirection aDirection,
+                                               bool aIncludeOrigin) const;
 
   // Return the point immediately succeeding or preceding this leaf depending
   // on given direction.

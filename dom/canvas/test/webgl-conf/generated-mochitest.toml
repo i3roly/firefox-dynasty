@@ -1,6 +1,6 @@
 # This is a GENERATED FILE. Do not edit it directly.
 # Regenerated it by using `python generate-wrappers-and-manifest.py`.
-# Mark failing (fail-if) and crashing (skip-if) tests in mochitest-errata.ini.
+# Mark failing (fail-if) and crashing (skip-if) tests in mochitest-errata.toml.
 
 [DEFAULT]
 prefs = "media.seamless-looping-video=false"
@@ -14420,7 +14420,6 @@ skip-if = ["os == 'android'"]
 
 ["generated/test_conformance__extensions__oes-texture-half-float.html"]
 subsuite = "webgl1-core"
-fail-if = ["os == 'android'"]
 
 ["generated/test_conformance__extensions__oes-vertex-array-object-bufferData.html"]
 subsuite = "webgl1-core"
@@ -15780,6 +15779,7 @@ subsuite = "webgl1-core"
 
 ["generated/test_conformance__ogles__GL__abs__abs_001_to_006.html"]
 subsuite = "webgl1-ext"
+skip-if = ["os == 'android' && debug"]
 
 ["generated/test_conformance__ogles__GL__acos__acos_001_to_006.html"]
 subsuite = "webgl1-ext"

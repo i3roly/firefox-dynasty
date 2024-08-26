@@ -290,10 +290,16 @@
     <string name="browser_menu_switch_to_mobile_site">Nei mobylwebsite</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Ark</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Lêzerwerjefte, Oersette, Ofdrukke, Diele, App iepenje</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Lêzerwerjefte, Ofdrukke, Diele, App iepenje</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Bewarje</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Blêdwizer tafoegje, Fluchtoets, Startside, Kolleksje, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Blêdwizer foar dizze side meitsje</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -1097,7 +1103,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Namme kolleksje</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Namme wizigje</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Namme wizigje</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Fuortsmite</string>
 
@@ -1227,6 +1233,17 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Fier syktermen yn</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Werom blêdzje</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">In nije map tafoegje</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Blêdwizers slute</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Blêdwizers trochsykje</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">Itemmenu foar %s</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2179,8 +2196,10 @@
 
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Namme fluchkeppeling</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">Fluchkeppelings-URL</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">OK</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">OK</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">Annulearje</string>
 
@@ -2190,6 +2209,18 @@
     <string name="top_sites_menu_sponsor_privacy">Us sponsors en jo privacy</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Sponsore</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Bewurkje</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Fluchkeppeling bewurkje</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Bewarje</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Fier in jildige URL yn</string>
+
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->

@@ -25,10 +25,8 @@
 #include "nsIConstraintValidation.h"
 #include "nsIControllers.h"
 #include "mozilla/dom/Document.h"
-#include "nsIFormControlFrame.h"
 #include "nsIFormControl.h"
 #include "nsIFrame.h"
-#include "nsITextControlFrame.h"
 #include "nsLayoutUtils.h"
 #include "nsLinebreakConverter.h"
 #include "nsPresContext.h"
@@ -118,19 +116,15 @@ void HTMLTextAreaElement::Select() {
     }
   }
 
-  SetSelectionRange(0, UINT32_MAX, mozilla::dom::Optional<nsAString>(),
-                    IgnoreErrors());
+  SetSelectionRange(0, UINT32_MAX, Optional<nsAString>(), IgnoreErrors());
 }
 
-NS_IMETHODIMP
-HTMLTextAreaElement::SelectAll(nsPresContext* aPresContext) {
-  nsIFormControlFrame* formControlFrame = GetFormControlFrame(true);
-
-  if (formControlFrame) {
-    formControlFrame->SetFormProperty(nsGkAtoms::select, u""_ns);
+void HTMLTextAreaElement::SelectAll() {
+  // FIXME(emilio): Should we try to call Select(), which will avoid flushing?
+  if (nsTextControlFrame* tf =
+          do_QueryFrame(GetPrimaryFrame(FlushType::Frames))) {
+    tf->SelectAll();
   }
-
-  return NS_OK;
 }
 
 bool HTMLTextAreaElement::IsHTMLFocusable(IsFocusableFlags aFlags,
@@ -419,9 +413,7 @@ nsMapRuleToAttributesFunc HTMLTextAreaElement::GetAttributeMappingFunction()
 }
 
 bool HTMLTextAreaElement::IsDisabledForEvents(WidgetEvent* aEvent) {
-  nsIFormControlFrame* formControlFrame = GetFormControlFrame(false);
-  nsIFrame* formFrame = do_QueryFrame(formControlFrame);
-  return IsElementDisabledForEvents(aEvent, formFrame);
+  return IsElementDisabledForEvents(aEvent, GetPrimaryFrame());
 }
 
 void HTMLTextAreaElement::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
@@ -626,16 +618,6 @@ nsresult HTMLTextAreaElement::SetValueFromSetRangeText(
                                    ValueSetterOption::SetValueChanged});
 }
 
-void HTMLTextAreaElement::SetDirectionFromValue(bool aNotify,
-                                                const nsAString* aKnownValue) {
-  nsAutoString value;
-  if (!aKnownValue) {
-    GetValue(value);
-    aKnownValue = &value;
-  }
-  SetDirectionalityFromValue(this, *aKnownValue, aNotify);
-}
-
 nsresult HTMLTextAreaElement::Reset() {
   nsAutoString resetVal;
   GetDefaultValue(resetVal, IgnoreErrors());
@@ -757,9 +739,7 @@ nsresult HTMLTextAreaElement::BindToTree(BindContext& aContext,
   NS_ENSURE_SUCCESS(rv, rv);
 
   // Set direction based on value if dir=auto
-  if (HasDirAuto()) {
-    SetDirectionFromValue(false);
-  }
+  ResetDirFormAssociatedElement(this, false, HasDirAuto());
 
   // If there is a disabled fieldset in the parent chain, the element is now
   // barred from constraint validation and can't suffer from value missing.
@@ -897,7 +877,7 @@ void HTMLTextAreaElement::AfterSetAttr(int32_t aNameSpaceID, nsAtom* aName,
       UpdatePlaceholderShownState();
     } else if (aName == nsGkAtoms::dir && aValue &&
                aValue->Equals(nsGkAtoms::_auto, eIgnoreCase)) {
-      SetDirectionFromValue(aNotify);
+      ResetDirFormAssociatedElement(this, aNotify, true);
     }
   }
 
@@ -1122,9 +1102,7 @@ void HTMLTextAreaElement::OnValueChanged(ValueChangeKind aKind,
   UpdateTooShortValidityState();
   UpdateValueMissingValidityState();
 
-  if (HasDirAuto()) {
-    SetDirectionFromValue(true, aKnownNewValue);
-  }
+  ResetDirFormAssociatedElement(this, true, HasDirAuto(), aKnownNewValue);
 
   if (validBefore != IsValid()) {
     UpdateValidityElementStates(true);

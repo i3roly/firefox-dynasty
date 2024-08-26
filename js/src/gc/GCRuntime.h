@@ -23,7 +23,6 @@
 #include "gc/Scheduling.h"
 #include "gc/Statistics.h"
 #include "gc/StoreBuffer.h"
-#include "gc/SweepingAPI.h"
 #include "js/friend/PerformanceHint.h"
 #include "js/GCAnnotations.h"
 #include "js/UniquePtr.h"
@@ -236,11 +235,13 @@ class ZoneList {
 };
 
 struct WeakCacheToSweep {
-  WeakCacheBase* cache;
+  JS::detail::WeakCacheBase* cache;
   JS::Zone* zone;
 };
 
 class WeakCacheSweepIterator {
+  using WeakCacheBase = JS::detail::WeakCacheBase;
+
   JS::Zone* sweepZone;
   WeakCacheBase* sweepCache;
 
@@ -432,6 +433,7 @@ class GCRuntime {
   void setAlwaysPreserveCode() { alwaysPreserveCode = true; }
 
   void setIncrementalGCEnabled(bool enabled);
+  void setNurseryEnabled(bool enabled);
 
   bool isIncrementalGCEnabled() const { return incrementalGCEnabled; }
   bool isPerZoneGCEnabled() const { return perZoneGCEnabled; }
@@ -601,7 +603,8 @@ class GCRuntime {
   // Queue memory memory to be freed on a background thread if possible.
   void queueUnusedLifoBlocksForFree(LifoAlloc* lifo);
   void queueAllLifoBlocksForFreeAfterMinorGC(LifoAlloc* lifo);
-  void queueBuffersForFreeAfterMinorGC(Nursery::BufferSet& buffers);
+  void queueBuffersForFreeAfterMinorGC(
+      Nursery::BufferSet& buffers, Nursery::StringBufferVector& stringBuffers);
 
   // Public here for ReleaseArenaLists and FinalizeTypedArenas.
   void releaseArena(Arena* arena, const AutoLockGC& lock);
@@ -666,6 +669,12 @@ class GCRuntime {
 
  private:
   enum IncrementalResult { ResetIncremental = 0, Ok };
+
+  bool hasBuffersForBackgroundFree() const {
+    return !lifoBlocksToFree.ref().isEmpty() ||
+           !buffersToFreeAfterMinorGC.ref().empty() ||
+           !stringBuffersToReleaseAfterMinorGC.ref().empty();
+  }
 
   [[nodiscard]] bool setParameter(JSGCParamKey key, uint32_t value,
                                   AutoLockGC& lock);
@@ -1213,6 +1222,8 @@ class GCRuntime {
   MainThreadData<LifoAlloc> lifoBlocksToFreeAfterFullMinorGC;
   MainThreadData<LifoAlloc> lifoBlocksToFreeAfterNextMinorGC;
   HelperThreadLockData<Nursery::BufferSet> buffersToFreeAfterMinorGC;
+  HelperThreadLockData<Nursery::StringBufferVector>
+      stringBuffersToReleaseAfterMinorGC;
 
   /* Index of current sweep group (for stats). */
   MainThreadData<unsigned> sweepGroupIndex;
@@ -1252,7 +1263,8 @@ class GCRuntime {
    * used during shutdown GCs. In either case, unmarked objects may need to be
    * discarded.
    */
-  WeakCache<GCVector<HeapPtr<JS::Value>, 0, SystemAllocPolicy>> testMarkQueue;
+  JS::WeakCache<GCVector<HeapPtr<JS::Value>, 0, SystemAllocPolicy>>
+      testMarkQueue;
 
   /* Position within the test mark queue. */
   size_t queuePos = 0;
@@ -1293,12 +1305,20 @@ class GCRuntime {
   MainThreadData<int64_t> defaultTimeBudgetMS_;
 
   /*
-   * Whether compacting GC can is enabled globally.
+   * Whether compacting GC is enabled globally.
    *
    * JSGC_COMPACTING_ENABLED
    * pref: javascript.options.mem.gc_compacting
    */
   MainThreadData<bool> compactingEnabled;
+
+  /*
+   * Whether generational GC is enabled globally.
+   *
+   * JSGC_NURSERY_ENABLED
+   * pref: javascript.options.mem.gc_generational
+   */
+  MainThreadData<bool> nurseryEnabled;
 
   /*
    * Whether parallel marking is enabled globally.

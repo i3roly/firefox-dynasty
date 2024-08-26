@@ -240,6 +240,7 @@ static const char* gCallbackPrefsForSocketProcess[] = {
     "network.proxy.allow_hijacking_localhost",
     "network.connectivity-service.",
     "network.captive-portal-service.testMode",
+    "network.socket.ip_addr_any.disabled",
     nullptr,
 };
 
@@ -257,11 +258,6 @@ static const char* gCallbackSecurityPrefs[] = {
     "security.ssl.disable_session_identifiers",
     "security.tls.enable_post_handshake_auth",
     "security.tls.enable_delegated_credentials",
-    // Note the prefs listed below should be in sync with the code in
-    // SetValidationOptionsCommon().
-    "security.ssl.enable_ocsp_stapling",
-    "security.ssl.enable_ocsp_must_staple",
-    "security.pki.certificate_transparency.mode",
     nullptr,
 };
 
@@ -438,13 +434,9 @@ void nsIOService::OnTLSPrefChange(const char* aPref, void* aSelf) {
 
   nsAutoCString pref(aPref);
   // The preferences listed in gCallbackSecurityPrefs need to be in sync with
-  // the code in HandleTLSPrefChange() and SetValidationOptionsCommon().
+  // the code in HandleTLSPrefChange().
   if (HandleTLSPrefChange(pref)) {
     LOG(("HandleTLSPrefChange done"));
-  } else if (pref.EqualsLiteral("security.ssl.enable_ocsp_stapling") ||
-             pref.EqualsLiteral("security.ssl.enable_ocsp_must_staple") ||
-             pref.EqualsLiteral("security.pki.certificate_transparency.mode")) {
-    SetValidationOptionsCommon();
   }
 }
 

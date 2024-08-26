@@ -47,6 +47,7 @@
 #include "nsIStringBundle.h"
 #include "nsFocusManager.h"
 #include "nsColorControlFrame.h"
+#include "nsFileControlFrame.h"
 #include "nsNumberControlFrame.h"
 #include "nsSearchControlFrame.h"
 #include "nsPIDOMWindow.h"
@@ -59,8 +60,6 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/HTMLDataListElement.h"
 #include "mozilla/dom/HTMLOptionElement.h"
-#include "nsIFormControlFrame.h"
-#include "nsITextControlFrame.h"
 #include "nsIFrame.h"
 #include "nsRangeFrame.h"
 #include "nsError.h"
@@ -1252,8 +1251,8 @@ void HTMLInputElement::AfterSetAttr(int32_t aNameSpaceID, nsAtom* aName,
       // default, we have to re-set it.
       if (!mValueChanged && GetValueMode() == VALUE_MODE_VALUE) {
         SetDefaultValueAsValue();
-      } else if (GetValueMode() == VALUE_MODE_DEFAULT && HasDirAuto()) {
-        SetAutoDirectionality(aNotify);
+      } else if (GetValueMode() == VALUE_MODE_DEFAULT) {
+        ResetDirFormAssociatedElement(this, aNotify, HasDirAuto());
       }
       // GetStepBase() depends on the `value` attribute if `min` is not present,
       // even if the value doesn't change.
@@ -1380,7 +1379,7 @@ void HTMLInputElement::AfterSetAttr(int32_t aNameSpaceID, nsAtom* aName,
                  "HTML5 spec does not allow underflow for type=range");
     } else if (aName == nsGkAtoms::dir && aValue &&
                aValue->Equals(nsGkAtoms::_auto, eIgnoreCase)) {
-      SetAutoDirectionality(aNotify);
+      ResetDirFormAssociatedElement(this, aNotify, true);
     } else if (aName == nsGkAtoms::lang) {
       // FIXME(emilio, bug 1651070): This doesn't account for lang changes on
       // ancestors.
@@ -2574,11 +2573,8 @@ void HTMLInputElement::AfterSetFilesOrDirectories(bool aSetValueChanged) {
   // No need to flush here, if there's no frame at this point we
   // don't need to force creation of one just to tell it about this
   // new value.  We just want the display to update as needed.
-  nsIFormControlFrame* formControlFrame = GetFormControlFrame(false);
-  if (formControlFrame) {
-    nsAutoString readableValue;
-    GetDisplayFileName(readableValue);
-    formControlFrame->SetFormProperty(nsGkAtoms::value, readableValue);
+  if (nsFileControlFrame* f = do_QueryFrame(GetPrimaryFrame())) {
+    f->SelectedFilesUpdated();
   }
 
   // Grab the full path here for any chrome callers who access our .value via a
@@ -2987,15 +2983,7 @@ void HTMLInputElement::MaybeSubmitForm(nsPresContext* aPresContext) {
   // Get the default submit element
   if (RefPtr<nsGenericHTMLFormElement> submitContent =
           mForm->GetDefaultSubmitElement()) {
-    Maybe<WidgetPointerEvent> pointerEvent;
-    Maybe<WidgetMouseEvent> mouseEvent;
-    if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-      pointerEvent.emplace(true, ePointerClick, nullptr);
-    } else {
-      mouseEvent.emplace(true, ePointerClick, nullptr, WidgetMouseEvent::eReal);
-    }
-    WidgetMouseEvent& event =
-        pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+    WidgetPointerEvent event(true, ePointerClick, nullptr);
     event.mInputSource = MouseEvent_Binding::MOZ_SOURCE_KEYBOARD;
     // pointerId definition in Pointer Events:
     // > The pointerId value of -1 MUST be reserved and used to indicate events
@@ -3106,11 +3094,11 @@ void HTMLInputElement::Select() {
                            TextControlState::ScrollAfterSelection::No);
 }
 
-void HTMLInputElement::SelectAll(nsPresContext* aPresContext) {
-  nsIFormControlFrame* formControlFrame = GetFormControlFrame(true);
-
-  if (formControlFrame) {
-    formControlFrame->SetFormProperty(nsGkAtoms::select, u""_ns);
+void HTMLInputElement::SelectAll() {
+  // FIXME(emilio): Should we try to call Select(), which will avoid flushing?
+  if (nsTextControlFrame* tf =
+          do_QueryFrame(GetPrimaryFrame(FlushType::Frames))) {
+    tf->SelectAll();
   }
 }
 
@@ -3187,8 +3175,9 @@ void HTMLInputElement::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
 
   // Initialize the editor if needed.
   if (NeedToInitializeEditorForEvent(aVisitor)) {
-    nsITextControlFrame* textControlFrame = do_QueryFrame(GetPrimaryFrame());
-    if (textControlFrame) textControlFrame->EnsureEditorInitialized();
+    if (nsTextControlFrame* tcf = do_QueryFrame(GetPrimaryFrame())) {
+      tcf->EnsureEditorInitialized();
+    }
   }
 
   if (CheckActivationBehaviorPreconditions(aVisitor)) {
@@ -3217,10 +3206,10 @@ void HTMLInputElement::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
   if (mType == FormControlType::InputRange &&
       (aVisitor.mEvent->mMessage == eFocus ||
        aVisitor.mEvent->mMessage == eBlur)) {
-    // Just as nsGenericHTMLFormControlElementWithState::GetEventTargetParent
-    // calls nsIFormControlFrame::SetFocus, we handle focus here.
-    nsIFrame* frame = GetPrimaryFrame();
-    if (frame) {
+    // We handle focus here.
+    // FIXME(emilio): Why is this needed? If it is it should be moved to
+    // nsRangeFrame::ElementStateChanged.
+    if (nsIFrame* frame = GetPrimaryFrame()) {
       frame->InvalidateFrameSubtree();
     }
   }
@@ -3775,9 +3764,7 @@ nsresult HTMLInputElement::PostHandleEvent(EventChainPostVisitor& aVisitor) {
                 return bool(lastFocusMethod & nsIFocusManager::FLAG_BYKEY);
               }();
               if (shouldSelectAllOnFocus) {
-                RefPtr<nsPresContext> presContext =
-                    GetPresContext(eForComposedDoc);
-                SelectAll(presContext);
+                SelectAll();
               }
             }
           }
@@ -3962,39 +3949,42 @@ nsresult HTMLInputElement::PostHandleEvent(EventChainPostVisitor& aVisitor) {
           }
           break;
         }
-#if !defined(ANDROID) && !defined(XP_MACOSX)
         case eWheel: {
-          // Handle wheel events as increasing / decreasing the input element's
-          // value when it's focused and it's type is number or range.
-          WidgetWheelEvent* wheelEvent = aVisitor.mEvent->AsWheelEvent();
-          if (!aVisitor.mEvent->DefaultPrevented() &&
-              aVisitor.mEvent->IsTrusted() && IsMutable() && wheelEvent &&
-              wheelEvent->mDeltaY != 0 &&
-              wheelEvent->mDeltaMode != WheelEvent_Binding::DOM_DELTA_PIXEL) {
-            if (mType == FormControlType::InputNumber) {
-              if (nsContentUtils::IsFocusedContent(this)) {
-                StepNumberControlForUserEvent(wheelEvent->mDeltaY > 0 ? -1 : 1);
+          if (StaticPrefs::
+                  dom_input_number_and_range_modified_by_mousewheel()) {
+            // Handle wheel events as increasing / decreasing the input
+            // element's value when it's focused and it's type is number or
+            // range.
+            WidgetWheelEvent* wheelEvent = aVisitor.mEvent->AsWheelEvent();
+            if (!aVisitor.mEvent->DefaultPrevented() &&
+                aVisitor.mEvent->IsTrusted() && IsMutable() && wheelEvent &&
+                wheelEvent->mDeltaY != 0 &&
+                wheelEvent->mDeltaMode != WheelEvent_Binding::DOM_DELTA_PIXEL) {
+              if (mType == FormControlType::InputNumber) {
+                if (nsFocusManager::GetFocusedElementStatic() == this) {
+                  StepNumberControlForUserEvent(wheelEvent->mDeltaY > 0 ? -1
+                                                                        : 1);
+                  FireChangeEventIfNeeded();
+                  aVisitor.mEvent->PreventDefault();
+                }
+              } else if (mType == FormControlType::InputRange &&
+                         nsFocusManager::GetFocusedElementStatic() == this &&
+                         GetMinimum() < GetMaximum()) {
+                Decimal value = GetValueAsDecimal();
+                Decimal step = GetStep();
+                if (step == kStepAny) {
+                  step = GetDefaultStep();
+                }
+                MOZ_ASSERT(value.isFinite() && step.isFinite());
+                SetValueOfRangeForUserEvent(
+                    wheelEvent->mDeltaY < 0 ? value + step : value - step);
                 FireChangeEventIfNeeded();
                 aVisitor.mEvent->PreventDefault();
               }
-            } else if (mType == FormControlType::InputRange &&
-                       nsContentUtils::IsFocusedContent(this) &&
-                       GetMinimum() < GetMaximum()) {
-              Decimal value = GetValueAsDecimal();
-              Decimal step = GetStep();
-              if (step == kStepAny) {
-                step = GetDefaultStep();
-              }
-              MOZ_ASSERT(value.isFinite() && step.isFinite());
-              SetValueOfRangeForUserEvent(
-                  wheelEvent->mDeltaY < 0 ? value + step : value - step);
-              FireChangeEventIfNeeded();
-              aVisitor.mEvent->PreventDefault();
             }
           }
           break;
         }
-#endif
         case ePointerClick: {
           if (!aVisitor.mEvent->DefaultPrevented() &&
               aVisitor.mEvent->IsTrusted() &&
@@ -4383,9 +4373,7 @@ nsresult HTMLInputElement::BindToTree(BindContext& aContext, nsINode& aParent) {
   }
 
   // Set direction based on value if dir=auto
-  if (HasDirAuto()) {
-    SetAutoDirectionality(false);
-  }
+  ResetDirFormAssociatedElement(this, false, HasDirAuto());
 
   // An element can't suffer from value missing if it is not in a document.
   // We have to check if we suffer from that as we are now in a document.
@@ -4417,7 +4405,7 @@ void HTMLInputElement::MaybeDispatchLoginManagerEvents(HTMLFormElement* aForm) {
   }
 
   nsString eventType;
-  Element* target = nullptr;
+  EventTarget* target = nullptr;
 
   if (mType == FormControlType::InputPassword) {
     // Don't fire another event if we have a pending event.
@@ -4428,28 +4416,40 @@ void HTMLInputElement::MaybeDispatchLoginManagerEvents(HTMLFormElement* aForm) {
     // TODO(Bug 1864404): Use one event for formless and form inputs.
     eventType = aForm ? u"DOMFormHasPassword"_ns : u"DOMInputPasswordAdded"_ns;
 
-    target = aForm ? static_cast<Element*>(aForm) : this;
-
     if (aForm) {
+      target = aForm;
       aForm->mHasPendingPasswordEvent = true;
+    } else {
+      target = this;
     }
 
   } else if (mType == FormControlType::InputEmail ||
              mType == FormControlType::InputText) {
     // Don't fire a username event if:
-    // - <input> is not part of a form
     // - we have a pending event
     // - username only forms are not supported
-    if (!aForm || aForm->mHasPendingPossibleUsernameEvent ||
-        !StaticPrefs::signon_usernameOnlyForm_enabled()) {
+    // fire event if we have a username field without a form with the
+    // autcomplete value of username
+
+    if (!StaticPrefs::signon_usernameOnlyForm_enabled()) {
       return;
     }
 
-    eventType = u"DOMFormHasPossibleUsername"_ns;
-    target = aForm;
-
-    aForm->mHasPendingPossibleUsernameEvent = true;
-
+    if (aForm) {
+      if (aForm->mHasPendingPossibleUsernameEvent) {
+        return;
+      }
+      aForm->mHasPendingPossibleUsernameEvent = true;
+      target = aForm;
+    } else {
+      nsAutoString autocompleteValue;
+      GetAutocomplete(autocompleteValue);
+      if (!autocompleteValue.EqualsASCII("username")) {
+        return;
+      }
+      target = GetComposedDoc();
+    }
+    eventType = u"DOMPossibleUsernameInputAdded"_ns;
   } else {
     return;
   }
@@ -4674,16 +4674,15 @@ void HTMLInputElement::HandleTypeChange(FormControlType aNewType,
 
   UpdateBarredFromConstraintValidation();
 
-  // Changing type may affect auto directionality, or non-auto directionality
-  // because of the special-case for <input type=tel>, as specified in
+  // Changing type might change auto directionality of this or the assigned slot
+  const bool autoDirAssociated = IsAutoDirectionalityAssociated(mType);
+  if (IsAutoDirectionalityAssociated(oldType) != autoDirAssociated) {
+    ResetDirFormAssociatedElement(this, aNotify, true);
+  }
+  // Special case for <input type=tel> as specified in
   // https://html.spec.whatwg.org/multipage/dom.html#the-directionality
-  if (HasDirAuto()) {
-    const bool autoDirAssociated = IsAutoDirectionalityAssociated(mType);
-    if (IsAutoDirectionalityAssociated(oldType) != autoDirAssociated) {
-      SetAutoDirectionality(aNotify);
-    }
-  } else if (oldType == FormControlType::InputTel ||
-             mType == FormControlType::InputTel) {
+  if (!HasDirAuto() && (oldType == FormControlType::InputTel ||
+                        mType == FormControlType::InputTel)) {
     RecomputeDirectionality(this, aNotify);
   }
 
@@ -5939,25 +5938,6 @@ nsresult HTMLInputElement::SetDefaultValueAsValue() {
   return SetValueInternal(resetVal, ValueSetterOption::ByInternalAPI);
 }
 
-// https://html.spec.whatwg.org/#auto-directionality
-void HTMLInputElement::SetAutoDirectionality(bool aNotify,
-                                             const nsAString* aKnownValue) {
-  if (!IsAutoDirectionalityAssociated()) {
-    return SetDirectionality(Directionality::Ltr, aNotify);
-  }
-  nsAutoString value;
-  if (!aKnownValue) {
-    // It's unclear if per spec we should use the sanitized or unsanitized
-    // value to set the directionality, but aKnownValue is unsanitized, so be
-    // consistent. Using what the user is seeing to determine directionality
-    // instead of the sanitized (empty if invalid) value probably makes more
-    // sense.
-    GetValueInternal(value, CallerType::System);
-    aKnownValue = &value;
-  }
-  SetDirectionalityFromValue(this, *aKnownValue, aNotify);
-}
-
 NS_IMETHODIMP
 HTMLInputElement::Reset() {
   // We should be able to reset all dirty flags regardless of the type.
@@ -7077,9 +7057,7 @@ void HTMLInputElement::OnValueChanged(ValueChangeKind aKind,
 
   UpdateAllValidityStates(true);
 
-  if (HasDirAuto()) {
-    SetAutoDirectionality(true, aKnownNewValue);
-  }
+  ResetDirFormAssociatedElement(this, true, HasDirAuto(), aKnownNewValue);
 }
 
 bool HTMLInputElement::HasCachedSelection() {

@@ -12,6 +12,10 @@ const { BackupResource } = ChromeUtils.importESModule(
   "resource:///modules/backup/BackupResource.sys.mjs"
 );
 
+const { MeasurementUtils } = ChromeUtils.importESModule(
+  "resource:///modules/backup/MeasurementUtils.sys.mjs"
+);
+
 const { TelemetryTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/TelemetryTestUtils.sys.mjs"
 );
@@ -23,6 +27,43 @@ const { Sqlite } = ChromeUtils.importESModule(
 const { sinon } = ChromeUtils.importESModule(
   "resource://testing-common/Sinon.sys.mjs"
 );
+
+const { OSKeyStoreTestUtils } = ChromeUtils.importESModule(
+  "resource://testing-common/OSKeyStoreTestUtils.sys.mjs"
+);
+
+const { MockRegistrar } = ChromeUtils.importESModule(
+  "resource://testing-common/MockRegistrar.sys.mjs"
+);
+
+let gFakeOSKeyStore;
+
+add_setup(async () => {
+  // During our unit tests, we're not interested in showing OSKeyStore
+  // authentication dialogs, nor are we interested in actually using the "real"
+  // OSKeyStore. We instead swap in our own implementation of nsIOSKeyStore
+  // which provides some stubbed out values. We also set up OSKeyStoreTestUtils
+  // which will suppress any reauthentication dialogs.
+  gFakeOSKeyStore = {
+    asyncEncryptBytes: sinon.stub(),
+    asyncDecryptBytes: sinon.stub(),
+    asyncDeleteSecret: sinon.stub().resolves(),
+    asyncSecretAvailable: sinon.stub().resolves(true),
+    asyncGetRecoveryPhrase: sinon.stub().resolves("SomeRecoveryPhrase"),
+    asyncRecoverSecret: sinon.stub().resolves(),
+    QueryInterface: ChromeUtils.generateQI([Ci.nsIOSKeyStore]),
+  };
+  let osKeyStoreCID = MockRegistrar.register(
+    "@mozilla.org/security/oskeystore;1",
+    gFakeOSKeyStore
+  );
+
+  OSKeyStoreTestUtils.setup();
+  registerCleanupFunction(async () => {
+    await OSKeyStoreTestUtils.cleanup();
+    MockRegistrar.unregister(osKeyStoreCID);
+  });
+});
 
 const BYTES_IN_KB = 1000;
 
@@ -283,4 +324,57 @@ function assertUint8ArraysSimilarity(uint8ArrayA, uint8ArrayB, expectSimilar) {
   } else {
     Assert.ok(foundDifference, "Arrays contain different bytes.");
   }
+}
+
+/**
+ * Returns the total number of measurements taken for this histogram, regardless
+ * of the values of the measurements themselves.
+ *
+ * @param {object} histogram
+ *   Telemetry histogram object, like from `getHistogramById`
+ * @returns {number}
+ *   Number of measurements in the latest snapshot of the histogram
+ */
+function countHistogramMeasurements(histogram) {
+  const snapshot = histogram.snapshot();
+  const countsPerBucket = Object.values(snapshot.values);
+  return countsPerBucket.reduce((sum, count) => sum + count, 0);
+}
+
+/**
+ * Asserts that a histogram received a certain number of measurements, regardless
+ * of the values of the measurements themselves.
+ *
+ * @param {object} histogram
+ *   Telemetry histogram object, like from `getHistogramById`
+ * @param {number} expected
+ *   Expected number of measurements to have been taken
+ * @param {string?} message
+ *   Optional message for test report
+ * @returns {void}
+ *   No return value; only runs assertions
+ */
+function assertHistogramMeasurementQuantity(
+  histogram,
+  expected,
+  message = "Should have taken a specific number of measurements in the histogram"
+) {
+  const totalCount = countHistogramMeasurements(histogram);
+  Assert.equal(totalCount, expected, message);
+}
+
+/**
+ * @param {GleanDistributionData?} timerTestValue
+ *   Glean timer from `testGetValue`
+ * @returns {void}
+ *   No return value; only runs assertions
+ */
+function assertSingleTimeMeasurement(timerTestValue) {
+  Assert.notEqual(timerTestValue, null, "Timer should have something recorded");
+  Assert.equal(
+    timerTestValue.count,
+    1,
+    "Timer should have a single measurement"
+  );
+  Assert.greater(timerTestValue.sum, 0, "Timer measurement should be non-zero");
 }

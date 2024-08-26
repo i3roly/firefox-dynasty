@@ -3,6 +3,8 @@ https://creativecommons.org/publicdomain/zero/1.0/ */
 
 "use strict";
 
+const SCHEDULED_BACKUPS_ENABLED_PREF = "browser.backup.scheduled.enabled";
+
 /**
  * Tests that the enable-backup-encryption dialog can enable encryption
  * from the settings page via the toggle checkbox.
@@ -13,6 +15,10 @@ add_task(async function test_enable_backup_encryption_checkbox_confirm() {
     let enableEncryptionStub = sandbox
       .stub(BackupService.prototype, "enableEncryption")
       .resolves(true);
+
+    await SpecialPowers.pushPrefEnv({
+      set: [[SCHEDULED_BACKUPS_ENABLED_PREF, true]],
+    });
 
     let settings = browser.contentDocument.querySelector("backup-settings");
 
@@ -26,7 +32,6 @@ add_task(async function test_enable_backup_encryption_checkbox_confirm() {
      * the update explicitly.
      */
     settings.backupServiceState.encryptionEnabled = false;
-
     await settings.requestUpdate();
     await settings.updateComplete;
 
@@ -51,29 +56,25 @@ add_task(async function test_enable_backup_encryption_checkbox_confirm() {
       enableBackupEncryption,
       "enable-backup-encryption should be found"
     );
-
-    let newPasswordInput = enableBackupEncryption.inputNewPasswordEl;
-    let repeatPasswordInput = enableBackupEncryption.inputRepeatPasswordEl;
-
-    // Pretend we're entering a password in the new password field
-    let newPassPromise = createMockPassInputEventPromise(
-      newPasswordInput,
-      MOCK_PASSWORD
+    Assert.equal(
+      enableBackupEncryption.type,
+      "set-password",
+      "enable-backup-encryption type should be set-password"
     );
-    await newPassPromise;
 
-    // Pretend we're entering a password in the repeat field
-    // Before matching passwords, verify confirm button
+    let passwordInputs = enableBackupEncryption.passwordInputsEl;
+    Assert.ok(passwordInputs, "password-validation-inputs should be found");
+
     let confirmButton = enableBackupEncryption.confirmButtonEl;
     Assert.ok(confirmButton, "Confirm button should be found");
     Assert.ok(confirmButton.disabled, "Confirm button should be disabled");
 
-    // Passwords match
-    let matchPassPromise = createMockPassInputEventPromise(
-      repeatPasswordInput,
-      MOCK_PASSWORD
+    // Pretend we have a valid password
+    let validPromise = createMockValidityPassEventPromise(
+      enableBackupEncryption,
+      passwordInputs,
+      "ValidPasswordsDetected"
     );
-    await matchPassPromise;
 
     let confirmButtonPromise = BrowserTestUtils.waitForMutationCondition(
       confirmButton,
@@ -81,6 +82,7 @@ add_task(async function test_enable_backup_encryption_checkbox_confirm() {
       () => !confirmButton.disabled
     );
 
+    await validPromise;
     await confirmButtonPromise;
     ok(!confirmButton.disabled, "Confirm button should no longer be disabled");
 
@@ -93,13 +95,14 @@ add_task(async function test_enable_backup_encryption_checkbox_confirm() {
     );
 
     confirmButton.click();
-
     await encryptionPromise;
 
     Assert.ok(
       enableEncryptionStub.calledOnceWith(MOCK_PASSWORD),
       "BackupService was called to enable encryption with inputted password"
     );
+
+    await SpecialPowers.popPrefEnv();
     sandbox.restore();
   });
 });
@@ -119,9 +122,12 @@ add_task(
         .stub(BackupService.prototype, "disableEncryption")
         .resolves(true);
 
+      await SpecialPowers.pushPrefEnv({
+        set: [[SCHEDULED_BACKUPS_ENABLED_PREF, true]],
+      });
+
       let settings = browser.contentDocument.querySelector("backup-settings");
       settings.backupServiceState.encryptionEnabled = true;
-
       await settings.requestUpdate();
       await settings.updateComplete;
 
@@ -143,30 +149,25 @@ add_task(
         enableBackupEncryption,
         "enable-backup-encryption should be found"
       );
-
-      let newPasswordInput = enableBackupEncryption.inputNewPasswordEl;
-      let repeatPasswordInput = enableBackupEncryption.inputRepeatPasswordEl;
-      const changedPassword = "changedPassword";
-
-      // Pretend we're entering a password in the new password field
-      let newPassPromise = createMockPassInputEventPromise(
-        newPasswordInput,
-        changedPassword
+      Assert.equal(
+        enableBackupEncryption.type,
+        "change-password",
+        "enable-backup-encryption type should be change-password"
       );
-      await newPassPromise;
 
-      // Pretend we're entering a password in the repeat field
-      // Before matching passwords, verify confirm button
+      let passwordInputs = enableBackupEncryption.passwordInputsEl;
+      Assert.ok(passwordInputs, "password-validation-inputs should be found");
+
       let confirmButton = enableBackupEncryption.confirmButtonEl;
       Assert.ok(confirmButton, "Confirm button should be found");
       Assert.ok(confirmButton.disabled, "Confirm button should be disabled");
 
-      // Passwords match
-      let matchPassPromise = createMockPassInputEventPromise(
-        repeatPasswordInput,
-        changedPassword
+      // Pretend we have a valid password
+      let validPromise = createMockValidityPassEventPromise(
+        enableBackupEncryption,
+        passwordInputs,
+        "ValidPasswordsDetected"
       );
-      await matchPassPromise;
 
       let confirmButtonPromise = BrowserTestUtils.waitForMutationCondition(
         confirmButton,
@@ -174,6 +175,7 @@ add_task(
         () => !confirmButton.disabled
       );
 
+      await validPromise;
       await confirmButtonPromise;
       ok(
         !confirmButton.disabled,
@@ -192,9 +194,11 @@ add_task(
         "BackupService was called to disable encryption first before registering the changed password"
       );
       Assert.ok(
-        enableEncryptionStub.calledOnceWith(changedPassword),
+        enableEncryptionStub.calledOnceWith(MOCK_PASSWORD),
         "BackupService was called to re-run encryption with changed password"
       );
+
+      await SpecialPowers.popPrefEnv();
       sandbox.restore();
     });
   }

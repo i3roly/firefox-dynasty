@@ -118,6 +118,10 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">Bu sekmenin geçmişindeki sayfalar arasında dolaşmak için oklara dokunup basılı tutun.</string>
 
+    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_title">Yeni: Tek dokunuşla geri ve ileri okları</string>
+
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Kamera erişimi gerekiyor. Android ayarlarına gidin, izinlere girin ve izin verin.</string>
     <!-- Text for the positive action button to go to Android Settings to grant permissions. -->
@@ -199,6 +203,14 @@
     <string name="browser_menu_stop">Durdur</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Uzantılar</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">%s tarayıcınızı özelleştirin</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">Uzantılarla tarayıcınıza güç katın. %s tarayıcısının görünümünü ve çalışma şeklini değiştirebilir, gizliliğinizi ve güvenliğinizi artırabilirsiniz.</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">Daha fazla bilgi al</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">Uzantıları yönet</string>
     <!-- Browser menu button that opens AMO in a tab -->
@@ -290,10 +302,16 @@
     <string name="browser_menu_switch_to_mobile_site">Mobil siteye geç</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Araçlar</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Okuyucu görünümü, Çevir, Yazdır, Paylaş, Uygulamada aç</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Okuyucu görünümü, Yazdır, Paylaş, Uygulamada aç</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Kaydet</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Yer imi ekle, Kısayol, Giriş, Koleksiyon, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Sayfayı yer imlerine ekle</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -311,6 +329,10 @@
     <string name="browser_menu_translated_to">%1$s diline çevrildi</string>
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">Yazdır…</string>
+
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">%1$s uygulamasından çık</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -1105,7 +1127,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Koleksiyon adı</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Adını değiștir</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Adını değiștir</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Kaldır</string>
 
@@ -1235,6 +1257,18 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Aranacak terimleri yazın</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Geri git</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">Yeni klasör ekle</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Yer imlerini kapat</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Yer imlerinde ara</string>
+
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">%s öğe menüsü</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2186,8 +2220,10 @@
     <string name="top_sites_rename_dialog_title">Adı</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Kısayol adı</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">Kısayol adresi</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">Tamam</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">Tamam</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">İptal</string>
 
@@ -2197,6 +2233,17 @@
     <string name="top_sites_menu_sponsor_privacy">Sponsorlarımız ve gizliliğiniz</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Sponsorlu</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Düzenle</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Kısayolu düzenle</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Kaydet</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Geçerli bir adres girin</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">Adres</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2663,11 +2710,11 @@
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">%1$s indirmesi iptal edilsin mi?</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">%1$s indirmesi iptal edilsin mi?</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">Evet</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Evet</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">Hayır</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Hayır</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2749,8 +2796,6 @@
     <string name="micro_survey_privacy_notice_2">Gizlilik bildirimi</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Gönder</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Kapat</string>
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Anket tamamlandı</string>
     <!-- The survey completion confirmation text -->

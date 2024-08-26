@@ -281,11 +281,11 @@ bool Compartment::getNonWrapperObjectForCurrentCompartment(
   // We're a bit worried about infinite recursion here, so we do a check -
   // see bug 809295.
   auto preWrap = cx->runtime()->wrapObjectCallbacks->preWrap;
-  AutoCheckRecursionLimit recursion(cx);
-  if (!recursion.checkSystem(cx)) {
-    return false;
-  }
   if (preWrap) {
+    AutoCheckRecursionLimit recursion(cx);
+    if (!recursion.checkSystem(cx)) {
+      return false;
+    }
     preWrap(cx, cx->global(), origObj, obj, objectPassedToWrap, obj);
     if (!obj) {
       return false;
@@ -485,13 +485,18 @@ bool Compartment::wrap(JSContext* cx, MutableHandle<GCVector<Value>> vec) {
 
 static inline bool ShouldTraceWrapper(JSObject* wrapper,
                                       Compartment::EdgeSelector whichEdges) {
-  if (whichEdges == Compartment::AllEdges) {
-    return true;
+  switch (whichEdges) {
+    case Compartment::AllEdges:
+      return true;
+    case Compartment::NonGrayEdges:
+      return !wrapper->isMarkedGray();
+    case Compartment::GrayEdges:
+      return wrapper->isMarkedGray();
+    case Compartment::BlackEdges:
+      return wrapper->isMarkedBlack();
+    default:
+      MOZ_CRASH("Unexpected EdgeSelector value");
   }
-
-  bool isGray = wrapper->isMarkedGray();
-  return (whichEdges == Compartment::NonGrayEdges && !isGray) ||
-         (whichEdges == Compartment::GrayEdges && isGray);
 }
 
 void Compartment::traceWrapperTargetsInCollectedZones(JSTracer* trc,

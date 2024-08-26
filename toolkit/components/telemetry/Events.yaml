@@ -466,7 +466,7 @@ address:
     expiry_version: never
     products:
       - "firefox"
-    record_in_processes: ["content"]
+    record_in_processes: ["main"]
     release_channel_collection: opt-out
     extra_keys:
       street_address: street address result, filled when method is `detected`, `filled`, or `filled_modified`
@@ -489,7 +489,7 @@ address:
     expiry_version: never
     products:
       - "firefox"
-    record_in_processes: ["content"]
+    record_in_processes: ["main"]
     release_channel_collection: opt-out
     extra_keys:
       name: name
@@ -570,7 +570,7 @@ creditcard:
     expiry_version: never
     products:
       - "firefox"
-    record_in_processes: ["content"]
+    record_in_processes: ["main"]
     release_channel_collection: opt-out
     extra_keys:
       cc_name: cardholder name field result. Used by `detected`, `filled`, and `filled_modified` methods.
@@ -924,7 +924,7 @@ normandy:
     description: >
       This records when validation of a recipe fails.
     bug_numbers: [1762652]
-    notification_emails: ["barret@mozilla.com"]
+    notification_emails: ["beth@mozilla.com"]
     expiry_version: never
     extra_keys:
       reason: Why validation failed (one of "invalid-recipe", "invalid-branch", or "invalid-reason").
@@ -1505,6 +1505,7 @@ messaging_experiments:
       "infobar",
       "spotlight",
       "featureCallout",
+      "fxms_bmb_button",
       "fxms_message_1",
       "fxms_message_2",
       "fxms_message_3",
@@ -2860,7 +2861,7 @@ pictureinpicture:
     expiry_version: "never"
     release_channel_collection: opt-out
   opened_method:
-    objects: ["toggle", "contextMenu", "urlBar", "shortcut"]
+    objects: ["toggle", "contextMenu", "urlBar", "shortcut", "autoPip"]
     description: >
       Records the method for opening the Picture-in-Picture window.
     extra_keys:
@@ -2881,7 +2882,7 @@ pictureinpicture:
     expiry_version: "never"
     release_channel_collection: opt-out
   closed_method:
-    objects: ["closeButton", "unpip", "pagehide", "fullscreen", "setupFailure", "closePlayerShortcut", "contextMenu", "videoElRemove", "videoElEmptied", "urlBar", "shortcut"]
+    objects: ["closeButton", "unpip", "pagehide", "foregrounded","fullscreen", "setupFailure", "closePlayerShortcut", "contextMenu", "videoElRemove", "videoElEmptied", "urlBar", "shortcut"]
     description: >
       Records the method for closing the Picture-in-Picture window.
     notification_emails:
@@ -2974,6 +2975,20 @@ pictureinpicture.settings:
       - main
     bug_numbers:
       - 1639774
+    expiry_version: "never"
+    release_channel_collection: opt-out
+  enable_autotrigger:
+    objects: ["settings"]
+    description: Recorded when the Picture-in-Picture auto-trigger is enabled.
+    notification_emails:
+      - mconley@mozilla.com
+    products:
+      - "firefox"
+    record_in_processes:
+      - main
+    bug_numbers:
+      - 1647800
+      - 1910505
     expiry_version: "never"
     release_channel_collection: opt-out
 

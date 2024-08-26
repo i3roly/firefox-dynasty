@@ -210,7 +210,9 @@ jobs:
               mozilla-release:
                   - {hour: 7, minute: 0}
                   - {hour: 19, minute: 0}
-              mozilla-esr128: []
+              mozilla-esr128:
+                  - {hour: 7, minute: 0}
+                  - {hour: 19, minute: 0}
 
     - name: periodic-update
       job:
@@ -295,12 +297,10 @@ jobs:
           target-tasks-method: l10n_bump
       run-on-projects:
           - autoland
-          - mozilla-central
           - mozilla-beta
       when:
           by-project:
               autoland: [{hour: 6, minute: 45}, {hour: 18, minute: 45}]
-              mozilla-central: []
               # 4h before launch of `daily-releases`
               mozilla-beta: [{hour: 9, minute: 00}]
               # No default

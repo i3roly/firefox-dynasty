@@ -104,6 +104,14 @@ static_assert(Instance::offsetOfLastCommonJitField() < 128);
 //
 // Functions and invocation.
 
+FuncDefInstanceData* Instance::funcDefInstanceData(uint32_t funcIndex) const {
+  MOZ_ASSERT(funcIndex >= codeMeta().numFuncImports);
+  uint32_t funcDefIndex = funcIndex - codeMeta().numFuncImports;
+  FuncDefInstanceData* instanceData =
+      (FuncDefInstanceData*)(data() + codeMeta().funcDefsOffsetStart);
+  return &instanceData[funcDefIndex];
+}
+
 TypeDefInstanceData* Instance::typeDefInstanceData(uint32_t typeIndex) const {
   TypeDefInstanceData* instanceData =
       (TypeDefInstanceData*)(data() + codeMeta().typeDefsOffsetStart);
@@ -228,7 +236,7 @@ bool Instance::callImport(JSContext* cx, uint32_t funcImportIndex,
   AssertRealmUnchanged aru(cx);
 
   const FuncImport& fi = code().funcImport(funcImportIndex);
-  const FuncType& funcType = code().getFuncImportType(funcImportIndex);
+  const FuncType& funcType = codeMeta().getFuncType(funcImportIndex);
 
   ArgTypeVector argTypes(funcType);
   InvokeArgs args(cx);
@@ -306,13 +314,6 @@ bool Instance::callImport(JSContext* cx, uint32_t funcImportIndex,
   if (!JitOptions.enableWasmJitExit) {
     return true;
   }
-
-#ifdef ENABLE_WASM_JSPI
-  // Disable jit exit optimization when JSPI is enabled.
-  if (JSPromiseIntegrationAvailable(cx)) {
-    return true;
-  }
-#endif
 
   // The import may already have become optimized.
   void* jitExitCode =
@@ -917,9 +918,13 @@ bool Instance::initSegments(JSContext* cx,
       if (!seg.offset().evaluate(cx, instanceObj, &offsetVal)) {
         return false;  // OOM
       }
-      uint32_t offset = offsetVal.get().i32();
 
-      uint32_t tableLength = tables()[seg.tableIndex]->length();
+      const wasm::Table* table = tables()[seg.tableIndex];
+      uint64_t offset = table->indexType() == IndexType::I32
+                            ? offsetVal.get().i32()
+                            : offsetVal.get().i64();
+
+      uint64_t tableLength = table->length();
       if (offset > tableLength || tableLength - offset < seg.numElements()) {
         JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                                  JSMSG_WASM_OUT_OF_BOUNDS);
@@ -1507,7 +1512,7 @@ static bool ArrayCopyFromData(JSContext* cx, Handle<WasmArrayObject*> arrayObj,
   // Compute the number of bytes to copy, ensuring it's below 2^32.
   CheckedUint32 numBytesToCopy =
       CheckedUint32(numElements) *
-      CheckedUint32(typeDef->arrayType().elementType_.size());
+      CheckedUint32(typeDef->arrayType().elementType().size());
   if (!numBytesToCopy.isValid()) {
     // Because the request implies that 2^32 or more bytes are to be copied.
     ReportTrapError(cx, JSMSG_WASM_OUT_OF_BOUNDS);
@@ -1658,7 +1663,7 @@ static bool ArrayCopyFromElem(JSContext* cx, Handle<WasmArrayObject*> arrayObj,
   // Any data coming from an element segment will be an AnyRef. Writes into
   // array memory are done with raw pointers, so we must ensure here that the
   // destination size is correct.
-  MOZ_RELEASE_ASSERT(typeDef->arrayType().elementType_.size() ==
+  MOZ_RELEASE_ASSERT(typeDef->arrayType().elementType().size() ==
                      sizeof(AnyRef));
 
   Rooted<WasmArrayObject*> arrayObj(
@@ -1764,7 +1769,7 @@ static bool ArrayCopyFromElem(JSContext* cx, Handle<WasmArrayObject*> arrayObj,
   // Any data coming from an element segment will be an AnyRef. Writes into
   // array memory are done with raw pointers, so we must ensure here that the
   // destination size is correct.
-  MOZ_RELEASE_ASSERT(typeDef->arrayType().elementType_.size() ==
+  MOZ_RELEASE_ASSERT(typeDef->arrayType().elementType().size() ==
                      sizeof(AnyRef));
 
   // Get hold of the array.
@@ -1962,8 +1967,8 @@ static WasmArrayObject* UncheckedCastToArrayI16(HandleAnyRef ref) {
   JSObject& object = ref.toJSObject();
   WasmArrayObject& array = object.as<WasmArrayObject>();
   DebugOnly<const ArrayType*> type(&array.typeDef().arrayType());
-  MOZ_ASSERT(type->elementType_ == StorageType::I16);
-  MOZ_ASSERT(type->isMutable_ == isMutable);
+  MOZ_ASSERT(type->elementType() == StorageType::I16);
+  MOZ_ASSERT(type->isMutable() == isMutable);
   return &array;
 }
 
@@ -2240,6 +2245,7 @@ Instance::Instance(JSContext* cx, Handle<WasmInstanceObject*> object,
                    const SharedCode& code, SharedTableVector&& tables,
                    UniqueDebugState maybeDebug)
     : realm_(cx->realm()),
+      onSuspendableStack_(false),
       jsJitArgsRectifier_(
           cx->runtime()->jitRuntime()->getArgumentsRectifier().value),
       jsJitExceptionHandler_(
@@ -2305,6 +2311,22 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
   addressOfGCZealModeBits_ = cx->runtime()->gc.addressOfZealModeBits();
 #endif
 
+  // Initialize the request-tier-up stub pointer, if relevant
+  if (code().mode() == CompileMode::LazyTiering) {
+    setRequestTierUpStub(code().sharedStubs().segment->base() +
+                         code().requestTierUpStubOffset());
+  } else {
+    setRequestTierUpStub(nullptr);
+  }
+
+  // Initialize the hotness counters, if relevant
+  if (code().mode() == CompileMode::LazyTiering) {
+    for (uint32_t funcIndex = codeMeta().numFuncImports;
+         funcIndex < codeMeta().numFuncs(); funcIndex++) {
+      funcDefInstanceData(funcIndex)->hotnessCounter = 1;
+    }
+  }
+
   // Initialize type definitions in the instance data.
   const SharedTypeContext& types = codeMeta().types;
   Zone* zone = realm()->zone();
@@ -2364,7 +2386,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
         // StructLayout::close ensures this is an integral number of words.
         MOZ_ASSERT((typeDefData->structTypeSize % sizeof(uintptr_t)) == 0);
       } else {
-        uint32_t arrayElemSize = typeDef.arrayType().elementType_.size();
+        uint32_t arrayElemSize = typeDef.arrayType().elementType().size();
         typeDefData->arrayElemSize = arrayElemSize;
         MOZ_ASSERT(arrayElemSize == 16 || arrayElemSize == 8 ||
                    arrayElemSize == 4 || arrayElemSize == 2 ||
@@ -2385,7 +2407,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
 #ifdef ENABLE_WASM_JSPI
     if (JSObject* suspendingObject = MaybeUnwrapSuspendingObject(f)) {
       // Compile suspending function Wasm wrapper.
-      const FuncType& funcType = code().getFuncImportType(i);
+      const FuncType& funcType = codeMeta().getFuncType(i);
       RootedObject wrapped(cx, suspendingObject);
       RootedFunction wrapper(
           cx, WasmSuspendingFunctionCreate(cx, wrapped, funcType));
@@ -2399,7 +2421,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
 
     MOZ_ASSERT(f->isCallable());
     const FuncImport& fi = code().funcImport(i);
-    const FuncType& funcType = code().getFuncImportType(i);
+    const FuncType& funcType = codeMeta().getFuncType(i);
     FuncImportInstanceData& import = funcImportInstanceData(fi);
     import.callable = f;
     if (f->is<JSFunction>()) {
@@ -2564,7 +2586,7 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
 
   // Add debug filtering table.
   if (codeMeta().debugEnabled) {
-    size_t numFuncs = codeMeta().debugNumFuncs();
+    size_t numFuncs = codeMeta().numFuncs();
     size_t numWords = std::max<size_t>((numFuncs + 31) / 32, 1);
     debugFilter_ = (uint32_t*)js_calloc(numWords, sizeof(uint32_t));
     if (!debugFilter_) {
@@ -2655,12 +2677,18 @@ void Instance::setTemporaryStackLimit(JS::NativeStackLimit limit) {
   if (!isInterrupted()) {
     stackLimit_ = limit;
   }
+  onSuspendableStack_ = true;
 }
 
 void Instance::resetTemporaryStackLimit(JSContext* cx) {
   if (!isInterrupted()) {
     stackLimit_ = cx->stackLimitForJitCode(JS::StackForUntrustedScript);
   }
+  onSuspendableStack_ = false;
+}
+
+void Instance::resetHotnessCounter(uint32_t funcIndex) {
+  funcDefInstanceData(funcIndex)->hotnessCounter = INT32_MAX;
 }
 
 bool Instance::debugFilter(uint32_t funcIndex) const {
@@ -2917,7 +2945,7 @@ static bool GetInterpEntryAndEnsureStubs(JSContext* cx, Instance& instance,
     return false;
   }
 
-  *funcType = &instance.code().getFuncExportType(funcIndex);
+  *funcType = &instance.codeMeta().getFuncType(funcIndex);
 
 #ifdef DEBUG
   // EnsureEntryStubs() has ensured proper jit-entry stubs have been created and
@@ -3346,8 +3374,8 @@ JSString* Instance::createDisplayURL(JSContext* cx) {
   // In the best case, we simply have a URL, from a streaming compilation of a
   // fetched Response.
 
-  if (codeMeta().filenameIsURL) {
-    const char* filename = codeMeta().filename.get();
+  if (codeMeta().scriptedCaller().filenameIsURL) {
+    const char* filename = codeMeta().scriptedCaller().filename.get();
     return NewStringCopyUTF8N(cx, JS::UTF8Chars(filename, strlen(filename)));
   }
 
@@ -3361,7 +3389,7 @@ JSString* Instance::createDisplayURL(JSContext* cx) {
     return nullptr;
   }
 
-  if (const char* filename = codeMeta().filename.get()) {
+  if (const char* filename = codeMeta().scriptedCaller().filename.get()) {
     // EncodeURI returns false due to invalid chars or OOM -- fail only
     // during OOM.
     JSString* filenamePrefix = EncodeURI(cx, filename, strlen(filename));

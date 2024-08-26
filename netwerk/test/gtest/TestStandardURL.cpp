@@ -529,4 +529,57 @@ TEST(TestStandardURL, CoalescePath)
   // Relatively long inputs
   testCoalescing("/foo/bar/foo/bar/foo/bar/foo/bar/foo?query#frag",
                  "/foo/bar/foo/bar/foo/bar/foo/bar/foo?query#frag", 32, 36);
+
+  testCoalescing("/coder/coder/edit/main/docs/./enterprise.md",
+                 "/coder/coder/edit/main/docs/enterprise.md", 27, 41);
+}
+
+TEST(TestStandardURL, bug1904582)
+{
+  auto spec = "x:///%2e%2e"_ns;
+
+  nsCOMPtr<nsIURI> uri;
+  nsresult rv = NS_MutateURI(NS_STANDARDURLMUTATOR_CONTRACTID)
+                    .SetSpec(spec)
+                    .Finalize(uri);
+  ASSERT_TRUE(NS_SUCCEEDED(rv));
+}
+
+TEST(TestStandardURL, bug1911529)
+{
+  nsCOMPtr<nsIURI> uri;
+  nsresult rv =
+      NS_MutateURI(NS_STANDARDURLMUTATOR_CONTRACTID)
+          .SetSpec(
+              "https://github.com/coder/coder/edit/main/docs/./enterprise.md"_ns)
+          .Finalize(uri);
+  ASSERT_TRUE(NS_SUCCEEDED(rv));
+
+  nsAutoCString out;
+  ASSERT_EQ(uri->GetSpec(out), NS_OK);
+  ASSERT_TRUE(out ==
+              "https://github.com/coder/coder/edit/main/docs/enterprise.md"_ns);
+
+  nsCOMPtr<nsIURI> uri2;
+  rv = NS_MutateURI(NS_STANDARDURLMUTATOR_CONTRACTID)
+           .SetSpec(
+               "https://github.com/coder/coder/edit/main/docs/enterprise.md"_ns)
+           .Finalize(uri2);
+  ASSERT_TRUE(NS_SUCCEEDED(rv));
+
+  bool equals = false;
+  ASSERT_EQ(uri->Equals(uri2, &equals), NS_OK);
+  ASSERT_TRUE(equals);
+
+  rv = NS_MutateURI(NS_STANDARDURLMUTATOR_CONTRACTID)
+           .SetSpec("https://domain.com/."_ns)
+           .Finalize(uri);
+  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  rv = NS_MutateURI(NS_STANDARDURLMUTATOR_CONTRACTID)
+           .SetSpec("https://domain.com/"_ns)
+           .Finalize(uri2);
+  ASSERT_TRUE(NS_SUCCEEDED(rv));
+
+  ASSERT_EQ(uri->Equals(uri2, &equals), NS_OK);
+  ASSERT_TRUE(equals);
 }

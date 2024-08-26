@@ -144,15 +144,11 @@ bool CompileBuiltinModule(JSContext* cx,
 
   // Build a module metadata struct
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*compileArgs)) {
     ReportOutOfMemory(cx);
     return false;
   }
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(compileArgs->features);
-  if (!codeMeta || !codeMeta->init()) {
-    ReportOutOfMemory(cx);
-    return false;
-  }
+  MutableCodeMetadata codeMeta = moduleMeta->codeMeta;
 
   if (memory.isSome()) {
     // Add (import (memory 0))
@@ -193,13 +189,13 @@ bool CompileBuiltinModule(JSContext* cx,
   // as the function declaration metadata uses pointers into the type vectors
   // that must be stable.
   for (uint32_t funcIndex = 0; funcIndex < ids.size(); funcIndex++) {
-    FuncDesc decl(&(*codeMeta->types)[funcIndex].funcType(), funcIndex);
+    FuncDesc decl(funcIndex);
     if (!codeMeta->funcs.append(decl)) {
       ReportOutOfMemory(cx);
       return false;
     }
-    codeMeta->declareFuncExported(funcIndex, /* eager */ true,
-                                  /* canRefFunc */ true);
+    codeMeta->funcs[funcIndex].declareFuncExported(/* eager */ true,
+                                                   /* canRefFunc */ true);
   }
 
   // Add (export "$name" (func $i)) declarations.
@@ -217,11 +213,15 @@ bool CompileBuiltinModule(JSContext* cx,
     }
   }
 
+  if (!moduleMeta->prepareForCompile(compilerEnv.mode())) {
+    return false;
+  }
+
   // Compile the module functions
   UniqueChars error;
-  ModuleGenerator mg(*compileArgs, codeMeta, &compilerEnv, nullptr, &error,
-                     nullptr);
-  if (!mg.init(nullptr)) {
+  ModuleGenerator mg(*codeMeta, compilerEnv, compilerEnv.initialState(),
+                     nullptr, &error, nullptr);
+  if (!mg.initializeCompleteTier()) {
     ReportOutOfMemory(cx);
     return false;
   }
@@ -326,6 +326,12 @@ Maybe<BuiltinModuleId> wasm::ImportMatchesBuiltinModule(
       importName == mozilla::MakeStringSpan(JSStringModuleName)) {
     return Some(BuiltinModuleId::JSString);
   }
+  if (enabledBuiltins.jsStringConstants &&
+      importName ==
+          mozilla::MakeStringSpan(
+              enabledBuiltins.jsStringConstantsNamespace->chars.get())) {
+    return Some(BuiltinModuleId::JSStringConstants);
+  }
 #endif  // ENABLE_WASM_JS_STRING_BUILTINS
   // Not supported for implicit instantiation yet
   MOZ_RELEASE_ASSERT(!enabledBuiltins.selfTest && !enabledBuiltins.intGemm);
@@ -335,7 +341,13 @@ Maybe<BuiltinModuleId> wasm::ImportMatchesBuiltinModule(
 Maybe<const BuiltinModuleFunc*> wasm::ImportMatchesBuiltinModuleFunc(
     mozilla::Span<const char> importName, BuiltinModuleId module) {
 #ifdef ENABLE_WASM_JS_STRING_BUILTINS
-  // Not supported for implicit instantiation yet
+  // Imported string constants don't define any functions
+  if (module == BuiltinModuleId::JSStringConstants) {
+    return Nothing();
+  }
+
+  // Only the wasm:js-string module defines functions at this point, and is
+  // supported by implicit instantiation.
   MOZ_RELEASE_ASSERT(module == BuiltinModuleId::JSString);
   for (BuiltinModuleFuncId funcId : JSStringFuncs) {
     const BuiltinModuleFunc& func = BuiltinModuleFuncs::getFromId(funcId);
@@ -361,6 +373,8 @@ bool wasm::CompileBuiltinModule(JSContext* cx, BuiltinModuleId module,
 #ifdef ENABLE_WASM_JS_STRING_BUILTINS
     case BuiltinModuleId::JSString:
       return CompileBuiltinModule(cx, JSStringFuncs, Nothing(), result);
+    case BuiltinModuleId::JSStringConstants:
+      MOZ_CRASH();
 #endif  // ENABLE_WASM_JS_STRING_BUILTINS
     default:
       MOZ_CRASH();

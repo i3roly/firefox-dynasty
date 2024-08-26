@@ -60,7 +60,7 @@ static const LABELS_AVIF_YUV_COLOR_SPACE gColorSpaceLabel[] = {
     LABELS_AVIF_YUV_COLOR_SPACE::BT601, LABELS_AVIF_YUV_COLOR_SPACE::BT709,
     LABELS_AVIF_YUV_COLOR_SPACE::BT2020, LABELS_AVIF_YUV_COLOR_SPACE::identity};
 
-static MaybeIntSize GetImageSize(const Mp4parseAvifInfo& aInfo) {
+static Maybe<IntSize> GetImageSize(const Mp4parseAvifInfo& aInfo) {
   // Note this does not take cropping via CleanAperture (clap) into account
   const struct Mp4parseImageSpatialExtents* ispe = aInfo.spatial_extents;
 
@@ -1632,7 +1632,7 @@ nsAVIFDecoder::DecodeResult nsAVIFDecoder::DoDecodeInternal(
     orientation = Orientation{};
   }
 
-  MaybeIntSize ispeImageSize = GetImageSize(parsedInfo);
+  Maybe<IntSize> ispeImageSize = GetImageSize(parsedInfo);
 
   bool sendDecodeTelemetry = IsMetadataDecode();
   if (ispeImageSize.isSome()) {
@@ -1906,30 +1906,25 @@ nsAVIFDecoder::DecodeResult nsAVIFDecoder::DoDecodeInternal(
     return AsVariant(NonDecoderResult::OutOfMemory);
   }
 
+  PremultFunc premultOp = nullptr;
   if (decodedData->mAlpha) {
     const auto wantPremultiply =
         !bool(GetSurfaceFlags() & SurfaceFlags::NO_PREMULTIPLY_ALPHA);
     const bool& hasPremultiply = decodedData->mAlpha->mPremultiplied;
 
-    PremultFunc premultOp = nullptr;
     if (wantPremultiply && !hasPremultiply) {
       premultOp = libyuv::ARGBAttenuate;
     } else if (!wantPremultiply && hasPremultiply) {
       premultOp = libyuv::ARGBUnattenuate;
     }
-
-    MOZ_LOG(sAVIFLog, LogLevel::Debug,
-            ("[this=%p] calling gfx::ConvertYCbCrAToARGB premultOp: %p", this,
-             premultOp));
-    gfx::ConvertYCbCrAToARGB(*decodedData, *decodedData->mAlpha, format,
-                             rgbSize, rgbBuf.get(), rgbStride.value(),
-                             premultOp);
-  } else {
-    MOZ_LOG(sAVIFLog, LogLevel::Debug,
-            ("[this=%p] calling gfx::ConvertYCbCrToRGB", this));
-    gfx::ConvertYCbCrToRGB(*decodedData, format, rgbSize, rgbBuf.get(),
-                           rgbStride.value());
   }
+
+  MOZ_LOG(sAVIFLog, LogLevel::Debug,
+          ("[this=%p] calling gfx::ConvertYCbCrToRGB32 premultOp: %p", this,
+           premultOp));
+  DebugOnly<nsresult> result = gfx::ConvertYCbCrToRGB32(
+      *decodedData, format, rgbBuf.get(), rgbStride.value(), premultOp);
+  MOZ_ASSERT(NS_SUCCEEDED(result), "Failed to convert YUV into RGB data");
 
   MOZ_LOG(sAVIFLog, LogLevel::Debug,
           ("[this=%p] calling SurfacePipeFactory::CreateSurfacePipe", this));

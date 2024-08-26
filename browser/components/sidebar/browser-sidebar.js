@@ -79,7 +79,7 @@ var SidebarController = {
           triggerButtonId: "appMenuViewHistorySidebar",
           keyId: "key_gotoHistory",
           menuL10nId: "menu-view-history-button",
-          revampL10nId: "sidebar-menu-history",
+          revampL10nId: "sidebar-menu-history-label",
           iconUrl: "chrome://browser/content/firefoxview/view-history.svg",
         }),
       ],
@@ -93,7 +93,7 @@ var SidebarController = {
           menuId: "menu_tabsSidebar",
           classAttribute: "sync-ui-item",
           menuL10nId: "menu-view-synced-tabs-sidebar",
-          revampL10nId: "sidebar-menu-synced-tabs",
+          revampL10nId: "sidebar-menu-synced-tabs-label",
           iconUrl: "chrome://browser/content/firefoxview/view-syncedtabs.svg",
         }),
       ],
@@ -105,7 +105,7 @@ var SidebarController = {
           menuId: "menu_bookmarksSidebar",
           keyId: "viewBookmarksSidebarKb",
           menuL10nId: "menu-view-bookmarks",
-          revampL10nId: "sidebar-menu-bookmarks",
+          revampL10nId: "sidebar-menu-bookmarks-label",
           iconUrl: "chrome://browser/skin/bookmark-hollow.svg",
           disabled: true,
         }),
@@ -121,7 +121,7 @@ var SidebarController = {
         menuId: "menu_genaiChatSidebar",
         menuL10nId: "menu-view-genai-chat",
         // Bug 1900915 to expose as conditional tool
-        revampL10nId: "sidebar-menu-genai-chat",
+        revampL10nId: "sidebar-menu-genai-chat-label",
         iconUrl: "chrome://mozapps/skin/extensions/category-discover.svg",
       }
     );
@@ -141,7 +141,7 @@ var SidebarController = {
     } else {
       this._sidebars.set("viewCustomizeSidebar", {
         url: "chrome://browser/content/sidebar/sidebar-customize.html",
-        revampL10nId: "sidebar-menu-customize",
+        revampL10nId: "sidebar-menu-customize-label",
         iconUrl: "chrome://browser/skin/preferences/category-general.svg",
       });
     }
@@ -246,6 +246,19 @@ var SidebarController = {
     this._switcherPanel = document.getElementById("sidebarMenu-popup");
     this._switcherTarget = document.getElementById("sidebar-switcher-target");
     this._switcherArrow = document.getElementById("sidebar-switcher-arrow");
+    let newTabButton = document.getElementById("vertical-tabs-newtab-button");
+
+    newTabButton.addEventListener("command", event => {
+      BrowserCommands.openTab({ event });
+    });
+    if (
+      Services.prefs.getBoolPref(
+        "browser.tabs.allow_transparent_browser",
+        false
+      )
+    ) {
+      this.browser.setAttribute("transparent", "true");
+    }
 
     const menubar = document.getElementById("viewSidebarMenu");
     for (const [commandID, sidebar] of this.sidebars.entries()) {
@@ -265,7 +278,12 @@ var SidebarController = {
     });
 
     if (this.sidebarRevampEnabled) {
-      await import("chrome://browser/content/sidebar/sidebar-main.mjs");
+      if (!customElements.get("sidebar-main")) {
+        ChromeUtils.importESModule(
+          "chrome://browser/content/sidebar/sidebar-main.mjs",
+          { global: "current" }
+        );
+      }
       this.revampComponentsLoaded = true;
       this.sidebarContainer.hidden =
         !window.toolbar.visible ||
@@ -312,6 +330,12 @@ var SidebarController = {
       this._observer.disconnect();
       this._observer = null;
     }
+
+    if (this.revampComponentsLoaded) {
+      // Explicitly disconnect the `sidebar-main` element so that listeners
+      // setup by reactive controllers will also be removed.
+      this.sidebarMain.remove();
+    }
   },
 
   /**
@@ -327,6 +351,9 @@ var SidebarController = {
           this.hide();
           this.showInitially(this.lastOpenedId);
           break;
+        }
+        if (this.revampComponentsLoaded) {
+          this.sidebarMain.requestUpdate();
         }
       }
     }
@@ -1178,12 +1205,10 @@ var SidebarController = {
     if (this.sidebarVerticalTabsEnabled) {
       arrowScrollbox.setAttribute("orient", "vertical");
       tabStrip.setAttribute("orient", "vertical");
-      tabStrip.removeAttribute("overflow");
-      tabStrip._positionPinnedTabs();
       verticalTabs.append(tabStrip);
     } else {
       arrowScrollbox.setAttribute("orient", "horizontal");
-      tabStrip.removeAttribute("orient");
+      tabStrip.setAttribute("orient", "horizontal");
 
       // make sure we put the tabstrip back in its original position in the TabsToolbar
       if (tabstripPlacement < tabsToolbarWidgets.length) {
@@ -1199,7 +1224,7 @@ var SidebarController = {
           .append(tabStrip);
       }
     }
-    verticalTabs.toggleAttribute("activated", this.sidebarVerticalTabsEnabled);
+    verticalTabs.toggleAttribute("visible", this.sidebarVerticalTabsEnabled);
   },
 };
 

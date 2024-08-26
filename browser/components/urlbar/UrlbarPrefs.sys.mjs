@@ -15,6 +15,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Region: "resource://gre/modules/Region.sys.mjs",
   TelemetryEnvironment: "resource://gre/modules/TelemetryEnvironment.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
+  CustomizableUI: "resource:///modules/CustomizableUI.sys.mjs",
 });
 
 const PREF_URLBAR_BRANCH = "browser.urlbar.";
@@ -126,6 +127,21 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // When we send events to extensions that use the omnibox API, we wait this
   // amount of time in milliseconds for them to respond before timing out.
   ["extension.omnibox.timeout", 3000],
+
+  // Feature gate pref for Fakespot suggestions in the urlbar.
+  ["fakespot.featureGate", false],
+
+  // The minimum prefix length of a Fakespot keyword the user must type to
+  // trigger the suggestion. 0 means the min length should be taken from Nimbus.
+  ["fakespot.minKeywordLength", 4],
+
+  // The number of times the user has clicked the "Show less frequently" command
+  // for Fakespot suggestions.
+  ["fakespot.showLessFrequentlyCount", 0],
+
+  // The index of Fakespot results within the Firefox Suggest section. A
+  // negative index is relative to the end of the section.
+  ["fakespot.suggestedIndex", -1],
 
   // When true, `javascript:` URLs are not included in search results.
   ["filter.javascript", true],
@@ -323,6 +339,9 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // grouped release.
   ["scotchBonnet.enableOverride", false],
 
+  // Feature gate pref for search restrict keywords being shown in the urlbar.
+  ["searchRestrictKeywords.featureGate", false],
+
   // Hidden pref. Disables checks that prevent search tips being shown, thus
   // showing them every time the newtab page or the default search engine
   // homepage is opened.
@@ -375,6 +394,10 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // Whether results will include search engines (e.g. tab-to-search).
   ["suggest.engines", true],
+
+  // If `browser.urlbar.fakespot.featureGate` is true, this controls whether
+  // Fakespot suggestions are turned on.
+  ["suggest.fakespot", true],
 
   // Whether results will include the user's history.
   ["suggest.history", true],
@@ -505,7 +528,6 @@ const PREF_OTHER_DEFAULTS = new Map([
   ["browser.fixup.dns_first_for_single_words", false],
   ["browser.search.suggest.enabled", true],
   ["browser.search.suggest.enabled.private", false],
-  ["browser.search.widget.inNavBar", false],
   ["keyword.enabled", true],
   ["security.insecure_connection_text.enabled", false],
   ["ui.popup.disable_autohide", false],
@@ -517,6 +539,7 @@ const PREF_OTHER_DEFAULTS = new Map([
 const NIMBUS_DEFAULTS = {
   addonsShowLessFrequentlyCap: 0,
   experimentType: "",
+  fakespotMinKeywordLength: null,
   pocketShowLessFrequentlyCap: 0,
   pocketSuggestIndex: null,
   quickSuggestRemoteSettingsDataType: "data",
@@ -665,6 +688,10 @@ function makeResultGroups({ showSearchSuggestionsFirst }) {
                 // only added for queries starting with "about:".
                 flex: 2,
                 group: lazy.UrlbarUtils.RESULT_GROUP.ABOUT_PAGES,
+              },
+              {
+                flex: 99,
+                group: lazy.UrlbarUtils.RESULT_GROUP.RESTRICT_SEARCH_KEYWORD,
               },
             ],
           },
@@ -1666,7 +1693,7 @@ class Preferences {
     return (
       this.get("showSearchTermsFeatureGate") &&
       this.get("showSearchTerms.enabled") &&
-      !this.get("browser.search.widget.inNavBar")
+      !lazy.CustomizableUI.getPlacementOfWidget("search-container")
     );
   }
 

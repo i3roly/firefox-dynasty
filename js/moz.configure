@@ -387,11 +387,7 @@ def instruments(value, target):
 
 set_config("MOZ_INSTRUMENTS", instruments)
 set_define("MOZ_INSTRUMENTS", instruments)
-add_old_configure_assignment(
-    "MOZ_INSTRUMENTS_LIBS",
-    ["-framework", "CoreFoundation"],
-    when=instruments,
-)
+
 imply_option("--enable-profiling", instruments, reason="--enable-instruments")
 
 option("--enable-callgrind", env="MOZ_CALLGRIND", help="Enable callgrind profiling")
@@ -813,10 +809,10 @@ def default_wasm_jspi(
     if not is_nightly:
         return
 
-    if simulator and (simulator[0] == "arm64"):
-        return True
+    if simulator:
+        return simulator[0] == "arm64" or simulator[0] == "arm"
 
-    if target.cpu in ("x86_64", "aarch64"):
+    if target.cpu in ("x86_64", "x86", "aarch64", "arm"):
         return True
 
 
@@ -849,13 +845,13 @@ def wasm_jspi(value, jit_enabled, simulator, gc, tail_calls, no_experimental, ta
     if not tail_calls:
         die("--enable-wasm-jspi requires --enable-wasm-tail-calls")
 
-    if simulator and (simulator[0] != "arm64"):
-        die("--enable-wasm-jspi is only supported for arm64 simulator")
+    if simulator and not (simulator[0] == "arm64" or simulator[0] == "arm"):
+        die("--enable-wasm-jspi is only supported for arm64/arm simulators")
 
-    if target.cpu in ("x86_64", "aarch64"):
+    if target.cpu in ("x86_64", "x86", "aarch64", "arm"):
         return True
 
-    die("--enable-wasm-jspi only possible when targeting the x86_64/arm64 jits")
+    die("--enable-wasm-jspi only possible when targeting the x86_64/x86/arm64/arm jits")
 
 
 set_config("ENABLE_WASM_JSPI", wasm_jspi)
@@ -1493,6 +1489,35 @@ def moz_glue_in_program(is_excluded_target, is_js_without_jemalloc):
 
 set_define("MOZ_GLUE_IN_PROGRAM", True, when=moz_glue_in_program)
 set_config("MOZ_GLUE_IN_PROGRAM", True, when=moz_glue_in_program)
+
+
+# JavaScript shell
+# ==============================================================
+@depends(milestone.symbolversion, js_standalone)
+def js_library_name(symbolversion, js_standalone):
+    if js_standalone:
+        return f"mozjs-{symbolversion}"
+    else:
+        return "mozjs"
+
+
+set_config("JS_LIBRARY_NAME", js_library_name)
+add_old_configure_assignment("JS_LIBRARY_NAME", js_library_name)
+
+
+@depends(nspr_config.libs, nspr_pkg.libs, instruments)
+def js_config_libs(nspr_libs, nspr_pkg_libs, instruments):
+    libs = []
+    if nspr_libs:
+        libs += nspr_libs
+    if nspr_pkg_libs:
+        libs += nspr_pkg_libs
+    if instruments:
+        libs += ["-framework", "CoreFoundation"]
+    return libs
+
+
+set_config("JS_CONFIG_LIBS", js_config_libs)
 
 #
 # Checks for library functions

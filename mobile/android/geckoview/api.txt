@@ -871,6 +871,10 @@ package org.mozilla.geckoview {
     method @Nullable public Boolean getExtensionsProcessEnabled();
     method public boolean getExtensionsWebAPIEnabled();
     method @NonNull public Bundle getExtras();
+    method public boolean getFdlibmMathEnabled();
+    method public boolean getFingerprintingProtection();
+    method @NonNull public String getFingerprintingProtectionOverrides();
+    method public boolean getFingerprintingProtectionPrivateBrowsing();
     method public boolean getFontInflationEnabled();
     method public float getFontSizeFactor();
     method public boolean getForceEnableAccessibility();
@@ -904,6 +908,10 @@ package org.mozilla.geckoview {
     method @NonNull public GeckoRuntimeSettings setExtensionsProcessCrashTimeframe(@NonNull Long);
     method @NonNull public GeckoRuntimeSettings setExtensionsProcessEnabled(boolean);
     method @NonNull public GeckoRuntimeSettings setExtensionsWebAPIEnabled(boolean);
+    method @NonNull public GeckoRuntimeSettings setFdlibmMathEnabled(boolean);
+    method @NonNull public GeckoRuntimeSettings setFingerprintingProtection(boolean);
+    method @NonNull public GeckoRuntimeSettings setFingerprintingProtectionOverrides(@NonNull String);
+    method @NonNull public GeckoRuntimeSettings setFingerprintingProtectionPrivateBrowsing(boolean);
     method @NonNull public GeckoRuntimeSettings setFontInflationEnabled(boolean);
     method @NonNull public GeckoRuntimeSettings setFontSizeFactor(float);
     method @NonNull public GeckoRuntimeSettings setForceEnableAccessibility(boolean);
@@ -2375,7 +2383,6 @@ package org.mozilla.geckoview {
   }
 
   public static class TranslationsController.SessionTranslation.TranslationState {
-    ctor @Deprecated @DeprecationSchedule(version=130,id="translation-state-deprecated-constructor") public TranslationState(@Nullable TranslationsController.SessionTranslation.TranslationPair, @Nullable String, @Nullable TranslationsController.SessionTranslation.DetectedLanguages, @NonNull Boolean);
     ctor public TranslationState(@Nullable TranslationsController.SessionTranslation.TranslationPair, @Nullable String, @Nullable TranslationsController.SessionTranslation.DetectedLanguages, @NonNull Boolean, @NonNull Boolean);
     field @Nullable public final TranslationsController.SessionTranslation.DetectedLanguages detectedLanguages;
     field @Nullable public final String error;

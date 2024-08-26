@@ -24,6 +24,19 @@ add_task(async function test_chat_autoopen() {
 });
 
 /**
+ * Check that chat sidebar auto closes
+ */
+add_task(async function test_chat_autoclose() {
+  SidebarController.show("viewGenaiChatSidebar");
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.ml.chat.enabled", false]],
+  });
+
+  Assert.ok(!SidebarController.isOpen, "Pref change closed sidebar");
+});
+
+/**
  * Check that chat sidebar doesn't open if disabled
  */
 add_task(async function test_chat_no_open() {
@@ -46,7 +59,12 @@ add_task(async function test_preferences_observer() {
 
   await BrowserTestUtils.withNewTab("about:preferences#experimental", () => {
     Assert.equal(stub.callCount, 1, "Would have built genai preferences");
+
+    GenAI.init();
+
+    Assert.equal(stub.callCount, 2, "Would have handled existing tab");
   });
 
+  GenAI.uninit();
   sandbox.restore();
 });

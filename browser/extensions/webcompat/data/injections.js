@@ -1004,20 +1004,6 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
-    id: "bug1877346",
-    platform: "android",
-    domain: "offerup.com",
-    bug: "1877346",
-    contentScripts: {
-      matches: ["*://offerup.com/*"],
-      css: [
-        {
-          file: "injections/css/bug1877346-offerup.com-infinite-scroll-fix.css",
-        },
-      ],
-    },
-  },
-  {
     id: "bug1884842",
     platform: "android",
     domain: "foodora.cz",
@@ -1061,20 +1047,6 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
-    id: "1882040",
-    platform: "android",
-    domain: "YouTube Shorts",
-    bug: "1882040",
-    contentScripts: {
-      matches: ["*://m.youtube.com/shorts", "*://m.youtube.com/shorts/*"],
-      css: [
-        {
-          file: "injections/css/bug1882040-disable-pull-to-refresh.css",
-        },
-      ],
-    },
-  },
-  {
     id: "bug1889326",
     platform: "desktop",
     domain: "Office 365 email handling prompt",
@@ -1098,6 +1070,76 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
+    id: "bug1881922",
+    platform: "all",
+    domain: "helpdeskgeek.com",
+    bug: "1881922",
+    contentScripts: {
+      matches: ["*://helpdeskgeek.com/*"],
+      js: [
+        {
+          file: "injections/js/bug1881922-disable-legacy-mutation-events.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1901780",
+    platform: "all",
+    domain: "vanbreda-health.be",
+    bug: "1901780",
+    contentScripts: {
+      matches: ["*://www.vanbreda-health.be/*"],
+      js: [
+        {
+          file: "injections/js/bug1881922-disable-legacy-mutation-events.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1896571",
+    platform: "all",
+    domain: "gracobaby.ca",
+    bug: "1896571",
+    contentScripts: {
+      matches: ["*://www.gracobaby.ca/*"],
+      css: [
+        {
+          file: "injections/css/bug1896571-gracobaby.ca-unlock-scrolling.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1895994",
+    platform: "android",
+    domain: "www.softrans.ro",
+    bug: "1895994",
+    contentScripts: {
+      matches: ["*://*.softrans.ro/*"],
+      css: [
+        {
+          file: "injections/css/bug1895994-softtrans.ro-unlock-scrolling.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1898952",
+    platform: "desktop",
+    domain: "digits.t-mobile.com",
+    bug: "1898952",
+    contentScripts: {
+      matches: ["*://digits.t-mobile.com/*"],
+      js: [
+        {
+          file: "injections/js/bug1898952-digits.t-mobile.com.js",
+        },
+      ],
+    },
+  },
+  {
     id: "bug1815733",
     platform: "desktop",
     domain: "Office 365 Outlook locations",
@@ -1117,6 +1159,34 @@ const AVAILABLE_INJECTIONS = [
         },
       ],
       allFrames: true,
+    },
+  },
+  {
+    id: "bug1899937",
+    platform: "all",
+    domain: "plus.nhk.jp",
+    bug: "1899937",
+    contentScripts: {
+      matches: ["*://plus.nhk.jp/*"],
+      js: [
+        {
+          file: "injections/js/bug1899937-plus.nhk.jp-request-picture-in-picture.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1905278",
+    platform: "all",
+    domain: "personalizedplates.revenue.tn.gov",
+    bug: "1905278",
+    contentScripts: {
+      matches: ["*://personalizedplates.revenue.tn.gov/*"],
+      css: [
+        {
+          file: "injections/css/bug1905278-personalizedplates.revenue.tn.gov-pointer-events.css",
+        },
+      ],
     },
   },
 ];

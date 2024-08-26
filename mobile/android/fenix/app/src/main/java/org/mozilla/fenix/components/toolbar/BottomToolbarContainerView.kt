@@ -15,8 +15,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import mozilla.components.concept.toolbar.ScrollableToolbar
 import mozilla.components.ui.widgets.behavior.EngineViewScrollingBehavior
 import mozilla.components.ui.widgets.behavior.ViewPosition
-
-// TODO the gecko view/engine view height needs changing behind based on this bottom toolbar height FXDROID-2057.
+import org.mozilla.fenix.R
 
 /**
  *  A helper class to add a bottom toolbar container view to the given [parent].
@@ -33,7 +32,9 @@ class BottomToolbarContainerView(
     private val content: @Composable () -> Unit,
 ) {
 
-    val toolbarContainerView = ToolbarContainerView(context)
+    val toolbarContainerView = ToolbarContainerView(context).apply {
+        id = R.id.toolbar_navbar_container
+    }
     private val composeView = ComposeView(context).apply {
         setContent {
             content()

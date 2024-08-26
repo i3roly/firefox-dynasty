@@ -221,6 +221,7 @@ class MenuStoreTest {
         assertTrue(store.state.browserMenuState!!.isPinned)
     }
 
+    @Test
     fun `WHEN update extension state action is dispatched THEN extension state is updated`() = runTest {
         val addon = Addon(id = "ext1")
         val store = MenuStore(initialState = MenuState())
@@ -231,5 +232,35 @@ class MenuStoreTest {
 
         assertEquals(1, store.state.extensionMenuState.recommendedAddons.size)
         assertEquals(addon, store.state.extensionMenuState.recommendedAddons.first())
+    }
+
+    @Test
+    fun `WHEN find in page action is dispatched THEN state is not updated`() = runTest {
+        val initialState = MenuState()
+        val store = MenuStore(initialState = initialState)
+
+        store.dispatch(MenuAction.FindInPage).join()
+
+        assertEquals(initialState, store.state)
+    }
+
+    @Test
+    fun `WHEN request desktop site action is dispatched THEN desktop mode state is updated`() = runTest {
+        val initialState = MenuState()
+        val store = MenuStore(initialState = initialState)
+
+        store.dispatch(MenuAction.RequestDesktopSite).join()
+
+        assertTrue(store.state.isDesktopMode)
+    }
+
+    @Test
+    fun `WHEN request mobile site action is dispatched THEN desktop mode state is updated`() = runTest {
+        val initialState = MenuState(isDesktopMode = true)
+        val store = MenuStore(initialState = initialState)
+
+        store.dispatch(MenuAction.RequestMobileSite).join()
+
+        assertFalse(store.state.isDesktopMode)
     }
 }

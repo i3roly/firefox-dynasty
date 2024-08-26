@@ -64,6 +64,8 @@ class MicrosurveyBottomSheetFragment : BottomSheetDialogFragment() {
                 microsurveyMessageController.onMicrosurveyShown(it.id)
                 setContent {
                     FirefoxTheme {
+                        val activity = requireActivity() as HomeActivity
+
                         MicrosurveyBottomSheet(
                             question = it.question,
                             icon = it.icon,
@@ -78,10 +80,12 @@ class MicrosurveyBottomSheetFragment : BottomSheetDialogFragment() {
                             onCloseButtonClicked = {
                                 microsurveyMessageController.onMicrosurveyDismissed(it.id)
                                 context.settings().shouldShowMicrosurveyPrompt = false
-                                dismiss()
+                                activity.isMicrosurveyPromptDismissed.value = true
+                                closeBottomSheet()
                             },
                             onSubmitButtonClicked = { answer ->
                                 context.settings().shouldShowMicrosurveyPrompt = false
+                                activity.isMicrosurveyPromptDismissed.value = true
                                 microsurveyMessageController.onSurveyCompleted(it.id, answer)
                             },
                         )

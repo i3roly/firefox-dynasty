@@ -199,6 +199,11 @@
     <string name="browser_menu_stop">Zastajić</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Rozšěrjenja</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">Přiswojće sej %s</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">Dalše informacije</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">Rozšěrjenja rjadować</string>
     <!-- Browser menu button that opens AMO in a tab -->
@@ -289,10 +294,16 @@
     <string name="browser_menu_switch_to_mobile_site">K mobilnemu sydłu</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Nastroje</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Čitanski napohlad, přełožić, ćišćeć, dźělić, nałoženje wočinić</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Čitanski napohlad, ćišćeć, dźělić, nałoženje wočinić</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Składować</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Zapołožku přidać, zwjazanje, startowa strona, zběrka, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Tutu stronu jako zapołožku składować</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -310,6 +321,10 @@
     <string name="browser_menu_translated_to">Přełoženy do rěče %1$s</string>
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">Ćišćeć…</string>
+
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">%1$s skónčić</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -1103,7 +1118,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Mjeno zběrki</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Přemjenować</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Přemjenować</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Wotstronić</string>
 
@@ -1234,6 +1249,18 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Pytanske wurazy zapodać</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Wróćo nawigěrować</string>
+
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">Nowy rjadowak přidać</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Zapołožki začinić</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Zapołožki přepytać</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">Zapiskowy meni za %s</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2185,8 +2212,10 @@
     <string name="top_sites_rename_dialog_title">Mjeno</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Mjeno zwjazanja</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">URL zwjazanja</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">W porjadku</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">W porjadku</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">Přetorhnyć</string>
 
@@ -2196,6 +2225,17 @@
     <string name="top_sites_menu_sponsor_privacy">Naši sponsorojo a waša priwatnosć</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Sponserowany</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Wobdźěłać</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Zwjazanje wobdźěłać</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Składować</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Zapodajće płaćiwy URL</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2659,11 +2699,11 @@ To budźe jenož pomhać, kwalitu pohódnoćenjow posudźić, nic kwalitu produk
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">Sćehnjenje za rěč %1$s přetorhnyć?</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">Sćehnjenje za rěč %1$s přetorhnyć?</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">Haj</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Haj</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">Ně</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Ně</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2745,8 +2785,6 @@ To budźe jenož pomhać, kwalitu pohódnoćenjow posudźić, nic kwalitu produk
     <string name="micro_survey_privacy_notice_2">Zdźělenka priwatnosće</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Wotpósłać</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Začinić</string>
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Naprašowanje dokónčene</string>
     <!-- The survey completion confirmation text -->

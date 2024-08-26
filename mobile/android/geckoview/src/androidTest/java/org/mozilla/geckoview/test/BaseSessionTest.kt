@@ -142,6 +142,9 @@ open class BaseSessionTest(
         const val NO_META_VIEWPORT_HTML_PATH = "/assets/www/no-meta-viewport.html"
         const val TRANSLATIONS_EN = "/assets/www/translations-tester-en.html"
         const val TRANSLATIONS_ES = "/assets/www/translations-tester-es.html"
+        const val INTERSECTION_OBSERVER_HTML_PATH = "/assets/www/intersection-observer.html"
+        const val INTERSECTION_OBSERVER_DESKTOP_HTML_PATH = "/assets/www/intersection-observer-desktop.html"
+        const val BUG1909181_HTML_PATH = "/assets/www/bug1909181.html"
 
         const val TEST_ENDPOINT = GeckoSessionTestRule.TEST_ENDPOINT
         const val TEST_HOST = GeckoSessionTestRule.TEST_HOST

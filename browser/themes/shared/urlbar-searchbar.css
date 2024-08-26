@@ -561,16 +561,20 @@
   border-radius: var(--urlbar-icon-border-radius);
   padding: var(--urlbar-icon-padding);
   color: inherit;
+  outline: var(--toolbarbutton-outline);
+  outline-offset: var(--toolbarbutton-outline-offset);
 
   &:not([disabled]):hover {
     background-color: var(--urlbar-box-hover-bgcolor);
     color: var(--urlbar-box-hover-text-color);
+    outline-color: var(--toolbarbutton-hover-outline-color);
   }
 
   &:not([disabled])[open],
   &:not([disabled]):hover:active {
     background-color: var(--urlbar-box-active-bgcolor);
     color: var(--urlbar-box-hover-text-color);
+    outline-color: var(--toolbarbutton-active-outline-color);
   }
 }
 
@@ -1083,7 +1087,8 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
 
   /* stylelint-disable-next-line media-query-no-invalid */
   @media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") or (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
-    #urlbar[focused] & {
+    /* Don't show on mousedown to avoid shifting input field text */
+    #urlbar[focused]:not([focusing-via-mousedown]) & {
       display: flex;
     }
   }
@@ -1094,6 +1099,8 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
   height: calc(var(--urlbar-min-height) - 2px - 2 * var(--urlbar-container-padding));
   border-radius: var(--urlbar-icon-border-radius);
   padding: var(--urlbar-icon-padding);
+  -moz-context-properties: fill;
+  fill: var(--text-color-deemphasized);
 }
 
 #searchmode-switcher-title {
@@ -1140,7 +1147,8 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
 
 /* stylelint-disable-next-line media-query-no-invalid */
 @media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") or (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
-  #urlbar[focused] #identity-box,
+  /* Don't hide on mousedown to avoid shifting input field text */
+  #urlbar[focused]:not([focusing-via-mousedown]) #identity-box,
   #urlbar[searchmode] > .urlbar-input-container > #urlbar-search-mode-indicator {
     display: none;
   }

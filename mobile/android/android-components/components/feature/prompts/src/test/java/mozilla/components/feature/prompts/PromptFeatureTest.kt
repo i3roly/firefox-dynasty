@@ -45,6 +45,7 @@ import mozilla.components.concept.storage.Login
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.feature.prompts.address.AddressDelegate
 import mozilla.components.feature.prompts.address.AddressPicker
+import mozilla.components.feature.prompts.concept.PasswordPromptView
 import mozilla.components.feature.prompts.concept.SelectablePromptView
 import mozilla.components.feature.prompts.creditcard.CreditCardDelegate
 import mozilla.components.feature.prompts.creditcard.CreditCardPicker
@@ -58,6 +59,8 @@ import mozilla.components.feature.prompts.facts.CreditCardAutofillDialogFacts
 import mozilla.components.feature.prompts.file.FilePicker.Companion.FILE_PICKER_ACTIVITY_REQUEST_CODE
 import mozilla.components.feature.prompts.login.LoginDelegate
 import mozilla.components.feature.prompts.login.LoginPicker
+import mozilla.components.feature.prompts.login.StrongPasswordPromptViewListener
+import mozilla.components.feature.prompts.login.SuggestStrongPasswordDelegate
 import mozilla.components.feature.prompts.share.ShareDelegate
 import mozilla.components.feature.session.SessionUseCases
 import mozilla.components.support.base.Component
@@ -356,6 +359,40 @@ class PromptFeatureTest {
     }
 
     @Test
+    fun `GIVEN strongPasswordPromptView is visible WHEN dismissSelectPrompts THEN dismissCurrentSuggestStrongPassword called and true returned`() {
+        // given
+        val strongPasswordPromptViewListener: StrongPasswordPromptViewListener = mock()
+        val strongPasswordPromptViewListenerView: PasswordPromptView = mock()
+        val feature = spy(
+            PromptFeature(
+                mock<Activity>(),
+                store,
+                fragmentManager = fragmentManager,
+                tabsUseCases = mock(),
+                suggestStrongPasswordDelegate = object : SuggestStrongPasswordDelegate {
+                    override val strongPasswordPromptViewListenerView =
+                        strongPasswordPromptViewListenerView
+                },
+                fileUploadsDirCleaner = mock(),
+                onNeedToRequestPermissions = { },
+            ),
+        )
+        val selectLoginPrompt = mock<PromptRequest.SelectLoginPrompt>()
+        whenever(strongPasswordPromptViewListenerView.isVisible()).thenReturn(true)
+        feature.strongPasswordPromptViewListener = strongPasswordPromptViewListener
+        feature.activePromptRequest = selectLoginPrompt
+
+        // when
+        val result = feature.dismissSelectPrompts()
+
+        // then
+        verify(feature.strongPasswordPromptViewListener!!).dismissCurrentSuggestStrongPassword(
+            selectLoginPrompt,
+        )
+        assertEquals(true, result)
+    }
+
+    @Test
     fun `GIVEN saveLoginPrompt is visible WHEN prompt is removed from state THEN dismiss saveLoginPrompt`() {
         // given
         val loginUsername = "username"
@@ -379,6 +416,7 @@ class PromptFeatureTest {
                 exitFullscreenUsecase = mock(),
                 loginValidationDelegate = mock(),
                 isSaveLoginEnabled = { true },
+                hideUpdateFragmentAfterSavingGeneratedPassword = { _, _ -> false },
                 fileUploadsDirCleaner = mock(),
                 onNeedToRequestPermissions = { },
             ),
@@ -423,6 +461,40 @@ class PromptFeatureTest {
 
         store.waitUntilIdle()
 
+        verify(feature).dismissDialogRequest(promptRequest, session)
+    }
+
+    @Test
+    fun `GIVEN hideUpdateFragmentAfterSavingGeneratedPassword is true WHEN saveLoginPrompt request is handled THEN dismiss saveLoginPrompt`() {
+        val loginUsername = "username"
+        val loginPassword = "password"
+        val entry: LoginEntry = mock()
+        `when`(entry.username).thenReturn(loginUsername)
+        `when`(entry.password).thenReturn(loginPassword)
+        val promptRequest = PromptRequest.SaveLoginPrompt(2, listOf(entry), { }, { })
+
+        var onRemoveLastSavedPasswordCalled = false
+        val feature = spy(
+            PromptFeature(
+                activity = mock(),
+                store = store,
+                fragmentManager = fragmentManager,
+                tabsUseCases = mock(),
+                loginValidationDelegate = mock(),
+                isSaveLoginEnabled = { true },
+                hideUpdateFragmentAfterSavingGeneratedPassword = { _, _ -> true },
+                removeLastSavedGeneratedPassword = { onRemoveLastSavedPasswordCalled = true },
+                fileUploadsDirCleaner = mock(),
+                onNeedToRequestPermissions = {},
+            ),
+        )
+        val session = tab()!!
+
+        feature.handleDialogsRequest(promptRequest, session)
+
+        store.waitUntilIdle()
+
+        assertTrue(onRemoveLastSavedPasswordCalled)
         verify(feature).dismissDialogRequest(promptRequest, session)
     }
 
@@ -2585,6 +2657,7 @@ class PromptFeatureTest {
             shareDelegate = mock(),
             loginValidationDelegate = mock(),
             isSaveLoginEnabled = { true },
+            hideUpdateFragmentAfterSavingGeneratedPassword = { _, _ -> false },
             fileUploadsDirCleaner = mock(),
             onNeedToRequestPermissions = { },
         )
@@ -2641,15 +2714,16 @@ class PromptFeatureTest {
 
         val fragment = spy(
             SaveLoginDialogFragment.newInstance(
-                tabId,
-                shareRequest.uid,
-                false,
-                0,
-                LoginEntry(
+                sessionId = tabId,
+                promptRequestUID = shareRequest.uid,
+                shouldDismissOnLoad = false,
+                hint = 0,
+                entry = LoginEntry(
                     origin = "https://www.mozilla.org",
                     username = "username",
                     password = "password",
                 ),
+                onShowSnackbarAfterLoginChange = { _ -> },
             ),
         )
         feature.activePrompt = WeakReference(fragment)

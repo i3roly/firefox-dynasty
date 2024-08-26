@@ -2022,6 +2022,11 @@ void Element::UnbindFromTree(UnbindContext& aContext) {
 
   HandleShadowDOMRelatedRemovalSteps(nullParent);
 
+  if (HasFlag(ELEMENT_IN_CONTENT_IDENTIFIER_FOR_LCP)) {
+    OwnerDoc()->ContentIdentifiersForLCP().Remove(this);
+    UnsetFlags(ELEMENT_IN_CONTENT_IDENTIFIER_FOR_LCP);
+  }
+
   if (HasFlag(ELEMENT_IS_DATALIST_OR_HAS_DATALIST_ANCESTOR) &&
       !IsHTMLElement(nsGkAtoms::datalist)) {
     if (nullParent) {
@@ -2359,17 +2364,8 @@ nsresult Element::DispatchClickEvent(nsPresContext* aPresContext,
   MOZ_ASSERT(aSourceEvent, "Must have source event");
   MOZ_ASSERT(aStatus, "Null out param?");
 
-  Maybe<WidgetPointerEvent> pointerEvent;
-  Maybe<WidgetMouseEvent> mouseEvent;
-  if (StaticPrefs::dom_w3c_pointer_events_dispatch_click_as_pointer_event()) {
-    pointerEvent.emplace(aSourceEvent->IsTrusted(), ePointerClick,
-                         aSourceEvent->mWidget);
-  } else {
-    mouseEvent.emplace(aSourceEvent->IsTrusted(), ePointerClick,
-                       aSourceEvent->mWidget, WidgetMouseEvent::eReal);
-  }
-  WidgetMouseEvent& event =
-      pointerEvent.isSome() ? pointerEvent.ref() : mouseEvent.ref();
+  WidgetPointerEvent event(aSourceEvent->IsTrusted(), ePointerClick,
+                           aSourceEvent->mWidget);
   event.mRefPoint = aSourceEvent->mRefPoint;
   uint32_t clickCount = 1;
   float pressure = 0;
@@ -2468,7 +2464,7 @@ bool Element::MaybeCheckSameAttrVal(int32_t aNamespaceID, const nsAtom* aName,
                                     bool* aOldValueSet) {
   bool modification = false;
   *aHasListeners =
-      aNotify && nsContentUtils::HasMutationListeners(
+      aNotify && nsContentUtils::WantMutationEvents(
                      this, NS_EVENT_BITS_MUTATION_ATTRMODIFIED, this);
   *aOldValueSet = false;
 
@@ -2982,7 +2978,7 @@ nsresult Element::UnsetAttr(int32_t aNameSpaceID, nsAtom* aName, bool aNotify) {
   BeforeSetAttr(aNameSpaceID, aName, nullptr, aNotify);
 
   bool hasMutationListeners =
-      aNotify && nsContentUtils::HasMutationListeners(
+      aNotify && nsContentUtils::WantMutationEvents(
                      this, NS_EVENT_BITS_MUTATION_ATTRMODIFIED, this);
 
   PreIdMaybeChange(aNameSpaceID, aName, nullptr);

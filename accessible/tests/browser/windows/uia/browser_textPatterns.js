@@ -883,3 +883,209 @@ addUiaTask(
     ok(true, "input got TextChanged event");
   }
 );
+
+/**
+ * Test the TextRange pattern's GetEnclosingElement method.
+ */
+addUiaTask(
+  `<div id="editable" contenteditable role="textbox">ab <mark id="cdef"><span>cd</span> <a id="ef" href="/">ef</a></mark> <img id="g" src="https://example.com/a11y/accessible/tests/mochitest/moz.png" alt="g"></div>`,
+  async function testTextRangeGetEnclosingElement() {
+    info("Getting editable DocumentRange");
+    await runPython(`
+      doc = getDocUia()
+      editable = findUiaByDomId(doc, "editable")
+      text = getUiaPattern(editable, "Text")
+      global range
+      range = text.DocumentRange
+    `);
+    is(
+      await runPython(`range.GetEnclosingElement().CurrentAutomationId`),
+      "editable",
+      "EnclosingElement is editable"
+    );
+    info("Expanding to word");
+    await runPython(`range.ExpandToEnclosingUnit(TextUnit_Word)`);
+    // Range is now "ab ".
+    // The IA2 -> UIA proxy gets this wrong.
+    if (gIsUiaEnabled) {
+      is(
+        await runPython(`range.GetEnclosingElement().CurrentName`),
+        "ab ",
+        "EnclosingElement is ab text leaf"
+      );
+    }
+    info("Moving 1 word");
+    await runPython(`range.Move(TextUnit_Word, 1)`);
+    // Range is now "cd ".
+    // The "cd" text leaf doesn't include the space, so the enclosing element is
+    // its parent.
+    is(
+      await runPython(`range.GetEnclosingElement().CurrentAutomationId`),
+      "cdef",
+      "EnclosingElement is cdef"
+    );
+    info("Moving end -1 character");
+    await runPython(
+      `range.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, -1)`
+    );
+    // Range is now "cd".
+    // The IA2 -> UIA proxy gets this wrong.
+    if (gIsUiaEnabled) {
+      is(
+        await runPython(`range.GetEnclosingElement().CurrentName`),
+        "cd",
+        "EnclosingElement is cd text leaf"
+      );
+    }
+    info("Moving 1 word");
+    await runPython(`range.Move(TextUnit_Word, 1)`);
+    // Range is now "ef ".
+    // Neither the "ef" text leaf/link nor the "cdef" mark include the trailing
+    // space, so the enclosing element is cdef's parent.
+    is(
+      await runPython(`range.GetEnclosingElement().CurrentAutomationId`),
+      "editable",
+      "EnclosingElement is editable"
+    );
+    info("Moving end -1 character");
+    await runPython(
+      `range.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, -1)`
+    );
+    // Range is now "ef".
+    is(
+      await runPython(`range.GetEnclosingElement().CurrentName`),
+      "ef",
+      "EnclosingElement is ef text leaf"
+    );
+    info("Moving 1 word");
+    await runPython(`range.Move(TextUnit_Word, 1)`);
+    // Range is now the embedded object character for the img (g).
+    // The IA2 -> UIA proxy gets this wrong.
+    if (gIsUiaEnabled) {
+      is(
+        await runPython(`range.GetEnclosingElement().CurrentAutomationId`),
+        "g",
+        "EnclosingElement is g"
+      );
+    }
+  }
+);
+
+/**
+ * Test the TextRange pattern's GetChildren method.
+ */
+addUiaTask(
+  `<div id="editable" contenteditable role="textbox">ab <span id="cdef" role="button"><span>cd</span> <a id="ef" href="/">ef</a> </span><img id="g" src="https://example.com/a11y/accessible/tests/mochitest/moz.png" alt="g"></div>`,
+  async function testTextRangeGetChildren() {
+    info("Getting editable DocumentRange");
+    await runPython(`
+      doc = getDocUia()
+      editable = findUiaByDomId(doc, "editable")
+      text = getUiaPattern(editable, "Text")
+      global r
+      r = text.DocumentRange
+    `);
+    await isUiaElementArray(
+      `r.GetChildren()`,
+      ["cdef", "g"],
+      "Children are correct"
+    );
+    info("Expanding to word");
+    await runPython(`r.ExpandToEnclosingUnit(TextUnit_Word)`);
+    // Range is now "ab ".
+    await isUiaElementArray(`r.GetChildren()`, [], "Children are correct");
+    info("Moving 1 word");
+    await runPython(`r.Move(TextUnit_Word, 1)`);
+    // Range is now "cd ".
+    await isUiaElementArray(`r.GetChildren()`, [], "Children are correct");
+    info("Moving 1 word");
+    await runPython(`r.Move(TextUnit_Word, 1)`);
+    // Range is now "ef ". The range includes the link but is not completely
+    // enclosed by the link.
+    await isUiaElementArray(`r.GetChildren()`, ["ef"], "Children are correct");
+    info("Moving end -1 character");
+    await runPython(
+      `r.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, -1)`
+    );
+    // Range is now "ef". The range encloses the link, so there are no children.
+    await isUiaElementArray(`r.GetChildren()`, [], "Children are correct");
+    info("Moving 1 word");
+    await runPython(`r.Move(TextUnit_Word, 1)`);
+    // Range is now the embedded object character for the img (g). The range is
+    // completely enclosed by the image.
+    // The IA2 -> UIA proxy gets this wrong.
+    if (gIsUiaEnabled) {
+      await isUiaElementArray(`r.GetChildren()`, [], "Children are correct");
+    }
+  }
+);
+
+/**
+ * Test the Text pattern's RangeFromChild method.
+ */
+addUiaTask(
+  `<div id="editable" contenteditable role="textbox">ab <mark id="cdef"><span>cd</span> <a id="ef" href="/">ef</a></mark> <img id="g" src="https://example.com/a11y/accessible/tests/mochitest/moz.png" alt="g"></div>`,
+  async function testTextRangeFromChild() {
+    await runPython(`
+      global doc, docText, editable, edText
+      doc = getDocUia()
+      docText = getUiaPattern(doc, "Text")
+      editable = findUiaByDomId(doc, "editable")
+      edText = getUiaPattern(editable, "Text")
+    `);
+    is(
+      await runPython(`docText.RangeFromChild(editable).GetText(-1)`),
+      `ab cd ef ${kEmbedChar}`,
+      "doc returned correct range for editable"
+    );
+    await testPythonRaises(
+      `edText.RangeFromChild(editable)`,
+      "editable correctly failed to return range for editable"
+    );
+    is(
+      await runPython(`docText.RangeFromChild(editable).GetText(-1)`),
+      `ab cd ef ${kEmbedChar}`,
+      "doc returned correct range for editable"
+    );
+    let text = await runPython(`
+      ab = uiaClient.RawViewWalker.GetFirstChildElement(editable)
+      range = docText.RangeFromChild(ab)
+      return range.GetText(-1)
+    `);
+    is(text, "ab ", "doc returned correct range for ab");
+    text = await runPython(`
+      global cdef
+      cdef = findUiaByDomId(doc, "cdef")
+      range = docText.RangeFromChild(cdef)
+      return range.GetText(-1)
+    `);
+    is(text, "cd ef", "doc returned correct range for cdef");
+    text = await runPython(`
+      cd = uiaClient.RawViewWalker.GetFirstChildElement(cdef)
+      range = docText.RangeFromChild(cd)
+      return range.GetText(-1)
+    `);
+    is(text, "cd", "doc returned correct range for cd");
+    text = await runPython(`
+      global efLink
+      efLink = findUiaByDomId(doc, "ef")
+      range = docText.RangeFromChild(efLink)
+      return range.GetText(-1)
+    `);
+    is(text, "ef", "doc returned correct range for ef link");
+    text = await runPython(`
+      efLeaf = uiaClient.RawViewWalker.GetFirstChildElement(efLink)
+      range = docText.RangeFromChild(efLeaf)
+      return range.GetText(-1)
+    `);
+    is(text, "ef", "doc returned correct range for ef leaf");
+    text = await runPython(`
+      g = findUiaByDomId(doc, "g")
+      range = docText.RangeFromChild(g)
+      return range.GetText(-1)
+    `);
+    is(text, kEmbedChar, "doc returned correct range for g");
+  },
+  // The IA2 -> UIA proxy has too many quirks/bugs here.
+  { uiaEnabled: true, uiaDisabled: false }
+);

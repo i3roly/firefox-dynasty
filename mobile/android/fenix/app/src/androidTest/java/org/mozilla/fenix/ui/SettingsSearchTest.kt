@@ -9,7 +9,6 @@ import androidx.test.espresso.Espresso.pressBack
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.mozilla.fenix.customannotations.SmokeTest
@@ -22,12 +21,14 @@ import org.mozilla.fenix.helpers.MockBrowserDataHelper.createBookmarkItem
 import org.mozilla.fenix.helpers.MockBrowserDataHelper.createHistoryItem
 import org.mozilla.fenix.helpers.SearchDispatcher
 import org.mozilla.fenix.helpers.TestAssetHelper.getGenericAsset
+import org.mozilla.fenix.helpers.TestAssetHelper.waitingTimeLong
 import org.mozilla.fenix.helpers.TestHelper.appContext
 import org.mozilla.fenix.helpers.TestHelper.clickSnackbarButton
 import org.mozilla.fenix.helpers.TestHelper.exitMenu
 import org.mozilla.fenix.helpers.TestHelper.restartApp
 import org.mozilla.fenix.helpers.TestHelper.verifySnackBarText
 import org.mozilla.fenix.helpers.TestSetup
+import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.ui.robots.EngineShortcut
 import org.mozilla.fenix.ui.robots.homeScreen
 import org.mozilla.fenix.ui.robots.navigationToolbar
@@ -63,7 +64,7 @@ class SettingsSearchTest : TestSetup() {
         searchMockServer.shutdown()
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203333
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203333
     @Test
     fun verifySearchSettingsMenuItemsTest() {
         homeScreen {
@@ -88,7 +89,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203307
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203307
     @Test
     fun verifyDefaultSearchEnginesSettingsItemsTest() {
         homeScreen {
@@ -103,7 +104,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203308
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203308
     @SmokeTest
     @Test
     fun verifyTheDefaultSearchEngineCanBeChangedTest() {
@@ -123,30 +124,88 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/233586
-    @Ignore("Failing, see: https://bugzilla.mozilla.org/show_bug.cgi?id=1905976")
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/233586
     @Test
-    fun verifyUrlAutocompleteToggleTest() {
-        homeScreen {
-        }.openSearch {
-            typeSearch("mo")
-            verifyTypedToolbarText("monster.com")
-            typeSearch("moz")
-            verifyTypedToolbarText("mozilla.org")
-        }.dismissSearchBar {
-        }.openThreeDotMenu {
-        }.openSettings {
-        }.openSearchSubMenu {
-            toggleAutocomplete()
-        }.goBack {
-        }.goBack {
-        }.openSearch {
-            typeSearch("moz")
-            verifyTypedToolbarText("moz")
+    fun verifyEnabledUrlAutocompleteToggleTest() {
+        // Currently part of an experiment https://bugzilla.mozilla.org/show_bug.cgi?id=1842106
+        // Check if "Top domain" suggestions for the address bar's autocomplete are enabled
+        if (FxNimbus.features.suggestShippedDomains.value().enabled) {
+            // If true it will use the hardcoded list of "top domain" suggestions for the address bar's autocomplete suggestions
+            homeScreen {
+            }.openSearch {
+                typeSearch("mo")
+                verifyTypedToolbarText("monster.com", exists = true)
+                typeSearch("moz")
+                verifyTypedToolbarText("mozilla.org", exists = true)
+            }
+        } else {
+            // The suggestions for the address bar's autocomplete will take use of the user's local browsing history and bookmarks
+            createHistoryItem("https://github.com/mozilla-mobile/fenix")
+            createBookmarkItem("https://github.com/mozilla-mobile/focus-android", "focus-android", 1u)
+
+            homeScreen {
+            }.openSearch {
+                typeSearch("moz")
+                // "Top domain" suggestions from the address bar's autocomplete are disabled, "moz" shouldn't autocomplete to mozilla.org
+                verifyTypedToolbarText("mozilla.org", exists = false)
+                // The address bar's autocomplete should take use of the browsing history
+                // Autocomplete with the history items url
+                typeSearch("github.com/mozilla-mobile/f")
+                verifyTypedToolbarText("github.com/mozilla-mobile/fenix", exists = true)
+                // The address bar's autocomplete should also take use of the saved bookmarks
+                // Autocomplete with the bookmarked items url
+                typeSearch("github.com/mozilla-mobile/fo")
+                verifyTypedToolbarText("github.com/mozilla-mobile/focus-android", exists = true)
+                // It should not autocomplete with links that are not part of browsing history or bookmarks
+                typeSearch("github.com/mozilla-mobile/fi")
+                verifyTypedToolbarText("github.com/mozilla-mobile/firefox-android", exists = false)
+            }
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/361817
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2660692
+    @Test
+    fun verifyDisabledUrlAutocompleteToggleTest() {
+        // Currently part of an experiment https://bugzilla.mozilla.org/show_bug.cgi?id=1842106
+        // Check if "Top domain" suggestions for the address bar's autocomplete are enabled
+        if (FxNimbus.features.suggestShippedDomains.value().enabled) {
+            // If true it will use the hardcoded list of "top domain" suggestions for the address bar's autocomplete suggestions
+            homeScreen {
+            }.openThreeDotMenu {
+            }.openSettings {
+            }.openSearchSubMenu {
+                toggleAutocomplete()
+            }.goBack {
+            }.goBack {
+            }.openSearch {
+                typeSearch("moz")
+                verifyTypedToolbarText("moz", exists = true)
+                verifyTypedToolbarText("mozilla.org", exists = false)
+            }
+        } else {
+            // The suggestions for the address bar's autocomplete will take use of the user's local browsing history and bookmarks
+            createHistoryItem("https://github.com/mozilla-mobile/fenix")
+            createBookmarkItem("https://github.com/mozilla-mobile/focus-android", "focus-android", 1u)
+
+            homeScreen {
+            }.openThreeDotMenu {
+            }.openSettings {
+            }.openSearchSubMenu {
+                toggleAutocomplete()
+            }.goBack {
+            }.goBack {
+            }.openSearch {
+                // Having the setting disabled, it should not autocomplete anymore with the history items url
+                typeSearch("github.com/mozilla-mobile/f")
+                verifyTypedToolbarText("github.com/mozilla-mobile/fenix", exists = false)
+                // Having the setting disabled, it should not autocomplete anymore with the bookmarked items url
+                typeSearch("github.com/mozilla-mobile/fo")
+                verifyTypedToolbarText("github.com/mozilla-mobile/focus-android", exists = false)
+            }
+        }
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/361817
     @Test
     fun disableSearchBrowsingHistorySuggestionsToggleTest() {
         val websiteURL = getGenericAsset(mockWebServer, 1).url.toString()
@@ -172,7 +231,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/412926
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/412926
     @Test
     fun disableSearchBookmarksToggleTest() {
         val website = getGenericAsset(mockWebServer, 1)
@@ -201,7 +260,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203309
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203309
     // Verifies setting as default a customized search engine name and URL
     @SmokeTest
     @Test
@@ -240,7 +299,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203335
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203335
     @Test
     fun addCustomSearchEngineToManageShortcutsListTest() {
         val customSearchEngine = object {
@@ -263,7 +322,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203343
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203343
     @Test
     fun verifyLearnMoreLinksFromAddSearchEngineSectionTest() {
         homeScreen {
@@ -284,7 +343,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203310
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203310
     @Test
     fun editCustomSearchEngineTest() {
         val customSearchEngine = object {
@@ -314,7 +373,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203312
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203312
     @Test
     fun verifyErrorMessagesForInvalidSearchEngineUrlsTest() {
         val customSearchEngine = object {
@@ -346,7 +405,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203313
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203313
     @Test
     fun deleteCustomSearchEngineTest() {
         val customSearchEngineTitle = "TestSearchEngine"
@@ -381,7 +440,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203339
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203339
     @Test
     fun deleteCustomSearchShortcutTest() {
         val customSearchEngineTitle = "TestSearchEngine"
@@ -409,7 +468,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/233588
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/233588
     // Test running on beta/release builds in CI:
     // caution when making changes to it, so they don't block the builds
     // Goes through the settings and changes the search suggestion toggle, then verifies it changes.
@@ -445,7 +504,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/464420
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/464420
     // Tests the "Don't allow" option from private mode search suggestions onboarding dialog
     @Test
     fun doNotAllowSearchSuggestionsInPrivateBrowsingTest() {
@@ -459,7 +518,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/1957063
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1957063
     // Tests the "Allow" option from private mode search suggestions onboarding dialog
     @Test
     fun allowSearchSuggestionsInPrivateBrowsingTest() {
@@ -487,7 +546,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/888673
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/888673
     @Test
     fun verifyShowVoiceSearchToggleTest() {
         homeScreen {
@@ -507,7 +566,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/412927
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/412927
     @Test
     fun verifyShowClipboardSuggestionsToggleTest() {
         val link = "https://www.mozilla.org/en-US/"
@@ -517,7 +576,7 @@ class SettingsSearchTest : TestSetup() {
         }.openNavigationToolbar {
             verifyClipboardSuggestionsAreDisplayed(link, true)
         }.visitLinkFromClipboard {
-            waitForPageToLoad()
+            waitForPageToLoad(pageLoadWaitingTime = waitingTimeLong)
         }.openTabDrawer(activityTestRule) {
         }.openNewTab {
         }
@@ -549,7 +608,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2233337
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2233337
     @Test
     fun verifyTheSearchEnginesListsRespectTheLocaleTest() {
         runWithSystemLocaleChanged(Locale.CHINA, activityTestRule.activityRule) {
@@ -581,7 +640,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203334
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203334
     @Test
     fun verifyManageSearchShortcutsSettingsItemsTest() {
         homeScreen {
@@ -604,7 +663,7 @@ class SettingsSearchTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://testrail.stage.mozaws.net/index.php?/cases/view/2203340
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2203340
     @SmokeTest
     @Test
     fun verifySearchShortcutChangesAreReflectedInSearchSelectorMenuTest() {

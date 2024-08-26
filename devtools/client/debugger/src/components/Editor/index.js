@@ -34,6 +34,7 @@ import {
   isSourceMapIgnoreListEnabled,
   isSourceOnSourceMapIgnoreList,
   isMapScopesEnabled,
+  getSelectedTraceIndex,
 } from "../../selectors/index";
 
 // Redux actions
@@ -142,6 +143,30 @@ class Editor extends PureComponent {
       editor = this.setupEditor();
     }
 
+    if (!features.codemirrorNext) {
+      const shouldUpdateSize =
+        nextProps.startPanelSize !== this.props.startPanelSize ||
+        nextProps.endPanelSize !== this.props.endPanelSize;
+
+      startOperation();
+      if (shouldUpdateSize) {
+        editor.codeMirror.setSize();
+      }
+      this.setTextContent(nextProps, editor);
+      endOperation();
+
+      if (this.props.selectedSource != nextProps.selectedSource) {
+        this.props.updateViewport();
+        resizeBreakpointGutter(editor.codeMirror);
+        resizeToggleButton(getLineNumberWidth(editor.codeMirror));
+      }
+    } else {
+      // For codemirror 6
+      this.setTextContent(nextProps, editor);
+    }
+  }
+
+  async setTextContent(nextProps, editor) {
     const shouldUpdateText =
       nextProps.selectedSource !== this.props.selectedSource ||
       nextProps.selectedSourceTextContent?.value !==
@@ -152,40 +177,12 @@ class Editor extends PureComponent {
       nextProps.selectedLocation &&
       this.shouldScrollToLocation(nextProps, editor);
 
-    if (!features.codemirrorNext) {
-      const shouldUpdateSize =
-        nextProps.startPanelSize !== this.props.startPanelSize ||
-        nextProps.endPanelSize !== this.props.endPanelSize;
+    if (shouldUpdateText) {
+      await this.setText(nextProps, editor);
+    }
 
-      if (shouldUpdateText || shouldUpdateSize || shouldScroll) {
-        startOperation();
-        if (shouldUpdateText) {
-          this.setText(nextProps, editor);
-        }
-        if (shouldUpdateSize) {
-          editor.codeMirror.setSize();
-        }
-        if (shouldScroll) {
-          this.scrollToLocation(nextProps, editor);
-        }
-        endOperation();
-      }
-
-      if (this.props.selectedSource != nextProps.selectedSource) {
-        this.props.updateViewport();
-        resizeBreakpointGutter(editor.codeMirror);
-        resizeToggleButton(getLineNumberWidth(editor.codeMirror));
-      }
-    } else {
-      // For codemirror 6
-      // eslint-disable-next-line no-lonely-if
-      if (shouldUpdateText) {
-        this.setText(nextProps, editor);
-      }
-
-      if (shouldScroll) {
-        this.scrollToLocation(nextProps, editor);
-      }
+    if (shouldScroll) {
+      this.scrollToLocation(nextProps, editor);
     }
   }
 
@@ -231,7 +228,7 @@ class Editor extends PureComponent {
       codeMirrorWrapper.tabIndex = 0;
       codeMirrorWrapper.addEventListener("keydown", e => this.onKeyDown(e));
       codeMirrorWrapper.addEventListener("click", e => this.onClick(e));
-      codeMirrorWrapper.addEventListener("mouseover", onMouseOver(codeMirror));
+      codeMirrorWrapper.addEventListener("mouseover", onMouseOver(editor));
       codeMirrorWrapper.addEventListener("contextmenu", event =>
         this.openMenu(event)
       );
@@ -365,8 +362,8 @@ class Editor extends PureComponent {
 
         const lines = [];
         for (const range of blackboxedRanges[selectedSource.url]) {
-          for (let i = range.start.line; i <= range.end.line; i++) {
-            lines.push(i);
+          for (let line = range.start.line; line <= range.end.line; line++) {
+            lines.push({ line });
           }
         }
 
@@ -741,7 +738,7 @@ class Editor extends PureComponent {
     editor.scrollTo(line, column);
   }
 
-  setText(props, editor) {
+  async setText(props, editor) {
     const { selectedSource, selectedSourceTextContent, symbols } = props;
 
     if (!editor) {
@@ -779,7 +776,10 @@ class Editor extends PureComponent {
         symbols
       );
     } else {
-      editor.setText(selectedSourceTextContent.value.value);
+      await editor.setText(
+        selectedSourceTextContent.value.value,
+        selectedSource.id
+      );
     }
   }
 
@@ -853,6 +853,7 @@ class Editor extends PureComponent {
       selectedSource,
       conditionalPanelLocation,
       isPaused,
+      isTraceSelected,
       inlinePreviewEnabled,
       highlightedLineRange,
       blackboxedRanges,
@@ -898,7 +899,7 @@ class Editor extends PureComponent {
               selectedSource,
             })
           : null,
-        isPaused &&
+        (isPaused || isTraceSelected) &&
           inlinePreviewEnabled &&
           (!selectedSource.isOriginal ||
             selectedSource.isPrettyPrinted ||
@@ -966,7 +967,7 @@ class Editor extends PureComponent {
       React.createElement(ColumnBreakpoints, {
         editor,
       }),
-      isPaused &&
+      (isPaused || isTraceSelected) &&
         inlinePreviewEnabled &&
         (!selectedSource.isOriginal ||
           (selectedSource.isOriginal && selectedSource.isPrettyPrinted) ||
@@ -1034,6 +1035,7 @@ const mapStateToProps = state => {
     conditionalPanelLocation: getConditionalPanelLocation(state),
     symbols: getSymbols(state, selectedLocation),
     isPaused: getIsCurrentThreadPaused(state),
+    isTraceSelected: getSelectedTraceIndex(state) != null,
     skipPausing: getSkipPausing(state),
     inlinePreviewEnabled: getInlinePreview(state),
     blackboxedRanges: getBlackBoxRanges(state),

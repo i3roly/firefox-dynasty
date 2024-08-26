@@ -246,6 +246,13 @@ add_task(async function sidebar_isOpen() {
 });
 
 add_task(async function testShortcuts() {
+  // This test covers the access key expected to be set on the switcher panel
+  // element for the extension, which is not part of the new sidebar design.
+  if (Services.prefs.getBoolPref("sidebar.revamp", false)) {
+    info("skipping test because sidebar.revamp is set");
+    return;
+  }
+
   function verifyShortcut(id, commandKey, win = window) {
     const doc = win.document;
     // We're just testing the command key since the modifiers have different
@@ -348,7 +355,10 @@ add_task(async function testShortcuts() {
   await BrowserTestUtils.closeWindow(win);
 });
 
-add_task(async function sidebar_switcher_panel_icon_update() {
+add_task(async function sidebar_action_icon_update() {
+  const isNewSidebar = Services.prefs.getBoolPref("sidebar.revamp", false);
+  const sidebar = isNewSidebar && document.querySelector("sidebar-main");
+
   info("Load extension");
   const extension = ExtensionTestUtils.loadExtension(getExtData());
   await extension.startup();
@@ -358,16 +368,23 @@ add_task(async function sidebar_switcher_panel_icon_update() {
   await sendMessage(extension, "isOpen", { result: true });
   const sidebarID = SidebarController.currentID;
 
-  const item = SidebarController._switcherPanel.querySelector(
-    ".webextension-menuitem"
-  );
   let iconUrl = `moz-extension://${extension.uuid}/icon.png`;
   let icon2xUrl = `moz-extension://${extension.uuid}/icon@2x.png`;
-  is(
-    item.style.getPropertyValue("--webextension-menuitem-image"),
-    `image-set(url("${iconUrl}"), url("${icon2xUrl}") 2x)`,
-    "Extension has the correct icon."
-  );
+
+  if (isNewSidebar) {
+    ok(sidebar, "sidebar is shown");
+    const { iconSrc } = sidebar.extensionButtons[0];
+    is(iconSrc, iconUrl, "Extension has the correct icon.");
+  } else {
+    const item = SidebarController._switcherPanel.querySelector(
+      ".webextension-menuitem"
+    );
+    is(
+      item.style.getPropertyValue("--webextension-menuitem-image"),
+      `image-set(url("${iconUrl}"), url("${icon2xUrl}") 2x)`,
+      "Extension has the correct icon."
+    );
+  }
   SidebarController.hide();
   await sendMessage(extension, "isOpen", { result: false });
 
@@ -376,19 +393,30 @@ add_task(async function sidebar_switcher_panel_icon_update() {
   await extension.awaitMessage("sidebar");
   await sendMessage(extension, "isOpen", { result: true });
   iconUrl = `moz-extension://${extension.uuid}/1.png`;
-  is(
-    item.style.getPropertyValue("--webextension-menuitem-image"),
-    `image-set(url("${iconUrl}"), url("${iconUrl}") 2x)`,
-    "Extension has updated icon."
-  );
+
+  if (isNewSidebar) {
+    const { iconSrc } = sidebar.extensionButtons[0];
+    is(iconSrc, iconUrl, "Extension has updated icon.");
+  } else {
+    const item = SidebarController._switcherPanel.querySelector(
+      ".webextension-menuitem"
+    );
+    is(
+      item.style.getPropertyValue("--webextension-menuitem-image"),
+      `image-set(url("${iconUrl}"), url("${iconUrl}") 2x)`,
+      "Extension has updated icon."
+    );
+  }
 
   await extension.unload();
 });
 
-add_task(async function sidebar_switcher_panel_hidpi_icon() {
+add_task(async function sidebar_action_hidpi_icon() {
   await SpecialPowers.pushPrefEnv({
     set: [["layout.css.devPixelsPerPx", 2]],
   });
+
+  const isNewSidebar = Services.prefs.getBoolPref("sidebar.revamp", false);
 
   info("Load extension");
   const extension = ExtensionTestUtils.loadExtension(getExtData());
@@ -398,22 +426,40 @@ add_task(async function sidebar_switcher_panel_hidpi_icon() {
   await extension.awaitMessage("sidebar");
   await sendMessage(extension, "isOpen", { result: true });
 
-  const item = SidebarController._switcherPanel.querySelector(
-    ".webextension-menuitem"
-  );
   let iconUrl = `moz-extension://${extension.uuid}/icon.png`;
   let icon2xUrl = `moz-extension://${extension.uuid}/icon@2x.png`;
-  is(
-    item.style.getPropertyValue("--webextension-menuitem-image"),
-    `image-set(url("${iconUrl}"), url("${icon2xUrl}") 2x)`,
-    "Extension has the correct icon for HiDPI displays."
-  );
+
+  if (isNewSidebar) {
+    const sidebar = document.querySelector("sidebar-main");
+    const { iconSrc } = sidebar.extensionButtons[0];
+    is(
+      iconSrc,
+      icon2xUrl,
+      "Extension has the correct icon for HiDPI displays."
+    );
+  } else {
+    const item = SidebarController._switcherPanel.querySelector(
+      ".webextension-menuitem"
+    );
+    is(
+      item.style.getPropertyValue("--webextension-menuitem-image"),
+      `image-set(url("${iconUrl}"), url("${icon2xUrl}") 2x)`,
+      "Extension has the correct icon for HiDPI displays."
+    );
+  }
 
   await extension.unload();
   await SpecialPowers.popPrefEnv();
 });
 
 add_task(async function sidebar_switcher_label_bug1905771_regression_test() {
+  // This test covers a regression specific to the current sidebar design and
+  // doesn't need to be covered with the new sidebar design.
+  if (Services.prefs.getBoolPref("sidebar.revamp", false)) {
+    info("skipping test because sidebar.revamp is set");
+    return;
+  }
+
   let extData = getExtData({
     name: "Test Extension",
     browser_specific_settings: { gecko: { id: "@sidebar" } },

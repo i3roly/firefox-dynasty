@@ -209,19 +209,15 @@ void EditorEventListener::Disconnect() {
   const OwningNonNull<EditorBase> editorBase = *mEditorBase;
   mEditorBase = nullptr;
 
-  nsFocusManager* fm = nsFocusManager::GetFocusManager();
-  if (fm) {
-    nsIContent* focusedContent = fm->GetFocusedElement();
-    mozilla::dom::Element* root = editorBase->GetRoot();
-    if (focusedContent && root &&
-        focusedContent->IsInclusiveDescendantOf(root)) {
-      // Reset the Selection ancestor limiter and SelectionController state
-      // that EditorBase::InitializeSelection set up.
-      DebugOnly<nsresult> rvIgnored = editorBase->FinalizeSelection();
-      NS_WARNING_ASSERTION(
-          NS_SUCCEEDED(rvIgnored),
-          "EditorBase::FinalizeSelection() failed, but ignored");
-    }
+  const Element* const focusedElement =
+      nsFocusManager::GetFocusedElementStatic();
+  mozilla::dom::Element* root = editorBase->GetRoot();
+  if (focusedElement && root && focusedElement->IsInclusiveDescendantOf(root)) {
+    // Reset the Selection ancestor limiter and SelectionController state
+    // that EditorBase::InitializeSelection set up.
+    DebugOnly<nsresult> rvIgnored = editorBase->FinalizeSelection();
+    NS_WARNING_ASSERTION(NS_SUCCEEDED(rvIgnored),
+                         "EditorBase::FinalizeSelection() failed, but ignored");
   }
 }
 
@@ -1195,8 +1191,8 @@ bool EditorEventListener::IsFileControlTextBox() {
   if (!parent || !parent->IsHTMLElement(nsGkAtoms::input)) {
     return false;
   }
-  nsCOMPtr<nsIFormControl> formControl = do_QueryInterface(parent);
-  return formControl->ControlType() == FormControlType::InputFile;
+  return nsIFormControl::FromNode(parent)->ControlType() ==
+         FormControlType::InputFile;
 }
 
 bool EditorEventListener::ShouldHandleNativeKeyBindings(

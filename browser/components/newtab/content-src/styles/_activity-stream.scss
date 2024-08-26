@@ -180,6 +180,7 @@ input {
 @import '../components/DiscoveryStreamImpressionStats/ImpressionStats';
 @import '../components/DiscoveryStreamComponents/DSEmptyState/DSEmptyState';
 @import '../components/DiscoveryStreamComponents/DSTextPromo/DSTextPromo';
+@import '../components/DiscoveryStreamComponents/DSThumbsUpDownButtons/DSThumbsUpDownButtons';
 @import '../components/DiscoveryStreamComponents/DSSignup/DSSignup';
 @import '../components/DiscoveryStreamComponents/DSPrivacyModal/DSPrivacyModal';
 @import '../components/DiscoveryStreamComponents/PrivacyLink/PrivacyLink';
@@ -187,4 +188,5 @@ input {
 @import '../components/DiscoveryStreamComponents/FeatureHighlight/FeatureHighlight';
 @import '../components/DiscoveryStreamComponents/FeatureHighlight/SponsoredContentHighlight';
 @import '../components/DiscoveryStreamComponents/FeatureHighlight/WallpaperFeatureHighlight';
+@import '../components/DiscoveryStreamComponents/TopicSelection/TopicSelection';
 // stylelint-enable no-invalid-position-at-import-rule

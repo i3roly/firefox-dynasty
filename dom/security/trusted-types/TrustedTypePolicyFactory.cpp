@@ -15,8 +15,6 @@
 #include "mozilla/dom/TrustedTypePolicy.h"
 #include "mozilla/dom/nsCSPUtils.h"
 
-#include "jsapi.h"
-
 namespace mozilla::dom {
 
 NS_IMPL_CYCLE_COLLECTION_WRAPPERCACHE(TrustedTypePolicyFactory, mGlobalObject)
@@ -31,17 +29,7 @@ constexpr size_t kCreatePolicyCSPViolationMaxSampleLength = 40;
 static CSPViolationData CreateCSPViolationData(JSContext* aJSContext,
                                                uint32_t aPolicyIndex,
                                                const nsAString& aPolicyName) {
-  JS::AutoFilename autoFilename;
-  nsAutoString fileName;
-  uint32_t lineNumber{0};
-  JS::ColumnNumberOneOrigin columnNumber;
-  if (JS::DescribeScriptedCaller(aJSContext, &autoFilename, &lineNumber,
-                                 &columnNumber)) {
-    if (const char* file = autoFilename.get()) {
-      CopyUTF8toUTF16(nsDependentCString(file), fileName);
-    }
-  }
-
+  auto caller = JSCallingLocation::Get(aJSContext);
   const nsAString& sample =
       Substring(aPolicyName, /* aStartPos */ 0,
                 /* aLength */ kCreatePolicyCSPViolationMaxSampleLength);
@@ -53,9 +41,9 @@ static CSPViolationData CreateCSPViolationData(JSContext* aJSContext,
           CSPViolationData::Resource{
               CSPViolationData::BlockedContentSource::TrustedTypesPolicy},
           nsIContentSecurityPolicy::TRUSTED_TYPES_DIRECTIVE,
-          fileName,
-          lineNumber,
-          columnNumber.oneOriginValue(),
+          caller.FileName(),
+          caller.mLine,
+          caller.mColumn,
           /* aElement */ nullptr,
           sample};
 }
@@ -161,7 +149,7 @@ IS_TRUSTED_TYPE_IMPL(HTML);
 IS_TRUSTED_TYPE_IMPL(Script);
 IS_TRUSTED_TYPE_IMPL(ScriptURL);
 
-UniquePtr<TrustedHTML> TrustedTypePolicyFactory::EmptyHTML() {
+already_AddRefed<TrustedHTML> TrustedTypePolicyFactory::EmptyHTML() {
   // Preserving the wrapper ensures:
   // ```
   //  const e = trustedTypes.emptyHTML;
@@ -172,14 +160,14 @@ UniquePtr<TrustedHTML> TrustedTypePolicyFactory::EmptyHTML() {
   // multiple emptyHML objects. Both, the JS- and the C++-objects.
   dom::PreserveWrapper(this);
 
-  return MakeUnique<TrustedHTML>(EmptyString());
+  return MakeRefPtr<TrustedHTML>(EmptyString()).forget();
 }
 
-UniquePtr<TrustedScript> TrustedTypePolicyFactory::EmptyScript() {
+already_AddRefed<TrustedScript> TrustedTypePolicyFactory::EmptyScript() {
   // See the explanation in `EmptyHTML()`.
   dom::PreserveWrapper(this);
 
-  return MakeUnique<TrustedScript>(EmptyString());
+  return MakeRefPtr<TrustedScript>(EmptyString()).forget();
 }
 
 }  // namespace mozilla::dom

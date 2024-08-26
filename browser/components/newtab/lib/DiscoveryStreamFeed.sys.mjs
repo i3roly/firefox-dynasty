@@ -11,6 +11,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PersistentCache: "resource://activity-stream/lib/PersistentCache.sys.mjs",
   Region: "resource://gre/modules/Region.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
+  ProfileAge: "resource://gre/modules/ProfileAge.sys.mjs",
 });
 
 // We use importESModule here instead of static import so that
@@ -35,12 +36,22 @@ const SPOCS_FEEDS_UPDATE_TIME = 30 * 60 * 1000; // 30 minutes
 const DEFAULT_RECS_EXPIRE_TIME = 60 * 60 * 1000; // 1 hour
 const MAX_LIFETIME_CAP = 500; // Guard against misconfiguration on the server
 const FETCH_TIMEOUT = 45 * 1000;
+const TOPIC_LOADING_TIMEOUT = 1 * 1000;
+const TOPIC_SELECTION_DISPLAY_COUNT =
+  "discoverystream.topicSelection.onboarding.displayCount";
+const TOPIC_SELECTION_LAST_DISPLAYED =
+  "discoverystream.topicSelection.onboarding.lastDisplayed";
+const TOPIC_SELECTION_DISPLAY_TIMEOUT =
+  "discoverystream.topicSelection.onboarding.displayTimeout";
+
 const SPOCS_URL = "https://spocs.getpocket.com/spocs";
 const FEED_URL =
   "https://getpocket.cdn.mozilla.net/v3/firefox/global-recs?version=3&consumer_key=$apiKey&locale_lang=$locale&region=$region&count=30";
 const PREF_CONFIG = "discoverystream.config";
 const PREF_ENDPOINTS = "discoverystream.endpoints";
 const PREF_IMPRESSION_ID = "browser.newtabpage.activity-stream.impressionId";
+const PREF_MERINO_FEED_EXPERIMENT =
+  "browser.newtabpage.activity-stream.discoverystream.merino-feed-experiment";
 const PREF_ENABLED = "discoverystream.enabled";
 const PREF_HARDCODED_BASIC_LAYOUT = "discoverystream.hardcoded-basic-layout";
 const PREF_SPOCS_ENDPOINT = "discoverystream.spocs-endpoint";
@@ -63,6 +74,13 @@ const PREF_COLLECTIONS_ENABLED =
   "discoverystream.sponsored-collections.enabled";
 const PREF_POCKET_BUTTON = "extensions.pocket.enabled";
 const PREF_COLLECTION_DISMISSIBLE = "discoverystream.isCollectionDismissible";
+const PREF_SELECTED_TOPICS = "discoverystream.topicSelection.selectedTopics";
+const PREF_TOPIC_SELECTION_ENABLED = "discoverystream.topicSelection.enabled";
+const PREF_TOPIC_SELECTION_PREVIOUS_SELECTED =
+  "discoverystream.topicSelection.hasBeenUpdatedPreviously";
+const PREF_SPOCS_CACHE_TIMEOUT = "discoverystream.spocs.cacheTimeout";
+const PREF_SPOCS_STARTUP_CACHE_ENABLED =
+  "discoverystream.spocs.startupCache.enabled";
 
 let getHardcodedLayout;
 
@@ -411,8 +429,8 @@ export class DiscoveryStreamFeed {
   }
 
   setupSpocsCacheUpdateTime() {
-    const nimbusConfig = this.store.getState().Prefs.values?.pocketConfig || {};
-    const { spocsCacheTimeout } = nimbusConfig;
+    const spocsCacheTimeout =
+      this.store.getState().Prefs.values[PREF_SPOCS_CACHE_TIMEOUT];
     const MAX_TIMEOUT = 30;
     const MIN_TIMEOUT = 5;
     // We do a bit of min max checking the the configured value is between
@@ -628,6 +646,23 @@ export class DiscoveryStreamFeed {
     ) {
       ctaButtonVariant = pocketConfig.ctaButtonVariant;
     }
+
+    const topicSelectionHasBeenUpdatedPreviously =
+      this.store.getState().Prefs.values[
+        PREF_TOPIC_SELECTION_PREVIOUS_SELECTED
+      ];
+
+    const selectedTopics =
+      this.store.getState().Prefs.values[PREF_SELECTED_TOPICS];
+
+    // Note: This requires a cache update to react to a pref update
+    const pocketStoriesHeadlineId =
+      topicSelectionHasBeenUpdatedPreviously || selectedTopics
+        ? "newtab-section-header-todays-picks"
+        : "newtab-section-header-stories";
+
+    pocketConfig.pocketStoriesHeadlineId = pocketStoriesHeadlineId;
+
     let spocMessageVariant = "";
     if (
       pocketConfig.spocMessageVariant === "variant-a" ||
@@ -713,6 +748,7 @@ export class DiscoveryStreamFeed {
       spocMessageVariant: this.locale.startsWith("en-")
         ? spocMessageVariant
         : "",
+      pocketStoriesHeadlineId: pocketConfig.pocketStoriesHeadlineId,
     });
 
     sendUpdate({
@@ -1369,6 +1405,28 @@ export class DiscoveryStreamFeed {
     );
   }
 
+  getExperimentInfo() {
+    const pocketNewtabExperiment = lazy.ExperimentAPI.getExperimentMetaData({
+      featureId: "pocketNewtab",
+    });
+
+    const pocketNewtabRollout = lazy.ExperimentAPI.getRolloutMetaData({
+      featureId: "pocketNewtab",
+    });
+
+    // We want to know if the user is in an experiment or rollout,
+    // but we prioritize experiments over rollouts.
+    const experimentMetaData = pocketNewtabExperiment || pocketNewtabRollout;
+
+    let experimentName = experimentMetaData?.slug || "";
+    let experimentBranch = experimentMetaData?.branch?.slug || "";
+
+    return {
+      experimentName,
+      experimentBranch,
+    };
+  }
+
   async getComponentFeed(feedUrl, isStartup) {
     const cachedData = (await this.cache.get()) || {};
     const { feeds } = cachedData;
@@ -1378,13 +1436,31 @@ export class DiscoveryStreamFeed {
       let options = {};
       const headers = new Headers();
       if (this.isMerino) {
+        const topicSelectionEnabled =
+          this.store.getState().Prefs.values[PREF_TOPIC_SELECTION_ENABLED];
+        const topicsString =
+          this.store.getState().Prefs.values[PREF_SELECTED_TOPICS];
+        const topics = topicSelectionEnabled
+          ? topicsString
+              .split(",")
+              .map(s => s.trim())
+              .filter(item => item)
+          : [];
+
+        // Should we pass the experiment branch and slug to the Merino feed request.
+        const prefMerinoFeedExperiment = Services.prefs.getBoolPref(
+          PREF_MERINO_FEED_EXPERIMENT
+        );
+
         headers.append("content-type", "application/json");
         options = {
           method: "POST",
           headers,
           body: JSON.stringify({
+            ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
             locale: this.locale,
             region: this.region,
+            topics,
           }),
         };
       } else if (this.isBff) {
@@ -1399,6 +1475,7 @@ export class DiscoveryStreamFeed {
       }
 
       const feedResponse = await this.fetchFromEndpoint(feedUrl, options);
+
       if (feedResponse) {
         const { settings = {} } = feedResponse;
         let { recommendations } = feedResponse;
@@ -1408,6 +1485,7 @@ export class DiscoveryStreamFeed {
             scheduled_corpus_item_id: item.scheduledCorpusItemId,
             url: item.url,
             title: item.title,
+            topic: item.topic,
             excerpt: item.excerpt,
             publisher: item.publisher,
             raw_image_src: item.imageUrl,
@@ -1572,11 +1650,17 @@ export class DiscoveryStreamFeed {
 
     this.loadLayout(dispatch, isStartup);
     if (this.showStories || this.showTopsites) {
+      const spocsStartupCacheEnabled =
+        this.store.getState().Prefs.values[PREF_SPOCS_STARTUP_CACHE_ENABLED];
       const promises = [];
+
       // We could potentially have either or both sponsored topsites or stories.
       // We only make one fetch, and control which to request when we fetch.
       // So for now we only care if we need to make this request at all.
-      const spocsPromise = this.loadSpocs(dispatch, isStartup).catch(error =>
+      const spocsPromise = this.loadSpocs(
+        dispatch,
+        spocsStartupCacheEnabled
+      ).catch(error =>
         console.error("Error trying to load spocs feeds:", error)
       );
       promises.push(spocsPromise);
@@ -1649,6 +1733,10 @@ export class DiscoveryStreamFeed {
     await this.cache.set("feeds", {});
     await this.cache.set("spocs", {});
     await this.cache.set("sov", {});
+  }
+
+  async resetContentFeed() {
+    await this.cache.set("feeds", {});
   }
 
   async resetAllCache() {
@@ -1791,6 +1879,38 @@ export class DiscoveryStreamFeed {
     this.loadLayout(dispatch, false);
   }
 
+  async retreiveProfileAge() {
+    let profileAccessor = await lazy.ProfileAge();
+    let profileCreateTime = await profileAccessor.created;
+    let timeNow = new Date().getTime();
+    let profileAge = timeNow - profileCreateTime;
+    // Convert milliseconds to days
+    return profileAge / 1000 / 60 / 60 / 24;
+  }
+
+  topicSelectionImpressionEvent() {
+    let counter =
+      this.store.getState().Prefs.values[TOPIC_SELECTION_DISPLAY_COUNT];
+
+    const newCount = counter + 1;
+    this.store.dispatch(ac.SetPref(TOPIC_SELECTION_DISPLAY_COUNT, newCount));
+    this.store.dispatch(
+      ac.SetPref(TOPIC_SELECTION_LAST_DISPLAYED, `${new Date().getTime()}`)
+    );
+  }
+
+  topicSelectionMaybeLaterEvent() {
+    const age = this.retreiveProfileAge();
+    const newProfile = age <= 1;
+    const day = 24 * 60 * 60 * 1000;
+    this.store.dispatch(
+      ac.SetPref(
+        TOPIC_SELECTION_DISPLAY_TIMEOUT,
+        newProfile ? 3 * day : 7 * day
+      )
+    );
+  }
+
   async onPrefChangedAction(action) {
     switch (action.data.name) {
       case PREF_CONFIG:
@@ -1805,6 +1925,36 @@ export class DiscoveryStreamFeed {
         break;
       case PREF_COLLECTIONS_ENABLED:
         this.onCollectionsChanged();
+        break;
+      case PREF_SELECTED_TOPICS:
+        this.store.dispatch(
+          ac.BroadcastToContent({ type: at.DISCOVERY_STREAM_LAYOUT_RESET })
+        );
+        // Ensure at least a little bit of loading is seen, if this is too fast,
+        // it's not clear to the user what just happened.
+        this.store.dispatch(
+          ac.BroadcastToContent({
+            type: at.DISCOVERY_STREAM_TOPICS_LOADING,
+            data: true,
+          })
+        );
+        setTimeout(() => {
+          this.store.dispatch(
+            ac.BroadcastToContent({
+              type: at.DISCOVERY_STREAM_TOPICS_LOADING,
+              data: false,
+            })
+          );
+        }, TOPIC_LOADING_TIMEOUT);
+        this.loadLayout(
+          a => this.store.dispatch(ac.BroadcastToContent(a)),
+          false
+        );
+
+        // when topics have been updated, make a new request from merino and clear impression cap
+        this.writeDataPref(PREF_REC_IMPRESSIONS, {});
+        await this.resetContentFeed();
+        this.refreshAll({ updateOpenTabs: true });
         break;
       case PREF_USER_TOPSITES:
       case PREF_SYSTEM_TOPSITES:
@@ -1878,6 +2028,9 @@ export class DiscoveryStreamFeed {
         }
         Services.prefs.addObserver(PREF_POCKET_BUTTON, this);
         break;
+      case at.TOPIC_SELECTION_MAYBE_LATER:
+        this.topicSelectionMaybeLaterEvent();
+        break;
       case at.DISCOVERY_STREAM_DEV_SYSTEM_TICK:
       case at.SYSTEM_TICK:
         // Only refresh if we loaded once in .enable()
@@ -1897,6 +2050,17 @@ export class DiscoveryStreamFeed {
         // we want to be able to expire just content to trigger the earlier expire times.
         await this.resetContentCache();
         break;
+      case at.DISCOVERY_STREAM_DEV_SHOW_PLACEHOLDER: {
+        // We want to display the loading state permanently, for dev purposes.
+        // We do this by resetting everything, loading the layout, and nothing else.
+        // This essentially hangs because we never triggered the content load.
+        await this.reset();
+        this.loadLayout(
+          a => this.store.dispatch(ac.BroadcastToContent(a)),
+          false
+        );
+        break;
+      }
       case at.DISCOVERY_STREAM_CONFIG_SET_VALUE:
         // Use the original string pref to then set a value instead of
         // this.config which has some modifications
@@ -2090,6 +2254,9 @@ export class DiscoveryStreamFeed {
           this.setupPrefs(false /* isStartup */);
         }
         break;
+      case at.TOPIC_SELECTION_IMPRESSION:
+        this.topicSelectionImpressionEvent();
+        break;
     }
   }
 }
@@ -2143,6 +2310,7 @@ getHardcodedLayout = ({
   ctaButtonSponsors = [],
   ctaButtonVariant = "",
   spocMessageVariant = "",
+  pocketStoriesHeadlineId = "newtab-section-header-stories",
 }) => ({
   lastUpdate: Date.now(),
   spocs: {
@@ -2215,13 +2383,13 @@ getHardcodedLayout = ({
           editorsPicksHeader,
           header: {
             title: {
-              id: "newtab-section-header-stories",
+              id: pocketStoriesHeadlineId,
             },
             subtitle: "",
             link_text: {
               id: "newtab-pocket-learn-more",
             },
-            link_url: "https://getpocket.com/firefox/new_tab_learn_more",
+            link_url: "",
             icon: "chrome://global/skin/icons/pocket.svg",
           },
           properties: {

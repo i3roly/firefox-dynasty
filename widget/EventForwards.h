@@ -79,11 +79,21 @@ const char* ToChar(EventMessage aEventMessage);
 /**
  * Return true if aMessage should be dispatched as a WidgetPointerEvent and
  * the message was dispatched as a WidgetMouseEvent.  So, this returns true
- * if the event message is ePointerClick, ePointerAuxClick or eContextMenu
- * if and only if the message should be dispatched with WidgetPointerEvent
- * (depending on `dispatch_click_as_pointer_event` pref).
+ * if the event message is ePointerClick, ePointerAuxClick or eContextMenu.
  */
 [[nodiscard]] bool IsPointerEventMessageOriginallyMouseEventMessage(
+    EventMessage aMessage);
+
+/**
+ * Return true if aMessage is not allowed to dispatch to a content node except
+ * Element node when we dispatch the event as a trusted event which .
+ *
+ * NOTE: This is currently designed for PresShell to consider whether a content
+ * node is proper event target for aMessage.  So, this may not work the expected
+ * way in other cases.  Therefore, when you use this method in a new place, you
+ * should check whether this returns the expected result for you.
+ */
+[[nodiscard]] bool IsForbiddenDispatchingToNonElementContent(
     EventMessage aMessage);
 
 /**

@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import org.mozilla.fenix.R
@@ -65,7 +66,10 @@ fun MicrosurveyBottomSheet(
         shape = bottomSheetShape,
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier
+                .padding(vertical = 8.dp)
+                .nestedScroll(rememberNestedScrollInteropConnection())
+                .verticalScroll(rememberScrollState()),
         ) {
             BottomSheetHandle(
                 onRequestDismiss = {},
@@ -76,19 +80,15 @@ fun MicrosurveyBottomSheet(
                     .semantics { traversalIndex = -1f },
             )
 
-            MicroSurveyHeader(title = stringResource(id = R.string.micro_survey_survey_header_2)) {
+            MicrosurveyHeader(title = stringResource(id = R.string.micro_survey_survey_header_2)) {
                 onCloseButtonClicked()
             }
 
-            Column(
-                modifier = Modifier
-                    .nestedScroll(rememberNestedScrollInteropConnection())
-                    .verticalScroll(rememberScrollState()),
-            ) {
+            Column {
                 if (isSubmitted) {
                     MicrosurveyCompleted()
                 } else {
-                    MicroSurveyContent(
+                    MicrosurveyContent(
                         question = question,
                         icon = icon,
                         answers = answers,
@@ -99,7 +99,7 @@ fun MicrosurveyBottomSheet(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                MicroSurveyFooter(
+                MicrosurveyFooter(
                     isSubmitted = isSubmitted,
                     isContentAnswerSelected = selectedAnswer != null,
                     onPrivacyPolicyLinkClick = onPrivacyPolicyLinkClick,
@@ -117,8 +117,12 @@ fun MicrosurveyBottomSheet(
 
 @PreviewScreenSizes
 @LightDarkPreview
+@Preview(
+    name = "Large Font",
+    fontScale = 2.0f,
+)
 @Composable
-private fun MicroSurveyBottomSheetPreview() {
+private fun MicrosurveyBottomSheetPreview() {
     FirefoxTheme {
         MicrosurveyBottomSheet(
             question = "How satisfied are you with printing in Firefox?",

@@ -52,7 +52,7 @@
     <!-- Title for the home screen section with bookmarks. -->
     <string name="home_bookmarks_title">Отметки</string>
     <!-- Content description for the button which navigates the user to show all of their bookmarks. -->
-    <string name="home_bookmarks_show_all_content_description">Показване на всички отметки</string>
+    <string name="home_bookmarks_show_all_content_description">Всички отметки</string>
     <!-- Text for the menu button to remove a recently saved bookmark from the user's home screen -->
     <string name="home_bookmarks_menu_item_remove">Премахване</string>
 
@@ -119,6 +119,12 @@
 
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">Докоснете и задръжте стрелките, за да прескачате между страниците от историята на този раздел.</string>
+
+    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_title">Ново: стрелки напред и назад с едно докосване</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_message">Насладете се на по-бърза навигация, която винаги е на една ръка разстояние.</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Необходим е достъп до камерата. Отворете настройките на Android, докоснете разрешения и изберете разрешаване.</string>
@@ -201,8 +207,16 @@
     <string name="browser_menu_stop">Спиране</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Разширения</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">Направете %s свой</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">Разширенията повишават нивото на вашето сърфиране, от променящи външния вид и производителността на %s до повишаване на поверителността и безопасността.</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">Научете повече</string>
     <!-- Browser menu button that opens the extensions manager -->
-    <string name="browser_menu_manage_extensions">Управление на добавки</string>
+    <string name="browser_menu_manage_extensions">Управление на разширенията</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Открийте още разширения</string>
     <!-- Browser menu button that opens account settings -->
@@ -293,10 +307,16 @@
     <string name="browser_menu_switch_to_mobile_site">Към мобилна версия</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Инструменти</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Изглед за четене, превод, отпечатване, споделяне, отваряне на приложение</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Изглед за четене, отпечатване, споделяне, отваряне на приложение</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Запазване</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Добавяне на отметка, пряк път, начална страница, колекция, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Отбележете тази страница</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -315,6 +335,10 @@
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">Отпечатване…</string>
 
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">Изход от %1$s</string>
+
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
     <string name="extensions_management_no_extensions">Няма разширения</string>
@@ -327,7 +351,7 @@
          history and go back to the home screen. -->
     <string name="browser_toolbar_erase">Изчистване историята на разглеждане</string>
     <!-- Content description for the translate page toolbar button that opens the translations dialog when no translation has occurred. -->
-    <string name="browser_toolbar_translate">Превеждане на страницатa</string>
+    <string name="browser_toolbar_translate">Превеждане на страницата</string>
 
     <!-- Content description (not visible, for screen readers etc.) for the translate page toolbar button that opens the translations dialog when the page is translated successfully.
          The first parameter is the name of the language that is displayed in the original page. (For example: English)
@@ -410,7 +434,7 @@
 
     <!-- Juno first user onboarding flow experiment, strings are marked unused as they are only referenced by Nimbus experiments. -->
     <!-- Description for learning more about our privacy notice. -->
-    <string name="juno_onboarding_privacy_notice_text">бележка за поверителността на Firefox</string>
+    <string name="juno_onboarding_privacy_notice_text">Бележка за поверителността на Firefox</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_2">Обичаме да ви пазим в безопасност</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments.
@@ -422,8 +446,6 @@
     <string name="juno_onboarding_default_browser_description_nimbus_3">Нашият браузър с нестопанска цел помага да спрете компаниите да ви следват тайно в мрежата.</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_description_nimbus_4" tools:ignore="UnusedResources">Повече от 100 милиона души защитават поверителността си, като избират браузър, поддържан от организация с нестопанска цел.</string>
-    <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
-    <string name="juno_onboarding_default_browser_description_nimbus_5" tools:ignore="UnusedResources">Познати тракери? Автоматично блокиране. Разширения? Опитайте всички 700. PDF файлове? Вграденият четец ги прави лесни за управление.</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_description_nimbus_2" moz:RemovedIn="124" tools:ignore="UnusedResources">Нашият четец,  разработван от организация  с нестопанска цел ви помага да не бъдете следени тайно в мрежата.\n\nНаучете повече в нашето съобщение за поверителност.</string>
     <!-- Text for the link to the privacy notice webpage for set as firefox default browser screen.
@@ -755,7 +777,7 @@
     <!-- Text for artist series wallpapers title. "Artist series" represents a collection of artist collaborated wallpapers. -->
     <string name="wallpaper_artist_series_title">Серия за художници</string>
     <!-- Description text for the artist series wallpapers with learn more link. The first parameter is the learn more string defined in wallpaper_learn_more. "Independent voices" is the name of the wallpaper collection -->
-    <string name="wallpaper_artist_series_description_with_learn_more">Колекцията независими гласове. %s</string>
+    <string name="wallpaper_artist_series_description_with_learn_more">Колекцията „Независими гласове“. %s</string>
     <!-- Description text for the artist series wallpapers. "Independent voices" is the name of the wallpaper collection -->
     <string name="wallpaper_artist_series_description">Колекцията независими гласове.</string>
     <!-- Wallpaper onboarding dialog header text. -->
@@ -913,9 +935,9 @@
     <string name="preference_gestures_swipe_toolbar_show_tabs">Плъзване нагоре на лентата с инструменти отваря раздели</string>
 
     <!-- Preference for using the dynamic toolbars -->
-    <string name="preference_gestures_dynamic_toolbar_2">Превъртете, за да скриете адресната лента и лентата с инструменти</string>
+    <string name="preference_gestures_dynamic_toolbar_2">Плъзване за скриване на адресната и лентата с инструменти</string>
     <!-- Preference for switching tabs by swiping horizontally on the addressbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">Плъзнете адресната лента настрани, за да превключите разделите</string>
+    <string name="preference_gestures_swipe_toolbar_switch_tabs_2">Плъзване на адресната лента настрани превключва разделите</string>
 
     <!-- Library -->
     <!-- Option in Library to open Downloads page -->
@@ -1101,7 +1123,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Наименование на списък</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Преименуване</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Преименуване</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Премахване</string>
     <!-- Text for the menu button to delete a top site from history -->
@@ -1233,6 +1255,17 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Въведете търсене</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Връщане назад</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">Добавяне на нова папка</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Затваряне на отметки</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Търсене в отметките</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">Меню с елементи на %s</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2196,8 +2229,10 @@
     <string name="top_sites_rename_dialog_title">Наименование</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Име на пряк път</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">Адрес за пряк път</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">Добре</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">Добре</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">Отказ</string>
 
@@ -2207,6 +2242,17 @@
     <string name="top_sites_menu_sponsor_privacy">Спонсори и поверителност</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Спонсорирано</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Редактиране</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Редактиране на пряк път</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Запазване</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Въведете валиден URL</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2469,7 +2515,7 @@
     The second parameter is the name of the language that the page was translated to, for example, "English". -->
     <string name="translations_bottom_sheet_title_translation_completed">Страницата е преведена от %1$s на %2$s</string>
     <!-- Title for the translation dialog that allows a user to translate the webpage when a user uses the translation feature the first time. The first parameter is the name of the application, for example, "Fenix". -->
-    <string name="translations_bottom_sheet_title_first_time">Опитайте с поверителни преводи след %1$s</string>
+    <string name="translations_bottom_sheet_title_first_time">Опитайте поверителни преводи с %1$s</string>
     <!-- Additional information on the translation dialog that appears when a user uses the translation feature the first time. The first parameter is clickable text with a link, for example, "Learn more". -->
     <string name="translations_bottom_sheet_info_message">За ваша поверителност, преводите никога не напускат устройството ви. Нови езици и подобрения очакват скоро! %1$s</string>
     <!-- Text that links to additional information about the Firefox translations feature. -->
@@ -2663,11 +2709,11 @@
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">Отмяна на изтегляне на %1$s?</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">Отмяна на изтегляне на %1$s?</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">Да</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Да</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">Не</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Не</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2749,8 +2795,6 @@
     <string name="micro_survey_privacy_notice_2">Политика на поверителност</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Изпращане</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Затваряне</string>
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Проучването е завършено</string>
     <!-- The survey completion confirmation text -->

@@ -6,7 +6,7 @@
 // We explicitly need HTTP URLs in this test
 /* eslint-disable @microsoft/sdl/no-insecure-url */
 
-requestLongerTimeout(2);
+requestLongerTimeout(3);
 
 ChromeUtils.defineLazyGetter(this, "UrlbarTestUtils", () => {
   const { UrlbarTestUtils: module } = ChromeUtils.importESModule(
@@ -53,6 +53,7 @@ async function setPrefsAndResetFog(
 
 function verifyGleanValues(
   aDescription,
+  aNotInitialized,
   aNoUpgrade,
   aAlreadyHTTPS,
   aHSTS,
@@ -62,10 +63,18 @@ function verifyGleanValues(
   aHttpsFirstUpgradeDowngrade,
   aHttpsFirstSchemelessUpgrade,
   aHttpsFirstSchemelessUpgradeDowngrade,
-  aHttpsRR
+  aCSPUpgradeInsecureRequests,
+  aHttpsRR,
+  aWebExtensionUpgrade,
+  aUpgradeException
 ) {
   info(aDescription);
   let glean = Glean.networking.httpToHttpsUpgradeReason;
+  is(
+    glean.not_initialized.testGetValue(),
+    aNotInitialized,
+    "verify not_initialized"
+  );
   is(glean.no_upgrade.testGetValue(), aNoUpgrade, "verify no_upgrade");
   is(glean.already_https.testGetValue(), aAlreadyHTTPS, "verify already_https");
   is(glean.hsts.testGetValue(), aHSTS, "verify hsts");
@@ -99,7 +108,22 @@ function verifyGleanValues(
     aHttpsFirstSchemelessUpgradeDowngrade,
     "verify https_first_schemeless_upgrade_downgrade"
   );
+  is(
+    glean.csp_uir.testGetValue(),
+    aCSPUpgradeInsecureRequests,
+    "verify csp_uir"
+  );
   is(glean.https_rr.testGetValue(), aHttpsRR, "verify https_rr");
+  is(
+    glean.web_extension_upgrade.testGetValue(),
+    aWebExtensionUpgrade,
+    "verify web_extension_upgrade"
+  );
+  is(
+    glean.upgrade_exception.testGetValue(),
+    aUpgradeException,
+    "verify upgrade_exception"
+  );
 }
 
 async function runUpgradeTest(aURI, aDesc, aAssertURLStartsWith) {
@@ -148,6 +172,41 @@ async function runSchemelessTest(aURI, aDesc, aAssertURLStartsWith) {
 }
 
 add_task(async function () {
+  info("(0) exempt loopback addresses");
+
+  await setPrefsAndResetFog(
+    false /* aHTTPSOnlyPref */,
+    false /* aHTTPSFirstPref */,
+    false /* aSchemeLessPref */
+  );
+
+  // the request to localhost will actually fail in our test infra,
+  // though the telemetry would be recorded.
+  await runUpgradeTest(
+    "https://localhost",
+    "(0) exempt loopback addresses",
+    "https://"
+  );
+  verifyGleanValues(
+    "(0) exempt loopback addresses",
+    null /* aNotInitialized */,
+    null /* aNoUpgrade */,
+    null /* aAlreadyHTTPS */,
+    null /* aHSTS */,
+    null /* aHttpsOnlyUpgrade */,
+    null /* aHttpsOnlyUpgradeDowngrade */,
+    null /* aHttpsFirstUpgrade */,
+    null /* aHttpsFirstUpgradeDowngrade */,
+    null /* aHttpsFirstSchemelessUpgrade */,
+    null /* aHttpsFirstSchemelessUpgradeDowngrade */,
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
+  );
+});
+
+add_task(async function () {
   info("(1) no upgrade test");
 
   await setPrefsAndResetFog(
@@ -163,6 +222,7 @@ add_task(async function () {
   );
   verifyGleanValues(
     "(1) no upgrade test",
+    null /* aNotInitialized */,
     1 /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -172,7 +232,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 });
 
@@ -193,6 +256,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(2) already https test",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     1 /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -202,7 +266,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 });
 
@@ -223,6 +290,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(2b) already https test all prefs true",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     1 /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -232,7 +300,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 });
 
@@ -259,6 +330,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(3) hsts",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     1 /* aHSTS */,
@@ -268,7 +340,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aHttpsRR */,
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 
   // finally we need to reset hsts
@@ -304,6 +379,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(3b) hsts with all prefs true",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     1 /* aHSTS */,
@@ -313,7 +389,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 
   // finally we need to reset the hsts host
@@ -341,6 +420,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(4) https-only upgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -350,7 +430,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 
   info("(4b) https-only upgrade downgrade");
@@ -390,7 +473,7 @@ add_task(async function () {
       true
     );
 
-    // click the 'contine to insecure page' button
+    // click the 'continue to insecure page' button
     await SpecialPowers.spawn(browser, [], async function () {
       let openInsecureButton = content.document.getElementById("openInsecure");
       Assert.notEqual(
@@ -433,6 +516,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(4b) https-only upgrade downgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -442,7 +526,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 });
 
@@ -463,6 +550,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(5) https-first upgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -472,7 +560,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 
   info("(5b) https-first upgrade downgrade");
@@ -491,6 +582,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(5) https-first upgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -500,7 +592,10 @@ add_task(async function () {
     1 /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 });
 
@@ -521,6 +616,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(6) schemeless https-first upgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -530,7 +626,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     1 /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 
   info("(6b) schemeless https-first upgrade downgrade");
@@ -549,6 +648,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(6b) schemeless https-first upgrade downgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -558,7 +658,10 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     1 /* aHttpsFirstSchemelessUpgrade */,
     1 /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    null /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
   );
 });
 
@@ -585,6 +688,7 @@ add_task(async function () {
 
   verifyGleanValues(
     "(7) https-rr upgrade",
+    null /* aNotInitialized */,
     null /* aNoUpgrade */,
     null /* aAlreadyHTTPS */,
     null /* aHSTS */,
@@ -594,6 +698,84 @@ add_task(async function () {
     null /* aHttpsFirstUpgradeDowngrade */,
     null /* aHttpsFirstSchemelessUpgrade */,
     null /* aHttpsFirstSchemelessUpgradeDowngrade */,
-    1 /* aHttpsRR */
+    null /* aCSPUpgradeInsecureRequests */,
+    1 /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    null /* aUpgradeException */
+  );
+});
+
+add_task(async function () {
+  info("(8) upgrade/downgrade/reload");
+  // This test performs an upgrade-downgrade and then reloads
+  // the document which then triggers an upgrade_exception.
+
+  await setPrefsAndResetFog(
+    false /* aHTTPSOnlyPref */,
+    true /* aHTTPSFirstPref */,
+    false /* aSchemeLessPref */
+  );
+
+  await BrowserTestUtils.withNewTab("about:blank", async function (browser) {
+    // First, perform the upgrade/downgrade
+    const upgradeDowngradeLoaded = BrowserTestUtils.browserLoaded(
+      browser,
+      false,
+      null,
+      true
+    );
+    BrowserTestUtils.startLoadingURIString(
+      browser,
+      NO_HTTPS_SUPPORT_SITE + "?test8"
+    );
+    await upgradeDowngradeLoaded;
+
+    await SpecialPowers.spawn(browser, [], async function () {
+      ok(
+        content.document.location.href.startsWith("http://"),
+        "(8) upgrade/downgrade/reload"
+      );
+    });
+
+    // Before reloading the doc we have to reset the fog
+    Services.fog.testResetFOG();
+
+    const reloadLoaded = BrowserTestUtils.browserLoaded(
+      browser,
+      false,
+      null,
+      true
+    );
+
+    await SpecialPowers.spawn(browser, [], async function () {
+      content.location.reload();
+    });
+
+    await reloadLoaded;
+
+    await SpecialPowers.spawn(browser, [], async function () {
+      ok(
+        content.document.location.href.startsWith("http://"),
+        "(8) upgrade/downgrade/reload"
+      );
+    });
+  });
+
+  verifyGleanValues(
+    "(8) upgrade/downgrade/reload",
+    null /* aNotInitialized */,
+    null /* aNoUpgrade */,
+    null /* aAlreadyHTTPS */,
+    null /* aHSTS */,
+    null /* aHttpsOnlyUpgrade */,
+    null /* aHttpsOnlyUpgradeDowngrade */,
+    null /* aHttpsFirstUpgrade */,
+    null /* aHttpsFirstUpgradeDowngrade */,
+    null /* aHttpsFirstSchemelessUpgrade */,
+    null /* aHttpsFirstSchemelessUpgradeDowngrade */,
+    null /* aCSPUpgradeInsecureRequests */,
+    null /* aHttpsRR */,
+    null /* aWebExtensionUpgrade */,
+    1 /* aUpgradeException */
   );
 });

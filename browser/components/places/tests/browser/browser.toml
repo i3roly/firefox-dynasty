@@ -11,6 +11,9 @@ support-files = [
   "sidebarpanels_click_test_page.html",
   "keyword_form.html",
 ]
+prefs = [
+  "sidebar.revamp=false",
+]
 
 ["browser_addBookmarkForFrame.js"]
 
@@ -55,6 +58,7 @@ https_first_disabled = true
 ["browser_bookmark_context_menu_contents.js"]
 
 ["browser_bookmark_copy_folder_tree.js"]
+tags = "os_integration"
 
 ["browser_bookmark_current_tabs.js"]
 
@@ -87,7 +91,7 @@ support-files = ["pageopeningwindow.html"]
 
 ["browser_bookmarks_toolbar_context_menu_view_options.js"]
 
-["browser_bookmarks_toolbar_drag_from_chevron.js"]
+["browser_bookmarks_toolbar_drag_with_chevron.js"]
 
 ["browser_bookmarks_toolbar_telemetry.js"]
 

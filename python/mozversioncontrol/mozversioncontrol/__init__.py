@@ -806,7 +806,11 @@ class GitRepository(Repository):
 
     @property
     def branch(self):
-        return self._run("branch", "--show-current").strip() or None
+        # This mimics `git branch --show-current` for older versions of git.
+        branch = self._run("symbolic-ref", "-q", "HEAD", return_codes=[0, 1]).strip()
+        if not branch.startswith("refs/heads/"):
+            return None
+        return branch[len("refs/heads/") :]
 
     @property
     def has_git_cinnabar(self):
@@ -1137,9 +1141,10 @@ class SrcRepository(Repository):
         """
         res = []
         # move away the .git or .hg folder from path to more easily test in a hg/git repo
-        for root, dirs, files in os.walk("."):
+        for root, dirs, files in os.walk(self.path):
+            base = os.path.relpath(root, self.path)
             for name in files:
-                res.append(os.path.join(root, name))
+                res.append(os.path.join(base, name))
         return res
 
     def get_tracked_files_finder(self, path):

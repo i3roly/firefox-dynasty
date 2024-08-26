@@ -116,6 +116,12 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">Հպեք և պահեք սլաքները՝ այս ներդիրի պատմության էջերի միջև անցնելու համար:</string>
 
+    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_title">Նոր. մեկ հպումով հետ և առաջ գնալու սլաքներ</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_message">Վայելեք ավելի արագ նավարկություն, որը միշտ ձեր մատների տակ է:</string>
+
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Անհրաժեշտ է հասանելիություն տեսախցիկին: Անցեք Android-ի կարգավորումներ, հպեք՝ Թույլտվություններ, այնուհետև՝ Թույլատրել:</string>
     <!-- Text for the positive action button to go to Android Settings to grant permissions. -->
@@ -198,6 +204,14 @@
     <string name="browser_menu_stop">Կանգնեցնել</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Ընդլայնումներ</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">Դարձրե՛ք %s-ը ձեր սեփականը</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">Ընդլայնումները բարձրացնում են ձեր զննարկումը՝ սկսած %s-ի տեսքի և կատարողականի փոփոխությունից մինչև գաղտնիության և անվտանգության բարձրացում:</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">Իմանալ ավելին</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">Կառավարել ընդլայնումները</string>
     <!-- Browser menu button that opens AMO in a tab -->
@@ -289,10 +303,16 @@
     <string name="browser_menu_switch_to_mobile_site">Անցում բջջային կայք</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Գործիքներ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Ընթերցողի դիտում, թարգմանել, տպել, համօգտագործում, բաց հավելված</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Ընթերցողի տեսք, տպել, համօգտագործել, բաց հավելված</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Պահպանել</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Հավելել էջանիշ, դյուրանցում, տուն, հավաքածու, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Էջանշել այս էջը</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -310,6 +330,10 @@
     <string name="browser_menu_translated_to">Թարգմանված է %1$s</string>
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">Տպել…</string>
+
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">Փակել %1$s-ը</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -1095,7 +1119,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Հավաքածուի անունը</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Վերանվանել</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Վերանվանել</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Ջնջել</string>
 
@@ -1226,6 +1250,17 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Մուտքագրեք որոնման եզրույթներ</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Նավարկել հետ</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">Հավելել նոր պանակ</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Փակել էջանիշը</string>
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Որոնել էջանիշեր</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">Միավորի ցանկը %s-ի համար</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2175,8 +2210,10 @@
     <string name="top_sites_rename_dialog_title">Անուն</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Դյուրանցման անունը</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">Դյուրանցման URL</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">Լավ</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">Լավ</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">Չեղարկել</string>
 
@@ -2186,6 +2223,17 @@
     <string name="top_sites_menu_sponsor_privacy">Մեր հովանավորները և ձեր գաղտնիությունը</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Հովանավորված</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Խմբագրել</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Խմբագրել դյուրանցումը</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Պահել</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Մուտքագրեք վավեր URL</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2645,11 +2693,11 @@
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">Չեղարկե՞լ %1$s-ի ներբեռնումը</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">Չեղարկե՞լ %1$s-ի ներբեռնումը</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">Այո</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Այո</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">Ոչ</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Ոչ</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2731,8 +2779,6 @@
     <string name="micro_survey_privacy_notice_2">Գաղտնիության ծանուցում</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Ուղարկել</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Փակել</string>
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Հարցումն ավարտված է</string>
     <!-- The survey completion confirmation text -->

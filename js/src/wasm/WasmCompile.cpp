@@ -22,6 +22,7 @@
 
 #include <algorithm>
 
+#include "js/Conversions.h"
 #include "js/Equality.h"
 #include "js/ForOfIterator.h"
 #include "js/PropertyAndElement.h"
@@ -106,47 +107,95 @@ bool FeatureOptions::init(JSContext* cx, HandleValue val) {
     }
     RootedObject obj(cx, &val.toObject());
 
+    // Check the 'importedStringConstants' option
+    RootedValue importedStringConstants(cx);
+    if (!JS_GetProperty(cx, obj, "importedStringConstants",
+                        &importedStringConstants)) {
+      return false;
+    }
+
+    if (importedStringConstants.isNullOrUndefined()) {
+      this->jsStringConstants = false;
+    } else if (importedStringConstants.isBoolean() &&
+               importedStringConstants.toBoolean()) {
+      // Temporary backwards compatibility hack to interpret 'true' as "'"
+      this->jsStringConstants = true;
+
+      UniqueChars jsStringConstantsNamespace = JS_smprintf("'");
+      if (!jsStringConstantsNamespace) {
+        return false;
+      }
+
+      this->jsStringConstantsNamespace =
+          js_new<ShareableChars>(std::move(jsStringConstantsNamespace));
+      if (!this->jsStringConstantsNamespace) {
+        return false;
+      }
+    } else {
+      this->jsStringConstants = true;
+
+      RootedString importedStringConstantsString(
+          cx, JS::ToString(cx, importedStringConstants));
+      if (!importedStringConstantsString) {
+        return false;
+      }
+
+      UniqueChars jsStringConstantsNamespace =
+          StringToNewUTF8CharsZ(cx, *importedStringConstantsString);
+      if (!jsStringConstantsNamespace) {
+        return false;
+      }
+
+      this->jsStringConstantsNamespace =
+          js_new<ShareableChars>(std::move(jsStringConstantsNamespace));
+      if (!this->jsStringConstantsNamespace) {
+        return false;
+      }
+    }
+
     // Get the `builtins` iterable
     RootedValue builtins(cx);
     if (!JS_GetProperty(cx, obj, "builtins", &builtins)) {
       return false;
     }
 
-    JS::ForOfIterator iterator(cx);
+    if (!builtins.isUndefined()) {
+      JS::ForOfIterator iterator(cx);
 
-    if (!iterator.init(builtins, JS::ForOfIterator::ThrowOnNonIterable)) {
-      return false;
-    }
-
-    RootedValue jsStringModule(cx, StringValue(cx->names().jsStringModule));
-    RootedValue nextBuiltin(cx);
-    while (true) {
-      bool done;
-      if (!iterator.next(&nextBuiltin, &done)) {
-        return false;
-      }
-      if (done) {
-        break;
-      }
-
-      bool jsStringBuiltins;
-      if (!JS::LooselyEqual(cx, nextBuiltin, jsStringModule,
-                            &jsStringBuiltins)) {
+      if (!iterator.init(builtins, JS::ForOfIterator::ThrowOnNonIterable)) {
         return false;
       }
 
-      if (!jsStringBuiltins) {
-        JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                                 JSMSG_WASM_UNKNOWN_BUILTIN);
-        return false;
-      }
+      RootedValue jsStringModule(cx, StringValue(cx->names().jsStringModule));
+      RootedValue nextBuiltin(cx);
+      while (true) {
+        bool done;
+        if (!iterator.next(&nextBuiltin, &done)) {
+          return false;
+        }
+        if (done) {
+          break;
+        }
 
-      if (this->jsStringBuiltins && jsStringBuiltins) {
-        JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                                 JSMSG_WASM_DUPLICATE_BUILTIN);
-        return false;
+        bool jsStringBuiltins;
+        if (!JS::LooselyEqual(cx, nextBuiltin, jsStringModule,
+                              &jsStringBuiltins)) {
+          return false;
+        }
+
+        if (!jsStringBuiltins) {
+          JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
+                                   JSMSG_WASM_UNKNOWN_BUILTIN);
+          return false;
+        }
+
+        if (this->jsStringBuiltins && jsStringBuiltins) {
+          JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
+                                   JSMSG_WASM_DUPLICATE_BUILTIN);
+          return false;
+        }
+        this->jsStringBuiltins = jsStringBuiltins;
       }
-      this->jsStringBuiltins = jsStringBuiltins;
     }
   }
 #endif
@@ -169,6 +218,9 @@ FeatureArgs FeatureArgs::build(JSContext* cx, const FeatureOptions& options) {
   features.isBuiltinModule = options.isBuiltinModule;
   if (features.jsStringBuiltins) {
     features.builtinModules.jsString = options.jsStringBuiltins;
+    features.builtinModules.jsStringConstants = options.jsStringConstants;
+    features.builtinModules.jsStringConstantsNamespace =
+        options.jsStringConstantsNamespace;
   }
 #ifdef ENABLE_WASM_GC
   if (options.requireGC) {
@@ -197,8 +249,9 @@ SharedCompileArgs CompileArgs::build(JSContext* cx,
   // is open.
   bool debug = cx->realm() && cx->realm()->debuggerObservesWasm();
 
-  bool forceTiering =
-      cx->options().testWasmAwaitTier2() || JitOptions.wasmDelayTier2;
+  bool forceTiering = cx->options().testWasmAwaitTier2() ||
+                      JitOptions.wasmDelayTier2 ||
+                      wasm::ExperimentalCompilePipelineAvailable(cx);
 
   // The <Compiler>Available() predicates should ensure no failure here, but
   // when we're fuzzing we allow inconsistent switches and the check may thus
@@ -220,12 +273,13 @@ SharedCompileArgs CompileArgs::build(JSContext* cx,
     return nullptr;
   }
 
-  CompileArgs* target = cx->new_<CompileArgs>(std::move(scriptedCaller));
+  CompileArgs* target = cx->new_<CompileArgs>();
   if (!target) {
     *error = CompileArgsError::OutOfMemory;
     return nullptr;
   }
 
+  target->scriptedCaller = std::move(scriptedCaller);
   target->baselineEnabled = baseline;
   target->ionEnabled = ion;
   target->debugEnabled = debug;
@@ -243,17 +297,36 @@ void wasm::SetUseCountersForFeatureUsage(JSContext* cx, JSObject* object,
 }
 
 SharedCompileArgs CompileArgs::buildForAsmJS(ScriptedCaller&& scriptedCaller) {
-  CompileArgs* target = js_new<CompileArgs>(std::move(scriptedCaller));
+  CompileArgs* target = js_new<CompileArgs>();
   if (!target) {
     return nullptr;
   }
 
+  target->scriptedCaller = std::move(scriptedCaller);
   // AsmJS is deprecated and doesn't have mechanisms for experimental features,
   // so we don't need to initialize the FeatureArgs. It also only targets the
   // Ion backend and does not need WASM debug support since it is de-optimized
   // to JS in that case.
   target->ionEnabled = true;
   target->debugEnabled = false;
+
+  return target;
+}
+
+SharedCompileArgs CompileArgs::buildForValidation(const FeatureArgs& args) {
+  CompileArgs* target = js_new<CompileArgs>();
+  if (!target) {
+    return nullptr;
+  }
+
+  // Validation will not need compilers, just mark them disabled
+  target->baselineEnabled = false;
+  target->ionEnabled = false;
+  target->debugEnabled = false;
+  target->forceTiering = false;
+
+  // Set the features
+  target->features = args;
 
   return target;
 }
@@ -724,7 +797,9 @@ void CompilerEnvironment::computeParameters(Decoder& d) {
   if (baselineEnabled && hasSecondTier &&
       (TieringBeneficial(codeSectionSize) || forceTiering) &&
       PlatformCanTier()) {
-    mode_ = CompileMode::Tier1;
+    mode_ = args_->features.experimentalCompilePipeline
+                ? CompileMode::LazyTiering
+                : CompileMode::EagerTiering;
     tier_ = Tier::Baseline;
   } else {
     mode_ = CompileMode::Once;
@@ -803,66 +878,116 @@ SharedModule wasm::CompileBuffer(const CompileArgs& args,
   Decoder d(bytecode.bytes, 0, error, warnings);
 
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(args)) {
     return nullptr;
   }
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(args.features);
-  if (!codeMeta || !codeMeta->init() ||
-      !DecodeModuleEnvironment(d, codeMeta, moduleMeta)) {
+
+  if (!DecodeModuleEnvironment(d, moduleMeta->codeMeta.get(), moduleMeta)) {
     return nullptr;
   }
   CompilerEnvironment compilerEnv(args);
   compilerEnv.computeParameters(d);
-
-  ModuleGenerator mg(args, codeMeta, &compilerEnv, nullptr, error, warnings);
-  if (!mg.init(nullptr)) {
+  if (!moduleMeta->prepareForCompile(compilerEnv.mode())) {
     return nullptr;
   }
 
-  if (!DecodeCodeSection(*codeMeta, d, mg)) {
+  ModuleGenerator mg(*moduleMeta->codeMeta, compilerEnv,
+                     compilerEnv.initialState(), nullptr, error, warnings);
+  if (!mg.initializeCompleteTier()) {
     return nullptr;
   }
 
-  if (!DecodeModuleTail(d, codeMeta, moduleMeta)) {
+  if (!DecodeCodeSection(*moduleMeta->codeMeta, d, mg)) {
+    return nullptr;
+  }
+
+  if (!DecodeModuleTail(d, moduleMeta->codeMeta, moduleMeta)) {
     return nullptr;
   }
 
   return mg.finishModule(bytecode, moduleMeta, listener);
 }
 
-bool wasm::CompileTier2(const CompileArgs& args, const Bytes& bytecode,
-                        const Module& module, UniqueChars* error,
-                        UniqueCharsVector* warnings, Atomic<bool>* cancelled) {
-  Decoder d(bytecode, 0, error);
-
-  // FIXME this shouldn't be needed!  (nullptr should be OK)
-  MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
-    return false;
-  }
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(args.features);
-  if (!codeMeta || !codeMeta->init() ||
-      !DecodeModuleEnvironment(d, codeMeta, moduleMeta)) {
-    return false;
-  }
-  CompilerEnvironment compilerEnv(CompileMode::Tier2, Tier::Optimized,
+bool wasm::CompileCompleteTier2(const Bytes& bytecode, const Module& module,
+                                UniqueChars* error, UniqueCharsVector* warnings,
+                                Atomic<bool>* cancelled) {
+  CompilerEnvironment compilerEnv(CompileMode::EagerTiering, Tier::Optimized,
                                   DebugEnabled::False);
-  compilerEnv.computeParameters(d);
+  compilerEnv.computeParameters();
 
-  ModuleGenerator mg(args, codeMeta, &compilerEnv, cancelled, error, warnings);
-  if (!mg.init(nullptr)) {
+  const CodeMetadata& codeMeta = module.codeMeta();
+  ModuleGenerator mg(codeMeta, compilerEnv, CompileState::EagerTier2, cancelled,
+                     error, warnings);
+  if (!mg.initializeCompleteTier()) {
     return false;
   }
 
-  if (!DecodeCodeSection(*codeMeta, d, mg)) {
-    return false;
-  }
-
-  if (!DecodeModuleTail(d, codeMeta, moduleMeta)) {
-    return false;
+  if (codeMeta.codeSection) {
+    const SectionRange& codeSection = *codeMeta.codeSection;
+    const uint8_t* codeSectionStart = bytecode.begin() + codeSection.start;
+    const uint8_t* codeSectionEnd = codeSectionStart + codeSection.size;
+    Decoder d(codeSectionStart, codeSectionEnd, codeSection.start, error);
+    if (!DecodeCodeSection(module.codeMeta(), d, mg)) {
+      return false;
+    }
+  } else {
+    MOZ_ASSERT(codeMeta.numFuncDefs() == 0);
+    if (!mg.finishFuncDefs()) {
+      return false;
+    }
   }
 
   return mg.finishTier2(module);
+}
+
+class PartialTierModuleGenerator {
+ private:
+  ModuleGenerator& mg_;
+  uint32_t targetFuncIndex_;
+
+ public:
+  PartialTierModuleGenerator(ModuleGenerator& mg, uint32_t targetFuncIndex)
+      : mg_(mg), targetFuncIndex_(targetFuncIndex) {}
+
+  bool finishFuncDefs() { return mg_.finishFuncDefs(); }
+  bool compileFuncDef(uint32_t funcIndex, uint32_t lineOrBytecode,
+                      const uint8_t* begin, const uint8_t* end) {
+    if (funcIndex != targetFuncIndex_) {
+      return true;
+    }
+
+    return mg_.compileFuncDef(funcIndex, lineOrBytecode, begin, end);
+  }
+};
+
+bool wasm::CompilePartialTier2(const Code& code, uint32_t funcIndex) {
+  CompilerEnvironment compilerEnv(CompileMode::LazyTiering, Tier::Optimized,
+                                  DebugEnabled::False);
+  compilerEnv.computeParameters();
+
+  const CodeMetadata& codeMeta = code.codeMeta();
+  UniqueChars error;
+  ModuleGenerator mg(codeMeta, compilerEnv, CompileState::LazyTier2, nullptr,
+                     &error, nullptr);
+  if (!mg.initializePartialTier(code, funcIndex)) {
+    // The module is already validated, this must be an OOM
+    MOZ_ASSERT(!error);
+    return false;
+  }
+
+  const Bytes& bytecode = code.bytecode();
+  const FuncDefRange& funcRange = code.codeMeta().funcDefRange(funcIndex);
+  const uint8_t* bodyBegin = bytecode.begin() + funcRange.bytecodeOffset;
+  const uint8_t* bodyEnd = bodyBegin + funcRange.bodyLength;
+  Decoder d(bytecode.begin(), bytecode.end(), 0, &error);
+  if (!mg.compileFuncDef(funcIndex, funcRange.bytecodeOffset, bodyBegin,
+                         bodyEnd) ||
+      !mg.finishFuncDefs() || !mg.finishPartialTier2()) {
+    // The module is already validated, this must be an OOM
+    MOZ_RELEASE_ASSERT(!error);
+    return false;
+  }
+  return true;
 }
 
 class StreamingDecoder {
@@ -947,42 +1072,44 @@ SharedModule wasm::CompileStreaming(
     const Atomic<bool>& cancelled, UniqueChars* error,
     UniqueCharsVector* warnings) {
   CompilerEnvironment compilerEnv(args);
-  MutableCodeMetadata codeMeta = js_new<CodeMetadata>(args.features);
-  if (!codeMeta || !codeMeta->init()) {
-    return nullptr;
-  }
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(args)) {
     return nullptr;
   }
+  CodeMetadata& codeMeta = *moduleMeta->codeMeta;
 
   {
     Decoder d(envBytes, 0, error, warnings);
 
-    if (!DecodeModuleEnvironment(d, codeMeta, moduleMeta)) {
+    if (!DecodeModuleEnvironment(d, &codeMeta, moduleMeta)) {
       return nullptr;
     }
     compilerEnv.computeParameters(d);
 
-    if (!codeMeta->codeSection) {
+    if (!codeMeta.codeSection) {
       d.fail("unknown section before code section");
       return nullptr;
     }
 
-    MOZ_RELEASE_ASSERT(codeMeta->codeSection->size == codeBytes.length());
+    MOZ_RELEASE_ASSERT(codeMeta.codeSection->size == codeBytes.length());
     MOZ_RELEASE_ASSERT(d.done());
   }
 
-  ModuleGenerator mg(args, codeMeta, &compilerEnv, &cancelled, error, warnings);
-  if (!mg.init(nullptr)) {
+  if (!moduleMeta->prepareForCompile(compilerEnv.mode())) {
+    return nullptr;
+  }
+
+  ModuleGenerator mg(codeMeta, compilerEnv, compilerEnv.initialState(),
+                     &cancelled, error, warnings);
+  if (!mg.initializeCompleteTier()) {
     return nullptr;
   }
 
   {
-    StreamingDecoder d(*codeMeta, codeBytes, codeBytesEnd, cancelled, error,
+    StreamingDecoder d(codeMeta, codeBytes, codeBytesEnd, cancelled, error,
                        warnings);
 
-    if (!DecodeCodeSection(*codeMeta, d, mg)) {
+    if (!DecodeCodeSection(codeMeta, d, mg)) {
       return nullptr;
     }
 
@@ -1003,9 +1130,9 @@ SharedModule wasm::CompileStreaming(
   const Bytes& tailBytes = *streamEnd.tailBytes;
 
   {
-    Decoder d(tailBytes, codeMeta->codeSection->end(), error, warnings);
+    Decoder d(tailBytes, codeMeta.codeSection->end(), error, warnings);
 
-    if (!DecodeModuleTail(d, codeMeta, moduleMeta)) {
+    if (!DecodeModuleTail(d, &codeMeta, moduleMeta)) {
       return nullptr;
     }
 
@@ -1022,6 +1149,7 @@ SharedModule wasm::CompileStreaming(
 
 class DumpIonModuleGenerator {
  private:
+  const CompilerEnvironment& compilerEnv_;
   CodeMetadata& codeMeta_;
   uint32_t targetFuncIndex_;
   IonDumpContents contents_;
@@ -1029,10 +1157,12 @@ class DumpIonModuleGenerator {
   UniqueChars* error_;
 
  public:
-  DumpIonModuleGenerator(CodeMetadata& codeMeta, uint32_t targetFuncIndex,
+  DumpIonModuleGenerator(const CompilerEnvironment& compilerEnv,
+                         CodeMetadata& codeMeta, uint32_t targetFuncIndex,
                          IonDumpContents contents, GenericPrinter& out,
                          UniqueChars* error)
-      : codeMeta_(codeMeta),
+      : compilerEnv_(compilerEnv),
+        codeMeta_(codeMeta),
         targetFuncIndex_(targetFuncIndex),
         contents_(contents),
         out_(out),
@@ -1047,7 +1177,8 @@ class DumpIonModuleGenerator {
 
     FuncCompileInput input(funcIndex, lineOrBytecode, begin, end,
                            Uint32Vector());
-    return IonDumpFunction(codeMeta_, input, contents_, out_, error_);
+    return IonDumpFunction(compilerEnv_, codeMeta_, input, contents_, out_,
+                           error_);
   }
 };
 
@@ -1055,18 +1186,28 @@ bool wasm::DumpIonFunctionInModule(const ShareableBytes& bytecode,
                                    uint32_t targetFuncIndex,
                                    IonDumpContents contents,
                                    GenericPrinter& out, UniqueChars* error) {
+  SharedCompileArgs compileArgs =
+      CompileArgs::buildForValidation(FeatureArgs::allEnabled());
+  if (!compileArgs) {
+    return false;
+  }
+  CompilerEnvironment compilerEnv(CompileMode::Once, Tier::Optimized,
+                                  DebugEnabled::False);
+  compilerEnv.computeParameters();
+
   UniqueCharsVector warnings;
   Decoder d(bytecode.bytes, 0, error, &warnings);
   MutableModuleMetadata moduleMeta = js_new<ModuleMetadata>();
-  if (!moduleMeta) {
+  if (!moduleMeta || !moduleMeta->init(*compileArgs)) {
     return false;
   }
-  MutableCodeMetadata codeMeta =
-      js_new<CodeMetadata>(FeatureArgs::allEnabled());
-  if (!codeMeta) {
+
+  if (!DecodeModuleEnvironment(d, moduleMeta->codeMeta, moduleMeta)) {
     return false;
   }
-  DumpIonModuleGenerator mg(*codeMeta, targetFuncIndex, contents, out, error);
-  return codeMeta->init() && DecodeModuleEnvironment(d, codeMeta, moduleMeta) &&
-         DecodeCodeSection(*codeMeta, d, mg);
+
+  DumpIonModuleGenerator mg(compilerEnv, *moduleMeta->codeMeta, targetFuncIndex,
+                            contents, out, error);
+  return moduleMeta->prepareForCompile(CompileMode::Once) &&
+         DecodeCodeSection(*moduleMeta->codeMeta, d, mg);
 }

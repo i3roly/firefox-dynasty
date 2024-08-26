@@ -163,6 +163,7 @@
 #include "js/Stack.h"
 #include "js/StreamConsumer.h"
 #include "js/StructuredClone.h"
+#include "js/SweepingAPI.h"
 #include "js/Transcoding.h"  // JS::TranscodeBuffer, JS::TranscodeRange, JS::IsTranscodeFailureResult
 #include "js/Warnings.h"    // JS::SetWarningReporter
 #include "js/WasmModule.h"  // JS::WasmModule
@@ -1723,7 +1724,7 @@ static bool AddIntlExtras(JSContext* cx, unsigned argc, Value* vp) {
      * coincides with the end of a line.
      */
     int startline = lineno;
-    typedef Vector<char, 32> CharBuffer;
+    using CharBuffer = Vector<char, 32>;
     RootedObject globalLexical(cx, &cx->global()->lexicalEnvironment());
     CharBuffer buffer(cx);
     do {
@@ -2776,9 +2777,12 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
     }
 
     if (saveIncrementalBytecode) {
-      if (!JS::StartIncrementalEncoding(cx, std::move(stencil))) {
+      bool alreadyStarted;
+      if (!JS::StartIncrementalEncoding(cx, std::move(stencil),
+                                        alreadyStarted)) {
         return false;
       }
+      MOZ_ASSERT(!alreadyStarted);
     }
 
     if (execute) {
@@ -4123,12 +4127,12 @@ static bool CreateErrorReport(JSContext* cx, unsigned argc, Value* vp) {
 #define LAZY_STANDARD_CLASSES
 
 /* A class for easily testing the inner/outer object callbacks. */
-typedef struct ComplexObject {
+struct ComplexObject {
   bool isInner;
   bool frozen;
   JSObject* inner;
   JSObject* outer;
-} ComplexObject;
+};
 
 static bool sandbox_enumerate(JSContext* cx, JS::HandleObject obj,
                               JS::MutableHandleIdVector properties,
@@ -5472,9 +5476,9 @@ static bool RegisterModule(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  Rooted<UniquePtr<ImportAttributeVector>> attributes(cx);
+  Rooted<ImportAttributeVector> attributes(cx);
   RootedObject moduleRequest(
-      cx, ModuleRequestObject::create(cx, specifier, &attributes));
+      cx, ModuleRequestObject::create(cx, specifier, attributes));
   if (!moduleRequest) {
     return false;
   }
@@ -7348,8 +7352,10 @@ static void SingleStepCallback(void* arg, jit::Simulator* sim, void* pc) {
     JS::ProfilingFrameIterator::Frame frames[16];
     uint32_t nframes = i.extractStack(frames, 0, 16);
     for (uint32_t i = 0; i < nframes; i++) {
+#  ifndef ENABLE_WASM_JSPI
       // Assert endStackAddress never exceeds sp (bug 1782188).
       MOZ_ASSERT(frames[i].endStackAddress >= state.sp);
+#  endif
       if (frameNo > 0) {
         if (!stack.append(",", 1)) {
           oomUnsafe.crash("stack.append");
@@ -7539,7 +7545,7 @@ struct SharedObjectMailbox {
   Value val;
 };
 
-typedef ExclusiveData<SharedObjectMailbox> SOMailbox;
+using SOMailbox = ExclusiveData<SharedObjectMailbox>;
 
 // Never null after successful initialization.
 static SOMailbox* sharedObjectMailbox;
@@ -7763,11 +7769,11 @@ static bool SetSharedObject(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
-typedef Vector<uint8_t, 0, SystemAllocPolicy> Uint8Vector;
+using Uint8Vector = Vector<uint8_t, 0, SystemAllocPolicy>;
 
 class StreamCacheEntry : public AtomicRefCounted<StreamCacheEntry>,
                          public JS::OptimizedEncodingListener {
-  typedef AtomicRefCounted<StreamCacheEntry> AtomicBase;
+  using AtomicBase = AtomicRefCounted<StreamCacheEntry>;
 
   Uint8Vector bytes_;
   ExclusiveData<Uint8Vector> optimized_;
@@ -7813,7 +7819,7 @@ class StreamCacheEntry : public AtomicRefCounted<StreamCacheEntry>,
   }
 };
 
-typedef RefPtr<StreamCacheEntry> StreamCacheEntryPtr;
+using StreamCacheEntryPtr = RefPtr<StreamCacheEntry>;
 
 class StreamCacheEntryObject : public NativeObject {
   static const unsigned CACHE_ENTRY_SLOT = 0;
@@ -12191,6 +12197,8 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "enable-float16array", "Enable Float16Array") ||
       !op.addBoolOption('\0', "enable-regexp-duplicate-named-groups",
                         "Enable Duplicate Named Capture Groups") ||
+      !op.addBoolOption('\0', "enable-regexp-modifiers",
+                        "Enable Pattern Modifiers") ||
       !op.addBoolOption('\0', "enable-top-level-await",
                         "Enable top-level await") ||
       !op.addBoolOption('\0', "enable-import-assertions",
@@ -12588,6 +12596,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-uint8array-base64")) {
     JS::Prefs::setAtStartup_experimental_uint8array_base64(true);
   }
+  if (op.getBoolOption("enable-regexp-modifiers")) {
+    JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
+  }
 #endif
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE
   if (op.getBoolOption("enable-json-parse-with-source")) {
@@ -12921,7 +12932,8 @@ bool SetContextWasmOptions(JSContext* cx, const OptionParser& op) {
       .setWasm(enableWasm)
       .setWasmForTrustedPrinciples(enableWasm)
       .setWasmBaseline(enableWasmBaseline)
-      .setWasmIon(enableWasmOptimizing);
+      .setWasmIon(enableWasmOptimizing)
+      .setTestWasmAwaitTier2(enableTestWasmAwaitTier2);
 
 #ifndef __wasi__
   // This must be set before self-hosted code is initialized, as self-hosted
@@ -13403,6 +13415,12 @@ bool SetContextJITOptions(JSContext* cx, const OptionParser& op) {
   if (op.getBoolOption("enable-regexp-duplicate-named-groups")) {
     jit::JitOptions.js_regexp_duplicate_named_groups = true;
   }
+
+#ifdef NIGHTLY_BUILD
+  if (op.getBoolOption("enable-regexp-modifiers")) {
+    jit::JitOptions.js_regexp_modifiers = true;
+  }
+#endif
 
   return true;
 }

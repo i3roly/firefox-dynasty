@@ -445,7 +445,8 @@ function clearCacheForExtensionPrincipal(principal, clearAll = false) {
   const clearDataFlags = clearAll
     ? Ci.nsIClearDataService.CLEAR_ALL_CACHES
     : Ci.nsIClearDataService.CLEAR_IMAGE_CACHE |
-      Ci.nsIClearDataService.CLEAR_CSS_CACHE;
+      Ci.nsIClearDataService.CLEAR_CSS_CACHE |
+      Ci.nsIClearDataService.CLEAR_JS_CACHE;
 
   return new Promise(resolve =>
     Services.clearData.deleteDataFromPrincipal(
@@ -1245,6 +1246,27 @@ export class ExtensionData {
     }
 
     return Array.from(origins);
+  }
+
+  /**
+   * @returns {MatchPatternSet} MatchPatternSet for only the origins that are
+   * referenced in manifest via permissions, host_permissions, or content_scripts keys.
+   */
+  getManifestOriginsMatchPatternSet() {
+    if (this.type !== "extension") {
+      return null;
+    }
+    if (this._manifestOriginsMatchPatternSet) {
+      return this._manifestOriginsMatchPatternSet;
+    }
+    this._manifestOriginsMatchPatternSet = new MatchPatternSet(
+      this.getManifestOrigins(),
+      {
+        restrictSchemes: this.restrictSchemes,
+        ignorePath: true,
+      }
+    );
+    return this._manifestOriginsMatchPatternSet;
   }
 
   /**
@@ -2869,8 +2891,19 @@ export class Extension extends ExtensionData {
   /** @type {import("ExtensionShortcuts.sys.mjs").ExtensionShortcuts} */
   shortcuts;
 
-  /** @type {TabManagerBase} */
+  /**
+   * Extension's TabManager, initialized at "startup" event of Management.
+   *
+   * @type {TabManagerBase}
+   */
   tabManager;
+
+  /**
+   * Extension's WindowManager, initialized at "startup" event of Management.
+   *
+   * @type {WindowManagerBase}
+   */
+  windowManager;
 
   /** @type {(options?: { ignoreDevToolsAttached?: boolean, disableResetIdleForTest?: boolean }) => Promise} */
   terminateBackground;

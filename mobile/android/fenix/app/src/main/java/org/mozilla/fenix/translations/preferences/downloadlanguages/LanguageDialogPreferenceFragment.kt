@@ -48,14 +48,14 @@ class LanguageDialogPreferenceFragment : DialogFragment() {
         savedInstanceState: Bundle?,
     ): View {
         val view = ComposeView(requireContext())
-        if (args.modelState == ModelState.DOWNLOADED) {
-            setPrefDeleteLanguageFileDialog(view)
-        } else {
-            if (args.modelState == ModelState.NOT_DOWNLOADED) {
-                setDownloadLanguageFileDialog(view)
-            }
+        when (args.modelState) {
+            ModelState.NOT_DOWNLOADED -> setDownloadLanguageFileDialog(view)
+            ModelState.DOWNLOAD_IN_PROGRESS -> {}
+            ModelState.DOWNLOADED -> setPrefDeleteLanguageFileDialog(view)
+            ModelState.DELETION_IN_PROGRESS -> {}
+            ModelState.ERROR_DELETION -> {}
+            ModelState.ERROR_DOWNLOAD -> {}
         }
-
         return view
     }
 

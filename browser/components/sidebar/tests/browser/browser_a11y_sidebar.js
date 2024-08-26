@@ -6,12 +6,10 @@
 let win;
 
 add_setup(async () => {
-  await SpecialPowers.pushPrefEnv({ set: [["sidebar.revamp", true]] });
   win = await BrowserTestUtils.openNewBrowserWindow();
 });
 
 registerCleanupFunction(async () => {
-  await SpecialPowers.popPrefEnv();
   await BrowserTestUtils.closeWindow(win);
 });
 
@@ -95,10 +93,6 @@ add_task(async function test_menu_items_labeled() {
   await sidebar.updateComplete;
   for (const button of allButtons) {
     const view = button.getAttribute("view");
-    ok(!button.title, `${view} button does not have a tooltip.`);
-    if (document.hasPendingL10nMutations) {
-      await BrowserTestUtils.waitForEvent(document, "L10nMutationsFinished");
-    }
     ok(
       button.label || button.hasVisibleLabel,
       `Expanded ${view} button has a label.`

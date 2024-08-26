@@ -11,12 +11,6 @@
     "content"
     "button-group";
   grid-template-rows: auto auto auto;
-
-  & fieldset {
-    border: none;
-    margin: 0;
-    padding: 0;
-  }
 }
 
 #backup-enable-encryption-header {
@@ -35,21 +29,4 @@
 
 #backup-enable-encryption-button-group {
   grid-area: button-group;
-}
-
-#passwords {
-  display: flex;
-  flex-direction: column;
-  row-gap: var(--space-large);
-
-  > #new-password-label,
-  > #repeat-password-label {
-    display: flex;
-    flex-direction: column;
-  }
-
-  > #new-password-label > input,
-  > #repeat-password-label > input {
-    margin-inline-start: 0;
-  }
 }

@@ -121,7 +121,7 @@ bool DebugState::incrementStepperCount(JSContext* cx, Instance* instance,
   }
 
   enableDebuggingForFunction(instance, funcIndex);
-  enableDebugTrap(instance);
+  enableDebugTrapping(instance);
 
   return true;
 }
@@ -159,7 +159,7 @@ void DebugState::decrementStepperCount(JS::GCContext* gcx, Instance* instance,
   if (!keepDebugging && !anyEnterAndLeave) {
     disableDebuggingForFunction(instance, funcIndex);
     if (!anyStepping && !anyBreakpoints) {
-      disableDebugTrap(instance);
+      disableDebugTrapping(instance);
     }
   }
 }
@@ -192,11 +192,11 @@ void DebugState::toggleBreakpointTrap(JSRuntime* rt, Instance* instance,
 
   if (enabled) {
     enableDebuggingForFunction(instance, funcIndex);
-    enableDebugTrap(instance);
+    enableDebugTrapping(instance);
   } else if (!anyEnterAndLeave) {
     disableDebuggingForFunction(instance, funcIndex);
     if (!anyStepping && !anyBreakpoints) {
-      disableDebugTrap(instance);
+      disableDebugTrapping(instance);
     }
   }
 }
@@ -295,13 +295,13 @@ void DebugState::disableDebuggingForFunction(Instance* instance,
   instance->setDebugFilter(funcIndex, false);
 }
 
-void DebugState::enableDebugTrap(Instance* instance) {
-  instance->setDebugTrapHandler(code_->sharedStubs().segment->base() +
-                                code_->sharedStubs().debugTrapOffset);
+void DebugState::enableDebugTrapping(Instance* instance) {
+  instance->setDebugStub(code_->sharedStubs().segment->base() +
+                         code_->debugStubOffset());
 }
 
-void DebugState::disableDebugTrap(Instance* instance) {
-  instance->setDebugTrapHandler(nullptr);
+void DebugState::disableDebugTrapping(Instance* instance) {
+  instance->setDebugStub(nullptr);
 }
 
 void DebugState::adjustEnterAndLeaveFrameTrapsState(JSContext* cx,
@@ -318,13 +318,13 @@ void DebugState::adjustEnterAndLeaveFrameTrapsState(JSContext* cx,
 
   MOZ_RELEASE_ASSERT(&instance->codeMeta() == &codeMeta());
   MOZ_RELEASE_ASSERT(instance->codeMetaForAsmJS() == codeMetaForAsmJS());
-  uint32_t numFuncs = codeMeta().debugNumFuncs();
+  uint32_t numFuncs = codeMeta().numFuncs();
   if (enabled) {
     MOZ_ASSERT(enterAndLeaveFrameTrapsCounter_ > 0);
     for (uint32_t funcIdx = 0; funcIdx < numFuncs; funcIdx++) {
       enableDebuggingForFunction(instance, funcIdx);
     }
-    enableDebugTrap(instance);
+    enableDebugTrapping(instance);
   } else {
     MOZ_ASSERT(enterAndLeaveFrameTrapsCounter_ == 0);
     bool anyEnabled = false;
@@ -353,7 +353,7 @@ void DebugState::adjustEnterAndLeaveFrameTrapsState(JSContext* cx,
       }
     }
     if (!anyEnabled) {
-      disableDebugTrap(instance);
+      disableDebugTrapping(instance);
     }
   }
 }
@@ -373,7 +373,7 @@ bool DebugState::debugGetLocalTypes(uint32_t funcIndex, ValTypeVector* locals,
                                     size_t* argsLength,
                                     StackResults* stackResults) {
   const TypeContext& types = *codeMeta().types;
-  const FuncType& funcType = codeMeta().debugFuncType(funcIndex);
+  const FuncType& funcType = codeMeta().getFuncType(funcIndex);
   const ValTypeVector& args = funcType.args();
   const ValTypeVector& results = funcType.results();
   ResultType resultType(ResultType::Vector(results));
@@ -386,12 +386,9 @@ bool DebugState::debugGetLocalTypes(uint32_t funcIndex, ValTypeVector* locals,
   }
 
   // Decode local var types from wasm binary function body.
-  const CodeRange& range =
-      debugCode().codeRanges[funcToCodeRangeIndex(funcIndex)];
-  // In wasm, the Code points to the function start via funcLineOrBytecode.
-  size_t offsetInModule = range.funcLineOrBytecode();
-  Decoder d(bytecode().begin() + offsetInModule, bytecode().end(),
-            offsetInModule,
+  uint32_t bytecodeOffset = codeMeta().funcBytecodeOffset(funcIndex);
+  Decoder d(bytecode().begin() + bytecodeOffset, bytecode().end(),
+            bytecodeOffset,
             /* error = */ nullptr);
   return DecodeValidatedLocalEntries(types, d, locals);
 }
@@ -507,7 +504,7 @@ bool DebugState::getSourceMappingURL(JSContext* cx,
   }
 
   // Check presence of "SourceMap:" HTTP response header.
-  char* sourceMapURL = codeMeta().sourceMapURL.get();
+  char* sourceMapURL = codeMeta().sourceMapURL().get();
   if (sourceMapURL && strlen(sourceMapURL)) {
     JS::UTF8Chars utf8Chars(sourceMapURL, strlen(sourceMapURL));
     JSString* str = JS_NewStringCopyUTF8N(cx, utf8Chars);

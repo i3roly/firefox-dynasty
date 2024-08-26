@@ -119,6 +119,12 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">Tocca e retene le flechas pro saltar inter paginas in iste chronologia del scheda.</string>
 
+    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_title">Nova: flechas retro e avante de un tocco</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
+    <string name="tablet_nav_bar_cfr_message">Gaude del navigation plus facile, sempre a portata de manos.</string>
+
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Accesso al camera necessari. Vade al parametros de Android, tocca Permissiones e tocca Permitter.</string>
     <!-- Text for the positive action button to go to Android Settings to grant permissions. -->
@@ -201,6 +207,14 @@
     <string name="browser_menu_stop">Stoppar</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_extensions">Extensiones</string>
+    <!-- Browser menu banner header text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_header">Rende %s apte a te</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">Extensiones ameliora tu navigation, ab cambiar como %s pare e functiona al promover confidentialitate e securitate.</string>
+    <!-- Browser menu banner link text for learning more about extensions -->
+    <string name="browser_menu_extensions_banner_learn_more">Pro saper plus</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">Gerer extensiones</string>
     <!-- Browser menu button that opens AMO in a tab -->
@@ -292,10 +306,16 @@
     <string name="browser_menu_switch_to_mobile_site">Passar al sito pro apparato mobile</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Utensiles</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate">Vista de lector, Traducer, Imprimer, Compartir, Aperir app</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description">Vista de lector, Imprimer, Compartir, Aperir app</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Salvar</string>
 
+    <!-- Browser menu description that describes the various save related menu items inside of the save sub-menu -->
+    <string name="browser_menu_save_description">Adder marcapaginas, Vias breve, Initio, Collection, PDF</string>
     <!-- Browser menu label that bookmarks the currently visited page -->
     <string name="browser_menu_bookmark_this_page">Adder un marcapaginas pro iste pagina</string>
     <!-- Browser menu label that navigates to the edit bookmark screen for the current bookmarked page -->
@@ -313,6 +333,10 @@
     <string name="browser_menu_translated_to">Traducite in %1$s</string>
     <!-- Browser menu label for the print feature -->
     <string name="browser_menu_print">Imprimer…</string>
+
+    <!-- Browser menu label for the Delete browsing data on quit feature.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_delete_browsing_data_on_quit">Quitar %1$s</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -1133,7 +1157,7 @@
     <!-- Hint for adding name of a collection -->
     <string name="collection_name_hint">Nomine del collection</string>
     <!-- Text for the menu button to rename a top site -->
-    <string name="rename_top_site">Renominar</string>
+    <string name="rename_top_site" moz:removedIn="130" tools:ignore="UnusedResources">Renominar</string>
     <!-- Text for the menu button to remove a top site -->
     <string name="remove_top_site">Remover</string>
     <!-- Text for the menu button to delete a top site from history -->
@@ -1265,6 +1289,18 @@
 
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Inserer terminos pro le recerca</string>
+
+    <!-- Content description for the bookmark navigation bar back button -->
+    <string name="bookmark_navigate_back_button_content_description">Navigar retro</string>
+    <!-- Content description for the bookmark list new folder navigation bar button -->
+    <string name="bookmark_add_new_folder_button_content_description">Adder un nove plica</string>
+    <!-- Content description for the bookmark navigation bar close button -->
+    <string name="bookmark_close_button_content_description">Clauder marcapaginas</string>
+
+    <!-- Content description for bookmark search floating action button -->
+    <string name="bookmark_search_button_content_description">Cercar in marcapaginas</string>
+    <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
+    <string name="bookmark_item_menu_button_content_description">Menu de elementos pro %s</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2230,8 +2266,10 @@
     <string name="top_sites_rename_dialog_title">Nomine</string>
     <!-- Hint for renaming title of a shortcut -->
     <string name="shortcut_name_hint">Nomine de via breve</string>
+    <!-- Hint for editing URL of a shortcut. -->
+    <string name="shortcut_url_hint">URL directe</string>
     <!-- Button caption to confirm the renaming of the top site. -->
-    <string name="top_sites_rename_dialog_ok">OK</string>
+    <string name="top_sites_rename_dialog_ok" moz:removedIn="130" tools:ignore="UnusedResources">OK</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
     <string name="top_sites_rename_dialog_cancel">Cancellar</string>
 
@@ -2241,6 +2279,17 @@
     <string name="top_sites_menu_sponsor_privacy">Nostre sponsors e tu confidentialitate</string>
     <!-- Label text displayed for a sponsored top site. -->
     <string name="top_sites_sponsored_label">Sponsorisate</string>
+
+    <!-- Text for the menu item to edit a top site. -->
+    <string name="top_sites_edit_top_site">Rediger</string>
+    <!-- Text for the dialog title to edit a top site. -->
+    <string name="top_sites_edit_dialog_title">Modificar accesso directe</string>
+    <!-- Button caption to confirm the edit of the top site. -->
+    <string name="top_sites_edit_dialog_save">Salvar</string>
+    <!-- Error message when the user entered an invalid URL -->
+    <string name="top_sites_edit_dialog_url_error">Insere un URL valide</string>
+    <!-- Label for the URL edit field in the edit top site dialog. -->
+    <string name="top_sites_edit_dialog_url_title">URL</string>
 
     <!-- Inactive tabs in the tabs tray -->
     <!-- Title text displayed in the tabs tray when a tab has been unused for 14 days. -->
@@ -2702,11 +2751,11 @@
 
     <!-- Title for the dialog used by the translations feature to confirm canceling a download in progress for a language file.
     The first parameter is the name of the language, for example, "Spanish". -->
-    <string name="cancel_download_language_file_dialog_title">Cancellar discargamento %1$s?</string>
+    <string name="cancel_download_language_file_dialog_title" moz:removedIn="130" tools:ignore="UnusedResources">Cancellar discargamento %1$s?</string>
     <!-- Button text on the dialog used by the translations feature confirms canceling a download in progress for a language file. -->
-    <string name="cancel_download_language_file_dialog_positive_button_text">Si</string>
+    <string name="cancel_download_language_file_dialog_positive_button_text" moz:removedIn="130" tools:ignore="UnusedResources">Si</string>
     <!-- Button text on the dialog used by the translations feature to dismiss the dialog. -->
-    <string name="cancel_download_language_file_negative_button_text">No</string>
+    <string name="cancel_download_language_file_negative_button_text" moz:removedIn="130" tools:ignore="UnusedResources">No</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2788,8 +2837,6 @@
     <string name="micro_survey_privacy_notice_2">Aviso de confidentialitate</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">Inviar</string>
-    <!-- The close button label text -->
-    <string name="micro_survey_close_button_label" moz:removedIn="128" tools:ignore="UnusedResources">Clauder</string>
     <!-- The survey completion header -->
     <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">Sondage concludite</string>
     <!-- The survey completion confirmation text -->

@@ -254,6 +254,7 @@ class HTMLInputElement;
 class HTMLMetaElement;
 class HTMLDialogElement;
 class HTMLSharedElement;
+class HTMLVideoElement;
 class HTMLImageElement;
 struct LifecycleCallbackArgs;
 class Link;
@@ -2444,7 +2445,11 @@ class Document : public nsINode,
 
   LinkedList<MediaQueryList>& MediaQueryLists() { return mDOMMediaQueryLists; }
 
-  nsTHashtable<LCPEntryHashEntry>& ContentIdentifiersForLCP() {
+  using ContentIdentifiersForLCPType =
+      nsTHashMap<NoMemMoveKey<nsPtrHashKey<const Element>>,
+                 AutoTArray<WeakPtr<PreloaderBase>, 1>>;
+
+  ContentIdentifiersForLCPType& ContentIdentifiersForLCP() {
     return mContentIdentifiersForLCP;
   }
 
@@ -2727,17 +2732,17 @@ class Document : public nsINode,
     return !EventHandlingSuppressed() && mScriptGlobalObject;
   }
 
-  bool WouldScheduleFrameRequestCallbacks() const {
-    // If this function changes to depend on some other variable, make sure to
-    // call UpdateFrameRequestCallbackSchedulingState() calls to the places
-    // where that variable can change.
+  void MaybeScheduleFrameRequestCallbacks();
+  bool ShouldFireFrameRequestCallbacks() const {
+    // If this condition changes make sure to call
+    // MaybeScheduleFrameRequestCallbacks at the right places.
     return mPresShell && IsEventHandlingEnabled();
   }
 
   void DecreaseEventSuppression() {
     MOZ_ASSERT(mEventsSuppressed);
     --mEventsSuppressed;
-    UpdateFrameRequestCallbackSchedulingState();
+    MaybeScheduleFrameRequestCallbacks();
   }
 
   /**
@@ -3040,21 +3045,36 @@ class Document : public nsINode,
   SVGSVGElement* GetSVGRootElement() const;
 
   nsresult ScheduleFrameRequestCallback(FrameRequestCallback& aCallback,
-                                        int32_t* aHandle);
-  void CancelFrameRequestCallback(int32_t aHandle);
+                                        uint32_t* aHandle);
+  void CancelFrameRequestCallback(uint32_t aHandle);
+
+  void ScheduleVideoFrameCallbacks(HTMLVideoElement* aElement);
+  void CancelVideoFrameCallbacks(HTMLVideoElement* aElement);
 
   /**
    * Returns true if the handle refers to a callback that was canceled that
    * we did not find in our list of callbacks (e.g. because it is one of those
    * in the set of callbacks currently queued to be run).
    */
-  bool IsCanceledFrameRequestCallback(int32_t aHandle) const;
+  bool IsCanceledFrameRequestCallback(uint32_t aHandle) const;
+
+  /**
+   * Put this document's video frame request callbacks into the provided
+   * list, and forget about them.
+   */
+  void TakeVideoFrameRequestCallbacks(
+      nsTArray<RefPtr<HTMLVideoElement>>& aVideoCallbacks);
 
   /**
    * Put this document's frame request callbacks into the provided
    * list, and forget about them.
    */
   void TakeFrameRequestCallbacks(nsTArray<FrameRequest>& aCallbacks);
+
+  /** Whether we have any scheduled frame request */
+  bool HasFrameRequestCallbacks() const {
+    return !mFrameRequestManager.IsEmpty();
+  }
 
   /**
    * @return true if this document's frame request callbacks should be
@@ -3628,6 +3648,10 @@ class Document : public nsINode,
 
   // If this is true, we're ignoring scrolling to a fragment.
   bool ForceLoadAtTop() const { return mForceLoadAtTop; }
+
+  // https://html.spec.whatwg.org/#concept-document-fire-mutation-events-flag
+  bool FireMutationEvents() const { return mFireMutationEvents; }
+  void SetFireMutationEvents(bool aFire) { mFireMutationEvents = aFire; }
 
   // This should be called when this document receives events which are likely
   // to be user interaction with the document, rather than the byproduct of
@@ -4428,14 +4452,6 @@ class Document : public nsINode,
 
   nsCString GetContentTypeInternal() const { return mContentType; }
 
-  // Update our frame request callback scheduling state, if needed.  This will
-  // schedule or unschedule them, if necessary, and update
-  // mFrameRequestCallbacksScheduled.  aOldShell should only be passed when
-  // mPresShell is becoming null; in that case it will be used to get hold of
-  // the relevant refresh driver.
-  void UpdateFrameRequestCallbackSchedulingState(
-      PresShell* aOldPresShell = nullptr);
-
   // Helper for GetScrollingElement/IsScrollingElement.
   bool IsPotentiallyScrollable(HTMLBodyElement* aBody);
 
@@ -4722,11 +4738,6 @@ class Document : public nsINode,
   // (e.g. we're not being parsed at all).
   bool mDidFireDOMContentLoaded : 1;
 
-  // True if we have frame request callbacks scheduled with the refresh driver.
-  // This should generally be updated only via
-  // UpdateFrameRequestCallbackSchedulingState.
-  bool mFrameRequestCallbacksScheduled : 1;
-
   bool mIsTopLevelContentDocument : 1;
 
   bool mIsContentDocument : 1;
@@ -4900,6 +4911,8 @@ class Document : public nsINode,
   bool mSuspendDOMNotifications : 1;
 
   bool mForceLoadAtTop : 1;
+
+  bool mFireMutationEvents : 1;
 
   // The fingerprinting protections overrides for this document. The value will
   // override the default enabled fingerprinting protections for this document.
@@ -5098,10 +5111,10 @@ class Document : public nsINode,
   // Our live MediaQueryLists
   LinkedList<MediaQueryList> mDOMMediaQueryLists;
 
-  // A hashset to keep track of which {element, imgRequestProxy}
+  // A hashmap to keep track of which {element, imgRequestProxy}
   // combination has been processed to avoid considering the same
   // element twice for LargestContentfulPaint.
-  nsTHashtable<LCPEntryHashEntry> mContentIdentifiersForLCP;
+  ContentIdentifiersForLCPType mContentIdentifiersForLCP;
 
   // Array of observers
   nsTObserverArray<nsIDocumentObserver*> mObservers;

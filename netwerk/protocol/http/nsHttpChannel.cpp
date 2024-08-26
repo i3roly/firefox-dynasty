@@ -1863,9 +1863,9 @@ nsresult nsHttpChannel::CallOnStartRequest() {
       PerformOpaqueResponseSafelistCheckBeforeSniff();
   if (opaqueResponse == OpaqueResponse::Block) {
     SetChannelBlockedByOpaqueResponse();
-    CancelWithReason(NS_ERROR_FAILURE,
+    CancelWithReason(NS_BINDING_ABORTED,
                      "OpaqueResponseBlocker::BlockResponse"_ns);
-    return NS_ERROR_FAILURE;
+    return NS_BINDING_ABORTED;
   }
 
   // Allow consumers to override our content type
@@ -2621,11 +2621,23 @@ nsresult nsHttpChannel::ContinueProcessResponse1() {
     LOG(("  continuation state has been reset"));
   }
 
+  gHttpHandler->OnAfterExamineResponse(this);
+
   // No process switch needed, continue as normal.
   return ContinueProcessResponse2(rv);
 }
 
 nsresult nsHttpChannel::ContinueProcessResponse2(nsresult rv) {
+  if (mSuspendCount) {
+    LOG(("Waiting until resume to finish processing response [this=%p]\n",
+         this));
+    mCallOnResume = [rv](nsHttpChannel* self) {
+      Unused << self->ContinueProcessResponse2(rv);
+      return NS_OK;
+    };
+    return NS_OK;
+  }
+
   if (NS_FAILED(rv) && !mCanceled) {
     // The process switch failed, cancel this channel.
     Cancel(rv);
@@ -8026,25 +8038,43 @@ nsresult nsHttpChannel::LogConsoleError(const char* aTag) {
   nsCOMPtr<nsIScriptError> error(do_CreateInstance(NS_SCRIPTERROR_CONTRACTID));
   NS_ENSURE_TRUE(error, NS_ERROR_OUT_OF_MEMORY);
 
-  rv = error->InitWithSourceURI(errorText, mURI, u""_ns, 0, 0,
-                                nsIScriptError::errorFlag,
-                                "Invalid HTTP Status Lines"_ns, innerWindowID);
+  rv =
+      error->InitWithSourceURI(errorText, mURI, 0, 0, nsIScriptError::errorFlag,
+                               "Invalid HTTP Status Lines"_ns, innerWindowID);
   NS_ENSURE_SUCCESS(rv, rv);
   console->LogMessage(error);
   return NS_OK;
 }
 
-static void RecordHTTPSUpgradeTelemetry(nsILoadInfo* aLoadInfo) {
+static void RecordHTTPSUpgradeTelemetry(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
   // we record https telemetry only for top-level loads
   if (aLoadInfo->GetExternalContentPolicyType() !=
       ExtContentPolicy::TYPE_DOCUMENT) {
     return;
   }
 
+  // exempt loopback addresses because we only want to record telemetry
+  // for actual web requests
+  if (nsMixedContentBlocker::IsPotentiallyTrustworthyLoopbackURL(aURI)) {
+    return;
+  }
+
+  // todo: for now we don't record form submissions, only
+  // top-level document loads. Once Bug 1720500 is fixed, we can
+  // consider recording form submissions too.
+  if (aLoadInfo->GetIsFormSubmission()) {
+    return;
+  }
+
   nsILoadInfo::HTTPSUpgradeTelemetryType httpsTelemetry =
-      nsILoadInfo::NO_UPGRADE;
+      nsILoadInfo::NOT_INITIALIZED;
   aLoadInfo->GetHttpsUpgradeTelemetry(&httpsTelemetry);
   switch (httpsTelemetry) {
+    case nsILoadInfo::NOT_INITIALIZED:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("not_initialized"_ns)
+          .Add(1);
+      break;
     case nsILoadInfo::NO_UPGRADE:
       mozilla::glean::networking::http_to_https_upgrade_reason
           .Get("no_upgrade"_ns)
@@ -8089,9 +8119,23 @@ static void RecordHTTPSUpgradeTelemetry(nsILoadInfo* aLoadInfo) {
           .Get("https_first_schemeless_upgrade_downgrade"_ns)
           .Add(1);
       break;
+    case nsILoadInfo::CSP_UIR:
+      mozilla::glean::networking::http_to_https_upgrade_reason.Get("csp_uir"_ns)
+          .Add(1);
+      break;
     case nsILoadInfo::HTTPS_RR:
       mozilla::glean::networking::http_to_https_upgrade_reason
           .Get("https_rr"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::WEB_EXTENSION_UPGRADE:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("web_extension_upgrade"_ns)
+          .Add(1);
+      break;
+    case nsILoadInfo::UPGRADE_EXCEPTION:
+      mozilla::glean::networking::http_to_https_upgrade_reason
+          .Get("upgrade_exception"_ns)
           .Add(1);
       break;
     default:
@@ -8241,7 +8285,7 @@ nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
     mTransferSize = mTransaction->GetTransferSize();
     mRequestSize = mTransaction->GetRequestSize();
 
-    RecordHTTPSUpgradeTelemetry(mLoadInfo);
+    RecordHTTPSUpgradeTelemetry(mURI, mLoadInfo);
 
     // If we are using the transaction to serve content, we also save the
     // time since async open in the cache entry so we can compare telemetry

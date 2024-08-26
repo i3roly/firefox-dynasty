@@ -1230,9 +1230,10 @@ bool SharedContextWebgl::CreateShaders() {
         "   v_cliptc = vertex / u_viewport;\n"
         "   v_clipdist = vec4(vertex - u_clipbounds.xy,\n"
         "                     u_clipbounds.zw - vertex);\n"
-        "   v_dist = vec4(extrude, 1.0 - extrude) * scale.xyxy +\n"
-        "            0.5 * min(scale.xyxy, 1.0) + (1.0 - u_aa);\n"
-        "   v_alpha = a_vertex.z;\n"
+        "   float noAA = 1.0 - u_aa;\n"
+        "   v_dist = vec4(extrude, 1.0 - extrude) * scale.xyxy + 0.5 + noAA;\n"
+        "   v_alpha = min(a_vertex.z,\n"
+        "                 min(scale.x, 1.0) * min(scale.y, 1.0) + noAA);\n"
         "}\n";
     auto fsSource =
         "precision mediump float;\n"
@@ -1246,7 +1247,7 @@ bool SharedContextWebgl::CreateShaders() {
         "   float clip = texture2D(u_clipmask, v_cliptc).r;\n"
         "   vec4 dist = min(v_dist, v_clipdist);\n"
         "   dist.xy = min(dist.xy, dist.zw);\n"
-        "   float aa = v_alpha * clamp(min(dist.x, dist.y), 0.0, 1.0);\n"
+        "   float aa = clamp(min(dist.x, dist.y), 0.0, v_alpha);\n"
         "   gl_FragColor = clip * aa * u_color;\n"
         "}\n";
     RefPtr<WebGLShader> vsId = mWebgl->CreateShader(LOCAL_GL_VERTEX_SHADER);
@@ -1314,9 +1315,10 @@ bool SharedContextWebgl::CreateShaders() {
         "   v_texcoord = u_texmatrix[0] * extrude.x +\n"
         "                u_texmatrix[1] * extrude.y +\n"
         "                u_texmatrix[2];\n"
-        "   v_dist = vec4(extrude, 1.0 - extrude) * scale.xyxy +\n"
-        "            0.5 * min(scale.xyxy, 1.0) + (1.0 - u_aa);\n"
-        "   v_alpha = a_vertex.z;\n"
+        "   float noAA = 1.0 - u_aa;\n"
+        "   v_dist = vec4(extrude, 1.0 - extrude) * scale.xyxy + 0.5 + noAA;\n"
+        "   v_alpha = min(a_vertex.z,\n"
+        "                 min(scale.x, 1.0) * min(scale.y, 1.0) + noAA);\n"
         "}\n";
     auto fsSource =
         "precision mediump float;\n"
@@ -1337,7 +1339,7 @@ bool SharedContextWebgl::CreateShaders() {
         "   float clip = texture2D(u_clipmask, v_cliptc).r;\n"
         "   vec4 dist = min(v_dist, v_clipdist);\n"
         "   dist.xy = min(dist.xy, dist.zw);\n"
-        "   float aa = v_alpha * clamp(min(dist.x, dist.y), 0.0, 1.0);\n"
+        "   float aa = clamp(min(dist.x, dist.y), 0.0, v_alpha);\n"
         "   gl_FragColor = clip * aa * u_color *\n"
         "                  mix(image, image.rrrr, u_swizzle);\n"
         "}\n";
@@ -1408,23 +1410,27 @@ inline ColorPattern DrawTargetWebgl::GetClearPattern() const {
       DeviceColor(0.0f, 0.0f, 0.0f, IsOpaque(mFormat) ? 1.0f : 0.0f));
 }
 
-// Check if the transformed rect would contain the entire viewport.
-inline bool DrawTargetWebgl::RectContainsViewport(const Rect& aRect) const {
-  return mTransform.PreservesAxisAlignedRectangles() &&
-         MatrixDouble(mTransform)
-             .TransformBounds(
-                 RectDouble(aRect.x, aRect.y, aRect.width, aRect.height))
-             .Contains(RectDouble(GetRect()));
+template <typename R>
+inline RectDouble DrawTargetWebgl::TransformDouble(const R& aRect) const {
+  return MatrixDouble(mTransform).TransformBounds(WidenToDouble(aRect));
+}
+
+// Check if the transformed rect clips to the viewport.
+inline Maybe<Rect> DrawTargetWebgl::RectClippedToViewport(
+    const RectDouble& aRect) const {
+  if (!mTransform.PreservesAxisAlignedRectangles()) {
+    return Nothing();
+  }
+
+  return Some(NarrowToFloat(aRect.SafeIntersect(RectDouble(GetRect()))));
 }
 
 // Ensure that the rect, after transform, is within reasonable precision limits
 // such that when transformed and clipped in the shader it will not round bits
 // from the mantissa in a way that will diverge in a noticeable way from path
 // geometry calculated by the path fallback.
-static inline bool RectInsidePrecisionLimits(const Rect& aRect,
-                                             const Matrix& aTransform) {
-  return Rect(-(1 << 20), -(1 << 20), 2 << 20, 2 << 20)
-      .Contains(aTransform.TransformBounds(aRect));
+static inline bool RectInsidePrecisionLimits(const RectDouble& aRect) {
+  return RectDouble(-(1 << 20), -(1 << 20), 2 << 20, 2 << 20).Contains(aRect);
 }
 
 void DrawTargetWebgl::ClearRect(const Rect& aRect) {
@@ -1433,14 +1439,16 @@ void DrawTargetWebgl::ClearRect(const Rect& aRect) {
     return;
   }
 
-  bool containsViewport = RectContainsViewport(aRect);
-  if (containsViewport) {
-    // If the rect encompasses the entire viewport, just clear the viewport
-    // instead to avoid transform issues.
-    DrawRect(Rect(GetRect()), GetClearPattern(),
+  RectDouble xformRect = TransformDouble(aRect);
+  bool containsViewport = false;
+  if (Maybe<Rect> clipped = RectClippedToViewport(xformRect)) {
+    // If the rect clips to viewport, just clear the clipped rect
+    // to avoid transform issues.
+    containsViewport = clipped->Size() == Size(GetSize());
+    DrawRect(*clipped, GetClearPattern(),
              DrawOptions(1.0f, CompositionOp::OP_CLEAR), Nothing(), nullptr,
              false);
-  } else if (RectInsidePrecisionLimits(aRect, mTransform)) {
+  } else if (RectInsidePrecisionLimits(xformRect)) {
     // If the rect transform won't stress precision, then just use it.
     DrawRect(aRect, GetClearPattern(),
              DrawOptions(1.0f, CompositionOp::OP_CLEAR));
@@ -2592,16 +2600,18 @@ bool SharedContextWebgl::PruneTextureMemory(size_t aMargin, bool aPruneUnused) {
 void DrawTargetWebgl::FillRect(const Rect& aRect, const Pattern& aPattern,
                                const DrawOptions& aOptions) {
   if (SupportsPattern(aPattern)) {
-    if (RectInsidePrecisionLimits(aRect, mTransform)) {
-      DrawRect(aRect, aPattern, aOptions);
-      return;
+    RectDouble xformRect = TransformDouble(aRect);
+    if (aPattern.GetType() == PatternType::COLOR) {
+      if (Maybe<Rect> clipped = RectClippedToViewport(xformRect)) {
+        // If the pattern is transform-invariant and the rect clips to the
+        // viewport, just clip drawing to the viewport to avoid transform
+        // issues.
+        DrawRect(*clipped, aPattern, aOptions, Nothing(), nullptr, false);
+        return;
+      }
     }
-    if (aPattern.GetType() == PatternType::COLOR &&
-        RectContainsViewport(aRect)) {
-      // If the pattern is transform-invariant and the rect encompasses the
-      // entire viewport, just clip drawing to the viewport to avoid transform
-      // issues.
-      DrawRect(Rect(GetRect()), aPattern, aOptions, Nothing(), nullptr, false);
+    if (RectInsidePrecisionLimits(xformRect)) {
+      DrawRect(aRect, aPattern, aOptions);
       return;
     }
   }
@@ -2762,17 +2772,19 @@ void DrawTargetWebgl::Fill(const Path* aPath, const Pattern& aPattern,
   SkRect skiaRect = SkRect::MakeEmpty();
   // Draw the path as a simple rectangle with a supported pattern when possible.
   if (skiaPath.isRect(&skiaRect) && SupportsPattern(aPattern)) {
-    Rect rect = SkRectToRect(skiaRect);
-    if (RectInsidePrecisionLimits(rect, mTransform)) {
-      DrawRect(rect, aPattern, aOptions);
-      return;
+    RectDouble rect = SkRectToRectDouble(skiaRect);
+    RectDouble xformRect = TransformDouble(rect);
+    if (aPattern.GetType() == PatternType::COLOR) {
+      if (Maybe<Rect> clipped = RectClippedToViewport(xformRect)) {
+        // If the pattern is transform-invariant and the rect clips to the
+        // viewport, just clip drawing to the viewport to avoid transform
+        // issues.
+        DrawRect(*clipped, aPattern, aOptions, Nothing(), nullptr, false);
+        return;
+      }
     }
-    if (aPattern.GetType() == PatternType::COLOR &&
-        RectContainsViewport(rect)) {
-      // If the pattern is transform-invariant and the rect encompasses the
-      // entire viewport, just clip drawing to the viewport to avoid transform
-      // issues.
-      DrawRect(Rect(GetRect()), aPattern, aOptions, Nothing(), nullptr, false);
+    if (RectInsidePrecisionLimits(xformRect)) {
+      DrawRect(NarrowToFloat(rect), aPattern, aOptions);
       return;
     }
   }

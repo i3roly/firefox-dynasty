@@ -63,12 +63,23 @@ struct FuncCompileInput {
 
 using FuncCompileInputVector = Vector<FuncCompileInput, 8, SystemAllocPolicy>;
 
+struct FuncCompileOutput {
+  FuncCompileOutput(uint32_t index, FeatureUsage featureUsage)
+      : index(index), featureUsage(featureUsage) {}
+
+  uint32_t index;
+  FeatureUsage featureUsage;
+};
+
+using FuncCompileOutputVector = Vector<FuncCompileOutput, 8, SystemAllocPolicy>;
+
 // CompiledCode contains the resulting code and metadata for a set of compiled
 // input functions or stubs.
 
 struct CompiledCode {
   CompiledCode() : featureUsage(FeatureUsage::None) {}
 
+  FuncCompileOutputVector funcs;
   Bytes bytes;
   CodeRangeVector codeRanges;
   CallSiteVector callSites;
@@ -84,6 +95,7 @@ struct CompiledCode {
   [[nodiscard]] bool swap(jit::MacroAssembler& masm);
 
   void clear() {
+    funcs.clear();
     bytes.clear();
     codeRanges.clear();
     callSites.clear();
@@ -99,8 +111,8 @@ struct CompiledCode {
   }
 
   bool empty() {
-    return bytes.empty() && codeRanges.empty() && callSites.empty() &&
-           callSiteTargets.empty() && trapSites.empty() &&
+    return funcs.empty() && bytes.empty() && codeRanges.empty() &&
+           callSites.empty() && callSiteTargets.empty() && trapSites.empty() &&
            symbolicAccesses.empty() && codeLabels.empty() && tryNotes.empty() &&
            stackMaps.empty() && codeRangeUnwindInfos.empty() &&
            featureUsage == FeatureUsage::None;
@@ -138,6 +150,7 @@ struct CompileTaskState {
 struct CompileTask : public HelperThreadTask {
   const CodeMetadata& codeMeta;
   const CompilerEnvironment& compilerEnv;
+  const CompileState compileState;
 
   CompileTaskState& state;
   LifoAlloc lifo;
@@ -145,10 +158,11 @@ struct CompileTask : public HelperThreadTask {
   CompiledCode output;
 
   CompileTask(const CodeMetadata& codeMeta,
-              const CompilerEnvironment& compilerEnv, CompileTaskState& state,
-              size_t defaultChunkSize)
+              const CompilerEnvironment& compilerEnv, CompileState compileState,
+              CompileTaskState& state, size_t defaultChunkSize)
       : codeMeta(codeMeta),
         compilerEnv(compilerEnv),
+        compileState(compileState),
         state(state),
         lifo(defaultChunkSize) {}
 
@@ -182,17 +196,24 @@ class MOZ_STACK_CLASS ModuleGenerator {
 
   // Constant parameters
   SharedCompileArgs const compileArgs_;
+  const CompileState compileState_;
   UniqueChars* const error_;
   UniqueCharsVector* const warnings_;
   const Atomic<bool>* const cancelled_;
-  CodeMetadata* const codeMeta_;
-  CompilerEnvironment* const compilerEnv_;
+  const CodeMetadata* const codeMeta_;
+  const CompilerEnvironment* const compilerEnv_;
+
+  // Data that is used for partial tiering
+  SharedCode partialTieringCode_;
 
   // Data that is moved into the Module/Code as the result of finish()
+  FuncDefRangeVector funcDefRanges_;
+  FeatureUsageVector funcDefFeatureUsages_;
   FuncImportVector funcImports_;
   UniqueLinkData sharedStubsLinkData_;
   UniqueCodeBlock sharedStubsCodeBlock_;
   MutableCodeMetadataForAsmJS codeMetaForAsmJS_;
+  FeatureUsage featureUsage_;
 
   // Data that is used to construct a CodeBlock
   UniqueCodeBlock codeBlock_;
@@ -200,7 +221,8 @@ class MOZ_STACK_CLASS ModuleGenerator {
   LifoAlloc lifo_;
   Maybe<MacroAssemblerScope> masmScope_;
   jit::WasmMacroAssembler* masm_;
-  uint32_t debugTrapCodeOffset_;
+  uint32_t debugStubCodeOffset_;
+  uint32_t requestTierUpStubCodeOffset_;
   CallFarJumpVector callFarJumps_;
   CallSiteTargetVector callSiteTargets_;
   uint32_t lastPatchedCallSite_;
@@ -239,32 +261,41 @@ class MOZ_STACK_CLASS ModuleGenerator {
 
   // Generate a code block containing all stubs that are shared between the
   // different tiers.
-  [[nodiscard]] bool generateSharedStubs();
+  [[nodiscard]] bool prepareTier1();
 
   // Starts the creation of a complete tier of wasm code. Every function
-  // defined in this module must be compiled, then finishCompleteTier must be
+  // defined in this module must be compiled, then finishTier must be
   // called.
   [[nodiscard]] bool startCompleteTier();
-  // Finishes a complete tier of wasm code. Returns a `linkData` through an
-  // out-param that can be serialized with the code block.
-  UniqueCodeBlock finishCompleteTier(UniqueLinkData* linkData);
-
-  bool finishCodeMetadata(const Bytes& bytecode);
+  // Starts the creation of a partial tier of wasm code. The specified function
+  // must be compiled, then finishTier must be called.
+  [[nodiscard]] bool startPartialTier(uint32_t funcIndex);
+  // Finishes a complete or partial tier of wasm code. Returns a `linkData`
+  // through an out-param that can be serialized with the code block.
+  UniqueCodeBlock finishTier(UniqueLinkData* linkData);
 
   bool isAsmJS() const { return codeMeta_->isAsmJS(); }
   Tier tier() const { return compilerEnv_->tier(); }
   CompileMode mode() const { return compilerEnv_->mode(); }
   bool debugEnabled() const { return compilerEnv_->debugEnabled(); }
+  bool compilingTier1() const {
+    return compileState_ == CompileState::Once ||
+           compileState_ == CompileState::EagerTier1 ||
+           compileState_ == CompileState::LazyTier1;
+  }
 
   void warnf(const char* msg, ...) MOZ_FORMAT_PRINTF(2, 3);
 
  public:
-  ModuleGenerator(const CompileArgs& args, CodeMetadata* codeMeta,
-                  CompilerEnvironment* compilerEnv,
-                  const Atomic<bool>* cancelled, UniqueChars* error,
-                  UniqueCharsVector* warnings);
+  ModuleGenerator(const CodeMetadata& codeMeta,
+                  const CompilerEnvironment& compilerEnv,
+                  CompileState compilerState, const Atomic<bool>* cancelled,
+                  UniqueChars* error, UniqueCharsVector* warnings);
   ~ModuleGenerator();
-  [[nodiscard]] bool init(CodeMetadataForAsmJS* codeMetaForAsmJS);
+  [[nodiscard]] bool initializeCompleteTier(
+      CodeMetadataForAsmJS* codeMetaForAsmJS = nullptr);
+  [[nodiscard]] bool initializePartialTier(const Code& code,
+                                           uint32_t maybeFuncIndex);
 
   // Before finishFuncDefs() is called, compileFuncDef() must be called once
   // for each funcIndex in the range [0, env->numFuncDefs()).
@@ -289,6 +320,7 @@ class MOZ_STACK_CLASS ModuleGenerator {
                             MutableModuleMetadata moduleMeta,
                             JS::OptimizedEncodingListener* maybeTier2Listener);
   [[nodiscard]] bool finishTier2(const Module& module);
+  [[nodiscard]] bool finishPartialTier2();
 };
 
 }  // namespace wasm

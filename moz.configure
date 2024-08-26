@@ -232,6 +232,7 @@ include("build/moz.configure/headers.configure", when="--enable-compile-environm
 include("build/moz.configure/libraries.configure", when="--enable-compile-environment")
 include("build/moz.configure/warnings.configure", when="--enable-compile-environment")
 include("build/moz.configure/flags.configure", when="--enable-compile-environment")
+include("build/moz.configure/default-flags.configure", when=~compile_environment)
 include("build/moz.configure/lto-pgo.configure", when="--enable-compile-environment")
 # rust.configure is included by js/moz.configure.
 
@@ -425,14 +426,25 @@ check_prog(
 profiling = dependable(False)
 # Same for js_standalone
 js_standalone = dependable(False)
-js_shared = dependable(False)
-moz_linker = dependable(False)
 # Same for fold_libs
 fold_libs = dependable(False)
 # And dmd
 dmd = dependable(False)
 
+# Only available when toolkit/moz.configure is included
+pack_relative_relocs_flags = dependable(False)
+
 include(include_project_configure)
+
+
+# Final flags validation and gathering
+# -------------------------------------------------
+
+include(
+    "build/moz.configure/finalize-flags.configure", when="--enable-compile-environment"
+)
+
+# -------------------------------------------------
 
 
 @depends("--help")
@@ -548,26 +560,9 @@ set_config("MOZ_UI_LOCALE", depends("--enable-ui-locale")(lambda x: x))
 
 # clang-plugin location
 # ==============================================================
-
-
-@depends(host_library_name_info, build_environment, when="--enable-clang-plugin")
-def clang_plugin_path(library_name_info, build_env):
-    topobjdir = build_env.topobjdir
-    if topobjdir.endswith("/js/src"):
-        topobjdir = topobjdir[:-7]
-    return os.path.abspath(
-        os.path.join(
-            topobjdir,
-            "build",
-            "clang-plugin",
-            "%sclang-plugin%s"
-            % (library_name_info.dll.prefix, library_name_info.dll.suffix),
-        )
-    )
-
-
-set_config("CLANG_PLUGIN", clang_plugin_path)
-add_old_configure_assignment("CLANG_PLUGIN", clang_plugin_path)
+include(
+    "build/moz.configure/clang_plugin.configure", when="--enable-compile-environment"
+)
 
 
 # Awk detection
@@ -899,16 +894,6 @@ def deprecated_system_zlib_path(value):
 pkg_check_modules("MOZ_ZLIB", "zlib >= 1.2.3", when="--with-system-zlib")
 
 set_config("MOZ_SYSTEM_ZLIB", True, when="--with-system-zlib")
-
-
-@depends(with_system_zlib_option, js_shared, moz_linker, target.os)
-def zlib_in_mozglue(system_zlib, js_shared, linker, os):
-    if not system_zlib and (js_shared or linker or os == "Android"):
-        return True
-
-
-set_config("ZLIB_IN_MOZGLUE", zlib_in_mozglue)
-set_define("ZLIB_IN_MOZGLUE", zlib_in_mozglue)
 
 
 with only_when(cross_compiling):
