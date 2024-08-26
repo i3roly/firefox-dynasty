@@ -189,6 +189,8 @@ include = [
   "BackgroundSize",
   "BaselineSource",
   "BorderImageSlice",
+  "BorderImageRepeat",
+  "BorderImageRepeatKeyword",
   "BorderSpacing",
   "BorderRadius",
   "ColorScheme",

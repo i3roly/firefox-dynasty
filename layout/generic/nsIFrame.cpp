@@ -609,7 +609,7 @@ void nsIFrame::Init(nsIContent* aContent, nsContainerFrame* aParent,
 
   mContent = aContent;
   mParent = aParent;
-  MOZ_DIAGNOSTIC_ASSERT(!mParent || PresShell() == mParent->PresShell());
+  MOZ_ASSERT(!mParent || PresShell() == mParent->PresShell());
 
   if (aPrevInFlow) {
     mWritingMode = aPrevInFlow->GetWritingMode();
@@ -5416,6 +5416,7 @@ static FrameContentRange GetRangeForFrame(const nsIFrame* aFrame) {
     content = content->GetParent();
   }
 
+  MOZ_ASSERT(!content->IsBeingRemoved());
   nsIContent* parent = content->GetParent();
   if (aFrame->IsBlockOutside() || !parent) {
     return FrameContentRange(content, 0, content->GetChildCount());
@@ -5424,9 +5425,10 @@ static FrameContentRange GetRangeForFrame(const nsIFrame* aFrame) {
   // TODO(emilio): Revise this in presence of Shadow DOM / display: contents,
   // it's likely that we don't want to just walk the light tree, and we need to
   // change the representation of FrameContentRange.
-  const int32_t index = parent->ComputeIndexOf_Deprecated(content);
-  MOZ_ASSERT(index >= 0);
-  return FrameContentRange(parent, index, index + 1);
+  Maybe<uint32_t> index = parent->ComputeIndexOf(content);
+  MOZ_ASSERT(index.isSome());
+  return FrameContentRange(parent, static_cast<int32_t>(*index),
+                           static_cast<int32_t>(*index + 1));
 }
 
 // The FrameTarget represents the closest frame to a point that can be selected
@@ -6493,8 +6495,8 @@ nsIFrame::SizeComputationResult nsIFrame::ComputeSize(
                              aWM, aCBSize, boxSizingAdjust,
                              maxBSizeCoord.AsLengthPercentage(), aspectRatio);
 
-    result.ISize(aWM) = NS_CSS_MINMAX(result.ISize(aWM), transferredMinISize,
-                                      transferredMaxISize);
+    result.ISize(aWM) =
+        CSSMinMax(result.ISize(aWM), transferredMinISize, transferredMaxISize);
   }
 
   // Flex items ignore their min & max sizing properties in their
@@ -11096,7 +11098,7 @@ void nsIFrame::SetParent(nsContainerFrame* aParent) {
 
   // Note that the current mParent may already be destroyed at this point.
   mParent = aParent;
-  MOZ_DIAGNOSTIC_ASSERT(!mParent || PresShell() == mParent->PresShell());
+  MOZ_ASSERT(!mParent || PresShell() == mParent->PresShell());
 
   if (HasAnyStateBits(NS_FRAME_HAS_VIEW | NS_FRAME_HAS_CHILD_WITH_VIEW)) {
     for (nsIFrame* f = aParent;

@@ -364,6 +364,13 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "discoverystream.spoc-positions",
+    {
+      title: "CSV string of spoc position indexes on newtab Pocket grid",
+      value: "1,5,7,11,18,20",
+    },
+  ],
+  [
     "newtabWallpapers.highlightEnabled",
     {
       title: "Boolean flag to show the highlight about the Wallpaper feature",
@@ -595,7 +602,7 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Topics available",
       value:
-        "business, arts, food, health, finance, government, sports, tech, travel, education, society",
+        "business, arts, food, health, finance, government, sports, tech, travel, education-science, society",
     },
   ],
   [

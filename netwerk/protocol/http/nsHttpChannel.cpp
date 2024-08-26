@@ -825,7 +825,7 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
   }
 
   auto dnsStrategy = GetProxyDNSStrategy();
-  if (dnsStrategy != ProxyDNSStrategy::ORIGIN) {
+  if (!(dnsStrategy & DNS_PREFETCH_ORIGIN)) {
     return ContinueOnBeforeConnect(aShouldUpgrade, aStatus);
   }
 
@@ -6773,16 +6773,29 @@ nsHttpChannel::GetOrCreateChannelClassifier() {
   return classifier.forget();
 }
 
-ProxyDNSStrategy nsHttpChannel::GetProxyDNSStrategy() {
+uint16_t nsHttpChannel::GetProxyDNSStrategy() {
+  // This function currently only supports returning DNS_PREFETCH_ORIGIN.
+  // Support for the rest of the DNS_* flags will be added later.
+
   // When network_dns_force_use_https_rr is true, return DNS_PREFETCH_ORIGIN.
   // This ensures that we always perform HTTPS RR query.
-  nsCOMPtr<nsProxyInfo> proxyInfo(static_cast<nsProxyInfo*>(mProxyInfo.get()));
-  if (!proxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
-    return ProxyDNSStrategy::ORIGIN;
+  if (!mProxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
+    return DNS_PREFETCH_ORIGIN;
   }
 
+  uint32_t flags = 0;
+  nsAutoCString type;
+  mProxyInfo->GetFlags(&flags);
+  mProxyInfo->GetType(type);
+
   // If the proxy is not to perform name resolution itself.
-  return GetProxyDNSStrategyHelper(proxyInfo->Type(), proxyInfo->Flags());
+  if (!(flags & nsIProxyInfo::TRANSPARENT_PROXY_RESOLVES_HOST)) {
+    if (type.EqualsLiteral("socks")) {
+      return DNS_PREFETCH_ORIGIN;
+    }
+  }
+
+  return 0;
 }
 
 // BeginConnect() SHOULD NOT call AsyncAbort(). AsyncAbort will be called by
@@ -7083,7 +7096,16 @@ nsresult nsHttpChannel::BeginConnect() {
     ReEvaluateReferrerAfterTrackingStatusIsKnown();
   }
 
-  MaybeStartDNSPrefetch();
+  rv = MaybeStartDNSPrefetch();
+  if (NS_FAILED(rv)) {
+    auto dnsStrategy = GetProxyDNSStrategy();
+    if (dnsStrategy & DNS_BLOCK_ON_ORIGIN_RESOLVE) {
+      // TODO: Should this be fatal?
+      return rv;
+    }
+    // Otherwise this shouldn't be fatal.
+    return NS_OK;
+  }
 
   rv = CallOrWaitForResume(
       [](nsHttpChannel* self) { return self->PrepareToConnect(); });
@@ -7103,7 +7125,7 @@ nsresult nsHttpChannel::BeginConnect() {
   return NS_OK;
 }
 
-void nsHttpChannel::MaybeStartDNSPrefetch() {
+nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
   // Start a DNS lookup very early in case the real open is queued the DNS can
   // happen in parallel. Do not do so in the presence of an HTTP proxy as
   // all lookups other than for the proxy itself are done by the proxy.
@@ -7119,7 +7141,7 @@ void nsHttpChannel::MaybeStartDNSPrefetch() {
   // timing we used.
   if ((mLoadFlags & (LOAD_NO_NETWORK_IO | LOAD_ONLY_FROM_CACHE)) ||
       LoadAuthRedirectedChannel()) {
-    return;
+    return NS_OK;
   }
 
   auto dnsStrategy = GetProxyDNSStrategy();
@@ -7127,10 +7149,10 @@ void nsHttpChannel::MaybeStartDNSPrefetch() {
   LOG(
       ("nsHttpChannel::MaybeStartDNSPrefetch [this=%p, strategy=%u] "
        "prefetching%s\n",
-       this, static_cast<uint32_t>(dnsStrategy),
+       this, dnsStrategy,
        mCaps & NS_HTTP_REFRESH_DNS ? ", refresh requested" : ""));
 
-  if (dnsStrategy == ProxyDNSStrategy::ORIGIN) {
+  if (dnsStrategy & DNS_PREFETCH_ORIGIN) {
     OriginAttributes originAttributes;
     StoragePrincipalHelper::GetOriginAttributesForNetworkState(
         this, originAttributes);
@@ -7142,8 +7164,20 @@ void nsHttpChannel::MaybeStartDNSPrefetch() {
     if (mCaps & NS_HTTP_REFRESH_DNS) {
       dnsFlags |= nsIDNSService::RESOLVE_BYPASS_CACHE;
     }
+    nsresult rv = mDNSPrefetch->PrefetchHigh(dnsFlags);
 
-    Unused << mDNSPrefetch->PrefetchHigh(dnsFlags);
+    if (dnsStrategy & DNS_BLOCK_ON_ORIGIN_RESOLVE) {
+      LOG(("  blocking on prefetching origin"));
+
+      if (NS_WARN_IF(NS_FAILED(rv))) {
+        LOG(("  lookup failed with 0x%08" PRIx32 ", aborting request",
+             static_cast<uint32_t>(rv)));
+        return rv;
+      }
+
+      // Resolved in OnLookupComplete.
+      mDNSBlockingThenable = mDNSBlockingPromise.Ensure(__func__);
+    }
 
     if (StaticPrefs::network_dns_use_https_rr_as_altsvc() && !mHTTPSSVCRecord &&
         !(mCaps & NS_HTTP_DISALLOW_HTTPS_RR) && canUseHTTPSRRonNetwork()) {
@@ -7161,6 +7195,8 @@ void nsHttpChannel::MaybeStartDNSPrefetch() {
                                         });
     }
   }
+
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -8268,8 +8304,6 @@ nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
 
   if (LoadTimingEnabled() && request == mCachePump) {
     mCacheReadEnd = TimeStamp::Now();
-
-    ReportNetVSCacheTelemetry();
   }
 
   // allow content to be cached if it was loaded successfully (bug #482935)
@@ -10223,144 +10257,6 @@ void nsHttpChannel::ReportRcwnStats(bool isFromNet) {
   gIOService->IncrementRequestNumber();
 }
 
-static const size_t kPositiveBucketNumbers = 34;
-static const int64_t kPositiveBucketLevels[kPositiveBucketNumbers] = {
-    0,    10,   20,   30,   40,    50,    60,    70,    80,    90,   100,  200,
-    300,  400,  500,  600,  700,   800,   900,   1000,  2000,  3000, 4000, 5000,
-    6000, 7000, 8000, 9000, 10000, 20000, 30000, 40000, 50000, 60000};
-
-/**
- * For space efficiency, we collect finer resolution for small difference
- * between net and cache time, coarser for larger.
- * Bucket #40 for a tie.
- * #41 to #50 indicates cache wins by 1ms to 100ms, split equally.
- * #51 to #59 indicates cache wins by 101ms to 1000ms.
- * #60 to #68 indicates cache wins by 1s to 10s.
- * #69 to #73 indicates cache wins by 11s to 60s.
- * #74 indicates cache wins by more than 1 minute.
- *
- * #39 to #30 indicates network wins by 1ms to 100ms, split equally.
- * #29 to #21 indicates network wins by 101ms to 1000ms.
- * #20 to #12 indicates network wins by 1s to 10s.
- * #11 to #7 indicates network wins by 11s to 60s.
- * #6 indicates network wins by more than 1 minute.
- *
- * Other bucket numbers are reserved.
- */
-inline int64_t nsHttpChannel::ComputeTelemetryBucketNumber(
-    int64_t difftime_ms) {
-  int64_t absBucketIndex =
-      std::lower_bound(kPositiveBucketLevels,
-                       kPositiveBucketLevels + kPositiveBucketNumbers,
-                       static_cast<int64_t>(mozilla::Abs(difftime_ms))) -
-      kPositiveBucketLevels;
-
-  return difftime_ms >= 0 ? 40 + absBucketIndex : 40 - absBucketIndex;
-}
-
-void nsHttpChannel::ReportNetVSCacheTelemetry() {
-  nsresult rv;
-  if (!mCacheEntry) {
-    return;
-  }
-
-  // We only report telemetry if the entry is persistent (on disk)
-  bool persistent;
-  rv = mCacheEntry->GetPersistent(&persistent);
-  if (NS_FAILED(rv) || !persistent) {
-    return;
-  }
-
-  uint64_t onStartNetTime = 0;
-  if (NS_FAILED(mCacheEntry->GetOnStartTime(&onStartNetTime))) {
-    return;
-  }
-
-  uint64_t onStopNetTime = 0;
-  if (NS_FAILED(mCacheEntry->GetOnStopTime(&onStopNetTime))) {
-    return;
-  }
-
-  uint64_t onStartCacheTime =
-      (mOnStartRequestTimestamp - mAsyncOpenTime).ToMilliseconds();
-  int64_t onStartDiff = onStartNetTime - onStartCacheTime;
-  onStartDiff = ComputeTelemetryBucketNumber(onStartDiff);
-
-  uint64_t onStopCacheTime = (mCacheReadEnd - mAsyncOpenTime).ToMilliseconds();
-  int64_t onStopDiff = onStopNetTime - onStopCacheTime;
-  onStopDiff = ComputeTelemetryBucketNumber(onStopDiff);
-
-  if (mDidReval) {
-    Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTART_REVALIDATED_V2,
-                          onStartDiff);
-    Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_REVALIDATED_V2,
-                          onStopDiff);
-  } else {
-    Telemetry::Accumulate(
-        Telemetry::HTTP_NET_VS_CACHE_ONSTART_NOTREVALIDATED_V2, onStartDiff);
-    Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_NOTREVALIDATED_V2,
-                          onStopDiff);
-  }
-
-  if (mDidReval) {
-    // We don't report revalidated probes as the data would be skewed.
-    return;
-  }
-
-  if (mCacheOpenWithPriority) {
-    if (mCacheQueueSizeWhenOpen < 5) {
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTART_QSMALL_HIGHPRI_V2, onStartDiff);
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTOP_QSMALL_HIGHPRI_V2, onStopDiff);
-    } else if (mCacheQueueSizeWhenOpen < 10) {
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTART_QMED_HIGHPRI_V2, onStartDiff);
-      Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_QMED_HIGHPRI_V2,
-                            onStopDiff);
-    } else {
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTART_QBIG_HIGHPRI_V2, onStartDiff);
-      Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_QBIG_HIGHPRI_V2,
-                            onStopDiff);
-    }
-  } else {  // The limits are higher for normal priority cache queues
-    if (mCacheQueueSizeWhenOpen < 10) {
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTART_QSMALL_NORMALPRI_V2,
-          onStartDiff);
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTOP_QSMALL_NORMALPRI_V2, onStopDiff);
-    } else if (mCacheQueueSizeWhenOpen < 50) {
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTART_QMED_NORMALPRI_V2, onStartDiff);
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTOP_QMED_NORMALPRI_V2, onStopDiff);
-    } else {
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTART_QBIG_NORMALPRI_V2, onStartDiff);
-      Telemetry::Accumulate(
-          Telemetry::HTTP_NET_VS_CACHE_ONSTOP_QBIG_NORMALPRI_V2, onStopDiff);
-    }
-  }
-
-  uint32_t diskStorageSizeK = 0;
-  rv = mCacheEntry->GetDiskStorageSizeInKB(&diskStorageSizeK);
-  if (NS_FAILED(rv)) {
-    return;
-  }
-
-  // No significant difference was observed between different sizes for
-  // |onStartDiff|
-  if (diskStorageSizeK < 256) {
-    Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_SMALL_V2,
-                          onStopDiff);
-  } else {
-    Telemetry::Accumulate(Telemetry::HTTP_NET_VS_CACHE_ONSTOP_LARGE_V2,
-                          onStopDiff);
-  }
-}
-
 void nsHttpChannel::ReportSystemChannelTelemetry(nsresult status) {
   // Use status and httpStatus to determine
   // if it was successful, and if we had connectivity / offline in this time
@@ -11114,6 +11010,23 @@ NS_IMETHODIMP nsHttpChannel::SetResponseOverride(
   mOverrideResponse = new nsMainThreadPtrHolder<nsIReplacedHttpResponse>(
       "nsIReplacedHttpResponse", aReplacedHttpResponse);
   return NS_OK;
+}
+
+NS_IMETHODIMP nsHttpChannel::SetResponseStatus(uint32_t aStatus,
+                                               const nsACString& aStatusText) {
+  if (!mResponseHead) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
+  nsAutoCString statusText(aStatusText);
+  nsAutoCString protocolVersion(
+      nsHttp::GetProtocolVersion(mResponseHead->Version()));
+  ToUpperCase(protocolVersion);
+
+  nsPrintfCString line("%s %u %s", protocolVersion.get(), aStatus,
+                       statusText.get());
+
+  return mResponseHead->ParseStatusLine(line);
 }
 
 NS_IMETHODIMP nsHttpChannel::SetWebTransportSessionEventListener(

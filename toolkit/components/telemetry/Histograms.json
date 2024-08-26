@@ -2994,186 +2994,6 @@
     "n_values": 12,
     "description": "Http response status (0=200, 1=301, 2=302, 3=304, 4=307, 5=308, 6=400, 7=401, 8=403, 9=404, 10=500, 11=other)"
   },
-  "HTTP_NET_VS_CACHE_ONSTART_QSMALL_NORMALPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) for requests with a normal priority and small queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_QMED_NORMALPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) for requests with a normal priority and medium queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_QBIG_NORMALPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) for requests with a normal priority and large queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_QSMALL_HIGHPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) for requests with a high priority and small queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_QMED_HIGHPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) for requests with a high priority and medium queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_QBIG_HIGHPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) for requests with a high priority and large queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_QSMALL_NORMALPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for requests with a normal priority and small queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_QMED_NORMALPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for requests with a normal priority and medium queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_QBIG_NORMALPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for requests with a normal priority and large queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_QSMALL_HIGHPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for requests with a high priority and small queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_QMED_HIGHPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for requests with a high priority and medium queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_QBIG_HIGHPRI_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for requests with a high priority and large queue. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_SMALL_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for cache files with a small size (<256K). Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_LARGE_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) for cache files with a large size (>=256K). Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_REVALIDATED_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference revalidated cache entries. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTART_NOTREVALIDATED_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStartRequest) difference (ms) not revalidated cache entries. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_REVALIDATED_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) revalidated cache entries. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
-  "HTTP_NET_VS_CACHE_ONSTOP_NOTREVALIDATED_V2": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "84",
-    "alert_emails": ["necko@mozilla.com", "mnovotny@mozilla.com"],
-    "bug_numbers": [1325322, 1524552, 1616069],
-    "kind": "enumerated",
-    "n_values": 80,
-    "description": "Network vs cache time load (OnStopRequest) difference (ms) not revalidated cache entries. Cache wins: 41-50 for 1-100ms, 51-59 for 101-1000ms, 60-68 for 1-10s, 69-73 for 11-60s and 74 for > 1m. Network wins: 39-30 for 1-100ms, 29-21 for 101-1000ms, 20-12 for 1-10s, 11-7 for 11-60s and 6 for > 1m."
-  },
   "HTTP_ONSTART_SUSPEND_TOTAL_TIME": {
     "record_in_processes": ["main", "content"],
     "products": ["firefox", "fennec"],
@@ -3562,24 +3382,6 @@
     "high": 2000,
     "n_buckets": 50,
     "description": "The time spent relaying response completion from the socket thread of the parent process to the content process, in milliseconds, keyed by the classOfService flags"
-  },
-  "HTTP_CHILD_OMT_STATS_2": {
-    "record_in_processes": ["content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["necko@mozilla.com"],
-    "bug_numbers": [1357682],
-    "expires_in_version": "61",
-    "kind": "categorical",
-    "keyed": true,
-    "description": "Stats about success rate of HTTP OMT request in content process, keyed by content policy.",
-    "labels": [
-      "success",
-      "successMainThread",
-      "failListener",
-      "failListenerChain",
-      "notRequested",
-      "successOnlyDecomp"
-    ]
   },
   "TLS_EARLY_DATA_NEGOTIATED": {
     "record_in_processes": ["main", "socket"],
@@ -4285,96 +4087,6 @@
     "high": 20,
     "n_buckets": 19,
     "description": "Reuse count of an HTTP cache entry warmed in memory"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_OPEN_PRIORITY": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_READ_PRIORITY": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_MANAGEMENT": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_OPEN": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_READ": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_WRITE": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_WRITE_PRIORITY": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_INDEX": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
-  },
-  "HTTP_CACHE_IO_QUEUE_2_EVICT": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["hbambas@mozilla.com"],
-    "bug_numbers": [1294183],
-    "expires_in_version": "55",
-    "kind": "enumerated",
-    "n_values": 10,
-    "description": "HTTP Cache IO queue length"
   },
   "CACHE_DEVICE_SEARCH_2": {
     "record_in_processes": ["main", "content"],
@@ -5811,15 +5523,6 @@
     "kind": "enumerated",
     "n_values": 4,
     "description": "Count the number of 0) successful connections to an ipv4 address, 1) failed connection an ipv4 address, 2) successful connection to an ipv6 address and 3) failed connections to an ipv6 address."
-  },
-  "NETWORK_CONNECTION_COUNT": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["amarchesini@mozilla.com"],
-    "expires_in_version": "58",
-    "kind": "count",
-    "bug_numbers": [1330255],
-    "description": "Number of the use of navigator.connection."
   },
   "FIND_PLUGINS": {
     "record_in_processes": ["main", "content"],
@@ -11943,17 +11646,6 @@
       "WASM"
     ],
     "description": "Percentage of the entries with the given content type. Numbers are sampled periodically, every time 2GB of data is written to the cache."
-  },
-  "NETWORK_COOKIE_UNICODE_BYTE": {
-    "record_in_processes": ["main"],
-    "products": ["firefox"],
-    "alert_emails": ["necko@mozilla.com", "vgosu@mozilla.com"],
-    "bug_numbers": [1797231, 1813469, 1850889],
-    "expires_in_version": "130",
-    "kind": "categorical",
-    "releaseChannelCollection": "opt-out",
-    "description": "Records whether a cookie contains unexpected characters",
-    "labels": ["none", "unicodeName", "unicodeValue"]
   },
   "SSL_TLS13_INTOLERANCE_REASON_PRE": {
     "record_in_processes": ["main"],

@@ -716,8 +716,10 @@ ImgDrawResult nsCSSRendering::CreateWebRenderCommandsForBorderWithStyleBorder(
     return ImgDrawResult::NOT_SUPPORTED;
   }
 
-  if (aStyleBorder.mBorderImageRepeatH == StyleBorderImageRepeat::Space ||
-      aStyleBorder.mBorderImageRepeatV == StyleBorderImageRepeat::Space) {
+  if (aStyleBorder.mBorderImageRepeat._0 ==
+          StyleBorderImageRepeatKeyword::Space ||
+      aStyleBorder.mBorderImageRepeat._1 ==
+          StyleBorderImageRepeatKeyword::Space) {
     return ImgDrawResult::NOT_SUPPORTED;
   }
 

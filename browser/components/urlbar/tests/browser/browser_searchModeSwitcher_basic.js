@@ -157,10 +157,10 @@ add_task(async function detect_searchmode_changes() {
   }, "The searchMode name has been removed when we exit search mode");
 });
 
-function focusSwitcher() {
-  EventUtils.synthesizeKey("l", { accelKey: true });
-  EventUtils.synthesizeKey("KEY_Escape");
-  EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true });
+function focusSwitcher(win = window) {
+  EventUtils.synthesizeKey("l", { accelKey: true }, win);
+  EventUtils.synthesizeKey("KEY_Escape", {}, win);
+  EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true }, win);
 }
 
 /**
@@ -283,6 +283,50 @@ add_task(async function open_settings() {
     "about:preferences#search",
     "Opened settings page"
   );
+
+  // Clean up.
+  let onLoaded = BrowserTestUtils.browserLoaded(gBrowser.selectedBrowser);
+  gBrowser.selectedBrowser.loadURI(Services.io.newURI("about:newtab"), {
+    triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+  });
+  await onLoaded;
+});
+
+add_task(async function open_settings_with_there_is_already_opened_settings() {
+  info("Open settings page in a tab");
+  let startTab = gBrowser.selectedTab;
+  let preferencesTab = await BrowserTestUtils.openNewForegroundTab(
+    gBrowser,
+    "about:preferences#search"
+  );
+  gBrowser.selectedTab = startTab;
+
+  info("Open new window");
+  let newWin = await BrowserTestUtils.openNewBrowserWindow();
+  let popup = UrlbarTestUtils.searchModeSwitcherPopup(newWin);
+  let promiseMenuOpen = BrowserTestUtils.waitForEvent(popup, "popupshown");
+
+  info("Open the urlbar and open the switcher via keyboard in the new window");
+  focusSwitcher(newWin);
+  EventUtils.synthesizeKey("KEY_Enter", {}, newWin);
+  await promiseMenuOpen;
+
+  info(
+    "Choose open settings item and wait until the window having perference page will get focus"
+  );
+  let onFocus = BrowserTestUtils.waitForEvent(window, "focus", true);
+  EventUtils.synthesizeKey("KEY_ArrowUp", {}, newWin);
+  EventUtils.synthesizeKey("KEY_Enter", {}, newWin);
+  await onFocus;
+  Assert.ok(true, "The window that has perference page got focus");
+
+  await BrowserTestUtils.waitForCondition(
+    () => window.gBrowser.selectedTab == preferencesTab
+  );
+  Assert.ok(true, "Focus opened settings page");
+
+  BrowserTestUtils.removeTab(preferencesTab);
+  await BrowserTestUtils.closeWindow(newWin);
 });
 
 async function setDefaultEngine(name) {
@@ -323,5 +367,79 @@ add_task(async function test_search_icon_change() {
     defaultEngine,
     Ci.nsISearchService.CHANGE_REASON_UNKNOWN
   );
+  await BrowserTestUtils.closeWindow(newWin);
+});
+
+add_task(async function test_search_icon_change_without_keyword_enabled() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["keyword.enabled", false]],
+  });
+
+  let newWin = await BrowserTestUtils.openNewBrowserWindow();
+  let searchModeSwitcherButton = newWin.document.getElementById(
+    "searchmode-switcher-icon"
+  );
+
+  let regex = /url\("([^"]+)"\)/;
+  let searchModeSwitcherIconUrl =
+    searchModeSwitcherButton.style.listStyleImage.match(regex);
+
+  const searchGlassIconUrl = UrlbarUtils.ICON.SEARCH_GLASS;
+
+  Assert.equal(
+    searchModeSwitcherIconUrl[1],
+    searchGlassIconUrl,
+    "The search mode switcher should have the search glass icon url since \
+     keyword.enabled is false and we are not in search mode."
+  );
+
+  let popup = UrlbarTestUtils.searchModeSwitcherPopup(newWin);
+  let engineName = "Bing";
+  info("Open the urlbar and searchmode switcher popup");
+  await UrlbarTestUtils.promiseAutocompleteResultPopup({
+    window: newWin,
+    value: "",
+  });
+  await UrlbarTestUtils.openSearchModeSwitcher(newWin);
+  info("Press on the bing menu button and enter search mode");
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(newWin);
+  popup.querySelector(`toolbarbutton[label=${engineName}]`).click();
+  await popupHidden;
+
+  const bingSearchEngineIconUrl = await Services.search
+    .getEngineByName(engineName)
+    .getIconURL();
+
+  searchModeSwitcherIconUrl =
+    searchModeSwitcherButton.style.listStyleImage.match(regex);
+
+  Assert.equal(
+    searchModeSwitcherIconUrl[1],
+    bingSearchEngineIconUrl,
+    "The search mode switcher should have the bing icon url since we are in \
+     search mode"
+  );
+  await UrlbarTestUtils.assertSearchMode(newWin, {
+    engineName: "Bing",
+    entry: "other",
+    source: 3,
+  });
+
+  info("Press the close button and exit search mode");
+  newWin.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(newWin, null);
+
+  searchModeSwitcherIconUrl = await BrowserTestUtils.waitForCondition(
+    () => searchModeSwitcherButton.style.listStyleImage.match(regex),
+    "Waiting for the search mode switcher icon to update after exiting search mode."
+  );
+
+  Assert.equal(
+    searchModeSwitcherIconUrl[1],
+    searchGlassIconUrl,
+    "The search mode switcher should have the search glass icon url since \
+     keyword.enabled is false"
+  );
+
   await BrowserTestUtils.closeWindow(newWin);
 });

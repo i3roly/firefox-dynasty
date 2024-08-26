@@ -271,7 +271,13 @@
         return;
       }
 
-      if (event.button != 0 || event.originalTarget.localName != "scrollbox") {
+      // Make sure it is the primary button, we are hitting our arrowscrollbox,
+      // and we're not hitting the scroll buttons.
+      if (
+        event.button != 0 ||
+        event.target != this.arrowScrollbox ||
+        event.composedTarget.localName == "toolbarbutton"
+      ) {
         return;
       }
 
@@ -362,11 +368,15 @@
           let winUtils = window.windowUtils;
           let endOfTab =
             winUtils.getBoundsWithoutFlushing(lastTab)[
-              RTL_UI ? "left" : "right"
+              (this.verticalMode && "bottom") ||
+                (this.#rtlMode ? "left" : "right")
             ];
           if (
-            (!RTL_UI && event.clientX > endOfTab) ||
-            (RTL_UI && event.clientX < endOfTab)
+            (this.verticalMode && event.clientY > endOfTab) ||
+            (!this.verticalMode &&
+              (this.#rtlMode
+                ? event.clientX < endOfTab
+                : event.clientX > endOfTab))
           ) {
             BrowserCommands.openTab();
           }
@@ -422,8 +432,8 @@
           if (keyComboForMove) {
             gBrowser.moveTabOver(event);
           } else if (
-            (!RTL_UI && event.keyCode == KeyEvent.DOM_VK_RIGHT) ||
-            (RTL_UI && event.keyCode == KeyEvent.DOM_VK_LEFT)
+            (!this.#rtlMode && event.keyCode == KeyEvent.DOM_VK_RIGHT) ||
+            (this.#rtlMode && event.keyCode == KeyEvent.DOM_VK_LEFT)
           ) {
             focusedTabIndex++;
           } else {
@@ -612,9 +622,7 @@
         offsetY: this.verticalMode
           ? event.screenY - window.screenY - tabOffset
           : event.screenY - window.screenY,
-        scrollPos: this.verticalMode
-          ? this.arrowScrollbox.scrollbox.scrollTop
-          : this.arrowScrollbox.scrollbox.scrollLeft,
+        scrollPos: this.arrowScrollbox.scrollPosition,
         screenX: event.screenX,
         screenY: event.screenY,
         movingTabs: (tab.multiselected ? gBrowser.selectedTabs : [tab]).filter(
@@ -661,7 +669,7 @@
         }
         if (pixelsToScroll) {
           arrowScrollbox.scrollByPixels(
-            (RTL_UI && !this.verticalMode ? -1 : 1) * pixelsToScroll,
+            (this.#rtlMode ? -1 : 1) * pixelsToScroll,
             true
           );
         }
@@ -715,15 +723,10 @@
         let maxMargin = this.verticalMode
           ? Math.min(minMargin + scrollRect.height, scrollRect.bottom)
           : Math.min(minMargin + scrollRect.width, scrollRect.right);
-        if (RTL_UI && !this.verticalMode) {
+        if (this.#rtlMode) {
           [minMargin, maxMargin] = [
             this.clientWidth - maxMargin,
             this.clientWidth - minMargin,
-          ];
-        } else if (this.verticalMode) {
-          [minMargin, maxMargin] = [
-            this.clientHeight - maxMargin,
-            this.clientHeight - minMargin,
           ];
         }
         newMargin = pixelsToScroll > 0 ? maxMargin : minMargin;
@@ -734,7 +737,7 @@
           let tabRect = this._getVisibleTabs().at(-1).getBoundingClientRect();
           if (this.verticalMode) {
             newMargin = tabRect.bottom - rect.top;
-          } else if (RTL_UI) {
+          } else if (this.#rtlMode) {
             newMargin = rect.right - tabRect.left;
           } else {
             newMargin = tabRect.right - rect.left;
@@ -743,7 +746,7 @@
           let tabRect = children[newIndex].getBoundingClientRect();
           if (this.verticalMode) {
             newMargin = rect.top - tabRect.bottom;
-          } else if (RTL_UI) {
+          } else if (this.#rtlMode) {
             newMargin = rect.right - tabRect.right;
           } else {
             newMargin = tabRect.left - rect.left;
@@ -753,7 +756,7 @@
 
       ind.hidden = false;
       newMargin += this.verticalMode ? ind.clientHeight : ind.clientWidth / 2;
-      if (RTL_UI && !this.verticalMode) {
+      if (this.#rtlMode) {
         newMargin *= -1;
       }
       ind.style.transform = this.verticalMode
@@ -1184,6 +1187,10 @@
 
     get verticalMode() {
       return this.getAttribute("orient") == "vertical";
+    }
+
+    get #rtlMode() {
+      return !this.verticalMode && RTL_UI;
     }
 
     _getVisibleTabs() {
@@ -1666,7 +1673,7 @@
         pinned ? numPinned : undefined
       );
 
-      if (RTL_UI && !this.verticalMode) {
+      if (this.#rtlMode) {
         tabs.reverse();
         // Copy moving tabs array to avoid infinite reversing.
         movingTabs = [...movingTabs].reverse();
@@ -1733,16 +1740,10 @@
       let high = tabs.length - 1;
       let getTabShift = (tab, dropIndex) => {
         if (tab._tPos < draggedTab._tPos && tab._tPos >= dropIndex) {
-          if (this.verticalMode) {
-            return shiftSize;
-          }
-          return RTL_UI ? -shiftSize : shiftSize;
+          return this.#rtlMode ? -shiftSize : shiftSize;
         }
         if (tab._tPos > draggedTab._tPos && tab._tPos < dropIndex) {
-          if (this.verticalMode) {
-            return -shiftSize;
-          }
-          return RTL_UI ? shiftSize : -shiftSize;
+          return this.#rtlMode ? shiftSize : -shiftSize;
         }
         return 0;
       };
@@ -1933,8 +1934,7 @@
       for (let t of this._getVisibleTabs()) {
         if (t.groupingTabsData && t.groupingTabsData.translatePos) {
           let translatePos =
-            (RTL_UI && !this.verticalMode ? -1 : 1) *
-            t.groupingTabsData.translatePos;
+            (this.#rtlMode ? -1 : 1) * t.groupingTabsData.translatePos;
           t.style.transform = `translate${
             this.verticalMode ? "Y" : "X"
           }(${translatePos}px)`;
@@ -2081,7 +2081,7 @@
               }
 
               this.arrowScrollbox.scrollByPixels(
-                RTL_UI
+                this.#rtlMode
                   ? selectedRect.right - scrollRect.right
                   : selectedRect.left - scrollRect.left
               );
@@ -2144,7 +2144,7 @@
         isBeforeMiddle = event.screenY < middle;
       } else {
         let middle = tab.screenX + tab.getBoundingClientRect().width / 2;
-        isBeforeMiddle = RTL_UI
+        isBeforeMiddle = this.#rtlMode
           ? event.screenX > middle
           : event.screenX < middle;
       }
