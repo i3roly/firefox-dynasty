@@ -32,6 +32,30 @@ add_task(async function test_tabGroupCreateWithTabs() {
   group.remove();
 });
 
+add_task(async function test_getTabGroups() {
+  let group1 = gBrowser.addTabGroup("blue", "test1");
+  Assert.equal(
+    gBrowser.tabGroups.length,
+    1,
+    "there is one group in the tabstrip"
+  );
+
+  let group2 = gBrowser.addTabGroup("red", "test2");
+  Assert.equal(
+    gBrowser.tabGroups.length,
+    2,
+    "there are two groups in the tabstrip"
+  );
+
+  group1.remove();
+  group2.remove();
+  Assert.equal(
+    gBrowser.tabGroups.length,
+    0,
+    "there are no groups in the tabstrip"
+  );
+});
+
 add_task(async function test_tabGroupCollapseAndExpand() {
   let group = gBrowser.addTabGroup("blue", "test");
   let tab1 = BrowserTestUtils.addTab(gBrowser, "about:blank");
@@ -167,4 +191,30 @@ add_task(async function test_tabGroupCollapseCreatesNewTabIfAllTabsInGroup() {
   BrowserTestUtils.removeTab(fgWindow.gBrowser.tabs[1]);
   group.remove();
   await BrowserTestUtils.closeWindow(fgWindow);
+});
+
+add_task(async function test_tabUngroup() {
+  let extraTab1 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+
+  let group = gBrowser.addTabGroup("blue", "test");
+
+  let groupedTab = BrowserTestUtils.addTab(gBrowser, "about:blank");
+  group.addTabs([groupedTab]);
+  let extraTab2 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+
+  Assert.equal(groupedTab._tPos, 2, "grouped tab starts in correct position");
+  Assert.equal(groupedTab.group, group, "tab belongs to group");
+
+  group.ungroupTabs();
+
+  Assert.equal(
+    groupedTab._tPos,
+    2,
+    "tab is in the same position as before ungroup"
+  );
+  Assert.equal(groupedTab.group, null, "tab no longer belongs to group");
+
+  BrowserTestUtils.removeTab(groupedTab);
+  BrowserTestUtils.removeTab(extraTab1);
+  BrowserTestUtils.removeTab(extraTab2);
 });

@@ -437,6 +437,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
 
         components.settings.coldStartsBetweenSetAsDefaultPrompts++
 
+        components.appStore.dispatch(
+            AppAction.OrientationChange(
+                orientation = OrientationMode.fromInteger(resources.configuration.orientation),
+            ),
+        )
+
         StartupTimeline.onActivityCreateEndHome(this) // DO NOT MOVE ANYTHING BELOW HERE.
     }
 
@@ -658,11 +664,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
     /**
      * Handles intents received when the activity is open.
      */
-    final override fun onNewIntent(intent: Intent?) {
+    final override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent?.let {
-            handleNewIntent(it)
-        }
+        handleNewIntent(intent)
         startupPathProvider.onIntentReceived(intent)
     }
 
@@ -764,6 +768,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         }.toTypedArray()
     }
 
+    @Suppress("MissingSuperCall", "OVERRIDE_DEPRECATION")
     final override fun onBackPressed() {
         supportFragmentManager.primaryNavigationFragment?.childFragmentManager?.fragments?.forEach {
             if (it is UserInteractionHandler && it.onBackPressed()) {

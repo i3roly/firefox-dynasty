@@ -495,6 +495,23 @@ win64-vs2022:
             - vs
             - vs-toolchain
 
+win64-aarch64-vs2022:
+    description: "VS 2022"
+    attributes:
+        local-toolchain: true
+    treeherder:
+        symbol: TW64(msvc2022-aarch64)
+    worker:
+        env:
+            MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: system
+    run:
+        script: get_vs.py
+        arguments:
+            - build/vs/vs2022-aarch64.yaml
+        resources:
+            - build/vs/vs2022-aarch64.yaml
+        toolchain-artifact: project/gecko/vs/vs.tar.zst
+
 linux64-afl-instrumentation-4.0:
     description: "AFL++ instrumentation toolchain build"
     treeherder:
@@ -574,6 +591,22 @@ win64-libxml2:
         symbol: TW64(libxml2)
     run:
         script: build-libxml2.sh
+        arguments: ['x86_64-pc-windows-msvc']
+        toolchain-artifact: public/build/libxml2.tar.zst
+    fetches:
+        fetch:
+            - libxml2
+        toolchain:
+            - linux64-clang-toolchain
+            - vs-toolchain
+
+win64-aarch64-libxml2:
+    description: "libxml2 toolchain build"
+    treeherder:
+        symbol: TW64(libxml2-aarch64)
+    run:
+        script: build-libxml2.sh
+        arguments: ['aarch64-pc-windows-msvc']
         toolchain-artifact: public/build/libxml2.tar.zst
     fetches:
         fetch:

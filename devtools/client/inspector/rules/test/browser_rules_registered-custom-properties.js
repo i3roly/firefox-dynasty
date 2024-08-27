@@ -49,6 +49,12 @@ const TEST_URI = `https://example.org/document-builder.sjs?html=${encodeURICompo
       initial-value: ${CSS_NOT_DEFINED_INITIAL_VALUE};
     }
 
+    @property --empty {
+      syntax: "*";
+      inherits: true;
+      initial-value: ;
+    }
+
     main {
       --js-no-inherit: ${JS_NO_INHERIT_MAIN_VALUE};
       --js-inherit: ${JS_INHERIT_MAIN_VALUE};
@@ -65,6 +71,7 @@ const TEST_URI = `https://example.org/document-builder.sjs?html=${encodeURICompo
       outline: 10px solid var(--constructed, green);
       text-decoration-color: var(--js-not-defined, blue);
       caret-color: var(--css-dynamic-registered, turquoise);
+      --test-empty: var(--empty);
     }
 
     aside {
@@ -127,6 +134,14 @@ add_task(async function () {
       ],
     },
     {
+      header: `--empty {`,
+      propertyDefinition: [
+        `  syntax: "*";`,
+        `  inherits: true;`,
+        `  initial-value: ;`,
+      ],
+    },
+    {
       header: `--js-inherit {`,
       propertyDefinition: [
         `  name: "--js-inherit",`,
@@ -150,7 +165,7 @@ add_task(async function () {
   info("Check that var() tooltips handle registered properties");
   await assertVariableTooltipForProperty(view, "h1", "background-color", {
     // The variable value is the initial value since the variable does not inherit
-    header: `--css-no-inherit = ${CSS_NO_INHERIT_INITIAL_VALUE}`,
+    header: CSS_NO_INHERIT_INITIAL_VALUE,
     registeredProperty: [
       `syntax:"<color>"`,
       `inherits:false`,
@@ -159,7 +174,7 @@ add_task(async function () {
   });
   await assertVariableTooltipForProperty(view, "h1", "color", {
     // The variable value is the value set in the main selector, since the variable does inherit
-    header: `--css-inherit = ${CSS_INHERIT_MAIN_VALUE}`,
+    header: CSS_INHERIT_MAIN_VALUE,
     computed: "rgb(255, 0, 0)",
     registeredProperty: [
       `syntax:"<color>"`,
@@ -173,7 +188,7 @@ add_task(async function () {
     "border-color",
     // The variable value is the initial value since the variable is not set
     {
-      header: `--css-not-defined = ${CSS_NOT_DEFINED_INITIAL_VALUE}`,
+      header: CSS_NOT_DEFINED_INITIAL_VALUE,
       registeredProperty: [
         `syntax:"<color>"`,
         `inherits:true`,
@@ -187,7 +202,7 @@ add_task(async function () {
     "height",
     // The variable value is the initial value since the variable does not inherit
     {
-      header: `--js-no-inherit = ${JS_NO_INHERIT_INITIAL_VALUE}`,
+      header: JS_NO_INHERIT_INITIAL_VALUE,
       registeredProperty: [
         `syntax:"<length>"`,
         `inherits:false`,
@@ -201,12 +216,20 @@ add_task(async function () {
     "width",
     // The variable value is the value set in the main selector, since the variable does inherit
     {
-      header: `--js-inherit = ${JS_INHERIT_MAIN_VALUE}`,
+      header: JS_INHERIT_MAIN_VALUE,
       // Computed value isn't displayed when it's the same as we put in the header
       computed: null,
       registeredProperty: [`syntax:"*"`, `inherits:true`],
     }
   );
+  await assertVariableTooltipForProperty(view, "h1", "--test-empty", {
+    header: "<empty>",
+    registeredProperty: [
+      `syntax:"*"`,
+      `inherits:true`,
+      `initial-value:<empty>`,
+    ],
+  });
 
   info(
     "Check that registered properties from new regular stylesheets are displayed"
@@ -245,7 +268,7 @@ add_task(async function () {
 
   // The var() tooltip should show the initial value of the new property
   await assertVariableTooltipForProperty(view, "h1", "caret-color", {
-    header: `--css-dynamic-registered = orchid`,
+    header: `orchid`,
     registeredProperty: [
       `syntax:"<color>"`,
       `inherits:false`,
@@ -286,7 +309,7 @@ add_task(async function () {
 
   // The var() tooltip should show the new initial value of the updated property
   await assertVariableTooltipForProperty(view, "h1", "caret-color", {
-    header: `--css-dynamic-registered = purple`,
+    header: `purple`,
     registeredProperty: [
       `syntax:"<color>"`,
       `inherits:true`,
@@ -357,7 +380,7 @@ add_task(async function () {
 
   // The `var()` tooltip should show the initial-value of the new property
   await assertVariableTooltipForProperty(view, "h1", "outline", {
-    header: `--constructed = aqua`,
+    header: `aqua`,
     registeredProperty: [
       `syntax:"<color>"`,
       `inherits:true`,

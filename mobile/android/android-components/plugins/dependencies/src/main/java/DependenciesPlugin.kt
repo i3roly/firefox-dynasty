@@ -45,7 +45,6 @@ object Versions {
     const val disklrucache = "2.0.2"
     const val leakcanary = "2.14"
 
-    const val material = "1.9.0"
     const val ksp = "1.0.20"
     val ksp_plugin = "$kotlin-$ksp"
 
@@ -54,7 +53,7 @@ object Versions {
     const val compose_compiler = "1.5.14"
 
     object AndroidX {
-        const val activity = "1.7.2"
+        const val activity = "1.9.1"
         const val annotation = "1.8.2"
         const val appcompat = "1.7.0"
         const val autofill = "1.1.0"
@@ -68,7 +67,7 @@ object Versions {
         const val coordinatorlayout = "1.2.0"
         const val core = "1.13.1"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.6.2"
+        const val fragment = "1.8.2"
         const val recyclerview = "1.3.2"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"
@@ -98,6 +97,7 @@ object Versions {
     }
 
     object Google {
+        const val material = "1.12.0"
         const val play_review = "2.0.1"
         const val play_services_ads_id = "16.0.0"
         const val play_services_base = "18.5.0"
@@ -194,7 +194,7 @@ object ComponentsDependencies {
     const val androidx_test_rules = "androidx.test:rules:${Versions.AndroidX.test}"
     const val androidx_test_uiautomator = "androidx.test.uiautomator:uiautomator:${Versions.AndroidX.test_uiautomator}"
 
-    const val google_material = "com.google.android.material:material:${Versions.material}"
+    const val google_material = "com.google.android.material:material:${Versions.Google.material}"
 
     const val plugin_serialization = "org.jetbrains.kotlin.plugin.serialization:org.jetbrains.kotlin.plugin.serialization.gradle.plugin:${Versions.kotlin}"
 

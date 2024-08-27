@@ -221,6 +221,9 @@ RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
   LOG("DecoderAgent #%d (%p), shutdown in %s state", mId, this,
       EnumValueToString(mState));
 
+  MOZ_ASSERT(mShutdownWhileCreationPromise.IsEmpty(),
+             "Shutdown while shutting down is prohibited");
+
   auto r =
       MediaResult(NS_ERROR_DOM_MEDIA_CANCELED, "Canceled by decoder shutdown");
 
@@ -231,7 +234,6 @@ RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
     MOZ_ASSERT(!mConfigurePromise.IsEmpty());
     MOZ_ASSERT(!mDecoder);
     MOZ_ASSERT(mState == State::Configuring);
-    MOZ_ASSERT(mShutdownWhileCreationPromise.IsEmpty());
 
     LOGW(
         "DecoderAgent #%d (%p) shutdown while the decoder-creation for "
@@ -248,7 +250,7 @@ RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
     return mShutdownWhileCreationPromise.Ensure(__func__);
   }
 
-  // If decoder creation has been completed but failed, no decoder would be set.
+  // If decoder creation has been completed but failed, no decoder is set.
   if (!mDecoder) {
     LOG("DecoderAgent #%d (%p) shutdown without an active decoder", mId, this);
     MOZ_ASSERT(mState == State::Error);
@@ -261,7 +263,7 @@ RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
     MOZ_ASSERT(!mDryRequest.Exists());
     MOZ_ASSERT(mDryPromise.IsEmpty());
     MOZ_ASSERT(mDrainAndFlushPromise.IsEmpty());
-    // ~DecoderAgent() ensures the state must be Unconfigured.
+    // ~DecoderAgent() will ensure that the decoder is shutdown.
     SetState(State::Unconfigured);
     return ShutdownPromise::CreateAndResolve(true, __func__);
   }

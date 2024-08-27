@@ -80,8 +80,10 @@ const TEST_URI = `
       --my-color: white;
       --my-overridden-color: white !important;
       --my-registered-color: white;
+      --empty-start: 1px;
       --check-my-overridden-color: var(--my-overridden-color);
       --check-my-registered-color: var(--my-registered-color);
+      --check-empty-start: var(--empty-start);
       color: var(--my-color);
       background-color: firebrick;
       padding-top: 2px !important;
@@ -93,6 +95,7 @@ const TEST_URI = `
       outline-offset: 10px;
 
       @starting-style {
+        --empty-start: ;
         background-color: goldenrod;
         padding-top: 3px;
         margin-top: 3px;
@@ -276,11 +279,11 @@ add_task(async function () {
     `main, [data-test="top-level"]`,
     "color",
     {
-      header: "--my-color = white",
+      header: "white",
       // Computed value isn't displayed when it's the same as we put in the header
       computed: null,
       // The starting-style value is displayed in the tooltip
-      startingStyle: "--my-color = black",
+      startingStyle: "black",
     }
   );
 
@@ -293,7 +296,7 @@ add_task(async function () {
     "--check-my-color",
     {
       // The displayed value is the one set in the starting-style rule
-      header: "--my-color = black",
+      header: "black",
       // Computed value isn't displayed in starting-style rule
       computed: null,
       // The starting-style section is not displayed when hovering starting-style rule
@@ -313,7 +316,7 @@ add_task(async function () {
     `main, [data-test="top-level"]`,
     "--check-my-overridden-color",
     {
-      header: "--my-overridden-color = white",
+      header: "white",
       computed: "white",
       // The starting-style rule is overridden, so we don't show a starting-style section in the tooltip
       startingStyle: null,
@@ -325,7 +328,7 @@ add_task(async function () {
     "--check-my-overridden-color",
     {
       // the value is the one from the regular rule, not the one from the starting-style rule
-      header: "--my-overridden-color = white",
+      header: "white",
       // Computed value isn't displayed in starting-style rule
       computed: null,
       startingStyle: null,
@@ -340,10 +343,10 @@ add_task(async function () {
     `main, [data-test="top-level"]`,
     "--check-my-registered-color",
     {
-      header: "--my-registered-color = white",
+      header: "white",
       computed: "rgb(255, 255, 255)",
       // The starting-style value is displayed in the tooltip
-      startingStyle: "--my-registered-color = black",
+      startingStyle: "black",
       // registered property data is displayed
       registeredProperty: [
         `syntax:"<color>"`,
@@ -359,7 +362,7 @@ add_task(async function () {
     "--check-my-registered-color",
     {
       // The displayed value is the one set in the starting-style rule
-      header: "--my-registered-color = black",
+      header: "black",
       // Computed value isn't displayed in starting-style rule
       computed: null,
       // The starting-style section is not displayed when hovering starting-style rule
@@ -380,7 +383,7 @@ add_task(async function () {
     "--check-my-unset-registered-color",
     {
       // The displayed value is the registered property initial value
-      header: "--my-unset-registered-color = lavender",
+      header: "lavender",
       // The starting-style section is not displayed when hovering starting-style rule
       startingStyle: null,
       // registered property data is displayed
@@ -389,6 +392,18 @@ add_task(async function () {
         `inherits:true`,
         `initial-value:lavender`,
       ],
+    }
+  );
+
+  info("Check var() for a empty variable in regular rule");
+  await assertVariableTooltipForProperty(
+    view,
+    `main, [data-test="top-level"]`,
+    "--check-empty-start",
+    {
+      header: "1px",
+      // The starting-style value is displayed in the tooltip
+      startingStyle: "<empty>",
     }
   );
 

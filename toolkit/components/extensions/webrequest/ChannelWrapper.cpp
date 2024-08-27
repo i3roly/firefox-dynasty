@@ -189,12 +189,20 @@ already_AddRefed<ChannelWrapper> ChannelWrapper::GetRegisteredChannel(
 }
 
 void ChannelWrapper::SetChannel(nsIChannel* aChannel) {
+  // SetChannel is called when the channel changes, e.g. by redirects.
+  // NOTE: Redirect tracking depends on a webRequest listener (bug 1799118).
   detail::ChannelHolder::SetChannel(aChannel);
   ClearCachedAttributes();
+  // Method may change when the request is redirected with HTTP 301, 302, 303.
+  ChannelWrapper_Binding::ClearCachedMethodValue(this);
+
+  // Clear all fields whose state is derived from the channel's URL.
   ChannelWrapper_Binding::ClearCachedFinalURIValue(this);
   ChannelWrapper_Binding::ClearCachedFinalURLValue(this);
   mFinalURLInfo.reset();
   ChannelWrapper_Binding::ClearCachedProxyInfoValue(this);
+  ChannelWrapper_Binding::ClearCachedThirdPartyValue(this);
+  ChannelWrapper_Binding::ClearCachedCanModifyValue(this);
 }
 
 void ChannelWrapper::ClearCachedAttributes() {
