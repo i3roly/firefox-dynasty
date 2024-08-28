@@ -37,6 +37,8 @@ use cocoa::{
     NSTextField_NSTextFieldConvenience, NSView_NSConstraintBasedLayoutInstallingConstraints,
     NSView_NSConstraintBasedLayoutLayering, PNSObject,
 };
+use std::str::FromStr;
+
 use once_cell::sync::Lazy;
 
 /// https://developer.apple.com/documentation/foundation/1497293-string_encodings/nsutf8stringencoding?language=objc
@@ -47,6 +49,33 @@ const NSControlStateValueOn: cocoa::NSControlStateValue = 1;
 
 /// Constant from NSLayoutConstraint.h
 const NSLayoutPriorityDefaultHigh: cocoa::NSLayoutPriority = 750.0;
+
+const MACOS_KERNEL_MAJOR_VERSION_MAVERICKS: u32 = 13;
+
+#[derive(Debug, PartialOrd, PartialEq)]
+enum ParseMacOSKernelVersionError {
+    SysCtl,
+    Malformed,
+    Parsing,
+}
+
+fn macos_kernel_major_version() -> std::result::Result<u32, ParseMacOSKernelVersionError> {
+    let ver = whatsys::kernel_version();
+    if ver.is_none() {
+        return Err(ParseMacOSKernelVersionError::SysCtl);
+    }
+    let ver = ver.unwrap();
+    let major = ver.split('.').next();
+    if major.is_none() {
+        return Err(ParseMacOSKernelVersionError::Malformed);
+    }
+    let parsed_major = u32::from_str(major.unwrap());
+    if parsed_major.is_err() {
+        return Err(ParseMacOSKernelVersionError::Parsing);
+    }
+    Ok(parsed_major.unwrap())
+}
+
 
 mod objc;
 
@@ -980,9 +1009,17 @@ fn render_element(
             button.into()
         }
         Label(model::Label { text, bold }) => {
-            let tf = cocoa::NSTextField(unsafe {
-                cocoa::NSTextField::wrappingLabelWithString_(nsstring(""))
-            });
+
+            let mut actualtf = cocoa::NSTextField::alloc();
+            unsafe {
+                actualtf.setStringValue_(nsstring(""))
+            };
+            if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+              actualtf = cocoa::NSTextField(unsafe {
+                  cocoa::NSTextField::wrappingLabelWithString_(nsstring(""))
+              });
+            }
+            let tf = actualtf;
             unsafe { tf.setSelectable_(runtime::NO) };
             if bold {
                 unsafe { tf.setFont_(cocoa::NSFont::boldSystemFontOfSize_(0.0)) };
