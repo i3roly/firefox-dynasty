@@ -2209,11 +2209,11 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     mRootCALayer.bounds = NSZeroRect;
     mRootCALayer.anchorPoint = NSZeroPoint;
     mRootCALayer.contentsGravity = kCAGravityTopLeft;
-    [mPixelHostingView.layer addSublayer:mRootCALayer];
     if(!nsCocoaFeatures::OnMavericksOrLater()) {
       mRootCALayer.cornerRadius = 4.0f;
       //mRootCALayer.masksToBounds = YES;
     }
+    [mPixelHostingView.layer addSublayer:mRootCALayer];
 
     mLastPressureStage = 0;
   }
