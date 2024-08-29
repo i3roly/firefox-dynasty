@@ -2923,6 +2923,11 @@
   value: 8
   mirror: always
 
+- name: dom.interactive_widget_default_resizes_visual
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # How often to check for CPOW timeouts (ms). CPOWs are only timed
 # out by the hang monitor.
 - name: dom.ipc.cpow.timeout
@@ -2936,7 +2941,7 @@
 #if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN) || defined(MOZ_PROFILE_GENERATE)
   value: false
 #else
-  value: @IS_NIGHTLY_BUILD@
+  value: false
 #endif
   mirror: once
 #endif
@@ -4297,7 +4302,7 @@
 
 - name: dom.text_fragments.enabled
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
   rust: true
 
@@ -5755,6 +5760,13 @@
   value: 5000
   mirror: always
 #endif
+
+# If true, open system preferences for the user when geolocation is requested
+# by the user but OS geolocation permission is not available.
+- name: geo.prompt.open_system_prefs
+  type: bool
+  value: true
+  mirror: always
 
 #---------------------------------------------------------------------------
 # Prefs starting with "gfx."
@@ -11421,7 +11433,7 @@
 # Planned next steps: true → @IS_NOT_NIGHTLY_BUILD@ → false
 - name: media.devices.enumerate.legacy.enabled
   type: bool
-  value: @IS_NOT_NIGHTLY_BUILD@
+  value: @IS_NOT_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # WebRTC prefs follow
@@ -12078,7 +12090,7 @@
 # Whether to support CHIPS(Cookies Having Independent Partitioned State).
 - name: network.cookie.CHIPS.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Stale threshold for cookies in seconds.
@@ -14161,7 +14173,7 @@
 # Is support for Permissions.query enabled for camera and microphone?
 - name: permissions.media.query.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -15776,6 +15788,12 @@
 # Is support for the new getBBox method from SVG 2 enabled?
 # See https://svgwg.org/svg2-draft/single-page.html#types-SVGBoundingBoxOptions
 - name: svg.new-getBBox.enabled
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
+# Whether we use Moz2D Path::GetStrokedBounds to get the stroke bounds.
+- name: svg.Moz2D.strokeBounds.enabled
   type: bool
   value: @IS_NIGHTLY_BUILD@
   mirror: always

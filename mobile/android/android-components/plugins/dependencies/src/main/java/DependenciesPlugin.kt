@@ -23,7 +23,7 @@ object Versions {
 
     const val junit = "4.13.2"
     const val robolectric = "4.13"
-    const val mockito = "5.12.0"
+    const val mockito = "5.13.0"
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.11"
     const val okhttp = "4.12.0"
@@ -98,6 +98,7 @@ object Versions {
 
     object Google {
         const val material = "1.12.0"
+        const val osslicenses_plugin = "0.10.6"
         const val play_review = "2.0.1"
         const val play_services_ads_id = "16.0.0"
         const val play_services_base = "18.5.0"
@@ -243,6 +244,7 @@ object ComponentsDependencies {
 
     const val firebase_messaging = "com.google.firebase:firebase-messaging:${Versions.Firebase.messaging}"
 
+    const val osslicenses_plugin = "com.google.android.gms:oss-licenses-plugin:${Versions.Google.osslicenses_plugin}"
     const val play_review = "com.google.android.play:review:${Versions.Google.play_review}"
     const val play_review_ktx = "com.google.android.play:review-ktx:${Versions.Google.play_review}"
     const val play_services_ads_id = "com.google.android.gms:play-services-ads-identifier:${Versions.Google.play_services_ads_id}"

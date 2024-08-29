@@ -7,9 +7,14 @@ package org.mozilla.fenix.home.fake
 import com.google.firebase.util.nextAlphanumericString
 import mozilla.components.browser.state.state.ContentState
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.concept.sync.DeviceType
 import mozilla.components.feature.top.sites.TopSite
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
+import org.mozilla.fenix.home.bookmarks.Bookmark
+import org.mozilla.fenix.home.bookmarks.interactor.BookmarksInteractor
 import org.mozilla.fenix.home.privatebrowsing.interactor.PrivateBrowsingInteractor
+import org.mozilla.fenix.home.recentsyncedtabs.RecentSyncedTab
+import org.mozilla.fenix.home.recentsyncedtabs.interactor.RecentSyncedTabInteractor
 import org.mozilla.fenix.home.recenttabs.RecentTab
 import org.mozilla.fenix.home.recenttabs.interactor.RecentTabInteractor
 import org.mozilla.fenix.home.sessioncontrol.TopSiteInteractor
@@ -21,18 +26,12 @@ import kotlin.random.Random
 internal object FakeHomepagePreview {
     private val random = Random(seed = 1)
 
-    /**
-     * Fake private browsing interactor
-     */
     internal val privateBrowsingInteractor
         get() = object : PrivateBrowsingInteractor {
             override fun onLearnMoreClicked() { /* no op */ }
             override fun onPrivateModeButtonClicked(newMode: BrowsingMode) { /* no op */ }
         }
 
-    /**
-     * Fake top sites interactor
-     */
     internal val topSitesInteractor
         get() = object : TopSiteInteractor {
             override fun onOpenInPrivateTabClicked(topSite: TopSite) { /* no op */ }
@@ -49,6 +48,20 @@ internal object FakeHomepagePreview {
             override fun onRecentTabClicked(tabId: String) { /* no op */ }
             override fun onRecentTabShowAllClicked() { /* no op */ }
             override fun onRemoveRecentTab(tab: RecentTab.Tab) { /* no op */ }
+        }
+
+    internal val recentSyncedTabInterator
+        get() = object : RecentSyncedTabInteractor {
+            override fun onRecentSyncedTabClicked(tab: RecentSyncedTab) { /* no op */ }
+            override fun onSyncedTabShowAllClicked() { /* no op */ }
+            override fun onRemovedRecentSyncedTab(tab: RecentSyncedTab) { /* no op */ }
+        }
+
+    internal val bookmarksInteractor
+        get() = object : BookmarksInteractor {
+            override fun onBookmarkClicked(bookmark: Bookmark) { /* no op */ }
+            override fun onShowAllBookmarksClicked() { /* no op */ }
+            override fun onBookmarkRemoved(bookmark: Bookmark) { /* no op */ }
         }
 
     internal fun topSites(
@@ -116,6 +129,28 @@ internal object FakeHomepagePreview {
                                 url = URL,
                             ),
                         ),
+                    ),
+                )
+            }
+        }
+
+    internal fun recentSyncedTab() =
+        RecentSyncedTab(
+            deviceDisplayName = "Desktop",
+            deviceType = DeviceType.DESKTOP,
+            title = "Mozilla",
+            url = URL,
+            previewImageUrl = null,
+        )
+
+    internal fun bookmarks(bookmarkCount: Int = 4) =
+        mutableListOf<Bookmark>().apply {
+            repeat(bookmarkCount) {
+                add(
+                    Bookmark(
+                        title = "Other Bookmark Title",
+                        url = "https://www.example.com",
+                        previewImageUrl = null,
                     ),
                 )
             }

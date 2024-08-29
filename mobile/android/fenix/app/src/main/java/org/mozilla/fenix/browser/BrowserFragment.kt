@@ -48,6 +48,7 @@ import org.mozilla.fenix.components.toolbar.BrowserToolbarView
 import org.mozilla.fenix.components.toolbar.ToolbarMenu
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.components
+import org.mozilla.fenix.ext.isTablet
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.runIfFragmentIsAttached
@@ -110,38 +111,14 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
             context = context,
             redesignEnabled = context.settings().navigationToolbarEnabled,
             isLandscape = context.isLandscape(),
-            isTablet = resources.getBoolean(R.bool.tablet),
+            isTablet = isTablet(),
             isPrivate = (activity as HomeActivity).browsingModeManager.mode.isPrivate,
             feltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
         )
 
         updateBrowserToolbarMenuVisibility()
 
-        val readerModeAction =
-            BrowserToolbar.ToggleButton(
-                image = AppCompatResources.getDrawable(
-                    context,
-                    R.drawable.ic_readermode,
-                )!!,
-                imageSelected =
-                AppCompatResources.getDrawable(
-                    context,
-                    R.drawable.ic_readermode_selected,
-                )!!,
-                contentDescription = context.getString(R.string.browser_menu_read),
-                contentDescriptionSelected = context.getString(R.string.browser_menu_read_close),
-                visible = {
-                    readerModeAvailable && !reviewQualityCheckAvailable
-                },
-                weight = { READER_MODE_WEIGHT },
-                selected = getSafeCurrentTab()?.let {
-                    activity?.components?.core?.store?.state?.findTab(it.id)?.readerState?.active
-                } ?: false,
-                listener = browserToolbarInteractor::onReaderModePressed,
-            )
-
-        browserToolbarView.view.addPageAction(readerModeAction)
-
+        initReaderMode(context, view)
         initTranslationsAction(context, view)
         initReviewQualityCheck(context, view)
         initSharePageAction(context)
@@ -149,27 +126,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
 
         thumbnailsFeature.set(
             feature = BrowserThumbnails(context, binding.engineView, components.core.store),
-            owner = this,
-            view = view,
-        )
-
-        readerViewFeature.set(
-            feature = components.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
-                ReaderViewFeature(
-                    context,
-                    components.core.engine,
-                    components.core.store,
-                    binding.readerViewControlsBar,
-                ) { available, active ->
-                    if (available) {
-                        ReaderMode.available.record(NoExtras())
-                    }
-
-                    readerModeAvailable = available
-                    readerModeAction.setSelected(active)
-                    safeInvalidateBrowserToolbarView()
-                }
-            },
             owner = this,
             view = view,
         )
@@ -326,6 +282,53 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         refreshAction?.let {
             browserToolbarView.view.addPageAction(it)
         }
+    }
+
+    private fun initReaderMode(context: Context, view: View) {
+        val readerModeAction = BrowserToolbar.ToggleButton(
+            image = AppCompatResources.getDrawable(
+                context,
+                R.drawable.ic_readermode,
+            )!!,
+            imageSelected =
+            AppCompatResources.getDrawable(
+                context,
+                R.drawable.ic_readermode_selected,
+            )!!,
+            contentDescription = context.getString(R.string.browser_menu_read),
+            contentDescriptionSelected = context.getString(R.string.browser_menu_read_close),
+            visible = {
+                readerModeAvailable && !reviewQualityCheckAvailable
+            },
+            weight = { READER_MODE_WEIGHT },
+            selected = getSafeCurrentTab()?.let {
+                activity?.components?.core?.store?.state?.findTab(it.id)?.readerState?.active
+            } ?: false,
+            listener = browserToolbarInteractor::onReaderModePressed,
+        )
+
+        browserToolbarView.view.addPageAction(readerModeAction)
+
+        readerViewFeature.set(
+            feature = context.components.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
+                ReaderViewFeature(
+                    context = context,
+                    engine = context.components.core.engine,
+                    store = context.components.core.store,
+                    controlsView = binding.readerViewControlsBar,
+                ) { available, active ->
+                    if (available) {
+                        ReaderMode.available.record(NoExtras())
+                    }
+
+                    readerModeAvailable = available
+                    readerModeAction.setSelected(active)
+                    safeInvalidateBrowserToolbarView()
+                }
+            },
+            owner = this,
+            view = view,
+        )
     }
 
     private fun initReviewQualityCheck(context: Context, view: View) {
@@ -521,7 +524,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
             context = requireContext(),
             redesignEnabled = requireContext().settings().navigationToolbarEnabled,
             isLandscape = requireContext().isLandscape(),
-            isTablet = resources.getBoolean(R.bool.tablet),
+            isTablet = isTablet(),
             isPrivate = (activity as HomeActivity).browsingModeManager.mode.isPrivate,
             feltPrivateBrowsingEnabled = requireContext().settings().feltPrivateBrowsingEnabled,
         )

@@ -2940,6 +2940,12 @@
       return group;
     },
 
+    removeTabGroup(group) {
+      this.removeTabs(group.tabs);
+      // TODO: remove the call to `group.remove` once bug1908413 is closed
+      group.remove();
+    },
+
     _determineURIToLoad(uriString, createLazyBrowser) {
       uriString = uriString || "about:blank";
       let aURIObject = null;
@@ -4475,9 +4481,6 @@
         if (aNewTab) {
           gURLBar.select();
         }
-
-        // workaround for bug 345399
-        this.tabContainer.arrowScrollbox._updateScrollButtonsDisabledState();
       }
 
       // We're going to remove the tab and the browser now.
@@ -7138,6 +7141,12 @@
           !(originalLocation.spec in FAVICON_DEFAULTS)
         ) {
           this.mTab.removeAttribute("image");
+        } else {
+          // Bug 1804166: Allow new tabs to set the favicon correctly if the
+          // new tabs behavior is set to open a blank page
+          // This is a no-op unless this.mBrowser._documentURI is in
+          // FAVICON_DEFAULTS.
+          gBrowser.setDefaultIcon(this.mTab, this.mBrowser._documentURI);
         }
 
         // For keyword URIs clear the user typed value since they will be changed into real URIs
@@ -7294,12 +7303,6 @@
               // to this new document and not to tabs opened by the previous one.
               gBrowser.clearRelatedTabs();
             }
-          }
-
-          // Bug 1804166: Allow new tabs to set the favicon correctly if the
-          // new tabs behavior is set to open a blank page
-          if (!isReload && !aWebProgress.isLoadingDocument) {
-            gBrowser.setDefaultIcon(this.mTab, this.mBrowser._documentURI);
           }
 
           if (

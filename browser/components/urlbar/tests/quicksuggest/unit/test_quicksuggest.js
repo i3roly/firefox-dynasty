@@ -101,19 +101,11 @@ const REMOTE_SETTINGS_RESULTS = [
   }),
 ];
 
-function expectedNonSponsoredResult() {
-  return makeWikipediaResult({
-    blockId: 2,
-  });
-}
-
-function expectedSponsoredResult({ suggestedIndex } = {}) {
-  return makeAmpResult({ suggestedIndex });
-}
+let gMaxRichResultsSuggestionsCount;
 
 function expectedSponsoredPriorityResult() {
   return {
-    ...expectedSponsoredResult(),
+    ...QuickSuggestTestUtils.ampResult(),
     isBestMatch: true,
     suggestedIndex: 1,
     isSuggestedIndexRelativeToGroup: false,
@@ -122,7 +114,7 @@ function expectedSponsoredPriorityResult() {
 
 function expectedHttpResult() {
   let suggestion = REMOTE_SETTINGS_RESULTS[2];
-  return makeAmpResult({
+  return QuickSuggestTestUtils.ampResult({
     keyword: HTTP_SEARCH_STRING,
     title: suggestion.title,
     url: suggestion.url,
@@ -136,7 +128,7 @@ function expectedHttpResult() {
 
 function expectedHttpsResult() {
   let suggestion = REMOTE_SETTINGS_RESULTS[3];
-  return makeAmpResult({
+  return QuickSuggestTestUtils.ampResult({
     keyword: HTTPS_SEARCH_STRING,
     title: suggestion.title,
     url: suggestion.url,
@@ -149,6 +141,21 @@ function expectedHttpsResult() {
 }
 
 add_setup(async function init() {
+  // Add a bunch of suggestions that all have the same keyword so we can verify
+  // the provider respects its `maxRichResults` cap when adding results.
+  let maxResults = UrlbarPrefs.get("maxRichResults");
+  Assert.greater(maxResults, 0, "This test expects maxRichResults to be > 0");
+  gMaxRichResultsSuggestionsCount = 2 * maxResults;
+  for (let i = 0; i < gMaxRichResultsSuggestionsCount; i++) {
+    REMOTE_SETTINGS_RESULTS.push(
+      QuickSuggestTestUtils.ampRemoteSettings({
+        keywords: ["maxrichresults"],
+        title: "maxRichResults " + i,
+        url: "https://example.com/maxRichResults/" + i,
+      })
+    );
+  }
+
   // Install a default test engine.
   let engine = await addTestSuggestionsEngine();
   await Services.search.setDefault(
@@ -212,7 +219,7 @@ add_tasks_with_rust(async function nonsponsoredOnly_match() {
   });
   await check_results({
     context,
-    matches: [expectedNonSponsoredResult()],
+    matches: [QuickSuggestTestUtils.wikipediaResult()],
   });
 
   // The title should include the full keyword and em dash, and the part of the
@@ -256,7 +263,7 @@ add_tasks_with_rust(async function sponsoredOnly_sponsored() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult()],
+    matches: [QuickSuggestTestUtils.ampResult()],
   });
 
   // The title should include the full keyword and em dash, and the part of the
@@ -301,7 +308,7 @@ add_tasks_with_rust(async function both_sponsored() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult()],
+    matches: [QuickSuggestTestUtils.ampResult()],
   });
 });
 
@@ -318,7 +325,7 @@ add_tasks_with_rust(async function both_nonsponsored() {
   });
   await check_results({
     context,
-    matches: [expectedNonSponsoredResult()],
+    matches: [QuickSuggestTestUtils.wikipediaResult()],
   });
 });
 
@@ -374,7 +381,7 @@ add_tasks_with_rust(async function caseInsensitiveAndLeadingSpaces() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult()],
+    matches: [QuickSuggestTestUtils.ampResult()],
   });
 });
 
@@ -419,7 +426,7 @@ add_tasks_with_rust(async function browser_search_suggest_disabled() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult({ suggestedIndex: -1 })],
+    matches: [QuickSuggestTestUtils.ampResult({ suggestedIndex: -1 })],
   });
 
   UrlbarPrefs.clear("browser.search.suggest.enabled");
@@ -439,7 +446,7 @@ add_tasks_with_rust(async function browser_suggest_searches_disabled() {
   });
   await check_results({
     context,
-    matches: [expectedSponsoredResult({ suggestedIndex: -1 })],
+    matches: [QuickSuggestTestUtils.ampResult({ suggestedIndex: -1 })],
   });
 
   UrlbarPrefs.clear("suggest.searches");
@@ -499,7 +506,7 @@ add_tasks_with_rust(async function suggestionsBeforeGeneral_only() {
         suggestion: SPONSORED_SEARCH_STRING + " bar",
         engineName: Services.search.defaultEngine.name,
       }),
-      expectedSponsoredResult(),
+      QuickSuggestTestUtils.ampResult(),
     ],
   });
 
@@ -554,7 +561,7 @@ add_tasks_with_rust(async function suggestionsBeforeGeneral_others() {
         suggestion: SPONSORED_SEARCH_STRING + " bar",
         engineName: Services.search.defaultEngine.name,
       }),
-      expectedSponsoredResult(),
+      QuickSuggestTestUtils.ampResult(),
       ...historyResults,
     ],
   });
@@ -584,7 +591,7 @@ add_tasks_with_rust(async function generalBeforeSuggestions_only() {
         query: SPONSORED_SEARCH_STRING,
         engineName: Services.search.defaultEngine.name,
       }),
-      expectedSponsoredResult({ suggestedIndex: -1 }),
+      QuickSuggestTestUtils.ampResult({ suggestedIndex: -1 }),
       makeSearchResult(context, {
         query: SPONSORED_SEARCH_STRING,
         suggestion: SPONSORED_SEARCH_STRING + " foo",
@@ -640,7 +647,7 @@ add_tasks_with_rust(async function generalBeforeSuggestions_others() {
         engineName: Services.search.defaultEngine.name,
       }),
       ...historyResults,
-      expectedSponsoredResult({ suggestedIndex: -1 }),
+      QuickSuggestTestUtils.ampResult({ suggestedIndex: -1 }),
       makeSearchResult(context, {
         query: SPONSORED_SEARCH_STRING,
         suggestion: SPONSORED_SEARCH_STRING + " foo",
@@ -658,6 +665,65 @@ add_tasks_with_rust(async function generalBeforeSuggestions_others() {
   UrlbarPrefs.clear("suggest.searches");
   UrlbarPrefs.clear("showSearchSuggestionsFirst");
   await PlacesUtils.history.clear();
+});
+
+// The provider should not add more than `maxRichResults` results.
+add_tasks_with_rust(async function maxRichResults() {
+  UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
+  await QuickSuggestTestUtils.forceSync();
+
+  let searchString = "maxrichresults";
+  let suggestions = await QuickSuggest.backend.query(searchString);
+  Assert.equal(
+    suggestions.length,
+    gMaxRichResultsSuggestionsCount,
+    "The backend should return all matching suggestions"
+  );
+
+  let context = createContext(searchString, {
+    providers: [UrlbarProviderQuickSuggest.name],
+    isPrivate: false,
+  });
+
+  // Spy on `muxer.sort()` so we can verify the provider limited the number of
+  // results it added to the query.
+  let muxerName = context.muxer || "UnifiedComplete";
+  let muxer = UrlbarProvidersManager.muxers.get(muxerName);
+  Assert.ok(!!muxer, "Muxer should exist");
+
+  let sandbox = sinon.createSandbox();
+  let spy = sandbox.spy(muxer, "sort");
+
+  // Use `check_results()` to do the query.
+  await check_results({
+    context,
+    matches: [
+      QuickSuggestTestUtils.ampResult({
+        keyword: "maxrichresults",
+        title: "maxRichResults 0",
+        url: "https://example.com/maxRichResults/0",
+      }),
+    ],
+  });
+
+  // Check the `sort()` calls.
+  let calls = spy.getCalls();
+  Assert.greater(
+    calls.length,
+    0,
+    "muxer.sort() should have been called at least once"
+  );
+
+  for (let c of calls) {
+    let unsortedResults = c.args[1];
+    Assert.lessOrEqual(
+      unsortedResults.length,
+      UrlbarPrefs.get("maxRichResults"),
+      "Provider should have added no more than maxRichResults results"
+    );
+  }
+
+  sandbox.restore();
 });
 
 add_tasks_with_rust(async function dedupeAgainstURL_samePrefix() {
@@ -808,7 +874,7 @@ add_tasks_with_rust(
     });
     await check_results({
       context,
-      matches: [expectedSponsoredResult()],
+      matches: [QuickSuggestTestUtils.ampResult()],
     });
 
     // In the latency histogram, there should be a single value across all
@@ -1045,7 +1111,7 @@ add_tasks_with_rust(async function dedupeAgainstURL_timestamps() {
   await QuickSuggestTestUtils.forceSync();
   context = createContext(TIMESTAMP_SEARCH_STRING, { isPrivate: false });
 
-  let expectedQuickSuggest = makeAmpResult({
+  let expectedQuickSuggest = QuickSuggestTestUtils.ampResult({
     originalUrl: TIMESTAMP_SUGGESTION_URL,
     keyword: TIMESTAMP_SEARCH_STRING,
     title: "Timestamp suggestion",
@@ -1306,8 +1372,8 @@ add_tasks_with_rust(async function block() {
 
   let tests = [
     // [suggestion, expected result]
-    [REMOTE_SETTINGS_RESULTS[0], expectedSponsoredResult()],
-    [REMOTE_SETTINGS_RESULTS[1], expectedNonSponsoredResult()],
+    [REMOTE_SETTINGS_RESULTS[0], QuickSuggestTestUtils.ampResult()],
+    [REMOTE_SETTINGS_RESULTS[1], QuickSuggestTestUtils.wikipediaResult()],
     [REMOTE_SETTINGS_RESULTS[2], expectedHttpResult()],
     [REMOTE_SETTINGS_RESULTS[3], expectedHttpsResult()],
   ];
@@ -1406,7 +1472,7 @@ add_tasks_with_rust(
       let cleanUpNimbus = await UrlbarTestUtils.initNimbusFeature(value);
 
       // Make the result for test data type.
-      let expected = expectedSponsoredResult();
+      let expected = QuickSuggestTestUtils.ampResult();
       if (dataType) {
         expected = JSON.parse(JSON.stringify(expected));
         expected.payload.title = dataType;
@@ -1442,7 +1508,7 @@ add_tasks_with_rust(async function sponsoredPriority_nonsponsoredSuggestion() {
   await doSponsoredPriorityTest({
     searchWord: NONSPONSORED_SEARCH_STRING,
     remoteSettingsData: [REMOTE_SETTINGS_RESULTS[1]],
-    expectedMatches: [expectedNonSponsoredResult()],
+    expectedMatches: [QuickSuggestTestUtils.wikipediaResult()],
   });
 });
 
@@ -1721,7 +1787,7 @@ add_tasks_with_rust(async function keywordLengthThreshold() {
       matches: !expected
         ? []
         : [
-            makeAmpResult({
+            QuickSuggestTestUtils.ampResult({
               keyword,
               title: "Suggestion with 1-char keyword",
               url: "http://example.com/1-char-keyword",
@@ -1772,14 +1838,14 @@ add_tasks_with_rust(async function ampTopPickCharThreshold() {
 
     let expectedResult;
     if (!amp) {
-      expectedResult = makeWikipediaResult({
+      expectedResult = QuickSuggestTestUtils.wikipediaResult({
         keyword,
         fullKeyword,
         title: "Wikipedia suggestion with full keyword and prefix keywords",
         url: "https://example.com/wikipedia-full-keyword",
       });
     } else if (isTopPick) {
-      expectedResult = makeAmpResult({
+      expectedResult = QuickSuggestTestUtils.ampResult({
         keyword,
         fullKeyword,
         title: "AMP suggestion with full keyword and prefix keywords",
@@ -1790,7 +1856,7 @@ add_tasks_with_rust(async function ampTopPickCharThreshold() {
         descriptionL10n: null,
       });
     } else {
-      expectedResult = makeAmpResult({
+      expectedResult = QuickSuggestTestUtils.ampResult({
         keyword,
         fullKeyword,
         title: "AMP suggestion with full keyword and prefix keywords",
@@ -1840,14 +1906,14 @@ add_tasks_with_rust(async function ampTopPickCharThreshold_zero() {
 
     let expectedResult;
     if (!amp) {
-      expectedResult = makeWikipediaResult({
+      expectedResult = QuickSuggestTestUtils.wikipediaResult({
         keyword,
         fullKeyword,
         title: "Wikipedia suggestion with full keyword and prefix keywords",
         url: "https://example.com/wikipedia-full-keyword",
       });
     } else {
-      expectedResult = makeAmpResult({
+      expectedResult = QuickSuggestTestUtils.ampResult({
         keyword,
         fullKeyword,
         title: "AMP suggestion with full keyword and prefix keywords",

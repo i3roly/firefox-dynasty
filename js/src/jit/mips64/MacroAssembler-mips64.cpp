@@ -946,16 +946,23 @@ void MacroAssemblerMIPS64::ma_cmp_set(Register rd, Register rs, ImmWord imm,
   }
 }
 
+void MacroAssemblerMIPS64::ma_cmp_set(Register rd, Register rs, ImmPtr imm,
+                                      Condition c) {
+  ma_cmp_set(rd, rs, ImmWord(uintptr_t(imm.value)), c);
+}
+
+void MacroAssemblerMIPS64::ma_cmp_set(Register rd, Address address, Register rt,
+                                      Condition c) {
+  SecondScratchRegisterScope scratch2(asMasm());
+  ma_load(scratch2, address, SizeDouble);
+  ma_cmp_set(rd, scratch2, rt, c);
+}
+
 void MacroAssemblerMIPS64::ma_cmp_set(Register rd, Address address, ImmWord imm,
                                       Condition c) {
   SecondScratchRegisterScope scratch2(asMasm());
   ma_load(scratch2, address, SizeDouble);
   ma_cmp_set(rd, scratch2, imm, c);
-}
-
-void MacroAssemblerMIPS64::ma_cmp_set(Register rd, Register rs, ImmPtr imm,
-                                      Condition c) {
-  ma_cmp_set(rd, rs, ImmWord(uintptr_t(imm.value)), c);
 }
 
 void MacroAssemblerMIPS64::ma_cmp_set(Register rd, Address address, Imm32 imm,
@@ -2489,7 +2496,7 @@ void MacroAssemblerMIPS64Compat::wasmLoadI64Impl(
     const wasm::MemoryAccessDesc& access, Register memoryBase, Register ptr,
     Register ptrScratch, Register64 output, Register tmp) {
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   MOZ_ASSERT_IF(offset, ptrScratch != InvalidReg);
 
   MOZ_ASSERT(!access.isZeroExtendSimd128Load());
@@ -2528,7 +2535,7 @@ void MacroAssemblerMIPS64Compat::wasmStoreI64Impl(
     const wasm::MemoryAccessDesc& access, Register64 value, Register memoryBase,
     Register ptr, Register ptrScratch, Register tmp) {
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   MOZ_ASSERT_IF(offset, ptrScratch != InvalidReg);
 
   // Maybe add the offset.

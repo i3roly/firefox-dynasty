@@ -824,6 +824,19 @@ newtabTopicSelection:
       setPref:
         branch: user
         pref: browser.newtabpage.activity-stream.discoverystream.topicSelection.locale-topics-config
+    regionTopicLabelConfig:
+      description: A comma-separated list of regions that get topic labels by default.
+      type: string
+      setPref:
+        branch: user
+        pref:  browser.newtabpage.activity-stream.discoverystream.topicLabels.region-topic-label-config
+    localeTopicLabelConfig:
+      description: A comma-separated list of locales that get topic Labels by default.
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.topicLabels.locale-topic-label-config
+
 
 pocketNewtab:
   description: The Pocket section in newtab
@@ -2478,6 +2491,18 @@ fingerprintingProtection:
         pref: javascript.options.use_fdlibm_for_sin_cos_tan
       description: >-
         Uses a different math backend for Math.sin/cos/tan in JavaScript that exposes less entropy
+
+userCharacteristics:
+  description: Control user characteristic data collection
+  owner: tihuang@mozilla.com
+  hasExposure: false
+  variables:
+    currentVersion:
+      type: int
+      setPref:
+        branch: user
+        pref: toolkit.telemetry.user_characteristics_ping.current_version
+      description: The current collection version of the user characteristics.
 
 migrationWizard:
   description: Prefs to control the Migration Wizard UI.

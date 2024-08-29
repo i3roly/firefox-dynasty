@@ -674,40 +674,11 @@ export const LoginHelper = {
    * Strip out things like the userPass portion and handle javascript:.
    */
   getLoginOrigin(uriString, allowJS = false) {
-    try {
-      const mozProxyRegex = /^moz-proxy:\/\//i;
-      const isMozProxy = !!uriString.match(mozProxyRegex);
-      if (isMozProxy) {
-        // Special handling because uri.displayHostPort throws on moz-proxy://
-        return (
-          "moz-proxy://" +
-          Services.io.newURI(uriString.replace(mozProxyRegex, "https://"))
-            .displayHostPort
-        );
-      }
-
-      const uri = Services.io.newURI(uriString);
-      if (allowJS && uri.scheme == "javascript") {
-        return "javascript:";
-      }
-
-      // Build this manually instead of using prePath to avoid including the userPass portion.
-      return uri.scheme + "://" + uri.displayHostPort;
-    } catch {
-      return null;
-    }
+    return Logic.getLoginOrigin(uriString, allowJS);
   },
 
   getFormActionOrigin(form) {
-    let uriString = form.action;
-
-    // A blank or missing action submits to where it came from.
-    if (uriString == "") {
-      // ala bug 297761
-      uriString = form.baseURI;
-    }
-
-    return this.getLoginOrigin(uriString, true);
+    return Logic.getFormActionOrigin(form);
   },
 
   /**
@@ -1294,29 +1265,7 @@ export const LoginHelper = {
    *                    be treated as a password input
    */
   isPasswordFieldType(element, { ignoreConnect = false } = {}) {
-    if (!HTMLInputElement.isInstance(element)) {
-      return false;
-    }
-
-    if (!element.isConnected && !ignoreConnect) {
-      // If the element isn't connected then it isn't visible to the user so
-      // shouldn't be considered. It must have been connected in the past.
-      return false;
-    }
-
-    if (!element.hasBeenTypePassword) {
-      return false;
-    }
-
-    // Ensure the element is of a type that could have autocomplete.
-    // These include the types with user-editable values. If not, even if it used to be
-    // a type=password, we can't treat it as a password input now
-    let acInfo = element.getAutocompleteInfo();
-    if (!acInfo) {
-      return false;
-    }
-
-    return true;
+    return Logic.isPasswordFieldType(element, { ignoreConnect });
   },
 
   /**
@@ -1332,41 +1281,7 @@ export const LoginHelper = {
    *                    of the username types.
    */
   isUsernameFieldType(element, { ignoreConnect = false } = {}) {
-    if (!HTMLInputElement.isInstance(element)) {
-      return false;
-    }
-
-    if (!element.isConnected && !ignoreConnect) {
-      // If the element isn't connected then it isn't visible to the user so
-      // shouldn't be considered. It must have been connected in the past.
-      return false;
-    }
-
-    if (element.hasBeenTypePassword) {
-      return false;
-    }
-
-    if (!Logic.inputTypeIsCompatibleWithUsername(element)) {
-      return false;
-    }
-
-    let acFieldName = element.getAutocompleteInfo().fieldName;
-    if (
-      !(
-        acFieldName == "username" ||
-        acFieldName == "webauthn" ||
-        // Bug 1540154: Some sites use tel/email on their username fields.
-        acFieldName == "email" ||
-        acFieldName == "tel" ||
-        acFieldName == "tel-national" ||
-        acFieldName == "off" ||
-        acFieldName == "on" ||
-        acFieldName == ""
-      )
-    ) {
-      return false;
-    }
-    return true;
+    return Logic.isUsernameFieldType(element, { ignoreConnect });
   },
 
   /**
@@ -1427,7 +1342,7 @@ export const LoginHelper = {
    * @returns {boolean} True if any of the rules matches
    */
   isInferredNonUsernameField(element) {
-    const expr = /search|code/i;
+    const expr = /search|code|add/i;
 
     if (
       Logic.elementAttrsMatchRegex(element, expr) ||

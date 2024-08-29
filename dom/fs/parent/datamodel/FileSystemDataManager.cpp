@@ -57,8 +57,11 @@ class nsCStringHashKeyDM : public nsCStringHashKey {
 // When CheckedUnsafePtr's checking is enabled, it's necessary to ensure that
 // the hashtable uses the copy constructor instead of memmove for moving entries
 // since memmove will break CheckedUnsafePtr in a memory-corrupting way.
+
+// The assertion type must be the same as the assertion type used for defining
+// the base class for FileSystemDataManager in FileSystemDataManager.h!
 using FileSystemDataManagerHashKey =
-    std::conditional<DiagnosticAssertEnabled::value, nsCStringHashKeyDM,
+    std::conditional<ReleaseAssertEnabled::value, nsCStringHashKeyDM,
                      nsCStringHashKey>::type;
 
 // Raw (but checked when the diagnostic assert is enabled) references as we

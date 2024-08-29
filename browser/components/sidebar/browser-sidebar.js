@@ -1027,6 +1027,27 @@ var SidebarController = {
   },
 
   /**
+   * Ensure tools reflect the current pref state
+   */
+  refreshTools() {
+    let changed = false;
+    const tools = new Set(this.sidebarRevampTools.split(","));
+    this.toolsAndExtensions.forEach((tool, commandID) => {
+      const toolID = defaultTools[commandID];
+      if (toolID) {
+        const expected = !tools.has(toolID);
+        if (tool.disabled != expected) {
+          tool.disabled = expected;
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      window.dispatchEvent(new CustomEvent("SidebarItemChanged"));
+    }
+  },
+
+  /**
    * Sets the disabled property for a tool when customizing sidebar options
    *
    * @param {string} commandID
@@ -1499,11 +1520,6 @@ var SidebarController = {
       arrowScrollbox.setAttribute("orient", "vertical");
       tabStrip.setAttribute("orient", "vertical");
       verticalTabs.append(tabStrip);
-
-      // Enable revamped sidebar if vertical tabs is enabled
-      if (!this.sidebarRevampEnabled) {
-        Services.prefs.setBoolPref("sidebar.revamp", true);
-      }
     } else {
       arrowScrollbox.setAttribute("orient", "horizontal");
       tabStrip.removeAttribute("expanded");
@@ -1555,7 +1571,12 @@ XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,
   "sidebarRevampTools",
   "sidebar.main.tools",
-  "aichat,syncedtabs,history"
+  "aichat,syncedtabs,history",
+  () => {
+    if (!SidebarController.uninitializing) {
+      SidebarController.refreshTools();
+    }
+  }
 );
 XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,

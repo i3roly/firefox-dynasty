@@ -1281,6 +1281,12 @@ void DOMStyleSheetSetList::EnsureFresh() {
 
 Document::PendingFrameStaticClone::~PendingFrameStaticClone() = default;
 
+static InteractiveWidget DefaultInteractiveWidget() {
+  return StaticPrefs::dom_interactive_widget_default_resizes_visual()
+             ? InteractiveWidget::ResizesVisual
+             : InteractiveWidget::ResizesContent;
+}
+
 // ==================================================================
 // =
 // ==================================================================
@@ -1439,7 +1445,7 @@ Document::Document(const char* aContentType)
       mHttpsOnlyStatus(nsILoadInfo::HTTPS_ONLY_UNINITIALIZED),
       mViewportType(Unknown),
       mViewportFit(ViewportFitType::Auto),
-      mInteractiveWidgetMode(InteractiveWidget::ResizesContent),
+      mInteractiveWidgetMode(DefaultInteractiveWidget()),
       mHeaderData(nullptr),
       mServoRestyleRootDirtyBits(0),
       mThrowOnDynamicMarkupInsertionCounter(0),
@@ -2083,28 +2089,6 @@ static void AccumulatePriorityFcpGleanPref(
     MOZ_ASSERT_UNREACHABLE("Unknown value for http3WithPriorityKey");
   }
 }
-
-static void AccumulateEarlyHintFcpGleanPref(const nsCString& earlyHintKey,
-                                            const TimeDuration& duration) {
-  if (earlyHintKey == "preload_1"_ns) {
-    glean::performance_pageload::eh_fcp_preload_with_eh.AccumulateRawDuration(
-        duration);
-  } else if (earlyHintKey == "preload_0"_ns) {
-    glean::performance_pageload::eh_fcp_preload_without_eh
-        .AccumulateRawDuration(duration);
-  } else if (earlyHintKey == "preconnect_"_ns) {
-    glean::performance_pageload::eh_fcp_preconnect.AccumulateRawDuration(
-        duration);
-  } else if (earlyHintKey == "preconnect_preload_1"_ns) {
-    glean::performance_pageload::eh_fcp_preconnect_preload_with_eh
-        .AccumulateRawDuration(duration);
-  } else if (earlyHintKey == "preconnect_preload_0"_ns) {
-    glean::performance_pageload::eh_fcp_preconnect_preload_without_eh
-        .AccumulateRawDuration(duration);
-  } else {
-    MOZ_ASSERT_UNREACHABLE("Unknown value for earlyHintKey");
-  }
-}
 #endif
 
 void Document::AccumulatePageLoadTelemetry(
@@ -2262,16 +2246,6 @@ void Document::AccumulatePageLoadTelemetry(
 #endif
     }
 
-    if (!earlyHintKey.IsEmpty()) {
-      Telemetry::AccumulateTimeDelta(
-          Telemetry::EH_PERF_FIRST_CONTENTFUL_PAINT_MS, earlyHintKey,
-          navigationStart, firstContentfulComposite);
-#ifndef ANDROID
-      AccumulateEarlyHintFcpGleanPref(
-          earlyHintKey, firstContentfulComposite - navigationStart);
-#endif
-    }
-
     Telemetry::AccumulateTimeDelta(
         Telemetry::DNS_PERF_FIRST_CONTENTFUL_PAINT_MS, dnsKey, navigationStart,
         firstContentfulComposite);
@@ -2307,12 +2281,6 @@ void Document::AccumulatePageLoadTelemetry(
     if (!http3WithPriorityKey.IsEmpty()) {
       Telemetry::AccumulateTimeDelta(Telemetry::H3P_PERF_PAGE_LOAD_TIME_MS,
                                      http3WithPriorityKey, navigationStart,
-                                     loadEventStart);
-    }
-
-    if (!earlyHintKey.IsEmpty()) {
-      Telemetry::AccumulateTimeDelta(Telemetry::EH_PERF_PAGE_LOAD_TIME_MS,
-                                     earlyHintKey, navigationStart,
                                      loadEventStart);
     }
 
@@ -11145,10 +11113,7 @@ ViewportMetaData Document::GetViewportMetaData() const {
 static InteractiveWidget ParseInteractiveWidget(
     const ViewportMetaData& aViewportMetaData) {
   if (aViewportMetaData.mInteractiveWidgetMode.IsEmpty()) {
-    // The spec defines "use `resizes-visual` if no value specified", but here
-    // we use `resizes-content` for the backward compatibility now.
-    // We will change it in bug 1884807.
-    return InteractiveWidget::ResizesContent;
+    return DefaultInteractiveWidget();
   }
 
   if (aViewportMetaData.mInteractiveWidgetMode.EqualsIgnoreCase(
@@ -11163,8 +11128,7 @@ static InteractiveWidget ParseInteractiveWidget(
           "overlays-content")) {
     return InteractiveWidget::OverlaysContent;
   }
-  // For the same reason above empty case, we use `resizes-content` here.
-  return InteractiveWidget::ResizesContent;
+  return DefaultInteractiveWidget();
 }
 
 void Document::SetMetaViewportData(UniquePtr<ViewportMetaData> aData) {

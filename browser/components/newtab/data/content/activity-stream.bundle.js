@@ -3208,8 +3208,10 @@ class _DSCard extends (external_React_default()).PureComponent {
   }
   render() {
     if (this.props.placeholder || !this.state.isSeen) {
+      // placeholder-seen is used to ensure the loading animation is only used if the card is visible.
+      const placeholderClassName = this.state.isSeen ? `placeholder-seen` : ``;
       return /*#__PURE__*/external_React_default().createElement("div", {
-        className: "ds-card placeholder",
+        className: `ds-card placeholder ${placeholderClassName}`,
         ref: this.setPlaceholderRef
       }, /*#__PURE__*/external_React_default().createElement("div", {
         className: "placeholder-image placeholder-fill"
@@ -11569,7 +11571,11 @@ class DetectUserSessionStart {
       this._store.dispatch(
         actionCreators.AlsoToMain({
           type: actionTypes.SAVE_SESSION_PERF_DATA,
-          data: { visibility_event_rcvd_ts },
+          data: {
+            visibility_event_rcvd_ts,
+            window_inner_width: window.innerWidth,
+            window_inner_height: window.innerHeight,
+          },
         })
       );
     } catch (ex) {

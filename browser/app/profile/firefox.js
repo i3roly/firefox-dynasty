@@ -772,6 +772,10 @@ pref("browser.search.serpMetricsRecordedCounter", 0);
 // days
 pref("browser.search.widget.removeAfterDaysUnused", 120);
 
+// The number of times the search function in the URL bar has been used,
+// capped at 100.
+pref("browser.search.totalSearches", 0);
+
 // Enable new experimental shopping features. This is solely intended as a
 // rollout/"emergency stop" button - it will go away once the feature has
 // rolled out. There will be separate controls for user opt-in/opt-out.
@@ -1861,16 +1865,17 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-bff-config", "US
   // List of regions that get topics selection by default.
   pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "US, CA");
   pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", true);
+  pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.region-topic-label-config", "US, CA");
 #else
   pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", false);
   pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "");
   pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", false);
+  pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.region-topic-label-config", "");
 #endif
 
 // List of locales that get topics selection by default.
 pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.locale-topics-config", "en-US, en-GB, en-CA");
-// System pref to enable topic labels on Pocket cards
-pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.enabled", true);
+pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.locale-topic-label-config", "en-US, en-GB, en-CA");
 
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
 // List of regions that get spocs by default.
@@ -2072,7 +2077,7 @@ pref("identity.fxaccounts.commands.remoteTabManagement.enabled", true);
 
 // Controls whether or not the client association ping has values set on it
 // when the sync-ui-state:update notification fires.
-pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", false);
+pref("identity.fxaccounts.telemetry.clientAssociationPing.enabled", true);
 
 // Note: when media.gmp-*.visible is true, provided we're running on a
 // supported platform/OS version, the corresponding CDM appears in the
