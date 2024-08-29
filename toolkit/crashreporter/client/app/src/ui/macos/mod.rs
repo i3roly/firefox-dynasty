@@ -1010,16 +1010,18 @@ fn render_element(
         }
         Label(model::Label { text, bold }) => {
 
-            let mut actualtf = cocoa::NSTextField::alloc();
-            unsafe {
-                actualtf.setStringValue_(nsstring(""))
-            };
-            if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
-              actualtf = cocoa::NSTextField(unsafe {
+            let tf = if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+              cocoa::NSTextField(unsafe {
                   cocoa::NSTextField::wrappingLabelWithString_(nsstring(""))
-              });
-            }
-            let tf = actualtf;
+              })
+            } else {
+                  let tf = cocoa::NSTextField::alloc();
+                unsafe {
+                  tf.init();
+                  tf.setStringValue_(nsstring(""));
+              };
+                  tf
+            };
             unsafe { tf.setSelectable_(runtime::NO) };
             if bold {
                 unsafe { tf.setFont_(cocoa::NSFont::boldSystemFontOfSize_(0.0)) };
