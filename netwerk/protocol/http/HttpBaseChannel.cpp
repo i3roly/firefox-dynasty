@@ -3162,7 +3162,7 @@ nsresult HttpBaseChannel::ValidateMIMEType() {
 
 bool HttpBaseChannel::ShouldFilterOpaqueResponse(
     OpaqueResponseFilterFetch aFilterType) const {
-  MOZ_DIAGNOSTIC_ASSERT(ShouldBlockOpaqueResponse());
+  MOZ_ASSERT(ShouldBlockOpaqueResponse());
 
   if (!mLoadInfo || ConfiguredFilterFetchResponseBehaviour() != aFilterType) {
     return false;
@@ -6686,6 +6686,11 @@ NS_IMETHODIMP
 HttpBaseChannel::GetRenderBlocking(bool* aRenderBlocking) {
   *aRenderBlocking = mRenderBlocking;
   return NS_OK;
+}
+
+NS_IMETHODIMP HttpBaseChannel::GetLastTransportStatus(
+    nsresult* aLastTransportStatus) {
+  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 }  // namespace net

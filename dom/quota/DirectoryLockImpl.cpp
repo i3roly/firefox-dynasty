@@ -14,15 +14,15 @@ namespace mozilla::dom::quota {
 
 DirectoryLockImpl::DirectoryLockImpl(
     MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
-    const Nullable<PersistenceType>& aPersistenceType,
-    const nsACString& aSuffix, const nsACString& aGroup,
-    const OriginScope& aOriginScope, const nsACString& aStorageOrigin,
-    bool aIsPrivate, const Nullable<Client::Type>& aClientType,
-    const bool aExclusive, const bool aInternal,
+    const PersistenceScope& aPersistenceScope, const nsACString& aSuffix,
+    const nsACString& aGroup, const OriginScope& aOriginScope,
+    const nsACString& aStorageOrigin, bool aIsPrivate,
+    const Nullable<Client::Type>& aClientType, const bool aExclusive,
+    const bool aInternal,
     const ShouldUpdateLockIdTableFlag aShouldUpdateLockIdTableFlag,
     const DirectoryLockCategory aCategory)
     : mQuotaManager(std::move(aQuotaManager)),
-      mPersistenceType(aPersistenceType),
+      mPersistenceScope(aPersistenceScope),
       mSuffix(aSuffix),
       mGroup(aGroup),
       mOriginScope(aOriginScope),
@@ -38,9 +38,9 @@ DirectoryLockImpl::DirectoryLockImpl(
       mRegistered(false) {
   AssertIsOnOwningThread();
   MOZ_ASSERT_IF(aOriginScope.IsOrigin(), !aOriginScope.GetOrigin().IsEmpty());
-  MOZ_ASSERT_IF(!aInternal, !aPersistenceType.IsNull());
+  MOZ_ASSERT_IF(!aInternal, aPersistenceScope.IsValue());
   MOZ_ASSERT_IF(!aInternal,
-                aPersistenceType.Value() != PERSISTENCE_TYPE_INVALID);
+                aPersistenceScope.GetValue() != PERSISTENCE_TYPE_INVALID);
   MOZ_ASSERT_IF(!aInternal, !aGroup.IsEmpty());
   MOZ_ASSERT_IF(!aInternal, aOriginScope.IsOrigin());
   MOZ_ASSERT_IF(!aInternal, !aStorageOrigin.IsEmpty());
@@ -69,13 +69,13 @@ bool DirectoryLockImpl::Overlaps(const DirectoryLockImpl& aLock) const {
   AssertIsOnOwningThread();
 
   // If the persistence types don't overlap, the op can proceed.
-  if (!aLock.mPersistenceType.IsNull() && !mPersistenceType.IsNull() &&
-      aLock.mPersistenceType.Value() != mPersistenceType.Value()) {
+  bool match = aLock.mPersistenceScope.Matches(mPersistenceScope);
+  if (!match) {
     return false;
   }
 
   // If the origin scopes don't overlap, the op can proceed.
-  bool match = aLock.mOriginScope.Matches(mOriginScope);
+  match = aLock.mOriginScope.Matches(mOriginScope);
   if (!match) {
     return false;
   }
@@ -332,7 +332,7 @@ RefPtr<ClientDirectoryLock> DirectoryLockImpl::SpecializeForClient(
   }
 
   RefPtr<DirectoryLockImpl> lock =
-      Create(mQuotaManager, Nullable<PersistenceType>(aPersistenceType),
+      Create(mQuotaManager, PersistenceScope::CreateFromValue(aPersistenceType),
              aOriginMetadata.mSuffix, aOriginMetadata.mGroup,
              OriginScope::FromOrigin(aOriginMetadata.mOrigin),
              aOriginMetadata.mStorageOrigin, aOriginMetadata.mIsPrivate,
@@ -377,13 +377,20 @@ void DirectoryLockImpl::Log() const {
 
   QM_LOG(("DirectoryLockImpl [%p]", this));
 
-  nsCString persistenceType;
-  if (mPersistenceType.IsNull()) {
-    persistenceType.AssignLiteral("null");
+  nsCString persistenceScope;
+  if (mPersistenceScope.IsNull()) {
+    persistenceScope.AssignLiteral("null");
+  } else if (mPersistenceScope.IsValue()) {
+    persistenceScope.Assign(
+        PersistenceTypeToString(mPersistenceScope.GetValue()));
   } else {
-    persistenceType.Assign(PersistenceTypeToString(mPersistenceType.Value()));
+    MOZ_ASSERT(mPersistenceScope.IsSet());
+    for (auto persistenceType : mPersistenceScope.GetSet()) {
+      persistenceScope.Append(PersistenceTypeToString(persistenceType) +
+                              " "_ns);
+    }
   }
-  QM_LOG(("  mPersistenceType: %s", persistenceType.get()));
+  QM_LOG(("  mPersistenceScope: %s", persistenceScope.get()));
 
   QM_LOG(("  mGroup: %s", mGroup.get()));
 

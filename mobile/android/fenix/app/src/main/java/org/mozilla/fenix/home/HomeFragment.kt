@@ -27,9 +27,11 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -87,6 +89,7 @@ import mozilla.components.feature.top.sites.TopSitesFrecencyConfig
 import mozilla.components.feature.top.sites.TopSitesProviderConfig
 import mozilla.components.lib.state.ext.consumeFlow
 import mozilla.components.lib.state.ext.consumeFrom
+import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.ui.colors.PhotonColors
 import mozilla.components.ui.tabcounter.TabCounterMenu
@@ -112,6 +115,7 @@ import org.mozilla.fenix.components.TabCollectionStorage
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.MicrosurveyAction
+import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerIntegration
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerView
@@ -149,6 +153,7 @@ import org.mozilla.fenix.home.sessioncontrol.DefaultSessionControlController
 import org.mozilla.fenix.home.sessioncontrol.SessionControlInteractor
 import org.mozilla.fenix.home.sessioncontrol.SessionControlView
 import org.mozilla.fenix.home.sessioncontrol.viewholders.CollectionHeaderViewHolder
+import org.mozilla.fenix.home.store.HomepageState
 import org.mozilla.fenix.home.toolbar.DefaultToolbarController
 import org.mozilla.fenix.home.toolbar.SearchSelectorBinding
 import org.mozilla.fenix.home.toolbar.SearchSelectorMenuBinding
@@ -278,6 +283,9 @@ class HomeFragment : Fragment() {
         super.onCreate(savedInstanceState)
 
         bundleArgs = args.toBundle()
+        if (savedInstanceState != null) {
+            bundleArgs.putBoolean(FOCUS_ON_ADDRESS_BAR, false)
+        }
         savedLoginsLauncher = registerForActivityResult { navigateToSavedLoginsFragment() }
 
         // DO NOT MOVE ANYTHING BELOW THIS addMarker CALL!
@@ -438,8 +446,9 @@ class HomeFragment : Fragment() {
                 tabCollectionStorage = components.core.tabCollectionStorage,
                 addTabUseCase = components.useCases.tabsUseCases.addTab,
                 restoreUseCase = components.useCases.tabsUseCases.restore,
-                reloadUrlUseCase = components.useCases.sessionUseCases.reload,
                 selectTabUseCase = components.useCases.tabsUseCases.selectTab,
+                reloadUrlUseCase = components.useCases.sessionUseCases.reload,
+                topSitesUseCases = components.useCases.topSitesUseCase,
                 appStore = components.appStore,
                 navController = findNavController(),
                 viewLifecycleScope = viewLifecycleOwner.lifecycleScope,
@@ -477,6 +486,7 @@ class HomeFragment : Fragment() {
             pocketStoriesController = DefaultPocketStoriesController(
                 homeActivity = activity,
                 appStore = components.appStore,
+                settings = components.settings,
             ),
             privateBrowsingController = DefaultPrivateBrowsingController(
                 activity = activity,
@@ -658,8 +668,6 @@ class HomeFragment : Fragment() {
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> binding.toolbarLayout })
-                        } else {
-                            Divider()
                         }
 
                         val showCFR =
@@ -701,12 +709,8 @@ class HomeFragment : Fragment() {
                                 }
                             },
                         ) {
-                            HomeNavBar(
-                                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
-                                isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
-                                browserStore = context.components.core.store,
-                                menuButton = menuButton,
-                                tabsCounterMenu = FenixTabCounterMenu(
+                            val tabCounterMenu = lazy {
+                                FenixTabCounterMenu(
                                     context = context,
                                     onItemTapped = { item ->
                                         if (item is TabCounterMenu.Item.NewTab) {
@@ -722,7 +726,14 @@ class HomeFragment : Fragment() {
                                     },
                                 ).also {
                                     it.updateMenu()
-                                },
+                                }
+                            }
+
+                            HomeNavBar(
+                                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                                browserStore = context.components.core.store,
+                                menuButton = menuButton,
+                                tabsCounterMenu = tabCounterMenu,
                                 onSearchButtonClick = {
                                     NavigationBar.homeSearchTapped.record(NoExtras())
                                     val directions =
@@ -1066,7 +1077,10 @@ class HomeFragment : Fragment() {
 
         toolbarView?.updateTabCounter(requireComponents.core.store.state)
 
-        if (bundleArgs.getBoolean(FOCUS_ON_ADDRESS_BAR)) {
+        val focusOnAddressBar = bundleArgs.getBoolean(FOCUS_ON_ADDRESS_BAR) ||
+            FxNimbus.features.oneClickSearch.value().enabled
+
+        if (focusOnAddressBar) {
             // If the fragment gets recreated by the activity, the search fragment might get recreated as well. Changing
             // between browsing modes triggers activity recreation, so when changing modes goes together with navigating
             // home, we should avoid navigating to search twice.
@@ -1135,8 +1149,21 @@ class HomeFragment : Fragment() {
 
             setContent {
                 FirefoxTheme {
+                    val settings = LocalContext.current.settings()
+                    val appState by components.appStore.observeAsState(
+                        initialValue = components.appStore.state,
+                    ) { it }
+
                     Homepage(
-                        interactor = sessionControlInteractor,
+                        state = HomepageState.build(
+                            appState = appState,
+                            settings = settings,
+                        ),
+                        privateBrowsingInteractor = sessionControlInteractor,
+                        topSiteInteractor = sessionControlInteractor,
+                        recentTabInteractor = sessionControlInteractor,
+                        recentSyncedTabInteractor = sessionControlInteractor,
+                        bookmarksInteractor = sessionControlInteractor,
                         onTopSitesItemBound = {
                             StartupTimeline.onTopSitesItemBound(activity = (requireActivity() as HomeActivity))
                         },

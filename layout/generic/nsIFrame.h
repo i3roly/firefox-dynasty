@@ -575,6 +575,8 @@ enum class LayoutFrameClassFlags : uint16_t {
   SupportsAspectRatio = 1 << 13,
   // Whether this frame class is always a BFC.
   BlockFormattingContext = 1 << 14,
+  // Whether we're a SVG rendering observer container.
+  SVGRenderingObserverContainer = 1 << 15,
 };
 
 MOZ_MAKE_ENUM_CLASS_BITWISE_OPERATORS(LayoutFrameClassFlags)
@@ -2042,16 +2044,18 @@ class nsIFrame : public nsQueryFrame {
   }
 
   /**
-   * Returns true if this frame is an SVG frame that has SVG transforms applied
-   * to it, or if its parent frame is an SVG frame that has children-only
+   * Returns true if this frame's parent is an SVG frame that has children-only
    * transforms (e.g. an SVG viewBox attribute).
-   * If aOwnTransforms is non-null and the frame has its own SVG transforms,
-   * aOwnTransforms will be set to these transforms. If aFromParentTransforms
-   * is non-null and the frame has an SVG parent with children-only transforms,
-   * then aFromParentTransforms will be set to these transforms.
+   * If aFromParentTransforms is non-null, then aFromParentTransforms will be
+   * set to these transforms.
    */
-  virtual bool IsSVGTransformed(Matrix* aOwnTransforms = nullptr,
-                                Matrix* aFromParentTransforms = nullptr) const;
+  bool GetParentSVGTransforms(Matrix* aFromParentTransforms = nullptr) const {
+    if (!HasAnyStateBits(NS_FRAME_SVG_LAYOUT)) {
+      return false;
+    }
+    return DoGetParentSVGTransforms(aFromParentTransforms);
+  }
+  virtual bool DoGetParentSVGTransforms(Matrix* = nullptr) const;
 
   /**
    * Returns whether this frame will attempt to extend the 3d transforms of its
@@ -2468,7 +2472,7 @@ class nsIFrame : public nsQueryFrame {
     }
   }
 
-  bool IsPrimaryFrameOfRootOrBodyElement() const;
+  bool ShouldPropagateRepaintsToRoot() const;
 
   /**
    * @return true if this frame is used as a fieldset's rendered legend.
@@ -3071,9 +3075,11 @@ class nsIFrame : public nsQueryFrame {
 
   /**
    * Computes any overflow area created by children of this frame and
-   * includes it into aOverflowAreas.
+   * includes it into aOverflowAreas. If aAsIfScrolled is true, then it behaves
+   * as if we were the scrolled content frame.
    */
-  virtual void UnionChildOverflow(mozilla::OverflowAreas& aOverflowAreas);
+  virtual void UnionChildOverflow(mozilla::OverflowAreas& aOverflowAreas,
+                                  bool aAsIfScrolled = false);
 
   // Returns the applicable overflow-clip-margin values.
   nsSize OverflowClipMargin(mozilla::PhysicalAxes aClipAxes) const;
@@ -3445,6 +3451,8 @@ class nsIFrame : public nsQueryFrame {
   CLASS_FLAG_METHOD0(SupportsCSSTransforms);
   CLASS_FLAG_METHOD0(SupportsContainLayoutAndPaint)
   CLASS_FLAG_METHOD0(SupportsAspectRatio)
+  CLASS_FLAG_METHOD(IsSVGRenderingObserverContainer,
+                    SVGRenderingObserverContainer);
 
 #undef CLASS_FLAG_METHOD
 #undef CLASS_FLAG_METHOD0
@@ -4669,17 +4677,6 @@ class nsIFrame : public nsQueryFrame {
    */
   bool IsInSVGTextSubtree() const {
     return HasAnyStateBits(NS_FRAME_IS_SVG_TEXT);
-  }
-
-  /**
-   * Returns true if the frame is an SVG Rendering Observer container.
-   */
-  bool IsRenderingObserverContainer() const {
-    // NS_FRAME_SVG_LAYOUT is used as a proxy to check for an SVG frame because
-    // NS_STATE_SVG_RENDERING_OBSERVER_CONTAINER is an SVG specific state bit.
-    return HasAllStateBits(NS_FRAME_SVG_LAYOUT |
-                           NS_STATE_SVG_RENDERING_OBSERVER_CONTAINER) ||
-           IsSVGOuterSVGFrame();
   }
 
   /**

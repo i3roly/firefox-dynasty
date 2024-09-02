@@ -474,7 +474,7 @@ pub struct SceneBuilder<'a> {
     pub config: FrameBuilderConfig,
 
     /// Reference to the set of data that is interned across display lists.
-    interners: &'a mut Interners,
+    pub interners: &'a mut Interners,
 
     /// Helper struct to map spatial nodes to external scroll offsets.
     external_scroll_mapper: ScrollOffsetMapper,
@@ -1777,6 +1777,7 @@ impl<'a> SceneBuilder<'a> {
                     info.spread_radius,
                     info.border_radius,
                     info.clip_mode,
+                    self.spatial_tree.is_root_coord_system(spatial_node_index),
                 );
             }
             DisplayItem::Border(ref info) => {
@@ -1991,7 +1992,7 @@ impl<'a> SceneBuilder<'a> {
 
     /// Convenience interface that creates a primitive entry and adds it
     /// to the draw list.
-    fn add_nonshadowable_primitive<P>(
+    pub fn add_nonshadowable_primitive<P>(
         &mut self,
         spatial_node_index: SpatialNodeIndex,
         clip_node_id: ClipNodeId,
@@ -3613,6 +3614,7 @@ impl<'a> SceneBuilder<'a> {
         let yuv_key = match yuv_data {
             YuvData::NV12(plane_0, plane_1) => [plane_0, plane_1, ImageKey::DUMMY],
             YuvData::P010(plane_0, plane_1) => [plane_0, plane_1, ImageKey::DUMMY],
+            YuvData::NV16(plane_0, plane_1) => [plane_0, plane_1, ImageKey::DUMMY],
             YuvData::PlanarYCbCr(plane_0, plane_1, plane_2) => [plane_0, plane_1, plane_2],
             YuvData::InterleavedYCbCr(plane_0) => [plane_0, ImageKey::DUMMY, ImageKey::DUMMY],
         };

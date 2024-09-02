@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 
+#include "mozilla/dom/quota/CommonMetadataArrayFwd.h"
 #include "mozilla/dom/quota/Config.h"
 
 enum class nsresult : uint32_t;
@@ -35,17 +36,23 @@ class MozPromise;
 
 using BoolPromise = MozPromise<bool, nsresult, false>;
 using Int64Promise = MozPromise<int64_t, nsresult, false>;
+using UInt64Promise = MozPromise<uint64_t, nsresult, false>;
 
 using ExclusiveBoolPromise = MozPromise<bool, nsresult, true>;
 
 namespace ipc {
 
 class BoolResponse;
+class UInt64Response;
 enum class ResponseRejectReason;
 
 using BoolResponsePromise =
     MozPromise<BoolResponse, ResponseRejectReason, true>;
+using UInt64ResponsePromise =
+    MozPromise<UInt64Response, ResponseRejectReason, true>;
+
 using BoolResponseResolver = std::function<void(const BoolResponse&)>;
+using UInt64ResponseResolver = std::function<void(const UInt64Response&)>;
 using NSResultResponseResolver = std::function<void(const nsresult&)>;
 
 }  // namespace ipc
@@ -59,6 +66,25 @@ using ClientDirectoryLockPromise =
     MozPromise<RefPtr<ClientDirectoryLock>, nsresult, true>;
 using UniversalDirectoryLockPromise =
     MozPromise<RefPtr<UniversalDirectoryLock>, nsresult, true>;
+
+class UsageInfo;
+
+using OriginUsageMetadataArrayPromise =
+    MozPromise<OriginUsageMetadataArray, nsresult, true>;
+using UsageInfoPromise = MozPromise<UsageInfo, nsresult, false>;
+
+class OriginUsageMetadataArrayResponse;
+class UsageInfoResponse;
+
+using OriginUsageMetadataArrayResponsePromise =
+    MozPromise<OriginUsageMetadataArrayResponse,
+               mozilla::ipc::ResponseRejectReason, true>;
+using UsageInfoResponsePromise =
+    MozPromise<UsageInfoResponse, mozilla::ipc::ResponseRejectReason, true>;
+
+using OriginUsageMetadataArrayResponseResolver =
+    std::function<void(OriginUsageMetadataArrayResponse&&)>;
+using UsageInfoResponseResolver = std::function<void(const UsageInfoResponse&)>;
 
 }  // namespace dom::quota
 

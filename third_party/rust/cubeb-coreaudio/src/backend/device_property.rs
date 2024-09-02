@@ -262,7 +262,7 @@ pub fn get_device_streams(
                 .flatten()
                 .collect());
         }
-        //debug_assert!(devices.contains(&id));
+        debug_assert!(devices.contains(&id));
         devices.sort();
         let next_id = devices.into_iter().skip_while(|&i| i != id).nth(1);
         cubeb_log!(

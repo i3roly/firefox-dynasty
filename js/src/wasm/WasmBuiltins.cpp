@@ -57,8 +57,12 @@ using namespace js;
 using namespace jit;
 using namespace wasm;
 
+using mozilla::EnumeratedArray;
 using mozilla::HashGeneric;
 using mozilla::MakeEnumeratedRange;
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
 
 static const unsigned BUILTIN_THUNK_LIFO_SIZE = 64 * 1024;
 
@@ -696,14 +700,19 @@ static void WasmHandleRequestTierUp(Instance* instance) {
   // possible.  So set the counter to "infinity" right now.
   instance->resetHotnessCounter(funcIndex);
 
+  // Submit the collected profiling information for call_ref to be available
+  // for compilation.
+  instance->submitCallRefHints(funcIndex);
+
   // Try to Ion-compile it.  Note that `ok == true` signifies either
   // "duplicate request" or "not a duplicate, and compilation succeeded".
   bool ok = codeBlock->code->requestTierUp(funcIndex);
 
-  // If compilation failed, there's no feasible way to recover.
+  // If compilation failed, there's no feasible way to recover. We use the
+  // 'off thread' logging mechanism to avoid possibly triggering a GC.
   if (!ok) {
-    wasm::Log(cx, "Failed to tier-up function=%d in instance=%p.", funcIndex,
-              instance);
+    wasm::LogOffThread("Failed to tier-up function=%d in instance=%p.",
+                       funcIndex, instance);
   }
 }
 
@@ -1937,7 +1946,7 @@ struct BuiltinThunks {
 };
 
 Mutex initBuiltinThunks(mutexid::WasmInitBuiltinThunks);
-Atomic<const BuiltinThunks*> builtinThunks;
+mozilla::Atomic<const BuiltinThunks*> builtinThunks;
 
 bool wasm::EnsureBuiltinThunksInitialized() {
   AutoMarkJitCodeWritableForThread writable;
@@ -1956,7 +1965,7 @@ bool wasm::EnsureBuiltinThunksInitialized(
     return false;
   }
 
-  LifoAlloc lifo(BUILTIN_THUNK_LIFO_SIZE);
+  LifoAlloc lifo(BUILTIN_THUNK_LIFO_SIZE, js::MallocArena);
   TempAllocator tempAlloc(&lifo);
   WasmMacroAssembler masm(tempAlloc);
   AutoCreatedBy acb(masm, "wasm::EnsureBuiltinThunksInitialized");

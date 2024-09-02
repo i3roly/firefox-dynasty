@@ -13,10 +13,11 @@ Services.scriptloader.loadSubScript(
  *
  * @param {string} url
  */
-async function addTab(url) {
+async function addTab(url, message, win = window) {
   logAction(url);
+  info(message);
   const tab = await BrowserTestUtils.openNewForegroundTab(
-    gBrowser,
+    win.gBrowser,
     url,
     true // Wait for load
   );
@@ -24,6 +25,37 @@ async function addTab(url) {
     tab,
     removeTab() {
       BrowserTestUtils.removeTab(tab);
+    },
+    /**
+     * Runs a callback in the content page. The function's contents are serialized as
+     * a string, and run in the page. The `translations-test.mjs` module is made
+     * available to the page.
+     *
+     * @param {(TranslationsTest: import("./translations-test.mjs")) => any} callback
+     * @returns {Promise<void>}
+     */
+    runInPage(callback, data = {}) {
+      // ContentTask.spawn runs the `Function.prototype.toString` on this function in
+      // order to send it into the content process. The following function is doing its
+      // own string manipulation in order to load in the TranslationsTest module.
+      const fn = new Function(/* js */ `
+        const TranslationsTest = ChromeUtils.importESModule(
+          "chrome://mochitests/content/browser/toolkit/components/translations/tests/browser/translations-test.mjs"
+        );
+
+        // Pass in the values that get injected by the task runner.
+        TranslationsTest.setup({Assert, ContentTaskUtils, content});
+
+        const data = ${JSON.stringify(data)};
+
+        return (${callback.toString()})(TranslationsTest, data);
+      `);
+
+      return ContentTask.spawn(
+        tab.linkedBrowser,
+        {}, // Data to inject.
+        fn
+      );
     },
   };
 }
@@ -60,6 +92,17 @@ function focusElementAndSynthesizeKey(element, key) {
   assertVisibility({ visible: { element } });
   element.focus();
   EventUtils.synthesizeKey(key);
+}
+
+/**
+ * Focuses the given window object, moving it to the top of all open windows.
+ *
+ * @param {Window} win
+ */
+async function focusWindow(win) {
+  const windowFocusPromise = BrowserTestUtils.waitForEvent(win, "focus");
+  win.focus();
+  await windowFocusPromise;
 }
 
 /**
@@ -362,14 +405,14 @@ class SharedTranslationsTestUtils {
       menuList.label,
       `The label for the menulist ${menuList.id} should not be empty.`
     );
-    if (langTag) {
+    if (langTag !== undefined) {
       is(
         menuList.value,
         langTag,
         `Expected ${menuList.id} selection to match '${langTag}'`
       );
     }
-    if (l10nId) {
+    if (l10nId !== undefined) {
       is(
         menuList.getAttribute("data-l10n-id"),
         l10nId,
@@ -949,9 +992,11 @@ class FullPageTranslationsTestUtils {
    * @param {object} options - Options containing 'langTag' and 'l10nId' to assert against.
    * @param {string} [options.langTag] - The BCP-47 language tag to match.
    * @param {string} [options.l10nId] - The localization Id to match.
+   * @param {ChromeWindow} [options.win]
+   *  - An optional ChromeWindow, for multi-window tests.
    */
-  static assertSelectedFromLanguage({ langTag, l10nId }) {
-    const { fromMenuList } = FullPageTranslationsPanel.elements;
+  static assertSelectedFromLanguage({ langTag, l10nId, win = window }) {
+    const { fromMenuList } = win.FullPageTranslationsPanel.elements;
     SharedTranslationsTestUtils._assertSelectedLanguage(fromMenuList, {
       langTag,
       l10nId,
@@ -964,9 +1009,11 @@ class FullPageTranslationsTestUtils {
    * @param {object} options - Options containing 'langTag' and 'l10nId' to assert against.
    * @param {string} [options.langTag] - The BCP-47 language tag to match.
    * @param {string} [options.l10nId] - The localization Id to match.
+   * @param {ChromeWindow} [options.win]
+   *  - An optional ChromeWindow, for multi-window tests.
    */
-  static assertSelectedToLanguage({ langTag, l10nId }) {
-    const { toMenuList } = FullPageTranslationsPanel.elements;
+  static assertSelectedToLanguage({ langTag, l10nId, win = window }) {
+    const { toMenuList } = win.FullPageTranslationsPanel.elements;
     SharedTranslationsTestUtils._assertSelectedLanguage(toMenuList, {
       langTag,
       l10nId,
@@ -1151,10 +1198,13 @@ class FullPageTranslationsTestUtils {
 
   /**
    * Simulates clicking the restore-page button.
+   *
+   * @param {ChromeWindow} [win]
+   *  - An optional ChromeWindow, for multi-window tests.
    */
-  static async clickRestoreButton() {
+  static async clickRestoreButton(win = window) {
     logAction();
-    const { restoreButton } = FullPageTranslationsPanel.elements;
+    const { restoreButton } = win.FullPageTranslationsPanel.elements;
     assertVisibility({ visible: { restoreButton } });
     await FullPageTranslationsTestUtils.waitForPanelPopupEvent(
       "popuphidden",
@@ -1226,6 +1276,8 @@ class FullPageTranslationsTestUtils {
    *  - Open the panel from the app menu. If false, uses the translations button.
    * @param {boolean} config.openWithKeyboard
    *  - Open the panel by synthesizing the keyboard. If false, synthesizes the mouse.
+   * @param {string} [config.expectedFromLanguage] - The expected from-language tag.
+   * @param {string} [config.expectedToLanguage] - The expected to-language tag.
    * @param {ChromeWindow} [config.win]
    *  - An optional window for multi-window tests.
    */
@@ -1233,6 +1285,8 @@ class FullPageTranslationsTestUtils {
     onOpenPanel = null,
     openFromAppMenu = false,
     openWithKeyboard = false,
+    expectedFromLanguage = undefined,
+    expectedToLanguage = undefined,
     win = window,
   }) {
     logAction();
@@ -1248,6 +1302,18 @@ class FullPageTranslationsTestUtils {
         win,
         onOpenPanel,
         openWithKeyboard,
+      });
+    }
+    if (expectedFromLanguage !== undefined) {
+      FullPageTranslationsTestUtils.assertSelectedFromLanguage({
+        win,
+        langTag: expectedFromLanguage,
+      });
+    }
+    if (expectedToLanguage !== undefined) {
+      FullPageTranslationsTestUtils.assertSelectedToLanguage({
+        win,
+        langTag: expectedToLanguage,
       });
     }
   }
@@ -1367,15 +1433,19 @@ class FullPageTranslationsTestUtils {
    * @param {object} elements - Elements involved in the dropdown language selection process.
    * @param {Element} elements.menuList - The element that triggers the dropdown menu.
    * @param {Element} elements.menuPopup - The dropdown menu element containing selectable languages.
+   * @param {ChromeWindow} [win]
+   *  - An optional ChromeWindow, for multi-window tests.
    *
    * @returns {Promise<void>}
    */
-  static async #changeSelectedLanguage(langTag, elements) {
+  static async #changeSelectedLanguage(langTag, elements, win = window) {
     const { menuList, menuPopup } = elements;
 
     await FullPageTranslationsTestUtils.waitForPanelPopupEvent(
       "popupshown",
-      () => click(menuList)
+      () => click(menuList),
+      null /* postEventAssertion */,
+      win
     );
 
     const menuItem = menuPopup.querySelector(`[value="${langTag}"]`);
@@ -1386,39 +1456,55 @@ class FullPageTranslationsTestUtils {
         // Synthesizing a click on the menuitem isn't closing the popup
         // as a click normally would, so this tab keypress is added to
         // ensure the popup closes.
-        EventUtils.synthesizeKey("KEY_Tab");
-      }
+        EventUtils.synthesizeKey("KEY_Tab", {}, win);
+      },
+      null /* postEventAssertion */,
+      win
     );
   }
 
   /**
    * Switches the selected from-language to the provided language tag.
    *
-   * @param {string} langTag - A BCP-47 language tag.
+   * @param {object} options
+   * @param {string} options.langTag - A BCP-47 language tag.
+   * @param {ChromeWindow} [options.win]
+   *  - An optional ChromeWindow, for multi-window tests.
    */
-  static async changeSelectedFromLanguage(langTag) {
+  static async changeSelectedFromLanguage({ langTag, win = window }) {
     logAction(langTag);
     const { fromMenuList: menuList, fromMenuPopup: menuPopup } =
-      FullPageTranslationsPanel.elements;
-    await FullPageTranslationsTestUtils.#changeSelectedLanguage(langTag, {
-      menuList,
-      menuPopup,
-    });
+      win.FullPageTranslationsPanel.elements;
+    await FullPageTranslationsTestUtils.#changeSelectedLanguage(
+      langTag,
+      {
+        menuList,
+        menuPopup,
+      },
+      win
+    );
   }
 
   /**
    * Switches the selected to-language to the provided language tag.
    *
-   * @param {string} langTag - A BCP-47 language tag.
+   * @param {object} options
+   * @param {string} options.langTag - A BCP-47 language tag.
+   * @param {ChromeWindow} [options.win]
+   *  - An optional ChromeWindow, for multi-window tests.
    */
-  static async changeSelectedToLanguage(langTag) {
+  static async changeSelectedToLanguage({ langTag, win = window }) {
     logAction(langTag);
     const { toMenuList: menuList, toMenuPopup: menuPopup } =
-      FullPageTranslationsPanel.elements;
-    await FullPageTranslationsTestUtils.#changeSelectedLanguage(langTag, {
-      menuList,
-      menuPopup,
-    });
+      win.FullPageTranslationsPanel.elements;
+    await FullPageTranslationsTestUtils.#changeSelectedLanguage(
+      langTag,
+      {
+        menuList,
+        menuPopup,
+      },
+      win
+    );
   }
 
   /**

@@ -30,6 +30,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BuiltInThemes: "resource:///modules/BuiltInThemes.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
   CloseRemoteTab: "resource://gre/modules/FxAccountsCommands.sys.mjs",
+  CommonDialog: "resource://gre/modules/CommonDialog.sys.mjs",
   ContentRelevancyManager:
     "resource://gre/modules/ContentRelevancyManager.sys.mjs",
   ContextualIdentityService:
@@ -284,7 +285,6 @@ let JSWINDOWACTORS = {
         AboutLoginsRemoveAllLogins: { wantUntrusted: true },
         AboutLoginsSortChanged: { wantUntrusted: true },
         AboutLoginsSyncEnable: { wantUntrusted: true },
-        AboutLoginsSyncOptions: { wantUntrusted: true },
         AboutLoginsUpdateLogin: { wantUntrusted: true },
         AboutLoginsExportPasswords: { wantUntrusted: true },
       },
@@ -456,12 +456,14 @@ let JSWINDOWACTORS = {
       esModuleURI: "resource:///actors/BackupUIChild.sys.mjs",
       events: {
         "BackupUI:InitWidget": { wantUntrusted: true },
-        "BackupUI:ToggleScheduledBackups": { wantUntrusted: true },
+        "BackupUI:EnableScheduledBackups": { wantUntrusted: true },
+        "BackupUI:DisableScheduledBackups": { wantUntrusted: true },
         "BackupUI:ShowFilepicker": { wantUntrusted: true },
         "BackupUI:GetBackupFileInfo": { wantUntrusted: true },
         "BackupUI:RestoreFromBackupFile": { wantUntrusted: true },
         "BackupUI:RestoreFromBackupChooseFile": { wantUntrusted: true },
-        "BackupUI:ToggleEncryption": { wantUntrusted: true },
+        "BackupUI:EnableEncryption": { wantUntrusted: true },
+        "BackupUI:DisableEncryption": { wantUntrusted: true },
         "BackupUI:RerunEncryption": { wantUntrusted: true },
         "BackupUI:ShowBackupLocation": { wantUntrusted: true },
         "BackupUI:EditBackupLocation": { wantUntrusted: true },
@@ -1750,34 +1752,44 @@ BrowserGlue.prototype = {
 
   _earlyBlankFirstPaint(cmdLine) {
     let startTime = Cu.now();
-    if (
-      AppConstants.platform == "macosx" ||
-      Services.startup.wasSilentlyStarted ||
-      !Services.prefs.getBoolPref("browser.startup.blankWindow", false)
-    ) {
-      return;
-    }
 
-    // Until bug 1450626 and bug 1488384 are fixed, skip the blank window when
-    // using a non-default theme.
-    if (
-      !Services.startup.showedPreXULSkeletonUI &&
-      Services.prefs.getCharPref(
-        "extensions.activeThemeID",
-        "default-theme@mozilla.org"
-      ) != "default-theme@mozilla.org"
-    ) {
-      return;
-    }
+    let shouldCreateWindow = () => {
+      if (cmdLine.findFlag("wait-for-jsdebugger", false) != -1) {
+        return true;
+      }
 
-    let store = Services.xulStore;
-    let getValue = attr =>
-      store.getValue(AppConstants.BROWSER_CHROME_URL, "main-window", attr);
-    let width = getValue("width");
-    let height = getValue("height");
+      if (
+        AppConstants.platform == "macosx" ||
+        Services.startup.wasSilentlyStarted ||
+        !Services.prefs.getBoolPref("browser.startup.blankWindow", false)
+      ) {
+        return false;
+      }
 
-    // The clean profile case isn't handled yet. Return early for now.
-    if (!width || !height) {
+      // Until bug 1450626 and bug 1488384 are fixed, skip the blank window when
+      // using a non-default theme.
+      if (
+        !Services.startup.showedPreXULSkeletonUI &&
+        Services.prefs.getCharPref(
+          "extensions.activeThemeID",
+          "default-theme@mozilla.org"
+        ) != "default-theme@mozilla.org"
+      ) {
+        return false;
+      }
+
+      let width = getValue("width");
+      let height = getValue("height");
+
+      // The clean profile case isn't handled yet. Return early for now.
+      if (!width || !height) {
+        return false;
+      }
+
+      return true;
+    };
+
+    if (!shouldCreateWindow()) {
       return;
     }
 
@@ -1813,6 +1825,8 @@ BrowserGlue.prototype = {
 
     // The sizemode="maximized" attribute needs to be set before first paint.
     let sizemode = getValue("sizemode");
+    let width = getValue("width") || 500;
+    let height = getValue("height") || 500;
     if (sizemode == "maximized") {
       docElt.setAttribute("sizemode", sizemode);
 
@@ -1846,6 +1860,14 @@ BrowserGlue.prototype = {
       "resource://gre/modules/TelemetryTimestamps.sys.mjs"
     );
     TelemetryTimestamps.add("blankWindowShown");
+
+    function getValue(attr) {
+      return Services.xulStore.getValue(
+        AppConstants.BROWSER_CHROME_URL,
+        "main-window",
+        attr
+      );
+    }
   },
 
   _firstWindowTelemetry(aWindow) {
@@ -1999,10 +2021,6 @@ BrowserGlue.prototype = {
       this._updateCBCategory
     );
     Services.prefs.addObserver(
-      "media.autoplay.default",
-      this._updateAutoplayPref
-    );
-    Services.prefs.addObserver(
       "privacy.trackingprotection",
       this._setPrefExpectations
     );
@@ -2061,17 +2079,6 @@ BrowserGlue.prototype = {
           this._resetProfileNotification("uninstall");
         }
       }
-    }
-  },
-
-  _updateAutoplayPref() {
-    const blocked = Services.prefs.getIntPref("media.autoplay.default", 1);
-    const telemetry = Services.telemetry.getHistogramById(
-      "AUTOPLAY_DEFAULT_SETTING_CHANGE"
-    );
-    const labels = { 0: "allow", 1: "blockAudible", 5: "blockAll" };
-    if (blocked in labels) {
-      telemetry.add(labels[blocked]);
     }
   },
 
@@ -2755,12 +2762,20 @@ BrowserGlue.prototype = {
                 winTaskbar.defaultGroupId
               )
             );
-            Services.telemetry.scalarSet(
-              "os.environment.is_taskbar_pinned_private",
-              await shellService.isCurrentAppPinnedToTaskbarAsync(
-                winTaskbar.defaultPrivateGroupId
-              )
-            );
+            // Bug 1911343: Pinning regular browsing on MSIX
+            // causes false positives when checking for private
+            // browsing.
+            if (
+              AppConstants.platform === "win" &&
+              !Services.sysinfo.getProperty("hasWinPackageId")
+            ) {
+              Services.telemetry.scalarSet(
+                "os.environment.is_taskbar_pinned_private",
+                await shellService.isCurrentAppPinnedToTaskbarAsync(
+                  winTaskbar.defaultPrivateGroupId
+                )
+              );
+            }
           } catch (ex) {
             console.error(ex);
           }
@@ -5821,35 +5836,6 @@ ContentPermissionPrompt.prototype = {
       request.cancel();
       throw ex;
     }
-
-    let schemeHistogram = Services.telemetry.getKeyedHistogramById(
-      "PERMISSION_REQUEST_ORIGIN_SCHEME"
-    );
-    let scheme = 0;
-    try {
-      if (request.principal.schemeIs("http")) {
-        scheme = 1;
-      } else if (request.principal.schemeIs("https")) {
-        scheme = 2;
-      }
-    } catch (ex) {
-      // If the request principal is not available at this point,
-      // the request has likely been cancelled before being shown to the
-      // user. We shouldn't record this request.
-      if (ex.result != Cr.NS_ERROR_FAILURE) {
-        console.error(ex);
-      }
-      return;
-    }
-    schemeHistogram.add(type, scheme);
-
-    let userInputHistogram = Services.telemetry.getKeyedHistogramById(
-      "PERMISSION_REQUEST_HANDLING_USER_INPUT"
-    );
-    userInputHistogram.add(
-      type,
-      request.hasValidTransientUserGestureActivation
-    );
   },
 };
 
@@ -5914,7 +5900,9 @@ export var DefaultBrowserCheck = {
       null,
       askLabel,
       false, // checkbox state
-      { headerIconURL: "chrome://branding/content/icon32.png" }
+      {
+        headerIconCSSValue: lazy.CommonDialog.DEFAULT_APP_ICON_CSS,
+      }
     );
     let buttonNumClicked = rv.get("buttonNumClicked");
     let checkboxState = rv.get("checked");

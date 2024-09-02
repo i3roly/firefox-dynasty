@@ -13,6 +13,8 @@
       <html:slot/>
       `;
 
+    #labelElement;
+
     constructor() {
       super();
     }
@@ -31,7 +33,22 @@
       this.textContent = "";
       this.appendChild(this.constructor.fragment);
       this.initializeAttributeInheritance();
+
       this._initialized = true;
+
+      this.#labelElement = this.querySelector(".tab-group-label");
+      this.#labelElement.addEventListener("click", this);
+
+      this._lastTabRemovedObserver = new window.MutationObserver(() => {
+        if (!this.tabs.length) {
+          this.remove();
+        }
+      });
+      this._lastTabRemovedObserver.observe(this, { childList: true });
+    }
+
+    disconnectedCallback() {
+      this._lastTabRemovedObserver.disconnect();
     }
 
     get color() {
@@ -56,6 +73,50 @@
 
     set label(val) {
       this.setAttribute("label", val);
+    }
+
+    get collapsed() {
+      return this.hasAttribute("collapsed");
+    }
+
+    set collapsed(val) {
+      this.toggleAttribute("collapsed", val);
+      const eventName = val ? "TabGroupCollapse" : "TabGroupExpand";
+      this.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
+    }
+
+    get tabs() {
+      return Array.from(this.children).filter(node => node.matches("tab"));
+    }
+
+    /**
+     * add tabs to the group
+     *
+     * @param tabs array of tabs to add
+     */
+    addTabs(tabs) {
+      for (let tab of tabs) {
+        gBrowser.moveTabToGroup(tab, this);
+      }
+    }
+
+    /**
+     * remove all tabs from the group and delete the group
+     *
+     */
+    ungroupTabs() {
+      let adjacentTab = gBrowser.tabContainer.findNextTab(this.tabs.at(-1));
+
+      for (let tab of this.tabs) {
+        gBrowser.tabContainer.insertBefore(tab, adjacentTab);
+      }
+    }
+
+    on_click(event) {
+      if (event.target === this.#labelElement && event.button === 0) {
+        event.preventDefault();
+        this.collapsed = !this.collapsed;
+      }
     }
   }
 

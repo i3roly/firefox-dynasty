@@ -2234,7 +2234,7 @@ Toolbox.prototype = {
    */
   _getPickerTooltip() {
     let shortcut = L10N.getStr("toolbox.elementPicker.key");
-    shortcut = KeyShortcuts.parseElectronKey(this.win, shortcut);
+    shortcut = KeyShortcuts.parseElectronKey(shortcut);
     shortcut = KeyShortcuts.stringify(shortcut);
     const shortcutMac = L10N.getStr("toolbox.elementPicker.mac.key");
     const isMac = Services.appinfo.OS === "Darwin";
@@ -4753,9 +4753,7 @@ Toolbox.prototype = {
       }
 
       if (resourceType === TYPES.CONSOLE_MESSAGE) {
-        // @backward-compat { version 129 } Once Fx129 is release, CONSOLE_MESSAGE resource
-        // are no longer encapsulated into a sub "message" attribute.
-        const { level } = resource.message || resource;
+        const { level } = resource;
         if (level === "error" || level === "exception" || level === "assert") {
           errors++;
         }

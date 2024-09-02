@@ -25,9 +25,9 @@ git = "https://github.com/franziskuskiefer/cose-rust"
 rev = "43c22248d136c8b38fe42ea709d08da6355cf04b"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/gfx-rs/wgpu?rev=aeb2067e8120c1ff480625c00b9571db8d01d5a4"]
+[source."git+https://github.com/gfx-rs/wgpu?rev=bbdbafdf8a947b563b46f632a778632b906d9eb4"]
 git = "https://github.com/gfx-rs/wgpu"
-rev = "aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+rev = "bbdbafdf8a947b563b46f632a778632b906d9eb4"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/hsivonen/any_all_workaround?rev=7fb1b7034c9f172aade21ee1c8554e8d8a48af80"]
@@ -55,9 +55,9 @@ git = "https://github.com/mozilla-spidermonkey/jsparagus"
 rev = "61f399c53a641ebd3077c1f39f054f6d396a633c"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/mozilla/application-services?rev=9fc8d02e6cc4751c08c75a7b3c5aee432b66116f"]
+[source."git+https://github.com/mozilla/application-services?rev=c3774b262f27fabdd8ae7d064db5745029b347b9"]
 git = "https://github.com/mozilla/application-services"
-rev = "9fc8d02e6cc4751c08c75a7b3c5aee432b66116f"
+rev = "c3774b262f27fabdd8ae7d064db5745029b347b9"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/mozilla/audioipc?rev=e6f44a2bd1e57d11dfc737632a9e849077632330"]
@@ -65,9 +65,9 @@ git = "https://github.com/mozilla/audioipc"
 rev = "e6f44a2bd1e57d11dfc737632a9e849077632330"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/mozilla/cubeb-coreaudio-rs?rev=8bce3b333a920999055397a397e59c2b81a93b9a"]
+[source."git+https://github.com/mozilla/cubeb-coreaudio-rs?rev=f7e50c2166f4564cad6966b629f06c6f75391a6f"]
 git = "https://github.com/mozilla/cubeb-coreaudio-rs"
-rev = "8bce3b333a920999055397a397e59c2b81a93b9a"
+rev = "f7e50c2166f4564cad6966b629f06c6f75391a6f"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/mozilla/cubeb-pulse-rs?rev=8678dcab1c287de79c4c184ccc2e065bc62b70e2"]
@@ -85,9 +85,9 @@ git = "https://github.com/mozilla/mp4parse-rust"
 rev = "a138e40ec1c603615873e524b5b22e11c0ec4820"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/mozilla/neqo?tag=v0.8.1"]
+[source."git+https://github.com/mozilla/neqo?tag=v0.8.2"]
 git = "https://github.com/mozilla/neqo"
-tag = "v0.8.1"
+tag = "v0.8.2"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/servo/unicode-bidi?rev=ca612daf1c08c53abe07327cb3e6ef6e0a760f0c"]

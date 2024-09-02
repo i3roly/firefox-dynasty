@@ -42,10 +42,6 @@
 namespace js {
 namespace wasm {
 
-using mozilla::Maybe;
-using mozilla::Nothing;
-using mozilla::Span;
-
 class FuncType;
 
 // A Module can either be asm.js or wasm.
@@ -80,8 +76,10 @@ struct CacheableName {
 
   bool isEmpty() const { return bytes_.length() == 0; }
 
-  Span<char> utf8Bytes() { return Span<char>(bytes_); }
-  Span<const char> utf8Bytes() const { return Span<const char>(bytes_); }
+  mozilla::Span<char> utf8Bytes() { return mozilla::Span<char>(bytes_); }
+  mozilla::Span<const char> utf8Bytes() const {
+    return mozilla::Span<const char>(bytes_);
+  }
 
   static CacheableName fromUTF8Chars(UniqueChars&& utf8Chars);
   [[nodiscard]] static bool fromUTF8Chars(const char* utf8Chars,
@@ -101,8 +99,8 @@ using CacheableNameVector = Vector<CacheableName, 0, SystemAllocPolicy>;
 
 // A hash policy for names.
 struct NameHasher {
-  using Key = Span<const char>;
-  using Lookup = Span<const char>;
+  using Key = mozilla::Span<const char>;
+  using Lookup = mozilla::Span<const char>;
 
   static HashNumber hash(const Lookup& aLookup) {
     return mozilla::HashString(aLookup.data(), aLookup.Length());
@@ -254,6 +252,76 @@ struct FuncDefRange {
 WASM_DECLARE_CACHEABLE_POD(FuncDefRange);
 
 using FuncDefRangeVector = Vector<FuncDefRange, 0, SystemAllocPolicy>;
+
+struct CallRefMetricsRange {
+  explicit CallRefMetricsRange() {}
+  explicit CallRefMetricsRange(uint32_t begin, uint32_t length)
+      : begin(begin), length(length) {}
+
+  uint32_t begin = 0;
+  uint32_t length = 0;
+
+  void offsetBy(uint32_t offset) { begin += offset; }
+
+  WASM_CHECK_CACHEABLE_POD(begin, length);
+};
+
+// A compact plain data summary of CallRefMetrics for use by our function
+// compilers. See CallRefMetrics in WasmInstanceData.h for more information.
+//
+// We cannot allow the metrics collected by an instance to directly be read
+// from our function compilers because they contain thread-local data and are
+// written into without any synchronization.
+//
+// Instead, CodeMetadata contains an array of CallRefHint that every instance
+// writes into when it has a function that requests a tier-up. This array is
+// 1:1 with the non-threadsafe CallRefMetrics that is stored on the instance.
+//
+// This class must be thread safe, as it's read and written from different
+// threads.
+class CallRefHint {
+ public:
+  using Repr = uint32_t;
+
+ private:
+  Repr state_;
+
+  static constexpr Repr UnknownState = 0;
+  static constexpr Repr FirstInlineFuncState = UnknownState + 1;
+
+  explicit CallRefHint(uint32_t state) : state_(state) {}
+
+ public:
+  static CallRefHint unknown() { return CallRefHint(UnknownState); }
+  static CallRefHint inlineFunc(uint32_t funcIndex) {
+    return CallRefHint(FirstInlineFuncState + funcIndex);
+  }
+
+  static CallRefHint fromRepr(Repr repr) { return CallRefHint(repr); }
+  Repr toRepr() const { return state_; }
+
+  // This call_ref is to an unknown target, emit a normal indirect call.
+  bool isUnknown() const { return state_ == UnknownState; }
+
+  // This call_ref is to a single target from the same instance, try to inline
+  // it if there is budget for it.
+  bool isInlineFunc() const { return state_ >= FirstInlineFuncState; }
+
+  // The function index to inline.
+  uint32_t inlineFuncIndex() const {
+    MOZ_ASSERT(isInlineFunc());
+    return state_ - FirstInlineFuncState;
+  }
+};
+
+using MutableCallRefHint = mozilla::Atomic<CallRefHint::Repr>;
+using MutableCallRefHints =
+    mozilla::UniquePtr<MutableCallRefHint[], JS::FreePolicy>;
+
+WASM_DECLARE_CACHEABLE_POD(CallRefMetricsRange);
+
+using CallRefMetricsRangeVector =
+    Vector<CallRefMetricsRange, 0, SystemAllocPolicy>;
 
 enum class BranchHint : uint8_t { Unlikely = 0, Likely = 1, Invalid = 2 };
 
@@ -496,7 +564,7 @@ struct ModuleElemSegment {
   Kind kind;
   uint32_t tableIndex;
   RefType elemType;
-  Maybe<InitExpr> offsetIfActive;
+  mozilla::Maybe<InitExpr> offsetIfActive;
 
   // We store either an array of indices or the full bytecode of the element
   // expressions, depending on the encoding used for the element segment.
@@ -549,7 +617,7 @@ static_assert(InvalidMemoryIndex > MaxMemories, "Invariant");
 
 struct DataSegmentRange {
   uint32_t memoryIndex;
-  Maybe<InitExpr> offsetIfActive;
+  mozilla::Maybe<InitExpr> offsetIfActive;
   uint32_t bytecodeOffset;
   uint32_t length;
 };
@@ -558,7 +626,7 @@ using DataSegmentRangeVector = Vector<DataSegmentRange, 0, SystemAllocPolicy>;
 
 struct DataSegment : AtomicRefCounted<DataSegment> {
   uint32_t memoryIndex;
-  Maybe<InitExpr> offsetIfActive;
+  mozilla::Maybe<InitExpr> offsetIfActive;
   Bytes bytes;
 
   DataSegment() = default;
@@ -651,7 +719,7 @@ struct Limits {
   // The initial and maximum limit. The unit is pages for memories and elements
   // for tables.
   uint64_t initial;
-  Maybe<uint64_t> maximum;
+  mozilla::Maybe<uint64_t> maximum;
 
   // `shared` is Shareable::False for tables but may be Shareable::True for
   // memories.
@@ -660,7 +728,8 @@ struct Limits {
   WASM_CHECK_CACHEABLE_POD(indexType, initial, maximum, shared);
 
   Limits() = default;
-  explicit Limits(uint64_t initial, const Maybe<uint64_t>& maximum = Nothing(),
+  explicit Limits(uint64_t initial,
+                  const mozilla::Maybe<uint64_t>& maximum = mozilla::Nothing(),
                   Shareable shared = Shareable::False)
       : indexType(IndexType::I32),
         initial(initial),
@@ -696,7 +765,7 @@ struct MemoryDesc {
   Pages initialPages() const { return Pages(limits.initial); }
 
   // The maximum length of this memory in pages.
-  Maybe<Pages> maximumPages() const {
+  mozilla::Maybe<Pages> maximumPages() const {
     return limits.maximum.map([](uint64_t x) { return Pages(x); });
   }
 
@@ -722,7 +791,7 @@ using MemoryDescVector = Vector<MemoryDesc, 1, SystemAllocPolicy>;
 
 // We don't need to worry about overflow with a Memory32 field when
 // using a uint64_t.
-static_assert(MaxMemory32LimitField <= UINT64_MAX / PageSize);
+static_assert(MaxMemory32PagesValidation <= UINT64_MAX / PageSize);
 
 struct TableDesc {
   Limits limits;
@@ -730,37 +799,24 @@ struct TableDesc {
   bool isImported;
   bool isExported;
   bool isAsmJS;
-  Maybe<InitExpr> initExpr;
+  mozilla::Maybe<InitExpr> initExpr;
 
   TableDesc() = default;
-  TableDesc(Limits limits, RefType elemType, Maybe<InitExpr>&& initExpr,
-            bool isAsmJS, bool isImported = false, bool isExported = false)
+  TableDesc(Limits limits, RefType elemType,
+            mozilla::Maybe<InitExpr>&& initExpr, bool isAsmJS,
+            bool isImported = false, bool isExported = false)
       : limits(limits),
         elemType(elemType),
         isImported(isImported),
         isExported(isExported),
         isAsmJS(isAsmJS),
-        initExpr(std::move(initExpr)) {
-    // Table limits are enforced by validation to never be greater than
-    // UINT32_MAX. This means that we can always safely convert table limits to
-    // uint32_t (unlike with memories, which are the other main use of Limits.)
-    static_assert(MaxTableLimitField <= UINT32_MAX);
-    MOZ_ASSERT(limits.initial <= UINT32_MAX);
-    MOZ_ASSERT_IF(limits.maximum.isSome(),
-                  limits.maximum.value() <= UINT32_MAX);
-  }
+        initExpr(std::move(initExpr)) {}
 
   IndexType indexType() const { return limits.indexType; }
 
-  uint32_t initialLength() const {
-    // Note the conversion to uint32_t.
-    return limits.initial;
-  }
+  uint64_t initialLength() const { return limits.initial; }
 
-  Maybe<uint32_t> maximumLength() const {
-    // Note the conversion to uint32_t.
-    return limits.maximum;
-  }
+  mozilla::Maybe<uint64_t> maximumLength() const { return limits.maximum; }
 };
 
 using TableDescVector = Vector<TableDesc, 0, SystemAllocPolicy>;

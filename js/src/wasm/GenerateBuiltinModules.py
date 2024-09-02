@@ -107,9 +107,12 @@ def main(c_out, yaml_path):
     for i in range(len(data)):
         op = data[i]
         sa = op["symbolic_address"]
+        inlineOp = "BuiltinInlineOp::None"
+        if "inline_op" in op:
+            inlineOp = f"BuiltinInlineOp::{op['inline_op']}"
         contents += (
             f"    M({op['op']}, \"{op['export']}\", "
-            f"{sa['name']}, {sa['type']}, {op['entry']}, {cppBool(op['uses_memory'])}, {i})\\\n"
+            f"{sa['name']}, {sa['type']}, {op['entry']}, {cppBool(op['uses_memory'])}, {inlineOp}, {i})\\\n"
         )
     contents += "\n"
 
@@ -139,9 +142,9 @@ def main(c_out, yaml_path):
         # `Some(X)` if present, or else `Nothing()`.
         result_valtype = ""
         if "result" in op:
-            result_valtype = f"Some({specTypeToValType(op['result'])})\n"
+            result_valtype = f"mozilla::Some({specTypeToValType(op['result'])})\n"
         else:
-            result_valtype = "Nothing()"
+            result_valtype = "mozilla::Nothing()"
         contents += f"#define DECLARE_BUILTIN_MODULE_FUNC_RESULT_VALTYPE_{op['op']} {result_valtype}\n"
 
         # Define DECLARE_BUILTIN_MODULE_FUNC_RESULT_MIRTYPE_<op> as:

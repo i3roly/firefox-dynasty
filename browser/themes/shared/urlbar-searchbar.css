@@ -20,7 +20,9 @@
 #identity-box.chromeUI ~ #page-action-buttons > .urlbar-page-action:not(#star-button-box),
 #urlbar[usertyping] > .urlbar-input-container > #page-action-buttons > #urlbar-zoom-button,
 #urlbar:not([usertyping]) > .urlbar-input-container > .urlbar-go-button,
-#urlbar:not([focused]) > .urlbar-input-container > .urlbar-go-button {
+#urlbar:not([focused]) > .urlbar-input-container > .urlbar-go-button,
+.urlbar-show-page-actions-button,
+.urlbar-revert-button {
   display: none;
 }
 
@@ -44,11 +46,15 @@
 }
 
 #urlbar,
-#searchbar {
+#searchbar,
+.urlbar-searchmode-and-input-box-container {
   /* Setting a min-width to let the location & search bars maintain a constant
    * width in case they haven't been resized manually. (bug 965772) */
   min-width: 1px;
+}
 
+#urlbar,
+#searchbar {
   min-height: var(--urlbar-min-height);
   text-shadow: none;
   color: var(--toolbar-field-color);
@@ -123,23 +129,23 @@
     text-align: right !important;
   }
 
-  #urlbar:not([focused])[domaindir="ltr"]> .urlbar-input-container > .urlbar-input-box > & {
+  #urlbar:not([focused])[domaindir="ltr"]> .urlbar-input-container > .urlbar-searchmode-and-input-box-container > .urlbar-input-box > & {
     direction: ltr;
     unicode-bidi: embed;
   }
 
   /* The following rules apply overflow masks to the unfocused urlbar
      This mask may be overriden when a Contextual Feature Recommendation is shown. */
-  #urlbar:not([focused])[textoverflow="both"] > .urlbar-input-container > .urlbar-input-box > & {
+  #urlbar:not([focused])[textoverflow="both"] > .urlbar-input-container > .urlbar-searchmode-and-input-box-container > .urlbar-input-box > & {
     mask-image: linear-gradient(to right, transparent, black 3ch, black calc(100% - 3ch), transparent);
   }
-  #urlbar:not([focused])[textoverflow="right"] > .urlbar-input-container > .urlbar-input-box > & {
+  #urlbar:not([focused])[textoverflow="right"] > .urlbar-input-container > .urlbar-searchmode-and-input-box-container > .urlbar-input-box > & {
     mask-image: linear-gradient(to left, transparent, black 3ch);
   }
-  #urlbar:not([focused])[textoverflow="left"] > .urlbar-input-container > .urlbar-input-box > & {
+  #urlbar:not([focused])[textoverflow="left"] > .urlbar-input-container > .urlbar-searchmode-and-input-box-container > .urlbar-input-box > & {
     mask-image: linear-gradient(to right, transparent, black 3ch);
   }
-  #urlbar:not([focused])[textoverflow="left"][domaindir="rtl"] > .urlbar-input-container > .urlbar-input-box > & {
+  #urlbar:not([focused])[textoverflow="left"][domaindir="rtl"] > .urlbar-input-container > .urlbar-searchmode-and-input-box-container > .urlbar-input-box > & {
     mask-image: linear-gradient(to right, transparent var(--urlbar-scheme-size), black calc(var(--urlbar-scheme-size) + 3ch));
   }
 }
@@ -153,7 +159,7 @@
 
   /* The protocol is visible if there is an RTL domain and we overflow to the left.
      Uses the required-valid trick to check if it contains a value */
-  #urlbar:not([focused])[textoverflow="left"][domaindir="rtl"] > .urlbar-input-container > .urlbar-input-box > &:valid {
+  #urlbar:not([focused])[textoverflow="left"][domaindir="rtl"] > .urlbar-input-container > .urlbar-searchmode-and-input-box-container > .urlbar-input-box > &:valid {
     visibility: visible;
   }
 }
@@ -554,6 +560,8 @@
 }
 
 .urlbar-page-action,
+.urlbar-revert-button,
+.urlbar-show-page-actions-button,
 .urlbar-go-button,
 .search-go-button {
   width: calc(var(--urlbar-min-height) - 2px /* border */ - 2 * var(--urlbar-container-padding));
@@ -796,6 +804,47 @@
   }
 }
 
+/* Persisted Search Terms rules specific when the Unified Search Button is present */
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") or (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
+  #urlbar[persistsearchterms] {
+    .urlbar-input {
+      padding-inline: var(--space-medium);
+    }
+    .urlbar-revert-button {
+      list-style-image: url(chrome://global/skin/icons/close.svg);
+      fill: var(--toolbarbutton-icon-fill);
+    }
+    .urlbar-show-page-actions-button {
+      list-style-image: url(chrome://global/skin/icons/more.svg);
+    }
+    .urlbar-searchmode-and-input-box-container {
+      align-items: center;
+      background-color: light-dark(rgba(255, 255, 255, 0.4), rgba(0, 0, 0, 0.4));
+      border: 1px solid var(--urlbar-searchmode-and-input-box-container-border-color);
+      border-radius: calc(var(--toolbarbutton-border-radius) + 1px);
+      box-shadow: var(--urlbar-searchmode-and-input-box-container-shadow);
+      padding-inline-end: var(--space-small);
+    }
+    .urlbar-go-button {
+      display: none;
+    }
+    #page-action-buttons {
+      display: none;
+    }
+    .urlbar-show-page-actions-button {
+      height: auto;
+    }
+    .urlbar-show-page-actions-button,
+    .urlbar-revert-button {
+      display: inherit;
+    }
+  }
+  #urlbar[focused][persistedsearchterms] .urlbar-searchmode-and-input-box-container {
+    background-color: transparent;
+  }
+}
+
 /* Reader mode icon */
 
 #reader-mode-button > .urlbar-icon {
@@ -822,17 +871,6 @@
 
 /* Translations button */
 
-@keyframes translationsRotate {
-  from { transform: rotate(0); }
-  to { transform: rotate(360deg); }
-}
-
-@media not (prefers-reduced-motion) {
-  #translations-button-circle-arrows {
-    animation: translationsRotate 1.2s linear infinite;
-  }
-}
-
 #translations-button-icon {
   list-style-image: url(chrome://browser/skin/translations.svg);
   /* The translation icon's right letter is 1px too long, so account for that here.
@@ -848,7 +886,7 @@
 #translations-button-circle-arrows {
   height: 16px;
   width: 16px;
-  list-style-image: url("chrome://browser/skin/sync.svg");
+  list-style-image: url("chrome://global/skin/icons/loading.svg");
   fill: var(--toolbarbutton-icon-fill-attention);
   fill-opacity: 1;
   margin-inline: 1px;
@@ -1079,17 +1117,37 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
 }
 
 #urlbar-searchmode-switcher {
-  /* Hidden until urlbar opens */
   display: none;
-  margin-inline-end: var(--urlbar-icon-padding);
   background-color: var(--toolbar-field-background-color);
   border-radius: var(--toolbarbutton-border-radius);
+  margin-inline: 0 var(--urlbar-icon-padding);
+  padding-block: 0;
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-inset);
+  }
+
+  #urlbar[searchmode] & {
+    margin-inline-end: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
 
   /* stylelint-disable-next-line media-query-no-invalid */
   @media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") or (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
-    /* Don't show on mousedown to avoid shifting input field text */
-    #urlbar[focused]:not([focusing-via-mousedown]) & {
-      display: flex;
+    display: flex;
+    #urlbar[persistsearchterms] & {
+      height: 100%;
+      margin-inline-start: 0;
+      margin-inline-end: 0;
+      background-color: var(--urlbar-search-mode-picker-persisted-background-color);
+    }
+    #urlbar[persistsearchterms] &:hover {
+      background-color: var(--urlbar-search-mode-picker-persisted-background-color-hover);
+    }
+    #urlbar[persistsearchterms] &[open] {
+      background-color: var(--urlbar-search-mode-picker-persisted-background-color-active);
     }
   }
 }
@@ -1103,8 +1161,25 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
   fill: var(--text-color-deemphasized);
 }
 
+#searchmode-switcher-chicklet {
+  background-color: var(--toolbar-field-background-color);
+  border-start-end-radius: var(--toolbarbutton-border-radius);
+  border-end-end-radius: var(--toolbarbutton-border-radius);
+  align-items: center;
+  margin-inline-end: var(--urlbar-icon-padding);
+  display: none;
+
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "browser.urlbar.searchModeSwitcher.featureGate") or (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
+    #urlbar[searchmode] & {
+      display: inline-flex;
+    }
+  }
+}
+
 #searchmode-switcher-title {
-  margin-inline-start: 0px;
+  margin-inline-start: 0;
+  align-items: center;
 
   &:empty {
     display: none;
@@ -1114,7 +1189,6 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
 #searchmode-switcher-close {
   list-style-image: url("chrome://global/skin/icons/close-12.svg");
   pointer-events: all;
-  display: none;
   -moz-context-properties: fill;
   fill: var(--text-color-deemphasized);
 
@@ -1132,13 +1206,9 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left::after {
   }
 }
 
-#searchmode-switcher-popup {
-  --panel-padding: var(--space-small);
-  --arrowpanel-menuitem-margin: 0;
-}
-
 #searchmode-switcher-popup-description {
   margin: var(--space-small);
+  margin-bottom: var(--space-xsmall);
 }
 
 #searchmode-switcher-popup-search-settings-icon {

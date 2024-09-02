@@ -37,7 +37,7 @@ class TestSessionRestore(SessionStoreTestCase):
             ),
         )
 
-    def test_restore(self):
+    def test_restore_sidebar_open(self):
         self.assertEqual(
             len(self.marionette.chrome_window_handles),
             1,
@@ -109,6 +109,59 @@ class TestSessionRestore(SessionStoreTestCase):
             "Correct sidebar category has been restored.",
         )
 
+    def test_restore_sidebar_closed(self):
+        self.marionette.execute_script(
+            """
+            let window = BrowserWindowTracker.getTopWindow()
+            window.SidebarController.show("viewHistorySidebar");
+            let sidebarBox = window.document.getElementById("sidebar-box")
+            sidebarBox.style.width = "100px";
+            window.SidebarController.toggle();
+            """
+        )
+
+        self.assertEqual(
+            self.marionette.execute_script(
+                """
+                let window = BrowserWindowTracker.getTopWindow()
+                return window.document.getElementById("sidebar-box").hidden;
+                """
+            ),
+            True,
+            "Sidebar is hidden before window is closed.",
+        )
+
+        self.marionette.restart()
+        self.marionette.set_context("chrome")
+
+        self.assertEqual(
+            len(self.marionette.chrome_window_handles),
+            1,
+            msg="Windows from last session have been restored.",
+        )
+
+        self.assertEqual(
+            self.marionette.execute_script(
+                """
+                let window = BrowserWindowTracker.getTopWindow()
+                return window.document.getElementById("sidebar-box").hidden;
+                """
+            ),
+            True,
+            "Sidebar is hidden on session restore.",
+        )
+
+        self.assertEqual(
+            self.marionette.execute_script(
+                """
+                let window = BrowserWindowTracker.getTopWindow()
+                return window.document.getElementById("sidebar-box").style.width;
+                """
+            ),
+            "100px",
+            "Sidebar width has been restored.",
+        )
+
     def test_restore_for_always_show(self):
         self.marionette.execute_script(
             """
@@ -129,6 +182,7 @@ class TestSessionRestore(SessionStoreTestCase):
                 """
                 const window = BrowserWindowTracker.getTopWindow();
                 window.SidebarController.toolbarButton.click();
+                window.SidebarController.sidebarMain.expanded = true;
                 return window.SidebarController.sidebarMain.expanded;
                 """
             ),
@@ -137,11 +191,31 @@ class TestSessionRestore(SessionStoreTestCase):
 
         self.marionette.restart()
 
+        self.marionette.execute_async_script(
+            """
+            let resolve = arguments[0];
+            let { BrowserInitState } = ChromeUtils.importESModule("resource:///modules/BrowserGlue.sys.mjs");
+            BrowserInitState.startupIdleTaskPromise.then(resolve);
+            """
+        )
+
         self.assertTrue(
             self.marionette.execute_script(
                 """
                 const window = BrowserWindowTracker.getTopWindow();
-                return window.SidebarController.sidebarMain.expanded;
+                function waitForExpandedState() {
+                    let expanded = false;
+                    for (let i = 0; i < 50; i++) {
+                        if (!window.SidebarController.sidebarMain.expanded) {
+                            continue;
+                        } else {
+                            expanded = true;
+                            break;
+                        }
+                    }
+                    return expanded;
+                }
+                return waitForExpandedState();
                 """
             ),
             "Sidebar expanded state has been restored.",

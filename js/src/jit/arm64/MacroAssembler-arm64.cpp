@@ -463,7 +463,7 @@ void MacroAssemblerCompat::wasmLoadImpl(const wasm::MemoryAccessDesc& access,
                                         Register memoryBase_, Register ptr_,
                                         AnyRegister outany, Register64 out64) {
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
 
   MOZ_ASSERT(memoryBase_ != ptr_);
 
@@ -617,7 +617,7 @@ void MacroAssemblerCompat::wasmStoreImpl(const wasm::MemoryAccessDesc& access,
                                          AnyRegister valany, Register64 val64,
                                          Register memoryBase_, Register ptr_) {
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
 
   ARMRegister memoryBase(memoryBase_, 64);
   ARMRegister ptr(ptr_, 64);
@@ -1449,6 +1449,25 @@ void MacroAssembler::patchCallToNop(uint8_t* call) {
   Instruction* instr = reinterpret_cast<Instruction*>(inst);
   MOZ_ASSERT(instr->IsBL() || instr->IsNOP());
   nop(instr);
+}
+
+CodeOffset MacroAssembler::move32WithPatch(Register dest) {
+  AutoForbidPoolsAndNops afp(this,
+                             /* max number of instructions in scope = */ 3);
+  CodeOffset offs = CodeOffset(currentOffset());
+  movz(ARMRegister(dest, 64), 0, 0);
+  movk(ARMRegister(dest, 64), 0, 16);
+  return offs;
+}
+
+void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
+  Instruction* i1 = getInstructionAt(BufferOffset(offset.offset()));
+  MOZ_ASSERT(i1->IsMovz());
+  i1->SetInstructionBits(i1->InstructionBits() | ImmMoveWide(n));
+
+  Instruction* i2 = getInstructionAt(BufferOffset(offset.offset() + 4));
+  MOZ_ASSERT(i2->IsMovk());
+  i2->SetInstructionBits(i2->InstructionBits() | ImmMoveWide(n >> 16));
 }
 
 void MacroAssembler::pushReturnAddress() {
@@ -2924,7 +2943,6 @@ void MacroAssembler::flexibleDivMod32(Register rhs, Register srcDest,
                                       Register remOutput, bool isUnsigned,
                                       const LiveRegisterSet&) {
   vixl::UseScratchRegisterScope temps(this);
-  ARMRegister scratch = temps.AcquireW();
   ARMRegister src = temps.AcquireW();
 
   // Preserve src for remainder computation
@@ -2935,9 +2953,10 @@ void MacroAssembler::flexibleDivMod32(Register rhs, Register srcDest,
   } else {
     Sdiv(ARMRegister(srcDest, 32), src, ARMRegister(rhs, 32));
   }
-  // Compute remainder
-  Mul(scratch, ARMRegister(srcDest, 32), ARMRegister(rhs, 32));
-  Sub(ARMRegister(remOutput, 32), src, scratch);
+
+  // Compute the remainder: remOutput = src - (srcDest * rhs).
+  Msub(/* result= */ ARMRegister(remOutput, 32), ARMRegister(srcDest, 32),
+       ARMRegister(rhs, 32), src);
 }
 
 CodeOffset MacroAssembler::moveNearAddressWithPatch(Register dest) {

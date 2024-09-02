@@ -95,6 +95,7 @@ include = [
   "AnimationFillMode",
   "AnimationPlayState",
   "AnimationComposition",
+  "AnimationDuration",
   "Appearance",
   "Au",
   "BreakBetween",
@@ -110,8 +111,6 @@ include = [
   "FontVariantEastAsian",
   "FontVariantLigatures",
   "FontVariantNumeric",
-  "InsetArea",
-  "InsetAreaKeyword",
   "ComputedFontStretchRange",
   "ComputedFontStyleDescriptor",
   "ComputedFontWeightRange",
@@ -124,6 +123,8 @@ include = [
   "DisplayMode",
   "Platform",
   "PositionAnchor",
+  "PositionArea",
+  "PositionAreaKeyword",
   "PositionTryFallbacks",
   "PositionTryOrder",
   "PositionVisibility",
@@ -188,6 +189,8 @@ include = [
   "BackgroundSize",
   "BaselineSource",
   "BorderImageSlice",
+  "BorderImageRepeat",
+  "BorderImageRepeatKeyword",
   "BorderSpacing",
   "BorderRadius",
   "ColorScheme",
@@ -312,6 +315,7 @@ include = [
   "XTextScale",
   "Zoom",
   "TransitionProperty",
+  "ViewTransitionName",
 ]
 item_types = ["enums", "structs", "unions", "typedefs", "functions", "constants"]
 renaming_overrides_prefixing = true
@@ -1024,6 +1028,11 @@ renaming_overrides_prefixing = true
 "GenericViewTimelineInset" = """
  public:
   inline StyleGenericViewTimelineInset();
+"""
+
+"ViewTransitionName" = """
+ public:
+  StyleViewTransitionName() : _0(nsGkAtoms::_empty) {}
 """
 
 "Time" = """

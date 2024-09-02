@@ -55,7 +55,7 @@
 #include "js/StableStringChars.h"
 #include "js/Wrapper.h"
 #include "util/DifferentialTesting.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/ErrorReporting.h"
 #include "vm/FunctionFlags.h"          // js::FunctionFlags
@@ -89,7 +89,6 @@ using namespace js::wasm;
 using JS::AsmJSOption;
 using JS::AutoStableStringChars;
 using JS::GenericNaN;
-using JS::SourceOwnership;
 using JS::SourceText;
 using mozilla::Abs;
 using mozilla::AsVariant;
@@ -98,6 +97,7 @@ using mozilla::HashGeneric;
 using mozilla::IsNegativeZero;
 using mozilla::IsPositiveZero;
 using mozilla::IsPowerOfTwo;
+using mozilla::Maybe;
 using mozilla::Nothing;
 using mozilla::PodZero;
 using mozilla::PositiveInfinity;
@@ -1405,7 +1405,7 @@ class MOZ_STACK_CLASS ModuleValidatorShared {
         moduleFunctionNode_(moduleFunctionNode),
         moduleFunctionName_(FunctionName(moduleFunctionNode)),
         standardLibraryMathNames_(fc),
-        validationLifo_(VALIDATION_LIFO_DEFAULT_CHUNK_SIZE),
+        validationLifo_(VALIDATION_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena),
         funcDefs_(fc),
         tables_(fc),
         globalMap_(fc),
@@ -2042,7 +2042,7 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
   bool declareFuncPtrTable(FuncType&& sig, TaggedParserAtomIndex name,
                            uint32_t firstUse, uint32_t mask,
                            uint32_t* tableIndex) {
-    if (mask > MaxTableLength) {
+    if (mask > MaxTableElemsRuntime) {
       return failCurrentOffset("function pointer table too big");
     }
 
@@ -2221,7 +2221,7 @@ class MOZ_STACK_CLASS ModuleValidator : public ModuleValidatorShared {
     }
 
     return mg.finishModule(*bytes, moduleMeta_,
-                           /*maybeTier2Listener=*/nullptr);
+                           /*maybeCompleteTier2Listener=*/nullptr);
   }
 };
 

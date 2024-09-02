@@ -126,6 +126,7 @@ class CustomTabsToolbarFeatureTest {
         assertFalse(toolbar.display.onUrlClicked.invoke())
     }
 
+    @Suppress("DEPRECATION")
     @Test
     @Config(sdk = [28])
     fun `initialize updates toolbar, window and text color on SDK 28`() {
@@ -166,6 +167,7 @@ class CustomTabsToolbarFeatureTest {
         assertEquals(Color.WHITE, toolbar.display.colors.text)
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `initialize updates toolbar, window and text color`() {
         val tab = createCustomTab(
@@ -271,6 +273,7 @@ class CustomTabsToolbarFeatureTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `GIVEN changing the status bar color is enabled WHEN customizing the UI for a custom tab THEN change the status bar color`() {
         val tab = createCustomTab(
@@ -314,6 +317,7 @@ class CustomTabsToolbarFeatureTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `GIVEN changing the status bar color is disabled WHEN customizing the UI for a custom tab THEN don't change the status bar color`() {
         val tab = createCustomTab(
@@ -357,6 +361,7 @@ class CustomTabsToolbarFeatureTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `GIVEN changing the system navigation bar color is enabled WHEN customizing the UI for a custom tab THEN change the system navigation bar color`() {
         val tab = createCustomTab(
@@ -401,6 +406,7 @@ class CustomTabsToolbarFeatureTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun `GIVEN changing the system navigation bar color is disabled WHEN customizing the UI for a custom tab THEN don't change the system navigation bar color`() {
         val tab = createCustomTab(
@@ -626,6 +632,75 @@ class CustomTabsToolbarFeatureTest {
         feature.start()
 
         verify(feature).addRefreshButton(anyInt())
+
+        val captor = argumentCaptor<Toolbar.ActionButton>()
+        verify(toolbar).addBrowserAction(captor.capture())
+
+        val button = captor.value.createView(FrameLayout(testContext))
+        button.performClick()
+        assertTrue(clicked)
+    }
+
+    @Test
+    fun `GIVEN the default custom tabs toolbar button config and listeners THEN do not add menu button`() {
+        val tab = createCustomTab("https://www.mozilla.org", id = "mozilla", config = CustomTabConfig())
+        val store = BrowserStore(
+            BrowserState(
+                customTabs = listOf(tab),
+            ),
+        )
+        val toolbar = spy(BrowserToolbar(testContext))
+        val useCases = CustomTabsUseCases(
+            store = store,
+            loadUrlUseCase = SessionUseCases(store).loadUrl,
+        )
+        val feature = spy(
+            CustomTabsToolbarFeature(
+                store = store,
+                toolbar = toolbar,
+                sessionId = "mozilla",
+                useCases = useCases,
+            ) {},
+        )
+
+        feature.start()
+
+        verify(feature, never()).addMenuButton(anyInt())
+        verify(toolbar, never()).addBrowserAction(any())
+    }
+
+    @Test
+    fun `GIVEN custom tabs toolbar config to show menu with a menu listener THEN show menu button with custom menu listener`() {
+        val tab = createCustomTab("https://www.mozilla.org", id = "mozilla", config = CustomTabConfig())
+        val store = BrowserStore(
+            BrowserState(
+                customTabs = listOf(tab),
+            ),
+        )
+        val toolbar = spy(BrowserToolbar(testContext))
+        val useCases = CustomTabsUseCases(
+            store = store,
+            loadUrlUseCase = SessionUseCases(store).loadUrl,
+        )
+        var clicked = false
+        val feature = spy(
+            CustomTabsToolbarFeature(
+                store = store,
+                toolbar = toolbar,
+                sessionId = "mozilla",
+                useCases = useCases,
+                customTabsToolbarButtonConfig = CustomTabsToolbarButtonConfig(
+                    showMenu = true,
+                ),
+                customTabsToolbarListeners = CustomTabsToolbarListeners(
+                    menuListener = { clicked = true },
+                ),
+            ) {},
+        )
+
+        feature.start()
+
+        verify(feature).addMenuButton(anyInt())
 
         val captor = argumentCaptor<Toolbar.ActionButton>()
         verify(toolbar).addBrowserAction(captor.capture())

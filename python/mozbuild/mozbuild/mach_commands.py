@@ -1405,12 +1405,6 @@ def _get_desktop_run_parser():
         "--app", help="Path to executable to run (default: output of ./mach build)"
     )
     group.add_argument(
-        "--remote",
-        "-r",
-        action="store_true",
-        help="Do not pass the --no-remote argument by default.",
-    )
-    group.add_argument(
         "--background",
         "-b",
         action="store_true",
@@ -1934,7 +1928,6 @@ def _run_desktop(
     params,
     packaged,
     app,
-    remote,
     background,
     noprofile,
     disable_e10s,
@@ -2018,9 +2011,6 @@ def _run_desktop(
 
     if params:
         args.extend(params)
-
-    if not remote:
-        args.append("-no-remote")
 
     if not background and sys.platform == "darwin":
         args.append("-foreground")
@@ -2853,6 +2843,7 @@ def repackage_mar(command_context, input, mar, output, arch, mar_channel_id):
     "repackage",
     "snap",
     description="Repackage into Snap format for developer testing",
+    virtualenv_name="repackage-snap",
 )
 @CommandArgument(
     "--snapcraft",
@@ -3024,6 +3015,7 @@ def repackage_snap(
 
     # Create the package
     snappath = repackage_snap(
+        log=command_context.log,
         srcdir=command_context.topsrcdir,
         objdir=command_context.topobjdir,
         snapdir=snapdir,
@@ -3151,10 +3143,88 @@ def repackage_snap_install(command_context, snap_file, snap_name, sudo=None):
         logging.INFO,
         "repackage-snap-install-howto-run",
         {},
-        "Example usage: snap run {} --no-remote".format(snap_name),
+        "Example usage: snap run {}".format(snap_name),
     )
 
     return 0
+
+
+@SubCommand(
+    "repackage",
+    "desktop-file",
+    description="Prepare a firefox.desktop file",
+    virtualenv_name="repackage-desktop-file",
+)
+@CommandArgument("--output", type=str, required=True, help="Output desktop file")
+@CommandArgument(
+    "--flavor",
+    type=str,
+    required=True,
+    choices=["snap", "flatpak"],
+    help="Desktop file flavor to generate.",
+)
+@CommandArgument(
+    "--release-product",
+    type=str,
+    required=True,
+    help="The product being shipped. Used to disambiguate beta/devedition etc.",
+)
+@CommandArgument(
+    "--release-type",
+    type=str,
+    required=True,
+    help="The release being shipped. Used to disambiguate nightly/try etc.",
+)
+def repackage_desktop_file(
+    command_context,
+    output,
+    flavor,
+    release_product,
+    release_type,
+):
+    desktop = None
+    if flavor == "flatpak":
+        from fluent.runtime.fallback import FluentLocalization, FluentResourceLoader
+
+        from mozbuild.repackaging.desktop_file import generate_browser_desktop_entry
+
+        # This relies in existing build variables usage inherited from the
+        # debian repackage code that serves the same purpose on Flatpak, so
+        # it is just directly re-used here.
+        build_variables = {
+            "DEB_PKG_NAME": release_product,
+            "DBusActivatable": "false",
+            "Icon": "org.mozilla.firefox",
+            "StartupWMClass": release_product,
+        }
+
+        desktop = "\n".join(
+            generate_browser_desktop_entry(
+                command_context.log,
+                build_variables,
+                release_product,
+                release_type,
+                FluentLocalization,
+                FluentResourceLoader,
+            )
+        )
+
+    if flavor == "snap":
+        from mozbuild.repackaging.snapcraft_transform import (
+            SnapDesktopFile,
+        )
+
+        desktop = SnapDesktopFile(
+            command_context.log, appname=release_product, branchname=release_type
+        ).repack()
+
+    if desktop is None:
+        raise NotImplementedError(
+            f"Couldn't generate a desktop file. Unknown flavor: {flavor}"
+        )
+
+    with open(output, "w") as desktop_file:
+        desktop_file.write(desktop)
 
 
 @Command(

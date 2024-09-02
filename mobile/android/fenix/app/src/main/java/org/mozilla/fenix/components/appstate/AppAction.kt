@@ -5,6 +5,7 @@
 package org.mozilla.fenix.components.appstate
 
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.concept.storage.BookmarkNode
 import mozilla.components.concept.sync.TabData
 import mozilla.components.feature.tab.collections.TabCollection
 import mozilla.components.feature.top.sites.TopSite
@@ -74,6 +75,11 @@ sealed class AppAction : Action {
     data class TopSitesChange(val topSites: List<TopSite>) : AppAction()
     data class RecentTabsChange(val recentTabs: List<RecentTab>) : AppAction()
     data class RemoveRecentTab(val recentTab: RecentTab) : AppAction()
+
+    /**
+     * The orientation of the application has changed.
+     */
+    data class OrientationChange(val orientation: OrientationMode) : AppAction()
 
     /**
      * The list of bookmarks displayed on the home screen has changed.
@@ -389,8 +395,12 @@ sealed class AppAction : Action {
          * [BookmarkAction] dispatched when a bookmark is added.
          *
          * @property guidToEdit The guid of the newly added bookmark or null.
+         * @property parentNode The [BookmarkNode] representing the folder the bookmark was added to, if any.
          */
-        data class BookmarkAdded(val guidToEdit: String?) : BookmarkAction()
+        data class BookmarkAdded(
+            val guidToEdit: String?,
+            val parentNode: BookmarkNode?,
+        ) : BookmarkAction()
 
         /**
          * [BookmarkAction] dispatched when a bookmark is removed.

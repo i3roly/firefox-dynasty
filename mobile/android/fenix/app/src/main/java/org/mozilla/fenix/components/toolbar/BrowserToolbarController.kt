@@ -33,6 +33,7 @@ import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.readermode.ReaderModeController
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction.SnackbarAction
+import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.toolbar.interactor.BrowserToolbarInteractor
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.nav
@@ -93,6 +94,11 @@ interface BrowserToolbarController {
      * @see [BrowserToolbarInteractor.onNewTabButtonLongClicked]
      */
     fun handleNewTabButtonLongClick()
+
+    /**
+     * @see [BrowserToolbarInteractor.onMenuButtonClicked]
+     */
+    fun handleMenuButtonClicked(accessPoint: MenuAccessPoint, customTabSessionId: String? = null)
 }
 
 private const val MAX_DISPLAY_NUMBER_SHOPPING_CFR = 3
@@ -294,6 +300,15 @@ class DefaultBrowserToolbarController(
 
     override fun handleNewTabButtonLongClick() {
         NavigationBar.browserNewTabLongTapped.record(NoExtras())
+    }
+
+    override fun handleMenuButtonClicked(accessPoint: MenuAccessPoint, customTabSessionId: String?) {
+        navController.navigate(
+            BrowserFragmentDirections.actionGlobalMenuDialogFragment(
+                accesspoint = accessPoint,
+                customTabSessionId = customTabSessionId,
+            ),
+        )
     }
 
     companion object {

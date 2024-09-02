@@ -166,8 +166,7 @@ class ViewState {
   }
 
   ensureReasonOrderingMatchesPref() {
-    const randomizeReasons =
-      this.#doc.ownerGlobal.ReportBrokenSite.randomizeReasons;
+    const { randomizeReasons } = ReportBrokenSite;
     if (randomizeReasons != this.#randomizeReasons) {
       if (randomizeReasons) {
         this.#randomizeReasonsOrdering();
@@ -183,17 +182,15 @@ class ViewState {
   }
 
   get isReasonValid() {
-    const { reasonEnabled, reasonIsOptional } =
-      this.#doc.ownerGlobal.ReportBrokenSite;
+    const { reasonEnabled, reasonIsOptional } = ReportBrokenSite;
     return (
       !reasonEnabled || reasonIsOptional || this.reasonInput.checkValidity()
     );
   }
 
   get isDescriptionValid() {
-    const { descriptionIsOptional } = this.#doc.ownerGlobal.ReportBrokenSite;
     return (
-      descriptionIsOptional ||
+      ReportBrokenSite.descriptionIsOptional ||
       gDescriptionCheckRE.test(this.descriptionInput.value)
     );
   }
@@ -384,10 +381,10 @@ export var ReportBrokenSite = new (class ReportBrokenSite {
     );
   }
 
-  init(tabbrowser) {
-    // Called in browser.js.
-    const { ownerGlobal } = tabbrowser.selectedBrowser;
-    const { document } = ownerGlobal;
+  init(win) {
+    // Called in browser-init.js via the category manager registration
+    // in BrowserComponents.manifest
+    const { document } = win;
 
     const state = ViewState.get(document);
 
@@ -416,19 +413,23 @@ export var ReportBrokenSite = new (class ReportBrokenSite {
 
     // Make sure the URL input is focused when the main view pops up.
     state.mainPanelview.addEventListener("ViewShown", () => {
-      const panelview = ownerGlobal.PanelView.forNode(state.mainPanelview);
+      const panelview = win.PanelView.forNode(state.mainPanelview);
       panelview.selectedElement = state.urlInput;
       panelview.focusSelectedElement();
     });
 
     // Make sure the Okay button is focused when the report sent view pops up.
     state.reportSentPanelview.addEventListener("ViewShown", () => {
-      const panelview = ownerGlobal.PanelView.forNode(
-        state.reportSentPanelview
-      );
+      const panelview = win.PanelView.forNode(state.reportSentPanelview);
       panelview.selectedElement = state.okayButton;
       panelview.focusSelectedElement();
     });
+
+    win.document
+      .getElementById("cmd_reportBrokenSite")
+      .addEventListener("command", e => {
+        this.open(e);
+      });
   }
 
   enableOrDisableMenuitems(selectedbrowser) {

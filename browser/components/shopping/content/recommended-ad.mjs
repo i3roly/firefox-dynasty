@@ -24,6 +24,7 @@ class RecommendedAd extends MozLitElement {
       linkEl: "#recommended-ad-wrapper",
       priceEl: "#price",
       ratingEl: "moz-five-star",
+      sponsoredLabelEl: "#sponsored-label",
     };
   }
 
@@ -71,7 +72,7 @@ class RecommendedAd extends MozLitElement {
     this.dispatchEvent(
       new CustomEvent("AdImpression", {
         bubbles: true,
-        detail: { aid: this.product.aid },
+        detail: { aid: this.product.aid, sponsored: this.product.sponsored },
       })
     );
 
@@ -86,7 +87,7 @@ class RecommendedAd extends MozLitElement {
       this.dispatchEvent(
         new CustomEvent("AdClicked", {
           bubbles: true,
-          detail: { aid: this.product.aid },
+          detail: { aid: this.product.aid, sponsored: this.product.sponsored },
         })
       );
     }
@@ -142,7 +143,14 @@ class RecommendedAd extends MozLitElement {
           </div>
         </a>
       </shopping-card>
-      <p data-l10n-id="ad-by-fakespot"></p>
+      ${
+        this.product.sponsored
+          ? html`<p
+              id="sponsored-label"
+              data-l10n-id="shopping-sponsored-label"
+            ></p>`
+          : null
+      }
     `;
   }
 }

@@ -226,22 +226,22 @@ user-login = "jrmuizel"
 user-name = "Jeff Muizelaar"
 
 [[publisher.glean]]
-version = "60.4.0"
-when = "2024-07-23"
+version = "60.5.0"
+when = "2024-08-06"
 user-id = 48
 user-login = "badboy"
 user-name = "Jan-Erik Rediger"
 
 [[publisher.glean-core]]
-version = "60.4.0"
-when = "2024-07-23"
+version = "60.5.0"
+when = "2024-08-06"
 user-id = 48
 user-login = "badboy"
 user-name = "Jan-Erik Rediger"
 
 [[publisher.glslopt]]
-version = "0.1.10"
-when = "2024-02-13"
+version = "0.1.11"
+when = "2024-08-30"
 user-id = 84794
 user-login = "jamienicol"
 user-name = "Jamie Nicol"
@@ -359,13 +359,6 @@ user-login = "jschanck"
 user-name = "John Schanck"
 
 [[publisher.num_cpus]]
-version = "1.15.0"
-when = "2022-12-20"
-user-id = 359
-user-login = "seanmonstar"
-user-name = "Sean McArthur"
-
-[[publisher.num_cpus]]
 version = "1.16.0"
 when = "2023-06-29"
 user-id = 359
@@ -373,8 +366,8 @@ user-login = "seanmonstar"
 user-name = "Sean McArthur"
 
 [[publisher.ohttp]]
-version = "0.3.1"
-when = "2023-02-23"
+version = "0.5.1"
+when = "2024-01-10"
 user-id = 128763
 user-login = "martinthomson"
 user-name = "Martin Thomson"
@@ -389,13 +382,6 @@ user-name = "Matt Brubeck"
 [[publisher.parking_lot]]
 version = "0.12.1"
 when = "2022-05-31"
-user-id = 2915
-user-login = "Amanieu"
-user-name = "Amanieu d'Antras"
-
-[[publisher.parking_lot_core]]
-version = "0.9.9"
-when = "2023-10-17"
 user-id = 2915
 user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
@@ -476,13 +462,6 @@ user-login = "mozkeeler"
 user-name = "Dana Keeler"
 
 [[publisher.rustix]]
-version = "0.38.28"
-when = "2023-12-09"
-user-id = 6825
-user-login = "sunfishcode"
-user-name = "Dan Gohman"
-
-[[publisher.rustix]]
 version = "0.38.34"
 when = "2024-04-22"
 user-id = 6825
@@ -517,6 +496,13 @@ user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
+[[publisher.serde]]
+version = "1.0.208"
+when = "2024-08-15"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
+
 [[publisher.serde_bytes]]
 version = "0.11.9"
 when = "2023-02-05"
@@ -527,6 +513,13 @@ user-name = "David Tolnay"
 [[publisher.serde_derive]]
 version = "1.0.204"
 when = "2024-07-06"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
+
+[[publisher.serde_derive]]
+version = "1.0.208"
+when = "2024-08-15"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -558,6 +551,13 @@ when = "2024-01-19"
 user-id = 2017
 user-login = "mbrubeck"
 user-name = "Matt Brubeck"
+
+[[publisher.syn]]
+version = "1.0.109"
+when = "2023-02-24"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
 
 [[publisher.syn]]
 version = "2.0.68"
@@ -712,13 +712,6 @@ user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
 [[publisher.warp]]
-version = "0.3.6"
-when = "2023-09-27"
-user-id = 359
-user-login = "seanmonstar"
-user-name = "Sean McArthur"
-
-[[publisher.warp]]
 version = "0.3.7"
 when = "2024-04-05"
 user-id = 359
@@ -733,32 +726,14 @@ user-login = "alexcrichton"
 user-name = "Alex Crichton"
 
 [[publisher.wasm-encoder]]
-version = "0.210.0"
-when = "2024-06-10"
-user-id = 73222
-user-login = "wasmtime-publish"
-
-[[publisher.wasm-encoder]]
 version = "0.214.0"
 when = "2024-07-16"
 user-id = 73222
 user-login = "wasmtime-publish"
 
 [[publisher.wasm-smith]]
-version = "0.210.0"
-when = "2024-06-10"
-user-id = 73222
-user-login = "wasmtime-publish"
-
-[[publisher.wasm-smith]]
 version = "0.214.0"
 when = "2024-07-16"
-user-id = 73222
-user-login = "wasmtime-publish"
-
-[[publisher.wast]]
-version = "210.0.0"
-when = "2024-06-10"
 user-id = 73222
 user-login = "wasmtime-publish"
 
@@ -782,15 +757,43 @@ user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
 [[publisher.windows]]
-version = "0.52.0"
-when = "2023-11-15"
+version = "0.58.0"
+when = "2024-07-03"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
 
 [[publisher.windows-core]]
-version = "0.52.0"
-when = "2023-11-15"
+version = "0.58.0"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-implement]]
+version = "0.58.0"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-interface]]
+version = "0.58.0"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-result]]
+version = "0.2.0"
+when = "2024-07-03"
+user-id = 64539
+user-login = "kennykerr"
+user-name = "Kenny Kerr"
+
+[[publisher.windows-strings]]
+version = "0.1.0"
+when = "2024-07-03"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
@@ -1082,6 +1085,12 @@ who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
 delta = "0.31.1 -> 0.32.0"
 notes = "Various new features and refactorings as one would expect from an object parsing crate, all looks good."
+
+[[audits.bytecode-alliance.audits.peeking_take_while]]
+who = "Nick Fitzgerald <fitzgen@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.0.0"
+notes = "I am the author of this crate."
 
 [[audits.bytecode-alliance.audits.percent-encoding]]
 who = "Alex Crichton <alex@alexcrichton.com>"
@@ -1398,18 +1407,6 @@ Reviewed in https://crrev.com/c/5171063
 Previously reviewed during security review and the audit is grandparented in.
 """
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
-
-[[audits.google.audits.tokio]]
-who = "Vovo Yang <vovoy@google.com>"
-criteria = "safe-to-run"
-version = "1.29.1"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
-[[audits.google.audits.tokio-macros]]
-who = "Vovo Yang <vovoy@google.com>"
-criteria = "safe-to-run"
-version = "2.1.0"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.tokio-stream]]
 who = "David Koloski <dkoloski@google.com>"

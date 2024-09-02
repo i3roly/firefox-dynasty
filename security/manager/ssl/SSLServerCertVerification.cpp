@@ -438,43 +438,15 @@ static SECStatus BlockServerCertChangeForSpdy(
 }
 
 void GatherTelemetryForSingleSCT(const ct::VerifiedSCT& verifiedSct) {
-  // See SSL_SCTS_ORIGIN in Histograms.json.
-  uint32_t origin = 0;
-  switch (verifiedSct.origin) {
-    case ct::VerifiedSCT::Origin::Embedded:
-      origin = 1;
-      break;
-    case ct::VerifiedSCT::Origin::TLSExtension:
-      origin = 2;
-      break;
-    case ct::VerifiedSCT::Origin::OCSPResponse:
-      origin = 3;
-      break;
-    default:
-      MOZ_ASSERT_UNREACHABLE("Unexpected VerifiedSCT::Origin type");
-  }
-  Telemetry::Accumulate(Telemetry::SSL_SCTS_ORIGIN, origin);
-
   // See SSL_SCTS_VERIFICATION_STATUS in Histograms.json.
   uint32_t verificationStatus = 0;
-  switch (verifiedSct.status) {
-    case ct::VerifiedSCT::Status::Valid:
+  switch (verifiedSct.logState) {
+    case ct::CTLogState::Admissible:
       verificationStatus = 1;
       break;
-    case ct::VerifiedSCT::Status::UnknownLog:
-      verificationStatus = 2;
-      break;
-    case ct::VerifiedSCT::Status::InvalidSignature:
-      verificationStatus = 3;
-      break;
-    case ct::VerifiedSCT::Status::InvalidTimestamp:
-      verificationStatus = 4;
-      break;
-    case ct::VerifiedSCT::Status::ValidFromDisqualifiedLog:
+    case ct::CTLogState::Retired:
       verificationStatus = 5;
       break;
-    default:
-      MOZ_ASSERT_UNREACHABLE("Unexpected VerifiedSCT::Status type");
   }
   Telemetry::Accumulate(Telemetry::SSL_SCTS_VERIFICATION_STATUS,
                         verificationStatus);
@@ -492,10 +464,29 @@ void GatherCertificateTransparencyTelemetry(
     GatherTelemetryForSingleSCT(sct);
   }
 
-  // Decoding errors are reported to the 0th bucket
-  // of the SSL_SCTS_VERIFICATION_STATUS enumerated probe.
+  // See SSL_SCTS_VERIFICATION_STATUS in Histograms.json.
   for (size_t i = 0; i < info.verifyResult.decodingErrors; ++i) {
     Telemetry::Accumulate(Telemetry::SSL_SCTS_VERIFICATION_STATUS, 0);
+  }
+  for (size_t i = 0; i < info.verifyResult.sctsFromUnknownLogs; ++i) {
+    Telemetry::Accumulate(Telemetry::SSL_SCTS_VERIFICATION_STATUS, 2);
+  }
+  for (size_t i = 0; i < info.verifyResult.sctsWithInvalidSignatures; ++i) {
+    Telemetry::Accumulate(Telemetry::SSL_SCTS_VERIFICATION_STATUS, 3);
+  }
+  for (size_t i = 0; i < info.verifyResult.sctsWithInvalidTimestamps; ++i) {
+    Telemetry::Accumulate(Telemetry::SSL_SCTS_VERIFICATION_STATUS, 4);
+  }
+
+  // See SSL_SCTS_ORIGIN in Histograms.json.
+  for (size_t i = 0; i < info.verifyResult.embeddedSCTs; ++i) {
+    Telemetry::Accumulate(Telemetry::SSL_SCTS_ORIGIN, 1);
+  }
+  for (size_t i = 0; i < info.verifyResult.sctsFromTLSHandshake; ++i) {
+    Telemetry::Accumulate(Telemetry::SSL_SCTS_ORIGIN, 2);
+  }
+  for (size_t i = 0; i < info.verifyResult.sctsFromOCSP; ++i) {
+    Telemetry::Accumulate(Telemetry::SSL_SCTS_ORIGIN, 3);
   }
 
   // Handle the histogram of SCTs counts.
@@ -506,17 +497,10 @@ void GatherCertificateTransparencyTelemetry(
   Telemetry::Accumulate(Telemetry::SSL_SCTS_PER_CONNECTION, sctsCount);
 
   // Report CT Policy compliance by CA.
-  switch (info.policyCompliance) {
-    case ct::CTPolicyCompliance::Compliant:
-      break;
-    case ct::CTPolicyCompliance::NotEnoughScts:
-    case ct::CTPolicyCompliance::NotDiverseScts:
-      AccumulateTelemetryForRootCA(
-          Telemetry::SSL_CT_POLICY_NON_COMPLIANT_CONNECTIONS_BY_CA_2, rootCert);
-      break;
-    case ct::CTPolicyCompliance::Unknown:
-    default:
-      MOZ_ASSERT_UNREACHABLE("Unexpected CTPolicyCompliance type");
+  if (info.policyCompliance.isSome() &&
+      *info.policyCompliance != ct::CTPolicyCompliance::Compliant) {
+    AccumulateTelemetryForRootCA(
+        Telemetry::SSL_CT_POLICY_NON_COMPLIANT_CONNECTIONS_BY_CA_2, rootCert);
   }
 }
 
@@ -784,10 +768,10 @@ SSLServerCertVerificationJob::Run() {
       certificateTransparencyInfo, isCertChainRootBuiltInRoot,
       madeOCSPRequests);
 
+  TimeDuration elapsed = TimeStamp::Now() - jobStartTime;
   if (rv == Success) {
-    Telemetry::AccumulateTimeDelta(
-        Telemetry::SSL_SUCCESFUL_CERT_VALIDATION_TIME_MOZILLAPKIX, jobStartTime,
-        TimeStamp::Now());
+    mozilla::glean::cert_verification_time::success.AccumulateRawDuration(
+        elapsed);
     Telemetry::Accumulate(Telemetry::SSL_CERT_ERROR_OVERRIDES, 1);
 
     mResultTask->Dispatch(
@@ -800,9 +784,8 @@ SSLServerCertVerificationJob::Run() {
     return NS_OK;
   }
 
-  Telemetry::AccumulateTimeDelta(
-      Telemetry::SSL_INITIAL_FAILED_CERT_VALIDATION_TIME_MOZILLAPKIX,
-      jobStartTime, TimeStamp::Now());
+  mozilla::glean::cert_verification_time::failure.AccumulateRawDuration(
+      elapsed);
 
   PRErrorCode error = MapResultToPRErrorCode(rv);
   nsITransportSecurityInfo::OverridableErrorCategory overridableErrorCategory =

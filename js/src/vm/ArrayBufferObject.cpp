@@ -58,12 +58,9 @@
 #include "vm/NativeObject-inl.h"
 #include "vm/Realm-inl.h"  // js::AutoRealm
 
-using JS::ToInt32;
-
 using js::wasm::IndexType;
 using js::wasm::Pages;
 using mozilla::Atomic;
-using mozilla::CheckedInt;
 using mozilla::DebugOnly;
 using mozilla::Maybe;
 using mozilla::Nothing;
@@ -904,6 +901,7 @@ void ArrayBufferObject::detach(JSContext* cx,
   auto& innerViews = ObjectRealm::get(buffer).innerViews.get();
   if (InnerViewTable::ViewVector* views =
           innerViews.maybeViewsUnbarriered(buffer)) {
+    AutoTouchingGrayThings tgt;
     for (size_t i = 0; i < views->length(); i++) {
       JSObject* view = (*views)[i];
       view->as<ArrayBufferViewObject>().notifyBufferDetached();
@@ -953,6 +951,7 @@ void ResizableArrayBufferObject::resize(size_t newByteLength) {
   auto& innerViews = ObjectRealm::get(this).innerViews.get();
   if (InnerViewTable::ViewVector* views =
           innerViews.maybeViewsUnbarriered(this)) {
+    AutoTouchingGrayThings tgt;
     for (auto& view : *views) {
       view->notifyBufferResized();
     }

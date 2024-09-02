@@ -12,48 +12,6 @@ $tags:
 
 
 netwerk:
-  early_hints:
-    type: labeled_counter
-    labels:
-      - stylesheet
-      - fonts
-      - scripts
-      - fetch
-      - image
-      - other
-    description: >
-      Counts the different type of resources that are sent for early hints.
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1772124
-    data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1772124
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1797695
-    notification_emails:
-      - necko@mozilla.com
-      - vgosu@mozilla.com
-    expires: never
-  eh_link_type:
-    type: labeled_counter
-    labels:
-      - dns-prefetch
-      - icon
-      - modulepreload
-      - preconnect
-      - prefetch
-      - preload
-      - prerender
-      - stylesheet
-      - other
-    description: >
-      Counts different type of link headers that are sent in early hint
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1797936
-    data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1797936
-    notification_emails:
-      - necko@mozilla.com
-      - manuel@mozilla.com
-    expires: never
   parent_connect_timeout:
     type: counter
     description: >
@@ -66,23 +24,6 @@ netwerk:
       - necko@mozilla.com
       - manuel@mozilla.com
     expires: never
-
-  eh_response_version:
-    type: labeled_counter
-    description: >
-      HTTP protocol version from Early Hints response
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1851437
-    data_reviews:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1851437
-    notification_emails:
-      - necko@mozilla.com
-    expires: never
-    labels:
-      - unknown
-      - http_1
-      - http_2
-      - http_3
 
 network:
   byte_range_request:
@@ -305,3 +246,60 @@ network:
       - necko@mozilla.com
       - vgosu@mozilla.com
     expires: never
+
+  system_channel_success_or_failure: &system_channel_success_or_failure
+    type: labeled_counter
+    description: >
+      Counts the number of succeeded and failed channels with a system principal to a mozilla domain. Label contains ok or failure reason.
+    bugs:
+      - https://bugzilla.mozilla.org/1914129
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1914129
+    notification_emails:
+      - necko@mozilla.com
+      - vgosu@mozilla.com
+    expires: never
+    labels:
+      - ok
+      - offline
+      - connectivity
+      - dns
+      - connect_fail
+      - tls_fail
+      - http_status
+      - cancel
+      - timeout
+      - reset
+      - refused
+      - partial
+      - other
+
+  system_channel_update_status:
+    <<: *system_channel_success_or_failure
+    description: >
+     Counts the status of succeeded and failed requests to aus5.mozilla.org
+
+  system_channel_addonversion_status:
+    <<: *system_channel_success_or_failure
+    description: >
+     Counts the status of succeeded and failed requests to *.addons.mozilla.org
+
+  system_channel_addon_status:
+    <<: *system_channel_success_or_failure
+    description: >
+     Counts the status of succeeded and failed requests to addons.mozilla.org
+
+  system_channel_remote_settings_status:
+    <<: *system_channel_success_or_failure
+    description: >
+     Counts the status of succeeded and failed requests to firefox.settings.services.mozilla.com
+
+  system_channel_telemetry_status:
+    <<: *system_channel_success_or_failure
+    description: >
+     Counts the status of succeeded and failed requests to incoming.telemetry.mozilla.org
+
+  system_channel_other_status:
+    <<: *system_channel_success_or_failure
+    description: >
+     Counts the status of succeeded and failed requests to other mozilla.org domains

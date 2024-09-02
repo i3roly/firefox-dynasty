@@ -612,10 +612,7 @@ void HttpChannelChild::DoOnStartRequest(nsIRequest* aRequest) {
     // final listener might not support it
     if (nsCOMPtr<nsIStreamConverter> conv =
             do_QueryInterface((mCompressListener))) {
-      rv = conv->MaybeRetarget(this);
-      if (NS_SUCCEEDED(rv)) {
-        mOMTResult = LABELS_HTTP_CHILD_OMT_STATS_2::successOnlyDecomp;
-      }
+      conv->MaybeRetarget(this);
     }
   }
 }
@@ -909,6 +906,14 @@ void HttpChannelChild::ProcessOnStopRequest(
           TimeDuration delay = now - start;
           glean::networking::http_content_ondatafinished_delay
               .AccumulateRawDuration(delay);
+          // We can be on main thread or background thread at this point
+          // http_content_ondatafinished_delay_2 is used to track
+          // delay observed between dispatch the OnDataFinished on the socket
+          // thread and running OnDataFinished on the background thread
+          if (!NS_IsMainThread()) {
+            glean::networking::http_content_ondatafinished_delay_2
+                .AccumulateRawDuration(delay);
+          }
           timing->mOnDataFinishedTime = now;
           self->SendOnDataFinished(status);
         }));
@@ -1116,25 +1121,6 @@ void HttpChannelChild::DoPreOnStopRequest(nsresult aStatus) {
   if (!mCanceled && NS_SUCCEEDED(mStatus)) {
     mStatus = aStatus;
   }
-
-  CollectOMTTelemetry();
-}
-
-void HttpChannelChild::CollectOMTTelemetry() {
-  MOZ_ASSERT(NS_IsMainThread());
-
-  // Only collect telemetry for HTTP channel that is loaded successfully and
-  // completely.
-  if (mCanceled || NS_FAILED(mStatus)) {
-    return;
-  }
-
-  // Use content policy type to accumulate data by usage.
-  nsAutoCString key(
-      NS_CP_ContentTypeName(mLoadInfo->InternalContentPolicyType()));
-
-  Telemetry::AccumulateCategoricalKeyed(
-      key, static_cast<LABELS_HTTP_CHILD_OMT_STATS_2>(mOMTResult));
 }
 
 // We want to inspect all upgradable mixed content loads
@@ -3033,15 +3019,10 @@ HttpChannelChild::RetargetDeliveryTo(nsISerialEventTarget* aNewTarget) {
   NS_ENSURE_ARG(aNewTarget);
   if (aNewTarget->IsOnCurrentThread()) {
     NS_WARNING("Retargeting delivery to same thread");
-    mOMTResult = LABELS_HTTP_CHILD_OMT_STATS_2::successMainThread;
     return NS_OK;
   }
 
   if (mMultiPartID) {
-    // TODO: Maybe add a new label for this? Maybe it doesn't
-    // matter though, since we also blocked QI, so we shouldn't
-    // ever get here.
-    mOMTResult = LABELS_HTTP_CHILD_OMT_STATS_2::failListener;
     return NS_ERROR_NO_INTERFACE;
   }
 
@@ -3052,14 +3033,12 @@ HttpChannelChild::RetargetDeliveryTo(nsISerialEventTarget* aNewTarget) {
       do_QueryInterface(mListener, &rv);
   if (!retargetableListener || NS_FAILED(rv)) {
     NS_WARNING("Listener is not retargetable");
-    mOMTResult = LABELS_HTTP_CHILD_OMT_STATS_2::failListener;
     return NS_ERROR_NO_INTERFACE;
   }
 
   rv = retargetableListener->CheckListenerChain();
   if (NS_FAILED(rv)) {
     NS_WARNING("Subsequent listeners are not retargetable");
-    mOMTResult = LABELS_HTTP_CHILD_OMT_STATS_2::failListenerChain;
     return rv;
   }
 
@@ -3069,7 +3048,6 @@ HttpChannelChild::RetargetDeliveryTo(nsISerialEventTarget* aNewTarget) {
     RetargetDeliveryToImpl(aNewTarget, lock);
   }
 
-  mOMTResult = LABELS_HTTP_CHILD_OMT_STATS_2::success;
   return NS_OK;
 }
 

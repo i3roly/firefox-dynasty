@@ -22,7 +22,7 @@ Please note that some targeting attributes require stricter controls on the tele
 * [currentDate](#currentdate)
 * [defaultPDFHandler](#defaultpdfhandler)
 * [devToolsOpenedCount](#devtoolsopenedcount)
-* [distributionId](#distributionId)
+* [distributionId](#distributionid)
 * [doesAppNeedPin](#doesappneedpin)
 * [doesAppNeedPrivatePin](#doesappneedprivatepin)
 * [firefoxVersion](#firefoxversion)
@@ -41,7 +41,7 @@ Please note that some targeting attributes require stricter controls on the tele
 * [isDefaultHandler](#isdefaulthandler)
 * [isDeviceMigration](#isdevicemigration)
 * [isFxAEnabled](#isfxaenabled)
-* [isFxASignedIn](#isFxASignedIn)
+* [isFxASignedIn](#isfxasignedin)
 * [isMajorUpgrade](#ismajorupgrade)
 * [isMSIX](#ismsix)
 * [isRTAMO](#isrtamo)
@@ -62,7 +62,7 @@ Please note that some targeting attributes require stricter controls on the tele
 * [providerCohorts](#providercohorts)
 * [recentBookmarks](#recentbookmarks)
 * [region](#region)
-* [screenImpressions](#screenImpressions)
+* [screenImpressions](#screenimpressions)
 * [searchEngines](#searchengines)
 * [sync](#sync)
 * [topFrecentSites](#topfrecentsites)
@@ -74,7 +74,8 @@ Please note that some targeting attributes require stricter controls on the tele
 * [useEmbeddedMigrationWizard](#useembeddedmigrationwizard)
 * [userPrefs](#userprefs)
 * [usesFirefoxSync](#usesfirefoxsync)
-* [xpinstallEnabled](#xpinstallEnabled)
+* [xpinstallEnabled](#xpinstallenabled)
+* [totalSearches](#totalsearches)
 
 ## Detailed usage
 
@@ -1026,6 +1027,7 @@ A boolean. `true` when hasPackageId is `true` on Windows, `false` otherwise.
 ### `isDeviceMigration`
 
 A boolean. `true` when [support.mozilla.org](https://support.mozilla.org) has been used to download the browser as part of a "migration" campaign, for device migration guidance, `false` otherwise.
+
 ### `screenImpressions`
 
 An array that maps about:welcome screen IDs to their most recent impression timestamp. Should only be used for unique screen IDs to avoid unintentionally targeting messages with identical screen IDs.
@@ -1034,3 +1036,7 @@ An array that maps about:welcome screen IDs to their most recent impression time
 ```
 declare const screenImpressions: { [key: string]: Array<UnixEpochNumber> };
 ```
+
+### `totalSearches`
+
+Returns the number of times a user has completed a search in the URL Bar. The number is arbitrarily capped at 100.

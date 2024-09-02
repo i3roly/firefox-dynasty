@@ -35,9 +35,6 @@
 namespace js {
 namespace wasm {
 
-using mozilla::CheckedInt32;
-using mozilla::MallocSizeOf;
-
 class RecGroup;
 
 //=========================================================================
@@ -306,7 +303,7 @@ class StructType {
  public:
   FieldTypeVector fields_;  // Field type and mutability
 
-  uint32_t size_;             // The size of the type in bytes.
+  uint32_t size_;  // The size of the type in bytes.
   FieldOffsetVector fieldOffsets_;
   InlineTraceOffsetVector inlineTraceOffsets_;
   OutlineTraceOffsetVector outlineTraceOffsets_;
@@ -404,16 +401,16 @@ using StructTypeVector = Vector<StructType, 0, SystemAllocPolicy>;
 // Given that, it follows from (3) that all fields fall completely within
 // either the inline or outline areas; no field crosses the boundary.
 class StructLayout {
-  CheckedInt32 sizeSoFar = 0;
+  mozilla::CheckedInt32 sizeSoFar = 0;
   uint32_t structAlignment = 1;
 
  public:
   // The field adders return the offset of the the field.
-  CheckedInt32 addField(StorageType type);
+  mozilla::CheckedInt32 addField(StorageType type);
 
   // The close method rounds up the structure size to the appropriate
   // alignment and returns that size.
-  CheckedInt32 close();
+  mozilla::CheckedInt32 close();
 };
 
 //=========================================================================
@@ -831,7 +828,7 @@ class TypeDef {
     const SuperTypeVector* subSTV = subTypeDef->superTypeVector();
     const SuperTypeVector* superSTV = superTypeDef->superTypeVector();
 
-    // During construction of a recursion group, the super type vector may not
+    // During construction of a recursion group, the super type vectors may not
     // have been computed yet, in which case we need to fall back to a linear
     // search.
     if (!subSTV || !superSTV) {
@@ -844,8 +841,12 @@ class TypeDef {
       return false;
     }
 
-    // The supertype vector does exist.  So check it points back here.
+    // The supertype vectors do exist. Check that they point to the right
+    // places.
+    MOZ_ASSERT(subSTV);
+    MOZ_ASSERT(superSTV);
     MOZ_ASSERT(subSTV->typeDef() == subTypeDef);
+    MOZ_ASSERT(superSTV->typeDef() == superTypeDef);
 
     // We need to check if `superTypeDef` is one of `subTypeDef`s super types
     // by checking in `subTypeDef`s super type vector. We can use the static
@@ -855,9 +856,6 @@ class TypeDef {
     if (subTypingDepth >= subSTV->length()) {
       return false;
     }
-
-    MOZ_ASSERT(superSTV);
-    MOZ_ASSERT(superSTV->typeDef() == superTypeDef);
 
     return subSTV->type(subTypingDepth) == superSTV;
   }
@@ -1104,7 +1102,7 @@ class TypeContext : public AtomicRefCounted<TypeContext> {
   TypeContext() = default;
   ~TypeContext();
 
-  size_t sizeOfExcludingThis(MallocSizeOf mallocSizeOf) const {
+  size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
     return types_.sizeOfExcludingThis(mallocSizeOf) +
            moduleIndices_.shallowSizeOfExcludingThis(mallocSizeOf);
   }

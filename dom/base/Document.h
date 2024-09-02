@@ -246,7 +246,6 @@ class FeaturePolicy;
 class FontFaceSet;
 class FragmentDirective;
 class FrameRequestCallback;
-class ImageTracker;
 class HighlightRegistry;
 class HTMLAllCollection;
 class HTMLBodyElement;
@@ -256,6 +255,8 @@ class HTMLDialogElement;
 class HTMLSharedElement;
 class HTMLVideoElement;
 class HTMLImageElement;
+class ImageTracker;
+enum class InteractiveWidget : uint8_t;
 struct LifecycleCallbackArgs;
 class Link;
 class Location;
@@ -280,6 +281,8 @@ class Touch;
 class TouchList;
 class TreeWalker;
 enum class ViewportFitType : uint8_t;
+class ViewTransition;
+class ViewTransitionUpdateCallback;
 class WakeLockSentinel;
 class WindowContext;
 class WindowGlobalChild;
@@ -2032,7 +2035,7 @@ class Document : public nsINode,
   void RuleAdded(StyleSheet&, css::Rule&);
   void RuleRemoved(StyleSheet&, css::Rule&);
   void SheetCloned(StyleSheet&) {}
-  void ImportRuleLoaded(CSSImportRule&, StyleSheet&);
+  void ImportRuleLoaded(StyleSheet&);
 
   /**
    * Flush notifications for this document and its parent documents
@@ -3811,6 +3814,9 @@ class Document : public nsINode,
   MOZ_CAN_RUN_SCRIPT void
   DetermineProximityToViewportAndNotifyResizeObservers();
 
+  ViewTransition* StartViewTransition(
+      const Optional<OwningNonNull<ViewTransitionUpdateCallback>>&);
+
   // Getter for PermissionDelegateHandler. Performs lazy initialization.
   PermissionDelegateHandler* GetPermissionDelegateHandler();
 
@@ -3957,6 +3963,10 @@ class Document : public nsINode,
 
  public:
   const OriginTrials& Trials() const { return mTrials; }
+
+  dom::InteractiveWidget InteractiveWidget() const {
+    return mInteractiveWidgetMode;
+  }
 
  private:
   void DoCacheAllKnownLangPrefs();
@@ -5172,6 +5182,9 @@ class Document : public nsINode,
   // viewport-fit described by
   // https://drafts.csswg.org/css-round-display/#viewport-fit-descriptor
   ViewportFitType mViewportFit;
+
+  // https://drafts.csswg.org/css-viewport/#interactive-widget-section
+  dom::InteractiveWidget mInteractiveWidgetMode;
 
   // XXXdholbert This should really be modernized to a nsTHashMap or similar,
   // though note that the modernization will need to take care to also convert

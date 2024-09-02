@@ -109,11 +109,6 @@ using namespace mozilla::ipc;
 
 namespace mozilla::dom {
 
-// Counts the number of registered ServiceWorkers, and the number that
-// handle Fetch, for reporting in Telemetry
-uint32_t gServiceWorkersRegistered = 0;
-uint32_t gServiceWorkersRegisteredFetch = 0;
-
 static_assert(
     nsIHttpChannelInternal::REDIRECT_MODE_FOLLOW ==
         static_cast<uint32_t>(RequestRedirect::Follow),
@@ -564,9 +559,6 @@ RefPtr<GenericErrorResultPromise> ServiceWorkerManager::StartControllingClient(
             aRegistrationInfo->StartControllingClient();
           }
 
-          Telemetry::Accumulate(Telemetry::SERVICE_WORKER_CONTROLLED_DOCUMENTS,
-                                1);
-
           // Always check to see if we failed to actually control the client. In
           // that case remove the client from our list of controlled clients.
           return promise->Then(
@@ -600,9 +592,6 @@ RefPtr<GenericErrorResultPromise> ServiceWorkerManager::StartControllingClient(
         clientHandle->OnDetach()->Then(
             GetMainThreadSerialEventTarget(), __func__,
             [self, aClientInfo] { self->StopControllingClient(aClientInfo); });
-
-        Telemetry::Accumulate(Telemetry::SERVICE_WORKER_CONTROLLED_DOCUMENTS,
-                              1);
 
         // Always check to see if we failed to actually control the client.  In
         // that case removed the client from our list of controlled clients.
@@ -1587,21 +1576,9 @@ void ServiceWorkerManager::LoadRegistration(
 void ServiceWorkerManager::LoadRegistrations(
     const nsTArray<ServiceWorkerRegistrationData>& aRegistrations) {
   MOZ_ASSERT(NS_IsMainThread());
-  uint32_t fetch = 0;
   for (uint32_t i = 0, len = aRegistrations.Length(); i < len; ++i) {
     LoadRegistration(aRegistrations[i]);
-    if (aRegistrations[i].currentWorkerHandlesFetch()) {
-      fetch++;
-    }
   }
-  gServiceWorkersRegistered = aRegistrations.Length();
-  gServiceWorkersRegisteredFetch = fetch;
-  Telemetry::ScalarSet(Telemetry::ScalarID::SERVICEWORKER_REGISTRATIONS,
-                       u"All"_ns, gServiceWorkersRegistered);
-  Telemetry::ScalarSet(Telemetry::ScalarID::SERVICEWORKER_REGISTRATIONS,
-                       u"Fetch"_ns, gServiceWorkersRegisteredFetch);
-  LOG(("LoadRegistrations: %u, fetch %u\n", gServiceWorkersRegistered,
-       gServiceWorkersRegisteredFetch));
 }
 
 void ServiceWorkerManager::StoreRegistration(

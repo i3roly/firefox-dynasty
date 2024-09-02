@@ -122,7 +122,11 @@ android {
 
         // Changing the build config can cause files that depend on BuildConfig.java to recompile
         // so we only set the vcs hash in release builds to avoid possible recompilation in debug builds.
-        buildConfigField "String", "VCS_HASH", "\"${Config.getVcsHash()}\""
+        if (gradle.ext.vcsHashFileContent) {
+            buildConfigField "String", "VCS_HASH", "\"hg-${gradle.ext.vcsHashFileContent}\""
+        } else {
+            buildConfigField "String", "VCS_HASH", "\"${Config.vcsHash}\""
+        }
 
         if (gradle.hasProperty("localProperties.autosignReleaseWithDebugKey")) {
             signingConfig signingConfigs.debug
@@ -744,9 +748,9 @@ dependencies {
     androidTestImplementation ComponentsDependencies.androidx_test_uiautomator
     androidTestUtil ComponentsDependencies.androidx_test_orchestrator
 
+    androidTestImplementation ComponentsDependencies.androidx_benchmark_junit4
     androidTestImplementation ComponentsDependencies.androidx_compose_ui_test
     androidTestImplementation ComponentsDependencies.androidx_work_testing
-    androidTestImplementation FenixDependencies.androidx_benchmark_junit4
     androidTestImplementation ComponentsDependencies.testing_mockwebserver
     testImplementation project(':support-test')
     testImplementation project(':support-test-libstate')

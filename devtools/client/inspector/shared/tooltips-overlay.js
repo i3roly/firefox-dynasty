@@ -347,12 +347,23 @@ TooltipsOverlay.prototype = {
       type === TOOLTIP_VARIABLE_TYPE &&
       nodeInfo.value.value.startsWith("--")
     ) {
-      const { variable, registeredProperty, startingStyleVariable } =
-        nodeInfo.value;
+      const {
+        variable,
+        registeredProperty,
+        startingStyleVariable,
+        variableComputed,
+        outputParserOptions,
+        cssProperties,
+        value,
+      } = nodeInfo.value;
       await this._setVariablePreviewTooltip({
         topSectionText: variable,
+        computed: variableComputed,
         registeredProperty,
         startingStyle: startingStyleVariable,
+        outputParserOptions,
+        cssProperties,
+        variableName: value,
       });
 
       this.sendOpenScalarToTelemetry(type);

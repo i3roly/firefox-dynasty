@@ -39,6 +39,7 @@ namespace layers {
 class SharedSurfacesHolder;
 class TextureData;
 class TextureHost;
+class VideoProcessorD3D11;
 
 class CanvasTranslator final : public gfx::InlineTranslator,
                                public PCanvasParent {
@@ -298,7 +299,7 @@ class CanvasTranslator final : public gfx::InlineTranslator,
     const Tag mTag;
 
    private:
-    ipc::SharedMemoryBasic::Handle mBufferHandle;
+    ipc::SharedMemory::Handle mBufferHandle;
     const size_t mBufferSize;
 
    public:
@@ -308,7 +309,7 @@ class CanvasTranslator final : public gfx::InlineTranslator,
                  mTag == Tag::ClearCachedResources);
     }
     CanvasTranslatorEvent(const Tag aTag,
-                          ipc::SharedMemoryBasic::Handle&& aBufferHandle,
+                          ipc::SharedMemory::Handle&& aBufferHandle,
                           size_t aBufferSize)
         : mTag(aTag),
           mBufferHandle(std::move(aBufferHandle)),
@@ -321,13 +322,13 @@ class CanvasTranslator final : public gfx::InlineTranslator,
     }
 
     static UniquePtr<CanvasTranslatorEvent> AddBuffer(
-        ipc::SharedMemoryBasic::Handle&& aBufferHandle, size_t aBufferSize) {
+        ipc::SharedMemory::Handle&& aBufferHandle, size_t aBufferSize) {
       return MakeUnique<CanvasTranslatorEvent>(
           Tag::AddBuffer, std::move(aBufferHandle), aBufferSize);
     }
 
     static UniquePtr<CanvasTranslatorEvent> SetDataSurfaceBuffer(
-        ipc::SharedMemoryBasic::Handle&& aBufferHandle, size_t aBufferSize) {
+        ipc::SharedMemory::Handle&& aBufferHandle, size_t aBufferSize) {
       return MakeUnique<CanvasTranslatorEvent>(
           Tag::SetDataSurfaceBuffer, std::move(aBufferHandle), aBufferSize);
     }
@@ -336,12 +337,12 @@ class CanvasTranslator final : public gfx::InlineTranslator,
       return MakeUnique<CanvasTranslatorEvent>(Tag::ClearCachedResources);
     }
 
-    ipc::SharedMemoryBasic::Handle TakeBufferHandle() {
+    ipc::SharedMemory::Handle TakeBufferHandle() {
       if (mTag == Tag::AddBuffer || mTag == Tag::SetDataSurfaceBuffer) {
         return std::move(mBufferHandle);
       }
       MOZ_ASSERT_UNREACHABLE("unexpected to be called");
-      return mozilla::ipc::SharedMemoryBasic::NULLHandle();
+      return mozilla::ipc::SharedMemory::NULLHandle();
     }
 
     size_t BufferSize() {
@@ -425,6 +426,7 @@ class CanvasTranslator final : public gfx::InlineTranslator,
   const RefPtr<SharedSurfacesHolder> mSharedSurfacesHolder;
 #if defined(XP_WIN)
   RefPtr<ID3D11Device> mDevice;
+  DataMutex<RefPtr<VideoProcessorD3D11>> mVideoProcessorD3D11;
 #endif
   static StaticRefPtr<gfx::SharedContextWebgl> sSharedContext;
   RefPtr<gfx::SharedContextWebgl> mSharedContext;
@@ -437,20 +439,24 @@ class CanvasTranslator final : public gfx::InlineTranslator,
   using State = CanvasDrawEventRecorder::State;
   using Header = CanvasDrawEventRecorder::Header;
 
-  RefPtr<ipc::SharedMemoryBasic> mHeaderShmem;
+  RefPtr<ipc::SharedMemory> mHeaderShmem;
   Header* mHeader = nullptr;
 
   struct CanvasShmem {
-    RefPtr<ipc::SharedMemoryBasic> shmem;
-    auto Size() { return shmem->Size(); }
+    RefPtr<ipc::SharedMemory> shmem;
+    bool IsValid() const { return !!shmem; }
+    auto Size() { return shmem ? shmem->Size() : 0; }
     gfx::MemReader CreateMemReader() {
-      return {static_cast<char*>(shmem->memory()), Size()};
+      if (!shmem) {
+        return {nullptr, 0};
+      }
+      return {static_cast<char*>(shmem->Memory()), Size()};
     }
   };
   std::queue<CanvasShmem> mCanvasShmems;
   CanvasShmem mCurrentShmem;
   gfx::MemReader mCurrentMemReader{0, 0};
-  RefPtr<ipc::SharedMemoryBasic> mDataSurfaceShmem;
+  RefPtr<ipc::SharedMemory> mDataSurfaceShmem;
   UniquePtr<CrossProcessSemaphore> mWriterSemaphore;
   UniquePtr<CrossProcessSemaphore> mReaderSemaphore;
   TextureType mTextureType = TextureType::Unknown;

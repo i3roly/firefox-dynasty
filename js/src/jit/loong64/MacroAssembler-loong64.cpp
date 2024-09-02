@@ -1168,6 +1168,13 @@ void MacroAssemblerLOONG64::ma_cmp_set(Register rd, Address address, Imm32 imm,
 }
 
 void MacroAssemblerLOONG64::ma_cmp_set(Register rd, Address address,
+                                       Register rk, Condition c) {
+  SecondScratchRegisterScope scratch2(asMasm());
+  ma_ld_d(scratch2, address);
+  ma_cmp_set(rd, scratch2, rk, c);
+}
+
+void MacroAssemblerLOONG64::ma_cmp_set(Register rd, Address address,
                                        ImmWord imm, Condition c) {
   SecondScratchRegisterScope scratch2(asMasm());
   ma_ld_d(scratch2, address);
@@ -2130,7 +2137,7 @@ void MacroAssemblerLOONG64::wasmLoadImpl(const wasm::MemoryAccessDesc& access,
                                          Register ptrScratch,
                                          AnyRegister output, Register tmp) {
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   MOZ_ASSERT_IF(offset, ptrScratch != InvalidReg);
 
   // Maybe add the offset.
@@ -2178,7 +2185,7 @@ void MacroAssemblerLOONG64::wasmStoreImpl(const wasm::MemoryAccessDesc& access,
                                           Register memoryBase, Register ptr,
                                           Register ptrScratch, Register tmp) {
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   MOZ_ASSERT_IF(offset, ptrScratch != InvalidReg);
 
   // Maybe add the offset.
@@ -2224,7 +2231,7 @@ void MacroAssemblerLOONG64::wasmStoreImpl(const wasm::MemoryAccessDesc& access,
 void MacroAssemblerLOONG64Compat::wasmLoadI64Impl(
     const wasm::MemoryAccessDesc& access, Register memoryBase, Register ptr,
     Register ptrScratch, Register64 output, Register tmp) {
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   MOZ_ASSERT_IF(offset, ptrScratch != InvalidReg);
 
   // Maybe add the offset.
@@ -2270,7 +2277,7 @@ void MacroAssemblerLOONG64Compat::wasmLoadI64Impl(
 void MacroAssemblerLOONG64Compat::wasmStoreI64Impl(
     const wasm::MemoryAccessDesc& access, Register64 value, Register memoryBase,
     Register ptr, Register ptrScratch, Register tmp) {
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   MOZ_ASSERT_IF(offset, ptrScratch != InvalidReg);
 
   // Maybe add the offset.
@@ -2747,6 +2754,16 @@ void MacroAssembler::patchCallToNop(uint8_t* call) {
   inst[1].makeNop();  // ori
   inst[2].makeNop();  // lu32i_d
   inst[3].makeNop();  // jirl
+}
+
+CodeOffset MacroAssembler::move32WithPatch(Register dest) {
+  CodeOffset offs = CodeOffset(currentOffset());
+  ma_liPatchable(dest, Imm32(0));
+  return offs;
+}
+
+void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
+  patchSub32FromStackPtr(offset, Imm32(n));
 }
 
 void MacroAssembler::pushReturnAddress() { push(ra); }

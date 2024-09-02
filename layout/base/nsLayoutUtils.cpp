@@ -49,6 +49,7 @@
 #include "mozilla/dom/HTMLVideoElement.h"
 #include "mozilla/dom/InspectorFontFace.h"
 #include "mozilla/dom/ImageBitmap.h"
+#include "mozilla/dom/InteractiveWidget.h"
 #include "mozilla/dom/KeyframeEffect.h"
 #include "mozilla/dom/SVGViewportElement.h"
 #include "mozilla/dom/UIEvent.h"
@@ -1375,94 +1376,6 @@ nsIFrame* nsLayoutUtils::GetNearestOverflowClipFrame(nsIFrame* aFrame) {
                  currentFrame->StyleDisplay()->mOverflowY !=
                      StyleOverflow::Visible));
       });
-}
-
-// static
-nsRect nsLayoutUtils::GetScrolledRect(nsIFrame* aScrolledFrame,
-                                      const nsRect& aScrolledFrameOverflowArea,
-                                      const nsSize& aScrollPortSize,
-                                      StyleDirection aDirection) {
-  WritingMode wm = aScrolledFrame->GetWritingMode();
-  // Potentially override the frame's direction to use the direction found
-  // by ScrollContainerFrame::GetScrolledFrameDir()
-  wm.SetDirectionFromBidiLevel(aDirection == StyleDirection::Rtl
-                                   ? mozilla::intl::BidiEmbeddingLevel::RTL()
-                                   : mozilla::intl::BidiEmbeddingLevel::LTR());
-
-  nscoord x1 = aScrolledFrameOverflowArea.x,
-          x2 = aScrolledFrameOverflowArea.XMost(),
-          y1 = aScrolledFrameOverflowArea.y,
-          y2 = aScrolledFrameOverflowArea.YMost();
-
-  const bool isHorizontalWM = !wm.IsVertical();
-  const bool isVerticalWM = wm.IsVertical();
-  bool isInlineFlowFromTopOrLeft = !wm.IsInlineReversed();
-  bool isBlockFlowFromTopOrLeft = isHorizontalWM || wm.IsVerticalLR();
-
-  if (aScrolledFrame->IsFlexContainerFrame()) {
-    // In a flex container, the children flow (and overflow) along the flex
-    // container's main axis and cross axis. These are analogous to the
-    // inline/block axes, and by default they correspond exactly to those axes;
-    // but the flex container's CSS (e.g. flex-direction: column-reverse) may
-    // have swapped and/or reversed them, and we need to account for that here.
-    FlexboxAxisInfo info(aScrolledFrame);
-    if (info.mIsRowOriented) {
-      // The flex container's inline axis is the main axis.
-      isInlineFlowFromTopOrLeft =
-          isInlineFlowFromTopOrLeft == !info.mIsMainAxisReversed;
-      isBlockFlowFromTopOrLeft =
-          isBlockFlowFromTopOrLeft == !info.mIsCrossAxisReversed;
-    } else {
-      // The flex container's block axis is the main axis.
-      isBlockFlowFromTopOrLeft =
-          isBlockFlowFromTopOrLeft == !info.mIsMainAxisReversed;
-      isInlineFlowFromTopOrLeft =
-          isInlineFlowFromTopOrLeft == !info.mIsCrossAxisReversed;
-    }
-  }
-
-  // Clamp the horizontal start-edge (x1 or x2, depending whether the logical
-  // axis that corresponds to horizontal progresses from left-to-right or
-  // right-to-left).
-  if ((isHorizontalWM && isInlineFlowFromTopOrLeft) ||
-      (isVerticalWM && isBlockFlowFromTopOrLeft)) {
-    if (x1 < 0) {
-      x1 = 0;
-    }
-  } else {
-    if (x2 > aScrollPortSize.width) {
-      x2 = aScrollPortSize.width;
-    }
-    // When the scrolled frame chooses a size larger than its available width
-    // (because its padding alone is larger than the available width), we need
-    // to keep the start-edge of the scroll frame anchored to the start-edge of
-    // the scrollport.
-    // When the scrolled frame is RTL, this means moving it in our left-based
-    // coordinate system, so we need to compensate for its extra width here by
-    // effectively repositioning the frame.
-    nscoord extraWidth =
-        std::max(0, aScrolledFrame->GetSize().width - aScrollPortSize.width);
-    x2 += extraWidth;
-  }
-
-  // Similarly, clamp the vertical start-edge (y1 or y2, depending whether the
-  // logical axis that corresponds to vertical progresses from top-to-bottom or
-  // buttom-to-top).
-  if ((isHorizontalWM && isBlockFlowFromTopOrLeft) ||
-      (isVerticalWM && isInlineFlowFromTopOrLeft)) {
-    if (y1 < 0) {
-      y1 = 0;
-    }
-  } else {
-    if (y2 > aScrollPortSize.height) {
-      y2 = aScrollPortSize.height;
-    }
-    nscoord extraHeight =
-        std::max(0, aScrolledFrame->GetSize().height - aScrollPortSize.height);
-    y2 += extraHeight;
-  }
-
-  return nsRect(x1, y1, x2 - x1, y2 - y1);
 }
 
 // static
@@ -5218,7 +5131,7 @@ nsSize nsLayoutUtils::ComputeAutoSizeWithIntrinsicDimensions(
     if (heightAtMinWidth > maxHeight) heightAtMinWidth = maxHeight;
   } else {
     heightAtMaxWidth = heightAtMinWidth =
-        NS_CSS_MINMAX(tentHeight, minHeight, maxHeight);
+        CSSMinMax(tentHeight, minHeight, maxHeight);
   }
 
   if (tentHeight > 0) {
@@ -5228,7 +5141,7 @@ nsSize nsLayoutUtils::ComputeAutoSizeWithIntrinsicDimensions(
     if (widthAtMinHeight > maxWidth) widthAtMinHeight = maxWidth;
   } else {
     widthAtMaxHeight = widthAtMinHeight =
-        NS_CSS_MINMAX(tentWidth, minWidth, maxWidth);
+        CSSMinMax(tentWidth, minWidth, maxWidth);
   }
 
   // The table at http://www.w3.org/TR/CSS21/visudet.html#min-max-widths :
@@ -8224,6 +8137,17 @@ bool nsLayoutUtils::UpdateCompositionBoundsForRCDRSF(
   if (!GetDocumentViewerSize(aPresContext, contentSize,
                              shouldSubtractDynamicToolbar)) {
     return false;
+  }
+
+  // Add the keyboard height in the case of
+  // `interactive-widget=overlays-content` so that contents being overlaid by
+  // the keyboard can NOT be reachable by scrolling.
+  if (aPresContext->GetKeyboardHeight() &&
+      aPresContext->Document()->InteractiveWidget() ==
+          InteractiveWidget::OverlaysContent) {
+    contentSize.height += ViewAs<LayoutDevicePixel>(
+        aPresContext->GetKeyboardHeight(),
+        PixelCastJustification::LayoutDeviceIsScreenForBounds);
   }
   aCompBounds.SizeTo(ViewAs<ParentLayerPixel>(
       LayoutDeviceSize(contentSize),

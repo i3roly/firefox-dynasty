@@ -464,6 +464,13 @@ class ContentParent final : public PContentParent,
    */
   void KillHard(const char* aReason);
 
+  /**
+   * Get a unique identifier for this child process. This ID is unique across
+   * all types of child processes.
+   *
+   * NOTE: The `ContentParentId` wrapper type is a historical artifact from when
+   * the ID was only specific to content processes.
+   */
   ContentParentId ChildID() const { return mChildID; }
 
   /**
@@ -1380,6 +1387,14 @@ class ContentParent final : public PContentParent,
 
   mozilla::ipc::IPCResult RecvGetSystemIcon(nsIURI* aURI,
                                             GetSystemIconResolver&& aResolver);
+
+  mozilla::ipc::IPCResult RecvGetSystemGeolocationPermissionBehavior(
+      GetSystemGeolocationPermissionBehaviorResolver&& aResolver);
+
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY mozilla::ipc::IPCResult
+  RecvRequestGeolocationPermissionFromUser(
+      const MaybeDiscardedBrowsingContext& aBrowsingContext,
+      RequestGeolocationPermissionFromUserResolver&& aResolver);
 
 #ifdef FUZZING_SNAPSHOT
   mozilla::ipc::IPCResult RecvSignalFuzzingReady();

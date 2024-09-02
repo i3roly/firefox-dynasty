@@ -92,6 +92,8 @@
     <string name="preferences_debug_settings_debug_drawer" translatable="false">Enable Debug Drawer</string>
     <!-- Label for enabling the microsurvey feature -->
     <string name="preferences_debug_settings_microsurvey_feature" translatable="false">Enable Microsurvey Feature</string>
+    <!-- Label for enabling the Set as default prompt for existing users feature -->
+    <string name="preferences_debug_settings_set_as_default_browser_prompt_for_existing_users_feature" translatable="false">Enable Native Default Browser Prompt For Existing Users</string>
 
     <!-- A secret menu option in the tabs tray for making a tab inactive for testing. -->
     <string name="inactive_tabs_menu_item">Make inactive</string>
@@ -197,5 +199,5 @@
     <!-- The open in app CFR title in CFR Tools -->
     <string name="debug_drawer_cfr_tools_open_in_app_title">Open in App</string>
     <!-- The open in app CFR description in CFR Tools -->
-    <string name="debug_drawer_cfr_tools_open_in_app_description">Displayed when the user has the \"Open links in apps\" setting set to \"Never\", and it is the user\'s first time visiting a website that can be opened in an installed native app.</string>
+    <string name="debug_drawer_cfr_tools_open_in_app_description">Displayed when the user has the “Open links in apps” setting set to “Never”, and it is the user’s first time visiting a website that can be opened in an installed native app.</string>
 </resources>

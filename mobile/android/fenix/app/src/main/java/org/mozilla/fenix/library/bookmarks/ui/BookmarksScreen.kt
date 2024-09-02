@@ -15,10 +15,12 @@ import androidx.compose.material.Scaffold
 import androidx.compose.material.Text
 import androidx.compose.material.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import mozilla.components.lib.state.ext.observeAsState
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.annotation.FlexibleWindowLightDarkPreview
 import org.mozilla.fenix.compose.button.FloatingActionButton
@@ -30,33 +32,40 @@ import org.mozilla.fenix.theme.FirefoxTheme
  * The UI host for the Bookmarks list screen and related subscreens.
  */
 @Composable
-@Suppress("Unused")
-fun BookmarksScreen() {
+internal fun BookmarksScreen(store: BookmarksStore) {
+    val state by store.observeAsState(initialValue = store.state) { it }
     BookmarksList(
-        bookmarkItems = listOf(),
-        onBookmarkItemClick = {},
+        bookmarkItems = state.bookmarkItems,
+        folderTitle = state.folderTitle,
+        onBookmarkClick = { item -> store.dispatch(BookmarkClicked(item)) },
+        onFolderClick = { item -> store.dispatch(FolderClicked(item)) },
         onBackClick = {},
         onNewFolderClick = {},
         onCloseClick = {},
         onMenuClick = {},
-        onSearchClick = {},
+        onSearchClick = { store.dispatch(SearchClicked) },
     )
 }
 
 /**
  * The Bookmarks list screen.
  * @param bookmarkItems Bookmarks and folders to display.
- * @param onBookmarkItemClick Invoked when the user clicks on a bookmark item row.
+ * @param folderTitle The display title of the currently selected bookmarks folder.
+ * @param onBookmarkClick Invoked when the user clicks on a bookmark item row.
+ * @param onFolderClick Invoked when the user clicks on a folder item row.
  * @param onBackClick Invoked when the user clicks on the toolbar back button.
  * @param onNewFolderClick Invoked when the user clicks on the toolbar new folder button.
  * @param onCloseClick Invoked when the user clicks on the toolbar close button.
  * @param onMenuClick Invoked when the user clicks on a bookmark item overflow menu.
  * @param onSearchClick Invoked when the user clicks on the search floating action button.
  */
+@Suppress("LongParameterList")
 @Composable
 private fun BookmarksList(
     bookmarkItems: List<BookmarkItem>,
-    onBookmarkItemClick: (BookmarkItem) -> Unit,
+    folderTitle: String,
+    onBookmarkClick: (BookmarkItem.Bookmark) -> Unit,
+    onFolderClick: (BookmarkItem.Folder) -> Unit,
     onBackClick: () -> Unit,
     onNewFolderClick: () -> Unit,
     onCloseClick: () -> Unit,
@@ -73,6 +82,7 @@ private fun BookmarksList(
         },
         topBar = {
             BookmarksListTopBar(
+                folderTitle = folderTitle,
                 onBackClick = onBackClick,
                 onNewFolderClick = onNewFolderClick,
                 onCloseClick = onCloseClick,
@@ -80,14 +90,18 @@ private fun BookmarksList(
         },
         backgroundColor = FirefoxTheme.colors.layer1,
     ) { paddingValues ->
-        LazyColumn(modifier = Modifier.padding(paddingValues).padding(vertical = 16.dp)) {
+        LazyColumn(
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(vertical = 16.dp),
+        ) {
             items(bookmarkItems) { item ->
                 when (item) {
                     is BookmarkItem.Bookmark -> FaviconListItem(
                         label = item.title,
                         url = item.previewImageUrl,
                         description = item.url,
-                        onClick = { onBookmarkItemClick(item) },
+                        onClick = { onBookmarkClick(item) },
                         iconPainter = painterResource(R.drawable.mozac_ic_ellipsis_vertical_24),
                         onIconClick = { onMenuClick(item) },
                         iconDescription = stringResource(
@@ -98,14 +112,14 @@ private fun BookmarksList(
 
                     is BookmarkItem.Folder -> {
                         IconListItem(
-                            label = item.name,
-                            onClick = { onBookmarkItemClick(item) },
+                            label = item.title,
+                            onClick = { onFolderClick(item) },
                             beforeIconPainter = painterResource(R.drawable.mozac_ic_folder_24),
                             afterIconPainter = painterResource(R.drawable.mozac_ic_ellipsis_vertical_24),
                             onAfterIconClick = { onMenuClick(item) },
                             afterIconDescription = stringResource(
                                 R.string.bookmark_item_menu_button_content_description,
-                                item.name,
+                                item.title,
                             ),
                         )
                     }
@@ -117,6 +131,7 @@ private fun BookmarksList(
 
 @Composable
 private fun BookmarksListTopBar(
+    folderTitle: String,
     onBackClick: () -> Unit,
     onNewFolderClick: () -> Unit,
     onCloseClick: () -> Unit,
@@ -125,7 +140,7 @@ private fun BookmarksListTopBar(
         backgroundColor = FirefoxTheme.colors.layer1,
         title = {
             Text(
-                text = stringResource(R.string.library_bookmarks),
+                text = folderTitle,
                 color = FirefoxTheme.colors.textPrimary,
                 style = FirefoxTheme.typography.headline6,
             )
@@ -162,8 +177,8 @@ private fun BookmarksListTopBar(
 @Composable
 @FlexibleWindowLightDarkPreview
 @Suppress("MagicNumber")
-private fun BookmarksListPreview() {
-    val bookmarks = List(10) {
+private fun BookmarksScreenPreview() {
+    val bookmarkItems = List(10) {
         if (it % 2 == 0) {
             BookmarkItem.Bookmark(
                 url = "https://www.whoevenmakeswebaddressesthislonglikeseriously$it.com",
@@ -171,21 +186,15 @@ private fun BookmarksListPreview() {
                 previewImageUrl = "",
             )
         } else {
-            BookmarkItem.Folder("folder $it")
+            BookmarkItem.Folder("folder $it", guid = "$it")
         }
     }
 
+    val store = BookmarksStore(initialState = BookmarksState(bookmarkItems = bookmarkItems, folderTitle = "Bookmarks"))
+
     FirefoxTheme {
         Box(modifier = Modifier.background(color = FirefoxTheme.colors.layer1)) {
-            BookmarksList(
-                bookmarkItems = bookmarks,
-                onBookmarkItemClick = {},
-                onBackClick = {},
-                onNewFolderClick = {},
-                onCloseClick = {},
-                onMenuClick = {},
-                onSearchClick = {},
-            )
+            BookmarksScreen(store)
         }
     }
 }

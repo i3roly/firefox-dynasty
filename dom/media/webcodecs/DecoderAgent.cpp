@@ -12,6 +12,7 @@
 #include "VideoUtils.h"
 #include "mozilla/DebugOnly.h"
 #include "mozilla/Logging.h"
+#include "mozilla/StaticPrefs_media.h"
 #include "mozilla/layers/ImageBridgeChild.h"
 #include "nsThreadUtils.h"
 
@@ -103,6 +104,10 @@ RefPtr<DecoderAgent::ConfigurePromise> DecoderAgent::Configure(
       mInfo->GetType(), mImageContainer, knowsCompositor};
   if (aLowLatency) {
     params.mOptions += CreateDecoderParams::Option::LowLatency;
+  }
+  // This should only be used for testing.
+  if (StaticPrefs::media_test_null_decoder_creation_failure()) {
+    params.mUseNullDecoder = CreateDecoderParams::UseNullDecoder(true);
   }
 
   // Always even use the pts that were set on the input samples when returning
@@ -213,6 +218,12 @@ RefPtr<DecoderAgent::ConfigurePromise> DecoderAgent::Configure(
 RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
   MOZ_ASSERT(mOwnerThread->IsOnCurrentThread());
 
+  LOG("DecoderAgent #%d (%p), shutdown in %s state", mId, this,
+      EnumValueToString(mState));
+
+  MOZ_ASSERT(mShutdownWhileCreationPromise.IsEmpty(),
+             "Shutdown while shutting down is prohibited");
+
   auto r =
       MediaResult(NS_ERROR_DOM_MEDIA_CANCELED, "Canceled by decoder shutdown");
 
@@ -223,7 +234,6 @@ RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
     MOZ_ASSERT(!mConfigurePromise.IsEmpty());
     MOZ_ASSERT(!mDecoder);
     MOZ_ASSERT(mState == State::Configuring);
-    MOZ_ASSERT(mShutdownWhileCreationPromise.IsEmpty());
 
     LOGW(
         "DecoderAgent #%d (%p) shutdown while the decoder-creation for "
@@ -240,8 +250,25 @@ RefPtr<ShutdownPromise> DecoderAgent::Shutdown() {
     return mShutdownWhileCreationPromise.Ensure(__func__);
   }
 
-  // If decoder creation has been completed, we must have the decoder now.
-  MOZ_ASSERT(mDecoder);
+  // If decoder creation has been completed but failed, no decoder is set.
+  if (!mDecoder) {
+    LOG("DecoderAgent #%d (%p) shutdown without an active decoder", mId, this);
+    MOZ_ASSERT(mState == State::Error);
+    MOZ_ASSERT(!mInitRequest.Exists());
+    MOZ_ASSERT(mConfigurePromise.IsEmpty());
+    MOZ_ASSERT(!mDecodeRequest.Exists());
+    MOZ_ASSERT(mDecodePromise.IsEmpty());
+    MOZ_ASSERT(!mDrainRequest.Exists());
+    MOZ_ASSERT(!mFlushRequest.Exists());
+    MOZ_ASSERT(!mDryRequest.Exists());
+    MOZ_ASSERT(mDryPromise.IsEmpty());
+    MOZ_ASSERT(mDrainAndFlushPromise.IsEmpty());
+    // ~DecoderAgent() will ensure that the decoder is shutdown.
+    SetState(State::Unconfigured);
+    return ShutdownPromise::CreateAndResolve(true, __func__);
+  }
+
+  // If decoder creation has succeeded, we must have the decoder now.
 
   // Cancel pending initialization for configuration in flight if any.
   mInitRequest.DisconnectIfExists();

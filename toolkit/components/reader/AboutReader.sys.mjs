@@ -175,6 +175,7 @@ export var AboutReader = function (
   doc.addEventListener("mousedown", this);
   doc.addEventListener("keydown", this);
   doc.addEventListener("click", this);
+  doc.addEventListener("blur", this, true);
   doc.addEventListener("touchstart", this);
 
   win.addEventListener("pagehide", this);
@@ -295,6 +296,7 @@ export var AboutReader = function (
     tickLabels: `[]`,
     l10nId: "about-reader-content-width-label",
     icon: "chrome://global/skin/reader/content-width-20.svg",
+    telemetryId: "content-width-slider",
   };
 
   let lineSpacingSliderOptions = {
@@ -304,6 +306,7 @@ export var AboutReader = function (
     tickLabels: `[]`,
     l10nId: "about-reader-line-spacing-label",
     icon: "chrome://global/skin/reader/line-spacing-20.svg",
+    telemetryId: "line-spacing-slider",
   };
 
   let characterSpacingSliderOptions = {
@@ -313,6 +316,7 @@ export var AboutReader = function (
     tickLabels: `["${standardSpacingLabel.value}", "${wideSpacingLabel.value}"]`,
     l10nId: "about-reader-character-spacing-label",
     icon: "chrome://global/skin/reader/character-spacing-20.svg",
+    telemetryId: "character-spacing-slider",
   };
 
   let wordSpacingSliderOptions = {
@@ -322,6 +326,7 @@ export var AboutReader = function (
     tickLabels: `["${standardSpacingLabel.value}", "${wideSpacingLabel.value}"]`,
     l10nId: "about-reader-word-spacing-label",
     icon: "chrome://global/skin/reader/word-spacing-20.svg",
+    telemetryId: "word-spacing-slider",
   };
 
   let textAlignmentOptions = [
@@ -608,6 +613,16 @@ AboutReader.prototype = {
   },
 
   handleEvent(aEvent) {
+    // To avoid buttons that are programmatically clicked being counted twice,
+    // and account for controls that don't fire click events, define a set of
+    // blur only telemetry ids.
+    const blurTelemetryIds = new Set([
+      "colors-menu-custom-tab",
+      "left-align-button",
+      "font-type-selector",
+      "font-weight-selector",
+    ]);
+
     if (!aEvent.isTrusted) {
       return;
     }
@@ -631,18 +646,18 @@ AboutReader.prototype = {
           this._closeDropdowns();
         }
         break;
-      case "click":
-        const buttonLabel =
+      case "click": {
+        let clickTelemetryId =
           target.attributes.getNamedItem(`data-telemetry-id`)?.value;
 
-        if (buttonLabel) {
+        if (clickTelemetryId && !blurTelemetryIds.has(clickTelemetryId)) {
           Services.telemetry.recordEvent(
             "readermode",
             "button",
             "click",
             null,
             {
-              label: buttonLabel,
+              label: clickTelemetryId,
             }
           );
         }
@@ -651,7 +666,26 @@ AboutReader.prototype = {
           this._toggleDropdownClicked(aEvent);
         }
         break;
-      case "scroll":
+      }
+      case "blur":
+        if (HTMLElement.isInstance(target)) {
+          let blurTelemetryId =
+            target.attributes.getNamedItem(`data-telemetry-id`)?.value;
+
+          if (blurTelemetryId && blurTelemetryIds.has(blurTelemetryId)) {
+            Services.telemetry.recordEvent(
+              "readermode",
+              "button",
+              "click",
+              null,
+              {
+                label: blurTelemetryId,
+              }
+            );
+          }
+        }
+        break;
+      case "scroll": {
         let lastHeight = this._lastHeight;
         let { windowUtils } = this._win;
         this._lastHeight = windowUtils.getBoundsWithoutFlushing(
@@ -659,17 +693,20 @@ AboutReader.prototype = {
         ).height;
         // Only close dropdowns if the scroll events are not a result of line
         // height / font-size changes that caused a page height change.
-        if (lastHeight == this._lastHeight) {
+        // Prevent dropdowns from closing when scrolling within the popup.
+        let mouseInDropdown = !!this._doc.querySelector(".dropdown.open:hover");
+        if (lastHeight == this._lastHeight && !mouseInDropdown) {
           this._closeDropdowns(true);
         }
 
         break;
+      }
       case "resize":
         this._updateImageMargins();
         this._scheduleToolbarOverlapHandler();
         break;
 
-      case "wheel":
+      case "wheel": {
         let doZoom =
           (aEvent.ctrlKey && zoomOnCtrl) || (aEvent.metaKey && zoomOnMeta);
         if (!doZoom) {
@@ -698,6 +735,7 @@ AboutReader.prototype = {
           this._changeFontSize(-1);
         }
         break;
+      }
 
       case "pagehide":
         this._closeDropdowns();
@@ -714,7 +752,7 @@ AboutReader.prototype = {
 
         break;
 
-      case "change":
+      case "change": {
         let colorScheme;
         if (this.forcedColorsMediaList.matches) {
           colorScheme = "hcm";
@@ -729,6 +767,7 @@ AboutReader.prototype = {
         this._setColorScheme(colorScheme);
 
         break;
+      }
     }
   },
 
@@ -789,7 +828,6 @@ AboutReader.prototype = {
         if (!event.isTrusted) {
           return;
         }
-        event.stopPropagation();
         this._changeFontSize(+1);
       },
       true
@@ -801,7 +839,6 @@ AboutReader.prototype = {
         if (!event.isTrusted) {
           return;
         }
-        event.stopPropagation();
         this._changeFontSize(-1);
       },
       true
@@ -1082,6 +1119,7 @@ AboutReader.prototype = {
     slider.setAttribute("data-l10n-id", options.l10nId);
     slider.setAttribute("data-l10n-attrs", "label");
     slider.setAttribute("slider-icon", options.icon);
+    slider.setAttribute("data-telemetry-id", options.telemetryId);
 
     slider.addEventListener("slider-changed", e => {
       callback(e.detail);
@@ -1630,6 +1668,7 @@ AboutReader.prototype = {
       radioButton.type = "radio";
       radioButton.classList.add("radio-button");
       radioButton.name = option.groupName;
+      radioButton.setAttribute("data-telemetry-id", option.itemClass);
       segmentedButton.appendChild(radioButton);
 
       let item = doc.createElement("label");
@@ -1751,6 +1790,7 @@ AboutReader.prototype = {
     input.setAttribute("prop-name", prop);
     let labelL10nId = `about-reader-custom-colors-${prop}`;
     input.setAttribute("data-l10n-id", labelL10nId);
+    input.setAttribute("data-telemetry-id", `custom-color-picker-${prop}`);
 
     let pref = `reader.custom_colors.${prop}`;
     let customColor = Services.prefs.getStringPref(pref, "");

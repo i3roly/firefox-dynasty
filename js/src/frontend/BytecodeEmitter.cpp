@@ -13,9 +13,8 @@
 #include "mozilla/Casting.h"    // mozilla::AssertedCast
 #include "mozilla/DebugOnly.h"  // mozilla::DebugOnly
 #include "mozilla/FloatingPoint.h"  // mozilla::NumberEqualsInt32, mozilla::NumberIsInt32
-#include "mozilla/HashTable.h"      // mozilla::HashSet
-#include "mozilla/Maybe.h"          // mozilla::{Maybe,Nothing,Some}
-#include "mozilla/PodOperations.h"  // mozilla::PodCopy
+#include "mozilla/HashTable.h"  // mozilla::HashSet
+#include "mozilla/Maybe.h"      // mozilla::{Maybe,Nothing,Some}
 #include "mozilla/Saturate.h"
 #include "mozilla/Variant.h"  // mozilla::AsVariant
 
@@ -63,7 +62,7 @@
 #include "js/ColumnNumber.h"  // JS::LimitedColumnNumberOneOrigin, JS::ColumnNumberOffset
 #include "js/friend/ErrorMessages.h"  // JSMSG_*
 #include "js/friend/StackLimits.h"    // AutoCheckRecursionLimit
-#include "util/StringBuffer.h"        // StringBuffer
+#include "util/StringBuilder.h"       // StringBuilder
 #include "vm/BytecodeUtil.h"  // JOF_*, IsArgOp, IsLocalOp, SET_UINT24, SET_ICINDEX, BytecodeFallsThrough, BytecodeIsJumpTarget
 #include "vm/CompletionKind.h"      // CompletionKind
 #include "vm/FunctionPrefixKind.h"  // FunctionPrefixKind
@@ -85,7 +84,6 @@ using mozilla::Maybe;
 using mozilla::Nothing;
 using mozilla::NumberEqualsInt32;
 using mozilla::NumberIsInt32;
-using mozilla::PodCopy;
 using mozilla::Some;
 
 static bool ParseNodeRequiresSpecialLineNumberNotes(ParseNode* pn) {
@@ -2467,17 +2465,17 @@ bool BytecodeEmitter::emitScript(ParseNode* body) {
     }
   }
 
-  if (topLevelAwait) {
-    if (!topLevelAwait->emitEndModule()) {
-      return false;
-    }
-  }
-
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
   if (!emitterScope.emitModuleDisposableScopeBodyEnd(this)) {
     return false;
   }
 #endif
+
+  if (topLevelAwait) {
+    if (!topLevelAwait->emitEndModule()) {
+      return false;
+    }
+  }
 
   if (!markSimpleBreakpoint()) {
     return false;
@@ -4264,6 +4262,12 @@ bool BytecodeEmitter::emitSingleDeclaration(ListNode* declList, NameNode* decl,
       //            [stack] ENV? V
       return false;
     }
+  } else if (declList->isKind(ParseNodeKind::AwaitUsingDecl)) {
+    if (!innermostEmitterScope()->prepareForDisposableAssignment(
+            UsingHint::Async)) {
+      //            [stack] ENV? V
+      return false;
+    }
   }
 #endif
 
@@ -5814,6 +5818,12 @@ bool BytecodeEmitter::emitInitializeForInOrOfTarget(TernaryNode* forHead) {
         //            [stack] ENV? V
         return false;
       }
+    } else if (declarationList->isKind(ParseNodeKind::AwaitUsingDecl)) {
+      if (!innermostEmitterScope()->prepareForDisposableAssignment(
+              UsingHint::Async)) {
+        //            [stack] ENV? V
+        return false;
+      }
     }
 #endif
 
@@ -5854,12 +5864,14 @@ bool BytecodeEmitter::emitForOf(ForNode* forOfLoop,
   // Certain builtins (e.g. Array.from) are implemented in self-hosting
   // as for-of loops.
   auto selfHostedIter = getSelfHostedIterFor(forHeadExpr);
-  ForOfEmitter forOf(this, headLexicalEmitterScope, selfHostedIter, iterKind
+  ForOfEmitter forOf(
+      this, headLexicalEmitterScope, selfHostedIter, iterKind
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
-                     ,
-                     forOfHead->kid1()->isKind(ParseNodeKind::UsingDecl)
-                         ? ForOfEmitter::HasUsingDeclarationInHead::Yes
-                         : ForOfEmitter::HasUsingDeclarationInHead::No
+      ,
+      forOfHead->kid1()->isKind(ParseNodeKind::UsingDecl) ||
+              forOfHead->kid1()->isKind(ParseNodeKind::AwaitUsingDecl)
+          ? ForOfEmitter::HasUsingDeclarationInHead::Yes
+          : ForOfEmitter::HasUsingDeclarationInHead::No
 #endif
   );
 
@@ -5884,7 +5896,8 @@ bool BytecodeEmitter::emitForOf(ForNode* forOfLoop,
     MOZ_ASSERT(forOfTarget->isKind(ParseNodeKind::LetDecl) ||
                forOfTarget->isKind(ParseNodeKind::ConstDecl)
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
-               || forOfTarget->isKind(ParseNodeKind::UsingDecl)
+               || forOfTarget->isKind(ParseNodeKind::UsingDecl) ||
+               forOfTarget->isKind(ParseNodeKind::AwaitUsingDecl)
 #endif
     );
   }
@@ -10216,7 +10229,7 @@ bool BytecodeEmitter::emitCreateMemberInitializers(ClassEmitter& ce,
             TaggedParserAtomIndex name =
                 classMethod->name().as<NameNode>().atom();
             AccessorType accessorType = classMethod->accessorType();
-            StringBuffer storedMethodName(fc);
+            StringBuilder storedMethodName(fc);
             if (!storedMethodName.append(parserAtoms(), name)) {
               return false;
             }
@@ -10494,7 +10507,7 @@ bool BytecodeEmitter::emitPrivateMethodInitializers(ClassEmitter& ce,
     // private method body.
     TaggedParserAtomIndex name = classMethod->name().as<NameNode>().atom();
     AccessorType accessorType = classMethod->accessorType();
-    StringBuffer storedMethodName(fc);
+    StringBuilder storedMethodName(fc);
     if (!storedMethodName.append(parserAtoms(), name)) {
       return false;
     }
@@ -12784,6 +12797,7 @@ bool BytecodeEmitter::emitTree(
       }
       break;
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+    case ParseNodeKind::AwaitUsingDecl:
     case ParseNodeKind::UsingDecl:
       if (!emitDeclarationList(&pn->as<ListNode>())) {
         return false;

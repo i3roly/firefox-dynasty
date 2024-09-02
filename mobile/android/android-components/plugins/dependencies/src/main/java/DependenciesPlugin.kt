@@ -19,33 +19,32 @@ object Versions {
     const val serialization = "1.6.3"
     const val python_envs_plugin = "0.0.31"
 
-    const val mozilla_glean = "60.4.0"
+    const val mozilla_glean = "60.5.0"
 
     const val junit = "4.13.2"
     const val robolectric = "4.13"
-    const val mockito = "5.12.0"
+    const val mockito = "5.13.0"
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.11"
     const val okhttp = "4.12.0"
     const val okio = "3.9.0"
     const val androidsvg = "1.4"
 
-    const val android_gradle_plugin = "8.4.0"
+    const val android_gradle_plugin = "8.4.2"
 
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
-    const val lint = "31.4.0"
+    const val lint = "31.4.2"
     const val detekt = "1.23.6"
     const val ktlint = "0.49.1"
 
-    const val sentry = "7.11.0"
+    const val sentry = "7.14.0"
 
     const val zxing = "3.5.3"
 
     const val disklrucache = "2.0.2"
     const val leakcanary = "2.14"
 
-    const val material = "1.9.0"
     const val ksp = "1.0.20"
     val ksp_plugin = "$kotlin-$ksp"
 
@@ -54,24 +53,25 @@ object Versions {
     const val compose_compiler = "1.5.14"
 
     object AndroidX {
-        const val activity = "1.7.2"
-        const val annotation = "1.8.1"
+        const val activity = "1.9.1"
+        const val annotation = "1.8.2"
         const val appcompat = "1.7.0"
         const val autofill = "1.1.0"
+        const val benchmark = "1.3.0"
         const val browser = "1.8.0"
         const val biometric = "1.1.0"
         const val cardview = "1.0.0"
-        const val collection = "1.4.2"
+        const val collection = "1.4.3"
         const val compose_bom = "2024.06.00"
         const val constraintlayout = "2.1.4"
         const val coordinatorlayout = "1.2.0"
         const val core = "1.13.1"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.6.2"
+        const val fragment = "1.8.2"
         const val recyclerview = "1.3.2"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"
-        const val paging = "3.3.1"
+        const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
         const val lifecycle = "2.8.4"
@@ -79,7 +79,7 @@ object Versions {
         const val navigation = "2.7.7"
         const val transition = "1.5.1"
         const val tracing = "1.2.0"
-        const val work = "2.9.0"
+        const val work = "2.9.1"
         const val arch = "2.2.0"
         const val localbroadcastmanager = "1.0.0"
         const val swiperefreshlayout = "1.1.0"
@@ -92,11 +92,10 @@ object Versions {
         const val test_uiautomator = "2.3.0"
     }
 
-    object Firebase {
-        const val messaging = "24.0.0"
-    }
-
     object Google {
+        const val firebase_messaging = "24.0.1"
+        const val material = "1.12.0"
+        const val osslicenses_plugin = "0.10.6"
         const val play_review = "2.0.1"
         const val play_services_ads_id = "16.0.0"
         const val play_services_base = "18.5.0"
@@ -126,6 +125,8 @@ object ComponentsDependencies {
     const val androidx_autofill = "androidx.autofill:autofill:${Versions.AndroidX.autofill}"
     const val androidx_arch_core_common = "androidx.arch.core:core-common:${Versions.AndroidX.arch}"
     const val androidx_arch_core_testing = "androidx.arch.core:core-testing:${Versions.AndroidX.arch}"
+    const val androidx_benchmark_junit4 = "androidx.benchmark:benchmark-junit4:${Versions.AndroidX.benchmark}"
+    const val androidx_benchmark_macro_junit4 = "androidx.benchmark:benchmark-macro-junit4:${Versions.AndroidX.benchmark}"
     const val androidx_biometric = "androidx.biometric:biometric:${Versions.AndroidX.biometric}"
     const val androidx_browser = "androidx.browser:browser:${Versions.AndroidX.browser}"
     const val androidx_cardview = "androidx.cardview:cardview:${Versions.AndroidX.cardview}"
@@ -191,13 +192,14 @@ object ComponentsDependencies {
     const val androidx_test_rules = "androidx.test:rules:${Versions.AndroidX.test}"
     const val androidx_test_uiautomator = "androidx.test.uiautomator:uiautomator:${Versions.AndroidX.test_uiautomator}"
 
-    const val google_material = "com.google.android.material:material:${Versions.material}"
+    const val google_material = "com.google.android.material:material:${Versions.Google.material}"
 
     const val plugin_serialization = "org.jetbrains.kotlin.plugin.serialization:org.jetbrains.kotlin.plugin.serialization.gradle.plugin:${Versions.kotlin}"
 
     const val leakcanary = "com.squareup.leakcanary:leakcanary-android:${Versions.leakcanary}"
 
     const val tools_androidgradle = "com.android.tools.build:gradle:${Versions.android_gradle_plugin}"
+    const val tools_benchmarkgradle = "androidx.benchmark:benchmark-gradle-plugin:${Versions.AndroidX.benchmark}"
     const val tools_kotlingradle = "org.jetbrains.kotlin:kotlin-gradle-plugin:${Versions.kotlin}"
 
     const val tools_lint = "com.android.tools.lint:lint:${Versions.lint}"
@@ -237,8 +239,9 @@ object ComponentsDependencies {
     const val thirdparty_disklrucache = "com.jakewharton:disklrucache:${Versions.disklrucache}"
     const val thirdparty_androidsvg = "com.caverock:androidsvg-aar:${Versions.androidsvg}"
 
-    const val firebase_messaging = "com.google.firebase:firebase-messaging:${Versions.Firebase.messaging}"
+    const val firebase_messaging = "com.google.firebase:firebase-messaging:${Versions.Google.firebase_messaging}"
 
+    const val osslicenses_plugin = "com.google.android.gms:oss-licenses-plugin:${Versions.Google.osslicenses_plugin}"
     const val play_review = "com.google.android.play:review:${Versions.Google.play_review}"
     const val play_review_ktx = "com.google.android.play:review-ktx:${Versions.Google.play_review}"
     const val play_services_ads_id = "com.google.android.gms:play-services-ads-identifier:${Versions.Google.play_services_ads_id}"

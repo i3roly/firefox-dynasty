@@ -959,7 +959,7 @@ static MOZ_ALWAYS_INLINE void InitElemArrayOperation(JSContext* cx,
 }
 
 /*
- * As an optimization, the interpreter creates a handful of reserved Rooted<T>
+ * As an optimization, the interpreter creates a handful of reserved rooted
  * variables at the beginning, thus inserting them into the Rooted list once
  * upon entry. ReservedRooted "borrows" a reserved Rooted variable and uses it
  * within a local scope, resetting the value to nullptr (or the appropriate
@@ -967,128 +967,29 @@ static MOZ_ALWAYS_INLINE void InitElemArrayOperation(JSContext* cx,
  * from the rooter list, while preventing stale values from being kept alive
  * unnecessarily.
  */
-
 template <typename T>
 class ReservedRooted : public RootedOperations<T, ReservedRooted<T>> {
-  Rooted<T>* savedRoot;
+  MutableHandle<T> savedRoot;
 
  public:
-  ReservedRooted(Rooted<T>* root, const T& ptr) : savedRoot(root) {
-    *root = ptr;
+  ReservedRooted(MutableHandle<T> root, const T& ptr) : savedRoot(root) {
+    root.set(ptr);
   }
 
-  explicit ReservedRooted(Rooted<T>* root) : savedRoot(root) {
-    *root = JS::SafelyInitialized<T>::create();
-  }
+  explicit ReservedRooted(MutableHandle<T> root) : savedRoot(root) { clear(); }
 
-  ~ReservedRooted() { *savedRoot = JS::SafelyInitialized<T>::create(); }
+  ~ReservedRooted() { clear(); }
 
-  void set(const T& p) const { *savedRoot = p; }
-  operator Handle<T>() { return *savedRoot; }
-  operator Rooted<T>&() { return *savedRoot; }
-  MutableHandle<T> operator&() { return &*savedRoot; }
+  void clear() { savedRoot.set(JS::SafelyInitialized<T>::create()); }
+  void set(const T& p) { savedRoot.set(p); }
+  operator Handle<T>() { return savedRoot; }
+  MutableHandle<T> operator&() { return savedRoot; }
 
-  DECLARE_NONPOINTER_ACCESSOR_METHODS(savedRoot->get())
-  DECLARE_NONPOINTER_MUTABLE_ACCESSOR_METHODS(savedRoot->get())
+  DECLARE_NONPOINTER_ACCESSOR_METHODS(savedRoot.get())
+  DECLARE_NONPOINTER_MUTABLE_ACCESSOR_METHODS(savedRoot.get())
   DECLARE_POINTER_CONSTREF_OPS(T)
   DECLARE_POINTER_ASSIGN_OPS(ReservedRooted, T)
 };
-
-#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
-// Explicit Resource Management Proposal
-// DisposeResources ( disposeCapability, completion )
-// https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-disposeresources
-template <typename ClearFn>
-MOZ_ALWAYS_INLINE bool DisposeResources(
-    JSContext* cx, JS::Handle<ListObject*> disposeCapability, ClearFn clear) {
-  uint32_t index = disposeCapability->length();
-
-  // hadError and latestException correspond to the completion value.
-  bool hadError = false;
-  JS::Rooted<JS::Value> latestException(cx);
-
-  if (cx->isExceptionPending()) {
-    hadError = true;
-    if (!cx->getPendingException(&latestException)) {
-      return false;
-    }
-    cx->clearPendingException();
-  }
-
-  // Step 3. For each element resource of
-  // disposeCapability.[[DisposableResourceStack]], in reverse list order, do
-  while (index) {
-    --index;
-    JS::Value val = disposeCapability->get(index);
-
-    MOZ_ASSERT(val.isObject());
-
-    JS::Rooted<DisposableRecordObject*> resource(
-        cx, &val.toObject().as<DisposableRecordObject>());
-
-    // Step 3.a. Let value be resource.[[ResourceValue]].
-    JS::Rooted<JS::Value> value(cx, resource->getObject());
-
-    // Step 3.b. Let hint be resource.[[Hint]].
-    // TODO: Implementation of async-dispose, implicitly sync-dispose for now
-    // (Bug 1906534).
-    // Step 3.c. Let method be resource.[[DisposeMethod]].
-    JS::Rooted<JS::Value> method(cx, resource->getMethod());
-
-    // Step 3.e. If method is not undefined, then
-    if (method.isUndefined()) {
-      continue;
-    }
-
-    // Step 3.e.i. Let result be Completion(Call(method, value)).
-    JS::Rooted<JS::Value> rval(cx);
-    if (!Call(cx, method, value, &rval)) {
-      // Step 3.e.iii. If result is a throw completion, then
-      if (hadError) {
-        // Step 3.e.iii.1.a. Set result to result.[[Value]].
-        JS::Rooted<JS::Value> result(cx);
-        if (!cx->getPendingException(&result)) {
-          return false;
-        }
-        cx->clearPendingException();
-
-        // Step 3.e.iii.1.b. Let suppressed be completion.[[Value]].
-        JS::Rooted<JS::Value> suppressed(cx, latestException);
-
-        // Steps 3.e.iii.1.c-e.
-        ErrorObject* errorObj = CreateSuppressedError(cx, result, suppressed);
-        if (!errorObj) {
-          return false;
-        }
-        // Step 3.e.iii.1.f. Set completion to ThrowCompletion(error).
-        latestException.set(ObjectValue(*errorObj));
-      } else {
-        // Step 3.e.iii.2. Else,
-        // Step 3.e.iii.2.a. Set completion to result.
-        hadError = true;
-        if (cx->isExceptionPending()) {
-          if (!cx->getPendingException(&latestException)) {
-            return false;
-          }
-          cx->clearPendingException();
-        }
-      }
-    }
-  }
-
-  // Step 6. Set disposeCapability.[[DisposableResourceStack]] to a new empty
-  // List.
-  clear();
-
-  // Step 7. Return ? completion.
-  if (hadError) {
-    cx->setPendingException(latestException, ShouldCaptureStack::Maybe);
-    return false;
-  }
-
-  return true;
-}
-#endif
 
 } /* namespace js */
 

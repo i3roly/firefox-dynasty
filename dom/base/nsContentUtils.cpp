@@ -145,6 +145,7 @@
 #include "mozilla/dom/BrowserParent.h"
 #include "mozilla/dom/BrowsingContext.h"
 #include "mozilla/dom/BrowsingContextGroup.h"
+#include "mozilla/dom/CacheExpirationTime.h"
 #include "mozilla/dom/CallbackFunction.h"
 #include "mozilla/dom/CallbackObject.h"
 #include "mozilla/dom/ChromeMessageBroadcaster.h"
@@ -426,6 +427,7 @@ nsIXPConnect* nsContentUtils::sXPConnect;
 nsIScriptSecurityManager* nsContentUtils::sSecurityManager;
 nsIPrincipal* nsContentUtils::sSystemPrincipal;
 nsIPrincipal* nsContentUtils::sNullSubjectPrincipal;
+nsIPrincipal* nsContentUtils::sFingerprintingProtectionPrincipal;
 nsIConsoleService* nsContentUtils::sConsoleService;
 
 static nsTHashMap<RefPtr<nsAtom>, EventNameMapping>* sAtomEventTable;
@@ -818,6 +820,15 @@ nsresult nsContentUtils::Init() {
   }
 
   nullPrincipal.forget(&sNullSubjectPrincipal);
+
+  RefPtr<nsIPrincipal> fingerprintingProtectionPrincipal =
+      BasePrincipal::CreateContentPrincipal(
+          "about:fingerprintingprotection"_ns);
+  if (!fingerprintingProtectionPrincipal) {
+    return NS_ERROR_FAILURE;
+  }
+
+  fingerprintingProtectionPrincipal.forget(&sFingerprintingProtectionPrincipal);
 
   if (!InitializeEventTable()) return NS_ERROR_FAILURE;
 
@@ -1973,6 +1984,7 @@ void nsContentUtils::Shutdown() {
   NS_IF_RELEASE(sSecurityManager);
   NS_IF_RELEASE(sSystemPrincipal);
   NS_IF_RELEASE(sNullSubjectPrincipal);
+  NS_IF_RELEASE(sFingerprintingProtectionPrincipal);
 
   sBidiKeyboard = nullptr;
 
@@ -6364,7 +6376,12 @@ already_AddRefed<nsIDragSession> nsContentUtils::GetDragSession(
 /* static */
 already_AddRefed<nsIDragSession> nsContentUtils::GetDragSession(
     nsPresContext* aPC) {
-  return GetDragSession(aPC->GetRootWidget());
+  NS_ENSURE_TRUE(aPC, nullptr);
+  auto* widget = aPC->GetRootWidget();
+  if (!widget) {
+    return nullptr;
+  }
+  return GetDragSession(widget);
 }
 
 /* static */
@@ -8836,7 +8853,8 @@ nsresult nsContentUtils::SendMouseEvent(
     msg = eMouseLongTap;
   } else if (aType.EqualsLiteral("contextmenu")) {
     msg = eContextMenu;
-    contextMenuKey = (aButton == 0);
+    contextMenuKey = !aButton && aInputSourceArg !=
+                                     dom::MouseEvent_Binding::MOZ_SOURCE_TOUCH;
   } else if (aType.EqualsLiteral("MozMouseHittest")) {
     msg = eMouseHitTest;
   } else if (aType.EqualsLiteral("MozMouseExploreByTouch")) {
@@ -11402,7 +11420,9 @@ nsContentUtils::GetSubresourceCacheValidationInfo(nsIRequest* aRequest,
   if (nsCOMPtr<nsICacheInfoChannel> cache = do_QueryInterface(aRequest)) {
     uint32_t value = 0;
     if (NS_SUCCEEDED(cache->GetCacheTokenExpirationTime(&value))) {
-      info.mExpirationTime.emplace(value);
+      // NOTE: If the cache doesn't expire, the value should be
+      // nsICacheEntry::NO_EXPIRATION_TIME.
+      info.mExpirationTime.emplace(CacheExpirationTime::ExpireAt(value));
     }
   }
 
@@ -11439,10 +11459,22 @@ nsContentUtils::GetSubresourceCacheValidationInfo(nsIRequest* aRequest,
   if (knownCacheable) {
     MOZ_ASSERT(!info.mExpirationTime);
     MOZ_ASSERT(!info.mMustRevalidate);
-    info.mExpirationTime = Some(0);  // 0 means "doesn't expire".
+    info.mExpirationTime = Some(CacheExpirationTime::Never());
   }
 
   return info;
+}
+
+CacheExpirationTime nsContentUtils::GetSubresourceCacheExpirationTime(
+    nsIRequest* aRequest, nsIURI* aURI) {
+  auto info = GetSubresourceCacheValidationInfo(aRequest, aURI);
+
+  // For now, we never cache entries that we have to revalidate, or whose
+  // channel don't support caching.
+  if (info.mMustRevalidate || !info.mExpirationTime) {
+    return CacheExpirationTime::AlreadyExpired();
+  }
+  return *info.mExpirationTime;
 }
 
 /* static */

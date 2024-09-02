@@ -95,7 +95,6 @@ class TabPreview @JvmOverloads constructor(
 
                             BrowserNavBar(
                                 isPrivateMode = browserStore.state.selectedTab?.content?.private ?: false,
-                                isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
                                 browserStore = browserStore,
                                 menuButton = MenuButton(context).apply {
                                     setColorFilter(
@@ -106,7 +105,7 @@ class TabPreview @JvmOverloads constructor(
                                     )
                                 },
                                 newTabMenu = NewTabMenu(context, onItemTapped = {}),
-                                tabsCounterMenu = TabCounterMenu(context, onItemTapped = {}),
+                                tabsCounterMenu = lazy { TabCounterMenu(context, onItemTapped = {}) },
                                 onBackButtonClick = {
                                     // no-op
                                 },
@@ -132,6 +131,9 @@ class TabPreview @JvmOverloads constructor(
                                     // no-op
                                 },
                                 onMenuButtonClick = {
+                                    // no-op
+                                },
+                                onVisibilityUpdated = {
                                     // no-op
                                 },
                             )

@@ -29,8 +29,7 @@ nsIFrame* NS_NewSVGContainerFrame(mozilla::PresShell* aPresShell,
   // If we were called directly, then the frame is for a <defs> or
   // an unknown element type. In both cases we prevent the content
   // from displaying directly.
-  frame->AddStateBits(NS_FRAME_IS_NONDISPLAY |
-                      NS_STATE_SVG_RENDERING_OBSERVER_CONTAINER);
+  frame->AddStateBits(NS_FRAME_IS_NONDISPLAY);
   return frame;
 }
 
@@ -197,9 +196,9 @@ void SVGDisplayContainerFrame::RemoveFrame(DestroyContext& aContext,
   SVGContainerFrame::RemoveFrame(aContext, aListID, aOldFrame);
 }
 
-bool SVGDisplayContainerFrame::IsSVGTransformed(
-    gfx::Matrix* aOwnTransform, gfx::Matrix* aFromParentTransform) const {
-  return SVGUtils::IsSVGTransformed(this, aOwnTransform, aFromParentTransform);
+bool SVGDisplayContainerFrame::DoGetParentSVGTransforms(
+    gfx::Matrix* aFromParentTransform) const {
+  return SVGUtils::GetParentSVGTransforms(this, aFromParentTransform);
 }
 
 //----------------------------------------------------------------------

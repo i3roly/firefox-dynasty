@@ -270,6 +270,38 @@ static void AddDeveloperRepoDirToPolicy(sandbox::TargetPolicy* aPolicy) {
 
 #undef WSTRING
 
+static void EnsureAppLockerAccess(sandbox::TargetPolicy* aPolicy) {
+  if (aPolicy->GetLockdownTokenLevel() < sandbox::USER_LIMITED) {
+    // The following rules are to allow DLLs to be loaded when the token level
+    // blocks access to AppLocker. If the sandbox does not allow access to the
+    // DLL or the AppLocker rules specifically block it, then it will not load.
+    auto result = aPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                                   sandbox::TargetPolicy::FILES_ALLOW_READONLY,
+                                   L"\\Device\\SrpDevice");
+    if (sandbox::SBOX_ALL_OK != result) {
+      NS_ERROR("Failed to add rule for SrpDevice.");
+      LOG_E("Failed (ResultCode %d) to add read access to SrpDevice", result);
+    }
+    result = aPolicy->AddRule(
+        sandbox::TargetPolicy::SUBSYS_REGISTRY,
+        sandbox::TargetPolicy::REG_ALLOW_READONLY,
+        L"HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Srp\\GP\\");
+    if (sandbox::SBOX_ALL_OK != result) {
+      NS_ERROR("Failed to add rule for Srp\\GP.");
+      LOG_E("Failed (ResultCode %d) to add read access to Srp\\GP", result);
+    }
+    // On certain Windows versions there is a double slash before GP.
+    result = aPolicy->AddRule(
+        sandbox::TargetPolicy::SUBSYS_REGISTRY,
+        sandbox::TargetPolicy::REG_ALLOW_READONLY,
+        L"HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Srp\\\\GP\\");
+    if (sandbox::SBOX_ALL_OK != result) {
+      NS_ERROR("Failed to add rule for Srp\\\\GP.");
+      LOG_E("Failed (ResultCode %d) to add read access to Srp\\\\GP", result);
+    }
+  }
+}
+
 Result<Ok, mozilla::ipc::LaunchError> SandboxBroker::LaunchApp(
     const wchar_t* aPath, const wchar_t* aArguments,
     base::EnvironmentMap& aEnvironment, GeckoProcessType aProcessType,
@@ -298,6 +330,8 @@ Result<Ok, mozilla::ipc::LaunchError> SandboxBroker::LaunchApp(
         mPolicy->SetProcessMitigations(mitigations) == sandbox::SBOX_ALL_OK,
         "Setting the reduced set of flags should always succeed");
   }
+
+  EnsureAppLockerAccess(mPolicy);
 
   // If logging enabled, set up the policy.
   if (aEnableLogging) {
@@ -1001,40 +1035,86 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
         LOG_E("Failed (ResultCode %d) to add read access to: %S", result,
               fontsStr.c_str());
       }
+    }
 
-      // Read access for MF Media Source Activate and subkeys/values.
-      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
-                                sandbox::TargetPolicy::REG_ALLOW_READONLY,
-                                L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID"
-                                L"\\{e79167d7-1b85-4d78-b603-798e0e1a4c67}*");
+    // Add access to Windows system binary dir to allow DLLs that are not
+    // required in all content processes to load later.
+    wchar_t* systemBinPath;
+    if (SUCCEEDED(::SHGetKnownFolderPath(FOLDERID_System, 0, nullptr,
+                                         &systemBinPath))) {
+      std::wstring systemBinPathStr = systemBinPath;
+      ::CoTaskMemFree(systemBinPath);
+      systemBinPathStr += L"\\*";
+      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
+                                sandbox::TargetPolicy::FILES_ALLOW_READONLY,
+                                systemBinPathStr.c_str());
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_ERROR("Failed to add rule for system bin dir.");
+        LOG_E("Failed (ResultCode %d) to add read access to: %S", result,
+              systemBinPathStr.c_str());
+      }
+    }
+
+    // Read access for MF Media Source Activate and subkeys/values.
+    result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
+                              sandbox::TargetPolicy::REG_ALLOW_READONLY,
+                              L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID"
+                              L"\\{e79167d7-1b85-4d78-b603-798e0e1a4c67}*");
+    if (sandbox::SBOX_ALL_OK != result) {
+      NS_ERROR("Failed to add rule for MFStartup CLSID.");
+      LOG_E("Failed (ResultCode %d) to add rule for MFStartup CLSID.", result);
+    }
+
+    // Read access for other Media Foundation Classes.
+    result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
+                              sandbox::TargetPolicy::REG_ALLOW_READONLY,
+                              L"HKEY_LOCAL_MACHINE\\"
+                              L"Software\\Classes\\MediaFoundation\\*");
+    if (sandbox::SBOX_ALL_OK != result) {
+      NS_ERROR("Failed to add rule for MFStartup CLSID.");
+      LOG_E("Failed (ResultCode %d) to add rule for MFStartup CLSID.", result);
+    }
+
+    // Read access for MF H264 Encoder and subkeys/values.
+    result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
+                              sandbox::TargetPolicy::REG_ALLOW_READONLY,
+                              L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID"
+                              L"\\{6CA50344-051A-4DED-9779-A43305165E35}*");
+    if (sandbox::SBOX_ALL_OK != result) {
+      NS_ERROR("Failed to add rule for MF H264 Encoder CLSID.");
+      LOG_E("Failed (ResultCode %d) to add rule for MF H264 Encoder CLSID.",
+            result);
+    }
+
+#if !defined(_WIN64)
+    BOOL isWow64Process;
+    if (::IsWow64Process(::GetCurrentProcess(), &isWow64Process) &&
+        isWow64Process) {
+      // Read access for other Media Foundation Classes for WOW64.
+      result = mPolicy->AddRule(
+          sandbox::TargetPolicy::SUBSYS_REGISTRY,
+          sandbox::TargetPolicy::REG_ALLOW_READONLY,
+          L"HKEY_LOCAL_MACHINE\\"
+          L"Software\\Classes\\WOW6432Node\\MediaFoundation\\*");
       if (sandbox::SBOX_ALL_OK != result) {
         NS_ERROR("Failed to add rule for MFStartup CLSID.");
         LOG_E("Failed (ResultCode %d) to add rule for MFStartup CLSID.",
               result);
       }
 
-      // Read access for other Media Foundation Classes.
-      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
-                                sandbox::TargetPolicy::REG_ALLOW_READONLY,
-                                L"HKEY_LOCAL_MACHINE\\"
-                                L"Software\\Classes\\MediaFoundation\\*");
-      if (sandbox::SBOX_ALL_OK != result) {
-        NS_ERROR("Failed to add rule for MFStartup CLSID.");
-        LOG_E("Failed (ResultCode %d) to add rule for MFStartup CLSID.",
-              result);
-      }
-
-      // Read access for MF H264 Encoder and subkeys/values.
-      result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_REGISTRY,
-                                sandbox::TargetPolicy::REG_ALLOW_READONLY,
-                                L"HKEY_LOCAL_MACHINE\\Software\\Classes\\CLSID"
-                                L"\\{6CA50344-051A-4DED-9779-A43305165E35}*");
+      // Read access for MF H264 Encoder and subkeys/values for WOW64.
+      result = mPolicy->AddRule(
+          sandbox::TargetPolicy::SUBSYS_REGISTRY,
+          sandbox::TargetPolicy::REG_ALLOW_READONLY,
+          L"HKEY_LOCAL_MACHINE\\Software\\Classes\\WOW6432Node\\CLSID"
+          L"\\{6CA50344-051A-4DED-9779-A43305165E35}*");
       if (sandbox::SBOX_ALL_OK != result) {
         NS_ERROR("Failed to add rule for MF H264 Encoder CLSID.");
         LOG_E("Failed (ResultCode %d) to add rule for MF H264 Encoder CLSID.",
               result);
       }
     }
+#endif
 
     // We still currently create IPC named pipes in the content process.
     result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_NAMED_PIPES,
@@ -1784,31 +1864,6 @@ bool SandboxBroker::SetSecurityLevelForGMPlugin(SandboxLevel aLevel,
                             L"HKEY_LOCAL_"
                             L"MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVer"
                             L"sion\\SideBySide\\PreferExternalManifest");
-  SANDBOX_ENSURE_SUCCESS(
-      result,
-      "With these static arguments AddRule should never fail, what happened?");
-
-  // The following rules were added to allow a GMP to be loaded when any
-  // AppLocker DLL rules are specified. If the rules specifically block the DLL
-  // then it will not load.
-  result = mPolicy->AddRule(sandbox::TargetPolicy::SUBSYS_FILES,
-                            sandbox::TargetPolicy::FILES_ALLOW_READONLY,
-                            L"\\Device\\SrpDevice");
-  SANDBOX_ENSURE_SUCCESS(
-      result,
-      "With these static arguments AddRule should never fail, what happened?");
-  result = mPolicy->AddRule(
-      sandbox::TargetPolicy::SUBSYS_REGISTRY,
-      sandbox::TargetPolicy::REG_ALLOW_READONLY,
-      L"HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Srp\\GP\\");
-  SANDBOX_ENSURE_SUCCESS(
-      result,
-      "With these static arguments AddRule should never fail, what happened?");
-  // On certain Windows versions there is a double slash before GP in the path.
-  result = mPolicy->AddRule(
-      sandbox::TargetPolicy::SUBSYS_REGISTRY,
-      sandbox::TargetPolicy::REG_ALLOW_READONLY,
-      L"HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Control\\Srp\\\\GP\\");
   SANDBOX_ENSURE_SUCCESS(
       result,
       "With these static arguments AddRule should never fail, what happened?");

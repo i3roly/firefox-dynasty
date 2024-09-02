@@ -99,7 +99,6 @@
 #include "prtime.h"
 #include "prenv.h"
 
-#include "mozilla/WidgetTraceEvent.h"
 #include "nsContentUtils.h"
 #include "nsISupportsPrimitives.h"
 #include "nsITheme.h"
@@ -908,14 +907,6 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
       !sFirstTopLevelWindowCreated) {
     sFirstTopLevelWindowCreated = true;
     mWnd = ConsumePreXULSkeletonUIHandle();
-    auto skeletonUIError = GetPreXULSkeletonUIErrorReason();
-    if (skeletonUIError) {
-      nsAutoString errorString(
-          GetPreXULSkeletonUIErrorString(skeletonUIError.value()));
-      Telemetry::ScalarSet(
-          Telemetry::ScalarID::STARTUP_SKELETON_UI_DISABLED_REASON,
-          errorString);
-    }
     if (mWnd) {
       MOZ_ASSERT(style == kPreXULSkeletonUIWindowStyle,
                  "The skeleton UI window style should match the expected "
@@ -992,35 +983,37 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
     }
   }
 
-  if (Preferences::GetBool("browser.privateWindowSeparation.enabled", true) &&
-      (aInitData->mIsPrivate)) {
+  {
     // Although permanent Private Browsing mode is indeed Private Browsing,
     // we choose to make it look like regular Firefox in terms of the icon
     // it uses (which also means we shouldn't use the Private Browsing
     // AUMID).
-    if (!StaticPrefs::browser_privatebrowsing_autostart()) {
-      RefPtr<IPropertyStore> pPropStore;
-      if (!FAILED(SHGetPropertyStoreForWindow(mWnd, IID_IPropertyStore,
-                                              getter_AddRefs(pPropStore)))) {
-        PROPVARIANT pv;
-        nsAutoString aumid;
-        // make sure we're using the private browsing AUMID so that taskbar
-        // grouping works properly
-        Unused << NS_WARN_IF(
-            !mozilla::widget::WinTaskbar::GenerateAppUserModelID(aumid, true));
-        if (!FAILED(InitPropVariantFromString(aumid.get(), &pv))) {
-          if (!FAILED(pPropStore->SetValue(PKEY_AppUserModel_ID, pv))) {
-            pPropStore->Commit();
-          }
-
-          PropVariantClear(&pv);
+    bool usePrivateAumid =
+        Preferences::GetBool("browser.privateWindowSeparation.enabled", true) &&
+        (aInitData->mIsPrivate) &&
+        !StaticPrefs::browser_privatebrowsing_autostart();
+    RefPtr<IPropertyStore> pPropStore;
+    if (!FAILED(SHGetPropertyStoreForWindow(mWnd, IID_IPropertyStore,
+                                            getter_AddRefs(pPropStore)))) {
+      PROPVARIANT pv;
+      nsAutoString aumid;
+      // Make sure we're using the correct AUMID so that taskbar
+      // grouping works properly
+      Unused << NS_WARN_IF(!mozilla::widget::WinTaskbar::GenerateAppUserModelID(
+          aumid, usePrivateAumid));
+      if (!FAILED(InitPropVariantFromString(aumid.get(), &pv))) {
+        if (!FAILED(pPropStore->SetValue(PKEY_AppUserModel_ID, pv))) {
+          pPropStore->Commit();
         }
+
+        PropVariantClear(&pv);
       }
-      HICON icon = ::LoadIconW(::GetModuleHandleW(nullptr),
-                               MAKEINTRESOURCEW(IDI_PBMODE));
-      SetBigIcon(icon);
-      SetSmallIcon(icon);
     }
+    HICON icon = ::LoadIconW(
+        ::GetModuleHandleW(nullptr),
+        MAKEINTRESOURCEW(usePrivateAumid ? IDI_PBMODE : IDI_APPICON));
+    SetBigIcon(icon);
+    SetSmallIcon(icon);
   }
 
   mDeviceNotifyHandle = InputDeviceUtils::RegisterNotification(mWnd);
@@ -2991,8 +2984,7 @@ void nsWindow::SetCursor(const Cursor& aCursor) {
  * SECTION: nsIWidget::Get/SetTransparencyMode
  *
  * Manage the transparency mode of the window containing this
- * widget. Only works for popup and dialog windows when the
- * Desktop Window Manager compositor is not enabled.
+ * widget.
  *
  **************************************************************/
 
@@ -4304,6 +4296,12 @@ bool nsWindow::DispatchMouseEvent(EventMessage aEventMessage, WPARAM wParam,
     mouseOrPointerEvent.pointerId = pointerId;
   }
 
+  if (aEventMessage == eContextMenu &&
+      aInputSource == MouseEvent_Binding::MOZ_SOURCE_TOUCH) {
+    MOZ_ASSERT(!aIsContextMenuKey);
+    mouseOrPointerEvent.mContextMenuTrigger = WidgetMouseEvent::eNormal;
+  }
+
   // Static variables used to distinguish simple-, double- and triple-clicks.
   static POINT sLastMousePoint = {0};
   static LONG sLastMouseDownTime = 0L;
@@ -4699,13 +4697,6 @@ LRESULT CALLBACK nsWindow::WindowProcInternal(HWND hWnd, UINT msg,
       WNDPROC prevWindowProc = (WNDPROC)::GetWindowLongPtr(hWnd, GWLP_USERDATA);
       return ::CallWindowProcW(prevWindowProc, hWnd, msg, wParam, lParam);
     }
-  }
-
-  if (msg == MOZ_WM_TRACE) {
-    // This is a tracer event for measuring event loop latency.
-    // See WidgetTraceEvent.cpp for more details.
-    mozilla::SignalTracerThread();
-    return 0;
   }
 
   // Get the window which caused the event and ask it to process the message
@@ -5445,10 +5436,15 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
         pos = lParamToClient(lParam);
       }
 
-      result = DispatchMouseEvent(
-          eContextMenu, wParam, pos, contextMenukey,
-          contextMenukey ? MouseButton::ePrimary : MouseButton::eSecondary,
-          MOUSE_INPUT_SOURCE());
+      uint16_t inputSource = MOUSE_INPUT_SOURCE();
+      int16_t button =
+          (contextMenukey ||
+           inputSource == dom::MouseEvent_Binding::MOZ_SOURCE_TOUCH)
+              ? MouseButton::ePrimary
+              : MouseButton::eSecondary;
+
+      result = DispatchMouseEvent(eContextMenu, wParam, pos, contextMenukey,
+                                  button, inputSource);
       if (lParam != -1 && !result && mCustomNonClient &&
           mDraggableRegion.Contains(GET_X_LPARAM(pos), GET_Y_LPARAM(pos))) {
         // Blank area hit, throw up the system menu.
@@ -7364,51 +7360,14 @@ void nsWindow::SetWindowTranslucencyInner(TransparencyMode aMode) {
     return;
   }
 
-  // stop on dialogs and popups!
-  HWND hWnd = WinUtils::GetTopLevelHWND(mWnd, true);
-  nsWindow* parent = WinUtils::GetNSWindowPtr(hWnd);
-
-  if (!parent) {
-    NS_WARNING("Trying to use transparent chrome in an embedded context");
-    return;
-  }
-
-  if (parent != this) {
-    NS_WARNING(
-        "Setting SetWindowTranslucencyInner on a parent this is not us!");
-  }
-
-  if (aMode == TransparencyMode::Transparent) {
-    // If we're switching to the use of a transparent window, hide the chrome
-    // on our parent.
-    HideWindowChrome(true);
-  } else if (mHideChrome &&
-             mTransparencyMode == TransparencyMode::Transparent) {
-    // if we're switching out of transparent, re-enable our parent's chrome.
-    HideWindowChrome(false);
-  }
-
-  LONG_PTR style = ::GetWindowLongPtrW(hWnd, GWL_STYLE),
-           exStyle = ::GetWindowLongPtr(hWnd, GWL_EXSTYLE);
-
-  if (parent->mIsVisible) {
-    style |= WS_VISIBLE;
-    if (parent->mFrameState->GetSizeMode() == nsSizeMode_Maximized) {
-      style |= WS_MAXIMIZE;
-    } else if (parent->mFrameState->GetSizeMode() == nsSizeMode_Minimized) {
-      style |= WS_MINIMIZE;
-    }
-  }
-
+  MOZ_ASSERT(WinUtils::GetTopLevelHWND(mWnd, true) == mWnd);
+  LONG_PTR exStyle = ::GetWindowLongPtr(mWnd, GWL_EXSTYLE);
   if (aMode == TransparencyMode::Transparent) {
     exStyle |= WS_EX_LAYERED;
   } else {
     exStyle &= ~WS_EX_LAYERED;
   }
-
-  VERIFY_WINDOW_STYLE(style);
-  ::SetWindowLongPtrW(hWnd, GWL_STYLE, style);
-  ::SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+  ::SetWindowLongPtrW(mWnd, GWL_EXSTYLE, exStyle);
 
   mTransparencyMode = aMode;
 

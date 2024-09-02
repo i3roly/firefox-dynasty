@@ -8,11 +8,14 @@
 
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 import { SelectableProfile } from "./SelectableProfile.sys.mjs";
+import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   CryptoUtils: "resource://services-crypto/utils.sys.mjs",
+  EveryWindow: "resource:///modules/EveryWindow.sys.mjs",
+  PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   Sqlite: "resource://gre/modules/Sqlite.sys.mjs",
 });
 
@@ -23,16 +26,49 @@ XPCOMUtils.defineLazyServiceGetter(
   "nsIToolkitProfileService"
 );
 
-const PROFILES_CRYPTO_SALT_LENGTH_BYTES = 8;
+const PROFILES_CRYPTO_SALT_LENGTH_BYTES = 16;
 
 /**
  * The service that manages selectable profiles
  */
-export class SelectableProfileService {
+class SelectableProfileServiceClass {
   #connection = null;
   #asyncShutdownBlocker = null;
   #initialized = false;
   #groupToolkitProfile = null;
+  #currentProfile = null;
+  #everyWindowCallbackId = "SelectableProfileService";
+
+  // Do not use. Only for testing.
+  constructor() {
+    if (Cu.isInAutomation) {
+      this.#groupToolkitProfile = {
+        storeID: "12345678",
+        rootDir: Services.dirsvc.get("ProfD", Ci.nsIFile),
+      };
+    } else {
+      this.#groupToolkitProfile = lazy.ProfileService.currentProfile;
+    }
+  }
+
+  // Do not use. Only for testing.
+  set groupToolkitProfile(mockToolkitProfile) {
+    if (Cu.isInAutomation) {
+      this.#groupToolkitProfile = mockToolkitProfile;
+    }
+  }
+
+  get toolkitProfileRootDir() {
+    return this.#groupToolkitProfile.rootDir;
+  }
+
+  get currentProfile() {
+    return this.#currentProfile;
+  }
+
+  get initialized() {
+    return this.#initialized;
+  }
 
   static get PROFILE_GROUPS_DIR() {
     return PathUtils.join(
@@ -42,7 +78,9 @@ export class SelectableProfileService {
   }
 
   async createProfilesStorePath() {
-    await IOUtils.makeDirectory(SelectableProfileService.PROFILE_GROUPS_DIR);
+    await IOUtils.makeDirectory(
+      SelectableProfileServiceClass.PROFILE_GROUPS_DIR
+    );
 
     const storageID = Services.uuid
       .generateUUID()
@@ -50,6 +88,7 @@ export class SelectableProfileService {
       .replace("{", "")
       .split("-")[0];
     this.#groupToolkitProfile.storeID = storageID;
+    lazy.ProfileService.flush();
   }
 
   async getProfilesStorePath() {
@@ -58,7 +97,7 @@ export class SelectableProfileService {
     }
 
     return PathUtils.join(
-      SelectableProfileService.PROFILE_GROUPS_DIR,
+      SelectableProfileServiceClass.PROFILE_GROUPS_DIR,
       `${this.#groupToolkitProfile.storeID}.sqlite`
     );
   }
@@ -72,11 +111,52 @@ export class SelectableProfileService {
       return;
     }
 
-    this.#groupToolkitProfile = lazy.ProfileService.currentProfile;
+    this.initWindowTracker();
 
     await this.initConnection();
 
+    // Get the SelectableProfile by the profile directory
+    this.#currentProfile = await this.getProfileByPath(
+      this.#groupToolkitProfile.rootDir
+    );
+
     this.#initialized = true;
+  }
+
+  async uninit() {
+    if (!this.#initialized) {
+      return;
+    }
+
+    lazy.EveryWindow.unregisterCallback(this.#everyWindowCallbackId);
+
+    await this.closeConnection();
+
+    this.#currentProfile = null;
+
+    this.#initialized = false;
+  }
+
+  initWindowTracker() {
+    lazy.EveryWindow.registerCallback(
+      this.#everyWindowCallbackId,
+      window => {
+        let isPBM = lazy.PrivateBrowsingUtils.isWindowPrivate(window);
+        if (isPBM) {
+          return;
+        }
+
+        window.addEventListener("activate", this);
+      },
+      window => {
+        let isPBM = lazy.PrivateBrowsingUtils.isWindowPrivate(window);
+        if (isPBM) {
+          return;
+        }
+
+        window.removeEventListener("activate", this);
+      }
+    );
   }
 
   async initConnection() {
@@ -132,6 +212,20 @@ export class SelectableProfileService {
     }
   }
 
+  async handleEvent(event) {
+    switch (event.type) {
+      case "activate": {
+        if (
+          this.#groupToolkitProfile.rootDir.path === this.currentProfile.path
+        ) {
+          return;
+        }
+        this.#groupToolkitProfile.rootDir = await this.currentProfile.rootDir;
+        lazy.ProfileService.flush();
+      }
+    }
+  }
+
   /**
    * Create tables for Selectable Profiles if they don't already exist
    */
@@ -184,6 +278,7 @@ export class SelectableProfileService {
     }
 
     this.#groupToolkitProfile.storeID = null;
+    lazy.ProfileService.flush();
     await this.vacuumAndCloseGroupDB();
   }
 
@@ -244,15 +339,20 @@ export class SelectableProfileService {
    * directory is salt + "." + profileName. (Ex. c7IZaLu7.testProfile)
    *
    * @param {string} aProfileName The name of the profile to be created
-   * @returns {string} The directory name for the given profile name
+   * @returns {string} The relative path for the given profile
    */
   async createProfileDirs(aProfileName) {
     const salt = btoa(
       lazy.CryptoUtils.generateRandomBytesLegacy(
         PROFILES_CRYPTO_SALT_LENGTH_BYTES
       )
-    ).slice(0, 8);
-    const profileDir = `${salt}.${aProfileName}`;
+    );
+    // Sometimes the string from CryptoUtils.generateRandomBytesLegacy will
+    // contain non-word characters that we don't want to include in the profile
+    // directory name. So we match only word characters for the directory name.
+    const safeSalt = salt.match(/\w/g).join("").slice(0, 8);
+
+    const profileDir = `${safeSalt}.${aProfileName}`;
 
     // Handle errors in bug 1909919
     await Promise.all([
@@ -269,7 +369,32 @@ export class SelectableProfileService {
         )
       ),
     ]);
-    return profileDir;
+
+    return IOUtils.getDirectory(
+      PathUtils.join(
+        Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+        profileDir
+      )
+    );
+  }
+
+  /**
+   * Get a relative to the Profiles directory for the given profile directory.
+   *
+   * @param {nsIFile} aProfilePath Path to profile directory.
+   *
+   * @returns {string} A relative path of the profile directory.
+   */
+  getRelativeProfilePath(aProfilePath) {
+    let relativePath = aProfilePath.getRelativePath(
+      Services.dirsvc.get("UAppData", Ci.nsIFile)
+    );
+
+    if (AppConstants.platform === "win") {
+      relativePath = relativePath.replace("/", "\\");
+    }
+
+    return relativePath;
   }
 
   /**
@@ -278,23 +403,28 @@ export class SelectableProfileService {
    *
    * @param {object} profile An object that contains a path, name, themeL10nId,
    *                 themeFg, and themeBg for creating a new profile.
+   * @returns {SelectableProfile}
+   *   The newly created profile object.
    */
   async createProfile(profile) {
-    let profileDir = await this.createProfileDirs(profile.name);
-    profile.path = profileDir;
+    let profilePath = await this.createProfileDirs(profile.name);
+    let relativePath = this.getRelativeProfilePath(profilePath);
+    profile.path = relativePath;
     await this.#connection.execute(
       `INSERT INTO Profiles VALUES (NULL, :path, :name, :avatar, :themeL10nId, :themeFg, :themeBg);`,
       profile
     );
-    return this.getProfileByName(profile.name);
+    return this.getProfileByPath(profilePath);
   }
 
   /**
    * Remove the profile directories.
    *
-   * @param {string} profileDir Directory name of profile to be removed.
+   * @param {SelectableProfile} aSelectableProfile The SelectableProfile of the
+   * directories to be removed.
    */
-  async removeProfileDirs(profileDir) {
+  async removeProfileDirs(aSelectableProfile) {
+    let profileDir = (await aSelectableProfile.rootDir).leafName;
     // Handle errors in bug 1909919
     await Promise.all([
       IOUtils.remove(
@@ -330,7 +460,7 @@ export class SelectableProfileService {
       id: aSelectableProfile.id,
     });
     if (removeFiles) {
-      await this.removeProfileDirs(aSelectableProfile.path);
+      await this.removeProfileDirs(aSelectableProfile);
     }
   }
 
@@ -378,6 +508,9 @@ export class SelectableProfileService {
 
   /**
    * Get the complete list of profiles in the group.
+   *
+   * @returns {SelectableProfile[]}
+   *   An array of profiles in the group.
    */
   async getProfiles() {
     return (
@@ -391,6 +524,8 @@ export class SelectableProfileService {
    * Get a specific profile by its internal ID.
    *
    * @param {number} aProfileID The internal id of the profile
+   * @returns {SelectableProfile}
+   *   The specific profile.
    */
   async getProfile(aProfileID) {
     let row = (
@@ -399,13 +534,15 @@ export class SelectableProfileService {
       })
     )[0];
 
-    return new SelectableProfile(row);
+    return row ? new SelectableProfile(row) : null;
   }
 
   /**
    * Get a specific profile by its name.
    *
    * @param {string} aProfileNanme The name of the profile
+   * @returns {SelectableProfile}
+   *   The specific profile.
    */
   async getProfileByName(aProfileNanme) {
     let row = (
@@ -417,7 +554,27 @@ export class SelectableProfileService {
       )
     )[0];
 
-    return new SelectableProfile(row);
+    return row ? new SelectableProfile(row) : null;
+  }
+
+  /**
+   * Get a specific profile by its absolute path.
+   *
+   * @param {nsIFile} aProfilePath The path of the profile
+   * @returns {SelectableProfile|null}
+   */
+  async getProfileByPath(aProfilePath) {
+    let relativePath = this.getRelativeProfilePath(aProfilePath);
+    let row = (
+      await this.#connection.execute(
+        "SELECT * FROM Profiles WHERE path = :path;",
+        {
+          path: relativePath,
+        }
+      )
+    )[0];
+
+    return row ? new SelectableProfile(row) : null;
   }
 
   // Shared Prefs management
@@ -433,6 +590,8 @@ export class SelectableProfileService {
 
   /**
    * Get all shared prefs as a list.
+   *
+   * @returns {{name: string, value: *, type: string}}
    */
   async getAllPrefs() {
     return (
@@ -601,3 +760,6 @@ export class SelectableProfileService {
     await this.closeConnection();
   }
 }
+
+const SelectableProfileService = new SelectableProfileServiceClass();
+export { SelectableProfileService };

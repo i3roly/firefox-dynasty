@@ -477,8 +477,6 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
 
   HttpTrafficAnalyzer* GetHttpTrafficAnalyzer();
 
-  bool GetThroughCaptivePortal() { return mThroughCaptivePortal; }
-
   nsresult CompleteUpgrade(HttpTransactionShell* aTrans,
                            nsIHttpUpgradeListener* aUpgradeListener);
 
@@ -523,6 +521,9 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   //
   void BuildUserAgent();
   void InitUserAgentComponents();
+#ifdef XP_MACOSX
+  void InitMSAuthorities();
+#endif
   static void PrefsChanged(const char* pref, void* self);
   void PrefsChanged(const char* pref);
 
@@ -826,6 +827,10 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   void ExcludeHTTPSRRHost(const nsACString& aHost);
   [[nodiscard]] bool IsHostExcludedForHTTPSRR(const nsACString& aHost);
 
+#ifdef XP_MACOSX
+  [[nodiscard]] bool IsHostMSAuthority(const nsACString& aHost);
+#endif
+
  private:
   nsTHashSet<nsCString> mExcludedHttp2Origins;
   nsTHashSet<nsCString> mExcludedHttp3Origins;
@@ -833,7 +838,10 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   // A set of hosts that we should not upgrade to HTTPS with HTTPS RR.
   nsTHashSet<nsCString> mExcludedHostsForHTTPSRRUpgrade;
 
-  Atomic<bool, Relaxed> mThroughCaptivePortal{false};
+#ifdef XP_MACOSX
+  // A list of trusted Microsoft SSO authority URLs
+  nsTHashSet<nsCString> mMSAuthorities;
+#endif
 
   // The mapping of channel id and the weak pointer of nsHttpChannel.
   nsTHashMap<nsUint64HashKey, nsWeakPtr> mIDToHttpChannelMap;

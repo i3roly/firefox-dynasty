@@ -125,7 +125,7 @@ async function doBasicDisableAndEnableTest(pref) {
   });
   await check_results({
     context,
-    matches: [makeWeatherResult()],
+    matches: [QuickSuggestTestUtils.weatherResult()],
   });
 }
 
@@ -196,7 +196,7 @@ add_tasks_with_rust(
     });
     await check_results({
       context,
-      matches: [makeWeatherResult()],
+      matches: [QuickSuggestTestUtils.weatherResult()],
     });
   }
 );
@@ -666,7 +666,7 @@ async function doLocaleTest({ shouldRunTask, osUnit, unitsByLocale }) {
           ],
           isPrivate: false,
         }),
-        matches: [makeWeatherResult({ temperatureUnit })],
+        matches: [QuickSuggestTestUtils.weatherResult({ temperatureUnit })],
       });
 
       info(
@@ -681,7 +681,9 @@ async function doLocaleTest({ shouldRunTask, osUnit, unitsByLocale }) {
           ],
           isPrivate: false,
         }),
-        matches: [makeWeatherResult({ temperatureUnit: osUnit })],
+        matches: [
+          QuickSuggestTestUtils.weatherResult({ temperatureUnit: osUnit }),
+        ],
       });
       Services.prefs.clearUserPref("intl.regional_prefs.use_os_locales");
     });
@@ -707,7 +709,7 @@ add_tasks_with_rust(async function block() {
   });
   await check_results({
     context,
-    matches: [makeWeatherResult()],
+    matches: [QuickSuggestTestUtils.weatherResult()],
   });
 
   // Block the result.
@@ -724,24 +726,11 @@ add_tasks_with_rust(async function block() {
   let provider = UrlbarProvidersManager.getProvider(result.providerName);
   Assert.ok(provider, "Sanity check: Result provider found");
 
-  if (result.providerName === "UrlbarProviderQuickSuggest") {
-    provider.onLegacyEngagement(
-      "engagement",
-      context,
-      {
-        result,
-        selType: "dismiss",
-        selIndex: context.results[0].rowIndex,
-      },
-      controller
-    );
-  } else {
-    provider.onEngagement(context, controller, {
-      result,
-      selType: "dismiss",
-      selIndex: context.results[0].rowIndex,
-    });
-  }
+  provider.onEngagement(context, controller, {
+    result,
+    selType: "dismiss",
+    selIndex: context.results[0].rowIndex,
+  });
   Assert.ok(
     !UrlbarPrefs.get("suggest.weather"),
     "suggest.weather is false after blocking the result"
@@ -1226,7 +1215,7 @@ add_tasks_with_rust(async function nimbusOverride() {
     hasSuggestion: true,
   });
 
-  let defaultResult = makeWeatherResult();
+  let defaultResult = QuickSuggestTestUtils.weatherResult();
 
   // Verify a search works as expected with the default remote settings weather
   // record (which was added in the init task).
@@ -1256,7 +1245,7 @@ add_tasks_with_rust(async function nimbusOverride() {
   // The new keyword from Nimbus should match. Since keywords are defined in
   // Nimbus, the result will be served from UrlbarProviderWeather and its source
   // will be "merino", not "rust", even when Rust is enabled.
-  let merinoResult = makeWeatherResult({
+  let merinoResult = QuickSuggestTestUtils.weatherResult({
     source: "merino",
     provider: "accuweather",
     telemetryType: null,

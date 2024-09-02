@@ -27,6 +27,7 @@
 #include "mozilla/Variant.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #ifdef XP_WIN
 #  include <direct.h>
@@ -180,7 +181,7 @@
 #include "threading/Thread.h"
 #include "util/CompleteFile.h"  // js::FileContents, js::ReadCompleteFile
 #include "util/DifferentialTesting.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "util/WindowsWrapper.h"
 #include "vm/ArgumentsObject.h"
@@ -193,6 +194,7 @@
 #include "vm/JSFunction.h"
 #include "vm/JSObject.h"
 #include "vm/JSScript.h"
+#include "vm/Logging.h"
 #include "vm/ModuleBuilder.h"  // js::ModuleBuilder
 #include "vm/Modules.h"
 #include "vm/Monitor.h"
@@ -333,6 +335,114 @@ enum JSShellExitCode {
   EXITCODE_OUT_OF_MEMORY = 5,
   EXITCODE_TIMEOUT = 6
 };
+
+struct ShellLogModule {
+  // Since ShellLogModules have references to their levels created
+  // we can't move them.
+  ShellLogModule(ShellLogModule&&) = delete;
+
+  const char* name;
+  explicit ShellLogModule(const char* name) : name(name) {}
+  mozilla::AtomicLogLevel level;
+};
+
+// If asserts related to this ever fail, simply bump this number.
+//
+// This is used to construct a mozilla::Array, which is used because a
+// ShellLogModule cannot move once constructed to avoid invalidating
+// a levelRef.
+static const int MAX_LOG_MODULES = 64;
+static int initialized_modules = 0;
+mozilla::Array<mozilla::Maybe<ShellLogModule>, MAX_LOG_MODULES> logModules;
+
+JS::OpaqueLogger GetLoggerByName(const char* name) {
+  // Check for pre-existing module
+  for (auto& logger : logModules) {
+    if (logger) {
+      if (logger->name == name) {
+        return logger.ptr();
+      }
+    }
+    // We've seen all initialized, not there, break out.
+    if (!logger) break;
+  }
+
+  // Not found, allocate a new module.
+  MOZ_RELEASE_ASSERT(initialized_modules < MAX_LOG_MODULES - 1);
+  auto index = initialized_modules++;
+  logModules[index].emplace(name);
+  return logModules[index].ptr();
+}
+
+mozilla::AtomicLogLevel& GetLevelRef(JS::OpaqueLogger logger) {
+  ShellLogModule* slm = static_cast<ShellLogModule*>(logger);
+  return slm->level;
+}
+
+void LogPrintVA(const JS::OpaqueLogger logger, mozilla::LogLevel level,
+                const char* fmt, va_list ap) {
+  ShellLogModule* mod = static_cast<ShellLogModule*>(logger);
+  fprintf(stderr, "[%s] ", mod->name);
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\n");
+}
+
+JS::LoggingInterface shellLoggingInterface = {GetLoggerByName, LogPrintVA,
+                                              GetLevelRef};
+
+static void ToLower(const char* src, char* dest, size_t len) {
+  for (size_t c = 0; c < len; c++) {
+    dest[c] = (char)(tolower(src[c]));
+  }
+}
+
+// Run this after initialiation!
+void ParseLoggerOptions() {
+  char* mixedCaseOpts = getenv("MOZ_LOG");
+  if (!mixedCaseOpts) {
+    return;
+  }
+
+  // Copy into a new buffer and lower case to do case insensitive matching.
+  //
+  // Done this way rather than just using strcasestr because Windows doesn't
+  // have strcasestr as part of its base C library.
+  size_t len = strlen(mixedCaseOpts);
+  mozilla::UniqueFreePtr<char[]> logOpts(static_cast<char*>(calloc(len, 1)));
+  if (!logOpts) {
+    return;
+  }
+
+  ToLower(mixedCaseOpts, logOpts.get(), len);
+
+  // This is a really permissive parser, but will suffice!
+  for (auto& logger : logModules) {
+    if (logger) {
+      // Lowercase the logger name for strstr
+      size_t len = strlen(logger->name);
+      mozilla::UniqueFreePtr<char[]> lowerName(
+          static_cast<char*>(calloc(len, 1)));
+      ToLower(logger->name, lowerName.get(), len);
+
+      if (char* needle = strstr(logOpts.get(), lowerName.get())) {
+        // If the string to enable a logger is present, but no level is provided
+        // then default to Debug level.
+        int logLevel = static_cast<int>(mozilla::LogLevel::Debug);
+
+        if (char* colon = strchr(needle, ':')) {
+          // Parse character after colon as log level.
+          if (*(colon + 1)) {
+            logLevel = atoi(colon + 1);
+          }
+        }
+
+        fprintf(stderr, "[JS_LOG] Enabling Logger %s at level %d\n",
+                logger->name, logLevel);
+        logger->level = mozilla::ToLogLevel(logLevel);
+      }
+    }
+  }
+}
 
 /*
  * Limit the timeout to 30 minutes to prevent an overflow on platfoms
@@ -1648,7 +1758,8 @@ static bool AddIntlExtras(JSContext* cx, unsigned argc, Value* vp) {
 
   static const JSFunctionSpec funcs[] = {
       JS_SELF_HOSTED_FN("getCalendarInfo", "Intl_getCalendarInfo", 1, 0),
-      JS_FS_END};
+      JS_FS_END,
+  };
 
   if (!JS_DefineFunctions(cx, intl, funcs)) {
     return false;
@@ -2353,8 +2464,10 @@ static bool CacheOptionsCompatible(const CacheOptionSet& a,
   return a == b;
 }
 
-static const JSClass CacheEntry_class = {"CacheEntryObject",
-                                         JSCLASS_HAS_RESERVED_SLOTS(3)};
+static const JSClass CacheEntry_class = {
+    "CacheEntryObject",
+    JSCLASS_HAS_RESERVED_SLOTS(3),
+};
 
 static bool CacheEntry(JSContext* cx, unsigned argc, JS::Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -4176,8 +4289,11 @@ static const JSClassOps sandbox_classOps = {
     JS_GlobalObjectTraceHook,  // trace
 };
 
-static const JSClass sandbox_class = {"sandbox", JSCLASS_GLOBAL_FLAGS,
-                                      &sandbox_classOps};
+static const JSClass sandbox_class = {
+    "sandbox",
+    JSCLASS_GLOBAL_FLAGS,
+    &sandbox_classOps,
+};
 
 static void SetStandardRealmOptions(JS::RealmOptions& options) {
   options.creationOptions()
@@ -5255,7 +5371,8 @@ class XDRBufferObject : public NativeObject {
     "XDRBufferObject",
     JSCLASS_HAS_RESERVED_SLOTS(XDRBufferObject::RESERVED_SLOTS) |
         JSCLASS_BACKGROUND_FINALIZE,
-    &XDRBufferObject::classOps_};
+    &XDRBufferObject::classOps_,
+};
 
 XDRBufferObject* XDRBufferObject::create(JSContext* cx,
                                          JS::TranscodeBuffer&& buf) {
@@ -7936,7 +8053,8 @@ const JSClass StreamCacheEntryObject::class_ = {
     "StreamCacheEntryObject",
     JSCLASS_HAS_RESERVED_SLOTS(StreamCacheEntryObject::RESERVED_SLOTS) |
         JSCLASS_BACKGROUND_FINALIZE,
-    &StreamCacheEntryObject::classOps_};
+    &StreamCacheEntryObject::classOps_,
+};
 
 struct BufferStreamJob {
   Variant<Uint8Vector, StreamCacheEntryPtr> source;
@@ -8707,7 +8825,8 @@ static JSObject* GetDOMPrototype(JSContext* cx, JSObject* global);
 
 static const JSClass TransplantableDOMObjectClass = {
     "TransplantableDOMObject",
-    JSCLASS_IS_DOMJSCLASS | JSCLASS_HAS_RESERVED_SLOTS(1)};
+    JSCLASS_IS_DOMJSCLASS | JSCLASS_HAS_RESERVED_SLOTS(1),
+};
 
 static const JSClass TransplantableDOMProxyObjectClass =
     PROXY_CLASS_DEF("TransplantableDOMProxyObject",
@@ -9245,7 +9364,10 @@ static const JSClassOps SideEffectfulResolveObject_classOps = {
 };
 
 static const JSClass SideEffectfulResolveObject_class = {
-    "SideEffectfulResolveObject", 0, &SideEffectfulResolveObject_classOps};
+    "SideEffectfulResolveObject",
+    0,
+    &SideEffectfulResolveObject_classOps,
+};
 
 static bool CreateSideEffectfulResolveObject(JSContext* cx, unsigned argc,
                                              JS::Value* vp) {
@@ -9946,7 +10068,7 @@ JS_FN_HELP("createUserArrayBuffer", CreateUserArrayBuffer, 1, 0,
 #ifdef FUZZING_JS_FUZZILLI
 static const JSFunctionSpec shell_function_fuzzilli_hash[] = {
     JS_INLINABLE_FN("fuzzilli_hash", fuzzilli_hash, 1, 0, FuzzilliHash),
-    JS_FS_END
+    JS_FS_END,
 };
 #endif
 // clang-format on
@@ -10585,7 +10707,8 @@ static constexpr uint32_t DOM_GLOBAL_SLOTS = 1;
 static const JSClass global_class = {
     "global",
     JSCLASS_GLOBAL_FLAGS | JSCLASS_GLOBAL_FLAGS_WITH_SLOTS(DOM_GLOBAL_SLOTS),
-    &global_classOps};
+    &global_classOps,
+};
 
 /*
  * Define a FakeDOMObject constructor. It returns an object with a getter,
@@ -10775,15 +10898,19 @@ static const JSPropertySpec dom_props[] = {
     JSPropertySpec::nativeAccessors("global", JSPROP_ENUMERATE,
                                     dom_genericGetter, &dom_global_getterinfo,
                                     dom_genericSetter, &dom_global_setterinfo),
-    JS_PS_END};
+    JS_PS_END,
+};
 
 static const JSFunctionSpec dom_methods[] = {
     JS_FNINFO("doFoo", dom_genericMethod, &doFoo_methodinfo, 3,
               JSPROP_ENUMERATE),
-    JS_FS_END};
+    JS_FS_END,
+};
 
 static const JSClass dom_class = {
-    "FakeDOMObject", JSCLASS_IS_DOMJSCLASS | JSCLASS_HAS_RESERVED_SLOTS(2)};
+    "FakeDOMObject",
+    JSCLASS_IS_DOMJSCLASS | JSCLASS_HAS_RESERVED_SLOTS(2),
+};
 
 static const JSClass* GetDomClass() { return &dom_class; }
 
@@ -10928,7 +11055,9 @@ static bool TimesAccessed(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 static const JSPropertySpec TestingProperties[] = {
-    JS_PSG("timesAccessed", TimesAccessed, 0), JS_PS_END};
+    JS_PSG("timesAccessed", TimesAccessed, 0),
+    JS_PS_END,
+};
 
 static JSObject* NewGlobalObject(JSContext* cx, JS::RealmOptions& options,
                                  JSPrincipals* principals, ShellGlobalKind kind,
@@ -11959,6 +12088,11 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  if (!JS::SetLoggingInterface(shellLoggingInterface)) {
+    return 1;
+  }
+  ParseLoggerOptions();
+
   // Register telemetry callbacks, if needed.
   if (telemetryLock) {
     JS_SetAccumulateTelemetryCallback(cx, AccumulateTelemetryDataCallback);
@@ -12199,6 +12333,7 @@ bool InitOptionParser(OptionParser& op) {
                         "Enable Duplicate Named Capture Groups") ||
       !op.addBoolOption('\0', "enable-regexp-modifiers",
                         "Enable Pattern Modifiers") ||
+      !op.addBoolOption('\0', "enable-regexp-escape", "Enable RegExp.escape") ||
       !op.addBoolOption('\0', "enable-top-level-await",
                         "Enable top-level await") ||
       !op.addBoolOption('\0', "enable-import-assertions",
@@ -12580,10 +12715,10 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-float16array")) {
     JS::Prefs::setAtStartup_experimental_float16array(true);
   }
-#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_iterator_helpers(true);
   }
+#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-async-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_async_iterator_helpers(true);
   }
@@ -12598,6 +12733,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-regexp-modifiers")) {
     JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
+  }
+  if (op.getBoolOption("enable-regexp-escape")) {
+    JS::Prefs::setAtStartup_experimental_regexp_escape(true);
   }
 #endif
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE

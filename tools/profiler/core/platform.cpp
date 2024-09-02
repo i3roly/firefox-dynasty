@@ -45,11 +45,13 @@
 #include "ProfilerStackWalk.h"
 #include "ProfilerRustBindings.h"
 #include "mozilla/Assertions.h"
+#include "mozilla/Likely.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/MozPromise.h"
 #include "mozilla/Perfetto.h"
 #include "nsCOMPtr.h"
 #include "nsDebug.h"
+#include "nsISupports.h"
 #include "nsXPCOM.h"
 #include "shared-libraries.h"
 #include "VTuneProfiler.h"
@@ -141,6 +143,7 @@
 #  include <fcntl.h>
 #  include <unistd.h>
 #  include <errno.h>
+#  include <pthread.h>
 #endif
 
 #if defined(GP_OS_android)
@@ -765,6 +768,7 @@ class AsyncSignalControlThread {
 };
 
 static void* AsyncSignalControlThreadEntry(void* aArg) {
+  NS_SetCurrentThreadName("AsyncSignalControlThread");
   auto* thread = static_cast<AsyncSignalControlThread*>(aArg);
   thread->Watch();
   return nullptr;
@@ -957,7 +961,7 @@ class CorePS {
   PS_GET_AND_SET(const nsACString&, ProcessName)
   PS_GET_AND_SET(const nsACString&, ETLDplus1)
 #if !defined(XP_WIN)
-  PS_GET_AND_SET(const Maybe<nsCOMPtr<nsIFile>>&, DownloadDirectory)
+  PS_GET_AND_SET(const Maybe<nsCOMPtr<nsIFile>>&, AsyncSignalDumpDirectory)
 #endif
 
   static void SetBandwidthCounter(ProfilerBandwidthCounter* aBandwidthCounter) {
@@ -1023,7 +1027,7 @@ class CorePS {
 
   // Cached download directory for when we need to dump profiles to disk.
 #if !defined(XP_WIN)
-  Maybe<nsCOMPtr<nsIFile>> mDownloadDirectory;
+  Maybe<nsCOMPtr<nsIFile>> mAsyncSignalDumpDirectory;
 #endif
 };
 
@@ -5669,10 +5673,10 @@ Maybe<nsAutoCString> profiler_find_dump_path() {
     // Acquire the lock so that we can get things from CorePS
     PSAutoLock lock;
     Maybe<nsCOMPtr<nsIFile>> downloadDir = Nothing();
-    downloadDir = CorePS::DownloadDirectory(lock);
+    downloadDir = CorePS::AsyncSignalDumpDirectory(lock);
 
     // This needs to be done within the context of the lock, as otherwise
-    // another thread might modify CorePS::mDownloadDirectory while we're
+    // another thread might modify CorePS::mAsyncSignalDumpDirectory while we're
     // cloning the pointer.
     if (downloadDir) {
       nsCOMPtr<nsIFile> d;
@@ -5710,39 +5714,113 @@ Maybe<nsAutoCString> profiler_find_dump_path() {
 #endif
 }
 
-void profiler_dump_and_stop() {
-  // Do nothing unless we're the parent process, as we're sandboxed and can't
-  // write anyway.
-  if (XRE_IsParentProcess()) {
-    // pause the profiler until we are done dumping
-    profiler_pause();
-
-    // Try to save the profile to a file
-    if (auto path = profiler_find_dump_path()) {
-      profiler_save_profile_to_file(path.value().get());
-    } else {
-      LOG("Failed to dump profile to disk");
-    }
-
-    // Stop the profiler
-    profiler_stop();
-  }
-}
-
 void profiler_start_from_signal() {
   // Do nothing unless we're the parent process, as we're sandboxed and can't
   // write any data that we gather anyway.
   if (XRE_IsParentProcess()) {
     // Start the profiler here directly, as we're on a background thread.
     // set of preferences, configuration of them is TODO, see Bug 1866007
+    // Enabling the JS feature leaks an 8-byte object during testing, but is too
+    // useful to disable. See Bug 1904897, Bug 1699681, and browser.toml for
+    // more details.
     uint32_t features = ProfilerFeature::JS | ProfilerFeature::StackWalk |
                         ProfilerFeature::CPUUtilization;
     // as we often don't know what threads we'll care about, tell the
     // profiler to profile all threads.
     const char* filters[] = {"*"};
-    profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
-                   PROFILER_DEFAULT_INTERVAL, features, filters,
-                   MOZ_ARRAY_LENGTH(filters), 0);
+    if (MOZ_UNLIKELY(NS_IsMainThread())) {
+      // We are on the main thread here, so `NotifyProfilerStarted` will
+      // start the profiler in content/child processes.
+      profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
+                     PROFILER_DEFAULT_INTERVAL, features, filters,
+                     MOZ_ARRAY_LENGTH(filters), 0);
+    } else {
+      // Directly start the profiler on this thread. We know we're not the main
+      // thread here, so this will not start the profiler in child processes,
+      // but we want to make sure that we do it here in case the main thread is
+      // stuck.
+      profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
+                     PROFILER_DEFAULT_INTERVAL, features, filters,
+                     MOZ_ARRAY_LENGTH(filters), 0);
+      // Now also try and start the profiler from the main thread, so that the
+      // ParentProfiler will start child threads.
+      NS_DispatchToMainThread(
+          NS_NewRunnableFunction("StartProfilerInChildProcesses", [=] {
+            Unused << NotifyProfilerStarted(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
+                                            Nothing(),
+                                            PROFILER_DEFAULT_INTERVAL, features,
+                                            const_cast<const char**>(filters),
+                                            MOZ_ARRAY_LENGTH(filters), 0);
+          }));
+    }
+  }
+}
+
+void profiler_dump_and_stop() {
+  // Do nothing unless we're the parent process, as we're sandboxed and can't
+  // open a file handle anyway.
+  if (!XRE_IsParentProcess()) {
+    return;
+  }
+
+  // pause the profiler until we are done dumping
+  profiler_pause();
+
+  // Try to save the profile to a file
+  auto path = profiler_find_dump_path();
+
+  // Exit quickly if we can't find the path, while stopping the profiler
+  if (!path) {
+    LOG("Failed to find a valid dump path to write profile to disk");
+    profiler_stop();
+    return;
+  }
+
+  // Dump the profile of this process first, in case the multi-process
+  // gathering is unsuccessful (e.g. due to a blocked main threaed).
+  profiler_save_profile_to_file(path.value().get());
+
+  // We are probably not the main thread, but check anyway, and dispatch
+  // directly.
+  if (NS_IsMainThread()) {
+    nsCOMPtr<nsIProfiler> nsProfiler(
+        do_GetService("@mozilla.org/tools/profiler;1"));
+    nsProfiler->DumpProfileToFileAsyncNoJs(path.value(), 0)
+        ->Then(
+            GetMainThreadSerialEventTarget(), __func__,
+            [](void_t ok) {
+              LOG("Stopping profiler after dumping profile to disk");
+              profiler_stop();
+            },
+            [](nsresult aRv) {
+              LOG("Dumping to disk failed with error \"%s\", stopping "
+                  "profiler.",
+                  GetStaticErrorName(aRv));
+              profiler_stop();
+            });
+  } else {
+    // Dispatch a runnable, as nsProfiler classes are currently main-thread
+    // only. We also stop the profiler within the runnable, as otherwise we
+    // may find ourselves stopping the profiler before the runnable has
+    // gathered all the profile data.
+    NS_DispatchToMainThread(
+        NS_NewRunnableFunction("WriteProfileDataToFile", [=] {
+          nsCOMPtr<nsIProfiler> nsProfiler(
+              do_GetService("@mozilla.org/tools/profiler;1"));
+          nsProfiler->DumpProfileToFileAsyncNoJs(path.value(), 0)
+              ->Then(
+                  GetMainThreadSerialEventTarget(), __func__,
+                  [](void_t ok) {
+                    LOG("Stopping profiler after dumping profile to disk");
+                    profiler_stop();
+                  },
+                  [](nsresult aRv) {
+                    LOG("Dumping to disk failed with error \"%s\", stopping "
+                        "profiler.",
+                        GetStaticErrorName(aRv));
+                    profiler_stop();
+                  });
+        }));
   }
 }
 
@@ -6865,12 +6943,12 @@ bool profiler_is_paused() {
 }
 
 // See `ProfilerControl.h` for more details.
-void profiler_lookup_download_directory() {
+void profiler_lookup_async_signal_dump_directory() {
 // This implementation is causing issues on Windows (see Bug 1890154) but as it
 // only exists to support the posix signal handling (on non-windows platforms)
 // we can remove it for now.
 #if !defined(XP_WIN)
-  LOG("profiler_lookup_download_directory");
+  LOG("profiler_lookup_async_signal_dump_directory");
 
   MOZ_ASSERT(
       NS_IsMainThread(),
@@ -6881,16 +6959,47 @@ void profiler_lookup_download_directory() {
 
   // take the lock so that we can write to CorePS
   PSAutoLock lock;
+  nsresult rv;
 
-  nsCOMPtr<nsIFile> tDownloadDir;
-  nsresult rv = NS_GetSpecialDirectory(NS_OS_DEFAULT_DOWNLOAD_DIR,
-                                       getter_AddRefs(tDownloadDir));
-  if (NS_FAILED(rv)) {
-    LOG("Failed to find download directory. Profiler signal handling will not "
-        "be able to save to disk. Error: %s",
-        GetStaticErrorName(rv));
+  // Check to see if we have a `MOZ_UPLOAD_DIR` first - i.e., check to see if
+  // we're running in CI.
+  LOG("Checking if MOZ_UPLOAD_DIR exists");
+  const char* mozUploadDir = getenv("MOZ_UPLOAD_DIR");
+  if (mozUploadDir && mozUploadDir[0] != '\0') {
+    LOG("Found MOZ_UPLOAD_DIR at: %s", mozUploadDir);
+    // We want to do the right thing, and turn this into an nsIFile. Go through
+    // the motions here:
+    nsCOMPtr<nsIFile> mozUploadDirFile =
+        do_CreateInstance("@mozilla.org/file/local;1", &rv);
+
+    if (NS_FAILED(rv)) {
+      LOG("Failed to create nsIFile for MOZ_UPLOAD_DIR: %s, Error: %s",
+          mozUploadDir, GetStaticErrorName(rv));
+      return;
+    }
+
+    rv = mozUploadDirFile->InitWithNativePath(nsDependentCString(mozUploadDir));
+
+    if (NS_FAILED(rv)) {
+      LOG("Failed to assign a filepath while creating MOZ_UPLOAD_DIR file "
+          "%s, Error %s ",
+          mozUploadDir, GetStaticErrorName(rv));
+      return;
+    }
+
+    CorePS::SetAsyncSignalDumpDirectory(lock, Some(mozUploadDirFile));
   } else {
-    CorePS::SetDownloadDirectory(lock, Some(tDownloadDir));
+    LOG("Defaulting to the user's Download directory for profile dumps");
+    nsCOMPtr<nsIFile> tDownloadDir;
+    rv = NS_GetSpecialDirectory(NS_OS_DEFAULT_DOWNLOAD_DIR,
+                                getter_AddRefs(tDownloadDir));
+    if (NS_FAILED(rv)) {
+      LOG("Failed to find download directory. Profiler signal handling will "
+          "not be able to save to disk. Error: %s",
+          GetStaticErrorName(rv));
+    } else {
+      CorePS::SetAsyncSignalDumpDirectory(lock, Some(tDownloadDir));
+    }
   }
 #endif
 }

@@ -33,7 +33,11 @@ const sizeOfDescriptor = (descriptor) => {
 };
 
 const getDescriptorFromBuffer = (buffer) => {
-  return {dataType: buffer.dataType, dimensions: buffer.shape};
+  return {
+    dataType: buffer.dataType,
+    dimensions: buffer.shape,
+    usage: buffer.usage
+  };
 };
 
 
@@ -82,15 +86,15 @@ const testCreateWebNNBuffer = (testName, bufferDescriptor) => {
       throw new AssertionError(
           `Unable to create context for ${variant} variant. ${e}`);
     }
-
-    try {
-      const mlBuffer = await mlContext.createBuffer(bufferDescriptor);
-    } catch (e) {
-      throw new AssertionError(
-          `Unable to create buffer for ${variant} variant. ${e}`);
-    }
   });
-  promise_test(async () => {
+  promise_test(async t => {
+    if (!mlContext.opSupportLimits().input.dataTypes.includes(
+            bufferDescriptor.dataType)) {
+      await promise_rejects_js(
+          t, TypeError, mlContext.createBuffer(bufferDescriptor));
+      return;
+    }
+
     const mlBuffer = await mlContext.createBuffer(bufferDescriptor);
     assert_equals(
         mlBuffer.dataType, bufferDescriptor.dataType,
@@ -115,14 +119,6 @@ const testCreateWebNNBufferFails = (testName, bufferDescriptor) => {
     } catch (e) {
       throw new AssertionError(
           `Unable to create context for ${variant} variant. ${e}`);
-    }
-
-    try {
-      const mlBuffer =
-          await mlContext.createBuffer({dataType: 'int32', dimensions: [2, 3]});
-    } catch (e) {
-      throw new AssertionError(
-          `Unable to create buffer for ${variant} variant. ${e}`);
     }
   });
   promise_test(async t => {
@@ -168,7 +164,11 @@ const testWriteWebNNBuffer = (testName) => {
   });
 
   promise_test(async () => {
-    const bufferDescriptor = {dataType: 'int32', dimensions: [1]};
+    const bufferDescriptor = {
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.WRITE_TO,
+    };
     let mlBuffer = await mlContext.createBuffer(bufferDescriptor);
 
     const bufferByteLength = sizeOfDescriptor(bufferDescriptor);
@@ -213,7 +213,11 @@ const testWriteWebNNBuffer = (testName) => {
   }, `${testName} / error`);
 
   promise_test(async () => {
-    const bufferDescriptor = {dataType: 'int32', dimensions: [2, 2]};
+    const bufferDescriptor = {
+      dataType: 'int32',
+      dimensions: [2, 2],
+      usage: MLBufferUsage.WRITE_TO,
+    };
     let mlBuffer = await mlContext.createBuffer(bufferDescriptor);
 
     // Writing data to a destroyed MLBuffer should throw.
@@ -226,7 +230,11 @@ const testWriteWebNNBuffer = (testName) => {
   }, `${testName} / destroy`);
 
   promise_test(async () => {
-    const bufferDescriptor = {dataType: 'int32', dimensions: [2, 3]};
+    const bufferDescriptor = {
+      dataType: 'int32',
+      dimensions: [2, 3],
+      usage: MLBufferUsage.WRITE_TO,
+    };
     let mlBuffer = await mlContext.createBuffer(bufferDescriptor);
 
     let anotherMLContext = await navigator.ml.createContext(contextOptions);
@@ -239,6 +247,56 @@ const testWriteWebNNBuffer = (testName) => {
     assert_throws_js(
         TypeError, () => anotherMLContext.writeBuffer(mlBuffer, inputData));
   }, `${testName} / context_mismatch`);
+
+  promise_test(async () => {
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    });
+
+    // Initialize the buffer.
+    const inputData = Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]);
+    mlContext.writeBuffer(mlBuffer, inputData);
+
+    // Writing zero bytes from a zero write size.
+    mlContext.writeBuffer(mlBuffer, Uint8Array.from([0xBB]), 0, 0);
+
+    await assert_buffer_data_equals(mlContext, mlBuffer, inputData);
+
+    // Writing zero bytes at the end of the buffer.
+    mlContext.writeBuffer(
+        mlBuffer, Uint32Array.from([0xBBBBBBBB]), /*srcOffset=*/ 1);
+
+    await assert_buffer_data_equals(mlContext, mlBuffer, inputData);
+  }, `${testName} / zero_write`);
+
+  promise_test(async () => {
+    const bufferDescriptor = {
+      dataType: 'int32',
+      dimensions: [2, 2],
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    };
+    let mlBuffer = await mlContext.createBuffer(bufferDescriptor);
+
+    const bufferByteLength = sizeOfDescriptor(bufferDescriptor);
+    let inputBuffer = new ArrayBuffer(bufferByteLength);
+
+    // Initialize the buffer.
+    const int32View = new Int32Array(inputBuffer);
+    int32View.fill(0xBBBBBBBB);
+
+    mlContext.writeBuffer(mlBuffer, int32View);
+
+    // Writing to a detached buffer should be ignored.
+    const detachedBuffer = inputBuffer.transfer();
+    assert_true(inputBuffer.detached, 'array buffer should be detached.');
+
+    mlContext.writeBuffer(mlBuffer, inputBuffer);
+
+    await assert_buffer_data_equals(
+        mlContext, mlBuffer, new Int32Array(detachedBuffer));
+  }, `${testName} / detached`);
 };
 
 /**
@@ -265,8 +323,11 @@ const testReadWebNNBuffer = (testName) => {
   });
 
   promise_test(async t => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [2, 2]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [2, 2],
+      usage: MLBufferUsage.READ_FROM,
+    });
 
     // Reading a destroyed MLBuffer should reject.
     mlBuffer.destroy();
@@ -276,8 +337,11 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / read_after_destroy`);
 
   promise_test(async t => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [2, 3]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [2, 3],
+      usage: MLBufferUsage.READ_FROM,
+    });
 
     let promise = mlContext.readBuffer(mlBuffer);
     let anotherPromise = mlContext.readBuffer(mlBuffer);
@@ -289,8 +353,22 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / read_before_destroy`);
 
   promise_test(async () => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [1]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1024],
+      usage: MLBufferUsage.READ_FROM,
+    });
+
+    await assert_buffer_data_equals(
+        mlContext, mlBuffer, new Uint32Array(1024));
+  }, `${testName} / uninitialized`);
+
+  promise_test(async () => {
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.READ_FROM | MLBufferUsage.WRITE_TO,
+    });
 
     // Initialize the buffer.
     mlContext.writeBuffer(mlBuffer, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
@@ -302,8 +380,11 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / full_size`);
 
   promise_test(async () => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [1]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    });
 
     // Initialize the buffer.
     mlContext.writeBuffer(mlBuffer, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
@@ -317,8 +398,11 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / src_offset_only`);
 
   promise_test(async () => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [1]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    });
 
     // Initialize the buffer.
     mlContext.writeBuffer(mlBuffer, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
@@ -332,8 +416,11 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / src_offset_and_size`);
 
   promise_test(async () => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [1]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    });
 
     // Initialize the buffer.
     mlContext.writeBuffer(mlBuffer, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
@@ -347,8 +434,11 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / larger_src_data`);
 
   promise_test(async () => {
-    let mlBuffer =
-        await mlContext.createBuffer({dataType: 'int32', dimensions: [1]});
+    let mlBuffer = await mlContext.createBuffer({
+      dataType: 'int32',
+      dimensions: [1],
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    });
 
     const inputData = [0xAA, 0xAA, 0xAA, 0xAA];
 
@@ -361,7 +451,11 @@ const testReadWebNNBuffer = (testName) => {
   }, `${testName} / no_src_offset`);
 
   promise_test(async t => {
-    const bufferDescriptor = {dataType: 'int32', dimensions: [2, 3]};
+    const bufferDescriptor = {
+      dataType: 'int32',
+      dimensions: [2, 3],
+      usage: MLBufferUsage.READ_FROM,
+    };
     let mlBuffer = await mlContext.createBuffer(bufferDescriptor);
 
     let anotherMLContext = await navigator.ml.createContext(contextOptions);
@@ -393,7 +487,11 @@ const testDispatchWebNNBuffer = (testName) => {
     }
     // Construct a simple graph: A = B + C, with two outputs.
     const builder = new MLGraphBuilder(mlContext);
-    const bufferDescriptor = {dataType: 'float32', dimensions: shape};
+    const bufferDescriptor = {
+      dataType: 'float32',
+      dimensions: shape,
+      usage: MLBufferUsage.WRITE_TO | MLBufferUsage.READ_FROM,
+    };
     const lhsOperand = builder.input('lhs', bufferDescriptor);
     const rhsOperand = builder.input('rhs', bufferDescriptor);
     const output1Operand = builder.add(lhsOperand, rhsOperand);

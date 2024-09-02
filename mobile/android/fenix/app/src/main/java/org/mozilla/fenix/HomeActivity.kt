@@ -91,6 +91,7 @@ import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.browser.browsingmode.DefaultBrowsingModeManager
 import org.mozilla.fenix.components.appstate.AppAction
+import org.mozilla.fenix.components.appstate.OrientationMode
 import org.mozilla.fenix.components.metrics.BreadcrumbsRecorder
 import org.mozilla.fenix.components.metrics.GrowthDataWorker
 import org.mozilla.fenix.components.metrics.fonts.FontEnumerationWorker
@@ -434,6 +435,14 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
 
         components.notificationsDelegate.bindToActivity(this)
 
+        components.settings.coldStartsBetweenSetAsDefaultPrompts++
+
+        components.appStore.dispatch(
+            AppAction.OrientationChange(
+                orientation = OrientationMode.fromInteger(resources.configuration.orientation),
+            ),
+        )
+
         StartupTimeline.onActivityCreateEndHome(this) // DO NOT MOVE ANYTHING BELOW HERE.
     }
 
@@ -634,6 +643,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         breadcrumb(
             message = "onConfigurationChanged()",
         )
+
+        components.appStore.dispatch(
+            AppAction.OrientationChange(
+                orientation = OrientationMode.fromInteger(newConfig.orientation),
+            ),
+        )
     }
 
     final override fun recreate() {
@@ -649,11 +664,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
     /**
      * Handles intents received when the activity is open.
      */
-    final override fun onNewIntent(intent: Intent?) {
+    final override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        intent?.let {
-            handleNewIntent(it)
-        }
+        handleNewIntent(intent)
         startupPathProvider.onIntentReceived(intent)
     }
 
@@ -755,6 +768,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         }.toTypedArray()
     }
 
+    @Suppress("MissingSuperCall", "OVERRIDE_DEPRECATION")
     final override fun onBackPressed() {
         supportFragmentManager.primaryNavigationFragment?.childFragmentManager?.fragments?.forEach {
             if (it is UserInteractionHandler && it.onBackPressed()) {

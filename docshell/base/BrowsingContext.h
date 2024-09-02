@@ -272,7 +272,10 @@ struct EmbedderColorSchemes {
   /* If true, this browsing context is within a hidden embedded document. */  \
   FIELD(IsUnderHiddenEmbedderElement, bool)                                   \
   /* If true, this browsing context is offline */                             \
-  FIELD(ForceOffline, bool)
+  FIELD(ForceOffline, bool)                                                   \
+  /* Used to propagate window.top's inner size for RFPTarget::Window*         \
+   * protections */                                                           \
+  FIELD(TopInnerSizeForRFP, CSSIntSize)
 
 // BrowsingContext, in this context, is the cross process replicated
 // environment in which information about documents is stored. In
@@ -981,7 +984,18 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
                                        bool aHasPostData);
 
  private:
-  mozilla::ipc::IPCResult Attach(bool aFromIPC, ContentParent* aOriginProcess);
+  // Assert that this BrowsingContext is coherent relative to related
+  // BrowsingContexts. This will be run before the BrowsingContext is attached.
+  //
+  // A non-null string return value indicates that there was a coherency check
+  // failure, which will be handled with either a crash or IPC failure.
+  //
+  // If provided, `aOriginProcess` is the process which is responsible for the
+  // creation of this BrowsingContext.
+  [[nodiscard]] const char* BrowsingContextCoherencyChecks(
+      ContentParent* aOriginProcess);
+
+  void Attach(bool aFromIPC, ContentParent* aOriginProcess);
 
   // Recomputes whether we can execute scripts in this BrowsingContext based on
   // the value of AllowJavascript() and whether scripts are allowed in the
@@ -994,10 +1008,6 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
   bool CanSetOriginAttributes();
 
   void AssertOriginAttributesMatchPrivateBrowsing();
-
-  // Assert that the BrowsingContext's LoadContext flags appear coherent
-  // relative to related BrowsingContexts.
-  void AssertCoherentLoadContext();
 
   friend class ::nsOuterWindowProxy;
   friend class ::nsGlobalWindowOuter;
@@ -1252,6 +1262,10 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
 
   bool CanSet(FieldIndex<IDX_ForceOffline>, bool aNewValue,
               ContentParent* aSource);
+
+  bool CanSet(FieldIndex<IDX_TopInnerSizeForRFP>, bool, ContentParent*) {
+    return IsTop();
+  }
 
   bool CanSet(FieldIndex<IDX_EmbeddedInContentDocument>, bool,
               ContentParent* aSource) {

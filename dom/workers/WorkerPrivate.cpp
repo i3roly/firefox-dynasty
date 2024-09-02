@@ -237,6 +237,21 @@ class ExternalRunnableWrapper final : public WorkerThreadRunnable {
     mWrappedRunnable = nullptr;
     return NS_OK;
   }
+
+#ifdef MOZ_COLLECTING_RUNNABLE_TELEMETRY
+  NS_IMETHOD GetName(nsACString& aName) override {
+    aName.AssignLiteral("ExternalRunnableWrapper(");
+    if (nsCOMPtr<nsINamed> named = do_QueryInterface(mWrappedRunnable)) {
+      nsAutoCString containedName;
+      named->GetName(containedName);
+      aName.Append(containedName);
+    } else {
+      aName.AppendLiteral("?");
+    }
+    aName.AppendLiteral(")");
+    return NS_OK;
+  }
+#endif
 };
 
 struct WindowAction {
@@ -5399,6 +5414,10 @@ int32_t WorkerPrivate::SetTimeout(JSContext* aCx, TimeoutHandler* aHandler,
                                   Timeout::Reason aReason, ErrorResult& aRv) {
   auto data = mWorkerThreadAccessible.Access();
   MOZ_ASSERT(aHandler);
+
+  if (StaticPrefs::dom_workers_throttling_enabled()) {
+    // todo(aiunusov): change the logic of setTimeout accordingly
+  }
 
   // Reasons that doesn't support cancellation will get -1 as their ids.
   int32_t timerId = -1;

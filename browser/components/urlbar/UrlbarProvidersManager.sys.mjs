@@ -31,6 +31,8 @@ ChromeUtils.defineLazyGetter(lazy, "logger", () =>
 var localProviderModules = {
   UrlbarProviderAboutPages:
     "resource:///modules/UrlbarProviderAboutPages.sys.mjs",
+  UrlbarProviderActionsSearchMode:
+    "resource:///modules/UrlbarProviderActionsSearchMode.sys.mjs",
   UrlbarProviderAliasEngines:
     "resource:///modules/UrlbarProviderAliasEngines.sys.mjs",
   UrlbarProviderAutofill: "resource:///modules/UrlbarProviderAutofill.sys.mjs",
@@ -62,6 +64,8 @@ var localProviderModules = {
     "resource:///modules/UrlbarProviderRemoteTabs.sys.mjs",
   UrlbarProviderRestrictKeywords:
     "resource:///modules/UrlbarProviderRestrictKeywords.sys.mjs",
+  UrlbarProviderRestrictKeywordsAutofill:
+    "resource:///modules/UrlbarProviderRestrictKeywordsAutofill.sys.mjs",
   UrlbarProviderSearchTips:
     "resource:///modules/UrlbarProviderSearchTips.sys.mjs",
   UrlbarProviderSearchSuggestions:
@@ -107,7 +111,6 @@ class ProvidersManager {
       onImpression: new Set(),
       onAbandonment: new Set(),
       onSearchSessionEnd: new Set(),
-      onLegacyEngagement: new Set(),
     };
     for (let [symbol, module] of Object.entries(localProviderModules)) {
       let { [symbol]: provider } = ChromeUtils.importESModule(module);
@@ -442,17 +445,10 @@ class ProvidersManager {
       this.#notifySearchSessionEnd(
         this.providersByNotificationType.onSearchSessionEnd,
         queryContext,
-        controller
+        controller,
+        details
       );
     }
-
-    this.#notifyLegacyEngagement(
-      this.providersByNotificationType.onLegacyEngagement,
-      state,
-      queryContext,
-      details,
-      controller
-    );
   }
 
   #notifyEngagement(engagementProviders, queryContext, controller, details) {
@@ -500,26 +496,18 @@ class ProvidersManager {
     }
   }
 
-  #notifySearchSessionEnd(searchSessionEndProviders, queryContext, controller) {
-    for (const provider of searchSessionEndProviders) {
-      provider.tryMethod("onSearchSessionEnd", queryContext, controller);
-    }
-  }
-
-  #notifyLegacyEngagement(
-    legacyEngagementProviders,
-    state,
+  #notifySearchSessionEnd(
+    searchSessionEndProviders,
     queryContext,
-    details,
-    controller
+    controller,
+    details
   ) {
-    for (const provider of legacyEngagementProviders) {
+    for (const provider of searchSessionEndProviders) {
       provider.tryMethod(
-        "onLegacyEngagement",
-        state,
+        "onSearchSessionEnd",
         queryContext,
-        details,
-        controller
+        controller,
+        details
       );
     }
   }

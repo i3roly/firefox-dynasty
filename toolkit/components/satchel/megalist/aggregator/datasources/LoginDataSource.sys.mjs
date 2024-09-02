@@ -28,6 +28,12 @@ const ALERT_VALUES = {
   none: 2,
 };
 
+const SUPPORT_URL =
+  Services.urlFormatter.formatURLPref("app.support.baseURL") +
+  "password-manager-remember-delete-edit-logins";
+
+const PREFRENCES_URL = "about:preferences#privacy-logins";
+
 /**
  * Data source for Logins.
  *
@@ -120,8 +126,8 @@ export class LoginDataSource extends DataSourceBase {
 
       this.#header.executeImportFromBrowser = () => this.#importFromBrowser();
       this.#header.executeRemoveAll = () => this.#removeAllPasswords();
-      this.#header.executeSettings = () => this.#openPreferences();
-      this.#header.executeHelp = () => this.#getHelp();
+      this.#header.executeSettings = () => this.#openMenuLink(PREFRENCES_URL);
+      this.#header.executeHelp = () => this.#openMenuLink(SUPPORT_URL);
       this.#header.executeExport = async () => this.#exportAllPasswords();
       this.#exportPasswordsStrings = {
         OSReauthMessage: strings.exportPasswordsOSReauthMessage,
@@ -493,24 +499,13 @@ export class LoginDataSource extends DataSourceBase {
     fp.open(fpCallback);
   }
 
-  #openPreferences() {
+  #openMenuLink(url) {
     const { BrowserWindowTracker } = ChromeUtils.importESModule(
       "resource:///modules/BrowserWindowTracker.sys.mjs"
     );
     const browser = BrowserWindowTracker.getTopWindow().gBrowser;
-    browser.ownerGlobal.openPreferences("privacy-logins");
-  }
-
-  #getHelp() {
-    const { BrowserWindowTracker } = ChromeUtils.importESModule(
-      "resource:///modules/BrowserWindowTracker.sys.mjs"
-    );
-    const browser = BrowserWindowTracker.getTopWindow().gBrowser;
-    const SUPPORT_URL =
-      Services.urlFormatter.formatURLPref("app.support.baseURL") +
-      "password-manager-remember-delete-edit-logins";
-    browser.ownerGlobal.openWebLinkIn(SUPPORT_URL, "tab", {
-      relatedToCurrent: true,
+    browser.ownerGlobal.switchToTabHavingURI(url, true, {
+      ignoreFragment: "whenComparingAndReplace",
     });
   }
 
@@ -542,7 +537,7 @@ export class LoginDataSource extends DataSourceBase {
         login.password.toUpperCase().includes(searchText)
     );
 
-    this.#header.value.total = stats.total;
+    this.#header.value.statsTotal = stats.total;
   }
 
   /**
@@ -566,8 +561,16 @@ export class LoginDataSource extends DataSourceBase {
       ? await lazy.LoginBreaches.getPotentialBreachesByLoginGUID(logins)
       : new Map();
 
-    let alertsAcc = 0;
-    logins.forEach(login => {
+    const breachedOrVulnerableLogins = logins.filter(
+      login =>
+        breachesMap.has(login.guid) ||
+        lazy.LoginBreaches.isVulnerablePassword(login)
+    );
+
+    const filteredLogins =
+      this.#sortId === "alerts" ? breachedOrVulnerableLogins : logins;
+
+    filteredLogins.forEach(login => {
       // Similar domains will be grouped together
       // www. will have least effect on the sorting
       const parts = login.displayOrigin.split(".");
@@ -583,10 +586,8 @@ export class LoginDataSource extends DataSourceBase {
       let alertValue;
       if (isLoginBreached) {
         alertValue = ALERT_VALUES.breached;
-        alertsAcc += 1;
       } else if (isLoginVulnerable) {
         alertValue = ALERT_VALUES.vulnerable;
-        alertsAcc += 1;
       } else {
         alertValue = ALERT_VALUES.none;
       }
@@ -612,7 +613,9 @@ export class LoginDataSource extends DataSourceBase {
       originLine.breached = isLoginBreached;
       passwordLine.vulnerable = isLoginVulnerable;
     });
-    this.#header.value.alerts = alertsAcc;
+
+    this.#header.value.total = logins.length;
+    this.#header.value.alerts = breachedOrVulnerableLogins.length;
     this.afterReloadingDataSource();
     this.doneReloadDataSource = true;
   }

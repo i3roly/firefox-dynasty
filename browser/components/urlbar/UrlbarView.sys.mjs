@@ -1246,7 +1246,7 @@ export class UrlbarView {
           this.#rowCanUpdateToResult(rowIndex, result, seenSearchSuggestion)
         ) {
           // We can replace the row's current result with the new one.
-          if (result.exposureResultHidden) {
+          if (result.isHiddenExposure) {
             this.controller.engagementEvent.addExposure(result);
           } else {
             this.#updateRow(row, result);
@@ -1256,7 +1256,7 @@ export class UrlbarView {
         }
         if (
           (result.hasSuggestedIndex || row.result.hasSuggestedIndex) &&
-          !result.exposureResultHidden
+          !result.isHiddenExposure
         ) {
           seenMisplacedResult = true;
         }
@@ -1282,7 +1282,7 @@ export class UrlbarView {
       if (
         !seenMisplacedResult &&
         result.hasSuggestedIndex &&
-        !result.exposureResultHidden
+        !result.isHiddenExposure
       ) {
         if (result.isSuggestedIndexRelativeToGroup) {
           // We can't know at this point what the right index of a group-
@@ -1311,11 +1311,11 @@ export class UrlbarView {
       let newSpanCount =
         visibleSpanCount +
         lazy.UrlbarUtils.getSpanForResult(result, {
-          includeExposureResultHidden: true,
+          includeHiddenExposures: true,
         });
       let canBeVisible =
         newSpanCount <= this.#queryContext.maxResults && !seenMisplacedResult;
-      if (result.exposureResultHidden) {
+      if (result.isHiddenExposure) {
         if (canBeVisible) {
           this.controller.engagementEvent.addExposure(result);
         } else {
@@ -2217,7 +2217,7 @@ export class UrlbarView {
 
       let visible = this.#isElementVisible(item);
       if (visible) {
-        if (item.result.exposureResultType) {
+        if (item.result.exposureTelemetry) {
           this.controller.engagementEvent.addExposure(item.result);
         }
         this.visibleResults.push(item.result);
@@ -2348,6 +2348,11 @@ export class UrlbarView {
       row.result.providerName == lazy.UrlbarProviderQuickSuggest.name
     ) {
       switch (row.result.payload.telemetryType) {
+        case "adm_sponsored":
+          if (!lazy.UrlbarPrefs.get("quickSuggestSponsoredPriority")) {
+            return { id: "urlbar-group-sponsored" };
+          }
+          break;
         case "amo":
           return { id: "urlbar-group-addon" };
         case "mdn":
@@ -3015,6 +3020,10 @@ export class UrlbarView {
       { id: "urlbar-result-action-visit-from-clipboard" },
     ];
 
+    let suggestSponsoredEnabled =
+      lazy.UrlbarPrefs.get("quickSuggestEnabled") &&
+      lazy.UrlbarPrefs.get("suggest.quicksuggest.sponsored");
+
     if (lazy.UrlbarPrefs.get("groupLabels.enabled")) {
       idArgs.push({ id: "urlbar-group-firefox-suggest" });
       idArgs.push({ id: "urlbar-group-best-match" });
@@ -3031,13 +3040,16 @@ export class UrlbarView {
         if (lazy.UrlbarPrefs.get("yelpFeatureGate")) {
           idArgs.push({ id: "urlbar-group-local" });
         }
+        if (
+          suggestSponsoredEnabled &&
+          lazy.UrlbarPrefs.get("quickSuggestAmpTopPickCharThreshold")
+        ) {
+          idArgs.push({ id: "urlbar-group-sponsored" });
+        }
       }
     }
 
-    if (
-      lazy.UrlbarPrefs.get("quickSuggestEnabled") &&
-      lazy.UrlbarPrefs.get("suggest.quicksuggest.sponsored")
-    ) {
+    if (suggestSponsoredEnabled) {
       idArgs.push({ id: "urlbar-result-action-sponsored" });
     }
 

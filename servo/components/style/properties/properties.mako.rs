@@ -550,7 +550,8 @@ impl NonCustomPropertyId {
         debug_assert!(
             rule_types.contains(CssRuleType::Keyframe) ||
             rule_types.contains(CssRuleType::Page) ||
-            rule_types.contains(CssRuleType::Style),
+            rule_types.contains(CssRuleType::Style) ||
+            rule_types.contains(CssRuleType::PositionTry),
             "Declarations are only expected inside a keyframe, page, or style rule."
         );
 
@@ -1612,6 +1613,13 @@ pub mod style_structs {
                         self.transition_delay_mod(index).seconds();
                     combined_duration > 0.
                 })
+            }
+
+            /// Returns whether animation-timeline is initial value. We need this information to
+            /// resolve animation-duration.
+            #[cfg(feature = "servo")]
+            pub fn has_initial_animation_timeline(&self) -> bool {
+                self.animation_timeline_count() == 1 && self.animation_timeline_at(0).is_auto()
             }
 
             /// Returns whether there is any named progress timeline specified with

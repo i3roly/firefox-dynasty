@@ -1,13 +1,12 @@
-/*! This library describes the API surface of WebGPU that is agnostic of the backend.
- *  This API is used for targeting both Web and Native.
- */
+//! This library describes the API surface of WebGPU that is agnostic of the backend.
+//! This API is used for targeting both Web and Native.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![allow(
     // We don't use syntax sugar where it's not necessary.
     clippy::match_like_matches_macro,
 )]
-#![warn(missing_docs, unsafe_op_in_unsafe_fn)]
+#![warn(clippy::ptr_as_ptr, missing_docs, unsafe_op_in_unsafe_fn)]
 
 #[cfg(any(feature = "serde", test))]
 use serde::Deserialize;
@@ -55,6 +54,7 @@ macro_rules! impl_bitflags {
         impl $name {
             /// Returns true if the bitflags contains bits that are not part of
             /// the bitflags definition.
+            #[must_use]
             pub fn contains_invalid_bits(&self) -> bool {
                 let all = Self::all().bits();
                 (self.bits() | all) != all
@@ -115,6 +115,7 @@ pub enum Backend {
 
 impl Backend {
     /// Returns the string name of the backend.
+    #[must_use]
     pub const fn to_str(self) -> &'static str {
         match self {
             Backend::Empty => "empty",
@@ -291,11 +292,27 @@ bitflags::bitflags! {
         /// Support for this feature guarantees availability of [`TextureUsages::COPY_SRC | TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING`] for BCn formats.
         /// [`Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`] may enable additional usages.
         ///
+        /// This feature guarantees availability of sliced-3d textures for BC formats when combined with TEXTURE_COMPRESSION_BC_SLICED_3D.
+        ///
         /// Supported Platforms:
         /// - desktops
+        /// - Mobile (All Apple9 and some Apple7 and Apple8 devices)
         ///
         /// This is a web and native feature.
         const TEXTURE_COMPRESSION_BC = 1 << 2;
+
+
+        /// Allows the 3d dimension for textures with BC compressed formats.
+        ///
+        /// This feature must be used in combination with TEXTURE_COMPRESSION_BC to enable 3D textures with BC compression.
+        /// It does not enable the BC formats by itself.
+        ///
+        /// Supported Platforms:
+        /// - desktops
+        /// - Mobile (All Apple9 and some Apple7 and Apple8 devices)
+        ///
+        /// This is a web and native feature.
+        const TEXTURE_COMPRESSION_BC_SLICED_3D = 1 << 3;
 
         /// Enables ETC family of compressed textures. All ETC textures use 4x4 pixel blocks.
         /// ETC2 RGB and RGBA1 are 8 bytes per block. RTC2 RGBA8 and EAC are 16 bytes per block.
@@ -311,7 +328,7 @@ bitflags::bitflags! {
         /// - Mobile (some)
         ///
         /// This is a web and native feature.
-        const TEXTURE_COMPRESSION_ETC2 = 1 << 3;
+        const TEXTURE_COMPRESSION_ETC2 = 1 << 4;
 
         /// Enables ASTC family of compressed textures. ASTC textures use pixel blocks varying from 4x4 to 12x12.
         /// Blocks are always 16 bytes.
@@ -327,7 +344,7 @@ bitflags::bitflags! {
         /// - Mobile (some)
         ///
         /// This is a web and native feature.
-        const TEXTURE_COMPRESSION_ASTC = 1 << 4;
+        const TEXTURE_COMPRESSION_ASTC = 1 << 5;
 
         /// Enables use of Timestamp Queries. These queries tell the current gpu timestamp when
         /// all work before the query is finished.
@@ -351,7 +368,7 @@ bitflags::bitflags! {
         /// - Metal
         ///
         /// This is a web and native feature.
-        const TIMESTAMP_QUERY = 1 << 5;
+        const TIMESTAMP_QUERY = 1 << 6;
 
         /// Allows non-zero value for the `first_instance` member in indirect draw calls.
         ///
@@ -370,7 +387,7 @@ bitflags::bitflags! {
         /// - OpenGL ES / WebGL
         ///
         /// This is a web and native feature.
-        const INDIRECT_FIRST_INSTANCE = 1 << 6;
+        const INDIRECT_FIRST_INSTANCE = 1 << 7;
 
         /// Allows shaders to acquire the FP16 ability
         ///
@@ -381,10 +398,10 @@ bitflags::bitflags! {
         /// - Metal
         ///
         /// This is a web and native feature.
-        const SHADER_F16 = 1 << 7;
+        const SHADER_F16 = 1 << 8;
 
 
-        /// Allows for usage of textures of format [`TextureFormat::Rg11b10Float`] as a render target
+        /// Allows for usage of textures of format [`TextureFormat::Rg11b10UFloat`] as a render target
         ///
         /// Supported platforms:
         /// - Vulkan
@@ -392,7 +409,7 @@ bitflags::bitflags! {
         /// - Metal
         ///
         /// This is a web and native feature.
-        const RG11B10UFLOAT_RENDERABLE = 1 << 8;
+        const RG11B10UFLOAT_RENDERABLE = 1 << 9;
 
         /// Allows the [`wgpu::TextureUsages::STORAGE_BINDING`] usage on textures with format [`TextureFormat::Bgra8unorm`]
         ///
@@ -402,7 +419,7 @@ bitflags::bitflags! {
         /// - Metal
         ///
         /// This is a web and native feature.
-        const BGRA8UNORM_STORAGE = 1 << 9;
+        const BGRA8UNORM_STORAGE = 1 << 10;
 
 
         /// Allows textures with formats "r32float", "rg32float", and "rgba32float" to be filterable.
@@ -414,9 +431,9 @@ bitflags::bitflags! {
         /// - GL with one of `GL_ARB_color_buffer_float`/`GL_EXT_color_buffer_float`/`OES_texture_float_linear`
         ///
         /// This is a web and native feature.
-        const FLOAT32_FILTERABLE = 1 << 10;
+        const FLOAT32_FILTERABLE = 1 << 11;
 
-        // Bits 11-19 available for webgpu features. Should you chose to use some of them for
+        // Bits 12-19 available for webgpu features. Should you chose to use some of them for
         // for native features, don't forget to update `all_webgpu_mask` and `all_native_mask`
         // accordingly.
 
@@ -935,6 +952,22 @@ bitflags::bitflags! {
         ///
         /// This is a native only feature.
         const SHADER_INT64_ATOMIC_ALL_OPS = 1 << 61;
+        /// Allows using the [VK_GOOGLE_display_timing] Vulkan extension.
+        ///
+        /// This is used for frame pacing to reduce latency, and is generally only available on Android.
+        ///
+        /// This feature does not have a `wgpu`-level API, and so users of wgpu wishing
+        /// to use this functionality must access it using various `as_hal` functions,
+        /// primarily [`Surface::as_hal()`], to then use.
+        ///
+        /// Supported platforms:
+        /// - Vulkan (with [VK_GOOGLE_display_timing])
+        ///
+        /// This is a native only feature.
+        ///
+        /// [VK_GOOGLE_display_timing]: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_GOOGLE_display_timing.html
+        /// [`Surface::as_hal()`]: https://docs.rs/wgpu/latest/wgpu/struct.Surface.html#method.as_hal
+        const VULKAN_GOOGLE_DISPLAY_TIMING = 1 << 62;
     }
 }
 
@@ -942,11 +975,13 @@ impl_bitflags!(Features);
 
 impl Features {
     /// Mask of all features which are part of the upstream WebGPU standard.
+    #[must_use]
     pub const fn all_webgpu_mask() -> Self {
         Self::from_bits_truncate(0xFFFFF)
     }
 
     /// Mask of all features that are only available when targeting native (not web).
+    #[must_use]
     pub const fn all_native_mask() -> Self {
         Self::from_bits_truncate(!Self::all_webgpu_mask().bits())
     }
@@ -998,11 +1033,13 @@ impl Default for InstanceFlags {
 
 impl InstanceFlags {
     /// Enable recommended debugging and validation flags.
+    #[must_use]
     pub fn debugging() -> Self {
         InstanceFlags::DEBUG | InstanceFlags::VALIDATION
     }
 
     /// Enable advanced debugging and validation flags (potentially very slow).
+    #[must_use]
     pub fn advanced_debugging() -> Self {
         Self::debugging() | InstanceFlags::GPU_BASED_VALIDATION
     }
@@ -1010,6 +1047,7 @@ impl InstanceFlags {
     /// Infer good defaults from the build type
     ///
     /// Returns the default flags and add debugging flags if the build configuration has `debug_assertions`.
+    #[must_use]
     pub fn from_build_config() -> Self {
         if cfg!(debug_assertions) {
             return InstanceFlags::debugging();
@@ -1030,6 +1068,7 @@ impl InstanceFlags {
     /// The environment variables are named after the flags prefixed with "WGPU_". For example:
     /// - WGPU_DEBUG
     /// - WGPU_VALIDATION
+    #[must_use]
     pub fn with_env(mut self) -> Self {
         fn env(key: &str) -> Option<bool> {
             std::env::var(key).ok().map(|s| match s.as_str() {
@@ -1293,6 +1332,7 @@ impl Limits {
     ///     max_non_sampler_bindings: 1_000_000,
     /// });
     /// ```
+    #[must_use]
     pub const fn downlevel_defaults() -> Self {
         Self {
             max_texture_dimension_1d: 2048,
@@ -1349,6 +1389,7 @@ impl Limits {
     ///     max_non_sampler_bindings: 1_000_000,
     /// });
     /// ```
+    #[must_use]
     pub const fn downlevel_webgl2_defaults() -> Self {
         Self {
             max_uniform_buffers_per_shader_stage: 11,
@@ -1379,6 +1420,7 @@ impl Limits {
     /// This is useful because the swapchain might need to be larger than any other image in the application.
     ///
     /// If your application only needs 512x512, you might be running on a 4k display and need extremely high resolution limits.
+    #[must_use]
     pub const fn using_resolution(self, other: Self) -> Self {
         Self {
             max_texture_dimension_1d: other.max_texture_dimension_1d,
@@ -1391,6 +1433,7 @@ impl Limits {
     /// Modify the current limits to use the buffer alignment limits of the adapter.
     ///
     /// This is useful for when you'd like to dynamically use the "best" supported buffer alignments.
+    #[must_use]
     pub const fn using_alignment(self, other: Self) -> Self {
         Self {
             min_uniform_buffer_offset_alignment: other.min_uniform_buffer_offset_alignment,
@@ -1402,6 +1445,7 @@ impl Limits {
     /// Compares every limits within self is within the limits given in `allowed`.
     ///
     /// If you need detailed information on failures, look at [`Limits::check_limits_with_fail_fn`].
+    #[must_use]
     pub fn check_limits(&self, allowed: &Self) -> bool {
         let mut within = true;
         self.check_limits_with_fail_fn(allowed, true, |_, _, _| within = false);
@@ -1445,6 +1489,7 @@ impl Limits {
         compare!(max_texture_dimension_3d, Less);
         compare!(max_texture_array_layers, Less);
         compare!(max_bind_groups, Less);
+        compare!(max_bindings_per_bind_group, Less);
         compare!(max_dynamic_uniform_buffers_per_pipeline_layout, Less);
         compare!(max_dynamic_storage_buffers_per_pipeline_layout, Less);
         compare!(max_sampled_textures_per_shader_stage, Less);
@@ -1455,23 +1500,25 @@ impl Limits {
         compare!(max_uniform_buffer_binding_size, Less);
         compare!(max_storage_buffer_binding_size, Less);
         compare!(max_vertex_buffers, Less);
+        compare!(max_buffer_size, Less);
         compare!(max_vertex_attributes, Less);
         compare!(max_vertex_buffer_array_stride, Less);
-        if self.min_subgroup_size > 0 && self.max_subgroup_size > 0 {
-            compare!(min_subgroup_size, Greater);
-            compare!(max_subgroup_size, Less);
-        }
-        compare!(max_push_constant_size, Less);
         compare!(min_uniform_buffer_offset_alignment, Greater);
         compare!(min_storage_buffer_offset_alignment, Greater);
         compare!(max_inter_stage_shader_components, Less);
+        compare!(max_color_attachments, Less);
+        compare!(max_color_attachment_bytes_per_sample, Less);
         compare!(max_compute_workgroup_storage_size, Less);
         compare!(max_compute_invocations_per_workgroup, Less);
         compare!(max_compute_workgroup_size_x, Less);
         compare!(max_compute_workgroup_size_y, Less);
         compare!(max_compute_workgroup_size_z, Less);
         compare!(max_compute_workgroups_per_dimension, Less);
-        compare!(max_buffer_size, Less);
+        if self.min_subgroup_size > 0 && self.max_subgroup_size > 0 {
+            compare!(min_subgroup_size, Greater);
+            compare!(max_subgroup_size, Less);
+        }
+        compare!(max_push_constant_size, Less);
         compare!(max_non_sampler_bindings, Less);
     }
 }
@@ -1482,7 +1529,6 @@ impl Limits {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DownlevelLimits {}
 
-#[allow(unknown_lints)] // derivable_impls is nightly only currently
 #[allow(clippy::derivable_impls)]
 impl Default for DownlevelLimits {
     fn default() -> Self {
@@ -1517,6 +1563,7 @@ impl DownlevelCapabilities {
     ///
     /// If this returns false, some parts of the API will result in validation errors where they would not normally.
     /// These parts can be determined by the values in this structure.
+    #[must_use]
     pub fn is_webgpu_compliant(&self) -> bool {
         self.flags.contains(DownlevelFlags::compliant())
             && self.limits == DownlevelLimits::default()
@@ -1690,6 +1737,7 @@ impl_bitflags!(DownlevelFlags);
 
 impl DownlevelFlags {
     /// All flags that indicate if the backend is WebGPU compliant
+    #[must_use]
     pub const fn compliant() -> Self {
         // We use manual bit twiddling to make this a const fn as `Sub` and `.remove` aren't const
 
@@ -1829,6 +1877,7 @@ pub struct DeviceDescriptor<L> {
 
 impl<L> DeviceDescriptor<L> {
     /// Takes a closure and maps the label of the device descriptor into another.
+    #[must_use]
     pub fn map_label<K>(&self, fun: impl FnOnce(&L) -> K) -> DeviceDescriptor<K> {
         DeviceDescriptor {
             label: fun(&self.label),
@@ -1897,6 +1946,7 @@ pub enum TextureViewDimension {
 
 impl TextureViewDimension {
     /// Get the texture dimension required of this texture view dimension.
+    #[must_use]
     pub fn compatible_texture_dimension(self) -> TextureDimension {
         match self {
             Self::D1 => TextureDimension::D1,
@@ -1959,6 +2009,7 @@ impl BlendFactor {
     /// Returns `true` if the blend factor references the second blend source.
     ///
     /// Note that the usage of those blend factors require [`Features::DUAL_SOURCE_BLENDING`].
+    #[must_use]
     pub fn ref_second_blend_source(&self) -> bool {
         match self {
             BlendFactor::Src1
@@ -2029,6 +2080,7 @@ impl BlendComponent {
 
     /// Returns true if the state relies on the constant color, which is
     /// set independently on a render command encoder.
+    #[must_use]
     pub fn uses_constant(&self) -> bool {
         match (self.src_factor, self.dst_factor) {
             (BlendFactor::Constant, _)
@@ -2152,6 +2204,7 @@ pub enum PrimitiveTopology {
 
 impl PrimitiveTopology {
     /// Returns true for strip topologies.
+    #[must_use]
     pub fn is_strip(&self) -> bool {
         match *self {
             Self::PointList | Self::LineList | Self::TriangleList => false,
@@ -2319,6 +2372,7 @@ impl TextureFormatFeatureFlags {
     /// Sample count supported by a given texture format.
     ///
     /// returns `true` if `count` is a supported sample count.
+    #[must_use]
     pub fn sample_count_supported(&self, count: u32) -> bool {
         use TextureFormatFeatureFlags as tfsc;
 
@@ -2333,6 +2387,7 @@ impl TextureFormatFeatureFlags {
     }
 
     /// A `Vec` of supported sample counts.
+    #[must_use]
     pub fn supported_sample_counts(&self) -> Vec<u32> {
         let all_possible_sample_counts: [u32; 5] = [1, 2, 4, 8, 16];
         all_possible_sample_counts
@@ -2498,7 +2553,7 @@ pub enum TextureFormat {
     /// Red, green, blue, and alpha channels. 10 bit integer for RGB channels, 2 bit integer for alpha channel. [0, 1023] ([0, 3] for alpha) converted to/from float [0, 1] in shader.
     Rgb10a2Unorm,
     /// Red, green, and blue channels. 11 bit float with no sign bit for RG channels. 10 bit float with no sign bit for blue channel. Float in shader.
-    Rg11b10Float,
+    Rg11b10UFloat,
 
     // Normal 64 bit formats
     /// Red and green channels. 32 bit integer per channel. Unsigned in shader.
@@ -2561,13 +2616,14 @@ pub enum TextureFormat {
     /// [`Features::TEXTURE_FORMAT_NV12`] must be enabled to use this texture format.
     NV12,
 
-    // Compressed textures usable with `TEXTURE_COMPRESSION_BC` feature.
+    // Compressed textures usable with `TEXTURE_COMPRESSION_BC` feature. `TEXTURE_COMPRESSION_SLICED_3D` is required to use with 3D textures.
     /// 4x4 block compressed texture. 8 bytes per block (4 bit/px). 4 color + alpha pallet. 5 bit R + 6 bit G + 5 bit B + 1 bit alpha.
     /// [0, 63] ([0, 1] for alpha) converted to/from float [0, 1] in shader.
     ///
     /// Also known as DXT1.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc1RgbaUnorm,
     /// 4x4 block compressed texture. 8 bytes per block (4 bit/px). 4 color + alpha pallet. 5 bit R + 6 bit G + 5 bit B + 1 bit alpha.
     /// Srgb-color [0, 63] ([0, 1] for alpha) converted to/from linear-color float [0, 1] in shader.
@@ -2575,6 +2631,7 @@ pub enum TextureFormat {
     /// Also known as DXT1.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc1RgbaUnormSrgb,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). 4 color pallet. 5 bit R + 6 bit G + 5 bit B + 4 bit alpha.
     /// [0, 63] ([0, 15] for alpha) converted to/from float [0, 1] in shader.
@@ -2582,6 +2639,7 @@ pub enum TextureFormat {
     /// Also known as DXT3.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc2RgbaUnorm,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). 4 color pallet. 5 bit R + 6 bit G + 5 bit B + 4 bit alpha.
     /// Srgb-color [0, 63] ([0, 255] for alpha) converted to/from linear-color float [0, 1] in shader.
@@ -2589,6 +2647,7 @@ pub enum TextureFormat {
     /// Also known as DXT3.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc2RgbaUnormSrgb,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). 4 color pallet + 8 alpha pallet. 5 bit R + 6 bit G + 5 bit B + 8 bit alpha.
     /// [0, 63] ([0, 255] for alpha) converted to/from float [0, 1] in shader.
@@ -2596,6 +2655,7 @@ pub enum TextureFormat {
     /// Also known as DXT5.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc3RgbaUnorm,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). 4 color pallet + 8 alpha pallet. 5 bit R + 6 bit G + 5 bit B + 8 bit alpha.
     /// Srgb-color [0, 63] ([0, 255] for alpha) converted to/from linear-color float [0, 1] in shader.
@@ -2603,6 +2663,7 @@ pub enum TextureFormat {
     /// Also known as DXT5.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc3RgbaUnormSrgb,
     /// 4x4 block compressed texture. 8 bytes per block (4 bit/px). 8 color pallet. 8 bit R.
     /// [0, 255] converted to/from float [0, 1] in shader.
@@ -2610,6 +2671,7 @@ pub enum TextureFormat {
     /// Also known as RGTC1.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc4RUnorm,
     /// 4x4 block compressed texture. 8 bytes per block (4 bit/px). 8 color pallet. 8 bit R.
     /// [-127, 127] converted to/from float [-1, 1] in shader.
@@ -2617,6 +2679,7 @@ pub enum TextureFormat {
     /// Also known as RGTC1.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc4RSnorm,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). 8 color red pallet + 8 color green pallet. 8 bit RG.
     /// [0, 255] converted to/from float [0, 1] in shader.
@@ -2624,6 +2687,7 @@ pub enum TextureFormat {
     /// Also known as RGTC2.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc5RgUnorm,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). 8 color red pallet + 8 color green pallet. 8 bit RG.
     /// [-127, 127] converted to/from float [-1, 1] in shader.
@@ -2631,18 +2695,21 @@ pub enum TextureFormat {
     /// Also known as RGTC2.
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc5RgSnorm,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). Variable sized pallet. 16 bit unsigned float RGB. Float in shader.
     ///
     /// Also known as BPTC (float).
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc6hRgbUfloat,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). Variable sized pallet. 16 bit signed float RGB. Float in shader.
     ///
     /// Also known as BPTC (float).
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc6hRgbFloat,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). Variable sized pallet. 8 bit integer RGBA.
     /// [0, 255] converted to/from float [0, 1] in shader.
@@ -2650,6 +2717,7 @@ pub enum TextureFormat {
     /// Also known as BPTC (unorm).
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc7RgbaUnorm,
     /// 4x4 block compressed texture. 16 bytes per block (8 bit/px). Variable sized pallet. 8 bit integer RGBA.
     /// Srgb-color [0, 255] converted to/from linear-color float [0, 1] in shader.
@@ -2657,6 +2725,7 @@ pub enum TextureFormat {
     /// Also known as BPTC (unorm).
     ///
     /// [`Features::TEXTURE_COMPRESSION_BC`] must be enabled to use this texture format.
+    /// [`Features::TEXTURE_COMPRESSION_BC_SLICED_3D`] must be enabled to use this texture format with 3D dimension.
     Bc7RgbaUnormSrgb,
     /// 4x4 block compressed texture. 8 bytes per block (4 bit/px). Complex pallet. 8 bit integer RGB.
     /// [0, 255] converted to/from float [0, 1] in shader.
@@ -2772,7 +2841,7 @@ impl<'de> Deserialize<'de> for TextureFormat {
                     "bgra8unorm-srgb" => TextureFormat::Bgra8UnormSrgb,
                     "rgb10a2uint" => TextureFormat::Rgb10a2Uint,
                     "rgb10a2unorm" => TextureFormat::Rgb10a2Unorm,
-                    "rg11b10ufloat" => TextureFormat::Rg11b10Float,
+                    "rg11b10ufloat" => TextureFormat::Rg11b10UFloat,
                     "rg32uint" => TextureFormat::Rg32Uint,
                     "rg32sint" => TextureFormat::Rg32Sint,
                     "rg32float" => TextureFormat::Rg32Float,
@@ -2900,7 +2969,7 @@ impl Serialize for TextureFormat {
             TextureFormat::Bgra8UnormSrgb => "bgra8unorm-srgb",
             TextureFormat::Rgb10a2Uint => "rgb10a2uint",
             TextureFormat::Rgb10a2Unorm => "rgb10a2unorm",
-            TextureFormat::Rg11b10Float => "rg11b10ufloat",
+            TextureFormat::Rg11b10UFloat => "rg11b10ufloat",
             TextureFormat::Rg32Uint => "rg32uint",
             TextureFormat::Rg32Sint => "rg32sint",
             TextureFormat::Rg32Float => "rg32float",
@@ -2978,6 +3047,7 @@ impl Serialize for TextureFormat {
 
 impl TextureAspect {
     /// Returns the texture aspect for a given plane.
+    #[must_use]
     pub fn from_plane(plane: u32) -> Option<Self> {
         Some(match plane {
             0 => Self::Plane0,
@@ -2992,6 +3062,7 @@ impl TextureFormat {
     /// Returns the aspect-specific format of the original format
     ///
     /// see <https://gpuweb.github.io/gpuweb/#abstract-opdef-resolving-gputextureaspect>
+    #[must_use]
     pub fn aspect_specific_format(&self, aspect: TextureAspect) -> Option<Self> {
         match (*self, aspect) {
             (Self::Stencil8, TextureAspect::StencilOnly) => Some(*self),
@@ -3015,6 +3086,7 @@ impl TextureFormat {
 
     /// Returns `true` if `self` is a depth or stencil component of the given
     /// combined depth-stencil format
+    #[must_use]
     pub fn is_depth_stencil_component(&self, combined_format: Self) -> bool {
         match (combined_format, *self) {
             (Self::Depth24PlusStencil8, Self::Depth24Plus | Self::Stencil8)
@@ -3026,6 +3098,7 @@ impl TextureFormat {
     /// Returns `true` if the format is a depth and/or stencil format
     ///
     /// see <https://gpuweb.github.io/gpuweb/#depth-formats>
+    #[must_use]
     pub fn is_depth_stencil_format(&self) -> bool {
         match *self {
             Self::Stencil8
@@ -3041,6 +3114,7 @@ impl TextureFormat {
     /// Returns `true` if the format is a combined depth-stencil format
     ///
     /// see <https://gpuweb.github.io/gpuweb/#combined-depth-stencil-format>
+    #[must_use]
     pub fn is_combined_depth_stencil_format(&self) -> bool {
         match *self {
             Self::Depth24PlusStencil8 | Self::Depth32FloatStencil8 => true,
@@ -3049,11 +3123,13 @@ impl TextureFormat {
     }
 
     /// Returns `true` if the format is a multi-planar format
+    #[must_use]
     pub fn is_multi_planar_format(&self) -> bool {
         self.planes().is_some()
     }
 
     /// Returns the number of planes a multi-planar format has.
+    #[must_use]
     pub fn planes(&self) -> Option<u32> {
         match *self {
             Self::NV12 => Some(2),
@@ -3062,11 +3138,13 @@ impl TextureFormat {
     }
 
     /// Returns `true` if the format has a color aspect
+    #[must_use]
     pub fn has_color_aspect(&self) -> bool {
         !self.is_depth_stencil_format()
     }
 
     /// Returns `true` if the format has a depth aspect
+    #[must_use]
     pub fn has_depth_aspect(&self) -> bool {
         match *self {
             Self::Depth16Unorm
@@ -3079,6 +3157,7 @@ impl TextureFormat {
     }
 
     /// Returns `true` if the format has a stencil aspect
+    #[must_use]
     pub fn has_stencil_aspect(&self) -> bool {
         match *self {
             Self::Stencil8 | Self::Depth24PlusStencil8 | Self::Depth32FloatStencil8 => true,
@@ -3087,6 +3166,7 @@ impl TextureFormat {
     }
 
     /// Returns the size multiple requirement for a texture using this format.
+    #[must_use]
     pub fn size_multiple_requirement(&self) -> (u32, u32) {
         match *self {
             Self::NV12 => (2, 2),
@@ -3097,6 +3177,7 @@ impl TextureFormat {
     /// Returns the dimension of a [block](https://gpuweb.github.io/gpuweb/#texel-block) of texels.
     ///
     /// Uncompressed formats have a block dimension of `(1, 1)`.
+    #[must_use]
     pub fn block_dimensions(&self) -> (u32, u32) {
         match *self {
             Self::R8Unorm
@@ -3130,7 +3211,7 @@ impl TextureFormat {
             | Self::Rgb9e5Ufloat
             | Self::Rgb10a2Uint
             | Self::Rgb10a2Unorm
-            | Self::Rg11b10Float
+            | Self::Rg11b10UFloat
             | Self::Rg32Uint
             | Self::Rg32Sint
             | Self::Rg32Float
@@ -3196,11 +3277,19 @@ impl TextureFormat {
     }
 
     /// Returns `true` for compressed formats.
+    #[must_use]
     pub fn is_compressed(&self) -> bool {
         self.block_dimensions() != (1, 1)
     }
 
+    /// Returns `true` for BCn compressed formats.
+    #[must_use]
+    pub fn is_bcn(&self) -> bool {
+        self.required_features() == Features::TEXTURE_COMPRESSION_BC
+    }
+
     /// Returns the required features (if any) in order to use the texture.
+    #[must_use]
     pub fn required_features(&self) -> Features {
         match *self {
             Self::R8Unorm
@@ -3230,7 +3319,7 @@ impl TextureFormat {
             | Self::Rgb9e5Ufloat
             | Self::Rgb10a2Uint
             | Self::Rgb10a2Unorm
-            | Self::Rg11b10Float
+            | Self::Rg11b10UFloat
             | Self::Rg32Uint
             | Self::Rg32Sint
             | Self::Rg32Float
@@ -3293,6 +3382,7 @@ impl TextureFormat {
     /// Returns the format features guaranteed by the WebGPU spec.
     ///
     /// Additional features are available if `Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` is enabled.
+    #[must_use]
     pub fn guaranteed_format_features(&self, device_features: Features) -> TextureFormatFeatures {
         // Multisampling
         let noaa = TextureFormatFeatureFlags::empty();
@@ -3348,7 +3438,7 @@ impl TextureFormat {
             Self::Bgra8UnormSrgb =>       (msaa_resolve, attachment),
             Self::Rgb10a2Uint =>          (        msaa, attachment),
             Self::Rgb10a2Unorm =>         (msaa_resolve, attachment),
-            Self::Rg11b10Float =>         (        msaa,   rg11b10f),
+            Self::Rg11b10UFloat =>        (        msaa,   rg11b10f),
             Self::Rg32Uint =>             (        noaa,  all_flags),
             Self::Rg32Sint =>             (        noaa,  all_flags),
             Self::Rg32Float =>            (        noaa,  all_flags),
@@ -3428,6 +3518,7 @@ impl TextureFormat {
     ///
     /// Returns `None` only if this is a combined depth-stencil format or a multi-planar format
     /// and `TextureAspect::All` or no `aspect` was provided.
+    #[must_use]
     pub fn sample_type(
         &self,
         aspect: Option<TextureAspect>,
@@ -3458,7 +3549,7 @@ impl TextureFormat {
             | Self::Rg16Float
             | Self::Rgba16Float
             | Self::Rgb10a2Unorm
-            | Self::Rg11b10Float => Some(float),
+            | Self::Rg11b10UFloat => Some(float),
 
             Self::R32Float | Self::Rg32Float | Self::Rgba32Float => Some(float32_sample_type),
 
@@ -3550,6 +3641,7 @@ impl TextureFormat {
     ///  - the format is `Depth24Plus`
     ///  - the format is `Depth24PlusStencil8` and `aspect` is depth.
     #[deprecated(since = "0.19.0", note = "Use `block_copy_size` instead.")]
+    #[must_use]
     pub fn block_size(&self, aspect: Option<TextureAspect>) -> Option<u32> {
         self.block_copy_size(aspect)
     }
@@ -3566,6 +3658,7 @@ impl TextureFormat {
     ///  - the format is a multi-planar format and no `aspect` was provided
     ///  - the format is `Depth24Plus`
     ///  - the format is `Depth24PlusStencil8` and `aspect` is depth.
+    #[must_use]
     pub fn block_copy_size(&self, aspect: Option<TextureAspect>) -> Option<u32> {
         match *self {
             Self::R8Unorm | Self::R8Snorm | Self::R8Uint | Self::R8Sint => Some(1),
@@ -3588,7 +3681,7 @@ impl TextureFormat {
             | Self::Rg16Sint
             | Self::Rg16Float => Some(4),
             Self::R32Uint | Self::R32Sint | Self::R32Float => Some(4),
-            Self::Rgb9e5Ufloat | Self::Rgb10a2Uint | Self::Rgb10a2Unorm | Self::Rg11b10Float => {
+            Self::Rgb9e5Ufloat | Self::Rgb10a2Uint | Self::Rgb10a2Unorm | Self::Rg11b10UFloat => {
                 Some(4)
             }
 
@@ -3653,6 +3746,7 @@ impl TextureFormat {
 
     /// The number of bytes occupied per pixel in a color attachment
     /// <https://gpuweb.github.io/gpuweb/#render-target-pixel-byte-cost>
+    #[must_use]
     pub fn target_pixel_byte_cost(&self) -> Option<u32> {
         match *self {
             Self::R8Unorm | Self::R8Snorm | Self::R8Uint | Self::R8Sint => Some(1),
@@ -3690,7 +3784,7 @@ impl TextureFormat {
             | Self::Rg32Float
             | Self::Rgb10a2Uint
             | Self::Rgb10a2Unorm
-            | Self::Rg11b10Float => Some(8),
+            | Self::Rg11b10UFloat => Some(8),
             Self::Rgba32Uint | Self::Rgba32Sint | Self::Rgba32Float => Some(16),
             Self::Stencil8
             | Self::Depth16Unorm
@@ -3729,6 +3823,7 @@ impl TextureFormat {
     }
 
     /// See <https://gpuweb.github.io/gpuweb/#render-target-component-alignment>
+    #[must_use]
     pub fn target_component_alignment(&self) -> Option<u32> {
         match *self {
             Self::R8Unorm
@@ -3772,7 +3867,7 @@ impl TextureFormat {
             | Self::Rgba32Float
             | Self::Rgb10a2Uint
             | Self::Rgb10a2Unorm
-            | Self::Rg11b10Float => Some(4),
+            | Self::Rg11b10UFloat => Some(4),
             Self::Stencil8
             | Self::Depth16Unorm
             | Self::Depth24Plus
@@ -3810,6 +3905,7 @@ impl TextureFormat {
     }
 
     /// Returns the number of components this format has.
+    #[must_use]
     pub fn components(&self) -> u8 {
         self.components_with_aspect(TextureAspect::All)
     }
@@ -3817,6 +3913,7 @@ impl TextureFormat {
     /// Returns the number of components this format has taking into account the `aspect`.
     ///
     /// The `aspect` is only relevant for combined depth-stencil formats and multi-planar formats.
+    #[must_use]
     pub fn components_with_aspect(&self, aspect: TextureAspect) -> u8 {
         match *self {
             Self::R8Unorm
@@ -3861,7 +3958,7 @@ impl TextureFormat {
             | Self::Rgba32Sint
             | Self::Rgba32Float => 4,
 
-            Self::Rgb9e5Ufloat | Self::Rg11b10Float => 3,
+            Self::Rgb9e5Ufloat | Self::Rg11b10UFloat => 3,
             Self::Rgb10a2Uint | Self::Rgb10a2Unorm => 4,
 
             Self::Stencil8 | Self::Depth16Unorm | Self::Depth24Plus | Self::Depth32Float => 1,
@@ -3902,6 +3999,7 @@ impl TextureFormat {
     }
 
     /// Strips the `Srgb` suffix from the given texture format.
+    #[must_use]
     pub fn remove_srgb_suffix(&self) -> TextureFormat {
         match *self {
             Self::Rgba8UnormSrgb => Self::Rgba8Unorm,
@@ -3925,6 +4023,7 @@ impl TextureFormat {
     }
 
     /// Adds an `Srgb` suffix to the given texture format, if the format supports it.
+    #[must_use]
     pub fn add_srgb_suffix(&self) -> TextureFormat {
         match *self {
             Self::Rgba8Unorm => Self::Rgba8UnormSrgb,
@@ -3948,6 +4047,7 @@ impl TextureFormat {
     }
 
     /// Returns `true` for srgb formats.
+    #[must_use]
     pub fn is_srgb(&self) -> bool {
         *self != self.remove_srgb_suffix()
     }
@@ -4076,7 +4176,7 @@ fn texture_format_serialize() {
         "\"rgb10a2unorm\"".to_string()
     );
     assert_eq!(
-        serde_json::to_string(&TextureFormat::Rg11b10Float).unwrap(),
+        serde_json::to_string(&TextureFormat::Rg11b10UFloat).unwrap(),
         "\"rg11b10ufloat\"".to_string()
     );
     assert_eq!(
@@ -4373,7 +4473,7 @@ fn texture_format_deserialize() {
     );
     assert_eq!(
         serde_json::from_str::<TextureFormat>("\"rg11b10ufloat\"").unwrap(),
-        TextureFormat::Rg11b10Float
+        TextureFormat::Rg11b10UFloat
     );
     assert_eq!(
         serde_json::from_str::<TextureFormat>("\"rg32uint\"").unwrap(),
@@ -4593,6 +4693,7 @@ pub enum Maintain<T> {
 
 impl<T> Maintain<T> {
     /// Construct a wait variant
+    #[must_use]
     pub fn wait() -> Self {
         // This function seems a little silly, but it is useful to allow
         // <https://github.com/gfx-rs/wgpu/pull/5012> to be split up, as
@@ -4601,6 +4702,7 @@ impl<T> Maintain<T> {
     }
 
     /// Construct a WaitForSubmissionIndex variant
+    #[must_use]
     pub fn wait_for(submission_index: T) -> Self {
         // This function seems a little silly, but it is useful to allow
         // <https://github.com/gfx-rs/wgpu/pull/5012> to be split up, as
@@ -4609,6 +4711,7 @@ impl<T> Maintain<T> {
     }
 
     /// This maintain represents a wait of some kind.
+    #[must_use]
     pub fn is_wait(&self) -> bool {
         match *self {
             Self::WaitForSubmissionIndex(..) | Self::Wait => true,
@@ -4617,6 +4720,7 @@ impl<T> Maintain<T> {
     }
 
     /// Map on the wait index type.
+    #[must_use]
     pub fn map_index<U, F>(self, func: F) -> Maintain<U>
     where
         F: FnOnce(T) -> U,
@@ -4642,6 +4746,7 @@ pub enum MaintainResult {
 
 impl MaintainResult {
     /// Returns true if the result is [`Self::SubmissionQueueEmpty`]`.
+    #[must_use]
     pub fn is_queue_empty(&self) -> bool {
         matches!(self, Self::SubmissionQueueEmpty)
     }
@@ -4674,11 +4779,13 @@ pub struct StencilState {
 
 impl StencilState {
     /// Returns true if the stencil test is enabled.
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         (self.front != StencilFaceState::IGNORE || self.back != StencilFaceState::IGNORE)
             && (self.read_mask != 0 || self.write_mask != 0)
     }
     /// Returns true if the state doesn't mutate the target values.
+    #[must_use]
     pub fn is_read_only(&self, cull_mode: Option<Face>) -> bool {
         // The rules are defined in step 7 of the "Device timeline initialization steps"
         // subsection of the "Render Pipeline Creation" section of WebGPU
@@ -4694,6 +4801,7 @@ impl StencilState {
         front_ro && back_ro
     }
     /// Returns true if the stencil state uses the reference value for testing.
+    #[must_use]
     pub fn needs_ref_value(&self) -> bool {
         self.front.needs_ref_value() || self.back.needs_ref_value()
     }
@@ -4719,6 +4827,7 @@ pub struct DepthBiasState {
 
 impl DepthBiasState {
     /// Returns true if the depth biasing is enabled.
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.constant != 0 || self.slope_scale != 0.0
     }
@@ -4769,21 +4878,25 @@ pub struct DepthStencilState {
 
 impl DepthStencilState {
     /// Returns true if the depth testing is enabled.
+    #[must_use]
     pub fn is_depth_enabled(&self) -> bool {
         self.depth_compare != CompareFunction::Always || self.depth_write_enabled
     }
 
     /// Returns true if the state doesn't mutate the depth buffer.
+    #[must_use]
     pub fn is_depth_read_only(&self) -> bool {
         !self.depth_write_enabled
     }
 
     /// Returns true if the state doesn't mutate the stencil.
+    #[must_use]
     pub fn is_stencil_read_only(&self, cull_mode: Option<Face>) -> bool {
         self.stencil.is_read_only(cull_mode)
     }
 
     /// Returns true if the state doesn't mutate either depth or stencil of the target.
+    #[must_use]
     pub fn is_read_only(&self, cull_mode: Option<Face>) -> bool {
         self.is_depth_read_only() && self.is_stencil_read_only(cull_mode)
     }
@@ -4849,7 +4962,7 @@ pub enum StencilOperation {
 pub struct StencilFaceState {
     /// Comparison function that determines if the fail_op or pass_op is used on the stencil buffer.
     pub compare: CompareFunction,
-    /// Operation that is preformed when stencil test fails.
+    /// Operation that is performed when stencil test fails.
     pub fail_op: StencilOperation,
     /// Operation that is performed when depth test fails but stencil test succeeds.
     pub depth_fail_op: StencilOperation,
@@ -4867,6 +4980,7 @@ impl StencilFaceState {
     };
 
     /// Returns true if the face state uses the reference value for testing or operation.
+    #[must_use]
     pub fn needs_ref_value(&self) -> bool {
         self.compare.needs_ref_value()
             || self.fail_op == StencilOperation::Replace
@@ -4875,6 +4989,7 @@ impl StencilFaceState {
     }
 
     /// Returns true if the face state doesn't mutate the target values.
+    #[must_use]
     pub fn is_read_only(&self) -> bool {
         self.pass_op == StencilOperation::Keep
             && self.depth_fail_op == StencilOperation::Keep
@@ -4921,6 +5036,7 @@ pub enum CompareFunction {
 
 impl CompareFunction {
     /// Returns true if the comparison depends on the reference value.
+    #[must_use]
     pub fn needs_ref_value(self) -> bool {
         match self {
             Self::Never | Self::Always => false,
@@ -5104,6 +5220,7 @@ pub enum VertexFormat {
 
 impl VertexFormat {
     /// Returns the byte size of the format.
+    #[must_use]
     pub const fn size(&self) -> u64 {
         match self {
             Self::Uint8x2 | Self::Sint8x2 | Self::Unorm8x2 | Self::Snorm8x2 => 2,
@@ -5208,6 +5325,7 @@ pub struct BufferDescriptor<L> {
 
 impl<L> BufferDescriptor<L> {
     /// Takes a closure and maps the label of the buffer descriptor into another.
+    #[must_use]
     pub fn map_label<K>(&self, fun: impl FnOnce(&L) -> K) -> BufferDescriptor<K> {
         BufferDescriptor {
             label: fun(&self.label),
@@ -5232,6 +5350,7 @@ pub struct CommandEncoderDescriptor<L> {
 
 impl<L> CommandEncoderDescriptor<L> {
     /// Takes a closure and maps the label of the command encoder descriptor into another.
+    #[must_use]
     pub fn map_label<K>(&self, fun: impl FnOnce(&L) -> K) -> CommandEncoderDescriptor<K> {
         CommandEncoderDescriptor {
             label: fun(&self.label),
@@ -5535,6 +5654,7 @@ impl PresentationTimestamp {
     pub const INVALID_TIMESTAMP: Self = Self(u128::MAX);
 
     /// Returns true if this timestamp is the invalid timestamp.
+    #[must_use]
     pub fn is_invalid(self) -> bool {
         self == Self::INVALID_TIMESTAMP
     }
@@ -5637,6 +5757,7 @@ impl Origin2d {
     pub const ZERO: Self = Self { x: 0, y: 0 };
 
     /// Adds the third dimension to this origin
+    #[must_use]
     pub fn to_3d(self, z: u32) -> Origin3d {
         Origin3d {
             x: self.x,
@@ -5674,6 +5795,7 @@ impl Origin3d {
     pub const ZERO: Self = Self { x: 0, y: 0, z: 0 };
 
     /// Removes the third dimension from this origin
+    #[must_use]
     pub fn to_2d(self) -> Origin2d {
         Origin2d {
             x: self.x,
@@ -5741,6 +5863,7 @@ impl Extent3d {
     /// This is the texture extent that you must upload at when uploading to _mipmaps_ of compressed textures.
     ///
     /// [physical size]: https://gpuweb.github.io/gpuweb/#physical-miplevel-specific-texture-extent
+    #[must_use]
     pub fn physical_size(&self, format: TextureFormat) -> Self {
         let (block_width, block_height) = format.block_dimensions();
 
@@ -5758,6 +5881,7 @@ impl Extent3d {
     ///
     /// Treats the depth as part of the mipmaps. If calculating
     /// for a 2DArray texture, which does not mipmap depth, set depth to 1.
+    #[must_use]
     pub fn max_mips(&self, dim: TextureDimension) -> u32 {
         match dim {
             TextureDimension::D1 => 1,
@@ -5776,6 +5900,7 @@ impl Extent3d {
     /// Does *not* account for memory size being a multiple of block size.
     ///
     /// <https://gpuweb.github.io/gpuweb/#logical-miplevel-specific-texture-extent>
+    #[must_use]
     pub fn mip_level_size(&self, level: u32, dim: TextureDimension) -> Self {
         Self {
             width: u32::max(1, self.width >> level),
@@ -5927,6 +6052,7 @@ pub struct TextureDescriptor<L, V> {
 
 impl<L, V> TextureDescriptor<L, V> {
     /// Takes a closure and maps the label of the texture descriptor into another.
+    #[must_use]
     pub fn map_label<K>(&self, fun: impl FnOnce(&L) -> K) -> TextureDescriptor<K, V>
     where
         V: Clone,
@@ -5944,6 +6070,7 @@ impl<L, V> TextureDescriptor<L, V> {
     }
 
     /// Maps the label and view_formats of the texture descriptor into another.
+    #[must_use]
     pub fn map_label_and_view_formats<K, M>(
         &self,
         l_fun: impl FnOnce(&L) -> K,
@@ -5994,6 +6121,7 @@ impl<L, V> TextureDescriptor<L, V> {
     /// assert_eq!(desc.mip_level_size(6), Some(wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 }));
     /// assert_eq!(desc.mip_level_size(7), None);
     /// ```
+    #[must_use]
     pub fn mip_level_size(&self, level: u32) -> Option<Extent3d> {
         if level >= self.mip_level_count {
             return None;
@@ -6005,6 +6133,7 @@ impl<L, V> TextureDescriptor<L, V> {
     /// Computes the render extent of this texture.
     ///
     /// <https://gpuweb.github.io/gpuweb/#abstract-opdef-compute-render-extent>
+    #[must_use]
     pub fn compute_render_extent(&self, mip_level: u32) -> Extent3d {
         Extent3d {
             width: u32::max(1, self.size.width >> mip_level),
@@ -6016,6 +6145,7 @@ impl<L, V> TextureDescriptor<L, V> {
     /// Returns the number of array layers.
     ///
     /// <https://gpuweb.github.io/gpuweb/#abstract-opdef-array-layer-count>
+    #[must_use]
     pub fn array_layer_count(&self) -> u32 {
         match self.dimension {
             TextureDimension::D1 | TextureDimension::D3 => 1,
@@ -6127,6 +6257,7 @@ pub struct CommandBufferDescriptor<L> {
 
 impl<L> CommandBufferDescriptor<L> {
     /// Takes a closure and maps the label of the command buffer descriptor into another.
+    #[must_use]
     pub fn map_label<K>(&self, fun: impl FnOnce(&L) -> K) -> CommandBufferDescriptor<K> {
         CommandBufferDescriptor {
             label: fun(&self.label),
@@ -6175,6 +6306,7 @@ pub struct RenderBundleDescriptor<L> {
 
 impl<L> RenderBundleDescriptor<L> {
     /// Takes a closure and maps the label of the render bundle descriptor into another.
+    #[must_use]
     pub fn map_label<K>(&self, fun: impl FnOnce(&L) -> K) -> RenderBundleDescriptor<K> {
         RenderBundleDescriptor {
             label: fun(&self.label),
@@ -6606,6 +6738,7 @@ pub enum BindingType {
 
 impl BindingType {
     /// Returns true for buffer bindings with dynamic offset enabled.
+    #[must_use]
     pub fn has_dynamic_offset(&self) -> bool {
         match *self {
             Self::Buffer {
@@ -6726,14 +6859,21 @@ pub struct ImageCopyExternalImage {
 pub enum ExternalImageSource {
     /// Copy from a previously-decoded image bitmap.
     ImageBitmap(web_sys::ImageBitmap),
+    /// Copy from an image element.
+    HTMLImageElement(web_sys::HtmlImageElement),
     /// Copy from a current frame of a video element.
     HTMLVideoElement(web_sys::HtmlVideoElement),
+    /// Copy from an image.
+    ImageData(web_sys::ImageData),
     /// Copy from a on-screen canvas.
     HTMLCanvasElement(web_sys::HtmlCanvasElement),
     /// Copy from a off-screen canvas.
     ///
     /// Requires [`DownlevelFlags::UNRESTRICTED_EXTERNAL_TEXTURE_COPIES`]
     OffscreenCanvas(web_sys::OffscreenCanvas),
+    /// Copy from a video frame.
+    #[cfg(web_sys_unstable_apis)]
+    VideoFrame(web_sys::VideoFrame),
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -6742,9 +6882,13 @@ impl ExternalImageSource {
     pub fn width(&self) -> u32 {
         match self {
             ExternalImageSource::ImageBitmap(b) => b.width(),
+            ExternalImageSource::HTMLImageElement(i) => i.width(),
             ExternalImageSource::HTMLVideoElement(v) => v.video_width(),
+            ExternalImageSource::ImageData(i) => i.width(),
             ExternalImageSource::HTMLCanvasElement(c) => c.width(),
             ExternalImageSource::OffscreenCanvas(c) => c.width(),
+            #[cfg(web_sys_unstable_apis)]
+            ExternalImageSource::VideoFrame(v) => v.display_width(),
         }
     }
 
@@ -6752,9 +6896,13 @@ impl ExternalImageSource {
     pub fn height(&self) -> u32 {
         match self {
             ExternalImageSource::ImageBitmap(b) => b.height(),
+            ExternalImageSource::HTMLImageElement(i) => i.height(),
             ExternalImageSource::HTMLVideoElement(v) => v.video_height(),
+            ExternalImageSource::ImageData(i) => i.height(),
             ExternalImageSource::HTMLCanvasElement(c) => c.height(),
             ExternalImageSource::OffscreenCanvas(c) => c.height(),
+            #[cfg(web_sys_unstable_apis)]
+            ExternalImageSource::VideoFrame(v) => v.display_height(),
         }
     }
 }
@@ -6766,9 +6914,13 @@ impl std::ops::Deref for ExternalImageSource {
     fn deref(&self) -> &Self::Target {
         match self {
             Self::ImageBitmap(b) => b,
+            Self::HTMLImageElement(i) => i,
             Self::HTMLVideoElement(v) => v,
+            Self::ImageData(i) => i,
             Self::HTMLCanvasElement(c) => c,
             Self::OffscreenCanvas(c) => c,
+            #[cfg(web_sys_unstable_apis)]
+            Self::VideoFrame(v) => v,
         }
     }
 }
@@ -6893,6 +7045,7 @@ impl ImageSubresourceRange {
     /// };
     /// assert_eq!(range_mixed.is_full_resource(wgpu::TextureFormat::Stencil8, 5, 10), false);
     /// ```
+    #[must_use]
     pub fn is_full_resource(
         &self,
         format: TextureFormat,
@@ -6919,6 +7072,7 @@ impl ImageSubresourceRange {
     }
 
     /// Returns the mip level range of a subresource range describes for a specific texture.
+    #[must_use]
     pub fn mip_range(&self, mip_level_count: u32) -> Range<u32> {
         self.base_mip_level..match self.mip_level_count {
             Some(mip_level_count) => self.base_mip_level + mip_level_count,
@@ -6927,6 +7081,7 @@ impl ImageSubresourceRange {
     }
 
     /// Returns the layer range of a subresource range describes for a specific texture.
+    #[must_use]
     pub fn layer_range(&self, array_layer_count: u32) -> Range<u32> {
         self.base_array_layer..match self.array_layer_count {
             Some(array_layer_count) => self.base_array_layer + array_layer_count,
@@ -6973,6 +7128,7 @@ pub struct QuerySetDescriptor<L> {
 
 impl<L> QuerySetDescriptor<L> {
     /// Takes a closure and maps the label of the query set descriptor into another.
+    #[must_use]
     pub fn map_label<'a, K>(&'a self, fun: impl FnOnce(&'a L) -> K) -> QuerySetDescriptor<K> {
         QuerySetDescriptor {
             label: fun(&self.label),
@@ -7067,10 +7223,11 @@ pub struct DrawIndirectArgs {
 
 impl DrawIndirectArgs {
     /// Returns the bytes representation of the struct, ready to be written in a buffer.
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::mem::transmute(std::slice::from_raw_parts(
-                self as *const _ as *const u8,
+                self as *const _ as *const u8, 
                 std::mem::size_of::<Self>(),
             ))
         }
@@ -7097,6 +7254,7 @@ pub struct DrawIndexedIndirectArgs {
 
 impl DrawIndexedIndirectArgs {
     /// Returns the bytes representation of the struct, ready to be written in a buffer.
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::mem::transmute(std::slice::from_raw_parts(
@@ -7121,10 +7279,11 @@ pub struct DispatchIndirectArgs {
 
 impl DispatchIndirectArgs {
     /// Returns the bytes representation of the struct, ready to be written into a buffer.
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::mem::transmute(std::slice::from_raw_parts(
-                self as *const _ as *const u8,
+               self as *const _ as *const u8, 
                 std::mem::size_of::<Self>(),
             ))
         }
@@ -7140,6 +7299,7 @@ pub struct ShaderBoundChecks {
 
 impl ShaderBoundChecks {
     /// Creates a new configuration where the shader is bound checked.
+    #[must_use]
     pub fn new() -> Self {
         ShaderBoundChecks {
             runtime_checks: true,
@@ -7151,6 +7311,7 @@ impl ShaderBoundChecks {
     /// # Safety
     /// The caller MUST ensure that all shaders built with this configuration don't perform any
     /// out of bounds reads or writes.
+    #[must_use]
     pub unsafe fn unchecked() -> Self {
         ShaderBoundChecks {
             runtime_checks: false,
@@ -7158,6 +7319,7 @@ impl ShaderBoundChecks {
     }
 
     /// Query whether runtime bound checks are enabled in this configuration
+    #[must_use]
     pub fn runtime_checks(&self) -> bool {
         self.runtime_checks
     }

@@ -2229,10 +2229,6 @@ double HTMLMediaElement::MutedPlayTime() const {
   return mDecoder ? mDecoder->GetMutedPlayTimeInSeconds() : -1.0;
 }
 
-double HTMLMediaElement::VideoDecodeSuspendedTime() const {
-  return mDecoder ? mDecoder->GetVideoDecodeSuspendedTimeInSeconds() : -1.0;
-}
-
 void HTMLMediaElement::SetFormatDiagnosticsReportForMimeType(
     const nsAString& aMimeType, DecoderDoctorReportType aType) {
   DecoderDoctorDiagnostics diagnostics;
@@ -7537,8 +7533,9 @@ void HTMLMediaElement::GetEMEInfo(dom::EMEDebugInfo& aInfo) {
 
 void HTMLMediaElement::NotifyDecoderActivityChanges() const {
   if (mDecoder) {
-    mDecoder->NotifyOwnerActivityChanged(IsActuallyInvisible(),
-                                         IsInComposedDoc());
+    mDecoder->NotifyOwnerActivityChanged(
+        IsActuallyInvisible(), IsInComposedDoc(),
+        OwnerDoc()->IsInBackgroundWindow(), HasPendingCallbacks());
   }
 }
 

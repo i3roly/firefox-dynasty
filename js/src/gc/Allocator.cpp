@@ -27,7 +27,6 @@
 #include "vm/JSContext-inl.h"
 #include "vm/JSScript-inl.h"
 
-using mozilla::TimeDuration;
 using mozilla::TimeStamp;
 
 using namespace js;
@@ -113,7 +112,7 @@ MOZ_NEVER_INLINE void* CellAllocator::RetryNurseryAlloc(JSContext* cx,
   }
 
   // As a final fallback, allocate the cell in the tenured heap.
-  return TryNewTenuredCell<allowGC>(cx, allocKind, thingSize);
+  return TryNewTenuredCell<allowGC>(cx, allocKind);
 }
 
 template void* CellAllocator::RetryNurseryAlloc<NoGC>(JSContext* cx,
@@ -128,26 +127,22 @@ template void* CellAllocator::RetryNurseryAlloc<CanGC>(JSContext* cx,
                                                        AllocSite* site);
 
 template <AllowGC allowGC>
-void* gc::CellAllocator::AllocTenuredCell(JSContext* cx, gc::AllocKind kind,
-                                          size_t size) {
+void* gc::CellAllocator::AllocTenuredCell(JSContext* cx, gc::AllocKind kind) {
   MOZ_ASSERT(!IsNurseryAllocable(kind));
-  MOZ_ASSERT(size == Arena::thingSize(kind));
 
   if (!PreAllocChecks<allowGC>(cx, kind)) {
     return nullptr;
   }
 
-  return TryNewTenuredCell<allowGC>(cx, kind, size);
+  return TryNewTenuredCell<allowGC>(cx, kind);
 }
-template void* gc::CellAllocator::AllocTenuredCell<NoGC>(JSContext*, AllocKind,
-                                                         size_t);
-template void* gc::CellAllocator::AllocTenuredCell<CanGC>(JSContext*, AllocKind,
-                                                          size_t);
+template void* gc::CellAllocator::AllocTenuredCell<NoGC>(JSContext*, AllocKind);
+template void* gc::CellAllocator::AllocTenuredCell<CanGC>(JSContext*,
+                                                          AllocKind);
 
 template <AllowGC allowGC>
 /* static */
-void* CellAllocator::TryNewTenuredCell(JSContext* cx, AllocKind kind,
-                                       size_t thingSize) {
+void* CellAllocator::TryNewTenuredCell(JSContext* cx, AllocKind kind) {
   if constexpr (allowGC) {
     // Invoking the interrupt callback can fail and we can't usefully
     // handle that here. Just check in case we need to collect instead.
@@ -168,7 +163,7 @@ void* CellAllocator::TryNewTenuredCell(JSContext* cx, AllocKind kind,
     if (MOZ_UNLIKELY(!ptr)) {
       if constexpr (allowGC) {
         cx->runtime()->gc.attemptLastDitchGC(cx);
-        ptr = TryNewTenuredCell<NoGC>(cx, kind, thingSize);
+        ptr = TryNewTenuredCell<NoGC>(cx, kind);
         if (ptr) {
           return ptr;
         }
@@ -193,11 +188,9 @@ void* CellAllocator::TryNewTenuredCell(JSContext* cx, AllocKind kind,
   return ptr;
 }
 template void* CellAllocator::TryNewTenuredCell<NoGC>(JSContext* cx,
-                                                      AllocKind kind,
-                                                      size_t thingSize);
+                                                      AllocKind kind);
 template void* CellAllocator::TryNewTenuredCell<CanGC>(JSContext* cx,
-                                                       AllocKind kind,
-                                                       size_t thingSize);
+                                                       AllocKind kind);
 
 void GCRuntime::attemptLastDitchGC(JSContext* cx) {
   // Either there was no memory available for a new chunk or the heap hit its
@@ -447,7 +440,7 @@ inline void* FreeLists::setArenaAndAllocate(Arena* arena, AllocKind kind) {
   FreeSpan* span = arena->getFirstFreeSpan();
   freeLists_[kind] = span;
 
-  Zone* zone = arena->zone;
+  Zone* zone = arena->zone();
   if (MOZ_UNLIKELY(zone->isGCMarkingOrSweeping())) {
     arena->arenaAllocatedDuringGC();
   }
@@ -463,7 +456,7 @@ void Arena::arenaAllocatedDuringGC() {
   // incremental GC will be marked black by pre-marking all free cells in the
   // arena we are about to allocate from.
 
-  MOZ_ASSERT(zone->isGCMarkingOrSweeping());
+  MOZ_ASSERT(zone()->isGCMarkingOrSweeping());
   for (ArenaFreeCellIter cell(this); !cell.done(); cell.next()) {
     MOZ_ASSERT(!cell->isMarkedAny());
     cell->markBlack();
@@ -515,7 +508,7 @@ Arena* TenuredChunk::allocateArena(GCRuntime* gc, Zone* zone,
   MOZ_ASSERT(info.numArenasFreeCommitted > 0);
   Arena* arena = fetchNextFreeArena(gc);
 
-  arena->init(zone, thingKind, lock);
+  arena->init(gc, zone, thingKind, lock);
   updateChunkListAfterAlloc(gc, lock);
 
   verify();

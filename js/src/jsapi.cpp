@@ -77,7 +77,7 @@
 #include "js/WrapperCallbacks.h"
 #include "proxy/DOMProxy.h"
 #include "util/Identifier.h"  // IsIdentifier
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BoundFunctionObject.h"
 #include "vm/EnvironmentObject.h"
@@ -91,6 +91,7 @@
 #include "vm/JSFunction.h"
 #include "vm/JSObject.h"
 #include "vm/JSScript.h"
+#include "vm/Logging.h"
 #include "vm/PlainObject.h"    // js::PlainObject
 #include "vm/PromiseObject.h"  // js::PromiseObject
 #include "vm/Runtime.h"
@@ -118,13 +119,10 @@
 using namespace js;
 
 using mozilla::Maybe;
-using mozilla::PodCopy;
-using mozilla::Some;
 
 using JS::AutoStableStringChars;
 using JS::CompileOptions;
 using JS::ReadOnlyCompileOptions;
-using JS::SourceText;
 
 // See preprocessor definition of JS_BITS_PER_WORD in jstypes.h; make sure
 // JS_64BIT (used internally) agrees with it
@@ -3640,7 +3638,7 @@ JS_PUBLIC_API bool JS_Stringify(JSContext* cx, MutableHandleValue vp,
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
   cx->check(replacer, space);
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (!sb.ensureTwoByteChars()) {
     return false;
   }
@@ -3659,7 +3657,7 @@ JS_PUBLIC_API bool JS::ToJSON(JSContext* cx, HandleValue value,
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
   cx->check(replacer, space);
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (!sb.ensureTwoByteChars()) {
     return false;
   }
@@ -3680,7 +3678,7 @@ JS_PUBLIC_API bool JS::ToJSONMaybeSafely(JSContext* cx, JS::HandleObject input,
   CHECK_THREAD(cx);
   cx->check(input);
 
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (!sb.ensureTwoByteChars()) {
     return false;
   }
@@ -4923,6 +4921,10 @@ JS_PUBLIC_API void JS::SetShadowRealmInitializeGlobalCallback(
 JS_PUBLIC_API void JS::SetShadowRealmGlobalCreationCallback(
     JSContext* cx, JS::GlobalCreationCallback callback) {
   cx->runtime()->shadowRealmGlobalCreationCallback = callback;
+}
+
+JS_PUBLIC_API bool JS::SetLoggingInterface(LoggingInterface& iface) {
+  return js::LogModule::initializeAll(iface);
 }
 
 JS::FirstSubsumedFrame::FirstSubsumedFrame(

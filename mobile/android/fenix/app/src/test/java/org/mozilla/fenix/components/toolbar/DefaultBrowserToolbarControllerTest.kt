@@ -54,6 +54,7 @@ import org.mozilla.fenix.browser.browsingmode.SimpleBrowsingModeManager
 import org.mozilla.fenix.browser.readermode.ReaderModeController
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction.SnackbarAction
+import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.helpers.FenixRobolectricTestRunner
@@ -517,6 +518,40 @@ class DefaultBrowserToolbarControllerTest {
         val recordedEvents = NavigationBar.browserNewTabLongTapped.testGetValue()!!
         assertEquals(1, recordedEvents.size)
         assertEquals(null, recordedEvents.single().extra)
+    }
+
+    @Test
+    fun `GIVEN that the menu access point is not a custom tab WHEN menu button is clicked THEN handle menu navigation`() {
+        val controller = createController()
+        val accessPoint = MenuAccessPoint.Browser
+
+        controller.handleMenuButtonClicked(accessPoint)
+
+        verify {
+            navController.navigate(
+                BrowserFragmentDirections.actionGlobalMenuDialogFragment(
+                    accesspoint = accessPoint,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `GIVEN that the menu access point is a custom tab WHEN menu button is clicked THEN handle menu navigation`() {
+        val controller = createController()
+        val accessPoint = MenuAccessPoint.External
+        val customTabSessionId = "1"
+
+        controller.handleMenuButtonClicked(accessPoint, customTabSessionId)
+
+        verify {
+            navController.navigate(
+                BrowserFragmentDirections.actionGlobalMenuDialogFragment(
+                    accesspoint = accessPoint,
+                    customTabSessionId = customTabSessionId,
+                ),
+            )
+        }
     }
 
     private fun createController(

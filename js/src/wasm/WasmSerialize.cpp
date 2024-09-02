@@ -33,6 +33,7 @@ using namespace js;
 using namespace js::wasm;
 
 using mozilla::Err;
+using mozilla::Maybe;
 using mozilla::Ok;
 
 namespace js {
@@ -1158,7 +1159,7 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
   // NOTE: keep the field sequence here in sync with the sequence in the
   // declaration of CodeMetadata.
 
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 712);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 888);
   // Serialization doesn't handle asm.js or debug enabled modules
   MOZ_RELEASE_ASSERT(mode == MODE_SIZE || !item->isAsmJS());
 
@@ -1193,6 +1194,7 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
       CodeVector<mode, RefType, &CodeRefType>(coder, &item->elemSegmentTypes)));
 
   MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder, &item->dataCount)));
+  MOZ_TRY((CodePodVector(coder, &item->exportedFuncIndices)));
 
   // We do not serialize `asmJSSigToTableIndex` because we don't serialize
   // asm.js.
@@ -1212,6 +1214,7 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
 
   MOZ_TRY(CodePodVector(coder, &item->funcDefRanges));
   MOZ_TRY(CodePodVector(coder, &item->funcDefFeatureUsages));
+  MOZ_TRY(CodePodVector(coder, &item->funcDefCallRefs));
   MOZ_TRY((CodeNullablePtr<
            mode, SharedBytes,
            &CodeRefPtr<mode, const ShareableBytes, CodeShareableBytes>>(
@@ -1219,11 +1222,13 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
 
   MOZ_TRY(CodePod(coder, &item->funcDefsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->funcImportsOffsetStart));
+  MOZ_TRY(CodePod(coder, &item->funcExportsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->typeDefsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->memoriesOffsetStart));
   MOZ_TRY(CodePod(coder, &item->tablesOffsetStart));
   MOZ_TRY(CodePod(coder, &item->tagsOffsetStart));
   MOZ_TRY(CodePod(coder, &item->instanceDataLength));
+  MOZ_TRY(CodePod(coder, &item->numCallRefMetrics));
 
   if constexpr (mode == MODE_DECODE) {
     // Initialize debugging state to disabled

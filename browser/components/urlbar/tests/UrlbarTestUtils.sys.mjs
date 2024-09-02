@@ -133,6 +133,8 @@ export var UrlbarTestUtils = {
    *        your test waits for the query to finish. However, this behavior
    *        isn't always desired, for example if your test intentionally blurs
    *        the input before the query finishes. In that case, pass false.
+   * @returns {Promise}
+   *   The promise for the last query context.
    */
   async promiseAutocompleteResultPopup({
     window,
@@ -338,6 +340,8 @@ export var UrlbarTestUtils = {
    *   array. If it's in a submenu, set this to an array where each element i is
    *   a selector that can be used to get the i'th menu item that opens a
    *   submenu.
+   * @returns {DOMElement}
+   *   Returns the menu item element.
    */
   async openResultMenuAndGetItem({
     window,
@@ -828,19 +832,20 @@ export var UrlbarTestUtils = {
       "gURLBar.searchMode should exist as expected"
     );
 
+    let results = window.gURLBar.querySelector(".urlbarView-results");
     if (
       window.gURLBar.searchMode?.source &&
       window.gURLBar.searchMode.source !== UrlbarUtils.RESULT_SOURCE.SEARCH
     ) {
       this.Assert.equal(
-        window.gURLBar.getAttribute("searchmodesource"),
+        results.getAttribute("searchmodesource"),
         UrlbarUtils.getResultSourceName(window.gURLBar.searchMode.source),
-        "gURLBar has proper searchmodesource attribute"
+        "Urlbar results have proper searchmodesource attribute"
       );
     } else {
       this.Assert.ok(
-        !window.gURLBar.hasAttribute("searchmodesource"),
-        "gURLBar does not have searchmodesource attribute"
+        !results.hasAttribute("searchmodesource"),
+        "Urlbar results does not have searchmodesource attribute"
       );
     }
 
@@ -1513,10 +1518,6 @@ class TestProvider extends UrlbarProvider {
    *   {@link UrlbarView.#selectElement} method is called.
    * @param {Function} [options.onEngagement]
    *   If given, a function that will be called when engagement.
-   * @param {Function} [options.onLegacyEngagement]
-   *   If given, a function that will be called when engagement.
-   *   onLegacyEngagement() is implemented for those who rely on the
-   *   older implementation of onEngagement()
    * @param {Function} [options.onAbandonment]
    *   If given, a function that will be called when abandonment.
    * @param {Function} [options.onImpression]
@@ -1540,7 +1541,6 @@ class TestProvider extends UrlbarProvider {
     onAbandonment = null,
     onImpression = null,
     onSearchSessionEnd = null,
-    onLegacyEngagement = null,
     delayResultsPromise = null,
   } = {}) {
     if (delayResultsPromise && addTimeout) {
@@ -1578,10 +1578,6 @@ class TestProvider extends UrlbarProvider {
 
     if (onSearchSessionEnd) {
       this.onSearchSessionEnd = onSearchSessionEnd.bind(this);
-    }
-
-    if (onLegacyEngagement) {
-      this.onLegacyEngagement = onLegacyEngagement.bind(this);
     }
   }
 

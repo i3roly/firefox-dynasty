@@ -194,6 +194,7 @@ void nsCocoaWindow::DestroyNativeWindow() {
   // do this now, then these side effects will never execute, though the
   // window will definitely no longer be shown.
   Show(false);
+  [mWindow removeTrackingArea];
 
   [mWindow releaseJSObjects];
   // We want to unhook the delegate here because we don't want events
@@ -2804,8 +2805,6 @@ void nsCocoaWindow::CocoaWindowDidResize() {
 }
 
 - (void)windowDidResize:(NSNotification*)aNotification {
-  BaseWindow* window = [aNotification object];
-  [window updateTrackingArea];
 
   if (!mGeckoWindow) return;
 
@@ -3184,7 +3183,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 @end
 
 @interface BaseWindow (Private)
-- (void)removeTrackingArea;
 - (void)cursorUpdated:(NSEvent*)aEvent;
 - (void)reflowTitlebarElements;
 @end
@@ -3281,7 +3279,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
   mDrawTitle = NO;
   mTouchBar = nil;
   mIsAnimationSuppressed = NO;
-  [self updateTrackingArea];
 
   return self;
 }
@@ -3389,7 +3386,6 @@ static NSImage* GetMenuMaskImage() {
 
 - (void)dealloc {
   [mTouchBar release];
-  [self removeTrackingArea];
   ChildViewMouseTracker::OnDestroyWindow(self);
   [super dealloc];
 }
@@ -3508,18 +3504,17 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   }
 }
 
-- (void)updateTrackingArea {
-  [self removeTrackingArea];
 
-  NSView* view = self.trackingAreaView;
-  const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
-                                        NSTrackingMouseMoved |
-                                        NSTrackingActiveAlways;
-  mTrackingArea = [[NSTrackingArea alloc] initWithRect:[view bounds]
+- (void)createTrackingArea {
+  mViewWithTrackingArea = [self.trackingAreaView retain];
+  const NSTrackingAreaOptions options =
+      NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
+      NSTrackingActiveAlways | NSTrackingInVisibleRect;
+  mTrackingArea = [[NSTrackingArea alloc] initWithRect:[mViewWithTrackingArea bounds]
                                                options:options
                                                  owner:self
                                               userInfo:nil];
-  [view addTrackingArea:mTrackingArea];
+  [mViewWithTrackingArea addTrackingArea:mTrackingArea];
 }
 
 - (void)mouseEntered:(NSEvent*)aEvent {

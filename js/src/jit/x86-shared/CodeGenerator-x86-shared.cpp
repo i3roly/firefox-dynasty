@@ -56,14 +56,7 @@ void OutOfLineBailout::accept(CodeGeneratorX86Shared* codegen) {
 
 void CodeGeneratorX86Shared::emitBranch(Assembler::Condition cond,
                                         MBasicBlock* mirTrue,
-                                        MBasicBlock* mirFalse,
-                                        Assembler::NaNCond ifNaN) {
-  if (ifNaN == Assembler::NaN_IsFalse) {
-    jumpToBlock(mirFalse, Assembler::Parity);
-  } else if (ifNaN == Assembler::NaN_IsTrue) {
-    jumpToBlock(mirTrue, Assembler::Parity);
-  }
-
+                                        MBasicBlock* mirFalse) {
   if (isNextBlock(mirFalse->lir())) {
     jumpToBlock(mirTrue, cond);
   } else {
@@ -72,20 +65,16 @@ void CodeGeneratorX86Shared::emitBranch(Assembler::Condition cond,
   }
 }
 
-void CodeGenerator::visitDouble(LDouble* ins) {
-  const LDefinition* out = ins->getDef(0);
-  masm.loadConstantDouble(ins->value(), ToFloatRegister(out));
-}
-
-void CodeGenerator::visitFloat32(LFloat32* ins) {
-  const LDefinition* out = ins->getDef(0);
-  masm.loadConstantFloat32(ins->value(), ToFloatRegister(out));
-}
-
-void CodeGenerator::visitTestIAndBranch(LTestIAndBranch* test) {
-  Register input = ToRegister(test->input());
-  masm.test32(input, input);
-  emitBranch(Assembler::NonZero, test->ifTrue(), test->ifFalse());
+void CodeGeneratorX86Shared::emitBranch(Assembler::DoubleCondition cond,
+                                        MBasicBlock* ifTrue,
+                                        MBasicBlock* ifFalse,
+                                        Assembler::NaNCond ifNaN) {
+  if (ifNaN == Assembler::NaN_IsFalse) {
+    jumpToBlock(ifFalse, Assembler::Parity);
+  } else if (ifNaN == Assembler::NaN_IsTrue) {
+    jumpToBlock(ifTrue, Assembler::Parity);
+  }
+  emitBranch(Assembler::ConditionFromDoubleCondition(cond), ifTrue, ifFalse);
 }
 
 void CodeGenerator::visitTestDAndBranch(LTestDAndBranch* test) {
@@ -116,44 +105,6 @@ void CodeGenerator::visitTestFAndBranch(LTestFAndBranch* test) {
     masm.vucomiss(scratch, ToFloatRegister(opd));
   }
   emitBranch(Assembler::NotEqual, test->ifTrue(), test->ifFalse());
-}
-
-void CodeGeneratorX86Shared::emitCompare(MCompare::CompareType type,
-                                         const LAllocation* left,
-                                         const LAllocation* right) {
-#ifdef JS_CODEGEN_X64
-  if (type == MCompare::Compare_Object || type == MCompare::Compare_Symbol ||
-      type == MCompare::Compare_UIntPtr ||
-      type == MCompare::Compare_WasmAnyRef) {
-    if (right->isConstant()) {
-      MOZ_ASSERT(type == MCompare::Compare_UIntPtr);
-      masm.cmpPtr(ToRegister(left), Imm32(ToInt32(right)));
-    } else {
-      masm.cmpPtr(ToRegister(left), ToOperand(right));
-    }
-    return;
-  }
-#endif
-
-  if (right->isConstant()) {
-    masm.cmp32(ToRegister(left), Imm32(ToInt32(right)));
-  } else {
-    masm.cmp32(ToRegister(left), ToOperand(right));
-  }
-}
-
-void CodeGenerator::visitCompare(LCompare* comp) {
-  MCompare* mir = comp->mir();
-  emitCompare(mir->compareType(), comp->left(), comp->right());
-  masm.emitSet(JSOpToCondition(mir->compareType(), comp->jsop()),
-               ToRegister(comp->output()));
-}
-
-void CodeGenerator::visitCompareAndBranch(LCompareAndBranch* comp) {
-  MCompare* mir = comp->cmpMir();
-  emitCompare(mir->compareType(), comp->left(), comp->right());
-  Assembler::Condition cond = JSOpToCondition(mir->compareType(), comp->jsop());
-  emitBranch(cond, comp->ifTrue(), comp->ifFalse());
 }
 
 void CodeGenerator::visitCompareD(LCompareD* comp) {
@@ -238,8 +189,7 @@ void CodeGenerator::visitCompareDAndBranch(LCompareDAndBranch* comp) {
   }
 
   masm.compareDouble(cond, lhs, rhs);
-  emitBranch(Assembler::ConditionFromDoubleCondition(cond), comp->ifTrue(),
-             comp->ifFalse(), nanCond);
+  emitBranch(cond, comp->ifTrue(), comp->ifFalse(), nanCond);
 }
 
 void CodeGenerator::visitCompareFAndBranch(LCompareFAndBranch* comp) {
@@ -255,8 +205,7 @@ void CodeGenerator::visitCompareFAndBranch(LCompareFAndBranch* comp) {
   }
 
   masm.compareFloat(cond, lhs, rhs);
-  emitBranch(Assembler::ConditionFromDoubleCondition(cond), comp->ifTrue(),
-             comp->ifFalse(), nanCond);
+  emitBranch(cond, comp->ifTrue(), comp->ifFalse(), nanCond);
 }
 
 void CodeGenerator::visitWasmStackArg(LWasmStackArg* ins) {
@@ -376,7 +325,7 @@ void CodeGenerator::visitWasmReinterpret(LWasmReinterpret* lir) {
 
 void CodeGenerator::visitAsmJSLoadHeap(LAsmJSLoadHeap* ins) {
   const MAsmJSLoadHeap* mir = ins->mir();
-  MOZ_ASSERT(mir->access().offset() == 0);
+  MOZ_ASSERT(mir->access().offset64() == 0);
 
   const LAllocation* ptr = ins->ptr();
   const LAllocation* boundsCheckLimit = ins->boundsCheckLimit();
@@ -650,31 +599,6 @@ void CodeGenerator::visitMinMaxF(LMinMaxF* ins) {
   } else {
     masm.minFloat32(second, first, handleNaN);
   }
-}
-
-void CodeGenerator::visitClzI(LClzI* ins) {
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-  bool knownNotZero = ins->mir()->operandIsNeverZero();
-
-  masm.clz32(input, output, knownNotZero);
-}
-
-void CodeGenerator::visitCtzI(LCtzI* ins) {
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-  bool knownNotZero = ins->mir()->operandIsNeverZero();
-
-  masm.ctz32(input, output, knownNotZero);
-}
-
-void CodeGenerator::visitPopcntI(LPopcntI* ins) {
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-  Register temp =
-      ins->temp0()->isBogusTemp() ? InvalidReg : ToRegister(ins->temp0());
-
-  masm.popcnt32(input, output, temp);
 }
 
 void CodeGenerator::visitPowHalfD(LPowHalfD* ins) {
@@ -2217,17 +2141,6 @@ void CodeGenerator::visitRotateI64(LRotateI64* lir) {
       masm.rotateRight64(ToRegister(count), input, output, temp);
     }
   }
-}
-
-void CodeGenerator::visitPopcntI64(LPopcntI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register64 output = ToOutRegister64(lir);
-  Register temp = InvalidReg;
-  if (!AssemblerX86Shared::HasPOPCNT()) {
-    temp = ToRegister(lir->getTemp(0));
-  }
-
-  masm.popcnt64(input, output, temp);
 }
 
 void CodeGenerator::visitSimd128(LSimd128* ins) {
@@ -3813,7 +3726,7 @@ void CodeGenerator::visitWasmLoadLaneSimd128(LWasmLoadLaneSimd128* ins) {
   const wasm::MemoryAccessDesc& access = mir->access();
 
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
 
   const LAllocation* value = ins->src();
   Operand srcAddr = toMemoryAccessOperand(ins, offset);
@@ -3864,7 +3777,7 @@ void CodeGenerator::visitWasmStoreLaneSimd128(LWasmStoreLaneSimd128* ins) {
   const wasm::MemoryAccessDesc& access = mir->access();
 
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
 
   const LAllocation* src = ins->src();
   Operand destAddr = toMemoryAccessOperand(ins, offset);

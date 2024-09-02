@@ -22,51 +22,117 @@ add_task(async function () {
     "div",
     "color"
   ).valueSpan.querySelector(".ruleview-unmatched");
-  const setColor = unsetColor.previousElementSibling;
   is(unsetColor.textContent, " red", "red is unmatched in color");
-  is(setColor.textContent, "--color", "--color is not set correctly");
-  is(
-    setColor.dataset.variable,
-    "--color = chartreuse",
-    "--color's dataset.variable is not set correctly"
-  );
-  let previewTooltip = await assertShowPreviewTooltip(view, setColor);
-  await assertTooltipHiddenOnMouseOut(previewTooltip, setColor);
 
-  ok(
-    previewTooltip.panel.textContent.includes("--color = chartreuse"),
-    "CSS variable preview tooltip shows the expected CSS variable"
-  );
+  await assertVariableTooltipForProperty(view, "div", "color", {
+    header:
+      // prettier-ignore
+      '<span xmlns="http://www.w3.org/1999/xhtml" data-color="chartreuse">' +
+        '<span class="ruleview-swatch ruleview-colorswatch" style="background-color:chartreuse" tabindex="0" role="button">' +
+        '</span>' +
+        '<span class="ruleview-color">chartreuse</span>' +
+      '</span>',
+    // Computed value isn't displayed when it's the same as we put in the header
+    computed: null,
+  });
 
-  const unsetVar = getRuleViewProperty(
-    view,
-    "div",
-    "background-color"
-  ).valueSpan.querySelector(".ruleview-unmatched");
-  const setVar = unsetVar.nextElementSibling;
-  const setVarName = setVar.querySelector(".ruleview-variable");
-  is(
-    unsetVar.textContent,
-    "--not-set",
-    "--not-set is unmatched in background-color"
-  );
-  is(setVar.textContent, " var(--bg)", "var(--bg) parsed incorrectly");
-  is(setVarName.textContent, "--bg", "--bg is not set correctly");
-  is(
-    setVarName.dataset.variable,
-    "--bg = seagreen",
-    "--bg's dataset.variable is not set correctly"
-  );
-  previewTooltip = await assertShowPreviewTooltip(view, setVarName);
+  await assertVariableTooltipForProperty(view, "div", "background-color", {
+    index: 0,
+    header: "--not-set is not set",
+    headerClasses: [],
+    isMatched: false,
+  });
 
-  ok(
-    !previewTooltip.panel.textContent.includes("--color = chartreuse"),
-    "CSS variable preview tooltip no longer shows the previous CSS variable"
-  );
-  ok(
-    previewTooltip.panel.textContent.includes("--bg = seagreen"),
-    "CSS variable preview tooltip shows the new CSS variable"
-  );
+  await assertVariableTooltipForProperty(view, "div", "background-color", {
+    index: 1,
+    header:
+      // prettier-ignore
+      '<span xmlns="http://www.w3.org/1999/xhtml" data-color="seagreen">' +
+        '<span class="ruleview-swatch ruleview-colorswatch" style="background-color:seagreen" tabindex="0" role="button">' +
+        '</span>' +
+        '<span class="ruleview-color">seagreen</span>' +
+      '</span>',
+    // Computed value isn't displayed when it's the same as we put in the header
+    computed: null,
+  });
 
-  await assertTooltipHiddenOnMouseOut(previewTooltip, setVarName);
+  await assertVariableTooltipForProperty(view, "div", "outline-color", {
+    header:
+      // prettier-ignore
+      '<span xmlns="http://www.w3.org/1999/xhtml" data-color="chartreuse">' +
+        '<span class="ruleview-swatch ruleview-colorswatch" style="background-color:chartreuse" tabindex="0" role="button">' +
+        '</span>' +
+        '<span class="ruleview-color">' +
+          'var(' +
+            '<span data-variable="chartreuse" class="ruleview-variable">--color</span>' +
+          ')' +
+        '</span>' +
+      '</span>',
+    computed:
+      // prettier-ignore
+      `<span xmlns="http://www.w3.org/1999/xhtml" data-color="chartreuse">` +
+        `<span ` +
+          `class="ruleview-swatch ruleview-colorswatch" ` +
+          `style="background-color:chartreuse" ` +
+          `tabindex="0" ` +
+          `role="button">` +
+        `</span>` +
+        `<span class="ruleview-color">chartreuse</span>` +
+      `</span>`,
+  });
+
+  await assertVariableTooltipForProperty(view, "div", "border-color", {
+    header:
+      // prettier-ignore
+      '<span xmlns="http://www.w3.org/1999/xhtml">' +
+        'var(' +
+          '<span data-variable="light-dark(var(--color), var(--bg))" class="ruleview-variable" data-variable-computed="light-dark(chartreuse, seagreen)">' +
+            '--theme-color' +
+          '</span>' +
+        ')' +
+      '</span>',
+    computed:
+      // prettier-ignore
+      `light-dark(` +
+        `<span xmlns="http://www.w3.org/1999/xhtml" data-color="chartreuse">` +
+          `<span ` +
+            `class="ruleview-swatch ruleview-colorswatch" ` +
+            `style="background-color:chartreuse" ` +
+            `tabindex="0" ` +
+            `role="button" ` +
+            `data-color-function="light-dark">` +
+          `</span>` +
+          `<span class="ruleview-color">chartreuse</span>` +
+        `</span>, ` +
+        `<span xmlns="http://www.w3.org/1999/xhtml" data-color="seagreen" class="ruleview-unmatched">` +
+          `<span ` +
+            `class="ruleview-swatch ruleview-colorswatch" ` +
+            `style="background-color:seagreen" ` +
+            `tabindex="0" ` +
+            `role="button" ` +
+            `data-color-function="light-dark">` +
+          `</span>` +
+          `<span class="ruleview-color">seagreen</span>` +
+        `</span>` +
+      `)`,
+  });
+
+  await assertVariableTooltipForProperty(view, "div", "background", {
+    header:
+      // prettier-ignore
+      '<span xmlns="http://www.w3.org/1999/xhtml">' +
+        'var(' +
+          '<span data-variable="" class="ruleview-variable">' +
+            '--empty' +
+          '</span>' +
+        ')' +
+      '</span>',
+    computed: "&lt;empty&gt;",
+    computedClasses: ["empty-css-variable"],
+  });
+
+  await assertVariableTooltipForProperty(view, "*", "--nested-with-empty", {
+    header: "&lt;empty&gt;",
+    headerClasses: ["empty-css-variable"],
+  });
 });

@@ -421,15 +421,42 @@ AudioInputProcessing::AudioInputProcessing(uint32_t aMaxChannelCount)
 }
 
 void AudioInputProcessing::Disconnect(MediaTrackGraph* aGraph) {
-  // This method is just for asserts.
   aGraph->AssertOnGraphThread();
+  mPlatformProcessingSetGeneration = 0;
+  mPlatformProcessingSetParams = CUBEB_INPUT_PROCESSING_PARAM_NONE;
+  ApplySettingsInternal(aGraph, mSettings);
+}
+
+void AudioInputProcessing::NotifySetRequestedInputProcessingParams(
+    MediaTrackGraph* aGraph, int aGeneration,
+    cubeb_input_processing_params aRequestedParams) {
+  aGraph->AssertOnGraphThread();
+  MOZ_ASSERT(aGeneration >= mPlatformProcessingSetGeneration);
+  if (aGeneration <= mPlatformProcessingSetGeneration) {
+    return;
+  }
+  mPlatformProcessingSetGeneration = aGeneration;
+  cubeb_input_processing_params intersection =
+      mPlatformProcessingSetParams & aRequestedParams;
+  LOG("AudioInputProcessing %p platform processing params being applied are "
+      "now %s (Gen %d). Assuming %s while waiting for the result.",
+      this, CubebUtils::ProcessingParamsToString(aRequestedParams).get(),
+      aGeneration, CubebUtils::ProcessingParamsToString(intersection).get());
+  if (mPlatformProcessingSetParams == intersection) {
+    LOG("AudioInputProcessing %p intersection %s of platform processing params "
+        "already applied. Doing nothing.",
+        this, CubebUtils::ProcessingParamsToString(intersection).get());
+    return;
+  }
+  mPlatformProcessingSetParams = intersection;
+  ApplySettingsInternal(aGraph, mSettings);
 }
 
 void AudioInputProcessing::NotifySetRequestedInputProcessingParamsResult(
-    MediaTrackGraph* aGraph, cubeb_input_processing_params aRequestedParams,
+    MediaTrackGraph* aGraph, int aGeneration,
     const Result<cubeb_input_processing_params, int>& aResult) {
   aGraph->AssertOnGraphThread();
-  if (aRequestedParams != RequestedInputProcessingParams(aGraph)) {
+  if (aGeneration != mPlatformProcessingSetGeneration) {
     // This is a result from an old request, wait for a more recent one.
     return;
   }
@@ -866,20 +893,22 @@ void AudioInputProcessing::PacketizeAndProcess(AudioProcessingTrack* aTrack,
       }
     } else {
       channelCountInput = mPacketizerInput->mChannels;
-      // Deinterleave the input data
-      // Prepare an array pointing to deinterleaved channels.
+      webrtc::InterleavedView<const float> interleaved(
+          packet, mPacketizerInput->mPacketSize, channelCountInput);
+      webrtc::DeinterleavedView<float> deinterleaved(
+          mDeinterleavedBuffer.Data(), mPacketizerInput->mPacketSize,
+          channelCountInput);
+
+      Deinterleave(interleaved, deinterleaved);
+
+      // Set up pointers into the deinterleaved data for code below
       deinterleavedPacketizedInputDataChannelPointers.SetLength(
           channelCountInput);
-      offset = 0;
       for (size_t i = 0;
            i < deinterleavedPacketizedInputDataChannelPointers.Length(); ++i) {
         deinterleavedPacketizedInputDataChannelPointers[i] =
-            mDeinterleavedBuffer.Data() + offset;
-        offset += mPacketizerInput->mPacketSize;
+            deinterleaved[i].data();
       }
-      // Deinterleave to mInputBuffer, pointed to by inputBufferChannelPointers.
-      Deinterleave(packet, mPacketizerInput->mPacketSize, channelCountInput,
-                   deinterleavedPacketizedInputDataChannelPointers.Elements());
     }
 
     StreamConfig inputConfig(aTrack->mSampleRate, channelCountInput);

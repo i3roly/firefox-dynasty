@@ -9,6 +9,7 @@
 #include "mozilla/Maybe.h"
 
 #include "frontend/TryEmitter.h"
+#include "vm/CompletionKind.h"
 #include "vm/UsingHint.h"
 
 namespace js::frontend {
@@ -24,6 +25,20 @@ class MOZ_STACK_CLASS UsingEmitter {
 
   // TODO: add state transition graph and state
   // management for this emitter. (Bug 1904346)
+
+  bool hasAwaitUsing_ = false;
+
+  [[nodiscard]] bool emitThrowIfException();
+
+  [[nodiscard]] bool emitGetDisposeMethod(UsingHint hint);
+
+  [[nodiscard]] bool emitCreateDisposableResource(UsingHint hint);
+
+  [[nodiscard]] bool emitTakeDisposeCapability();
+
+  [[nodiscard]] bool emitDisposeLoop(
+      EmitterScope& es,
+      CompletionKind initialCompletion = CompletionKind::Normal);
 
  public:
   explicit UsingEmitter(BytecodeEmitter* bce);

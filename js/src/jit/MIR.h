@@ -2815,6 +2815,8 @@ class MCompare : public MBinaryInstruction, public ComparePolicy::Data {
   [[nodiscard]] MDefinition* tryFoldStringCompare(TempAllocator& alloc);
   [[nodiscard]] MDefinition* tryFoldStringSubstring(TempAllocator& alloc);
   [[nodiscard]] MDefinition* tryFoldStringIndexOf(TempAllocator& alloc);
+  [[nodiscard]] MDefinition* tryFoldBigInt64(TempAllocator& alloc);
+  [[nodiscard]] MDefinition* tryFoldBigInt(TempAllocator& alloc);
 
  public:
   bool congruentTo(const MDefinition* ins) const override {
@@ -3843,9 +3845,12 @@ class MTruncateBigIntToInt64 : public MUnaryInstruction,
 
 // Takes an Int64 and returns a fresh BigInt pointer.
 class MInt64ToBigInt : public MUnaryInstruction, public NoTypePolicy::Data {
-  explicit MInt64ToBigInt(MDefinition* def)
-      : MUnaryInstruction(classOpcode, def) {
+  Scalar::Type elementType_;
+
+  MInt64ToBigInt(MDefinition* def, Scalar::Type elementType)
+      : MUnaryInstruction(classOpcode, def), elementType_(elementType) {
     MOZ_ASSERT(def->type() == MIRType::Int64);
+    MOZ_ASSERT(Scalar::isBigIntType(elementType));
     setResultType(MIRType::BigInt);
     setMovable();
   }
@@ -3855,10 +3860,17 @@ class MInt64ToBigInt : public MUnaryInstruction, public NoTypePolicy::Data {
   TRIVIAL_NEW_WRAPPERS
 
   bool congruentTo(const MDefinition* ins) const override {
-    return congruentIfOperandsEqual(ins);
+    return congruentIfOperandsEqual(ins) &&
+           ins->toInt64ToBigInt()->elementType() == elementType();
   }
 
   AliasSet getAliasSet() const override { return AliasSet::None(); }
+
+  Scalar::Type elementType() const { return elementType_; }
+
+  [[nodiscard]] bool writeRecoverData(
+      CompactBufferWriter& writer) const override;
+  bool canRecoverOnBailout() const override { return true; }
 
   ALLOW_CLONE(MInt64ToBigInt)
 };
@@ -5392,6 +5404,8 @@ class MBigIntPow : public MBigIntBinaryArithInstruction {
     }
     return AliasSet::None();
   }
+
+  MDefinition* foldsTo(TempAllocator& alloc) override;
 
   [[nodiscard]] bool writeRecoverData(
       CompactBufferWriter& writer) const override;
@@ -8753,8 +8767,8 @@ class MAtomicIsLockFree : public MUnaryInstruction,
 
 class MCompareExchangeTypedArrayElement
     : public MQuaternaryInstruction,
-      public MixPolicy<TruncateToInt32OrToBigIntPolicy<2>,
-                       TruncateToInt32OrToBigIntPolicy<3>>::Data {
+      public MixPolicy<TruncateToInt32OrToInt64Policy<2>,
+                       TruncateToInt32OrToInt64Policy<3>>::Data {
   Scalar::Type arrayType_;
 
   explicit MCompareExchangeTypedArrayElement(MDefinition* elements,
@@ -8785,7 +8799,7 @@ class MCompareExchangeTypedArrayElement
 
 class MAtomicExchangeTypedArrayElement
     : public MTernaryInstruction,
-      public TruncateToInt32OrToBigIntPolicy<2>::Data {
+      public TruncateToInt32OrToInt64Policy<2>::Data {
   Scalar::Type arrayType_;
 
   MAtomicExchangeTypedArrayElement(MDefinition* elements, MDefinition* index,
@@ -8814,7 +8828,7 @@ class MAtomicExchangeTypedArrayElement
 
 class MAtomicTypedArrayElementBinop
     : public MTernaryInstruction,
-      public TruncateToInt32OrToBigIntPolicy<2>::Data {
+      public TruncateToInt32OrToInt64Policy<2>::Data {
  private:
   AtomicOp op_;
   Scalar::Type arrayType_;

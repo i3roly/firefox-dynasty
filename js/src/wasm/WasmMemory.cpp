@@ -232,7 +232,7 @@ static_assert(MaxMemoryAccessSize < GuardSize,
 static_assert(OffsetGuardLimit < UINT32_MAX,
               "checking for overflow against OffsetGuardLimit is enough.");
 
-size_t wasm::GetMaxOffsetGuardLimit(bool hugeMemory) {
+uint64_t wasm::GetMaxOffsetGuardLimit(bool hugeMemory) {
 #ifdef WASM_SUPPORTS_HUGE_MEMORY
   return hugeMemory ? HugeOffsetGuardLimit : OffsetGuardLimit;
 #else
@@ -249,7 +249,7 @@ static_assert(MaxInlineMemoryFillLength < MinOffsetGuardLimit, "precondition");
 #ifdef JS_64BIT
 wasm::Pages wasm::MaxMemoryPages(IndexType t) {
   MOZ_ASSERT_IF(t == IndexType::I64, !IsHugeMemoryEnabled(t));
-  size_t desired = MaxMemoryLimitField(t);
+  size_t desired = MaxMemoryPagesValidation(t);
   constexpr size_t actual = ArrayBufferObject::ByteLengthLimit / PageSize;
   return wasm::Pages(std::min(desired, actual));
 }
@@ -312,7 +312,7 @@ uint64_t wasm::RoundUpToNextValidARMImmediate(uint64_t i) {
 }
 
 Pages wasm::ClampedMaxPages(IndexType t, Pages initialPages,
-                            const Maybe<Pages>& sourceMaxPages,
+                            const mozilla::Maybe<Pages>& sourceMaxPages,
                             bool useHugeMemory) {
   Pages clampedMaxPages;
 

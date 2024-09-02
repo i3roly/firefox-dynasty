@@ -175,6 +175,16 @@ class MacroAssemblerX86 : public MacroAssemblerX86Shared {
     xorl(Operand(HighWord(address)), dest.high);
   }
 
+  template <typename T1, typename T2>
+  inline void cmp64SetAliased(Condition cond, T1 lhs, T2 rhs, Register dest);
+
+  template <typename T1, typename T2>
+  inline void cmp64SetNonAliased(Condition cond, T1 lhs, T2 rhs, Register dest);
+
+  template <typename T1, typename T2>
+  inline void branch64Impl(Condition cond, T1 lhs, T2 rhs, Label* success,
+                           Label* fail);
+
   /////////////////////////////////////////////////////////////////
   // X86/X64-common interface.
   /////////////////////////////////////////////////////////////////

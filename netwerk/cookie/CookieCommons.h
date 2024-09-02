@@ -80,6 +80,10 @@ class CookieCommons final {
                                         const nsACString& aHost,
                                         nsCString& aBaseDomain);
 
+  // This method returns true if aBaseDomain contains any colons since only
+  // IPv6 baseDomains may contain colons.
+  static bool IsIPv6BaseDomain(const nsACString& aBaseDomain);
+
   static void NotifyRejected(nsIURI* aHostURI, nsIChannel* aChannel,
                              uint32_t aRejectedReason,
                              CookieOperation aOperation);
@@ -103,8 +107,6 @@ class CookieCommons final {
       CookieParser& aCookieParser, dom::Document* aDocument,
       const nsACString& aCookieString, int64_t aCurrentTimeInUsec,
       nsIEffectiveTLDService* aTLDService, mozIThirdPartyUtil* aThirdPartyUtil,
-      std::function<bool(const nsACString&, const OriginAttributes&)>&&
-          aHasExistingCookiesLambda,
       nsACString& aBaseDomain, OriginAttributes& aAttrs);
 
   static already_AddRefed<nsICookieJarSettings> GetCookieJarSettings(
@@ -135,10 +137,11 @@ class CookieCommons final {
   static bool IsSameSiteForeign(nsIChannel* aChannel, nsIURI* aHostURI,
                                 bool* aHadCrossSiteRedirects);
 
-  static void RecordUnicodeTelemetry(const CookieStruct& cookieData);
-
   static bool ChipsLimitEnabledAndChipsCookie(
       const Cookie& cookie, dom::BrowsingContext* aBrowsingContext);
+
+  static void ComposeCookieString(nsTArray<RefPtr<Cookie>>& aCookieList,
+                                  nsACString& aCookieString);
 };
 
 }  // namespace net

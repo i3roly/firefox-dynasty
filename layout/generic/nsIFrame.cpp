@@ -578,8 +578,15 @@ static void MaybeScheduleReflowSVGNonDisplayText(nsIFrame* aFrame) {
       IntrinsicDirty::FrameAncestorsAndDescendants);
 }
 
-bool nsIFrame::IsPrimaryFrameOfRootOrBodyElement() const {
+bool nsIFrame::ShouldPropagateRepaintsToRoot() const {
   if (!IsPrimaryFrame()) {
+    // special case for table frames because style images are associated to the
+    // table frame, but the table wrapper frame is the primary frame
+    if (IsTableFrame()) {
+      MOZ_ASSERT(GetParent() && GetParent()->IsTableWrapperFrame());
+      return GetParent()->ShouldPropagateRepaintsToRoot();
+    }
+
     return false;
   }
   nsIContent* content = GetContent();
@@ -602,7 +609,7 @@ void nsIFrame::Init(nsIContent* aContent, nsContainerFrame* aParent,
 
   mContent = aContent;
   mParent = aParent;
-  MOZ_DIAGNOSTIC_ASSERT(!mParent || PresShell() == mParent->PresShell());
+  MOZ_ASSERT(!mParent || PresShell() == mParent->PresShell());
 
   if (aPrevInFlow) {
     mWritingMode = aPrevInFlow->GetWritingMode();
@@ -1686,10 +1693,10 @@ nsRect nsIFrame::GetMarginRectRelativeToSelf() const {
 bool nsIFrame::IsTransformed() const {
   if (!HasAnyStateBits(NS_FRAME_MAY_BE_TRANSFORMED)) {
     MOZ_ASSERT(!IsCSSTransformed());
-    MOZ_ASSERT(!IsSVGTransformed());
+    MOZ_ASSERT(!GetParentSVGTransforms());
     return false;
   }
-  return IsCSSTransformed() || IsSVGTransformed();
+  return IsCSSTransformed() || GetParentSVGTransforms();
 }
 
 bool nsIFrame::IsCSSTransformed() const {
@@ -1734,10 +1741,7 @@ bool nsIFrame::HasOpacityInternal(float aThreshold,
   return HasAnimationOfOpacity(aEffectSet);
 }
 
-bool nsIFrame::IsSVGTransformed(gfx::Matrix* aOwnTransforms,
-                                gfx::Matrix* aFromParentTransforms) const {
-  return false;
-}
+bool nsIFrame::DoGetParentSVGTransforms(gfx::Matrix*) const { return false; }
 
 bool nsIFrame::Extend3DContext(const nsStyleDisplay* aStyleDisplay,
                                const nsStyleEffects* aStyleEffects,
@@ -2401,8 +2405,17 @@ already_AddRefed<ComputedStyle> nsIFrame::ComputeTargetTextStyle() const {
   if (!element) {
     return nullptr;
   }
-  return PresContext()->StyleSet()->ProbePseudoElementStyle(
+  RefPtr pseudoStyle = PresContext()->StyleSet()->ProbePseudoElementStyle(
       *element, PseudoStyleType::targetText, nullptr, Style());
+  if (!pseudoStyle) {
+    return nullptr;
+  }
+  if (PresContext()->ForcingColors() &&
+      pseudoStyle->StyleText()->mForcedColorAdjust !=
+          StyleForcedColorAdjust::None) {
+    return nullptr;
+  }
+  return pseudoStyle.forget();
 }
 
 bool nsIFrame::CanBeDynamicReflowRoot() const {
@@ -5400,6 +5413,7 @@ static FrameContentRange GetRangeForFrame(const nsIFrame* aFrame) {
     content = content->GetParent();
   }
 
+  MOZ_ASSERT(!content->IsBeingRemoved());
   nsIContent* parent = content->GetParent();
   if (aFrame->IsBlockOutside() || !parent) {
     return FrameContentRange(content, 0, content->GetChildCount());
@@ -5408,9 +5422,10 @@ static FrameContentRange GetRangeForFrame(const nsIFrame* aFrame) {
   // TODO(emilio): Revise this in presence of Shadow DOM / display: contents,
   // it's likely that we don't want to just walk the light tree, and we need to
   // change the representation of FrameContentRange.
-  const int32_t index = parent->ComputeIndexOf_Deprecated(content);
-  MOZ_ASSERT(index >= 0);
-  return FrameContentRange(parent, index, index + 1);
+  Maybe<uint32_t> index = parent->ComputeIndexOf(content);
+  MOZ_ASSERT(index.isSome());
+  return FrameContentRange(parent, static_cast<int32_t>(*index),
+                           static_cast<int32_t>(*index + 1));
 }
 
 // The FrameTarget represents the closest frame to a point that can be selected
@@ -6477,8 +6492,8 @@ nsIFrame::SizeComputationResult nsIFrame::ComputeSize(
                              aWM, aCBSize, boxSizingAdjust,
                              maxBSizeCoord.AsLengthPercentage(), aspectRatio);
 
-    result.ISize(aWM) = NS_CSS_MINMAX(result.ISize(aWM), transferredMinISize,
-                                      transferredMaxISize);
+    result.ISize(aWM) =
+        CSSMinMax(result.ISize(aWM), transferredMinISize, transferredMaxISize);
   }
 
   // Flex items ignore their min & max sizing properties in their
@@ -7408,7 +7423,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
 
   if (isTransformed || zoomedContentRoot) {
     MOZ_ASSERT(GetParent());
-    Matrix4x4 result;
+    Matrix4x4Flagged result;
     int32_t scaleFactor =
         ((aFlags & IN_CSS_UNITS) ? AppUnitsPerCSSPixel()
                                  : PresContext()->AppUnitsPerDevPixel());
@@ -7417,6 +7432,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
      * coordinates to our parent.
      */
     if (isTransformed) {
+      // Note: this converts from Matrix4x4 to Matrix4x4Flagged.
       result = nsDisplayTransform::GetResultingTransformMatrix(
           this, nsPoint(), scaleFactor,
           nsDisplayTransform::INCLUDE_PERSPECTIVE);
@@ -7432,7 +7448,7 @@ Matrix4x4Flagged nsIFrame::GetTransformMatrix(ViewportType aViewportType,
                          NSAppUnitsToFloatPixels(delta.y, scaleFactor), 0.0f);
 
     if (zoomedContentRoot) {
-      Matrix4x4 layoutToVisual;
+      Matrix4x4Flagged layoutToVisual;
       ScrollableLayerGuid::ViewID targetScrollId =
           nsLayoutUtils::FindOrCreateIDFor(zoomedContentRoot->GetContent());
       if (aFlags & nsIFrame::IN_CSS_UNITS) {
@@ -8028,8 +8044,9 @@ bool nsIFrame::DoesClipChildrenInBothAxes() const {
 }
 
 /* virtual */
-void nsIFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas) {
-  if (!DoesClipChildrenInBothAxes()) {
+void nsIFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
+                                  bool aAsIfScrolled) {
+  if (aAsIfScrolled || !DoesClipChildrenInBothAxes()) {
     nsLayoutUtils::UnionChildOverflow(this, aOverflowAreas);
   }
 }
@@ -11078,7 +11095,7 @@ void nsIFrame::SetParent(nsContainerFrame* aParent) {
 
   // Note that the current mParent may already be destroyed at this point.
   mParent = aParent;
-  MOZ_DIAGNOSTIC_ASSERT(!mParent || PresShell() == mParent->PresShell());
+  MOZ_ASSERT(!mParent || PresShell() == mParent->PresShell());
 
   if (HasAnyStateBits(NS_FRAME_HAS_VIEW | NS_FRAME_HAS_CHILD_WITH_VIEW)) {
     for (nsIFrame* f = aParent;

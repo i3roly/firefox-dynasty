@@ -395,20 +395,20 @@ def setup_browsertime(config, tasks):
 
         cd_fetches = {
             "android.*": [
-                "linux64-chromedriver-126",
                 "linux64-chromedriver-127",
+                "linux64-chromedriver-128",
             ],
             "linux.*": [
-                "linux64-chromedriver-126",
                 "linux64-chromedriver-127",
+                "linux64-chromedriver-128",
             ],
             "macosx1015.*": [
-                "mac64-chromedriver-126",
                 "mac64-chromedriver-127",
+                "mac64-chromedriver-128",
             ],
             "macosx1400.*": [
-                "mac-arm-chromedriver-126",
                 "mac-arm-chromedriver-127",
+                "mac-arm-chromedriver-128",
             ],
             "windows.*aarch64.*": [
                 "win32-chromedriver-121",
@@ -416,14 +416,13 @@ def setup_browsertime(config, tasks):
                 "win32-chromedriver-123",
             ],
             "windows.*-64.*": [
-                "win64-chromedriver-126",
                 "win64-chromedriver-127",
+                "win64-chromedriver-128",
             ],
         }
 
         chromium_fetches = {
             "linux.*": ["linux64-cft-chromedriver"],
-            "macosx1015.*": ["mac-cft-chromedriver"],
             "macosx1400.*": ["mac-cft-chromedriver-arm"],
             "windows.*-64.*": ["win64-cft-chromedriver"],
             "android.*": ["linux64-cft-chromedriver"],
@@ -454,7 +453,7 @@ def setup_browsertime(config, tasks):
 
         # Disable the Raptor install step
         if "--app=chrome-m" in extra_options or "--app=cstm-car-m" in extra_options:
-            extra_options.append("--noinstall")
+            extra_options.append("--no-install")
 
         task.setdefault("fetches", {}).setdefault("fetch", []).extend(
             evaluate_keyed_by(fs, "fetches.fetch", task)
@@ -784,7 +783,15 @@ def disable_try_only_platforms(config, tasks):
 def ensure_spi_disabled_on_all_but_spi(config, tasks):
     for task in tasks:
         variant = task["attributes"].get("unittest_variant", "")
-        has_no_setpref = ("gtest", "cppunit", "jittest", "junit", "raptor")
+        has_no_setpref = (
+            "gtest",
+            "cppunit",
+            "jittest",
+            "junit",
+            "raptor",
+            "reftest",
+            "web-platform-tests",
+        )
 
         if (
             all(s not in task["suite"] for s in has_no_setpref)

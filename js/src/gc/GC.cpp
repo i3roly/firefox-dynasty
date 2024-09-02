@@ -260,7 +260,6 @@ using mozilla::Some;
 using mozilla::TimeDuration;
 using mozilla::TimeStamp;
 
-using JS::AutoGCRooter;
 using JS::SliceBudget;
 using JS::TimeBudget;
 using JS::WorkBudget;
@@ -395,13 +394,26 @@ inline void GCRuntime::prepareToFreeChunk(TenuredChunkInfo& info) {
 #endif
 }
 
+void GCRuntime::releaseArenaList(ArenaList& arenaList, const AutoLockGC& lock) {
+  releaseArenas(arenaList.head(), lock);
+  arenaList.clear();
+}
+
+void GCRuntime::releaseArenas(Arena* arena, const AutoLockGC& lock) {
+  Arena* next;
+  for (; arena; arena = next) {
+    next = arena->next;
+    releaseArena(arena, lock);
+  }
+}
+
 void GCRuntime::releaseArena(Arena* arena, const AutoLockGC& lock) {
   MOZ_ASSERT(arena->allocated());
   MOZ_ASSERT(!arena->onDelayedMarkingList());
   MOZ_ASSERT(TlsGCContext.get()->isFinalizing());
 
-  arena->zone->gcHeapSize.removeGCArena(heapSize);
-  arena->release(lock);
+  arena->zone()->gcHeapSize.removeGCArena(heapSize);
+  arena->release(this, lock);
   arena->chunk()->releaseArena(this, arena, lock);
 }
 
@@ -450,11 +462,14 @@ GCRuntime::GCRuntime(JSRuntime* rt)
       hadShutdownGC(false),
 #endif
       requestSliceAfterBackgroundTask(false),
-      lifoBlocksToFree((size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE),
+      lifoBlocksToFree((size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE,
+                       js::BackgroundMallocArena),
       lifoBlocksToFreeAfterFullMinorGC(
-          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE),
+          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE,
+          js::BackgroundMallocArena),
       lifoBlocksToFreeAfterNextMinorGC(
-          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE),
+          (size_t)JSContext::TEMP_LIFO_ALLOC_PRIMARY_CHUNK_SIZE,
+          js::BackgroundMallocArena),
       sweepGroupIndex(0),
       sweepGroups(nullptr),
       currentSweepGroup(nullptr),
@@ -898,6 +913,7 @@ bool GCRuntime::init(uint32_t maxbytes) {
   MOZ_ASSERT(!wasInitialized());
 
   MOZ_ASSERT(SystemPageSize());
+  Arena::staticAsserts();
   Arena::checkLookupTables();
 
   if (!TlsGCContext.init()) {
@@ -2580,7 +2596,6 @@ void GCRuntime::startCollection(JS::GCReason reason) {
   isCompacting = shouldCompact();
   rootsRemoved = false;
   sweepGroupIndex = 0;
-  lastGCStartTime_ = TimeStamp::Now();
 
 #ifdef DEBUG
   if (isShutdownGC()) {
@@ -3398,7 +3413,7 @@ void GCRuntime::finishCollection(JS::GCReason reason) {
 
   TimeStamp currentTime = TimeStamp::Now();
 
-  updateSchedulingStateAfterCollection(currentTime);
+  updateSchedulingStateOnGCEnd(currentTime);
 
   for (GCZonesIter zone(this); !zone.done(); zone.next()) {
     zone->changeGCState(Zone::Finished, Zone::NoGC);
@@ -3411,8 +3426,6 @@ void GCRuntime::finishCollection(JS::GCReason reason) {
   clearSelectedForMarking();
 #endif
 
-  schedulingState.updateHighFrequencyMode(lastGCEndTime_, currentTime,
-                                          tunables);
   lastGCEndTime_ = currentTime;
 
   checkGCStateNotInUse();
@@ -3491,7 +3504,7 @@ void GCRuntime::maybeStopPretenuring() {
   }
 }
 
-void GCRuntime::updateSchedulingStateAfterCollection(TimeStamp currentTime) {
+void GCRuntime::updateSchedulingStateOnGCEnd(TimeStamp currentTime) {
   TimeDuration totalGCTime = stats().totalGCTime();
   size_t totalInitialBytes = stats().initialCollectedBytes();
 
@@ -4161,7 +4174,9 @@ GCRuntime::IncrementalResult GCRuntime::budgetIncrementalGC(
   return IncrementalResult::Ok;
 }
 
-bool GCRuntime::maybeIncreaseSliceBudget(SliceBudget& budget) {
+bool GCRuntime::maybeIncreaseSliceBudget(SliceBudget& budget,
+                                         TimeStamp sliceStartTime,
+                                         TimeStamp gcStartTime) {
   if (js::SupportDifferentialTesting()) {
     return false;
   }
@@ -4171,7 +4186,8 @@ bool GCRuntime::maybeIncreaseSliceBudget(SliceBudget& budget) {
   }
 
   bool wasIncreasedForLongCollections =
-      maybeIncreaseSliceBudgetForLongCollections(budget);
+      maybeIncreaseSliceBudgetForLongCollections(budget, sliceStartTime,
+                                                 gcStartTime);
   bool wasIncreasedForUgentCollections =
       maybeIncreaseSliceBudgetForUrgentCollections(budget);
 
@@ -4193,7 +4209,7 @@ static bool ExtendBudget(SliceBudget& budget, double newDuration) {
 }
 
 bool GCRuntime::maybeIncreaseSliceBudgetForLongCollections(
-    SliceBudget& budget) {
+    SliceBudget& budget, TimeStamp sliceStartTime, TimeStamp gcStartTime) {
   // For long-running collections, enforce a minimum time budget that increases
   // linearly with time up to a maximum.
 
@@ -4205,7 +4221,7 @@ bool GCRuntime::maybeIncreaseSliceBudgetForLongCollections(
   const BudgetAtTime MinBudgetStart{1500, 0.0};
   const BudgetAtTime MinBudgetEnd{2500, 100.0};
 
-  double totalTime = (TimeStamp::Now() - lastGCStartTime()).ToMilliseconds();
+  double totalTime = (sliceStartTime - gcStartTime).ToMilliseconds();
 
   double minBudget =
       LinearInterpolate(totalTime, MinBudgetStart.time, MinBudgetStart.budget,
@@ -4366,7 +4382,8 @@ MOZ_NEVER_INLINE GCRuntime::IncrementalResult GCRuntime::gcCycle(
   // Background finalization and decommit are finished by definition before we
   // can start a new major GC.  Background allocation may still be running, but
   // that's OK because chunk pools are protected by the GC lock.
-  if (!isIncrementalGCInProgress()) {
+  bool firstSlice = !isIncrementalGCInProgress();
+  if (firstSlice) {
     assertBackgroundSweepingFinished();
     MOZ_ASSERT(decommitTask.isIdle());
   }
@@ -4374,10 +4391,20 @@ MOZ_NEVER_INLINE GCRuntime::IncrementalResult GCRuntime::gcCycle(
   // Note that GC callbacks are allowed to re-enter GC.
   AutoCallGCCallbacks callCallbacks(*this, reason);
 
+  // Record GC start time and update global scheduling state.
+  TimeStamp now = TimeStamp::Now();
+  if (firstSlice) {
+    schedulingState.updateHighFrequencyModeOnGCStart(
+        gcOptions(), now, lastGCStartTime_, tunables);
+    lastGCStartTime_ = now;
+  }
+  schedulingState.updateHighFrequencyModeOnSliceStart(gcOptions(), reason);
+
   // Increase slice budget for long running collections before it is recorded by
   // AutoGCSlice.
   SliceBudget budget(budgetArg);
-  bool budgetWasIncreased = maybeIncreaseSliceBudget(budget);
+  bool budgetWasIncreased =
+      maybeIncreaseSliceBudget(budget, now, lastGCStartTime_);
 
   ScheduleZones(this, reason);
 
@@ -4590,8 +4617,6 @@ void GCRuntime::collect(bool nonincrementalByAPI, const SliceBudget& budget,
   AutoStopVerifyingBarriers av(rt, isShutdownGC());
   AutoMaybeLeaveAtomsZone leaveAtomsZone(rt->mainContextFromOwnThread());
   AutoSetZoneSliceThresholds sliceThresholds(this);
-
-  schedulingState.updateHighFrequencyModeForReason(reason);
 
   if (!isIncrementalGCInProgress() && tunables.balancedHeapLimitsEnabled()) {
     updateAllocationRates();

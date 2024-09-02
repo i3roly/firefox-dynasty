@@ -324,9 +324,8 @@ TextPropertyEditor.prototype = {
         }
       });
 
-      const cssVariables = this.rule.elementStyle.getAllCustomProperties(
-        this.rule.pseudoElement
-      );
+      const getCssVariables = () =>
+        this.rule.elementStyle.getAllCustomProperties(this.rule.pseudoElement);
 
       editableField({
         start: this._onStartEditing,
@@ -337,7 +336,7 @@ TextPropertyEditor.prototype = {
         contentType: InplaceEditor.CONTENT_TYPES.CSS_PROPERTY,
         popup: this.popup,
         cssProperties: this.cssProperties,
-        cssVariables,
+        getCssVariables,
         // (Shift+)Tab will move the focus to the previous/next editable field (so property value
         // or new selector).
         focusEditableFieldAfterApply: true,
@@ -436,7 +435,7 @@ TextPropertyEditor.prototype = {
         multiline: true,
         maxWidth: () => this.container.getBoundingClientRect().width,
         cssProperties: this.cssProperties,
-        cssVariables,
+        getCssVariables,
         getGridLineNames: this.getGridlineNames,
         showSuggestCompletionOnEmpty: true,
         // (Shift+)Tab will move the focus to the previous/next editable field (so property name,
@@ -582,7 +581,7 @@ TextPropertyEditor.prototype = {
     }
 
     const outputParser = this.ruleView._outputParser;
-    const parserOptions = {
+    this.outputParserOptions = {
       angleClass: "ruleview-angle",
       angleSwatchClass: SHARED_SWATCH_CLASS + " " + ANGLE_SWATCH_CLASS,
       bezierClass: "ruleview-bezier",
@@ -614,7 +613,15 @@ TextPropertyEditor.prototype = {
         ),
       inStartingStyleRule: this.rule.isInStartingStyle(),
     };
-    const frag = outputParser.parseCssProperty(name, val, parserOptions);
+
+    if (this.rule.darkColorScheme !== undefined) {
+      this.outputParserOptions.isDarkColorScheme = this.rule.darkColorScheme;
+    }
+    const frag = outputParser.parseCssProperty(
+      name,
+      val,
+      this.outputParserOptions
+    );
 
     // Save the initial value as the last committed value,
     // for restoring after pressing escape.
@@ -752,7 +759,7 @@ TextPropertyEditor.prototype = {
     const span = this.valueSpan.querySelector("." + FILTER_SWATCH_CLASS);
     if (this.ruleEditor.isEditable) {
       if (span) {
-        parserOptions.filterSwatch = true;
+        this.outputParserOptions.filterSwatch = true;
 
         this.ruleView.tooltips.getTooltip("filterEditor").addSwatch(
           span,
@@ -763,7 +770,7 @@ TextPropertyEditor.prototype = {
             onRevert: this._onSwatchRevert,
           },
           outputParser,
-          parserOptions
+          this.outputParserOptions
         );
         const title = l10n("rule.filterSwatch.tooltip");
         span.setAttribute("title", title);
@@ -1189,9 +1196,16 @@ TextPropertyEditor.prototype = {
       return;
     }
 
-    // Remove a property if the property value is empty and the property
-    // value is not about to be focused
-    if (!this.prop.value && direction !== Services.focus.MOVEFOCUS_FORWARD) {
+    const isVariable = value.startsWith("--");
+
+    // Remove a property if:
+    // - the property value is empty and is not a variable (empty variables are valid)
+    // - and the property value is not about to be focused
+    if (
+      !this.prop.value &&
+      !isVariable &&
+      direction !== Services.focus.MOVEFOCUS_FORWARD
+    ) {
       this.remove(direction);
       return;
     }
@@ -1271,9 +1285,11 @@ TextPropertyEditor.prototype = {
         this.committed.value === val.value &&
         this.committed.priority === val.priority);
 
-    // If the value is not empty and unchanged, revert the property back to
-    // its original value and enabled or disabled state
-    if (value.trim() && isValueUnchanged) {
+    const isVariable = this.prop.name.startsWith("--");
+
+    // If the value is not empty (or is an empty variable) and unchanged,
+    // revert the property back to its original value and enabled or disabled state
+    if ((value.trim() || isVariable) && isValueUnchanged) {
       this.ruleEditor.rule.previewPropertyValue(
         this.prop,
         val.value,
@@ -1305,12 +1321,17 @@ TextPropertyEditor.prototype = {
     // If needed, add any new properties after this.prop.
     this.ruleEditor.addProperties(parsedProperties.propertiesToAdd, this.prop);
 
-    // If the input value is empty and the focus is moving forward to the next
-    // editable field, then remove the whole property.
+    // If the input value is empty and is not a variable (empty variables are valid),
+    // and the focus is moving forward to the next editable field,
+    // then remove the whole property.
     // A timeout is used here to accurately check the state, since the inplace
     // editor `done` and `destroy` events fire before the next editor
     // is focused.
-    if (!value.trim() && direction !== Services.focus.MOVEFOCUS_BACKWARD) {
+    if (
+      !value.trim() &&
+      !isVariable &&
+      direction !== Services.focus.MOVEFOCUS_BACKWARD
+    ) {
       setTimeout(() => {
         if (!this.editing) {
           this.remove(direction);

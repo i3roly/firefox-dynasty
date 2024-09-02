@@ -73,7 +73,7 @@ let wasmGlobalInterfaces = [
   { name: "Function", insecureContext: true, nightly: true },
   { name: "Exception", insecureContext: true },
   { name: "Tag", insecureContext: true },
-  { name: "JSTag", insecureContext: true, earlyBetaOrEarlier: true },
+  { name: "JSTag", insecureContext: true },
   { name: "compile", insecureContext: true },
   { name: "compileStreaming", insecureContext: true },
   { name: "instantiate", insecureContext: true },
@@ -106,6 +106,7 @@ let ecmaGlobals = [
   { name: "Int8Array", insecureContext: true },
   { name: "InternalError", insecureContext: true },
   { name: "Intl", insecureContext: true },
+  { name: "Iterator", insecureContext: true },
   { name: "JSON", insecureContext: true },
   { name: "Map", insecureContext: true },
   { name: "Math", insecureContext: true },
@@ -463,6 +464,8 @@ let interfaceNamesInGlobalScope = [
   { name: "FontFaceSet", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "FontFaceSetLoadEvent", insecureContext: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "FragmentDirective", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "GainNode", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!

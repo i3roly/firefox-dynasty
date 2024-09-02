@@ -108,7 +108,7 @@
 #include "js/Wrapper.h"
 #include "threading/CpuCount.h"
 #include "util/DifferentialTesting.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BooleanObject.h"
 #include "vm/DateObject.h"
@@ -164,7 +164,6 @@ using mozilla::Span;
 using JS::AutoStableStringChars;
 using JS::CompileOptions;
 using JS::SliceBudget;
-using JS::SourceOwnership;
 using JS::SourceText;
 using JS::WorkBudget;
 
@@ -846,6 +845,18 @@ static bool GCParameter(JSContext* cx, unsigned argc, Value* vp) {
     JS_ReportErrorASCII(cx, "Attempt to change read-only parameter %s",
                         name.get());
     return false;
+  }
+
+  if (fuzzingSafe) {
+    // Some Params are not yet fuzzing safe and so we silently skip
+    // changing said parameters.
+    switch (param) {
+      case JSGC_SEMISPACE_NURSERY_ENABLED:
+        args.rval().setUndefined();
+        return true;
+      default:
+        break;
+    }
   }
 
   if (disableOOMFunctions) {
@@ -2049,6 +2060,38 @@ static bool WasmDisassemble(JSContext* cx, unsigned argc, Value* vp) {
   }
   JS_ReportErrorASCII(
       cx, "argument is not an exported wasm function or a wasm module");
+  return false;
+}
+
+static bool WasmFunctionTier(JSContext* cx, unsigned argc, Value* vp) {
+  if (!wasm::HasSupport(cx)) {
+    JS_ReportErrorASCII(cx, "wasm support unavailable");
+    return false;
+  }
+
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  args.rval().set(UndefinedValue());
+
+  if (!args.get(0).isObject()) {
+    JS_ReportErrorASCII(cx, "argument is not an object");
+    return false;
+  }
+
+  RootedFunction func(cx, args[0].toObject().maybeUnwrapIf<JSFunction>());
+  if (func && wasm::IsWasmExportedFunction(func)) {
+    uint32_t funcIndex = wasm::ExportedFunctionToFuncIndex(func);
+    wasm::Instance& instance = wasm::ExportedFunctionToInstance(func);
+    wasm::Tier tier = instance.code().funcTier(funcIndex);
+    RootedString tierString(cx, JS_NewStringCopyZ(cx, wasm::ToString(tier)));
+    if (!tierString) {
+      ReportOutOfMemory(cx);
+      return false;
+    }
+    args.rval().set(StringValue(tierString));
+    return true;
+  }
+  JS_ReportErrorASCII(cx, "argument is not an exported wasm function");
   return false;
 }
 
@@ -3471,7 +3514,9 @@ static bool NewObjectWithCallHook(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 static constexpr JSClass ObjectWithManyReservedSlotsClass = {
-    "ObjectWithManyReservedSlots", JSCLASS_HAS_RESERVED_SLOTS(40)};
+    "ObjectWithManyReservedSlots",
+    JSCLASS_HAS_RESERVED_SLOTS(40),
+};
 
 static bool NewObjectWithManyReservedSlots(JSContext* cx, unsigned argc,
                                            Value* vp) {
@@ -4620,7 +4665,10 @@ static const JSClassOps FinalizeCounterClassOps = {
 };
 
 static const JSClass FinalizeCounterClass = {
-    "FinalizeCounter", JSCLASS_FOREGROUND_FINALIZE, &FinalizeCounterClassOps};
+    "FinalizeCounter",
+    JSCLASS_FOREGROUND_FINALIZE,
+    &FinalizeCounterClassOps,
+};
 
 static bool MakeFinalizeObserver(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -5476,12 +5524,14 @@ const JSClass CloneBufferObject::class_ = {
     "CloneBuffer",
     JSCLASS_HAS_RESERVED_SLOTS(CloneBufferObject::NUM_SLOTS) |
         JSCLASS_FOREGROUND_FINALIZE,
-    &CloneBufferObjectClassOps};
+    &CloneBufferObjectClassOps,
+};
 
 const JSPropertySpec CloneBufferObject::props_[] = {
     JS_PSGS("clonebuffer", getCloneBuffer, setCloneBuffer, 0),
     JS_PSGS("arraybuffer", getCloneBufferAsArrayBuffer, setCloneBuffer, 0),
-    JS_PS_END};
+    JS_PS_END,
+};
 
 static mozilla::Maybe<JS::StructuredCloneScope> ParseCloneScope(
     JSContext* cx, HandleString str) {
@@ -5561,8 +5611,10 @@ class CustomSerializableObject : public NativeObject {
     FailDuringRead = 2
   };
 
-  static constexpr JSClass class_ = {"CustomSerializable",
-                                     JSCLASS_HAS_RESERVED_SLOTS(NUM_SLOTS)};
+  static constexpr JSClass class_ = {
+      "CustomSerializable",
+      JSCLASS_HAS_RESERVED_SLOTS(NUM_SLOTS),
+  };
 
   static bool is(HandleValue v) {
     return v.isObject() && v.toObject().is<CustomSerializableObject>();
@@ -6234,7 +6286,8 @@ class ShapeSnapshotObject : public NativeObject {
     "ShapeSnapshotObject",
     JSCLASS_HAS_RESERVED_SLOTS(ShapeSnapshotObject::ReservedSlots) |
         JSCLASS_BACKGROUND_FINALIZE,
-    &ShapeSnapshotObject::classOps_};
+    &ShapeSnapshotObject::classOps_,
+};
 
 bool ShapeSnapshot::init(JSObject* obj) {
   object_ = obj;
@@ -7863,7 +7916,9 @@ class AllocationMarkerObject : public NativeObject {
   static const JSClass class_;
 };
 
-const JSClass AllocationMarkerObject::class_ = {"AllocationMarker"};
+const JSClass AllocationMarkerObject::class_ = {
+    "AllocationMarker",
+};
 
 static bool AllocationMarker(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -10045,6 +10100,10 @@ JS_FOR_WASM_FEATURES(WASM_FEATURE)
 "      ImportInterpExit - wasm-to-C++ stubs\n"
 "      ImportJitExit    - wasm-to-jitted-JS stubs\n"
 "      all              - all kinds, including obscure ones\n"),
+
+    JS_FN_HELP("wasmFunctionTier", WasmFunctionTier, 1, 0,
+"wasmFunctionTier(wasmFunc)\n",
+"  Returns the best compiled tier for a function. Either 'baseline' or 'optimized'."),
 
     JS_FN_HELP("wasmHasTier2CompilationCompleted", WasmHasTier2CompilationCompleted, 1, 0,
 "wasmHasTier2CompilationCompleted(module)",

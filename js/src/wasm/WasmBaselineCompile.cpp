@@ -83,6 +83,10 @@ namespace wasm {
 
 using namespace js::jit;
 
+using mozilla::Maybe;
+using mozilla::Nothing;
+using mozilla::Some;
+
 ////////////////////////////////////////////////////////////
 //
 // Out of line code management.
@@ -507,7 +511,7 @@ bool BaseCompiler::beginFunction() {
         fr.storeLocalI64(RegI64(i->gpr64()), l);
         break;
       case MIRType::WasmAnyRef: {
-        DebugOnly<uint32_t> offs = fr.localOffsetFromSp(l);
+        mozilla::DebugOnly<uint32_t> offs = fr.localOffsetFromSp(l);
         MOZ_ASSERT(0 == (offs % sizeof(void*)));
         fr.storeLocalRef(RegRef(i->gpr()), l);
         // We should have just visited this local in the preceding loop.
@@ -1806,12 +1810,20 @@ bool BaseCompiler::callIndirect(uint32_t funcTypeIndex, uint32_t tableIndex,
 
 #ifdef ENABLE_WASM_GC
 void BaseCompiler::callRef(const Stk& calleeRef, const FunctionCall& call,
+                           mozilla::Maybe<size_t> callRefIndex,
                            CodeOffset* fastCallOffset,
                            CodeOffset* slowCallOffset) {
   CallSiteDesc desc(bytecodeOffset(), CallSiteDesc::FuncRef);
   CalleeDesc callee = CalleeDesc::wasmFuncRef();
 
   loadRef(calleeRef, RegRef(WasmCallRefReg));
+  if (compilerEnv_.mode() == CompileMode::LazyTiering) {
+    masm.updateCallRefMetrics(*callRefIndex, WasmCallRefReg,
+                              WasmCallRefCallScratchReg0,
+                              WasmCallRefCallScratchReg1);
+  } else {
+    MOZ_ASSERT(callRefIndex.isNothing());
+  }
   masm.wasmCallRef(desc, callee, fastCallOffset, slowCallOffset);
 }
 
@@ -2622,15 +2634,9 @@ static void XorImmI64(MacroAssembler& masm, int64_t c, RegI64 rsd) {
   masm.xor64(Imm64(c), rsd);
 }
 
-static void ClzI64(BaseCompiler& bc, RegI64 rsd) {
-  bc.masm.clz64(rsd, bc.lowPart(rsd));
-  bc.maybeClearHighPart(rsd);
-}
+static void ClzI64(BaseCompiler& bc, RegI64 rsd) { bc.masm.clz64(rsd, rsd); }
 
-static void CtzI64(BaseCompiler& bc, RegI64 rsd) {
-  bc.masm.ctz64(rsd, bc.lowPart(rsd));
-  bc.maybeClearHighPart(rsd);
-}
+static void CtzI64(BaseCompiler& bc, RegI64 rsd) { bc.masm.ctz64(rsd, rsd); }
 
 static void PopcntI64(BaseCompiler& bc, RegI64 rsd, RegI32 temp) {
   bc.masm.popcnt64(rsd, rsd, temp);
@@ -3005,8 +3011,7 @@ void BaseCompiler::emitQuotientI64() {
     if (power != 0) {
       RegI64 r = popI64();
       Label positive;
-      masm.branchTest64(Assembler::NotSigned, r, r, RegI32::Invalid(),
-                        &positive);
+      masm.branchTest64(Assembler::NotSigned, r, r, &positive);
       masm.add64(Imm64(c - 1), r);
       masm.bind(&positive);
 
@@ -3055,8 +3060,7 @@ void BaseCompiler::emitRemainderI64() {
     moveI64(r, temp);
 
     Label positive;
-    masm.branchTest64(Assembler::NotSigned, temp, temp, RegI32::Invalid(),
-                      &positive);
+    masm.branchTest64(Assembler::NotSigned, temp, temp, &positive);
     masm.add64(Imm64(c - 1), temp);
     masm.bind(&positive);
 
@@ -5394,6 +5398,17 @@ bool BaseCompiler::emitCallRef() {
     return false;
   }
 
+  // Add a metrics entry to track this call_ref site. Do this even if we're in
+  // 'dead code' to have easy consistency with ion, which consumes these.
+  Maybe<size_t> callRefIndex;
+  if (compilerEnv_.mode() == CompileMode::LazyTiering) {
+    masm.append(wasm::CallRefMetricsPatch());
+    if (masm.oom()) {
+      return false;
+    }
+    callRefIndex = Some(masm.callRefMetricsPatches().length() - 1);
+  }
+
   if (deadCode_) {
     return true;
   }
@@ -5424,7 +5439,7 @@ bool BaseCompiler::emitCallRef() {
   const Stk& callee = peek(results.count());
   CodeOffset fastCallOffset;
   CodeOffset slowCallOffset;
-  callRef(callee, baselineCall, &fastCallOffset, &slowCallOffset);
+  callRef(callee, baselineCall, callRefIndex, &fastCallOffset, &slowCallOffset);
   if (!createStackMap("emitCallRef", fastCallOffset)) {
     return false;
   }
@@ -8260,7 +8275,7 @@ bool BaseCompiler::emitArrayFill() {
   // - .. to spill/reload from a spill slot, we need a register to point at
   //   the instance.  That makes it even worse on x86 since there's no
   //   reserved instance reg; hence we have to use one of our 3 for it.  This
-  //   is indicated explictly in the code below.
+  //   is indicated explicitly in the code below.
   //
   // There are many comment lines indicating the current disposition of the 3
   // regs.
@@ -12124,6 +12139,7 @@ bool js::wasm::BaselineCompileFunctions(const CodeMetadata& codeMeta,
     }
 
     size_t unwindInfoBefore = masm.codeRangeUnwindInfos().length();
+    size_t callRefMetricsBefore = masm.callRefMetricsPatches().length();
 
     // One-pass baseline compilation.
 
@@ -12139,6 +12155,8 @@ bool js::wasm::BaselineCompileFunctions(const CodeMetadata& codeMeta,
     FuncOffsets offsets(f.finish());
     bool hasUnwindInfo =
         unwindInfoBefore != masm.codeRangeUnwindInfos().length();
+    size_t callRefMetricsAfter = masm.callRefMetricsPatches().length();
+    size_t callRefMetricsLength = callRefMetricsAfter - callRefMetricsBefore;
 
     // Record this function's code range
     if (!code->codeRanges.emplaceBack(func.index, offsets, hasUnwindInfo)) {
@@ -12146,7 +12164,9 @@ bool js::wasm::BaselineCompileFunctions(const CodeMetadata& codeMeta,
     }
 
     // Record this function's specific feature usage
-    if (!code->funcs.emplaceBack(func.index, f.iter_.featureUsage())) {
+    if (!code->funcs.emplaceBack(
+            func.index, f.iter_.featureUsage(),
+            CallRefMetricsRange(callRefMetricsBefore, callRefMetricsLength))) {
       return false;
     }
 

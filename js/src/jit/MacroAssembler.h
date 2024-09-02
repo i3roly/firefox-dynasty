@@ -580,6 +580,7 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void Pop(Register reg) PER_SHARED_ARCH;
   void Pop(FloatRegister t) PER_SHARED_ARCH;
   void Pop(const ValueOperand& val) PER_SHARED_ARCH;
+  void Pop(const Register64 reg);
   void PopFlags() DEFINED_ON(x86_shared);
   void PopStackPtr()
       DEFINED_ON(arm, mips_shared, x86_shared, loong64, riscv64, wasm32);
@@ -685,6 +686,11 @@ class MacroAssembler : public MacroAssemblerSpecific {
   static void patchNearAddressMove(CodeLocationLabel loc,
                                    CodeLocationLabel target)
       DEFINED_ON(x86, x64, arm, arm64, loong64, riscv64, wasm32, mips_shared);
+
+  CodeOffset move32WithPatch(Register dest)
+      DEFINED_ON(x86_shared, arm, arm64, loong64, mips_shared);
+  void patchMove32(CodeOffset offset, int32_t n)
+      DEFINED_ON(x86_shared, arm, arm64, loong64, mips_shared);
 
  public:
   // ===============================================================
@@ -994,6 +1000,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
 
   inline void moveDoubleToGPR64(FloatRegister src, Register64 dest) PER_ARCH;
   inline void moveGPR64ToDouble(Register64 src, FloatRegister dest) PER_ARCH;
+
+  // Move the low 32-bits of a double.
+  inline void moveLowDoubleToGPR(FloatRegister src,
+                                 Register dest) PER_SHARED_ARCH;
 
   inline void move8ZeroExtend(Register src, Register dest) PER_SHARED_ARCH;
 
@@ -1447,8 +1457,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void ctz32(Register src, Register dest,
                     bool knownNotZero) PER_SHARED_ARCH;
 
-  inline void clz64(Register64 src, Register dest) PER_ARCH;
-  inline void ctz64(Register64 src, Register dest) PER_ARCH;
+  inline void clz64(Register64 src, Register64 dest) PER_ARCH;
+  inline void ctz64(Register64 src, Register64 dest) PER_ARCH;
 
   // On x86_shared, temp may be Invalid only if the chip has the POPCNT
   // instruction. On ARM, temp may never be Invalid.
@@ -1472,7 +1482,15 @@ class MacroAssembler : public MacroAssemblerSpecific {
       DEFINED_ON(x86_shared, arm, arm64, mips32, mips64, loong64, riscv64,
                  wasm32);
 
-  // Only the NotEqual and Equal conditions are allowed.
+  inline void cmp64Set(Condition cond, Register64 lhs, Register64 rhs,
+                       Register dest) PER_ARCH;
+
+  inline void cmp64Set(Condition cond, Register64 lhs, Imm64 rhs,
+                       Register dest) PER_ARCH;
+
+  inline void cmp64Set(Condition cond, Address lhs, Register64 rhs,
+                       Register dest) PER_ARCH;
+
   inline void cmp64Set(Condition cond, Address lhs, Imm64 rhs,
                        Register dest) PER_ARCH;
 
@@ -1495,12 +1513,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void branch16(Condition cond, const Address& lhs, Imm32 rhs,
                        Label* label) PER_SHARED_ARCH;
 
-  template <class L>
   inline void branch32(Condition cond, Register lhs, Register rhs,
-                       L label) PER_SHARED_ARCH;
-  template <class L>
+                       Label* label) PER_SHARED_ARCH;
   inline void branch32(Condition cond, Register lhs, Imm32 rhs,
-                       L label) PER_SHARED_ARCH;
+                       Label* label) PER_SHARED_ARCH;
 
   inline void branch32(Condition cond, Register lhs, const Address& rhs,
                        Label* label) DEFINED_ON(arm64);
@@ -1539,21 +1555,19 @@ class MacroAssembler : public MacroAssemblerSpecific {
                        Label* success, Label* fail = nullptr) PER_ARCH;
   inline void branch64(Condition cond, Register64 lhs, Register64 rhs,
                        Label* success, Label* fail = nullptr) PER_ARCH;
-  // Only the NotEqual and Equal conditions are allowed for the branch64
-  // variants with Address as lhs.
   inline void branch64(Condition cond, const Address& lhs, Imm64 val,
-                       Label* label) PER_ARCH;
+                       Label* success, Label* fail = nullptr) PER_ARCH;
   inline void branch64(Condition cond, const Address& lhs, Register64 rhs,
-                       Label* label) PER_ARCH;
+                       Label* success, Label* fail = nullptr) PER_ARCH;
 
   // Compare the value at |lhs| with the value at |rhs|.  The scratch
   // register *must not* be the base of |lhs| or |rhs|.
+  // Only the NotEqual and Equal conditions are allowed.
   inline void branch64(Condition cond, const Address& lhs, const Address& rhs,
                        Register scratch, Label* label) PER_ARCH;
 
-  template <class L>
   inline void branchPtr(Condition cond, Register lhs, Register rhs,
-                        L label) PER_SHARED_ARCH;
+                        Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, Register lhs, Imm32 rhs,
                         Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, Register lhs, ImmPtr rhs,
@@ -1563,9 +1577,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void branchPtr(Condition cond, Register lhs, ImmWord rhs,
                         Label* label) PER_SHARED_ARCH;
 
-  template <class L>
   inline void branchPtr(Condition cond, const Address& lhs, Register rhs,
-                        L label) PER_SHARED_ARCH;
+                        Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, const Address& lhs, ImmPtr rhs,
                         Label* label) PER_SHARED_ARCH;
   inline void branchPtr(Condition cond, const Address& lhs, ImmGCPtr rhs,
@@ -1682,33 +1695,40 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
                            Label* label) PER_SHARED_ARCH;
 
-  template <class L>
   inline void branchTest32(Condition cond, Register lhs, Register rhs,
-                           L label) PER_SHARED_ARCH;
-  template <class L>
+                           Label* label) PER_SHARED_ARCH;
   inline void branchTest32(Condition cond, Register lhs, Imm32 rhs,
-                           L label) PER_SHARED_ARCH;
+                           Label* label) PER_SHARED_ARCH;
   inline void branchTest32(Condition cond, const Address& lhs, Imm32 rhh,
                            Label* label) PER_SHARED_ARCH;
   inline void branchTest32(Condition cond, const AbsoluteAddress& lhs,
                            Imm32 rhs, Label* label)
       DEFINED_ON(arm, arm64, mips_shared, x86, x64, loong64, riscv64, wasm32);
 
-  template <class L>
   inline void branchTestPtr(Condition cond, Register lhs, Register rhs,
-                            L label) PER_SHARED_ARCH;
+                            Label* label) PER_SHARED_ARCH;
   inline void branchTestPtr(Condition cond, Register lhs, Imm32 rhs,
                             Label* label) PER_SHARED_ARCH;
+  inline void branchTestPtr(Condition cond, Register lhs, ImmWord rhs,
+                            Label* label) PER_ARCH;
   inline void branchTestPtr(Condition cond, const Address& lhs, Imm32 rhs,
                             Label* label) PER_SHARED_ARCH;
 
-  template <class L>
+  // When a fail label is not defined it will fall through to next instruction,
+  // else jump to the fail label.
+  //
+  // On x86 if |lhs == rhs|, |temp| is used to generate a single branch
+  // instruction. Otherwise |temp| is unused and can be |InvalidReg|.
   inline void branchTest64(Condition cond, Register64 lhs, Register64 rhs,
-                           Register temp, L label) PER_ARCH;
+                           Register temp, Label* success,
+                           Label* fail = nullptr) PER_ARCH;
+  inline void branchTest64(Condition cond, Register64 lhs, Register64 rhs,
+                           Label* success, Label* fail = nullptr);
+  inline void branchTest64(Condition cond, Register64 lhs, Imm64 rhs,
+                           Label* success, Label* fail = nullptr) PER_ARCH;
 
   // Branches to |label| if |reg| is false. |reg| should be a C++ bool.
-  template <class L>
-  inline void branchIfFalseBool(Register reg, L label);
+  inline void branchIfFalseBool(Register reg, Label* label);
 
   // Branches to |label| if |reg| is true. |reg| should be a C++ bool.
   inline void branchIfTrueBool(Register reg, Label* label);
@@ -2006,9 +2026,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
                               Label* label) PER_SHARED_ARCH;
   inline void branchTestMagic(Condition cond, const BaseIndex& address,
                               Label* label) PER_SHARED_ARCH;
-  template <class L>
   inline void branchTestMagic(Condition cond, const ValueOperand& value,
-                              L label)
+                              Label* label)
       DEFINED_ON(arm, arm64, mips32, mips64, loong64, riscv64, wasm32,
                  x86_shared);
 
@@ -3772,7 +3791,7 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // MUST equal `ptrScratch`, and that register will be updated based on
   // conditions listed below (where it is only mentioned as `ptr`).
 
-  // `ptr` will be updated if access.offset() != 0 or access.type() ==
+  // `ptr` will be updated if access.offset32() != 0 or access.type() ==
   // Scalar::Int64.
   void wasmLoad(const wasm::MemoryAccessDesc& access, Register memoryBase,
                 Register ptr, Register ptrScratch, AnyRegister output)
@@ -3967,6 +3986,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
                          const ReturnCallAdjustmentInfo& retCallInfo);
 #endif  // ENABLE_WASM_TAIL_CALLS
 
+  void updateCallRefMetrics(size_t callRefIndex, const Register funcRef,
+                            const Register scratch1, const Register scratch2);
+
   // WasmTableCallIndexReg must contain the index of the indirect call.
   // This is for asm.js calls only.
   CodeOffset asmCallIndirect(const wasm::CallSiteDesc& desc,
@@ -4071,6 +4093,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
                                           Register superDepth, Register scratch,
                                           Label* label, bool onSuccess);
 
+  // Extract the tag of wasm anyref `src`.
+  void extractWasmAnyRefTag(Register src, Register dest);
+
   // Branch if the wasm anyref `src` is or is not the null value.
   void branchWasmAnyRefIsNull(bool isNull, Register src, Label* label);
   // Branch if the wasm anyref `src` is or is not an I31.
@@ -4078,6 +4103,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // Branch if the wasm anyref `src` is or is not a JSObject*.
   void branchWasmAnyRefIsObjectOrNull(bool isObject, Register src,
                                       Label* label);
+  // Branch if the wasm anyref `src` is or is not a JSString.
+  void branchWasmAnyRefIsJSString(bool isJSString, Register src, Register temp,
+                                  Label* label);
   // Branch if the wasm anyref `src` is or is not a GC thing.
   void branchWasmAnyRefIsGCThing(bool isGCThing, Register src, Label* label);
   // Branch if the wasm anyref `src` is or is not pointing to a nursery cell.
@@ -5028,9 +5056,11 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void bigIntDigitToSignedPtr(Register bigInt, Register digit, Label* fail);
 
   /**
-   * Initialize a BigInt from |val|. Clobbers |val|!
+   * Initialize a BigInt from |val|. Clobbers |val| when |temp| is invalid and
+   * |type == Scalar::BigInt64|!
    */
-  void initializeBigInt64(Scalar::Type type, Register bigInt, Register64 val);
+  void initializeBigInt64(Scalar::Type type, Register bigInt, Register64 val,
+                          Register64 temp = Register64::Invalid());
 
   /**
    * Initialize a BigInt from the signed, pointer-sized register |val|.
@@ -5056,6 +5086,12 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void compareBigIntAndInt32(JSOp op, Register bigInt, Register int32,
                              Register scratch1, Register scratch2,
                              Label* ifTrue, Label* ifFalse);
+
+  /**
+   * Compare a BigInt and an Int32 value. Falls through to the false case.
+   */
+  void compareBigIntAndInt32(JSOp op, Register bigInt, Imm32 int32,
+                             Register scratch, Label* ifTrue, Label* ifFalse);
 
   /**
    * Compare two BigInts for equality. Falls through if both BigInts are equal
@@ -5301,6 +5337,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
 
   void convertDoubleToFloat16(FloatRegister src, FloatRegister dest,
                               Register temp, LiveRegisterSet volatileLiveRegs);
+
+  void convertDoubleToFloat16(FloatRegister src, FloatRegister dest,
+                              Register temp1, Register temp2);
 
   void convertFloat32ToFloat16(FloatRegister src, FloatRegister dest,
                                Register temp, LiveRegisterSet volatileLiveRegs);

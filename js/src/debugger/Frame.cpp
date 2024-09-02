@@ -12,7 +12,7 @@
 #include "mozilla/Range.h"        // for Range
 #include "mozilla/RangedPtr.h"    // for RangedPtr
 #include "mozilla/Result.h"       // for Result
-#include "mozilla/ScopeExit.h"    // for MakeScopeExit, ScopeExit
+#include "mozilla/ScopeExit.h"    // for ScopeExit
 #include "mozilla/ThreadLocal.h"  // for ThreadLocal
 #include "mozilla/Vector.h"       // for Vector
 
@@ -96,7 +96,6 @@ using JS::AutoStableStringChars;
 using JS::CompileOptions;
 using JS::SourceOwnership;
 using JS::SourceText;
-using mozilla::MakeScopeExit;
 using mozilla::Maybe;
 
 ScriptedOnStepHandler::ScriptedOnStepHandler(JSObject* object)
@@ -196,12 +195,15 @@ const JSClass DebuggerFrame::class_ = {
         // We require foreground finalization so we can destruct GeneratorInfo's
         // HeapPtrs.
         JSCLASS_FOREGROUND_FINALIZE,
-    &DebuggerFrame::classOps_};
+    &DebuggerFrame::classOps_,
+};
 
 enum { JSSLOT_DEBUGARGUMENTS_FRAME, JSSLOT_DEBUGARGUMENTS_COUNT };
 
 const JSClass DebuggerArguments::class_ = {
-    "Arguments", JSCLASS_HAS_RESERVED_SLOTS(JSSLOT_DEBUGARGUMENTS_COUNT)};
+    "Arguments",
+    JSCLASS_HAS_RESERVED_SLOTS(JSSLOT_DEBUGARGUMENTS_COUNT),
+};
 
 bool DebuggerFrame::resume(const FrameIter& iter) {
   FrameIter::Data* data = iter.copyData();
@@ -2029,11 +2031,14 @@ const JSPropertySpec DebuggerFrame::properties_[] = {
     JS_DEBUG_PSG("implementation", implementationGetter),
     JS_DEBUG_PSGS("onStep", onStepGetter, onStepSetter),
     JS_DEBUG_PSGS("onPop", onPopGetter, onPopSetter),
-    JS_PS_END};
+    JS_PS_END,
+};
 
 const JSFunctionSpec DebuggerFrame::methods_[] = {
     JS_DEBUG_FN("eval", evalMethod, 1),
-    JS_DEBUG_FN("evalWithBindings", evalWithBindingsMethod, 1), JS_FS_END};
+    JS_DEBUG_FN("evalWithBindings", evalWithBindingsMethod, 1),
+    JS_FS_END,
+};
 
 JSObject* js::IdVectorToArray(JSContext* cx, HandleIdVector ids) {
   if (MOZ_UNLIKELY(ids.length() > UINT32_MAX)) {

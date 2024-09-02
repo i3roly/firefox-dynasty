@@ -194,6 +194,7 @@
 #include "mozilla/dom/HTMLTextAreaElement.h"
 #include "mozilla/dom/ImageTracker.h"
 #include "mozilla/dom/InspectorUtils.h"
+#include "mozilla/dom/InteractiveWidget.h"
 #include "mozilla/dom/Link.h"
 #include "mozilla/dom/MediaQueryList.h"
 #include "mozilla/dom/MediaSource.h"
@@ -265,7 +266,10 @@
 #include "mozilla/ipc/IdleSchedulerChild.h"
 #include "mozilla/ipc/MessageChannel.h"
 #include "mozilla/net/ChannelEventQueue.h"
+#include "mozilla/net/Cookie.h"
+#include "mozilla/net/CookieCommons.h"
 #include "mozilla/net/CookieJarSettings.h"
+#include "mozilla/net/CookieParser.h"
 #include "mozilla/net/NeckoChannelParams.h"
 #include "mozilla/net/RequestContextService.h"
 #include "nsAboutProtocolUtils.h"
@@ -461,6 +465,9 @@ mozilla::LazyLogModule gTimeoutDeferralLog("TimeoutDefer");
 mozilla::LazyLogModule gUseCountersLog("UseCounters");
 
 namespace mozilla {
+
+using namespace net;
+
 namespace dom {
 
 class Document::HeaderData {
@@ -1274,6 +1281,12 @@ void DOMStyleSheetSetList::EnsureFresh() {
 
 Document::PendingFrameStaticClone::~PendingFrameStaticClone() = default;
 
+static InteractiveWidget DefaultInteractiveWidget() {
+  return StaticPrefs::dom_interactive_widget_default_resizes_visual()
+             ? InteractiveWidget::ResizesVisual
+             : InteractiveWidget::ResizesContent;
+}
+
 // ==================================================================
 // =
 // ==================================================================
@@ -1432,6 +1445,7 @@ Document::Document(const char* aContentType)
       mHttpsOnlyStatus(nsILoadInfo::HTTPS_ONLY_UNINITIALIZED),
       mViewportType(Unknown),
       mViewportFit(ViewportFitType::Auto),
+      mInteractiveWidgetMode(DefaultInteractiveWidget()),
       mHeaderData(nullptr),
       mServoRestyleRootDirtyBits(0),
       mThrowOnDynamicMarkupInsertionCounter(0),
@@ -2075,28 +2089,6 @@ static void AccumulatePriorityFcpGleanPref(
     MOZ_ASSERT_UNREACHABLE("Unknown value for http3WithPriorityKey");
   }
 }
-
-static void AccumulateEarlyHintFcpGleanPref(const nsCString& earlyHintKey,
-                                            const TimeDuration& duration) {
-  if (earlyHintKey == "preload_1"_ns) {
-    glean::performance_pageload::eh_fcp_preload_with_eh.AccumulateRawDuration(
-        duration);
-  } else if (earlyHintKey == "preload_0"_ns) {
-    glean::performance_pageload::eh_fcp_preload_without_eh
-        .AccumulateRawDuration(duration);
-  } else if (earlyHintKey == "preconnect_"_ns) {
-    glean::performance_pageload::eh_fcp_preconnect.AccumulateRawDuration(
-        duration);
-  } else if (earlyHintKey == "preconnect_preload_1"_ns) {
-    glean::performance_pageload::eh_fcp_preconnect_preload_with_eh
-        .AccumulateRawDuration(duration);
-  } else if (earlyHintKey == "preconnect_preload_0"_ns) {
-    glean::performance_pageload::eh_fcp_preconnect_preload_without_eh
-        .AccumulateRawDuration(duration);
-  } else {
-    MOZ_ASSERT_UNREACHABLE("Unknown value for earlyHintKey");
-  }
-}
 #endif
 
 void Document::AccumulatePageLoadTelemetry(
@@ -2254,16 +2246,6 @@ void Document::AccumulatePageLoadTelemetry(
 #endif
     }
 
-    if (!earlyHintKey.IsEmpty()) {
-      Telemetry::AccumulateTimeDelta(
-          Telemetry::EH_PERF_FIRST_CONTENTFUL_PAINT_MS, earlyHintKey,
-          navigationStart, firstContentfulComposite);
-#ifndef ANDROID
-      AccumulateEarlyHintFcpGleanPref(
-          earlyHintKey, firstContentfulComposite - navigationStart);
-#endif
-    }
-
     Telemetry::AccumulateTimeDelta(
         Telemetry::DNS_PERF_FIRST_CONTENTFUL_PAINT_MS, dnsKey, navigationStart,
         firstContentfulComposite);
@@ -2299,12 +2281,6 @@ void Document::AccumulatePageLoadTelemetry(
     if (!http3WithPriorityKey.IsEmpty()) {
       Telemetry::AccumulateTimeDelta(Telemetry::H3P_PERF_PAGE_LOAD_TIME_MS,
                                      http3WithPriorityKey, navigationStart,
-                                     loadEventStart);
-    }
-
-    if (!earlyHintKey.IsEmpty()) {
-      Telemetry::AccumulateTimeDelta(Telemetry::EH_PERF_PAGE_LOAD_TIME_MS,
-                                     earlyHintKey, navigationStart,
                                      loadEventStart);
     }
 
@@ -2386,26 +2362,6 @@ Document::~Document() {
     if (!IsAboutPage()) {
       if (MOZ_UNLIKELY(mMathMLEnabled)) {
         ScalarAdd(Telemetry::ScalarID::MATHML_DOC_COUNT, 1);
-      }
-
-      if (IsHTMLDocument()) {
-        switch (GetCompatibilityMode()) {
-          case eCompatibility_FullStandards:
-            Telemetry::AccumulateCategorical(
-                Telemetry::LABELS_QUIRKS_MODE::FullStandards);
-            break;
-          case eCompatibility_AlmostStandards:
-            Telemetry::AccumulateCategorical(
-                Telemetry::LABELS_QUIRKS_MODE::AlmostStandards);
-            break;
-          case eCompatibility_NavQuirks:
-            Telemetry::AccumulateCategorical(
-                Telemetry::LABELS_QUIRKS_MODE::NavQuirks);
-            break;
-          default:
-            MOZ_ASSERT_UNREACHABLE("Unknown quirks mode");
-            break;
-        }
       }
     }
   }
@@ -6603,34 +6559,182 @@ void Document::GetCookie(nsAString& aCookie, ErrorResult& aRv) {
     return;
   }
 
-  StorageAccess storageAccess = CookieAllowedForDocument(this);
-  if (storageAccess == StorageAccess::eDeny) {
-    return;
-  }
+  // GTests do not create an inner window and because of these a few security
+  // checks will block this method.
+  if (!StaticPrefs::dom_cookie_testing_enabled()) {
+    StorageAccess storageAccess = CookieAllowedForDocument(this);
+    if (storageAccess == StorageAccess::eDeny) {
+      return;
+    }
 
-  if (ShouldPartitionStorage(storageAccess) &&
-      !StoragePartitioningEnabled(storageAccess, CookieJarSettings())) {
-    return;
-  }
+    if (ShouldPartitionStorage(storageAccess) &&
+        !StoragePartitioningEnabled(storageAccess, CookieJarSettings())) {
+      return;
+    }
 
-  // If the document is a cookie-averse Document... return the empty string.
-  if (IsCookieAverse()) {
-    return;
+    // If the document is a cookie-averse Document... return the empty string.
+    if (IsCookieAverse()) {
+      return;
+    }
   }
 
   // not having a cookie service isn't an error
   nsCOMPtr<nsICookieService> service =
       do_GetService(NS_COOKIESERVICE_CONTRACTID);
-  if (service) {
-    nsAutoCString cookie;
-    service->GetCookieStringFromDocument(this, cookie);
-    // CopyUTF8toUTF16 doesn't handle error
-    // because it assumes that the input is valid.
-    UTF_8_ENCODING->DecodeWithoutBOMHandling(cookie, aCookie);
+  if (!service) {
+    return;
   }
+
+  bool thirdParty = true;
+  nsPIDOMWindowInner* innerWindow = GetInnerWindow();
+  // in gtests we don't have a window, let's consider those requests as 3rd
+  // party.
+  if (innerWindow) {
+    ThirdPartyUtil* thirdPartyUtil = ThirdPartyUtil::GetInstance();
+
+    if (thirdPartyUtil) {
+      Unused << thirdPartyUtil->IsThirdPartyWindow(
+          innerWindow->GetOuterWindow(), nullptr, &thirdParty);
+    }
+  }
+
+  nsCOMPtr<nsIPrincipal> cookiePrincipal = EffectiveCookiePrincipal();
+
+  nsTArray<nsCOMPtr<nsIPrincipal>> principals;
+  principals.AppendElement(cookiePrincipal);
+
+  // CHIPS - If CHIPS is enabled the partitioned cookie jar is always available
+  // (and therefore the partitioned principal), the unpartitioned cookie jar is
+  // only available in first-party or third-party with storageAccess contexts.
+  // In both cases, the document will have storage access.
+  bool isCHIPS = StaticPrefs::network_cookie_CHIPS_enabled() &&
+                 CookieJarSettings()->GetPartitionForeign();
+  bool documentHasStorageAccess = false;
+  nsresult rv = HasStorageAccessSync(documentHasStorageAccess);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    return;
+  }
+
+  if (isCHIPS && documentHasStorageAccess) {
+    // Assert that the cookie principal is unpartitioned.
+    MOZ_ASSERT(cookiePrincipal->OriginAttributesRef().mPartitionKey.IsEmpty());
+    // Only append the partitioned originAttributes if the partitionKey is set.
+    // The partitionKey could be empty for partitionKey in partitioned
+    // originAttributes if the document is for privilege context, such as the
+    // extension's background page.
+    if (!PartitionedPrincipal()
+             ->OriginAttributesRef()
+             .mPartitionKey.IsEmpty()) {
+      principals.AppendElement(PartitionedPrincipal());
+    }
+  }
+
+  nsTArray<RefPtr<Cookie>> cookieList;
+  bool stale = false;
+  int64_t currentTimeInUsec = PR_Now();
+  int64_t currentTime = currentTimeInUsec / PR_USEC_PER_SEC;
+
+  for (auto& principal : principals) {
+    if (!CookieCommons::IsSchemeSupported(principal)) {
+      return;
+    }
+
+    nsAutoCString baseDomain;
+    rv = CookieCommons::GetBaseDomain(principal, baseDomain);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return;
+    }
+
+    nsAutoCString hostFromURI;
+    rv = nsContentUtils::GetHostOrIPv6WithBrackets(principal, hostFromURI);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return;
+    }
+
+    nsAutoCString pathFromURI;
+    rv = principal->GetFilePath(pathFromURI);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return;
+    }
+
+    nsTArray<RefPtr<Cookie>> cookies;
+    service->GetCookiesFromHost(baseDomain, principal->OriginAttributesRef(),
+                                cookies);
+    if (cookies.IsEmpty()) {
+      continue;
+    }
+
+    // check if the nsIPrincipal is using an https secure protocol.
+    // if it isn't, then we can't send a secure cookie over the connection.
+    bool potentiallyTrustworthy =
+        principal->GetIsOriginPotentiallyTrustworthy();
+
+    // iterate the cookies!
+    for (Cookie* cookie : cookies) {
+      // check the host, since the base domain lookup is conservative.
+      if (!CookieCommons::DomainMatches(cookie, hostFromURI)) {
+        continue;
+      }
+
+      // if the cookie is httpOnly and it's not going directly to the HTTP
+      // connection, don't send it
+      if (cookie->IsHttpOnly()) {
+        continue;
+      }
+
+      if (thirdParty && !CookieCommons::ShouldIncludeCrossSiteCookieForDocument(
+                            cookie, this)) {
+        continue;
+      }
+
+      // if the cookie is secure and the host scheme isn't, we can't send it
+      if (cookie->IsSecure() && !potentiallyTrustworthy) {
+        continue;
+      }
+
+      // if the nsIURI path doesn't match the cookie path, don't send it back
+      if (!CookieCommons::PathMatches(cookie, pathFromURI)) {
+        continue;
+      }
+
+      // check if the cookie has expired
+      if (cookie->Expiry() <= currentTime) {
+        continue;
+      }
+
+      // all checks passed - add to list and check if lastAccessed stamp needs
+      // updating
+      cookieList.AppendElement(cookie);
+      if (cookie->IsStale()) {
+        stale = true;
+      }
+    }
+  }
+
+  if (cookieList.IsEmpty()) {
+    return;
+  }
+
+  // update lastAccessed timestamps. we only do this if the timestamp is stale
+  // by a certain amount, to avoid thrashing the db during pageload.
+  if (stale) {
+    service->StaleCookies(cookieList, currentTimeInUsec);
+  }
+
+  // return cookies in order of path length; longest to shortest.
+  // this is required per RFC2109.  if cookies match in length,
+  // then sort by creation time (see bug 236772).
+  cookieList.Sort(CompareCookiesForSending());
+
+  nsAutoCString cookieString;
+  CookieCommons::ComposeCookieString(cookieList, cookieString);
+
+  // CopyUTF8toUTF16 doesn't handle error
+  // because it assumes that the input is valid.
+  UTF_8_ENCODING->DecodeWithoutBOMHandling(cookieString, aCookie);
 }
 
-void Document::SetCookie(const nsAString& aCookie, ErrorResult& aRv) {
+void Document::SetCookie(const nsAString& aCookieString, ErrorResult& aRv) {
   if (mDisableCookieAccess) {
     return;
   }
@@ -6670,19 +6774,71 @@ void Document::SetCookie(const nsAString& aCookie, ErrorResult& aRv) {
     return;
   }
 
-  NS_ConvertUTF16toUTF8 cookie(aCookie);
-  nsresult rv = service->SetCookieStringFromDocument(this, cookie);
+  NS_ConvertUTF16toUTF8 cookieString(aCookieString);
 
-  // No warning messages here.
-  if (NS_FAILED(rv)) {
+  nsCOMPtr<nsIURI> documentURI;
+  nsAutoCString baseDomain;
+  OriginAttributes attrs;
+
+  int64_t currentTimeInUsec = PR_Now();
+
+  auto* basePrincipal = BasePrincipal::Cast(NodePrincipal());
+  basePrincipal->GetURI(getter_AddRefs(documentURI));
+  if (NS_WARN_IF(!documentURI)) {
+    // Document's principal is not a content or null (may be system), so
+    // can't set cookies
     return;
   }
+
+  // Console report takes care of the correct reporting at the exit of this
+  // method.
+  RefPtr<ConsoleReportCollector> crc = new ConsoleReportCollector();
+  auto scopeExit = MakeScopeExit([&] { crc->FlushConsoleReports(this); });
+
+  CookieParser cookieParser(crc, documentURI);
+
+  ThirdPartyUtil* thirdPartyUtil = ThirdPartyUtil::GetInstance();
+  if (!thirdPartyUtil) {
+    return;
+  }
+
+  nsCOMPtr<nsIEffectiveTLDService> tldService =
+      do_GetService(NS_EFFECTIVETLDSERVICE_CONTRACTID);
+  if (!tldService) {
+    return;
+  }
+
+  RefPtr<Cookie> cookie = CookieCommons::CreateCookieFromDocument(
+      cookieParser, this, cookieString, currentTimeInUsec, tldService,
+      thirdPartyUtil, baseDomain, attrs);
+  if (!cookie) {
+    return;
+  }
+
+  bool thirdParty = true;
+  nsPIDOMWindowInner* innerWindow = GetInnerWindow();
+  // in gtests we don't have a window, let's consider those requests as 3rd
+  // party.
+  if (innerWindow) {
+    Unused << thirdPartyUtil->IsThirdPartyWindow(innerWindow->GetOuterWindow(),
+                                                 nullptr, &thirdParty);
+  }
+
+  if (thirdParty &&
+      !CookieCommons::ShouldIncludeCrossSiteCookieForDocument(cookie, this)) {
+    return;
+  }
+
+  // add the cookie to the list. AddCookieFromDocument() takes care of logging.
+  service->AddCookieFromDocument(cookieParser, baseDomain, attrs, *cookie,
+                                 currentTimeInUsec, documentURI, thirdParty,
+                                 this);
 
   nsCOMPtr<nsIObserverService> observerService =
       mozilla::services::GetObserverService();
   if (observerService) {
     observerService->NotifyObservers(ToSupports(this), "document-set-cookie",
-                                     nsString(aCookie).get());
+                                     nsString(aCookieString).get());
   }
 }
 
@@ -8376,9 +8532,6 @@ void Document::UnblockDOMContentLoaded() {
           ("DOCUMENT %p UnblockDOMContentLoaded", this));
 
   mDidFireDOMContentLoaded = true;
-  if (PresShell* presShell = GetPresShell()) {
-    presShell->GetRefreshDriver()->NotifyDOMContentLoaded();
-  }
 
   MOZ_ASSERT(mReadyState == READYSTATE_INTERACTIVE);
   if (!mSynchronousDOMContentLoaded) {
@@ -8416,7 +8569,7 @@ void Document::RuleAdded(StyleSheet& aSheet, css::Rule& aRule) {
   }
 }
 
-void Document::ImportRuleLoaded(dom::CSSImportRule& aRule, StyleSheet& aSheet) {
+void Document::ImportRuleLoaded(StyleSheet& aSheet) {
   if (aSheet.IsApplicable()) {
     ApplicableStylesChanged();
   }
@@ -9793,7 +9946,8 @@ mozilla::dom::Nullable<mozilla::dom::WindowProxyHolder> Document::Open(
   }
   RefPtr<nsGlobalWindowOuter> win = nsGlobalWindowOuter::Cast(outer);
   RefPtr<BrowsingContext> newBC;
-  rv = win->OpenJS(aURL, aName, aFeatures, getter_AddRefs(newBC));
+  rv = win->OpenJS(NS_ConvertUTF16toUTF8(aURL), aName, aFeatures,
+                   getter_AddRefs(newBC));
   if (!newBC) {
     return nullptr;
   }
@@ -10956,10 +11110,42 @@ ViewportMetaData Document::GetViewportMetaData() const {
                                        : ViewportMetaData();
 }
 
+static InteractiveWidget ParseInteractiveWidget(
+    const ViewportMetaData& aViewportMetaData) {
+  if (aViewportMetaData.mInteractiveWidgetMode.IsEmpty()) {
+    return DefaultInteractiveWidget();
+  }
+
+  if (aViewportMetaData.mInteractiveWidgetMode.EqualsIgnoreCase(
+          "resizes-visual")) {
+    return InteractiveWidget::ResizesVisual;
+  }
+  if (aViewportMetaData.mInteractiveWidgetMode.EqualsIgnoreCase(
+          "resizes-content")) {
+    return InteractiveWidget::ResizesContent;
+  }
+  if (aViewportMetaData.mInteractiveWidgetMode.EqualsIgnoreCase(
+          "overlays-content")) {
+    return InteractiveWidget::OverlaysContent;
+  }
+  return DefaultInteractiveWidget();
+}
+
 void Document::SetMetaViewportData(UniquePtr<ViewportMetaData> aData) {
   mLastModifiedViewportMetaData = std::move(aData);
   // Trigger recomputation of the nsViewportInfo the next time it's queried.
   mViewportType = Unknown;
+
+  // Parse interactive-widget here anyway. Normally we parse any data in the
+  // meta viewport tag in GetViewportInfo(), but GetViewportInfo() depends on
+  // the document state (e.g. display size, fullscreen, desktop-mode etc.)
+  // whereas interactive-widget is independent from the document state, it's
+  // necessary whatever the document state is.
+  dom::InteractiveWidget interactiveWidget =
+      ParseInteractiveWidget(*mLastModifiedViewportMetaData);
+  if (mInteractiveWidgetMode != interactiveWidget) {
+    mInteractiveWidgetMode = interactiveWidget;
+  }
 
   AsyncEventDispatcher::RunDOMEventWhenSafe(
       *this, u"DOMMetaViewportFitChanged"_ns, CanBubble::eYes,
@@ -17070,6 +17256,10 @@ void Document::NotifyUserGestureActivation(
 
     wc->NotifyUserGestureActivation(aModifiers);
   });
+
+  // If there has been a user activation, mark the current session history
+  // entry as having been interacted with.
+  SetSHEntryHasUserInteraction(true);
 }
 
 bool Document::HasBeenUserGestureActivated() {
@@ -17582,6 +17772,12 @@ void Document::ClearStaleServoData() {
   while (Element* root = iter.GetNextStyleRoot()) {
     RestyleManager::ClearServoDataFromSubtree(root);
   }
+}
+
+ViewTransition* Document::StartViewTransition(
+    const Optional<OwningNonNull<ViewTransitionUpdateCallback>>&) {
+  // TODO(emilio): Not yet implemented
+  return nullptr;
 }
 
 Selection* Document::GetSelection(ErrorResult& aRv) {
@@ -18157,6 +18353,13 @@ already_AddRefed<mozilla::dom::Promise> Document::RequestStorageAccessForOrigin(
   // Consume user activation before entering the async part of this method.
   // This prevents usage of other transient activation-gated APIs.
   ConsumeTransientUserGestureActivation();
+
+  ContentChild* cc = ContentChild::GetSingleton();
+  if (!cc) {
+    // TODO(bug 1778561): Make this work in non-content processes.
+    promise->MaybeRejectWithUndefined();
+    return promise.forget();
+  }
 
   // Step 4a: Start the async part of this function. Check the cookie
   // permission, but this can't be done in this process. We needs the cookie

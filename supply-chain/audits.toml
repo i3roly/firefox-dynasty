@@ -256,7 +256,7 @@ who = "Jamie Nicol <jnicol@mozilla.com>"
 criteria = "safe-to-deploy"
 user-id = 84794 # Jamie Nicol (jamienicol)
 start = "2020-04-07"
-end = "2024-04-25"
+end = "2025-08-30"
 
 [[wildcard-audits.io-surface]]
 who = "Bobby Holley <bobbyholley@gmail.com>"
@@ -870,6 +870,11 @@ who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.5.3 -> 0.6.0"
 
+[[audits.bit-set]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.6.0 -> 0.8.0"
+
 [[audits.bit-vec]]
 who = "Aria Beingessner <a.beingessner@gmail.com>"
 criteria = "safe-to-deploy"
@@ -880,6 +885,11 @@ notes = "Another crate I own via contain-rs that is ancient and in maintenance m
 who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.6.3 -> 0.7.0"
+
+[[audits.bit-vec]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.7.0 -> 0.8.0"
 
 [[audits.bitflags]]
 who = "Alex Franchuk <afranchuk@mozilla.com>"
@@ -1477,13 +1487,14 @@ criteria = "safe-to-deploy"
 delta = "0.19.0 -> 0.20.0"
 
 [[audits.d3d12]]
-who = [
-    "Jim Blandy <jimb@red-bean.com>",
-    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
-    "Erich Gubler <erichdongubler@gmail.com>",
-]
+who = "Jim Blandy <jimb@red-bean.com>"
 criteria = "safe-to-deploy"
-delta = "0.20.0 -> 0.20.0@git:aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+delta = "0.20.0 -> 22.0.0"
+
+[[audits.d3d12]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "22.0.0 -> 22.0.0@git:c6a3d927345a81eeb13e9e3720002c4cc6f25e54"
 importable = false
 
 [[audits.darling]]
@@ -2267,6 +2278,11 @@ who = "Erich Gubler <erichdongubler@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.25.0 -> 0.26.0"
 notes = "New Metal backend is written with no `unsafe`. New `unsafe` usage of DX12's platform APIs appear correct and safe. Otherwise, minimal changes."
+
+[[audits.gpu-allocator]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.26.0 -> 0.27.0"
 
 [[audits.gpu-descriptor]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
@@ -3084,13 +3100,18 @@ criteria = "safe-to-deploy"
 delta = "0.19.2 -> 0.20.0"
 
 [[audits.naga]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 22.0.0"
+
+[[audits.naga]]
 who = [
     "Jim Blandy <jimb@red-bean.com>",
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "0.20.0 -> 0.20.0@git:aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+delta = "22.0.0 -> 22.0.0@git:bbdbafdf8a947b563b46f632a778632b906d9eb4"
 importable = false
 
 [[audits.net2]]
@@ -4637,6 +4658,11 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.3 -> 0.2.4"
 
+[[audits.unicode-xid]]
+who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.4 -> 0.2.5"
+
 [[audits.uniffi]]
 who = "Travis Long <tlong@mozilla.com>"
 criteria = "safe-to-deploy"
@@ -5058,13 +5084,18 @@ criteria = "safe-to-deploy"
 delta = "0.19.3 -> 0.20.0"
 
 [[audits.wgpu-core]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 22.0.0"
+
+[[audits.wgpu-core]]
 who = [
     "Jim Blandy <jimb@red-bean.com>",
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "0.20.0 -> 0.20.0@git:aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+delta = "22.0.0 -> 22.0.0@git:bbdbafdf8a947b563b46f632a778632b906d9eb4"
 importable = false
 
 [[audits.wgpu-hal]]
@@ -5126,13 +5157,18 @@ criteria = "safe-to-deploy"
 delta = "0.19.3 -> 0.20.0"
 
 [[audits.wgpu-hal]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 22.0.0"
+
+[[audits.wgpu-hal]]
 who = [
     "Jim Blandy <jimb@red-bean.com>",
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "0.20.0 -> 0.20.0@git:aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+delta = "22.0.0 -> 22.0.0@git:bbdbafdf8a947b563b46f632a778632b906d9eb4"
 importable = false
 
 [[audits.wgpu-types]]
@@ -5194,13 +5230,18 @@ criteria = "safe-to-deploy"
 delta = "0.19.2 -> 0.20.0"
 
 [[audits.wgpu-types]]
+who = "Jim Blandy <jimb@red-bean.com>"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 22.0.0"
+
+[[audits.wgpu-types]]
 who = [
     "Jim Blandy <jimb@red-bean.com>",
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "0.20.0 -> 0.20.0@git:aeb2067e8120c1ff480625c00b9571db8d01d5a4"
+delta = "22.0.0 -> 22.0.0@git:bbdbafdf8a947b563b46f632a778632b906d9eb4"
 importable = false
 
 [[audits.whatsys]]
@@ -5836,6 +5877,30 @@ criteria = "safe-to-deploy"
 user-id = 64539 # Kenny Kerr (kennykerr)
 start = "2021-11-15"
 end = "2024-09-20"
+
+[[trusted.windows-implement]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-01-27"
+end = "2025-07-29"
+
+[[trusted.windows-interface]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-02-18"
+end = "2025-07-29"
+
+[[trusted.windows-result]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-02"
+end = "2025-07-29"
+
+[[trusted.windows-strings]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-02"
+end = "2025-07-29"
 
 [[trusted.windows-sys]]
 criteria = "safe-to-deploy"

@@ -1039,10 +1039,6 @@ var SessionStoreInternal = {
     this._initPrefs();
     this._initialized = true;
 
-    Services.telemetry
-      .getHistogramById("FX_SESSION_RESTORE_PRIVACY_LEVEL")
-      .add(Services.prefs.getIntPref("browser.sessionstore.privacy_level"));
-
     this.promiseAllWindowsRestored.finally(() => () => {
       this._log.debug("promiseAllWindowsRestored finalized");
     });
@@ -4544,11 +4540,12 @@ var SessionStoreInternal = {
 
     let sidebarBox = aWindow.document.getElementById("sidebar-box");
     let command = sidebarBox.getAttribute("sidebarcommand");
+    winData.sidebar = {};
+    if (sidebarBox.style.width) {
+      winData.sidebar.width = sidebarBox.style.width;
+    }
     if (command && sidebarBox.getAttribute("checked") == "true") {
-      winData.sidebar = {
-        command,
-        style: sidebarBox.style.cssText,
-      };
+      winData.sidebar.command = command;
     } else if (winData.sidebar?.command) {
       delete winData.sidebar.command;
     }
@@ -5605,21 +5602,27 @@ var SessionStoreInternal = {
    *        Object containing command (sidebarcommand/category) and styles
    */
   restoreSidebar(aWindow, aSidebar, isPopup) {
+    if (!aSidebar) {
+      return;
+    }
     if (!isPopup) {
       let sidebarBox = aWindow.document.getElementById("sidebar-box");
+      // Always restore sidebar width
+      if (aSidebar.width) {
+        sidebarBox.style.width = aSidebar.width;
+      }
       if (
-        aSidebar?.command &&
+        aSidebar.command &&
         (sidebarBox.getAttribute("sidebarcommand") != aSidebar.command ||
           !sidebarBox.getAttribute("checked"))
       ) {
         aWindow.SidebarController.showInitially(aSidebar.command);
-        sidebarBox.setAttribute("style", aSidebar.style);
       }
     }
-    if (aSidebar && aWindow.SidebarController.sidebarRevampEnabled) {
+    if (aWindow.SidebarController.sidebarRevampEnabled) {
       const { SidebarController } = aWindow;
       SidebarController.promiseInitialized.then(() => {
-        SidebarController.sidebarMain.expanded = aSidebar.expanded;
+        SidebarController.toggleExpanded(aSidebar.expanded);
         SidebarController.sidebarContainer.hidden = aSidebar.hidden;
         SidebarController.updateToolbarButton();
       });

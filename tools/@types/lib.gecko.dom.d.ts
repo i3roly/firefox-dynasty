@@ -10395,7 +10395,6 @@ interface HTMLMediaElement extends HTMLElement {
     readonly totalAudioPlayTime: number;
     readonly totalVideoHDRPlayTime: number;
     readonly totalVideoPlayTime: number;
-    readonly videoDecodeSuspendedTime: number;
     readonly videoTracks: VideoTrackList;
     readonly visiblePlayTime: number;
     volume: number;
@@ -18807,6 +18806,7 @@ declare var StreamFilterDataEvent: {
 };
 
 interface StructuredCloneHolder {
+    readonly dataSize: number;
     deserialize(global: any, keepData?: boolean): any;
 }
 

@@ -51,13 +51,13 @@ export class NetworkResponse {
     this.#headersTransmittedSize = rawHeaders.length;
     this.#totalTransmittedSize = rawHeaders.length;
 
-    // TODO: responseStatus and responseStatusText are sometimes inconsistent.
-    // For instance, they might be (304, Not Modified) when retrieved during the
-    // responseStarted event, and then (200, OK) during the responseCompleted
-    // event.
-    // For now consider them as immutable and store them on startup.
-    // According to the fetch spec for data URLs we can just hardcode
-    // status `200` and statusMessage `OK`.
+    // See https://github.com/w3c/webdriver-bidi/issues/761
+    // For 304 responses, the response will be replaced by the cached response
+    // between responseStarted and responseCompleted, which will effectively
+    // change the status and statusMessage.
+    // Until the issue linked above has been discussed and closed, we will
+    // cache the status/statusMessage in order to ensure consistent values
+    // between responseStarted and responseCompleted.
     this.#status = this.#isDataURL ? 200 : this.#channel.responseStatus;
     this.#statusMessage = this.#isDataURL
       ? "OK"
@@ -104,6 +104,20 @@ export class NetworkResponse {
     return this.#totalTransmittedSize;
   }
 
+  /**
+   * Clear a response header from the responses's headers list.
+   *
+   * @param {string} name
+   *     The header's name.
+   */
+  clearResponseHeader(name) {
+    this.#channel.setResponseHeader(
+      name, // aName
+      "", // aValue="" as an empty value
+      false // aMerge=false to force clearing the header
+    );
+  }
+
   getComputedMimeType() {
     // TODO: DevTools NetworkObserver is computing a similar value in
     // addResponseContent, but uses an inconsistent implementation in
@@ -137,7 +151,7 @@ export class NetworkResponse {
     if (this.#isDataURL) {
       headers.push(["Content-Type", this.#channel.contentType]);
     } else {
-      this.#channel.visitOriginalResponseHeaders({
+      this.#channel.visitResponseHeaders({
         visitHeader(name, value) {
           headers.push([name, value]);
         },
@@ -145,6 +159,40 @@ export class NetworkResponse {
     }
 
     return headers;
+  }
+
+  /**
+   * Set a response header
+   *
+   * @param {string} name
+   *     The header's name.
+   * @param {string} value
+   *     The header's value.
+   * @param {object} options
+   * @param {boolean} options.merge
+   *     True if the value should be merged with the existing value, false if it
+   *     should override it. Defaults to false.
+   */
+  setResponseHeader(name, value, options) {
+    const { merge = false } = options;
+    this.#channel.setResponseHeader(name, value, merge);
+  }
+
+  setResponseStatus(options) {
+    let { status, statusText } = options;
+    if (status === null) {
+      status = this.#channel.responseStatus;
+    }
+
+    if (statusText === null) {
+      statusText = this.#channel.responseStatusText;
+    }
+
+    this.#channel.setResponseStatus(status, statusText);
+
+    // Update the cached status and statusMessage.
+    this.#status = this.#channel.responseStatus;
+    this.#statusMessage = this.#channel.responseStatusText;
   }
 
   /**

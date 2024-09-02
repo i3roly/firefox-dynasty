@@ -278,6 +278,7 @@ BrowserChild::BrowserChild(ContentChild* aManager, const TabId& aTabId,
       mLayersId{0},
       mEffectsInfo{EffectsInfo::FullyHidden()},
       mDynamicToolbarMaxHeight(0),
+      mKeyboardHeight(0),
       mUniqueId(aTabId),
       mDidFakeShow(false),
       mTriedBrowserInit(false),
@@ -1232,6 +1233,23 @@ mozilla::ipc::IPCResult BrowserChild::RecvDynamicToolbarOffsetChanged(
 
   if (nsPresContext* presContext = document->GetPresContext()) {
     presContext->UpdateDynamicToolbarOffset(aOffset);
+  }
+#endif
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvKeyboardHeightChanged(
+    const ScreenIntCoord& aHeight) {
+#if defined(MOZ_WIDGET_ANDROID)
+  mKeyboardHeight = aHeight;
+
+  RefPtr<Document> document = GetTopLevelDocument();
+  if (!document) {
+    return IPC_OK();
+  }
+
+  if (nsPresContext* presContext = document->GetPresContext()) {
+    presContext->UpdateKeyboardHeight(aHeight);
   }
 #endif
   return IPC_OK();
@@ -2724,7 +2742,6 @@ mozilla::ipc::IPCResult BrowserChild::RecvRenderLayers(const bool& aEnabled) {
     root->SchedulePaint();
   }
 
-  Telemetry::AutoTimer<Telemetry::TABCHILD_PAINT_TIME> timer;
   // If we need to repaint, let's do that right away. No sense waiting until
   // we get back to the event loop again. We suppress the display port so
   // that we only paint what's visible. This ensures that the tab we're

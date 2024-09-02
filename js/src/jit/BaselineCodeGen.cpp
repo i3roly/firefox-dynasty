@@ -35,6 +35,7 @@
 #include "vm/FunctionFlags.h"  // js::FunctionFlags
 #include "vm/Interpreter.h"
 #include "vm/JSFunction.h"
+#include "vm/Logging.h"
 #include "vm/Time.h"
 #ifdef MOZ_VTUNE
 #  include "vtune/VTuneWrapper.h"
@@ -108,6 +109,9 @@ BaselineInterpreterGenerator::BaselineInterpreterGenerator(JSContext* cx,
     : BaselineCodeGen(cx, alloc /* no handlerArgs */) {}
 
 bool BaselineCompilerHandler::init(JSContext* cx) {
+  JS_LOG(baselineCompileHandler, mozilla::LogLevel::Debug,
+         "Baseline Compile Init");
+
   if (!analysis_.init(alloc_)) {
     return false;
   }
@@ -4877,21 +4881,72 @@ bool BaselineCodeGen<Handler>::emit_LeaveWith() {
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_AddDisposable() {
-  // TODO: AddDisposable to be implemented for Baseline (Bug 1899500)
-  MOZ_CRASH("AddDisposable has not been implemented for baseline");
+  frame.syncStack(0);
+
+  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
+  MOZ_ASSERT(!regs.has(FramePointer));
+  prepareVMCall();
+
+  Register needsClosure = regs.takeAny();
+  Register method = regs.takeAny();
+  Register value = regs.takeAny();
+  Register baselineFrame = regs.takeAny();
+  Register hint = regs.takeAny();
+
+  masm.loadBaselineFramePtr(FramePointer, baselineFrame);
+  masm.loadValue(frame.addressOfStackValue(-1), ValueOperand(needsClosure));
+  masm.loadValue(frame.addressOfStackValue(-2), ValueOperand(method));
+  masm.loadValue(frame.addressOfStackValue(-3), ValueOperand(value));
+
+  pushUint8BytecodeOperandArg(hint);
+  pushArg(needsClosure);
+  pushArg(method);
+  pushArg(value);
+  pushArg(baselineFrame);
+
+  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::Handle<JS::Value>,
+                      JS::Handle<JS::Value>, JS::Handle<JS::Value>, UsingHint);
+  if (!callVM<Fn, jit::AddDisposableResource>()) {
+    return false;
+  }
+  frame.popn(3);
+  return true;
 }
 
 template <typename Handler>
-bool BaselineCodeGen<Handler>::emit_DisposeDisposables() {
-  // TODO: DisposeDisposables to be implemented for Baseline (Bug 1899500)
-  MOZ_CRASH("DisposeDisposables has not been implemented for baseline");
+bool BaselineCodeGen<Handler>::emit_TakeDisposeCapability() {
+  frame.syncStack(0);
+
+  masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+  Address capAddr(R0.scratchReg(),
+                  DisposableEnvironmentObject::offsetOfDisposeCapability());
+  masm.loadValue(capAddr, R1);
+  masm.storeValue(UndefinedValue(), capAddr);
+
+  frame.push(R1);
+  return true;
 }
 
 template <typename Handler>
-bool BaselineCodeGen<Handler>::emit_ThrowWithStackWithoutJump() {
-  // TODO: ThrowWithStackWithoutJump to be implemented for Baseline (Bug
-  // 1899500)
-  MOZ_CRASH("ThrowWithStackWithoutJump has not been implemented for baseline");
+bool BaselineCodeGen<Handler>::emit_CreateSuppressedError() {
+  frame.popRegsAndSync(2);
+  prepareVMCall();
+
+  masm.loadBaselineFramePtr(FramePointer, R2.scratchReg());
+
+  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::Handle<JS::Value>,
+                      JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>);
+
+  pushArg(R1);  // suppressed
+  pushArg(R0);  // error
+  pushArg(R2.scratchReg());
+
+  if (!callVM<Fn, jit::CreateSuppressedError>()) {
+    return false;
+  }
+
+  frame.push(R0);
+  return true;
 }
 #endif
 

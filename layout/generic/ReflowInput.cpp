@@ -208,7 +208,6 @@ ReflowInput::ReflowInput(nsPresContext* aPresContext,
   }
 
   {
-    using mozilla::LayoutFrameType;
     switch (mFrame->Type()) {
       case LayoutFrameType::PageContent:
         // PageContent requires paginated reflow.
@@ -374,7 +373,7 @@ void ReflowInput::Init(nsPresContext* aPresContext,
   InitCBReflowInput();
 
   LayoutFrameType type = mFrame->Type();
-  if (type == mozilla::LayoutFrameType::Placeholder) {
+  if (type == LayoutFrameType::Placeholder) {
     // Placeholders have a no-op Reflow method that doesn't need the rest of
     // this initialization, so we bail out early.
     mComputedSize.SizeTo(mWritingMode, 0, 0);
@@ -531,9 +530,9 @@ static bool IsQuirkContainingBlockHeight(const ReflowInput* rs,
 
 void ReflowInput::InitResizeFlags(nsPresContext* aPresContext,
                                   LayoutFrameType aFrameType) {
-  SetBResize(false);
   SetIResize(false);
-  mFlags.mIsBResizeForPercentages = false;
+  SetBResize(false);
+  SetBResizeForPercentages(false);
 
   const WritingMode wm = mWritingMode;  // just a shorthand
   // We should report that we have a resize in the inline dimension if
@@ -659,7 +658,7 @@ void ReflowInput::InitResizeFlags(nsPresContext* aPresContext,
     // actually resize but children with percentages resize (since those
     // percentages become auto if their containing block is auto).
     SetBResize(true);
-    mFlags.mIsBResizeForPercentages = true;
+    SetBResizeForPercentages(true);
     // We don't clear the HasBSizeChange state here, since sometimes we
     // construct a ReflowInput (e.g. in nsBlockFrame::ReflowBlockFrame to
     // compute margin collapsing) without reflowing the frame. Instead, we
@@ -672,7 +671,7 @@ void ReflowInput::InitResizeFlags(nsPresContext* aPresContext,
     // We have a percentage (or calc-with-percentage) block-size, and the
     // value it's relative to has changed.
     SetBResize(true);
-    mFlags.mIsBResizeForPercentages = true;
+    SetBResizeForPercentages(true);
   } else if (aFrameType == LayoutFrameType::TableCell &&
              (mFlags.mSpecialBSizeReflow ||
               mFrame->FirstInFlow()->HasAnyStateBits(
@@ -682,15 +681,14 @@ void ReflowInput::InitResizeFlags(nsPresContext* aPresContext,
     // mCBReflowInput->IsBResize() is set correctly below when
     // reflowing descendant.
     SetBResize(true);
-    mFlags.mIsBResizeForPercentages = true;
+    SetBResizeForPercentages(true);
   } else if (mCBReflowInput && mFrame->IsBlockWrapper()) {
     // XXX Is this problematic for relatively positioned inlines acting
     // as containing block for absolutely positioned elements?
     // Possibly; in that case we should at least be checking
     // IsSubtreeDirty(), I'd think.
     SetBResize(mCBReflowInput->IsBResizeForWM(wm));
-    mFlags.mIsBResizeForPercentages =
-        mCBReflowInput->IsBResizeForPercentagesForWM(wm);
+    SetBResizeForPercentages(mCBReflowInput->IsBResizeForPercentagesForWM(wm));
   } else if (ComputedBSize() == NS_UNCONSTRAINEDSIZE) {
     // We have an 'auto' block-size.
     if (eCompatibility_NavQuirks == aPresContext->CompatibilityMode() &&
@@ -1030,9 +1028,9 @@ void ReflowInput::ComputeAbsPosBlockAutoMargin(nscoord aAvailMarginSpace,
 }
 
 void ReflowInput::ApplyRelativePositioning(
-    nsIFrame* aFrame, mozilla::WritingMode aWritingMode,
-    const mozilla::LogicalMargin& aComputedOffsets,
-    mozilla::LogicalPoint* aPosition, const nsSize& aContainerSize) {
+    nsIFrame* aFrame, WritingMode aWritingMode,
+    const LogicalMargin& aComputedOffsets, LogicalPoint* aPosition,
+    const nsSize& aContainerSize) {
   // Subtract the size of the frame from the container size that we
   // use for converting between the logical and physical origins of
   // the frame. This accounts for the fact that logical origins in RTL
@@ -1043,8 +1041,7 @@ void ReflowInput::ApplyRelativePositioning(
       aPosition->GetPhysicalPoint(aWritingMode, aContainerSize - frameSize);
   ApplyRelativePositioning(
       aFrame, aComputedOffsets.GetPhysicalMargin(aWritingMode), &pos);
-  *aPosition =
-      mozilla::LogicalPoint(aWritingMode, pos, aContainerSize - frameSize);
+  *aPosition = LogicalPoint(aWritingMode, pos, aContainerSize - frameSize);
 }
 
 nsIFrame* ReflowInput::GetHypotheticalBoxContainer(nsIFrame* aFrame,
@@ -1107,10 +1104,8 @@ void ReflowInput::CalculateBorderPaddingMargin(
     LogicalAxis aAxis, nscoord aContainingBlockSize, nscoord* aInsideBoxSizing,
     nscoord* aOutsideBoxSizing) const {
   WritingMode wm = GetWritingMode();
-  mozilla::Side startSide =
-      wm.PhysicalSide(MakeLogicalSide(aAxis, LogicalEdge::Start));
-  mozilla::Side endSide =
-      wm.PhysicalSide(MakeLogicalSide(aAxis, LogicalEdge::End));
+  Side startSide = wm.PhysicalSide(MakeLogicalSide(aAxis, LogicalEdge::Start));
+  Side endSide = wm.PhysicalSide(MakeLogicalSide(aAxis, LogicalEdge::End));
 
   nsMargin styleBorder = mStyleBorder->GetComputedBorder();
   nscoord borderStartEnd =
@@ -2858,7 +2853,7 @@ nscoord ReflowInput::CalcLineHeightForCanvas(const StyleLineHeight& aLh,
                                              nsAtom* aLanguage,
                                              bool aExplicitLanguage,
                                              nsPresContext* aPresContext,
-                                             mozilla::WritingMode aWM) {
+                                             WritingMode aWM) {
   return ComputeLineHeight(aLh, aRelativeToFont, aLanguage, aExplicitLanguage,
                            aPresContext, aWM.IsVertical() && !aWM.IsSideways(),
                            NS_UNCONSTRAINEDSIZE, 1.0f);

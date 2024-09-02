@@ -36,7 +36,7 @@ headless:
 a11y-checks:
     description: "{description} with accessibility checks enabled"
     component: "Core::Disability Access APIs"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "a11y-checks"
     mozinfo: "a11y_checks"
     replace:
@@ -164,7 +164,7 @@ xorigin:
 conditioned_profile:
     description: "{description} with conditioned profile"
     component: "Testing::General"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "condprof"
     mozinfo: "condprof"
     when:
@@ -197,7 +197,7 @@ conditioned_profile:
 socketprocess:
     description: "{description} with socket process enabled"
     component: "Core::Networking"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "spi"
     mozinfo: "socketprocess_e10s"
     when:
@@ -211,7 +211,7 @@ socketprocess:
 socketprocess_networking:
     description: "{description} with networking on socket process enabled"
     component: "Core::Networking"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "spi-nw"
     mozinfo: "socketprocess_networking"
     when:
@@ -236,7 +236,7 @@ socketprocess_networking:
 webrender-dcomp-disabled:
     description: "{description} with dcomp disabled"
     component: "Core::Graphics: WebRender"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "wr-dc0"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -252,7 +252,7 @@ webrender-dcomp-disabled:
 webrender-dcomp-present:  # Default variant ends up like this.
     description: "{description} with dcomp present but not overlays"
     component: "Core::Graphics: WebRender"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "wr-dc1-p"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -268,7 +268,7 @@ webrender-dcomp-present:  # Default variant ends up like this.
 webrender-dcomp-overlays:
     description: "{description} with dcomp overlays but not compositing"
     component: "Core::Graphics: WebRender"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "wr-dc2-o"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -284,7 +284,7 @@ webrender-dcomp-overlays:
 webrender-dcomp-compositing:
     description: "{description} with dcomp compositing"
     component: "Core::Graphics: WebRender"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "wr-dc3-c"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -419,7 +419,7 @@ msix:
 http3:
     description: "{description} with http3 server"
     component: "Core::Networking"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "http3"
     mozinfo: "http3"
     when:
@@ -438,7 +438,7 @@ http3:
 http2:
     description: "{description} with http2 server"
     component: "Core::Networking"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "http2"
     mozinfo: "http2"
     when:

@@ -6,6 +6,7 @@
 
 import functools
 import math
+from operator import attrgetter
 import os
 import re
 import string
@@ -584,7 +585,7 @@ def DOMClass(descriptor):
     else:
         wrapperCacheGetter = "nullptr"
 
-    if descriptor.hasOrdinaryObjectPrototype:
+    if descriptor.hasOrdinaryObjectPrototype():
         getProto = "JS::GetRealmObjectPrototypeHandle"
     else:
         getProto = "GetProtoObjectHandle"
@@ -822,6 +823,7 @@ def InterfacePrototypeObjectProtoGetter(descriptor):
         protoGetter = "GetNamedPropertiesObject"
         protoHandleGetter = None
     elif parentProtoName is None:
+        protoHandleGetter = None
         if descriptor.interface.getExtendedAttribute("ExceptionClass"):
             protoGetter = "JS::GetRealmErrorPrototype"
         elif descriptor.interface.isIteratorInterface():
@@ -830,7 +832,7 @@ def InterfacePrototypeObjectProtoGetter(descriptor):
             protoGetter = "JS::GetRealmAsyncIteratorPrototype"
         else:
             protoGetter = "JS::GetRealmObjectPrototype"
-        protoHandleGetter = None
+            protoHandleGetter = "JS::GetRealmObjectPrototypeHandle"
     else:
         prefix = toBindingNamespace(parentProtoName)
         protoGetter = prefix + "::GetProtoObject"
@@ -895,35 +897,21 @@ class CGPrototypeJSClass(CGThing):
         )
 
 
-def InterfaceObjectProtoGetter(descriptor, forXrays=False):
+def InterfaceObjectProtoGetter(descriptor):
     """
-    Returns a tuple with two elements:
-
-        1) The name of the function to call to get the prototype to use for the
-           interface object as a JSObject*.
-
-        2) The name of the function to call to get the prototype to use for the
-           interface prototype as a JS::Handle<JSObject*> or None if no such
-           function exists.
+    Returns the name of the function to call to get the prototype to use for the
+    interface object's prototype as a JS::Handle<JSObject*>.
     """
+    assert not descriptor.interface.isNamespace()
     parentInterface = descriptor.interface.parent
     if parentInterface:
-        assert not descriptor.interface.isNamespace()
         parentIfaceName = parentInterface.identifier.name
         parentDesc = descriptor.getDescriptor(parentIfaceName)
         prefix = toBindingNamespace(parentDesc.name)
-        protoGetter = prefix + "::GetConstructorObject"
         protoHandleGetter = prefix + "::GetConstructorObjectHandle"
-    elif descriptor.interface.isNamespace():
-        if forXrays or not descriptor.interface.getExtendedAttribute("ProtoObjectHack"):
-            protoGetter = "JS::GetRealmObjectPrototype"
-        else:
-            protoGetter = "GetHackedNamespaceProtoObject"
-        protoHandleGetter = None
     else:
-        protoGetter = "JS::GetRealmFunctionPrototype"
-        protoHandleGetter = None
-    return (protoGetter, protoHandleGetter)
+        protoHandleGetter = "JS::GetRealmFunctionPrototypeHandle"
+    return protoHandleGetter
 
 
 class CGNamespaceObjectJSClass(CGThing):
@@ -936,8 +924,6 @@ class CGNamespaceObjectJSClass(CGThing):
         return ""
 
     def define(self):
-        (protoGetter, _) = InterfaceObjectProtoGetter(self.descriptor, forXrays=True)
-
         classString = self.descriptor.interface.getExtendedAttribute("ClassString")
         if classString is None:
             classString = self.descriptor.interface.identifier.name
@@ -958,12 +944,14 @@ class CGNamespaceObjectJSClass(CGThing):
               prototypes::id::_ID_Count,
               0,
               ${hooks},
-              ${protoGetter}
+              // This isn't strictly following the spec (see
+              // https://console.spec.whatwg.org/#ref-for-dfn-namespace-object),
+              // but should be ok for Xrays.
+              JS::GetRealmObjectPrototype
             };
             """,
             classString=classString,
             hooks=NativePropertyHooks(self.descriptor),
-            protoGetter=protoGetter,
         )
 
 
@@ -984,13 +972,13 @@ class CGInterfaceObjectInfo(CGThing):
         wantsIsInstance = self.descriptor.interface.hasInterfacePrototypeObject()
 
         prototypeID, depth = PrototypeIDAndDepth(self.descriptor)
-        (protoGetter, _) = InterfaceObjectProtoGetter(self.descriptor, forXrays=True)
+        protoHandleGetter = InterfaceObjectProtoGetter(self.descriptor)
 
         return fill(
             """
             static const DOMInterfaceInfo sInterfaceObjectInfo = {
               { ${ctorname}, ${hooks} },
-              ${protoGetter},
+              ${protoHandleGetter},
               ${prototypeID},
               ${depth},
               ${wantsIsInstance},
@@ -998,7 +986,7 @@ class CGInterfaceObjectInfo(CGThing):
             """,
             ctorname=ctorname,
             hooks=NativePropertyHooks(self.descriptor),
-            protoGetter=protoGetter,
+            protoHandleGetter=protoHandleGetter,
             prototypeID=prototypeID,
             depth=depth,
             wantsIsInstance=toStringBool(wantsIsInstance),
@@ -3519,14 +3507,15 @@ class CGCreateInterfaceObjectsMethod(CGAbstractMethod):
         else:
             defineOnGlobal = "aDefineOnGlobal != DefineInterfaceProperty::No"
         if needInterfaceObject:
-            (protoGetter, protoHandleGetter) = InterfaceObjectProtoGetter(
-                self.descriptor
-            )
-            if protoHandleGetter is None:
-                getConstructorProto = "aCx, " + protoGetter
+            if self.descriptor.interface.isNamespace():
+                if self.descriptor.interface.getExtendedAttribute("ProtoObjectHack"):
+                    getConstructorProto = "GetHackedNamespaceProtoObject"
+                else:
+                    getConstructorProto = "JS::GetRealmObjectPrototype"
+                getConstructorProto = "aCx, " + getConstructorProto
                 constructorProtoType = "Rooted"
             else:
-                getConstructorProto = protoHandleGetter
+                getConstructorProto = InterfaceObjectProtoGetter(self.descriptor)
                 constructorProtoType = "Handle"
 
             getConstructorProto = fill(
@@ -3866,11 +3855,9 @@ class CGCreateInterfaceObjectsMethod(CGAbstractMethod):
         else:
             unforgeableHolderSetup = None
 
-        # FIXME Unclear whether this is needed for hasOrdinaryObjectPrototype
         if (
             self.descriptor.interface.isOnGlobalProtoChain()
             and needInterfacePrototypeObject
-            and not self.descriptor.hasOrdinaryObjectPrototype
         ):
             makeProtoPrototypeImmutable = CGGeneric(
                 fill(
@@ -3976,7 +3963,6 @@ class CGGetProtoObjectHandleMethod(CGAbstractMethod):
             "GetProtoObjectHandle",
             "JS::Handle<JSObject*>",
             [Argument("JSContext*", "aCx")],
-            inline=True,
             static=static,
             signatureOnly=signatureOnly,
         )
@@ -4027,7 +4013,6 @@ class CGGetConstructorObjectHandleMethod(CGAbstractMethod):
             [
                 Argument("JSContext*", "aCx"),
             ],
-            inline=True,
         )
 
     def definition_body(self):
@@ -4042,24 +4027,6 @@ class CGGetConstructorObjectHandleMethod(CGAbstractMethod):
             """,
             name=self.descriptor.name,
         )
-
-
-class CGGetConstructorObjectMethod(CGAbstractMethod):
-    """
-    A method for getting the interface constructor object.
-    """
-
-    def __init__(self, descriptor):
-        CGAbstractMethod.__init__(
-            self,
-            descriptor,
-            "GetConstructorObject",
-            "JSObject*",
-            [Argument("JSContext*", "aCx")],
-        )
-
-    def definition_body(self):
-        return "return GetConstructorObjectHandle(aCx);\n"
 
 
 class CGGetNamedPropertiesObjectMethod(CGAbstractStaticMethod):
@@ -4833,7 +4800,10 @@ class CGWrapGlobalMethod(CGAbstractMethod):
     """
 
     def __init__(self, descriptor, properties):
-        assert descriptor.interface.hasInterfacePrototypeObject()
+        assert (
+            descriptor.interface.hasInterfacePrototypeObject()
+            or descriptor.hasOrdinaryObjectPrototype()
+        )
         args = [
             Argument("JSContext*", "aCx"),
             Argument(descriptor.nativeType + "*", "aObject"),
@@ -4871,7 +4841,7 @@ class CGWrapGlobalMethod(CGAbstractMethod):
         else:
             unforgeable = ""
 
-        if self.descriptor.hasOrdinaryObjectPrototype:
+        if self.descriptor.hasOrdinaryObjectPrototype():
             getProto = "JS::GetRealmObjectPrototypeHandle"
         else:
             getProto = "GetProtoObjectHandle"
@@ -16812,6 +16782,7 @@ class CGDescriptor(CGThing):
         assert (
             not descriptor.concrete
             or descriptor.interface.hasInterfacePrototypeObject()
+            or descriptor.hasOrdinaryObjectPrototype()
         )
 
         self._deps = descriptor.interface.getDeps()
@@ -17109,13 +17080,23 @@ class CGDescriptor(CGThing):
         if descriptor.needsMissingPropUseCounters:
             cgThings.append(CGCountMaybeMissingProperty(descriptor))
 
+        # CGDOMProxyJSClass/CGDOMJSClass need GetProtoObjectHandle, but we don't
+        # want to export it for the iterator interfaces, or if we don't need it
+        # for child interfaces or for the named properties object.
+        protoObjectHandleGetterIsStatic = descriptor.concrete and (
+            isIteratorInterface
+            or (
+                descriptor.interface.hasInterfacePrototypeObject()
+                and not descriptor.interface.hasChildInterfaces()
+                and not descriptor.hasNamedPropertiesObject
+            )
+        )
         if descriptor.concrete:
             if descriptor.interface.isSerializable():
                 cgThings.append(CGSerializer(descriptor))
                 cgThings.append(CGDeserializer(descriptor))
 
-            # CGDOMProxyJSClass/CGDOMJSClass need GetProtoObjectHandle, but we don't want to export it for the iterator interfaces, so declare it here.
-            if isIteratorInterface:
+            if protoObjectHandleGetterIsStatic:
                 cgThings.append(
                     CGGetProtoObjectHandleMethod(
                         descriptor, static=True, signatureOnly=True
@@ -17195,38 +17176,37 @@ class CGDescriptor(CGThing):
                 )
             )
 
-        # CGCreateInterfaceObjectsMethod needs to come after our
-        # CGDOMJSClass and unscopables, if any.
-        cgThings.append(
-            CGCreateInterfaceObjectsMethod(
-                descriptor,
-                properties,
-                haveUnscopables,
-                haveLegacyWindowAliases,
-                static=isIteratorInterface,
-            )
-        )
-
-        # CGGetProtoObjectMethod and CGGetConstructorObjectMethod need
-        # to come after CGCreateInterfaceObjectsMethod.
-        if (
-            descriptor.interface.hasInterfacePrototypeObject()
-            and not descriptor.hasOrdinaryObjectPrototype
-        ):
+        if not descriptor.hasOrdinaryObjectPrototype():
+            # CGCreateInterfaceObjectsMethod needs to come after our
+            # CGDOMJSClass and unscopables, if any.
             cgThings.append(
-                CGGetProtoObjectHandleMethod(descriptor, static=isIteratorInterface)
-            )
-            if descriptor.interface.hasChildInterfaces():
-                assert not isIteratorInterface
-                cgThings.append(CGGetProtoObjectMethod(descriptor))
-        if descriptor.interface.hasInterfaceObject():
-            cgThings.append(CGGetConstructorObjectHandleMethod(descriptor))
-            cgThings.append(CGGetConstructorObjectMethod(descriptor))
-            cgThings.append(
-                CGCreateAndDefineOnGlobalMethod(
+                CGCreateInterfaceObjectsMethod(
                     descriptor,
+                    properties,
+                    haveUnscopables,
+                    haveLegacyWindowAliases,
+                    static=isIteratorInterface,
                 )
             )
+
+            # CGGetProtoObjectMethod and CGGetConstructorObjectMethod need
+            # to come after CGCreateInterfaceObjectsMethod.
+            if descriptor.interface.hasInterfacePrototypeObject():
+                cgThings.append(
+                    CGGetProtoObjectHandleMethod(
+                        descriptor, static=protoObjectHandleGetterIsStatic
+                    )
+                )
+                if descriptor.interface.hasChildInterfaces():
+                    assert not isIteratorInterface
+                    cgThings.append(CGGetProtoObjectMethod(descriptor))
+            if descriptor.interface.hasInterfaceObject():
+                cgThings.append(CGGetConstructorObjectHandleMethod(descriptor))
+                cgThings.append(
+                    CGCreateAndDefineOnGlobalMethod(
+                        descriptor,
+                    )
+                )
 
         # See whether we need to generate cross-origin property arrays.
         if needCrossOriginPropertyArrays:
@@ -18888,6 +18868,11 @@ class CGBindingRoot(CGThing):
 
         descriptors = config.getDescriptors(
             webIDLFile=webIDLFile, hasInterfaceOrInterfacePrototypeObject=True
+        )
+        descriptors.extend(
+            config.getDescriptors(
+                webIDLFile=webIDLFile, hasOrdinaryObjectPrototype=True
+            )
         )
 
         unionTypes = UnionsForFile(config, webIDLFile)
@@ -23622,6 +23607,10 @@ class GlobalGenRoots:
         descriptorsWithPrototype = config.getDescriptors(
             hasInterfacePrototypeObject=True
         )
+        descriptorsWithPrototype.extend(
+            config.getDescriptors(hasOrdinaryObjectPrototype=True)
+        )
+        descriptorsWithPrototype.sort(key=attrgetter("name"))
         protos = [d.name for d in descriptorsWithPrototype]
         idEnum = CGNamespacedEnum("id", "ID", ["_ID_Start"] + protos, [0, "_ID_Start"])
         idEnum = CGList([idEnum])

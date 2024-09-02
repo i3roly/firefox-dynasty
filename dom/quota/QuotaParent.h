@@ -27,22 +27,10 @@ class Quota final : public PQuotaParent {
 
   bool TrustParams() const;
 
-  bool VerifyRequestParams(const UsageRequestParams& aParams) const;
-
   bool VerifyRequestParams(const RequestParams& aParams) const;
 
   // IPDL methods.
   virtual void ActorDestroy(ActorDestroyReason aWhy) override;
-
-  virtual PQuotaUsageRequestParent* AllocPQuotaUsageRequestParent(
-      const UsageRequestParams& aParams) override;
-
-  virtual mozilla::ipc::IPCResult RecvPQuotaUsageRequestConstructor(
-      PQuotaUsageRequestParent* aActor,
-      const UsageRequestParams& aParams) override;
-
-  virtual bool DeallocPQuotaUsageRequestParent(
-      PQuotaUsageRequestParent* aActor) override;
 
   virtual PQuotaRequestParent* AllocPQuotaRequestParent(
       const RequestParams& aParams) override;
@@ -81,6 +69,20 @@ class Quota final : public PQuotaParent {
 
   virtual mozilla::ipc::IPCResult RecvInitializeTemporaryStorage(
       InitializeTemporaryStorageResolver&& aResolver) override;
+
+  virtual mozilla::ipc::IPCResult RecvGetUsage(
+      const bool& aGetAll,
+      ManagedEndpoint<PQuotaUsageRequestParent>&& aParentEndpoint,
+      GetUsageResolver&& aResolve) override;
+
+  virtual mozilla::ipc::IPCResult RecvGetOriginUsage(
+      const PrincipalInfo& aPrincipalInfo,
+      ManagedEndpoint<PQuotaUsageRequestParent>&& aParentEndpoint,
+      GetOriginUsageResolver&& aResolve) override;
+
+  virtual mozilla::ipc::IPCResult RecvGetCachedOriginUsage(
+      const PrincipalInfo& aPrincipalInfo,
+      GetCachedOriginUsageResolver&& aResolve) override;
 
   virtual mozilla::ipc::IPCResult RecvClearStoragesForOrigin(
       const Maybe<PersistenceType>& aPersistenceType,

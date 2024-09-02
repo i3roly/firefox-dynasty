@@ -200,51 +200,16 @@ macosx64-xz:
             - macosx64-clang-toolchain
             - macosx64-sdk-toolchain
 
-macosx64-custom-car:
-    description: "Custom chromium-as-release build for mac"
-    worker-type: b-osx-1015
-    attributes:
-        cached_task: false
-    treeherder:
-        symbol: TM(custom-car)
-    worker:
-        max-run-time: 40000
-    use-python: default
-    run-on-projects: []
-    run:
-        script: build-custom-car.sh
-        arguments: [
-            car_macosx.tar.zst,
-            blink_symbol_level=0,
-            chrome_pgo_phase=2,
-            dcheck_always_on=false,
-            enable_nacl=false,
-            enable_resource_allowlist_generation=false,
-            is_chrome_branded=false,
-            is_clang=true,
-            is_component_build=false,
-            is_debug=false,
-            is_official_build=true,
-            symbol_level=0,
-            target_cpu="x64",
-            use_v8_context_snapshot=false,
-            v8_symbol_level=0
-        ]
-        toolchain-artifact: public/build/car_macosx.tar.zst
-    fetches:
-        toolchain:
-            - macosx64-sdk-14.4
-
 macosx-arm64-custom-car:
     description: "Custom chromium-as-release build for mac (apple silicon)"
-    worker-type: b-osx-1015
+    worker-type: b-osx-arm64
     attributes:
         cached_task: false
     treeherder:
         symbol: TM(custom-car-arm)
         tier: 2
     worker:
-        max-run-time: 50000
+        max-run-time: 25000
     use-python: default
     run-on-projects: []
     run:
@@ -530,6 +495,24 @@ win64-vs2022:
             - vs
             - vs-toolchain
 
+win64-aarch64-vs2022:
+    description: "VS 2022"
+    attributes:
+        local-toolchain: true
+    treeherder:
+        symbol: TW64(msvc2022-aarch64)
+    worker:
+        env:
+            MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: system
+    run:
+        script: get_vs.py
+        arguments:
+            - build/vs/vs2022-aarch64.yaml
+        resources:
+            - build/vs/vs2022-aarch64.yaml
+        toolchain-artifact: project/gecko/vs/vs.tar.zst
+        toolchain-alias: win64-aarch64-vs
+
 linux64-afl-instrumentation-4.0:
     description: "AFL++ instrumentation toolchain build"
     treeherder:
@@ -609,6 +592,22 @@ win64-libxml2:
         symbol: TW64(libxml2)
     run:
         script: build-libxml2.sh
+        arguments: ['x86_64-pc-windows-msvc']
+        toolchain-artifact: public/build/libxml2.tar.zst
+    fetches:
+        fetch:
+            - libxml2
+        toolchain:
+            - linux64-clang-toolchain
+            - vs-toolchain
+
+win64-aarch64-libxml2:
+    description: "libxml2 toolchain build"
+    treeherder:
+        symbol: TW64(libxml2-aarch64)
+    run:
+        script: build-libxml2.sh
+        arguments: ['aarch64-pc-windows-msvc']
         toolchain-artifact: public/build/libxml2.tar.zst
     fetches:
         fetch:

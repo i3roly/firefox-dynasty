@@ -66,6 +66,11 @@ body {
   --toolbarbutton-border-radius: 4px;
 
   --chrome-content-separator-color: ThreeDShadow;
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "sidebar.revamp") {
+    --chrome-content-separator-color: var(--lwt-sidebar-border-color, light-dark(rgba(0,0,0,.3), rgba(255,255,255,.3)));
+  }
+
   --tabs-navbar-separator-color: ThreeDShadow;
   --tabs-navbar-separator-style: solid;
 
@@ -99,6 +104,11 @@ body {
   /* This should be used for icons and chiclets inside the input field. It makes
      the gap around them more uniform when they are close to the field edges */
   --urlbar-icon-border-radius: calc(var(--toolbarbutton-border-radius) - 1px);
+  --urlbar-searchmode-and-input-box-container-border-color: color-mix(in srgb, currentColor 30%, transparent);
+  --urlbar-searchmode-and-input-box-container-shadow: 0 2px 6px rgba(0, 0, 0, 15%);
+  --urlbar-search-mode-picker-persisted-background-color: color-mix(in srgb, currentColor 14%, transparent);
+  --urlbar-search-mode-picker-persisted-background-color-hover: color-mix(in srgb, currentColor 28%, transparent);
+  --urlbar-search-mode-picker-persisted-background-color-active: color-mix(in srgb, currentColor 35%, transparent);
 
   --pocket-icon-fill: #ef4056;
 
@@ -132,9 +142,13 @@ body {
     color: var(--lwt-text-color);
 
     --link-color: light-dark(rgb(0, 97, 224), rgb(0, 221, 255));
-    --chrome-content-separator-color: rgba(0,0,0,.3);
     --tabs-navbar-separator-color: light-dark(rgba(0,0,0,.1), rgba(0,0,0,.3));
     --attention-dot-color: light-dark(#2ac3a2, #54ffbd);
+
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media not (-moz-bool-pref: "sidebar.revamp") {
+      --chrome-content-separator-color: light-dark(rgba(0,0,0,.3), rgba(255,255,255,.3));
+    }
 
     @media not (prefers-contrast) {
       --focus-outline-color: light-dark(#0061E0, #00DDFF);
@@ -190,6 +204,11 @@ body {
   &:-moz-window-inactive {
     background-color: var(--toolbox-non-lwt-bgcolor-inactive);
     color: var(--toolbox-non-lwt-textcolor-inactive);
+  }
+
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "sidebar.revamp") {
+    border-bottom: none;
   }
 
   &[fullscreenShouldAnimate] {
@@ -484,7 +503,8 @@ toolbarpaletteitem:has(> toolbarbutton.fxms-bmb-button),
 
   .newTabBrowserPanel,
   #sidebar-main,
-  #sidebar-box {
+  #sidebar-box,
+  .sidebar-animation-screenshot {
     /* Make room for the bookmarks toolbar so that it won't visibly overlap the
        new tab page and sidebar contents. We do not put this padding on #browser
        as that would resize the content area for all tabs including background

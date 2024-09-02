@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.73"
 name = "wgpu-core"
-version = "0.20.0"
+version = "22.0.0"
 authors = ["gfx-rs developers"]
 description = "WebGPU core logic on wgpu-hal"
 homepage = "https://wgpu.rs/"
@@ -41,29 +41,30 @@ targets = [
 
 [dependencies]
 arrayvec = "0.7"
-bit-vec = "0.7"
-bitflags = "2"
+bit-vec = "0.8"
+bitflags = "2.6"
 document-features = "0.2.10"
 indexmap = "2"
 log = "0.4"
-once_cell = "1"
+once_cell = "1.19.0"
 parking_lot = ">=0.11, <0.13"
-rustc-hash = "1.1"
+rustc-hash = "1.1.0"
 smallvec = "1"
-thiserror = "1"
+thiserror = "1.0.63"
 
 [dependencies.bytemuck]
-version = "1.16"
+version = "1.17"
+features = ["derive"]
 optional = true
 
 [dependencies.hal]
-version = "0.20.0"
+version = "22.0.0"
 path = "../wgpu-hal"
 default-features = false
 package = "wgpu-hal"
 
 [dependencies.naga]
-version = "0.20.0"
+version = "22.0.0"
 path = "../naga"
 
 [dependencies.profiling]
@@ -84,7 +85,7 @@ features = ["derive"]
 optional = true
 
 [dependencies.wgt]
-version = "0.20.0"
+version = "22.0.0"
 path = "../wgpu-types"
 package = "wgpu-types"
 
@@ -102,6 +103,10 @@ fragile-send-sync-non-atomic-wasm = [
 gles = ["hal/gles"]
 glsl = ["naga/glsl-in"]
 metal = ["hal/metal"]
+observe_locks = [
+    "dep:ron",
+    "serde/serde_derive",
+]
 raw-window-handle = ["dep:raw-window-handle"]
 renderdoc = ["hal/renderdoc"]
 replay = [

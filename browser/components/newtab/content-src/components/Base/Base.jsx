@@ -12,6 +12,7 @@ import { CustomizeMenu } from "content-src/components/CustomizeMenu/CustomizeMen
 import React from "react";
 import { Search } from "content-src/components/Search/Search";
 import { Sections } from "content-src/components/Sections/Sections";
+import { Logo } from "content-src/components/Logo/Logo";
 import { Weather } from "content-src/components/Weather/Weather";
 import { Notifications } from "content-src/components/Notifications/Notifications";
 import { TopicSelection } from "content-src/components/DiscoveryStreamComponents/TopicSelection/TopicSelection";
@@ -435,6 +436,10 @@ export class BaseContent extends React.PureComponent {
     const { initialized, customizeMenuVisible } = App;
     const prefs = props.Prefs.values;
 
+    const layoutsVariantAEnabled = prefs["newtabLayouts.variant-a"];
+    const layoutsVariantBEnabled = prefs["newtabLayouts.variant-b"];
+    const layoutsVariantAorB = layoutsVariantAEnabled || layoutsVariantBEnabled;
+
     const activeWallpaper =
       prefs[`newtabWallpapers.wallpaper-${this.state.colorMode}`];
     const wallpapersEnabled = prefs["newtabWallpapers.enabled"];
@@ -491,6 +496,9 @@ export class BaseContent extends React.PureComponent {
     const featureClassName = [
       weatherEnabled && mayHaveWeather && "has-weather", // Show is weather is enabled/visible
       prefs.showSearch ? "has-search" : "no-search",
+      layoutsVariantAEnabled ? "layout-variant-a" : "", // Layout experiment variant A
+      layoutsVariantBEnabled ? "layout-variant-b" : "", // Layout experiment variant B
+      pocketEnabled ? "has-recommended-stories" : "no-recommended-stories",
     ]
       .filter(v => v)
       .join(" ");
@@ -567,6 +575,10 @@ export class BaseContent extends React.PureComponent {
                   />
                 </ErrorBoundary>
               </div>
+            )}
+            {/* Bug 1914055: Show logo regardless if search is enabled */}
+            {!prefs.showSearch && layoutsVariantAorB && !noSectionsEnabled && (
+              <Logo />
             )}
             <div className={`body-wrapper${initialized ? " on" : ""}`}>
               {isDiscoveryStream ? (

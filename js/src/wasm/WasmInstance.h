@@ -25,8 +25,8 @@
 #include <functional>
 
 #include "gc/Barrier.h"
-#include "gc/Zone.h"
-#include "js/Stack.h"  // JS::NativeStackLimit
+#include "js/shadow/Zone.h"  // for BarrierState
+#include "js/Stack.h"        // JS::NativeStackLimit
 #include "js/TypeDecls.h"
 #include "vm/SharedMem.h"
 #include "wasm/WasmExprType.h"  // for ResultType
@@ -50,11 +50,10 @@ class StoreBuffer;
 
 namespace wasm {
 
-using mozilla::Atomic;
-
 struct FuncDefInstanceData;
 class FuncImport;
 struct FuncImportInstanceData;
+struct FuncExportInstanceData;
 struct MemoryDesc;
 struct MemoryInstanceData;
 class GlobalDesc;
@@ -63,6 +62,7 @@ struct TableInstanceData;
 struct TagDesc;
 struct TagInstanceData;
 struct TypeDefInstanceData;
+struct CallRefMetrics;
 class WasmFrameIter;
 
 // Instance represents a wasm instance and provides all the support for runtime
@@ -118,10 +118,10 @@ class alignas(16) Instance {
   // Usually equal to cx->stackLimitForJitCode(JS::StackForUntrustedScript),
   // but can be racily set to trigger immediate trap as an opportunity to
   // CheckForInterrupt without an additional branch.
-  Atomic<JS::NativeStackLimit, mozilla::Relaxed> stackLimit_;
+  mozilla::Atomic<JS::NativeStackLimit, mozilla::Relaxed> stackLimit_;
 
   // Set to 1 when wasm should call CheckForInterrupt.
-  Atomic<uint32_t, mozilla::Relaxed> interrupt_;
+  mozilla::Atomic<uint32_t, mozilla::Relaxed> interrupt_;
 
   // Boolean value set to true when instance code is executed on a suspendable
   // stack. Aligned to int32_t to be used on JIT code.
@@ -196,6 +196,11 @@ class alignas(16) Instance {
   // worthwhile.
   uint32_t* debugFilter_;
 
+  // A pointer to an array of metrics for all the call_ref's in this instance.
+  // This is only used with lazy tiering for collecting speculative inlining
+  // information.
+  CallRefMetrics* callRefMetrics_;
+
   // The exclusive maximum index of a global that has been initialized so far.
   uint32_t maxInitializedGlobalsIndexPlus1_;
 
@@ -222,7 +227,8 @@ class alignas(16) Instance {
   FuncDefInstanceData* funcDefInstanceData(uint32_t funcIndex) const;
   TypeDefInstanceData* typeDefInstanceData(uint32_t typeIndex) const;
   const void* addressOfGlobalCell(const GlobalDesc& globalDesc) const;
-  FuncImportInstanceData& funcImportInstanceData(const FuncImport& fi);
+  FuncImportInstanceData& funcImportInstanceData(uint32_t funcIndex);
+  FuncExportInstanceData& funcExportInstanceData(uint32_t funcExportIndex);
   MemoryInstanceData& memoryInstanceData(uint32_t memoryIndex) const;
   TableInstanceData& tableInstanceData(uint32_t tableIndex) const;
   TagInstanceData& tagInstanceData(uint32_t tagIndex) const;
@@ -338,6 +344,9 @@ class alignas(16) Instance {
   static constexpr size_t offsetOfDebugFilter() {
     return offsetof(Instance, debugFilter_);
   }
+  static constexpr size_t offsetOfCallRefMetrics() {
+    return offsetof(Instance, callRefMetrics_);
+  }
   static constexpr size_t offsetOfData() { return offsetof(Instance, data_); }
   static constexpr size_t offsetInData(size_t offset) {
     return offsetOfData() + offset;
@@ -377,7 +386,9 @@ class alignas(16) Instance {
   void setTemporaryStackLimit(JS::NativeStackLimit limit);
   void resetTemporaryStackLimit(JSContext* cx);
 
+  int32_t computeInitialHotnessCounter(uint32_t funcIndex);
   void resetHotnessCounter(uint32_t funcIndex);
+  void submitCallRefHints(uint32_t funcIndex);
 
   bool debugFilter(uint32_t funcIndex) const;
   void setDebugFilter(uint32_t funcIndex, bool value);
@@ -394,6 +405,11 @@ class alignas(16) Instance {
 
   WasmInstanceObject* object() const;
   WasmInstanceObject* objectUnbarriered() const;
+
+  // Get or create the exported function wrapper for a function index.
+
+  [[nodiscard]] bool getExportedFunction(JSContext* cx, uint32_t funcIndex,
+                                         MutableHandleFunction result);
 
   // Execute the given export given the JS call arguments, storing the return
   // value in args.rval.
@@ -472,7 +488,7 @@ class alignas(16) Instance {
 
   // about:memory reporting:
 
-  void addSizeOfMisc(MallocSizeOf mallocSizeOf,
+  void addSizeOfMisc(mozilla::MallocSizeOf mallocSizeOf,
                      SeenSet<CodeMetadata>* seenCodeMeta,
                      SeenSet<CodeMetadataForAsmJS>* seenCodeMetaForAsmJS,
                      SeenSet<Code>* seenCode, SeenSet<Table>* seenTables,
@@ -632,7 +648,8 @@ class alignas(16) Instance {
 };
 
 bool ResultsToJSValue(JSContext* cx, ResultType type, void* registerResultLoc,
-                      Maybe<char*> stackResultsLoc, MutableHandleValue rval,
+                      mozilla::Maybe<char*> stackResultsLoc,
+                      MutableHandleValue rval,
                       CoercionLevel level = CoercionLevel::Spec);
 
 // Report an error to `cx` and mark it as a 'trap' so that it cannot be caught

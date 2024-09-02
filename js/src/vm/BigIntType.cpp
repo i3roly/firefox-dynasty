@@ -117,7 +117,6 @@ using namespace js;
 using JS::AutoStableStringChars;
 using mozilla::Abs;
 using mozilla::AssertedCast;
-using mozilla::BitwiseCast;
 using mozilla::Maybe;
 using mozilla::NegativeInfinity;
 using mozilla::Nothing;
@@ -2149,8 +2148,9 @@ BigInt* BigInt::pow(JSContext* cx, HandleBigInt x, HandleBigInt y) {
     return nullptr;
   }
 
-  static_assert(MaxBitLength <= std::numeric_limits<int>::max(),
-                "unexpectedly large MaxBitLength");
+  static_assert(
+      MaxBitLength <= static_cast<unsigned>(std::numeric_limits<int>::max()),
+      "unexpectedly large MaxBitLength");
   int n = static_cast<int>(exponent);
   bool isOddPower = n & 1;
 
@@ -2558,6 +2558,22 @@ uint64_t BigInt::toUint64(const BigInt* x) {
   }
 
   return digit;
+}
+
+bool BigInt::isInt32(const BigInt* x, int32_t* result) {
+  MOZ_MAKE_MEM_UNDEFINED(result, sizeof(*result));
+
+  int64_t r;
+  if (!BigInt::isInt64(x, &r)) {
+    return false;
+  }
+
+  if (std::numeric_limits<int32_t>::min() <= r &&
+      r <= std::numeric_limits<int32_t>::max()) {
+    *result = AssertedCast<int32_t>(r);
+    return true;
+  }
+  return false;
 }
 
 bool BigInt::isInt64(const BigInt* x, int64_t* result) {

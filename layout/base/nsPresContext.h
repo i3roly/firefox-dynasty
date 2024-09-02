@@ -401,7 +401,7 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
    * Set the currently visible area. The units for r are standard
    * nscoord units (as scaled by the device context).
    */
-  void SetVisibleArea(const nsRect& r);
+  void SetVisibleArea(const nsRect& aRect);
 
   nsSize GetSizeForViewportUnits() const { return mSizeForViewportUnits; }
 
@@ -434,6 +434,10 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
                   IsRootContentDocumentCrossProcess());
     return mDynamicToolbarHeight;
   }
+
+  void UpdateKeyboardHeight(mozilla::ScreenIntCoord aHeight);
+
+  mozilla::ScreenIntCoord GetKeyboardHeight() const { return mKeyboardHeight; }
 
   /**
    * Returns the maximum height of the dynamic toolbar if the toolbar state is
@@ -548,6 +552,7 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
   void SetFullZoom(float aZoom);
   void SetOverrideDPPX(float);
   void SetInRDMPane(bool aInRDMPane);
+  void UpdateTopInnerSizeForRFP();
 
  public:
   float GetFullZoom() { return mFullZoom; }
@@ -1040,7 +1045,6 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
   void NotifyNonBlankPaint();
   void NotifyContentfulPaint();
   void NotifyPaintStatusReset();
-  void NotifyDOMContentFlushed();
 
   bool HasEverBuiltInvisibleText() const { return mHasEverBuiltInvisibleText; }
   void SetBuiltInvisibleText() { mHasEverBuiltInvisibleText = true; }
@@ -1227,6 +1231,8 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
   // The maximum height of the dynamic toolbar on mobile.
   mozilla::ScreenIntCoord mDynamicToolbarMaxHeight;
   mozilla::ScreenIntCoord mDynamicToolbarHeight;
+  // The software keyboard height.
+  mozilla::ScreenIntCoord mKeyboardHeight;
   // Safe area insets support
   mozilla::ScreenIntMargin mSafeAreaInsets;
   nsSize mPageSize;

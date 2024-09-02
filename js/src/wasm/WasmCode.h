@@ -65,8 +65,6 @@
 #include "wasm/WasmTypeDef.h"
 #include "wasm/WasmValType.h"
 
-using js::CodeMetadataForAsmJS;
-
 struct JS_PUBLIC_API JSContext;
 class JSFunction;
 
@@ -117,8 +115,9 @@ struct LinkData : LinkDataCacheablePod {
   };
   using InternalLinkVector = Vector<InternalLink, 0, SystemAllocPolicy>;
 
-  struct SymbolicLinkArray : EnumeratedArray<SymbolicAddress, Uint32Vector,
-                                             size_t(SymbolicAddress::Limit)> {
+  struct SymbolicLinkArray
+      : mozilla::EnumeratedArray<SymbolicAddress, Uint32Vector,
+                                 size_t(SymbolicAddress::Limit)> {
     bool isEmpty() const {
       for (const Uint32Vector& symbolicLinks : *this) {
         if (symbolicLinks.length() != 0) {
@@ -219,19 +218,22 @@ class CodeSegment : public ShareableBase<CodeSegment> {
 
   // Create a new, empty code segment.  Allocation granularity is
   // ExecutableCodePageSize (64KB).
-  static RefPtr<CodeSegment> createEmpty(size_t capacityBytes);
+  static RefPtr<CodeSegment> createEmpty(size_t capacityBytes,
+                                         bool allowLastDitchGC = true);
 
   // Create a new code segment and copy/link code from `masm` into it.
   // Allocation granularity is ExecutableCodePageSize (64KB).
   static RefPtr<CodeSegment> createFromMasm(jit::MacroAssembler& masm,
                                             const LinkData& linkData,
-                                            const Code* maybeCode);
+                                            const Code* maybeCode,
+                                            bool allowLastDitchGC = true);
 
   // Create a new code segment and copy/link code from `unlinkedBytes` into
   // it.  Allocation granularity is ExecutableCodePageSize (64KB).
   static RefPtr<CodeSegment> createFromBytes(const uint8_t* unlinkedBytes,
                                              size_t unlinkedBytesLength,
-                                             const LinkData& linkData);
+                                             const LinkData& linkData,
+                                             bool allowLastDitchGC = true);
 
   // Allocate code space at a hardware page granularity, taking space from
   // `code->lazyFuncSegments`, and copy/link code from `masm` into it.  If an
@@ -246,7 +248,7 @@ class CodeSegment : public ShareableBase<CodeSegment> {
   // value returned in `*metadataBias`.
   static RefPtr<CodeSegment> createFromMasmWithBumpAlloc(
       jit::MacroAssembler& masm, const LinkData& linkData, const Code* code,
-      uint8_t** codeStartOut, uint32_t* codeLengthOut,
+      bool allowLastDitchGC, uint8_t** codeStartOut, uint32_t* codeLengthOut,
       uint32_t* metadataBiasOut);
 
   // For this CodeSegment, perform linking on the area
@@ -306,7 +308,7 @@ using SharedCodeSegmentVector = Vector<SharedCodeSegment, 0, SystemAllocPolicy>;
 
 extern UniqueCodeBytes AllocateCodeBytes(
     mozilla::Maybe<jit::AutoMarkJitCodeWritableForThread>& writable,
-    uint32_t codeLength);
+    uint32_t codeLength, bool allowLastDitchGC);
 extern bool StaticallyLink(jit::AutoMarkJitCodeWritableForThread& writable,
                            uint8_t* base, const LinkData& linkData,
                            const Code* maybeCode);
@@ -319,8 +321,8 @@ enum class TierUpState : uint32_t {
 };
 
 struct FuncState {
-  Atomic<const CodeBlock*> bestTier;
-  Atomic<TierUpState> tierUpState;
+  mozilla::Atomic<const CodeBlock*> bestTier;
+  mozilla::Atomic<TierUpState> tierUpState;
 };
 using FuncStatesPointer = mozilla::UniquePtr<FuncState[], JS::FreePolicy>;
 
@@ -344,6 +346,93 @@ struct LazyFuncExport {
 };
 
 using LazyFuncExportVector = Vector<LazyFuncExport, 0, SystemAllocPolicy>;
+
+// A FuncExport represents a single function definition inside a wasm Module
+// that has been exported one or more times. A FuncExport represents an
+// internal entry point that can be called via function definition index by
+// Instance::callExport(). To allow O(log(n)) lookup of a FuncExport by
+// function definition index, the FuncExportVector is stored sorted by
+// function definition index.
+
+class FuncExport {
+  uint32_t funcIndex_;
+  uint32_t eagerInterpEntryOffset_;  // Machine code offset
+
+  WASM_CHECK_CACHEABLE_POD(funcIndex_, eagerInterpEntryOffset_);
+
+  // Sentinel value that this FuncExport will get eager stubs
+  static constexpr uint32_t PENDING_EAGER_STUBS = UINT32_MAX - 1;
+
+  // Sentinel value that this FuncExport will not eager stubs
+  static constexpr uint32_t NO_EAGER_STUBS = UINT32_MAX;
+
+ public:
+  FuncExport() = default;
+  explicit FuncExport(uint32_t funcIndex, bool hasEagerStubs) {
+    funcIndex_ = funcIndex;
+    eagerInterpEntryOffset_ =
+        hasEagerStubs ? PENDING_EAGER_STUBS : NO_EAGER_STUBS;
+  }
+  void initEagerInterpEntryOffset(uint32_t entryOffset) {
+    MOZ_ASSERT(eagerInterpEntryOffset_ == PENDING_EAGER_STUBS);
+    MOZ_ASSERT(entryOffset != PENDING_EAGER_STUBS &&
+               entryOffset != NO_EAGER_STUBS);
+    MOZ_ASSERT(hasEagerStubs());
+    eagerInterpEntryOffset_ = entryOffset;
+  }
+
+  bool hasEagerStubs() const {
+    return eagerInterpEntryOffset_ != NO_EAGER_STUBS;
+  }
+  uint32_t funcIndex() const { return funcIndex_; }
+  uint32_t eagerInterpEntryOffset() const {
+    MOZ_ASSERT(eagerInterpEntryOffset_ != PENDING_EAGER_STUBS);
+    MOZ_ASSERT(hasEagerStubs());
+    return eagerInterpEntryOffset_;
+  }
+  void offsetBy(uint32_t delta) {
+    if (hasEagerStubs()) {
+      eagerInterpEntryOffset_ += delta;
+    }
+  }
+};
+
+WASM_DECLARE_CACHEABLE_POD(FuncExport);
+
+using FuncExportVector = Vector<FuncExport, 0, SystemAllocPolicy>;
+
+// A FuncImport contains the runtime metadata needed to implement a call to an
+// imported function. Each function import has two call stubs: an optimized path
+// into JIT code and a slow path into the generic C++ js::Invoke and these
+// offsets of these stubs are stored so that function-import callsites can be
+// dynamically patched at runtime.
+
+class FuncImport {
+ private:
+  uint32_t interpExitCodeOffset_;  // Machine code offset
+  uint32_t jitExitCodeOffset_;     // Machine code offset
+
+  WASM_CHECK_CACHEABLE_POD(interpExitCodeOffset_, jitExitCodeOffset_);
+
+ public:
+  FuncImport() : interpExitCodeOffset_(0), jitExitCodeOffset_(0) {}
+
+  void initInterpExitOffset(uint32_t off) {
+    MOZ_ASSERT(!interpExitCodeOffset_);
+    interpExitCodeOffset_ = off;
+  }
+  void initJitExitOffset(uint32_t off) {
+    MOZ_ASSERT(!jitExitCodeOffset_);
+    jitExitCodeOffset_ = off;
+  }
+
+  uint32_t interpExitCodeOffset() const { return interpExitCodeOffset_; }
+  uint32_t jitExitCodeOffset() const { return jitExitCodeOffset_; }
+};
+
+WASM_DECLARE_CACHEABLE_POD(FuncImport)
+
+using FuncImportVector = Vector<FuncImport, 0, SystemAllocPolicy>;
 
 static const uint32_t BAD_CODE_RANGE = UINT32_MAX;
 
@@ -409,7 +498,7 @@ class FuncToCodeRangeMap {
 #endif
   }
 
-  size_t sizeOfExcludingThis(MallocSizeOf mallocSizeOf) const {
+  size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
     return funcToCodeRange_.sizeOfExcludingThis(mallocSizeOf);
   }
 
@@ -539,7 +628,7 @@ class CodeBlock {
   void disassemble(JSContext* cx, int kindSelection,
                    PrintCallback printString) const;
 
-  void addSizeOfMisc(MallocSizeOf mallocSizeOf, size_t* code,
+  void addSizeOfMisc(mozilla::MallocSizeOf mallocSizeOf, size_t* code,
                      size_t* data) const;
 
   WASM_DECLARE_FRIEND_SERIALIZE_ARGS(CodeBlock, const wasm::LinkData& data);
@@ -567,8 +656,8 @@ class ThreadSafeCodeBlockMap {
   // vector pointed to by mutableCodeBlocks_
 
   RawCodeBlockVector* mutableCodeBlocks_;
-  Atomic<const RawCodeBlockVector*> readonlyCodeBlocks_;
-  Atomic<size_t> numActiveLookups_;
+  mozilla::Atomic<const RawCodeBlockVector*> readonlyCodeBlocks_;
+  mozilla::Atomic<size_t> numActiveLookups_;
 
   struct CodeBlockPC {
     const void* pc;
@@ -905,7 +994,7 @@ class Code : public ShareableBase<Code> {
   // hasCompleteTier2_ as true first.  Once hasCompleteTier2_ is true, it stays
   // true.
   mutable const CodeBlock* completeTier2_;
-  mutable Atomic<bool> hasCompleteTier2_;
+  mutable mozilla::Atomic<bool> hasCompleteTier2_;
 
   // State for every defined function (not imported) in this module. This is
   // only needed if we're doing partial tiering.
@@ -953,7 +1042,7 @@ class Code : public ShareableBase<Code> {
   // tier2.
   [[nodiscard]] bool createTier2LazyEntryStubs(
       const WriteGuard& guard, const CodeBlock& tier2Code,
-      Maybe<size_t>* outStubBlockIndex) const;
+      mozilla::Maybe<size_t>* outStubBlockIndex) const;
   [[nodiscard]] bool appendProfilingLabels(
       const ExclusiveData<CacheableCharsVector>::Guard& labels,
       const CodeBlock& codeBlock) const;
@@ -1042,6 +1131,9 @@ class Code : public ShareableBase<Code> {
   bool funcHasTier(uint32_t funcIndex, Tier tier) const {
     return funcCodeBlock(funcIndex).tier() == tier;
   }
+  Tier funcTier(uint32_t funcIndex) const {
+    return funcCodeBlock(funcIndex).tier();
+  }
 
   const LinkData* codeBlockLinkData(const CodeBlock& block) const;
   void clearLinkData() const;
@@ -1093,6 +1185,8 @@ class Code : public ShareableBase<Code> {
     }
     return block->lookupUnwindInfo(pc);
   }
+  // Search through this code to find which tier a code range is from. Returns
+  // false if this code range was not found.
   bool lookupFunctionTier(const CodeRange* codeRange, Tier* tier) const;
 
   // To save memory, profilingLabels_ are generated lazily when profiling mode
@@ -1112,7 +1206,7 @@ class Code : public ShareableBase<Code> {
   // about:memory reporting:
 
   void addSizeOfMiscIfNotSeen(
-      MallocSizeOf mallocSizeOf, CodeMetadata::SeenSet* seenCodeMeta,
+      mozilla::MallocSizeOf mallocSizeOf, CodeMetadata::SeenSet* seenCodeMeta,
       CodeMetadataForAsmJS::SeenSet* seenCodeMetaForAsmJS,
       Code::SeenSet* seenCode, size_t* code, size_t* data) const;
 
@@ -1133,6 +1227,7 @@ void PatchDebugSymbolicAccesses(uint8_t* codeBase, jit::MacroAssembler& masm);
 // it is guaranteed to be a multiple of the machine's page size.
 SharedCodeSegment AllocateCodePagesFrom(SharedCodeSegmentVector& lazySegments,
                                         uint32_t bytesNeeded,
+                                        bool allowLastDitchGC,
                                         size_t* offsetInSegment,
                                         size_t* roundedUpAllocationSize);
 

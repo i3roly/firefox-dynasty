@@ -776,7 +776,13 @@
   call_instruction: true
   mir_op: Compare
 
+- name: CompareBigIntInt32AndBranch
+  gen_boilerplate: false
+
 - name: BitAndAndBranch
+  gen_boilerplate: false
+
+- name: BitAnd64AndBranch
   gen_boilerplate: false
 
 # Takes a value and tests whether it is null, undefined, or is an object that
@@ -1494,6 +1500,12 @@
     input: WordSized
   num_temps: 1
 
+- name: DoubleToFloat32ToFloat16
+  result_type: WordSized
+  operands:
+    input: WordSized
+  num_temps: 2
+
 - name: Float32ToFloat16
   result_type: WordSized
   operands:
@@ -2146,10 +2158,13 @@
   num_temps: 2
   mir_op: true
 
-- name: LoadUnboxedBigInt
+- name: LoadUnboxedInt64
   gen_boilerplate: false
 
 - name: LoadDataViewElement
+  gen_boilerplate: false
+
+- name: LoadDataViewElement64
   gen_boilerplate: false
 
 - name: LoadTypedArrayElementHole
@@ -2172,10 +2187,13 @@
   num_temps: 1
   mir_op: true
 
-- name: StoreUnboxedBigInt
+- name: StoreUnboxedInt64
   gen_boilerplate: false
 
 - name: StoreDataViewElement
+  gen_boilerplate: false
+
+- name: StoreDataViewElement64
   gen_boilerplate: false
 
 - name: StoreTypedArrayElementHole
@@ -2187,7 +2205,7 @@
   num_temps: 1
   mir_op: true
 
-- name: StoreTypedArrayElementHoleBigInt
+- name: StoreTypedArrayElementHoleInt64
   gen_boilerplate: false
 
 - name: AtomicIsLockFree
@@ -2753,13 +2771,25 @@
     input: WordSized
   mir_op: true
 
+# Create a new BigInt* from an unboxed int32.
+- name: Int32ToBigInt
+  result_type: WordSized
+  operands:
+    input: WordSized
+  num_temps: 1
+  mir_op: true
+
 # Create a new BigInt* from an unboxed int64.
 - name: Int64ToBigInt
+  gen_boilerplate: false
+
+# Create a new BigInt* from an unboxed uint64.
+- name: Uint64ToBigInt
   result_type: WordSized
   operands:
     input: Int64
   num_temps: 1
-  mir_op: true
+  mir_op: Int64ToBigInt
 
 # Generational write barrier used when writing an object to another object.
 - name: PostWriteBarrierO
@@ -4063,6 +4093,18 @@
   result_type: WordSized
   operands:
     input: WordSized
+
+- name: WasmAnyRefIsJSString
+  result_type: WordSized
+  operands:
+    input: WordSized
+  num_temps: 1
+
+- name: WasmTrapIfAnyRefIsNotJSString
+  mir_op: true
+  operands:
+    input: WordSized
+  num_temps: 1
 
 - name: WasmNewI31Ref
   mir_op: true

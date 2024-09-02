@@ -351,11 +351,12 @@ bool WarpCacheIRTranspiler::transpile(
     }
   } while (reader.more());
 
-  // Effectful instructions should have a resume point. MIonToWasmCall is an
-  // exception: we can attach the resume point to the MInt64ToBigInt instruction
-  // instead. Other exceptions are MResizableTypedArrayLength and
-  // MResizableDataViewByteLength, and MGrowableSharedArrayBufferByteLength,
-  // which add the resume point to MPostIntPtrConversion.
+  // Effectful instructions should have a resume point. We allow a limited
+  // number of exceptions:
+  // - MIonToWasmCall: Resumes after MInt64ToBigInt
+  // - MResizableTypedArrayLength: Resumes after MPostIntPtrConversion
+  // - MResizableDataViewByteLength: Resumes after MPostIntPtrConversion
+  // - MGrowableSharedArrayBufferByteLength: Resumes after MPostIntPtrConversion
   MOZ_ASSERT_IF(effectful_,
                 effectful_->resumePoint() || effectful_->isIonToWasmCall() ||
                     effectful_->isResizableTypedArrayLength() ||
@@ -2251,7 +2252,7 @@ static MIRType MIRTypeForArrayBufferViewRead(Scalar::Type arrayType,
       return MIRType::Double;
     case Scalar::BigInt64:
     case Scalar::BigUint64:
-      return MIRType::BigInt;
+      return MIRType::Int64;
     default:
       break;
   }
@@ -2288,7 +2289,13 @@ bool WarpCacheIRTranspiler::emitLoadTypedArrayElementResult(
       MIRTypeForArrayBufferViewRead(elementType, forceDoubleForUint32));
   add(load);
 
-  pushResult(load);
+  MInstruction* result = load;
+  if (Scalar::isBigIntType(elementType)) {
+    result = MInt64ToBigInt::New(alloc(), load, elementType);
+    add(result);
+  }
+
+  pushResult(result);
   return true;
 }
 
@@ -2913,7 +2920,13 @@ bool WarpCacheIRTranspiler::emitLoadDataViewValueResult(
       MIRTypeForArrayBufferViewRead(elementType, forceDoubleForUint32);
   load->setResultType(knownType);
 
-  pushResult(load);
+  MInstruction* result = load;
+  if (Scalar::isBigIntType(elementType)) {
+    result = MInt64ToBigInt::New(alloc(), load, elementType);
+    add(result);
+  }
+
+  pushResult(result);
   return true;
 }
 
@@ -4574,12 +4587,11 @@ bool WarpCacheIRTranspiler::emitObjectCreateResult(
 }
 
 bool WarpCacheIRTranspiler::emitNewArrayFromLengthResult(
-    uint32_t templateObjectOffset, Int32OperandId lengthId) {
+    uint32_t templateObjectOffset, Int32OperandId lengthId,
+    uint32_t siteOffset) {
   JSObject* templateObj = tenuredObjectStubField(templateObjectOffset);
   MDefinition* length = getOperand(lengthId);
-
-  // TODO: support pre-tenuring.
-  gc::Heap heap = gc::Heap::Default;
+  gc::Heap heap = allocSiteInitialHeapField(siteOffset);
 
   if (length->isConstant()) {
     int32_t lenInt32 = length->toConstant()->toInt32();
@@ -4696,7 +4708,13 @@ bool WarpCacheIRTranspiler::emitAtomicsCompareExchangeResult(
   cas->setResultType(knownType);
   addEffectful(cas);
 
-  pushResult(cas);
+  MInstruction* result = cas;
+  if (Scalar::isBigIntType(elementType)) {
+    result = MInt64ToBigInt::New(alloc(), cas, elementType);
+    add(result);
+  }
+
+  pushResult(result);
   return resumeAfter(cas);
 }
 
@@ -4723,7 +4741,13 @@ bool WarpCacheIRTranspiler::emitAtomicsExchangeResult(
   exchange->setResultType(knownType);
   addEffectful(exchange);
 
-  pushResult(exchange);
+  MInstruction* result = exchange;
+  if (Scalar::isBigIntType(elementType)) {
+    result = MInt64ToBigInt::New(alloc(), exchange, elementType);
+    add(result);
+  }
+
+  pushResult(result);
   return resumeAfter(exchange);
 }
 
@@ -4753,11 +4777,18 @@ bool WarpCacheIRTranspiler::emitAtomicsBinaryOp(
   }
   addEffectful(binop);
 
-  if (!forEffect) {
-    pushResult(binop);
-  } else {
+  if (forEffect) {
     pushResult(constant(UndefinedValue()));
+    return resumeAfter(binop);
   }
+
+  MInstruction* result = binop;
+  if (Scalar::isBigIntType(elementType)) {
+    result = MInt64ToBigInt::New(alloc(), binop, elementType);
+    add(result);
+  }
+
+  pushResult(result);
   return resumeAfter(binop);
 }
 
@@ -4818,7 +4849,13 @@ bool WarpCacheIRTranspiler::emitAtomicsLoadResult(
   load->setResultType(knownType);
   addEffectful(load);
 
-  pushResult(load);
+  MInstruction* result = load;
+  if (Scalar::isBigIntType(elementType)) {
+    result = MInt64ToBigInt::New(alloc(), load, elementType);
+    add(result);
+  }
+
+  pushResult(result);
   return resumeAfter(load);
 }
 
@@ -4853,6 +4890,16 @@ bool WarpCacheIRTranspiler::emitAtomicsIsLockFreeResult(
   add(ilf);
 
   pushResult(ilf);
+  return true;
+}
+
+bool WarpCacheIRTranspiler::emitInt32ToBigIntResult(Int32OperandId inputId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* ins = MInt32ToBigInt::New(alloc(), input);
+  add(ins);
+
+  pushResult(ins);
   return true;
 }
 
@@ -6052,7 +6099,7 @@ bool WarpCacheIRTranspiler::emitCallWasmFunction(
     switch (results[0].kind()) {
       case wasm::ValType::I64:
         // JS expects a BigInt from I64 types.
-        postConversion = MInt64ToBigInt::New(alloc(), call);
+        postConversion = MInt64ToBigInt::New(alloc(), call, Scalar::BigInt64);
 
         // Make non-movable so we can attach a resume point.
         postConversion->setNotMovable();
@@ -6310,6 +6357,17 @@ bool WarpCacheIRTranspiler::emitAssertPropertyLookup(ObjOperandId objId,
                                                      uint32_t slotOffset) {
   // We currently only emit checks in baseline.
   return true;
+}
+
+bool WarpCacheIRTranspiler::emitAssertFloat32Result(ValOperandId valId,
+                                                    bool mustBeFloat32) {
+  MDefinition* val = getOperand(valId);
+
+  auto* assert = MAssertFloat32::New(alloc(), val, mustBeFloat32);
+  addEffectful(assert);
+
+  pushResult(constant(UndefinedValue()));
+  return resumeAfter(assert);
 }
 
 bool WarpCacheIRTranspiler::emitAssertRecoveredOnBailoutResult(

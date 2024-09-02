@@ -93,10 +93,14 @@ add_task(async function test_expanded_state_for_always_show() {
 
   info("Check default expanded state.");
   await checkExpandedState(false);
-
+  ok(
+    !toolbarButton.hasAttribute("checked"),
+    "The toolbar button is not checked."
+  );
   info("Toggle expanded state via toolbar button.");
   EventUtils.synthesizeMouseAtCenter(toolbarButton, {}, win);
   await checkExpandedState(true);
+  ok(toolbarButton.hasAttribute("checked"), "The toolbar button is checked.");
   EventUtils.synthesizeMouseAtCenter(toolbarButton, {}, win);
   await checkExpandedState(false);
 
@@ -201,4 +205,36 @@ add_task(async function test_states_for_hide_sidebar() {
   await BrowserTestUtils.closeWindow(win);
   await BrowserTestUtils.closeWindow(newWin);
   await SpecialPowers.popPrefEnv();
+}).skip(); //bug 1896421
+
+add_task(async function test_sidebar_button_runtime_pref_enabled() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["sidebar.revamp", false]],
+  });
+  let button = document.getElementById("sidebar-button");
+  Assert.ok(
+    BrowserTestUtils.isVisible(button),
+    "The sidebar button is visible"
+  );
+
+  CustomizableUI.removeWidgetFromArea("sidebar-button");
+  Assert.ok(
+    BrowserTestUtils.isHidden(button),
+    "The sidebar button is not visible after being removed"
+  );
+
+  // rever the pref change, this should cause the button to be placed in the nav-bar
+  await SpecialPowers.popPrefEnv();
+  button = document.getElementById("sidebar-button");
+  Assert.ok(
+    BrowserTestUtils.isVisible(button),
+    "The sidebar button is visible again when the pref is flipped"
+  );
+
+  let widgetPlacement = CustomizableUI.getPlacementOfWidget("sidebar-button");
+  Assert.equal(
+    widgetPlacement.area,
+    CustomizableUI.AREA_NAVBAR,
+    "The sidebar button is in the nav-bar"
+  );
 });

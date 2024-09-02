@@ -411,6 +411,9 @@ class MenuNavigationMiddlewareTest {
             navController.nav(
                 R.id.menuDialogFragment,
                 MenuDialogFragmentDirections.actionMenuDialogFragmentToTranslationsDialogFragment(),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.browserFragment, false)
+                    .build(),
             )
         }
     }
@@ -448,6 +451,9 @@ class MenuNavigationMiddlewareTest {
                     ),
                     showPage = true,
                 ),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.browserFragment, false)
+                    .build(),
             )
         }
     }
@@ -483,6 +489,9 @@ class MenuNavigationMiddlewareTest {
                     ),
                     showPage = true,
                 ),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.browserFragment, false)
+                    .build(),
             )
         }
     }
@@ -512,6 +521,20 @@ class MenuNavigationMiddlewareTest {
         store.dispatch(MenuAction.Navigate.DiscoverMoreExtensions).join()
 
         assertEquals(AMO_HOMEPAGE_FOR_ANDROID, params?.url)
+    }
+
+    @Test
+    fun `WHEN navigate to extensions learn more action is dispatched THEN navigate to the SUMO page for installing add-ons`() = runTest {
+        var params: BrowserNavigationParams? = null
+        val store = createStore(
+            openToBrowser = {
+                params = it
+            },
+        )
+
+        store.dispatch(MenuAction.Navigate.ExtensionsLearnMore).join()
+
+        assertEquals(SumoTopic.FIND_INSTALL_ADDONS, params?.sumoTopic)
     }
 
     @Test
