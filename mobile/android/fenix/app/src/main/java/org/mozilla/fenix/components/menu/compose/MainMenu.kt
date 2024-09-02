@@ -47,9 +47,11 @@ private const val INDICATOR_START_OFFSET = 46
  * @param syncStore The [SyncStore] used to determine account information.
  * @param showQuitMenu Whether or not to show the [QuitMenuGroup].
  * @param isPrivate Whether or not the browsing mode is in private mode.
+ * @param isDesktopMode Whether or not the current site is in desktop mode.
  * @param isTranslationSupported Whether or not Translations are supported.
  * @param isExtensionsProcessDisabled Whether or not the extensions process is disabled due to extension errors.
  */
+@Suppress("LongParameterList")
 @Composable
 internal fun MainMenuWithCFR(
     accessPoint: MenuAccessPoint,
@@ -57,6 +59,7 @@ internal fun MainMenuWithCFR(
     syncStore: SyncStore,
     showQuitMenu: Boolean,
     isPrivate: Boolean,
+    isDesktopMode: Boolean,
     isTranslationSupported: Boolean,
     isExtensionsProcessDisabled: Boolean,
 ) {
@@ -105,8 +108,9 @@ internal fun MainMenuWithCFR(
             accessPoint = accessPoint,
             store = store,
             syncStore = syncStore,
-            isPrivate = isPrivate,
             showQuitMenu = showQuitMenu,
+            isPrivate = isPrivate,
+            isDesktopMode = isDesktopMode,
             isTranslationSupported = isTranslationSupported,
             isExtensionsProcessDisabled = isExtensionsProcessDisabled,
         )
@@ -121,10 +125,11 @@ internal fun MainMenuWithCFR(
  * @param syncStore The [SyncStore] used to determine account information.
  * @param showQuitMenu Whether or not to show the [QuitMenuGroup].
  * @param isPrivate Whether or not the browsing mode is in private mode.
+ * @param isDesktopMode Whether or not the current site is in desktop mode.
  * @param isTranslationSupported Whether or not Translations are supported.
  * @param isExtensionsProcessDisabled Whether or not the extensions process is disabled due to extension errors.
  */
-@Suppress("LongMethod")
+@Suppress("LongMethod", "LongParameterList")
 @Composable
 internal fun MainMenu(
     accessPoint: MenuAccessPoint,
@@ -132,15 +137,13 @@ internal fun MainMenu(
     syncStore: SyncStore,
     showQuitMenu: Boolean,
     isPrivate: Boolean,
+    isDesktopMode: Boolean,
     isTranslationSupported: Boolean,
     isExtensionsProcessDisabled: Boolean,
 ) {
     val account by syncStore.observeAsState(initialValue = null) { state -> state.account }
     val accountState by syncStore.observeAsState(initialValue = NotAuthenticated) { state ->
         state.accountState
-    }
-    val isDesktopMode by store.observeAsState(initialValue = false) { state ->
-        state.isDesktopMode
     }
 
     MainMenu(
@@ -403,18 +406,24 @@ private fun ToolsAndActionsMenuGroup(
 ) {
     MenuGroup {
         if (accessPoint == MenuAccessPoint.Browser) {
+            val labelId: Int
+            val iconId: Int
+            val menuItemState: MenuItemState
+
+            if (isDesktopMode) {
+                labelId = R.string.browser_menu_switch_to_mobile_site
+                iconId = R.drawable.mozac_ic_device_mobile_24
+                menuItemState = MenuItemState.ACTIVE
+            } else {
+                labelId = R.string.browser_menu_switch_to_desktop_site
+                iconId = R.drawable.mozac_ic_device_desktop_24
+                menuItemState = MenuItemState.ENABLED
+            }
+
             MenuItem(
-                label = if (isDesktopMode) {
-                    stringResource(id = R.string.browser_menu_switch_to_mobile_site)
-                } else {
-                    stringResource(id = R.string.browser_menu_switch_to_desktop_site)
-                },
-                beforeIconPainter = painterResource(id = R.drawable.mozac_ic_device_desktop_24),
-                state = if (isDesktopMode) {
-                    MenuItemState.ACTIVE
-                } else {
-                    MenuItemState.ENABLED
-                },
+                label = stringResource(id = labelId),
+                beforeIconPainter = painterResource(id = iconId),
+                state = menuItemState,
                 onClick = onSwitchToDesktopSiteMenuClick,
             )
 

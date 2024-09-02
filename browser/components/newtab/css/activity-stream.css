@@ -539,7 +539,7 @@ main section {
     width: 346px;
   }
 }
-@media (min-width: 866px) {
+@media (min-width: 724px) {
   .layout-variant-a .ds-outer-wrapper-breakpoint-override main,
 .layout-variant-b .ds-outer-wrapper-breakpoint-override main {
     width: auto;
@@ -740,8 +740,9 @@ main section {
 .layout-variant-a .top-sites-list, .layout-variant-b .top-sites-list {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  row-gap: var(--space-xlarge);
 }
-@media (min-width: 866px) {
+@media (min-width: 724px) {
   .layout-variant-a .top-sites-list, .layout-variant-b .top-sites-list {
     grid-template-columns: repeat(6, 1fr);
   }
@@ -868,9 +869,6 @@ main section {
 .layout-variant-a .top-site-outer .tile .icon-wrapper, .layout-variant-b .top-site-outer .tile .icon-wrapper {
   width: var(--size-item-large);
   height: var(--size-item-large);
-}
-.layout-variant-a .top-site-outer .title, .layout-variant-b .top-site-outer .title {
-  font-size: var(--font-size-small);
 }
 .top-site-outer .top-site-inner {
   position: relative;
@@ -1584,6 +1582,60 @@ main section {
   fill: var(--newtab-wordmark-color);
 }
 
+.layout-variant-b.has-recommended-stories .search-wrapper {
+  margin-block-start: 16px;
+}
+.layout-variant-b.has-recommended-stories .logo-and-wordmark {
+  position: fixed;
+  inset-inline-start: 40px;
+  inset-block-start: 40px;
+}
+.layout-variant-b.has-recommended-stories.no-search .body-wrapper {
+  margin-block-start: 0;
+}
+@media (min-width: 866px) {
+  .layout-variant-b.has-recommended-stories.no-search .body-wrapper {
+    margin-block-start: 108px;
+  }
+}
+@media (min-width: 1698px) {
+  .layout-variant-b.has-recommended-stories.no-search .body-wrapper {
+    margin-block-start: 0;
+  }
+}
+.layout-variant-b.has-recommended-stories .search-inner-wrapper {
+  width: 350px;
+}
+@media (min-width: 866px) {
+  .layout-variant-b.has-recommended-stories .search-inner-wrapper {
+    width: 410px;
+  }
+}
+@media (min-width: 1122px) {
+  .layout-variant-b.has-recommended-stories .search-inner-wrapper {
+    width: 584px;
+  }
+}
+@media (min-width: 1506px) {
+  .layout-variant-b.has-recommended-stories .search-inner-wrapper {
+    width: 720px;
+  }
+}
+.layout-variant-b.has-recommended-stories .logo {
+  width: 52px;
+  height: 52px;
+  background-size: 52px;
+}
+.layout-variant-b.has-recommended-stories .wordmark {
+  display: none;
+  height: 52px;
+}
+@media (min-width: 866px) {
+  .layout-variant-b.has-recommended-stories .wordmark {
+    display: block;
+  }
+}
+
 @media (height <= 700px) {
   .search-wrapper {
     padding: 0 0 30px;
@@ -1875,17 +1927,28 @@ main section {
 @media (height < 700px) {
   .personalizeButtonWrapper {
     position: absolute;
-    top: var(--space-xlarge);
+    inset-block-start: var(--space-xlarge);
     inset-inline-end: var(--space-xlarge);
   }
 }
 @media (height >= 700px) {
   .personalizeButtonWrapper {
     position: fixed;
-    top: var(--space-xlarge);
+    inset-block-start: var(--space-xlarge);
     inset-inline-end: var(--space-xlarge);
     z-index: 1000;
   }
+}
+
+.layout-variant-b .personalizeButtonWrapper {
+  position: fixed;
+  inset-block-start: auto;
+  inset-block-end: var(--space-xlarge);
+}
+
+.layout-variant-b + .discoverystream-admin-toggle {
+  inset-block-start: auto;
+  inset-block-end: 50px;
 }
 
 .personalize-button {
@@ -2337,7 +2400,7 @@ main section {
     inset-block-start: 24px;
   }
 }
-.no-search.layout-variant-a .weather, .no-search.layout-variant-a .weather, .layout-variant-a .weather, .layout-variant-b .weather {
+.no-search.layout-variant-a .weather, .no-search.layout-variant-b .weather, .layout-variant-a .weather, .layout-variant-b .weather {
   position: absolute;
   inset-inline-start: var(--space-xlarge);
   inset-block-start: var(--space-xlarge);
@@ -2377,6 +2440,29 @@ main section {
 .layout-variant-a.has-weather.no-search .outer-wrapper,
 .layout-variant-b.has-weather.no-search .outer-wrapper {
   padding-top: 24px;
+}
+
+.no-search.layout-variant-b .weather,
+.layout-variant-b .weather {
+  position: absolute;
+  inset-inline-start: auto;
+  inset-inline-end: 40px;
+  inset-block-start: 40px;
+  margin-block-start: 0;
+}
+.no-search.layout-variant-b .weather .weatherSponsorText,
+.layout-variant-b .weather .weatherSponsorText {
+  float: inline-end;
+}
+.no-search.layout-variant-b .weather .weatherSponsorText span,
+.layout-variant-b .weather .weatherSponsorText span {
+  inset-inline-end: 0;
+}
+.no-search.layout-variant-b .weather .context-menu,
+.layout-variant-b .weather .context-menu {
+  inset-inline-end: 100%;
+  inset-inline-start: auto;
+  margin-inline-end: 5px;
 }
 
 .has-weather.has-search .outer-wrapper:not(.only-search) {
@@ -2792,33 +2878,47 @@ main section {
   outline: 2px solid var(--focus-outline-color);
 }
 
-.has-weather.has-search.layout-variant-a .weatherIconCol,
 .has-weather.has-search.layout-variant-a .weatherCityRow,
 .has-weather.has-search.layout-variant-a .weatherButtonContextMenuWrapper,
-.has-weather.has-search.layout-variant-b .weatherIconCol,
 .has-weather.has-search.layout-variant-b .weatherCityRow,
 .has-weather.has-search.layout-variant-b .weatherButtonContextMenuWrapper,
-.layout-variant-a .weatherIconCol,
 .layout-variant-a .weatherCityRow,
 .layout-variant-a .weatherButtonContextMenuWrapper,
-.layout-variant-b .weatherIconCol,
 .layout-variant-b .weatherCityRow,
 .layout-variant-b .weatherButtonContextMenuWrapper {
   display: none;
 }
-@media (min-width: 610px) {
-  .has-weather.has-search.layout-variant-a .weatherIconCol,
-.has-weather.has-search.layout-variant-a .weatherCityRow,
+@media (min-width: 866px) {
+  .has-weather.has-search.layout-variant-a .weatherCityRow,
 .has-weather.has-search.layout-variant-a .weatherButtonContextMenuWrapper,
-.has-weather.has-search.layout-variant-b .weatherIconCol,
 .has-weather.has-search.layout-variant-b .weatherCityRow,
 .has-weather.has-search.layout-variant-b .weatherButtonContextMenuWrapper,
-.layout-variant-a .weatherIconCol,
 .layout-variant-a .weatherCityRow,
 .layout-variant-a .weatherButtonContextMenuWrapper,
-.layout-variant-b .weatherIconCol,
 .layout-variant-b .weatherCityRow,
 .layout-variant-b .weatherButtonContextMenuWrapper {
+    display: flex;
+  }
+}
+.has-weather.has-search.layout-variant-a .weatherIconCol,
+.has-weather.has-search.layout-variant-a .weatherDetailedSummaryRow,
+.has-weather.has-search.layout-variant-b .weatherIconCol,
+.has-weather.has-search.layout-variant-b .weatherDetailedSummaryRow,
+.layout-variant-a .weatherIconCol,
+.layout-variant-a .weatherDetailedSummaryRow,
+.layout-variant-b .weatherIconCol,
+.layout-variant-b .weatherDetailedSummaryRow {
+  display: none;
+}
+@media (min-width: 1122px) {
+  .has-weather.has-search.layout-variant-a .weatherIconCol,
+.has-weather.has-search.layout-variant-a .weatherDetailedSummaryRow,
+.has-weather.has-search.layout-variant-b .weatherIconCol,
+.has-weather.has-search.layout-variant-b .weatherDetailedSummaryRow,
+.layout-variant-a .weatherIconCol,
+.layout-variant-a .weatherDetailedSummaryRow,
+.layout-variant-b .weatherIconCol,
+.layout-variant-b .weatherDetailedSummaryRow {
     display: flex;
   }
 }
@@ -2835,7 +2935,7 @@ main section {
   min-width: auto;
   max-width: none;
 }
-@media (min-width: 866px) {
+@media (min-width: 1122px) {
   .has-weather.has-search.layout-variant-a .weatherInfoLink,
 .has-weather.has-search.layout-variant-b .weatherInfoLink,
 .layout-variant-a .weatherInfoLink,
@@ -2850,7 +2950,7 @@ main section {
 .layout-variant-b .weatherForecastRow {
   margin-block: var(--space-small);
 }
-@media (min-width: 610px) {
+@media (min-width: 866px) {
   .has-weather.has-search.layout-variant-a .weatherForecastRow,
 .has-weather.has-search.layout-variant-b .weatherForecastRow,
 .layout-variant-a .weatherForecastRow,
@@ -2872,7 +2972,7 @@ main section {
   white-space: nowrap;
   inset-block-start: var(--space-small);
 }
-@media (min-width: 610px) {
+@media (min-width: 866px) {
   .has-weather.has-search.layout-variant-a .weatherSponsorText span,
 .has-weather.has-search.layout-variant-b .weatherSponsorText span,
 .layout-variant-a .weatherSponsorText span,
@@ -3282,7 +3382,7 @@ main section {
 .layout-variant-a .collapsible-section .button-topic-selection, .layout-variant-b .collapsible-section .button-topic-selection {
   display: none;
 }
-@media (min-width: 866px) {
+@media (min-width: 724px) {
   .layout-variant-a .collapsible-section .button-topic-selection, .layout-variant-b .collapsible-section .button-topic-selection {
     display: block;
   }

@@ -37,7 +37,9 @@ import mozilla.components.concept.engine.translate.findLanguage
 import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.support.ktx.android.util.dpToPx
 import mozilla.components.support.ktx.android.view.setNavigationBarColorCompat
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
+import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.components
@@ -83,8 +85,10 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
     private val args by navArgs<MenuDialogFragmentArgs>()
     private val browsingModeManager get() = (activity as HomeActivity).browsingModeManager
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
-        super.onCreateDialog(savedInstanceState).apply {
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Events.toolbarMenuVisible.record(NoExtras())
+
+        return super.onCreateDialog(savedInstanceState).apply {
             setOnShowListener {
                 val navigationBarColor = if (browsingModeManager.mode.isPrivate) {
                     ContextCompat.getColor(context, R.color.fx_mobile_private_layer_color_3)
@@ -106,6 +110,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                 }
             }
         }
+    }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
     override fun onCreateView(
@@ -148,6 +153,10 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         ?.requestedTranslationPair?.toLanguage
                     val isExtensionsProcessDisabled = browserStore.state.extensionsProcessDisabled
 
+                    val customTab = args.customTabSessionId?.let {
+                        browserStore.state.findCustomTab(it)
+                    }
+
                     val navHostController = rememberNavController()
                     val coroutineScope = rememberCoroutineScope()
                     val store = remember {
@@ -158,10 +167,17 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 } else {
                                     null
                                 },
-                                isDesktopMode = if (args.accesspoint == MenuAccessPoint.Home) {
-                                    settings.openNextTabInDesktopMode
-                                } else {
-                                    selectedTab?.content?.desktopMode ?: false
+                                customTabSessionId = args.customTabSessionId,
+                                isDesktopMode = when (args.accesspoint) {
+                                    MenuAccessPoint.Home -> {
+                                        settings.openNextTabInDesktopMode
+                                    }
+                                    MenuAccessPoint.External -> {
+                                        customTab?.content?.desktopMode ?: false
+                                    }
+                                    else -> {
+                                        selectedTab?.content?.desktopMode ?: false
+                                    }
                                 },
                             ),
                             middleware = listOf(
@@ -216,6 +232,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             ),
                         )
                     }
+                    val isDesktopMode by store.observeAsState(initialValue = false) { state ->
+                        state.isDesktopMode
+                    }
                     val recommendedAddons by store.observeAsState(initialValue = emptyList()) { state ->
                         state.extensionMenuState.recommendedAddons
                     }
@@ -248,6 +267,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     syncStore = syncStore,
                                     showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                     isPrivate = browsingModeManager.mode.isPrivate,
+                                    isDesktopMode = isDesktopMode,
                                     isTranslationSupported = isTranslationSupported,
                                     isExtensionsProcessDisabled = isExtensionsProcessDisabled,
                                 )
@@ -258,6 +278,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     syncStore = syncStore,
                                     showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                     isPrivate = browsingModeManager.mode.isPrivate,
+                                    isDesktopMode = isDesktopMode,
                                     isTranslationSupported = isTranslationSupported,
                                     isExtensionsProcessDisabled = isExtensionsProcessDisabled,
                                 )
@@ -379,11 +400,8 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         }
 
                         composable(route = CUSTOM_TAB_MENU_ROUTE) {
-                            val customTab = args.customTabSessionId?.let {
-                                browserStore.state.findCustomTab(it)
-                            }
-
                             CustomTabMenu(
+                                isDesktopMode = isDesktopMode,
                                 customTabMenuItems = customTab?.config?.menuItems,
                                 onCustomMenuItemClick = { intent: PendingIntent ->
                                     store.dispatch(
@@ -393,7 +411,13 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         ),
                                     )
                                 },
-                                onSwitchToDesktopSiteMenuClick = {},
+                                onSwitchToDesktopSiteMenuClick = {
+                                    if (isDesktopMode) {
+                                        store.dispatch(MenuAction.RequestMobileSite)
+                                    } else {
+                                        store.dispatch(MenuAction.RequestDesktopSite)
+                                    }
+                                },
                                 onFindInPageMenuClick = {
                                     store.dispatch(MenuAction.FindInPage)
                                 },

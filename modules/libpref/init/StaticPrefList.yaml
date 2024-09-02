@@ -8629,11 +8629,6 @@
   value: 15
   mirror: always
 
-- name: layers.iosurfaceimage.use-nv12
-  type: bool
-  value: true
-  mirror: once
-
 #---------------------------------------------------------------------------
 # Prefs starting with "layout."
 #---------------------------------------------------------------------------
@@ -11386,6 +11381,16 @@
 # When disabled, or on a host where not supported (< macOS 14), the older
 # CoreGraphics backend is used instead.
 -   name: media.getdisplaymedia.screencapturekit.enabled
+    type: bool
+    value: true
+    mirror: once
+
+# Use the libwebrtc ScreenCaptureKit desktop capture backend on Mac for screen
+# enumeration when enabled.
+# When this is false and the backend is used (see above), the older CoreGraphics
+# backend is used to enumerate CGDirectDisplayIDs, which the ScreenCaptureKit
+# backend understand as well.
+-   name: media.getdisplaymedia.screencapturekit.enumeration.enabled
     type: bool
     value: false
     mirror: once
@@ -14513,7 +14518,7 @@
 # any effect.
 - name: privacy.trackingprotection.lower_network_priority
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: false
   mirror: always
 
 # A subset of Resist Fingerprinting protections focused specifically on timers.
