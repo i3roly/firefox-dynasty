@@ -3496,6 +3496,7 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   }
   return nil;
 }
+
 - (void)removeTrackingArea {
   if (mTrackingArea) {
     [self.trackingAreaView removeTrackingArea:mTrackingArea];
@@ -3503,7 +3504,6 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
     mTrackingArea = nil;
   }
 }
-
 
 - (void)createTrackingArea {
   mViewWithTrackingArea = [self.trackingAreaView retain];
