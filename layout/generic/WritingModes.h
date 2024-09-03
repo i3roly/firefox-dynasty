@@ -296,32 +296,13 @@ class WritingMode {
    */
   bool IsAlphabeticalBaseline() const { return !IsCentralBaseline(); }
 
-  static mozilla::PhysicalAxis PhysicalAxisForLogicalAxis(
-      uint8_t aWritingModeValue, LogicalAxis aAxis) {
-    // This relies on bit 0 of a writing-value mode indicating vertical
-    // orientation and bit 0 of a LogicalAxis value indicating the inline axis,
-    // so that it can correctly form mozilla::PhysicalAxis values using bit
-    // manipulation.
-    static_assert(uint8_t(StyleWritingModeProperty::HorizontalTb) == 0 &&
-                      uint8_t(StyleWritingModeProperty::VerticalRl) == 1 &&
-                      uint8_t(StyleWritingModeProperty::VerticalLr) == 3 &&
-                      uint8_t(LogicalAxis::Block) == 0 &&
-                      uint8_t(LogicalAxis::Inline) == 1 &&
-                      uint8_t(PhysicalAxis::Vertical) == 0 &&
-                      uint8_t(PhysicalAxis::Horizontal) == 1,
-                  "unexpected writing-mode, logical axis or physical axis "
-                  "constant values");
-    return mozilla::PhysicalAxis((aWritingModeValue ^ uint8_t(aAxis)) & 0x1);
-  }
-
+  /**
+   * Convert LogicalAxis to PhysicalAxis given the current writing mode.
+   */
   mozilla::PhysicalAxis PhysicalAxis(LogicalAxis aAxis) const {
-    // This will set wm to either StyleWritingModel::HorizontalTB or
-    // StyleWritingModeProperty::VerticalRL, and not the other two (real
-    // and hypothetical) values.  But this is fine; we only need to
-    // distinguish between vertical and horizontal in
-    // PhysicalAxisForLogicalAxis.
-    const auto wm = (mWritingMode & StyleWritingMode::VERTICAL)._0;
-    return PhysicalAxisForLogicalAxis(wm, aAxis);
+    const bool isInline = aAxis == LogicalAxis::Inline;
+    return isInline == IsVertical() ? PhysicalAxis::Vertical
+                                    : PhysicalAxis::Horizontal;
   }
 
   static mozilla::Side PhysicalSideForBlockAxis(uint8_t aWritingModeValue,
@@ -480,9 +461,8 @@ class WritingMode {
   }
 
   /**
-   * Default constructor gives us a horizontal, LTR writing mode.
-   * XXX We will probably eliminate this and require explicit initialization
-   *     in all cases once transition is complete.
+   * Construct a default WritingMode, equivalent to specifying
+   * 'writing-mode: horizontal-tb' and 'direction: ltr' in CSS.
    */
   WritingMode() : mWritingMode{0} {}
 
@@ -509,8 +489,6 @@ class WritingMode {
    * the rtl-ness doesn't match), then we correct the direction by flipping the
    * same bits that get flipped in the constructor's CSS 'direction'-based
    * chunk.
-   *
-   * XXX change uint8_t to UBiDiLevel after bug 924851
    */
   void SetDirectionFromBidiLevel(mozilla::intl::BidiEmbeddingLevel level) {
     if (level.IsRTL() == IsBidiLTR()) {
@@ -591,8 +569,9 @@ class WritingMode {
   }
 
   /**
-   * Constructing a WritingMode with an arbitrary value is a private operation
-   * currently only used by the Unknown() and IgnoreSideways() methods.
+   * Constructing a WritingMode with an arbitrary value is a private operation.
+   * This is currently only used by the Unknown() and IgnoreSideways() methods,
+   * and a friend struct IMENotification.
    */
   explicit WritingMode(uint8_t aValue) : mWritingMode{aValue} {}
 

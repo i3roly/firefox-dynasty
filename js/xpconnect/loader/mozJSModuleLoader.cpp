@@ -1430,7 +1430,8 @@ nsresult mozJSModuleLoader::IsModuleLoaded(const nsACString& aLocation,
     nsresult rv = mjsInfo.EnsureURI();
     NS_ENSURE_SUCCESS(rv, rv);
 
-    if (mModuleLoader->IsModuleFetched(mjsInfo.URI())) {
+    if (mModuleLoader->IsModuleFetched(
+            JS::loader::ModuleMapKey(mjsInfo.URI(), ModuleType::JavaScript))) {
       *retval = true;
       return NS_OK;
     }
@@ -1475,7 +1476,8 @@ nsresult mozJSModuleLoader::IsESModuleLoaded(const nsACString& aLocation,
   nsresult rv = info.EnsureURI();
   NS_ENSURE_SUCCESS(rv, rv);
 
-  if (mModuleLoader->IsModuleFetched(info.URI())) {
+  if (mModuleLoader->IsModuleFetched(
+          JS::loader::ModuleMapKey(info.URI(), ModuleType::JavaScript))) {
     *retval = true;
     return NS_OK;
   }
@@ -2094,10 +2096,12 @@ nsresult mozJSModuleLoader::ImportESModule(
   context->mSkipCheck = aSkipCheck;
 
   RefPtr<VisitedURLSet> visitedSet =
-      ModuleLoadRequest::NewVisitedSetForTopLevelImport(uri);
+      ModuleLoadRequest::NewVisitedSetForTopLevelImport(
+          uri, JS::ModuleType::JavaScript);
 
   RefPtr<ModuleLoadRequest> request = new ModuleLoadRequest(
-      uri, dom::ReferrerPolicy::No_referrer, options, dom::SRIMetadata(),
+      uri, JS::ModuleType::JavaScript, dom::ReferrerPolicy::No_referrer,
+      options, dom::SRIMetadata(),
       /* aReferrer = */ nullptr, context,
       /* aIsTopLevel = */ true,
       /* aIsDynamicImport = */ false, mModuleLoader, visitedSet, nullptr);

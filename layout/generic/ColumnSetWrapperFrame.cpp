@@ -149,22 +149,22 @@ void ColumnSetWrapperFrame::MarkIntrinsicISizesDirty() {
   }
 }
 
-nscoord ColumnSetWrapperFrame::IntrinsicISize(gfxContext* aContext,
+nscoord ColumnSetWrapperFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                               IntrinsicISizeType aType) {
   if (aType == IntrinsicISizeType::MinISize) {
     if (mCachedMinISize == NS_INTRINSIC_ISIZE_UNKNOWN) {
-      mCachedMinISize = MinISize(aContext);
+      mCachedMinISize = MinISize(aInput);
     }
     return mCachedMinISize;
   }
 
   if (mCachedPrefISize == NS_INTRINSIC_ISIZE_UNKNOWN) {
-    mCachedPrefISize = PrefISize(aContext);
+    mCachedPrefISize = PrefISize(aInput);
   }
   return mCachedPrefISize;
 }
 
-nscoord ColumnSetWrapperFrame::MinISize(gfxContext* aContext) {
+nscoord ColumnSetWrapperFrame::MinISize(const IntrinsicSizeInput& aInput) {
   nscoord iSize = 0;
 
   if (Maybe<nscoord> containISize =
@@ -199,14 +199,16 @@ nscoord ColumnSetWrapperFrame::MinISize(gfxContext* aContext) {
     }
   } else {
     for (nsIFrame* f : PrincipalChildList()) {
-      iSize = std::max(iSize, f->GetMinISize(aContext));
+      const IntrinsicSizeInput childInput(aInput, f->GetWritingMode(),
+                                          GetWritingMode());
+      iSize = std::max(iSize, f->GetMinISize(childInput));
     }
   }
 
   return iSize;
 }
 
-nscoord ColumnSetWrapperFrame::PrefISize(gfxContext* aContext) {
+nscoord ColumnSetWrapperFrame::PrefISize(const IntrinsicSizeInput& aInput) {
   nscoord iSize = 0;
 
   if (Maybe<nscoord> containISize =
@@ -235,7 +237,9 @@ nscoord ColumnSetWrapperFrame::PrefISize(gfxContext* aContext) {
     iSize = ColumnUtils::IntrinsicISize(numColumns, colGap, colISize);
   } else {
     for (nsIFrame* f : PrincipalChildList()) {
-      iSize = std::max(iSize, f->GetPrefISize(aContext));
+      const IntrinsicSizeInput childInput(aInput, f->GetWritingMode(),
+                                          GetWritingMode());
+      iSize = std::max(iSize, f->GetPrefISize(childInput));
     }
   }
 

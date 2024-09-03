@@ -416,6 +416,40 @@ struct FrameBidiData {
   mozilla::intl::BidiEmbeddingLevel precedingControl;
 };
 
+// A struct aggregates necessary data to compute the intrinsic sizes for a
+// frame, used as an input for GetMinISize(), GetPrefISize(), IntrinsicISize(),
+// and others.
+struct MOZ_STACK_CLASS IntrinsicSizeInput final {
+  gfxContext* const mContext;
+
+  // The content-box size of a frame, served as a percentage basis when
+  // computing the children's intrinsic contributions. If the basis is
+  // indefinite in a given axis, use NS_UNCONSTRAINEDSIZE for that component.
+  //
+  // In most scenarios, this struct is used when computing the inline size
+  // contribution, so the inline component of the percentage basis should be set
+  // to NS_UNCONSTRAINEDSIZE.
+  Maybe<LogicalSize> mPercentageBasis;
+
+  IntrinsicSizeInput(gfxContext* aContext,
+                     const Maybe<LogicalSize>& aPercentageBasis)
+      : mContext(aContext), mPercentageBasis(aPercentageBasis) {
+    MOZ_ASSERT(mContext);
+  }
+
+  // Construct a new IntrinsicSizeInput by copying from aSource.
+  //
+  // This constructor converts mPercentageBasis' writing mode, if it exists. The
+  // original mPercentageBasis in aSource is expected to be in the writing mode
+  // aFromWM, and it will be converted to the writing mode aToWM.
+  IntrinsicSizeInput(const IntrinsicSizeInput& aSource,
+                     mozilla::WritingMode aToWM, mozilla::WritingMode aFromWM)
+      : IntrinsicSizeInput(aSource.mContext,
+                           aSource.mPercentageBasis.map([&](const auto& aPB) {
+                             return aPB.ConvertTo(aToWM, aFromWM);
+                           })) {}
+};
+
 }  // namespace mozilla
 
 /// Generic destructor for frame properties. Calls delete.
@@ -2581,8 +2615,8 @@ class nsIFrame : public nsQueryFrame {
    *
    * This method must not return a negative value.
    */
-  nscoord GetMinISize(gfxContext* aContext) {
-    return IntrinsicISize(aContext, mozilla::IntrinsicISizeType::MinISize);
+  nscoord GetMinISize(const mozilla::IntrinsicSizeInput& aInput) {
+    return IntrinsicISize(aInput, mozilla::IntrinsicISizeType::MinISize);
   }
 
   /**
@@ -2591,8 +2625,8 @@ class nsIFrame : public nsQueryFrame {
    *
    * Otherwise, all the comments for |GetMinISize| above apply.
    */
-  nscoord GetPrefISize(gfxContext* aContext) {
-    return IntrinsicISize(aContext, mozilla::IntrinsicISizeType::PrefISize);
+  nscoord GetPrefISize(const mozilla::IntrinsicSizeInput& aInput) {
+    return IntrinsicISize(aInput, mozilla::IntrinsicISizeType::PrefISize);
   }
 
   /**
@@ -2601,7 +2635,7 @@ class nsIFrame : public nsQueryFrame {
    *
    * All the comments for GetMinISize() and GetPrefISize() apply.
    */
-  virtual nscoord IntrinsicISize(gfxContext* aContext,
+  virtual nscoord IntrinsicISize(const mozilla::IntrinsicSizeInput& aInput,
                                  mozilla::IntrinsicISizeType aType) {
     return 0;
   }
@@ -2732,7 +2766,7 @@ class nsIFrame : public nsQueryFrame {
    * line breaking can inherit the default implementation on nsIFrame,
    * which calls |GetMinISize|.
    */
-  virtual void AddInlineMinISize(gfxContext* aRenderingContext,
+  virtual void AddInlineMinISize(const mozilla::IntrinsicSizeInput& aInput,
                                  InlineMinISizeData* aData);
 
   /**
@@ -2745,7 +2779,7 @@ class nsIFrame : public nsQueryFrame {
    * except that this fills in an |InlinePrefISizeData| structure
    * based on using all *mandatory* breakpoints within the frame.
    */
-  virtual void AddInlinePrefISize(gfxContext* aRenderingContext,
+  virtual void AddInlinePrefISize(const mozilla::IntrinsicSizeInput& aInput,
                                   InlinePrefISizeData* aData);
 
   /**
@@ -2863,6 +2897,12 @@ class nsIFrame : public nsQueryFrame {
       const mozilla::StyleSizeOverrides& aSizeOverrides,
       mozilla::ComputeSizeFlags aFlags);
 
+  static nscoord ComputeBSizeValueAsPercentageBasis(
+      const mozilla::StyleSize& aStyleBSize,
+      const mozilla::StyleSize& aStyleMinBSize,
+      const mozilla::StyleMaxSize& aStyleMaxBSize, nscoord aCBBSize,
+      nscoord aContentEdgeToBoxSizingBSize);
+
  protected:
   /**
    * A helper, used by |nsIFrame::ComputeSize| (for frames that need to
@@ -2895,7 +2935,8 @@ class nsIFrame : public nsQueryFrame {
    * Utility function for ComputeAutoSize implementations.  Return
    * max(GetMinISize(), min(aISizeInCB, GetPrefISize()))
    */
-  nscoord ShrinkISizeToFit(gfxContext* aRenderingContext, nscoord aISizeInCB,
+  nscoord ShrinkISizeToFit(const mozilla::IntrinsicSizeInput& aInput,
+                           nscoord aISizeInCB,
                            mozilla::ComputeSizeFlags aFlags);
 
   /**
@@ -2903,7 +2944,7 @@ class nsIFrame : public nsQueryFrame {
    * intrinsic inline size in terms of AddInlineMinISize() and
    * AddInlinePrefISize().
    */
-  nscoord IntrinsicISizeFromInline(gfxContext* aContext,
+  nscoord IntrinsicISizeFromInline(const mozilla::IntrinsicSizeInput& aInput,
                                    mozilla::IntrinsicISizeType aType);
 
  public:

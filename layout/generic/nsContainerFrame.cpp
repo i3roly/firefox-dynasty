@@ -785,21 +785,25 @@ void nsContainerFrame::SyncFrameViewAfterReflow(nsPresContext* aPresContext,
   }
 }
 
-void nsContainerFrame::DoInlineMinISize(gfxContext* aRenderingContext,
+void nsContainerFrame::DoInlineMinISize(const IntrinsicSizeInput& aInput,
                                         InlineMinISizeData* aData) {
-  auto handleChildren = [aRenderingContext](auto frame, auto data) {
+  auto handleChildren = [&](auto frame, auto data) {
     for (nsIFrame* kid : frame->mFrames) {
-      kid->AddInlineMinISize(aRenderingContext, data);
+      const IntrinsicSizeInput kidInput(aInput, kid->GetWritingMode(),
+                                        GetWritingMode());
+      kid->AddInlineMinISize(kidInput, data);
     }
   };
   DoInlineIntrinsicISize(aData, handleChildren);
 }
 
-void nsContainerFrame::DoInlinePrefISize(gfxContext* aRenderingContext,
+void nsContainerFrame::DoInlinePrefISize(const IntrinsicSizeInput& aInput,
                                          InlinePrefISizeData* aData) {
-  auto handleChildren = [aRenderingContext](auto frame, auto data) {
+  auto handleChildren = [&](auto frame, auto data) {
     for (nsIFrame* kid : frame->mFrames) {
-      kid->AddInlinePrefISize(aRenderingContext, data);
+      const IntrinsicSizeInput kidInput(aInput, kid->GetWritingMode(),
+                                        GetWritingMode());
+      kid->AddInlinePrefISize(kidInput, data);
     }
   };
   DoInlineIntrinsicISize(aData, handleChildren);
@@ -830,17 +834,18 @@ LogicalSize nsContainerFrame::ComputeAutoSize(
     AutoMaybeDisableFontInflation an(this);
 
     WritingMode tableWM = GetParent()->GetWritingMode();
+    const IntrinsicSizeInput input(aRenderingContext, Nothing());
     if (aWM.IsOrthogonalTo(tableWM)) {
       // For an orthogonal caption on a block-dir side of the table, shrink-wrap
       // to min-isize.
-      result.ISize(aWM) = GetMinISize(aRenderingContext);
+      result.ISize(aWM) = GetMinISize(input);
     } else {
       // The outer frame constrains our available isize to the isize of
       // the table.  Grow if our min-isize is bigger than that, but not
       // larger than the containing block isize.  (It would really be nice
       // to transmit that information another way, so we could grow up to
       // the table's available isize, but that's harder.)
-      nscoord min = GetMinISize(aRenderingContext);
+      nscoord min = GetMinISize(input);
       if (min > aCBSize.ISize(aWM)) {
         min = aCBSize.ISize(aWM);
       }

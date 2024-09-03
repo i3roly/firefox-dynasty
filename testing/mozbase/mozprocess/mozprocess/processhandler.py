@@ -604,6 +604,10 @@ falling back to not using job objects for managing child processes""",
                     # Dude, the process is like totally dead!
                     return self.returncode
 
+                # On Windows, an unlimited timeout prevents KeyboardInterrupt from
+                # being caught.
+                the_timeout = 0.1 if timeout is None else timeout
+
                 if self._job:
                     self.debug("waiting with IO completion port")
                     # Then we are managing with IO Completion Ports
@@ -613,7 +617,18 @@ falling back to not using job objects for managing child processes""",
                     # function because events just didn't have robust enough error
                     # handling on pre-2.7 versions
                     try:
-                        item = self._process_events.get(timeout=timeout)
+                        while True:
+                            try:
+                                item = self._process_events.get(timeout=the_timeout)
+                            except Empty:
+                                # The timeout was not given by the user, we just have a
+                                # timeout to allow KeyboardInterrupt, so retry.
+                                if timeout is None:
+                                    continue
+                                else:
+                                    raise
+                            break
+
                         # re-emit the event in case some other thread is also calling wait()
                         self._process_events.put(item)
                         if item[self.pid] == "FINISHED":
@@ -646,13 +661,17 @@ falling back to not using job objects for managing child processes""",
 
                     rc = None
                     if self._handle:
-                        if timeout is None:
-                            timeout = -1
-                        else:
-                            # timeout for WaitForSingleObject is in ms
-                            timeout = timeout * 1000
-
-                        rc = winprocess.WaitForSingleObject(self._handle, timeout)
+                        # timeout for WaitForSingleObject is in ms
+                        the_timeout = int(the_timeout * 1000)
+                        while True:
+                            rc = winprocess.WaitForSingleObject(
+                                self._handle, the_timeout
+                            )
+                            # The timeout was not given by the user, we just have a
+                            # timeout to allow KeyboardInterrupt, so retry.
+                            if timeout is None and rc == winprocess.WAIT_TIMEOUT:
+                                continue
+                            break
 
                     if rc == winprocess.WAIT_TIMEOUT:
                         # Timeout happened as asked.
@@ -946,12 +965,17 @@ falling back to not using job objects for managing child processes""",
             self.returncode is not None
             and self.reader.thread
             and self.reader.thread is not threading.current_thread()
+        ):
             # If children are ignored and a child is still running because it's
             # been daemonized or something, the reader might still be attached
             # to that child'd output... and joining will deadlock.
-            and not self._ignore_children
-        ):
-            self.reader.join()
+            # So instead, we wait for there to be no more active reading still
+            # happening.
+            if self._ignore_children:
+                while self.reader.is_still_reading(timeout=0.1):
+                    time.sleep(0.1)
+            else:
+                self.reader.join()
         return self.returncode
 
     @property
@@ -1056,6 +1080,7 @@ class ProcessReader(object):
         self.timeout = timeout
         self.output_timeout = output_timeout
         self.thread = None
+        self.got_data = threading.Event()
         self.didOutputTimeout = False
 
     def debug(self, msg):
@@ -1124,6 +1149,7 @@ class ProcessReader(object):
             # reader threads setup in start.
             for n in range(readers):
                 for line, callback in iter(get_line, (b"", None)):
+                    self.got_data.set()
                     try:
                         callback(line.rstrip())
                     except Exception:
@@ -1145,6 +1171,10 @@ class ProcessReader(object):
         if self.thread:
             return self.thread.is_alive()
         return False
+
+    def is_still_reading(self, timeout):
+        self.got_data.clear()
+        return self.got_data.wait(timeout)
 
     def join(self, timeout=None):
         if self.thread:
