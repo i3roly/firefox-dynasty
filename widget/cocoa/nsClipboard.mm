@@ -69,6 +69,7 @@ static NSPasteboard* GetPasteboard(
       if (@available(macOS 10.13, *)) {
           return [NSPasteboard pasteboardWithName:NSPasteboardNameFind];
       }
+      return [NSPasteboard pasteboardWithName:NSFindPboard];
     default:
       return nil;
   }
