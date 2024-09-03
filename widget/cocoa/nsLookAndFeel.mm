@@ -358,6 +358,12 @@ nsresult nsLookAndFeel::NativeGetColor(ColorID aID, ColorScheme aScheme,
           color = GetColorFromNSColor(
                   NSColor.unemphasizedSelectedContentBackgroundColor);
           break;
+      } else {
+        color = GetColorFromNSColor(NSColor.controlColor);
+        if (!NS_GET_A(color)) {
+          color = GetColorFromNSColor(NSColor.controlBackgroundColor);
+        }
+        break; 
       }
     case ColorID::MozColheader:
     case ColorID::MozColheaderhover:
