@@ -4036,14 +4036,6 @@
     hash: WordSized
   num_temps: 4
 
-- name: MapObjectGetValue
-  result_type: BoxedValue
-  operands:
-    mapObject: WordSized
-    input: BoxedValue
-    hash: WordSized
-  num_temps: 4
-
 - name: MapObjectGetValueVMCall
   result_type: BoxedValue
   call_instruction: true
@@ -4512,4 +4504,28 @@
 
 - name: FuzzilliHashStore
   gen_boilerplate: false
+#endif
+
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+- name: AddDisposableResource
+  operands:
+    environment: WordSized
+    resource: BoxedValue
+    method: BoxedValue
+    needsClosure: WordSized
+  arguments:
+    hint: uint8_t
+  call_instruction: true
+
+- name: TakeDisposeCapability
+  operands:
+    environment: WordSized
+  result_type: BoxedValue
+
+- name: CreateSuppressedError
+  operands:
+    error: BoxedValue
+    suppressed: BoxedValue
+  result_type: WordSized
+  call_instruction: true
 #endif

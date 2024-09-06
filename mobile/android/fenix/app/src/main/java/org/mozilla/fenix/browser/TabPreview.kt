@@ -55,27 +55,29 @@ class TabPreview @JvmOverloads constructor(
     private val thumbnailLoader = ThumbnailLoader(context.components.core.thumbnailStorage)
 
     private var bottomToolbarContainerView: BottomToolbarContainerView? = null
+    private var mockToolbarView: View = binding.fakeToolbar
 
     init {
         initializeView()
     }
 
     private fun initializeView() {
+        val isNavBarVisible = context.shouldAddNavigationBar()
         val isToolbarAtTop = context.settings().toolbarPosition == ToolbarPosition.TOP
+
+        binding.fakeToolbar.isVisible = !isNavBarVisible
+        binding.fakeToolbarTwo.isVisible = isNavBarVisible
+        mockToolbarView = if (isNavBarVisible) binding.fakeToolbarTwo else binding.fakeToolbar
+
         if (isToolbarAtTop) {
-            binding.fakeToolbar.updateLayoutParams<LayoutParams> {
+            mockToolbarView.updateLayoutParams<LayoutParams> {
                 gravity = Gravity.TOP
             }
-
-            binding.fakeToolbar.background = AppCompatResources.getDrawable(
+            mockToolbarView.background = AppCompatResources.getDrawable(
                 context,
                 ThemeManager.resolveAttribute(R.attr.bottomBarBackgroundTop, context),
             )
         }
-
-        val isNavBarVisible = context.shouldAddNavigationBar()
-        binding.tabButton.isVisible = !isNavBarVisible
-        binding.menuButton.isVisible = !isNavBarVisible
 
         if (isNavBarVisible) {
             val browserStore = context.components.core.store
@@ -87,8 +89,8 @@ class TabPreview @JvmOverloads constructor(
                         Column {
                             if (!isToolbarAtTop) {
                                 // before adding fake navigation bar in the preview, remove fake toolbar
-                                removeView(binding.fakeToolbar)
-                                AndroidView(factory = { _ -> binding.fakeToolbar })
+                                removeView(mockToolbarView)
+                                AndroidView(factory = { _ -> mockToolbarView })
                             } else {
                                 Divider()
                             }
@@ -158,7 +160,7 @@ class TabPreview @JvmOverloads constructor(
         }
 
         binding.previewThumbnail.translationY = if (context.settings().toolbarPosition == ToolbarPosition.TOP) {
-            binding.fakeToolbar.height.toFloat()
+            mockToolbarView.height.toFloat()
         } else {
             0f
         }
@@ -170,7 +172,7 @@ class TabPreview @JvmOverloads constructor(
             updateNavBarForConfigurationChange(
                 context = context,
                 parent = this,
-                toolbarView = binding.fakeToolbar,
+                toolbarView = mockToolbarView,
                 bottomToolbarContainerView = bottomToolbarContainerView?.toolbarContainerView,
                 reinitializeNavBar = ::initializeView,
                 reinitializeMicrosurveyPrompt = {},

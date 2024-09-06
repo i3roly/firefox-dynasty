@@ -443,18 +443,18 @@ void js::gc::GCRuntime::finishVerifier() {
 }
 
 struct GCChunkHasher {
-  using Lookup = gc::TenuredChunk*;
+  using Lookup = gc::ArenaChunk*;
 
   /*
    * Strip zeros for better distribution after multiplying by the golden
    * ratio.
    */
-  static HashNumber hash(gc::TenuredChunk* chunk) {
+  static HashNumber hash(gc::ArenaChunk* chunk) {
     MOZ_ASSERT(!(uintptr_t(chunk) & gc::ChunkMask));
     return HashNumber(uintptr_t(chunk) >> gc::ChunkShift);
   }
 
-  static bool match(gc::TenuredChunk* k, gc::TenuredChunk* l) {
+  static bool match(gc::ArenaChunk* k, gc::ArenaChunk* l) {
     MOZ_ASSERT(!(uintptr_t(k) & gc::ChunkMask));
     MOZ_ASSERT(!(uintptr_t(l) & gc::ChunkMask));
     return k == l;
@@ -471,8 +471,8 @@ class js::gc::MarkingValidator {
   GCRuntime* gc;
   bool initialized;
 
-  using BitmapMap = HashMap<TenuredChunk*, UniquePtr<MarkBitmap>, GCChunkHasher,
-                            SystemAllocPolicy>;
+  using BitmapMap = HashMap<ArenaChunk*, UniquePtr<ChunkMarkBitmap>,
+                            GCChunkHasher, SystemAllocPolicy>;
   BitmapMap map;
 };
 
@@ -506,11 +506,11 @@ void js::gc::MarkingValidator::nonIncrementalMark(AutoGCSession& session) {
          chunk.next()) {
       // Bug 1842582: Allocate mark bit buffer in two stages to avoid alignment
       // restriction which we currently can't support.
-      void* buffer = js_malloc(sizeof(MarkBitmap));
+      void* buffer = js_malloc(sizeof(ChunkMarkBitmap));
       if (!buffer) {
         return;
       }
-      UniquePtr<MarkBitmap> entry(new (buffer) MarkBitmap);
+      UniquePtr<ChunkMarkBitmap> entry(new (buffer) ChunkMarkBitmap);
       entry->copyFrom(chunk->markBits);
       if (!map.putNew(chunk, std::move(entry))) {
         return;
@@ -628,11 +628,11 @@ void js::gc::MarkingValidator::nonIncrementalMark(AutoGCSession& session) {
     AutoLockGC lock(gc);
     for (auto chunk = gc->allNonEmptyChunks(lock); !chunk.done();
          chunk.next()) {
-      MarkBitmap* bitmap = &chunk->markBits;
+      ChunkMarkBitmap* bitmap = &chunk->markBits;
       auto ptr = map.lookup(chunk);
       MOZ_RELEASE_ASSERT(ptr, "Chunk not found in map");
-      MarkBitmap* entry = ptr->value().get();
-      MarkBitmap temp;
+      ChunkMarkBitmap* entry = ptr->value().get();
+      ChunkMarkBitmap temp;
       temp.copyFrom(*entry);
       entry->copyFrom(*bitmap);
       bitmap->copyFrom(temp);
@@ -688,8 +688,8 @@ void js::gc::MarkingValidator::validate() {
       continue; /* Allocated after we did the non-incremental mark. */
     }
 
-    MarkBitmap* bitmap = ptr->value().get();
-    MarkBitmap* incBitmap = &chunk->markBits;
+    ChunkMarkBitmap* bitmap = ptr->value().get();
+    ChunkMarkBitmap* incBitmap = &chunk->markBits;
 
     for (size_t i = 0; i < ArenasPerChunk; i++) {
       if (chunk->decommittedPages[chunk->pageIndex(i)]) {

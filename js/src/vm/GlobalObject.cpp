@@ -52,6 +52,8 @@
 #include "gc/FinalizationObservers.h"
 #include "gc/GC.h"
 #include "gc/GCContext.h"
+#include "jit/Invalidation.h"
+#include "jit/JitSpewer.h"
 #include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
 #include "js/friend/WindowProxy.h"    // js::ToWindowProxyIfWindow
 #include "js/Prefs.h"                 // JS::Prefs
@@ -880,6 +882,7 @@ GlobalObject::getOrCreateFinalizationRegistryData() {
   return maybeFinalizationRegistryData();
 }
 
+#ifndef NIGHTLY_BUILD
 bool GlobalObject::addToVarNames(JSContext* cx, JS::Handle<JSAtom*> name) {
   MOZ_ASSERT(name);
 
@@ -890,6 +893,7 @@ bool GlobalObject::addToVarNames(JSContext* cx, JS::Handle<JSAtom*> name) {
 
   return true;
 }
+#endif
 
 /* static */
 bool GlobalObject::createIntrinsicsHolder(JSContext* cx,
@@ -1054,15 +1058,22 @@ void GlobalObject::releaseData(JS::GCContext* gcx) {
   gcx->delete_(this, data, MemoryUse::GlobalObjectData);
 }
 
-GlobalObjectData::GlobalObjectData(Zone* zone) : varNames(zone) {}
+GlobalObjectData::GlobalObjectData(Zone* zone)
+#ifndef NIGHTLY_BUILD
+    : varNames(zone)
+#endif
+{
+}
 
 GlobalObjectData::~GlobalObjectData() = default;
 
 void GlobalObjectData::trace(JSTracer* trc, GlobalObject* global) {
+#ifndef NIGHTLY_BUILD
   // Atoms are always tenured so don't need to be traced during minor GC.
   if (trc->runtime()->heapState() != JS::HeapState::MinorCollecting) {
     varNames.trace(trc);
   }
+#endif
 
   for (auto& ctorWithProto : builtinConstructors) {
     TraceNullableEdge(trc, &ctorWithProto.constructor, "global-builtin-ctor");
@@ -1129,6 +1140,17 @@ void GlobalObjectData::addSizeOfIncludingThis(
         regExpRealm.regExpStatics->sizeOfIncludingThis(mallocSizeOf);
   }
 
+#ifndef NIGHTLY_BUILD
   info->objectsMallocHeapGlobalVarNamesSet +=
       varNames.shallowSizeOfExcludingThis(mallocSizeOf);
+#endif
+}
+
+void GlobalObject::bumpGenerationCount(JSContext* cx) {
+  MOZ_RELEASE_ASSERT(data().generationCount < UINT32_MAX);
+  data().generationCount++;
+
+  auto& weakScripts = realm()->generationCounterDependentScripts;
+  js::jit::InvalidateAndClearScriptSet(cx, weakScripts,
+                                       "generation count bump");
 }

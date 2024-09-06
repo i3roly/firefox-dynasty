@@ -124,6 +124,9 @@ redirects:
 fatal warnings:
     - "WARNING: '([^']*)' reference target not found:((?!.rst).)*$"
     - "WARNING: Include file '([^']*)' not found or reading it failed"
+    - "WARNING: Non-consecutive header level"
+    - "WARNING: Document headings start at"
+    - "WARNING: Parsing of expression failed"
 
 # A regexp of errors we currently allow so that we can fail on new errors,
 # but resolve these at a later date. Please do not add new items to this list
@@ -139,5 +142,6 @@ allowed_errors:
     # Bug 1915274 - General issues in nss docs.
     - "security/nss/releases/nss_3_90\\.rst.* ERROR: Content block expected for the \"container\" directive"
     - "security/nss/releases/nss_3_94\\.rst.* ERROR: Unknown target name:"
+    - "security/nss/getting_started\\.rst.* CRITICAL: Unexpected section title"
 
-max_num_warnings: 837
+max_num_warnings: 794

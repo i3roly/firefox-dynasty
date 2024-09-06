@@ -9,6 +9,7 @@
  */
 
 #include "modules/video_capture/linux/pipewire_session.h"
+#include "modules/video_capture/linux/device_info_pipewire.h"
 
 #include <spa/monitor/device.h>
 #include <spa/param/format-utils.h>
@@ -19,6 +20,7 @@
 #include "common_video/libyuv/include/webrtc_libyuv.h"
 #include "modules/video_capture/device_info_impl.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/sanitizer.h"
 #include "rtc_base/string_encode.h"
 #include "rtc_base/string_to_number.h"
 
@@ -65,6 +67,7 @@ PipeWireNode::PipeWireNodePtr PipeWireNode::Create(PipeWireSession* session,
   return PipeWireNodePtr(new PipeWireNode(session, id, props));
 }
 
+RTC_NO_SANITIZE("cfi-icall")
 PipeWireNode::PipeWireNode(PipeWireSession* session,
                            uint32_t id,
                            const spa_dict* props)
@@ -87,6 +90,7 @@ PipeWireNode::PipeWireNode(PipeWireSession* session,
 }
 
 // static
+RTC_NO_SANITIZE("cfi-icall")
 void PipeWireNode::OnNodeInfo(void* data, const pw_node_info* info) {
   PipeWireNode* that = static_cast<PipeWireNode*>(data);
 
@@ -123,6 +127,7 @@ void PipeWireNode::OnNodeInfo(void* data, const pw_node_info* info) {
 }
 
 // static
+RTC_NO_SANITIZE("cfi-icall")
 void PipeWireNode::OnNodeParam(void* data,
                                int seq,
                                uint32_t id,
@@ -274,6 +279,29 @@ void PipeWireSession::InitPipeWire(int fd) {
     Finish(VideoCaptureOptions::Status::ERROR);
 }
 
+bool PipeWireSession::RegisterDeviceInfo(DeviceInfoPipeWire* device_info) {
+  RTC_CHECK(device_info);
+  MutexLock lock(&device_info_lock_);
+  auto it = std::find(device_info_list_.begin(), device_info_list_.end(), device_info);
+  if (it == device_info_list_.end()) {
+    device_info_list_.push_back(device_info);
+    return true;
+  }
+  return false;
+}
+
+bool PipeWireSession::DeRegisterDeviceInfo(DeviceInfoPipeWire* device_info) {
+  RTC_CHECK(device_info);
+  MutexLock lock(&device_info_lock_);
+  auto it = std::find(device_info_list_.begin(), device_info_list_.end(), device_info);
+  if (it != device_info_list_.end()) {
+    device_info_list_.erase(it);
+    return true;
+  }
+  return false;
+}
+
+RTC_NO_SANITIZE("cfi-icall")
 bool PipeWireSession::StartPipeWire(int fd) {
   pw_init(/*argc=*/nullptr, /*argv=*/nullptr);
 
@@ -340,8 +368,24 @@ void PipeWireSession::StopPipeWire() {
   }
 }
 
+RTC_NO_SANITIZE("cfi-icall")
 void PipeWireSession::PipeWireSync() {
   sync_seq_ = pw_core_sync(pw_core_, PW_ID_CORE, sync_seq_);
+}
+
+void PipeWireSession::NotifyDeviceChange() {
+  RTC_LOG(LS_INFO) << "Notify about device list changes";
+  MutexLock lock(&device_info_lock_);
+
+  // It makes sense to notify about device changes only once we are
+  // properly initialized.
+  if (status_ != VideoCaptureOptions::Status::SUCCESS) {
+    return;
+  }
+
+  for (auto* deviceInfo : device_info_list_) {
+    deviceInfo->DeviceChange();
+  }
 }
 
 // static
@@ -374,6 +418,7 @@ void PipeWireSession::OnCoreDone(void* data, uint32_t id, int seq) {
 }
 
 // static
+RTC_NO_SANITIZE("cfi-icall")
 void PipeWireSession::OnRegistryGlobal(void* data,
                                        uint32_t id,
                                        uint32_t permissions,
@@ -401,6 +446,8 @@ void PipeWireSession::OnRegistryGlobal(void* data,
 
   that->nodes_.push_back(PipeWireNode::Create(that, id, props));
   that->PipeWireSync();
+
+  that->NotifyDeviceChange();
 }
 
 // static
@@ -412,9 +459,16 @@ void PipeWireSession::OnRegistryGlobalRemove(void* data, uint32_t id) {
                              return node->id() == id;
                            });
   that->nodes_.erase(it, that->nodes_.end());
+
+  that->NotifyDeviceChange();
 }
 
 void PipeWireSession::Finish(VideoCaptureOptions::Status status) {
+  {
+    MutexLock lock(&device_info_lock_);
+    status_ = status;
+  }
+
   webrtc::MutexLock lock(&callback_lock_);
 
   if (callback_) {

@@ -468,11 +468,51 @@ bool WarpCacheIRTranspiler::emitGuardShape(ObjOperandId objId,
   return true;
 }
 
-bool WarpCacheIRTranspiler::emitGuardFuse(RealmFuses::FuseIndex fuseIndex) {
-  auto* ins = MGuardFuse::New(alloc(), fuseIndex);
-  add(ins);
+template <auto FuseMember>
+struct RealmFuseDependency final : public CompilationDependency {
+  Realm* realm = nullptr;
 
-  return true;
+  explicit RealmFuseDependency(Realm* realm);
+
+  virtual bool registerDependency(JSContext* cx, HandleScript script) override {
+    MOZ_ASSERT(checkDependency());
+    return (realm->realmFuses.*FuseMember).addFuseDependency(cx, script);
+  }
+
+  virtual UniquePtr<CompilationDependency> clone() override {
+    return MakeUnique<RealmFuseDependency<FuseMember>>(realm);
+  }
+
+  virtual bool checkDependency() override {
+    return (realm->realmFuses.*FuseMember).intact();
+  }
+
+  virtual bool operator==(CompilationDependency& dep) override {
+    if (dep.type != type) {
+      return false;
+    }
+
+    return static_cast<RealmFuseDependency<FuseMember>*>(&dep)->realm != realm;
+  }
+};
+
+using GetIteratorDependency =
+    RealmFuseDependency<&RealmFuses::optimizeGetIteratorFuse>;
+template <>
+GetIteratorDependency::RealmFuseDependency(Realm* realm)
+    : CompilationDependency(CompilationDependency::Type::GetIterator),
+      realm(realm) {}
+
+bool WarpCacheIRTranspiler::emitGuardFuse(RealmFuses::FuseIndex fuseIndex) {
+  if (fuseIndex != RealmFuses::FuseIndex::OptimizeGetIteratorFuse) {
+    auto* ins = MGuardFuse::New(alloc(), fuseIndex);
+    add(ins);
+    return true;
+  }
+
+  // Register the compilation dependency.
+  GetIteratorDependency dep((JS::Realm*)(mirGen().realm->realmPtr()));
+  return mirGen().tracker.addDependency(dep);
 }
 
 bool WarpCacheIRTranspiler::emitGuardMultipleShapes(ObjOperandId objId,
@@ -6507,15 +6547,61 @@ bool WarpCacheIRTranspiler::emitCloseIterScriptedResult(ObjOperandId iterId,
   return resumeAfterUnchecked(check);
 }
 
+class GenerationDependency final : public CompilationDependency {
+  Realm* realm = nullptr;
+  const uint32_t* generationAddress = nullptr;
+  const uint32_t expectedGeneration = 0;
+
+ public:
+  GenerationDependency(const uint32_t* address, uint32_t expected, Realm* realm)
+      : CompilationDependency(CompilationDependency::Type::GenerationCounter),
+        realm(realm),
+        generationAddress(address),
+        expectedGeneration(expected) {}
+
+  bool operator==(CompilationDependency& dep) override {
+    if (dep.type != type) {
+      return false;
+    }
+
+    GenerationDependency* other = static_cast<GenerationDependency*>(&dep);
+    return other->expectedGeneration == expectedGeneration &&
+           other->generationAddress == generationAddress &&
+           other->realm == realm;
+  }
+
+  bool checkDependency() override {
+    return *generationAddress == expectedGeneration;
+  }
+
+  bool registerDependency(JSContext* cx, HandleScript script) override {
+    auto& dependentScripts = realm->generationCounterDependentScripts;
+
+    Realm::WeakScriptSet::AddPtr p = dependentScripts.lookupForAdd(script);
+    if (!p) {
+      if (!dependentScripts.add(p, script)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  UniquePtr<CompilationDependency> clone() override {
+    return MakeUnique<GenerationDependency>(generationAddress,
+                                            expectedGeneration, realm);
+  }
+};
+
 bool WarpCacheIRTranspiler::emitGuardGlobalGeneration(
-    uint32_t expectedOffset, uint32_t generationAddrOffset) {
+    uint32_t expectedOffset, uint32_t generationAddrOffset,
+    uint32_t realmOffset) {
   uint32_t expected = uint32StubField(expectedOffset);
   const void* generationAddr = rawPointerField(generationAddrOffset);
+  Realm* realm = (Realm*)(rawPointerField(realmOffset));
 
-  auto guard = MGuardGlobalGeneration::New(alloc(), expected, generationAddr);
-  add(guard);
-
-  return true;
+  GenerationDependency dep(static_cast<const uint32_t*>(generationAddr),
+                           expected, realm);
+  return mirGen().tracker.addDependency(dep);
 }
 
 #ifdef FUZZING_JS_FUZZILLI

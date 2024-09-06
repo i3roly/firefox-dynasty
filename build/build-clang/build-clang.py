@@ -180,7 +180,16 @@ def is_windows(target):
 
 
 def is_cross_compile(target):
-    return SUPPORTED_TARGETS[target] != (platform.system(), platform.machine())
+    target_system, target_machine = SUPPORTED_TARGETS[target]
+    system, machine = (platform.system(), platform.machine())
+    if system != target_system:
+        return True
+    # Don't consider x86 mac on arm64 mac a cross-compile so that we
+    # can build x86 mac clang on arm64 mac via Rosetta, as if they
+    # were building on x86.
+    if system == "Darwin" and machine == "arm64":
+        return False
+    return machine != target_machine
 
 
 def build_one_stage(
@@ -189,6 +198,7 @@ def build_one_stage(
     asm,
     ar,
     ranlib,
+    libtool,
     ldflags,
     src_dir,
     stage_dir,
@@ -210,8 +220,13 @@ def build_one_stage(
     def slashify_path(path):
         return path.replace("\\", "/")
 
-    def cmake_base_args(cc, cxx, asm, ar, ranlib, ldflags, inst_dir):
-        machine_targets = targets if is_final_stage and targets else "X86"
+    def cmake_base_args(cc, cxx, asm, ar, ranlib, libtool, ldflags, inst_dir):
+        if is_final_stage and targets:
+            machine_targets = targets
+        elif target.startswith("aarch64-"):
+            machine_targets = "AArch64"
+        else:
+            machine_targets = "X86"
 
         cmake_args = [
             "-GNinja",
@@ -287,20 +302,25 @@ def build_one_stage(
             cmake_args += ["-DLLVM_LINK_LLVM_DYLIB=ON"]
         if ranlib is not None:
             cmake_args += ["-DCMAKE_RANLIB=%s" % slashify_path(ranlib)]
-        if is_darwin(target) and is_cross_compile(target):
+        if libtool is not None:
+            cmake_args += ["-DCMAKE_LIBTOOL=%s" % slashify_path(libtool)]
+        if is_darwin(target):
             arch = "arm64" if target.startswith("aarch64") else "x86_64"
+            if is_cross_compile(target):
+                cmake_args += [
+                    "-DCMAKE_SYSTEM_NAME=Darwin",
+                ]
             cmake_args += [
-                "-DCMAKE_SYSTEM_NAME=Darwin",
                 "-DCMAKE_SYSTEM_VERSION=%s" % os.environ["MACOSX_DEPLOYMENT_TARGET"],
-                "-DCMAKE_OSX_SYSROOT=%s" % slashify_path(os.getenv("CROSS_SYSROOT")),
-                "-DCMAKE_FIND_ROOT_PATH=%s" % slashify_path(os.getenv("CROSS_SYSROOT")),
+                "-DCMAKE_OSX_SYSROOT=%s" % slashify_path(os.getenv("OSX_SYSROOT")),
+                "-DCMAKE_FIND_ROOT_PATH=%s" % slashify_path(os.getenv("OSX_SYSROOT")),
                 "-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER",
                 "-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY",
                 "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY",
                 "-DCMAKE_MACOSX_RPATH=ON",
                 "-DCMAKE_OSX_ARCHITECTURES=%s" % arch,
                 "-DDARWIN_osx_ARCHS=%s" % arch,
-                "-DDARWIN_osx_SYSROOT=%s" % slashify_path(os.getenv("CROSS_SYSROOT")),
+                "-DDARWIN_osx_SYSROOT=%s" % slashify_path(os.getenv("OSX_SYSROOT")),
                 "-DLLVM_DEFAULT_TARGET_TRIPLE=%s" % target,
                 "-DCMAKE_C_COMPILER_TARGET=%s" % target,
                 "-DCMAKE_CXX_COMPILER_TARGET=%s" % target,
@@ -336,7 +356,7 @@ def build_one_stage(
         return cmake_args
 
     cmake_args = []
-    cmake_args += cmake_base_args(cc, cxx, asm, ar, ranlib, ldflags, inst_dir)
+    cmake_args += cmake_base_args(cc, cxx, asm, ar, ranlib, libtool, ldflags, inst_dir)
     cmake_args += [src_dir]
     build_package(build_dir, cmake_args)
 
@@ -359,7 +379,11 @@ def get_tool(config, key):
     if key in config:
         f = config[key].format(**os.environ)
         if os.path.isabs(f):
-            if not os.path.exists(f):
+            path, f = os.path.split(f)
+            # Searches for .exes on windows too, even if the extension is
+            # not given. which(absolute_path) doesn't do that until python 3.12.
+            f = which(f, path=path)
+            if not f:
                 raise ValueError("%s must point to an existing path" % key)
             return f
 
@@ -640,6 +664,7 @@ def main():
     # knows how to find it when they are installed alongside each others.
     ar = get_tool(config, "lib" if is_windows(target) else "ar")
     ranlib = None if is_windows(target) else get_tool(config, "ranlib")
+    libtool = get_tool(config, "libtool") if is_darwin(target) else None
 
     if not os.path.exists(source_dir):
         os.makedirs(source_dir)
@@ -733,6 +758,7 @@ def main():
             [asm] + extra_asmflags,
             ar,
             ranlib,
+            libtool,
             extra_ldflags,
             llvm_source_dir,
             stage1_dir,
@@ -758,6 +784,7 @@ def main():
             [asm] + extra_asmflags,
             ar,
             ranlib,
+            libtool,
             extra_ldflags,
             llvm_source_dir,
             stage2_dir,
@@ -784,6 +811,7 @@ def main():
             [asm] + extra_asmflags,
             ar,
             ranlib,
+            libtool,
             extra_ldflags,
             llvm_source_dir,
             stage3_dir,
@@ -826,6 +854,7 @@ def main():
             [asm] + extra_asmflags,
             ar,
             ranlib,
+            libtool,
             extra_ldflags,
             llvm_source_dir,
             stage4_dir,

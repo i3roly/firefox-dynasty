@@ -83,6 +83,7 @@ void RemoteAccessible::SetChildDoc(DocAccessibleParent* aChildDoc) {
   MOZ_ASSERT(aChildDoc);
   MOZ_ASSERT(mChildren.Length() == 0);
   mChildren.AppendElement(aChildDoc);
+  aChildDoc->mIndexInParent = 0;
 }
 
 void RemoteAccessible::ClearChildDoc(DocAccessibleParent* aChildDoc) {
@@ -157,6 +158,9 @@ void RemoteAccessible::SetParent(RemoteAccessible* aParent) {
   MOZ_ASSERT(!IsDoc() || !aParent || aParent->IsOuterDoc(),
              "Doc's parent must be OuterDoc");
   mParent = aParent;
+  if (!aParent) {
+    mIndexInParent = -1;
+  }
 }
 
 RemoteAccessible* RemoteAccessible::RemoteParent() const {

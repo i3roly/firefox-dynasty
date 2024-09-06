@@ -101,7 +101,7 @@ const REMOTE_SETTINGS_RESULTS = [
   }),
 ];
 
-let gMaxRichResultsSuggestionsCount;
+let gMaxResultsSuggestionsCount;
 
 function expectedSponsoredPriorityResult() {
   return {
@@ -141,17 +141,17 @@ function expectedHttpsResult() {
 }
 
 add_setup(async function init() {
-  // Add a bunch of suggestions that all have the same keyword so we can verify
-  // the provider respects its `maxRichResults` cap when adding results.
+  // Add a bunch of suggestions that have the same keyword so we can verify the
+  // provider respects its `queryContext.maxResults` cap when adding results.
   let maxResults = UrlbarPrefs.get("maxRichResults");
   Assert.greater(maxResults, 0, "This test expects maxRichResults to be > 0");
-  gMaxRichResultsSuggestionsCount = 2 * maxResults;
-  for (let i = 0; i < gMaxRichResultsSuggestionsCount; i++) {
+  gMaxResultsSuggestionsCount = 2 * maxResults;
+  for (let i = 0; i < gMaxResultsSuggestionsCount; i++) {
     REMOTE_SETTINGS_RESULTS.push(
       QuickSuggestTestUtils.ampRemoteSettings({
-        keywords: ["maxrichresults"],
-        title: "maxRichResults " + i,
-        url: "https://example.com/maxRichResults/" + i,
+        keywords: ["maxresults"],
+        title: "maxresults " + i,
+        url: "https://example.com/maxresults/" + i,
       })
     );
   }
@@ -667,16 +667,16 @@ add_tasks_with_rust(async function generalBeforeSuggestions_others() {
   await PlacesUtils.history.clear();
 });
 
-// The provider should not add more than `maxRichResults` results.
-add_tasks_with_rust(async function maxRichResults() {
+// The provider should not add more than `queryContext.maxResults` results.
+add_tasks_with_rust(async function maxResults() {
   UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
   await QuickSuggestTestUtils.forceSync();
 
-  let searchString = "maxrichresults";
+  let searchString = "maxresults";
   let suggestions = await QuickSuggest.backend.query(searchString);
   Assert.equal(
     suggestions.length,
-    gMaxRichResultsSuggestionsCount,
+    gMaxResultsSuggestionsCount,
     "The backend should return all matching suggestions"
   );
 
@@ -699,9 +699,9 @@ add_tasks_with_rust(async function maxRichResults() {
     context,
     matches: [
       QuickSuggestTestUtils.ampResult({
-        keyword: "maxrichresults",
-        title: "maxRichResults 0",
-        url: "https://example.com/maxRichResults/0",
+        keyword: "maxresults",
+        title: "maxresults 0",
+        url: "https://example.com/maxresults/0",
       }),
     ],
   });
@@ -725,6 +725,110 @@ add_tasks_with_rust(async function maxRichResults() {
 
   sandbox.restore();
 });
+
+// When the Suggest provider adds more than one result and they are not hidden
+// exposures, the muxer should add the first one to the final results list and
+// discard the rest, and the discarded results should not prevent the muxer from
+// adding other non-Suggest results.
+add_task(async function manySuggestResults_visible() {
+  await doManySuggestResultsTest({
+    expectedSuggestResults: [
+      QuickSuggestTestUtils.ampResult({
+        keyword: "maxresults",
+        title: "maxresults 0",
+        url: "https://example.com/maxresults/0",
+      }),
+    ],
+    expectedOtherResultsCount: UrlbarPrefs.get("maxRichResults") - 1,
+  });
+});
+
+// When the Suggest provider adds more than one result and they are hidden
+// exposures, the muxer should add up to `queryContext.maxResults` of them to
+// the final results list, and they should not prevent the muxer from adding
+// other non-Suggest results.
+add_task(async function manySuggestResults_hiddenExposures() {
+  UrlbarPrefs.set("exposureResults", "rust_adm_sponsored");
+  UrlbarPrefs.set("showExposureResults", false);
+
+  // Build the list of expected Suggest results.
+  let results = [];
+  let maxResults = UrlbarPrefs.get("maxRichResults");
+  let suggestResultsCount = Math.min(gMaxResultsSuggestionsCount, maxResults);
+  for (let i = 0; i < suggestResultsCount; i++) {
+    let index = maxResults - 1 - i;
+    results.push({
+      ...QuickSuggestTestUtils.ampResult({
+        keyword: "maxresults",
+        title: "maxresults " + index,
+        url: "https://example.com/maxresults/" + index,
+      }),
+      exposureTelemetry: UrlbarUtils.EXPOSURE_TELEMETRY.HIDDEN,
+    });
+  }
+
+  await doManySuggestResultsTest({
+    expectedSuggestResults: results,
+    expectedOtherResultsCount: maxResults,
+  });
+
+  UrlbarPrefs.clear("exposureResults");
+  UrlbarPrefs.clear("showExposureResults");
+});
+
+async function doManySuggestResultsTest({
+  expectedSuggestResults,
+  expectedOtherResultsCount,
+}) {
+  UrlbarPrefs.set("suggest.quicksuggest.sponsored", true);
+  await QuickSuggestTestUtils.forceSync();
+
+  // Make sure many Suggest suggestions match the search string.
+  let searchString = "maxresults";
+  let suggestions = await QuickSuggest.backend.query(searchString);
+  Assert.equal(
+    suggestions.length,
+    gMaxResultsSuggestionsCount,
+    "Sanity check: The backend should return all matching suggestions"
+  );
+  Assert.greater(
+    suggestions.length,
+    1,
+    "Sanity check: There should be more than 1 matching suggestion"
+  );
+
+  // Register a test provider that adds a bunch of history results.
+  let otherResults = [];
+  let maxResults = UrlbarPrefs.get("maxRichResults");
+  for (let i = 0; i < maxResults; i++) {
+    otherResults.push(
+      new UrlbarResult(
+        UrlbarUtils.RESULT_TYPE.URL,
+        UrlbarUtils.RESULT_SOURCE.HISTORY,
+        { url: "http://example.com/history/" + i }
+      )
+    );
+  }
+
+  let provider = new UrlbarTestUtils.TestProvider({ results: otherResults });
+  UrlbarProvidersManager.registerProvider(provider);
+
+  // Do a search that matches all the Suggest suggestions and the test
+  // provider's results. The Suggest suggestion(s) should be first since its
+  // `suggestedIndex` is 0.
+  await check_results({
+    context: createContext(searchString, {
+      providers: [UrlbarProviderQuickSuggest.name, provider.name],
+      isPrivate: false,
+    }),
+    matches: [
+      ...expectedSuggestResults,
+      ...otherResults.slice(0, expectedOtherResultsCount),
+    ],
+  });
+
+  UrlbarProvidersManager.unregisterProvider(provider);
+}
 
 add_tasks_with_rust(async function dedupeAgainstURL_samePrefix() {
   await doDedupeAgainstURLTest({

@@ -166,6 +166,7 @@ class Editor extends EventEmitter {
     query: null,
   };
 
+  #abortController;
   // The id for the current source in the editor (selected source). This
   // is used to cache the scroll snapshot for tracking scroll positions.
   #currentDocumentId = null;
@@ -418,7 +419,11 @@ class Editor extends EventEmitter {
       };
 
       env.style.visibility = "hidden";
-      env.addEventListener("load", onLoad, { capture: true, once: true });
+      env.addEventListener("load", onLoad, {
+        capture: true,
+        once: true,
+        signal: this.#abortController?.signal,
+      });
       env.src = CM_IFRAME;
       el.appendChild(env);
 
@@ -427,6 +432,8 @@ class Editor extends EventEmitter {
   }
 
   appendToLocalElement(el) {
+    const win = el.ownerDocument.defaultView;
+    this.#abortController = new win.AbortController();
     if (this.config.cm6) {
       this.#setupCm6(el);
     } else {
@@ -485,42 +492,50 @@ class Editor extends EventEmitter {
     // Disable APZ for source editors. It currently causes the line numbers to
     // "tear off" and swim around on top of the content. Bug 1160601 tracks
     // finding a solution that allows APZ to work with CodeMirror.
-    cm.getScrollerElement().addEventListener("wheel", ev => {
-      // By handling the wheel events ourselves, we force the platform to
-      // scroll synchronously, like it did before APZ. However, we lose smooth
-      // scrolling for users with mouse wheels. This seems acceptible vs.
-      // doing nothing and letting the gutter slide around.
-      ev.preventDefault();
+    cm.getScrollerElement().addEventListener(
+      "wheel",
+      ev => {
+        // By handling the wheel events ourselves, we force the platform to
+        // scroll synchronously, like it did before APZ. However, we lose smooth
+        // scrolling for users with mouse wheels. This seems acceptible vs.
+        // doing nothing and letting the gutter slide around.
+        ev.preventDefault();
 
-      let { deltaX, deltaY } = ev;
+        let { deltaX, deltaY } = ev;
 
-      if (ev.deltaMode == ev.DOM_DELTA_LINE) {
-        deltaX *= cm.defaultCharWidth();
-        deltaY *= cm.defaultTextHeight();
-      } else if (ev.deltaMode == ev.DOM_DELTA_PAGE) {
-        deltaX *= cm.getWrapperElement().clientWidth;
-        deltaY *= cm.getWrapperElement().clientHeight;
-      }
+        if (ev.deltaMode == ev.DOM_DELTA_LINE) {
+          deltaX *= cm.defaultCharWidth();
+          deltaY *= cm.defaultTextHeight();
+        } else if (ev.deltaMode == ev.DOM_DELTA_PAGE) {
+          deltaX *= cm.getWrapperElement().clientWidth;
+          deltaY *= cm.getWrapperElement().clientHeight;
+        }
 
-      cm.getScrollerElement().scrollBy(deltaX, deltaY);
-    });
+        cm.getScrollerElement().scrollBy(deltaX, deltaY);
+      },
+      { signal: this.#abortController?.signal }
+    );
 
-    cm.getWrapperElement().addEventListener("contextmenu", ev => {
-      if (!this.config.contextMenu) {
-        return;
-      }
+    cm.getWrapperElement().addEventListener(
+      "contextmenu",
+      ev => {
+        if (!this.config.contextMenu) {
+          return;
+        }
 
-      ev.stopPropagation();
-      ev.preventDefault();
+        ev.stopPropagation();
+        ev.preventDefault();
 
-      let popup = this.config.contextMenu;
-      if (typeof popup == "string") {
-        popup = this.#ownerDoc.getElementById(this.config.contextMenu);
-      }
+        let popup = this.config.contextMenu;
+        if (typeof popup == "string") {
+          popup = this.#ownerDoc.getElementById(this.config.contextMenu);
+        }
 
-      this.emit("popupOpen", ev, popup);
-      popup.openPopupAtScreen(ev.screenX, ev.screenY, true);
-    });
+        this.emit("popupOpen", ev, popup);
+        popup.openPopupAtScreen(ev.screenX, ev.screenY, true);
+      },
+      { signal: this.#abortController?.signal }
+    );
 
     const pipedEvents = [
       "beforeChange",
@@ -632,8 +647,14 @@ class Editor extends EventEmitter {
 
     const {
       codemirror,
-      codemirrorView: { EditorView, lineNumbers, drawSelection },
-      codemirrorState: { EditorState, Compartment },
+      codemirrorView: {
+        drawSelection,
+        EditorView,
+        keymap,
+        lineNumbers,
+        placeholder,
+      },
+      codemirrorState: { EditorState, Compartment, Prec },
       codemirrorSearch: { highlightSelectionMatches },
       codemirrorLanguage: {
         syntaxTreeAvailable,
@@ -735,6 +756,14 @@ class Editor extends EventEmitter {
       extensions.push(codemirrorLangJavascript.javascript());
     }
 
+    if (this.config.placeholder) {
+      extensions.push(placeholder(this.config.placeholder));
+    }
+
+    if (this.config.keyMap) {
+      extensions.push(Prec.highest(keymap.of(this.config.keyMap)));
+    }
+
     if (Services.prefs.prefHasUserValue(CARET_BLINK_TIME)) {
       // We need to multiply the preference value by 2 to match Firefox cursor rate
       const cursorBlinkRate = Services.prefs.getIntPref(CARET_BLINK_TIME) * 2;
@@ -753,6 +782,11 @@ class Editor extends EventEmitter {
     cm.isDocumentLoadComplete = false;
     this.#ownerDoc.sourceEditor = { editor: this, cm };
     editors.set(this, cm);
+
+    // For now, we only need to pipe the blur event
+    cm.contentDOM.addEventListener("blur", e => this.emit("blur", e), {
+      signal: this.#abortController?.signal,
+    });
   }
 
   /**
@@ -2449,7 +2483,9 @@ class Editor extends EventEmitter {
 
     for (const name in eventsArg) {
       const listener = eventsArg[name].bind(this, line, marker, data);
-      marker.addEventListener(name, listener);
+      marker.addEventListener(name, listener, {
+        signal: this.#abortController?.signal,
+      });
     }
   }
 
@@ -3087,6 +3123,10 @@ class Editor extends EventEmitter {
     if (this.config.cm6 && this.#CodeMirror6) {
       this.#clearEditorDOMEventListeners();
     }
+    if (this.#abortController) {
+      this.#abortController.abort();
+      this.#abortController = null;
+    }
     this.container = null;
     this.config = null;
     this.version = null;
@@ -3262,6 +3302,29 @@ class Editor extends EventEmitter {
       );
     }
     return outputNode.innerHTML;
+  }
+
+  /**
+   * Focus the CodeMirror editor
+   */
+  focus() {
+    const cm = editors.get(this);
+    cm.focus();
+  }
+
+  /**
+   * Select the whole document
+   */
+  selectAll() {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      cm.dispatch({
+        selection: { anchor: 0, head: cm.state.doc.length },
+        userEvent: "select",
+      });
+    } else {
+      cm.execCommand("selectAll");
+    }
   }
 }
 

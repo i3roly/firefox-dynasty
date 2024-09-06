@@ -232,7 +232,7 @@
     <!-- Browser menu button that opens a user's library -->
     <string name="browser_menu_library">Biblioteca</string>
     <!-- Browser menu toggle that requests a desktop site -->
-    <string name="browser_menu_desktop_site">Site do desktop</string>
+    <string name="browser_menu_desktop_site">Site de computador</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
     <string name="browser_menu_open_in_regular_tab">Abrir em aba normal</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
@@ -309,6 +309,8 @@
     <string name="browser_menu_switch_to_mobile_site">Mudar para versão de dispositivos móveis</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Ferramentas</string>
+    <!-- Content description (not visible, for screen readers etc.): Back button for the page tools sub-menu -->
+    <string name="browser_menu_back_button_content_description">Voltar ao menu principal</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate">Modo de leitura, traduzir, imprimir, compartilhar, abrir aplicativo</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -644,8 +646,6 @@
     <string name="toast_override_account_sync_server_done">Modificado o servidor de conta Mozilla e sincronização. Saindo do aplicativo para aplicar as mudanças…</string>
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Conta</string>
-    <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Barra de ferramentas</string>
     <!-- Preference for changing where the AddressBar is positioned -->
     <string name="preferences_toolbar_2">Local da barra de endereços</string>
     <!-- Preference for changing default theme to dark or light mode -->
@@ -949,8 +949,6 @@
     <string name="preference_gestures_website_pull_to_refresh">Atualizar página ao deslizar para baixo desde o topo</string>
     <!-- Preference for using the dynamic toolbar -->
     <string name="preference_gestures_dynamic_toolbar">Ocultar barra de ferramentas ao deslizar para cima</string>
-    <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Mudar de aba ao deslizar a barra de ferramentas para o lado</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Abrir abas ao deslizar a barra de ferramentas para cima</string>
 
@@ -2692,8 +2690,6 @@
     <string name="download_language_all_languages_item_preference_to_delete">Excluir todos os idiomas</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">Excluir</string>
-    <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
-    <string name="download_languages_item_content_description_in_progress_state" moz:removedIn="129" tools:ignore="UnusedResources">Em andamento</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, deleting is in progress. -->
     <string name="download_languages_item_content_description_delete_in_progress_state">Em andamento</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress.
@@ -2745,8 +2741,6 @@
     <string name="download_language_file_dialog_title">Baixar no modo de economia de dados (%1$s)?</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">Partes de idiomas são baixadas no cache para manter a tradução privativa.</string>
-    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">Partes de idiomas são baixadas para manter a tradução privativa.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Sempre baixar no modo de economia de dados</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2809,11 +2803,7 @@
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Avançar</string>
     <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Participe nesta pesquisa de opinião</string>
-    <!-- The survey header -->
     <string name="micro_survey_survey_header_2">Complete a pesquisa de opinião</string>
-    <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Aviso de privacidade</string>
     <!-- The privacy notice link -->
     <string name="micro_survey_privacy_notice_2">Aviso de privacidade</string>
     <!-- The submit button label text -->
@@ -2873,9 +2863,9 @@
 
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture">Para sair do modo de tela inteira, arraste a partir do alto e use o gesto de voltar</string>
+    <string name="exit_fullscreen_with_gesture">Para sair de tela inteira, arraste desde o topo e use o gesto de voltar</string>
     <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button">Para sair do modo de tela inteira, arraste a partir do alto e toque em voltar</string>
+    <string name="exit_fullscreen_with_back_button">Para sair de tela inteira, arraste desde o topo e toque em voltar</string>
 
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->

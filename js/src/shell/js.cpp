@@ -166,8 +166,9 @@
 #include "js/StructuredClone.h"
 #include "js/SweepingAPI.h"
 #include "js/Transcoding.h"  // JS::TranscodeBuffer, JS::TranscodeRange, JS::IsTranscodeFailureResult
-#include "js/Warnings.h"    // JS::SetWarningReporter
-#include "js/WasmModule.h"  // JS::WasmModule
+#include "js/Warnings.h"      // JS::SetWarningReporter
+#include "js/WasmFeatures.h"  // JS_FOR_WASM_FEATURES
+#include "js/WasmModule.h"    // JS::WasmModule
 #include "js/Wrapper.h"
 #include "proxy/DeadObjectProxy.h"  // js::IsDeadProxyObject
 #include "shell/jsoptparse.h"
@@ -11907,10 +11908,27 @@ static bool SetJSPrefToValue(const char* name, size_t nameLen,
   return false;
 }
 
+static bool IsJSPrefAvailable(const char* pref) {
+  if (!fuzzingSafe) {
+    // All prefs in fuzzing unsafe mode are enabled.
+    return true;
+  }
+#define WASM_FEATURE(NAME, LOWER_NAME, COMPILE_PRED, COMPILER_PRED, FLAG_PRED, \
+                     FLAG_FORCE_ON, FLAG_FUZZ_ON, PREF)                        \
+  if constexpr (!FLAG_FUZZ_ON) {                                               \
+    if (strcmp("wasm_" #PREF, pref) == 0) {                                    \
+      return false;                                                            \
+    }                                                                          \
+  }
+  JS_FOR_WASM_FEATURES(WASM_FEATURE)
+#undef WASM_FEATURE
+  return true;
+}
+
 static bool SetJSPref(const char* pref) {
   const char* assign = strchr(pref, '=');
   if (!assign) {
-    if (!SetJSPrefToTrueForBool(pref)) {
+    if (IsJSPrefAvailable(pref) && !SetJSPrefToTrueForBool(pref)) {
       return false;
     }
     return true;
@@ -11919,7 +11937,7 @@ static bool SetJSPref(const char* pref) {
   size_t nameLen = assign - pref;
   const char* valStart = assign + 1;  // Skip '='.
 
-  if (!SetJSPrefToValue(pref, nameLen, valStart)) {
+  if (IsJSPrefAvailable(pref) && !SetJSPrefToValue(pref, nameLen, valStart)) {
     return false;
   }
   return true;
@@ -11927,6 +11945,9 @@ static bool SetJSPref(const char* pref) {
 
 static void ListJSPrefs() {
   auto printPref = [](const char* name, auto defaultVal) {
+    if (!IsJSPrefAvailable(name)) {
+      return;
+    }
     using T = decltype(defaultVal);
     if constexpr (std::is_same_v<T, bool>) {
       fprintf(stderr, "%s=%s\n", name, defaultVal ? "true" : "false");
@@ -12738,15 +12759,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
     JS::Prefs::setAtStartup_experimental_regexp_escape(true);
   }
 #endif
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
   if (op.getBoolOption("enable-json-parse-with-source")) {
     JS::Prefs::set_experimental_json_parse_with_source(true);
   }
-#else
-  if (op.getBoolOption("enable-json-parse-with-source")) {
-    fprintf(stderr, "JSON.parse with source is not enabled on this build.\n");
-  }
-#endif
 
   if (op.getBoolOption("disable-weak-refs")) {
     JS::Prefs::setAtStartup_weakrefs(false);

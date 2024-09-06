@@ -403,15 +403,36 @@ wasi-sdk:
         repo: https://github.com/WebAssembly/wasi-sdk
         revision: 935fe1acd2fcd7ea4aed2d5ee4527482862b6344
 
-ninja:
-    description: ninja 1.9.0
+macosx64-ninja:
+    description: ninja 1.12.1
     fetch:
         type: static-url
-        url: https://github.com/ninja-build/ninja/releases/download/v1.9.0/ninja-win.zip
-        sha256: 2d70010633ddaacc3af4ffbd21e22fae90d158674a09e132e06424ba3ab036e9
-        size: 254497
+        url: https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-mac.zip
+        sha256: 89a287444b5b3e98f88a945afa50ce937b8ffd1dcc59c555ad9b1baf855298c9
+        size: 281130
         artifact-name: ninja.tar.zst
         add-prefix: ninja/bin/
+
+win64-ninja:
+    description: ninja 1.12.1
+    fetch:
+        type: static-url
+        url: https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+        sha256: f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a
+        size: 275425
+        artifact-name: ninja.tar.zst
+        add-prefix: ninja/bin/
+
+macosx64-cmake:
+    description: cmake 3.25.1
+    fetch:
+        type: static-url
+        url: https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1-macos-universal.tar.gz
+        sha256: e95e75ea506189785355a7e8dd86b059780a5613b9e62ab6e7419d6bfba3510b
+        size: 74418897
+        artifact-name: cmake.tar.zst
+        strip-components: 3
+        add-prefix: cmake/
 
 cmake:
     description: cmake 3.25.1 source code

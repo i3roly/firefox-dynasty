@@ -21,16 +21,9 @@ const yesterday = new Date(
   today.getDate() - 1
 );
 
-// Set the date for the first day of the last month
-const lastMonth = new Date(today);
-lastMonth.setDate(1);
-if (lastMonth.getMonth() === 0) {
-  // If today's date is in January, use first day in December from the previous year
-  lastMonth.setMonth(11);
-  lastMonth.setFullYear(lastMonth.getFullYear() - 1);
-} else {
-  lastMonth.setMonth(lastMonth.getMonth() - 1);
-}
+// Get date for the second-last day of the previous month.
+// (Do not use the last day, since that could be the same as yesterday's date.)
+const lastMonth = new Date(today.getFullYear(), today.getMonth(), -1);
 
 const dates = [today, yesterday, lastMonth];
 
@@ -93,6 +86,18 @@ add_task(async function test_history_cards_created() {
       "Card shows the correct number of visits."
     );
   }
+});
+
+add_task(async function test_history_searchbox_focus() {
+  const { component } = await showHistorySidebar();
+  const { searchTextbox } = component;
+
+  ok(component.shadowRoot.activeElement, "check activeElement is present");
+  Assert.equal(
+    component.shadowRoot.activeElement,
+    searchTextbox,
+    "Check search box is focused"
+  );
 });
 
 add_task(async function test_history_search() {

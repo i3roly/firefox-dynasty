@@ -29,18 +29,7 @@ ChromeUtils.defineESModuleGetters(this, {
     "resource://gre/modules/components-utils/WindowsVersionInfo.sys.mjs",
 });
 
-let osVersion = Services.sysinfo.get("version");
-if (AppConstants.platform == "macosx") {
-  // Convert Darwin version to macOS version: 19.x.x -> 10.15 etc.
-  // https://en.wikipedia.org/wiki/Darwin_%28operating_system%29
-  let DarwinVersionParts = osVersion.split(".");
-  let DarwinMajorVersion = +DarwinVersionParts[0];
-  let macOsMinorVersion = DarwinMajorVersion - 4;
-  if (macOsMinorVersion > 15) {
-    macOsMinorVersion = 15;
-  }
-  osVersion = `10.${macOsMinorVersion}`;
-}
+const osVersion = Services.sysinfo.get("version");
 
 const DEFAULT_APPVERSION = {
   linux: "5.0 (X11)",
@@ -60,34 +49,35 @@ const SPOOFED_APPVERSION = {
 
 let cpuArch = Services.sysinfo.get("arch");
 if (cpuArch == "x86-64") {
-  // Convert CPU arch "x86-64" to "x86_64" used in Linux and Android UAs.
-  cpuArch = "x86_64";
+    // Convert CPU arch "x86-64" to "x86_64" used in Linux and Android UAs.
+    cpuArch = "x86_64";
 }
 
 // Hard code the User-Agent string's CPU arch on Android, Linux, and other
 // Unix-like platforms. This pref can be removed after we're confident there
 // are no webcompat problems.
 const freezeCpu = Services.prefs.getBoolPref(
-  "network.http.useragent.freezeCpu",
-  false
-);
+                                             "network.http.useragent.freezeCpu",
+                                             false
+                                             );
 
 let defaultLinuxCpu;
 if (freezeCpu) {
-  defaultLinuxCpu = AppConstants.platform == "android" ? "armv81" : "x86_64";
+    defaultLinuxCpu = AppConstants.platform == "android" ? "armv81" : "x86_64";
 } else {
-  defaultLinuxCpu = cpuArch;
+    defaultLinuxCpu = cpuArch;
 }
 
 const DEFAULT_PLATFORM = {
-  linux: `Linux ${defaultLinuxCpu}`,
-  win: "Win32",
-  macosx: "MacIntel",
-  android: `Linux ${defaultLinuxCpu}`,
-  other: `Linux ${defaultLinuxCpu}`,
+linux: `Linux ${defaultLinuxCpu}`,
+win: "Win32",
+macosx: "MacIntel",
+android: `Linux ${defaultLinuxCpu}`,
+other: `Linux ${defaultLinuxCpu}`,
 };
 
-const SPOOFED_PLATFORM = {
+
+const DEFAULT_PLATFORM = {
   linux: "Linux x86_64",
   win: "Win32",
   macosx: "MacIntel",
@@ -101,10 +91,11 @@ const SPOOFED_PLATFORM = {
 const WindowsOscpuPromise = (async () => {
   let WindowsOscpu = null;
   if (AppConstants.platform == "win") {
+    let cpuArch = Services.sysinfo.get("arch");
     let isWin11 = WindowsVersionInfo.get().buildNumber >= 22000;
     let isWow64 = (await Services.sysinfo.processInfo).isWow64;
     WindowsOscpu =
-      cpuArch == "x86_64" || isWow64 || (cpuArch == "aarch64" && isWin11)
+      cpuArch == "x86-64" || isWow64 || (cpuArch == "aarch64" && isWin11)
         ? "Windows NT 10.0; Win64; x64"
         : "Windows NT 10.0";
   }
@@ -354,7 +345,7 @@ add_setup(async () => {
     hardwareConcurrency: SPOOFED_HW_CONCURRENCY,
     mimeTypesLength: 2,
     oscpu: SPOOFED_OSCPU[AppConstants.platform],
-    platform: SPOOFED_PLATFORM[AppConstants.platform],
+    platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
     userAgentNavigator: spoofedUserAgentNavigator,
     userAgentHTTPHeader: spoofedUserAgentHeader,

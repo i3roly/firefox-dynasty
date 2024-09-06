@@ -28,7 +28,7 @@ skip-if = [
 ]
 
 ["browser_bfcache_exemption_about_pages.js"]
-skip-if = ["!fission"]
+run-if = ["fission"]
 
 ["browser_blank_tab_label.js"]
 
@@ -190,7 +190,7 @@ https_first_disabled = true
 ["browser_multiselect_tabs_using_Shift_and_Ctrl.js"]
 
 ["browser_multiselect_tabs_using_keyboard.js"]
-skip-if = ["os == 'mac'"] # Skipped because macOS keyboard support requires changing system settings
+run-if = ["os != 'mac'"] # Skipped because macOS keyboard support requires changing system settings
 
 ["browser_multiselect_tabs_using_selectedTabs.js"]
 
@@ -326,8 +326,6 @@ skip-if = ["true"] # Bug 1616418 Bug 1549985
 
 ["browser_tab_manager_keyboard_access.js"]
 skip-if = ["true"] # Bug 1900477
-
-["browser_tab_manager_visibility.js"]
 
 ["browser_tab_move_to_new_window_reload.js"]
 

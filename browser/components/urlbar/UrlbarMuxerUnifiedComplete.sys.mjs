@@ -283,28 +283,31 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
     let suggestedIndexAvailableSpan = 0;
     let suggestedIndexAvailableCount = 0;
     if ("group" in group) {
-      suggestedIndexResults = state.suggestedIndexResultsByGroup.get(
-        group.group
-      );
-      if (suggestedIndexResults) {
+      let results = state.suggestedIndexResultsByGroup.get(group.group);
+      if (results) {
         // Subtract them from the group's limits so there will be room for them
-        // later. Create a new `limits` object so we don't modify the caller's.
-        let [span, resultCount] = suggestedIndexResults.reduce(
-          ([sum, count], result) => {
+        // later. Discard results that can't be added.
+        let span = 0;
+        let resultCount = 0;
+        for (let result of results) {
+          if (this._canAddResult(result, state)) {
+            suggestedIndexResults ??= [];
+            suggestedIndexResults.push(result);
             const spanSize = UrlbarUtils.getSpanForResult(result);
-            sum += spanSize;
+            span += spanSize;
             if (spanSize) {
-              count++;
+              resultCount++;
             }
-            return [sum, count];
-          },
-          [0, 0]
-        );
+          }
+        }
+
         suggestedIndexAvailableSpan = Math.min(limits.availableSpan, span);
         suggestedIndexAvailableCount = Math.min(
           limits.maxResultCount,
           resultCount
         );
+
+        // Create a new `limits` object so we don't modify the caller's.
         limits = { ...limits };
         limits.availableSpan -= suggestedIndexAvailableSpan;
         limits.maxResultCount -= suggestedIndexAvailableCount;
@@ -684,16 +687,22 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
   // error or increase the complexity threshold.
   // eslint-disable-next-line complexity
   _canAddResult(result, state) {
-    // The first Suggest result is always shown unless a weather result is also
-    // present or it's a navigational suggestion that duplicates the heuristic.
+    // Typically the first visible Suggest result is always added.
     if (result.providerName == lazy.UrlbarProviderQuickSuggest.name) {
+      if (result.isHiddenExposure) {
+        // Always allow hidden exposure Suggest results.
+        return true;
+      }
+
       if (
         state.weatherResult ||
         (state.quickSuggestResult && state.quickSuggestResult != result)
       ) {
+        // A Suggest result was already added.
         return false;
       }
 
+      // Don't add navigational suggestions that dupe the heuristic.
       let heuristicUrl = state.context.heuristicResult?.payload.url;
       if (
         heuristicUrl &&
@@ -711,6 +720,7 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
           UrlbarUtils.stripPrefixAndTrim(result.payload.url, opts)[0];
         return !result.payload.dupedHeuristic;
       }
+
       return true;
     }
 

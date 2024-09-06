@@ -329,7 +329,7 @@
 
 -   name: android.touch_resampling.enabled
     type: RelaxedAtomicBool
-    value: true
+    value: false
     mirror: always
 
 #endif
@@ -4458,6 +4458,15 @@
   type: RelaxedAtomicBool
   value: false
   mirror: always
+  rust: true
+
+# Timeout for view transitions.
+# TODO(emilio): Figure out the right time-out, Blink uses between 4 and 15
+# seconds.
+- name: dom.viewTransitions.timeout-ms
+  type: uint32_t
+  value: 10000
+  mirror: always
 
 # Is support for WebVR APIs enabled?
 # Disabled everywhere, but not removed.
@@ -8073,13 +8082,11 @@
     set_spidermonkey_pref: startup
 #endif  // NIGHTLY_BUILD
 
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
 -   name: javascript.options.experimental.json_parse_with_source
     type: bool
-    value: false
+    value: true
     mirror: always
     set_spidermonkey_pref: always
-#endif  // ENABLE_JSON_PARSE_WITH_SOURCE
 
 - name: javascript.options.wasm_caching
   type: bool
@@ -8116,13 +8123,10 @@
 # appropriate pref is set.
 - name: javascript.options.gc_on_memory_pressure
   type: bool
-#if defined(MOZ_WIDGET_ANDROID)
-  # We will enable the JS engine's GC on memory pressure on Nightly to observe its performance
-  # impact and then decide to ride the trains or not. See bug 1450787.
-  value: @IS_NIGHTLY_BUILD@
-#else
-  value: true
-#endif
+  # Disable the JS engine's GC on memory pressure on Android for now to continue investigating its
+  # performance impacts and then decide to enable it or not.
+  # See bug 1450787.
+  value: @IS_NOT_ANDROID@
   mirror: always
 
 # We allow at most MIN(max, MAX(NUM_CPUS / cpu_divisor, 1)) concurrent GCs
@@ -12253,7 +12257,7 @@
 # false=allow onion referer, true=hide onion referer (use empty referer).
 - name: network.http.referer.hideOnionSource
   type: bool
-  value: false
+  value: true
   mirror: always
 
 # Include an origin header on non-GET and non-HEAD requests regardless of CORS.
@@ -12409,22 +12413,6 @@
   value: false
   mirror: always
 
-# Hard code the User-Agent string's CPU architecture. This pref can be removed
-# after we're confident there are no webcompat problems.
-#
-# Enable for:
-# * Android (any architecture)
-# * Linux (any architecture)
-# * Other Unix-like platforms except macOS (any architecture)
-- name: network.http.useragent.freezeCpu
-  type: bool
-#if defined(XP_UNIX) && !defined(XP_MACOSX)
-  value: true
-#else
-  value: false
-#endif
-  mirror: always
-
 # Whether or not we use Windows for SSO to Microsoft sites.
 - name: network.http.windows-sso.enabled
   type: RelaxedAtomicBool
@@ -12471,7 +12459,11 @@
 # NS_HTTP_LARGE_KEEPALIVE flag is used for a connection
 - name: network.http.largeKeepaliveFactor
   type: RelaxedAtomicUint32
+#if defined(ANDROID)
   value: 10
+#else
+  value: 20
+#endif
   mirror: always
 
 # Max size, in bytes, for received HTTP response header.
@@ -13174,6 +13166,13 @@
 - name: network.http.tailing.enabled
   type: bool
   value: true
+  mirror: always
+
+# When true, the default Accept request header will include the supported mime
+# types for images.
+- name: network.http.accept_include_images
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 # Whether to run proxy checks when processing Alt-Svc headers.
@@ -15473,7 +15472,11 @@
 # 1: Only collect telemetry. CT qualification checks are not performed.
 - name: security.pki.certificate_transparency.mode
   type: RelaxedAtomicUint32
+#ifdef NIGHTLY_BUILD
+  value: 1
+#else
   value: 0
+#endif
   mirror: always
 
 # 0: Disable CRLite entirely.
@@ -16484,9 +16487,9 @@
   value: true
   mirror: always
 
-- name: webgl.colorspaces.prototype
+- name: webgl.drawing_buffer_color_space
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 - name: webgl.debug.incomplete-tex-color

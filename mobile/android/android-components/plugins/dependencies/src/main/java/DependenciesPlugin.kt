@@ -30,11 +30,11 @@ object Versions {
     const val okio = "3.9.0"
     const val androidsvg = "1.4"
 
-    const val android_gradle_plugin = "8.4.2"
+    const val android_gradle_plugin = "8.6.0"
 
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
-    const val lint = "31.4.2"
+    const val lint = "31.6.0"
     const val detekt = "1.23.6"
     const val ktlint = "0.49.1"
 
@@ -53,7 +53,7 @@ object Versions {
     const val compose_compiler = "1.5.14"
 
     object AndroidX {
-        const val activity = "1.9.1"
+        const val activity = "1.9.2"
         const val annotation = "1.8.2"
         const val appcompat = "1.7.0"
         const val autofill = "1.1.0"
@@ -67,14 +67,14 @@ object Versions {
         const val coordinatorlayout = "1.2.0"
         const val core = "1.13.1"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.8.2"
+        const val fragment = "1.8.3"
         const val recyclerview = "1.3.2"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"
         const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
-        const val lifecycle = "2.8.4"
+        const val lifecycle = "2.8.5"
         const val media = "1.7.0"
         const val navigation = "2.7.7"
         const val transition = "1.5.1"
