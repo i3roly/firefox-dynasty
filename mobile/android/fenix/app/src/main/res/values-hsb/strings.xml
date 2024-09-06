@@ -305,6 +305,8 @@
     <string name="browser_menu_switch_to_mobile_site">K mobilnemu sydłu</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Nastroje</string>
+    <!-- Content description (not visible, for screen readers etc.): Back button for the page tools sub-menu -->
+    <string name="browser_menu_back_button_content_description">Wróćo k hłownemu menijej</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate">Čitanski napohlad, přełožić, ćišćeć, dźělić, nałoženje wočinić</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -336,6 +338,13 @@
     <!-- Browser menu label for the Delete browsing data on quit feature.
         The first parameter is the name of the app defined in app_name (for example: Fenix). -->
     <string name="browser_menu_delete_browsing_data_on_quit">%1$s skónčić</string>
+
+    <!-- Menu "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_title">Nowy: zjednorjeny meni</string>
+
+    <!-- Text for the message in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_body">Namakajće, štož spěšnišo trjebaće, wot priwatneho přehladowanja do składowanskich akcijow.</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -571,6 +580,8 @@
     <string name="cookie_banner_handling_details_site_is_not_supported_request_support_button_3">Prašeć so, hač so ma sydło přidać</string>
     <!-- Text for title indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. -->
     <string name="cookie_banner_handling_details_site_is_not_supported_title_2" moz:RemovedIn="130" tools:ignore="UnusedResources">Wo podpěru za tute sydło prosyć?</string>
+    <!-- Text for title indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. The first parameter is the application name -->
+    <string name="cookie_banner_handling_details_site_is_not_supported_title_3">%1$s prosyć, placki awtomatisce wotpokazać</string>
     <!-- Label for the snackBar, after the user reports with success a website where cookie banner reducer did not work -->
     <string name="cookie_banner_handling_report_site_snack_bar_text_2">Naprašowanje pósłane</string>
     <!-- Text for indicating cookie banner handling is on this site, this is shown as part of the protections panel with the tracking protection toggle -->
@@ -587,6 +598,8 @@
     <string name="reduce_cookie_banner_details_panel_title_off_for_site_1">Blokowak plackowych chorhojow za %1$s znjemóžnić?</string>
     <!-- Title text for a detail explanation indicating cookie banner reducer didn't work for the current site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name-->
     <string name="reduce_cookie_banner_details_panel_title_unsupported_site_request_2" moz:RemovedIn="130" tools:ignore="UnusedResources">%1$s njemóže plackowe naprašowanja na tutym sydle awtomatisce wotpokazać. Móžeće próstwu wo podpěru tutoho sydła w přichodźe pósłać.</string>
+    <!-- Title text for a detail explanation indicating cookie banner reducer didn't work for the current site, this is shown as part of the cookie banner panel in the toolbar.-->
+    <string name="reduce_cookie_banner_details_panel_title_unsupported_site_request_3">Tuchwilu njemóžemy plackowe wuskakowace wokna na tutym sydle awtomatisce wotpokazać.</string>
     <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is off for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
     <string name="reduce_cookie_banner_details_panel_description_off_for_site_1">Při znjemóžnjenju %1$s placki zhaša a tute sydło znowa začita. To móže was wotzjewić abo nakupowanske koše wuprózdnić.</string>
     <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is on for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
@@ -627,8 +640,6 @@
     <string name="toast_override_account_sync_server_done">Kontowy resp. synchronizowanski serwer Mozilla je so změnił. Nałoženje so kónči, zo bychu so změny nałožili…</string>
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Konto</string>
-    <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Symbolowa lajsta</string>
     <!-- Preference for changing where the AddressBar is positioned -->
     <string name="preferences_toolbar_2">Městno adresoweho pola</string>
     <!-- Preference for changing default theme to dark or light mode -->
@@ -934,8 +945,6 @@
     <!-- Preference for using the dynamic toolbar -->
     <string name="preference_gestures_dynamic_toolbar">Kulće, zo byšće symbolowu lajstu schował</string>
 
-    <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Trějće symbolowu lajstu nabok, zo byšće rajtarki přepinał</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Trějće symbolowu lajstu horje, zo byšće rajtarki wočinił</string>
 
@@ -2676,8 +2685,6 @@ To budźe jenož pomhać, kwalitu pohódnoćenjow posudźić, nic kwalitu produk
     <string name="download_language_all_languages_item_preference_to_delete">Wšě rěče zhašeć</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">Zhašeć</string>
-    <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
-    <string name="download_languages_item_content_description_in_progress_state" moz:removedIn="129" tools:ignore="UnusedResources">Běži</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, deleting is in progress. -->
     <string name="download_languages_item_content_description_delete_in_progress_state">Běži</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress.
@@ -2729,8 +2736,6 @@ To budźe jenož pomhać, kwalitu pohódnoćenjow posudźić, nic kwalitu produk
     <string name="download_language_file_dialog_title">W datowym lutowanskim modusu sćahnyć (%1$s)?</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">Sćahujemy dźělne rěče do wašeho cache, zo byšće přełožki priwatne dźerželi.</string>
-    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">Sćahujemy dźělne rěče, zo bychmy přełožki priwatne dźerželi.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Přeco w datowym lutowanskim modusu sćahnyć</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2793,11 +2798,7 @@ To budźe jenož pomhać, kwalitu pohódnoćenjow posudźić, nic kwalitu produk
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Dale</string>
     <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Tute naprašowanje dokónčić</string>
-    <!-- The survey header -->
     <string name="micro_survey_survey_header_2">Prošu dokónčće naprašowanje</string>
-    <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Zdźělenka priwatnosće</string>
     <!-- The privacy notice link -->
     <string name="micro_survey_privacy_notice_2">Zdźělenka priwatnosće</string>
     <!-- The submit button label text -->
