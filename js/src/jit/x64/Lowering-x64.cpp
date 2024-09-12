@@ -501,18 +501,22 @@ void LIRGeneratorX64::lowerUModI64(MMod* mod) {
   defineInt64Fixed(lir, mod, LInt64Allocation(LAllocation(AnyRegister(rdx))));
 }
 
-void LIRGeneratorX64::lowerBigIntDiv(MBigIntDiv* ins) {
-  auto* lir = new (alloc()) LBigIntDiv(
-      useRegister(ins->lhs()), useRegister(ins->rhs()), tempFixed(rax), temp());
-  defineFixed(lir, ins, LAllocation(AnyRegister(rdx)));
-  assignSafepoint(lir, ins);
+void LIRGeneratorX64::lowerBigIntPtrDiv(MBigIntPtrDiv* ins) {
+  auto* lir = new (alloc())
+      LBigIntPtrDiv(useRegister(ins->lhs()), useRegister(ins->rhs()),
+                    tempFixed(rdx), LDefinition::BogusTemp());
+  assignSnapshot(lir, ins->bailoutKind());
+  defineFixed(lir, ins, LAllocation(AnyRegister(rax)));
 }
 
-void LIRGeneratorX64::lowerBigIntMod(MBigIntMod* ins) {
-  auto* lir = new (alloc()) LBigIntMod(
-      useRegister(ins->lhs()), useRegister(ins->rhs()), tempFixed(rax), temp());
+void LIRGeneratorX64::lowerBigIntPtrMod(MBigIntPtrMod* ins) {
+  auto* lir = new (alloc())
+      LBigIntPtrMod(useRegister(ins->lhs()), useRegister(ins->rhs()),
+                    tempFixed(rax), LDefinition::BogusTemp());
+  if (ins->canBeDivideByZero()) {
+    assignSnapshot(lir, ins->bailoutKind());
+  }
   defineFixed(lir, ins, LAllocation(AnyRegister(rdx)));
-  assignSafepoint(lir, ins);
 }
 
 void LIRGenerator::visitWasmTruncateToInt64(MWasmTruncateToInt64* ins) {

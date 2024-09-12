@@ -9,6 +9,9 @@
 #include "jsapi.h"
 #include "jsfriendapi.h"
 
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+#  include "builtin/AsyncDisposableStackObject.h"
+#endif
 #include "builtin/AtomicsObject.h"
 #include "builtin/BigInt.h"
 #include "builtin/DataViewObject.h"
@@ -143,6 +146,7 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
     case JSProto_SuppressedError:
     case JSProto_DisposableStack:
+    case JSProto_AsyncDisposableStack:
 #endif
     case JSProto_EvalError:
     case JSProto_RangeError:
@@ -598,13 +602,25 @@ GlobalObject* GlobalObject::createInternal(JSContext* cx,
   MOZ_ASSERT(clasp->flags & JSCLASS_IS_GLOBAL);
   MOZ_ASSERT(clasp->isTrace(JS_GlobalObjectTraceHook));
 
-  JSObject* obj = NewTenuredObjectWithGivenProto(cx, clasp, nullptr);
+  ObjectFlags objectFlags = {
+      ObjectFlag::QualifiedVarObj,
+      ObjectFlag::GenerationCountedGlobal,
+  };
+
+  JSObject* obj =
+      NewTenuredObjectWithGivenProto(cx, clasp, nullptr, objectFlags);
   if (!obj) {
     return nullptr;
   }
 
   Rooted<GlobalObject*> global(cx, &obj->as<GlobalObject>());
+
+  // Global holds both variables qualified with `var` and those that are not.
   MOZ_ASSERT(global->isUnqualifiedVarObj());
+  MOZ_ASSERT(global->isQualifiedVarObj());
+
+  // Global objects support generation counts.
+  MOZ_ASSERT(global->isGenerationCountedGlobal());
 
   {
     auto data = cx->make_unique<GlobalObjectData>(cx->zone());
@@ -634,13 +650,6 @@ GlobalObject* GlobalObject::createInternal(JSContext* cx,
   global->data().emptyGlobalScope.init(emptyGlobalScope);
 
   if (!GlobalObject::createIntrinsicsHolder(cx, global)) {
-    return nullptr;
-  }
-
-  if (!JSObject::setQualifiedVarObj(cx, global)) {
-    return nullptr;
-  }
-  if (!JSObject::setGenerationCountedGlobal(cx, global)) {
     return nullptr;
   }
 

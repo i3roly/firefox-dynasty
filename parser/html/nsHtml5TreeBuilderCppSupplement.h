@@ -1210,16 +1210,18 @@ void nsHtml5TreeBuilder::elementPushed(int32_t aNamespace, nsAtom* aName,
    * reasons.
    */
 
-  if (isInSVGOddPCData) {
+  if (MOZ_UNLIKELY(isInSVGOddPCData)) {
     // We are seeing an element that has children, which could not have child
     // elements in HTML, i.e., is parsed as PCDATA in SVG but CDATA in HTML.
     mozilla::glean::parsing::svg_unusual_pcdata.AddToNumerator(1);
   }
-  if ((aName == nsGkAtoms::style) || (aName == nsGkAtoms::xmp) ||
-      (aName == nsGkAtoms::iframe) || (aName == nsGkAtoms::noembed) ||
-      (aName == nsGkAtoms::noframes) || (aName == nsGkAtoms::noscript) ||
-      (aName == nsGkAtoms::script)) {
-    isInSVGOddPCData++;
+  if (MOZ_UNLIKELY(aNamespace == kNameSpaceID_SVG)) {
+    if ((aName == nsGkAtoms::style) || (aName == nsGkAtoms::xmp) ||
+        (aName == nsGkAtoms::iframe) || (aName == nsGkAtoms::noembed) ||
+        (aName == nsGkAtoms::noframes) || (aName == nsGkAtoms::noscript) ||
+        (aName == nsGkAtoms::script)) {
+      isInSVGOddPCData++;
+    }
   }
 
   if (aNamespace != kNameSpaceID_XHTML) {
@@ -1271,7 +1273,7 @@ void nsHtml5TreeBuilder::elementPopped(int32_t aNamespace, nsAtom* aName,
   if (aNamespace == kNameSpaceID_MathML) {
     return;
   }
-  if (aNamespace == kNameSpaceID_SVG) {
+  if (MOZ_UNLIKELY(aNamespace == kNameSpaceID_SVG)) {
     if ((aName == nsGkAtoms::style) || (aName == nsGkAtoms::xmp) ||
         (aName == nsGkAtoms::iframe) || (aName == nsGkAtoms::noembed) ||
         (aName == nsGkAtoms::noframes) || (aName == nsGkAtoms::noscript) ||

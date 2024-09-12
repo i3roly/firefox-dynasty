@@ -4899,7 +4899,7 @@
 
 - name: dom.webnotifications.silent.enabled
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 - name: dom.webnotifications.vibrate.enabled
@@ -8080,6 +8080,14 @@
     value: false
     mirror: always
     set_spidermonkey_pref: startup
+
+  # Experimental support for Promise.try in JavaScript.
+-   name: javascript.options.experimental.promise_try
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
 #endif  // NIGHTLY_BUILD
 
 -   name: javascript.options.experimental.json_parse_with_source
@@ -8450,15 +8458,9 @@
 # Instead, use gfxConfig::IsEnabled(Feature::HW_COMPOSITING).
 
 # Whether to force acceleration on, ignoring blacklists.
-
-# bug 838603 -- on Android, accidentally blacklisting OpenGL layers
-# means a startup crash for everyone.
-# Temporarily force-enable GL compositing.  This is default-disabled
-# deep within the bowels of the widgetry system.  Remove me when GL
-# compositing isn't default disabled in widget/android.
 - name: layers.acceleration.force-enabled
   type: bool
-  value: @IS_ANDROID@
+  value: false
   mirror: once
   do_not_use_directly: true
 
@@ -11448,11 +11450,9 @@
 # In this mode, camera and microphone device labels are exposed if the site has a
 # persisted permission to either kind, as well as while actively capturing either
 # kind (temporary and tab-specific grace-period permissions do not count).
-#
-# Planned next steps: true → @IS_NOT_NIGHTLY_BUILD@ → false
 - name: media.devices.enumerate.legacy.enabled
   type: bool
-  value: @IS_NOT_EARLY_BETA_OR_EARLIER@
+  value: false
   mirror: always
 
 # WebRTC prefs follow
@@ -12103,7 +12103,7 @@
 # Changes cookieBehavior=5 to block third-party cookies by default
 - name: network.cookie.cookieBehavior.optInPartitioning
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Changes cookieBehavior=5 to block third-party cookies in the private browsing
@@ -13555,11 +13555,6 @@
   value: true
   mirror: always
 
-- name: network.url.strict_protocol_setter
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-
 # When true, if all the cyrillic characters in a label
 # are latin confusables and on a non-cyrillic domain
 # the label will be displayed as punycode.
@@ -13641,7 +13636,7 @@
 
 - name: network.http.http2.allow-push
   type: RelaxedAtomicBool
-  value: true
+  value: false
   mirror: always
 
 - name: network.http.http2.push-allowance
@@ -13703,6 +13698,14 @@
   value: @IS_NOT_NIGHTLY_BUILD@
 #endif
   mirror: always
+
+# Send and receive IP ECN marks. Noop if network.http.http3.use_nspr_for_io is
+# true.
+- name: network.http.http3.ecn
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  rust: true
 
 - name: network.http.http3.enable_qlog
   type: RelaxedAtomicBool
@@ -14200,7 +14203,7 @@
 # Is support for Permissions.query enabled for camera and microphone?
 - name: permissions.media.query.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -14393,7 +14396,7 @@
 # be used instead.
 - name: privacy.annotate_channels.strict_list.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: false
   mirror: always
 
 # Annotate trackers using the strict list in the private browsing mode. If set

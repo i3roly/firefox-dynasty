@@ -362,32 +362,20 @@ void LIRGeneratorLOONG64::lowerPowOfTwoI(MPow* mir) {
   define(lir, mir);
 }
 
-void LIRGeneratorLOONG64::lowerBigIntDiv(MBigIntDiv* ins) {
-  auto* lir = new (alloc()) LBigIntDiv(useRegister(ins->lhs()),
-                                       useRegister(ins->rhs()), temp(), temp());
-  define(lir, ins);
-  assignSafepoint(lir, ins);
+void LIRGeneratorLOONG64::lowerBigIntPtrLsh(MBigIntPtrLsh* ins) {
+  MOZ_CRASH("NYI");
 }
 
-void LIRGeneratorLOONG64::lowerBigIntMod(MBigIntMod* ins) {
-  auto* lir = new (alloc()) LBigIntMod(useRegister(ins->lhs()),
-                                       useRegister(ins->rhs()), temp(), temp());
-  define(lir, ins);
-  assignSafepoint(lir, ins);
+void LIRGeneratorLOONG64::lowerBigIntPtrRsh(MBigIntPtrRsh* ins) {
+  MOZ_CRASH("NYI");
 }
 
-void LIRGeneratorLOONG64::lowerBigIntLsh(MBigIntLsh* ins) {
-  auto* lir = new (alloc()) LBigIntLsh(
-      useRegister(ins->lhs()), useRegister(ins->rhs()), temp(), temp(), temp());
-  define(lir, ins);
-  assignSafepoint(lir, ins);
+void LIRGeneratorLOONG64::lowerBigIntPtrDiv(MBigIntPtrDiv* ins) {
+  MOZ_CRASH("NYI");
 }
 
-void LIRGeneratorLOONG64::lowerBigIntRsh(MBigIntRsh* ins) {
-  auto* lir = new (alloc()) LBigIntRsh(
-      useRegister(ins->lhs()), useRegister(ins->rhs()), temp(), temp(), temp());
-  define(lir, ins);
-  assignSafepoint(lir, ins);
+void LIRGeneratorLOONG64::lowerBigIntPtrMod(MBigIntPtrMod* ins) {
+  MOZ_CRASH("NYI");
 }
 
 void LIRGeneratorLOONG64::lowerTruncateDToInt32(MTruncateToInt32* ins) {

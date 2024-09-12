@@ -15,6 +15,7 @@
 #include "mozilla/gfx/Types.h"
 #include "mozilla/TypedEnumBits.h"
 #include "mozilla/dom/MediaDeviceInfoBinding.h"
+#include "mozilla/dom/ScreenOrientationBinding.h"
 #include "js/RealmOptions.h"
 #include "nsHashtablesFwd.h"
 #include "nsICookieJarSettings.h"
@@ -34,20 +35,24 @@
 #  define SPOOFED_UA_OS "Windows NT 10.0; Win64; x64"
 #  define SPOOFED_APPVERSION "5.0 (Windows)"
 #  define SPOOFED_OSCPU "Windows NT 10.0; Win64; x64"
+#  define SPOOFED_MAX_TOUCH_POINTS 10
 #elif defined(XP_MACOSX)
 #  define SPOOFED_UA_OS "Macintosh; Intel Mac OS X 10.15"
 #  define SPOOFED_APPVERSION "5.0 (Macintosh)"
 #  define SPOOFED_OSCPU "Intel Mac OS X 10.15"
+#  define SPOOFED_MAX_TOUCH_POINTS 0
 #elif defined(MOZ_WIDGET_ANDROID)
 #  define SPOOFED_UA_OS "Android 10; Mobile"
 #  define SPOOFED_APPVERSION "5.0 (Android 10)"
 #  define SPOOFED_OSCPU "Linux armv81"
+#  define SPOOFED_MAX_TOUCH_POINTS 10
 #else
 // For Linux and other platforms, like BSDs, SunOS and etc, we will use Linux
 // platform.
 #  define SPOOFED_UA_OS "X11; Linux x86_64"
 #  define SPOOFED_APPVERSION "5.0 (X11)"
 #  define SPOOFED_OSCPU "Linux x86_64"
+#  define SPOOFED_MAX_TOUCH_POINTS 10
 #endif
 
 #define LEGACY_BUILD_ID "20181001000000"
@@ -378,6 +383,14 @@ class nsRFPService final : public nsIObserver, public nsIRFPService {
   // Example: Audio Group
   static void GetMediaDeviceGroup(nsString& aGroup,
                                   mozilla::dom::MediaDeviceKind aKind);
+
+  // Converts any OrientationType::SOMETHING_secondary to
+  // OrientationType::SOMETHING_primary
+  static mozilla::dom::OrientationType OrientationSecondaryToPrimary(
+      mozilla::dom::OrientationType aOrientation);
+
+  // Converts (exactly) 180 degrees to 0 degrees, 270 degrees to 90 degrees.
+  static uint16_t OrientationSecondaryToPrimary(uint16_t aAngle);
 
  private:
   nsresult Init();

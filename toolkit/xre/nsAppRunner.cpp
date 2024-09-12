@@ -2698,6 +2698,10 @@ static ReturnAbortOnError ProfileLockedDialog(nsIFile* aProfileDir,
   rv = xpcom.SetWindowCreator(aNative);
   NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
 
+#ifdef XP_MACOSX
+  InitializeMacApp();
+#endif
+
   {  // extra scoping is needed so we release these components before xpcom
      // shutdown
     nsCOMPtr<nsIStringBundleService> sbs =
@@ -4109,7 +4113,8 @@ int XREMain::XRE_mainInit(bool* aExitFlag) {
       mozilla::Version(mAppData->maxVersion) < gToolkitVersion) {
     Output(true,
            "Error: Platform version '%s' is not compatible with\n"
-           "minVersion >= %s\nmaxVersion <= %s\n",
+           "minVersion >= %s\nmaxVersion <= %s\n"
+           "Maybe try to reinstall " MOZ_APP_DISPLAYNAME "?\n",
            (const char*)gToolkitVersion, (const char*)mAppData->minVersion,
            (const char*)mAppData->maxVersion);
     return 1;

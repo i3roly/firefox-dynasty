@@ -64,11 +64,15 @@ add_task(async function test_support_separator_properties() {
     "No vertical separator on app menu"
   );
 
-  let tabbox = document.querySelector("#tabbrowser-tabbox");
-  let shadow = window.getComputedStyle(tabbox).boxShadow;
-  Assert.ok(
-    shadow.includes(`rgb(${hexToRGB(SEPARATOR_BOTTOM_COLOR).join(", ")})`),
-    `Bottom separator color properly set: ${shadow}`
+  let separatorColor = Services.prefs.getBoolPref("sidebar.revamp", false)
+    ? window.getComputedStyle(document.querySelector("#tabbrowser-tabbox"))
+        .outlineColor
+    : window.getComputedStyle(document.querySelector("#navigator-toolbox"))
+        .borderBottomColor;
+  Assert.equal(
+    separatorColor,
+    `rgb(${hexToRGB(SEPARATOR_BOTTOM_COLOR).join(", ")})`,
+    `Bottom separator color properly set`
   );
 
   await extension.unload();

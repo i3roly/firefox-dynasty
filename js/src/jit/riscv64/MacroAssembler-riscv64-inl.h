@@ -653,6 +653,12 @@ void MacroAssembler::branchMulPtr(Condition cond, Register src, Register dest,
   MOZ_ASSERT(cond == Assembler::Overflow);
   ma_mulPtrTestOverflow(dest, dest, src, label);
 }
+
+void MacroAssembler::branchNegPtr(Condition cond, Register reg, Label* label) {
+  MOZ_ASSERT(cond == Overflow);
+  negPtr(reg);
+  branchPtr(Assembler::Equal, reg, ImmWord(INTPTR_MIN), label);
+}
 void MacroAssembler::branchNeg32(Condition cond, Register reg, Label* label) {
   MOZ_ASSERT(cond == Overflow);
   neg32(reg);
@@ -1249,6 +1255,14 @@ void MacroAssembler::branchTruncateFloat32ToInt32(FloatRegister src,
   ma_b(scratch, Imm32(0), fail, Assembler::Equal);
 }
 
+void MacroAssembler::branchInt64NotInPtrRange(Register64 src, Label* label) {
+  // No-op on 64-bit platforms.
+}
+
+void MacroAssembler::branchUInt64NotInPtrRange(Register64 src, Label* label) {
+  branchTest64(Assembler::Signed, src, src, label);
+}
+
 void MacroAssembler::byteSwap16SignExtend(Register src) {
   JitSpew(JitSpew_Codegen, "[ %s\n", __FUNCTION__);
   UseScratchRegisterScope temps(this);
@@ -1465,6 +1479,11 @@ void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Register rhs,
   moveIfNotZero(dest, src, scratch2);
 }
 
+void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Imm32 rhs,
+                                   Register src, Register dest) {
+  MOZ_CRASH("NYI");
+}
+
 void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs,
                                    const Address& rhs, Register src,
                                    Register dest) {
@@ -1563,6 +1582,11 @@ void MacroAssembler::lshiftPtr(Imm32 imm, Register dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   slli(dest, dest, imm.value);
 }
+
+void MacroAssembler::flexibleLshiftPtr(Register shift, Register srcDest) {
+  lshiftPtr(shift, srcDest);
+}
+
 void MacroAssembler::maxDouble(FloatRegister other, FloatRegister srcDest,
                                bool handleNaN) {
   Float64Max(srcDest, srcDest, other);
@@ -1823,6 +1847,15 @@ void MacroAssembler::quotient32(Register rhs, Register srcDest,
   }
 }
 
+void MacroAssembler::quotient64(Register rhs, Register srcDest,
+                                bool isUnsigned) {
+  if (isUnsigned) {
+    ma_divu64(srcDest, srcDest, rhs);
+  } else {
+    ma_div64(srcDest, srcDest, rhs);
+  }
+}
+
 void MacroAssembler::remainder32(Register rhs, Register srcDest,
                                  bool isUnsigned) {
   if (isUnsigned) {
@@ -1831,6 +1864,16 @@ void MacroAssembler::remainder32(Register rhs, Register srcDest,
     ma_mod32(srcDest, srcDest, rhs);
   }
 }
+
+void MacroAssembler::remainder64(Register rhs, Register srcDest,
+                                 bool isUnsigned) {
+  if (isUnsigned) {
+    ma_modu64(srcDest, srcDest, rhs);
+  } else {
+    ma_mod64(srcDest, srcDest, rhs);
+  }
+}
+
 void MacroAssembler::rotateLeft64(Imm32 count, Register64 src, Register64 dest,
                                   Register temp) {
   Dror(dest.reg, src.reg, Operand(64 - (count.value % 64)));
@@ -1910,6 +1953,16 @@ void MacroAssembler::rshiftPtrArithmetic(Imm32 imm, Register dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   srai(dest, dest, imm.value);
 }
+
+void MacroAssembler::rshiftPtrArithmetic(Register shift, Register dest) {
+  sra(dest, dest, shift);
+}
+
+void MacroAssembler::flexibleRshiftPtrArithmetic(Register shift,
+                                                 Register srcDest) {
+  rshiftPtrArithmetic(shift, srcDest);
+}
+
 void MacroAssembler::rshiftPtr(Register shift, Register dest) {
   srl(dest, dest, shift);
 }
@@ -1918,6 +1971,11 @@ void MacroAssembler::rshiftPtr(Imm32 imm, Register dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   srli(dest, dest, imm.value);
 }
+
+void MacroAssembler::flexibleRshiftPtr(Register shift, Register srcDest) {
+  rshiftPtr(shift, srcDest);
+}
+
 void MacroAssembler::spectreBoundsCheck32(Register index, Register length,
                                           Register maybeScratch,
                                           Label* failure) {
@@ -2064,6 +2122,10 @@ void MacroAssembler::test32LoadPtr(Condition cond, const Address& addr,
 }
 void MacroAssembler::test32MovePtr(Condition, const Address&, Imm32, Register,
                                    Register) {
+  MOZ_CRASH();
+}
+void MacroAssembler::test32MovePtr(Condition cond, Register operand, Imm32 mask,
+                                   Register src, Register dest) {
   MOZ_CRASH();
 }
 void MacroAssembler::xor32(Register src, Register dest) {

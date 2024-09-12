@@ -1790,6 +1790,15 @@ BigInt* BigInt::createFromInt64(JSContext* cx, int64_t n) {
   return res;
 }
 
+BigInt* BigInt::createFromIntPtr(JSContext* cx, intptr_t n) {
+  static_assert(sizeof(intptr_t) == sizeof(BigInt::Digit));
+
+  if (n == 0) {
+    return BigInt::zero(cx);
+  }
+  return BigInt::createFromDigit(cx, BigInt::Digit(Abs(n)), n < 0);
+}
+
 // BigInt proposal section 5.1.2
 BigInt* js::NumberToBigInt(JSContext* cx, double d) {
   // Step 1 is an assertion checked by the caller.
@@ -2246,6 +2255,49 @@ BigInt* BigInt::pow(JSContext* cx, HandleBigInt x, HandleBigInt y) {
   }
 }
 
+bool BigInt::powIntPtr(intptr_t x, intptr_t y, intptr_t* result) {
+  if (y < 0) {
+    return false;
+  }
+  uintptr_t n = uintptr_t(y);
+
+  // x^y where x == 1 returns 1 for any y.
+  if (x == 1) {
+    *result = 1;
+    return true;
+  }
+
+  // x^y where x == -1 returns 1 for even y, and -1 for odd y.
+  if (x == -1) {
+    *result = (y & 1) ? -1 : 1;
+    return true;
+  }
+
+  using CheckedIntPtr = mozilla::CheckedInt<intptr_t>;
+
+  CheckedIntPtr runningSquare = x;
+  CheckedIntPtr res = 1;
+  while (true) {
+    if ((n & 1) != 0) {
+      res *= runningSquare;
+      if (!res.isValid()) {
+        return false;
+      }
+    }
+
+    n >>= 1;
+    if (n == 0) {
+      *result = res.value();
+      return true;
+    }
+
+    runningSquare *= runningSquare;
+    if (!runningSquare.isValid()) {
+      return false;
+    }
+  }
+}
+
 BigInt* BigInt::lshByAbsolute(JSContext* cx, HandleBigInt x, HandleBigInt y) {
   if (x->isZero() || y->isZero()) {
     return x;
@@ -2623,6 +2675,41 @@ bool BigInt::isUint64(const BigInt* x, uint64_t* result) {
 
   *result = x->uint64FromAbsNonZero();
   return true;
+}
+
+bool BigInt::isIntPtr(const BigInt* x, intptr_t* result) {
+  MOZ_MAKE_MEM_UNDEFINED(result, sizeof(*result));
+
+  static_assert(sizeof(intptr_t) == sizeof(BigInt::Digit));
+
+  if (x->digitLength() > 1) {
+    return false;
+  }
+
+  if (x->isZero()) {
+    *result = 0;
+    return true;
+  }
+
+  uintptr_t magnitude = x->digit(0);
+
+  if (x->isNegative()) {
+    constexpr uintptr_t IntPtrMinMagnitude = uintptr_t(1) << (DigitBits - 1);
+    if (magnitude <= IntPtrMinMagnitude) {
+      *result = magnitude == IntPtrMinMagnitude
+                    ? std::numeric_limits<intptr_t>::min()
+                    : -AssertedCast<intptr_t>(magnitude);
+      return true;
+    }
+  } else {
+    if (magnitude <=
+        static_cast<uintptr_t>(std::numeric_limits<intptr_t>::max())) {
+      *result = AssertedCast<intptr_t>(magnitude);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool BigInt::isNumber(const BigInt* x, double* result) {

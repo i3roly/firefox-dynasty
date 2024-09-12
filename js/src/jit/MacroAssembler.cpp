@@ -2089,8 +2089,7 @@ void MacroAssembler::loadBigInt64(Register bigInt, Register64 dest) {
   bind(&done);
 }
 
-void MacroAssembler::loadFirstBigIntDigitOrZero(Register bigInt,
-                                                Register dest) {
+void MacroAssembler::loadBigIntDigit(Register bigInt, Register dest) {
   Label done, nonZero;
   branchIfBigIntIsNonZero(bigInt, &nonZero);
   {
@@ -2107,59 +2106,8 @@ void MacroAssembler::loadFirstBigIntDigitOrZero(Register bigInt,
   bind(&done);
 }
 
-void MacroAssembler::loadBigInt(Register bigInt, Register dest, Label* fail) {
-  Label done, nonZero;
-  branchIfBigIntIsNonZero(bigInt, &nonZero);
-  {
-    movePtr(ImmWord(0), dest);
-    jump(&done);
-  }
-  bind(&nonZero);
-
-  loadBigIntNonZero(bigInt, dest, fail);
-
-  bind(&done);
-}
-
-void MacroAssembler::loadBigIntNonZero(Register bigInt, Register dest,
-                                       Label* fail) {
-  MOZ_ASSERT(bigInt != dest);
-
-#ifdef DEBUG
-  Label nonZero;
-  branchIfBigIntIsNonZero(bigInt, &nonZero);
-  assumeUnreachable("Unexpected zero BigInt");
-  bind(&nonZero);
-#endif
-
-  branch32(Assembler::Above, Address(bigInt, BigInt::offsetOfLength()),
-           Imm32(1), fail);
-
-  static_assert(BigInt::inlineDigitsLength() > 0,
-                "Single digit BigInts use inline storage");
-
-  // Load the first inline digit into the destination register.
-  loadPtr(Address(bigInt, BigInt::offsetOfInlineDigits()), dest);
-
-  // Return as a signed pointer.
-  bigIntDigitToSignedPtr(bigInt, dest, fail);
-}
-
-void MacroAssembler::bigIntDigitToSignedPtr(Register bigInt, Register digit,
-                                            Label* fail) {
-  // BigInt digits are stored as absolute numbers. Take the failure path when
-  // the digit can't be stored in intptr_t.
-  branchTestPtr(Assembler::Signed, digit, digit, fail);
-
-  // Negate |dest| when the BigInt is negative.
-  Label nonNegative;
-  branchIfBigIntIsNonNegative(bigInt, &nonNegative);
-  negPtr(digit);
-  bind(&nonNegative);
-}
-
-void MacroAssembler::loadBigIntAbsolute(Register bigInt, Register dest,
-                                        Label* fail) {
+void MacroAssembler::loadBigIntDigit(Register bigInt, Register dest,
+                                     Label* fail) {
   MOZ_ASSERT(bigInt != dest);
 
   branch32(Assembler::Above, Address(bigInt, BigInt::offsetOfLength()),
@@ -2172,6 +2120,28 @@ void MacroAssembler::loadBigIntAbsolute(Register bigInt, Register dest,
   movePtr(ImmWord(0), dest);
   cmp32LoadPtr(Assembler::NotEqual, Address(bigInt, BigInt::offsetOfLength()),
                Imm32(0), Address(bigInt, BigInt::offsetOfInlineDigits()), dest);
+}
+
+void MacroAssembler::loadBigIntPtr(Register bigInt, Register dest,
+                                   Label* fail) {
+  loadBigIntDigit(bigInt, dest, fail);
+
+  // BigInt digits are stored as unsigned numbers. Take the failure path when
+  // the digit can't be stored in intptr_t.
+
+  Label nonNegative, done;
+  branchIfBigIntIsNonNegative(bigInt, &nonNegative);
+  {
+    // Negate |dest| when the BigInt is negative.
+    negPtr(dest);
+
+    // Test after negating to handle INTPTR_MIN correctly.
+    branchTestPtr(Assembler::NotSigned, dest, dest, fail);
+    jump(&done);
+  }
+  bind(&nonNegative);
+  branchTestPtr(Assembler::Signed, dest, dest, fail);
+  bind(&done);
 }
 
 void MacroAssembler::initializeBigInt64(Scalar::Type type, Register bigInt,
@@ -2230,7 +2200,7 @@ void MacroAssembler::initializeBigInt64(Scalar::Type type, Register bigInt,
   bind(&done);
 }
 
-void MacroAssembler::initializeBigInt(Register bigInt, Register val) {
+void MacroAssembler::initializeBigIntPtr(Register bigInt, Register val) {
   store32(Imm32(0), Address(bigInt, BigInt::offsetOfFlags()));
 
   Label done, nonZero;
@@ -2251,27 +2221,6 @@ void MacroAssembler::initializeBigInt(Register bigInt, Register val) {
     negPtr(val);
   }
   bind(&isPositive);
-
-  store32(Imm32(1), Address(bigInt, BigInt::offsetOfLength()));
-
-  static_assert(sizeof(BigInt::Digit) == sizeof(uintptr_t),
-                "BigInt Digit size matches uintptr_t");
-
-  storePtr(val, Address(bigInt, js::BigInt::offsetOfInlineDigits()));
-
-  bind(&done);
-}
-
-void MacroAssembler::initializeBigIntAbsolute(Register bigInt, Register val) {
-  store32(Imm32(0), Address(bigInt, BigInt::offsetOfFlags()));
-
-  Label done, nonZero;
-  branchTestPtr(Assembler::NonZero, val, val, &nonZero);
-  {
-    store32(Imm32(0), Address(bigInt, BigInt::offsetOfLength()));
-    jump(&done);
-  }
-  bind(&nonZero);
 
   store32(Imm32(1), Address(bigInt, BigInt::offsetOfLength()));
 
@@ -2330,7 +2279,7 @@ void MacroAssembler::compareBigIntAndInt32(JSOp op, Register bigInt,
 
   // Test for too large numbers.
   //
-  // If the absolute value of the BigInt can't be expressed in an uint32/uint64,
+  // If the unsigned value of the BigInt can't be expressed in an uint32/uint64,
   // the result of the comparison is a constant.
   if (op == JSOp::Eq || op == JSOp::Ne) {
     Label* tooLarge = op == JSOp::Eq ? ifFalse : ifTrue;
@@ -2356,7 +2305,7 @@ void MacroAssembler::compareBigIntAndInt32(JSOp op, Register bigInt,
   }
 
   // Test for mismatched signs and, if the signs are equal, load |abs(x)| in
-  // |scratch1| and |abs(y)| in |scratch2| and then compare the absolute numbers
+  // |scratch1| and |abs(y)| in |scratch2| and then compare the unsigned numbers
   // against each other.
   {
     // Jump to |ifTrue| resp. |ifFalse| if the BigInt is strictly less than
@@ -2379,8 +2328,8 @@ void MacroAssembler::compareBigIntAndInt32(JSOp op, Register bigInt,
       lessThan = ifFalse;
     }
 
-    // BigInt digits are always stored as an absolute number.
-    loadFirstBigIntDigitOrZero(bigInt, scratch1);
+    // BigInt digits are always stored as an unsigned number.
+    loadBigIntDigit(bigInt, scratch1);
 
     // Load the int32 into |scratch2| and negate it for negative numbers.
     move32(int32, scratch2);
@@ -2487,14 +2436,14 @@ void MacroAssembler::compareBigIntAndInt32(JSOp op, Register bigInt,
   }
 
   // Both signs are equal, load |abs(x)| in |scratch| and then compare the
-  // absolute numbers against each other.
+  // unsigned numbers against each other.
   //
-  // If the absolute value of the BigInt can't be expressed in an uint32/uint64,
+  // If the unsigned value of the BigInt can't be expressed in an uint32/uint64,
   // the result of the comparison is a constant.
   Label* tooLarge = int32.value > 0 ? greaterThan : lessThan;
-  loadBigIntAbsolute(bigInt, scratch, tooLarge);
+  loadBigIntDigit(bigInt, scratch, tooLarge);
 
-  // Use the absolute value of the immediate.
+  // Use the unsigned value of the immediate.
   ImmWord uint32 = ImmWord(mozilla::Abs(int32.value));
 
   // Reverse the relational comparator for negative numbers.
@@ -2850,12 +2799,12 @@ void MacroAssembler::loadAtomOrSymbolAndHash(ValueOperand value, Register outId,
   }
 
   const JSAtomState& names = runtime()->names();
-  movePropertyKey(PropertyKey::NonIntAtom(names.undefined), outId);
+  movePropertyKey(NameToId(names.undefined), outId);
   move32(Imm32(names.undefined->hash()), outHash);
   jump(&done);
 
   bind(&isNull);
-  movePropertyKey(PropertyKey::NonIntAtom(names.null), outId);
+  movePropertyKey(NameToId(names.null), outId);
   move32(Imm32(names.null->hash()), outHash);
   jump(&done);
 
@@ -4758,18 +4707,19 @@ void MacroAssembler::pow32(Register base, Register power, Register dest,
   Label done;
   branch32(Assembler::Equal, base, Imm32(1), &done);
 
-  move32(base, temp1);   // runningSquare = x
-  move32(power, temp2);  // n = y
-
   // x^y where y < 0 returns a non-int32 value for any x != 1. Except when y is
   // large enough so that the result is no longer representable as a double with
   // fractional parts. We can't easily determine when y is too large, so we bail
   // here.
   // Note: it's important for this condition to match the code in CacheIR.cpp
   // (CanAttachInt32Pow) to prevent failure loops.
+  branchTest32(Assembler::Signed, power, power, onOver);
+
+  move32(base, temp1);   // runningSquare = x
+  move32(power, temp2);  // n = y
+
   Label start;
-  branchTest32(Assembler::NotSigned, power, power, &start);
-  jump(onOver);
+  jump(&start);
 
   Label loop;
   bind(&loop);
@@ -4783,6 +4733,58 @@ void MacroAssembler::pow32(Register base, Register power, Register dest,
   Label even;
   branchTest32(Assembler::Zero, temp2, Imm32(1), &even);
   branchMul32(Assembler::Overflow, temp1, dest, onOver);
+  bind(&even);
+
+  // n >>= 1
+  // if (n == 0) return result
+  branchRshift32(Assembler::NonZero, Imm32(1), temp2, &loop);
+
+  bind(&done);
+}
+
+void MacroAssembler::powPtr(Register base, Register power, Register dest,
+                            Register temp1, Register temp2, Label* onOver) {
+  // Inline intptr-specialized implementation of BigInt::pow with overflow
+  // detection.
+
+  // Negative exponents are disallowed for any BigInts.
+  branchTestPtr(Assembler::Signed, power, power, onOver);
+
+  movePtr(ImmWord(1), dest);  // result = 1
+
+  // x^y where x == 1 returns 1 for any y.
+  Label done;
+  branchPtr(Assembler::Equal, base, ImmWord(1), &done);
+
+  // x^y where x == -1 returns 1 for even y, and -1 for odd y.
+  Label notNegativeOne;
+  branchPtr(Assembler::NotEqual, base, ImmWord(-1), &notNegativeOne);
+  test32MovePtr(Assembler::NonZero, power, Imm32(1), base, dest);
+  jump(&done);
+  bind(&notNegativeOne);
+
+  // x ** y with |x| > 1 and y >= DigitBits can't be pointer-sized.
+  branchPtr(Assembler::GreaterThanOrEqual, power, Imm32(BigInt::DigitBits),
+            onOver);
+
+  movePtr(base, temp1);   // runningSquare = x
+  movePtr(power, temp2);  // n = y
+
+  Label start;
+  jump(&start);
+
+  Label loop;
+  bind(&loop);
+
+  // runningSquare *= runningSquare
+  branchMulPtr(Assembler::Overflow, temp1, temp1, onOver);
+
+  bind(&start);
+
+  // if ((n & 1) != 0) result *= runningSquare
+  Label even;
+  branchTest32(Assembler::Zero, temp2, Imm32(1), &even);
+  branchMulPtr(Assembler::Overflow, temp1, dest, onOver);
   bind(&even);
 
   // n >>= 1
@@ -5530,7 +5532,7 @@ static ReturnCallTrampolineData MakeReturnCallTrampoline(MacroAssembler& masm) {
         wasm::FrameWithInstances::sizeOfInstanceFieldsAndShadowStack(),
         WasmStackAlignment));
 
-    masm.wasmMarkSlowCall();
+    masm.wasmMarkCallAsSlow();
   }
 
   masm.loadPtr(
@@ -5878,9 +5880,10 @@ CodeOffset MacroAssembler::wasmCallImport(const wasm::CallSiteDesc& desc,
            Address(getStackPointer(), WasmCalleeInstanceOffsetBeforeCall));
   loadWasmPinnedRegsFromInstance();
 
-  CodeOffset res = call(desc, ABINonArgReg0);
 #ifdef ENABLE_WASM_TAIL_CALLS
-  wasmMarkSlowCall();
+  CodeOffset res = wasmMarkedSlowCall(desc, ABINonArgReg0);
+#else
+  CodeOffset res = call(desc, ABINonArgReg0);
 #endif
   return res;
 }
@@ -6144,9 +6147,10 @@ void MacroAssembler::wasmCallIndirect(const wasm::CallSiteDesc& desc,
   loadPtr(Address(calleeScratch, offsetof(wasm::FunctionTableElem, code)),
           calleeScratch);
 
-  *slowCallOffset = call(desc, calleeScratch);
 #ifdef ENABLE_WASM_TAIL_CALLS
-  wasmMarkSlowCall();
+  *slowCallOffset = wasmMarkedSlowCall(desc, calleeScratch);
+#else
+  *slowCallOffset = call(desc, calleeScratch);
 #endif
 
   // Restore registers and realm and join up with the fast path.
@@ -6337,9 +6341,10 @@ void MacroAssembler::wasmCallRef(const wasm::CallSiteDesc& desc,
       FunctionExtended::WASM_FUNC_UNCHECKED_ENTRY_SLOT);
   loadPtr(Address(calleeFnObj, uncheckedEntrySlotOffset), calleeScratch);
 
-  *slowCallOffset = call(desc, calleeScratch);
 #ifdef ENABLE_WASM_TAIL_CALLS
-  wasmMarkSlowCall();
+  *slowCallOffset = wasmMarkedSlowCall(desc, calleeScratch);
+#else
+  *slowCallOffset = call(desc, calleeScratch);
 #endif
 
   // Restore registers and realm and back to this caller's.

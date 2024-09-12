@@ -216,7 +216,6 @@ class ContentAnalysis final : public nsIContentAnalysis {
     mozilla::MoveOnlyFunction<void(RefPtr<nsIContentAnalysisResult>&&)>
         mResolver;
   };
-  static bool MightBeActive();
   // Find the outermost browsing context that has same-origin access to
   // aBrowsingContext, and this is the URL we will pass to the Content Analysis
   // agent.
@@ -317,7 +316,11 @@ class ContentAnalysis final : public nsIContentAnalysis {
       MOZ_ASSERT(NS_IsMainThread());
       mRequest = aRequest;
       mResultAction = Some(aResultAction);
-      SetExpirationTimer();
+      // For warn responses, don't set the expiration timer until
+      // we get the updated action in UpdateWarnAction()
+      if (aResultAction != nsIContentAnalysisResponse::Action::eWarn) {
+        SetExpirationTimer();
+      }
     }
     Maybe<nsIContentAnalysisResponse::Action> ResultAction() const {
       MOZ_ASSERT(NS_IsMainThread());
@@ -331,6 +334,16 @@ class ContentAnalysis final : public nsIContentAnalysis {
       if (mExpirationTimer) {
         mExpirationTimer->Cancel();
       }
+    }
+    void UpdateWarnAction(nsIContentAnalysisResponse::Action aAction) {
+      MOZ_ASSERT(NS_IsMainThread());
+      MOZ_ASSERT(mRequest);
+      MOZ_ASSERT(mResultAction ==
+                 Some(nsIContentAnalysisResponse::Action::eWarn));
+      mResultAction = Some(aAction);
+      // We don't set the expiration timer for warn responses until we get the
+      // updated response, so set it here
+      SetExpirationTimer();
     }
     enum class CacheResult : uint8_t {
       CannotBeCached = 0,

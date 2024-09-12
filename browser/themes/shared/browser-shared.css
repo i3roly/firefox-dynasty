@@ -77,9 +77,6 @@ body {
   --short-notification-background: #0250BB;
   --short-notification-gradient: #9059FF;
 
-  --button-bgcolor: color-mix(in srgb, currentColor 13%, transparent);
-  --button-hover-bgcolor: color-mix(in srgb, currentColor 17%, transparent);
-  --button-active-bgcolor: color-mix(in srgb, currentColor 30%, transparent);
   --button-color: currentColor;
   --button-primary-bgcolor: AccentColor;
   --button-primary-hover-bgcolor: color-mix(in srgb, black 10%, AccentColor);
@@ -92,10 +89,10 @@ body {
   --buttons-destructive-color: #fbfbfe;
 
   --identity-box-margin-inline: 4px;
-  --urlbar-box-bgcolor: var(--button-bgcolor);
-  --urlbar-box-focus-bgcolor: var(--button-bgcolor);
-  --urlbar-box-hover-bgcolor: var(--button-hover-bgcolor);
-  --urlbar-box-active-bgcolor: var(--button-active-bgcolor);
+  --urlbar-box-bgcolor: var(--button-background-color-hover);
+  --urlbar-box-focus-bgcolor: var(--button-background-color);
+  --urlbar-box-hover-bgcolor: var(--button-background-color-hover);
+  --urlbar-box-active-bgcolor: var(--button-background-color-active);
   --urlbar-box-text-color: inherit;
   --urlbar-box-hover-text-color: var(--urlbar-box-text-color);
   --urlbar-min-height: max(32px, 1.4em);
@@ -178,14 +175,6 @@ body {
   @media (prefers-reduced-motion) {
     --inactive-window-transition: 0s;
   }
-
-  /* NOTE(emilio): There should be a better way of doing this, see:
-   * https://github.com/w3c/csswg-drafts/issues/10819 and
-   * https://github.com/w3c/csswg-drafts/issues/3720 */
-  --hairline-border-width: 1px;
-  @media (resolution >= 2x) {
-    --hairline-border-width: 0.5px;
-  }
 }
 
 body {
@@ -198,17 +187,19 @@ body {
 /* Chrome/content separation */
 
 #navigator-toolbox {
-  /* This reserves space for the tabbox shadow */
-  border-bottom: var(--hairline-border-width) solid var(--toolbar-bgcolor);
+  border-bottom: 0.01px solid var(--chrome-content-separator-color);
 }
 
-#tabbrowser-tabbox {
-  position: relative;
-  box-shadow: 0 0 0 var(--hairline-border-width) var(--chrome-content-separator-color);
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (-moz-bool-pref: "sidebar.revamp") {
+  #navigator-toolbox {
+    /* This reserves space for the tabbox outline */
+    border-bottom-color: var(--toolbar-bgcolor);
+  }
 
-  /* stylelint-disable-next-line media-query-no-invalid */
-  @media (-moz-bool-pref: "sidebar.revamp") {
-    box-shadow: 0 0 0 var(--hairline-border-width) var(--chrome-content-separator-color), 0 2px 6px 0 light-dark(rgb(0, 0, 0, 0.2), rgb(0, 0, 0, 0.8));
+  #tabbrowser-tabbox {
+    outline: 0.01px solid var(--chrome-content-separator-color);
+    box-shadow: 0 2px 6px 0 light-dark(rgb(0, 0, 0, 0.2), rgb(0, 0, 0, 0.8));
   }
 }
 

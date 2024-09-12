@@ -1148,13 +1148,8 @@
     }
 
     on_overflow(event) {
-      // Ignore overflow events:
-      // - from nested scrollable elements
-      // - for vertical orientation
-      if (
-        event.target != this.arrowScrollbox ||
-        event.originalTarget.getAttribute("orient") == "vertical"
-      ) {
+      // Ignore overflow events from nested scrollable elements
+      if (event.target != this.arrowScrollbox) {
         return;
       }
 
@@ -1555,7 +1550,6 @@
       let verticalTabsContainer = document.getElementById(
         "vertical-pinned-tabs-container"
       );
-      let newTabButton = document.getElementById("newtab-button-container");
       let numPinned = gBrowser._numPinnedTabs;
 
       if (gBrowser._numPinnedTabs !== verticalTabsContainer.children.length) {
@@ -1566,7 +1560,6 @@
         }
       }
 
-      newTabButton.toggleAttribute("showborder", gBrowser._numPinnedTabs !== 0);
       this.style.removeProperty("--tab-overflow-pinned-tabs-width");
     }
 

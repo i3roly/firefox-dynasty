@@ -44,6 +44,7 @@ import org.mozilla.fenix.components.toolbar.ToolbarPosition
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
+import org.mozilla.fenix.ext.isTablet
 import org.mozilla.fenix.nimbus.CookieBannersSection
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.nimbus.HomeScreenSection
@@ -350,8 +351,8 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     )
 
     var isExperimentationEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_experimentation),
-        default = true,
+        appContext.getPreferenceKey(R.string.pref_key_experimentation_v2),
+        default = isTelemetryEnabled,
     )
 
     var isOverrideTPPopupsForPerformanceTest = false
@@ -1627,8 +1628,8 @@ class Settings(private val appContext: Context) : PreferencesHolder {
      * If set to true, next opened tab from home screen will be opened in desktop mode.
      */
     var openNextTabInDesktopMode by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_open_next_tab_desktop_mode),
-        default = false,
+        appContext.getPreferenceKey(R.string.pref_key_open_next_tab_desktop_mode_is_tablet),
+        default = appContext.isTablet(),
     )
 
     var signedInFxaAccount by booleanPreference(
@@ -2227,4 +2228,17 @@ class Settings(private val appContext: Context) : PreferencesHolder {
             daysBetweenDefaultBrowserPrompts * ONE_DAY_MS &&
             numberOfSetAsDefaultPromptShownTimes < maxNumberOfDefaultBrowserPrompts &&
             coldStartsBetweenSetAsDefaultPrompts >= appColdStartsToShowDefaultPrompt
+
+    /**
+     * Updates the relevant settings when the "Set as Default Browser" prompt is shown.
+     *
+     * This method increments the count of how many times the prompt has been shown,
+     * records the current time as the last time the prompt was shown, and resets
+     * the counter for the number of cold starts between prompts.
+     */
+    fun setAsDefaultPromptCalled() {
+        numberOfSetAsDefaultPromptShownTimes += 1
+        lastSetAsDefaultPromptShownTimeInMillis = System.currentTimeMillis()
+        coldStartsBetweenSetAsDefaultPrompts = 0
+    }
 }

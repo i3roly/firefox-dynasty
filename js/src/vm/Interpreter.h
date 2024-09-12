@@ -615,9 +615,9 @@ bool GetAndClearExceptionAndStack(JSContext* cx, MutableHandleValue res,
                                   MutableHandle<SavedFrame*> stack);
 
 bool DeleteNameOperation(JSContext* cx, Handle<PropertyName*> name,
-                         HandleObject scopeObj, MutableHandleValue res);
+                         HandleObject envChain, MutableHandleValue res);
 
-bool ImplicitThisOperation(JSContext* cx, HandleObject scopeObj,
+bool ImplicitThisOperation(JSContext* cx, HandleObject envChain,
                            Handle<PropertyName*> name, MutableHandleValue res);
 
 bool InitPropGetterSetterOperation(JSContext* cx, jsbytecode* pc,
@@ -707,12 +707,6 @@ void ReportRuntimeLexicalError(JSContext* cx, unsigned errorNumber,
 
 void ReportInNotObjectError(JSContext* cx, HandleValue lref, HandleValue rref);
 
-// The parser only reports redeclarations that occurs within a single
-// script. Due to the extensibility of the global lexical scope, we also check
-// for redeclarations during runtime in JSOp::GlobalOrEvalDeclInstantation.
-void ReportRuntimeRedeclaration(JSContext* cx, Handle<PropertyName*> name,
-                                const char* redeclKind);
-
 bool ThrowCheckIsObject(JSContext* cx, CheckIsObjectKind kind);
 
 bool ThrowUninitializedThis(JSContext* cx);
@@ -720,8 +714,6 @@ bool ThrowUninitializedThis(JSContext* cx);
 bool ThrowInitializedThis(JSContext* cx);
 
 bool ThrowObjectCoercible(JSContext* cx, HandleValue value);
-
-bool DefaultClassConstructor(JSContext* cx, unsigned argc, Value* vp);
 
 bool Debug_CheckSelfHosted(JSContext* cx, HandleValue funVal);
 

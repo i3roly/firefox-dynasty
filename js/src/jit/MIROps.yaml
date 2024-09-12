@@ -751,6 +751,12 @@
 - name: Int64ToBigInt
   gen_boilerplate: false
 
+- name: Int64ToIntPtr
+  gen_boilerplate: false
+
+- name: IntPtrToInt64
+  gen_boilerplate: false
+
 - name: ToString
   gen_boilerplate: false
 
@@ -935,6 +941,64 @@
   gen_boilerplate: false
 
 - name: BigIntBitNot
+  gen_boilerplate: false
+
+- name: BigIntToIntPtr
+  operands:
+    input: BigInt
+  result_type: IntPtr
+  movable: true
+  congruent_to: if_operands_equal
+  alias_set: none
+  folds_to: custom
+  can_recover: true
+  clone: true
+
+- name: IntPtrToBigInt
+  operands:
+    input: IntPtr
+  result_type: BigInt
+  movable: true
+  congruent_to: if_operands_equal
+  alias_set: none
+  folds_to: custom
+  can_recover: true
+  clone: true
+
+- name: BigIntPtrAdd
+  gen_boilerplate: false
+
+- name: BigIntPtrSub
+  gen_boilerplate: false
+
+- name: BigIntPtrMul
+  gen_boilerplate: false
+
+- name: BigIntPtrDiv
+  gen_boilerplate: false
+
+- name: BigIntPtrMod
+  gen_boilerplate: false
+
+- name: BigIntPtrPow
+  gen_boilerplate: false
+
+- name: BigIntPtrBitAnd
+  gen_boilerplate: false
+
+- name: BigIntPtrBitOr
+  gen_boilerplate: false
+
+- name: BigIntPtrBitXor
+  gen_boilerplate: false
+
+- name: BigIntPtrLsh
+  gen_boilerplate: false
+
+- name: BigIntPtrRsh
+  gen_boilerplate: false
+
+- name: BigIntPtrBitNot
   gen_boilerplate: false
 
 - name: Int32ToStringWithBase

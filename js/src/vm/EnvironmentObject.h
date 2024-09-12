@@ -26,13 +26,6 @@ class AbstractGeneratorObject;
 class IndirectBindingMap;
 class ModuleObject;
 
-/*
- * Return a shape representing the static scope containing the variable
- * accessed by the ALIASEDVAR op at 'pc'.
- */
-extern SharedShape* EnvironmentCoordinateToEnvironmentShape(JSScript* script,
-                                                            jsbytecode* pc);
-
 // Return the name being accessed by the given ALIASEDVAR op. This function is
 // relatively slow so it should not be used on hot paths.
 extern PropertyName* EnvironmentCoordinateNameSlow(JSScript* script,
@@ -920,6 +913,12 @@ class ClassBodyLexicalEnvironmentObject
   static uint32_t privateBrandSlot() { return JSSLOT_FREE(&class_); }
 };
 
+/*
+ * Prepare a |this| object to be returned to script. This includes replacing
+ * Windows with their corresponding WindowProxy.
+ */
+JSObject* GetThisObject(JSObject* obj);
+
 // Global and non-syntactic lexical environments are extensible.
 class ExtensibleLexicalEnvironmentObject : public LexicalEnvironmentObject {
  public:
@@ -977,14 +976,13 @@ class NonSyntacticVariablesObject : public EnvironmentObject {
   static const JSClass class_;
 
   static constexpr uint32_t RESERVED_SLOTS = 1;
-  static constexpr ObjectFlags OBJECT_FLAGS = {};
+  static constexpr ObjectFlags OBJECT_FLAGS = {ObjectFlag::QualifiedVarObj};
 
   static NonSyntacticVariablesObject* create(JSContext* cx);
 };
 
-extern bool CreateNonSyntacticEnvironmentChain(JSContext* cx,
-                                               JS::HandleObjectVector envChain,
-                                               MutableHandleObject env);
+NonSyntacticLexicalEnvironmentObject* CreateNonSyntacticEnvironmentChain(
+    JSContext* cx, JS::HandleObjectVector envChain);
 
 // With environment objects on the run-time environment chain.
 class WithEnvironmentObject : public EnvironmentObject {
@@ -1511,21 +1509,6 @@ inline bool IsSyntacticEnvironment(JSObject* env) {
   return true;
 }
 
-inline bool IsExtensibleLexicalEnvironment(JSObject* env) {
-  return env->is<ExtensibleLexicalEnvironmentObject>();
-}
-
-inline bool IsGlobalLexicalEnvironment(JSObject* env) {
-  return env->is<GlobalLexicalEnvironmentObject>();
-}
-
-inline bool IsNSVOLexicalEnvironment(JSObject* env) {
-  return env->is<LexicalEnvironmentObject>() &&
-         env->as<LexicalEnvironmentObject>()
-             .enclosingEnvironment()
-             .is<NonSyntacticVariablesObject>();
-}
-
 inline JSObject* MaybeUnwrapWithEnvironment(JSObject* env) {
   if (env->is<WithEnvironmentObject>()) {
     return &env->as<WithEnvironmentObject>().object();
@@ -1575,10 +1558,8 @@ inline bool IsFrameInitialEnvironment(AbstractFramePtr frame,
   return false;
 }
 
-extern bool CreateObjectsForEnvironmentChain(JSContext* cx,
-                                             HandleObjectVector chain,
-                                             HandleObject terminatingEnv,
-                                             MutableHandleObject envObj);
+WithEnvironmentObject* CreateObjectsForEnvironmentChain(
+    JSContext* cx, HandleObjectVector chain, HandleObject terminatingEnv);
 
 ModuleObject* GetModuleObjectForScript(JSScript* script);
 
@@ -1591,20 +1572,6 @@ ModuleEnvironmentObject* GetModuleEnvironmentForScript(JSScript* script);
     JSContext* cx, AbstractGeneratorObject& genObj, JSScript* script,
     MutableHandleValue res);
 
-[[nodiscard]] bool CheckCanDeclareGlobalBinding(JSContext* cx,
-                                                Handle<GlobalObject*> global,
-                                                Handle<PropertyName*> name,
-                                                bool isFunction);
-
-[[nodiscard]] bool CheckLexicalNameConflict(
-    JSContext* cx, Handle<ExtensibleLexicalEnvironmentObject*> lexicalEnv,
-    HandleObject varObj, Handle<PropertyName*> name);
-
-[[nodiscard]] bool CheckGlobalDeclarationConflicts(
-    JSContext* cx, HandleScript script,
-    Handle<ExtensibleLexicalEnvironmentObject*> lexicalEnv,
-    HandleObject varObj);
-
 [[nodiscard]] bool GlobalOrEvalDeclInstantiation(JSContext* cx,
                                                  HandleObject envChain,
                                                  HandleScript script,
@@ -1615,17 +1582,6 @@ ModuleEnvironmentObject* GetModuleEnvironmentForScript(JSScript* script);
 
 [[nodiscard]] bool PushVarEnvironmentObject(JSContext* cx, Handle<Scope*> scope,
                                             AbstractFramePtr frame);
-
-[[nodiscard]] bool GetFrameEnvironmentAndScope(JSContext* cx,
-                                               AbstractFramePtr frame,
-                                               const jsbytecode* pc,
-                                               MutableHandleObject env,
-                                               MutableHandle<Scope*> scope);
-
-void GetSuspendedGeneratorEnvironmentAndScope(AbstractGeneratorObject& genObj,
-                                              JSScript* script,
-                                              MutableHandleObject env,
-                                              MutableHandle<Scope*> scope);
 
 #ifdef DEBUG
 bool AnalyzeEntrainedVariables(JSContext* cx, HandleScript script);

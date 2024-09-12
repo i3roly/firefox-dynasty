@@ -238,6 +238,11 @@ class MOZ_RAII WarpCacheIRTranspiler : public WarpBuilderShared {
   template <typename T>
   [[nodiscard]] bool emitBigIntUnaryArithResult(BigIntOperandId inputId);
 
+  template <typename T>
+  [[nodiscard]] bool emitBigIntPtrBinaryArith(IntPtrOperandId lhsId,
+                                              IntPtrOperandId rhsId,
+                                              IntPtrOperandId resultId);
+
   [[nodiscard]] bool emitCompareResult(JSOp op, OperandId lhsId,
                                        OperandId rhsId,
                                        MCompare::CompareType compareType);
@@ -354,11 +359,19 @@ bool WarpCacheIRTranspiler::transpile(
   // Effectful instructions should have a resume point. We allow a limited
   // number of exceptions:
   // - MIonToWasmCall: Resumes after MInt64ToBigInt
+  // - MLoadUnboxedScalar: Resumes after MInt64ToBigInt
+  // - MAtomicTypedArrayElementBinop: Resumes after MInt64ToBigInt
+  // - MAtomicExchangeTypedArrayElement: Resumes after MInt64ToBigInt
+  // - MCompareExchangeTypedArrayElement: Resumes after MInt64ToBigInt
   // - MResizableTypedArrayLength: Resumes after MPostIntPtrConversion
   // - MResizableDataViewByteLength: Resumes after MPostIntPtrConversion
   // - MGrowableSharedArrayBufferByteLength: Resumes after MPostIntPtrConversion
   MOZ_ASSERT_IF(effectful_,
                 effectful_->resumePoint() || effectful_->isIonToWasmCall() ||
+                    effectful_->isLoadUnboxedScalar() ||
+                    effectful_->isAtomicTypedArrayElementBinop() ||
+                    effectful_->isAtomicExchangeTypedArrayElement() ||
+                    effectful_->isCompareExchangeTypedArrayElement() ||
                     effectful_->isResizableTypedArrayLength() ||
                     effectful_->isResizableDataViewByteLength() ||
                     effectful_->isGrowableSharedArrayBufferByteLength());
@@ -3329,6 +3342,154 @@ bool WarpCacheIRTranspiler::emitBigIntNotResult(BigIntOperandId inputId) {
   return emitBigIntUnaryArithResult<MBigIntBitNot>(inputId);
 }
 
+bool WarpCacheIRTranspiler::emitBigIntToIntPtr(BigIntOperandId inputId,
+                                               IntPtrOperandId resultId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* ins = MBigIntToIntPtr::New(alloc(), input);
+  add(ins);
+
+  return defineOperand(resultId, ins);
+}
+
+bool WarpCacheIRTranspiler::emitIntPtrToBigIntResult(IntPtrOperandId inputId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* ins = MIntPtrToBigInt::New(alloc(), input);
+  add(ins);
+
+  pushResult(ins);
+  return true;
+}
+
+template <typename T>
+bool WarpCacheIRTranspiler::emitBigIntPtrBinaryArith(IntPtrOperandId lhsId,
+                                                     IntPtrOperandId rhsId,
+                                                     IntPtrOperandId resultId) {
+  MDefinition* lhs = getOperand(lhsId);
+  MDefinition* rhs = getOperand(rhsId);
+
+  auto* ins = T::New(alloc(), lhs, rhs);
+  add(ins);
+
+  return defineOperand(resultId, ins);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrAdd(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrAdd>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrSub(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrSub>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrMul(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrMul>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrDiv(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrDiv>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrMod(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrMod>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrPow(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrPow>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrBitOr(IntPtrOperandId lhsId,
+                                               IntPtrOperandId rhsId,
+                                               IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrBitOr>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrBitXor(IntPtrOperandId lhsId,
+                                                IntPtrOperandId rhsId,
+                                                IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrBitXor>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrBitAnd(IntPtrOperandId lhsId,
+                                                IntPtrOperandId rhsId,
+                                                IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrBitAnd>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrLeftShift(IntPtrOperandId lhsId,
+                                                   IntPtrOperandId rhsId,
+                                                   IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrLsh>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrRightShift(IntPtrOperandId lhsId,
+                                                    IntPtrOperandId rhsId,
+                                                    IntPtrOperandId resultId) {
+  return emitBigIntPtrBinaryArith<MBigIntPtrRsh>(lhsId, rhsId, resultId);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrInc(IntPtrOperandId inputId,
+                                             IntPtrOperandId resultId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* constOne = MConstant::NewIntPtr(alloc(), 1);
+  add(constOne);
+
+  auto* ins = MBigIntPtrAdd::New(alloc(), input, constOne);
+  add(ins);
+
+  return defineOperand(resultId, ins);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrDec(IntPtrOperandId inputId,
+                                             IntPtrOperandId resultId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* constOne = MConstant::NewIntPtr(alloc(), 1);
+  add(constOne);
+
+  auto* ins = MBigIntPtrSub::New(alloc(), input, constOne);
+  add(ins);
+
+  return defineOperand(resultId, ins);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrNegation(IntPtrOperandId inputId,
+                                                  IntPtrOperandId resultId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* constNegOne = MConstant::NewIntPtr(alloc(), -1);
+  add(constNegOne);
+
+  auto* ins = MBigIntPtrMul::New(alloc(), input, constNegOne);
+  add(ins);
+
+  return defineOperand(resultId, ins);
+}
+
+bool WarpCacheIRTranspiler::emitBigIntPtrNot(IntPtrOperandId inputId,
+                                             IntPtrOperandId resultId) {
+  MDefinition* input = getOperand(inputId);
+
+  auto* ins = MBigIntPtrBitNot::New(alloc(), input);
+  add(ins);
+
+  return defineOperand(resultId, ins);
+}
+
 bool WarpCacheIRTranspiler::emitCallStringConcatResult(StringOperandId lhsId,
                                                        StringOperandId rhsId) {
   MDefinition* lhs = getOperand(lhsId);
@@ -4751,11 +4912,15 @@ bool WarpCacheIRTranspiler::emitAtomicsCompareExchangeResult(
   MInstruction* result = cas;
   if (Scalar::isBigIntType(elementType)) {
     result = MInt64ToBigInt::New(alloc(), cas, elementType);
+
+    // Make non-movable so we can attach a resume point.
+    result->setNotMovable();
+
     add(result);
   }
 
   pushResult(result);
-  return resumeAfter(cas);
+  return resumeAfterUnchecked(result);
 }
 
 bool WarpCacheIRTranspiler::emitAtomicsExchangeResult(
@@ -4784,11 +4949,15 @@ bool WarpCacheIRTranspiler::emitAtomicsExchangeResult(
   MInstruction* result = exchange;
   if (Scalar::isBigIntType(elementType)) {
     result = MInt64ToBigInt::New(alloc(), exchange, elementType);
+
+    // Make non-movable so we can attach a resume point.
+    result->setNotMovable();
+
     add(result);
   }
 
   pushResult(result);
-  return resumeAfter(exchange);
+  return resumeAfterUnchecked(result);
 }
 
 bool WarpCacheIRTranspiler::emitAtomicsBinaryOp(
@@ -4825,11 +4994,15 @@ bool WarpCacheIRTranspiler::emitAtomicsBinaryOp(
   MInstruction* result = binop;
   if (Scalar::isBigIntType(elementType)) {
     result = MInt64ToBigInt::New(alloc(), binop, elementType);
+
+    // Make non-movable so we can attach a resume point.
+    result->setNotMovable();
+
     add(result);
   }
 
   pushResult(result);
-  return resumeAfter(binop);
+  return resumeAfterUnchecked(result);
 }
 
 bool WarpCacheIRTranspiler::emitAtomicsAddResult(
@@ -4892,11 +5065,15 @@ bool WarpCacheIRTranspiler::emitAtomicsLoadResult(
   MInstruction* result = load;
   if (Scalar::isBigIntType(elementType)) {
     result = MInt64ToBigInt::New(alloc(), load, elementType);
+
+    // Make non-movable so we can attach a resume point.
+    result->setNotMovable();
+
     add(result);
   }
 
   pushResult(result);
-  return resumeAfter(load);
+  return resumeAfterUnchecked(result);
 }
 
 bool WarpCacheIRTranspiler::emitAtomicsStoreResult(

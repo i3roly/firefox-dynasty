@@ -1537,6 +1537,15 @@ class nsLayoutUtils {
     return ComputeCBDependentValue(aPercentBasis, aCoord.AsLengthPercentage());
   }
 
+  static nscoord ComputeCBDependentValue(nscoord aPercentBasis,
+                                         const mozilla::StyleInset& aInset) {
+    if (!aInset.IsLengthPercentage()) {
+      // Callers are assumed to have handled other cases already.
+      return 0;
+    }
+    return ComputeCBDependentValue(aPercentBasis, aInset.AsLengthPercentage());
+  }
+
   static nscoord ComputeBSizeValue(nscoord aContainingBlockBSize,
                                    nscoord aContentEdgeToBoxSizingBoxEdge,
                                    const LengthPercentage& aCoord) {
@@ -1591,12 +1600,12 @@ class nsLayoutUtils {
   // Get a suitable foreground color for painting aColor for aFrame.
   static nscolor DarkenColorIfNeeded(nsIFrame* aFrame, nscolor aColor);
 
-  // Get a suitable foreground color for painting aField for aFrame.
+  // Get a suitable text foreground color for painting aField for aFrame.
   // Type of aFrame is made a template parameter because nsIFrame is not
   // a complete type in the header. Type-safety is not harmed given that
   // DarkenColorIfNeeded requires an nsIFrame pointer.
   template <typename Frame, typename T, typename S>
-  static nscolor GetColor(Frame* aFrame, T S::*aField) {
+  static nscolor GetTextColor(Frame* aFrame, T S::*aField) {
     nscolor color = aFrame->GetVisitedDependentColor(aField);
     return DarkenColorIfNeeded(aFrame, color);
   }

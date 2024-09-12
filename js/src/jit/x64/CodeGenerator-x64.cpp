@@ -204,27 +204,25 @@ void CodeGenerator::visitUDivOrModI64(LUDivOrModI64* lir) {
   masm.bind(&done);
 }
 
-void CodeGeneratorX64::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
-                                     Register divisor, Register output,
-                                     Label* fail) {
+void CodeGeneratorX64::emitBigIntPtrDiv(LBigIntPtrDiv* ins, Register dividend,
+                                        Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
-  MOZ_ASSERT(dividend == rax);
-  MOZ_ASSERT(output == rdx);
+  MOZ_ASSERT(ToRegister(ins->temp0()) == rdx);
+  MOZ_ASSERT(output == rax);
+
+  if (dividend != rax) {
+    masm.movePtr(dividend, rax);
+  }
 
   // Sign extend the lhs into rdx to make rdx:rax.
   masm.cqo();
 
   masm.idivq(divisor);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
 }
 
-void CodeGeneratorX64::emitBigIntMod(LBigIntMod* ins, Register dividend,
-                                     Register divisor, Register output,
-                                     Label* fail) {
+void CodeGeneratorX64::emitBigIntPtrMod(LBigIntPtrMod* ins, Register dividend,
+                                        Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
   MOZ_ASSERT(dividend == rax);
@@ -234,13 +232,6 @@ void CodeGeneratorX64::emitBigIntMod(LBigIntMod* ins, Register dividend,
   masm.cqo();
 
   masm.idivq(divisor);
-
-  // Move the remainder from rdx.
-  masm.movq(output, dividend);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
 }
 
 void CodeGenerator::visitAtomicLoad64(LAtomicLoad64* lir) {

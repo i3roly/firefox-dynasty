@@ -9,11 +9,6 @@
 # will likely look very different (and much more reasonable).
 # See Cargo.toml.orig for the original contents.
 
-bin = []
-example = []
-test = []
-bench = []
-
 [package]
 edition = "2021"
 name = "sync15"
@@ -76,7 +71,7 @@ path = "../support/guid"
 features = ["random"]
 
 [dependencies.uniffi]
-version = "0.27.1"
+version = "0.28.0"
 
 [dependencies.url]
 version = "2.1"
@@ -91,7 +86,7 @@ version = "0.10"
 default-features = false
 
 [build-dependencies.uniffi]
-version = "0.27.1"
+version = "0.28.0"
 features = ["build"]
 
 [features]

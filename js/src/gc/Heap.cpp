@@ -92,6 +92,17 @@ const uint8_t Arena::ThingsPerArena[] = {
 #undef EXPAND_THINGS_PER_ARENA
 };
 
+bool Arena::allocated() const {
+  size_t arenaIndex = ArenaChunk::arenaIndex(this);
+  size_t pageIndex = ArenaChunk::arenaToPageIndex(arenaIndex);
+  bool result = !chunk()->decommittedPages[pageIndex] &&
+                !chunk()->freeCommittedArenas[arenaIndex] &&
+                IsValidAllocKind(allocKind);
+  MOZ_ASSERT_IF(result, zone_);
+  MOZ_ASSERT_IF(result, (uintptr_t(zone_) & 7) == 0);
+  return result;
+}
+
 void Arena::unmarkAll() {
   MarkBitmapWord* arenaBits = chunk()->markBits.arenaBits(this);
   for (size_t i = 0; i < ArenaBitmapWords; i++) {
@@ -310,7 +321,7 @@ inline bool ArenaChunk::canDecommitPage(size_t pageIndex) const {
     return false;
   }
 
-  size_t arenaIndex = pageIndex * ArenasPerPage;
+  size_t arenaIndex = pageToArenaIndex(pageIndex);
   for (size_t i = 0; i < ArenasPerPage; i++) {
     if (!freeCommittedArenas[arenaIndex + i]) {
       return false;
@@ -363,7 +374,7 @@ bool ArenaChunk::decommitOneFreePage(GCRuntime* gc, size_t pageIndex,
 
   // Temporarily mark the page as allocated while we decommit.
   for (size_t i = 0; i < ArenasPerPage; i++) {
-    size_t arenaIndex = pageIndex * ArenasPerPage + i;
+    size_t arenaIndex = pageToArenaIndex(pageIndex) + i;
     MOZ_ASSERT(freeCommittedArenas[arenaIndex]);
     freeCommittedArenas[arenaIndex] = false;
   }
@@ -386,7 +397,7 @@ bool ArenaChunk::decommitOneFreePage(GCRuntime* gc, size_t pageIndex,
     decommittedPages[pageIndex] = true;
   } else {
     for (size_t i = 0; i < ArenasPerPage; i++) {
-      size_t arenaIndex = pageIndex * ArenasPerPage + i;
+      size_t arenaIndex = pageToArenaIndex(pageIndex) + i;
       MOZ_ASSERT(!freeCommittedArenas[arenaIndex]);
       freeCommittedArenas[arenaIndex] = true;
     }
@@ -419,7 +430,7 @@ void ArenaChunk::decommitFreeArenasWithoutUnlocking(const AutoLockGC& lock) {
 
     decommittedPages[i] = true;
     for (size_t j = 0; j < ArenasPerPage; ++j) {
-      size_t arenaIndex = i * ArenasPerPage + j;
+      size_t arenaIndex = pageToArenaIndex(i) + j;
       MOZ_ASSERT(freeCommittedArenas[arenaIndex]);
       freeCommittedArenas[arenaIndex] = false;
     }
@@ -625,8 +636,8 @@ void ArenaChunk::verify() const {
   MOZ_ASSERT(freeCommittedCount == info.numArenasFreeCommitted);
 
   for (size_t i = 0; i < ArenasPerChunk; ++i) {
-    MOZ_ASSERT(!(decommittedPages[pageIndex(i)] && freeCommittedArenas[i]));
-    MOZ_ASSERT_IF(freeCommittedArenas[i], !arenas[i].allocated());
+    MOZ_ASSERT(
+        !(decommittedPages[arenaToPageIndex(i)] && freeCommittedArenas[i]));
   }
 }
 

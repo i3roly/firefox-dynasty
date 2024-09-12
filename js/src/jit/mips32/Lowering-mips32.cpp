@@ -216,18 +216,12 @@ void LIRGeneratorMIPS::lowerUModI64(MMod* mod) {
   defineReturn(lir, mod);
 }
 
-void LIRGeneratorMIPS::lowerBigIntDiv(MBigIntDiv* ins) {
-  auto* lir = new (alloc()) LBigIntDiv(useRegister(ins->lhs()),
-                                       useRegister(ins->rhs()), temp(), temp());
-  define(lir, ins);
-  assignSafepoint(lir, ins);
+void LIRGeneratorMIPS::lowerBigIntPtrDiv(MBigIntPtrDiv* ins) {
+  MOZ_CRASH("NYI");
 }
 
-void LIRGeneratorMIPS::lowerBigIntMod(MBigIntMod* ins) {
-  auto* lir = new (alloc()) LBigIntMod(useRegister(ins->lhs()),
-                                       useRegister(ins->rhs()), temp(), temp());
-  define(lir, ins);
-  assignSafepoint(lir, ins);
+void LIRGeneratorMIPS::lowerBigIntPtrMod(MBigIntPtrMod* ins) {
+  MOZ_CRASH("NYI");
 }
 
 void LIRGenerator::visitWasmTruncateToInt64(MWasmTruncateToInt64* ins) {

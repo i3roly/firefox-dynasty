@@ -120,6 +120,20 @@ nsIContentAnalysisAcknowledgement::FinalAction ConvertResult(
 
 }  // anonymous namespace
 
+/* static */ bool nsIContentAnalysis::MightBeActive() {
+  // A DLP connection is not permitted to be added/removed while the
+  // browser is running, so we can cache this.
+  // Furthermore, if this is set via enterprise policy the pref will be locked
+  // so users won't be able to change it.
+  // Ideally we would make this a mirror: once pref, but this interacts in
+  // some weird ways with the enterprise policy for testing purposes.
+  static bool sIsEnabled =
+      mozilla::StaticPrefs::browser_contentanalysis_enabled();
+  // Note that we can't check gAllowContentAnalysis here because it
+  // only gets set in the parent process.
+  return sIsEnabled;
+}
+
 namespace mozilla::contentanalysis {
 ContentAnalysisRequest::~ContentAnalysisRequest() {
 #ifdef XP_WIN
@@ -1046,23 +1060,8 @@ ContentAnalysis::GetIsActive(bool* aIsActive) {
 
 NS_IMETHODIMP
 ContentAnalysis::GetMightBeActive(bool* aMightBeActive) {
-  // A DLP connection is not permitted to be added/removed while the
-  // browser is running, so we can cache this.
-  static bool sIsEnabled = StaticPrefs::browser_contentanalysis_enabled();
-  // Note that we can't check gAllowContentAnalysis here because it
-  // only gets set in the parent process.
-  *aMightBeActive = sIsEnabled;
+  *aMightBeActive = nsIContentAnalysis::MightBeActive();
   return NS_OK;
-}
-
-/* static */ bool ContentAnalysis::MightBeActive() {
-  nsCOMPtr<nsIContentAnalysis> contentAnalysis =
-      mozilla::components::nsIContentAnalysis::Service();
-  NS_ENSURE_TRUE(contentAnalysis, false);
-
-  bool maybeActive = false;
-  return NS_SUCCEEDED(contentAnalysis->GetMightBeActive(&maybeActive)) &&
-         maybeActive;
 }
 
 NS_IMETHODIMP
@@ -1248,7 +1247,8 @@ nsresult ContentAnalysis::RunAnalyzeRequestTask(
   if (cacheMatchResult == CachedData::CacheResult::Matches) {
     auto action = mCachedData.ResultAction();
     MOZ_ASSERT(action.isSome());
-    LOGD("Found existing request in cache for token %s", requestToken.get());
+    LOGD("Found existing request in cache for token %s with action %d",
+         requestToken.get(), *action);
     mCachedData.SetExpirationTimer();
     auto response = ContentAnalysisResponse::FromAction(*action, requestToken);
     response->DoNotAcknowledge();
@@ -1583,8 +1583,10 @@ ContentAnalysis::CancelAllRequests() {
           auto warnResponseDataMap = owner->mWarnResponseDataMap.Lock();
           auto keys = warnResponseDataMap->Keys();
           for (const auto& key : keys) {
-            LOGD("Responding to warn dialog for request %s",
-                 nsCString(key).get());
+            LOGD(
+                "Responding to warn dialog (from CancelAllRequests) for "
+                "request %s",
+                nsCString(key).get());
             owner->RespondToWarnDialog(key, false);
           }
         }
@@ -1636,6 +1638,18 @@ ContentAnalysis::RespondToWarnDialog(const nsACString& aRequestToken,
         nsIContentAnalysisResponse::Action action;
         DebugOnly<nsresult> rv = entry->mResponse->GetAction(&action);
         MOZ_ASSERT(NS_SUCCEEDED(rv));
+        {
+          auto request = self->mCachedData.Request();
+          if (request) {
+            nsCString cachedRequestToken;
+            DebugOnly<nsresult> tokenRv =
+                request->GetRequestToken(cachedRequestToken);
+            MOZ_ASSERT(NS_SUCCEEDED(tokenRv));
+            if (cachedRequestToken.Equals(requestToken)) {
+              self->mCachedData.UpdateWarnAction(action);
+            }
+          }
+        }
         if (entry->mCallbackData.AutoAcknowledge()) {
           RefPtr<ContentAnalysisAcknowledgement> acknowledgement =
               new ContentAnalysisAcknowledgement(
@@ -2393,6 +2407,7 @@ void ContentAnalysis::CachedData::SetExpirationTimer() {
   }
   mExpirationTimer->InitWithNamedFuncCallback(
       [](nsITimer* func, void* closure) {
+        LOGD("Clearing content analysis cache (dispatching to main thread)");
         NS_DispatchToMainThread(
             NS_NewCancelableRunnableFunction("Clear ContentAnalysis cache", [] {
               LOGD("Clearing content analysis cache");

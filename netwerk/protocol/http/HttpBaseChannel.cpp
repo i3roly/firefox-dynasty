@@ -245,7 +245,7 @@ HttpBaseChannel::HttpBaseChannel()
       mCachedOpaqueResponseBlockingPref(
           StaticPrefs::browser_opaqueResponseBlocking()),
       mChannelBlockedByOpaqueResponse(false),
-      mDummyChannelForImageCache(false),
+      mDummyChannelForCachedResource(false),
       mHasContentDecompressed(false),
       mRenderBlocking(false) {
   StoreApplyConversion(true);
@@ -656,7 +656,7 @@ HttpBaseChannel::GetContentType(nsACString& aContentType) {
 
 NS_IMETHODIMP
 HttpBaseChannel::SetContentType(const nsACString& aContentType) {
-  if (mListener || LoadWasOpened() || mDummyChannelForImageCache) {
+  if (mListener || LoadWasOpened() || mDummyChannelForCachedResource) {
     if (!mResponseHead) return NS_ERROR_NOT_AVAILABLE;
 
     nsAutoCString contentTypeBuf, charsetBuf;
@@ -808,7 +808,7 @@ HttpBaseChannel::GetContentLength(int64_t* aContentLength) {
 
 NS_IMETHODIMP
 HttpBaseChannel::SetContentLength(int64_t value) {
-  if (!mDummyChannelForImageCache) {
+  if (!mDummyChannelForCachedResource) {
     MOZ_ASSERT_UNREACHABLE("HttpBaseChannel::SetContentLength");
     return NS_ERROR_NOT_IMPLEMENTED;
   }
@@ -2498,15 +2498,6 @@ HttpBaseChannel::GetResponseVersion(uint32_t* major, uint32_t* minor) {
   return NS_OK;
 }
 
-void HttpBaseChannel::NotifySetCookie(const nsACString& aCookie) {
-  nsCOMPtr<nsIObserverService> obs = services::GetObserverService();
-  if (obs) {
-    obs->NotifyObservers(static_cast<nsIChannel*>(this),
-                         "http-on-response-set-cookie",
-                         NS_ConvertASCIItoUTF16(aCookie).get());
-  }
-}
-
 bool HttpBaseChannel::IsBrowsingContextDiscarded() const {
   // If there is no loadGroup attached to the current channel, we check the
   // global private browsing state for the private channel instead. For
@@ -3582,11 +3573,7 @@ HttpBaseChannel::SetCookie(const nsACString& aCookieHeader) {
   nsICookieService* cs = gHttpHandler->GetCookieService();
   NS_ENSURE_TRUE(cs, NS_ERROR_FAILURE);
 
-  nsresult rv = cs->SetCookieStringFromHttp(mURI, aCookieHeader, this);
-  if (NS_SUCCEEDED(rv)) {
-    NotifySetCookie(aCookieHeader);
-  }
-  return rv;
+  return cs->SetCookieStringFromHttp(mURI, aCookieHeader, this);
 }
 
 NS_IMETHODIMP
@@ -6455,10 +6442,10 @@ bool HttpBaseChannel::Http3Allowed() const {
          LoadAllowHttp3();
 }
 
-void HttpBaseChannel::SetDummyChannelForImageCache() {
-  mDummyChannelForImageCache = true;
+void HttpBaseChannel::SetDummyChannelForCachedResource() {
+  mDummyChannelForCachedResource = true;
   MOZ_ASSERT(!mResponseHead,
-             "SetDummyChannelForImageCache should only be called once");
+             "SetDummyChannelForCachedResource should only be called once");
   mResponseHead = MakeUnique<nsHttpResponseHead>();
 }
 

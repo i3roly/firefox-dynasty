@@ -9,11 +9,6 @@
 # will likely look very different (and much more reasonable).
 # See Cargo.toml.orig for the original contents.
 
-bin = []
-example = []
-test = []
-bench = []
-
 [package]
 edition = "2021"
 name = "interrupt-support"
@@ -45,8 +40,8 @@ features = [
 ]
 
 [dependencies.uniffi]
-version = "0.27.1"
+version = "0.28.0"
 
 [build-dependencies.uniffi]
-version = "0.27.1"
+version = "0.28.0"
 features = ["build"]

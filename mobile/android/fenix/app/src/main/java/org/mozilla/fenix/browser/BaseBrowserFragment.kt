@@ -290,7 +290,9 @@ abstract class BaseBrowserFragment :
     private val copyDownloadsFeature = ViewBoundFeatureWrapper<CopyDownloadFeature>()
     private val appLinksFeature = ViewBoundFeatureWrapper<AppLinksFeature>()
     private val promptsFeature = ViewBoundFeatureWrapper<PromptFeature>()
-    private val findInPageIntegration = ViewBoundFeatureWrapper<FindInPageIntegration>()
+
+    @VisibleForTesting
+    internal val findInPageIntegration = ViewBoundFeatureWrapper<FindInPageIntegration>()
     private val toolbarIntegration = ViewBoundFeatureWrapper<ToolbarIntegration>()
     private val bottomToolbarContainerIntegration = ViewBoundFeatureWrapper<BottomToolbarContainerIntegration>()
     private val sitePermissionsFeature = ViewBoundFeatureWrapper<SitePermissionsFeature>()
@@ -615,10 +617,15 @@ abstract class BaseBrowserFragment :
                 sessionId = customTabSessionId,
                 view = binding.findInPageView,
                 engineView = binding.engineView,
-                toolbars = listOf(
-                    _bottomToolbarContainerView?.toolbarContainerView,
-                    browserToolbarView.layout as? ViewGroup?,
-                ),
+                toolbars = {
+                    listOf(
+                        _bottomToolbarContainerView?.toolbarContainerView,
+                        browserToolbarView.layout as? ViewGroup?,
+                    )
+                },
+                toolbarsResetCallback = {
+                    onUpdateToolbarForConfigurationChange(browserToolbarView)
+                },
             ),
             owner = this,
             view = view,
@@ -1498,8 +1505,6 @@ abstract class BaseBrowserFragment :
             content = {
                 FirefoxTheme {
                     Column {
-                        Divider()
-
                         if (!activity.isMicrosurveyPromptDismissed.value &&
                             !(context.isTablet() && context.settings().shouldShowTabletNavigationCFR)
                         ) {
@@ -1507,6 +1512,8 @@ abstract class BaseBrowserFragment :
                                 if (isToolbarAtBottom) {
                                     updateBrowserToolbarForMicrosurveyPrompt(browserToolbar)
                                 }
+
+                                Divider()
 
                                 MicrosurveyRequestPrompt(
                                     microsurvey = it,
@@ -1553,6 +1560,7 @@ abstract class BaseBrowserFragment :
                 appStore = requireComponents.appStore,
                 bottomToolbarContainerView = bottomToolbarContainerView,
                 sessionId = customTabSessionId,
+                findInPageFeature = { findInPageIntegration.get() },
             ),
             owner = this,
             view = view,
@@ -1755,8 +1763,6 @@ abstract class BaseBrowserFragment :
             content = {
                 FirefoxTheme {
                     Column {
-                        Divider()
-
                         val activity = requireActivity() as HomeActivity
 
                         if (!activity.isMicrosurveyPromptDismissed.value) {
@@ -1764,6 +1770,8 @@ abstract class BaseBrowserFragment :
                                 if (isToolbarAtBottom) {
                                     updateBrowserToolbarForMicrosurveyPrompt(browserToolbar)
                                 }
+
+                                Divider()
 
                                 MicrosurveyRequestPrompt(
                                     microsurvey = it,
@@ -1817,6 +1825,7 @@ abstract class BaseBrowserFragment :
                 appStore = requireComponents.appStore,
                 bottomToolbarContainerView = bottomToolbarContainerView,
                 sessionId = customTabSessionId,
+                findInPageFeature = { findInPageIntegration.get() },
             ),
             owner = this,
             view = view,
@@ -2128,7 +2137,11 @@ abstract class BaseBrowserFragment :
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     internal fun configureEngineViewWithDynamicToolbarsMaxHeight() {
+        val currentTab = requireComponents.core.store.state.findCustomTabOrSelectedTab(customTabSessionId)
+        if (currentTab?.content?.isPdf == true) return
+        if (findInPageIntegration.get()?.isFeatureActive == true) return
         val toolbarHeights = view?.let { probeToolbarHeights(it) } ?: return
+
         getEngineView().setDynamicToolbarMaxHeight(toolbarHeights.first + toolbarHeights.second)
     }
 
@@ -2370,8 +2383,9 @@ abstract class BaseBrowserFragment :
                 reinitializeNavBar = ::reinitializeNavBar,
                 reinitializeMicrosurveyPrompt = ::initializeMicrosurveyPrompt,
             )
-            reinitializeEngineView()
         }
+
+        reinitializeEngineView()
 
         // If the microsurvey feature is visible, we should update it's state.
         if (shouldShowMicrosurveyPrompt(requireContext()) && !shouldUpdateNavBarState) {
@@ -2392,7 +2406,8 @@ abstract class BaseBrowserFragment :
         )
     }
 
-    private fun reinitializeEngineView() {
+    @VisibleForTesting
+    internal fun reinitializeEngineView() {
         val isFullscreen = fullScreenFeature.get()?.isFullScreen == true
         val topToolbarHeight = requireContext().settings().getTopToolbarHeight(
             includeTabStrip = customTabSessionId == null && requireContext().isTabStripEnabled(),
@@ -2482,8 +2497,10 @@ abstract class BaseBrowserFragment :
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
 
-        _browserToolbarView?.let {
-            onUpdateToolbarForConfigurationChange(it)
+        if (findInPageIntegration.get()?.isFeatureActive != true) {
+            _browserToolbarView?.let {
+                onUpdateToolbarForConfigurationChange(it)
+            }
         }
     }
 

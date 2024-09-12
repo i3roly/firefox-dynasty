@@ -543,12 +543,30 @@ void MacroAssembler::quotient32(Register rhs, Register srcDest,
   }
 }
 
+void MacroAssembler::quotient64(Register rhs, Register srcDest,
+                                bool isUnsigned) {
+  if (isUnsigned) {
+    as_div_du(srcDest, srcDest, rhs);
+  } else {
+    as_div_d(srcDest, srcDest, rhs);
+  }
+}
+
 void MacroAssembler::remainder32(Register rhs, Register srcDest,
                                  bool isUnsigned) {
   if (isUnsigned) {
     as_mod_wu(srcDest, srcDest, rhs);
   } else {
     as_mod_w(srcDest, srcDest, rhs);
+  }
+}
+
+void MacroAssembler::remainder64(Register rhs, Register srcDest,
+                                 bool isUnsigned) {
+  if (isUnsigned) {
+    as_mod_du(srcDest, srcDest, rhs);
+  } else {
+    as_mod_d(srcDest, srcDest, rhs);
   }
 }
 
@@ -646,6 +664,10 @@ void MacroAssembler::lshiftPtr(Imm32 imm, Register dest) {
   as_slli_d(dest, dest, imm.value);
 }
 
+void MacroAssembler::flexibleLshiftPtr(Register shift, Register srcDest) {
+  lshiftPtr(shift, srcDest);
+}
+
 void MacroAssembler::rshift32(Register src, Register dest) {
   as_srl_w(dest, dest, src);
 }
@@ -697,9 +719,22 @@ void MacroAssembler::rshiftPtr(Imm32 imm, Register dest) {
   as_srli_d(dest, dest, imm.value);
 }
 
+void MacroAssembler::flexibleRshiftPtr(Register shift, Register srcDest) {
+  rshiftPtr(shift, srcDest);
+}
+
 void MacroAssembler::rshiftPtrArithmetic(Imm32 imm, Register dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   as_srai_d(dest, dest, imm.value);
+}
+
+void MacroAssembler::rshiftPtrArithmetic(Register shift, Register dest) {
+  as_sra_d(dest, dest, shift);
+}
+
+void MacroAssembler::flexibleRshiftPtrArithmetic(Register shift,
+                                                 Register srcDest) {
+  rshiftPtrArithmetic(shift, srcDest);
 }
 
 // ===============================================================
@@ -1284,6 +1319,14 @@ void MacroAssembler::branchTruncateDoubleToInt32(FloatRegister src,
   ma_b(dest, scratch, fail, Assembler::NotEqual);
 }
 
+void MacroAssembler::branchInt64NotInPtrRange(Register64 src, Label* label) {
+  // No-op on 64-bit platforms.
+}
+
+void MacroAssembler::branchUInt64NotInPtrRange(Register64 src, Label* label) {
+  branchTest64(Assembler::Signed, src, src, label);
+}
+
 template <typename T>
 void MacroAssembler::branchAdd32(Condition cond, T src, Register dest,
                                  Label* overflow) {
@@ -1380,6 +1423,12 @@ void MacroAssembler::branchMulPtr(Condition cond, Register src, Register dest,
                                   Label* label) {
   MOZ_ASSERT(cond == Assembler::Overflow);
   ma_mulPtrTestOverflow(dest, dest, src, label);
+}
+
+void MacroAssembler::branchNegPtr(Condition cond, Register reg, Label* label) {
+  MOZ_ASSERT(cond == Overflow);
+  negPtr(reg);
+  branchPtr(Assembler::Equal, reg, ImmWord(INTPTR_MIN), label);
 }
 
 void MacroAssembler::decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
@@ -1950,6 +1999,13 @@ void MacroAssembler::cmp32MovePtr(Condition cond, Register lhs, Imm32 rhs,
   moveIfNotZero(dest, src, scratch2);
 }
 
+void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Imm32 rhs,
+                                   Register src, Register dest) {
+  SecondScratchRegisterScope scratch2(asMasm());
+  cmpPtrSet(cond, lhs, rhs, scratch2);
+  moveIfNotZero(dest, src, scratch2);
+}
+
 void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Register rhs,
                                    Register src, Register dest) {
   SecondScratchRegisterScope scratch2(asMasm());
@@ -2004,6 +2060,11 @@ void MacroAssembler::test32LoadPtr(Condition cond, const Address& addr,
   branchTest32(Assembler::InvertCondition(cond), addr, mask, &skip);
   loadPtr(src, dest);
   bind(&skip);
+}
+
+void MacroAssembler::test32MovePtr(Condition cond, Register operand, Imm32 mask,
+                                   Register src, Register dest) {
+  MOZ_CRASH();
 }
 
 void MacroAssembler::test32MovePtr(Condition cond, const Address& addr,

@@ -11,6 +11,7 @@ import android.os.Looper.getMainLooper
 import android.os.Message
 import android.view.WindowManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import mozilla.components.browser.engine.gecko.ext.geckoTrackingProtectionPermission
 import mozilla.components.browser.engine.gecko.ext.isExcludedForTrackingProtection
@@ -78,6 +79,7 @@ import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
+import org.mozilla.gecko.util.HardwareUtils
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoResult
@@ -133,6 +135,7 @@ class GeckoEngineSessionTest {
     private lateinit var scrollDelegate: ArgumentCaptor<GeckoSession.ScrollDelegate>
     private lateinit var contentBlockingDelegate: ArgumentCaptor<ContentBlocking.Delegate>
     private lateinit var historyDelegate: ArgumentCaptor<GeckoSession.HistoryDelegate>
+    private var context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Suppress("DEPRECATION")
     // Deprecation will be handled in https://github.com/mozilla-mobile/android-components/issues/8514
@@ -167,6 +170,7 @@ class GeckoEngineSessionTest {
 
         geckoSession = mockGeckoSession()
         geckoSessionProvider = { geckoSession }
+        HardwareUtils.init(context)
     }
 
     private fun captureDelegates() {
@@ -1055,6 +1059,7 @@ class GeckoEngineSessionTest {
         )
         engineSession.settings.historyTrackingDelegate = historyTrackingDelegate
         engineSession.appRedirectUrl = emptyPageUrl
+        engineSession.initialLoad = false
 
         class MockHistoryList(
             items: List<GeckoSession.HistoryDelegate.HistoryItem>,
@@ -1096,6 +1101,33 @@ class GeckoEngineSessionTest {
         verify(historyTrackingDelegate, never()).onVisited(eq(emptyPageUrl), any())
         assertEquals("https://www.google.com", observedUrl)
         assertEquals("Google Search", observedTitle)
+    }
+
+    @Test
+    fun `GIVEN an app initiated request AND initial load WHEN user swipe back THEN the tab should display the loaded page`() = runTestOnMain {
+        val engineSession = GeckoEngineSession(
+            mock(),
+            geckoSessionProvider = geckoSessionProvider,
+            context = coroutineContext,
+        )
+
+        captureDelegates()
+
+        var observedUrl = "https://www.google.com"
+        val emptyPageUrl = "https://example.com"
+
+        engineSession.register(
+            object : EngineSession.Observer {
+                override fun onLocationChange(url: String, hasUserGesture: Boolean) { observedUrl = url }
+            },
+        )
+        engineSession.appRedirectUrl = emptyPageUrl
+        engineSession.initialLoad = true
+
+        navigationDelegate.value.onLocationChange(geckoSession, emptyPageUrl, emptyList(), false)
+        contentDelegate.value.onTitleChange(geckoSession, emptyPageUrl)
+
+        assertEquals("https://example.com", observedUrl)
     }
 
     @Test

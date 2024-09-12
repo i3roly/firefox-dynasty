@@ -861,6 +861,7 @@ class MOZ_RAII UnaryArithIRGenerator : public IRGenerator {
   AttachDecision tryAttachNumber();
   AttachDecision tryAttachBitwise();
   AttachDecision tryAttachBigInt();
+  AttachDecision tryAttachBigIntPtr();
   AttachDecision tryAttachStringInt32();
   AttachDecision tryAttachStringNumber();
 
@@ -905,6 +906,7 @@ class MOZ_RAII BinaryArithIRGenerator : public IRGenerator {
   AttachDecision tryAttachStringConcat();
   AttachDecision tryAttachStringObjectConcat();
   AttachDecision tryAttachBigInt();
+  AttachDecision tryAttachBigIntPtr();
   AttachDecision tryAttachStringInt32Arith();
   AttachDecision tryAttachStringNumberArith();
 

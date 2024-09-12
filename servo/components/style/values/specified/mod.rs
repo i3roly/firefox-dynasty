@@ -81,6 +81,7 @@ pub use self::percentage::{NonNegativePercentage, Percentage};
 pub use self::position::AnchorName;
 pub use self::position::AnchorScope;
 pub use self::position::AspectRatio;
+pub use self::position::Inset;
 pub use self::position::PositionAnchor;
 pub use self::position::PositionTryFallbacks;
 pub use self::position::PositionTryOrder;
@@ -89,6 +90,7 @@ pub use self::position::{GridAutoFlow, GridTemplateAreas, Position, PositionOrAu
 pub use self::position::{PositionArea, PositionAreaKeyword};
 pub use self::position::{MasonryAutoFlow, MasonryItemOrder, MasonryPlacement};
 pub use self::position::{PositionComponent, ZIndex};
+pub use self::position::AnchorFunction;
 pub use self::ratio::Ratio;
 pub use self::rect::NonNegativeLengthOrNumberRect;
 pub use self::resolution::Resolution;

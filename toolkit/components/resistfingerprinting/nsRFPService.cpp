@@ -239,6 +239,12 @@ bool nsRFPService::IsRFPEnabledFor(
     const Maybe<RFPTarget>& aOverriddenFingerprintingSettings) {
   MOZ_ASSERT(aTarget != RFPTarget::AllTargets);
 
+#if SPOOFED_MAX_TOUCH_POINTS > 0
+  if (aTarget == RFPTarget::PointerId) {
+    return false;
+  }
+#endif
+
   if (StaticPrefs::privacy_resistFingerprinting_DoNotUseDirectly() ||
       (aIsPrivateMode &&
        StaticPrefs::privacy_resistFingerprinting_pbmode_DoNotUseDirectly())) {
@@ -2379,5 +2385,30 @@ void nsRFPService::GetMediaDeviceGroup(nsString& aGroup,
     case dom::MediaDeviceKind::Audiooutput:
       aGroup = u"Speaker Device Group"_ns;
       break;
+  }
+}
+
+/* static */
+dom::OrientationType nsRFPService::OrientationSecondaryToPrimary(
+    dom::OrientationType aOrientation) {
+  switch (aOrientation) {
+    case dom::OrientationType::Landscape_secondary:
+      return dom::OrientationType::Landscape_primary;
+    case dom::OrientationType::Portrait_secondary:
+      return dom::OrientationType::Portrait_primary;
+    default:
+      return aOrientation;
+  }
+}
+
+/* static */
+uint16_t nsRFPService::OrientationSecondaryToPrimary(uint16_t aAngle) {
+  switch (aAngle) {
+    case 180:
+      return 0;
+    case 270:
+      return 90;
+    default:
+      return aAngle;
   }
 }

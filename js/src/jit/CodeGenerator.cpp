@@ -5266,7 +5266,7 @@ void CodeGenerator::visitInt32ToBigInt(LInt32ToBigInt* lir) {
 
   masm.newGCBigInt(output, temp, initialBigIntHeap(), ool->entry());
   masm.move32SignExtendToPtr(input, temp);
-  masm.initializeBigInt(output, temp);
+  masm.initializeBigIntPtr(output, temp);
   masm.bind(ool->rejoin());
 }
 
@@ -5285,6 +5285,34 @@ void CodeGenerator::visitUint64ToBigInt(LUint64ToBigInt* lir) {
   Register output = ToRegister(lir->output());
 
   emitCreateBigInt(lir, Scalar::BigUint64, input, output, temp);
+}
+
+void CodeGenerator::visitInt64ToIntPtr(LInt64ToIntPtr* lir) {
+  Register64 input = ToRegister64(lir->input());
+#ifdef JS_64BIT
+  MOZ_ASSERT(input.reg == ToRegister(lir->output()));
+#else
+  MOZ_ASSERT(input.low == ToRegister(lir->output()));
+#endif
+
+  Label bail;
+  if (lir->mir()->elementType() == Scalar::BigInt64) {
+    masm.branchInt64NotInPtrRange(input, &bail);
+  } else {
+    masm.branchUInt64NotInPtrRange(input, &bail);
+  }
+  bailoutFrom(&bail, lir->snapshot());
+}
+
+void CodeGenerator::visitIntPtrToInt64(LIntPtrToInt64* lir) {
+#ifdef JS_64BIT
+  MOZ_CRASH("Not used on 64-bit platforms");
+#else
+  Register input = ToRegister(lir->input());
+  Register64 output = ToOutRegister64(lir);
+
+  masm.move32To64SignExtend(input, output);
+#endif
 }
 
 void CodeGenerator::visitGuardValue(LGuardValue* lir) {
@@ -11306,707 +11334,110 @@ void CodeGenerator::visitPopcntI64(LPopcntI64* ins) {
 }
 
 void CodeGenerator::visitBigIntAdd(LBigIntAdd* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::add>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // 0n + x == x
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(rhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x + 0n == x
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  masm.branchAddPtr(Assembler::Overflow, temp2, temp1, ool->entry());
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::add>(ins);
 }
 
 void CodeGenerator::visitBigIntSub(LBigIntSub* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::sub>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // x - 0n == x
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigInt(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  masm.branchSubPtr(Assembler::Overflow, temp2, temp1, ool->entry());
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::sub>(ins);
 }
 
 void CodeGenerator::visitBigIntMul(LBigIntMul* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::mul>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // 0n * x == 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x * 0n == 0n
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(rhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  masm.branchMulPtr(Assembler::Overflow, temp2, temp1, ool->entry());
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::mul>(ins);
 }
 
 void CodeGenerator::visitBigIntDiv(LBigIntDiv* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::div>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // x / 0 throws an error.
-  if (ins->mir()->canBeDivideByZero()) {
-    masm.branchIfBigIntIsZero(rhs, ool->entry());
-  }
-
-  // 0n / x == 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  // |BigInt::div()| returns |lhs| for |lhs / 1n|, which means there's no
-  // allocation which might trigger a minor GC to free up nursery space. This
-  // requires us to apply the same optimization here, otherwise we'd end up with
-  // always entering the OOL call, because the nursery is never evicted.
-  Label notOne;
-  masm.branchPtr(Assembler::NotEqual, temp2, ImmWord(1), &notOne);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&notOne);
-
-  static constexpr auto DigitMin = std::numeric_limits<
-      mozilla::SignedStdintTypeForSize<sizeof(BigInt::Digit)>::Type>::min();
-
-  // Handle an integer overflow from INT{32,64}_MIN / -1.
-  Label notOverflow;
-  masm.branchPtr(Assembler::NotEqual, temp1, ImmWord(DigitMin), &notOverflow);
-  masm.branchPtr(Assembler::Equal, temp2, ImmWord(-1), ool->entry());
-  masm.bind(&notOverflow);
-
-  emitBigIntDiv(ins, temp1, temp2, output, ool->entry());
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::div>(ins);
 }
 
 void CodeGenerator::visitBigIntMod(LBigIntMod* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::mod>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // x % 0 throws an error.
-  if (ins->mir()->canBeDivideByZero()) {
-    masm.branchIfBigIntIsZero(rhs, ool->entry());
-  }
-
-  // 0n % x == 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntAbsolute(lhs, temp1, ool->entry());
-  masm.loadBigIntAbsolute(rhs, temp2, ool->entry());
-
-  // Similar to the case for BigInt division, we must apply the same allocation
-  // optimizations as performed in |BigInt::mod()|.
-  Label notBelow;
-  masm.branchPtr(Assembler::AboveOrEqual, temp1, temp2, &notBelow);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&notBelow);
-
-  // Convert both digits to signed pointer-sized values.
-  masm.bigIntDigitToSignedPtr(lhs, temp1, ool->entry());
-  masm.bigIntDigitToSignedPtr(rhs, temp2, ool->entry());
-
-  static constexpr auto DigitMin = std::numeric_limits<
-      mozilla::SignedStdintTypeForSize<sizeof(BigInt::Digit)>::Type>::min();
-
-  // Handle an integer overflow from INT{32,64}_MIN / -1.
-  Label notOverflow;
-  masm.branchPtr(Assembler::NotEqual, temp1, ImmWord(DigitMin), &notOverflow);
-  masm.branchPtr(Assembler::NotEqual, temp2, ImmWord(-1), &notOverflow);
-  masm.movePtr(ImmWord(0), temp1);
-  masm.bind(&notOverflow);
-
-  emitBigIntMod(ins, temp1, temp2, output, ool->entry());
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::mod>(ins);
 }
 
 void CodeGenerator::visitBigIntPow(LBigIntPow* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::pow>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // x ** -y throws an error.
-  if (ins->mir()->canBeNegativeExponent()) {
-    masm.branchIfBigIntIsNegative(rhs, ool->entry());
-  }
-
-  Register dest = temp1;
-  Register base = temp2;
-  Register exponent = output;
-
-  Label done;
-  masm.movePtr(ImmWord(1), dest);  // p = 1
-
-  // 1n ** y == 1n
-  // -1n ** y == 1n when y is even
-  // -1n ** y == -1n when y is odd
-  Label lhsNotOne;
-  masm.branch32(Assembler::Above, Address(lhs, BigInt::offsetOfLength()),
-                Imm32(1), &lhsNotOne);
-  masm.loadFirstBigIntDigitOrZero(lhs, base);
-  masm.branchPtr(Assembler::NotEqual, base, Imm32(1), &lhsNotOne);
-  {
-    masm.loadFirstBigIntDigitOrZero(rhs, exponent);
-
-    Label lhsNonNegative;
-    masm.branchIfBigIntIsNonNegative(lhs, &lhsNonNegative);
-    masm.branchTestPtr(Assembler::Zero, exponent, Imm32(1), &done);
-    masm.bind(&lhsNonNegative);
-    masm.movePtr(lhs, output);
-    masm.jump(ool->rejoin());
-  }
-  masm.bind(&lhsNotOne);
-
-  // x ** 0n == 1n
-  masm.branchIfBigIntIsZero(rhs, &done);
-
-  // 0n ** y == 0n with y != 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  {
-    masm.movePtr(lhs, output);
-    masm.jump(ool->rejoin());
-  }
-  masm.bind(&lhsNonZero);
-
-  // Call into the VM when the exponent can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntAbsolute(rhs, exponent, ool->entry());
-
-  // x ** y with x > 1 and y >= DigitBits can't be pointer-sized.
-  masm.branchPtr(Assembler::AboveOrEqual, exponent, Imm32(BigInt::DigitBits),
-                 ool->entry());
-
-  // x ** 1n == x
-  Label rhsNotOne;
-  masm.branch32(Assembler::NotEqual, exponent, Imm32(1), &rhsNotOne);
-  {
-    masm.movePtr(lhs, output);
-    masm.jump(ool->rejoin());
-  }
-  masm.bind(&rhsNotOne);
-
-  // Call into the VM when the base operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, base, ool->entry());
-
-  // MacroAssembler::pow32() adjusted to work on pointer-sized registers.
-  {
-    // m = base
-    // n = exponent
-
-    Label start, loop;
-    masm.jump(&start);
-    masm.bind(&loop);
-
-    // m *= m
-    masm.branchMulPtr(Assembler::Overflow, base, base, ool->entry());
-
-    masm.bind(&start);
-
-    // if ((n & 1) != 0) p *= m
-    Label even;
-    masm.branchTest32(Assembler::Zero, exponent, Imm32(1), &even);
-    masm.branchMulPtr(Assembler::Overflow, base, dest, ool->entry());
-    masm.bind(&even);
-
-    // n >>= 1
-    // if (n == 0) return p
-    masm.branchRshift32(Assembler::NonZero, Imm32(1), exponent, &loop);
-  }
-
-  MOZ_ASSERT(temp1 == dest);
-
-  // Create and return the result.
-  masm.bind(&done);
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::pow>(ins);
 }
 
 void CodeGenerator::visitBigIntBitAnd(LBigIntBitAnd* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::bitAnd>(ins, ArgList(lhs, rhs),
-                                            StoreRegisterTo(output));
-
-  // 0n & x == 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x & 0n == 0n
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(rhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  masm.andPtr(temp2, temp1);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::bitAnd>(ins);
 }
 
 void CodeGenerator::visitBigIntBitOr(LBigIntBitOr* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::bitOr>(ins, ArgList(lhs, rhs),
-                                           StoreRegisterTo(output));
-
-  // 0n | x == x
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(rhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x | 0n == x
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  masm.orPtr(temp2, temp1);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::bitOr>(ins);
 }
 
 void CodeGenerator::visitBigIntBitXor(LBigIntBitXor* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::bitXor>(ins, ArgList(lhs, rhs),
-                                            StoreRegisterTo(output));
-
-  // 0n ^ x == x
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(rhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x ^ 0n == x
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Call into the VM when either operand can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigIntNonZero(lhs, temp1, ool->entry());
-  masm.loadBigIntNonZero(rhs, temp2, ool->entry());
-
-  masm.xorPtr(temp2, temp1);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::bitXor>(ins);
 }
 
 void CodeGenerator::visitBigIntLsh(LBigIntLsh* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register temp3 = ToRegister(ins->temp3());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::lsh>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // 0n << x == 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x << 0n == x
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Inline |BigInt::lsh| for the case when |lhs| contains a single digit.
-
-  Label rhsTooLarge;
-  masm.loadBigIntAbsolute(rhs, temp2, &rhsTooLarge);
-
-  // Call into the VM when the left-hand side operand can't be loaded into a
-  // pointer-sized register.
-  masm.loadBigIntAbsolute(lhs, temp1, ool->entry());
-
-  // Handle shifts exceeding |BigInt::DigitBits| first.
-  Label shift, create;
-  masm.branchPtr(Assembler::Below, temp2, Imm32(BigInt::DigitBits), &shift);
-  {
-    masm.bind(&rhsTooLarge);
-
-    // x << DigitBits with x != 0n always exceeds pointer-sized storage.
-    masm.branchIfBigIntIsNonNegative(rhs, ool->entry());
-
-    // x << -DigitBits == x >> DigitBits, which is either 0n or -1n.
-    masm.move32(Imm32(0), temp1);
-    masm.branchIfBigIntIsNonNegative(lhs, &create);
-    masm.move32(Imm32(1), temp1);
-    masm.jump(&create);
-  }
-  masm.bind(&shift);
-
-  Label nonNegative;
-  masm.branchIfBigIntIsNonNegative(rhs, &nonNegative);
-  {
-    masm.movePtr(temp1, temp3);
-
-    // |x << -y| is computed as |x >> y|.
-    masm.rshiftPtr(temp2, temp1);
-
-    // For negative numbers, round down if any bit was shifted out.
-    masm.branchIfBigIntIsNonNegative(lhs, &create);
-
-    // Compute |mask = (static_cast<Digit>(1) << shift) - 1|.
-    masm.movePtr(ImmWord(-1), output);
-    masm.lshiftPtr(temp2, output);
-    masm.notPtr(output);
-
-    // Add plus one when |(lhs.digit(0) & mask) != 0|.
-    masm.branchTestPtr(Assembler::Zero, output, temp3, &create);
-    masm.addPtr(ImmWord(1), temp1);
-    masm.jump(&create);
-  }
-  masm.bind(&nonNegative);
-  {
-    masm.movePtr(temp2, temp3);
-
-    // Compute |grow = lhs.digit(0) >> (DigitBits - shift)|.
-    masm.negPtr(temp2);
-    masm.addPtr(Imm32(BigInt::DigitBits), temp2);
-    masm.movePtr(temp1, output);
-    masm.rshiftPtr(temp2, output);
-
-    // Call into the VM when any bit will be shifted out.
-    masm.branchTestPtr(Assembler::NonZero, output, output, ool->entry());
-
-    masm.movePtr(temp3, temp2);
-    masm.lshiftPtr(temp2, temp1);
-  }
-  masm.bind(&create);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigIntAbsolute(output, temp1);
-
-  // Set the sign bit when the left-hand side is negative.
-  masm.branchIfBigIntIsNonNegative(lhs, ool->rejoin());
-  masm.or32(Imm32(BigInt::signBitMask()),
-            Address(output, BigInt::offsetOfFlags()));
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::lsh>(ins);
 }
 
 void CodeGenerator::visitBigIntRsh(LBigIntRsh* ins) {
-  Register lhs = ToRegister(ins->lhs());
-  Register rhs = ToRegister(ins->rhs());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register temp3 = ToRegister(ins->temp3());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->rhs()));
+  pushArg(ToRegister(ins->lhs()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::rsh>(ins, ArgList(lhs, rhs),
-                                         StoreRegisterTo(output));
-
-  // 0n >> x == 0n
-  Label lhsNonZero;
-  masm.branchIfBigIntIsNonZero(lhs, &lhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&lhsNonZero);
-
-  // x >> 0n == x
-  Label rhsNonZero;
-  masm.branchIfBigIntIsNonZero(rhs, &rhsNonZero);
-  masm.movePtr(lhs, output);
-  masm.jump(ool->rejoin());
-  masm.bind(&rhsNonZero);
-
-  // Inline |BigInt::rsh| for the case when |lhs| contains a single digit.
-
-  Label rhsTooLarge;
-  masm.loadBigIntAbsolute(rhs, temp2, &rhsTooLarge);
-
-  // Call into the VM when the left-hand side operand can't be loaded into a
-  // pointer-sized register.
-  masm.loadBigIntAbsolute(lhs, temp1, ool->entry());
-
-  // Handle shifts exceeding |BigInt::DigitBits| first.
-  Label shift, create;
-  masm.branchPtr(Assembler::Below, temp2, Imm32(BigInt::DigitBits), &shift);
-  {
-    masm.bind(&rhsTooLarge);
-
-    // x >> -DigitBits == x << DigitBits, which exceeds pointer-sized storage.
-    masm.branchIfBigIntIsNegative(rhs, ool->entry());
-
-    // x >> DigitBits is either 0n or -1n.
-    masm.move32(Imm32(0), temp1);
-    masm.branchIfBigIntIsNonNegative(lhs, &create);
-    masm.move32(Imm32(1), temp1);
-    masm.jump(&create);
-  }
-  masm.bind(&shift);
-
-  Label nonNegative;
-  masm.branchIfBigIntIsNonNegative(rhs, &nonNegative);
-  {
-    masm.movePtr(temp2, temp3);
-
-    // Compute |grow = lhs.digit(0) >> (DigitBits - shift)|.
-    masm.negPtr(temp2);
-    masm.addPtr(Imm32(BigInt::DigitBits), temp2);
-    masm.movePtr(temp1, output);
-    masm.rshiftPtr(temp2, output);
-
-    // Call into the VM when any bit will be shifted out.
-    masm.branchTestPtr(Assembler::NonZero, output, output, ool->entry());
-
-    // |x >> -y| is computed as |x << y|.
-    masm.movePtr(temp3, temp2);
-    masm.lshiftPtr(temp2, temp1);
-    masm.jump(&create);
-  }
-  masm.bind(&nonNegative);
-  {
-    masm.movePtr(temp1, temp3);
-
-    masm.rshiftPtr(temp2, temp1);
-
-    // For negative numbers, round down if any bit was shifted out.
-    masm.branchIfBigIntIsNonNegative(lhs, &create);
-
-    // Compute |mask = (static_cast<Digit>(1) << shift) - 1|.
-    masm.movePtr(ImmWord(-1), output);
-    masm.lshiftPtr(temp2, output);
-    masm.notPtr(output);
-
-    // Add plus one when |(lhs.digit(0) & mask) != 0|.
-    masm.branchTestPtr(Assembler::Zero, output, temp3, &create);
-    masm.addPtr(ImmWord(1), temp1);
-  }
-  masm.bind(&create);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigIntAbsolute(output, temp1);
-
-  // Set the sign bit when the left-hand side is negative.
-  masm.branchIfBigIntIsNonNegative(lhs, ool->rejoin());
-  masm.or32(Imm32(BigInt::signBitMask()),
-            Address(output, BigInt::offsetOfFlags()));
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::rsh>(ins);
 }
 
 void CodeGenerator::visitBigIntIncrement(LBigIntIncrement* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->input()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt);
-  auto* ool =
-      oolCallVM<Fn, BigInt::inc>(ins, ArgList(input), StoreRegisterTo(output));
-
-  // Call into the VM when the input can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigInt(input, temp1, ool->entry());
-  masm.movePtr(ImmWord(1), temp2);
-
-  masm.branchAddPtr(Assembler::Overflow, temp2, temp1, ool->entry());
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::inc>(ins);
 }
 
 void CodeGenerator::visitBigIntDecrement(LBigIntDecrement* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->input()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt);
-  auto* ool =
-      oolCallVM<Fn, BigInt::dec>(ins, ArgList(input), StoreRegisterTo(output));
-
-  // Call into the VM when the input can't be loaded into a pointer-sized
-  // register.
-  masm.loadBigInt(input, temp1, ool->entry());
-  masm.movePtr(ImmWord(1), temp2);
-
-  masm.branchSubPtr(Assembler::Overflow, temp2, temp1, ool->entry());
-
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigInt(output, temp1);
-
-  masm.bind(ool->rejoin());
+  callVM<Fn, BigInt::dec>(ins);
 }
 
 void CodeGenerator::visitBigIntNegate(LBigIntNegate* ins) {
   Register input = ToRegister(ins->input());
-  Register temp = ToRegister(ins->temp());
+  Register temp = ToRegister(ins->temp0());
   Register output = ToRegister(ins->output());
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt);
@@ -12032,44 +11463,436 @@ void CodeGenerator::visitBigIntNegate(LBigIntNegate* ins) {
 }
 
 void CodeGenerator::visitBigIntBitNot(LBigIntBitNot* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register output = ToRegister(ins->output());
+  pushArg(ToRegister(ins->input()));
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt);
-  auto* ool = oolCallVM<Fn, BigInt::bitNot>(ins, ArgList(input),
-                                            StoreRegisterTo(output));
+  callVM<Fn, BigInt::bitNot>(ins);
+}
 
-  masm.loadBigIntAbsolute(input, temp1, ool->entry());
+void CodeGenerator::visitBigIntToIntPtr(LBigIntToIntPtr* ins) {
+  Register input = ToRegister(ins->input());
+  Register output = ToRegister(ins->output());
 
-  // This follows the C++ implementation because it let's us support the full
-  // range [-2^64, 2^64 - 1] on 64-bit resp. [-2^32, 2^32 - 1] on 32-bit.
-  Label nonNegative, done;
-  masm.branchIfBigIntIsNonNegative(input, &nonNegative);
-  {
-    // ~(-x) == ~(~(x-1)) == x-1
-    masm.subPtr(Imm32(1), temp1);
-    masm.jump(&done);
-  }
-  masm.bind(&nonNegative);
-  {
-    // ~x == -x-1 == -(x+1)
-    masm.movePtr(ImmWord(1), temp2);
-    masm.branchAddPtr(Assembler::CarrySet, temp2, temp1, ool->entry());
-  }
-  masm.bind(&done);
+  Label bail;
+  masm.loadBigIntPtr(input, output, &bail);
+  bailoutFrom(&bail, ins->snapshot());
+}
 
-  // Create and return the result.
-  masm.newGCBigInt(output, temp2, initialBigIntHeap(), ool->entry());
-  masm.initializeBigIntAbsolute(output, temp1);
+void CodeGenerator::visitIntPtrToBigInt(LIntPtrToBigInt* ins) {
+  Register input = ToRegister(ins->input());
+  Register temp = ToRegister(ins->temp0());
+  Register output = ToRegister(ins->output());
 
-  // Set the sign bit when the input is positive.
-  masm.branchIfBigIntIsNegative(input, ool->rejoin());
-  masm.or32(Imm32(BigInt::signBitMask()),
-            Address(output, BigInt::offsetOfFlags()));
+  using Fn = BigInt* (*)(JSContext*, intptr_t);
+  auto* ool = oolCallVM<Fn, JS::BigInt::createFromIntPtr>(
+      ins, ArgList(input), StoreRegisterTo(output));
+
+  masm.newGCBigInt(output, temp, initialBigIntHeap(), ool->entry());
+  masm.movePtr(input, temp);
+  masm.initializeBigIntPtr(output, temp);
 
   masm.bind(ool->rejoin());
+}
+
+void CodeGenerator::visitBigIntPtrAdd(LBigIntPtrAdd* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  const LAllocation* rhs = ins->rhs();
+  Register output = ToRegister(ins->output());
+
+  if (rhs->isConstant()) {
+    masm.movePtr(ImmWord(ToIntPtr(rhs)), output);
+  } else {
+    masm.movePtr(ToRegister(rhs), output);
+  }
+
+  Label bail;
+  masm.branchAddPtr(Assembler::Overflow, lhs, output, &bail);
+  bailoutFrom(&bail, ins->snapshot());
+}
+
+void CodeGenerator::visitBigIntPtrSub(LBigIntPtrSub* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register rhs = ToRegister(ins->rhs());
+  Register output = ToRegister(ins->output());
+
+  Label bail;
+  masm.movePtr(lhs, output);
+  masm.branchSubPtr(Assembler::Overflow, rhs, output, &bail);
+  bailoutFrom(&bail, ins->snapshot());
+}
+
+void CodeGenerator::visitBigIntPtrMul(LBigIntPtrMul* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  const LAllocation* rhs = ins->rhs();
+  Register output = ToRegister(ins->output());
+
+  if (rhs->isConstant()) {
+    masm.movePtr(ImmWord(ToIntPtr(rhs)), output);
+  } else {
+    masm.movePtr(ToRegister(rhs), output);
+  }
+
+  Label bail;
+  masm.branchMulPtr(Assembler::Overflow, lhs, output, &bail);
+  bailoutFrom(&bail, ins->snapshot());
+}
+
+void CodeGenerator::visitBigIntPtrDiv(LBigIntPtrDiv* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register rhs = ToRegister(ins->rhs());
+  Register output = ToRegister(ins->output());
+
+  // x / 0 throws an error.
+  Label bail;
+  if (ins->mir()->canBeDivideByZero()) {
+    masm.branchPtr(Assembler::Equal, rhs, Imm32(0), &bail);
+  }
+
+  static constexpr auto DigitMin = std::numeric_limits<
+      mozilla::SignedStdintTypeForSize<sizeof(BigInt::Digit)>::Type>::min();
+
+  // Handle an integer overflow from INT{32,64}_MIN / -1.
+  Label notOverflow;
+  masm.branchPtr(Assembler::NotEqual, lhs, ImmWord(DigitMin), &notOverflow);
+  masm.branchPtr(Assembler::Equal, rhs, Imm32(-1), &bail);
+  masm.bind(&notOverflow);
+
+  emitBigIntPtrDiv(ins, lhs, rhs, output);
+
+  bailoutFrom(&bail, ins->snapshot());
+}
+
+void CodeGenerator::visitBigIntPtrDivPowTwo(LBigIntPtrDivPowTwo* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register output = ToRegister(ins->output());
+  int32_t shift = ins->shift();
+  bool negativeDivisor = ins->negativeDivisor();
+
+  masm.movePtr(lhs, output);
+
+  if (shift) {
+    // Adjust the value so that shifting produces a correctly rounded result
+    // when the numerator is negative.
+    // See 10-1 "Signed Division by a Known Power of 2" in Henry S. Warren,
+    // Jr.'s Hacker's Delight.
+
+    constexpr size_t bits = BigInt::DigitBits;
+
+    if (shift > 1) {
+      // Copy the sign bit of the numerator. (= (2^bits - 1) or 0)
+      masm.rshiftPtrArithmetic(Imm32(bits - 1), output);
+    }
+
+    // Divide by 2^(bits - shift)
+    // i.e. (= (2^bits - 1) / 2^(bits - shift) or 0)
+    // i.e. (= (2^shift - 1) or 0)
+    masm.rshiftPtr(Imm32(bits - shift), output);
+
+    // If signed, make any 1 bit below the shifted bits to bubble up, such that
+    // once shifted the value would be rounded towards 0.
+    masm.addPtr(lhs, output);
+
+    masm.rshiftPtrArithmetic(Imm32(shift), output);
+
+    if (negativeDivisor) {
+      masm.negPtr(output);
+    }
+  } else if (negativeDivisor) {
+    Label bail;
+    masm.branchNegPtr(Assembler::Overflow, output, &bail);
+    bailoutFrom(&bail, ins->snapshot());
+  }
+}
+
+void CodeGenerator::visitBigIntPtrMod(LBigIntPtrMod* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register rhs = ToRegister(ins->rhs());
+  Register output = ToRegister(ins->output());
+  Register temp = ToRegister(ins->temp0());
+
+  // x % 0 throws an error.
+  if (ins->mir()->canBeDivideByZero()) {
+    bailoutCmpPtr(Assembler::Equal, rhs, Imm32(0), ins->snapshot());
+  }
+
+  static constexpr auto DigitMin = std::numeric_limits<
+      mozilla::SignedStdintTypeForSize<sizeof(BigInt::Digit)>::Type>::min();
+
+  masm.movePtr(lhs, temp);
+
+  // Handle an integer overflow from INT{32,64}_MIN / -1.
+  Label notOverflow;
+  masm.branchPtr(Assembler::NotEqual, lhs, ImmWord(DigitMin), &notOverflow);
+  masm.branchPtr(Assembler::NotEqual, rhs, Imm32(-1), &notOverflow);
+  masm.movePtr(ImmWord(0), temp);
+  masm.bind(&notOverflow);
+
+  emitBigIntPtrMod(ins, temp, rhs, output);
+}
+
+void CodeGenerator::visitBigIntPtrModPowTwo(LBigIntPtrModPowTwo* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register output = ToRegister(ins->output());
+  Register temp = ToRegister(ins->temp0());
+  int32_t shift = ins->shift();
+
+  masm.movePtr(lhs, output);
+  masm.movePtr(ImmWord((uintptr_t(1) << shift) - uintptr_t(1)), temp);
+
+  // Switch based on sign of the lhs.
+
+  // Positive numbers are just a bitmask.
+  Label negative;
+  masm.branchTestPtr(Assembler::Signed, lhs, lhs, &negative);
+
+  masm.andPtr(temp, output);
+
+  Label done;
+  masm.jump(&done);
+
+  // Negative numbers need a negate, bitmask, negate
+  masm.bind(&negative);
+
+  masm.negPtr(output);
+  masm.andPtr(temp, output);
+  masm.negPtr(output);
+
+  masm.bind(&done);
+}
+
+void CodeGenerator::visitBigIntPtrPow(LBigIntPtrPow* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register rhs = ToRegister(ins->rhs());
+  Register output = ToRegister(ins->output());
+  Register temp0 = ToRegister(ins->temp0());
+  Register temp1 = ToRegister(ins->temp1());
+
+  Label bail;
+  masm.powPtr(lhs, rhs, output, temp0, temp1, &bail);
+  bailoutFrom(&bail, ins->snapshot());
+}
+
+void CodeGenerator::visitBigIntPtrBitAnd(LBigIntPtrBitAnd* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  const LAllocation* rhs = ins->rhs();
+  Register output = ToRegister(ins->output());
+
+  if (rhs->isConstant()) {
+    masm.movePtr(ImmWord(ToIntPtr(rhs)), output);
+  } else {
+    masm.movePtr(ToRegister(rhs), output);
+  }
+  masm.andPtr(lhs, output);
+}
+
+void CodeGenerator::visitBigIntPtrBitOr(LBigIntPtrBitOr* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  const LAllocation* rhs = ins->rhs();
+  Register output = ToRegister(ins->output());
+
+  if (rhs->isConstant()) {
+    masm.movePtr(ImmWord(ToIntPtr(rhs)), output);
+  } else {
+    masm.movePtr(ToRegister(rhs), output);
+  }
+  masm.orPtr(lhs, output);
+}
+
+void CodeGenerator::visitBigIntPtrBitXor(LBigIntPtrBitXor* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  const LAllocation* rhs = ins->rhs();
+  Register output = ToRegister(ins->output());
+
+  if (rhs->isConstant()) {
+    masm.movePtr(ImmWord(ToIntPtr(rhs)), output);
+  } else {
+    masm.movePtr(ToRegister(rhs), output);
+  }
+  masm.xorPtr(lhs, output);
+}
+
+void CodeGenerator::visitBigIntPtrLsh(LBigIntPtrLsh* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register output = ToRegister(ins->output());
+  Register temp = ToTempRegisterOrInvalid(ins->temp0());
+  Register tempShift = ToTempRegisterOrInvalid(ins->temp1());
+
+  if (ins->rhs()->isConstant()) {
+    intptr_t rhs = ToIntPtr(ins->rhs());
+
+    if (rhs >= intptr_t(BigInt::DigitBits)) {
+      MOZ_ASSERT(ins->mir()->fallible());
+
+      // x << DigitBits with x != 0n always exceeds pointer-sized storage.
+      masm.movePtr(ImmWord(0), output);
+      bailoutCmpPtr(Assembler::NotEqual, lhs, Imm32(0), ins->snapshot());
+    } else if (rhs <= -intptr_t(BigInt::DigitBits)) {
+      MOZ_ASSERT(!ins->mir()->fallible());
+
+      // x << -DigitBits == x >> DigitBits, which is either 0n or -1n.
+      masm.movePtr(lhs, output);
+      masm.rshiftPtrArithmetic(Imm32(BigInt::DigitBits - 1), output);
+    } else if (rhs <= 0) {
+      MOZ_ASSERT(!ins->mir()->fallible());
+
+      // |x << -y| is computed as |x >> y|.
+      masm.movePtr(lhs, output);
+      masm.rshiftPtrArithmetic(Imm32(-rhs), output);
+    } else {
+      MOZ_ASSERT(ins->mir()->fallible());
+
+      masm.movePtr(lhs, output);
+      masm.lshiftPtr(Imm32(rhs), output);
+
+      // Check for overflow: ((lhs << rhs) >> rhs) == lhs.
+      masm.movePtr(output, temp);
+      masm.rshiftPtrArithmetic(Imm32(rhs), temp);
+      bailoutCmpPtr(Assembler::NotEqual, temp, lhs, ins->snapshot());
+    }
+  } else {
+    Register rhs = ToRegister(ins->rhs());
+
+    Label done, bail;
+    MOZ_ASSERT(ins->mir()->fallible());
+
+    masm.movePtr(lhs, output);
+
+    // 0n << x == 0n
+    masm.branchPtr(Assembler::Equal, lhs, Imm32(0), &done);
+
+    // x << DigitBits with x != 0n always exceeds pointer-sized storage.
+    masm.branchPtr(Assembler::GreaterThanOrEqual, rhs, Imm32(BigInt::DigitBits),
+                   &bail);
+
+    // x << -DigitBits == x >> DigitBits, which is either 0n or -1n.
+    Label shift;
+    masm.branchPtr(Assembler::GreaterThan, rhs,
+                   Imm32(-int32_t(BigInt::DigitBits)), &shift);
+    {
+      masm.rshiftPtrArithmetic(Imm32(BigInt::DigitBits - 1), output);
+      masm.jump(&done);
+    }
+    masm.bind(&shift);
+
+    // Move |rhs| into the designated shift register.
+    masm.movePtr(rhs, tempShift);
+
+    // |x << -y| is computed as |x >> y|.
+    Label leftShift;
+    masm.branchPtr(Assembler::GreaterThanOrEqual, rhs, Imm32(0), &leftShift);
+    {
+      masm.negPtr(tempShift);
+      masm.rshiftPtrArithmetic(tempShift, output);
+      masm.jump(&done);
+    }
+    masm.bind(&leftShift);
+
+    masm.lshiftPtr(tempShift, output);
+
+    // Check for overflow: ((lhs << rhs) >> rhs) == lhs.
+    masm.movePtr(output, temp);
+    masm.rshiftPtrArithmetic(tempShift, temp);
+    masm.branchPtr(Assembler::NotEqual, temp, lhs, &bail);
+
+    masm.bind(&done);
+    bailoutFrom(&bail, ins->snapshot());
+  }
+}
+
+void CodeGenerator::visitBigIntPtrRsh(LBigIntPtrRsh* ins) {
+  Register lhs = ToRegister(ins->lhs());
+  Register output = ToRegister(ins->output());
+  Register temp = ToTempRegisterOrInvalid(ins->temp0());
+  Register tempShift = ToTempRegisterOrInvalid(ins->temp1());
+
+  if (ins->rhs()->isConstant()) {
+    intptr_t rhs = ToIntPtr(ins->rhs());
+
+    if (rhs <= -intptr_t(BigInt::DigitBits)) {
+      MOZ_ASSERT(ins->mir()->fallible());
+
+      // x >> -DigitBits == x << DigitBits, which exceeds pointer-sized storage.
+      masm.movePtr(ImmWord(0), output);
+      bailoutCmpPtr(Assembler::NotEqual, lhs, Imm32(0), ins->snapshot());
+    } else if (rhs >= intptr_t(BigInt::DigitBits)) {
+      MOZ_ASSERT(!ins->mir()->fallible());
+
+      // x >> DigitBits is either 0n or -1n.
+      masm.movePtr(lhs, output);
+      masm.rshiftPtrArithmetic(Imm32(BigInt::DigitBits - 1), output);
+    } else if (rhs < 0) {
+      MOZ_ASSERT(ins->mir()->fallible());
+
+      // |x >> -y| is computed as |x << y|.
+      masm.movePtr(lhs, output);
+      masm.lshiftPtr(Imm32(-rhs), output);
+
+      // Check for overflow: ((lhs << rhs) >> rhs) == lhs.
+      masm.movePtr(output, temp);
+      masm.rshiftPtrArithmetic(Imm32(-rhs), temp);
+      bailoutCmpPtr(Assembler::NotEqual, temp, lhs, ins->snapshot());
+    } else {
+      MOZ_ASSERT(!ins->mir()->fallible());
+
+      masm.movePtr(lhs, output);
+      masm.rshiftPtrArithmetic(Imm32(rhs), output);
+    }
+  } else {
+    Register rhs = ToRegister(ins->rhs());
+
+    Label done, bail;
+    MOZ_ASSERT(ins->mir()->fallible());
+
+    masm.movePtr(lhs, output);
+
+    // 0n >> x == 0n
+    masm.branchPtr(Assembler::Equal, lhs, Imm32(0), &done);
+
+    // x >> -DigitBits == x << DigitBits, which exceeds pointer-sized storage.
+    masm.branchPtr(Assembler::LessThanOrEqual, rhs,
+                   Imm32(-int32_t(BigInt::DigitBits)), &bail);
+
+    // x >> DigitBits is either 0n or -1n.
+    Label shift;
+    masm.branchPtr(Assembler::LessThan, rhs, Imm32(BigInt::DigitBits), &shift);
+    {
+      masm.rshiftPtrArithmetic(Imm32(BigInt::DigitBits - 1), output);
+      masm.jump(&done);
+    }
+    masm.bind(&shift);
+
+    // Move |rhs| into the designated shift register.
+    masm.movePtr(rhs, tempShift);
+
+    // |x >> -y| is computed as |x << y|.
+    Label rightShift;
+    masm.branchPtr(Assembler::GreaterThanOrEqual, rhs, Imm32(0), &rightShift);
+    {
+      masm.negPtr(tempShift);
+      masm.lshiftPtr(tempShift, output);
+
+      // Check for overflow: ((lhs << rhs) >> rhs) == lhs.
+      masm.movePtr(output, temp);
+      masm.rshiftPtrArithmetic(tempShift, temp);
+      masm.branchPtr(Assembler::NotEqual, temp, lhs, &bail);
+
+      masm.jump(&done);
+    }
+    masm.bind(&rightShift);
+
+    masm.rshiftPtrArithmetic(tempShift, output);
+
+    masm.bind(&done);
+    bailoutFrom(&bail, ins->snapshot());
+  }
+}
+
+void CodeGenerator::visitBigIntPtrBitNot(LBigIntPtrBitNot* ins) {
+  Register input = ToRegister(ins->input());
+  Register output = ToRegister(ins->output());
+
+  masm.movePtr(input, output);
+  masm.notPtr(output);
 }
 
 void CodeGenerator::visitInt32ToStringWithBase(LInt32ToStringWithBase* lir) {
@@ -21554,7 +21377,7 @@ void CodeGenerator::visitBigIntAsIntN32(LBigIntAsIntN32* ins) {
   masm.movePtr(input, output);
 
   // Load the absolute value of the first digit.
-  masm.loadFirstBigIntDigitOrZero(input, temp);
+  masm.loadBigIntDigit(input, temp);
 
   // If the absolute value exceeds the int32 range, create a new BigInt.
   masm.branchPtr(Assembler::Above, temp, Imm32(INT32_MAX), &create);
@@ -21625,7 +21448,7 @@ void CodeGenerator::visitBigIntAsUintN32(LBigIntAsUintN32* ins) {
   masm.movePtr(input, output);
 
   // Load the absolute value of the first digit.
-  masm.loadFirstBigIntDigitOrZero(input, temp);
+  masm.loadBigIntDigit(input, temp);
 
   // If the absolute value exceeds the uint32 range, create a new BigInt.
 #if JS_PUNBOX64

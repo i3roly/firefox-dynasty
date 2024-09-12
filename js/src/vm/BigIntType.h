@@ -131,6 +131,7 @@ class BigInt final : public js::gc::CellWithLengthAndFlags {
   static BigInt* createFromDouble(JSContext* cx, double d);
   static BigInt* createFromUint64(JSContext* cx, uint64_t n);
   static BigInt* createFromInt64(JSContext* cx, int64_t n);
+  static BigInt* createFromIntPtr(JSContext* cx, intptr_t n);
   static BigInt* createFromDigit(JSContext* cx, Digit d, bool isNegative);
   static BigInt* createFromNonZeroRawUint64(JSContext* cx, uint64_t n,
                                             bool isNegative);
@@ -161,6 +162,8 @@ class BigInt final : public js::gc::CellWithLengthAndFlags {
                      MutableHandle<BigInt*> quotient,
                      MutableHandle<BigInt*> remainder);
 
+  static bool powIntPtr(intptr_t x, intptr_t y, intptr_t* result);
+
   static int64_t toInt64(const BigInt* x);
   static uint64_t toUint64(const BigInt* x);
 
@@ -178,6 +181,11 @@ class BigInt final : public js::gc::CellWithLengthAndFlags {
   // uint64 and store the uint64 value in the output. Otherwise return false and
   // leave the value of the output parameter unspecified.
   static bool isUint64(const BigInt* x, uint64_t* result);
+
+  // Return true if the BigInt is without loss of precision representable as an
+  // intptr_t and store the intptr_t value in the output. Otherwise return false
+  // and leave the value of the output parameter unspecified.
+  static bool isIntPtr(const BigInt* x, intptr_t* result);
 
   // Return true if the BigInt is without loss of precision representable as a
   // JS Number (double) and store the double value in the output. Otherwise
