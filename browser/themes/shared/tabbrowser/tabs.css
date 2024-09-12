@@ -998,19 +998,11 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
 /* All tabs button and menupopup */
 
 #alltabs-button {
-  list-style-image: url(chrome://global/skin/icons/arrow-down.svg);
+  list-style-image: url("chrome://browser/content/firefoxview/view-opentabs.svg");
 
-  /* stylelint-disable-next-line media-query-no-invalid */
-  @media not (-moz-bool-pref: "browser.tabs.tabmanager.enabled") {
-    #tabbrowser-tabs:not([overflow], [hashiddentabs]) ~ & {
-      display: none;
-    }
-
-    #tabbrowser-tabs:not([overflow])[using-closing-tabs-spacer] ~ & {
-      /* temporary space to keep a tab's close button under the cursor */
-      display: flex;
-      visibility: hidden;
-    }
+  > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+    width: 20px;
+    margin: -2px;
   }
 
   #tabbrowser-tabs[hiddensoundplaying] ~ & > .toolbarbutton-badge-stack > .toolbarbutton-badge {
