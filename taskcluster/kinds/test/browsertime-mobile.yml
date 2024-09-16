@@ -102,7 +102,7 @@ browsertime-tp6m:
                 default: 3
         treeherder-symbol: Btime(tp6m)
     raptor:
-        apps: [geckoview, fenix, chrome-m, refbrow]
+        apps: [geckoview, fenix, chrome-m, refbrow, cstm-car-m]
         run-visual-metrics: true
         test: tp6m
         subtests:
@@ -166,7 +166,7 @@ browsertime-tp6m-essential:
     <<: *tp6m-defaults
     run-without-variant: false
     raptor:
-        apps: [geckoview, fenix, chrome-m, refbrow]
+        apps: [geckoview, fenix, chrome-m, refbrow, cstm-car-m]
         run-visual-metrics: true
         test: tp6m
         subtests:
@@ -501,27 +501,6 @@ browsertime-benchmark-speedometer3-mobile:
     mozharness:
         extra-options:
             - --test=speedometer3
-
-browsertime-benchmark-motionmark:
-    description: Raptor (browsertime) Motionmark benchmark tests
-    run-without-variant: false
-    raptor:
-        apps: [fenix, chrome-m, geckoview]
-        subtests:
-            - [motionmark-animometer, mm-a]
-            - [motionmark-animometer-ramp, mm-ar]
-            - [motionmark-htmlsuite, mm-h]
-            - [motionmark-htmlsuite-ramp, mm-hr]
-    run-on-projects:
-        by-app:
-            chrome-m: []
-            default:
-                by-test-platform:
-                    android-hw-a51-.*aarch64-shippable-qr.*: [mozilla-central]
-                    android-hw-a55.*shippable-qr.*: [mozilla-central]
-                    default: []
-    treeherder-symbol: Btime()
-    tier: 2
 
 browsertime-benchmark-motionmark-1-3:
     description: Raptor (browsertime) Motionmark 1.3 benchmark tests

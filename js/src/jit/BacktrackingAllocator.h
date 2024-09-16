@@ -458,6 +458,9 @@ class LiveBundle : public TempObject {
   void setSpillSet(SpillSet* spill) { spill_ = spill; }
 
   LiveRange::BundleLinkIterator rangesBegin() const { return ranges_.begin(); }
+  LiveRange::BundleLinkIterator rangesBegin(LiveRange* range) const {
+    return ranges_.begin(&range->bundleLink);
+  }
   bool hasRanges() const { return !!rangesBegin(); }
   LiveRange* firstRange() const { return LiveRange::get(*rangesBegin()); }
   LiveRange* lastRange() const { return LiveRange::get(ranges_.back()); }
@@ -565,7 +568,7 @@ class VirtualRegister {
   LiveBundle* firstBundle() const { return firstRange()->bundle(); }
 
   [[nodiscard]] bool addInitialRange(TempAllocator& alloc, CodePosition from,
-                                     CodePosition to, size_t* numRanges);
+                                     CodePosition to);
   void addInitialUse(UsePosition* use);
   void setInitialDefinition(CodePosition from);
 };

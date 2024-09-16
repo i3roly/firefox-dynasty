@@ -950,31 +950,21 @@ void LiveBundle::removeRange(LiveRange* range) {
 ///////////////////////////////////////////////////////////////////////////////
 
 bool VirtualRegister::addInitialRange(TempAllocator& alloc, CodePosition from,
-                                      CodePosition to, size_t* numRanges) {
+                                      CodePosition to) {
   MOZ_ASSERT(from < to);
+  MOZ_ASSERT_IF(hasRanges(), from < firstRange()->to());
 
   // Mark [from,to) as a live range for this register during the initial
   // liveness analysis, coalescing with any existing overlapping ranges.
 
-  // On some pathological graphs there might be a huge number of different
-  // live ranges. Allow non-overlapping live range to be merged if the
-  // number of ranges exceeds the cap below.
-  static const size_t CoalesceLimit = 100000;
-
-  LiveRange* prev = nullptr;
   LiveRange* merged = nullptr;
   for (LiveRange::RegisterLinkIterator iter(rangesBegin()); iter;) {
     LiveRange* existing = LiveRange::get(*iter);
 
-    if (from > existing->to() && *numRanges < CoalesceLimit) {
-      // The new range should go after this one.
-      prev = existing;
-      iter++;
-      continue;
-    }
+    MOZ_ASSERT(from < existing->to());
 
-    if (to.next() < existing->from()) {
-      // The new range should go before this one.
+    if (to < existing->from()) {
+      // All other ranges start after |to| so can't overlap.
       break;
     }
 
@@ -1011,18 +1001,14 @@ bool VirtualRegister::addInitialRange(TempAllocator& alloc, CodePosition from,
 
   if (!merged) {
     // The new range does not overlap any existing range for the vreg.
+    MOZ_ASSERT_IF(hasRanges(), to < firstRange()->from());
+
     LiveRange* range = LiveRange::FallibleNew(alloc, this, from, to);
     if (!range) {
       return false;
     }
 
-    if (prev) {
-      ranges_.insertAfter(&prev->registerLink, &range->registerLink);
-    } else {
-      ranges_.pushFront(&range->registerLink);
-    }
-
-    (*numRanges)++;
+    ranges_.pushFront(&range->registerLink);
   }
 
   return true;
@@ -1504,14 +1490,6 @@ static bool IsInputReused(LInstruction* ins, LUse* use) {
 bool BacktrackingAllocator::buildLivenessInfo() {
   JitSpew(JitSpew_RegAlloc, "Beginning liveness analysis");
 
-  Vector<MBasicBlock*, 1, SystemAllocPolicy> loopWorkList;
-  BitSet loopDone(graph.numBlockIds());
-  if (!loopDone.init(alloc())) {
-    return false;
-  }
-
-  size_t numRanges = 0;
-
   for (size_t i = graph.numBlocks(); i > 0; i--) {
     if (mir->shouldCancel("Build Liveness Info (main loop)")) {
       return false;
@@ -1551,8 +1529,9 @@ bool BacktrackingAllocator::buildLivenessInfo() {
     // the range to the point of definition.
     for (BitSet::Iterator liveRegId(live); liveRegId; ++liveRegId) {
       if (!vregs[*liveRegId].addInitialRange(alloc(), entryOf(block),
-                                             exitOf(block).next(), &numRanges))
+                                             exitOf(block).next())) {
         return false;
+      }
     }
 
     // Shorten the front end of ranges for live variables to their point of
@@ -1616,8 +1595,7 @@ bool BacktrackingAllocator::buildLivenessInfo() {
                            /* usedAtStart = */ true);
         }
 
-        if (!vreg(def).addInitialRange(alloc(), from, from.next(),
-                                       &numRanges)) {
+        if (!vreg(def).addInitialRange(alloc(), from, from.next())) {
           return false;
         }
         vreg(def).setInitialDefinition(from);
@@ -1662,7 +1640,7 @@ bool BacktrackingAllocator::buildLivenessInfo() {
         CodePosition to =
             ins->isCall() ? outputOf(*ins) : outputOf(*ins).next();
 
-        if (!vreg(temp).addInitialRange(alloc(), from, to, &numRanges)) {
+        if (!vreg(temp).addInitialRange(alloc(), from, to)) {
           return false;
         }
         vreg(temp).setInitialDefinition(from);
@@ -1714,8 +1692,7 @@ bool BacktrackingAllocator::buildLivenessInfo() {
             }
           }
 
-          if (!vreg(use).addInitialRange(alloc(), entryOf(block), to.next(),
-                                         &numRanges)) {
+          if (!vreg(use).addInitialRange(alloc(), entryOf(block), to.next())) {
             return false;
           }
           UsePosition* usePosition =
@@ -1740,80 +1717,46 @@ bool BacktrackingAllocator::buildLivenessInfo() {
         // This is a dead phi, so add a dummy range over all phis. This
         // can go away if we have an earlier dead code elimination pass.
         CodePosition entryPos = entryOf(block);
-        if (!vreg(def).addInitialRange(alloc(), entryPos, entryPos.next(),
-                                       &numRanges)) {
+        if (!vreg(def).addInitialRange(alloc(), entryPos, entryPos.next())) {
           return false;
         }
       }
     }
 
     if (mblock->isLoopHeader()) {
-      // A divergence from the published algorithm is required here, as
-      // our block order does not guarantee that blocks of a loop are
-      // contiguous. As a result, a single live range spanning the
-      // loop is not possible. Additionally, we require liveIn in a later
-      // pass for resolution, so that must also be fixed up here.
-      MBasicBlock* loopBlock = mblock->backedge();
-      while (true) {
-        // Blocks must already have been visited to have a liveIn set.
-        MOZ_ASSERT(loopBlock->id() >= mblock->id());
+      // MakeLoopsContiguous ensures blocks of a loop are contiguous, so add a
+      // single live range spanning the loop. Because we require liveIn in a
+      // later pass for resolution, we also have to fix that up for all loop
+      // blocks.
 
-        // Add a range for this entire loop block
-        CodePosition from = entryOf(loopBlock->lir());
-        CodePosition to = exitOf(loopBlock->lir()).next();
+      MBasicBlock* backedge = mblock->backedge();
 
-        for (BitSet::Iterator liveRegId(live); liveRegId; ++liveRegId) {
-          if (!vregs[*liveRegId].addInitialRange(alloc(), from, to,
-                                                 &numRanges)) {
-            return false;
-          }
-        }
+      // Add a range for this entire loop
+      CodePosition from = entryOf(mblock->lir());
+      CodePosition to = exitOf(backedge->lir()).next();
 
-        // Fix up the liveIn set.
-        liveIn[loopBlock->id()].insertAll(live);
-
-        // Make sure we don't visit this node again
-        loopDone.insert(loopBlock->id());
-
-        // If this is the loop header, any predecessors are either the
-        // backedge or out of the loop, so skip any predecessors of
-        // this block
-        if (loopBlock != mblock) {
-          for (size_t i = 0; i < loopBlock->numPredecessors(); i++) {
-            MBasicBlock* pred = loopBlock->getPredecessor(i);
-            if (loopDone.contains(pred->id())) {
-              continue;
-            }
-            if (!loopWorkList.append(pred)) {
-              return false;
-            }
-          }
-        }
-
-        // Terminate loop if out of work.
-        if (loopWorkList.empty()) {
-          break;
-        }
-
-        // Grab the next block off the work list, skipping any OSR block.
-        MBasicBlock* osrBlock = graph.mir().osrBlock();
-        while (!loopWorkList.empty()) {
-          loopBlock = loopWorkList.popCopy();
-          if (loopBlock != osrBlock) {
-            break;
-          }
-        }
-
-        // If end is reached without finding a non-OSR block, then no more work
-        // items were found.
-        if (loopBlock == osrBlock) {
-          MOZ_ASSERT(loopWorkList.empty());
-          break;
+      for (BitSet::Iterator liveRegId(live); liveRegId; ++liveRegId) {
+        if (!vregs[*liveRegId].addInitialRange(alloc(), from, to)) {
+          return false;
         }
       }
 
-      // Clear the done set for other loops
-      loopDone.clear();
+      if (mblock != backedge) {
+        // Start at the block after |mblock|.
+        MOZ_ASSERT(graph.getBlock(i - 1) == mblock->lir());
+        size_t j = i;
+        while (true) {
+          MBasicBlock* loopBlock = graph.getBlock(j)->mir();
+
+          // Fix up the liveIn set.
+          liveIn[loopBlock->id()].insertAll(live);
+
+          if (loopBlock == backedge) {
+            break;
+          }
+          j++;
+        }
+      }
     }
 
     MOZ_ASSERT_IF(!mblock->numPredecessors(), live.empty());
@@ -2357,19 +2300,17 @@ static bool HasPrecedingRangeSharingVreg(LiveBundle* bundle, LiveRange* range) {
 static bool HasFollowingRangeSharingVreg(LiveBundle* bundle, LiveRange* range) {
   MOZ_ASSERT(range->bundle() == bundle);
 
-  bool foundRange = false;
-  for (LiveRange::BundleLinkIterator iter = bundle->rangesBegin(); iter;
-       iter++) {
-    LiveRange* prevRange = LiveRange::get(*iter);
-    if (foundRange && &prevRange->vreg() == &range->vreg()) {
+  LiveRange::BundleLinkIterator iter = bundle->rangesBegin(range);
+  MOZ_ASSERT(LiveRange::get(*iter) == range);
+  iter++;
+
+  for (; iter; iter++) {
+    LiveRange* nextRange = LiveRange::get(*iter);
+    if (&nextRange->vreg() == &range->vreg()) {
       return true;
-    }
-    if (prevRange == range) {
-      foundRange = true;
     }
   }
 
-  MOZ_ASSERT(foundRange);
   return false;
 }
 

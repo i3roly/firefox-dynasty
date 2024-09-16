@@ -2325,6 +2325,12 @@
   value: false
   mirror: always
 
+# https://whatpr.org/html/10168/interaction.html#closewatcher
+- name: dom.closewatcher.enabled
+  type: bool
+  value: false
+  mirror: always
+
 # Disable custom highlight API; implementation pending.
 - name: dom.customHighlightAPI.enabled
   type: RelaxedAtomicBool
@@ -2351,7 +2357,7 @@
 # Disable cookie-store API
 - name: dom.cookieStore.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Is support for CSSPseudoElement enabled?
@@ -3509,6 +3515,12 @@
 
 # A pref that is used to slow down origin operations for testing purposes.
 - name: dom.quotaManager.originOperations.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A pref that is used to slow down storage initialization for testing purposes.
+- name: dom.quotaManager.storageInitialization.pauseOnIOThreadMs
   type: RelaxedAtomicUint32
   value: 0
   mirror: always

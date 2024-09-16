@@ -6,6 +6,7 @@
 
 #include "mozilla/dom/AudioDecoder.h"
 #include "mozilla/dom/AudioDecoderBinding.h"
+#include "mozilla/dom/TypedArray.h"
 
 #include "DecoderTraits.h"
 #include "MediaContainerType.h"
@@ -155,6 +156,7 @@ static bool CanDecodeAudio(const Config& aConfig) {
   if (IsOnAndroid() && IsAACCodecString(param.mParsedCodec)) {
     return false;
   }
+  bool typeSupported = false;
   // TODO: Instead of calling CanHandleContainerType with the guessed the
   // containers, DecoderTraits should provide an API to tell if a codec is
   // decodable or not.
@@ -164,11 +166,35 @@ static bool CanDecodeAudio(const Config& aConfig) {
       if (DecoderTraits::CanHandleContainerType(
               *containerType, nullptr /* DecoderDoctorDiagnostics */) !=
           CANPLAY_NO) {
-        return true;
+        typeSupported = true;
       }
     }
   }
-  return false;
+
+  if (!typeSupported) {
+    return false;
+  }
+
+  // Perform additional checks, often codec-specific.
+  // This is to error out only when attempting to `configure(...)` the decoder,
+  // not when calling `isConfigSupported(...)`
+  if constexpr (std::is_same_v<Config, AudioDecoderConfigInternal>) {
+    if (aConfig.mCodec.EqualsLiteral("opus")) {
+      if (aConfig.mNumberOfChannels > 2 &&
+          (!aConfig.mDescription || aConfig.mDescription->Length() < 10)) {
+        LOG("Opus needs a description of at least 10 bytes when decoding > 2 "
+            "channels");
+        return false;
+      }
+    }
+    if (!aConfig.mDescription && (aConfig.mCodec.EqualsLiteral("vorbis") ||
+                                  aConfig.mCodec.EqualsLiteral("flac"))) {
+      LOG("vorbis and flac require a description");
+      return false;
+    }
+  }
+
+  return true;
 }
 
 static nsTArray<UniquePtr<TrackInfo>> GetTracksInfo(
@@ -309,15 +335,6 @@ bool AudioDecoderTraits::Validate(const AudioDecoderConfig& aConfig,
   if (detached) {
     LOGE("description is detached.");
     return false;
-  }
-
-  if (codec.value().EqualsLiteral("flac") ||
-      codec.value().EqualsLiteral("vorbis")) {
-    if (!aConfig.mDescription.WasPassed() ||
-        IsArrayBufferEmpty(aConfig.mDescription.Value())) {
-      LOGE("Description data is required for FLAC and Vorbis");
-      return false;
-    }
   }
 
   return true;

@@ -18,11 +18,8 @@
 
 namespace mozilla::webgpu {
 
-bool AdapterInfo::WrapObject(JSContext* const cx,
-                             JS::Handle<JSObject*> givenProto,
-                             JS::MutableHandle<JSObject*> reflector) {
-  return dom::GPUAdapterInfo_Binding::Wrap(cx, this, givenProto, reflector);
-}
+GPU_IMPL_CYCLE_COLLECTION(AdapterInfo, mParent)
+GPU_IMPL_JS_WRAP(AdapterInfo)
 
 void AdapterInfo::GetWgpuName(nsString& s) const {
   s = mAboutSupportInfo->name;
@@ -90,7 +87,7 @@ void AdapterInfo::GetWgpuBackend(nsString& s) const {
 
 // -
 
-GPU_IMPL_CYCLE_COLLECTION(Adapter, mParent, mBridge, mFeatures, mLimits)
+GPU_IMPL_CYCLE_COLLECTION(Adapter, mParent, mBridge, mFeatures, mLimits, mInfo)
 GPU_IMPL_JS_WRAP(Adapter)
 
 static Maybe<ffi::WGPUFeatures> ToWGPUFeatures(
@@ -159,7 +156,8 @@ Adapter::Adapter(Instance* const aParent, WebGPUChild* const aBridge,
       mId(aInfo->id),
       mFeatures(new SupportedFeatures(this)),
       mLimits(new SupportedLimits(this, aInfo->limits)),
-      mInfo(aInfo) {
+      mInfo(new AdapterInfo(this, aInfo)),
+      mInfoInner(aInfo) {
   ErrorResult ignoredRv;  // It's onerous to plumb this in from outside in this
                           // case, and we don't really need to.
 
@@ -213,12 +211,14 @@ void Adapter::Cleanup() {
 
 const RefPtr<SupportedFeatures>& Adapter::Features() const { return mFeatures; }
 const RefPtr<SupportedLimits>& Adapter::Limits() const { return mLimits; }
+const RefPtr<AdapterInfo>& Adapter::Info() const { return mInfo; }
+
 bool Adapter::IsFallbackAdapter() const {
-  return mInfo->device_type == ffi::WGPUDeviceType::WGPUDeviceType_Cpu;
+  return mInfoInner->device_type == ffi::WGPUDeviceType::WGPUDeviceType_Cpu;
 }
 
 bool Adapter::SupportExternalTextureInSwapChain() const {
-  return mInfo->support_use_external_texture_in_swap_chain;
+  return mInfoInner->support_use_external_texture_in_swap_chain;
 }
 
 static std::string_view ToJsKey(const Limit limit) {
@@ -497,8 +497,8 @@ already_AddRefed<dom::Promise> Adapter::RequestAdapterInfo(
   RefPtr<dom::Promise> promise = dom::Promise::Create(GetParentObject(), aRv);
   if (!promise) return nullptr;
 
-  auto rai = UniquePtr<AdapterInfo>{new AdapterInfo(mInfo)};
-  promise->MaybeResolve(std::move(rai));
+  RefPtr<AdapterInfo> rai = mInfo;
+  promise->MaybeResolve(rai);
   return promise.forget();
 }
 
