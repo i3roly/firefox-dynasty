@@ -168,7 +168,7 @@ void SetIOSurfaceCommonProperties(
   auto colorSpace = CFTypeRefPtr<CGColorSpaceRef>::WrapUnderCreateRule(
       CGDisplayCopyColorSpace(CGMainDisplayID()));
   auto colorData = CFTypeRefPtr<CFDataRef>::WrapUnderCreateRule(
-      CGColorSpaceCopyICCData(colorSpace.get()));
+      CGColorSpaceCopyICCProfile(colorSpace.get()));
   IOSurfaceSetValue(surfaceRef.get(), CFSTR("IOSurfaceColorSpace"),
                     colorData.get());
 #endif
