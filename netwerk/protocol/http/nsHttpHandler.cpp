@@ -350,11 +350,6 @@ nsresult nsHttpHandler::Init() {
   if (IsNeckoChild()) NeckoChild::InitNeckoChild();
 
   InitUserAgentComponents();
-#ifdef XP_MACOSX
-  if (XRE_IsParentProcess()) {
-    InitMSAuthorities();
-  }
-#endif
 
   // This perference is only used in parent process.
   if (!IsNeckoChild()) {
@@ -1105,6 +1100,7 @@ void nsHttpHandler::InitMSAuthorities() {
                                         authorityList))) {
     return;
   }
+  mMSAuthorities.Clear();
 
   // Normalize the MS authority list
   nsCCharSeparatedTokenizer tokenizer(authorityList, ',');
@@ -1925,6 +1921,18 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
       }
     }
   }
+
+#ifdef XP_MACOSX
+  if (XRE_IsParentProcess()) {
+    if (PREF_CHANGED(HTTP_PREF("microsoft-entra-sso.enabled"))) {
+      rv =
+          Preferences::GetBool(HTTP_PREF("microsoft-entra-sso.enabled"), &cVar);
+      if (NS_SUCCEEDED(rv) && cVar) {
+        InitMSAuthorities();
+      }
+    }
+  }
+#endif
 
   // Enable HTTP response timeout if TCP Keepalives are disabled.
   mResponseTimeoutEnabled =

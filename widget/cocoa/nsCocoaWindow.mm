@@ -2262,24 +2262,26 @@ LayoutDeviceIntPoint nsCocoaWindow::GetClientOffset() {
   NS_OBJC_END_TRY_BLOCK_RETURN(LayoutDeviceIntPoint(0, 0));
 }
 
-LayoutDeviceIntSize nsCocoaWindow::ClientToWindowSize(const LayoutDeviceIntSize& aClientSize) {
-  NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
-
-  if (!mWindow || mWindow.drawsContentsIntoWindowFrame ||
-      mWindowType == WindowType::Popup) {
-    return {};
-  }
-
-  CGFloat backingScale = BackingScaleFactor();
-  LayoutDeviceIntRect r(0, 0, aClientSize.width, aClientSize.height);
-  NSRect rect = nsCocoaUtils::DevPixelsToCocoaPoints(r, backingScale);
-
-  NSRect maybeInflatedRect = [mWindow frameRectForChildViewRect:rect];
-  r = nsCocoaUtils::CocoaRectToGeckoRectDevPix(maybeInflatedRect, backingScale);
-  return r.Size();
-
-  NS_OBJC_END_TRY_BLOCK_RETURN(LayoutDeviceIntSize(0, 0));
-
+LayoutDeviceIntMargin nsCocoaWindow::ClientToWindowMargin() {
+    NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
+    
+    if (!mWindow || mWindow.drawsContentsIntoWindowFrame ||
+        mWindowType == WindowType::Popup) {
+        return {};
+    }
+    
+    NSRect clientNSRect = mWindow.contentLayoutRect;
+    NSRect frameNSRect = [mWindow frameRectForChildViewRect:clientNSRect];
+    
+    CGFloat backingScale = BackingScaleFactor();
+    const auto clientRect =
+    nsCocoaUtils::CocoaRectToGeckoRectDevPix(clientNSRect, backingScale);
+    const auto frameRect =
+    nsCocoaUtils::CocoaRectToGeckoRectDevPix(frameNSRect, backingScale);
+    
+    return frameRect - clientRect;
+    
+    NS_OBJC_END_TRY_BLOCK_RETURN({});
 }
 
 nsMenuBarX* nsCocoaWindow::GetMenuBar() { return mMenuBar; }
@@ -2873,6 +2875,16 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   }
   if ([titlebarContainerView respondsToSelector:@selector(setTransparent:)]) {
     [titlebarContainerView setTransparent:NO];
+  }
+
+  if (@available(macOS 11.0, *)) {
+    if ([window isKindOfClass:[ToolbarWindow class]]) {
+      // In order to work around a drawing bug with windows in full screen
+      // mode, disable titlebar separators for full screen windows of the
+      // ToolbarWindow class. The drawing bug was filed as FB9056136. See bug
+      // 1700211 and bug 1912338 for more details.
+      window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+    }
   }
 
   if (!mGeckoWindow) {
@@ -3651,11 +3663,11 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   if (aWindow) {
     // When entering full screen mode, titlebar accessory views are inserted
     // into a floating NSWindow which houses the window titlebar and toolbars.
-    // In order to work around a drawing bug with titlebarAppearsTransparent
-    // windows in full screen mode, disable titlebar separators for all
-    // NSWindows that this view is used in, including the floating full screen
-    // toolbar window. The drawing bug was filed as FB9056136. See bug 1700211
-    // for more details.
+    // In order to work around a drawing bug with windows in full screen mode,
+    // disable titlebar separators for all NSWindows that this view is used in
+    // that are not of the ToolbarWindow class, such as the floating full
+    // screen toolbar window. The drawing bug was filed as FB9056136. See bug
+    // 1700211 and bug 1912338 for more details.
     if (@available(macOS 11.0, *)) {
       aWindow.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
