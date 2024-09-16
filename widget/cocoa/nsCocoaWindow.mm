@@ -3323,12 +3323,14 @@ static NSImage* GetMenuMaskImage() {
       if (isMenu) {
         // Turn on rounded corner masking.
         if ([effectView respondsToSelector:@selector(setMaskImage:)]) {
-        effectView.maskImage = GetMenuMaskImage();
+          effectView.maskImage = GetMenuMaskImage();
         }
         effectView.material = NSVisualEffectMaterialMenu;
       } else {
         if(@available(macOS 10.14, *)) {
           effectView.material = NSVisualEffectMaterialToolTip;
+        } else {
+          effectView.material =  NSVisualEffectMaterialMenu;
         }
       }
       return effectView;

@@ -332,8 +332,13 @@ nsTArray<nsCString> TakeStartupURLs() { return std::move(StartupURLs()); }
 
 - (BOOL)application:(NSApplication*)application
     continueUserActivity:(NSUserActivity*)userActivity
+#if defined(MAC_OS_X_VERSION_10_14) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_14
       restorationHandler:
           (void (^)(NSArray<id<NSUserActivityRestoring>>*))restorationHandler {
+#else
+      restorationHandler:(void (^)(NSArray*))restorationHandler {
+#endif
   if (![userActivity.activityType
           isEqualToString:NSUserActivityTypeBrowsingWeb]) {
     return NO;

@@ -180,7 +180,10 @@ struct MOZ_CAPABILITY("mutex") StaticMutex {
 typedef Mutex StaticMutex;
 
 #  if defined(XP_DARWIN)
-#    define STATIC_MUTEX_INIT OS_UNFAIR_LOCK_INIT
+// The hack below works because both OS_UNFAIR_LOCK_INIT and OS_SPINLOCK_INIT
+// initialize the lock to 0 and in both case it's a 32-bit integer.
+#    define STATIC_MUTEX_INIT \
+      { .mUnfairLock = OS_UNFAIR_LOCK_INIT }
 #  elif defined(XP_LINUX) && !defined(ANDROID)
 #    define STATIC_MUTEX_INIT PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP
 #  else

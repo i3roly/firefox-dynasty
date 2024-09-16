@@ -4973,9 +4973,14 @@ nsresult nsChildView::RestoreHiDPIMode() {
 }
 
 - (void)drawRect:(NSRect)aRect {
+  if(nsCocoaFeatures::OnMountainLionOrLater()) {
   NS_WARNING("Unexpected call to drawRect: This view returns YES from "
              "wantsUpdateLayer, so "
              "drawRect should not be called.");
+  } else { //because lion doesn't have these functions we have to duplicate this call
+  //to effectively mimic updateLayer
+   [(ChildView*)[self superview] updateRootCALayer]; 
+  }
 }
 
 - (BOOL)wantsUpdateLayer {
