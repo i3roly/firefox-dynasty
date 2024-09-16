@@ -33,7 +33,7 @@ add_task(async function () {
     return dbg.selectors.getIsThreadCurrentlyTracing(topLevelThreadActorID);
   });
 
-  const tracerMessage = findElementWithSelector(
+  let tracerMessage = findElementWithSelector(
     dbg,
     "#tracer-tab-panel .tracer-message"
   );
@@ -176,7 +176,7 @@ add_task(async function () {
   const clickTrace = await waitFor(() =>
     tracerTree.querySelector(".tracer-dom-event")
   );
-  is(clickTrace.textContent, "DOM | click");
+  is(clickTrace.textContent, "DOM | node.click");
   is(
     tracerTree.querySelectorAll(".trace-line").length,
     6,
@@ -191,7 +191,7 @@ add_task(async function () {
     }
     return false;
   });
-  is(keyTrace.textContent, "DOM | keypress");
+  is(keyTrace.textContent, "DOM | global.keypress");
 
   is(
     tracerTree.querySelectorAll(".trace-line").length,
@@ -239,6 +239,111 @@ add_task(async function () {
   // Click on the mutation trace to open its source
   mutationTrace.click();
   await waitForSelectedSource(dbg, "foo.js");
+
+  info("Open the DOM event list");
+  const eventListToggleButton = await waitForElementWithSelector(
+    dbg,
+    "#tracer-tab-panel #tracer-events-tab"
+  );
+  eventListToggleButton.click();
+
+  let domEventCategories = findAllElementsWithSelector(
+    dbg,
+    "#tracer-tab-panel .event-listener-category"
+  );
+  is(domEventCategories.length, 2);
+  is(domEventCategories[0].textContent, "Keyboard");
+  is(domEventCategories[1].textContent, "Mouse");
+
+  // Test event highlighting on mouse over
+  is(
+    findAllElementsWithSelector(dbg, ".tracer-slider-event.highlighted").length,
+    0,
+    "No event is highlighted in the timeline"
+  );
+  info("Mouse over the Keyboard category");
+  EventUtils.synthesizeMouseAtCenter(
+    domEventCategories[0],
+    { type: "mousemove" },
+    dbg.win
+  );
+  await waitFor(() => {
+    return (
+      findAllElementsWithSelector(dbg, ".tracer-slider-event.highlighted")
+        .length == 1
+    );
+  }, "The setTimeout event is highlighted in the timeline");
+
+  // Before toggling some DOM events, assert that the two events are displayed in the timeline
+  is(findAllElementsWithSelector(dbg, ".tracer-slider-event").length, 2);
+  info("Toggle off the Mouse and then the Keyboard events");
+  domEventCategories[0].click();
+  await waitFor(
+    () => findAllElementsWithSelector(dbg, ".tracer-slider-event").length == 1
+  );
+  domEventCategories[1].click();
+  // Now that all events are disabled, there is no more trace displayed in the timeline
+  await waitFor(
+    () => !findAllElementsWithSelector(dbg, ".tracer-slider-event").length
+  );
+  tracerMessage = findElementWithSelector(
+    dbg,
+    "#tracer-tab-panel .tracer-message"
+  );
+  is(tracerMessage.textContent, "All traces have been filtered out");
+
+  info("Trigger a setTimeout to have a new event category");
+  await SpecialPowers.spawn(gBrowser.selectedBrowser, [], async function () {
+    content.eval(`
+      window.setTimeout(function () {
+        console.log("timeout fired");
+      });
+      `);
+  });
+  domEventCategories = await waitFor(() => {
+    const categories = findAllElementsWithSelector(
+      dbg,
+      "#tracer-tab-panel .event-listener-category"
+    );
+    if (categories.length == 3) {
+      return categories;
+    }
+    return false;
+  });
+  is(domEventCategories[2].textContent, "Timer");
+  is(
+    findAllElementsWithSelector(dbg, ".tracer-slider-event").length,
+    1,
+    "The setTimeout callback is displayed in the timeline"
+  );
+
+  info(
+    "Check each category checked status before enabling only keyboad instead of time"
+  );
+  const domEventCheckboxes = findAllElementsWithSelector(
+    dbg,
+    `#tracer-tab-panel .event-listener-label input`
+  );
+  is(domEventCheckboxes[0].checked, false);
+  is(domEventCheckboxes[1].checked, false);
+  is(domEventCheckboxes[2].checked, true);
+
+  info(
+    "CmdOrCtrl + click on the Keyboard categorie to force selecting only this category"
+  );
+  EventUtils.synthesizeMouseAtCenter(
+    domEventCategories[0],
+    { [Services.appinfo.OS === "Darwin" ? "metaKey" : "ctrlKey"]: true },
+    dbg.win
+  );
+
+  info("Wait for the event checkboxes to be updated");
+  await waitFor(() => {
+    return domEventCheckboxes[0].checked;
+  });
+  is(domEventCheckboxes[0].checked, true);
+  is(domEventCheckboxes[1].checked, false);
+  is(domEventCheckboxes[2].checked, false);
 
   // Test Disabling tracing
   info("Disable the tracing");

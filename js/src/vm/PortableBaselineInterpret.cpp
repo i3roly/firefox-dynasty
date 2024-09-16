@@ -4973,12 +4973,10 @@ PBIResult PortableBaselineInterpret(JSContext* cx_, State& state, Stack& stack,
 
     CASE(ImplicitThis) {
       {
-        ReservedRooted<JSObject*> obj0(&state.obj0, frame->environmentChain());
-        ReservedRooted<PropertyName*> name0(&state.name0, script->getName(pc));
+        ReservedRooted<JSObject*> env(&state.obj0, &sp[0].asValue().toObject());
+        POP();
         PUSH_EXIT_FRAME();
-        if (!ImplicitThisOperation(cx, obj0, name0, &state.res)) {
-          goto error;
-        }
+        ImplicitThisOperation(cx, env, &state.res);
       }
       PUSH(StackVal(state.res));
       state.res.setUndefined();
@@ -5537,18 +5535,24 @@ PBIResult PortableBaselineInterpret(JSContext* cx_, State& state, Stack& stack,
       END_OP(CheckAliasedLexical);
     }
 
-    CASE(BindGName) {
+    CASE(BindUnqualifiedGName) {
       IC_SET_OBJ_ARG(
           0, &frameMgr.cxForLocalUseOnly()->global()->lexicalEnvironment());
       INVOKE_IC(BindName);
       IC_PUSH_RESULT();
-      END_OP(BindGName);
+      END_OP(BindUnqualifiedGName);
     }
     CASE(BindName) {
       IC_SET_OBJ_ARG(0, frame->environmentChain());
       INVOKE_IC(BindName);
       IC_PUSH_RESULT();
       END_OP(BindName);
+    }
+    CASE(BindUnqualifiedName) {
+      IC_SET_OBJ_ARG(0, frame->environmentChain());
+      INVOKE_IC(BindName);
+      IC_PUSH_RESULT();
+      END_OP(BindUnqualifiedName);
     }
     CASE(GetGName) {
       IC_SET_OBJ_ARG(

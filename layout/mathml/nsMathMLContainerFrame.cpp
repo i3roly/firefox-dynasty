@@ -684,18 +684,6 @@ void nsMathMLContainerFrame::RemoveFrame(DestroyContext& aContext,
   ChildListChanged(dom::MutationEvent_Binding::REMOVAL);
 }
 
-nsresult nsMathMLContainerFrame::AttributeChanged(int32_t aNameSpaceID,
-                                                  nsAtom* aAttribute,
-                                                  int32_t aModType) {
-  // XXX Since they are numerous MathML attributes that affect layout, and
-  // we can't check all of them here, play safe by requesting a reflow.
-  // XXXldb This should only do work for attributes that cause changes!
-  PresShell()->FrameNeedsReflow(
-      this, IntrinsicDirty::FrameAncestorsAndDescendants, NS_FRAME_IS_DIRTY);
-
-  return NS_OK;
-}
-
 void nsMathMLContainerFrame::GatherAndStoreOverflow(ReflowOutput* aMetrics) {
   mBlockStartAscent = aMetrics->BlockStartAscent();
 
@@ -938,21 +926,13 @@ void nsMathMLContainerFrame::GetIntrinsicISizeMetrics(
   }
 
   // Measure
-  nsresult rv =
-      MeasureForWidth(aRenderingContext->GetDrawTarget(), aDesiredSize);
+  PlaceFlags flags(PlaceFlag::IntrinsicSize, PlaceFlag::MeasureOnly);
+  nsresult rv = Place(aRenderingContext->GetDrawTarget(), flags, aDesiredSize);
   if (NS_FAILED(rv)) {
-    PlaceFlags flags(PlaceFlag::IntrinsicSize, PlaceFlag::MeasureOnly);
     PlaceAsMrow(aRenderingContext->GetDrawTarget(), flags, aDesiredSize);
   }
 
   ClearSavedChildMetrics();
-}
-
-/* virtual */
-nsresult nsMathMLContainerFrame::MeasureForWidth(DrawTarget* aDrawTarget,
-                                                 ReflowOutput& aDesiredSize) {
-  PlaceFlags flags(PlaceFlag::IntrinsicSize, PlaceFlag::MeasureOnly);
-  return Place(aDrawTarget, flags, aDesiredSize);
 }
 
 // see spacing table in Chapter 18, TeXBook (p.170)

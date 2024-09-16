@@ -104,13 +104,16 @@ export class SearchModeSwitcher {
       anchor.setAttribute("open", true);
       anchor.setAttribute("aria-expanded", true);
 
-      this.#popup.addEventListener(
-        "popupshown",
-        () => {
-          this.#popup.querySelector("toolbarbutton").focus();
-        },
-        { once: true }
-      );
+      if (event.type == "keypress") {
+        // Focus the first item when opened by keypress only.
+        this.#popup.addEventListener(
+          "popupshown",
+          () => {
+            this.#popup.querySelector("toolbarbutton").focus();
+          },
+          { once: true }
+        );
+      }
 
       lazy.PanelMultiView.openPopup(this.#popup, anchor, {
         position: "bottomleft topleft",
@@ -276,7 +279,22 @@ export class SearchModeSwitcher {
 
     let fireCommand = e => {
       if (e.keyCode == KeyEvent.DOM_VK_RETURN) {
-        e.target.doCommand();
+        let event = e.target.ownerDocument.createEvent("xulcommandevent");
+        event.initCommandEvent(
+          "command",
+          true,
+          true,
+          e.target.ownerGlobal,
+          0,
+          e.ctrlKey,
+          e.altKey,
+          e.shiftKey,
+          e.metaKey,
+          0,
+          e,
+          e.inputSource
+        );
+        e.target.dispatchEvent(event);
       }
     };
 
@@ -292,8 +310,8 @@ export class SearchModeSwitcher {
       menuitem.setAttribute("role", "menuitem");
       menuitem.engine = engine;
       menuitem.addEventListener("keypress", fireCommand);
-      menuitem.addEventListener("command", () => {
-        this.search({ engine });
+      menuitem.addEventListener("command", e => {
+        this.search({ engine, openEngineHomePage: e.shiftKey });
       });
 
       menuitem.setAttribute("image", await engine.getIconURL());
@@ -341,19 +359,36 @@ export class SearchModeSwitcher {
     container.appendChild(frag);
   }
 
-  search({ engine = null, restrict = null } = {}) {
+  search({ engine = null, restrict = null, openEngineHomePage = false } = {}) {
     let gBrowser = this.#input.window.gBrowser;
     let search = "";
     let opts = null;
     if (engine) {
       search =
         gBrowser.userTypedValue ?? gBrowser.selectedBrowser.searchTerms ?? "";
-      opts = { searchEngine: engine, searchModeEntry: "searchbutton" };
+      opts = {
+        searchEngine: engine,
+        searchModeEntry: "searchbutton",
+        openEngineHomePage,
+      };
     } else if (restrict) {
       search = restrict + " " + (gBrowser.userTypedValue || "");
       opts = { searchModeEntry: "searchbutton" };
     }
+
+    if (openEngineHomePage) {
+      opts.focus = false;
+      opts.startQuery = false;
+    }
+
     this.#input.search(search, opts);
+
+    if (openEngineHomePage) {
+      this.#input.openEngineHomePage(search, {
+        searchEngine: opts.searchEngine,
+      });
+    }
+
     this.#popup.hidePopup();
   }
 }

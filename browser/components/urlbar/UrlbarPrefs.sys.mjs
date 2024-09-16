@@ -157,6 +157,11 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Whether the results panel should be kept open during IME composition.
   ["keepPanelOpenDuringImeComposition", false],
 
+  // Comma-separated list of result types that should trigger keyword-exposure
+  // telemetry. Only applies to results with an `exposureTelemetry` value other
+  // than `NONE`.
+  ["keywordExposureResults", ""],
+
   // As a user privacy measure, don't fetch results from remote services for
   // searches that start by pasting a string longer than this. The pref name
   // indicates search suggestions, but this is used for all remote results.
@@ -249,6 +254,9 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Comma-separated list of Suggest exposure suggestion types to enable.
   ["quicksuggest.exposureSuggestionTypes", ""],
 
+  // Whether Suggest should be hidden in the settings UI even when enabled.
+  ["quicksuggest.hideSettingsUI", false],
+
   // Whether non-sponsored quick suggest results are subject to impression
   // frequency caps. This pref is a fallback for the Nimbus variable
   // `quickSuggestImpressionCapsNonSponsoredEnabled`.
@@ -308,7 +316,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   ["quicksuggest.seenRestarts", 0],
 
   // Whether to show the quick suggest onboarding dialog.
-  ["quicksuggest.shouldShowOnboardingDialog", true],
+  ["quicksuggest.shouldShowOnboardingDialog", false],
 
   // Whether the user has seen the onboarding dialog.
   ["quicksuggest.showedOnboardingDialog", false],
@@ -327,10 +335,6 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // The maximum number of recent searches we will show.
   ["recentsearches.maxResults", 5],
-
-  // Whether keyword exposures should be recorded for results with an
-  // `exposureTelemetry` value other than `NONE`.
-  ["recordKeywordExposures", false],
 
   // When true, URLs in the user's history that look like search result pages
   // are styled to look like search engine results instead of the usual history
@@ -1108,6 +1112,10 @@ class Preferences {
     return {
       history: {
         "quicksuggest.enabled": false,
+        "quicksuggest.dataCollection.enabled": false,
+        "quicksuggest.shouldShowOnboardingDialog": false,
+        "suggest.quicksuggest.nonsponsored": false,
+        "suggest.quicksuggest.sponsored": false,
       },
       offline: {
         "quicksuggest.enabled": true,
@@ -1578,6 +1586,7 @@ class Preferences {
           : parseFloat(nimbusValue);
       }
       case "exposureResults":
+      case "keywordExposureResults":
       case "quicksuggest.exposureSuggestionTypes":
         return new Set(
           this._readPref(pref)

@@ -11,6 +11,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import mozilla.components.concept.base.crash.Breadcrumb
+import mozilla.components.lib.crash.db.CrashDao
+import mozilla.components.lib.crash.db.CrashDatabase
+import mozilla.components.lib.crash.db.CrashEntity
+import mozilla.components.lib.crash.db.CrashType
 import mozilla.components.lib.crash.service.CrashReporterService
 import mozilla.components.lib.crash.service.CrashTelemetryService
 import mozilla.components.support.test.any
@@ -22,6 +26,7 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.test.rule.MainCoroutineRule
 import mozilla.components.support.test.rule.runTestOnMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -33,6 +38,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.spy
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
+import org.mockito.Mockito.`when`
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
@@ -75,6 +81,57 @@ class CrashReporterTest {
             services = emptyList(),
             notificationsDelegate = mock(),
         ).install(testContext)
+    }
+
+    @Test
+    fun `GIVEN a CrashReporter initialized with useLegacyReporting=false and shouldPrompt=NEVER WHEN it receives a crash THEN sendCrashReport is no longer called`() {
+        val service: CrashReporterService = mock()
+        val telemetryService: CrashTelemetryService = mock()
+
+        val reporter = spy(
+            CrashReporter(
+                context = testContext,
+                services = listOf(service),
+                telemetryServices = listOf(telemetryService),
+                shouldPrompt = CrashReporter.Prompt.ALWAYS,
+                scope = scope,
+                notificationsDelegate = mock(),
+                useLegacyReporting = false,
+            ).install(testContext),
+        )
+
+        val crash: Crash.UncaughtExceptionCrash = createUncaughtExceptionCrash()
+
+        reporter.onCrash(testContext, crash)
+
+        verify(reporter).sendCrashTelemetry(testContext, crash)
+        verify(reporter, never()).sendCrashReport(testContext, crash)
+        verify(reporter, never()).showPromptOrNotification(testContext, crash)
+    }
+
+    @Test
+    fun `GIVEN a CrashReporter initialized with useLegacyReporting=false and usePrompt=ALWAYS WHEN it receives a crash THEN showPromptOrNotification is no longer called`() {
+        val service: CrashReporterService = mock()
+        val telemetryService: CrashTelemetryService = mock()
+
+        val reporter = spy(
+            CrashReporter(
+                context = testContext,
+                services = listOf(service),
+                telemetryServices = listOf(telemetryService),
+                shouldPrompt = CrashReporter.Prompt.ALWAYS,
+                scope = scope,
+                notificationsDelegate = mock(),
+                useLegacyReporting = false,
+            ).install(testContext),
+        )
+
+        val crash: Crash.UncaughtExceptionCrash = createUncaughtExceptionCrash()
+
+        reporter.onCrash(testContext, crash)
+
+        verify(reporter).sendCrashTelemetry(testContext, crash)
+        verify(reporter, never()).showPromptOrNotification(testContext, crash)
     }
 
     @Test
@@ -989,6 +1046,74 @@ class CrashReporterTest {
                 time = it[i].date
             }
         }
+    }
+
+    @Test
+    fun `GIVEN the crash reporter has unsent crashes WHEN calling hasUnsentCrashReports THEN return true`() = runTestOnMain {
+        val database: CrashDatabase = mock()
+        val crashDao: CrashDao = mock()
+
+        var crashReporter = CrashReporter(
+            services = listOf(mock()),
+            scope = scope,
+            notificationsDelegate = mock(),
+            databaseProvider = { database },
+        )
+
+        `when`(database.crashDao()).thenReturn(crashDao)
+        `when`(crashDao.numberOfUnsentCrashes()).thenReturn(1)
+
+        assertTrue(crashReporter.hasUnsentCrashReports())
+    }
+
+    @Test
+    fun `GIVEN the crash reporter has no crashes WHEN calling hasUnsentCrashReports THEN return false`() = runTestOnMain {
+        val database: CrashDatabase = mock()
+        val crashDao: CrashDao = mock()
+
+        var crashReporter = CrashReporter(
+            services = listOf(mock()),
+            scope = scope,
+            notificationsDelegate = mock(),
+            databaseProvider = { database },
+        )
+
+        `when`(database.crashDao()).thenReturn(crashDao)
+        `when`(crashDao.numberOfUnsentCrashes()).thenReturn(0)
+
+        assertFalse(crashReporter.hasUnsentCrashReports())
+    }
+
+    @Test
+    fun `GIVEN the crash reporter has unsent crashes WHEN calling unsentCrashReports THEN return list of unsent crashes`() = runTestOnMain {
+        val database: CrashDatabase = mock()
+        val crashDao: CrashDao = mock()
+
+        var crashReporter = CrashReporter(
+            services = listOf(mock()),
+            scope = scope,
+            notificationsDelegate = mock(),
+            databaseProvider = { database },
+        )
+
+        val crashEntity = CrashEntity(
+            crashType = CrashType.NATIVE,
+            uuid = "6b6aea3f-55f1-46b2-a875-6c15530ed36e",
+            runtimeTags = mapOf(),
+            breadcrumbs = listOf(),
+            createdAt = 0L,
+            stacktrace = "<native crash>",
+            throwableData = null,
+            minidumpPath = null,
+            minidumpSuccess = null,
+            processType = null,
+            extrasPath = null,
+            remoteType = null,
+        )
+        `when`(database.crashDao()).thenReturn(crashDao)
+        `when`(crashDao.getCrashesWithoutReports()).thenReturn(listOf(crashEntity))
+
+        assertEquals(crashReporter.unsentCrashReports().first().uuid, "6b6aea3f-55f1-46b2-a875-6c15530ed36e")
     }
 
     @Test

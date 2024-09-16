@@ -6015,18 +6015,26 @@ void nsIFrame::MarkSubtreeDirty() {
 /* virtual */
 void nsIFrame::AddInlineMinISize(const IntrinsicSizeInput& aInput,
                                  InlineMinISizeData* aData) {
+  // Note: we are one of the children that mPercentageBasisForChildren was
+  // prepared for (i.e. our parent frame prepares the percentage basis for us,
+  // not for our own children). Hence it's fine that we're resolving our
+  // percentages sizes against this basis in IntrinsicForContainer().
   nscoord isize = nsLayoutUtils::IntrinsicForContainer(
       aInput.mContext, this, IntrinsicISizeType::MinISize,
-      aInput.mPercentageBasis);
+      aInput.mPercentageBasisForChildren);
   aData->DefaultAddInlineMinISize(this, isize);
 }
 
 /* virtual */
 void nsIFrame::AddInlinePrefISize(const IntrinsicSizeInput& aInput,
                                   nsIFrame::InlinePrefISizeData* aData) {
+  // Note: we are one of the children that mPercentageBasisForChildren was
+  // prepared for (i.e. our parent frame prepares the percentage basis for us,
+  // not for our own children). Hence it's fine that we're resolving our
+  // percentages sizes against this basis in IntrinsicForContainer().
   nscoord isize = nsLayoutUtils::IntrinsicForContainer(
       aInput.mContext, this, IntrinsicISizeType::PrefISize,
-      aInput.mPercentageBasis);
+      aInput.mPercentageBasisForChildren);
   aData->DefaultAddInlinePrefISize(isize);
 }
 
@@ -6517,7 +6525,9 @@ nsIFrame::SizeComputationResult nsIFrame::ComputeSize(
     result.ISize(aWM) = std::min(maxISize, result.ISize(aWM));
   }
 
-  const IntrinsicSizeInput input(aRenderingContext, Nothing());
+  const IntrinsicSizeInput input(aRenderingContext,
+                                 Some(aCBSize.ConvertTo(GetWritingMode(), aWM)),
+                                 Nothing());
   const auto& minISizeCoord = stylePos->MinISize(aWM);
   nscoord minISize;
   if (!minISizeCoord.IsAuto() && !shouldIgnoreMinMaxISize) {
@@ -6749,8 +6759,9 @@ LogicalSize nsIFrame::ComputeAutoSize(
         styleBSize, stylePos->MinBSize(aWM), stylePos->MaxBSize(aWM),
         aCBSize.BSize(aWM), contentEdgeToBoxSizing.BSize(aWM));
     const IntrinsicSizeInput input(
-        aRenderingContext, Some(LogicalSize(aWM, NS_UNCONSTRAINEDSIZE, bSize)
-                                    .ConvertTo(GetWritingMode(), aWM)));
+        aRenderingContext, Some(aCBSize.ConvertTo(GetWritingMode(), aWM)),
+        Some(LogicalSize(aWM, NS_UNCONSTRAINEDSIZE, bSize)
+                 .ConvertTo(GetWritingMode(), aWM)));
     result.ISize(aWM) = ShrinkISizeToFit(input, availBased, aFlags);
   }
   return result;
@@ -6846,8 +6857,9 @@ nsIFrame::ISizeComputationResult nsIFrame::ComputeISizeValue(
       aStyleBSize, stylePos->MinBSize(aWM), stylePos->MaxBSize(aWM),
       aCBSize.BSize(aWM), aContentEdgeToBoxSizing.BSize(aWM));
   const IntrinsicSizeInput input(
-      aRenderingContext, Some(LogicalSize(aWM, NS_UNCONSTRAINEDSIZE, bSize)
-                                  .ConvertTo(GetWritingMode(), aWM)));
+      aRenderingContext, Some(aCBSize.ConvertTo(GetWritingMode(), aWM)),
+      Some(LogicalSize(aWM, NS_UNCONSTRAINEDSIZE, bSize)
+               .ConvertTo(GetWritingMode(), aWM)));
   nscoord result;
   switch (aSize) {
     case ExtremumLength::MaxContent:

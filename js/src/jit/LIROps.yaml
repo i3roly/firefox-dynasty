@@ -549,7 +549,6 @@
   result_type: BoxedValue
   operands:
     env: WordSized
-  call_instruction: true
   mir_op: true
 
 # Writes a typed argument for a function call to the frame's argument vector.
@@ -667,6 +666,9 @@
   gen_boilerplate: false
 
 - name: TestIAndBranch
+  gen_boilerplate: false
+
+- name: TestIPtrAndBranch
   gen_boilerplate: false
 
 - name: TestI64AndBranch
@@ -844,6 +846,12 @@
 
 # Not operation on an integer.
 - name: NotI
+  result_type: WordSized
+  operands:
+    input: WordSized
+
+# Not operation on an intptr.
+- name: NotIPtr
   result_type: WordSized
   operands:
     input: WordSized

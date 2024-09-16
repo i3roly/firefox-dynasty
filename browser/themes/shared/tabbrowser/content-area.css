@@ -25,6 +25,16 @@
   }
 }
 
+#navigator-toolbox {
+  border-bottom: 0.01px solid var(--chrome-content-separator-color);
+
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "sidebar.revamp") {
+    /* This reserves space for the content area outline */
+    border-bottom-color: var(--toolbar-bgcolor);
+  }
+}
+
 #browser,
 #tabbrowser-tabbox,
 #tabbrowser-tabpanels,
@@ -37,6 +47,14 @@
 #tabbrowser-tabbox {
   position: relative;
   margin: 0;
+}
+
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (-moz-bool-pref: "sidebar.revamp") {
+  .browserSidebarContainer {
+    outline: 0.01px solid var(--chrome-content-separator-color);
+    box-shadow: var(--content-area-shadow);
+  }
 }
 
 /* We set large flex on both containers to allow the devtools toolbox to

@@ -429,12 +429,14 @@ AbortReasonOr<WarpScriptSnapshot*> WarpScriptOracle::createScriptSnapshot() {
         break;
       }
 
-      case JSOp::BindGName: {
+      case JSOp::BindUnqualifiedGName: {
         Rooted<GlobalObject*> global(cx_, &script_->global());
         Rooted<PropertyName*> name(cx_, loc.getPropertyName(script_));
-        if (JSObject* env = MaybeOptimizeBindGlobalName(cx_, global, name)) {
+        if (JSObject* env =
+                MaybeOptimizeBindUnqualifiedGlobalName(cx_, global, name)) {
           MOZ_ASSERT(env->isTenured());
-          if (!AddOpSnapshot<WarpBindGName>(alloc_, opSnapshots, offset, env)) {
+          if (!AddOpSnapshot<WarpBindUnqualifiedGName>(alloc_, opSnapshots,
+                                                       offset, env)) {
             return abort(AbortReason::Alloc);
           }
         } else {
@@ -536,6 +538,7 @@ AbortReasonOr<WarpScriptSnapshot*> WarpScriptOracle::createScriptSnapshot() {
       case JSOp::StrictEq:
       case JSOp::StrictNe:
       case JSOp::BindName:
+      case JSOp::BindUnqualifiedName:
       case JSOp::GetBoundName:
       case JSOp::Add:
       case JSOp::Sub:

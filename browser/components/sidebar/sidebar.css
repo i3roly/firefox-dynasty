@@ -3,13 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 @import url("chrome://global/skin/global.css");
+@import url("chrome://browser/skin/browser-colors.css");
 
 :root {
-  --sidebar-background-color: -moz-sidebar;
-  --sidebar-text-color: -moz-sidebartext;
-  --sidebar-border-color: -moz-sidebarborder;
-
   background-color: transparent;
+  color: var(--sidebar-text-color);
   height: 100%;
 }
 
@@ -51,8 +49,6 @@ moz-card {
 }
 
 .sidebar-panel {
-  background-color: var(--sidebar-background-color);
-  color: var(--sidebar-text-color);
   padding: var(--space-large);
   height: 100%;
   box-sizing: border-box;

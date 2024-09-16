@@ -99,6 +99,8 @@ import org.mozilla.fenix.components.appstate.OrientationMode
 import org.mozilla.fenix.components.metrics.BreadcrumbsRecorder
 import org.mozilla.fenix.components.metrics.GrowthDataWorker
 import org.mozilla.fenix.components.metrics.fonts.FontEnumerationWorker
+import org.mozilla.fenix.crashes.CrashReporterBinding
+import org.mozilla.fenix.crashes.UnsubmittedCrashDialog
 import org.mozilla.fenix.customtabs.ExternalAppBrowserActivity
 import org.mozilla.fenix.databinding.ActivityHomeBinding
 import org.mozilla.fenix.debugsettings.data.DefaultDebugSettingsRepository
@@ -133,6 +135,7 @@ import org.mozilla.fenix.messaging.FenixMessageSurfaceId
 import org.mozilla.fenix.messaging.MessageNotificationWorker
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.onboarding.ReEngagementNotificationWorker
+import org.mozilla.fenix.partnerships.PartnershipDealIdUtil
 import org.mozilla.fenix.perf.MarkersActivityLifecycleCallbacks
 import org.mozilla.fenix.perf.MarkersFragmentLifecycleCallbacks
 import org.mozilla.fenix.perf.Performance
@@ -183,6 +186,13 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             store = components.core.store,
             context = this@HomeActivity,
             fragmentManager = supportFragmentManager,
+        )
+    }
+
+    private val crashReporterBinding by lazy {
+        CrashReporterBinding(
+            store = components.appStore,
+            onReporting = ::showCrashReporter,
         )
     }
 
@@ -365,12 +375,19 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             val safeIntent = intent?.toSafeIntent()
             safeIntent
                 ?.let(::getIntentSource)
-                ?.also {
-                    Events.appOpened.record(Events.AppOpenedExtra(it))
+                ?.also { source ->
+                    lifecycleScope.launch {
+                        Events.appOpened.record(
+                            Events.AppOpenedExtra(
+                                source = source,
+                                dealId = PartnershipDealIdUtil.getPartnershipDealId(),
+                            ),
+                        )
+                    }
                     // This will record an event in Nimbus' internal event store. Used for behavioral targeting
                     recordEventInNimbus("app_opened")
 
-                    if (safeIntent.action.equals(ACTION_OPEN_PRIVATE_TAB) && it == APP_ICON) {
+                    if (safeIntent.action.equals(ACTION_OPEN_PRIVATE_TAB) && source == APP_ICON) {
                         AppIcon.newPrivateTabTapped.record(NoExtras())
                     }
                 }
@@ -383,6 +400,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             extensionsProcessDisabledBackgroundController,
             serviceWorkerSupport,
             webExtensionPromptFeature,
+            crashReporterBinding,
         )
 
         if (shouldAddToRecentsScreen(intent)) {
@@ -1158,7 +1176,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         components.core.store.dispatch(ContentAction.UpdateDesktopModeAction(tabId, true))
 
         // Reset preference value after opening the tab in desktop mode
-        settings().openNextTabInDesktopMode = components.core.store.state.desktopMode
+        settings().openNextTabInDesktopMode = false
     }
 
     @VisibleForTesting
@@ -1340,6 +1358,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
                 (systemGestureInsets?.left ?: 0) > 0 && (systemGestureInsets?.right ?: 0) > 0
             NavigationBar.osNavigationUsesGestures.set(isUsingGesturesNavigation)
         }
+    }
+
+    private fun showCrashReporter() {
+        UnsubmittedCrashDialog(
+            dispatcher = { action -> components.appStore.dispatch(AppAction.CrashActionWrapper(action)) },
+        ).show(supportFragmentManager, UnsubmittedCrashDialog.TAG)
     }
 
     companion object {

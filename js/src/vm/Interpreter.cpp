@@ -2710,11 +2710,11 @@ bool MOZ_NEVER_INLINE JS_HAZ_JSNATIVE_CALLER js::Interpret(JSContext* cx,
     }
     END_CASE(Unpick)
 
-    CASE(BindGName)
-    CASE(BindName) {
+    CASE(BindUnqualifiedGName)
+    CASE(BindUnqualifiedName) {
       JSOp op = JSOp(*REGS.pc);
       ReservedRooted<JSObject*> envChain(&rootObject0);
-      if (op == JSOp::BindName) {
+      if (op == JSOp::BindUnqualifiedName) {
         envChain.set(REGS.fp()->environmentChain());
       } else {
         MOZ_ASSERT(!script->hasNonSyntacticScope());
@@ -2730,8 +2730,22 @@ bool MOZ_NEVER_INLINE JS_HAZ_JSNATIVE_CALLER js::Interpret(JSContext* cx,
 
       PUSH_OBJECT(*env);
 
-      static_assert(JSOpLength_BindName == JSOpLength_BindGName,
-                    "We're sharing the END_CASE so the lengths better match");
+      static_assert(
+          JSOpLength_BindUnqualifiedName == JSOpLength_BindUnqualifiedGName,
+          "We're sharing the END_CASE so the lengths better match");
+    }
+    END_CASE(BindUnqualifiedName)
+
+    CASE(BindName) {
+      auto envChain = REGS.fp()->environmentChain();
+      ReservedRooted<PropertyName*> name(&rootName0, script->getName(REGS.pc));
+
+      JSObject* env = LookupNameWithGlobalDefault(cx, name, envChain);
+      if (!env) {
+        goto error;
+      }
+
+      PUSH_OBJECT(*env);
     }
     END_CASE(BindName)
 
@@ -3604,15 +3618,8 @@ bool MOZ_NEVER_INLINE JS_HAZ_JSNATIVE_CALLER js::Interpret(JSContext* cx,
     END_CASE(ThrowMsg)
 
     CASE(ImplicitThis) {
-      ReservedRooted<PropertyName*> name(&rootName0, script->getName(REGS.pc));
-      HandleObject envChain = REGS.fp()->environmentChain();
-      JSObject* env = LookupNameWithGlobalDefault(cx, name, envChain);
-      if (!env) {
-        goto error;
-      }
-
-      Value v = ComputeImplicitThis(env);
-      PUSH_COPY(v);
+      Value thisv = ComputeImplicitThis(&REGS.sp[-1].toObject());
+      REGS.sp[-1] = thisv;
     }
     END_CASE(ImplicitThis)
 
@@ -5200,16 +5207,11 @@ bool js::DeleteNameOperation(JSContext* cx, Handle<PropertyName*> name,
   return true;
 }
 
-bool js::ImplicitThisOperation(JSContext* cx, HandleObject envChain,
-                               Handle<PropertyName*> name,
+void js::ImplicitThisOperation(JSContext* cx, HandleObject env,
                                MutableHandleValue res) {
-  JSObject* env = LookupNameWithGlobalDefault(cx, name, envChain);
-  if (!env) {
-    return false;
-  }
-
+  // Note: ImplicitThisOperation has an unused cx argument because the JIT
+  // callVM machinery requires this.
   res.set(ComputeImplicitThis(env));
-  return true;
 }
 
 unsigned js::GetInitDataPropAttrs(JSOp op) {

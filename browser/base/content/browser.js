@@ -730,10 +730,6 @@ var gInitialPages = [
   "chrome://browser/content/blanktab.html",
 ];
 
-if (Services.prefs.getBoolPref("browser.profiles.enabled")) {
-  gInitialPages.push("about:profilemanager");
-}
-
 function isInitialPage(url) {
   if (!(url instanceof Ci.nsIURI)) {
     try {
@@ -5851,10 +5847,9 @@ function WindowIsClosing(event) {
  * Checks if this is the last full *browser* window around. If it is, this will
  * be communicated like quitting. Otherwise, we warn about closing multiple tabs.
  *
- * @param source where the request to close came from (used for telemetry)
  * @returns true if closing can proceed, false if it got cancelled.
  */
-function warnAboutClosingWindow(source) {
+function warnAboutClosingWindow() {
   // Popups aren't considered full browser windows; we also ignore private windows.
   let isPBWindow =
     PrivateBrowsingUtils.isWindowPrivate(window) &&
@@ -5863,8 +5858,7 @@ function warnAboutClosingWindow(source) {
   if (!isPBWindow && !toolbar.visible) {
     return gBrowser.warnAboutClosingTabs(
       gBrowser.visibleTabs.length,
-      gBrowser.closingTabsEnum.ALL,
-      source
+      gBrowser.closingTabsEnum.ALL
     );
   }
 
@@ -5904,8 +5898,7 @@ function warnAboutClosingWindow(source) {
       isPBWindow ||
       gBrowser.warnAboutClosingTabs(
         gBrowser.visibleTabs.length,
-        gBrowser.closingTabsEnum.ALL,
-        source
+        gBrowser.closingTabsEnum.ALL
       )
     );
   }
@@ -5930,8 +5923,7 @@ function warnAboutClosingWindow(source) {
     isPBWindow ||
     gBrowser.warnAboutClosingTabs(
       gBrowser.visibleTabs.length,
-      gBrowser.closingTabsEnum.ALL,
-      source
+      gBrowser.closingTabsEnum.ALL
     )
   );
 }

@@ -8,10 +8,11 @@
 "use strict";
 
 add_setup(async function () {
-  useHttpServer("opensearch");
   SearchTestUtils.setRemoteSettingsConfig([{ identifier: "unused" }]);
 
-  let data = await readJSONFile(do_get_file("data/search-migration.json"));
+  let data = await readJSONFile(
+    do_get_file("settings/v1-migrate-to-webextension.json")
+  );
 
   await promiseSaveSettingsData(data);
 

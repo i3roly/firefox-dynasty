@@ -39,6 +39,8 @@ static NSVisualEffectState VisualEffectStateForVibrancyType(
   switch (aType) {
     case VibrancyType::Titlebar:
       break;
+    case VibrancyType::Sidebar:
+      break;
   }
   return NSVisualEffectStateFollowsWindowActiveState;
 }
@@ -46,7 +48,9 @@ static NSVisualEffectState VisualEffectStateForVibrancyType(
 static NSVisualEffectMaterial VisualEffectMaterialForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
-    case VibrancyType::Titlebar:
+    case VibrancyType::Sidebar:
+      return NSVisualEffectMaterialSidebar;
+   case VibrancyType::Titlebar:
       return NSVisualEffectMaterialTitlebar;
   }
 }
@@ -54,7 +58,11 @@ static NSVisualEffectMaterial VisualEffectMaterialForVibrancyType(
 static NSVisualEffectBlendingMode VisualEffectBlendingModeForVibrancyType(
     VibrancyType aType) {
   switch (aType) {
-    case VibrancyType::Titlebar:
+  case VibrancyType::Sidebar:
+      return StaticPrefs::widget_macos_sidebar_blend_mode_behind_window()
+                 ? NSVisualEffectBlendingModeBehindWindow
+                 : NSVisualEffectBlendingModeWithinWindow;
+  case VibrancyType::Titlebar:
       return StaticPrefs::widget_macos_titlebar_blend_mode_behind_window()
                  ? NSVisualEffectBlendingModeBehindWindow
                  : NSVisualEffectBlendingModeWithinWindow;  

@@ -44,7 +44,6 @@ import org.mozilla.fenix.components.toolbar.ToolbarPosition
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
-import org.mozilla.fenix.ext.isTablet
 import org.mozilla.fenix.nimbus.CookieBannersSection
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.nimbus.HomeScreenSection
@@ -1628,8 +1627,8 @@ class Settings(private val appContext: Context) : PreferencesHolder {
      * If set to true, next opened tab from home screen will be opened in desktop mode.
      */
     var openNextTabInDesktopMode by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_open_next_tab_desktop_mode_is_tablet),
-        default = appContext.isTablet(),
+        appContext.getPreferenceKey(R.string.pref_key_open_next_tab_desktop_mode),
+        default = false,
     )
 
     var signedInFxaAccount by booleanPreference(
@@ -2241,4 +2240,30 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         lastSetAsDefaultPromptShownTimeInMillis = System.currentTimeMillis()
         coldStartsBetweenSetAsDefaultPrompts = 0
     }
+
+    /**
+     * A timestamp indicating the end of a deferral period, initiated when users deny submitted a crash,
+     * during which we avoid showing the unsubmitted crash dialog.
+     */
+    var crashReportDeferredUntil by longPreference(
+        appContext.getPreferenceKey(R.string.pref_key_crash_reporting_deferred_until),
+        default = 0,
+    )
+
+    /**
+     * A user preference indicating that crash reports should always be automatically sent. This can be updated
+     * through the unsubmitted crash dialog or through data choice preferences.
+     */
+    var crashReportAlwaysSend by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_crash_reporting_always_report),
+        default = false,
+    )
+
+    /**
+     * Indicates whether or not we should use the new crash reporter dialog.
+     */
+    var useNewCrashReporter by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_use_new_crash_reporter),
+        default = false,
+    )
 }

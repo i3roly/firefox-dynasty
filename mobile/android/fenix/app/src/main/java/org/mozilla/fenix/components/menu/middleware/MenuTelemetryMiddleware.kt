@@ -108,6 +108,12 @@ class MenuTelemetryMiddleware(
                 ),
             )
 
+            MenuAction.Navigate.NewPrivateTab -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "new_private_tab",
+                ),
+            )
+
             MenuAction.OpenInApp -> Events.browserMenuAction.record(
                 Events.BrowserMenuActionExtra(
                     item = "open_in_app",
@@ -198,8 +204,13 @@ class MenuTelemetryMiddleware(
                 ),
             )
 
+            MenuAction.OpenInFirefox -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "open_in_fenix",
+                ),
+            )
+
             MenuAction.InitAction,
-            MenuAction.OpenInFirefox,
             is MenuAction.InstallAddon,
             is MenuAction.CustomMenuItemAction,
             is MenuAction.Navigate.AddonDetails,
@@ -207,7 +218,6 @@ class MenuTelemetryMiddleware(
             MenuAction.Navigate.DiscoverMoreExtensions,
             MenuAction.Navigate.ExtensionsLearnMore,
             MenuAction.Navigate.Extensions,
-            MenuAction.Navigate.NewPrivateTab,
             MenuAction.Navigate.Save,
             MenuAction.Navigate.Tools,
             is MenuAction.UpdateBookmarkState,

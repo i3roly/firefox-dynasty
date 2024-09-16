@@ -417,37 +417,60 @@ struct FrameBidiData {
 };
 
 // A struct aggregates necessary data to compute the intrinsic sizes for a
-// frame, used as an input for GetMinISize(), GetPrefISize(), IntrinsicISize(),
-// and others.
+// frame, typically the frame whose intrinsic size contribution is being
+// requested. This struct is used as an input for GetMinISize(), GetPrefISize(),
+// IntrinsicISize(), and others.
 struct MOZ_STACK_CLASS IntrinsicSizeInput final {
   gfxContext* const mContext;
 
-  // The content-box size of a frame, served as a percentage basis when
-  // computing the children's intrinsic contributions. If the basis is
-  // indefinite in a given axis, use NS_UNCONSTRAINEDSIZE for that component.
+  // The content-box size of a frame's containing block (in the frame's own
+  // writing mode), used as a percentage basis for percentage-based sizes on the
+  // frame itself that contribute to its intrinsic size. For example, in grid
+  // layout, a percentage value of min-height be can transferred through the
+  // aspect-ratio to determine auto repeat columns specified in
+  // grid-template-columns.
+  //
+  // Note: it is acceptable for mContainingBlockSize to be Nothing() as long as
+  // the frame doesn't have percentage-based value for properties that need to
+  // be resolved in order to compute its intrinsic size.
+  Maybe<LogicalSize> mContainingBlockSize;
+
+  // The content-box size of a frame (in the frame's own writing mode), served
+  // as a percentage basis when computing the children's intrinsic
+  // contributions. If the basis is indefinite in a given axis, use
+  // NS_UNCONSTRAINEDSIZE for that component. If the value is Nothing, it is
+  // semantically equivalent to NS_UNCONSTRAINEDSIZE in both axes.
   //
   // In most scenarios, this struct is used when computing the inline size
   // contribution, so the inline component of the percentage basis should be set
   // to NS_UNCONSTRAINEDSIZE.
-  Maybe<LogicalSize> mPercentageBasis;
+  Maybe<LogicalSize> mPercentageBasisForChildren;
 
   IntrinsicSizeInput(gfxContext* aContext,
-                     const Maybe<LogicalSize>& aPercentageBasis)
-      : mContext(aContext), mPercentageBasis(aPercentageBasis) {
+                     const Maybe<LogicalSize>& aContainingBlockSize,
+                     const Maybe<LogicalSize>& aPercentageBasisForChildren)
+      : mContext(aContext),
+        mContainingBlockSize(aContainingBlockSize),
+        mPercentageBasisForChildren(aPercentageBasisForChildren) {
     MOZ_ASSERT(mContext);
   }
 
-  // Construct a new IntrinsicSizeInput by copying from aSource.
+  // Construct a new IntrinsicSizeInput for children by copying from
+  // aParentInput.
   //
-  // This constructor converts mPercentageBasis' writing mode, if it exists. The
-  // original mPercentageBasis in aSource is expected to be in the writing mode
-  // aFromWM, and it will be converted to the writing mode aToWM.
-  IntrinsicSizeInput(const IntrinsicSizeInput& aSource,
+  // Note: since this constructor creates an IntrinsicSizeInput for the
+  // children, it does not copy mContainingBlockSize from aParentInput.
+  //
+  // This constructor converts mPercentageBasisForChildren's writing mode, if it
+  // exists. The original mPercentageBasis in aSource is expected to be in the
+  // writing mode aFromWM, and it will be converted to the writing mode aToWM.
+  IntrinsicSizeInput(const IntrinsicSizeInput& aParentInput,
                      mozilla::WritingMode aToWM, mozilla::WritingMode aFromWM)
-      : IntrinsicSizeInput(aSource.mContext,
-                           aSource.mPercentageBasis.map([&](const auto& aPB) {
-                             return aPB.ConvertTo(aToWM, aFromWM);
-                           })) {}
+      : IntrinsicSizeInput(
+            aParentInput.mContext, Nothing(),
+            aParentInput.mPercentageBasisForChildren.map([&](const auto& aPB) {
+              return aPB.ConvertTo(aToWM, aFromWM);
+            })) {}
 };
 
 }  // namespace mozilla
@@ -2792,6 +2815,7 @@ class nsIFrame : public nsQueryFrame {
     nscoord border = 0;
     nscoord margin = 0;
     nscoord BorderPadding() const { return border + padding; };
+    nscoord MarginBorderPadding() const { return margin + border + padding; }
   };
 
   /**

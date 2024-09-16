@@ -64,7 +64,6 @@ import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 import org.mozilla.gecko.MultiMap;
-import org.mozilla.gecko.util.HardwareUtils;
 import org.mozilla.gecko.util.ThreadUtils;
 import org.mozilla.geckoview.Autocomplete;
 import org.mozilla.geckoview.Autofill;
@@ -873,7 +872,6 @@ public class GeckoSessionTestRule implements TestRule {
   @Nullable private Map<String, TestServer.ResponseModifier> mResponseModifiers = null;
 
   public GeckoSessionTestRule() {
-    HardwareUtils.init(InstrumentationRegistry.getInstrumentation().getTargetContext());
     mDefaultSettings = new GeckoSessionSettings.Builder().build();
   }
 
@@ -2795,6 +2793,11 @@ public class GeckoSessionTestRule implements TestRule {
   /** Clears sites from the HSTS list. */
   public void clearHSTSState() {
     webExtensionApiCall("ClearHSTSState", null);
+  }
+
+  /** Checks if SHIP is running. */
+  public boolean isSessionHistoryInParentRunning() {
+    return (Boolean) webExtensionApiCall("IsSessionHistoryInParentRunning", null);
   }
 
   private Object webExtensionApiCall(

@@ -10,7 +10,7 @@
   "name": "Dark",
   "description": "A theme with a dark color scheme.",
   "author": "Mozilla",
-  "version": "1.2",
+  "version": "1.3",
 
   "icons": { "32": "icon.svg" },
 
@@ -51,7 +51,7 @@
       "input_background": "#42414D",
       "input_color": "rgb(251,251,254)",
       "urlbar_popup_separator": "rgb(82,82,94)",
-      "tab_icon_overlay_stroke": "rgb(66,65,77)",
+      "tab_icon_overlay_stroke": "rgb(28,27,34)",
       "tab_icon_overlay_fill": "rgb(251,251,254)"
     },
     "properties": {
@@ -65,9 +65,9 @@
   "theme_experiment": {
     "stylesheet": "experiment.css",
     "colors": {
-      "button": "--button-bgcolor",
-      "button_hover": "--button-hover-bgcolor",
-      "button_active": "--button-active-bgcolor",
+      "button": "--button-background-color",
+      "button_hover": "--button-background-color-hover",
+      "button_active": "--button-background-color-active",
       "button_primary": "--button-primary-bgcolor",
       "button_primary_hover": "--button-primary-hover-bgcolor",
       "button_primary_active": "--button-primary-active-bgcolor",

@@ -876,7 +876,7 @@ nscoord nsBlockFrame::MinISize(const IntrinsicSizeInput& aInput) {
                                           GetWritingMode());
         data.mCurrentLine = nsLayoutUtils::IntrinsicForContainer(
             kidInput.mContext, kid, IntrinsicISizeType::MinISize,
-            kidInput.mPercentageBasis);
+            kidInput.mPercentageBasisForChildren);
         data.ForceBreak();
       } else {
         if (!curFrame->GetPrevContinuation() && TextIndentAppliesTo(line)) {
@@ -959,7 +959,7 @@ nscoord nsBlockFrame::PrefISize(const IntrinsicSizeInput& aInput) {
                                           GetWritingMode());
         data.mCurrentLine = nsLayoutUtils::IntrinsicForContainer(
             kidInput.mContext, kid, IntrinsicISizeType::PrefISize,
-            kidInput.mPercentageBasis);
+            kidInput.mPercentageBasisForChildren);
         data.ForceBreak();
       } else {
         if (!curFrame->GetPrevContinuation() && TextIndentAppliesTo(line)) {
@@ -1039,7 +1039,8 @@ nsresult nsBlockFrame::GetPrefWidthTightBounds(gfxContext* aRenderingContext,
         // determine the intrinsic inline sizes of MathML token elements. These
         // elements shouldn't have percentage block sizes that require a
         // percentage basis for resolution.
-        const IntrinsicSizeInput kidInput(aRenderingContext, Nothing());
+        const IntrinsicSizeInput kidInput(aRenderingContext, Nothing(),
+                                          Nothing());
         for (int32_t i = 0, i_end = line->GetChildCount(); i != i_end;
              ++i, kid = kid->GetNextSibling()) {
           rv = kid->GetPrefWidthTightBounds(aRenderingContext, &childX,

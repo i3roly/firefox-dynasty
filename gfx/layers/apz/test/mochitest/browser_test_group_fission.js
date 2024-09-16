@@ -36,7 +36,6 @@ add_task(async function test_main() {
         });
       },
     },
-    { file: "helper_fission_animation_styling_in_oopif.html" },
     { file: "helper_fission_force_empty_hit_region.html" },
     {
       file: "helper_fission_tap_in_nested_iframe_on_zoomed.html",
@@ -48,7 +47,6 @@ add_task(async function test_main() {
     { file: "helper_fission_setResolution.html" },
     { file: "helper_fission_inactivescroller_positionedcontent.html" },
     { file: "helper_fission_irregular_areas.html" },
-    { file: "helper_fission_animation_styling_in_transformed_oopif.html" },
     // add additional tests here
   ];
 

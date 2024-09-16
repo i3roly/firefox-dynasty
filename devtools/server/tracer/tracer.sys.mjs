@@ -46,6 +46,7 @@ const listeners = new Set();
 
 // Detecting worker is different if this file is loaded via Common JS loader (isWorker global)
 // or as a JSM (constructor name)
+// eslint-disable-next-line no-shadow
 const isWorker =
   globalThis.isWorker ||
   globalThis.constructor.name == "WorkerDebuggerGlobalScope";
@@ -70,6 +71,8 @@ const customLazy = {
     // this module no longer has WorkerDebuggerGlobalScope as global,
     // but has to use require() to pull Debugger.
     if (isWorker) {
+      // require is defined for workers.
+      // eslint-disable-next-line no-undef
       return require("Debugger");
     }
     const { addDebuggerToGlobal } = ChromeUtils.importESModule(
@@ -485,8 +488,14 @@ class JavaScriptTracer {
     // We don't need to maintain a stack of events as that's only consumed by onEnterFrame
     // which only cares about the very lastest event being currently trigerring some code.
     if (notification.phase == "pre") {
-      // We get notified about "real" DOM event, but also when some particular callbacks are called like setTimeout.
+      // We get notified about "real" DOM event when type is "domEvent",
+      // but also when some other DOM APIs are involved.
+      // notification's type will be "setTimeout" when the setTimeout method is called,
+      // or "setTimeoutCallback" when the callback passed to setTimeout is called.
+      // This also work against setInterval/clearTimeout/clearInterval and requestAnimationFrame.
       if (notification.type == "domEvent") {
+        // `targetType` can help distinguish same-name DOM events fired against XHR, window or workers.
+        const { targetType } = notification;
         let { type } = notification.event;
         if (!type) {
           // In the Worker thread, `notification.event` is an opaque wrapper.
@@ -497,7 +506,7 @@ class JavaScriptTracer {
             .makeDebuggeeValue(notification.event)
             .getProperty("type").return;
         }
-        this.currentDOMEvent = `DOM | ${type}`;
+        this.currentDOMEvent = `${targetType}.${type}`;
       } else {
         this.currentDOMEvent = notification.type;
       }
@@ -865,7 +874,9 @@ class JavaScriptTracer {
     // and are logging the topmost frame,
     // then log a preliminary dedicated line to mention that event type.
     if (this.currentDOMEvent && depth == 0) {
-      this.loggingMethod(this.prefix + padding + this.currentDOMEvent + "\n");
+      this.loggingMethod(
+        this.prefix + padding + "DOM | " + this.currentDOMEvent + "\n"
+      );
     }
 
     let message = `${padding}[${frame.implementation}]—> ${getTerminalHyperLink(

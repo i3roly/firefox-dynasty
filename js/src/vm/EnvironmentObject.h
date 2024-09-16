@@ -1020,13 +1020,19 @@ class WithEnvironmentObject : public EnvironmentObject {
   // For syntactic with environment objects, the with scope.
   WithScope& scope() const;
 
-  static inline size_t objectSlot() { return OBJECT_SLOT; }
+  static constexpr size_t objectSlot() { return OBJECT_SLOT; }
 
-  static inline size_t thisSlot() { return THIS_SLOT; }
+  static constexpr size_t thisSlot() { return THIS_SLOT; }
+
+  // For JITs.
+  static constexpr size_t offsetOfThisSlot() {
+    return getFixedSlotOffset(THIS_SLOT);
+  }
 };
 
-// Internal scope object used by JSOp::BindName upon encountering an
-// uninitialized lexical slot or an assignment to a 'const' binding.
+// Internal environment object used by JSOp::BindUnqualifiedName upon
+// encountering an uninitialized lexical slot or an assignment to a 'const'
+// binding.
 //
 // ES6 lexical bindings cannot be accessed in any way (throwing
 // ReferenceErrors) until initialized. Normally, NAME operations
@@ -1034,13 +1040,13 @@ class WithEnvironmentObject : public EnvironmentObject {
 // looking up names, this can be done without slowing down normal operations
 // on the return value. When setting names, however, we do not want to pollute
 // all set-property paths with uninitialized lexical checks. For setting names
-// (i.e. JSOp::SetName), we emit an accompanying, preceding JSOp::BindName which
-// finds the right scope on which to set the name. Moreover, when the name on
-// the scope is an uninitialized lexical, we cannot throw eagerly, as the spec
-// demands that the error be thrown after evaluating the RHS of
-// assignments. Instead, this sentinel scope object is pushed on the stack.
-// Attempting to access anything on this scope throws the appropriate
-// ReferenceError.
+// (i.e. JSOp::SetName), we emit an accompanying, preceding
+// JSOp::BindUnqualifiedName which finds the right scope on which to set the
+// name. Moreover, when the name on the scope is an uninitialized lexical, we
+// cannot throw eagerly, as the spec demands that the error be thrown after
+// evaluating the RHS of assignments. Instead, this sentinel scope object is
+// pushed on the stack. Attempting to access anything on this scope throws the
+// appropriate ReferenceError.
 //
 // ES6 'const' bindings induce a runtime error when assigned to outside
 // of initialization, regardless of strictness.
@@ -1587,9 +1593,8 @@ ModuleEnvironmentObject* GetModuleEnvironmentForScript(JSScript* script);
 bool AnalyzeEntrainedVariables(JSContext* cx, HandleScript script);
 #endif
 
-extern JSObject* MaybeOptimizeBindGlobalName(JSContext* cx,
-                                             Handle<GlobalObject*> global,
-                                             Handle<PropertyName*> name);
+extern JSObject* MaybeOptimizeBindUnqualifiedGlobalName(
+    JSContext* cx, Handle<GlobalObject*> global, Handle<PropertyName*> name);
 }  // namespace js
 
 #endif /* vm_EnvironmentObject_h */

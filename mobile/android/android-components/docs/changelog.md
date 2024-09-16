@@ -5,16 +5,21 @@ permalink: /changelog/
 ---
 
 # 132.0 (In Development)
+* **feature-awesomebar**
+  * The `onCancelEditing` now returns a result based on the `onStartEditing` and `onStopEditing` callback. [Bug 1917496](https://bugzilla.mozilla.org/show_bug.cgi?id=1917496)
 
 * **support-ktx**:
     * ⚠️ `Int.dpToPx` will round the values to the nearest integer, instead of always rounding down. [Bug 1912988](https://bugzilla.mozilla.org/show_bug.cgi?id=1912988)
 
+* **lib-crash**
+  * Adds `CrashReporter.hasUnsentCrashReports()` method, allowing the caller to find out if there is unsent crashes. [Bug 1904974](https://bugzilla.mozilla.org/show_bug.cgi?id=1904974)
+  * Adds `CrashReporter.unsentCrashReports()` method, allowing the caller to fetch all unsent crashes. [Bug 1904974](https://bugzilla.mozilla.org/show_bug.cgi?id=1904974)
+  * Adds Store primitives (State, Action, Middleware) to be able to drive the crash reporter UI. [Bug 1905774](https://bugzilla.mozilla.org/show_bug.cgi?id=1905774)
+  * Adds new parameter `useLegacyReporting` when initializing a `CrashReporter`. [Bug 1905774](https://bugzilla.mozilla.org/show_bug.cgi?id=1905774)
+
 # 131.0
 * **All components**
   * ⚠️Increased `compileSdkVersion` to 35 (Android 15)
-
-* **browser-store**
-  * Adds `desktopMode` property to the `BrowserStore` to know whether or not browsing is in desktop mode. [Bug 1790516](https://bugzilla.mozilla.org/show_bug.cgi?id=1790516)
 
 * **browser-state**
   * 🆕 New `isPdf` property for `ContentState` to inform whether the current page is a pdf or not. [Bug 1817810](https://bugzilla.mozilla.org/show_bug.cgi?id=1817810)

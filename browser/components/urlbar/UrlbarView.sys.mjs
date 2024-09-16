@@ -546,6 +546,7 @@ export class UrlbarView {
     // implicitly unselected.
     if (this.input.searchMode?.isPreview) {
       this.input.searchMode = null;
+      this.window.gBrowser.userTypedValue = null;
     }
 
     this.resultMenu.hidePopup();
@@ -1895,13 +1896,12 @@ export class UrlbarView {
       case lazy.UrlbarUtils.RESULT_TYPE.TAB_SWITCH:
         // Hide chichlet when showing secondaryActions.
         if (
-          lazy.UrlbarPrefs.getScotchBonnetPref("secondaryActions.featureGate")
+          !lazy.UrlbarPrefs.getScotchBonnetPref("secondaryActions.featureGate")
         ) {
-          break;
+          actionSetter = () => {
+            this.#setSwitchTabActionChiclet(result, action);
+          };
         }
-        actionSetter = () => {
-          this.#setSwitchTabActionChiclet(result, action);
-        };
         setURL = true;
         break;
       case lazy.UrlbarUtils.RESULT_TYPE.REMOTE_TAB:

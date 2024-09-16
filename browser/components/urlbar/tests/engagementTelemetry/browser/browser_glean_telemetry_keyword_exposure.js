@@ -280,6 +280,8 @@ add_task(async function manyResults() {
     searchStrings: ["foo", "bar", "baz", "bar"],
     expectedEvents: [
       { extra: { keyword: "foo", result: "history", terminal: false } },
+      { extra: { keyword: "foo", result: "history", terminal: false } },
+      { extra: { keyword: "foo", result: "history", terminal: false } },
       { extra: { keyword: "bar", result: "history", terminal: false } },
       { extra: { keyword: "bar", result: "bookmark", terminal: false } },
       { extra: { keyword: "baz", result: "bookmark", terminal: false } },
@@ -312,6 +314,54 @@ add_task(async function multiWordKeyword() {
     expectedEvents: [
       { extra: { keyword: "this has multiple words", terminal: true } },
     ],
+  });
+});
+
+add_task(async function subset_matched() {
+  await doTest({
+    // "history" is in `exposureResults` but not `keywordExposureResults`
+    exposureResults: "bookmark,history",
+    keywordExposureResults: "bookmark",
+    keywords: [{ keyword: "example", resultType: "bookmark" }],
+    searchStrings: ["example"],
+    expectedEvents: [
+      { extra: { keyword: "example", result: "bookmark", terminal: true } },
+    ],
+  });
+});
+
+add_task(async function subset_notMatched() {
+  await doTest({
+    // "history" is in `exposureResults` but not `keywordExposureResults`
+    exposureResults: "bookmark,history",
+    keywordExposureResults: "bookmark",
+    keywords: [{ keyword: "example", resultType: "history" }],
+    searchStrings: ["example"],
+    expectedEvents: [],
+  });
+});
+
+add_task(async function superset_matched() {
+  await doTest({
+    // "history" is in `keywordExposureResults` but not `exposureResults`
+    exposureResults: "bookmark",
+    keywordExposureResults: "bookmark,history",
+    keywords: [{ keyword: "example", resultType: "bookmark" }],
+    searchStrings: ["example"],
+    expectedEvents: [
+      { extra: { keyword: "example", result: "bookmark", terminal: true } },
+    ],
+  });
+});
+
+add_task(async function superset_notMatched() {
+  await doTest({
+    // "history" is in `keywordExposureResults` but not `exposureResults`
+    exposureResults: "bookmark",
+    keywordExposureResults: "bookmark,history",
+    keywords: [{ keyword: "example", resultType: "history" }],
+    searchStrings: ["example"],
+    expectedEvents: [],
   });
 });
 
@@ -363,13 +413,14 @@ async function doTest({
   keywords,
   searchStrings,
   expectedEvents,
+  exposureResults = "history,bookmark",
+  keywordExposureResults = exposureResults,
   useNimbus = false,
   win = window,
   endSession = () =>
     UrlbarTestUtils.promisePopupClose(win, () => win.gURLBar.blur()),
 }) {
   // Assume all callers are testing with history and/or bookmarks.
-  let exposureResults = "history,bookmark";
   let resultSourceByType = {
     history: UrlbarUtils.RESULT_SOURCE.HISTORY,
     bookmark: UrlbarUtils.RESULT_SOURCE.BOOKMARKS,
@@ -420,13 +471,13 @@ async function doTest({
   if (useNimbus) {
     nimbusCleanup = await UrlbarTestUtils.initNimbusFeature({
       exposureResults,
-      recordKeywordExposures: true,
+      keywordExposureResults,
     });
   } else {
     await SpecialPowers.pushPrefEnv({
       set: [
         ["browser.urlbar.exposureResults", exposureResults],
-        ["browser.urlbar.recordKeywordExposures", true],
+        ["browser.urlbar.keywordExposureResults", keywordExposureResults],
       ],
     });
   }
@@ -475,9 +526,10 @@ async function doTest({
     [],
     "Sanity check: exposureResults is empty after clearing prefs/uninstalling experiment"
   );
-  Assert.ok(
-    !UrlbarPrefs.get("recordKeywordExposures"),
-    "Sanity check: recordKeywordExposures is false after clearing prefs/uninstalling experiment"
+  Assert.strictEqual(
+    UrlbarPrefs.get("keywordExposureResults").size,
+    0,
+    "Sanity check: keywordExposureResults is empty after clearing prefs/uninstalling experiment"
   );
 }
 

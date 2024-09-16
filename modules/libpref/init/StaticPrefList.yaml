@@ -2348,6 +2348,12 @@
   value: true
   mirror: always
 
+# Disable cookie-store API
+- name: dom.cookieStore.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # Is support for CSSPseudoElement enabled?
 - name: dom.css_pseudo_element.enabled
   type: bool
@@ -4919,12 +4925,6 @@
   value: true
   mirror: always
 
-# Whether Window.sizeToContent() is enabled.
-- name: dom.window.sizeToContent.enabled
-  type: bool
-  value: false
-  mirror: always
-
 - name: dom.worker.canceling.timeoutMilliseconds
   type: RelaxedAtomicUint32
   value: 30000    # 30 seconds
@@ -6659,7 +6659,7 @@
 
 - name: gfx.webrender.svg-filter-effects
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 - name: gfx.webrender.svg-filter-effects.also-convert-css-filters
@@ -6747,10 +6747,9 @@
   value: false
   mirror: always
 
-# Disabled for now due to https://bugzilla.mozilla.org/show_bug.cgi?id=1902136
 - name: gfx.webrender.svg-filter-effects.feoffset
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 - name: gfx.webrender.svg-filter-effects.fespecularlighting
@@ -8032,6 +8031,13 @@
   mirror: always
   set_spidermonkey_pref: startup
 
+# Experimental support for Pattern Modifiers in JavaScript.
+- name: javascript.options.experimental.regexp_modifiers
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
 #ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
 -   name: javascript.options.experimental.async_iterator_helpers
@@ -8049,13 +8055,6 @@
 
   # Experimental support for Uint8Array base64/hex in JavaScript.
 -   name: javascript.options.experimental.uint8array_base64
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Pattern Modifiers in JavaScript.
--   name: javascript.options.experimental.regexp_modifiers
     type: bool
     value: false
     mirror: always
@@ -8476,11 +8475,6 @@
   value: true
   mirror: once
   do_not_use_directly: true
-
-- name: layers.child-process-shutdown
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
 
 - name: layers.d3d11.force-warp
   type: bool
@@ -9230,17 +9224,6 @@
   mirror: always
   rust: true
 
-# Dictates whether or not the prefers contrast media query will be
-# usable.
-#   true: prefers-contrast will toggle based on OS and browser settings.
-#   false: prefers-contrast will only parse and toggle in the browser
-#   chrome and ua.
-- name: layout.css.prefers-contrast.enabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-  rust: true
-
 # An override for prefers-color-scheme for content documents.
 #   0: Dark
 #   1: Light
@@ -9249,13 +9232,6 @@
   type: RelaxedAtomicInt32
   value: 2
   mirror: always
-
-# Dictates whether or not the forced-colors media query is enabled.
-- name: layout.css.forced-colors.enabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-  rust: true
 
 # Dictates whether or not the prefers-reduced-transparency media query is enabled.
 - name: layout.css.prefers-reduced-transparency.enabled
@@ -9268,13 +9244,6 @@
 - name: layout.css.inverted-colors.enabled
   type: RelaxedAtomicBool
   value: false
-  mirror: always
-  rust: true
-
-# Is support for forced-color-adjust properties enabled?
-- name: layout.css.forced-color-adjust.enabled
-  type: RelaxedAtomicBool
-  value: true
   mirror: always
   rust: true
 
@@ -11401,6 +11370,15 @@
     value: true
     mirror: once
 
+# Use SCContentSharingPicker for source picking when the libwebrtc
+# ScreenCaptureKit desktop capture backend is used. When this is true and the
+# backend supports SCContentSharingPicker, this takes precendence over the
+# enumeration pref below.
+-   name: media.getdisplaymedia.screencapturekit.picker.enabled
+    type: bool
+    value: true
+    mirror: once
+
 # Use the libwebrtc ScreenCaptureKit desktop capture backend on Mac for screen
 # enumeration when enabled.
 # When this is false and the backend is used (see above), the older CoreGraphics
@@ -12115,7 +12093,7 @@
 
 # Whether to support CHIPS(Cookies Having Independent Partitioned State).
 - name: network.cookie.CHIPS.enabled
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -13586,7 +13564,22 @@
 
 - name: network.http.http2.enabled.deps
   type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# This pref controls whether to send the
+# SETTINGS_NO_RFC7540_PRIORITIES when stream dependencies
+# are disabled, and extensible prioritization scheme is in use.
+- name: network.http.http2.send_NO_RFC7540_PRI
+  type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# This pref controls whether to send PRIORITY_UPDATE
+# frames for pushed streams.
+- name: network.http.http2.push_priority_update
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 - name: network.http.http2.enforce-tls-profile
@@ -13689,9 +13682,8 @@
 # Use NSPR for HTTP3 UDP IO
 - name: network.http.http3.use_nspr_for_io
   type: RelaxedAtomicBool
-# Always use NSPR on Android x86. On Android x86 sendmsg and recvmmsg, both used
-# by quinn-udp, are disallowed by seccomp. Future fix and further details
-# tracked in https://github.com/quinn-rs/quinn/issues/1947.
+# Always use NSPR on Android x86 until
+# https://bugzilla.mozilla.org/show_bug.cgi?id=1916412 is fixed.
 #if defined(ANDROID) && !defined(HAVE_64BIT_BUILD)
   value: true
 #else
@@ -13703,7 +13695,12 @@
 # true.
 - name: network.http.http3.ecn
   type: RelaxedAtomicBool
+# See network.http.http3.use_nspr_for_io above.
+#if defined(ANDROID) && !defined(HAVE_64BIT_BUILD)
   value: false
+#else
+  value: @IS_NIGHTLY_BUILD@
+#endif
   mirror: always
   rust: true
 
@@ -13796,15 +13793,11 @@
   mirror: always
   rust: true
 
-# Whether to send a Xyber768 key share in HTTP/3 TLS handshakes.
+# Whether to send an mlkem768x25519 key share in HTTP/3 TLS handshakes.
 # Has no effect unless security.tls.enable_kyber is true.
 - name: network.http.http3.enable_kyber
   type: RelaxedAtomicBool
-#ifdef ANDROID
   value: false
-#else
-  value: @IS_NIGHTLY_BUILD@
-#endif
   mirror: always
   rust: true
 
@@ -15500,6 +15493,11 @@
   value: "specified"
   mirror: never
 
+- name: security.pki.use_modern_crypto_with_pkcs12
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
 - name: security.tls.version.min
   type: RelaxedAtomicUint32
   value: 3
@@ -15577,11 +15575,7 @@
 
 - name: security.tls.enable_kyber
   type: RelaxedAtomicBool
-#ifdef ANDROID
   value: false
-#else
-  value: @IS_NIGHTLY_BUILD@
-#endif
   mirror: always
   rust: true
 

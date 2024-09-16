@@ -224,24 +224,22 @@ function isSubObjectOf(expectedObj, actualObj, skipProp) {
 }
 
 /**
- * After useHttpServer() is called, this string contains the URL of the "data"
- * directory, including the final slash.
+ * After useHttpServer() is called, this string contains the URL test directory,
+ * excluding the final slash.
  */
-var gDataUrl;
+var gHttpURL;
 
 /**
  * Initializes the HTTP server and ensures that it is terminated when tests end.
  *
- * @param {string} dir
- *   The test sub-directory to use for the engines.
  * @returns {HttpServer}
  *   The HttpServer object in case further customization is needed.
  */
-function useHttpServer(dir = "data") {
+function useHttpServer() {
   let httpServer = new HttpServer();
   httpServer.start(-1);
   httpServer.registerDirectory("/", do_get_cwd());
-  gDataUrl = `http://localhost:${httpServer.identity.primaryPort}/${dir}/`;
+  gHttpURL = `http://localhost:${httpServer.identity.primaryPort}`;
   registerCleanupFunction(async function cleanup_httpServer() {
     await new Promise(resolve => {
       httpServer.stop(resolve);
@@ -279,25 +277,6 @@ function checkCountryResultTelemetry(aExpectedValue) {
 }
 
 /**
- * Provides a basic set of remote settings for use in tests.
- */
-async function setupRemoteSettings() {
-  const settings = await RemoteSettings("hijack-blocklists");
-  sinon.stub(settings, "get").returns([
-    {
-      id: "load-paths",
-      matches: ["[addon]searchignore@mozilla.com"],
-      _status: "synced",
-    },
-    {
-      id: "submission-urls",
-      matches: ["ignore=true"],
-      _status: "synced",
-    },
-  ]);
-}
-
-/**
  * Reads the specified file from the data directory and returns its contents as
  * an Uint8Array.
  *
@@ -307,7 +286,7 @@ async function setupRemoteSettings() {
  *   The contents of the file in an Uint8Array.
  */
 async function getFileDataBuffer(filename) {
-  return IOUtils.read(PathUtils.join(do_get_cwd().path, "data", filename));
+  return IOUtils.read(PathUtils.join(do_get_cwd().path, "icons", filename));
 }
 
 /**

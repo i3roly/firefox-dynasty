@@ -243,6 +243,8 @@
     <string name="browser_menu_add_to_homescreen">Legg til på startskjermen</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Legg til på startskjermen…</string>
+    <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
+    <string name="browser_menu_add_to_homescreen_xiaomi">Xiaomi-einingar kan trenge ekstra løyve for å leggje til snarvegar på startskjermen. Sjekk innstillingane dine.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Synkroniser på nytt</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -1217,7 +1219,7 @@
     <!-- Snackbar title shown after a bookmark has been created. -->
     <string name="bookmark_saved_snackbar">Bokmerke lagra!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
-    <string name="bookmark_saved_in_folder_snackbar">Lagra i “%s”</string>
+    <string name="bookmark_saved_in_folder_snackbar">Lagra i «%s»</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">REDIGER</string>
     <!-- Bookmark overflow menu edit button -->

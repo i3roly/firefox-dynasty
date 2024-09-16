@@ -108,6 +108,7 @@
 #include "mozilla/dom/ClientState.h"
 #include "mozilla/dom/ClientsBinding.h"
 #include "mozilla/dom/Console.h"
+#include "mozilla/dom/CookieStore.h"
 #include "mozilla/dom/ContentChild.h"
 #include "mozilla/dom/ContentFrameMessageManager.h"
 #include "mozilla/dom/ContentMediaController.h"
@@ -1260,6 +1261,7 @@ void nsGlobalWindowInner::FreeInnerObjects() {
   mScrollbars = nullptr;
 
   mConsole = nullptr;
+  mCookieStore = nullptr;
 
   mPaintWorklet = nullptr;
 
@@ -1450,6 +1452,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INTERNAL(nsGlobalWindowInner)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mScrollbars)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mCrypto)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mConsole)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mCookieStore)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mPaintWorklet)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mExternal)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mInstallTrigger)
@@ -1562,6 +1565,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(nsGlobalWindowInner)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mScrollbars)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mCrypto)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mConsole)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mCookieStore)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mPaintWorklet)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mExternal)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mInstallTrigger)
@@ -3313,12 +3317,6 @@ bool nsGlobalWindowInner::CachesEnabled(JSContext* aCx, JSObject* aObj) {
 }
 
 /* static */
-bool nsGlobalWindowInner::IsSizeToContentEnabled(JSContext* aCx, JSObject*) {
-  return StaticPrefs::dom_window_sizeToContent_enabled() ||
-         nsContentUtils::IsSystemCaller(aCx);
-}
-
-/* static */
 bool nsGlobalWindowInner::IsGleanNeeded(JSContext* aCx, JSObject* aObj) {
   // Glean is needed in ChromeOnly contexts and also in privileged about pages.
   nsIPrincipal* principal = nsContentUtils::SubjectPrincipal(aCx);
@@ -3780,16 +3778,10 @@ void nsGlobalWindowInner::ResizeBy(int32_t aWidthDif, int32_t aHeightDif,
       ResizeByOuter, (aWidthDif, aHeightDif, aCallerType, aError), aError, );
 }
 
-void nsGlobalWindowInner::SizeToContent(CallerType aCallerType,
-                                        ErrorResult& aError) {
-  FORWARD_TO_OUTER_OR_THROW(SizeToContentOuter, (aCallerType, {}, aError),
-                            aError, );
-}
-
-void nsGlobalWindowInner::SizeToContentConstrained(
+void nsGlobalWindowInner::SizeToContent(
     const SizeToContentConstraints& aConstraints, ErrorResult& aError) {
-  FORWARD_TO_OUTER_OR_THROW(
-      SizeToContentOuter, (CallerType::System, aConstraints, aError), aError, );
+  FORWARD_TO_OUTER_OR_THROW(SizeToContentOuter, (aConstraints, aError),
+                            aError, );
 }
 
 already_AddRefed<nsPIWindowRoot> nsGlobalWindowInner::GetTopWindowRoot() {
@@ -5928,6 +5920,10 @@ nsresult nsGlobalWindowInner::FireDelayedDOMEvents(bool aIncludeSubWindows) {
   // Fires an offline status event if the offline status has changed
   FireOfflineStatusEventIfChanged();
 
+  if (mCookieStore) {
+    mCookieStore->FireDelayedDOMEvents();
+  }
+
   if (!aIncludeSubWindows) {
     return NS_OK;
   }
@@ -7266,7 +7262,8 @@ int16_t nsGlobalWindowInner::Orientation(CallerType aCallerType) {
   uint16_t screenAngle = Screen()->GetOrientationAngle();
   if (nsIGlobalObject::ShouldResistFingerprinting(
           aCallerType, RFPTarget::ScreenOrientation)) {
-    screenAngle = nsRFPService::OrientationSecondaryToPrimary(screenAngle);
+    CSSIntSize size = mBrowsingContext->GetTopInnerSizeForRFP();
+    screenAngle = nsRFPService::ViewportSizeToAngle(size.width, size.height);
   }
   int16_t angle = AssertedCast<int16_t>(screenAngle);
   return angle <= 180 ? angle : angle - 360;
@@ -7283,6 +7280,14 @@ already_AddRefed<Console> nsGlobalWindowInner::GetConsole(JSContext* aCx,
 
   RefPtr<Console> console = mConsole;
   return console.forget();
+}
+
+already_AddRefed<CookieStore> nsGlobalWindowInner::CookieStore() {
+  if (!mCookieStore) {
+    mCookieStore = CookieStore::Create(this);
+  }
+
+  return do_AddRef(mCookieStore);
 }
 
 bool nsGlobalWindowInner::IsSecureContext() const {

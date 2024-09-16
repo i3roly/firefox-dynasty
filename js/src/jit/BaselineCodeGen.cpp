@@ -3245,13 +3245,14 @@ bool BaselineCodeGen<Handler>::emit_GetGName() {
 }
 
 template <>
-bool BaselineCompilerCodeGen::tryOptimizeBindGlobalName() {
+bool BaselineCompilerCodeGen::tryOptimizeBindUnqualifiedGlobalName() {
   JSScript* script = handler.script();
   MOZ_ASSERT(!script->hasNonSyntacticScope());
 
   Rooted<GlobalObject*> global(cx, &script->global());
   Rooted<PropertyName*> name(cx, script->getName(handler.pc()));
-  if (JSObject* binding = MaybeOptimizeBindGlobalName(cx, global, name)) {
+  if (JSObject* binding =
+          MaybeOptimizeBindUnqualifiedGlobalName(cx, global, name)) {
     frame.push(ObjectValue(*binding));
     return true;
   }
@@ -3259,14 +3260,14 @@ bool BaselineCompilerCodeGen::tryOptimizeBindGlobalName() {
 }
 
 template <>
-bool BaselineInterpreterCodeGen::tryOptimizeBindGlobalName() {
-  // Interpreter doesn't optimize simple BindGNames.
+bool BaselineInterpreterCodeGen::tryOptimizeBindUnqualifiedGlobalName() {
+  // Interpreter doesn't optimize simple BindUnqualifiedGNames.
   return false;
 }
 
 template <typename Handler>
-bool BaselineCodeGen<Handler>::emit_BindGName() {
-  if (tryOptimizeBindGlobalName()) {
+bool BaselineCodeGen<Handler>::emit_BindUnqualifiedGName() {
+  if (tryOptimizeBindUnqualifiedGlobalName()) {
     return true;
   }
 
@@ -3694,6 +3695,21 @@ template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_GetName() {
   frame.syncStack(0);
 
+  masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+
+  // Call IC.
+  if (!emitNextIC()) {
+    return false;
+  }
+
+  // Mark R0 as pushed stack value.
+  frame.push(R0);
+  return true;
+}
+
+template <typename Handler>
+bool BaselineCodeGen<Handler>::emit_BindUnqualifiedName() {
+  frame.syncStack(0);
   masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
 
   // Call IC.
@@ -4487,20 +4503,28 @@ bool BaselineCodeGen<Handler>::emit_OptimizeSpreadCall() {
 
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_ImplicitThis() {
-  frame.syncStack(0);
-  masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+  frame.popRegsAndSync(1);
 
-  prepareVMCall();
+  Register env = R1.scratchReg();
+  masm.unboxObject(R0, env);
 
-  pushScriptNameArg(R1.scratchReg(), R2.scratchReg());
-  pushArg(R0.scratchReg());
+  Label slowPath, skipCall;
+  masm.computeImplicitThis(env, R0, &slowPath);
+  masm.jump(&skipCall);
 
-  using Fn = bool (*)(JSContext*, HandleObject, Handle<PropertyName*>,
-                      MutableHandleValue);
-  if (!callVM<Fn, ImplicitThisOperation>()) {
-    return false;
+  masm.bind(&slowPath);
+  {
+    prepareVMCall();
+
+    pushArg(env);
+
+    using Fn = void (*)(JSContext*, HandleObject, MutableHandleValue);
+    if (!callVM<Fn, ImplicitThisOperation>()) {
+      return false;
+    }
   }
 
+  masm.bind(&skipCall);
   frame.push(R0);
   return true;
 }

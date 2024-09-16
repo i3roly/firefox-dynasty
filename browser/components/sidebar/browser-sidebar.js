@@ -142,7 +142,7 @@ var SidebarController = {
 
     if (!this.sidebarRevampEnabled) {
       this.registerPrefSidebar(
-        "browser.megalist.enabled",
+        "browser.contextual-password-manager.enabled",
         "viewMegalistSidebar",
         {
           elementId: "sidebar-switcher-megalist",
@@ -261,7 +261,7 @@ var SidebarController = {
     return this._toolbarButton;
   },
 
-  async init() {
+  init() {
     // Initialize with side effects
     this.SidebarManager;
 
@@ -318,9 +318,6 @@ var SidebarController = {
         this._mainResizeObserverAdded = true;
       }
 
-      if (this.sidebarVerticalTabsEnabled) {
-        this.toggleTabstrip();
-      }
       let newTabButton = document.getElementById("vertical-tabs-newtab-button");
       if (!this._verticalNewTabListenerAdded) {
         newTabButton.addEventListener("command", event => {
@@ -343,6 +340,11 @@ var SidebarController = {
         this._switcherListenersAdded = true;
       }
     }
+    // We need to update the tab strip for vertical tabs during init
+    // as there will be no tabstrip-orientation-change event
+    if (CustomizableUI.verticalTabsEnabled) {
+      this.toggleTabstrip();
+    }
 
     // sets the sidebar to the left or right, based on a pref
     this.setPosition();
@@ -352,6 +354,10 @@ var SidebarController = {
     if (!this._localesObserverAdded) {
       Services.obs.addObserver(this, "intl:app-locales-changed");
       this._localesObserverAdded = true;
+    }
+    if (!this._tabstripOrientationObserverAdded) {
+      Services.obs.addObserver(this, "tabstrip-orientation-change");
+      this._tabstripOrientationObserverAdded = true;
     }
 
     this._initDeferred.resolve();
@@ -371,6 +377,8 @@ var SidebarController = {
     }
 
     Services.obs.removeObserver(this, "intl:app-locales-changed");
+    Services.obs.removeObserver(this, "tabstrip-orientation-change");
+    delete this._tabstripOrientationObserverAdded;
 
     if (this._observer) {
       this._observer.disconnect();
@@ -406,6 +414,11 @@ var SidebarController = {
         if (this.revampComponentsLoaded) {
           this.sidebarMain.requestUpdate();
         }
+        break;
+      }
+      case "tabstrip-orientation-change": {
+        this.promiseInitialized.then(() => this.toggleTabstrip());
+        break;
       }
     }
   },
@@ -592,7 +605,8 @@ var SidebarController = {
     if (!this._sidebars.get(this.lastOpenedId)) {
       this.lastOpenedId = this.DEFAULT_SIDEBAR_ID;
     }
-    await this.init();
+    this._inited = false;
+    this.init();
   },
 
   /**
@@ -800,178 +814,102 @@ var SidebarController = {
     return this.show(commandID, triggerNode);
   },
 
-  async _drawImagesToCanvas() {
-    let selectedBrowser = gBrowser.selectedBrowser;
-    let {
-      sidebarBackgroundColor,
-      sidebarBrowserWidth,
-      contentBrowserWidth,
-      contentBrowserHeight,
-    } = await window.promiseDocumentFlushed(() => {
-      let results = {};
-      results.sidebarBackgroundColor = window.getComputedStyle(
-        this.browser.parentElement
-      ).backgroundColor;
-      results.sidebarBrowserWidth = this.browser.clientWidth;
-      results.contentBrowserWidth = selectedBrowser.clientWidth;
-      results.contentBrowserHeight = selectedBrowser.clientHeight;
-      return results;
-    });
-
-    let width;
-    if (this.sidebarMain.open) {
-      width = contentBrowserWidth + sidebarBrowserWidth;
-    } else {
-      width = contentBrowserWidth;
-    }
-    let height = contentBrowserHeight;
-
-    let canvas = new OffscreenCanvas(width, height);
-    let context = canvas.getContext("2d");
-
-    let selectedBrowserSnapshot =
-      await selectedBrowser.browsingContext.currentWindowGlobal.drawSnapshot(
-        null,
-        1,
-        sidebarBackgroundColor
-      );
-    if (this.sidebarMain.open) {
-      let sidebarSnapshot =
-        await this.browser.browsingContext.currentWindowGlobal.drawSnapshot(
-          null,
-          1,
-          sidebarBackgroundColor
-        );
-      if (!this._positionStart) {
-        context.drawImage(selectedBrowserSnapshot, 0, 0);
-        context.drawImage(sidebarSnapshot, contentBrowserWidth, 0);
-      } else {
-        context.drawImage(sidebarSnapshot, 0, 0);
-        context.drawImage(selectedBrowserSnapshot, sidebarBrowserWidth, 0);
-      }
-    } else {
-      context.drawImage(selectedBrowserSnapshot, 0, 0);
-    }
-    return canvas;
-  },
-
   async _animateSidebarMain() {
-    // Temporarily pause resizeobserver on sidebarMain
-    this._mainResizeObserver.unobserve(this.sidebarMain);
-    let canvas = await this._drawImagesToCanvas();
+    let tabbox = document.getElementById("tabbrowser-tabbox");
+    let animatingElements = [
+      this.sidebarContainer,
+      this._box,
+      this._splitter,
+      tabbox,
+    ];
+    let getRects = () => {
+      return animatingElements.map(e => e.getBoundingClientRect());
+    };
+    let fromRects = await window.promiseDocumentFlushed(getRects);
 
-    let initialSidebarMainWidth = await window.promiseDocumentFlushed(
-      () => this.sidebarMain.clientWidth
-    );
+    this.toggleExpanded();
 
-    await new Promise(resolve => {
+    // We need to wait for rAF for lit to re-render, and us to get the final
+    // width. This is a bit unfortunate but alas...
+    let toRects = await new Promise(resolve => {
       requestAnimationFrame(() => {
-        setTimeout(() => {
-          document.documentElement.style.setProperty(
-            `--sidebar-${
-              this.sidebarMain.expanded ? "expanded" : "collapsed"
-            }-width`,
-            `${initialSidebarMainWidth}px`
-          );
-          resolve();
-        }, 0);
+        resolve(getRects());
       });
     });
 
-    let blob = await canvas.convertToBlob();
-    // Remove any existing screenshot overlays if needed
-    let existingScreenshotOverlay = document.querySelector(
-      ".sidebar-animation-screenshot"
-    );
-    if (existingScreenshotOverlay) {
-      existingScreenshotOverlay.remove();
-    }
-    let screenshotOverlay = document.createElement("div");
-    let img = document.createElement("img");
-    screenshotOverlay.classList.add("sidebar-animation-screenshot");
-    let url = URL.createObjectURL(blob);
-    img.src = url;
-    screenshotOverlay.appendChild(img);
-
-    img.onload = () => {
-      URL.revokeObjectURL(img.src);
+    const options = {
+      duration: this._animationDurationMs,
+      easing: "ease-in-out",
     };
-    let parentHbox = this.sidebarMain.closest("#browser");
-    let parentNode = this.sidebarMain.parentNode;
-    if (!this.sidebarMain.expanded) {
-      screenshotOverlay.classList.add("collapsed");
-      if (screenshotOverlay.classList.contains("expanded")) {
-        screenshotOverlay.classList.remove("expanded");
-      }
-    } else {
-      screenshotOverlay.classList.add("expanded");
-      if (screenshotOverlay.classList.contains("collapsed")) {
-        screenshotOverlay.classList.remove("collapsed");
-      }
-    }
-    if (!this._positionStart) {
-      screenshotOverlay.classList.add("positionend");
-    }
-    parentHbox.insertBefore(screenshotOverlay, parentNode);
-    screenshotOverlay.classList.add("translate");
+    let animations = [];
+    let sidebarOnLeft = this._positionStart != RTL_UI;
+    for (let i = 0; i < animatingElements.length; ++i) {
+      const el = animatingElements[i];
+      const from = fromRects[i];
+      const to = toRects[i];
+      const widthGrowth = to.width - from.width;
+      // For the sidebar, we need some special cases to make the animation
+      // nicer (keeping the icon positions).
+      const isSidebar = el === this.sidebarContainer;
 
-    if (!this.sidebarMain.expanded) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          this.toggleExpanded();
-        });
-      });
-    } else {
-      this.expandAfterTranslate = true;
-    }
+      let fromTranslate = sidebarOnLeft
+        ? from.left - to.left
+        : from.right - to.right;
+      let toTranslate = 0;
 
-    screenshotOverlay.addEventListener(
-      "animationend",
-      this._onScreenshotOverlayAnimationEnd.bind(this)
-    );
-  },
-
-  async _onScreenshotOverlayAnimationEnd(e) {
-    if (
-      this.expandAfterTranslate &&
-      e.animationName.includes("translate-collapse")
-    ) {
-      this.toggleExpanded();
-      this.expandAfterAnimation = false;
-    }
-    if (e.animationName.includes("translate")) {
-      let screenshotOverlay = document.querySelector(
-        ".sidebar-animation-screenshot"
-      );
-      screenshotOverlay.classList.remove("translate");
-      if (this.sidebarMain.expanded) {
-        screenshotOverlay.classList.add("expanded");
-        if (screenshotOverlay.classList.contains("collapsed")) {
-          screenshotOverlay.classList.remove("collapsed");
+      // We fix the element to the larger width during the animation if needed,
+      // but keeping the right flex width, and thus our original position, with
+      // a negative margin.
+      el.style.minWidth =
+        el.style.maxWidth =
+        el.style.marginLeft =
+        el.style.marginRight =
+          "";
+      if (widthGrowth < 0) {
+        el.style.minWidth = el.style.maxWidth = from.width + "px";
+        el.style["margin-" + (sidebarOnLeft ? "right" : "left")] =
+          widthGrowth + "px";
+        if (isSidebar) {
+          toTranslate = sidebarOnLeft ? widthGrowth : -widthGrowth;
         }
-      } else {
-        screenshotOverlay.classList.add("collapsed");
-        if (screenshotOverlay.classList.contains("expanded")) {
-          screenshotOverlay.classList.remove("expanded");
-        }
+      } else if (isSidebar && !this._positionStart) {
+        fromTranslate += sidebarOnLeft ? -widthGrowth : widthGrowth;
       }
-      screenshotOverlay.classList.add("fadeOut");
-    }
-    if (e.animationName.includes("opacity")) {
-      let screenshotOverlay = document.querySelector(
-        ".sidebar-animation-screenshot"
+      animations.push(
+        el.animate(
+          [
+            { translate: `${fromTranslate}px 0 0` },
+            { translate: `${toTranslate}px 0 0` },
+          ],
+          options
+        )
       );
-      screenshotOverlay.classList.remove("fadeOut");
-      let screenshot = document.querySelector(".sidebar-animation-screenshot");
-      screenshot.remove();
-      this._mainResizeObserver.observe(this.sidebarMain);
+      if (!isSidebar || !this._positionStart) {
+        continue;
+      }
+      // We want to keep the buttons in place during the animation, for which
+      // we might need to compensate.
+      animations.push(
+        this.sidebarMain.animate(
+          [{ translate: "0" }, { translate: `${-toTranslate}px 0 0` }],
+          options
+        )
+      );
+    }
+    await Promise.allSettled(animations.map(a => a.finished));
+    for (let el of animatingElements) {
+      el.style.minWidth =
+        el.style.maxWidth =
+        el.style.marginLeft =
+        el.style.marginRight =
+          "";
     }
   },
 
   async handleToolbarButtonClick() {
     switch (this.sidebarRevampVisibility) {
       case "always-show":
-        if (!window.gReduceMotion) {
+        if (this._animationEnabled && !window.gReduceMotion) {
           this._animateSidebarMain();
         } else {
           this.toggleExpanded();
@@ -1516,40 +1454,43 @@ var SidebarController = {
   },
 
   toggleTabstrip() {
-    let tabStrip = document.getElementById("tabbrowser-tabs");
+    let toVerticalTabs = CustomizableUI.verticalTabsEnabled;
     let arrowScrollbox = gBrowser.tabContainer.arrowScrollbox;
-    let verticalTabs = document.getElementById("vertical-tabs");
+    let currentScrollOrientation = arrowScrollbox.getAttribute("orient");
 
-    let tabsToolbarWidgets = CustomizableUI.getWidgetIdsInArea("TabsToolbar");
-    let tabstripPlacement = tabsToolbarWidgets.findIndex(
-      item => item == "tabbrowser-tabs"
-    );
+    if (
+      (!toVerticalTabs && currentScrollOrientation !== "vertical") ||
+      (toVerticalTabs && currentScrollOrientation === "vertical")
+    ) {
+      // Nothing to update
+      return;
+    }
 
-    if (this.sidebarVerticalTabsEnabled) {
+    let tabStrip = gBrowser.tabContainer;
+    if (toVerticalTabs) {
       this.toggleExpanded(this._sidebarMain.expanded);
       arrowScrollbox.setAttribute("orient", "vertical");
       tabStrip.setAttribute("orient", "vertical");
-      verticalTabs.append(tabStrip);
     } else {
       arrowScrollbox.setAttribute("orient", "horizontal");
       tabStrip.removeAttribute("expanded");
       tabStrip.setAttribute("orient", "horizontal");
-
-      // make sure we put the tabstrip back in its original position in the TabsToolbar
-      if (tabstripPlacement < tabsToolbarWidgets.length) {
-        document
-          .getElementById("TabsToolbar-customization-target")
-          .insertBefore(
-            tabStrip,
-            document.getElementById(tabsToolbarWidgets[tabstripPlacement + 1])
-          );
-      } else {
-        document
-          .getElementById("TabsToolbar-customization-target")
-          .append(tabStrip);
-      }
     }
-    verticalTabs.toggleAttribute("visible", this.sidebarVerticalTabsEnabled);
+
+    let verticalToolbar = document.getElementById(
+      CustomizableUI.AREA_VERTICAL_TABSTRIP
+    );
+    let indicatorTabs = gBrowser.visibleTabs.filter(tab => {
+      return (
+        tab.hasAttribute("soundplaying") ||
+        tab.hasAttribute("muted") ||
+        tab.hasAttribute("activemedia-blocked")
+      );
+    });
+    for (const indicatorTab of indicatorTabs) {
+      tabStrip.updateTabIndicatorAttr(indicatorTab);
+    }
+    verticalToolbar.toggleAttribute("visible", toVerticalTabs);
   },
 };
 
@@ -1569,6 +1510,18 @@ XPCOMUtils.defineLazyPreferenceGetter(
       SidebarController.setPosition();
     }
   }
+);
+XPCOMUtils.defineLazyPreferenceGetter(
+  SidebarController,
+  "_animationEnabled",
+  "sidebar.animation.enabled",
+  true
+);
+XPCOMUtils.defineLazyPreferenceGetter(
+  SidebarController,
+  "_animationDurationMs",
+  "sidebar.animation.duration-ms",
+  200
 );
 XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,
@@ -1602,10 +1555,5 @@ XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,
   "sidebarVerticalTabsEnabled",
   "sidebar.verticalTabs",
-  false,
-  () => {
-    if (!SidebarController.uninitializing) {
-      SidebarController.toggleTabstrip();
-    }
-  }
+  false
 );

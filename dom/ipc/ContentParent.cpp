@@ -3073,16 +3073,13 @@ void ContentParent::OnCompositorDeviceReset() {
 
 void ContentParent::MaybeEnableRemoteInputEventQueue() {
   MOZ_ASSERT(!mIsRemoteInputEventQueueEnabled);
-  if (!IsInputEventQueueSupported()) {
-    return;
-  }
   mIsRemoteInputEventQueueEnabled = true;
   Unused << SendSetInputEventQueueEnabled();
   SetInputPriorityEventEnabled(true);
 }
 
 void ContentParent::SetInputPriorityEventEnabled(bool aEnabled) {
-  if (!IsInputEventQueueSupported() || !mIsRemoteInputEventQueueEnabled ||
+  if (!mIsRemoteInputEventQueueEnabled ||
       mIsInputPriorityEventEnabled == aEnabled) {
     return;
   }
@@ -3092,18 +3089,6 @@ void ContentParent::SetInputPriorityEventEnabled(bool aEnabled) {
   Unused << SendSuspendInputEventQueue();
   Unused << SendFlushInputEventQueue();
   Unused << SendResumeInputEventQueue();
-}
-
-/*static*/
-bool ContentParent::IsInputEventQueueSupported() {
-  static bool sSupported = false;
-  static bool sInitialized = false;
-  if (!sInitialized) {
-    MOZ_ASSERT(Preferences::IsServiceAvailable());
-    sSupported = Preferences::GetBool("input_event_queue.supported", false);
-    sInitialized = true;
-  }
-  return sSupported;
 }
 
 void ContentParent::OnVarChanged(const GfxVarUpdate& aVar) {
@@ -3845,6 +3830,8 @@ ContentParent::Observe(nsISupports* aSubject, const char* aTopic,
       return NS_OK;
     }
     auto* cs = static_cast<CookieServiceParent*>(csParent);
+    MOZ_ASSERT(mCookieInContentListCache.IsEmpty());
+
     if (action == nsICookieNotification::COOKIES_BATCH_DELETED) {
       nsCOMPtr<nsIArray> cookieList;
       DebugOnly<nsresult> rv =
@@ -3866,7 +3853,7 @@ ContentParent::Observe(nsISupports* aSubject, const char* aTopic,
     }
 
     nsCOMPtr<nsICookie> xpcCookie;
-    DebugOnly<nsresult> rv = notification->GetCookie(getter_AddRefs(xpcCookie));
+    nsresult rv = notification->GetCookie(getter_AddRefs(xpcCookie));
     NS_ASSERTION(NS_SUCCEEDED(rv) && xpcCookie, "couldn't get cookie");
 
     // only broadcast the cookie change to content processes that need it
@@ -3877,11 +3864,17 @@ ContentParent::Observe(nsISupports* aSubject, const char* aTopic,
       return NS_OK;
     }
 
+    nsID* operationID = nullptr;
+    rv = notification->GetOperationID(&operationID);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return NS_OK;
+    }
+
     if (action == nsICookieNotification::COOKIE_DELETED) {
-      cs->RemoveCookie(cookie);
+      cs->RemoveCookie(cookie, operationID);
     } else if (action == nsICookieNotification::COOKIE_ADDED ||
                action == nsICookieNotification::COOKIE_CHANGED) {
-      cs->AddCookie(cookie);
+      cs->AddCookie(cookie, operationID);
     }
   } else if (!strcmp(aTopic, NS_NETWORK_LINK_TYPE_TOPIC)) {
     UpdateNetworkLinkType();
@@ -6131,6 +6124,17 @@ nsresult ContentParent::TransmitPermissionsForPrincipal(
   }
 
   return NS_OK;
+}
+
+void ContentParent::AddPrincipalToCookieInProcessCache(
+    nsIPrincipal* aPrincipal) {
+  MOZ_ASSERT(aPrincipal);
+  mCookieInContentListCache.AppendElement(aPrincipal);
+}
+
+void ContentParent::TakeCookieInProcessCache(
+    nsTArray<nsCOMPtr<nsIPrincipal>>& aList) {
+  aList.SwapElements(mCookieInContentListCache);
 }
 
 void ContentParent::TransmitBlobURLsForPrincipal(nsIPrincipal* aPrincipal) {

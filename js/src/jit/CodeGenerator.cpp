@@ -1485,6 +1485,21 @@ void CodeGenerator::visitTestIAndBranch(LTestIAndBranch* test) {
   }
 }
 
+void CodeGenerator::visitTestIPtrAndBranch(LTestIPtrAndBranch* test) {
+  Register input = ToRegister(test->input());
+  MBasicBlock* ifTrue = test->ifTrue();
+  MBasicBlock* ifFalse = test->ifFalse();
+
+  if (isNextBlock(ifFalse->lir())) {
+    masm.branchTestPtr(Assembler::NonZero, input, input,
+                       getJumpLabelForBranch(ifTrue));
+  } else {
+    masm.branchTestPtr(Assembler::Zero, input, input,
+                       getJumpLabelForBranch(ifFalse));
+    jumpToBlock(ifTrue);
+  }
+}
+
 void CodeGenerator::visitTestI64AndBranch(LTestI64AndBranch* test) {
   Register64 input = ToRegister64(test->input());
   MBasicBlock* ifTrue = test->ifTrue();
@@ -1552,10 +1567,12 @@ void CodeGenerator::visitCompare(LCompare* comp) {
 
   if (compareType == MCompare::Compare_Object ||
       compareType == MCompare::Compare_Symbol ||
+      compareType == MCompare::Compare_IntPtr ||
       compareType == MCompare::Compare_UIntPtr ||
       compareType == MCompare::Compare_WasmAnyRef) {
     if (right->isConstant()) {
-      MOZ_ASSERT(compareType == MCompare::Compare_UIntPtr);
+      MOZ_ASSERT(compareType == MCompare::Compare_IntPtr ||
+                 compareType == MCompare::Compare_UIntPtr);
       masm.cmpPtrSet(cond, left, ImmWord(ToInt32(right)), output);
     } else if (right->isRegister()) {
       masm.cmpPtrSet(cond, left, ToRegister(right), output);
@@ -1597,10 +1614,12 @@ void CodeGenerator::visitCompareAndBranch(LCompareAndBranch* comp) {
 
   if (compareType == MCompare::Compare_Object ||
       compareType == MCompare::Compare_Symbol ||
+      compareType == MCompare::Compare_IntPtr ||
       compareType == MCompare::Compare_UIntPtr ||
       compareType == MCompare::Compare_WasmAnyRef) {
     if (right->isConstant()) {
-      MOZ_ASSERT(compareType == MCompare::Compare_UIntPtr);
+      MOZ_ASSERT(compareType == MCompare::Compare_IntPtr ||
+                 compareType == MCompare::Compare_UIntPtr);
       masm.branchPtr(cond, left, ImmWord(ToInt32(right)), label);
     } else if (right->isRegister()) {
       masm.branchPtr(cond, left, ToRegister(right), label);
@@ -5292,7 +5311,7 @@ void CodeGenerator::visitInt64ToIntPtr(LInt64ToIntPtr* lir) {
 #ifdef JS_64BIT
   MOZ_ASSERT(input.reg == ToRegister(lir->output()));
 #else
-  MOZ_ASSERT(input.low == ToRegister(lir->output()));
+  Register output = ToRegister(lir->output());
 #endif
 
   Label bail;
@@ -5302,6 +5321,10 @@ void CodeGenerator::visitInt64ToIntPtr(LInt64ToIntPtr* lir) {
     masm.branchUInt64NotInPtrRange(input, &bail);
   }
   bailoutFrom(&bail, lir->snapshot());
+
+#ifndef JS_64BIT
+  masm.move64To32(input, output);
+#endif
 }
 
 void CodeGenerator::visitIntPtrToInt64(LIntPtrToInt64* lir) {
@@ -9205,12 +9228,15 @@ void CodeGenerator::visitOutOfLineBoxNonStrictThis(
 }
 
 void CodeGenerator::visitImplicitThis(LImplicitThis* lir) {
-  pushArg(ImmGCPtr(lir->mir()->name()));
-  pushArg(ToRegister(lir->env()));
+  Register env = ToRegister(lir->env());
+  ValueOperand output = ToOutValue(lir);
 
-  using Fn = bool (*)(JSContext*, HandleObject, Handle<PropertyName*>,
-                      MutableHandleValue);
-  callVM<Fn, ImplicitThisOperation>(lir);
+  using Fn = void (*)(JSContext*, HandleObject, MutableHandleValue);
+  auto* ool = oolCallVM<Fn, ImplicitThisOperation>(lir, ArgList(env),
+                                                   StoreValueTo(output));
+
+  masm.computeImplicitThis(env, output, ool->entry());
+  masm.bind(ool->rejoin());
 }
 
 void CodeGenerator::visitArrayLength(LArrayLength* lir) {
@@ -14692,6 +14718,27 @@ void CodeGenerator::visitSetInitializedLength(LSetInitializedLength* lir) {
   Address initLength(ToRegister(lir->elements()),
                      ObjectElements::offsetOfInitializedLength());
   SetLengthFromIndex(masm, lir->index(), initLength);
+}
+
+void CodeGenerator::visitNotI(LNotI* lir) {
+  Register input = ToRegister(lir->input());
+  Register output = ToRegister(lir->output());
+
+  masm.cmp32Set(Assembler::Equal, input, Imm32(0), output);
+}
+
+void CodeGenerator::visitNotIPtr(LNotIPtr* lir) {
+  Register input = ToRegister(lir->input());
+  Register output = ToRegister(lir->output());
+
+  masm.cmpPtrSet(Assembler::Equal, input, ImmWord(0), output);
+}
+
+void CodeGenerator::visitNotI64(LNotI64* lir) {
+  Register64 input = ToRegister64(lir->inputI64());
+  Register output = ToRegister(lir->output());
+
+  masm.cmp64Set(Assembler::Equal, input, Imm64(0), output);
 }
 
 void CodeGenerator::visitNotBI(LNotBI* lir) {

@@ -519,11 +519,11 @@ void LIRGenerator::visitBoxNonStrictThis(MBoxNonStrictThis* ins) {
 }
 
 void LIRGenerator::visitImplicitThis(MImplicitThis* ins) {
-  MDefinition* env = ins->envChain();
+  MDefinition* env = ins->env();
   MOZ_ASSERT(env->type() == MIRType::Object);
 
-  LImplicitThis* lir = new (alloc()) LImplicitThis(useRegisterAtStart(env));
-  defineReturn(lir, ins);
+  auto* lir = new (alloc()) LImplicitThis(useRegister(env));
+  defineBox(lir, ins);
   assignSafepoint(lir, ins);
 }
 
@@ -1050,6 +1050,7 @@ void LIRGenerator::visitTest(MTest* test) {
     // Compare and branch Int32, Symbol, Object, or WasmAnyRef pointers.
     if (comp->isInt32Comparison() ||
         comp->compareType() == MCompare::Compare_UInt32 ||
+        comp->compareType() == MCompare::Compare_IntPtr ||
         comp->compareType() == MCompare::Compare_UIntPtr ||
         comp->compareType() == MCompare::Compare_Object ||
         comp->compareType() == MCompare::Compare_Symbol ||
@@ -1059,6 +1060,7 @@ void LIRGenerator::visitTest(MTest* test) {
       LAllocation rhs;
       if (comp->isInt32Comparison() ||
           comp->compareType() == MCompare::Compare_UInt32 ||
+          comp->compareType() == MCompare::Compare_IntPtr ||
           comp->compareType() == MCompare::Compare_UIntPtr) {
         rhs = useAnyOrInt32Constant(right);
       } else {
@@ -1239,6 +1241,9 @@ void LIRGenerator::visitTest(MTest* test) {
     case MIRType::Boolean:
       add(new (alloc()) LTestIAndBranch(useRegister(opd), ifTrue, ifFalse));
       break;
+    case MIRType::IntPtr:
+      add(new (alloc()) LTestIPtrAndBranch(useRegister(opd), ifTrue, ifFalse));
+      break;
     case MIRType::Int64:
       add(new (alloc())
               LTestI64AndBranch(useInt64Register(opd), ifTrue, ifFalse));
@@ -1403,6 +1408,7 @@ void LIRGenerator::visitCompare(MCompare* comp) {
   // Compare Int32, Symbol, Object or Wasm pointers.
   if (comp->isInt32Comparison() ||
       comp->compareType() == MCompare::Compare_UInt32 ||
+      comp->compareType() == MCompare::Compare_IntPtr ||
       comp->compareType() == MCompare::Compare_UIntPtr ||
       comp->compareType() == MCompare::Compare_Object ||
       comp->compareType() == MCompare::Compare_Symbol ||
@@ -1412,6 +1418,7 @@ void LIRGenerator::visitCompare(MCompare* comp) {
     LAllocation rhs;
     if (comp->isInt32Comparison() ||
         comp->compareType() == MCompare::Compare_UInt32 ||
+        comp->compareType() == MCompare::Compare_IntPtr ||
         comp->compareType() == MCompare::Compare_UIntPtr) {
       rhs = useAnyOrInt32Constant(right);
     } else {
@@ -3604,15 +3611,16 @@ void LIRGenerator::visitInt64ToIntPtr(MInt64ToIntPtr* ins) {
     redefine(ins, ins->input());
     return;
   }
-#else
-  static_assert(INT64LOW_INDEX == 0,
-                "low 32-bits are stored in operand index zero");
 #endif
 
   auto* lir =
       new (alloc()) LInt64ToIntPtr(useInt64RegisterAtStart(ins->input()));
   assignSnapshot(lir, ins->bailoutKind());
+#ifdef JS_64BIT
   defineReuseInput(lir, ins, 0);
+#else
+  define(lir, ins);
+#endif
 }
 
 void LIRGenerator::visitIntPtrToInt64(MIntPtrToInt64* ins) {
@@ -4454,6 +4462,9 @@ void LIRGenerator::visitNot(MNot* ins) {
     }
     case MIRType::Int32:
       define(new (alloc()) LNotI(useRegisterAtStart(op)), ins);
+      break;
+    case MIRType::IntPtr:
+      define(new (alloc()) LNotIPtr(useRegisterAtStart(op)), ins);
       break;
     case MIRType::Int64:
       define(new (alloc()) LNotI64(useInt64RegisterAtStart(op)), ins);

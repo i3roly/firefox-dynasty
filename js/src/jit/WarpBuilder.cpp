@@ -1943,10 +1943,18 @@ bool WarpBuilder::build_BindName(BytecodeLocation loc) {
   return buildIC(loc, CacheKind::BindName, {env});
 }
 
-bool WarpBuilder::build_BindGName(BytecodeLocation loc) {
+bool WarpBuilder::build_BindUnqualifiedName(BytecodeLocation loc) {
+  MOZ_ASSERT(usesEnvironmentChain());
+
+  MDefinition* env = current->environmentChain();
+  env = unboxObjectInfallible(env, IsMovable::Yes);
+  return buildIC(loc, CacheKind::BindName, {env});
+}
+
+bool WarpBuilder::build_BindUnqualifiedGName(BytecodeLocation loc) {
   MOZ_ASSERT(!script_->hasNonSyntacticScope());
 
-  if (const auto* snapshot = getOpSnapshot<WarpBindGName>(loc)) {
+  if (const auto* snapshot = getOpSnapshot<WarpBindUnqualifiedGName>(loc)) {
     JSObject* globalEnv = snapshot->globalEnv();
     pushConstant(ObjectValue(*globalEnv));
     return true;
@@ -2269,12 +2277,9 @@ bool WarpBuilder::build_PushVarEnv(BytecodeLocation loc) {
 }
 
 bool WarpBuilder::build_ImplicitThis(BytecodeLocation loc) {
-  MOZ_ASSERT(usesEnvironmentChain());
+  MDefinition* env = current->pop();
 
-  PropertyName* name = loc.getPropertyName(script_);
-  MDefinition* env = current->environmentChain();
-
-  auto* ins = MImplicitThis::New(alloc(), env, name);
+  auto* ins = MImplicitThis::New(alloc(), env);
   current->add(ins);
   current->push(ins);
   return resumeAfter(ins, loc);

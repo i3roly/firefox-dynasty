@@ -505,3 +505,128 @@ add_task(async function test_suggestions_after_no_search_mode() {
   await defaultEngine.unload();
   await anotherEngine.unload();
 });
+
+add_task(async function open_engine_page_directly() {
+  await SearchTestUtils.installSearchExtension(
+    {
+      name: "MozSearch",
+      search_url: "https://example.com/",
+      favicon_url: "https://example.com/favicon.ico",
+    },
+    { setAsDefault: true }
+  );
+
+  const TEST_DATA = [
+    {
+      action: "click",
+      input: "",
+      expected: "https://example.com/",
+    },
+    {
+      action: "click",
+      input: "a b c",
+      expected: "https://example.com/?q=a+b+c",
+    },
+    {
+      action: "key",
+      input: "",
+      expected: "https://example.com/",
+    },
+    {
+      action: "key",
+      input: "a b c",
+      expected: "https://example.com/?q=a+b+c",
+    },
+  ];
+
+  for (let { action, input, expected } of TEST_DATA) {
+    info(`Test for ${JSON.stringify({ action, input, expected })}`);
+
+    info("Open a window");
+    let newWin = await BrowserTestUtils.openNewBrowserWindow();
+
+    info(`Open the result popup with [${input}]`);
+    await UrlbarTestUtils.promiseAutocompleteResultPopup({
+      window: newWin,
+      value: input,
+    });
+
+    info("Open the mode switcher");
+    let popup = await UrlbarTestUtils.openSearchModeSwitcher(newWin);
+
+    info(`Do action of [${action}] on MozSearch menuitem`);
+    let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(newWin);
+    let pageLoaded = BrowserTestUtils.browserLoaded(
+      newWin.gBrowser.selectedBrowser,
+      false,
+      expected
+    );
+
+    if (action == "click") {
+      EventUtils.synthesizeMouseAtCenter(
+        popup.querySelector("toolbarbutton[label=MozSearch]"),
+        {
+          shiftKey: true,
+        },
+        newWin
+      );
+    } else {
+      popup.querySelector("toolbarbutton[label=MozSearch]").focus();
+      EventUtils.synthesizeKey("KEY_Enter", { shiftKey: true }, newWin);
+    }
+
+    await popupHidden;
+    await pageLoaded;
+    Assert.ok(true, "The popup was hidden and expected page was loaded");
+
+    info("Search mode also be changed");
+    await UrlbarTestUtils.assertSearchMode(newWin, {
+      engineName: "MozSearch",
+      isGeneralPurposeEngine: false,
+      isPreview: true,
+      entry: "other",
+    });
+
+    // Cleanup.
+    await PlacesUtils.history.clear();
+    await BrowserTestUtils.closeWindow(newWin);
+  }
+});
+
+add_task(async function test_urlbar_text_after_previewed_search_mode() {
+  info("Open urlbar with a query that shows DuckDuckGo search engine");
+  await UrlbarTestUtils.promiseAutocompleteResultPopup({
+    window,
+    value: "duck",
+  });
+
+  // Sanity check.
+  const target = await UrlbarTestUtils.getDetailsOfResultAt(window, 1);
+  Assert.equal(target.result.payload.engine, "DuckDuckGo");
+  Assert.ok(target.result.payload.providesSearchMode);
+
+  info("Choose the search mode suggestion");
+  EventUtils.synthesizeKey("KEY_Tab", {});
+  await UrlbarTestUtils.assertSearchMode(window, {
+    engineName: "DuckDuckGo",
+    entry: "tabtosearch_onboard",
+    source: 3,
+    isPreview: true,
+  });
+
+  info("Click on the content area");
+  EventUtils.synthesizeMouseAtCenter(gBrowser.selectedBrowser, {});
+  await UrlbarTestUtils.assertSearchMode(window, null);
+
+  info("Choose any search engine from the switcher");
+  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+  popup.querySelector("toolbarbutton[label=Bing]").click();
+  await popupHidden;
+
+  Assert.equal(gURLBar.value, "", "The value of urlbar should be empty");
+
+  // Clean up.
+  window.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+});
