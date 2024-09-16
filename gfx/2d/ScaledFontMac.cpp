@@ -112,7 +112,8 @@ CTFontRef CreateCTFontFromCGFontWithVariations(CGFontRef aCGFont, CGFloat aSize,
   }
   // Older implementation used up to macOS 12.
   CTFontRef ctFont;
-  if (aInstalledFont) {
+  if (nsCocoaFeatures::OnSierraExactly() ||
+        (aInstalledFont && nsCocoaFeatures::OnHighSierraOrLater())) {
     AutoRelease<CFDictionaryRef> vars(CGFontCopyVariations(aCGFont));
     if (vars) {
       AutoRelease<CFDictionaryRef> varAttr(CFDictionaryCreate(
