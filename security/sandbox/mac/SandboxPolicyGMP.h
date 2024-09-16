@@ -40,12 +40,13 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
   (if (defined? 'file-map-executable)
     (moz-deny file-map-executable))
 
-  (allow process-info-pidinfo (target self))
 
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
   (if (>= macosVersion 1009)  
-  (allow process-info-pidinfo process-info-setcontrol (target self)))
-
+  (begin 
+        (allow process-info-pidinfo (target self))
+        (allow process-info-pidinfo process-info-setcontrol (target self))))
+  
   (if (defined? 'file-map-executable)
     (begin
       (if (string=? isRosettaTranslated "TRUE")
