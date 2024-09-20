@@ -24,12 +24,6 @@ interface FeatureSettingsHelper {
     var isPocketEnabled: Boolean
 
     /**
-     * Whether the "Jump back in" CFR should be shown or not.
-     * It should appear on the first visit to homescreen given that there is a tab opened.
-     */
-    var isJumpBackInCFREnabled: Boolean
-
-    /**
      * Whether the "Navigation bar" CFR should be shown or not.
      * It should appear on the first visit to homescreen given that there is a navigation bar.
      */
@@ -103,6 +97,11 @@ interface FeatureSettingsHelper {
      * Enable or disable the "Set as default browser" dialog.
      */
     var isSetAsDefaultBrowserPromptEnabled: Boolean
+
+    /**
+     * Enable or disable bottom toolbar position.
+     */
+    var shouldUseBottomToolbar: Boolean
 
     fun applyFlagUpdates()
 

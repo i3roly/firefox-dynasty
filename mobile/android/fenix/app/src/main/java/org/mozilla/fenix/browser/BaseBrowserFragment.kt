@@ -542,8 +542,6 @@ abstract class BaseBrowserFragment :
             tabCollectionStorage = requireComponents.core.tabCollectionStorage,
             topSitesStorage = requireComponents.core.topSitesStorage,
             pinnedSiteStorage = requireComponents.core.pinnedSiteStorage,
-            onShowPinVerification = { intent -> savedLoginsLauncher.launch(intent) },
-            onBiometricAuthenticationSuccessful = { navigateToSavedLoginsFragment() },
         )
 
         _browserToolbarInteractor = DefaultBrowserToolbarInteractor(
@@ -1505,9 +1503,7 @@ abstract class BaseBrowserFragment :
             content = {
                 FirefoxTheme {
                     Column {
-                        if (!activity.isMicrosurveyPromptDismissed.value &&
-                            !(context.isTablet() && context.settings().shouldShowTabletNavigationCFR)
-                        ) {
+                        if (!activity.isMicrosurveyPromptDismissed.value) {
                             currentMicrosurvey?.let {
                                 if (isToolbarAtBottom) {
                                     updateBrowserToolbarForMicrosurveyPrompt(browserToolbar)
@@ -1541,6 +1537,8 @@ abstract class BaseBrowserFragment :
                                     },
                                 )
                             }
+                        } else {
+                            restoreBrowserToolbarAfterMicrosurveyPrompt(browserToolbar)
                         }
 
                         if (isToolbarAtBottom) {
@@ -1744,6 +1742,7 @@ abstract class BaseBrowserFragment :
         }
     }
 
+    @Suppress("LongMethod")
     private fun initializeMicrosurveyPrompt() {
         val context = requireContext()
         val view = requireView()
@@ -1799,6 +1798,8 @@ abstract class BaseBrowserFragment :
                                     },
                                 )
                             }
+                        } else {
+                            restoreBrowserToolbarAfterMicrosurveyPrompt(browserToolbar)
                         }
 
                         if (isToolbarAtBottom) {
@@ -1842,6 +1843,15 @@ abstract class BaseBrowserFragment :
         )
         browserToolbar.background = drawable
         browserToolbar.elevation = 0.0f
+    }
+
+    private fun restoreBrowserToolbarAfterMicrosurveyPrompt(browserToolbar: BrowserToolbar) {
+        val defaultBackground = ResourcesCompat.getDrawable(
+            resources,
+            R.drawable.toolbar_background,
+            context?.theme,
+        )
+        browserToolbar.background = defaultBackground
     }
 
     private var currentMicrosurvey: MicrosurveyUIData? = null

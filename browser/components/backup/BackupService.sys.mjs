@@ -50,12 +50,14 @@ ChromeUtils.defineLazyGetter(lazy, "fxAccounts", () => {
 });
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
   ArchiveDecryptor: "resource:///modules/backup/ArchiveEncryption.sys.mjs",
   ArchiveEncryptionState:
     "resource:///modules/backup/ArchiveEncryptionState.sys.mjs",
   ArchiveUtils: "resource:///modules/backup/ArchiveUtils.sys.mjs",
   BasePromiseWorker: "resource://gre/modules/PromiseWorker.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
+  DeferredTask: "resource://gre/modules/DeferredTask.sys.mjs",
   DownloadPaths: "resource://gre/modules/DownloadPaths.sys.mjs",
   FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
   JsonSchema: "resource://gre/modules/JsonSchema.sys.mjs",
@@ -649,12 +651,31 @@ export class BackupService extends EventTarget {
   #encState = undefined;
 
   /**
+   * The PlacesObserver instance used to monitor the Places database for
+   * history and bookmark removals to determine if backups should be
+   * regenerated.
+   *
+   * @type {PlacesObserver|null}
+   */
+  #placesObserver = null;
+
+  /**
    * The AbortController used to abort any queued requests to create or delete
    * backups that might be waiting on the WRITE_BACKUP_LOCK_NAME lock.
    *
    * @type {AbortController}
    */
   #backupWriteAbortController = null;
+
+  /**
+   * A DeferredTask that will cause the last known backup to be deleted, and
+   * a new backup to be created.
+   *
+   * See BackupService.#debounceRegeneration()
+   *
+   * @type {DeferredTask}
+   */
+  #regenerationDebouncer = null;
 
   /**
    * The path of the default parent directory for saving backups.
@@ -859,6 +880,16 @@ export class BackupService extends EventTarget {
   }
 
   /**
+   * The amount of time (in milliseconds) to wait for our backup regeneration
+   * debouncer to kick off a regeneration.
+   *
+   * @type {number}
+   */
+  static get REGENERATION_DEBOUNCE_RATE_MS() {
+    return 10000;
+  }
+
+  /**
    * Returns a reference to a BackupService singleton. If this is the first time
    * that this getter is accessed, this causes the BackupService singleton to be
    * be instantiated.
@@ -916,6 +947,14 @@ export class BackupService extends EventTarget {
     this.#postRecoveryPromise = promise;
     this.#postRecoveryResolver = resolve;
     this.#backupWriteAbortController = new AbortController();
+    this.#regenerationDebouncer = new lazy.DeferredTask(async () => {
+      if (!this.#backupWriteAbortController.signal.aborted) {
+        await this.deleteLastBackup();
+        if (lazy.scheduledBackupsPref) {
+          await this.createBackupOnIdleDispatch();
+        }
+      }
+    }, BackupService.REGENERATION_DEBOUNCE_RATE_MS);
   }
 
   /**
@@ -3115,6 +3154,25 @@ export class BackupService extends EventTarget {
     );
     lazy.logConsole.debug("Idle observer registered.");
 
+    lazy.logConsole.debug(`Registering Places observer`);
+
+    this.#placesObserver = new PlacesWeakCallbackWrapper(
+      this.onPlacesEvents.bind(this)
+    );
+    PlacesObservers.addListener(
+      ["history-cleared", "page-removed", "bookmark-removed"],
+      this.#placesObserver
+    );
+
+    lazy.AddonManager.addAddonListener(this);
+
+    Services.obs.addObserver(this.#observer, "passwordmgr-storage-changed");
+    Services.obs.addObserver(this.#observer, "formautofill-storage-changed");
+    Services.obs.addObserver(this.#observer, "sanitizer-sanitization-complete");
+    Services.obs.addObserver(this.#observer, "perm-changed");
+    Services.obs.addObserver(this.#observer, "cookie-changed");
+    Services.obs.addObserver(this.#observer, "session-cookie-changed");
+    Services.obs.addObserver(this.#observer, "newtab-linkBlocked");
     Services.obs.addObserver(this.#observer, "quit-application-granted");
   }
 
@@ -3135,8 +3193,29 @@ export class BackupService extends EventTarget {
       this.#observer,
       this.#idleThresholdSeconds
     );
+
+    PlacesObservers.removeListener(
+      ["history-cleared", "page-removed", "bookmark-removed"],
+      this.#placesObserver
+    );
+
+    lazy.AddonManager.removeAddonListener(this);
+
+    Services.obs.removeObserver(this.#observer, "passwordmgr-storage-changed");
+    Services.obs.removeObserver(this.#observer, "formautofill-storage-changed");
+    Services.obs.removeObserver(
+      this.#observer,
+      "sanitizer-sanitization-complete"
+    );
+    Services.obs.removeObserver(this.#observer, "perm-changed");
+    Services.obs.removeObserver(this.#observer, "cookie-changed");
+    Services.obs.removeObserver(this.#observer, "session-cookie-changed");
+    Services.obs.removeObserver(this.#observer, "newtab-linkBlocked");
     Services.obs.removeObserver(this.#observer, "quit-application-granted");
     this.#observer = null;
+
+    this.#regenerationDebouncer.disarm();
+    this.#backupWriteAbortController.abort();
   }
 
   /**
@@ -3144,13 +3223,15 @@ export class BackupService extends EventTarget {
    * quit-application-granted from the nsIObserverService. Exposed as a public
    * method mainly for ease in testing.
    *
-   * @param {nsISupports|null} _subject
+   * @param {nsISupports|null} subject
    *   The nsIUserIdleService for the idle notification, and null for the
    *   quit-application-granted topic.
    * @param {string} topic
    *   The topic that the notification belongs to.
+   * @param {string} data
+   *   Optional data that was included with the notification.
    */
-  onObserve(_subject, topic) {
+  onObserve(subject, topic, data) {
     switch (topic) {
       case "idle": {
         this.onIdle();
@@ -3158,10 +3239,61 @@ export class BackupService extends EventTarget {
       }
       case "quit-application-granted": {
         this.uninitBackupScheduler();
-        this.#backupWriteAbortController.abort();
+        break;
+      }
+      case "passwordmgr-storage-changed": {
+        if (data == "removeLogin" || data == "removeAllLogins") {
+          this.#debounceRegeneration();
+        }
+        break;
+      }
+      case "formautofill-storage-changed": {
+        if (
+          data == "remove" &&
+          (subject.wrappedJSObject.collectionName == "creditCards" ||
+            subject.wrappedJSObject.collectionName == "addresses")
+        ) {
+          this.#debounceRegeneration();
+        }
+        break;
+      }
+      case "newtab-linkBlocked":
+      // Intentional fall-through
+      case "sanitizer-sanitization-complete": {
+        this.#debounceRegeneration();
+        break;
+      }
+      case "perm-changed": {
+        if (data == "deleted") {
+          this.#debounceRegeneration();
+        }
+        break;
+      }
+      case "cookie-changed":
+      // Intentional fall-through
+      case "session-cookie-changed": {
+        let notification = subject.QueryInterface(Ci.nsICookieNotification);
+        if (
+          notification.action ==
+            Ci.nsICookieNotification.COOKIES_BATCH_DELETED ||
+          notification.action == Ci.nsICookieNotification.COOKIE_DELETED ||
+          notification.action == Ci.nsICookieNotification.ALL_COOKIES_CLEARED
+        ) {
+          this.#debounceRegeneration();
+        }
         break;
       }
     }
+  }
+
+  /**
+   * Called when the last known backup should be deleted and a new one
+   * created. This uses the #regenerationDebouncer to debounce clusters of
+   * events that might cause such a regeneration to occur.
+   */
+  #debounceRegeneration() {
+    this.#regenerationDebouncer.disarm();
+    this.#regenerationDebouncer.arm();
   }
 
   /**
@@ -3228,6 +3360,51 @@ export class BackupService extends EventTarget {
       );
       this.createBackup();
     });
+  }
+
+  /**
+   * Handler for events coming in through our PlacesObserver.
+   *
+   * @param {PlacesEvent[]} placesEvents
+   *   One or more batched events that are of a type that we subscribed to.
+   */
+  onPlacesEvents(placesEvents) {
+    // Note that if any of the events that we iterate result in a regeneration
+    // being queued, we simply return without the processing the rest, as there
+    // is not really a point.
+    for (let event of placesEvents) {
+      switch (event.type) {
+        case "page-removed": {
+          // We will get a page-removed event if a page has been deleted both
+          // manually by a user, but also automatically if the page has "aged
+          // out" of the Places database. We only want to regenerate backups
+          // in the manual case (REASON_DELETED).
+          if (event.reason == PlacesVisitRemoved.REASON_DELETED) {
+            this.#debounceRegeneration();
+            return;
+          }
+          break;
+        }
+        case "bookmark-removed":
+        // Intentional fall-through
+        case "history-cleared": {
+          this.#debounceRegeneration();
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * This method is the only method of the AddonListener interface that
+   * BackupService implements and is called by AddonManager when an addon
+   * is uninstalled.
+   *
+   * @param {AddonInternal} _addon
+   *   The addon being uninstalled.
+   */
+  onUninstalled(_addon) {
+    this.#debounceRegeneration();
   }
 
   /**
@@ -3317,21 +3494,30 @@ export class BackupService extends EventTarget {
    * @returns {Promise<undefined>}
    */
   async deleteLastBackup() {
+    if (!lazy.scheduledBackupsPref) {
+      lazy.logConsole.debug(
+        "Not deleting last backup, as scheduled backups are disabled."
+      );
+      return undefined;
+    }
+
     return locks.request(
       BackupService.WRITE_BACKUP_LOCK_NAME,
       { signal: this.#backupWriteAbortController.signal },
       async () => {
         if (this.#_state.lastBackupFileName) {
-          let backupFilePath = PathUtils.join(
-            lazy.backupDirPref,
-            this.#_state.lastBackupFileName
-          );
+          if (await this.#infalliblePathExists(lazy.backupDirPref)) {
+            let backupFilePath = PathUtils.join(
+              lazy.backupDirPref,
+              this.#_state.lastBackupFileName
+            );
 
-          lazy.logConsole.log(
-            "Attempting to delete last backup file at ",
-            backupFilePath
-          );
-          await IOUtils.remove(backupFilePath, { ignoreAbsent: true });
+            lazy.logConsole.log(
+              "Attempting to delete last backup file at ",
+              backupFilePath
+            );
+            await IOUtils.remove(backupFilePath, { ignoreAbsent: true });
+          }
 
           this.#_state.lastBackupDate = null;
           Services.prefs.clearUserPref(LAST_BACKUP_TIMESTAMP_PREF_NAME);
@@ -3346,7 +3532,7 @@ export class BackupService extends EventTarget {
           );
         }
 
-        if (await IOUtils.exists(lazy.backupDirPref)) {
+        if (await this.#infalliblePathExists(lazy.backupDirPref)) {
           // See if there are any other files lingering around in the destination
           // folder. If not, delete that folder too.
           let children = await IOUtils.getChildren(lazy.backupDirPref);
@@ -3356,5 +3542,25 @@ export class BackupService extends EventTarget {
         }
       }
     );
+  }
+
+  /**
+   * Wraps an IOUtils.exists in a try/catch and returns true iff the passed
+   * path actually exists on the file system. Returns false if the path doesn't
+   * exist or is an invalid path.
+   *
+   * @param {string} path
+   *   The path to check for existence.
+   * @returns {Promise<boolean>}
+   */
+  async #infalliblePathExists(path) {
+    let exists = false;
+    try {
+      exists = await IOUtils.exists(path);
+    } catch (e) {
+      lazy.logConsole.warn("Path failed existence check :", path);
+      return false;
+    }
+    return exists;
   }
 }

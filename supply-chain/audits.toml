@@ -552,6 +552,11 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "0.7.18 -> 0.7.20"
 
+[[audits.allocator-api2]]
+who = "Nicolas Silva <nical@fastmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.18"
+
 [[audits.alsa]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -3127,12 +3132,12 @@ delta = "0.20.0 -> 22.0.0"
 
 [[audits.naga]]
 who = [
-    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:c2e0ad293fc635c8695e8b2358610a5918f77695"
+delta = "22.0.0 -> 22.0.0@git:c8beade1877251c494036fc3661b04ec6aad63a9"
 importable = false
 
 [[audits.net2]]
@@ -3982,6 +3987,12 @@ This crate is basically developed in-tree. Mozilla employees have either
 reviewed or written virtually all of the code.
 """
 
+[[audits.selectors]]
+who = "Emilio Cobos Álvarez <emilio@crisal.io>"
+criteria = "safe-to-deploy"
+delta = "0.22.0 -> 0.25.0"
+notes = "First party Mozilla code."
+
 [[audits.semver]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -4132,6 +4143,12 @@ who = "Emilio Cobos Álvarez <emilio@crisal.io>"
 criteria = "safe-to-deploy"
 version = "0.1.1"
 notes = "Developed in-tree, effectively."
+
+[[audits.servo_arc]]
+who = "Emilio Cobos Álvarez <emilio@crisal.io>"
+criteria = "safe-to-deploy"
+delta = "0.1.1 -> 0.3.0"
+notes = "First-party Mozilla code."
 
 [[audits.sfv]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
@@ -5116,12 +5133,12 @@ delta = "0.20.0 -> 22.0.0"
 
 [[audits.wgpu-core]]
 who = [
-    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:c2e0ad293fc635c8695e8b2358610a5918f77695"
+delta = "22.0.0 -> 22.0.0@git:c8beade1877251c494036fc3661b04ec6aad63a9"
 importable = false
 
 [[audits.wgpu-hal]]
@@ -5189,12 +5206,12 @@ delta = "0.20.0 -> 22.0.0"
 
 [[audits.wgpu-hal]]
 who = [
-    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:c2e0ad293fc635c8695e8b2358610a5918f77695"
+delta = "22.0.0 -> 22.0.0@git:c8beade1877251c494036fc3661b04ec6aad63a9"
 importable = false
 
 [[audits.wgpu-types]]
@@ -5262,12 +5279,12 @@ delta = "0.20.0 -> 22.0.0"
 
 [[audits.wgpu-types]]
 who = [
-    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
     "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:c2e0ad293fc635c8695e8b2358610a5918f77695"
+delta = "22.0.0 -> 22.0.0@git:c8beade1877251c494036fc3661b04ec6aad63a9"
 importable = false
 
 [[audits.whatsys]]

@@ -421,7 +421,7 @@
               "dark": "{color.gray.05}"
             },
             "platform": {
-              "default": "var(--button-color)"
+              "default": "currentColor"
             }
           }
         },
@@ -956,6 +956,12 @@
         "value": {
           "default": "color-mix(in srgb, currentColor 69%, transparent)",
           "prefersContrast": "inherit"
+        }
+      },
+      "disabled": {
+        "value": {
+          "default": "color-mix(in srgb, currentColor 40%, transparent)",
+          "forcedColors": "GrayText"
         }
       },
       "error": {

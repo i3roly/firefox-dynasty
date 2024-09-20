@@ -11,6 +11,8 @@ head = "head.js"
 
 ["test_getDirectoryFailure.js"]
 
+["test_slowStorageInitialization.js"]
+
 ["test_syncAccessHandle_worker.js"]
 
 ["test_writableFileStream.js"]

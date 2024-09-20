@@ -19,7 +19,7 @@ class PresShell;
 // <msqrt> and <mroot> -- form a radical
 //
 
-class nsMathMLmrootFrame final : public nsMathMLContainerFrame {
+class nsMathMLmrootFrame : public nsMathMLContainerFrame {
  public:
   NS_DECL_FRAMEARENA_HELPERS(nsMathMLmrootFrame)
 
@@ -30,6 +30,9 @@ class nsMathMLmrootFrame final : public nsMathMLContainerFrame {
 
   virtual void Init(nsIContent* aContent, nsContainerFrame* aParent,
                     nsIFrame* aPrevInFlow) override;
+
+  NS_IMETHOD
+  InheritAutomaticData(nsIFrame* aParent) final;
 
   NS_IMETHOD
   TransmitAutomaticData() override;
@@ -55,6 +58,7 @@ class nsMathMLmrootFrame final : public nsMathMLContainerFrame {
 
  private:
   bool ShouldUseRowFallback();
+  bool IsMrowLike() final;
   nsresult Place(DrawTarget* aDrawTarget, const PlaceFlags& aFlags,
                  ReflowOutput& aDesiredSize) final;
 };

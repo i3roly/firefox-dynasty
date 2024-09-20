@@ -11,8 +11,10 @@
 #include "base/process_util.h"
 #include "GMPUtils.h"  // ToHexString
 #include "mozilla/Components.h"
+#include "mozilla/dom/BrowserParent.h"
 #include "mozilla/dom/CanonicalBrowsingContext.h"
 #include "mozilla/dom/DataTransfer.h"
+#include "mozilla/dom/DragEvent.h"
 #include "mozilla/dom/Promise.h"
 #include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/Logging.h"
@@ -1089,9 +1091,15 @@ ContentAnalysis::TestOnlySetCACmdLineArg(bool aVal) {
 
 nsresult ContentAnalysis::CancelWithError(nsCString aRequestToken,
                                           nsresult aResult) {
+  LOGD(
+      "ContentAnalysis::CancelWithError dispatching to main thread for "
+      "request %s",
+      aRequestToken.get());
   return NS_DispatchToMainThread(NS_NewCancelableRunnableFunction(
       "ContentAnalysis::CancelWithError",
       [aResult, aRequestToken = std::move(aRequestToken)]() mutable {
+        LOGD("ContentAnalysis::CancelWithError on main thread for request %s",
+             aRequestToken.get());
         RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
         if (!owner) {
           // May be shutting down
@@ -1376,6 +1384,7 @@ void ContentAnalysis::DoAnalyzeRequest(
       "ContentAnalysis::RunAnalyzeRequestTask::HandleResponse",
       [pbResponse = std::move(pbResponse),
        aRequestToCache = std::move(aRequestToCache)]() mutable {
+        LOGD("RunAnalyzeRequestTask on main thread about to send response");
         RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
         if (!owner) {
           // May be shutting down
@@ -1389,10 +1398,32 @@ void ContentAnalysis::DoAnalyzeRequest(
           return;
         }
         if (aRequestToCache) {
-          nsIContentAnalysisResponse::Action action;
-          if (NS_SUCCEEDED(response->GetAction(&action))) {
-            owner->mCachedData.SetData(std::move(aRequestToCache), action);
-          }
+          [&]() {
+            nsIContentAnalysisResponse::Action action;
+            if (NS_FAILED(response->GetAction(&action))) {
+              LOGE("Content analysis couldn't get action from response!");
+              return;
+            }
+            nsCString responseRequestToken;
+            nsresult requestRv =
+                response->GetRequestToken(responseRequestToken);
+            if (NS_FAILED(requestRv)) {
+              LOGE(
+                  "Content analysis couldn't get request token from response!");
+              return;
+            }
+            {
+              auto callbackMap = owner->mCallbackMap.Lock();
+              auto maybeCallbackData =
+                  callbackMap->MaybeGet(responseRequestToken);
+              // This prevents caching cancelled results to avoid issues like
+              // bug 1918028.
+              if (maybeCallbackData.isSome() &&
+                  !maybeCallbackData->Canceled()) {
+                owner->mCachedData.SetData(std::move(aRequestToCache), action);
+              }
+            }
+          }();
         }
         owner->IssueResponse(response);
       }));
@@ -1617,6 +1648,10 @@ NS_IMETHODIMP
 ContentAnalysis::RespondToWarnDialog(const nsACString& aRequestToken,
                                      bool aAllowContent) {
   nsCString requestToken(aRequestToken);
+  LOGD(
+      "ContentAnalysis::RespondToWarnDialog dispatching to main thread for "
+      "request %s",
+      requestToken.get());
   NS_DispatchToMainThread(NS_NewCancelableRunnableFunction(
       "RespondToWarnDialog",
       [aAllowContent, requestToken = std::move(requestToken)]() {
@@ -2305,6 +2340,22 @@ NS_IMETHODIMP ContentAnalysis::GetURIForBrowsingContext(
   }
   uri.forget(aURI);
   return NS_OK;
+}
+
+NS_IMETHODIMP
+ContentAnalysis::GetURIForDropEvent(dom::DragEvent* aEvent, nsIURI** aURI) {
+  MOZ_ASSERT(XRE_IsParentProcess());
+  *aURI = nullptr;
+  auto* widgetEvent = aEvent->WidgetEventPtr();
+  MOZ_ASSERT(widgetEvent);
+  MOZ_ASSERT(widgetEvent->mClass == eDragEventClass &&
+             widgetEvent->mMessage == eDrop);
+  auto* bp =
+      dom::BrowserParent::GetBrowserParentFromLayersId(widgetEvent->mLayersId);
+  NS_ENSURE_TRUE(bp, NS_ERROR_FAILURE);
+  auto* bc = bp->GetBrowsingContext();
+  NS_ENSURE_TRUE(bc, NS_ERROR_FAILURE);
+  return GetURIForBrowsingContext(bc, aURI);
 }
 
 NS_IMETHODIMP ContentAnalysisCallback::ContentResult(

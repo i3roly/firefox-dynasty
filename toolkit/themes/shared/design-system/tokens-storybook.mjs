@@ -424,7 +424,7 @@ export const storybookTables = {
           dark: "var(--color-gray-05)",
           default: "light-dark(var(--color-gray-100), var(--color-gray-05))",
         },
-        platform: { default: "var(--button-color)" },
+        platform: { default: "currentColor" },
       },
       name: "--button-text-color",
     },
@@ -537,6 +537,13 @@ export const storybookTables = {
         prefersContrast: "inherit",
       },
       name: "--text-color-deemphasized",
+    },
+    {
+      value: {
+        default: "color-mix(in srgb, currentColor 40%, transparent)",
+        forcedColors: "GrayText",
+      },
+      name: "--text-color-disabled",
     },
     {
       value: {
@@ -974,7 +981,7 @@ export const variableLookupTable = {
       dark: "var(--color-gray-05)",
       default: "light-dark(var(--color-gray-100), var(--color-gray-05))",
     },
-    platform: { default: "var(--button-color)" },
+    platform: { default: "currentColor" },
   },
   "button-text-color-active": {
     default: "var(--button-text-color)",
@@ -1208,6 +1215,10 @@ export const variableLookupTable = {
   "text-color-deemphasized": {
     default: "color-mix(in srgb, currentColor 69%, transparent)",
     prefersContrast: "inherit",
+  },
+  "text-color-disabled": {
+    default: "color-mix(in srgb, currentColor 40%, transparent)",
+    forcedColors: "GrayText",
   },
   "text-color-error": {
     light: "var(--color-red-50)",

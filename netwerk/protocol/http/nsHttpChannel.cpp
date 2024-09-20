@@ -667,7 +667,10 @@ nsresult nsHttpChannel::OnBeforeConnect() {
 
   RefPtr<mozilla::dom::BrowsingContext> bc;
   mLoadInfo->GetBrowsingContext(getter_AddRefs(bc));
-  if (bc && bc->Top()->GetForceOffline()) {
+  // If bypassing the cache and we're forced offline
+  // we can just return the error here.
+  if (bc && bc->Top()->GetForceOffline() &&
+      BYPASS_LOCAL_CACHE(mLoadFlags, LoadPreferCacheLoadOverBypass())) {
     return NS_ERROR_OFFLINE;
   }
 
@@ -734,28 +737,34 @@ nsresult nsHttpChannel::OnBeforeConnect() {
 // that HTTPS records can be resolved on this network - false otherwise.
 // When TRR is enabled, we always return true, as resolving HTTPS
 // records don't depend on the network.
-static bool canUseHTTPSRRonNetwork(bool* aTRREnabled = nullptr) {
+static bool canUseHTTPSRRonNetwork(bool& aTRREnabled) {
   // Respect the pref.
   if (StaticPrefs::network_dns_force_use_https_rr()) {
-    if (aTRREnabled) {
-      *aTRREnabled = true;
-    }
+    aTRREnabled = true;
     return true;
   }
+
+  aTRREnabled = false;
 
   if (nsCOMPtr<nsIDNSService> dns = mozilla::components::DNS::Service()) {
     nsIDNSService::ResolverMode mode;
     // If the browser is currently using TRR/DoH, then it can
     // definitely resolve HTTPS records.
-    if (NS_SUCCEEDED(dns->GetCurrentTrrMode(&mode)) &&
-        (mode == nsIDNSService::MODE_TRRFIRST ||
-         mode == nsIDNSService::MODE_TRRONLY)) {
-      if (aTRREnabled) {
-        *aTRREnabled = true;
+    if (NS_SUCCEEDED(dns->GetCurrentTrrMode(&mode))) {
+      if (mode == nsIDNSService::MODE_TRRFIRST) {
+        RefPtr<TRRService> trr = TRRService::Get();
+        if (trr && trr->IsConfirmed()) {
+          aTRREnabled = true;
+        }
+      } else if (mode == nsIDNSService::MODE_TRRONLY) {
+        aTRREnabled = true;
       }
-      return true;
+      if (aTRREnabled) {
+        return true;
+      }
     }
   }
+
   if (RefPtr<NetworkConnectivityService> ncs =
           NetworkConnectivityService::GetSingleton()) {
     nsINetworkConnectivityService::ConnectivityState state;
@@ -773,7 +782,12 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
     return aStatus;
   }
 
-  if (mURI->SchemeIs("https") || aShouldUpgrade || !LoadUseHTTPSSVC()) {
+  RefPtr<mozilla::dom::BrowsingContext> bc;
+  mLoadInfo->GetBrowsingContext(getter_AddRefs(bc));
+  bool forceOffline = bc && bc->Top()->GetForceOffline();
+
+  if (mURI->SchemeIs("https") || aShouldUpgrade || !LoadUseHTTPSSVC() ||
+      forceOffline) {
     return ContinueOnBeforeConnect(aShouldUpgrade, aStatus);
   }
 
@@ -795,7 +809,7 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
     // blocking HTTPS requests, then we should skip them so we don't
     // needlessly wait for a timeout.
     bool trrEnabled = false;
-    if (!canUseHTTPSRRonNetwork(&trrEnabled)) {
+    if (!canUseHTTPSRRonNetwork(trrEnabled)) {
       return true;
     }
 
@@ -1190,10 +1204,19 @@ nsresult nsHttpChannel::ContinueConnect() {
                      "CORS preflight must have been finished by the time we "
                      "do the rest of ContinueConnect");
 
+  RefPtr<mozilla::dom::BrowsingContext> bc;
+  mLoadInfo->GetBrowsingContext(getter_AddRefs(bc));
+
   // we may or may not have a cache entry at this point
   if (mCacheEntry) {
     // read straight from the cache if possible...
     if (mCachedContentIsValid) {
+      // If we're forced offline, and set to bypass the cache, return offline.
+      if (bc && bc->Top()->GetForceOffline() &&
+          BYPASS_LOCAL_CACHE(mLoadFlags, LoadPreferCacheLoadOverBypass())) {
+        return NS_ERROR_OFFLINE;
+      }
+
       nsRunnableMethod<nsHttpChannel>* event = nullptr;
       nsresult rv;
       if (!LoadCachedContentIsPartial()) {
@@ -1228,6 +1251,11 @@ nsresult nsHttpChannel::ContinueConnect() {
   if (mLoadFlags & LOAD_NO_NETWORK_IO) {
     LOG(("  mLoadFlags & LOAD_NO_NETWORK_IO"));
     return NS_ERROR_DOCUMENT_NOT_CACHED;
+  }
+
+  // We're about to hit the network. Don't if we're forced offline.
+  if (bc && bc->Top()->GetForceOffline()) {
+    return NS_ERROR_OFFLINE;
   }
 
   // hit the net...
@@ -4138,10 +4166,10 @@ nsresult nsHttpChannel::OpenCacheEntryInternal(bool isHttps) {
     return NS_OK;
   }
 
-  if (offline || (mLoadFlags & INHIBIT_CACHING) ||
-      (bc && bc->Top()->GetForceOffline())) {
+  bool forceOffline = bc && bc->Top()->GetForceOffline();
+  if (offline || (mLoadFlags & INHIBIT_CACHING) || forceOffline) {
     if (BYPASS_LOCAL_CACHE(mLoadFlags, LoadPreferCacheLoadOverBypass()) &&
-        !offline) {
+        !offline && !forceOffline) {
       return NS_OK;
     }
     cacheEntryOpenFlags = nsICacheStorage::OPEN_READONLY;
@@ -6965,7 +6993,7 @@ nsresult nsHttpChannel::BeginConnect() {
         mLoadInfo->GetExternalContentPolicyType() !=
             ExtContentPolicy::TYPE_DOCUMENT) &&
       dnsStrategy == ProxyDNSStrategy::ORIGIN &&
-      !mConnectionInfo->UsingConnect() && canUseHTTPSRRonNetwork(&trrEnabled) &&
+      !mConnectionInfo->UsingConnect() && canUseHTTPSRRonNetwork(trrEnabled) &&
       StaticPrefs::network_dns_use_https_rr_as_altsvc();
   if (!httpsRRAllowed) {
     DisallowHTTPSRR(mCaps);
@@ -7137,8 +7165,10 @@ void nsHttpChannel::MaybeStartDNSPrefetch() {
 
     Unused << mDNSPrefetch->PrefetchHigh(dnsFlags);
 
+    bool unused;
     if (StaticPrefs::network_dns_use_https_rr_as_altsvc() && !mHTTPSSVCRecord &&
-        !(mCaps & NS_HTTP_DISALLOW_HTTPS_RR) && canUseHTTPSRRonNetwork()) {
+        !(mCaps & NS_HTTP_DISALLOW_HTTPS_RR) &&
+        canUseHTTPSRRonNetwork(unused)) {
       MOZ_ASSERT(!mHTTPSSVCRecord);
 
       OriginAttributes originAttributes;

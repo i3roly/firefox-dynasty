@@ -949,10 +949,9 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         default = true,
     )
 
-    var shouldUseBottomToolbar by lazyFeatureFlagPreference(
+    var shouldUseBottomToolbar by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_toolbar_bottom),
-        featureFlag = true,
-        default = { shouldDefaultToBottomToolbar() },
+        default = false,
     )
 
     val toolbarPosition: ToolbarPosition
@@ -995,18 +994,6 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         get() {
             return touchExplorationIsEnabled || switchServiceIsEnabled
         }
-
-    val toolbarPositionTop: Boolean
-        get() = FxNimbus.features.toolbar.value().toolbarPositionTop
-
-    /**
-     * Checks if we should default to bottom toolbar.
-     */
-    fun shouldDefaultToBottomToolbar(): Boolean {
-        // Default accessibility users to top toolbar
-        return (!touchExplorationIsEnabled && !switchServiceIsEnabled) &&
-            !toolbarPositionTop
-    }
 
     fun getDeleteDataOnQuit(type: DeleteBrowsingDataOnQuitType): Boolean =
         preferences.getBoolean(type.getPreferenceKey(appContext), false)
@@ -1140,15 +1127,6 @@ class Settings(private val appContext: Context) : PreferencesHolder {
             numbersOfTabs >= INACTIVE_TAB_MINIMUM_TO_SHOW_AUTO_CLOSE_DIALOG &&
             !closeTabsAfterOneMonth
     }
-
-    /**
-     * Indicates if the jump back in CRF should be shown.
-     */
-    var shouldShowJumpBackInCFR by lazyFeatureFlagPreference(
-        appContext.getPreferenceKey(R.string.pref_key_should_show_jump_back_in_tabs_popup),
-        featureFlag = true,
-        default = { mr2022Sections[Mr2022Section.JUMP_BACK_IN_CFR] == true },
-    )
 
     /**
      *  Returns a sitePermissions action for the provided [feature].
@@ -1799,14 +1777,6 @@ class Settings(private val appContext: Context) : PreferencesHolder {
      */
     var shouldShowNavigationButtonsCFR by booleanPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_toolbar_navigation_cfr),
-        default = true,
-    )
-
-    /**
-     * Indicates if Tablet's navigation address bar buttons CFR should be displayed to the user.
-     */
-    var shouldShowTabletNavigationCFR by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_tablet_toolbar_navigation_cfr),
         default = true,
     )
 

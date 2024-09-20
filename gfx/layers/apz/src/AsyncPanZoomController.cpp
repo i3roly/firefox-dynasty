@@ -559,12 +559,6 @@ bool AsyncPanZoomController::IsZero(const ParentLayerPoint& aPoint) const {
 bool AsyncPanZoomController::IsZero(ParentLayerCoord aCoord) const {
   RecursiveMutexAutoLock lock(mRecursiveMutex);
 
-  const auto zoom = Metrics().GetZoom();
-
-  if (zoom == CSSToParentLayerScale(0)) {
-    return true;
-  }
-
   return FuzzyEqualsAdditive(ToCSSPixels(aCoord), CSSCoord(),
                              COORDINATE_EPSILON);
 }
@@ -572,13 +566,6 @@ bool AsyncPanZoomController::IsZero(ParentLayerCoord aCoord) const {
 bool AsyncPanZoomController::FuzzyGreater(ParentLayerCoord aCoord1,
                                           ParentLayerCoord aCoord2) const {
   RecursiveMutexAutoLock lock(mRecursiveMutex);
-
-  const auto zoom = Metrics().GetZoom();
-
-  if (zoom == CSSToParentLayerScale(0)) {
-    return false;
-  }
-
   return ToCSSPixels(aCoord1 - aCoord2) > COORDINATE_EPSILON;
 }
 
@@ -4044,14 +4031,6 @@ void AsyncPanZoomController::HandleFlingOverscroll(
           this, residualVelocity);
     }
   }
-}
-
-void AsyncPanZoomController::HandleSmoothScrollOverscroll(
-    const ParentLayerPoint& aVelocity, SideBits aOverscrollSideBits) {
-  // We must call BuildOverscrollHandoffChain from this deferred callback
-  // function in order to avoid a deadlock when acquiring the tree lock.
-  HandleFlingOverscroll(aVelocity, aOverscrollSideBits,
-                        BuildOverscrollHandoffChain(), nullptr);
 }
 
 ParentLayerPoint AsyncPanZoomController::ConvertDestinationToDelta(

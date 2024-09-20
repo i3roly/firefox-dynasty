@@ -16840,9 +16840,13 @@ static void UpdateEffectsOnBrowsingContext(BrowsingContext* aBc,
       // for example.
       return EffectsInfo::FullyHidden();
     }
-    Maybe<nsRect> visibleRect;
-    gfx::MatrixScales rasterScale;
-    visibleRect = subDocFrame->GetVisibleRect();
+    Maybe<nsRect> visibleRect = subDocFrame->GetVisibleRect();
+    // If we're paginated, we the display list rect might not be reasonable,
+    // because it is the one from the last display item painted. We assume the
+    // frame is fully visible, lacking something better.
+    if (subDocFrame->PresContext()->IsPaginated()) {
+      visibleRect = Some(subDocFrame->GetDestRect());
+    }
     if (!visibleRect) {
       // If we have no visible rect (e.g., because we are zero-sized) we
       // still want to provide the intersection rect in order to get the
@@ -16850,7 +16854,7 @@ static void UpdateEffectsOnBrowsingContext(BrowsingContext* aBc,
       visibleRect.emplace(*output.mIntersectionRect -
                           output.mTargetRect.TopLeft());
     }
-    rasterScale = subDocFrame->GetRasterScale();
+    gfx::MatrixScales rasterScale = subDocFrame->GetRasterScale();
     ParentLayerToScreenScale2D transformToAncestorScale =
         ParentLayerToParentLayerScale(
             subDocFrame->PresShell()->GetCumulativeResolution()) *

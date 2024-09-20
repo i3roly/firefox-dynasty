@@ -221,6 +221,7 @@ var SidebarController = {
   _localesObserverAdded: false,
   _mainResizeObserverAdded: false,
   _mainResizeObserver: null,
+  _ongoingAnimations: [],
 
   /**
    * @type {MutationObserver | null}
@@ -858,10 +859,24 @@ var SidebarController = {
       this._splitter,
       tabbox,
     ];
+    let resetElements = () => {
+      for (let el of animatingElements) {
+        el.style.minWidth =
+          el.style.maxWidth =
+          el.style.marginLeft =
+          el.style.marginRight =
+            "";
+      }
+    };
+    if (this._ongoingAnimations.length) {
+      this._ongoingAnimations.forEach(a => a.cancel());
+      this._ongoingAnimations = [];
+      resetElements();
+    }
     let getRects = () => {
       return animatingElements.map(e => e.getBoundingClientRect());
     };
-    let fromRects = await window.promiseDocumentFlushed(getRects);
+    let fromRects = getRects();
 
     this.toggleExpanded();
 
@@ -932,13 +947,11 @@ var SidebarController = {
         )
       );
     }
+    this._ongoingAnimations = animations;
     await Promise.allSettled(animations.map(a => a.finished));
-    for (let el of animatingElements) {
-      el.style.minWidth =
-        el.style.maxWidth =
-        el.style.marginLeft =
-        el.style.marginRight =
-          "";
+    if (this._ongoingAnimations === animations) {
+      this._ongoingAnimations = [];
+      resetElements();
     }
   },
 
@@ -1519,7 +1532,8 @@ var SidebarController = {
 
   toggleTabstrip() {
     let toVerticalTabs = CustomizableUI.verticalTabsEnabled;
-    let arrowScrollbox = gBrowser.tabContainer.arrowScrollbox;
+    let tabStrip = gBrowser.tabContainer;
+    let arrowScrollbox = tabStrip.arrowScrollbox;
     let currentScrollOrientation = arrowScrollbox.getAttribute("orient");
 
     if (
@@ -1530,7 +1544,6 @@ var SidebarController = {
       return;
     }
 
-    let tabStrip = gBrowser.tabContainer;
     if (toVerticalTabs) {
       this.toggleExpanded(this._sidebarMain.expanded);
       arrowScrollbox.setAttribute("orient", "vertical");
@@ -1544,16 +1557,6 @@ var SidebarController = {
     let verticalToolbar = document.getElementById(
       CustomizableUI.AREA_VERTICAL_TABSTRIP
     );
-    let indicatorTabs = gBrowser.visibleTabs.filter(tab => {
-      return (
-        tab.hasAttribute("soundplaying") ||
-        tab.hasAttribute("muted") ||
-        tab.hasAttribute("activemedia-blocked")
-      );
-    });
-    for (const indicatorTab of indicatorTabs) {
-      tabStrip.updateTabIndicatorAttr(indicatorTab);
-    }
     verticalToolbar.toggleAttribute("visible", toVerticalTabs);
   },
 };

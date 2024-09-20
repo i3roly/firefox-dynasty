@@ -1887,6 +1887,10 @@ fuzzy(0-128,0-22) == 1155828-1.html 1155828-1-ref.html # bug 1646527 for WR fuzz
 fuzzy(0-7,0-84) == 1156129-1.html 1156129-1-ref.html
 pref(dom.use_xbl_scopes_for_remote_xul,true) HTTP(..) == 1157127-1.html 1157127-1-ref.html
 fuzzy-if(Android,0-6,0-6) fuzzy-if(appleSilicon,0-1,0-7) == 1169331-1.html 1169331-1-ref.html
+== 1117304-1.html 1117304-1-ref.html
+== 1117304-2.html 1117304-2-ref.html
+== 1117304-3.html 1117304-3-ref.html
+== 1117304-4.html 1117304-4-ref.html
 fuzzy(0-3,0-110) fails == 1174332-1.html 1174332-1-ref.html # bug 1312658, expected to fail w/ non-native theme because of bug 1699937
 == 1179078-1.html 1179078-1-ref.html
 == 1179288-1.html 1179288-1-ref.html
@@ -2006,7 +2010,11 @@ fuzzy(0-129,0-48) == 1406179.html 1406179-ref.html
 == 1406183-1.html 1406183-1-ref.html
 == 1410028.html 1410028-ref.html
 fuzzy-if((!gtkWidget&&!geckoview&&!swgl&&!(isCoverageBuild&&winWidget))||useDrawSnapshot,1-2,17300-17500) skip-if(winWidget&&isCoverageBuild) == 1412375.html 1412375-ref.html # Skip WinCCov: Bug 1740155
-fuzzy(0-255,0-4054) == 1415987-1.html 1415987-1-ref.html # this is a large fuzz, without the fix the test fails in the range 246-255,3237-25110, which overlaps the fuzz range, but would still catch regressing this bug some of the time which is better than not having a test.
+# Note: The test below has a large fuzz, because svg text chooses
+# scale-dependent font metrics. Without the fix the test fails in the range
+# 246-255,3237-25110, which overlaps the fuzz range, but would still catch
+# regressing this bug some of the time which is better than not having a test.
+fuzzy(0-255,0-6025) == 1415987-1.html 1415987-1-ref.html
 == 1419820-1.html 1419820-1-ref.html
 == 1420946-1.html 1420946-1-ref.html
 == 1422393.html 1422393-ref.html

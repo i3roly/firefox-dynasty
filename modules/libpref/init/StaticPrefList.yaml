@@ -3010,6 +3010,13 @@
   value: false
   mirror: always
 
+# If non-zero, a grace delay (in milliseconds) during which unused content
+# processes are kept available for re-use to avoid unnecessary process churn.
+- name: dom.ipc.processReuse.unusedGraceMs
+  type: uint32_t
+  value: 0
+  mirror: always
+
 # Process launch delay (in milliseconds).
 - name: dom.ipc.processPrelaunch.delayMs
   type: uint32_t
@@ -8312,21 +8319,39 @@
     mirror: always
     set_spidermonkey_pref: startup
 
-- name: javascript.options.wasm_experimental_inline_depth_limit
-  type: uint32_t
-  value: 2
-  mirror: always
-  set_spidermonkey_pref: always
-
-- name: javascript.options.wasm_experimental_inline_size_limit
-  type: uint32_t
-  value: 256
-  mirror: always
-  set_spidermonkey_pref: always
-
 - name: javascript.options.wasm_experimental_inline_call_ref_threshold
   type: uint32_t
   value: 1
+  mirror: always
+  set_spidermonkey_pref: always
+
+# Aggressiveness of lazy tiering, allowable: 1 .. 9
+# 1 = min (almost never, set tiering threshold to max possible, == 2^31-1)
+# 9 = max (request tier up at first call, set tiering threshold to zero)
+- name: javascript.options.wasm_experimental_tiering_level
+  type: uint32_t
+  value: 5
+  mirror: always
+  set_spidermonkey_pref: always
+
+# Aggressiveness of inlining (regardless of call kind), allowable: 1 .. 9
+- name: javascript.options.wasm_experimental_inlining_level
+  type: uint32_t
+  value: 5
+  mirror: always
+  set_spidermonkey_pref: always
+
+# Are wasm direct calls (within same Instance) candidates for inlining?
+- name: javascript.options.wasm_experimental_direct_inlining
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: always
+
+# Are wasm callRef calls (within same Instance) candidates for inlining?
+- name: javascript.options.wasm_experimental_callRef_inlining
+  type: bool
+  value: true
   mirror: always
   set_spidermonkey_pref: always
 
@@ -10271,7 +10296,7 @@
 # Whether to enable experimental requestVideoFrameCallback support
 - name: media.rvfc.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # VideoSink
@@ -12100,7 +12125,7 @@
 # mode.
 - name: network.cookie.cookieBehavior.optInPartitioning.pbmode
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Whether to support CHIPS(Cookies Having Independent Partitioned State).
@@ -13644,6 +13669,14 @@
   value: false
   mirror: always
 
+# When true, Firefox will send a SETTINGS_MAX_CONCURRENT_STREAMS
+# parameter when push is disabled. Chrome doesn't send this,
+# so some servers misbehave when we do. See Bug 1919750.
+- name: network.http.http2.send-push-max-concurrent-frame
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 - name: network.http.http2.push-allowance
   type: RelaxedAtomicInt32
   value: 131072  # 128KB
@@ -14016,12 +14049,6 @@
 - name: network.http.early_data_max_error
   type: RelaxedAtomicUint32
   value: 5
-  mirror: always
-
-  # If true, requests will be canceled if any of the response headers values has a NUL character
-- name: network.http.reject_NULs_in_response_header_values
-  type: RelaxedAtomicBool
-  value: true
   mirror: always
 
   # If true, will be more strict with status code parsing
@@ -15587,7 +15614,7 @@
 
 - name: security.tls.enable_kyber
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_NOT_ANDROID@
   mirror: always
   rust: true
 
@@ -15941,12 +15968,6 @@
 #---------------------------------------------------------------------------
 # Prefs starting with "thread."
 #---------------------------------------------------------------------------
-
-# If control tasks aren't enabled, they get medium high priority.
-- name: threads.control_event_queue.enabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
 
 # If the service is available, set threads to low-power mode when in the background.
 - name: threads.use_low_power.enabled

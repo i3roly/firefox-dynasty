@@ -29,11 +29,11 @@ object Versions {
     const val okio = "3.9.0"
     const val androidsvg = "1.4"
 
-    const val android_gradle_plugin = "8.6.0"
+    const val android_gradle_plugin = "8.6.1"
 
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
-    const val lint = "31.6.0"
+    const val lint = "31.6.1"
     const val detekt = "1.23.6"
     const val ktlint = "0.49.1"
 
@@ -61,8 +61,8 @@ object Versions {
         const val biometric = "1.1.0"
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
-        const val collection = "1.4.3"
-        const val compose_bom = "2024.09.00"
+        const val collection = "1.4.4"
+        const val compose_bom = "2024.09.02"
         const val constraintlayout = "2.1.4"
         const val constraintlayout_compose = "1.0.1"
         const val coordinatorlayout = "1.2.0"
@@ -71,10 +71,10 @@ object Versions {
         const val datastore="1.1.1"
         const val drawerlayout = "1.2.0"
         const val fragment = "1.8.3"
-        const val lifecycle = "2.8.5"
+        const val lifecycle = "2.8.6"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
-        const val navigation = "2.7.7"
+        const val navigation = "2.8.1"
         const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
@@ -89,6 +89,8 @@ object Versions {
         const val work = "2.9.1"
     }
 
+    // Gradle can't deal with this being nested below.
+    const val protobuf_plugin = "0.9.4"
     object Google {
         const val accompanist = "0.36.0"
         const val firebase_messaging = "24.0.1"
@@ -98,6 +100,7 @@ object Versions {
         const val play_services_ads_id = "16.0.0"
         const val play_services_base = "18.5.0"
         const val play_services_fido = "21.1.0"
+        const val protobuf = "3.21.10" // Keep Protobuf in sync with the version used by AppServices.
     }
 
     object Testing {
@@ -148,16 +151,17 @@ object ComponentsDependencies {
 
     const val androidx_compose_bom = "androidx.compose:compose-bom:${Versions.AndroidX.compose_bom}"
     const val androidx_compose_animation = "androidx.compose.animation:animation"
+    const val androidx_compose_foundation = "androidx.compose.foundation:foundation"
+    const val androidx_compose_material = "androidx.compose.material:material"
+    const val androidx_compose_material_icons = "androidx.compose.material:material-icons-core"
+    const val androidx_compose_runtime_livedata = "androidx.compose.runtime:runtime-livedata"
+    const val androidx_compose_runtime_saveable = "androidx.compose.runtime:runtime-saveable"
     const val androidx_compose_ui = "androidx.compose.ui:ui"
     const val androidx_compose_ui_graphics = "androidx.compose.ui:ui-graphics"
     const val androidx_compose_ui_test = "androidx.compose.ui:ui-test-junit4"
     const val androidx_compose_ui_test_manifest = "androidx.compose.ui:ui-test-manifest"
     const val androidx_compose_ui_tooling = "androidx.compose.ui:ui-tooling"
     const val androidx_compose_ui_tooling_preview = "androidx.compose.ui:ui-tooling-preview"
-    const val androidx_compose_foundation = "androidx.compose.foundation:foundation"
-    const val androidx_compose_material = "androidx.compose.material:material"
-    const val androidx_compose_runtime_livedata = "androidx.compose.runtime:runtime-livedata"
-    const val androidx_compose_runtime_saveable = "androidx.compose.runtime:runtime-saveable"
 
     const val androidx_constraintlayout = "androidx.constraintlayout:constraintlayout:${Versions.AndroidX.constraintlayout}"
     const val androidx_constraintlayout_compose = "androidx.constraintlayout:constraintlayout-compose:${Versions.AndroidX.constraintlayout_compose}"
@@ -265,4 +269,6 @@ object ComponentsDependencies {
     const val play_services_ads_id = "com.google.android.gms:play-services-ads-identifier:${Versions.Google.play_services_ads_id}"
     const val play_services_base = "com.google.android.gms:play-services-base:${Versions.Google.play_services_base}"
     const val play_services_fido = "com.google.android.gms:play-services-fido:${Versions.Google.play_services_fido}"
+    const val protobuf_compiler = "com.google.protobuf:protoc:${Versions.Google.protobuf}"
+    const val protobuf_javalite = "com.google.protobuf:protobuf-javalite:${Versions.Google.protobuf}"
 }
