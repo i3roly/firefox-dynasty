@@ -188,7 +188,7 @@ class WidgetRenderingContext;
   BOOL mUsingOMTCompositor;
   // The mask image that's used when painting into the titlebar using basic
   // CGContext painting (i.e. non-accelerated).
-  // Always null if StaticPrefs::gfx_core_animation_enabled_AtStartup() is true.
+  // Always null if nsCocoaFeatures::OnMavericksOrLater() is true.
   CGImageRef mTopLeftCornerMask;
   // Subviews of self, which act as container views for vibrancy views and
   // non-draggable views.
@@ -611,7 +611,7 @@ class nsChildView final : public nsBaseWidget {
   RefPtr<mozilla::layers::NativeLayerRootCA> mNativeLayerRoot;
 
   // Only used for drawRect-based painting in popups.
-  // Always null if StaticPrefs::gfx_core_animation_enabled_AtStartup() is true.
+  // Always null if nsCocoaFeatures::OnMavericksOrLater() is true.
   RefPtr<mozilla::gfx::DrawTarget> mBackingSurface;
 
   // In BasicLayers mode, this is the CoreAnimation layer that contains the

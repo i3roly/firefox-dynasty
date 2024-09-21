@@ -844,12 +844,12 @@ void nsCocoaWindow::Show(bool aState) {
       if (!nativeParentWindow || mPopupLevel != PopupLevel::Parent) {
         if(!nsCocoaFeatures::OnMavericksOrLater()) {
           //for <10.9 systems we need this call to ensure the tooltip
-          //is not transparent, since we rely on maskstobounds to ensure
-          //the titlebar's GLcontext rounding is honoured, AND selectively
-          //exposing the superview in CreateNativeWindow to make sure our
-          //menu and fullscreen buttons are shown, but not at the  cost of
-          //losing the rounded corners on popup menus.
-          //round the corners of our popups, 
+          //is not transparent, since we use:
+          // - maskstobounds to ensure the titlebar's GLcontext rounding is 
+          //   honoured, AND;
+          // - superview setWantsLayer in CreateNativeWindow to ensure our
+          //   menu and fullscreen buttons are shown, but not at the  cost of
+          //   losing the rounded corners on popup menus.
           [[[mWindow contentView] superview] setWantsLayer:YES];
         }
         [mWindow orderFront:nil];
