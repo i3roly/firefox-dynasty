@@ -96,8 +96,6 @@
   -moz-default-appearance: -moz-mac-fullscreen-button;
 }
 
-
-
 /** End titlebar **/
 
 :root[chromehidden~="toolbar"][chromehidden~="location"][chromehidden~="directories"] {

@@ -1250,8 +1250,8 @@ void nsChildView::Invalidate(const LayoutDeviceIntRect& aRect) {
     EnsureContentLayerForMainThreadPainting();
     mContentLayerInvalidRegion.OrWith(aRect.Intersect(GetBounds()));
   } else {
-   [[mView pixelHostingView] setNeedsDisplayInRect:DevPixelsToCocoaPoints(aRect)];
-   }
+    [[mView pixelHostingView] setNeedsDisplayInRect:DevPixelsToCocoaPoints(aRect)];
+  }
   [mView markLayerForDisplay];
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
