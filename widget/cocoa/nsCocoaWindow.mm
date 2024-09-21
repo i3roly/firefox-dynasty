@@ -556,8 +556,14 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
   // Make the window use CoreAnimation from the start, so that we don't
   // switch from a non-CA window to a CA-window in the middle.
   [[mWindow contentView] setWantsLayer:YES];
-  if(!nsCocoaFeatures::OnMavericksOrLater()) {// so the buttons show up on 10.8
-    mWindow.contentView.superview.wantsLayer = YES;
+  if(!nsCocoaFeatures::OnMavericksOrLater()) {
+  // This is necessary for sub-Mavericks systems to ensure
+  // we don't expose the superview of any non-tooltip/popup window
+  // since we can't use GLContext to round their  corners
+  // see comment underneath setNeedsDisplay in nsCocoaWindow::Show
+    if(mWindowType != WindowType::Popup) {
+      mWindow.contentView.superview.wantsLayer = YES;
+    } 
   }
   // Make sure the window starts out not draggable by the background.
   // We will turn it on as necessary.
@@ -836,6 +842,16 @@ void nsCocoaWindow::Show(bool aState) {
       NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
       [[mWindow contentView] setNeedsDisplay:YES];
       if (!nativeParentWindow || mPopupLevel != PopupLevel::Parent) {
+        if(!nsCocoaFeatures::OnMavericksOrLater()) {
+          //for <10.9 systems we need this call to ensure the tooltip
+          //is not transparent, since we rely on maskstobounds to ensure
+          //the titlebar's GLcontext rounding is honoured, AND selectively
+          //exposing the superview in CreateNativeWindow to make sure our
+          //menu and fullscreen buttons are shown, but not at the  cost of
+          //losing the rounded corners on popup menus.
+          //round the corners of our popups, 
+          [[[mWindow contentView] superview] setWantsLayer:YES];
+        }
         [mWindow orderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;
@@ -2208,7 +2224,7 @@ void nsCocoaWindow::DispatchOcclusionEvent() {
     if (mWidgetListener) {
       mWidgetListener->OcclusionStateChanged(mIsFullyOccluded);
     }
-}
+  }
 }
 
 void nsCocoaWindow::ReportSizeEvent() {
@@ -3334,7 +3350,6 @@ static NSImage* GetMenuMaskImage() {
   if (!VibrancyManager::SystemSupportsVibrancy()) {
     return;
   }
-
   NSView* wrapper = [&]() -> NSView* {
     if (aStyle == WindowShadow::Menu || aStyle == WindowShadow::Tooltip) {
       const bool isMenu = aStyle == WindowShadow::Menu;
@@ -3588,16 +3603,6 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   }
 }
 
-- (NSArray*)titlebarControls {
-  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnYosemiteOrLater());
-
-  // Return all subviews of the frameView which are not the content view.
-  NSView* frameView = [[self contentView] superview];
-  NSMutableArray* array = [[[frameView subviews] mutableCopy] autorelease];
-  [array removeObject:[self contentView]];
-  return array;
-
-}
 
 - (BOOL)respondsToSelector:(SEL)aSelector {
   // Claim the window doesn't respond to this so that the system
@@ -3745,68 +3750,6 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
 - (void)_maskCorners:(NSUInteger)aFlags clipRect:(NSRect)aRect;
 @end
 
-@implementation TitlebarGradientView
-
-- (void)drawRect:(NSRect)aRect {
-  CGContextRef ctx = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-  ToolbarWindow* window = (ToolbarWindow*)[self window];
-  nsNativeThemeCocoa::DrawNativeTitlebar(ctx, NSRectToCGRect([self bounds]),
-                                         [window unifiedToolbarHeight], [window isMainWindow], NO);
-
-  if(!nsCocoaFeatures::OnYosemiteOrLater()) {
-    // The following is only necessary because we're not using
-    // NSFullSizeContentViewWindowMask yet: We need to mask our drawing to the
-    // rounded top corners of the window, and we need to draw the title string
-    // on top. That's because the title string is drawn as part of the frame view
-    // and this view covers that drawing up.
-    // Once we use NSFullSizeContentViewWindowMask and remove our override of
-    // _wantsFloatingTitlebar, Cocoa will draw the title string as part of a
-    // separate view which sits on top of the window's content view, and we'll be
-    // able to remove the code below.
-
-    NSView* frameView = [[[self window] contentView] superview];
-    if (!frameView || ![frameView respondsToSelector:@selector(_maskCorners:clipRect:)] ||
-        ![frameView respondsToSelector:@selector(_drawTitleStringInClip:)]) {
-      return;
-    }
-
-    NSPoint offsetToFrameView = [self convertPoint:NSZeroPoint toView:frameView];
-    NSRect clipRect = {offsetToFrameView, [self bounds].size};
-
-    // Both this view and frameView return NO from isFlipped. Switch into
-    // frameView's coordinate system using a translation by the offset.
-    CGContextSaveGState(ctx);
-    CGContextTranslateCTM(ctx, -offsetToFrameView.x, -offsetToFrameView.y);
-
-    [frameView _maskCorners:2 clipRect:clipRect];
-    [frameView _drawTitleStringInClip:clipRect];
-
-    CGContextRestoreGState(ctx);
-  }
-}
-
-- (BOOL)isOpaque {
-  return YES;
-}
-
-- (BOOL)mouseDownCanMoveWindow {
-  return YES;
-}
-
-- (void)mouseUp:(NSEvent*)event {
-  if ([event clickCount] == 2) {
-    // Handle titlebar double click. We don't get the window's default behavior here because the
-    // window uses NSWindowStyleMaskFullSizeContentView, and this view (the titlebar gradient view)
-    // is technically part of the window "contents" (it's a subview of the content view).
-    if (nsCocoaUtils::ShouldZoomOnTitlebarDoubleClick()) {
-      [[self window] performZoom:nil];
-    } else if (nsCocoaUtils::ShouldMinimizeOnTitlebarDoubleClick()) {
-      [[self window] performMiniaturize:nil];
-    }
-  }
-}
-
-@end
 
 @implementation ToolbarWindow
 
@@ -3848,9 +3791,7 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
                                styleMask:aStyle
                                  backing:aBufferingType
                                    defer:aFlag])) {
-    mTitlebarGradientView = nil;
     mUnifiedToolbarHeight = 22.0f;
-    mSheetAttachmentPosition = aChildViewRect.size.height;
     mWindowButtonsRect = NSZeroRect;
     mFullScreenButtonRect = NSZeroRect;
 
@@ -3876,14 +3817,12 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
         addTitlebarAccessoryViewController:mFullscreenTitlebarTracker];
 
     }
-  [self updateTitlebarGradientViewPresence];
   }
   return self;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
 }
 - (void)dealloc {
-  [mTitlebarGradientView release];
   [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
   [mFullscreenTitlebarTracker removeFromParentViewController];
   [mFullscreenTitlebarTracker release];
@@ -3893,24 +3832,7 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
 
 - (NSArray<NSView*>*)contentViewContents {
   NSMutableArray<NSView*>* contents = [[[self contentView] subviews] mutableCopy];
-  if (mTitlebarGradientView) {
-    // Do not include the titlebar gradient view in the returned array.
-    [contents removeObject:mTitlebarGradientView];
-  }
   return [contents autorelease];
-}
-
-- (void)updateTitlebarGradientViewPresence {
-  BOOL needTitlebarView = ![self drawsContentsIntoWindowFrame];
-  if (needTitlebarView && !mTitlebarGradientView) {
-    mTitlebarGradientView = [[TitlebarGradientView alloc] initWithFrame:[self titlebarRect]];
-    mTitlebarGradientView.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
-    [self.contentView addSubview:mTitlebarGradientView positioned:NSWindowBelow relativeTo:nil];
-  } else if (!needTitlebarView && mTitlebarGradientView) {
-    [mTitlebarGradientView removeFromSuperview];
-    [mTitlebarGradientView release];
-    mTitlebarGradientView = nil;
-  }
 }
 
 // Override methods that translate between content rect and frame rect.
@@ -3952,7 +3874,6 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   } 
 }
 - (void)windowMainStateChanged {
-  [self setTitlebarNeedsDisplay];
   [[self mainChildView] ensureNextCompositeIsAtomicWithMainThreadPaint];
 }
 
@@ -4041,10 +3962,6 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   }
 }
 
-- (void)setTitlebarNeedsDisplay {
-  [mTitlebarGradientView setNeedsDisplay:YES];
-}
-
 - (NSRect)titlebarRect {
   CGFloat titlebarHeight = [self titlebarHeight];
   return NSMakeRect(0, [self frame].size.height - titlebarHeight, [self frame].size.width,
@@ -4073,9 +3990,6 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
 
   mUnifiedToolbarHeight = aHeight;
 
-  if (![self drawsContentsIntoWindowFrame]) {
-    [self setTitlebarNeedsDisplay];
-  }
 }
 
 // Extending the content area into the title bar works by resizing the
@@ -4084,7 +3998,7 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
   BOOL stateChanged = self.drawsContentsIntoWindowFrame != aState;
   [super setDrawsContentsIntoWindowFrame:aState];
   if (stateChanged && [self.delegate isKindOfClass:[WindowDelegate class]]) {
-    if(nsCocoaFeatures::OnYosemiteOrLater()) {
+   if ([self respondsToSelector:@selector(setTitlebarAppearsTransparent:)]) {
     // Hide the titlebar if we are drawing into it
       self.titlebarAppearsTransparent = self.drawsContentsIntoWindowFrame;
     }
@@ -4105,20 +4019,6 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
     // we'll send a mouse move event with the correct new position.
     ChildViewMouseTracker::ResendLastMouseMoveEvent();
   }
-  [self updateTitlebarGradientViewPresence];
-}
-
-- (void)setWantsTitleDrawn:(BOOL)aDrawTitle {
-  [super setWantsTitleDrawn:aDrawTitle];
-  [self setTitlebarNeedsDisplay];
-}
-
-- (void)setSheetAttachmentPosition:(CGFloat)aY {
-  mSheetAttachmentPosition = aY;
-}
-
-- (CGFloat)sheetAttachmentPosition {
-  return mSheetAttachmentPosition;
 }
 
 - (void)placeWindowButtons:(NSRect)aRect {

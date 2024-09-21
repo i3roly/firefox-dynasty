@@ -729,7 +729,8 @@ nsresult nsLookAndFeel::GetKeyboardLayoutImpl(nsACString& aLayout) {
              name:NSSystemColorsDidChangeNotification
            object:nil];
 
-  if (@available(macOS 10.14, *)) {
+  if (nsCocoaFeatures::OnMojaveOrLater() && 
+      NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification) {
       [NSWorkspace.sharedWorkspace.notificationCenter
           addObserver:self
               selector:@selector(mediaQueriesChanged)

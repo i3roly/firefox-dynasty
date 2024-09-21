@@ -840,15 +840,16 @@ static void RenderWithCoreUI(CGRect aRect, CGContextRef cgContext,
       aRect.size.width * aRect.size.height > BITMAP_MAX_AREA) {
     return;
   }
-
-  NSAppearance* appearance = NSAppearance.currentAppearance;
-  if (appearance &&
-      [appearance respondsToSelector:@selector(_drawInRect:context:options:)]) {
-    // Render through NSAppearance on Mac OS 10.10 and up. This will call
-    // CUIDraw with a CoreUI renderer that will give us the correct 10.10
-    // style. Calling CUIDraw directly with [NSWindow coreUIRenderer] still
-    // renders 10.9-style widgets on 10.10.
-    [appearance _drawInRect:aRect context:(CGContextRef)cgContext options:aOptions];
+  if(nsCocoaFeatures::OnMavericksOrLater()) {
+    NSAppearance* appearance = NSAppearance.currentAppearance;
+    if (appearance &&
+        [appearance respondsToSelector:@selector(_drawInRect:context:options:)]) {
+      // Render through NSAppearance on Mac OS 10.10 and up. This will call
+      // CUIDraw with a CoreUI renderer that will give us the correct 10.10
+      // style. Calling CUIDraw directly with [NSWindow coreUIRenderer] still
+      // renders 10.9-style widgets on 10.10.
+      [appearance _drawInRect:aRect context:(CGContextRef)cgContext options:aOptions];
+    } 
   } else {
     // 10.9 and below
     CUIRendererRef renderer =
@@ -2022,24 +2023,6 @@ static void DrawNativeTitlebarToolbarWithSquareCorners(CGContextRef aContext, co
   CGContextRestoreGState(aContext);
 }
 
-void nsNativeThemeCocoa::DrawUnifiedToolbar(CGContextRef cgContext, const HIRect& inBoxRect,
-                                            const UnifiedToolbarParams& aParams) {
-  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
-
-  CGContextSaveGState(cgContext);
-  CGContextClipToRect(cgContext, inBoxRect);
-
-  CGFloat titlebarHeight = aParams.unifiedHeight - inBoxRect.size.height;
-  CGRect drawRect = CGRectMake(inBoxRect.origin.x, inBoxRect.origin.y - titlebarHeight,
-                               inBoxRect.size.width, inBoxRect.size.height + titlebarHeight);
-  DrawNativeTitlebarToolbarWithSquareCorners(cgContext, drawRect, aParams.unifiedHeight,
-                                             aParams.isMain, YES);
-
-  CGContextRestoreGState(cgContext);
-
-  NS_OBJC_END_TRY_ABORT_BLOCK;
-}
-
 void nsNativeThemeCocoa::DrawStatusBar(CGContextRef cgContext,
                                        const HIRect& inBoxRect, bool aIsMain) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
@@ -2408,8 +2391,9 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
   // Some of the drawing below uses NSAppearance.currentAppearance behind the
   // scenes. Set it to the appearance we want, the same way as
   // nsLookAndFeel::NativeGetColor.
-  
-  NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
+  if(nsCocoaFeatures::OnMavericksOrLater()) {
+    NSAppearance.currentAppearance = NSAppearanceForColorScheme(aScheme);
+  }
 
   // Also set the cell draw window's appearance; this is respected by
   // NSTextFieldCell (and its subclass NSSearchFieldCell).
@@ -2512,7 +2496,6 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
           UnifiedToolbarParams params = aWidgetInfo.Params<UnifiedToolbarParams>();
           DrawNativeTitlebar(cgContext, macRect, params);
           break;
-
         }
         case Widget::eStatusBar: {
           bool isMain = aWidgetInfo.Params<bool>();

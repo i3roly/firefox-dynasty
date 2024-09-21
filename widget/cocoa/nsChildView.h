@@ -186,7 +186,10 @@ class WidgetRenderingContext;
 
   // Whether this uses off-main-thread compositing.
   BOOL mUsingOMTCompositor;
-
+  // The mask image that's used when painting into the titlebar using basic
+  // CGContext painting (i.e. non-accelerated).
+  // Always null if StaticPrefs::gfx_core_animation_enabled_AtStartup() is true.
+  CGImageRef mTopLeftCornerMask;
   // Subviews of self, which act as container views for vibrancy views and
   // non-draggable views.
   NSView* mVibrancyViewsContainer;      // [STRONG]
@@ -448,7 +451,8 @@ class nsChildView final : public nsBaseWidget {
   bool PaintWindowInDrawTarget(mozilla::gfx::DrawTarget* aDT,
                                const LayoutDeviceIntRegion& aRegion,
                                const mozilla::gfx::IntSize& aSurfaceSize);
-
+  bool PaintWindowInContext(CGContextRef aContext, const LayoutDeviceIntRegion& aRegion,
+                            mozilla::gfx::IntSize aSurfaceSize);
   void PaintWindowInContentLayer();
   void HandleMainThreadCATransaction();
 
@@ -466,10 +470,8 @@ class nsChildView final : public nsBaseWidget {
       mozilla::widget::WidgetRenderingContext* aContext) override;
   virtual RefPtr<mozilla::layers::NativeLayerRoot> GetNativeLayerRoot()
       override;
-
   virtual void UpdateThemeGeometries(
       const nsTArray<ThemeGeometry>& aThemeGeometries) override;
-
   virtual void UpdateWindowDraggingRegion(
       const LayoutDeviceIntRegion& aRegion) override;
   LayoutDeviceIntRegion GetNonDraggableRegion() {
@@ -607,6 +609,10 @@ class nsChildView final : public nsBaseWidget {
   bool mIsDispatchPaint;  // Is a paint event being dispatched
 
   RefPtr<mozilla::layers::NativeLayerRootCA> mNativeLayerRoot;
+
+  // Only used for drawRect-based painting in popups.
+  // Always null if StaticPrefs::gfx_core_animation_enabled_AtStartup() is true.
+  RefPtr<mozilla::gfx::DrawTarget> mBackingSurface;
 
   // In BasicLayers mode, this is the CoreAnimation layer that contains the
   // rendering from Gecko. It is a sublayer of mNativeLayerRoot's underlying

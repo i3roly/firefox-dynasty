@@ -110,7 +110,7 @@ enum class NativeKeyBindingsType : uint8_t;
 
 @interface NSWindow (Undocumented)
 - (NSDictionary*)shadowParameters;
-
+- (BOOL)bottomCornerRounded;
 // Present in the same form on OS X since at least OS X 10.5.
 - (NSRect)contentRectForFrameRect:(NSRect)windowFrame
                         styleMask:(NSUInteger)windowStyle;
@@ -168,24 +168,14 @@ enum class NativeKeyBindingsType : uint8_t;
 - (FullscreenTitlebarTracker*)init;
 @end
 
-@interface TitlebarGradientView : NSView
-@end
-
 // NSWindow subclass for handling windows with toolbars.
 @interface ToolbarWindow : BaseWindow {
-  // This window's titlebar view, if present.
-  // Will be nil if the window has neither a titlebar nor a unified toolbar.
-  // This view is a subview of the window's content view and gets created and
-  // destroyed by updateTitlebarView.
-  TitlebarGradientView* mTitlebarGradientView;  // [STRONG]
   // mFullscreenTitlebarTracker attaches an invisible rectangle to the system
   // title bar. This allows us to detect when the title bar is showing in
   // fullscreen.
   FullscreenTitlebarTracker* mFullscreenTitlebarTracker;
 
-
   CGFloat mUnifiedToolbarHeight;
-  CGFloat mSheetAttachmentPosition;
   /* Store the height of the titlebar when this window is initialized. The
      titlebarHeight getter returns 0 when in fullscreen, which is not useful in
      some cases. */
@@ -198,10 +188,7 @@ enum class NativeKeyBindingsType : uint8_t;
 - (CGFloat)unifiedToolbarHeight;
 - (CGFloat)titlebarHeight;
 - (NSRect)titlebarRect;
-- (void)setTitlebarNeedsDisplay;
 - (void)setDrawsContentsIntoWindowFrame:(BOOL)aState;
-- (void)setSheetAttachmentPosition:(CGFloat)aY;
-- (CGFloat)sheetAttachmentPosition;
 - (void)placeWindowButtons:(NSRect)aRect;
 - (void)placeFullScreenButton:(NSRect)aRect;
 - (NSPoint)windowButtonsPositionWithDefaultPosition:(NSPoint)aDefaultPosition;
