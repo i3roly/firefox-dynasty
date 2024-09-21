@@ -199,6 +199,7 @@ static uint32_t sUniqueKeyEventId = 0;
 - (void)updateRootCALayer;
 
 - (CGFloat)cornerRadius;
+- (void)maskTopCornersInContext:(CGContextRef)aContext;
 
 #ifdef ACCESSIBILITY
 - (id<mozAccessible>)accessible;
@@ -268,6 +269,7 @@ nsChildView::~nsChildView() {
   mParentWidget = nil;
   TearDownView();  // Safe if called twice.
 }
+
 
 nsresult nsChildView::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
                              const LayoutDeviceIntRect& aRect,
@@ -828,6 +830,9 @@ void nsChildView::Resize(double aX, double aY, double aWidth, double aHeight,
 // paint has been handled completely, which is when we return to the event loop
 // after layer display.
 void nsChildView::SuspendAsyncCATransactions() {
+  if (!nsCocoaFeatures::OnMavericksOrLater()) {
+    return;
+  }
   if (mUnsuspendAsyncCATransactionsRunnable) {
     mUnsuspendAsyncCATransactionsRunnable->Cancel();
     mUnsuspendAsyncCATransactionsRunnable = nullptr;
@@ -1241,8 +1246,12 @@ void nsChildView::Invalidate(const LayoutDeviceIntRect& aRect) {
       GetWindowRenderer()->GetBackendType() != LayersBackend::LAYERS_WR,
       "Shouldn't need to invalidate with accelerated OMTC layers!");
 
-  EnsureContentLayerForMainThreadPainting();
-  mContentLayerInvalidRegion.OrWith(aRect.Intersect(GetBounds()));
+  if(nsCocoaFeatures::OnMavericksOrLater()) {
+    EnsureContentLayerForMainThreadPainting();
+    mContentLayerInvalidRegion.OrWith(aRect.Intersect(GetBounds()));
+  } else {
+   [[mView pixelHostingView] setNeedsDisplayInRect:DevPixelsToCocoaPoints(aRect)];
+   }
   [mView markLayerForDisplay];
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
@@ -1383,6 +1392,51 @@ bool nsChildView::PaintWindowInDrawTarget(gfx::DrawTarget* aDT,
     return PaintWindow(aRegion);
   }
   return false;
+}
+
+bool nsChildView::PaintWindowInContext(CGContextRef aContext, const LayoutDeviceIntRegion& aRegion,
+                                       gfx::IntSize aSurfaceSize) {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnMavericksOrLater());
+
+  if (!mBackingSurface || mBackingSurface->GetSize() != aSurfaceSize) {
+    mBackingSurface = gfxPlatform::GetPlatform()->CreateOffscreenContentDrawTarget(
+        aSurfaceSize, gfx::SurfaceFormat::B8G8R8A8);
+    if (!mBackingSurface) {
+      return false;
+    }
+  }
+
+  bool painted = PaintWindowInDrawTarget(mBackingSurface, aRegion, aSurfaceSize);
+
+  uint8_t* data;
+  gfx::IntSize size;
+  int32_t stride;
+  gfx::SurfaceFormat format;
+
+  if (!mBackingSurface->LockBits(&data, &size, &stride, &format)) {
+    return false;
+  }
+
+  // Draw the backing surface onto the window.
+  CGDataProviderRef provider = CGDataProviderCreateWithData(NULL, data, stride * size.height, NULL);
+  NSColorSpace* colorSpace = [[mView window] colorSpace];
+  CGImageRef image =
+      CGImageCreate(size.width, size.height, 8, 32, stride, [colorSpace CGColorSpace],
+                    kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst, provider, NULL,
+                    false, kCGRenderingIntentDefault);
+  CGContextSaveGState(aContext);
+  CGContextTranslateCTM(aContext, 0, size.height);
+  CGContextScaleCTM(aContext, 1, -1);
+  CGContextSetBlendMode(aContext, kCGBlendModeCopy);
+  CGContextDrawImage(aContext, CGRectMake(0, 0, size.width, size.height), image);
+  CGImageRelease(image);
+  CGDataProviderRelease(provider);
+  CGContextRestoreGState(aContext);
+
+  mBackingSurface->ReleaseBits(data);
+
+  return painted;
+
 }
 
 void nsChildView::EnsureContentLayerForMainThreadPainting() {
@@ -2211,10 +2265,6 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     mRootCALayer.bounds = NSZeroRect;
     mRootCALayer.anchorPoint = NSZeroPoint;
     mRootCALayer.contentsGravity = kCAGravityTopLeft;
-    if(!nsCocoaFeatures::OnMavericksOrLater()) {
-      mRootCALayer.cornerRadius = 4.0f;
-      //mRootCALayer.masksToBounds = YES;
-    }
     [mPixelHostingView.layer addSublayer:mRootCALayer];
 
     mLastPressureStage = 0;
@@ -2364,6 +2414,7 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     return 4.0f;
   return [frameView roundedCornerRadius];
 }
+
 - (BOOL)isCoveringTitlebar {
   return [[self window] isKindOfClass:[BaseWindow class]] &&
          [(BaseWindow*)[self window] mainChildView] == self &&
@@ -2392,6 +2443,258 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   }
 }
 
+- (LayoutDeviceIntRegion)nativeDirtyRegionWithBoundingRect:(NSRect)aRect {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnMavericksOrLater());
+
+  LayoutDeviceIntRect boundingRect = mGeckoChild->CocoaPointsToDevPixels(aRect);
+  const NSRect* rects;
+  NSInteger count;
+  [mPixelHostingView getRectsBeingDrawn:&rects count:&count];
+
+  if (count > MAX_RECTS_IN_REGION) {
+    return boundingRect;
+  }
+
+  LayoutDeviceIntRegion region;
+  for (NSInteger i = 0; i < count; ++i) {
+    region.Or(region, mGeckoChild->CocoaPointsToDevPixels(rects[i]));
+  }
+  region.And(region, boundingRect);
+  return region;
+}
+
+// The display system has told us that a portion of our view is dirty. Tell
+// gecko to paint it
+// This method is called from mPixelHostingView's drawRect handler.
+// Only called when nsCocoaFeatures::OnMavericksOrLater() is false.
+- (void)doDrawRect:(NSRect)aRect {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnMavericksOrLater());
+
+  if (!NS_IsMainThread()) {
+    // In the presence of CoreAnimation, this method can sometimes be called on
+    // a non-main thread. Ignore those calls because Gecko can only react to
+    // them on the main thread.
+    return;
+  }
+
+  if (!mGeckoChild || !mGeckoChild->IsVisible()) {
+   return;
+  }
+  CGContextRef cgContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+  if (mUsingOMTCompositor) {
+    // Make sure the window's "drawRect" buffer does not interfere with our
+    // OpenGL drawing's rounded corners.
+    [self clearCorners];
+    // Force a sync OMTC composite into the OpenGL context and return.
+    LayoutDeviceIntRect geckoBounds = mGeckoChild->GetBounds();
+    LayoutDeviceIntRegion region(geckoBounds);
+    mGeckoChild->PaintWindow(region);
+    //this call will ensure the GL context
+    //will round our corners as we want, but at a cost
+    //see comments about superview in nscocoawindow
+    mPixelHostingView.layer.cornerRadius=4.0f;
+    mPixelHostingView.layer.masksToBounds=YES;
+    return;
+  }
+  AUTO_PROFILER_LABEL("ChildView::drawRect", OTHER);
+
+  // The CGContext that drawRect supplies us with comes with a transform that
+  // scales one user space unit to one Cocoa point, which can consist of
+  // multiple dev pixels. But Gecko expects its supplied context to be scaled
+  // to device pixels, so we need to reverse the scaling.
+  double scale = mGeckoChild->BackingScaleFactor();
+  CGContextSaveGState(cgContext);
+  CGContextScaleCTM(cgContext, 1.0 / scale, 1.0 / scale);
+
+  NSSize viewSize = [self bounds].size;
+  gfx::IntSize backingSize =
+      gfx::IntSize::Truncate(viewSize.width * scale, viewSize.height * scale);
+  LayoutDeviceIntRegion region = [self nativeDirtyRegionWithBoundingRect:aRect];
+
+  bool painted = mGeckoChild->PaintWindowInContext(cgContext, region, backingSize);
+  // Undo the scale transform so that from now on the context is in
+  // CocoaPoints again.
+  CGContextRestoreGState(cgContext);
+  if (!painted && [mPixelHostingView isOpaque]) {
+    // Gecko refused to draw, but we've claimed to be opaque, so we have to
+    // draw something--fill with white.
+    CGContextSetRGBFillColor(cgContext, 1, 1, 1, 1);
+    CGContextFillRect(cgContext, NSRectToCGRect(aRect));
+  }
+
+  if ([self isCoveringTitlebar]) {
+    [self drawTitleString];
+    [self maskTopCornersInContext:cgContext];
+  }
+}
+
+- (BOOL)hasRoundedBottomCorners {
+  return [[self window] respondsToSelector:@selector(bottomCornerRounded)] &&
+         [[self window] bottomCornerRounded];
+}
+
+// If nsCocoaFeatures::OnMavericksOrLater() is false, our "accelerated" windows are
+// NSWindows which are not CoreAnimation-backed but contain an NSView with
+// an attached NSOpenGLContext.
+// This means such windows have two WindowServer-level "surfaces" (NSSurface):
+//  (1) The window's "drawRect" contents (a main-memory backed buffer) in the
+//      back and
+//  (2) the OpenGL drawing in the front.
+// These two surfaces are composited by the window manager against our window's
+// backdrop, i.e. everything on the screen behind our window.
+// When our window has rounded corners, our OpenGL drawing respects those
+// rounded corners and will leave transparent pixels in the corners. In these
+// places the contents of the window's "drawRect" buffer can show through. So
+// we need to make sure that this buffer is transparent in the corners so that
+// the rounded corner anti-aliasing in the OpenGL context will blend directly
+// against the backdrop of the window.
+// We don't bother clearing parts of the window that are covered by opaque
+// pixels from the OpenGL context.
+- (void)clearCorners {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnMavericksOrLater());
+
+  CGFloat radius = [self cornerRadius];
+  CGFloat w = [self bounds].size.width, h = [self bounds].size.height;
+  [[NSColor clearColor] set];
+
+  if ([self isCoveringTitlebar]) {
+    NSRectFill(NSMakeRect(0, 0, radius, radius));
+    NSRectFill(NSMakeRect(w - radius, 0, radius, radius));
+  }
+
+  if ([self hasRoundedBottomCorners]) {
+    NSRectFill(NSMakeRect(0, h - radius, radius, radius));
+    NSRectFill(NSMakeRect(w - radius, h - radius, radius, radius));
+  }
+}
+
+static void DrawTopLeftCornerMask(CGContextRef aCtx, int aRadius) {
+  CGContextSetRGBFillColor(aCtx, 1.0, 1.0, 1.0, 1.0);
+  CGContextFillEllipseInRect(aCtx, CGRectMake(0, 0, aRadius * 2, aRadius * 2));
+}
+
+// This is the analog of nsChildView::MaybeDrawRoundedCorners for CGContexts.
+// We only need to mask the top corners here because Cocoa does the masking
+// for the window's bottom corners automatically.
+- (void)maskTopCornersInContext:(CGContextRef)aContext {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnMavericksOrLater());
+
+  CGFloat radius = [self cornerRadius];
+  int32_t devPixelCornerRadius = mGeckoChild->CocoaPointsToDevPixels(radius);
+
+  // First make sure that mTopLeftCornerMask is set up.
+  if (!mTopLeftCornerMask || int32_t(CGImageGetWidth(mTopLeftCornerMask)) != devPixelCornerRadius) {
+    CGImageRelease(mTopLeftCornerMask);
+    CGColorSpaceRef rgb = CGColorSpaceCreateDeviceRGB();
+    CGContextRef imgCtx =
+        CGBitmapContextCreate(NULL, devPixelCornerRadius, devPixelCornerRadius, 8,
+                              devPixelCornerRadius * 4, rgb, kCGImageAlphaPremultipliedFirst);
+    CGColorSpaceRelease(rgb);
+    DrawTopLeftCornerMask(imgCtx, devPixelCornerRadius);
+    mTopLeftCornerMask = CGBitmapContextCreateImage(imgCtx);
+    CGContextRelease(imgCtx);
+  }
+
+  // kCGBlendModeDestinationIn is the secret sauce which allows us to erase
+  // already painted pixels. It's defined as R = D * Sa: multiply all channels
+  // of the destination pixel with the alpha of the source pixel. In our case,
+  // the source is mTopLeftCornerMask.
+  CGContextSaveGState(aContext);
+  CGContextSetBlendMode(aContext, kCGBlendModeDestinationIn);
+
+  CGRect destRect = CGRectMake(0, 0, radius, radius);
+
+  // Erase the top left corner...
+  CGContextDrawImage(aContext, destRect, mTopLeftCornerMask);
+
+  // ... and the top right corner.
+  CGContextTranslateCTM(aContext, [self bounds].size.width, 0);
+  CGContextScaleCTM(aContext, -1, 1);
+  CGContextDrawImage(aContext, destRect, mTopLeftCornerMask);
+
+  CGContextRestoreGState(aContext);
+}
+
+- (void)drawTitleString {
+  MOZ_RELEASE_ASSERT(!nsCocoaFeatures::OnMavericksOrLater());
+
+  BaseWindow* window = (BaseWindow*)[self window];
+  if (![window wantsTitleDrawn]) {
+    return;
+  }
+
+  NSView* frameView = [[window contentView] superview];
+  if (![frameView respondsToSelector:@selector(_drawTitleBar:)]) {
+    return;
+  }
+
+  NSGraphicsContext* oldContext = [NSGraphicsContext currentContext];
+  CGContextRef ctx = (CGContextRef)[oldContext graphicsPort];
+  CGContextSaveGState(ctx);
+  if ([oldContext isFlipped] != [frameView isFlipped]) {
+    CGContextTranslateCTM(ctx, 0, [self bounds].size.height);
+    CGContextScaleCTM(ctx, 1, -1);
+  }
+  [NSGraphicsContext
+      setCurrentContext:[NSGraphicsContext graphicsContextWithGraphicsPort:ctx
+                                                                   flipped:[frameView isFlipped]]];
+  [frameView _drawTitleBar:[frameView bounds]];
+  CGContextRestoreGState(ctx);
+  [NSGraphicsContext setCurrentContext:oldContext];
+}
+
+- (void)viewWillDraw {
+  if (!NS_IsMainThread()) {
+    // In the presence of CoreAnimation, this method can sometimes be called on
+    // a non-main thread. Ignore those calls because Gecko can only react to
+    // them on the main thread.
+    return;
+  }
+
+  if (nsCocoaFeatures::OnMavericksOrLater()) {
+    // If we use CALayers for display, we will call WillPaintWindow during
+    // nsChildView::HandleMainThreadCATransaction, and not here.
+    return;
+  }
+
+  nsAutoRetainCocoaObject kungFuDeathGrip(self);
+
+  if (mGeckoChild) {
+    // The OS normally *will* draw our NSWindow, no matter what we do here.
+    // But Gecko can delete our parent widget(s) (along with mGeckoChild)
+    // while processing a paint request, which closes our NSWindow and
+    // makes the OS throw an NSInternalInconsistencyException assertion when
+    // it tries to draw it.  Sometimes the OS also aborts the browser process.
+    // So we need to retain our parent(s) here and not release it/them until
+    // the next time through the main thread's run loop.  When we do this we
+    // also need to retain and release mGeckoChild, which holds a strong
+    // reference to us.  See bug 550392.
+    nsIWidget* parent = mGeckoChild->GetParent();
+    if (parent) {
+      nsTArray<nsCOMPtr<nsIWidget>> widgetArray;
+      while (parent) {
+        widgetArray.AppendElement(parent);
+        parent = parent->GetParent();
+      }
+      widgetArray.AppendElement(mGeckoChild);
+      nsCOMPtr<nsIRunnable> releaserRunnable = new WidgetsReleaserRunnable(std::move(widgetArray));
+      NS_DispatchToMainThread(releaserRunnable);
+    }
+
+    if (mUsingOMTCompositor) {
+      if (WindowRenderer* slf = mGeckoChild->GetWindowRenderer()) {
+        slf->GetCompositorBridgeChild()->WindowOverlayChanged();
+      } else if (WebRenderLayerManager* wrlm =
+                     mGeckoChild->GetWindowRenderer()->AsWebRender()) {
+        wrlm->WindowOverlayChanged();
+      }
+    }
+
+    mGeckoChild->WillPaintWindow();
+  }
+  [super viewWillDraw];
+
+}
 - (void)markLayerForDisplay {
   MOZ_RELEASE_ASSERT(NS_IsMainThread());
   if (!mIsUpdatingLayer) {
@@ -4960,7 +5263,6 @@ nsresult nsChildView::RestoreHiDPIMode() {
 
   self.wantsLayer = YES;
   self.layerContentsRedrawPolicy = NSViewLayerContentsRedrawDuringViewResize;
-
   return self;
 }
 
@@ -4973,18 +5275,18 @@ nsresult nsChildView::RestoreHiDPIMode() {
 }
 
 - (void)drawRect:(NSRect)aRect {
-  if(nsCocoaFeatures::OnMountainLionOrLater()) {
+  if(nsCocoaFeatures::OnMavericksOrLater()) {
   NS_WARNING("Unexpected call to drawRect: This view returns YES from "
              "wantsUpdateLayer, so "
              "drawRect should not be called.");
   } else { //because lion doesn't have these functions we have to duplicate this call
   //to effectively mimic updateLayer
-   [(ChildView*)[self superview] updateRootCALayer]; 
+   [(ChildView*)[self superview] doDrawRect:aRect]; 
   }
 }
 
 - (BOOL)wantsUpdateLayer {
-  return YES;
+  return nsCocoaFeatures::OnMavericksOrLater();
 }
 
 - (void)updateLayer {

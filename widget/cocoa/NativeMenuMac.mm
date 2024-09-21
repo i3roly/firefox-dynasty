@@ -256,18 +256,26 @@ void NativeMenuMac::ShowAsContextMenu(nsIFrame* aClickedFrame,
   NSMenu* menu = mMenu->NativeNSMenu();
   NSView* view = NativeViewForFrame(aClickedFrame);
   
-  NSAppearance* appearance = NativeAppearanceForContent(mMenu->Content());
   NSPoint locationOnScreen = nsCocoaUtils::GeckoPointToCocoaPoint(desktopPoint);
-
+  if(nsCocoaFeatures::OnMavericksOrLater()) {
+    NSAppearance* appearance = NativeAppearanceForContent(mMenu->Content());
+    mOpeningHandle = [MOZMenuOpeningCoordinator.sharedInstance
+        asynchronouslyOpenMenu:menu
+              atScreenPosition:locationOnScreen
+                       forView:view
+                withAppearance:appearance
+                 asContextMenu:aIsContextMenu];
+  } else {
+    mOpeningHandle = [MOZMenuOpeningCoordinator.sharedInstance
+        asynchronouslyOpenMenu:menu
+              atScreenPosition:locationOnScreen
+                       forView:view
+                withAppearance:nil
+                 asContextMenu:aIsContextMenu];
+    }
   // Let the MOZMenuOpeningCoordinator do the actual opening, so that this
   // ShowAsContextMenu call does not spawn a nested event loop, which would be
   // surprising to our callers.
-  mOpeningHandle = [MOZMenuOpeningCoordinator.sharedInstance
-      asynchronouslyOpenMenu:menu
-            atScreenPosition:locationOnScreen
-                     forView:view
-              withAppearance:appearance
-               asContextMenu:aIsContextMenu];
 }
 
 bool NativeMenuMac::Close() {
