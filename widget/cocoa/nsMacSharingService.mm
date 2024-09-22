@@ -118,11 +118,11 @@ nsresult nsMacSharingService::GetSharingProviders(
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
 
   NSURL* url = nsCocoaUtils::ToNSURL(aPageUrl);
-  if (!url) {
+  if (!url || !nsCocoaFeatures::OnMountainLionOrLater()) {
     // aPageUrl is not a valid URL.
     return NS_ERROR_FAILURE;
   }
-
+  
   NSArray* sharingService = [NSSharingService sharingServicesForItems:@[ url ]];
   int32_t serviceCount = 0;
   JS::Rooted<JSObject*> array(aCx, JS::NewArrayObject(aCx, 0));
@@ -187,39 +187,41 @@ nsMacSharingService::ShareUrl(const nsAString& aServiceName,
   NSString* serviceName = nsCocoaUtils::ToNSString(aServiceName);
   NSURL* pageUrl = nsCocoaUtils::ToNSURL(aPageUrl);
   NSString* pageTitle = nsCocoaUtils::ToNSString(aPageTitle);
-  NSSharingService* service =
-      [NSSharingService sharingServiceNamed:serviceName];
+  if(nsCocoaFeatures::OnMountainLionOrLater()) {
+    NSSharingService* service =
+        [NSSharingService sharingServiceNamed:serviceName];
 
-  // Reminders fetch its data from an activity, not the share data
-  if ([[service name] isEqual:remindersServiceName]) {
-    NSUserActivity* shareActivity = [[NSUserActivity alloc]
-        initWithActivityType:NSUserActivityTypeBrowsingWeb];
+    // Reminders fetch its data from an activity, not the share data
+    if(nsCocoaFeatures::OnYosemiteOrLater()) {
+      if ([[service name] isEqual:remindersServiceName]) {
+        NSUserActivity* shareActivity = [[NSUserActivity alloc]
+            initWithActivityType:NSUserActivityTypeBrowsingWeb];
 
-    if ([pageUrl.scheme hasPrefix:@"http"]) {
-      [shareActivity setWebpageURL:pageUrl];
+        if ([pageUrl.scheme hasPrefix:@"http"]) {
+          [shareActivity setWebpageURL:pageUrl];
+        }
+        [shareActivity setEligibleForHandoff:NO];
+        [shareActivity setTitle:pageTitle];
+        [shareActivity becomeCurrent];
+
+        // Pass ownership of shareActivity to shareDelegate, which will release the
+        // activity once sharing has completed.
+        SharingServiceDelegate* shareDelegate =
+            [[SharingServiceDelegate alloc] initWithActivity:shareActivity];
+        [shareActivity release];
+
+        [service setDelegate:shareDelegate];
+        [shareDelegate release];
+      }
     }
-    [shareActivity setEligibleForHandoff:NO];
-    [shareActivity setTitle:pageTitle];
-    [shareActivity becomeCurrent];
+    // Twitter likes the the title as an additional share item
+    NSArray* toShare = [[service name] isEqual:NSSharingServiceNamePostOnTwitter]
+                           ? @[ pageUrl, pageTitle ]
+                           : @[ pageUrl ];
 
-    // Pass ownership of shareActivity to shareDelegate, which will release the
-    // activity once sharing has completed.
-    SharingServiceDelegate* shareDelegate =
-        [[SharingServiceDelegate alloc] initWithActivity:shareActivity];
-    [shareActivity release];
-
-    [service setDelegate:shareDelegate];
-    [shareDelegate release];
+    [service setSubject:pageTitle];
+    [service performWithItems:toShare];
   }
-
-  // Twitter likes the the title as an additional share item
-  NSArray* toShare = [[service name] isEqual:NSSharingServiceNamePostOnTwitter]
-                         ? @[ pageUrl, pageTitle ]
-                         : @[ pageUrl ];
-
-  [service setSubject:pageTitle];
-  [service performWithItems:toShare];
-
   return NS_OK;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(NS_ERROR_FAILURE);

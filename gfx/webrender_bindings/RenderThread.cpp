@@ -157,11 +157,6 @@ void RenderThread::Start(uint32_t aNamespace) {
   stackSize = std::max(stackSize, 4 * 1024 * 1024U);
 #endif
 
-#if !defined(__OPTIMIZE__)
-  // swgl's draw_quad_spans will allocate ~1.5MB in no-opt builds
-  stackSize = std::max(stackSize, 4*1024*1024U);
-#endif
-
   //optimised or not, mavericks needs a bigger stack
   if(darwinVersion() <=13) {
     stackSize = std::max(stackSize, 4*1024*1024U);

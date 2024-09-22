@@ -3367,11 +3367,15 @@ static NSImage* GetMenuMaskImage() {
 
 
 - (NSTouchBar*)makeTouchBar {
-  mTouchBar = [[nsTouchBar alloc] init];
-  if (mTouchBar) {
-    sTouchBarIsInitialized = YES;
+  if(nsCocoaFeatures::OnSierraOrLater()) {
+    mTouchBar = [[nsTouchBar alloc] init];
+    if (mTouchBar) {
+      sTouchBarIsInitialized = YES;
+    } 
+    return mTouchBar;
+  } else {
+    return nil;
   }
-  return mTouchBar;
 }
 
 - (void)setBeingShown:(BOOL)aValue {
