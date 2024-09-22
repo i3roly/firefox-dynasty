@@ -1490,9 +1490,16 @@ pub enum Appearance {
     /// A dual toolbar button (e.g., a Back button with a dropdown)
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     Dualbutton,
+    /// <menu> and <menuitem> appearances
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuitem,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Checkmenuitem,
     /// Menu Popup background.
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     Menupopup,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuseparator,
     /// The meter bar's meter indicator.
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     Meterchunk,
@@ -1615,11 +1622,17 @@ pub enum Appearance {
     MozWindowTitlebarMaximized,
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     MozWindowDecorations,
-
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozMacActiveSourceListSelection,
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     MozMacDisclosureButtonClosed,
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     MozMacDisclosureButtonOpen,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozMacSourceList,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozMacSourceListSelection,
+
 
     /// A themed focus outline (for outline:auto).
     ///

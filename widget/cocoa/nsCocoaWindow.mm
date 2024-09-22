@@ -559,12 +559,17 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
   if(!nsCocoaFeatures::OnMavericksOrLater()) {
   // This is necessary for sub-Mavericks systems to ensure
   // we don't expose the superview of any non-tooltip/popup window
-  // since we can't use GLContext to round their  corners
-  // see comment underneath setNeedsDisplay in nsCocoaWindow::Show
     if(mWindowType != WindowType::Popup) {
-      mWindow.contentView.superview.wantsLayer = YES;
-    } 
+      // - maskstobounds (doDrawrect) to ensure the titlebar and menu
+      //   items' GLcontext rounding are honoured, AND;
+      // - superview setWantsLayer here  to ensure our
+      //   menu and fullscreen buttons are shown, but not at the  cost of
+      //   losing the rounded corners on popup menus.
+      [[[mWindow contentView] superview] setWantsLayer:YES];
+    }
   }
+
+  [mWindow createTrackingArea];
   // Make sure the window starts out not draggable by the background.
   // We will turn it on as necessary.
   [mWindow setMovableByWindowBackground:NO]; 
@@ -842,16 +847,6 @@ void nsCocoaWindow::Show(bool aState) {
       NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
       [[mWindow contentView] setNeedsDisplay:YES];
       if (!nativeParentWindow || mPopupLevel != PopupLevel::Parent) {
-        if(!nsCocoaFeatures::OnMavericksOrLater()) {
-          //for <10.9 systems we need this call to ensure the tooltip
-          //is not transparent, since we use:
-          // - maskstobounds to ensure the titlebar's GLcontext rounding is 
-          //   honoured, AND;
-          // - superview setWantsLayer in CreateNativeWindow to ensure our
-          //   menu and fullscreen buttons are shown, but not at the  cost of
-          //   losing the rounded corners on popup menus.
-          [[[mWindow contentView] superview] setWantsLayer:YES];
-        }
         [mWindow orderFront:nil];
       }
       NS_OBJC_END_TRY_IGNORE_BLOCK;

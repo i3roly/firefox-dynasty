@@ -32,6 +32,13 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
   using ThemeCocoa = mozilla::widget::ThemeCocoa;
 
  public:
+  enum class MenuIcon : uint8_t {
+    eCheckmark,
+    eMenuArrow,
+    eMenuDownScrollArrow,
+    eMenuUpScrollArrow
+  };
+
   enum class CheckboxOrRadioState : uint8_t { eOff, eOn, eIndeterminate };
 
   enum class ButtonType : uint8_t {
@@ -63,6 +70,27 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     bool pressed : 1;
     bool focused : 1;
     bool rtl : 1;
+  };
+  
+  struct MenuBackgroundParams {
+    bool disabled = false;
+    bool submenuRightOfParent = false;
+  };
+  
+  struct MenuIconParams {
+    MenuIcon icon = MenuIcon::eCheckmark;
+    bool disabled = false;
+    bool insideActiveMenuItem = false;
+    bool centerHorizontally = false;
+    bool rtl = false;
+  };
+
+  struct MenuItemParams {
+    bool backgroundIsVibrant = false;
+    bool checked = false;
+    bool disabled = false;
+    bool selected = false;
+    bool rtl = false;
   };
 
   struct CheckboxOrRadioParams {
@@ -147,6 +175,11 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
 
   enum Widget : uint8_t {
     eColorFill,       // mozilla::gfx::sRGBColor
+    eMenuBackground,  // MenuBackgroundParams
+    eMenuIcon,        // MenuIconParams
+    eMenuItem,        // MenuItemParams
+    eMenuSeparator,   // MenuItemParams
+    eTooltip,
     eCheckbox,        // CheckboxOrRadioParams
     eRadio,           // CheckboxOrRadioParams
     eButton,          // ButtonParams
@@ -166,6 +199,9 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     eScale,               // ScaleParams
     eMultilineTextField,  // bool
     eListBox,
+    eSourceList,                   // bool
+    eActiveSourceListSelection,    // bool
+    eInactiveSourceListSelection,  // bool
     eTabPanel,
   };
 
@@ -173,6 +209,20 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     static WidgetInfo ColorFill(const mozilla::gfx::sRGBColor& aParams) {
       return WidgetInfo(Widget::eColorFill, aParams);
     }
+    static WidgetInfo MenuBackground(const MenuBackgroundParams& aParams) {
+      return WidgetInfo(Widget::eMenuBackground, aParams);
+    }
+    static WidgetInfo MenuIcon(const MenuIconParams& aParams) {
+      return WidgetInfo(Widget::eMenuIcon, aParams);
+    }
+    static WidgetInfo MenuItem(const MenuItemParams& aParams) {
+      return WidgetInfo(Widget::eMenuItem, aParams);
+    }
+    static WidgetInfo MenuSeparator(const MenuItemParams& aParams) {
+      return WidgetInfo(Widget::eMenuSeparator, aParams);
+    }
+    static WidgetInfo Tooltip() { return WidgetInfo(Widget::eTooltip, false); }
+
     static WidgetInfo Checkbox(const CheckboxOrRadioParams& aParams) {
       return WidgetInfo(Widget::eCheckbox, aParams);
     }
@@ -202,7 +252,6 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     }
     static WidgetInfo NativeTitlebar(const UnifiedToolbarParams& aParams) {
       return WidgetInfo(Widget::eNativeTitlebar, aParams);
-
     }  
     static WidgetInfo StatusBar(bool aParams) {
       return WidgetInfo(Widget::eStatusBar, aParams);
@@ -229,6 +278,13 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
       return WidgetInfo(Widget::eMultilineTextField, aParams);
     }
     static WidgetInfo ListBox() { return WidgetInfo(Widget::eListBox, false); }
+        static WidgetInfo SourceList(bool aParams) { return WidgetInfo(Widget::eSourceList, aParams); }
+    static WidgetInfo ActiveSourceListSelection(bool aParams) {
+      return WidgetInfo(Widget::eActiveSourceListSelection, aParams);
+    }
+    static WidgetInfo InactiveSourceListSelection(bool aParams) {
+      return WidgetInfo(Widget::eInactiveSourceListSelection, aParams);
+    }
     static WidgetInfo TabPanel(bool aParams) {
       return WidgetInfo(Widget::eTabPanel, aParams);
     }
@@ -246,8 +302,8 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     WidgetInfo(enum Widget aWidget, const T& aParams)
         : mVariant(aParams), mWidget(aWidget) {}
 
-    mozilla::Variant<mozilla::gfx::sRGBColor, CheckboxOrRadioParams,
-                     ButtonParams, DropdownParams, SpinButtonParams,
+    mozilla::Variant<mozilla::gfx::sRGBColor, MenuBackgroundParams, MenuIconParams, MenuItemParams,
+                     CheckboxOrRadioParams, ButtonParams, DropdownParams, SpinButtonParams,
                      SegmentParams, UnifiedToolbarParams, TextFieldParams, ProgressParams,
                      MeterParams, ScaleParams, bool>
         mVariant;
@@ -307,6 +363,12 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
                                              nsIFrame*);
   nsIFrame* SeparatorResponsibility(nsIFrame* aBefore, nsIFrame* aAfter);
   ControlParams ComputeControlParams(nsIFrame*, mozilla::dom::ElementState);
+  MenuBackgroundParams ComputeMenuBackgroundParams(nsIFrame* aFrame,
+                                                   mozilla::dom::ElementState);
+  MenuIconParams ComputeMenuIconParams(nsIFrame* aParams, mozilla::dom::ElementState,
+                                       MenuIcon aIcon);
+  MenuItemParams ComputeMenuItemParams(nsIFrame* aFrame, mozilla::dom::ElementState,
+                                       bool aIsChecked);
   SegmentParams ComputeSegmentParams(nsIFrame*, mozilla::dom::ElementState,
                                      SegmentType);
   TextFieldParams ComputeTextFieldParams(nsIFrame*, mozilla::dom::ElementState);
@@ -344,6 +406,14 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
   void DrawDisclosureButton(CGContextRef cgContext, const HIRect& inBoxRect,
                             ControlParams aControlParams,
                             NSCellStateValue aState);
+  void DrawMenuBackground(CGContextRef cgContext, const CGRect& inBoxRect,
+                          const MenuBackgroundParams& aParams);
+  NSString* GetMenuIconName(const MenuIconParams& aParams);
+  NSSize GetMenuIconSize(MenuIcon aIcon);
+  void DrawMenuIcon(CGContextRef cgContext, const CGRect& aRect, const MenuIconParams& aParams);
+  void DrawMenuItem(CGContextRef cgContext, const CGRect& inBoxRect, const MenuItemParams& aParams);
+  void DrawMenuSeparator(CGContextRef cgContext, const CGRect& inBoxRect,
+                         const MenuItemParams& aParams);
   void DrawHIThemeButton(CGContextRef cgContext, const HIRect& aRect,
                          ThemeButtonKind aKind, ThemeButtonValue aValue,
                          ThemeDrawState aState, ThemeButtonAdornment aAdornment,
@@ -368,6 +438,9 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
                      bool aIsMain);
   void DrawMultilineTextField(CGContextRef cgContext, const CGRect& inBoxRect,
                               bool aIsFocused);
+  void DrawSourceList(CGContextRef cgContext, const CGRect& inBoxRect, bool aIsActive);
+  void DrawSourceListSelection(CGContextRef aContext, const CGRect& aRect, bool aWindowIsActive,
+                               bool aSelectionIsActive);
   void RenderWidget(const WidgetInfo& aWidgetInfo, mozilla::ColorScheme,
                     mozilla::gfx::DrawTarget& aDrawTarget,
                     const mozilla::gfx::Rect& aWidgetRect,

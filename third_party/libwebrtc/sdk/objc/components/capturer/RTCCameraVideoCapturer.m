@@ -58,13 +58,23 @@ const int64_t kNanosecondsPerSecond = 1000000000;
   return [self initWithDelegate:nil captureSession:[[AVCaptureSession alloc] init]];
 }
 
+#  if !defined(MAC_OS_X_VERSION_10_7) || \
+         MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_7
+- (instancetype)initWithDelegate:(__strong id<RTC_OBJC_TYPE(RTCVideoCapturerDelegate)>)delegate {
+  return [self initWithDelegate:delegate captureSession:[[AVCaptureSession alloc] init]];
+}
+// This initializer is used for testing.
+- (instancetype)initWithDelegate:(__strong id<RTC_OBJC_TYPE(RTCVideoCapturerDelegate)>)delegate
+                  captureSession:(AVCaptureSession *)captureSession {
+#else
 - (instancetype)initWithDelegate:(__weak id<RTC_OBJC_TYPE(RTCVideoCapturerDelegate)>)delegate {
   return [self initWithDelegate:delegate captureSession:[[AVCaptureSession alloc] init]];
 }
-
 // This initializer is used for testing.
 - (instancetype)initWithDelegate:(__weak id<RTC_OBJC_TYPE(RTCVideoCapturerDelegate)>)delegate
                   captureSession:(AVCaptureSession *)captureSession {
+#endif
+
   if (self = [super initWithDelegate:delegate]) {
     // Create the capture session and all relevant inputs and outputs. We need
     // to do this in init because the application may want the capture session

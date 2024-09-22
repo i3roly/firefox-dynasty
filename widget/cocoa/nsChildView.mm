@@ -1849,6 +1849,10 @@ static void MakeRegionsNonOverlapping(Span<LayoutDeviceIntRegion> aRegions) {
 
 void nsChildView::UpdateVibrancy(
     const nsTArray<ThemeGeometry>& aThemeGeometries) {
+  if(!VibrancyManager::SystemSupportsVibrancy()) {
+    return;
+  }
+  
   auto regions = GatherVibrantRegions(aThemeGeometries);
   MakeRegionsNonOverlapping(regions);
 
@@ -2260,6 +2264,7 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     mRootCALayer.bounds = NSZeroRect;
     mRootCALayer.anchorPoint = NSZeroPoint;
     mRootCALayer.contentsGravity = kCAGravityTopLeft;
+    
     [mPixelHostingView.layer addSublayer:mRootCALayer];
 
     mLastPressureStage = 0;
@@ -2475,7 +2480,13 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   if (!mGeckoChild || !mGeckoChild->IsVisible()) {
    return;
   }
+
   CGContextRef cgContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+  //this call will ensure the GL context
+  //will round our corners as we want, but at a cost
+  //see comments about superview in nscocoawindow
+  mPixelHostingView.layer.cornerRadius=4.0f;
+  mPixelHostingView.layer.masksToBounds=YES;
   if (mUsingOMTCompositor) {
     // Make sure the window's "drawRect" buffer does not interfere with our
     // OpenGL drawing's rounded corners.
@@ -2484,11 +2495,6 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     LayoutDeviceIntRect geckoBounds = mGeckoChild->GetBounds();
     LayoutDeviceIntRegion region(geckoBounds);
     mGeckoChild->PaintWindow(region);
-    //this call will ensure the GL context
-    //will round our corners as we want, but at a cost
-    //see comments about superview in nscocoawindow
-    mPixelHostingView.layer.cornerRadius=4.0f;
-    mPixelHostingView.layer.masksToBounds=YES;
     return;
   }
   AUTO_PROFILER_LABEL("ChildView::drawRect", OTHER);
