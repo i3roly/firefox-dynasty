@@ -23,7 +23,7 @@ nsMacUserActivityUpdater::UpdateLocation(const nsAString& aPageUrl,
     return NS_OK;
   }
 
-  if(__builtin_available(macOS 10.10, *)) {
+  if(@available(macOS 10.10, *)) {
     BaseWindow* cocoaWin = nsMacUserActivityUpdater::GetCocoaWindow(aWindow);
     if (!cocoaWin) {
       return NS_ERROR_FAILURE;
