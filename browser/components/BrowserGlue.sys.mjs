@@ -1365,11 +1365,7 @@ BrowserGlue.prototype = {
               "launch_on_login",
               true
             );
-            Services.telemetry.recordEvent(
-              "launch_on_login",
-              "last_profile_disable",
-              "startup"
-            );
+            Glean.launchOnLogin.lastProfileDisableStartup.record();
           }
           Services.prefs.setBoolPref(launchOnLoginPref, false);
           // To reduce confusion when running multiple Gecko profiles,
@@ -3350,10 +3346,6 @@ BrowserGlue.prototype = {
         Services.search.runBackgroundChecks();
       },
 
-      function reportInstallationTelemetry() {
-        lazy.BrowserUsageTelemetry.reportInstallationTelemetry();
-      },
-
       function trustObjectTelemetry() {
         let certdb = Cc["@mozilla.org/security/x509certdb;1"].getService(
           Ci.nsIX509CertDB
@@ -3362,6 +3354,12 @@ BrowserGlue.prototype = {
         certdb.countTrustObjects();
       },
     ];
+
+    if (AppConstants.platform == "win") {
+      idleTasks.push(function reportInstallationTelemetry() {
+        lazy.BrowserUsageTelemetry.reportInstallationTelemetry();
+      });
+    }
 
     for (let task of idleTasks) {
       ChromeUtils.idleDispatch(async () => {
@@ -4754,12 +4752,9 @@ BrowserGlue.prototype = {
 
     // Record why the dialog is showing or not.
     Services.telemetry.setEventRecordingEnabled("upgrade_dialog", true);
-    Services.telemetry.recordEvent(
-      "upgrade_dialog",
-      "trigger",
-      "reason",
-      dialogReason || "satisfied"
-    );
+    Glean.upgradeDialog.triggerReason.record({
+      value: dialogReason || "satisfied",
+    });
 
     // Show the upgrade dialog if allowed and remember the version.
     if (!dialogReason) {
@@ -4873,7 +4868,7 @@ BrowserGlue.prototype = {
       return;
     }
 
-    if (Services.appShell.hiddenDOMWindow.openPreferences) {
+    if (AppConstants.platform == "macosx") {
       Services.appShell.hiddenDOMWindow.openPreferences(...args);
     }
   },
@@ -5236,11 +5231,7 @@ BrowserGlue.prototype = {
       // Record events when preferences change
       if (topic === "nsPref:changed") {
         if (enabled) {
-          Services.telemetry.recordEvent(
-            "pictureinpicture.settings",
-            "enable",
-            "settings"
-          );
+          Glean.pictureinpictureSettings.enableSettings.record();
         }
       }
     };

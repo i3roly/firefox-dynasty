@@ -667,10 +667,12 @@
 
 tab-group {
   border-bottom: 2px solid var(--tab-group-color);
-
-  & > .tabbrowser-tab {
-    transition: min-width 100ms ease-out, max-width 100ms ease-out, padding 100ms ease-out;
+  &[collapsed] {
+    border-bottom: 0;
   }
+
+  /* Provide some space between tab groups or between tab groups and adjacent tabs */
+  margin-inline: var(--tab-overflow-clip-margin);
 
   &[collapsed] > .tabbrowser-tab {
     min-width: 0;
@@ -680,25 +682,39 @@ tab-group {
   }
 }
 
+tab-group > .tab-group-label-container {
+  /* Provide some space between tab group label and the first tab in the tab group */
+  margin-inline-end: var(--tab-overflow-clip-margin);
+}
+
 .tab-group-label {
-  background-color: var(--tab-group-color);
+  align-items: center;
+
+  font: message-box;
+  font-weight: var(--font-weight-bold);
+
+  /* Copied .tab-label settings */
+  margin-inline: 0;
+  line-height: 1.7;  /* override 'normal' in case of fallback math fonts with huge metrics */
+  white-space: nowrap;
+
   border-radius: var(--tab-border-radius);
-  box-sizing: content-box;
-  min-height: 1em;
+  min-height: 2em;
+  min-width: 2em;
   max-width: 10em;
+  padding: 0 4px;
+
+  background-color: var(--tab-group-color);
   /* TODO: pick the right text color depending on group color */
   color: white;
-  margin: auto 0;
-  padding: 2px;
 
-  tab-group[collapsed] > & {
+  tab-group[collapsed] > .tab-group-label-container > & {
     /* TODO: choose actual color values from the spec instead of generating on the fly */
     background-color: color-mix(in srgb, var(--tab-group-color) 30%, white);
     color: var(--tab-group-color);
     outline: 1px solid var(--tab-group-color);
   }
 }
-
 
 /* Tab Overflow */
 
@@ -803,22 +819,28 @@ tab-group {
   }
 }
 
+#tabbrowser-arrowscrollbox[orient="vertical"] > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
 #vertical-tabs-newtab-button {
   appearance: none;
   font: message-box; /* match .tabbrowser-tab on macOS */
   min-height: var(--tab-min-height);
   border-radius: var(--border-radius-medium);
   padding: 0 var(--tab-inline-padding);
+  width: 100%;
   margin-inline: var(--tab-overflow-clip-margin);
 
-  #tabbrowser-tabs[orient="horizontal"] > &,
-  #tabbrowser-tabs[orient="vertical"]:not([expanded]) > & > .toolbarbutton-text {
+  #tabbrowser-tabs[orient="vertical"]:not([expanded]) & > .toolbarbutton-text {
     display: none;
   }
 
   &:hover {
     background-color: var(--tab-hover-background-color);
     outline-color: var(--tab-hover-outline-color);
+  }
+
+  &:focus-visible {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-inset);
   }
 
   > .toolbarbutton-text {
@@ -957,11 +979,11 @@ tab-group {
 
 /* Firefox View button and menu item */
 
-:root:not([privatebrowsingmode], [firefoxviewhidden]) :is(toolbarbutton, toolbarpaletteitem) + #tabbrowser-tabs,
+:root:not([privatebrowsingmode], [firefoxviewhidden]) :is(toolbarbutton, toolbarpaletteitem) ~ #tabbrowser-tabs,
 :root[privatebrowsingmode]:not([firefoxviewhidden]) :is(
   toolbarbutton:not(#firefox-view-button),
   toolbarpaletteitem:not(#wrapper-firefox-view-button)
-) + #tabbrowser-tabs {
+) ~ #tabbrowser-tabs {
   border-inline-start: var(--tabstrip-inner-border);
   padding-inline-start: calc(var(--tab-overflow-pinned-tabs-width) + 2px);
   margin-inline-start: 2px;
@@ -998,9 +1020,10 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
 }
 
 #tabbrowser-tabs[hasadjacentnewtabbutton]:not([overflow]) ~ #new-tab-button,
-#tabbrowser-tabs[orient="vertical"] > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
+#tabbrowser-tabs[orient="horizontal"] > #vertical-tabs-newtab-button,
+#tabbrowser-tabs[orient="vertical"]:not([overflow]) > #vertical-tabs-newtab-button,
 #tabbrowser-arrowscrollbox[overflowing] > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
-#tabbrowser-tabs:not([hasadjacentnewtabbutton]) > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
+#tabbrowser-tabs:not([hasadjacentnewtabbutton])[orient="horizontal"] > #tabbrowser-arrowscrollbox > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button,
 #TabsToolbar[customizing] #tabs-newtab-button {
   display: none;
 }

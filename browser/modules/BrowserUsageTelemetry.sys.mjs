@@ -536,11 +536,7 @@ export let BrowserUsageTelemetry = {
             break;
           case "media.videocontrols.picture-in-picture.enable-when-switching-tabs.enabled":
             if (Services.prefs.getBoolPref(data)) {
-              Services.telemetry.recordEvent(
-                "pictureinpicture.settings",
-                "enable_autotrigger",
-                "settings"
-              );
+              Glean.pictureinpictureSettings.enableAutotriggerSettings.record();
             }
             break;
         }
@@ -1516,15 +1512,15 @@ export let BrowserUsageTelemetry = {
       if (data?.installer_type) {
         let { installer_type, extra } = data;
 
-        // Record the event
+        // Record the event (mirrored to legacy telemetry using GIFFT)
         Services.telemetry.setEventRecordingEnabled("installation", true);
-        Services.telemetry.recordEvent(
-          "installation",
-          "first_seen",
-          installer_type,
-          null,
-          extra
-        );
+        if (installer_type == "full") {
+          Glean.installation.firstSeenFull.record(extra);
+        } else if (installer_type == "stub") {
+          Glean.installation.firstSeenStub.record(extra);
+        } else if (installer_type == "msix") {
+          Glean.installation.firstSeenMsix.record(extra);
+        }
 
         // Scalars for the new-profile ping. We don't need to collect the build version
         // These are mirrored to legacy telemetry using GIFFT

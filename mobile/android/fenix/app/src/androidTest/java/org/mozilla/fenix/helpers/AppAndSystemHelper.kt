@@ -55,6 +55,7 @@ import org.mozilla.fenix.helpers.TestAssetHelper.waitingTime
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTimeShort
 import org.mozilla.fenix.helpers.TestHelper.appContext
 import org.mozilla.fenix.helpers.TestHelper.mDevice
+import org.mozilla.fenix.helpers.TestHelper.packageName
 import org.mozilla.fenix.helpers.ext.waitNotNull
 import org.mozilla.fenix.helpers.idlingresource.NetworkConnectionIdlingResource
 import org.mozilla.fenix.ui.robots.BrowserRobot
@@ -559,6 +560,9 @@ object AppAndSystemHelper {
             waitingTime,
         )
         Log.i(TAG, "putAppToBackground: Waited for the app to be gone for $waitingTime ms.")
+        Log.i(TAG, "putAppToBackground: Trying to press device home button")
+        mDevice.pressHome()
+        Log.i(TAG, "putAppToBackground: Pressed the device home button")
     }
 
     /**
@@ -568,10 +572,16 @@ object AppAndSystemHelper {
      * The index of the most recent opened app will always have index 2, meaning that the previously opened app will have index 1.
      */
     fun bringAppToForeground() {
+        Log.i(TAG, "bringAppToForeground: Trying to press the device Recent apps button.")
+        mDevice.pressRecentApps()
+        Log.i(TAG, "bringAppToForeground: Pressed the device Recent apps button.")
         Log.i(TAG, "bringAppToForeground: Trying to select the app from the recent apps tray and wait for $waitingTime ms for a new window")
         mDevice.findObject(UiSelector().index(2).packageName(PIXEL_LAUNCHER))
             .clickAndWaitForNewWindow(waitingTimeShort)
         Log.i(TAG, "bringAppToForeground: Selected the app from the recent apps tray.")
+        Log.i(TAG, "bringAppToForeground: Waiting for $waitingTime ms for $packageName window to be updated")
+        mDevice.waitForWindowUpdate(packageName, waitingTime)
+        Log.i(TAG, "bringAppToForeground: Waited for $waitingTime ms for $packageName window to be updated")
     }
 
     fun verifyKeyboardVisibility(isExpectedToBeVisible: Boolean = true) {
@@ -668,6 +678,25 @@ object AppAndSystemHelper {
             Log.i(TAG, "allowOrPreventSystemUIFromReadingTheClipboard: Trying to prevent the System UI from reading the clipboard content")
             mDevice.executeShellCommand("appops set com.android.systemui READ_CLIPBOARD deny")
             Log.i(TAG, "TestSetup: Successfully prevented the System UI from reading the clipboard content")
+        }
+    }
+
+    // Enable or disable the back gesture from the edge of the screen on the device.
+    fun enableOrDisableBackGestureNavigationOnDevice(backGestureNavigationEnabled: Boolean) {
+        if (backGestureNavigationEnabled) {
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Trying to enable the back gesture navigation from the right edge of the screen on the device")
+            mDevice.executeShellCommand("settings put secure back_gesture_inset_scale_right 1")
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Successfully enabled the back gesture navigation from the right edge of the screen on the device")
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Trying to enable the back gesture navigation from the left edge of the screen on the device")
+            mDevice.executeShellCommand("settings put secure back_gesture_inset_scale_left 1")
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Successfully enabled the back gesture navigation from the left edge of the screen on the device on the device")
+        } else {
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Trying to disable the back gesture navigation from the right edge of the screen on the device")
+            mDevice.executeShellCommand("settings put secure back_gesture_inset_scale_right 0")
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Successfully disabled the back gesture navigation from the right edge of the screen on the device")
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Trying to disable the back gesture navigation from the left edge of the screen on the device")
+            mDevice.executeShellCommand("settings put secure back_gesture_inset_scale_left 0")
+            Log.i(TAG, "enableOrDisableBackGestureNavigationOnDevice: Successfully disabled the back gesture navigation from the left edge of the screen on the device on the device")
         }
     }
 

@@ -40,13 +40,12 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/nsCSPContext.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/StaticPrefs_security.h"
 #include "LoadInfo.h"
 #include "mozilla/StaticPrefs_extensions.h"
 #include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/Telemetry.h"
-#include "mozilla/TelemetryComms.h"
-#include "mozilla/TelemetryEventEnums.h"
 #include "nsIConsoleService.h"
 #include "nsIStringBundle.h"
 
@@ -743,26 +742,27 @@ void nsContentSecurityUtils::NotifyEvalUsage(bool aIsSystemPrincipal,
                                              uint64_t aWindowID,
                                              uint32_t aLineNumber,
                                              uint32_t aColumnNumber) {
-  // Send Telemetry
-  Telemetry::EventID eventType =
-      aIsSystemPrincipal ? Telemetry::EventID::Security_Evalusage_Systemcontext
-                         : Telemetry::EventID::Security_Evalusage_Parentprocess;
-
   FilenameTypeAndDetails fileNameTypeAndDetails =
       FilenameToFilenameType(aFileName, false);
-  mozilla::Maybe<nsTArray<EventExtraEntry>> extra;
-  if (fileNameTypeAndDetails.second.isSome()) {
-    extra = Some<nsTArray<EventExtraEntry>>({EventExtraEntry{
-        "fileinfo"_ns, fileNameTypeAndDetails.second.value()}});
-  } else {
-    extra = Nothing();
-  }
   if (!sTelemetryEventEnabled.exchange(true)) {
     sTelemetryEventEnabled = true;
     Telemetry::SetEventRecordingEnabled("security"_ns, true);
   }
-  Telemetry::RecordEvent(eventType, mozilla::Some(fileNameTypeAndDetails.first),
-                         extra);
+  auto fileinfo = fileNameTypeAndDetails.second;
+  auto value = Some(fileNameTypeAndDetails.first);
+  if (aIsSystemPrincipal) {
+    glean::security::EvalUsageSystemContextExtra extra = {
+        .fileinfo = fileinfo,
+        .value = value,
+    };
+    glean::security::eval_usage_system_context.Record(Some(extra));
+  } else {
+    glean::security::EvalUsageParentProcessExtra extra = {
+        .fileinfo = fileinfo,
+        .value = value,
+    };
+    glean::security::eval_usage_parent_process.Record(Some(extra));
+  }
 
   // Report an error to console
   nsCOMPtr<nsIConsoleService> console(
@@ -1571,27 +1571,18 @@ bool nsContentSecurityUtils::ValidateScriptFilename(JSContext* cx,
   MOZ_LOG(sCSMLog, LogLevel::Error,
           ("ValidateScriptFilename Failed: %s\n", aFilename));
 
-  // Send Telemetry
   FilenameTypeAndDetails fileNameTypeAndDetails =
       FilenameToFilenameType(filename, true);
-
-  Telemetry::EventID eventType =
-      Telemetry::EventID::Security_Javascriptload_Parentprocess;
-
-  mozilla::Maybe<nsTArray<EventExtraEntry>> extra;
-  if (fileNameTypeAndDetails.second.isSome()) {
-    extra = Some<nsTArray<EventExtraEntry>>({EventExtraEntry{
-        "fileinfo"_ns, fileNameTypeAndDetails.second.value()}});
-  } else {
-    extra = Nothing();
-  }
 
   if (!sTelemetryEventEnabled.exchange(true)) {
     sTelemetryEventEnabled = true;
     Telemetry::SetEventRecordingEnabled("security"_ns, true);
   }
-  Telemetry::RecordEvent(eventType, mozilla::Some(fileNameTypeAndDetails.first),
-                         extra);
+  glean::security::JavascriptLoadParentProcessExtra extra = {
+      .fileinfo = fileNameTypeAndDetails.second,
+      .value = Some(fileNameTypeAndDetails.first),
+  };
+  glean::security::javascript_load_parent_process.Record(Some(extra));
 
 #if defined(DEBUG) || defined(FUZZING)
   auto crashString = nsContentSecurityUtils::SmartFormatCrashString(

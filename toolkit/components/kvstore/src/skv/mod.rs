@@ -13,15 +13,17 @@ use nserror::nsresult;
 use xpcom::nsIID;
 
 mod abort;
-mod connection;
+pub mod checker;
+pub mod connection;
 mod coordinator;
 mod database;
 mod importer;
 mod interface;
 mod key;
+mod maintenance;
 mod schema;
 mod sql;
-mod store;
+pub mod store;
 mod value;
 
 use interface::KeyValueService;

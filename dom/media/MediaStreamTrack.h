@@ -11,6 +11,7 @@
 #include "PrincipalHandle.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/dom/MediaStreamTrackBinding.h"
+#include "mozilla/dom/MediaTrackCapabilitiesBinding.h"
 #include "mozilla/dom/MediaTrackSettingsBinding.h"
 #include "mozilla/media/MediaUtils.h"
 #include "mozilla/WeakPtr.h"
@@ -183,6 +184,8 @@ class MediaStreamTrackSource : public nsISupports {
    * Same for GetSettings (no-op).
    */
   virtual void GetSettings(dom::MediaTrackSettings& aResult) {};
+
+  virtual void GetCapabilities(dom::MediaTrackCapabilities& aResult) {};
 
   /**
    * Called by the source interface when all registered sinks with
@@ -438,6 +441,7 @@ class MediaStreamTrack : public DOMEventTargetHelper, public SupportsWeakPtr {
   void SetEnabled(bool aEnabled);
   bool Muted() { return mMuted; }
   void Stop();
+  void GetCapabilities(MediaTrackCapabilities& aResult, CallerType aCallerType);
   void GetConstraints(dom::MediaTrackConstraints& aResult);
   void GetSettings(dom::MediaTrackSettings& aResult, CallerType aCallerType);
 

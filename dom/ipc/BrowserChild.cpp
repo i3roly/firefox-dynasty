@@ -1939,15 +1939,6 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
   }
 
   DispatchWidgetEventViaAPZ(localEvent);
-
-  if (aEvent.mMessage == eDragLeave || aEvent.mMessage == eDragExit) {
-    // If session is still active, remove its target.
-    dragSession = GetDragSession();
-    if (dragSession) {
-      static_cast<nsDragSessionProxy*>(dragSession.get())
-          ->SetDragTarget(nullptr);
-    }
-  }
   return IPC_OK();
 }
 
@@ -2319,6 +2310,20 @@ mozilla::ipc::IPCResult BrowserChild::RecvSelectionEvent(
 mozilla::ipc::IPCResult BrowserChild::RecvNormalPrioritySelectionEvent(
     const WidgetSelectionEvent& aEvent) {
   return RecvSelectionEvent(aEvent);
+}
+
+mozilla::ipc::IPCResult BrowserChild::RecvSimpleContentCommandEvent(
+    const EventMessage& aMessage) {
+  WidgetContentCommandEvent localEvent(true, aMessage, mPuppetWidget);
+  DispatchWidgetEventViaAPZ(localEvent);
+  Unused << SendOnEventNeedingAckHandled(aMessage, 0u);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult
+BrowserChild::RecvNormalPrioritySimpleContentCommandEvent(
+    const EventMessage& aMessage) {
+  return RecvSimpleContentCommandEvent(aMessage);
 }
 
 mozilla::ipc::IPCResult BrowserChild::RecvInsertText(

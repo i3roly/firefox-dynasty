@@ -1328,10 +1328,6 @@ pref("network.websocket.timeout.ping.request", 0);
 // event is sent to the javascript websockets application
 pref("network.websocket.timeout.ping.response", 10);
 
-// Defines whether or not to try to negotiate the permessage compression
-// extension with the websocket server.
-pref("network.websocket.extensions.permessage-deflate", true);
-
 // the maximum number of concurrent websocket sessions. By specification there
 // is never more than one handshake oustanding to an individual host at
 // one time.
@@ -1496,17 +1492,6 @@ pref("network.http.throttle.max-time-ms", 500);
 // Give higher priority to requests resulting from a user interaction event
 // like click-to-play, image fancy-box zoom, navigation.
 pref("network.http.on_click_priority", true);
-
-// When the page load has not yet reached DOMContentLoaded point, tail requestes are delayed
-// by (non-tailed requests count + 1) * delay-quantum milliseconds.
-pref("network.http.tailing.delay-quantum", 600);
-// The same as above, but applied after the document load reached DOMContentLoaded event.
-pref("network.http.tailing.delay-quantum-after-domcontentloaded", 100);
-// Upper limit for the calculated delay, prevents long standing and comet-like requests
-// tail forever.  This is in milliseconds as well.
-pref("network.http.tailing.delay-max", 6000);
-// Total limit we delay tailed requests since a page load beginning.
-pref("network.http.tailing.total-max", 45000);
 
 pref("network.proxy.http",                  "");
 pref("network.proxy.http_port",             0);

@@ -37,7 +37,7 @@ use style::font_face::{self, FontFaceSourceFormat, FontFaceSourceListComponent, 
 use style::gecko::arc_types::{
     LockedCounterStyleRule, LockedCssRules, LockedDeclarationBlock, LockedFontFaceRule,
     LockedImportRule, LockedKeyframe, LockedKeyframesRule, LockedMediaList, LockedPageRule,
-    LockedPositionTryRule, LockedStyleRule,
+    LockedPositionTryRule, LockedNestedDeclarationsRule, LockedStyleRule,
 };
 use style::gecko::data::{
     AuthorStyles, GeckoStyleSheet, PerDocumentStyleData, PerDocumentStyleDataImpl,
@@ -135,10 +135,10 @@ use style::stylesheets::{
     AllowImportRules, ContainerRule, CounterStyleRule, CssRule, CssRuleType, CssRuleTypes,
     CssRules, CssRulesHelpers, DocumentRule, FontFaceRule, FontFeatureValuesRule,
     FontPaletteValuesRule, ImportRule, KeyframesRule, LayerBlockRule, LayerStatementRule,
-    MarginRule, MediaRule, NamespaceRule, Origin, OriginSet, PagePseudoClassFlags, PageRule,
-    PositionTryRule, PropertyRule, SanitizationData, SanitizationKind, ScopeRule,
-    StartingStyleRule, StyleRule, StylesheetContents, StylesheetLoader as StyleStylesheetLoader,
-    SupportsRule, UrlExtraData,
+    MarginRule, MediaRule, NamespaceRule, NestedDeclarationsRule, Origin, OriginSet,
+    PagePseudoClassFlags, PageRule, PositionTryRule, PropertyRule, SanitizationData,
+    SanitizationKind, ScopeRule, StartingStyleRule, StyleRule, StylesheetContents,
+    StylesheetLoader as StyleStylesheetLoader, SupportsRule, UrlExtraData,
 };
 use style::stylist::{add_size_of_ua_cache, AuthorStylesEnabled, RuleInclusion, Stylist};
 use style::thread_state;
@@ -2585,6 +2585,30 @@ impl_basic_rule_funcs! { (PositionTry, PositionTryRule, Locked<PositionTryRule>)
     changed: Servo_StyleSet_PositionTryRuleChanged,
 }
 
+impl_basic_rule_funcs! { (NestedDeclarations, NestedDeclarationsRule, Locked<NestedDeclarationsRule>),
+    getter: Servo_CssRules_GetNestedDeclarationsRuleAt,
+    debug: Servo_NestedDeclarationsRule_Debug,
+    to_css: Servo_NestedDeclarationsRule_GetCssText,
+    changed: Servo_StyleSet_NestedDeclarationsRuleChanged,
+}
+
+#[no_mangle]
+pub extern "C" fn Servo_NestedDeclarationsRule_GetStyle(
+    rule: &LockedNestedDeclarationsRule,
+) -> Strong<LockedDeclarationBlock> {
+    read_locked_arc(rule, |rule: &NestedDeclarationsRule| rule.block.clone().into())
+}
+
+#[no_mangle]
+pub extern "C" fn Servo_NestedDeclarationsRule_SetStyle(
+    rule: &LockedNestedDeclarationsRule,
+    declarations: &LockedDeclarationBlock,
+) {
+    write_locked_arc(rule, |rule: &mut NestedDeclarationsRule| {
+        rule.block = unsafe { Arc::from_raw_addrefed(declarations) };
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn Servo_StyleRule_GetStyle(
     rule: &LockedStyleRule,
@@ -4447,9 +4471,9 @@ pub extern "C" fn Servo_ComputedValues_SpecifiesAnimationsOrTransitions(
 }
 
 #[no_mangle]
-pub extern "C" fn Servo_ComputedValues_GetStyleRuleList(
+pub extern "C" fn Servo_ComputedValues_GetMatchingDeclarations(
     values: &ComputedValues,
-    rules: &mut nsTArray<*const LockedStyleRule>,
+    rules: &mut nsTArray<*const LockedDeclarationBlock>,
 ) {
     let rule_node = match values.rules {
         Some(ref r) => r,
@@ -4457,11 +4481,6 @@ pub extern "C" fn Servo_ComputedValues_GetStyleRuleList(
     };
 
     for node in rule_node.self_and_ancestors() {
-        let style_rule = match node.style_source().and_then(|x| x.as_rule()) {
-            Some(rule) => rule,
-            _ => continue,
-        };
-
         // For the rules with any important declaration, we insert them into
         // rule tree twice, one for normal level and another for important
         // level. So, we skip the important one to keep the specificity order of
@@ -4470,7 +4489,9 @@ pub extern "C" fn Servo_ComputedValues_GetStyleRuleList(
             continue;
         }
 
-        rules.push(&*style_rule);
+        let Some(source) = node.style_source() else { continue };
+
+        rules.push(&**source.get());
     }
 }
 
@@ -4502,20 +4523,13 @@ fn dump_properties_and_rules(cv: &ComputedValues, properties: &LonghandIdSet) {
 #[cfg(feature = "gecko_debug")]
 fn dump_rules(cv: &ComputedValues) {
     println_stderr!("  Rules({:?}):", cv.pseudo());
-    let global_style_data = &*GLOBAL_STYLE_DATA;
-    let guard = global_style_data.shared_lock.read();
     if let Some(rules) = cv.rules.as_ref() {
         for rn in rules.self_and_ancestors() {
             if rn.importance().important() {
                 continue;
             }
-            if let Some(d) = rn.style_source().and_then(|s| s.as_declarations()) {
-                println_stderr!("    [DeclarationBlock: {:?}]", d);
-            }
-            if let Some(r) = rn.style_source().and_then(|s| s.as_rule()) {
-                let mut s = nsCString::new();
-                r.read_with(&guard).to_css(&guard, &mut s).unwrap();
-                println_stderr!("    {}", s);
+            if let Some(d) = rn.style_source() {
+                println_stderr!("    {:?}", d.get());
             }
         }
     }
@@ -5435,7 +5449,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetKeywordValue(
     use style::values::generics::font::FontStyle;
     use style::values::specified::{
         table::CaptionSide, BorderStyle, Clear, Display, Float, TextAlign, TextEmphasisPosition,
-        TextTransform,
+        TextTransform, UserModify,
     };
 
     fn get_from_computed<T>(value: u32) -> T
@@ -5450,7 +5464,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetKeywordValue(
     let value = value as u32;
 
     let prop = match_wrap_declared! { long,
-        MozUserModify => longhands::_moz_user_modify::SpecifiedValue::from_gecko_keyword(value),
+        MozUserModify => UserModify::from_u32(value).unwrap(),
         Direction => get_from_computed::<longhands::direction::SpecifiedValue>(value),
         Display => get_from_computed::<Display>(value),
         Float => get_from_computed::<Float>(value),

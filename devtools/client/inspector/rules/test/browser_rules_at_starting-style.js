@@ -129,15 +129,15 @@ add_task(async function () {
   await assertRules("h1", [
     { selector: `element`, ancestorRulesData: null },
     {
-      selector: `&`,
+      selector: `h1, [data-test="in-starting-style"]`,
+      ancestorRulesData: ["@starting-style {"],
+    },
+    {
+      selector: ``,
       ancestorRulesData: [
         `h1, [data-test="top-level"] {`,
         "  @starting-style {",
       ],
-    },
-    {
-      selector: `h1, [data-test="in-starting-style"]`,
-      ancestorRulesData: ["@starting-style {"],
     },
     {
       selector: `h1, [data-test="top-level"]`,
@@ -148,7 +148,7 @@ add_task(async function () {
   await assertRules("main", [
     { selector: `element`, ancestorRulesData: null },
     {
-      selector: `&`,
+      selector: ``,
       ancestorRulesData: [
         `main, [data-test="top-level"] {`,
         "  @starting-style {",

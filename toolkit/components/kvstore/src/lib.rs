@@ -21,7 +21,7 @@ extern crate xpcom;
 mod error;
 mod fs;
 mod owned_value;
-mod skv;
+pub mod skv;
 mod task;
 
 use atomic_refcell::AtomicRefCell;
@@ -346,6 +346,23 @@ impl KeyValueDatabase {
         ));
 
         TaskRunnable::dispatch(TaskRunnable::new("KVDatabase::Delete", task)?, &self.queue)
+    }
+
+    xpcom_method!(
+        delete_range => DeleteRange(
+            callback: *const nsIKeyValueVoidCallback,
+            from_key: *const nsACString,
+            to_key: *const nsACString
+        )
+    );
+
+    fn delete_range(
+        &self,
+        _callback: &nsIKeyValueVoidCallback,
+        _from_key: &nsACString,
+        _to_key: &nsACString,
+    ) -> Result<(), nsresult> {
+        Err(NS_ERROR_NOT_IMPLEMENTED)
     }
 
     xpcom_method!(

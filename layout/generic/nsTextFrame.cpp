@@ -4823,10 +4823,9 @@ static bool IsUnderlineRight(const ComputedStyle& aStyle) {
   if (!langAtom) {
     return false;
   }
-  nsDependentAtomString langStr(langAtom);
-  return (StringBeginsWith(langStr, u"ja"_ns) ||
-          StringBeginsWith(langStr, u"ko"_ns)) &&
-         (langStr.Length() == 2 || langStr[2] == '-');
+  return nsStyleUtil::MatchesLanguagePrefix(langAtom, u"ja") ||
+         nsStyleUtil::MatchesLanguagePrefix(langAtom, u"ko") ||
+         nsStyleUtil::MatchesLanguagePrefix(langAtom, u"mn");
 }
 
 void nsTextFrame::GetTextDecorations(
@@ -5103,7 +5102,7 @@ nsRect nsTextFrame::UpdateTextEmphasis(WritingMode aWM,
   info->advance = info->textRun->GetAdvanceWidth();
 
   // Calculate the baseline offset
-  LogicalSide side = styleText->TextEmphasisSide(aWM);
+  LogicalSide side = styleText->TextEmphasisSide(aWM, StyleFont()->mLanguage);
   LogicalSize frameSize = GetLogicalSize(aWM);
   // The overflow rect is inflated in the inline direction by half
   // advance of the emphasis mark on each side, so that even if a mark
