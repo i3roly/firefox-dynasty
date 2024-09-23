@@ -3364,6 +3364,10 @@ bool nsNativeThemeCocoa::WidgetAttributeChangeRequiresRepaint(
     case StyleAppearance::ProgressBar:
     case StyleAppearance::Meter:
     case StyleAppearance::Meterchunk:
+    case StyleAppearance::MozMacVibrancyLight:
+    case StyleAppearance::MozMacVibrancyDark:
+    case StyleAppearance::MozMacVibrantTitlebarLight:
+    case StyleAppearance::MozMacVibrantTitlebarDark:
       return false;
     default:
       break;
@@ -3439,6 +3443,12 @@ bool nsNativeThemeCocoa::ThemeSupportsWidget(nsPresContext* aPresContext,
 
     case StyleAppearance::Range:
       return !IsWidgetStyled(aPresContext, aFrame, aAppearance);
+
+    case StyleAppearance::MozMacVibrancyLight:
+    case StyleAppearance::MozMacVibrancyDark:
+    case StyleAppearance::MozMacVibrantTitlebarLight:
+    case StyleAppearance::MozMacVibrantTitlebarDark:
+      return VibrancyManager::SystemSupportsVibrancy();
 
     default:
       break;
@@ -3524,6 +3534,16 @@ nsITheme::ThemeGeometryType nsNativeThemeCocoa::ThemeGeometryTypeForWidget(
       return eThemeGeometryTypeWindowButtons;
     case StyleAppearance::MozMacFullscreenButton:
       return eThemeGeometryTypeFullscreenButton;
+    case StyleAppearance::MozMacVibrancyLight:
+      return eThemeGeometryTypeVibrancyLight;
+    case StyleAppearance::MozMacVibrancyDark:
+      return eThemeGeometryTypeVibrancyDark;
+    case StyleAppearance::MozMacVibrantTitlebarLight:
+      return eThemeGeometryTypeVibrantTitlebarLight;
+    case StyleAppearance::MozMacVibrantTitlebarDark:
+      return eThemeGeometryTypeVibrantTitlebarDark;
+    case StyleAppearance::Tooltip:
+      return eThemeGeometryTypeTooltip;
     case StyleAppearance::Menuitem:
     case StyleAppearance::Checkmenuitem: {
       ElementState eventState = GetContentState(aFrame, aAppearance);
