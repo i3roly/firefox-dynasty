@@ -318,6 +318,11 @@ def add_extra_options(config, tests):
                     "--test-url-params={}".format(param.replace(" ", ""))
                 )
 
+        if "android-hw-p6" in test_platform or "android-hw-s24" in test_platform:
+            extra_options.append("--power-test")
+        elif "windows" in test_platform and "speedometer3" in test["test-name"]:
+            extra_options.append("--power-test")
+
         extra_options.append("--project={}".format(config.params.get("project")))
 
         yield test
@@ -354,6 +359,16 @@ def handle_lull_schedule(config, tests):
             lull_schedule = test["raptor"].pop("lull-schedule")
             if lull_schedule:
                 test.setdefault("attributes", {})["lull-schedule"] = lull_schedule
+        yield test
+
+
+@transforms.add
+def apply_raptor_device_optimization(config, tests):
+    # Bug 1919389
+    # For now, only change the back stop optimization strategy for A55 devices
+    for test in tests:
+        if test["test-platform"].startswith("android-hw-a55"):
+            test["optimization"] = {"skip-unless-backstop": None}
         yield test
 
 

@@ -2949,8 +2949,18 @@
       return group;
     },
 
-    removeTabGroup(group) {
-      this.removeTabs(group.tabs);
+    /**
+     * Removes the tab group. This has the effect of closing all the tabs
+     * in the group.
+     *
+     *
+     * @param {MozTabbrowserTabGroup} [group]
+     *   The tab group to remove.
+     * @param {object} [options]
+     *   Options to use when removing tabs. @see removeTabs for more info.
+     */
+    removeTabGroup(group, options = {}) {
+      this.removeTabs(group.tabs, options);
     },
 
     adoptTabGroup(group, index) {
@@ -3587,7 +3597,7 @@
           let lastRelatedTab =
             openerTab && this._lastRelatedTabMap.get(openerTab);
           let previousTab = lastRelatedTab || openerTab || this.selectedTab;
-          if (!previousTab.hidden) {
+          if (previousTab.visible) {
             index = previousTab._tPos + 1;
           } else if (previousTab == FirefoxViewHandler.tab) {
             index = 0;
@@ -3648,7 +3658,7 @@
 
     getTabsToTheStartFrom(aTab) {
       let tabsToStart = [];
-      if (aTab.hidden) {
+      if (!aTab.visible) {
         return tabsToStart;
       }
       let tabs = this.visibleTabs;
@@ -3672,7 +3682,7 @@
 
     getTabsToTheEndFrom(aTab) {
       let tabsToEnd = [];
-      if (aTab.hidden) {
+      if (!aTab.visible) {
         return tabsToEnd;
       }
       let tabs = this.visibleTabs;
@@ -4145,7 +4155,8 @@
         return;
       }
 
-      let isLastTab = !aTab.hidden && this.visibleTabs.length == 1;
+      let isVisibleTab = aTab.visible;
+      let isLastTab = isVisibleTab && this.visibleTabs.length == 1;
       // We have to sample the tab width now, since _beginRemoveTab might
       // end up modifying the DOM in such a way that aTab gets a new
       // frame created for it (for example, by updating the visually selected
@@ -4169,7 +4180,7 @@
       let lockTabSizing =
         !this.tabContainer.verticalMode &&
         !aTab.pinned &&
-        !aTab.hidden &&
+        isVisibleTab &&
         aTab._fullyOpen &&
         triggeringEvent?.inputSource == MouseEvent.MOZ_SOURCE_MOUSE &&
         triggeringEvent?.target.closest(".tabbrowser-tab");
@@ -4184,7 +4195,7 @@
         gReduceMotion ||
         isLastTab ||
         aTab.pinned ||
-        aTab.hidden ||
+        !isVisibleTab ||
         this.tabContainer.verticalMode ||
         this._removingTabs.size >
           3 /* don't want lots of concurrent animations */ ||
@@ -4300,7 +4311,7 @@
 
       var closeWindow = false;
       var newTab = false;
-      if (!aTab.hidden && this.visibleTabs.length == 1) {
+      if (aTab.visible && this.visibleTabs.length == 1) {
         closeWindow =
           closeWindowWithLastTab != null
             ? closeWindowWithLastTab
@@ -4676,26 +4687,19 @@
       }
 
       if (
-        aTab.owner &&
-        !aTab.owner.hidden &&
-        !aTab.owner.closing &&
+        aTab.owner?.visible &&
         !excludeTabs.has(aTab.owner) &&
         Services.prefs.getBoolPref("browser.tabs.selectOwnerOnClose")
       ) {
         return aTab.owner;
       }
 
-      // Switch to a visible tab unless there aren't any others remaining
-      let remainingTabs = this.visibleTabs;
-      let numTabs = remainingTabs.length;
-      if (numTabs == 0 || (numTabs == 1 && remainingTabs[0] == aTab)) {
-        remainingTabs = Array.prototype.filter.call(
-          this.tabs,
-          tab => !tab.closing && !excludeTabs.has(tab)
-        );
-      }
-
       // Try to find a remaining tab that comes after the given tab
+      let remainingTabs = Array.prototype.filter.call(
+        this.visibleTabs,
+        tab => !excludeTabs.has(tab)
+      );
+
       let tab = this.tabContainer.findNextTab(aTab, {
         direction: 1,
         filter: _tab => remainingTabs.includes(_tab),
@@ -5383,7 +5387,7 @@
     moveTabForward() {
       let nextTab = this.tabContainer.findNextTab(this.selectedTab, {
         direction: 1,
-        filter: tab => !tab.hidden,
+        filter: tab => tab.visible,
       });
 
       if (nextTab) {
@@ -5451,7 +5455,7 @@
     moveTabBackward() {
       let previousTab = this.tabContainer.findNextTab(this.selectedTab, {
         direction: -1,
-        filter: tab => !tab.hidden,
+        filter: tab => tab.visible,
       });
 
       if (previousTab) {
@@ -5726,7 +5730,7 @@
     },
 
     _mayTabBeMultiselected(aTab) {
-      return aTab.isConnected && !aTab.closing && !aTab.hidden;
+      return aTab.visible;
     },
 
     _startMultiSelectChange() {
@@ -7815,6 +7819,15 @@ var TabContextMenu = {
       menuItem.disabled = disabled;
     }
 
+    let contextNewTabButton = document.getElementById("context_openANewTab");
+    // update context menu item strings for vertical tabs
+    document.l10n.setAttributes(
+      contextNewTabButton,
+      gBrowser.tabContainer?.verticalMode
+        ? "tab-context-new-tab-open-vertical"
+        : "tab-context-new-tab-open"
+    );
+
     // Session store
     document.getElementById("context_undoCloseTab").disabled =
       SessionStore.getClosedTabCount() == 0;
@@ -7907,16 +7920,35 @@ var TabContextMenu = {
     document.getElementById("context_duplicateTabs").hidden =
       !multiselectionContext;
 
-    // Disable "Close Tabs to the Left/Right" if there are no tabs
-    // preceding/following it.
     let closeTabsToTheStartItem = document.getElementById(
       "context_closeTabsToTheStart"
     );
-    let noTabsToStart = !gBrowser.getTabsToTheStartFrom(this.contextTab).length;
-    closeTabsToTheStartItem.disabled = noTabsToStart;
+
+    // update context menu item strings for vertical tabs
+    document.l10n.setAttributes(
+      closeTabsToTheStartItem,
+      gBrowser.tabContainer?.verticalMode
+        ? "close-tabs-to-the-start-vertical"
+        : "close-tabs-to-the-start"
+    );
+
     let closeTabsToTheEndItem = document.getElementById(
       "context_closeTabsToTheEnd"
     );
+
+    // update context menu item strings for vertical tabs
+    document.l10n.setAttributes(
+      closeTabsToTheEndItem,
+      gBrowser.tabContainer?.verticalMode
+        ? "close-tabs-to-the-end-vertical"
+        : "close-tabs-to-the-end"
+    );
+
+    // Disable "Close Tabs to the Left/Right" if there are no tabs
+    // preceding/following it.
+    let noTabsToStart = !gBrowser.getTabsToTheStartFrom(this.contextTab).length;
+    closeTabsToTheStartItem.disabled = noTabsToStart;
+
     let noTabsToEnd = !gBrowser.getTabsToTheEndFrom(this.contextTab).length;
     closeTabsToTheEndItem.disabled = noTabsToEnd;
 

@@ -136,6 +136,7 @@ class ScriptLoadData final
 
   void StartLoading() override {}
   void SetLoadCompleted() override {}
+  void OnCoalescedTo(const ScriptLoadData& aExistingLoad) override {}
   void Cancel() override {}
 
   void DidCancelLoad() {}
@@ -189,8 +190,9 @@ class SharedScriptCache final
   // a sheet cache (loaders that are not owned by a document).
   static void LoadCompleted(SharedScriptCache*, ScriptLoadData&);
   using Base::LoadCompleted;
-  static void Clear(nsIPrincipal* aForPrincipal = nullptr,
-                    const nsACString* aBaseDomain = nullptr);
+  static void Clear(const Maybe<nsCOMPtr<nsIPrincipal>>& aPrincipal = Nothing(),
+                    const Maybe<nsCString>& aSchemelessSite = Nothing(),
+                    const Maybe<OriginAttributesPattern>& aPattern = Nothing());
 
  protected:
   ~SharedScriptCache();

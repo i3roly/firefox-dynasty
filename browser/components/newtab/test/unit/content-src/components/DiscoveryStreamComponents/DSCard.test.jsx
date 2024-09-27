@@ -287,6 +287,7 @@ describe("<DSCard>", () => {
             topic: undefined,
             matches_selected_topic: undefined,
             selected_topics: undefined,
+            is_list_card: undefined,
           },
         })
       );
@@ -303,6 +304,7 @@ describe("<DSCard>", () => {
               recommendation_id: undefined,
               topic: undefined,
               selected_topics: undefined,
+              is_list_card: undefined,
             },
           ],
           window_inner_width: 1000,
@@ -337,6 +339,7 @@ describe("<DSCard>", () => {
             topic: undefined,
             matches_selected_topic: undefined,
             selected_topics: undefined,
+            is_list_card: undefined,
           },
         })
       );
@@ -353,6 +356,7 @@ describe("<DSCard>", () => {
               recommendation_id: undefined,
               topic: undefined,
               selected_topics: undefined,
+              is_list_card: undefined,
             },
           ],
           window_inner_width: 1000,
@@ -396,6 +400,7 @@ describe("<DSCard>", () => {
             topic: undefined,
             matches_selected_topic: undefined,
             selected_topics: undefined,
+            is_list_card: undefined,
           },
         })
       );
@@ -413,6 +418,7 @@ describe("<DSCard>", () => {
               recommendation_id: undefined,
               topic: undefined,
               selected_topics: undefined,
+              is_list_card: undefined,
             },
           ],
           window_inner_width: 1000,
@@ -549,6 +555,7 @@ describe("<DSCard>", () => {
             topic: undefined,
             matches_selected_topic: undefined,
             selected_topics: undefined,
+            is_list_card: undefined,
           },
         })
       );
@@ -564,6 +571,7 @@ describe("<DSCard>", () => {
               recommendation_id: undefined,
               topic: undefined,
               selected_topics: undefined,
+              is_list_card: undefined,
             },
           ],
         })
@@ -752,6 +760,50 @@ describe("<PlaceholderDSCard> component", () => {
     wrapper.setState({ isSeen: true });
     const linkMenu = wrapper.find(DSLinkMenu);
     assert.lengthOf(linkMenu, 0);
+  });
+});
+
+describe("Listfeed <DSCard />", () => {
+  let wrapper;
+  let sandbox;
+  let dispatch;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    dispatch = sandbox.stub();
+    wrapper = shallow(
+      <DSCard dispatch={dispatch} {...DEFAULT_PROPS} isListFeed={true} />
+    );
+    wrapper.setState({ isSeen: true });
+  });
+
+  afterEach(() => {
+    sandbox.restore();
+  });
+
+  it("should not show save to pocket UI", () => {
+    wrapper.setState({ saveToPocketCard: true });
+
+    let stpButton = wrapper.find(".card-stp-button");
+
+    assert.ok(!stpButton.exists());
+  });
+
+  it("should not render thumbs up/down UI", () => {
+    wrapper.setState({ mayHaveThumbsUpDown: true });
+    const thumbs_up_down_buttons_component = wrapper.find(
+      DSThumbsUpDownButtons
+    );
+    const thumbs_up_down_buttons = thumbs_up_down_buttons_component.find(
+      ".card-stp-thumbs-buttons"
+    );
+    assert.ok(!thumbs_up_down_buttons.exists());
+  });
+
+  it("should not render the excerpt UI", () => {
+    const excerpt_element = wrapper.find(".excerpt");
+
+    assert.ok(!excerpt_element.exists());
   });
 });
 

@@ -5,7 +5,7 @@ version = 3
 [[package]]
 name = "aa-stroke"
 version = "0.1.0"
-source = "git+https://github.com/FirefoxGraphics/aa-stroke?rev=d94278ed9c7020f50232689a26d1277eb0eb74d2#d94278ed9c7020f50232689a26d1277eb0eb74d2"
+source = "git+https://github.com/FirefoxGraphics/aa-stroke?rev=35a650261605662795a04cc249c465436cbfab45#35a650261605662795a04cc249c465436cbfab45"
 dependencies = [
  "euclid",
 ]
@@ -163,9 +163,9 @@ dependencies = [
 
 [[package]]
 name = "arrayvec"
-version = "0.7.2"
+version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
+checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 dependencies = [
  "serde",
 ]
@@ -328,9 +328,9 @@ dependencies = [
 
 [[package]]
 name = "authenticator"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "253b4c27b89127df34b7037a462305affda8ec85b32d7a0b799484796a3cdc85"
+checksum = "82d71e457dc518a15eecc90d3b0660dee4b51623b34ac4262c9326e0d7e0f8e2"
 dependencies = [
  "base64 0.21.3",
  "bitflags 1.999.999",
@@ -580,6 +580,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "breakpad-symbols"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6aeaa2a7f839cbb61c2f59ad6e51cc3fd2c24aa2103cb24e6be143bcc114aa24"
+dependencies = [
+ "async-trait",
+ "cachemap2",
+ "circular",
+ "debugid",
+ "futures-util",
+ "minidump-common",
+ "nom",
+ "range-map",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "build-parallel"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -637,6 +655,12 @@ name = "cache-padded"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1db59621ec70f09c5e9b597b220c7a2b43611f4710dc03ceb8748637775692c"
+
+[[package]]
+name = "cachemap2"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68ccbd3153aa153b2f5eff557537ffce81e4dd6c50ae0eddc41dc8d0c388436f"
 
 [[package]]
 name = "calendrical_calculations"
@@ -707,6 +731,8 @@ version = "0.0.1"
 dependencies = [
  "base64 0.21.3",
  "byteorder",
+ "clubcard",
+ "clubcard-crlite",
  "crossbeam-utils",
  "cstr",
  "firefox-on-glean",
@@ -792,6 +818,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb7bdea464ae038f09197b82430b921c53619fc8d2bcaf7b151013b3ca008017"
 
 [[package]]
+name = "circular"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0fc239e0f6cb375d2402d48afb92f76f5404fd1df208a41930ec81eda078bea"
+
+[[package]]
 name = "clang-sys"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -851,6 +883,27 @@ name = "clap_lex"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
+
+[[package]]
+name = "clubcard"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d413adde685b0ec7e867186296768474efc2aa952063f40a5198baf760ca983"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "clubcard-crlite"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a85947de44196eb8effe46a2af1ac43e9309b7add92d805b411b7b98254935c9"
+dependencies = [
+ "bincode",
+ "clubcard",
+ "serde",
+ "sha2",
+]
 
 [[package]]
 name = "cmake"
@@ -1080,11 +1133,10 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.6"
+version = "0.5.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2dd04ddaf88237dc3b8d8f9a3c1004b506b54b3313403944054d23c0870c521"
+checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
 dependencies = [
- "cfg-if",
  "crossbeam-utils",
 ]
 
@@ -1817,6 +1869,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "chrono",
+ "gecko-profiler",
  "glean",
  "inherent",
  "log",
@@ -2025,6 +2078,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "framehop"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fd28d2036d4fd99e3629487baca659e5af1c5d554e320168613be79028610fc"
+dependencies = [
+ "arrayvec",
+ "cfg-if",
+ "fallible-iterator",
+ "gimli",
+ "macho-unwind-info",
+ "pe-unwind-info",
+]
+
+[[package]]
 name = "freetype"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2079,6 +2146,7 @@ dependencies = [
  "futures-core",
  "futures-task",
  "futures-util",
+ "num_cpus",
 ]
 
 [[package]]
@@ -2249,6 +2317,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimli"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2e1d97fbe9722ba9bbd0c97051c2956e726562b61f86a25a4360398a40edfc9"
+dependencies = [
+ "fallible-iterator",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "gkrust"
 version = "0.1.0"
 dependencies = [
@@ -2361,6 +2439,7 @@ dependencies = [
  "rure",
  "rusqlite",
  "rust_minidump_writer_linux",
+ "signature_cache",
  "static_prefs",
  "storage",
  "unic-langid",
@@ -2432,9 +2511,9 @@ dependencies = [
 
 [[package]]
 name = "glean"
-version = "61.0.0"
+version = "61.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "873a0621989a5eac9c9a23f47c217a74a1b1587fdc0c6c764c06567ba286e027"
+checksum = "b40ab6c0f040b60a82ad3a1fa7e398bbe40ff4c070c4d3f6e4218d993c509a27"
 dependencies = [
  "glean-core",
  "inherent",
@@ -2445,9 +2524,9 @@ dependencies = [
 
 [[package]]
 name = "glean-core"
-version = "61.0.0"
+version = "61.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfd39741d1790f1022b0bf65d7b4a73fbb7a646158e0c96a0c845b097cce2ba2"
+checksum = "1fe3b11146d25bdcc85cb226fe34095524cd12f9d72353438ce25387e6684108"
 dependencies = [
  "android_logger",
  "bincode",
@@ -3563,6 +3642,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "macho-unwind-info"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b6086acc74bc23f56b60e88bb082d505e23849d68d6c0f12bb6a7ad5c60e03e"
+dependencies = [
+ "thiserror",
+ "zerocopy",
+ "zerocopy-derive",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3746,6 +3836,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "minidump"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cee91aa51259518a08a12c18b5754e45135f89f1d9d7d6aae76ce93b92686698"
+dependencies = [
+ "debugid",
+ "encoding_rs",
+ "memmap2",
+ "minidump-common",
+ "num-traits",
+ "procfs-core",
+ "range-map",
+ "scroll",
+ "thiserror",
+ "time 0.3.36",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "minidump-analyzer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "breakpad-symbols",
+ "clap",
+ "env_logger",
+ "futures-executor",
+ "futures-util",
+ "lazy_static",
+ "log",
+ "minidump",
+ "minidump-unwind",
+ "mozilla-central-workspace-hack",
+ "serde_json",
+ "windows-sys",
+]
+
+[[package]]
 name = "minidump-common"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3758,6 +3888,24 @@ dependencies = [
  "range-map",
  "scroll",
  "smart-default",
+]
+
+[[package]]
+name = "minidump-unwind"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efde3c09258c297c0f6761f04d97771ef82a59a6734e7ba0e6e2ef961fb3cbb3"
+dependencies = [
+ "async-trait",
+ "breakpad-symbols",
+ "cachemap2",
+ "framehop",
+ "memmap2",
+ "minidump",
+ "minidump-common",
+ "object",
+ "scroll",
+ "tracing",
 ]
 
 [[package]]
@@ -3913,6 +4061,7 @@ dependencies = [
  "futures",
  "futures-channel",
  "futures-core",
+ "futures-executor",
  "futures-sink",
  "futures-util",
  "getrandom",
@@ -4362,9 +4511,9 @@ dependencies = [
 
 [[package]]
 name = "object"
-version = "0.32.0"
+version = "0.36.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77ac5bbd07aea88c60a577a1ce218075ffd59208b2d7ca97adf9bfc5aeb21ebe"
+checksum = "084f1a5821ac4c651660a94a7153d27ac9d8a53736203f58b31945ded098070a"
 dependencies = [
  "memchr",
 ]
@@ -4506,6 +4655,19 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+]
+
+[[package]]
+name = "pe-unwind-info"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ec3b43050c38ffb9de87e17d874e9956e3a9131b343c9b7b7002597727c3891"
+dependencies = [
+ "arrayvec",
+ "bitflags 2.6.0",
+ "thiserror",
+ "zerocopy",
+ "zerocopy-derive",
 ]
 
 [[package]]
@@ -5467,6 +5629,13 @@ name = "shlex"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
+
+[[package]]
+name = "signature_cache"
+version = "0.1.0"
+dependencies = [
+ "hashlink",
+]
 
 [[package]]
 name = "siphasher"
@@ -7215,6 +7384,7 @@ version = "0.7.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74d4d3961e53fa4c9a25a8637fc2bfaf2595b3d3ae34875568a5cf64787716be"
 dependencies = [
+ "byteorder",
  "zerocopy-derive",
 ]
 

@@ -159,15 +159,7 @@ nsJARInputThunk::IsNonBlocking(bool* nonBlocking) {
 // nsJARChannel
 //-----------------------------------------------------------------------------
 
-nsJARChannel::nsJARChannel()
-    : mOpened(false),
-      mCanceled(false),
-      mContentLength(-1),
-      mLoadFlags(LOAD_NORMAL),
-      mStatus(NS_OK),
-      mIsPending(false),
-      mEnableOMT(true),
-      mPendingEvent() {
+nsJARChannel::nsJARChannel() {
   LOG(("nsJARChannel::nsJARChannel [this=%p]\n", this));
   // hold an owning reference to the jar handler
   mJarHandler = gJarHandler;
@@ -777,6 +769,10 @@ nsJARChannel::GetContentCharset(nsACString& aContentCharset) {
   // If someone gives us a charset hint we should just use that charset.
   // So we don't care when this is being called.
   aContentCharset = mContentCharset;
+  if (mContentCharset.IsEmpty() && (mOriginalURI->SchemeIs("chrome") ||
+                                    mOriginalURI->SchemeIs("resource"))) {
+    aContentCharset.AssignLiteral("UTF-8");
+  }
   return NS_OK;
 }
 

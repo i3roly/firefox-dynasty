@@ -785,21 +785,6 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         get() = mr2022Sections[Mr2022Section.TCP_FEATURE] == true
 
     /**
-     * Indicates if the total cookie protection CRF feature is enabled.
-     */
-    val enabledTotalCookieProtectionCFR: Boolean
-        get() = mr2022Sections[Mr2022Section.TCP_CFR] == true
-
-    /**
-     * Indicates if the total cookie protection CRF should be shown.
-     */
-    var shouldShowTotalCookieProtectionCFR by lazyFeatureFlagPreference(
-        appContext.getPreferenceKey(R.string.pref_key_should_show_total_cookie_protection_popup),
-        featureFlag = true,
-        default = { enabledTotalCookieProtectionCFR },
-    )
-
-    /**
      * Indicates if the total cookie protection CRF should be shown.
      */
     var shouldShowEraseActionCFR by lazyFeatureFlagPreference(
@@ -2214,8 +2199,9 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     /**
      * Indicates whether or not we should use the new bookmarks UI.
      */
-    val useNewBookmarks by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_use_new_bookmarks_ui),
-        default = false,
+    val useNewBookmarks by lazyFeatureFlagPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_use_new_bookmarks_ui),
+        default = { FxNimbus.features.bookmarks.value().newComposeUi },
+        featureFlag = true,
     )
 }

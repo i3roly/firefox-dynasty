@@ -765,7 +765,7 @@ let JSWINDOWACTORS = {
         DOMDocElementInserted: { wantUntrusted: true },
       },
     },
-    matches: ["about:editprofile"],
+    matches: ["about:editprofile", "about:deleteprofile"],
     enablePreference: "browser.profiles.enabled",
   },
 
@@ -2104,10 +2104,6 @@ BrowserGlue.prototype = {
       Services.prefs.getBoolPref(
         "security.protectionspopup.recordEventTelemetry"
       )
-    );
-    Services.telemetry.setEventRecordingEnabled(
-      "security.ui.app_menu",
-      Services.prefs.getBoolPref("security.app_menu.recordEventTelemetry")
     );
 
     let tpEnabled = Services.prefs.getBoolPref(

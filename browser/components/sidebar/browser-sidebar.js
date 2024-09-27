@@ -148,18 +148,20 @@ var SidebarController = {
       }
     );
 
-    this.registerPrefSidebar(
-      "browser.shopping.experience2023.integratedSidebar",
-      "viewReviewCheckerSidebar",
-      {
-        elementId: "sidebar-switcher-review-checker",
-        url: "chrome://browser/content/shopping/shopping.html",
-        menuId: "menu_reviewCheckerSidebar",
-        menuL10nId: "menu-view-review-checker",
-        revampL10nId: "sidebar-menu-review-checker-label",
-        iconUrl: "chrome://browser/content/shopping/assets/shopping.svg",
-      }
-    );
+    if (!PrivateBrowsingUtils.isWindowPrivate(window)) {
+      this.registerPrefSidebar(
+        "browser.shopping.experience2023.integratedSidebar",
+        "viewReviewCheckerSidebar",
+        {
+          elementId: "sidebar-switcher-review-checker",
+          url: "chrome://browser/content/shopping/shopping.html",
+          menuId: "menu_reviewCheckerSidebar",
+          menuL10nId: "menu-view-review-checker",
+          revampL10nId: "sidebar-menu-review-checker-label",
+          iconUrl: "chrome://browser/content/shopping/assets/shopping.svg",
+        }
+      );
+    }
 
     if (!this.sidebarRevampEnabled) {
       this.registerPrefSidebar(
@@ -966,7 +968,7 @@ var SidebarController = {
     }
   },
 
-  async handleToolbarButtonClick() {
+  handleToolbarButtonClick() {
     switch (this.sidebarRevampVisibility) {
       case "always-show":
         if (this._animationEnabled && !window.gReduceMotion) {
@@ -985,13 +987,14 @@ var SidebarController = {
           this.toggleExpanded(true);
         }
         this.sidebarContainer.hidden = !isHidden;
+        this.updateToolbarButton();
         break;
       }
     }
   },
 
   /**
-   * Update `checked` state of the toolbar button.
+   * Update `checked` state and tooltip text of the toolbar button.
    */
   updateToolbarButton() {
     if (!this.sidebarRevampEnabled || !this.toolbarButton) {
@@ -1002,10 +1005,16 @@ var SidebarController = {
       case "always-show":
         // Toolbar button controls expanded state.
         this.toolbarButton.checked = this.sidebarMain.expanded;
+        this.toolbarButton.dataset.l10nId = this.toolbarButton.checked
+          ? "sidebar-toolbar-collapse-sidebar"
+          : "sidebar-toolbar-expand-sidebar";
         break;
       case "hide-sidebar":
         // Toolbar button controls hidden state.
         this.toolbarButton.checked = !this.sidebarContainer.hidden;
+        this.toolbarButton.dataset.l10nId = this.toolbarButton.checked
+          ? "sidebar-toolbar-hide-sidebar"
+          : "sidebar-toolbar-show-sidebar";
         break;
     }
   },
@@ -1258,23 +1267,25 @@ var SidebarController = {
    * @returns {Array}
    */
   getTools() {
-    return Object.keys(defaultTools).map(commandID => {
-      const sidebar = this.sidebars.get(commandID);
-      const disabled = !this.sidebarRevampTools
-        .split(",")
-        .includes(defaultTools[commandID]);
-      return {
-        commandID,
-        view: commandID,
-        iconUrl: sidebar.iconUrl,
-        l10nId: sidebar.revampL10nId,
-        disabled,
-        // Reflect the current tool state defaulting to visible
-        get hidden() {
-          return !(sidebar.visible ?? true);
-        },
-      };
-    });
+    return Object.keys(defaultTools)
+      .filter(commandID => this.sidebars.get(commandID))
+      .map(commandID => {
+        const sidebar = this.sidebars.get(commandID);
+        const disabled = !this.sidebarRevampTools
+          .split(",")
+          .includes(defaultTools[commandID]);
+        return {
+          commandID,
+          view: commandID,
+          iconUrl: sidebar.iconUrl,
+          l10nId: sidebar.revampL10nId,
+          disabled,
+          // Reflect the current tool state defaulting to visible
+          get hidden() {
+            return !(sidebar.visible ?? true);
+          },
+        };
+      });
   },
 
   /**
@@ -1630,7 +1641,12 @@ XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,
   "sidebarRevampVisibility",
   "sidebar.visibility",
-  "always-show"
+  "always-show",
+  () => {
+    if (!SidebarController.uninitializing) {
+      SidebarController.updateToolbarButton();
+    }
+  }
 );
 XPCOMUtils.defineLazyPreferenceGetter(
   SidebarController,

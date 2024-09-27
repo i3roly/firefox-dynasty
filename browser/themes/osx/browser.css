@@ -253,7 +253,6 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left {
 }
 
 .tabbrowser-tab {
-  font: message-box;
   border: none;
 
   /* FIXME: Are these styles really needed nowadays? */
@@ -272,6 +271,7 @@ moz-input-box > menupopup .context-menu-add-engine > .menu-iconic-left {
 
 #tabbrowser-tabs {
   /* overriding tabbox.css */
+  font: message-box;
   align-items: stretch;
   margin-bottom: 0;
   position: static;

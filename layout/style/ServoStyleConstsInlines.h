@@ -807,7 +807,13 @@ void LengthPercentage::ScaleLengthsBy(float aScale) {
 IMPL_LENGTHPERCENTAGE_FORWARDS(LengthPercentageOrAuto)
 IMPL_LENGTHPERCENTAGE_FORWARDS(StyleSize)
 IMPL_LENGTHPERCENTAGE_FORWARDS(StyleMaxSize)
-IMPL_LENGTHPERCENTAGE_FORWARDS(StyleInset);
+IMPL_LENGTHPERCENTAGE_FORWARDS(StyleInset)
+IMPL_LENGTHPERCENTAGE_FORWARDS(StyleMargin)
+
+template <>
+inline bool StyleInset::IsAnchorPositioningFunction() const {
+  return IsAnchorFunction() || IsAnchorSizeFunction();
+}
 
 #undef IMPL_LENGTHPERCENTAGE_FORWARDS
 

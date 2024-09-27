@@ -20,6 +20,7 @@ import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.components.appstate.AppState
 import org.mozilla.fenix.home.bookmarks.Bookmark
 import org.mozilla.fenix.home.bookmarks.interactor.BookmarksInteractor
+import org.mozilla.fenix.home.collections.CollectionsState
 import org.mozilla.fenix.home.interactor.HomepageInteractor
 import org.mozilla.fenix.home.pocket.PocketRecommendedStoriesCategory
 import org.mozilla.fenix.home.privatebrowsing.interactor.PrivateBrowsingInteractor
@@ -31,6 +32,7 @@ import org.mozilla.fenix.home.recentvisits.RecentlyVisitedItem
 import org.mozilla.fenix.home.recentvisits.RecentlyVisitedItem.RecentHistoryGroup
 import org.mozilla.fenix.home.recentvisits.RecentlyVisitedItem.RecentHistoryHighlight
 import org.mozilla.fenix.home.recentvisits.interactor.RecentVisitsInteractor
+import org.mozilla.fenix.home.sessioncontrol.CollectionInteractor
 import org.mozilla.fenix.home.sessioncontrol.TopSiteInteractor
 import org.mozilla.fenix.search.toolbar.SearchSelectorMenu
 import org.mozilla.fenix.wallpapers.WallpaperState
@@ -51,27 +53,8 @@ internal object FakeHomepagePreview {
             RecentTabInteractor by recentTabInteractor,
             RecentSyncedTabInteractor by recentSyncedTabInterator,
             BookmarksInteractor by bookmarksInteractor,
-            RecentVisitsInteractor by recentVisitsInteractor {
-            override fun onCollectionAddTabTapped(collection: TabCollection) { /* no op */ }
-
-            override fun onCollectionOpenTabClicked(tab: Tab) { /* no op */ }
-
-            override fun onCollectionOpenTabsTapped(collection: TabCollection) { /* no op */ }
-
-            override fun onCollectionRemoveTab(collection: TabCollection, tab: Tab) { /* no op */ }
-
-            override fun onCollectionShareTabsClicked(collection: TabCollection) { /* no op */ }
-
-            override fun onDeleteCollectionTapped(collection: TabCollection) { /* no op */ }
-
-            override fun onRenameCollectionTapped(collection: TabCollection) { /* no op */ }
-
-            override fun onToggleCollectionExpanded(collection: TabCollection, expand: Boolean) { /* no op */ }
-
-            override fun onAddTabsToCollectionTapped() { /* no op */ }
-
-            override fun onRemoveCollectionsPlaceholder() { /* no op */ }
-
+            RecentVisitsInteractor by recentVisitsInteractor,
+            CollectionInteractor by collectionInteractor {
             override fun reportSessionMetrics(state: AppState) { /* no op */ }
 
             override fun onPasteAndGo(clipboardText: String) { /* no op */ }
@@ -167,6 +150,29 @@ internal object FakeHomepagePreview {
             override fun onRecentHistoryHighlightClicked(recentHistoryHighlight: RecentHistoryHighlight) { /* no op */ }
 
             override fun onRemoveRecentHistoryHighlight(highlightUrl: String) { /* no op */ }
+        }
+
+    internal val collectionInteractor
+        get() = object : CollectionInteractor {
+            override fun onCollectionAddTabTapped(collection: TabCollection) { /* no op */ }
+
+            override fun onCollectionOpenTabClicked(tab: Tab) { /* no op */ }
+
+            override fun onCollectionOpenTabsTapped(collection: TabCollection) { /* no op */ }
+
+            override fun onCollectionRemoveTab(collection: TabCollection, tab: Tab) { /* no op */ }
+
+            override fun onCollectionShareTabsClicked(collection: TabCollection) { /* no op */ }
+
+            override fun onDeleteCollectionTapped(collection: TabCollection) { /* no op */ }
+
+            override fun onRenameCollectionTapped(collection: TabCollection) { /* no op */ }
+
+            override fun onToggleCollectionExpanded(collection: TabCollection, expand: Boolean) { /* no op */ }
+
+            override fun onAddTabsToCollectionTapped() { /* no op */ }
+
+            override fun onRemoveCollectionsPlaceholder() { /* no op */ }
         }
 
     internal fun topSites(
@@ -278,6 +284,12 @@ internal object FakeHomepagePreview {
                 )
             }
         }
+
+    internal fun collectionState() = CollectionsState.Content(
+        collections = listOf(collection(tabs = listOf(tab()))),
+        expandedCollections = setOf(),
+        showAddTabToCollection = true,
+    )
 
     internal fun collection(tabs: List<Tab> = emptyList()): TabCollection {
         return object : TabCollection {

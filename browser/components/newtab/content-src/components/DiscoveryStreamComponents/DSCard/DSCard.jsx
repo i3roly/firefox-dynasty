@@ -89,6 +89,7 @@ export const DefaultMeta = ({
   mayHaveThumbsUpDown,
   onThumbsUpClick,
   onThumbsDownClick,
+  isListCard,
   state,
 }) => (
   <div className="meta">
@@ -106,7 +107,7 @@ export const DefaultMeta = ({
       <header className="title clamp">{title}</header>
       {excerpt && <p className="excerpt clamp">{excerpt}</p>}
     </div>
-    {mayHaveThumbsUpDown && (
+    {!isListCard && mayHaveThumbsUpDown && (
       <DSThumbsUpDownButtons
         onThumbsDownClick={onThumbsDownClick}
         onThumbsUpClick={onThumbsUpClick}
@@ -256,6 +257,7 @@ export class _DSCard extends React.PureComponent {
             topic: this.props.topic,
             matches_selected_topic: matchesSelectedTopic,
             selected_topics: this.props.selectedTopics,
+            is_list_card: this.props.isListCard,
           },
         })
       );
@@ -277,6 +279,7 @@ export class _DSCard extends React.PureComponent {
               recommendation_id: this.props.recommendation_id,
               topic: this.props.topic,
               selected_topics: this.props.selectedTopics,
+              is_list_card: this.props.isListCard,
             },
           ],
         })
@@ -315,6 +318,7 @@ export class _DSCard extends React.PureComponent {
             topic: this.props.topic,
             matches_selected_topic: matchesSelectedTopic,
             selected_topics: this.props.selectedTopics,
+            is_list_card: this.props.isListCard,
           },
         })
       );
@@ -333,6 +337,7 @@ export class _DSCard extends React.PureComponent {
               recommendation_id: this.props.recommendation_id,
               topic: this.props.topic,
               selected_topics: this.props.selectedTopics,
+              is_list_card: this.props.isListCard,
             },
           ],
         })
@@ -722,6 +727,7 @@ export class _DSCard extends React.PureComponent {
               isRecentSave={isRecentSave}
               recommendation_id={this.props.recommendation_id}
               tile_id={this.props.id}
+              block_key={this.props.id}
               scheduled_corpus_item_id={this.props.scheduled_corpus_item_id}
               recommended_at={this.props.recommended_at}
               received_rank={this.props.received_rank}

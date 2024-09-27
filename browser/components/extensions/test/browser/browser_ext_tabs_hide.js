@@ -9,13 +9,14 @@ ChromeUtils.defineESModuleGetters(this, {
 
 const triggeringPrincipal_base64 = E10SUtils.SERIALIZED_SYSTEMPRINCIPAL;
 
-async function doorhangerTest(testFn) {
+async function doorhangerTest(testFn, manifestProps = {}) {
   let extension = ExtensionTestUtils.loadExtension({
     manifest: {
       permissions: ["tabs", "tabHide"],
       icons: {
         48: "addon-icon.png",
       },
+      ...manifestProps,
     },
     background() {
       browser.test.onMessage.addListener(async (msg, data) => {
@@ -69,8 +70,8 @@ add_task(function test_doorhanger_keep() {
     is(gBrowser.visibleTabs.length, 2, "There are 2 visible tabs now");
     is(
       panel.anchorNode.closest("toolbarbutton").id,
-      "alltabs-button",
-      "The doorhanger is anchored to the all tabs button"
+      "unified-extensions-button",
+      "The doorhanger is anchored to the extensions button"
     );
 
     let description = panel.querySelector(
@@ -116,7 +117,10 @@ add_task(function test_doorhanger_keep() {
   });
 });
 
-add_task(function test_doorhanger_disable() {
+const doorHangerDisable = (
+  manifestProps = {},
+  expectedAnchorID = "unified-extensions-button"
+) => {
   return doorhangerTest(async function (extension) {
     is(gBrowser.visibleTabs.length, 3, "There are 3 visible tabs");
 
@@ -130,8 +134,8 @@ add_task(function test_doorhanger_disable() {
     is(gBrowser.visibleTabs.length, 2, "There are 2 visible tabs now");
     is(
       panel.anchorNode.closest("toolbarbutton").id,
-      "alltabs-button",
-      "The doorhanger is anchored to the all tabs button"
+      expectedAnchorID,
+      "The doorhanger is anchored to the right element"
     );
 
     // verify the contents of the description.
@@ -167,8 +171,38 @@ add_task(function test_doorhanger_disable() {
 
     is(gBrowser.visibleTabs.length, 3, "There are 3 visible tabs again");
     is(addon.userDisabled, true, "The extension is now disabled");
-  });
+  }, manifestProps);
+};
+
+add_task(async function test_doorhanger_disable() {
+  await doorHangerDisable();
 });
+
+add_task(async function test_doorhanger_disable_with_browser_action() {
+  await doorHangerDisable(
+    {
+      browser_action: { default_area: "menupanel" },
+    }
+    // We expect to anchor the popup to the extensions button (the default)
+    // because the extension is placed in the extensions panel.
+  );
+});
+
+add_task(
+  async function test_doorhanger_disable_with_browser_action_in_navbar() {
+    const id = "@some-ext-id";
+
+    await doorHangerDisable(
+      {
+        browser_specific_settings: { gecko: { id } },
+        browser_action: { default_area: "navbar" },
+      },
+      // We expect to anchor the popup to the widget because it is placed in the
+      // nav-bar.
+      "_some-ext-id-BAP"
+    );
+  }
+);
 
 add_task(async function test_tabs_showhide() {
   async function background() {
@@ -245,22 +279,24 @@ add_task(async function test_tabs_showhide() {
     ],
   };
 
-  // Set up a test session with 2 windows and 5 tabs.
+  info("Set up a test session with 2 windows and 5 tabs.");
   let oldState = SessionStore.getBrowserState();
   let restored = TestUtils.topicObserved("sessionstore-browser-state-restored");
   SessionStore.setBrowserState(JSON.stringify(sessData));
   await restored;
 
-  // Attempt to hide all the tabs, however the active tab in each window cannot
-  // be hidden, so the result will be 3 hidden tabs.
+  info(
+    "Attempt to hide all the tabs, however the active tab in each window cannot be hidden, so the result will be 3 hidden tabs."
+  );
   extension.sendMessage("hideall");
   await extension.awaitMessage("hidden");
 
-  // We have 2 windows in this session.  Otherwin is the non-current window.
-  // In each window, the first tab will be the selected tab and should not be
-  // hidden.  The rest of the tabs should be hidden at this point.  Hidden
-  // status was already validated inside the extension, this double checks
-  // from chrome code.
+  info(
+    "We have 2 windows in this session.  Otherwin is the non-current window. " +
+      "In each window, the first tab will be the selected tab and should not be hidden. " +
+      "The rest of the tabs should be hidden at this point.  Hidden status was already" +
+      "validated inside the extension, this double checks from chrome code."
+  );
   let otherwin;
   for (let win of BrowserWindowIterator()) {
     if (win != window) {
@@ -283,8 +319,9 @@ add_task(async function test_tabs_showhide() {
     );
   }
 
-  // Close the other window then restore it to test that the tabs are
-  // restored with proper hidden state, and the correct extension id.
+  info(
+    "Close the other window then restore it to test that the tabs are restored with proper hidden state, and the correct extension id."
+  );
   await BrowserTestUtils.closeWindow(otherwin);
 
   otherwin = SessionStore.undoCloseWindow(0);
@@ -297,17 +334,11 @@ add_task(async function test_tabs_showhide() {
     is(id, extension.id, "tab hiddenBy value is correct");
   }
 
-  // Test closing the last visible tab, the next tab which is hidden should become
-  // the selectedTab and will be visible.
-  ok(!otherwin.gBrowser.selectedTab.hidden, "selected tab is not hidden");
-  BrowserTestUtils.removeTab(otherwin.gBrowser.selectedTab);
-  ok(!otherwin.gBrowser.selectedTab.hidden, "tab was unhidden");
-
-  // Showall will unhide any remaining hidden tabs.
+  info("Showall will unhide any remaining hidden tabs.");
   extension.sendMessage("showall");
   await extension.awaitMessage("shown");
 
-  // Check from chrome code that all tabs are visible again.
+  info("Check from chrome code that all tabs are visible again.");
   for (let win of BrowserWindowIterator()) {
     let tabs = Array.from(win.gBrowser.tabs);
     for (let i = 0; i < tabs.length; i++) {
@@ -315,12 +346,12 @@ add_task(async function test_tabs_showhide() {
     }
   }
 
-  // Close second window.
+  info("Close second window.");
   await BrowserTestUtils.closeWindow(otherwin);
 
   await extension.unload();
 
-  // Restore pre-test state.
+  info("Restore pre-test state.");
   restored = TestUtils.topicObserved("sessionstore-browser-state-restored");
   SessionStore.setBrowserState(oldState);
   await restored;
@@ -373,7 +404,7 @@ add_task(async function test_tabs_shutdown() {
   let extension = ExtensionTestUtils.loadExtension(extdata);
   await extension.startup();
 
-  // test onUpdated
+  info("test onUpdated");
   await Promise.all([
     extension.awaitMessage("ready"),
     extension.awaitMessage("changeInfo"),

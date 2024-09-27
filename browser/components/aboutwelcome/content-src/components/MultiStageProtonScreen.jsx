@@ -21,6 +21,7 @@ import { AdditionalCTA } from "./AdditionalCTA";
 import { EmbeddedMigrationWizard } from "./EmbeddedMigrationWizard";
 import { AddonsPicker } from "./AddonsPicker";
 import { LinkParagraph } from "./LinkParagraph";
+import { ActionChecklist } from "./ActionChecklist";
 
 export const MultiStageProtonScreen = props => {
   const { autoAdvance, handleAction, order } = props;
@@ -38,6 +39,20 @@ export const MultiStageProtonScreen = props => {
     }
     return () => {};
   }, [autoAdvance, handleAction, order]);
+
+  // Set narrow on an outer element to allow for use of SCSS outer selector and
+  // consolidation of styles for small screen widths with those for messages
+  // configured to always be narrow
+  if (props.content.narrow) {
+    document
+      .querySelector("#multi-stage-message-root")
+      ?.setAttribute("narrow", "");
+  } else {
+    // Clear narrow attribute in case it was set by a previous screen
+    document
+      .querySelector("#multi-stage-message-root")
+      ?.removeAttribute("narrow");
+  }
 
   return (
     <ProtonScreen
@@ -321,6 +336,14 @@ export class ProtonScreen extends React.PureComponent {
           <EmbeddedMigrationWizard
             handleAction={this.props.handleAction}
             content={content}
+          />
+        ) : null}
+        {content.tiles &&
+        content.tiles.type === "action_checklist" &&
+        content.tiles.data ? (
+          <ActionChecklist
+            content={content}
+            message_id={this.props.messageId}
           />
         ) : null}
       </React.Fragment>

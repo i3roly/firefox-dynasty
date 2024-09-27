@@ -209,6 +209,9 @@ input {
 .icon.icon-history-item {
   background-image: url("chrome://browser/skin/history.svg");
 }
+.icon.icon-newsfeed {
+  background-image: url("chrome://global/skin/icons/newsfeed.svg");
+}
 .icon.icon-trending {
   background-image: url("chrome://browser/skin/trending.svg");
   transform: translateY(2px);
@@ -6133,10 +6136,11 @@ main section {
   font-weight: var(--font-weight-bold);
   margin: 0;
 }
-.list-feed .list-feed-title .icon-trending {
+.list-feed .list-feed-title .icon-newsfeed {
   margin-inline-end: var(--space-small);
   transform: none;
   fill: var(--newtab-text-primary-color);
+  vertical-align: text-bottom;
 }
 .list-feed .list-feed-content {
   list-style: none;
@@ -6144,6 +6148,7 @@ main section {
   margin: 0;
   display: flex;
   flex-direction: column;
+  row-gap: var(--border-width);
 }
 
 .layout-variant-a .ds-card-grid .list-feed-content .ds-card.list-feed-card,
@@ -6205,7 +6210,7 @@ main section {
 
 .ds-card-grid .list-feed-content .ds-card.list-feed-card {
   background-color: var(--newtab-background-color-secondary);
-  border-block-start: 1px solid light-dark(var(--color-gray-70), var(--color-gray-50));
+  border-block-start: var(--border-width) solid var(--border-color-deemphasized);
   border-radius: 0;
   box-shadow: none;
   flex-direction: row-reverse;
@@ -6218,6 +6223,7 @@ main section {
 .ds-card-grid .list-feed-content .ds-card.list-feed-card .ds-card-link {
   inset-block-start: 0;
   inset-inline-start: 0;
+  border-radius: 0;
 }
 .ds-card-grid .list-feed-content .ds-card.list-feed-card .meta {
   padding: 0;
@@ -6275,7 +6281,7 @@ main section {
   border-start-end-radius: 0;
 }
 .ds-card-grid .list-feed-content .ds-card.list-feed-card:hover, .ds-card-grid .list-feed-content .ds-card.list-feed-card:focus-within {
-  background-color: var(--newtab-background-color);
+  background-color: var(--newtab-element-secondary-color);
 }
 .ds-card-grid .list-feed-content .ds-card.list-feed-card:hover .card-stp-button-hover-background, .ds-card-grid .list-feed-content .ds-card.list-feed-card:focus-within .card-stp-button-hover-background {
   background: transparent;

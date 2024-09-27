@@ -117,7 +117,6 @@
   --grey-20: #ededf0;
   --grey-25: #e0e0e2;
   --grey-30: #d7d7db;
-  --grey-35: #c3c3c6;
   --grey-40: #b1b1b3;
   --grey-43: #a4a4a4;
   --grey-45: #939395;
@@ -173,6 +172,10 @@
   --theme-selection-background-hover: light-dark(#f0f9fe, #353b48);
   --theme-selection-focus-background: light-dark(var(--toolbarbutton-hover-background), var(--grey-60));
   --theme-selection-color: #ffffff;
+
+  /* Text Selection/Highlight */
+  --theme-text-selection-background: light-dark(rgb(185, 215, 253), #353b48);
+  --theme-text-selection-unfocused-background: light-dark(rgb(210, 210, 210), var(--theme-text-selection-background));
 
   /* Border color that splits the toolbars/panels/headers. */
   --theme-splitter-color: light-dark(var(--grey-25), var(--grey-70));
@@ -274,8 +277,15 @@
   --theme-contrast-border: light-dark(var(--yellow-70), var(--yellow-65));
 
   &[forced-colors-active] {
+    /* Color picked from HCM palette created by a11y team */
+    --theme-highlight-blue: light-dark(#0060DF, #00DDFF);
+    --theme-highlight-red: light-dark(#C50042, #FF9AA2);
+
     --theme-selection-background: SelectedItem;
     --theme-selection-color: SelectedItemText;
+    --theme-text-selection-background: Highlight;
+    --theme-text-selection-color: HighlightText;
+    --theme-text-selection-unfocused-background: Highlight;
     --theme-body-color: CanvasText;
     --theme-focus-outline-color: CanvasText;
     --theme-focus-textinput-outline-color: SelectedItem;
@@ -284,5 +294,7 @@
     /* We don't want dimmed colors in high Contrast Mode, use the same colors as non-dimmed icons */
     --theme-icon-dimmed-color: var(--theme-icon-color);
     --theme-icon-disabled-color: GrayText;
+    --theme-icon-error-color: ButtonText;
+    --theme-icon-warning-color: ButtonText;
   }
 }

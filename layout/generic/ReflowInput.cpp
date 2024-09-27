@@ -707,13 +707,14 @@ void ReflowInput::InitResizeFlags(nsPresContext* aPresContext,
                    ComputedLogicalBorderPadding(wm).BStartEnd(wm));
   }
 
-  bool dependsOnCBBSize = (mStylePosition->BSizeDependsOnContainer(wm) &&
-                           // FIXME: condition this on not-abspos?
-                           !mStylePosition->BSize(wm).IsAuto()) ||
-                          mStylePosition->MinBSizeDependsOnContainer(wm) ||
-                          mStylePosition->MaxBSizeDependsOnContainer(wm) ||
-                          mStylePosition->mOffset.GetBStart(wm).HasPercent() ||
-                          !mStylePosition->mOffset.GetBEnd(wm).IsAuto();
+  bool dependsOnCBBSize =
+      (mStylePosition->BSizeDependsOnContainer(wm) &&
+       // FIXME: condition this on not-abspos?
+       !mStylePosition->BSize(wm).IsAuto()) ||
+      mStylePosition->MinBSizeDependsOnContainer(wm) ||
+      mStylePosition->MaxBSizeDependsOnContainer(wm) ||
+      mStylePosition->GetInset(LogicalSide::BStart, wm).HasPercent() ||
+      !mStylePosition->GetInset(LogicalSide::BEnd, wm).IsAuto();
 
   // If mFrame is a flex item, and mFrame's block axis is the flex container's
   // main axis (e.g. in a column-oriented flex container with same
@@ -827,12 +828,10 @@ LogicalMargin ReflowInput::ComputeRelativeOffsets(WritingMode aWM,
   // moves the boxes to the end of the line, and 'inlineEnd' moves the
   // boxes to the start of the line. The computed values are always:
   // inlineStart=-inlineEnd
-  const auto& inlineStart = position->mOffset.GetIStart(aWM);
-  const auto& inlineEnd = position->mOffset.GetIEnd(aWM);
-  // `anchor()` doesn't apply in relative positioning, so pretend it's auto.
-  bool inlineStartIsAuto =
-      inlineStart.IsAuto() || inlineStart.IsAnchorFunction();
-  bool inlineEndIsAuto = inlineEnd.IsAuto() || inlineEnd.IsAnchorFunction();
+  const auto& inlineStart = position->GetInset(LogicalSide::IStart, aWM);
+  const auto& inlineEnd = position->GetInset(LogicalSide::IEnd, aWM);
+  bool inlineStartIsAuto = !inlineStart.IsLengthPercentage();
+  bool inlineEndIsAuto = !inlineEnd.IsLengthPercentage();
 
   // If neither 'inlineStart' nor 'inlineEnd' is auto, then we're
   // over-constrained and we ignore one of them
@@ -868,8 +867,8 @@ LogicalMargin ReflowInput::ComputeRelativeOffsets(WritingMode aWM,
   // and 'blockEnd' properties move relatively positioned elements in
   // the block progression direction. They also must be each other's
   // negative
-  const auto& blockStart = position->mOffset.GetBStart(aWM);
-  const auto& blockEnd = position->mOffset.GetBEnd(aWM);
+  const auto& blockStart = position->GetInset(LogicalSide::BStart, aWM);
+  const auto& blockEnd = position->GetInset(LogicalSide::BEnd, aWM);
   bool blockStartIsAuto = blockStart.IsAuto();
   bool blockEndIsAuto = blockEnd.IsAuto();
 
@@ -1136,9 +1135,9 @@ void ReflowInput::CalculateBorderPaddingMargin(
     // correct margin value will be computed later in InitAbsoluteConstraints
     // (which is caller of this function, via CalculateHypotheticalPosition).
     const nscoord start = nsLayoutUtils::ComputeCBDependentValue(
-        aContainingBlockSize, mStyleMargin->mMargin.Get(startSide));
+        aContainingBlockSize, mStyleMargin->GetMargin(startSide));
     const nscoord end = nsLayoutUtils::ComputeCBDependentValue(
-        aContainingBlockSize, mStyleMargin->mMargin.Get(endSide));
+        aContainingBlockSize, mStyleMargin->GetMargin(endSide));
     marginStartEnd = start + end;
   }
 
@@ -1526,8 +1525,8 @@ void ReflowInput::CalculateHypotheticalPosition(
 bool ReflowInput::IsInlineSizeComputableByBlockSizeAndAspectRatio(
     nscoord aBlockSize) const {
   WritingMode wm = GetWritingMode();
-  MOZ_ASSERT(!mStylePosition->mOffset.GetBStart(wm).IsAuto() &&
-                 !mStylePosition->mOffset.GetBEnd(wm).IsAuto(),
+  MOZ_ASSERT(!mStylePosition->GetInset(LogicalSide::BStart, wm).IsAuto() &&
+                 !mStylePosition->GetInset(LogicalSide::BEnd, wm).IsAuto(),
              "If any of the block-start and block-end are auto, aBlockSize "
              "doesn't make sense");
   NS_WARNING_ASSERTION(
@@ -1552,8 +1551,8 @@ bool ReflowInput::IsInlineSizeComputableByBlockSizeAndAspectRatio(
 
   // If both inline insets are non-auto, mFrame->ComputeSize() should get a
   // possible inline size by those insets, so we don't rely on aspect-ratio.
-  if (!mStylePosition->mOffset.GetIStart(wm).IsAuto() &&
-      !mStylePosition->mOffset.GetIEnd(wm).IsAuto()) {
+  if (!mStylePosition->GetInset(LogicalSide::IStart, wm).IsAuto() &&
+      !mStylePosition->GetInset(LogicalSide::IEnd, wm).IsAuto()) {
     return false;
   }
 
@@ -1633,36 +1632,16 @@ void ReflowInput::InitAbsoluteConstraints(const ReflowInput* aCBReflowInput,
   NS_ASSERTION(mFrame->HasAnyStateBits(NS_FRAME_OUT_OF_FLOW),
                "Why are we here?");
 
-  auto originalStyleOffset = mStylePosition->mOffset;
-
-  // TODO(dshin): `anchor()` to be resolved here.
-  auto autoInset = StyleInset::Auto();
-  auto styleOffset = StyleRect<mozilla::StyleInset*>::WithAllSides(nullptr);
-  styleOffset.GetIStart(cbwm) =
-      originalStyleOffset.GetIStart(cbwm).IsAnchorFunction()
-          ? &autoInset
-          : &originalStyleOffset.GetIStart(cbwm);
-  styleOffset.GetIEnd(cbwm) =
-      originalStyleOffset.GetIEnd(cbwm).IsAnchorFunction()
-          ? &autoInset
-          : &originalStyleOffset.GetIEnd(cbwm);
-  styleOffset.GetBStart(cbwm) =
-      originalStyleOffset.GetBStart(cbwm).IsAnchorFunction()
-          ? &autoInset
-          : &originalStyleOffset.GetBStart(cbwm);
-  styleOffset.GetBEnd(cbwm) =
-      originalStyleOffset.GetBEnd(cbwm).IsAnchorFunction()
-          ? &autoInset
-          : &originalStyleOffset.GetBEnd(cbwm);
-
-  NS_ASSERTION(styleOffset.All([](const StyleInset* aInset) {
-    return !aInset->IsAnchorFunction();
-  }),
-               "Anchor function not resolved?");
-  bool iStartIsAuto = styleOffset.GetIStart(cbwm)->IsAuto();
-  bool iEndIsAuto = styleOffset.GetIEnd(cbwm)->IsAuto();
-  bool bStartIsAuto = styleOffset.GetBStart(cbwm)->IsAuto();
-  bool bEndIsAuto = styleOffset.GetBEnd(cbwm)->IsAuto();
+  const auto& iStartOffset =
+      mStylePosition->GetInset(LogicalSide::IStart, cbwm);
+  const auto& iEndOffset = mStylePosition->GetInset(LogicalSide::IEnd, cbwm);
+  const auto& bStartOffset =
+      mStylePosition->GetInset(LogicalSide::BStart, cbwm);
+  const auto& bEndOffset = mStylePosition->GetInset(LogicalSide::BEnd, cbwm);
+  bool iStartIsAuto = iStartOffset.IsAuto();
+  bool iEndIsAuto = iEndOffset.IsAuto();
+  bool bStartIsAuto = bStartOffset.IsAuto();
+  bool bEndIsAuto = bEndOffset.IsAuto();
 
   // If both 'inline-start' and 'inline-end' are 'auto' or both 'block-start'
   // and 'block-end' are 'auto', then compute the hypothetical box position
@@ -1738,13 +1717,13 @@ void ReflowInput::InitAbsoluteConstraints(const ReflowInput* aCBReflowInput,
     offsets.IStart(cbwm) = 0;
   } else {
     offsets.IStart(cbwm) = nsLayoutUtils::ComputeCBDependentValue(
-        cbSize.ISize(cbwm), *styleOffset.GetIStart(cbwm));
+        cbSize.ISize(cbwm), iStartOffset);
   }
   if (iEndIsAuto) {
     offsets.IEnd(cbwm) = 0;
   } else {
-    offsets.IEnd(cbwm) = nsLayoutUtils::ComputeCBDependentValue(
-        cbSize.ISize(cbwm), *styleOffset.GetIEnd(cbwm));
+    offsets.IEnd(cbwm) =
+        nsLayoutUtils::ComputeCBDependentValue(cbSize.ISize(cbwm), iEndOffset);
   }
 
   if (iStartIsAuto && iEndIsAuto) {
@@ -1761,13 +1740,13 @@ void ReflowInput::InitAbsoluteConstraints(const ReflowInput* aCBReflowInput,
     offsets.BStart(cbwm) = 0;
   } else {
     offsets.BStart(cbwm) = nsLayoutUtils::ComputeCBDependentValue(
-        cbSize.BSize(cbwm), *styleOffset.GetBStart(cbwm));
+        cbSize.BSize(cbwm), bStartOffset);
   }
   if (bEndIsAuto) {
     offsets.BEnd(cbwm) = 0;
   } else {
-    offsets.BEnd(cbwm) = nsLayoutUtils::ComputeCBDependentValue(
-        cbSize.BSize(cbwm), *styleOffset.GetBEnd(cbwm));
+    offsets.BEnd(cbwm) =
+        nsLayoutUtils::ComputeCBDependentValue(cbSize.BSize(cbwm), bEndOffset);
   }
 
   if (bStartIsAuto && bEndIsAuto) {
@@ -1886,8 +1865,10 @@ void ReflowInput::InitAbsoluteConstraints(const ReflowInput* aCBReflowInput,
     nscoord availMarginSpace =
         aCBSize.ISize(cbwm) - offsets.IStartEnd(cbwm) - margin.IStartEnd(cbwm) -
         borderPadding.IStartEnd(cbwm) - computedSize.ISize(cbwm);
-    marginIStartIsAuto = mStyleMargin->mMargin.GetIStart(cbwm).IsAuto();
-    marginIEndIsAuto = mStyleMargin->mMargin.GetIEnd(cbwm).IsAuto();
+    marginIStartIsAuto =
+        mStyleMargin->GetMargin(LogicalSide::IStart, cbwm).IsAuto();
+    marginIEndIsAuto =
+        mStyleMargin->GetMargin(LogicalSide::IEnd, cbwm).IsAuto();
     ComputeAbsPosInlineAutoMargin(availMarginSpace, cbwm, marginIStartIsAuto,
                                   marginIEndIsAuto, margin, offsets);
   }
@@ -1941,8 +1922,10 @@ void ReflowInput::InitAbsoluteConstraints(const ReflowInput* aCBReflowInput,
     //  * we're dealing with a replaced element
     //  * bsize was constrained by min- or max-bsize.
     nscoord availMarginSpace = autoBSize - computedSize.BSize(cbwm);
-    marginBStartIsAuto = mStyleMargin->mMargin.GetBStart(cbwm).IsAuto();
-    marginBEndIsAuto = mStyleMargin->mMargin.GetBEnd(cbwm).IsAuto();
+    marginBStartIsAuto =
+        mStyleMargin->GetMargin(LogicalSide::BStart, cbwm).IsAuto();
+    marginBEndIsAuto =
+        mStyleMargin->GetMargin(LogicalSide::BEnd, cbwm).IsAuto();
 
     ComputeAbsPosBlockAutoMargin(availMarginSpace, cbwm, marginBStartIsAuto,
                                  marginBEndIsAuto, margin, offsets);
@@ -2144,12 +2127,12 @@ LogicalSize ReflowInput::ComputeContainingBlockRectangle(
     if (!wm.IsVertical() && NS_UNCONSTRAINEDSIZE == cbSize.BSize(wm)) {
       if (eCompatibility_NavQuirks == aPresContext->CompatibilityMode() &&
           !aContainingBlockRI->mFrame->IsFlexOrGridItem() &&
-          (IsQuirky(mStylePosition->mHeight) ||
+          (IsQuirky(mStylePosition->GetHeight()) ||
            (mFrame->IsTableWrapperFrame() &&
             IsQuirky(mFrame->PrincipalChildList()
                          .FirstChild()
                          ->StylePosition()
-                         ->mHeight)))) {
+                         ->GetHeight())))) {
         cbSize.BSize(wm) = CalcQuirkContainingBlockHeight(aContainingBlockRI);
       }
     }
@@ -2684,9 +2667,10 @@ void ReflowInput::CalculateBlockSideMargins() {
 
   // The css2 spec clearly defines how block elements should behave
   // in section 10.3.3.
-  const auto& styleSides = mStyleMargin->mMargin;
-  bool isAutoStartMargin = styleSides.GetIStart(cbWM).IsAuto();
-  bool isAutoEndMargin = styleSides.GetIEnd(cbWM).IsAuto();
+  bool isAutoStartMargin =
+      mStyleMargin->GetMargin(LogicalSide::IStart, cbWM).IsAuto();
+  bool isAutoEndMargin =
+      mStyleMargin->GetMargin(LogicalSide::IEnd, cbWM).IsAuto();
   if (!isAutoStartMargin && !isAutoEndMargin) {
     // Neither margin is 'auto' so we're over constrained. Use the
     // 'direction' property of the parent to tell which margin to
@@ -2916,7 +2900,7 @@ bool SizeComputationInput::ComputeMargin(WritingMode aCBWM,
     LogicalMargin m(aCBWM);
     for (const LogicalSide side : LogicalSides::All) {
       m.Side(side, aCBWM) = nsLayoutUtils::ComputeCBDependentValue(
-          aPercentBasis, styleMargin->mMargin.Get(side, aCBWM));
+          aPercentBasis, styleMargin->GetMargin(side, aCBWM));
     }
     SetComputedLogicalMargin(aCBWM, m);
   } else {

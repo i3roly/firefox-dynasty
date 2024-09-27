@@ -90,10 +90,11 @@ const NIMBUS_VARIABLE_CONTILE_SOV_ENABLED = "topSitesContileSovEnabled";
 // The default will be `CONTILE_MAX_NUM_SPONSORED` if variable is unspecified.
 const NIMBUS_VARIABLE_CONTILE_MAX_NUM_SPONSORED = "topSitesContileMaxSponsored";
 
-const PREF_UNIFIED_ADS_ENABLED = "unifiedAds.enabled";
+const PREF_UNIFIED_ADS_TILES_ENABLED = "unifiedAds.tiles.enabled";
 const PREF_UNIFIED_ADS_ENDPOINT = "unifiedAds.endpoint";
 const PREF_UNIFIED_ADS_PLACEMENTS = "discoverystream.placements.tiles";
 const PREF_UNIFIED_ADS_COUNTS = "discoverystream.placements.tiles.counts";
+const PREF_UNIFIED_ADS_BLOCKED_LIST = "unifiedAds.blockedAds";
 
 // Search experiment stuff
 const FILTER_DEFAULT_SEARCH_PREF = "improvesearch.noDefaultSearchTile";
@@ -389,13 +390,13 @@ export class ContileIntegration {
    *   string value of the Contile resposne cache-control header
    */
   _extractCacheValidFor(cacheHeader) {
-    const unifiedAdsEnabled =
+    const unifiedAdsTilesEnabled =
       this._topSitesFeed.store.getState().Prefs.values[
-        PREF_UNIFIED_ADS_ENABLED
+        PREF_UNIFIED_ADS_TILES_ENABLED
       ];
 
     // Note: Cache-control only applies to direct Contile API calls
-    if (!cacheHeader && !unifiedAdsEnabled) {
+    if (!cacheHeader && !unifiedAdsTilesEnabled) {
       lazy.log.warn("Contile response cache control header is empty");
       return 0;
     }
@@ -465,6 +466,7 @@ export class ContileIntegration {
 
       const formattedData = {
         id: tile.block_key,
+        block_key: tile.block_key,
         name: tile.name,
         url: tile.url,
         click_url: tile.callbacks.click,
@@ -497,17 +499,23 @@ export class ContileIntegration {
     let response;
     const state = this._topSitesFeed.store.getState();
 
-    const unifiedAdsEnabled = state.Prefs.values[PREF_UNIFIED_ADS_ENABLED];
+    const unifiedAdsTilesEnabled =
+      state.Prefs.values[PREF_UNIFIED_ADS_TILES_ENABLED];
 
-    const serviceName = unifiedAdsEnabled ? "MARS" : "Contile";
+    const serviceName = unifiedAdsTilesEnabled ? "MARS" : "Contile";
 
     try {
       // Fetch tiles via MARS unified ads service
-      if (unifiedAdsEnabled) {
+      if (unifiedAdsTilesEnabled) {
         const headers = new Headers();
         headers.append("content-type", "application/json");
 
         const endpointBaseUrl = state.Prefs.values[PREF_UNIFIED_ADS_ENDPOINT];
+
+        let blockedSponsors =
+          this._topSitesFeed.store.getState().Prefs.values[
+            PREF_UNIFIED_ADS_BLOCKED_LIST
+          ];
 
         // Overwrite URL to Unified Ads endpoint
         const fetchUrl = `${endpointBaseUrl}v1/ads`;
@@ -533,7 +541,7 @@ export class ContileIntegration {
               placement,
               count: countsArray[index],
             })),
-            blocks: [],
+            blocks: blockedSponsors.split(","),
           }),
         });
       } else {
@@ -579,7 +587,7 @@ export class ContileIntegration {
       }
       let body = await response.json();
 
-      if (unifiedAdsEnabled) {
+      if (unifiedAdsTilesEnabled) {
         // Converts response into normalized tiles[] array
         body = this._normalizeTileData(body);
       }
@@ -623,7 +631,7 @@ export class ContileIntegration {
           JSON.stringify(this._sites)
         );
 
-        if (!unifiedAdsEnabled) {
+        if (!unifiedAdsTilesEnabled) {
           Services.prefs.setIntPref(
             CONTILE_CACHE_VALID_FOR_PREF,
             this._extractCacheValidFor(
@@ -819,6 +827,7 @@ export class TopSitesFeed {
           sponsored_impression_url: site.impression_url,
           sponsored_tile_id: site.id,
           partner: SPONSORED_TILE_PARTNER_AMP,
+          block_key: site.id,
         };
         if (site.image_url && site.image_size >= MIN_FAVICON_SIZE) {
           // Only use the image from Contile if it's hi-res, otherwise, fallback
@@ -884,12 +893,14 @@ export class TopSitesFeed {
           sponsored_tile_id,
           sponsored_impression_url,
           sponsored_click_url,
+          block_key,
         } = siteData;
         link = {
           sponsored_position,
           sponsored_tile_id,
           sponsored_impression_url,
           sponsored_click_url,
+          block_key,
           show_sponsored_label: link.hostname !== "yandex",
           ...link,
         };

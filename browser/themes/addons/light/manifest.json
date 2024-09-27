@@ -52,9 +52,7 @@
       "input_color": "rgb(21,20,26)",
       "input_background": "rgb(255,255,255)",
       "urlbar_popup_hover": "rgb(240,240,244)",
-      "urlbar_popup_separator": "rgb(240,240,244)",
-      "tab_icon_overlay_stroke": "rgb(255,255,255)",
-      "tab_icon_overlay_fill": "rgb(91,91,102)"
+      "urlbar_popup_separator": "rgb(240,240,244)"
     },
     "properties": {
       "color_scheme": "light",
@@ -73,16 +71,14 @@
       "button": "--button-background-color",
       "button_hover": "--button-background-color-hover",
       "button_active": "--button-background-color-active",
-      "button_primary": "--button-primary-bgcolor",
-      "button_primary_hover": "--button-primary-hover-bgcolor",
-      "button_primary_active": "--button-primary-active-bgcolor",
-      "button_primary_color": "--button-primary-color",
+      "button_primary": "--color-accent-primary",
+      "button_primary_hover": "--color-accent-primary-hover",
+      "button_primary_active": "--color-accent-primary-active",
+      "button_primary_color": "--button-text-color-primary",
       "input_background": "--input-bgcolor",
       "input_color": "--input-color",
       "urlbar_popup_hover": "--urlbarView-hover-background",
-      "urlbar_popup_separator": "--urlbarView-separator-color",
-      "tab_icon_overlay_stroke": "--tab-icon-overlay-stroke",
-      "tab_icon_overlay_fill": "--tab-icon-overlay-fill"
+      "urlbar_popup_separator": "--urlbarView-separator-color"
     },
     "properties": {
       "panel_hover": "--panel-item-hover-bgcolor",

@@ -37,6 +37,7 @@ log = {version = "0.4", features = ["release_max_level_info"]}
 cose-c = { version = "0.1.5" }
 jsrust_shared = { path = "../../../../js/src/rust/shared" }
 cascade_bloom_filter = { path = "../../../components/cascade_bloom_filter" }
+signature_cache = { path = "../../../../security/certverifier/signature_cache" }
 cert_storage = { path = "../../../../security/manager/ssl/cert_storage" }
 crypto_hash = { path = "../../../../security/manager/ssl/crypto_hash" }
 data_storage = { path = "../../../../security/manager/ssl/data_storage" }
@@ -95,7 +96,7 @@ processtools = { path = "../../../components/processtools" }
 qcms = { path = "../../../../gfx/qcms", features = ["c_bindings", "neon"], default-features = false }
 
 wpf-gpu-raster = { git = "https://github.com/FirefoxGraphics/wpf-gpu-raster", rev = "99979da091fd58fba8477e7fcdf5ec0727102916" }
-aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "d94278ed9c7020f50232689a26d1277eb0eb74d2" }
+aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "35a650261605662795a04cc249c465436cbfab45" }
 etagere = { version = "0.2.13", features = ["ffi"] }
 
 url = "2.5.0"

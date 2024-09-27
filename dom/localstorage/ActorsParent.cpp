@@ -88,6 +88,7 @@
 #include "mozilla/dom/quota/QuotaObject.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
 #include "mozilla/dom/quota/UsageInfo.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/ipc/BackgroundChild.h"
 #include "mozilla/ipc/BackgroundParent.h"
 #include "mozilla/ipc/PBackgroundChild.h"
@@ -2232,6 +2233,7 @@ class PrepareDatastoreOp
     AfterNesting
   };
 
+  mozilla::glean::TimerId mProcessingTimerId;
   RefPtr<PrepareDatastoreOp> mDelayedOp;
   RefPtr<ClientDirectoryLock> mPendingDirectoryLock;
   RefPtr<DirectoryLock> mDirectoryLock;
@@ -6468,6 +6470,8 @@ mozilla::ipc::IPCResult LSRequestBase::RecvCancel() {
 
   Log();
 
+  glean::ls_request::recv_cancellation.Add();
+
   const char* crashOnCancel = PR_GetEnv("LSNG_CRASH_ON_CANCEL");
   if (crashOnCancel) {
     MOZ_CRASH("LSNG: Crash on cancel.");
@@ -6497,6 +6501,7 @@ PrepareDatastoreOp::PrepareDatastoreOp(
     const LSRequestParams& aParams,
     const Maybe<ContentParentId>& aContentParentId)
     : LSRequestBase(aParams, aContentParentId),
+      mProcessingTimerId(glean::ls_preparedatastore::processing_time.Start()),
       mLoadDataOp(nullptr),
       mPrivateBrowsingId(0),
       mUsage(0),
@@ -7572,6 +7577,11 @@ void PrepareDatastoreOp::CleanupMetadata() {
 
   if (gPrepareDatastoreOps->IsEmpty()) {
     gPrepareDatastoreOps = nullptr;
+  }
+
+  if (NS_SUCCEEDED(ResultCode())) {
+    glean::ls_preparedatastore::processing_time.StopAndAccumulate(
+        std::move(mProcessingTimerId));
   }
 }
 

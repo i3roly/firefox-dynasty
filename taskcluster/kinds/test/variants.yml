@@ -381,7 +381,10 @@ media-gpu:
     mozinfo: "mda_gpu"
     when:
         $eval: '
-                    "windows" in task["test-platform"]
+                    (
+                        "windows" in task["test-platform"]
+                        && "hw" in task["test-platform"]
+                    )
                     || "macosx" in task["test-platform"]
                 '
     merge:
@@ -394,6 +397,25 @@ media-gpu:
         mozharness:
             extra-options:
                 - "--setpref=media.hardware-video-decoding.force-enabled=true"
+
+no-gpu-process:
+    description: "{description} without a dedicated GPU process"
+    component: "Core::Graphics"
+    expiration: "2025-03-01"
+    suffix: "nogpu"
+    mozinfo: "nogpu"
+    when:
+        $eval: '
+                    "windows" in task["test-platform"]
+                    || "android" in task["test-platform"]
+                '
+    replace:
+        virtualization: virtual
+    merge:
+        mozharness:
+            extra-options:
+                - "--setpref=layers.gpu-process.enabled=false"
+                - "--setpref=layers.gpu-process.force-enabled=false"
 
 msix:
     description: "{description} from msix packages"
@@ -475,3 +497,18 @@ draw-snapshot:
         mozharness:
             extra-options:
                 - "--setpref=reftest.use-draw-snapshot=true"
+
+os-integration:
+    description: >-
+        {description} limited to tests identified as good candidates for validating the test environment.
+    component: Release Engineering::Firefox-CI Administration
+    expiration: never
+    suffix: osint
+    when:
+        $eval: >-
+            "debug" in task["test-platform"]
+            && !("macosx" in task["test-platform"])
+    merge:
+        worker:
+            env:
+                MOZHARNESS_TEST_TAG: ["os_integration"]

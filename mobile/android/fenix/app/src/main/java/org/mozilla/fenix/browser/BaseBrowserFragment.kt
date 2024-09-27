@@ -1447,16 +1447,14 @@ abstract class BaseBrowserFragment :
                         topToolbarHeight = topToolbarHeight,
                     )
             } else {
-                val toolbarHeight = if (customTabSessionId == null && context.isTabStripEnabled()) {
-                    resources.getDimensionPixelSize(R.dimen.browser_toolbar_height) +
-                        resources.getDimensionPixelSize(R.dimen.tab_strip_height)
-                } else {
-                    resources.getDimensionPixelSize(R.dimen.browser_toolbar_height)
-                }
-
                 val toolbarPosition = when (context.settings().toolbarPosition) {
                     ToolbarPosition.BOTTOM -> OldToolbarPosition.BOTTOM
                     ToolbarPosition.TOP -> OldToolbarPosition.TOP
+                }
+
+                val toolbarHeight = when (toolbarPosition) {
+                    OldToolbarPosition.BOTTOM -> bottomToolbarHeight
+                    OldToolbarPosition.TOP -> topToolbarHeight
                 }
                 (getSwipeRefreshLayout().layoutParams as CoordinatorLayout.LayoutParams).behavior =
                     OldEngineViewClippingBehavior(
@@ -2386,7 +2384,7 @@ abstract class BaseBrowserFragment :
             if (webAppToolbarShouldBeVisible) {
                 browserToolbarView.visible()
                 _bottomToolbarContainerView?.toolbarContainerView?.isVisible = true
-                reinitializeEngineView(false)
+                reinitializeEngineView()
                 browserToolbarView.expand()
                 _bottomToolbarContainerView?.toolbarContainerView?.expand()
             }
@@ -2435,9 +2433,8 @@ abstract class BaseBrowserFragment :
     }
 
     @VisibleForTesting
-    internal fun reinitializeEngineView(
-        isFullscreen: Boolean = fullScreenFeature.get()?.isFullScreen == true,
-    ) {
+    internal fun reinitializeEngineView() {
+        val isFullscreen = fullScreenFeature.get()?.isFullScreen == true
         val topToolbarHeight = requireContext().settings().getTopToolbarHeight(
             includeTabStrip = customTabSessionId == null && requireContext().isTabStripEnabled(),
         )

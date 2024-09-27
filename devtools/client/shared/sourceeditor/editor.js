@@ -247,6 +247,11 @@ class Editor extends EventEmitter {
         el.append(doc.createTextNode(`\\u${char.codePointAt(0).toString(16)}`));
         return el;
       },
+      // In CodeMirror 5, adds a `CodeMirror-selectedtext` class on selected text that
+      // can be used to set the selected text color, which isn't possible by default.
+      // This is especially useful for High Contrast Mode where we do need to adjust the
+      // selection text color
+      styleSelectedText: true,
     };
 
     // Additional shortcuts.
@@ -780,7 +785,6 @@ class Editor extends EventEmitter {
     });
 
     cm.isDocumentLoadComplete = false;
-    this.#ownerDoc.sourceEditor = { editor: this, cm };
     editors.set(this, cm);
 
     // For now, we only need to pipe the blur event
@@ -3089,6 +3093,51 @@ class Editor extends EventEmitter {
         cm.scrollTo(centeredX, centeredY);
       }
     }
+  }
+
+  // Used only in tests
+  setCursorAt(line, column) {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      const position = cm.state.doc.line(line + 1).from + column;
+      return cm.dispatch({ selection: { anchor: position, head: position } });
+    }
+    return cm.setCursor({ line, ch: column });
+  }
+
+  // Used only in tests
+  getEditorFileMode() {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      return cm.contentDOM.dataset.language;
+    }
+    return cm.getOption("mode").name;
+  }
+
+  // Used only in tests
+  getEditorContent() {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      return cm.state.doc.toString();
+    }
+    return cm.getValue();
+  }
+
+  isSearchStateReady() {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      return !!this.searchState.cursors;
+    }
+    return !!cm.state.search;
+  }
+
+  // Used only in tests
+  getLineCount() {
+    const cm = editors.get(this);
+    if (this.config.cm6) {
+      return cm.state.doc.lines;
+    }
+    return cm.lineCount();
   }
 
   /**

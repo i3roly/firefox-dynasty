@@ -5854,8 +5854,9 @@ static nscoord MinSize(const GridItemInfo& aGridItem,
   nsIFrame* child = aGridItem.mFrame;
   PhysicalAxis axis(aCBWM.PhysicalAxis(aAxis));
   const nsStylePosition* stylePos = child->StylePosition();
-  StyleSize sizeStyle =
-      axis == PhysicalAxis::Horizontal ? stylePos->mWidth : stylePos->mHeight;
+  StyleSize sizeStyle = axis == PhysicalAxis::Horizontal
+                            ? stylePos->GetWidth()
+                            : stylePos->GetHeight();
 
   auto ourInlineAxis =
       child->GetWritingMode().PhysicalAxis(LogicalAxis::Inline);
@@ -5895,8 +5896,8 @@ static nscoord MinSize(const GridItemInfo& aGridItem,
                    axis, aRC, child, IntrinsicISizeType::MinISize,
                    *aCache->mPercentageBasis);
   const StyleSize& style = axis == PhysicalAxis::Horizontal
-                               ? stylePos->mMinWidth
-                               : stylePos->mMinHeight;
+                               ? stylePos->GetMinWidth()
+                               : stylePos->GetMinHeight();
   // max-content and min-content should behave as initial value in block axis.
   // FIXME: Bug 567039: moz-fit-content and -moz-available are not supported
   // for block size dimension on sizing properties (e.g. height), so we
@@ -8279,9 +8280,12 @@ nscoord nsGridContainerFrame::MasonryLayout(GridReflowInput& aState,
         // we include it to be placed after the last grid item with the same
         // grid-axis start track.
         // XXXmats this is all a bit experimental at this point, pending a spec
+        const auto masonrySide = masonryAxis == LogicalAxis::Inline
+                                     ? LogicalSide::IStart
+                                     : LogicalSide::BStart;
         if (masonryStart == 0 ||
             (masonryStart == kAutoLine && item->mFrame->StylePosition()
-                                              ->mOffset.Start(masonryAxis, wm)
+                                              ->GetInset(masonrySide, wm)
                                               .IsAuto())) {
           sortedItems.AppendElement(item);
         } else {

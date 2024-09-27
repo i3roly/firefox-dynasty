@@ -164,11 +164,10 @@ void ParserSharedBase::dumpAtom(TaggedParserAtomIndex index) const {
 
 ParserBase::ParserBase(FrontendContext* fc,
                        const ReadOnlyCompileOptions& options,
-                       bool foldConstants, CompilationState& compilationState)
+                       CompilationState& compilationState)
     : ParserSharedBase(fc, compilationState, ParserSharedBase::Kind::Parser),
       anyChars(fc, options, this),
       ss(nullptr),
-      foldConstants_(foldConstants),
 #ifdef DEBUG
       checkOptionsCalled_(false),
 #endif
@@ -197,9 +196,8 @@ JSAtom* ParserBase::liftParserAtomToJSAtom(TaggedParserAtomIndex index) {
 template <class ParseHandler>
 PerHandlerParser<ParseHandler>::PerHandlerParser(
     FrontendContext* fc, const ReadOnlyCompileOptions& options,
-    bool foldConstants, CompilationState& compilationState,
-    void* internalSyntaxParser)
-    : ParserBase(fc, options, foldConstants, compilationState),
+    CompilationState& compilationState, void* internalSyntaxParser)
+    : ParserBase(fc, options, compilationState),
       handler_(fc, compilationState),
       internalSyntaxParser_(internalSyntaxParser) {
   MOZ_ASSERT(compilationState.isInitialStencil() ==
@@ -209,9 +207,9 @@ PerHandlerParser<ParseHandler>::PerHandlerParser(
 template <class ParseHandler, typename Unit>
 GeneralParser<ParseHandler, Unit>::GeneralParser(
     FrontendContext* fc, const ReadOnlyCompileOptions& options,
-    const Unit* units, size_t length, bool foldConstants,
-    CompilationState& compilationState, SyntaxParser* syntaxParser)
-    : Base(fc, options, foldConstants, compilationState, syntaxParser),
+    const Unit* units, size_t length, CompilationState& compilationState,
+    SyntaxParser* syntaxParser)
+    : Base(fc, options, compilationState, syntaxParser),
       tokenStream(fc, &compilationState.parserAtoms, options, units, length) {}
 
 template <typename Unit>
@@ -408,18 +406,6 @@ GeneralParser<ParseHandler, Unit>::parse() {
 
   if (!CheckParseTree(this->fc_, alloc_, stmtList)) {
     return errorResult();
-  }
-
-  if (foldConstants_) {
-    Node node = stmtList;
-    // Don't constant-fold inside "use asm" code, as this could create a parse
-    // tree that doesn't type-check as asm.js.
-    if (!pc_->useAsmOrInsideUseAsm()) {
-      if (!FoldConstants(this->fc_, this->parserAtoms(), &node, &handler_)) {
-        return errorResult();
-      }
-    }
-    stmtList = handler_.asListNode(node);
   }
 
   return stmtList;
@@ -1838,7 +1824,8 @@ Parser<FullParseHandler, Unit>::evalBody(EvalSharedContext* evalsc) {
   // Don't constant-fold inside "use asm" code, as this could create a parse
   // tree that doesn't type-check as asm.js.
   if (!pc_->useAsmOrInsideUseAsm()) {
-    if (!FoldConstants(this->fc_, this->parserAtoms(), &node, &handler_)) {
+    if (!FoldConstants(this->fc_, this->parserAtoms(), this->bigInts(), &node,
+                       &handler_)) {
       return errorResult();
     }
   }
@@ -1903,7 +1890,8 @@ FullParseHandler::ListNodeResult Parser<FullParseHandler, Unit>::globalBody(
   // Don't constant-fold inside "use asm" code, as this could create a parse
   // tree that doesn't type-check as asm.js.
   if (!pc_->useAsmOrInsideUseAsm()) {
-    if (!FoldConstants(this->fc_, this->parserAtoms(), &node, &handler_)) {
+    if (!FoldConstants(this->fc_, this->parserAtoms(), this->bigInts(), &node,
+                       &handler_)) {
       return errorResult();
     }
   }
@@ -2038,7 +2026,8 @@ FullParseHandler::ModuleNodeResult Parser<FullParseHandler, Unit>::moduleBody(
   // Don't constant-fold inside "use asm" code, as this could create a parse
   // tree that doesn't type-check as asm.js.
   if (!pc_->useAsmOrInsideUseAsm()) {
-    if (!FoldConstants(this->fc_, this->parserAtoms(), &node, &handler_)) {
+    if (!FoldConstants(this->fc_, this->parserAtoms(), this->bigInts(), &node,
+                       &handler_)) {
       return errorResult();
     }
   }
@@ -2431,7 +2420,8 @@ Parser<FullParseHandler, Unit>::standaloneFunction(
   // Don't constant-fold inside "use asm" code, as this could create a parse
   // tree that doesn't type-check as asm.js.
   if (!pc_->useAsmOrInsideUseAsm()) {
-    if (!FoldConstants(this->fc_, this->parserAtoms(), &node, &handler_)) {
+    if (!FoldConstants(this->fc_, this->parserAtoms(), this->bigInts(), &node,
+                       &handler_)) {
       return errorResult();
     }
   }
@@ -3463,7 +3453,8 @@ Parser<FullParseHandler, Unit>::standaloneLazyFunction(
   // Don't constant-fold inside "use asm" code, as this could create a parse
   // tree that doesn't type-check as asm.js.
   if (!pc_->useAsmOrInsideUseAsm()) {
-    if (!FoldConstants(this->fc_, this->parserAtoms(), &node, &handler_)) {
+    if (!FoldConstants(this->fc_, this->parserAtoms(), this->bigInts(), &node,
+                       &handler_)) {
       return errorResult();
     }
   }
@@ -5363,8 +5354,7 @@ GeneralParser<ParseHandler, Unit>::importDeclaration() {
   MOZ_TRY_VAR(importAttributeList,
               handler_.newList(ParseNodeKind::ImportAttributeList, pos()));
 
-  if (tt == TokenKind::With ||
-      (tt == TokenKind::Assert && options().importAttributesAssertSyntax())) {
+  if (tt == TokenKind::With) {
     tokenStream.consumeKnownToken(tt, TokenStream::SlashIsRegExp);
 
     if (!withClause(importAttributeList)) {
@@ -5738,8 +5728,7 @@ GeneralParser<ParseHandler, Unit>::exportFrom(uint32_t begin, Node specList) {
   ListNodeType importAttributeList;
   MOZ_TRY_VAR(importAttributeList,
               handler_.newList(ParseNodeKind::ImportAttributeList, pos()));
-  if (tt == TokenKind::With ||
-      (tt == TokenKind::Assert && options().importAttributesAssertSyntax())) {
+  if (tt == TokenKind::With) {
     tokenStream.consumeKnownToken(tt, TokenStream::SlashIsRegExp);
 
     if (!withClause(importAttributeList)) {
@@ -11647,26 +11636,23 @@ Parser<FullParseHandler, Unit>::newBigInt() {
     return errorResult();
   }
 
-  BigIntIndex index(this->compilationState_.bigIntData.length());
+  BigIntIndex index(this->bigInts().length());
   if (uint32_t(index) >= TaggedScriptThingIndex::IndexLimit) {
     ReportAllocationOverflow(fc_);
     return errorResult();
   }
-  if (!this->compilationState_.bigIntData.emplaceBack()) {
+  if (!this->bigInts().emplaceBack()) {
     js::ReportOutOfMemory(this->fc_);
     return errorResult();
   }
 
-  if (!this->compilationState_.bigIntData[index].init(
-          this->fc_, this->stencilAlloc(), chars)) {
+  if (!this->bigInts()[index].init(this->fc_, this->stencilAlloc(), chars)) {
     return errorResult();
   }
 
-  bool isZero = this->compilationState_.bigIntData[index].isZero();
-
   // Should the operations below fail, the buffer held by data will
   // be cleaned up by the CompilationState destructor.
-  return handler_.newBigInt(index, isZero, pos());
+  return handler_.newBigInt(index, pos());
 }
 
 template <typename Unit>

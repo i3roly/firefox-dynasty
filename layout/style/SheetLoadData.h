@@ -98,6 +98,7 @@ class SheetLoadData final
   NS_DECL_ISUPPORTS
 
   css::Loader& Loader() { return *mLoader; }
+  const css::Loader& Loader() const { return *mLoader; }
 
   void DidCancelLoad() { mIsCancelled = true; }
 
@@ -204,6 +205,17 @@ class SheetLoadData final
   // to true if this load, or the load of any descendant import, fails.
   bool mLoadFailed : 1;
 
+  // If this flag is true, this load uses a cached load, where the corresponding
+  // notifications from the necko channel doesn't happen for the current
+  // document.  The loader should emulate the equivalent once the load finishes.
+  // See Loader::NotifyObservers.
+  //
+  // This becomes true in the following cases:
+  //   * This load is coalesced to a pending or loading cache, where the load
+  //     is performed by a different loader for the different document
+  //   * This load uses a complete cache and no necko activity happens
+  bool mShouldEmulateNotificationsForCachedLoad : 1;
+
   // Whether this is a preload, and which kind of preload it is.
   //
   // TODO(emilio): This can become a bitfield once we build with a GCC version
@@ -262,11 +274,13 @@ class SheetLoadData final
   }
 
   bool IsPreload() const { return mPreloadKind != StylePreloadKind::None; }
-  bool IsLinkRelPreload() const { return css::IsLinkRelPreload(mPreloadKind); }
+  bool IsLinkRelPreloadOrEarlyHint() const {
+    return css::IsLinkRelPreloadOrEarlyHint(mPreloadKind);
+  }
 
   bool BlocksLoadEvent() const {
     const auto& root = RootLoadData();
-    return !root.IsLinkRelPreload() && !root.IsSyncLoad();
+    return !root.IsLinkRelPreloadOrEarlyHint() && !root.IsSyncLoad();
   }
 
   bool IsSyncLoad() const override { return mSyncLoad; }
@@ -275,6 +289,11 @@ class SheetLoadData final
 
   void StartLoading() override;
   void SetLoadCompleted() override;
+  void OnCoalescedTo(const SheetLoadData& aExistingLoad) override {
+    if (&aExistingLoad.Loader() != &Loader()) {
+      mShouldEmulateNotificationsForCachedLoad = true;
+    }
+  }
 
   void Cancel() override { mIsCancelled = true; }
 

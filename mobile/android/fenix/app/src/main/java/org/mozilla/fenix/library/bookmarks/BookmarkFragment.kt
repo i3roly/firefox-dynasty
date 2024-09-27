@@ -22,6 +22,7 @@ import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.get
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDirections
 import androidx.navigation.NavHostController
@@ -117,7 +118,8 @@ class BookmarkFragment : LibraryPageFragment<BookmarkNode>(), UserInteractionHan
                             middleware = listOf(
                                 BookmarksMiddleware(
                                     bookmarksStorage = requireContext().bookmarkStorage,
-                                    exitBookmarks = { findNavController().popBackStack() },
+                                    clipboardManager = requireActivity().getSystemService(),
+                                    addNewTabUseCase = requireComponents.useCases.tabsUseCases.addTab,
                                     navigateToSignIntoSync = {
                                         findNavController()
                                             .navigate(
@@ -127,10 +129,32 @@ class BookmarkFragment : LibraryPageFragment<BookmarkNode>(), UserInteractionHan
                                             )
                                     },
                                     navController = navController,
-                                    resolveFolderTitle = {
-                                        friendlyRootTitle(requireContext(), it) ?: ""
+                                    exitBookmarks = { findNavController().popBackStack() },
+                                    shareBookmark = { url, title ->
+                                        findNavController().nav(
+                                            R.id.bookmarkFragment,
+                                            BookmarkFragmentDirections.actionGlobalShareFragment(
+                                                data = arrayOf(
+                                                    ShareData(url = url, title = title),
+                                                ),
+                                            ),
+                                        )
                                     },
-                                    getBrowsingMode = { BrowsingMode.Normal },
+                                    showTabsTray = ::showTabTray,
+                                    resolveFolderTitle = {
+                                        friendlyRootTitle(
+                                            context = requireContext(),
+                                            node = it,
+                                            rootTitles = composeRootTitles(requireContext()),
+                                        ) ?: ""
+                                    },
+                                    showUrlCopiedSnackbar = {
+                                        showSnackBarWithText(resources.getString(R.string.url_copied))
+                                    },
+                                    getBrowsingMode = {
+                                        (requireActivity() as? HomeActivity)
+                                            ?.browsingModeManager?.mode ?: BrowsingMode.Normal
+                                    },
                                     openTab = { url, openInNewTab ->
                                         (activity as HomeActivity).openToBrowserAndLoad(
                                             searchTermOrURL = url,
@@ -146,7 +170,6 @@ class BookmarkFragment : LibraryPageFragment<BookmarkNode>(), UserInteractionHan
                         )
                     }
                 }
-
                 setContent {
                     FirefoxTheme {
                         BookmarksScreen(buildStore = buildStore)

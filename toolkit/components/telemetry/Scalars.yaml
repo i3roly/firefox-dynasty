@@ -650,6 +650,21 @@ browser.engagement:
     record_in_processes:
       - 'main'
 
+  max_concurrent_vertical_tab_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of maximum number of tabs with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+
   tab_open_event_count:
     bug_numbers:
       - 1271304
@@ -665,6 +680,21 @@ browser.engagement:
     products:
       - 'firefox'
       - 'fennec'
+    record_in_processes:
+      - 'main'
+
+  vertical_tab_open_event_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of tab open events with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
     record_in_processes:
       - 'main'
 
@@ -723,6 +753,21 @@ browser.engagement:
     record_in_processes:
       - 'main'
 
+  max_concurrent_vertical_tab_pinned_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of maximum number of pinned tabs with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+
   tab_pinned_event_count:
     bug_numbers:
       - 1505535
@@ -738,6 +783,21 @@ browser.engagement:
     products:
       - 'firefox'
       - 'fennec'
+    record_in_processes:
+      - 'main'
+
+  vertical_tab_pinned_event_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of tab pinned events with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
     record_in_processes:
       - 'main'
 
@@ -6868,6 +6928,74 @@ urlbar.picked:
         - 1671508
       description: >
         Counts how many times this result type was picked at a given index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_actions:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict actions result was picked at a given
+        index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_bookmarks:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict bookmarks result was picked at a
+        given index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_history:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict history result was picked at a given
+        index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_tabs:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict tabs result was picked at a given
+        index.
       expires: never
       kind: uint
       keyed: true

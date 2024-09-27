@@ -19,7 +19,7 @@ object Versions {
     const val serialization = "1.6.3"
     const val python_envs_plugin = "0.0.31"
 
-    const val mozilla_glean = "61.0.0"
+    const val mozilla_glean = "61.1.0"
 
     const val robolectric = "4.13"
     const val mockito = "5.13.0"
@@ -57,7 +57,7 @@ object Versions {
         const val appcompat = "1.7.0"
         const val arch = "2.2.0"
         const val autofill = "1.1.0"
-        const val benchmark = "1.3.0"
+        const val benchmark = "1.3.1"
         const val biometric = "1.1.0"
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
@@ -78,7 +78,7 @@ object Versions {
         const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
-        const val profileinstaller = "1.3.1"
+        const val profileinstaller = "1.4.0"
         const val recyclerview = "1.3.2"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"

@@ -621,6 +621,23 @@ networking:
       - necko@mozilla.com
     expires: 136
 
+  http_ip_addr_any_count:
+    type: labeled_counter
+    description: >
+      The number of times we see the IP address 0.0.0.0 or its IPv6 equivalent.
+    bugs:
+    - https://bugzilla.mozilla.org/show_bug.cgi?id=1914583
+    data_reviews:
+    - https://bugzilla.mozilla.org/show_bug.cgi?id=1914583
+    data_sensitivity:
+    - technical
+    notification_emails:
+    - necko@mozilla.com
+    expires: 138
+    labels:
+    - not_blocked_requests
+    - blocked_requests
+
   http_onstart_suspend_total_time:
     type: timing_distribution
     time_unit: millisecond
@@ -1020,6 +1037,26 @@ networking:
     labels:
       - capable
       - not-capable
+
+  http_3_loss_ratio:
+    type: custom_distribution
+    unit: integer
+    range_min: 0
+    range_max: 2000
+    bucket_count: 100
+    histogram_type: exponential
+    description: >
+      HTTP3: packet loss ratio (multiply by 10000).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917778
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917778
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
 
   cache_metadata_first_read_time: &cache_metadata_first_read_time
     type: timing_distribution

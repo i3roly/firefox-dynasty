@@ -237,9 +237,18 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
-    "unifiedAds.enabled",
+    "unifiedAds.tiles.enabled",
     {
-      title: "Use Mozilla Ad Routing Service (MARS) unified ads API",
+      title:
+        "Use Mozilla Ad Routing Service (MARS) unified ads API for sponsored top sites tiles",
+      value: false,
+    },
+  ],
+  [
+    "unifiedAds.spocs.enabled",
+    {
+      title:
+        "Use Mozilla Ad Routing Service (MARS) unified ads API for sponsored content in Recommend Stories",
       value: false,
     },
   ],
@@ -248,6 +257,14 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Mozilla Ad Routing Service (MARS) unified ads API endpoint URL",
       value: "https://ads.mozilla.org/",
+    },
+  ],
+  [
+    "unifiedAds.blockedAds",
+    {
+      title:
+        "CSV list of blocked (dismissed) MARS ads. This payload is sent back every time new ads are fetched.",
+      value: "",
     },
   ],
   [
@@ -788,18 +805,25 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
-    "discoverystream.contextualContent.topics",
+    "discoverystream.contextualContent.feeds",
     {
       title: "CSV list of possible topics for the contextual content feed",
-      value: "",
+      value: "need_to_know",
     },
   ],
   [
-    "discoverystream.contextualContent.detailedView",
+    "discoverystream.contextualContent.selectedFeed",
     {
       title:
-        "Controls if cards in contextual content feed display meta information and images",
-      value: false,
+        "currently selected feed (one of discoverystream.contextualContent.feeds) to display in listfeed",
+      value: "need_to_know",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.listFeedTitle",
+    {
+      title: "Title for currently selected feed",
+      value: "",
     },
   ],
   [

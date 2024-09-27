@@ -92,6 +92,7 @@ namespace mozilla::dom {
 // Number of milliseconds between timeupdate events as defined by spec
 #define TIMEUPDATE_MS 250
 
+class HTMLVideoElement;
 class MediaError;
 class MediaSource;
 class PlayPromise;
@@ -151,6 +152,8 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   explicit HTMLMediaElement(
       already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo);
   void Init();
+
+  virtual HTMLVideoElement* AsHTMLVideoElement() { return nullptr; };
 
   // `eMandatory`: `timeupdate` occurs according to the spec requirement.
   // Eg.
@@ -1234,7 +1237,8 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   /**
    * Dispatches an error event to a child source element.
    */
-  void DispatchAsyncSourceError(nsIContent* aSourceElement);
+  void DispatchAsyncSourceError(nsIContent* aSourceElement,
+                                const nsACString& aErrorDetails);
 
   /**
    * Resets the media element for an error condition as per aErrorCode.

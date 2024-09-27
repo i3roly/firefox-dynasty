@@ -3747,9 +3747,9 @@ bool PresShell::ScrollFrameIntoView(
     }
     // If we're targetting a sticky element, make sure not to apply
     // scroll-padding on the direction we're stuck.
-    const auto& offsets = aFrame->StylePosition()->mOffset;
+    const auto* stylePosition = aFrame->StylePosition();
     for (auto side : AllPhysicalSides()) {
-      if (offsets.Get(side).IsAuto()) {
+      if (stylePosition->GetInset(side).IsAuto()) {
         continue;
       }
       // See if this axis is stuck.
@@ -8722,7 +8722,11 @@ void PresShell::EventHandler::FinalizeHandlingEvent(
           if (aEvent->mMessage == eKeyDown &&
               !aEvent->mFlags.mDefaultPrevented) {
             if (RefPtr<Document> doc = GetDocument()) {
-              doc->HandleEscKey();
+              if (StaticPrefs::dom_closewatcher_enabled()) {
+                doc->ProcessCloseRequest();
+              } else {
+                doc->HandleEscKey();
+              }
             }
           }
         }
@@ -11781,17 +11785,17 @@ PresShell::WindowSizeConstraints PresShell::GetWindowSizeConstraints() {
     return {minSize, maxSize};
   }
   const auto* pos = rootFrame->StylePosition();
-  if (pos->mMinWidth.ConvertsToLength()) {
-    minSize.width = pos->mMinWidth.ToLength();
+  if (pos->GetMinWidth().ConvertsToLength()) {
+    minSize.width = pos->GetMinWidth().ToLength();
   }
-  if (pos->mMinHeight.ConvertsToLength()) {
-    minSize.height = pos->mMinHeight.ToLength();
+  if (pos->GetMinHeight().ConvertsToLength()) {
+    minSize.height = pos->GetMinHeight().ToLength();
   }
-  if (pos->mMaxWidth.ConvertsToLength()) {
-    maxSize.width = pos->mMaxWidth.ToLength();
+  if (pos->GetMaxWidth().ConvertsToLength()) {
+    maxSize.width = pos->GetMaxWidth().ToLength();
   }
-  if (pos->mMaxHeight.ConvertsToLength()) {
-    maxSize.height = pos->mMaxHeight.ToLength();
+  if (pos->GetMaxHeight().ConvertsToLength()) {
+    maxSize.height = pos->GetMaxHeight().ToLength();
   }
   return {minSize, maxSize};
 }

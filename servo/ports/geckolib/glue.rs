@@ -67,7 +67,6 @@ use style::gecko_bindings::structs::nsCSSFontDesc;
 use style::gecko_bindings::structs::nsCSSPropertyID;
 use style::gecko_bindings::structs::nsChangeHint;
 use style::gecko_bindings::structs::nsCompatibility;
-use style::gecko_bindings::structs::nsStyleTransformMatrix::MatrixTransformOperator;
 use style::gecko_bindings::structs::nsresult;
 use style::gecko_bindings::structs::CallerType;
 use style::gecko_bindings::structs::CompositeOperation;
@@ -4768,28 +4767,24 @@ pub extern "C" fn Servo_GetProperties_Overriding_Animation(
 
 #[no_mangle]
 pub extern "C" fn Servo_MatrixTransform_Operate(
-    matrix_operator: MatrixTransformOperator,
-    from: *const structs::Matrix4x4Components,
-    to: *const structs::Matrix4x4Components,
+    interpolate: bool,
+    from: &structs::Matrix4x4Components,
+    to: &structs::Matrix4x4Components,
     progress: f64,
-    output: *mut structs::Matrix4x4Components,
+    output: &mut structs::Matrix4x4Components,
 ) {
-    use self::MatrixTransformOperator::{Accumulate, Interpolate};
     use style::values::computed::transform::Matrix3D;
 
-    let from = Matrix3D::from(unsafe { from.as_ref() }.expect("not a valid 'from' matrix"));
-    let to = Matrix3D::from(unsafe { to.as_ref() }.expect("not a valid 'to' matrix"));
-    let result = match matrix_operator {
-        Interpolate => from.animate(&to, Procedure::Interpolate { progress }),
-        Accumulate => from.animate(
-            &to,
-            Procedure::Accumulate {
-                count: progress as u64,
-            },
-        ),
+    let from = Matrix3D::from(from);
+    let to = Matrix3D::from(to);
+    let proc = if interpolate {
+        Procedure::Interpolate { progress }
+    } else {
+        Procedure::Accumulate {
+            count: progress as u64,
+        }
     };
-
-    let output = unsafe { output.as_mut() }.expect("not a valid 'output' matrix");
+    let result = from.animate(&to, proc);
     if let Ok(result) = result {
         *output = result.into();
     } else if progress < 0.5 {
@@ -5588,7 +5583,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetPixelValue(
 ) {
     use style::properties::longhands::border_spacing::SpecifiedValue as BorderSpacing;
     use style::properties::PropertyDeclaration;
-    use style::values::generics::length::{LengthPercentageOrAuto, Size};
+    use style::values::generics::length::{GenericMargin, Size};
     use style::values::generics::NonNegative;
     use style::values::specified::length::{
         LengthPercentage, NonNegativeLength, NonNegativeLengthPercentage,
@@ -5598,7 +5593,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetPixelValue(
     let long = get_longhand_from_id!(property);
     let nocalc = NoCalcLength::from_px(value);
     let lp = LengthPercentage::Length(nocalc);
-    let lp_or_auto = LengthPercentageOrAuto::LengthPercentage(lp.clone());
+    let margin = GenericMargin::LengthPercentage(lp.clone());
     let prop = match_wrap_declared! { long,
         Height => Size::LengthPercentage(NonNegative(lp)),
         Width => Size::LengthPercentage(NonNegative(lp)),
@@ -5606,10 +5601,10 @@ pub extern "C" fn Servo_DeclarationBlock_SetPixelValue(
         BorderRightWidth => BorderSideWidth::from_px(value),
         BorderBottomWidth => BorderSideWidth::from_px(value),
         BorderLeftWidth => BorderSideWidth::from_px(value),
-        MarginTop => lp_or_auto,
-        MarginRight => lp_or_auto,
-        MarginBottom => lp_or_auto,
-        MarginLeft => lp_or_auto,
+        MarginTop => margin,
+        MarginRight => margin,
+        MarginBottom => margin,
+        MarginLeft => margin,
         PaddingTop => NonNegative(lp),
         PaddingRight => NonNegative(lp),
         PaddingBottom => NonNegative(lp),
@@ -5827,7 +5822,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetPercentValue(
 ) {
     use style::properties::PropertyDeclaration;
     use style::values::computed::Percentage;
-    use style::values::generics::length::{LengthPercentageOrAuto, Size};
+    use style::values::generics::length::{GenericMargin, LengthPercentageOrAuto, Size};
     use style::values::generics::NonNegative;
     use style::values::specified::length::LengthPercentage;
     use style::values::specified::FontSize;
@@ -5835,7 +5830,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetPercentValue(
     let long = get_longhand_from_id!(property);
     let pc = Percentage(value);
     let lp = LengthPercentage::Percentage(pc);
-    let lp_or_auto = LengthPercentageOrAuto::LengthPercentage(lp.clone());
+    let margin = GenericMargin::LengthPercentage(lp.clone());
 
     let prop = match_wrap_declared! { long,
         Height => Size::LengthPercentage(NonNegative(lp)),
@@ -5847,10 +5842,10 @@ pub extern "C" fn Servo_DeclarationBlock_SetPercentValue(
         R =>  NonNegative(lp),
         Rx => LengthPercentageOrAuto::LengthPercentage(NonNegative(lp)),
         Ry => LengthPercentageOrAuto::LengthPercentage(NonNegative(lp)),
-        MarginTop => lp_or_auto,
-        MarginRight => lp_or_auto,
-        MarginBottom => lp_or_auto,
-        MarginLeft => lp_or_auto,
+        MarginTop => margin,
+        MarginRight => margin,
+        MarginBottom => margin,
+        MarginLeft => margin,
         FontSize => FontSize::Length(LengthPercentage::Percentage(pc)),
     };
     write_locked_arc(declarations, |decls: &mut PropertyDeclarationBlock| {
@@ -5864,10 +5859,10 @@ pub extern "C" fn Servo_DeclarationBlock_SetAutoValue(
     property: nsCSSPropertyID,
 ) {
     use style::properties::PropertyDeclaration;
-    use style::values::generics::length::{LengthPercentageOrAuto, Size};
+    use style::values::generics::length::{GenericMargin, Size};
 
     let long = get_longhand_from_id!(property);
-    let auto = LengthPercentageOrAuto::Auto;
+    let auto = GenericMargin::Auto;
 
     let prop = match_wrap_declared! { long,
         Height => Size::auto(),

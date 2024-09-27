@@ -96,9 +96,9 @@
 
     <!-- Total cookie protection "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the total cookie protection feature. -->
-    <string name="tcp_cfr_message">Our most powerful privacy feature yet isolates cross-site trackers.</string>
+    <string name="tcp_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Our most powerful privacy feature yet isolates cross-site trackers.</string>
     <!-- Text displayed that links to website containing documentation about the "Total cookie protection" feature. -->
-    <string name="tcp_cfr_learn_more">Learn about Total Cookie Protection</string>
+    <string name="tcp_cfr_learn_more" moz:removedIn="132" tools:ignore="UnusedResources">Learn about Total Cookie Protection</string>
 
     <!-- Private browsing erase action "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the erase private browsing feature. -->
@@ -207,8 +207,11 @@
     <string name="browser_menu_manage_extensions">Manage extensions</string>
     <!-- Content description (not visible, for screen readers etc.): Section heading for recommended extensions.-->
     <string name="browser_menu_recommended_section_content_description">Recommended extensions</string>
+    <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extension.
+      The first parameter is the name of the extension (for example: ClearURLs). -->
+    <string name="browser_menu_extension_plus_icon_content_description_2">Add %1$s</string>
     <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extensions. -->
-    <string name="browser_menu_extension_plus_icon_content_description">Add extension</string>
+    <string name="browser_menu_extension_plus_icon_content_description" moz:removedIn="124" tools:ignore="UnusedResources">Add extension</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Discover more extensions</string>
     <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
@@ -1170,6 +1173,8 @@
     <string name="bookmark_saved_in_folder_snackbar">Saved in “%s”</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">EDIT</string>
+    <!-- Bookmark menu move button -->
+    <string name="bookmark_menu_move_button">Move</string>
     <!-- Bookmark overflow menu edit button -->
     <string name="bookmark_menu_edit_button">Edit</string>
     <!-- Bookmark overflow menu copy button -->
@@ -1226,6 +1231,12 @@
     <string name="bookmark_deletion_multiple_snackbar_message_3">Deleting selected folders</string>
     <!-- Bookmark undo button for deletion snackbar action -->
     <string name="bookmark_undo_deletion">UNDO</string>
+    <!-- Bookmark snackbar message for deleting a single item. Parameter is the title of the item being deleted -->
+    <string name="bookmark_delete_single_item">Deleted %s</string>
+    <!-- Bookmark snackbar message for deleting multiple items. Parameter is the number of items being deleted -->
+    <string name="bookmark_delete_multiple_items">Deleted %s items</string>
+    <!-- Bookmark folder deletion dialog title. Parameter is the number of items being deleted -->
+    <string name="bookmark_delete_folder_dialog_title">Are you sure you want to delete %s items?</string>
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Enter search terms</string>
     <!-- Content description for the bookmark navigation bar back button -->
@@ -1236,6 +1247,8 @@
     <string name ="bookmark_close_button_content_description" tools:ignore="UnusedResources" moz:removedIn="130">Close bookmarks</string>
     <!-- Content description for bookmark search floating action button -->
     <string name ="bookmark_search_button_content_description">Search bookmarks</string>
+    <!-- Content description for icon to open the overflow menu for selected bookmarks -->
+    <string name ="bookmark_selected_menu_button_content_description">Overflow menu</string>
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
     <string name ="bookmark_item_menu_button_content_description">Item Menu for %s</string>
     <!-- Title for the bookmark list empty state-->
@@ -1248,6 +1261,8 @@
     <string name ="bookmark_empty_list_authenticated_description">Save sites as you browse. We’ll also grab bookmarks from other synced devices.</string>
     <!-- Description for the bookmark list empty state when you're in an empty folder. -->
     <string name ="bookmark_empty_list_folder_description">Add bookmarks as you browse so you can find your favorite sites later.</string>
+    <!-- Description for the add new folder button when selecting a folder. -->
+    <string name="bookmark_select_folder_new_folder_button_title">New folder</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2768,6 +2783,10 @@
     <string name="debug_drawer_cfr_tools_title">CFR Tools</string>
     <!-- The title of the reset CFR section in CFR Tools -->
     <string name="debug_drawer_cfr_tools_reset_cfr_title">Reset CFRs</string>
+
+    <!-- Glean debug tools -->
+    <!-- The title of the glean debugging feature -->
+    <string name="glean_debug_tools_title">Glean Debug Tools</string>
 
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->

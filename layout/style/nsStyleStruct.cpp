@@ -309,9 +309,12 @@ static StyleRect<T> StyleRectWithAllSides(const T& aSide) {
   return {aSide, aSide, aSide, aSide};
 }
 
+const StyleMargin nsStyleMargin::kZeroMargin =
+    StyleMargin::LengthPercentage(StyleLengthPercentage::Zero());
+
 nsStyleMargin::nsStyleMargin()
     : mMargin(StyleRectWithAllSides(
-          LengthPercentageOrAuto::LengthPercentage(LengthPercentage::Zero()))),
+          StyleMargin::LengthPercentage(LengthPercentage::Zero()))),
       mScrollMargin(StyleRectWithAllSides(StyleLength{0.})),
       mOverflowClipMargin(StyleLength::Zero()) {
   MOZ_COUNT_CTOR(nsStyleMargin);
@@ -328,7 +331,7 @@ nsChangeHint nsStyleMargin::CalcDifference(
     const nsStyleMargin& aNewData) const {
   nsChangeHint hint = nsChangeHint(0);
 
-  if (mMargin != aNewData.mMargin) {
+  if (!MarginEquals(aNewData)) {
     // Margin differences can't affect descendant intrinsic sizes and
     // don't need to force children to reflow.
     hint |= nsChangeHint_NeedReflow | nsChangeHint_ReflowChangesSizeOrPosition |
@@ -1257,12 +1260,12 @@ nsChangeHint nsStylePosition::CalcDifference(
     hint |= nsChangeHint_NeedReflow;
   }
 
-  bool widthChanged = mWidth != aNewData.mWidth ||
-                      mMinWidth != aNewData.mMinWidth ||
-                      mMaxWidth != aNewData.mMaxWidth;
-  bool heightChanged = mHeight != aNewData.mHeight ||
-                       mMinHeight != aNewData.mMinHeight ||
-                       mMaxHeight != aNewData.mMaxHeight;
+  bool widthChanged = GetWidth() != aNewData.GetWidth() ||
+                      GetMinWidth() != aNewData.GetMinWidth() ||
+                      GetMaxWidth() != aNewData.GetMaxWidth();
+  bool heightChanged = GetHeight() != aNewData.GetHeight() ||
+                       GetMinHeight() != aNewData.GetMinHeight() ||
+                       GetMaxHeight() != aNewData.GetMaxHeight();
 
   if (widthChanged || heightChanged) {
     // It doesn't matter whether we're looking at the old or new visibility
@@ -1305,7 +1308,7 @@ nsChangeHint nsStylePosition::CalcDifference(
   // Don't try to handle changes between types efficiently; at least for
   // changing into/out of `auto`, we will hardly ever be able to avoid a reflow.
   // TODO(dshin, Bug 1917695): Re-evaulate this for `anchor()`.
-  if (mOffset != aNewData.mOffset) {
+  if (!InsetEquals(aNewData)) {
     if (IsEqualInsetType(mOffset, aNewData.mOffset)) {
       hint |=
           nsChangeHint_RecomputePosition | nsChangeHint_UpdateParentOverflow;
@@ -1353,6 +1356,10 @@ StyleJustifySelf nsStylePosition::UsedJustifySelf(
   }
   return {StyleAlignFlags::NORMAL};
 }
+
+const StyleInset nsStylePosition::kAutoInset = StyleInset::Auto();
+const StyleSize nsStylePosition::kAutoSize = StyleSize::Auto();
+const StyleMaxSize nsStylePosition::kNoneMaxSize = StyleMaxSize::None();
 
 // --------------------
 // nsStyleTable
