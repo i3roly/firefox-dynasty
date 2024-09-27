@@ -446,9 +446,6 @@ function shadow(obj, prop, value, nonSerializable = false) {
 }
 const BaseException = function BaseExceptionClosure() {
   function BaseException(message, name) {
-    if (this.constructor === BaseException) {
-      unreachable("Cannot initialize BaseException.");
-    }
     this.message = message;
     this.name = name;
   }
@@ -817,11 +814,6 @@ const FontRenderOps = {
 ;// CONCATENATED MODULE: ./src/display/base_factory.js
 
 class BaseFilterFactory {
-  constructor() {
-    if (this.constructor === BaseFilterFactory) {
-      unreachable("Cannot initialize BaseFilterFactory.");
-    }
-  }
   addFilter(maps) {
     return "none";
   }
@@ -844,9 +836,6 @@ class BaseCanvasFactory {
   constructor({
     enableHWA = false
   } = {}) {
-    if (this.constructor === BaseCanvasFactory) {
-      unreachable("Cannot initialize BaseCanvasFactory.");
-    }
     this.#enableHWA = enableHWA;
   }
   create(width, height) {
@@ -889,9 +878,6 @@ class BaseCMapReaderFactory {
     baseUrl = null,
     isCompressed = true
   }) {
-    if (this.constructor === BaseCMapReaderFactory) {
-      unreachable("Cannot initialize BaseCMapReaderFactory.");
-    }
     this.baseUrl = baseUrl;
     this.isCompressed = isCompressed;
   }
@@ -918,9 +904,6 @@ class BaseStandardFontDataFactory {
   constructor({
     baseUrl = null
   }) {
-    if (this.constructor === BaseStandardFontDataFactory) {
-      unreachable("Cannot initialize BaseStandardFontDataFactory.");
-    }
     this.baseUrl = baseUrl;
   }
   async fetch({
@@ -942,11 +925,6 @@ class BaseStandardFontDataFactory {
   }
 }
 class BaseSVGFactory {
-  constructor() {
-    if (this.constructor === BaseSVGFactory) {
-      unreachable("Cannot initialize BaseSVGFactory.");
-    }
-  }
   create(width, height, skipDimensions = false) {
     if (width <= 0 || height <= 0) {
       throw new Error("Invalid SVG dimensions");
@@ -2304,19 +2282,22 @@ class AnnotationEditorUIManager {
     this.#viewer = viewer;
     this.#altTextManager = altTextManager;
     this._eventBus = eventBus;
-    this._eventBus._on("editingaction", this.onEditingAction.bind(this), {
+    eventBus._on("editingaction", this.onEditingAction.bind(this), {
       signal
     });
-    this._eventBus._on("pagechanging", this.onPageChanging.bind(this), {
+    eventBus._on("pagechanging", this.onPageChanging.bind(this), {
       signal
     });
-    this._eventBus._on("scalechanging", this.onScaleChanging.bind(this), {
+    eventBus._on("scalechanging", this.onScaleChanging.bind(this), {
       signal
     });
-    this._eventBus._on("rotationchanging", this.onRotationChanging.bind(this), {
+    eventBus._on("rotationchanging", this.onRotationChanging.bind(this), {
       signal
     });
-    this._eventBus._on("setpreference", this.onSetPreference.bind(this), {
+    eventBus._on("setpreference", this.onSetPreference.bind(this), {
+      signal
+    });
+    eventBus._on("switchannotationeditorparams", evt => this.updateParams(evt.type, evt.value), {
       signal
     });
     this.#addSelectionListener();
@@ -3822,7 +3803,8 @@ class AnnotationEditor {
   _isVisible = true;
   _uiManager = null;
   _focusEventsAllowed = true;
-  _l10nPromise = null;
+  static _l10nPromise = null;
+  static _l10nResizer = null;
   #isDraggable = false;
   #zIndex = AnnotationEditor._zIndex++;
   static _borderLineWidth = -1;
@@ -3852,9 +3834,6 @@ class AnnotationEditor {
     }], [["Escape", "mac+Escape"], AnnotationEditor.prototype._stopResizingWithKeyboard]]));
   }
   constructor(parameters) {
-    if (this.constructor === AnnotationEditor) {
-      unreachable("Cannot initialize AnnotationEditor.");
-    }
     this.parent = parameters.parent;
     this.id = parameters.id;
     this.width = this.height = null;
@@ -3902,8 +3881,17 @@ class AnnotationEditor {
     fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
   }
   static initialize(l10n, _uiManager, options) {
-    AnnotationEditor._l10nPromise ||= new Map(["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-new-alt-text-added-button-label", "pdfjs-editor-new-alt-text-missing-button-label", "pdfjs-editor-new-alt-text-to-review-button-label", "pdfjs-editor-resizer-label-topLeft", "pdfjs-editor-resizer-label-topMiddle", "pdfjs-editor-resizer-label-topRight", "pdfjs-editor-resizer-label-middleRight", "pdfjs-editor-resizer-label-bottomRight", "pdfjs-editor-resizer-label-bottomMiddle", "pdfjs-editor-resizer-label-bottomLeft", "pdfjs-editor-resizer-label-middleLeft"].map(str => [str, l10n.get(str.replaceAll(/([A-Z])/g, c => `-${c.toLowerCase()}`))]));
-    AnnotationEditor._l10nPromise.set("pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer", l10n.get.bind(l10n, "pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer"));
+    AnnotationEditor._l10nResizer ||= Object.freeze({
+      topLeft: "pdfjs-editor-resizer-top-left",
+      topMiddle: "pdfjs-editor-resizer-top-middle",
+      topRight: "pdfjs-editor-resizer-top-right",
+      middleRight: "pdfjs-editor-resizer-middle-right",
+      bottomRight: "pdfjs-editor-resizer-bottom-right",
+      bottomMiddle: "pdfjs-editor-resizer-bottom-middle",
+      bottomLeft: "pdfjs-editor-resizer-bottom-left",
+      middleLeft: "pdfjs-editor-resizer-middle-left"
+    });
+    AnnotationEditor._l10nPromise ||= new Map([...["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-new-alt-text-added-button-label", "pdfjs-editor-new-alt-text-missing-button-label", "pdfjs-editor-new-alt-text-to-review-button-label"].map(str => [str, l10n.get(str)]), ...["pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer"].map(str => [str, l10n.get.bind(l10n, str)])]);
     if (options?.strings) {
       for (const str of options.strings) {
         AnnotationEditor._l10nPromise.set(str, l10n.get(str));
@@ -4734,7 +4722,7 @@ class AnnotationEditor {
         div.addEventListener("focus", this.#resizerFocus.bind(this, name), {
           signal
         });
-        AnnotationEditor._l10nPromise.get(`pdfjs-editor-resizer-label-${name}`).then(msg => div.setAttribute("aria-label", msg));
+        div.setAttribute("data-l10n-id", AnnotationEditor._l10nResizer[name]);
       }
     }
     const first = this.#allResizerDivs[0];
@@ -4760,7 +4748,7 @@ class AnnotationEditor {
       for (const child of children) {
         const div = this.#allResizerDivs[i++];
         const name = div.getAttribute("data-resizer-name");
-        AnnotationEditor._l10nPromise.get(`pdfjs-editor-resizer-label-${name}`).then(msg => child.setAttribute("aria-label", msg));
+        child.setAttribute("data-l10n-id", AnnotationEditor._l10nResizer[name]);
       }
     }
     this.#setResizerTabIndex(0);
@@ -5546,11 +5534,6 @@ function applyBoundingBox(ctx, bbox) {
   ctx.clip(region);
 }
 class BaseShadingPattern {
-  constructor() {
-    if (this.constructor === BaseShadingPattern) {
-      unreachable("Cannot initialize BaseShadingPattern.");
-    }
-  }
   getPattern() {
     unreachable("Abstract method `getPattern` called.");
   }
@@ -9724,7 +9707,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "4.5.255",
+    apiVersion: "4.6.60",
     data,
     password,
     disableAutoFetch,
@@ -11393,8 +11376,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "4.5.255";
-const build = "0e063ffdd";
+const version = "4.6.60";
+const build = "10a846417";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -13452,10 +13435,9 @@ class PopupElement {
     if (this.#dateObj) {
       const modificationDate = document.createElement("span");
       modificationDate.classList.add("popupDate");
-      modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-string");
+      modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-time-string");
       modificationDate.setAttribute("data-l10n-args", JSON.stringify({
-        date: this.#dateObj.toLocaleDateString(),
-        time: this.#dateObj.toLocaleTimeString()
+        dateObj: this.#dateObj.valueOf()
       }));
       header.append(modificationDate);
     }
@@ -18492,8 +18474,8 @@ class DrawLayer {
 
 
 
-const pdfjsVersion = "4.5.255";
-const pdfjsBuild = "0e063ffdd";
+const pdfjsVersion = "4.6.60";
+const pdfjsBuild = "10a846417";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

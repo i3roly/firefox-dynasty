@@ -747,6 +747,15 @@ void MacroAssembler::patchCallToNop(uint8_t* callsite) {
   Assembler::patchCallToFiveByteNop(callsite);
 }
 
+CodeOffset MacroAssembler::move32WithPatch(Register dest) {
+  movl(Imm32(-1), dest);
+  return CodeOffset(currentOffset());
+}
+
+void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
+  X86Encoding::SetInt32(masm.data() + offset.offset(), n);
+}
+
 // ===============================================================
 // Jit Frames.
 
@@ -2187,5 +2196,14 @@ void MacroAssembler::shiftIndex32AndAdd(Register indexTemp32, int shift,
   lshift32(Imm32(shift), indexTemp32);
   addPtr(indexTemp32, pointer);
 }
+
+#ifdef ENABLE_WASM_TAIL_CALLS
+CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
+                                              const Register reg) {
+  CodeOffset offset = call(desc, reg);
+  wasmMarkCallAsSlow();
+  return offset;
+}
+#endif  // ENABLE_WASM_TAIL_CALLS
 
 //}}} check_macroassembler_style

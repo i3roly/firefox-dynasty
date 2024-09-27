@@ -171,7 +171,10 @@ add_task(async function test_ml_engine_destruction() {
     "The engine process is still active."
   );
 
-  await engineInstance.terminate();
+  await engineInstance.terminate(
+    /* shutDownIfEmpty */ true,
+    /* replacement */ false
+  );
 
   info(
     "The engineInstance is manually destroyed. The cleanup function should wait for the engine process to be destroyed."
@@ -449,5 +452,113 @@ add_task(async function test_ml_engine_override_options() {
   );
 
   await EngineProcess.destroyMLEngine();
+  await cleanup();
+});
+
+/**
+ * Tests a custom model hub
+ */
+add_task(async function test_ml_custom_hub() {
+  const { cleanup, remoteClients } = await setup();
+
+  info("Get the engine process");
+  const mlEngineParent = await EngineProcess.getMLEngineParent();
+
+  info("Get engineInstance");
+
+  const options = new PipelineOptions({
+    taskName: "summarization",
+    modelId: "test-echo",
+    modelRevision: "main",
+    modelHubRootUrl: "https://example.com",
+    modelHubUrlTemplate: "models/{model}/{revision}",
+  });
+
+  const engineInstance = await mlEngineParent.getEngine(options);
+
+  info("Run the inference");
+  const inferencePromise = engineInstance.run({
+    args: ["This gets echoed."],
+  });
+
+  info("Wait for the pending downloads.");
+  await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+
+  let res = await inferencePromise;
+
+  Assert.equal(
+    res.output,
+    "This gets echoed.",
+    "The text get echoed exercising the whole flow."
+  );
+
+  Assert.equal(
+    res.config.modelHubRootUrl,
+    "https://example.com",
+    "The pipeline used the custom hub"
+  );
+
+  ok(
+    !EngineProcess.areAllEnginesTerminated(),
+    "The engine process is still active."
+  );
+
+  await EngineProcess.destroyMLEngine();
+  await cleanup();
+});
+
+/**
+ * Make sure we don't get race conditions when running several inference runs in parallel
+ *
+ */
+add_task(async function test_ml_engine_parallel() {
+  const { cleanup, remoteClients } = await setup();
+
+  // We're doing 10 calls and each echo call will take from 0 to 1000ms
+  // So we're sure we're mixing runs.
+  let sleepTimes = [300, 1000, 700, 0, 500, 900, 400, 800, 600, 100];
+  let numCalls = 10;
+
+  async function run(x) {
+    const engineInstance = await createEngine(RAW_PIPELINE_OPTIONS);
+
+    let msg = `${x} - This gets echoed.`;
+    let res = engineInstance.run({
+      data: msg,
+      sleepTime: sleepTimes[x],
+    });
+
+    await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+    res = await res;
+
+    return res;
+  }
+
+  info(`Run ${numCalls} inferences in parallel`);
+  let runs = [];
+  for (let x = 0; x < numCalls; x++) {
+    runs.push(run(x));
+  }
+
+  // await all runs
+  const results = await Promise.all(runs);
+  Assert.equal(results.length, numCalls, `All ${numCalls} were successful`);
+
+  // check that each one got their own stuff
+  for (let y = 0; y < numCalls; y++) {
+    Assert.equal(
+      results[y].output.echo,
+      `${y} - This gets echoed.`,
+      `Result ${y} is correct`
+    );
+  }
+
+  ok(
+    !EngineProcess.areAllEnginesTerminated(),
+    "The engine process is still active."
+  );
+
+  await EngineProcess.destroyMLEngine();
+
   await cleanup();
 });

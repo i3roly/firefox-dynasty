@@ -7,7 +7,12 @@
 :root {
   --sidebar-background-color: -moz-sidebar;
   --sidebar-text-color: -moz-sidebartext;
-  --sidebar-border-color: -moz-sidebarborder;
+  --sidebar-border-color: var(--lwt-sidebar-border-color, -moz-sidebarborder);
+  --sidebar-collapsed-width: 51px;
+  --sidebar-expanded-width: 192px;
+  --sidebar-screenshot-overlay-z-index: 3;
+  --sidebar-screenshot-opacity-animation-duration: 100ms;
+  --sidebar-screenshot-translate-animation-duration: 300ms;
 }
 
 #sidebar-box {
@@ -28,6 +33,16 @@
   /* stylelint-disable-next-line media-query-no-invalid */
   @media (-moz-bool-pref: "sidebar.revamp") {
     min-width: 200px;
+    background-color: var(--toolbar-bgcolor);
+    color: var(--toolbar-color);
+    padding-block-end: var(--space-small);
+    padding-inline-end: var(--space-small);
+    position: relative;
+
+    &[positionend] {
+      padding-inline-end: 0;
+      padding-inline-start: var(--space-small);
+    }
   }
 
   &[sidebarcommand="viewGenaiChatSidebar"] {
@@ -49,6 +64,17 @@
 
 #sidebar {
   flex: 1;
+
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "sidebar.revamp") {
+    height: 100%;
+    box-sizing: border-box;
+    display: inline-block;
+    width: 100%;
+    border-radius: var(--border-radius-medium);
+    box-shadow: 0 2px 6px 0 light-dark(rgb(0, 0, 0, 0.2), rgb(0, 0, 0, 0.8));
+    border: 0.5px solid var(--sidebar-border-color);
+  }
 }
 
 .sidebar-splitter {
@@ -74,7 +100,8 @@
 
   /* stylelint-disable-next-line media-query-no-invalid */
   @media (-moz-bool-pref: "sidebar.revamp") {
-    transition: background-color .5s ease-in-out;
+    transition: background-color 0.5s ease-in-out;
+    border-color: transparent;
 
     &:hover {
       background-color: var(--focus-outline-color);
@@ -172,4 +199,108 @@ menuseparator + #sidebar-extensions-separator {
 
 .webextension-menuitem {
   list-style-image: var(--webextension-menuitem-image, inherit) !important;
+}
+
+/* Sidebar animation */
+
+.sidebar-animation-screenshot {
+  position: absolute;
+  z-index: var(--sidebar-screenshot-overlay-z-index);
+  inset-inline-start: 0;
+  inset-inline-end: unset;
+
+  &.collapsed {
+    transform: translateX(var(--sidebar-collapsed-width));
+
+    &.translate {
+      animation: var(--sidebar-screenshot-translate-animation-duration) ease-in-out 1 sidebar-translate-expand;
+    }
+  }
+
+  &.expanded {
+    transform: translateX(var(--sidebar-expanded-width));
+
+    &.translate {
+      animation: var(--sidebar-screenshot-translate-animation-duration) ease-in-out 1 sidebar-translate-collapse;
+    }
+  }
+
+  &.fadeOut {
+    animation: var(--sidebar-screenshot-opacity-animation-duration) ease-in-out 1 sidebar-opacity;
+  }
+
+  &.positionend {
+    inset-inline-start: unset;
+    inset-inline-end: 0;
+
+    &.collapsed {
+      transform: translateX(calc(var(--sidebar-collapsed-width) * -1));
+
+      &.translate {
+        animation: var(--sidebar-screenshot-translate-animation-duration) ease-in-out 1 sidebar-translate-expand-rtl;
+      }
+    }
+
+    &.expanded {
+      transform: translateX(calc(var(--sidebar-expanded-width) * -1));
+
+      &.translate {
+        animation: var(--sidebar-screenshot-translate-animation-duration) ease-in-out 1 sidebar-translate-collapse-rtl;
+      }
+    }
+
+    &.fadeOut {
+      animation: var(--sidebar-screenshot-opacity-animation-duration) ease-in-out 1 sidebar-opacity;
+    }
+  }
+}
+
+@keyframes sidebar-translate-expand {
+  0% {
+    transform: translateX(var(--sidebar-collapsed-width));
+  }
+
+  100% {
+    transform: translateX(var(--sidebar-expanded-width));
+  }
+}
+
+@keyframes sidebar-translate-collapse {
+  0% {
+    transform: translateX(var(--sidebar-expanded-width));
+  }
+
+  100% {
+    transform: translateX(var(--sidebar-collapsed-width));
+  }
+}
+
+@keyframes sidebar-translate-expand-rtl {
+  0% {
+    transform: translateX(calc(var(--sidebar-collapsed-width) * -1));
+  }
+
+  100% {
+    transform: translateX(calc(var(--sidebar-expanded-width) * -1));
+  }
+}
+
+@keyframes sidebar-translate-collapse-rtl {
+  0% {
+    transform: translateX(calc(var(--sidebar-expanded-width) * -1));
+  }
+
+  100% {
+    transform: translateX(calc(var(--sidebar-collapsed-width) * -1));
+  }
+}
+
+@keyframes sidebar-opacity {
+  0% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
 }

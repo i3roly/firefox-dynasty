@@ -30,12 +30,6 @@ let ignoreList = [
     errorMessage: /Unknown pseudo-class.*-moz-/i,
     isFromDevTools: false,
   },
-  // Reserved to UA sheets unless layout.css.overflow-clip-box.enabled flipped to true.
-  {
-    sourceName: /(?:res|gre-resources)\/forms\.css$/i,
-    errorMessage: /Unknown property.*overflow-clip-box/i,
-    isFromDevTools: false,
-  },
   // content: -moz-alt-content is UA-only.
   {
     sourceName: /\b(html)\.css$/i,
@@ -59,6 +53,13 @@ let ignoreList = [
     isFromDevTools: false,
   },
 ];
+
+if (AppConstants.platform != "macosx") {
+  ignoreList.push({
+    errorMessage: /Unknown property.*-moz-osx-font-smoothing/i,
+    isFromDevTools: false,
+  });
+}
 
 if (!Services.prefs.getBoolPref("layout.css.zoom.enabled")) {
   ignoreList.push({

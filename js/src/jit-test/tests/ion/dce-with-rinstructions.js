@@ -1872,9 +1872,9 @@ function rbigintmod(i) {
 
 let uceFault_pow_bigint = eval(`(${uceFault})`.replace('uceFault', 'uceFault_pow_bigint'));
 function rbigintpow(i) {
-    var x = i ** 2n;
+    var x = i ** 5n;
     if (uceFault_pow_bigint(i) || uceFault_pow_bigint(i))
-        assertEq(x, 9801n  /* = 99 ** 2 */);
+        assertEq(x, 9509900499n  /* = 99 ** 5 */);
     assertRecoveredOnBailout(x, true);
     return i;
 }
@@ -1980,10 +1980,19 @@ function rbigintasuint(i) {
     return i;
 }
 
+let uceFault_int32tobigint = eval(`(${uceFault})`.replace('uceFault', 'uceFault_int32tobigint'));
+function rint32tobigint(i) {
+    var x = BigInt(i);
+    if (uceFault_int32tobigint(i) || uceFault_int32tobigint(i))
+        assertEq(x, 99n);
+    assertRecoveredOnBailout(x, true);
+    return i;
+}
+
 let uceFault_nantozero_nan = eval(`(${uceFault})`.replace('uceFault', 'uceFault_nantozero_nan'));
 function rnantozero_nan(i) {
     // Note: |x| must be Double-typed.
-    var x = (i + 0.5) * NaN;
+    var x = NaN ** (i + 0.5);
     var y = x ? x : +0;
     if (uceFault_nantozero_nan(i) || uceFault_nantozero_nan(i))
         assertEq(y, +0);
@@ -2234,6 +2243,7 @@ for (j = 100 - max; j < 100; j++) {
     rbigintrsh(BigInt(i));
     rbigintasint(BigInt(i));
     rbigintasuint(BigInt(i));
+    rint32tobigint(i);
     rnantozero_nan(i);
     rnantozero_poszero(i);
     rnantozero_negzero(i);

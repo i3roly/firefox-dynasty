@@ -171,6 +171,7 @@ static const char sIntPrefs[][45] = {
     "ui.contextMenuOffsetHorizontal",
     "ui.tooltipOffsetVertical",
     "ui.GtkCSDAvailable",
+    "ui.GtkCSDTransparencyAvailable",
     "ui.GtkCSDMinimizeButton",
     "ui.GtkCSDMaximizeButton",
     "ui.GtkCSDCloseButton",

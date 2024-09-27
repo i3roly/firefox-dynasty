@@ -666,7 +666,6 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   double TotalVideoHDRPlayTime() const;
   double VisiblePlayTime() const;
   double InvisiblePlayTime() const;
-  double VideoDecodeSuspendedTime() const;
   double TotalAudioPlayTime() const;
   double AudiblePlayTime() const;
   double InaudiblePlayTime() const;
@@ -1414,6 +1413,10 @@ class HTMLMediaElement : public nsGenericHTMLElement,
   // This function is used to update the status of media control when the media
   // changes its status of being used in the Picture-in-Picture mode.
   void UpdateMediaControlAfterPictureInPictureModeChanged();
+
+  // Return true if the element has pending callbacks that should prevent the
+  // suspension of video playback.
+  virtual bool HasPendingCallbacks() const { return false; }
 
   // The current decoder. Load() has been called on this decoder.
   // At most one of mDecoder and mSrcStream can be non-null.

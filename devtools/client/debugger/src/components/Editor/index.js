@@ -35,6 +35,7 @@ import {
   isSourceOnSourceMapIgnoreList,
   isMapScopesEnabled,
   getSelectedTraceIndex,
+  getShouldScrollToSelectedLocation,
 } from "../../selectors/index";
 
 // Redux actions
@@ -123,6 +124,7 @@ class Editor extends PureComponent {
       highlightedLineRange: PropTypes.object,
       isSourceOnIgnoreList: PropTypes.bool,
       mapScopesEnabled: PropTypes.bool,
+      shouldScrollToSelectedLocation: PropTypes.bool,
     };
   }
 
@@ -139,7 +141,11 @@ class Editor extends PureComponent {
   UNSAFE_componentWillReceiveProps(nextProps) {
     let { editor } = this.state;
 
-    if (!editor && nextProps.selectedSource) {
+    if (!editor) {
+      // See Bug 1913061
+      if (!nextProps.selectedSource) {
+        return;
+      }
       editor = this.setupEditor();
     }
 
@@ -175,7 +181,8 @@ class Editor extends PureComponent {
 
     const shouldScroll =
       nextProps.selectedLocation &&
-      this.shouldScrollToLocation(nextProps, editor);
+      nextProps.shouldScrollToSelectedLocation &&
+      this.shouldScrollToLocation(nextProps);
 
     if (shouldUpdateText) {
       await this.setText(nextProps, editor);
@@ -186,10 +193,14 @@ class Editor extends PureComponent {
     }
   }
 
-  onEditorUpdated = v => {
-    if (v.docChanged || v.geometryChanged) {
-      resizeToggleButton(v.view.dom.querySelector(".cm-gutters").clientWidth);
+  onEditorUpdated = viewUpdate => {
+    if (viewUpdate.docChanged || viewUpdate.geometryChanged) {
+      resizeToggleButton(
+        viewUpdate.view.dom.querySelector(".cm-gutters").clientWidth
+      );
       this.props.updateViewport();
+    } else if (viewUpdate.selectionSet) {
+      this.onCursorChange();
     }
   };
 
@@ -226,7 +237,6 @@ class Editor extends PureComponent {
       const codeMirrorWrapper = codeMirror.getWrapperElement();
       // Set code editor wrapper to be focusable
       codeMirrorWrapper.tabIndex = 0;
-      codeMirrorWrapper.addEventListener("keydown", e => this.onKeyDown(e));
       codeMirrorWrapper.addEventListener("click", e => this.onClick(e));
       codeMirrorWrapper.addEventListener("mouseover", onMouseOver(editor));
       codeMirrorWrapper.addEventListener("contextmenu", event =>
@@ -407,11 +417,11 @@ class Editor extends PureComponent {
       return null;
     }
 
-    const selectionCursor = editor.getSelectionCursor().from;
+    const selectionCursor = editor.getSelectionCursor();
     return {
-      line: toSourceLine(selectedSource.id, selectionCursor.line),
+      line: toSourceLine(selectedSource.id, selectionCursor.from.line),
       // Add one to column for correct position in editor.
-      column: selectionCursor.ch + 1,
+      column: selectionCursor.from.ch + 1,
     };
   }
 
@@ -468,23 +478,6 @@ class Editor extends PureComponent {
   }
 
   onEditorScroll = debounce(this.props.updateViewport, 75);
-
-  onKeyDown(e) {
-    const { codeMirror } = this.state.editor;
-    const { key, target } = e;
-    const codeWrapper = codeMirror.getWrapperElement();
-    const textArea = codeWrapper.querySelector("textArea");
-
-    if (key === "Escape" && target == textArea) {
-      e.stopPropagation();
-      e.preventDefault();
-      codeWrapper.focus();
-    } else if (key === "Enter" && target == codeWrapper) {
-      e.preventDefault();
-      // Focus into editor's text area
-      textArea.focus();
-    }
-  }
 
   /*
    * The default Esc command is overridden in the CodeMirror keymap to allow
@@ -594,15 +587,14 @@ class Editor extends PureComponent {
    * CodeMirror event handler, called whenever the cursor moves
    * for user-driven or programatic reasons.
    */
-  onCursorChange = event => {
-    const { line, ch } = event.doc.getCursor();
+  onCursorChange = () => {
+    const { editor } = this.state;
+    const selectionCursor = editor.getSelectionCursor();
+    const { line, ch } = selectionCursor.to;
     this.props.selectLocation(
       createLocation({
         source: this.props.selectedSource,
-        // CodeMirror cursor location is all 0-based.
-        // Whereast in DevTools frontend and backend,
-        // only colunm is 0-based, the line is 1 based.
-        line: line + 1,
+        line: toSourceLine(this.props.selectedSource.id, line),
         column: ch,
       }),
       {
@@ -612,6 +604,9 @@ class Editor extends PureComponent {
 
         // Avoid highlighting the selected line
         highlight: false,
+
+        // Avoid scrolling to the selected line, it's already visible
+        scroll: false,
       }
     );
   };
@@ -1044,6 +1039,7 @@ const mapStateToProps = state => {
     mapScopesEnabled: selectedSource?.isOriginal
       ? isMapScopesEnabled(state)
       : null,
+    shouldScrollToSelectedLocation: getShouldScrollToSelectedLocation(state),
   };
 };
 

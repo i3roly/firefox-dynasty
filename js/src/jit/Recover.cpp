@@ -23,6 +23,7 @@
 #include "jit/MIR.h"
 #include "jit/MIRGraph.h"
 #include "jit/VMFunctions.h"
+#include "js/ScalarType.h"
 #include "util/DifferentialTesting.h"
 #include "vm/BigIntType.h"
 #include "vm/EqualityOperations.h"
@@ -480,12 +481,13 @@ bool MNot::writeRecoverData(CompactBufferWriter& writer) const {
 RNot::RNot(CompactBufferReader& reader) {}
 
 bool RNot::recover(JSContext* cx, SnapshotIterator& iter) const {
-  RootedValue v(cx, iter.read());
-  RootedValue result(cx);
+  Rooted<Value> value(cx);
+  if (!iter.readMaybeUnpackedBigInt(cx, &value)) {
+    return false;
+  }
 
-  result.setBoolean(!ToBoolean(v));
-
-  iter.storeInstructionResult(result);
+  bool result = !ToBoolean(value);
+  iter.storeInstructionResult(BooleanValue(result));
   return true;
 }
 
@@ -2007,6 +2009,55 @@ bool RAtomicIsLockFree::recover(JSContext* cx, SnapshotIterator& iter) const {
   bool result = mozilla::NumberEqualsInt32(dsize, &size) &&
                 AtomicOperations::isLockfreeJS(size);
   iter.storeInstructionResult(BooleanValue(result));
+  return true;
+}
+
+bool MInt32ToBigInt::writeRecoverData(CompactBufferWriter& writer) const {
+  MOZ_ASSERT(canRecoverOnBailout());
+  writer.writeUnsigned(uint32_t(RInstruction::Recover_Int32ToBigInt));
+  return true;
+}
+
+RInt32ToBigInt::RInt32ToBigInt(CompactBufferReader& reader) {}
+
+bool RInt32ToBigInt::recover(JSContext* cx, SnapshotIterator& iter) const {
+  // Number because |d| is computed from (recoverable) user input.
+  double d = iter.readNumber();
+
+  BigInt* result = NumberToBigInt(cx, d);
+  if (!result) {
+    return false;
+  }
+
+  iter.storeInstructionResult(JS::BigIntValue(result));
+  return true;
+}
+
+bool MInt64ToBigInt::writeRecoverData(CompactBufferWriter& writer) const {
+  MOZ_ASSERT(canRecoverOnBailout());
+  writer.writeUnsigned(uint32_t(RInstruction::Recover_Int64ToBigInt));
+  writer.writeByte(elementType() == JS::Scalar::BigUint64);
+  return true;
+}
+
+RInt64ToBigInt::RInt64ToBigInt(CompactBufferReader& reader) {
+  isUnsigned_ = bool(reader.readByte());
+}
+
+bool RInt64ToBigInt::recover(JSContext* cx, SnapshotIterator& iter) const {
+  int64_t n = iter.readInt64();
+
+  BigInt* result;
+  if (isUnsigned_) {
+    result = BigInt::createFromUint64(cx, uint64_t(n));
+  } else {
+    result = BigInt::createFromInt64(cx, n);
+  }
+  if (!result) {
+    return false;
+  }
+
+  iter.storeInstructionResult(JS::BigIntValue(result));
   return true;
 }
 

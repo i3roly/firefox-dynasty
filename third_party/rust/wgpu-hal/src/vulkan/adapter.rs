@@ -1,6 +1,6 @@
 use super::conv;
 
-use ash::{amd, ext, khr, vk};
+use ash::{amd, ext, google, khr, vk};
 use parking_lot::Mutex;
 
 use std::{collections::BTreeMap, ffi::CStr, sync::Arc};
@@ -253,6 +253,7 @@ impl PhysicalDeviceFeatures {
                 )
                 .texture_compression_bc(
                     requested_features.contains(wgt::Features::TEXTURE_COMPRESSION_BC),
+                    // BC provides formats for Sliced 3D
                 )
                 //.occlusion_query_precise(requested_features.contains(wgt::Features::PRECISE_OCCLUSION_QUERY))
                 .pipeline_statistics_query(
@@ -540,6 +541,10 @@ impl PhysicalDeviceFeatures {
             self.core.texture_compression_bc != 0,
         );
         features.set(
+            F::TEXTURE_COMPRESSION_BC_SLICED_3D,
+            self.core.texture_compression_bc != 0, // BC guarantees Sliced 3D
+        );
+        features.set(
             F::PIPELINE_STATISTICS_QUERY,
             self.core.pipeline_statistics_query != 0,
         );
@@ -765,6 +770,11 @@ impl PhysicalDeviceFeatures {
                     .unwrap_or_default(),
             );
         }
+
+        features.set(
+            F::VULKAN_GOOGLE_DISPLAY_TIMING,
+            caps.supports_extension(google::display_timing::NAME),
+        );
 
         (features, dl_flags)
     }
@@ -999,6 +1009,11 @@ impl PhysicalDeviceProperties {
             extensions.push(khr::shader_atomic_int64::NAME);
         }
 
+        // Require VK_GOOGLE_display_timing if the associated feature was requested
+        if requested_features.contains(wgt::Features::VULKAN_GOOGLE_DISPLAY_TIMING) {
+            extensions.push(google::display_timing::NAME);
+        }
+
         extensions
     }
 
@@ -1094,7 +1109,6 @@ impl PhysicalDeviceProperties {
 }
 
 impl super::InstanceShared {
-    #[allow(trivial_casts)] // false positives
     fn inspect(
         &self,
         phd: vk::PhysicalDevice,
@@ -1589,11 +1603,13 @@ impl super::Adapter {
     /// - `raw_device` must be created from this adapter.
     /// - `raw_device` must be created using `family_index`, `enabled_extensions` and `physical_device_features()`
     /// - `enabled_extensions` must be a superset of `required_device_extensions()`.
+    /// - If `drop_callback` is [`None`], wgpu-hal will take ownership of `raw_device`. If
+    ///   `drop_callback` is [`Some`], `raw_device` must be valid until the callback is called.
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn device_from_raw(
         &self,
         raw_device: ash::Device,
-        handle_is_owned: bool,
+        drop_callback: Option<crate::DropCallback>,
         enabled_extensions: &[&'static CStr],
         features: wgt::Features,
         memory_hints: &wgt::MemoryHints,
@@ -1773,7 +1789,6 @@ impl super::Adapter {
                     } else {
                         naga::proc::BoundsCheckPolicy::Restrict
                     },
-                    image_store: naga::proc::BoundsCheckPolicy::Unchecked,
                     // TODO: support bounds checks on binding arrays
                     binding_array: naga::proc::BoundsCheckPolicy::Unchecked,
                 },
@@ -1809,12 +1824,14 @@ impl super::Adapter {
             0, 0, 0, 0,
         ];
 
+        let drop_guard = crate::DropGuard::from_option(drop_callback);
+
         let shared = Arc::new(super::DeviceShared {
             raw: raw_device,
             family_index,
             queue_index,
             raw_queue,
-            handle_is_owned,
+            drop_guard,
             instance: Arc::clone(&self.instance),
             physical_device: self.raw,
             enabled_extensions: enabled_extensions.into(),
@@ -1981,13 +1998,28 @@ impl crate::Adapter for super::Adapter {
         let info = enabled_phd_features.add_to_device_create(pre_info);
         let raw_device = {
             profiling::scope!("vkCreateDevice");
-            unsafe { self.instance.raw.create_device(self.raw, &info, None)? }
+            unsafe {
+                self.instance
+                    .raw
+                    .create_device(self.raw, &info, None)
+                    .map_err(map_err)?
+            }
         };
+        fn map_err(err: vk::Result) -> crate::DeviceError {
+            match err {
+                vk::Result::ERROR_TOO_MANY_OBJECTS => crate::DeviceError::OutOfMemory,
+                vk::Result::ERROR_INITIALIZATION_FAILED => crate::DeviceError::Lost,
+                vk::Result::ERROR_EXTENSION_NOT_PRESENT | vk::Result::ERROR_FEATURE_NOT_PRESENT => {
+                    super::hal_usage_error(err)
+                }
+                other => super::map_host_device_oom_and_lost_err(other),
+            }
+        }
 
         unsafe {
             self.device_from_raw(
                 raw_device,
-                true,
+                None,
                 &enabled_extensions,
                 features,
                 memory_hints,

@@ -69,7 +69,6 @@ Http3Session::Http3Session() {
   LOG(("Http3Session::Http3Session [this=%p]", this));
 
   mCurrentBrowserId = gHttpHandler->ConnMgr()->CurrentBrowserId();
-  mThroughCaptivePortal = gHttpHandler->GetThroughCaptivePortal();
 }
 
 static nsresult RawBytesToNetAddr(uint16_t aFamily, const uint8_t* aRemoteAddr,
@@ -275,6 +274,7 @@ void Http3Session::Shutdown() {
 
   bool isEchRetry = mError == mozilla::psm::GetXPCOMFromNSSError(
                                   SSL_ERROR_ECH_RETRY_WITH_ECH);
+  bool isNSSError = psm::IsNSSErrorCode(-1 * NS_ERROR_GET_CODE(mError));
   bool allowToRetryWithDifferentIPFamily =
       mBeforeConnectedError &&
       gHttpHandler->ConnMgr()->AllowToRetryDifferentIPFamilyForHttp3(mConnInfo,
@@ -283,9 +283,7 @@ void Http3Session::Shutdown() {
        allowToRetryWithDifferentIPFamily));
   if ((mBeforeConnectedError ||
        (mError == NS_ERROR_NET_HTTP3_PROTOCOL_ERROR)) &&
-      (mError !=
-       mozilla::psm::GetXPCOMFromNSSError(SSL_ERROR_BAD_CERT_DOMAIN)) &&
-      !isEchRetry && !mConnInfo->GetWebTransport() &&
+      !isNSSError && !isEchRetry && !mConnInfo->GetWebTransport() &&
       !allowToRetryWithDifferentIPFamily && !mDontExclude) {
     gHttpHandler->ExcludeHttp3(mConnInfo);
   }
@@ -299,6 +297,8 @@ void Http3Session::Shutdown() {
       if (isEchRetry) {
         // We have to propagate this error to nsHttpTransaction, so the
         // transaction will be restarted with a new echConfig.
+        stream->Close(mError);
+      } else if (isNSSError) {
         stream->Close(mError);
       } else {
         if (allowToRetryWithDifferentIPFamily && mNetAddr) {
@@ -379,20 +379,6 @@ Http3Session::~Http3Session() {
       Telemetry::HTTP3_TRANS_SENDING_BLOCKED_BY_FLOW_CONTROL_PER_CONN,
       mTransactionsSenderBlockedByFlowControlCount);
 
-  if (mThroughCaptivePortal) {
-    if (mTotalBytesRead || mTotalBytesWritten) {
-      auto total =
-          Clamp<uint32_t>((mTotalBytesRead >> 10) + (mTotalBytesWritten >> 10),
-                          0, std::numeric_limits<uint32_t>::max());
-      Telemetry::ScalarAdd(
-          Telemetry::ScalarID::NETWORKING_DATA_TRANSFERRED_CAPTIVE_PORTAL,
-          total);
-    }
-
-    Telemetry::ScalarAdd(
-        Telemetry::ScalarID::NETWORKING_HTTP_CONNECTIONS_CAPTIVE_PORTAL, 1);
-  }
-
   Shutdown();
 }
 
@@ -443,6 +429,7 @@ nsresult Http3Session::ProcessInput(nsIUDPSocket* socket) {
     return rv.result;
   }
   mTotalBytesRead += rv.bytes_read;
+  socket->AddInputBytes(rv.bytes_read);
 
   return NS_OK;
 }
@@ -996,6 +983,7 @@ nsresult Http3Session::ProcessOutput(nsIUDPSocket* socket) {
   if (rv.bytes_written != 0) {
     mTotalBytesWritten += rv.bytes_written;
     mLastWriteTime = PR_IntervalNow();
+    socket->AddOutputBytes(rv.bytes_written);
   }
 
   return NS_OK;

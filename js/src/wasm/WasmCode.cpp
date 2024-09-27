@@ -33,6 +33,7 @@
 #include "jit/MacroAssembler.h"
 #include "jit/PerfSpewer.h"
 #include "util/Poison.h"
+#include "vm/HelperThreadState.h"  // PartialTier2CompileTask
 #ifdef MOZ_VTUNE
 #  include "vtune/VTuneWrapper.h"
 #endif
@@ -45,10 +46,13 @@
 using namespace js;
 using namespace js::jit;
 using namespace js::wasm;
+using mozilla::Atomic;
 using mozilla::BinarySearch;
 using mozilla::BinarySearchIf;
+using mozilla::DebugOnly;
 using mozilla::MakeEnumeratedRange;
-using mozilla::PodAssign;
+using mozilla::MallocSizeOf;
+using mozilla::Maybe;
 
 size_t LinkData::SymbolicLinkArray::sizeOfExcludingThis(
     MallocSizeOf mallocSizeOf) const {
@@ -65,7 +69,8 @@ static uint32_t RoundupCodeLength(uint32_t codeLength) {
 }
 
 UniqueCodeBytes wasm::AllocateCodeBytes(
-    Maybe<AutoMarkJitCodeWritableForThread>& writable, uint32_t codeLength) {
+    Maybe<AutoMarkJitCodeWritableForThread>& writable, uint32_t codeLength,
+    bool allowLastDitchGC) {
   if (codeLength > MaxCodeBytesPerProcess) {
     return nullptr;
   }
@@ -80,7 +85,7 @@ UniqueCodeBytes wasm::AllocateCodeBytes(
   // If the allocation failed and the embedding gives us a last-ditch attempt
   // to purge all memory (which, in gecko, does a purging GC/CC/GC), do that
   // then retry the allocation.
-  if (!p) {
+  if (!p && allowLastDitchGC) {
     if (OnLargeAllocationFailure) {
       OnLargeAllocationFailure();
       p = AllocateExecutableMemory(roundedCodeLength,
@@ -310,11 +315,13 @@ bool CodeSegment::linkAndMakeExecutable(
 }
 
 /* static */
-SharedCodeSegment CodeSegment::createEmpty(size_t capacityBytes) {
+SharedCodeSegment CodeSegment::createEmpty(size_t capacityBytes,
+                                           bool allowLastDitchGC) {
   uint32_t codeLength = 0;
   uint32_t codeCapacity = RoundupCodeLength(capacityBytes);
   Maybe<AutoMarkJitCodeWritableForThread> writable;
-  UniqueCodeBytes codeBytes = AllocateCodeBytes(writable, codeCapacity);
+  UniqueCodeBytes codeBytes =
+      AllocateCodeBytes(writable, codeCapacity, allowLastDitchGC);
   if (!codeBytes) {
     return nullptr;
   }
@@ -325,7 +332,8 @@ SharedCodeSegment CodeSegment::createEmpty(size_t capacityBytes) {
 /* static */
 SharedCodeSegment CodeSegment::createFromMasm(MacroAssembler& masm,
                                               const LinkData& linkData,
-                                              const Code* maybeCode) {
+                                              const Code* maybeCode,
+                                              bool allowLastDitchGC) {
   uint32_t codeLength = masm.bytesNeeded();
   if (codeLength == 0) {
     return js_new<CodeSegment>(nullptr, 0, 0);
@@ -333,7 +341,8 @@ SharedCodeSegment CodeSegment::createFromMasm(MacroAssembler& masm,
 
   uint32_t codeCapacity = RoundupCodeLength(codeLength);
   Maybe<AutoMarkJitCodeWritableForThread> writable;
-  UniqueCodeBytes codeBytes = AllocateCodeBytes(writable, codeCapacity);
+  UniqueCodeBytes codeBytes =
+      AllocateCodeBytes(writable, codeCapacity, allowLastDitchGC);
   if (!codeBytes) {
     return nullptr;
   }
@@ -353,7 +362,8 @@ SharedCodeSegment CodeSegment::createFromMasm(MacroAssembler& masm,
 /* static */
 SharedCodeSegment CodeSegment::createFromBytes(const uint8_t* unlinkedBytes,
                                                size_t unlinkedBytesLength,
-                                               const LinkData& linkData) {
+                                               const LinkData& linkData,
+                                               bool allowLastDitchGC) {
   uint32_t codeLength = unlinkedBytesLength;
   if (codeLength == 0) {
     return js_new<CodeSegment>(nullptr, 0, 0);
@@ -361,7 +371,8 @@ SharedCodeSegment CodeSegment::createFromBytes(const uint8_t* unlinkedBytes,
 
   uint32_t codeCapacity = RoundupCodeLength(codeLength);
   Maybe<AutoMarkJitCodeWritableForThread> writable;
-  UniqueCodeBytes codeBytes = AllocateCodeBytes(writable, codeLength);
+  UniqueCodeBytes codeBytes =
+      AllocateCodeBytes(writable, codeLength, allowLastDitchGC);
   if (!codeBytes) {
     return nullptr;
   }
@@ -381,12 +392,14 @@ SharedCodeSegment CodeSegment::createFromBytes(const uint8_t* unlinkedBytes,
 // and CodeSegment::createFromMasmWithBumpAlloc
 SharedCodeSegment js::wasm::AllocateCodePagesFrom(
     SharedCodeSegmentVector& lazySegments, uint32_t bytesNeeded,
-    size_t* offsetInSegment, size_t* roundedUpAllocationSize) {
+    bool allowLastDitchGC, size_t* offsetInSegment,
+    size_t* roundedUpAllocationSize) {
   size_t codeLength = CodeSegment::PageRoundup(bytesNeeded);
 
   if (lazySegments.length() == 0 ||
       !lazySegments[lazySegments.length() - 1]->hasSpace(codeLength)) {
-    SharedCodeSegment newSegment = CodeSegment::createEmpty(codeLength);
+    SharedCodeSegment newSegment =
+        CodeSegment::createEmpty(codeLength, allowLastDitchGC);
     if (!newSegment) {
       return nullptr;
     }
@@ -412,7 +425,7 @@ SharedCodeSegment js::wasm::AllocateCodePagesFrom(
 /* static */
 SharedCodeSegment CodeSegment::createFromMasmWithBumpAlloc(
     jit::MacroAssembler& masm, const LinkData& linkData, const Code* code,
-    uint8_t** codeStartOut, uint32_t* codeLengthOut,
+    bool allowLastDitchGC, uint8_t** codeStartOut, uint32_t* codeLengthOut,
     uint32_t* metadataBiasOut) {
   // Here's a picture that illustrates the relationship of the various
   // variables.  This is an example for a machine with a 4KB page size, for an
@@ -489,7 +502,7 @@ SharedCodeSegment CodeSegment::createFromMasmWithBumpAlloc(
     // Find a CodeSegment that has enough space
     size_t offsetInSegment = 0;
     segment = AllocateCodePagesFrom(guard->lazyFuncSegments, requestLength,
-                                    &offsetInSegment,
+                                    allowLastDitchGC, &offsetInSegment,
                                     /*roundedUpAllocationSize=*/nullptr);
     if (!segment) {
       return nullptr;
@@ -558,7 +571,7 @@ bool Code::createManyLazyEntryStubs(const WriteGuard& guard,
                                     size_t* stubBlockIndex) const {
   MOZ_ASSERT(funcExportIndices.length());
 
-  LifoAlloc lifo(LAZY_STUB_LIFO_DEFAULT_CHUNK_SIZE);
+  LifoAlloc lifo(LAZY_STUB_LIFO_DEFAULT_CHUNK_SIZE, js::MallocArena);
   TempAllocator alloc(&lifo);
   JitContext jitContext;
   WasmMacroAssembler masm(alloc);
@@ -605,7 +618,8 @@ bool Code::createManyLazyEntryStubs(const WriteGuard& guard,
   size_t codeLength = 0;
   CodeSegment* segment =
       AllocateCodePagesFrom(guard->lazyStubSegments, masm.bytesNeeded(),
-                            &offsetInSegment, &codeLength)
+                            /* allowLastDitchGC = */ true, &offsetInSegment,
+                            &codeLength)
           .get();
   if (!segment) {
     return false;
@@ -792,7 +806,48 @@ bool Code::createTier2LazyEntryStubs(const WriteGuard& guard,
   return true;
 }
 
+class Module::PartialTier2CompileTaskImpl : public PartialTier2CompileTask {
+  const SharedCode code_;
+  uint32_t funcIndex_;
+  Atomic<bool> cancelled_;
+
+ public:
+  PartialTier2CompileTaskImpl(const Code& code, uint32_t funcIndex)
+      : code_(&code), funcIndex_(funcIndex), cancelled_(false) {}
+
+  void cancel() override { cancelled_ = true; }
+
+  void runHelperThreadTask(AutoLockHelperThreadState& locked) override {
+    if (!cancelled_) {
+      AutoUnlockHelperThreadState unlock(locked);
+
+      // TODO: maybe have CompilePartialTier2 check `cancelled_` from time to
+      // time and return early if it is set?  See bug 1911060.
+      UniqueChars error;
+      bool success = CompilePartialTier2(*code_, funcIndex_, &error);
+
+      // FIXME: In the case `!success && !cancelled_`, compilation has failed
+      // and this function will be stuck in state TierUpState::Requested
+      // forever.  See bug 1911060.
+
+      UniqueCharsVector warnings;
+      ReportTier2ResultsOffThread(success, mozilla::Some(funcIndex_),
+                                  code_->codeMeta().scriptedCaller(), error,
+                                  warnings);
+    }
+
+    // The task is finished, release it.
+    js_delete(this);
+  }
+
+  ThreadType threadType() override {
+    return ThreadType::THREAD_TYPE_WASM_COMPILE_PARTIAL_TIER2;
+  }
+};
+
 bool Code::requestTierUp(uint32_t funcIndex) const {
+  // Note: this runs on the requesting (wasm-running) thread, not on a
+  // compilation-helper thread.
   MOZ_ASSERT(mode_ == CompileMode::LazyTiering);
   FuncState& state = funcStates_[funcIndex - codeMeta_->numFuncImports];
   if (!state.tierUpState.compareExchange(TierUpState::NotRequested,
@@ -800,7 +855,16 @@ bool Code::requestTierUp(uint32_t funcIndex) const {
     return true;
   }
 
-  return CompilePartialTier2(*this, funcIndex);
+  auto task =
+      js::MakeUnique<Module::PartialTier2CompileTaskImpl>(*this, funcIndex);
+  if (!task) {
+    // Effect is (I think), if we OOM here, the request is ignored.
+    // See bug 1911060.
+    return false;
+  }
+
+  StartOffThreadWasmPartialTier2Compile(std::move(task));
+  return true;
 }
 
 bool Code::finishTier2(UniqueCodeBlock tier2CodeBlock,

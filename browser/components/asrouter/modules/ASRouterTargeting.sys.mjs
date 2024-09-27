@@ -147,10 +147,17 @@ XPCOMUtils.defineLazyPreferenceGetter(
     return behaviorString === "embedded";
   }
 );
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "totalSearches",
+  "browser.search.totalSearches",
+  0
+);
 
 XPCOMUtils.defineLazyServiceGetters(lazy, {
   AUS: ["@mozilla.org/updates/update-service;1", "nsIApplicationUpdateService"],
   BrowserHandler: ["@mozilla.org/browser/clh;1", "nsIBrowserHandler"],
+  ScreenManager: ["@mozilla.org/gfx/screenmanager;1", "nsIScreenManager"],
   TrackingDBService: [
     "@mozilla.org/tracking-db-service;1",
     "nsITrackingDBService",
@@ -897,8 +904,7 @@ const TargetingGetters = {
   },
 
   get userPrefersReducedMotion() {
-    let window = Services.appShell.hiddenDOMWindow;
-    return window?.matchMedia("(prefers-reduced-motion: reduce)")?.matches;
+    return Services.appinfo.prefersReducedMotion;
   },
 
   /**
@@ -1016,17 +1022,25 @@ const TargetingGetters = {
    * web content. The available height and width are each calculated taking
    * into account the presence of menu bars, docks, and other similar OS elements
    * @returns {Object} resolution The resolution object containing width and height
-   * @returns {string} resolution.width The available width of the primary monitor
-   * @returns {string} resolution.height The available height of the primary monitor
+   * @returns {number} resolution.width The available width of the primary monitor
+   * @returns {number} resolution.height The available height of the primary monitor
    */
   get primaryResolution() {
-    // Using hidden dom window ensures that we have a window object
-    // to grab a screen from in certain edge cases such as targeting evaluation
-    // during first startup before the browser is available, and in MacOS
-    let window = Services.appShell.hiddenDOMWindow;
+    const { primaryScreen } = lazy.ScreenManager;
+    const { defaultCSSScaleFactor } = primaryScreen;
+    let availDeviceLeft = {};
+    let availDeviceTop = {};
+    let availDeviceWidth = {};
+    let availDeviceHeight = {};
+    primaryScreen.GetAvailRect(
+      availDeviceLeft,
+      availDeviceTop,
+      availDeviceWidth,
+      availDeviceHeight
+    );
     return {
-      width: window?.screen.availWidth,
-      height: window?.screen.availHeight,
+      width: Math.floor(availDeviceWidth.value / defaultCSSScaleFactor),
+      height: Math.floor(availDeviceHeight.value / defaultCSSScaleFactor),
     };
   },
 
@@ -1054,6 +1068,10 @@ const TargetingGetters = {
       memory = Number(memory) / 1024 / 1024;
     }
     return memory;
+  },
+
+  get totalSearches() {
+    return lazy.totalSearches;
   },
 };
 

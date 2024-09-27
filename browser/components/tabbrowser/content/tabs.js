@@ -25,6 +25,8 @@
       this.addEventListener("TabUnpinned", this);
       this.addEventListener("TabHoverStart", this);
       this.addEventListener("TabHoverEnd", this);
+      this.addEventListener("TabGroupExpand", this);
+      this.addEventListener("TabGroupCollapse", this);
       this.addEventListener("transitionend", this);
       this.addEventListener("dblclick", this);
       this.addEventListener("click", this);
@@ -215,6 +217,31 @@
       this._previewPanel?.deactivate(event.target);
     }
 
+    on_TabGroupExpand() {
+      this._invalidateCachedVisibleTabs();
+    }
+
+    on_TabGroupCollapse(event) {
+      this._invalidateCachedVisibleTabs();
+
+      // If the user's selected tab is in the collapsing group, kick them off
+      // the tab. If no tabs exist outside the group, create a new one and
+      // select it.
+      const group = event.target;
+      if (gBrowser.selectedTab.group === group) {
+        let tabToSelect = gBrowser._findTabToBlurTo(
+          gBrowser.selectedTab,
+          group.tabs
+        );
+
+        if (tabToSelect) {
+          gBrowser.selectedTab = tabToSelect;
+        } else {
+          gBrowser.addAdjacentNewTab(group.tabs.at(-1));
+        }
+      }
+    }
+
     on_transitionend(event) {
       if (event.propertyName != "max-width") {
         return;
@@ -240,11 +267,17 @@
       // When the tabbar has an unified appearance with the titlebar
       // and menubar, a double-click in it should have the same behavior
       // as double-clicking the titlebar
-      if (TabsInTitlebar.enabled) {
+      if (TabsInTitlebar.enabled && !this.verticalMode) {
         return;
       }
 
-      if (event.button != 0 || event.originalTarget.localName != "scrollbox") {
+      // Make sure it is the primary button, we are hitting our arrowscrollbox,
+      // and we're not hitting the scroll buttons.
+      if (
+        event.button != 0 ||
+        event.target != this.arrowScrollbox ||
+        event.composedTarget.localName == "toolbarbutton"
+      ) {
         return;
       }
 
@@ -331,15 +364,19 @@
           // Check whether the click
           // was dispatched on the open space of it.
           let visibleTabs = this._getVisibleTabs();
-          let lastTab = visibleTabs[visibleTabs.length - 1];
+          let lastTab = visibleTabs.at(-1);
           let winUtils = window.windowUtils;
           let endOfTab =
             winUtils.getBoundsWithoutFlushing(lastTab)[
-              RTL_UI ? "left" : "right"
+              (this.verticalMode && "bottom") ||
+                (this.#rtlMode ? "left" : "right")
             ];
           if (
-            (!RTL_UI && event.clientX > endOfTab) ||
-            (RTL_UI && event.clientX < endOfTab)
+            (this.verticalMode && event.clientY > endOfTab) ||
+            (!this.verticalMode &&
+              (this.#rtlMode
+                ? event.clientX < endOfTab
+                : event.clientX > endOfTab))
           ) {
             BrowserCommands.openTab();
           }
@@ -395,8 +432,8 @@
           if (keyComboForMove) {
             gBrowser.moveTabOver(event);
           } else if (
-            (!RTL_UI && event.keyCode == KeyEvent.DOM_VK_RIGHT) ||
-            (RTL_UI && event.keyCode == KeyEvent.DOM_VK_LEFT)
+            (!this.#rtlMode && event.keyCode == KeyEvent.DOM_VK_RIGHT) ||
+            (this.#rtlMode && event.keyCode == KeyEvent.DOM_VK_LEFT)
           ) {
             focusedTabIndex++;
           } else {
@@ -585,9 +622,7 @@
         offsetY: this.verticalMode
           ? event.screenY - window.screenY - tabOffset
           : event.screenY - window.screenY,
-        scrollPos: this.verticalMode
-          ? this.arrowScrollbox.scrollbox.scrollTop
-          : this.arrowScrollbox.scrollbox.scrollLeft,
+        scrollPos: this.arrowScrollbox.scrollPosition,
         screenX: event.screenX,
         screenY: event.screenY,
         movingTabs: (tab.multiselected ? gBrowser.selectedTabs : [tab]).filter(
@@ -634,7 +669,7 @@
         }
         if (pixelsToScroll) {
           arrowScrollbox.scrollByPixels(
-            (RTL_UI && !this.verticalMode ? -1 : 1) * pixelsToScroll,
+            (this.#rtlMode ? -1 : 1) * pixelsToScroll,
             true
           );
         }
@@ -688,15 +723,10 @@
         let maxMargin = this.verticalMode
           ? Math.min(minMargin + scrollRect.height, scrollRect.bottom)
           : Math.min(minMargin + scrollRect.width, scrollRect.right);
-        if (RTL_UI && !this.verticalMode) {
+        if (this.#rtlMode) {
           [minMargin, maxMargin] = [
             this.clientWidth - maxMargin,
             this.clientWidth - minMargin,
-          ];
-        } else if (this.verticalMode) {
-          [minMargin, maxMargin] = [
-            this.clientHeight - maxMargin,
-            this.clientHeight - minMargin,
           ];
         }
         newMargin = pixelsToScroll > 0 ? maxMargin : minMargin;
@@ -707,7 +737,7 @@
           let tabRect = this._getVisibleTabs().at(-1).getBoundingClientRect();
           if (this.verticalMode) {
             newMargin = tabRect.bottom - rect.top;
-          } else if (RTL_UI) {
+          } else if (this.#rtlMode) {
             newMargin = rect.right - tabRect.left;
           } else {
             newMargin = tabRect.right - rect.left;
@@ -716,7 +746,7 @@
           let tabRect = children[newIndex].getBoundingClientRect();
           if (this.verticalMode) {
             newMargin = rect.top - tabRect.bottom;
-          } else if (RTL_UI) {
+          } else if (this.#rtlMode) {
             newMargin = rect.right - tabRect.right;
           } else {
             newMargin = tabRect.left - rect.left;
@@ -726,7 +756,7 @@
 
       ind.hidden = false;
       newMargin += this.verticalMode ? ind.clientHeight : ind.clientWidth / 2;
-      if (RTL_UI && !this.verticalMode) {
+      if (this.#rtlMode) {
         newMargin *= -1;
       }
       ind.style.transform = this.verticalMode
@@ -1139,9 +1169,21 @@
       // remove arrowScrollbox periphery element
       children.pop();
 
+      // explode tab groups
+      Array.from(children).forEach((node, index) => {
+        if (node.tagName == "tab-group") {
+          children.splice(index, 1, ...node.tabs);
+        }
+      });
+
       let allChildren = [...verticalPinnedTabsContainer.children, ...children];
       this._allTabs = allChildren;
       return allChildren;
+    }
+
+    get allGroups() {
+      let children = Array.from(this.arrowScrollbox.children);
+      return children.filter(node => node.tagName == "tab-group");
     }
 
     get previewPanel() {
@@ -1152,11 +1194,15 @@
       return this.getAttribute("orient") == "vertical";
     }
 
+    get #rtlMode() {
+      return !this.verticalMode && RTL_UI;
+    }
+
     _getVisibleTabs() {
       if (!this._visibleTabs) {
         this._visibleTabs = Array.prototype.filter.call(
           this.allTabs,
-          tab => !tab.hidden && !tab.closing
+          tab => !tab.hidden && !tab.closing && !tab.group?.collapsed
         );
       }
       return this._visibleTabs;
@@ -1209,16 +1255,14 @@
     _initializeArrowScrollbox() {
       let arrowScrollbox = this.arrowScrollbox;
       let previewElement = document.getElementById("tab-preview-panel");
-      arrowScrollbox.shadowRoot.addEventListener(
+      arrowScrollbox.addEventListener(
         "underflow",
         event => {
           // Ignore underflow events:
           // - from nested scrollable elements
-          // - for vertical orientation
           // - corresponding to an overflow event that we ignored
           if (
-            event.originalTarget != arrowScrollbox.scrollbox ||
-            event.detail == 0 ||
+            event.target != arrowScrollbox ||
             !this.hasAttribute("overflow")
           ) {
             return;
@@ -1241,13 +1285,12 @@
         true
       );
 
-      arrowScrollbox.shadowRoot.addEventListener("overflow", event => {
+      arrowScrollbox.addEventListener("overflow", event => {
         // Ignore overflow events:
         // - from nested scrollable elements
         // - for vertical orientation
         if (
-          event.originalTarget != arrowScrollbox.scrollbox ||
-          event.detail == 0 ||
+          event.target != arrowScrollbox ||
           event.originalTarget.getAttribute("orient") == "vertical"
         ) {
           return;
@@ -1403,7 +1446,7 @@
         return;
       }
 
-      var isEndTab = aTab._tPos > tabs[tabs.length - 1]._tPos;
+      var isEndTab = aTab._tPos > tabs.at(-1)._tPos;
 
       if (!this._tabDefaultMaxWidth) {
         this._tabDefaultMaxWidth = parseFloat(
@@ -1418,7 +1461,7 @@
       if (this.hasAttribute("overflow")) {
         // Don't need to do anything if we're in overflow mode and aren't scrolled
         // all the way to the right, or if we're closing the last tab.
-        if (isEndTab || !this.arrowScrollbox._scrollButtonDown.disabled) {
+        if (isEndTab || !this.arrowScrollbox.hasAttribute("scrolledtoend")) {
           return;
         }
         // If the tab has an owner that will become the active tab, the owner will
@@ -1635,7 +1678,7 @@
         pinned ? numPinned : undefined
       );
 
-      if (RTL_UI && !this.verticalMode) {
+      if (this.#rtlMode) {
         tabs.reverse();
         // Copy moving tabs array to avoid infinite reversing.
         movingTabs = [...movingTabs].reverse();
@@ -1655,8 +1698,8 @@
 
       // Move the dragged tab based on the mouse position.
       let firstTab = tabs[0];
-      let lastTab = tabs[tabs.length - 1];
-      let firstMovingTabScreen = movingTabs[movingTabs.length - 1][screenAxis];
+      let lastTab = tabs.at(-1);
+      let firstMovingTabScreen = movingTabs.at(-1)[screenAxis];
       let lastMovingTabScreen = movingTabs[0][screenAxis];
       let translate = screen - draggedTab._dragData[screenAxis];
       if (!pinned) {
@@ -1702,16 +1745,10 @@
       let high = tabs.length - 1;
       let getTabShift = (tab, dropIndex) => {
         if (tab._tPos < draggedTab._tPos && tab._tPos >= dropIndex) {
-          if (this.verticalMode) {
-            return shiftSize;
-          }
-          return RTL_UI ? -shiftSize : shiftSize;
+          return this.#rtlMode ? -shiftSize : shiftSize;
         }
         if (tab._tPos > draggedTab._tPos && tab._tPos < dropIndex) {
-          if (this.verticalMode) {
-            return -shiftSize;
-          }
-          return RTL_UI ? shiftSize : -shiftSize;
+          return this.#rtlMode ? shiftSize : -shiftSize;
         }
         return 0;
       };
@@ -1902,8 +1939,7 @@
       for (let t of this._getVisibleTabs()) {
         if (t.groupingTabsData && t.groupingTabsData.translatePos) {
           let translatePos =
-            (RTL_UI && !this.verticalMode ? -1 : 1) *
-            t.groupingTabsData.translatePos;
+            (this.#rtlMode ? -1 : 1) * t.groupingTabsData.translatePos;
           t.style.transform = `translate${
             this.verticalMode ? "Y" : "X"
           }(${translatePos}px)`;
@@ -2050,7 +2086,7 @@
               }
 
               this.arrowScrollbox.scrollByPixels(
-                RTL_UI
+                this.#rtlMode
                   ? selectedRect.right - scrollRect.right
                   : selectedRect.left - scrollRect.left
               );
@@ -2113,7 +2149,7 @@
         isBeforeMiddle = event.screenY < middle;
       } else {
         let middle = tab.screenX + tab.getBoundingClientRect().width / 2;
-        isBeforeMiddle = RTL_UI
+        isBeforeMiddle = this.#rtlMode
           ? event.screenX > middle
           : event.screenX < middle;
       }
@@ -2189,13 +2225,6 @@
       } else if (!tab.hasAttribute("skipbackgroundnotify")) {
         this._notifyBackgroundTab(tab);
       }
-
-      // XXXmano: this is a temporary workaround for bug 345399
-      // We need to manually update the scroll buttons disabled state
-      // if a tab was inserted to the overflow area or removed from it
-      // without any scrolling and when the tabbar has already
-      // overflowed.
-      this.arrowScrollbox._updateScrollButtonsDisabledState();
 
       // If this browser isn't lazy (indicating it's probably created by
       // session restore), preload the next about:newtab if we don't
@@ -2310,8 +2339,13 @@
     updateTabIndicatorAttr(tab) {
       const theseAttributes = ["soundplaying", "muted", "activemedia-blocked"];
       const notTheseAttributes = ["pinned", "sharing", "crashed"];
+      const isVerticalAndCollapsed =
+        this.verticalMode && !this.hasAttribute("expanded");
 
-      if (notTheseAttributes.some(attr => tab.hasAttribute(attr))) {
+      if (
+        isVerticalAndCollapsed ||
+        notTheseAttributes.some(attr => tab.hasAttribute(attr))
+      ) {
         tab.removeAttribute("indicator-replaces-favicon");
         return;
       }

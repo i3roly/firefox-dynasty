@@ -204,7 +204,7 @@ class MigrationUtils {
 
   /**
    * Helper for implementing simple asynchronous cases of migration resources'
-   * |migrate(aCallback)| (see MigratorBase).  If your |migrate| method
+   * ``migrate(aCallback)`` (see MigratorBase).  If your ``migrate`` method
    * just waits for some file to be read, for example, and then migrates
    * everything right away, you can wrap the async-function with this helper
    * and not worry about notifying the callback.
@@ -235,7 +235,7 @@ class MigrationUtils {
    *   throws when it's called, aCallback(false) is called, otherwise
    *   aCallback(true) is called.
    * @param {Function} aCallback
-   *   the callback function passed to |migrate|.
+   *   the callback function passed to ``migrate``.
    * @returns {Function}
    *   the wrapped function.
    */
@@ -946,6 +946,9 @@ class MigrationUtils {
    *                             `AMBrowserExtensionsImport` as the "browser
    *                             identifier" used to match add-ons
    * @param {string[]} extensionIDs a list of extension IDs from another browser
+   * @returns {(lazy.MigrationWizardConstants.PROGRESS_VALUE|string[])[]}
+   *   An array whose first element is a `MigrationWizardConstants.PROGRESS_VALUE`
+   *   and second element is an array of imported add-on ids.
    */
   async installExtensionsWrapper(migratorKey, extensionIDs) {
     const totalExtensions = extensionIDs.length;

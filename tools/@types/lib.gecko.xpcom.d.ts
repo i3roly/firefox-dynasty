@@ -1297,7 +1297,6 @@ interface nsIPrincipal extends nsISupports {
   isURIInList(list: string): boolean;
   isContentAccessibleAboutURI(): boolean;
   isSameOrigin(otherURI: nsIURI): boolean;
-  allowsRelaxStrictFileOriginPolicy(aURI: nsIURI): boolean;
   hasFirstpartyStorageAccess(aWindow: mozIDOMWindow, rejectedReason: OutParam<u32>): boolean;
   readonly localStorageQuotaKey: string;
   readonly isOriginPotentiallyTrustworthy: boolean;
@@ -7707,9 +7706,7 @@ interface nsICookieService extends nsISupports {
   readonly BEHAVIOR_REJECT_TRACKER_AND_PARTITION_FOREIGN: 5;
   readonly BEHAVIOR_LAST: 5;
 
-  getCookieStringFromDocument(aDocument: Document): string;
   getCookieStringFromHttp(aURI: nsIURI, aChannel: nsIChannel): string;
-  setCookieStringFromDocument(aDocument: Document, aCookie: string): void;
   setCookieStringFromHttp(aURI: nsIURI, aCookie: string, aChannel: nsIChannel): void;
   runInTransaction(aCallback: nsICookieTransactionCallback): void;
 }

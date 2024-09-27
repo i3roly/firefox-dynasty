@@ -103,7 +103,6 @@ using namespace js;
 using namespace js::selfhosted;
 
 using JS::CompileOptions;
-using mozilla::Maybe;
 
 static bool intrinsic_ToObject(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -2351,7 +2350,8 @@ static const JSFunctionSpec intrinsic_functions[] = {
     JS_TRAMPOLINE_FN("std_TypedArray_sort", TypedArrayObject::sort, 1, 0,
                      TypedArraySort),
 
-    JS_FS_END};
+    JS_FS_END,
+};
 
 #ifdef DEBUG
 

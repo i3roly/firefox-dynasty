@@ -33,7 +33,7 @@
 #include "mozilla/gfx/Types.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/ComputedStyle.h"
-#include "SVGPathDataParser.h"
+#include "SVGOuterSVGFrame.h"
 #include "SVGPathData.h"
 #include "SVGPathElement.h"
 
@@ -489,7 +489,7 @@ SVGViewportElement* SVGContentUtils::GetNearestViewportElement(
   return nullptr;
 }
 
-enum class CTMType { NearestViewport, OuterViewport, Screen };
+enum class CTMType { NearestViewport, NonScalingStroke, Screen };
 
 static gfx::Matrix GetCTMInternal(SVGElement* aElement, CTMType aCTMType,
                                   bool aHaveRecursed) {
@@ -531,6 +531,18 @@ static gfx::Matrix GetCTMInternal(SVGElement* aElement, CTMType aCTMType,
   while (ancestor && ancestor->IsSVGElement() &&
          !ancestor->IsSVGElement(nsGkAtoms::foreignObject)) {
     element = static_cast<SVGElement*>(ancestor);
+    if (aCTMType == CTMType::NonScalingStroke) {
+      if (auto* el = SVGSVGElement::FromNode(element); el && !el->IsInner()) {
+        if (SVGOuterSVGFrame* frame =
+                do_QueryFrame(element->GetPrimaryFrame())) {
+          Matrix childTransform;
+          if (frame->HasChildrenOnlyTransform(&childTransform)) {
+            return gfx::ToMatrix(matrix) * childTransform;
+          }
+        }
+        return gfx::ToMatrix(matrix);
+      }
+    }
     matrix *= getLocalTransformHelper(element, true);
     if (aCTMType == CTMType::NearestViewport &&
         SVGContentUtils::EstablishesViewport(element)) {
@@ -571,9 +583,6 @@ static gfx::Matrix GetCTMInternal(SVGElement* aElement, CTMType aCTMType,
     int32_t appUnitsPerCSSPixel = AppUnitsPerCSSPixel();
     tm.PostTranslate(NSAppUnitsToFloatPixels(bp.left, appUnitsPerCSSPixel),
                      NSAppUnitsToFloatPixels(bp.top, appUnitsPerCSSPixel));
-    if (aCTMType == CTMType::OuterViewport) {
-      return tm;
-    }
   }
 
   if (!ancestor || !ancestor->IsElement()) {
@@ -626,8 +635,8 @@ gfx::Matrix SVGContentUtils::GetCTM(SVGElement* aElement) {
   return GetCTMInternal(aElement, CTMType::NearestViewport, false);
 }
 
-gfx::Matrix SVGContentUtils::GetOuterViewportCTM(SVGElement* aElement) {
-  return GetCTMInternal(aElement, CTMType::OuterViewport, false);
+gfx::Matrix SVGContentUtils::GetNonScalingStrokeCTM(SVGElement* aElement) {
+  return GetCTMInternal(aElement, CTMType::NonScalingStroke, false);
 }
 
 gfx::Matrix SVGContentUtils::GetScreenCTM(SVGElement* aElement) {

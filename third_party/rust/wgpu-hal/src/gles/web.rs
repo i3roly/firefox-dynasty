@@ -95,12 +95,8 @@ impl Instance {
 
     fn create_context_options() -> js_sys::Object {
         let context_options = js_sys::Object::new();
-        js_sys::Reflect::set(
-            &context_options,
-            &"antialias".into(),
-            &wasm_bindgen::JsValue::FALSE,
-        )
-        .expect("Cannot create context options");
+        js_sys::Reflect::set(&context_options, &"antialias".into(), &JsValue::FALSE)
+            .expect("Cannot create context options");
         context_options
     }
 }
@@ -171,8 +167,6 @@ impl crate::Instance for Instance {
 
         self.create_surface_from_canvas(canvas)
     }
-
-    unsafe fn destroy_surface(&self, _surface: Surface) {}
 }
 
 #[derive(Debug)]

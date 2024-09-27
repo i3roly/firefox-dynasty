@@ -10,7 +10,9 @@ import io.mockk.Runs
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.spyk
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
@@ -29,13 +31,16 @@ import mozilla.components.support.test.ext.joinBlocking
 import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.test.rule.MainCoroutineRule
 import mozilla.telemetry.glean.testing.GleanTestRule
+import org.junit.After
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mozilla.fenix.GleanMetrics.TrackingProtection
 import org.mozilla.fenix.R
+import org.mozilla.fenix.ext.isTablet
 import org.mozilla.fenix.helpers.FenixRobolectricTestRunner
 import org.mozilla.fenix.shopping.ShoppingExperienceFeature
 import org.mozilla.fenix.utils.Settings
@@ -47,6 +52,16 @@ class BrowserToolbarCFRPresenterTest {
 
     @get:Rule
     val gleanTestRule = GleanTestRule(testContext)
+
+    @Before
+    fun setup() {
+        mockkStatic("org.mozilla.fenix.ext.ContextKt")
+    }
+
+    @After
+    fun teardown() {
+        unmockkStatic("org.mozilla.fenix.ext.ContextKt")
+    }
 
     @Test
     fun `GIVEN the TCP CFR should be shown for a custom tab WHEN the custom tab is fully loaded THEN the TCP CFR is shown`() {
@@ -206,6 +221,7 @@ class BrowserToolbarCFRPresenterTest {
                 every { shouldShowTotalCookieProtectionCFR } returns false
                 every { shouldShowReviewQualityCheckCFR } returns false
                 every { shouldShowEraseActionCFR } returns false
+                every { shouldShowTabletNavigationCFR } returns false
             },
         )
 
@@ -455,11 +471,48 @@ class BrowserToolbarCFRPresenterTest {
         verify(exactly = 1) { presenter.showShoppingCFR(false) }
     }
 
+    @Test
+    fun `GIVEN using a tablet and haven't seen the navigation buttons CFR before WHEN the page is fully loaded THEN show the navigation buttons CFR`() {
+        val tab = createTab(url = "")
+        val browserStore = createBrowserStore(
+            tab = tab,
+            selectedTabId = tab.id,
+        )
+
+        val presenter = createPresenterThatShowsCFRs(
+            context = mockk {
+                every { isTablet() } returns true
+            },
+            browserStore = browserStore,
+            settings = mockk {
+                every { shouldShowTotalCookieProtectionCFR } returns false
+                every { shouldShowEraseActionCFR } returns false
+                every { shouldShowReviewQualityCheckCFR } returns false
+                every { shouldShowTabletNavigationCFR } returns true
+            },
+        )
+
+        presenter.start()
+
+        assertNotNull(presenter.scope)
+
+        browserStore.dispatch(ContentAction.UpdateProgressAction(tab.id, 14)).joinBlocking()
+        verify(exactly = 0) { presenter.showTabletNavigationCFR() }
+
+        browserStore.dispatch(ContentAction.UpdateProgressAction(tab.id, 99)).joinBlocking()
+        verify(exactly = 0) { presenter.showTabletNavigationCFR() }
+
+        browserStore.dispatch(ContentAction.UpdateProgressAction(tab.id, 100)).joinBlocking()
+        verify { presenter.showTabletNavigationCFR() }
+    }
+
     /**
      * Creates and return a [spyk] of a [BrowserToolbarCFRPresenter] that can handle actually showing CFRs.
      */
     private fun createPresenterThatShowsCFRs(
-        context: Context = mockk(),
+        context: Context = mockk {
+            every { isTablet() } returns false
+        },
         anchor: View = mockk(),
         browserStore: BrowserStore = mockk(),
         settings: Settings = mockk {
@@ -467,6 +520,7 @@ class BrowserToolbarCFRPresenterTest {
             every { openTabsCount } returns 5
             every { shouldShowReviewQualityCheckCFR } returns false
             every { shouldShowEraseActionCFR } returns false
+            every { shouldShowTabletNavigationCFR } returns false
         },
         toolbar: BrowserToolbar = mockk(),
         isPrivate: Boolean = false,
@@ -475,6 +529,7 @@ class BrowserToolbarCFRPresenterTest {
         every { showTcpCfr() } just Runs
         every { showShoppingCFR(any()) } just Runs
         every { showEraseCfr() } just Runs
+        every { showTabletNavigationCFR() } just Runs
     }
 
     /**
@@ -486,6 +541,7 @@ class BrowserToolbarCFRPresenterTest {
             every { getString(R.string.tcp_cfr_message) } returns "Test"
             every { getColor(any()) } returns 0
             every { getString(R.string.pref_key_should_show_review_quality_cfr) } returns "test"
+            every { isTablet() } returns false
         },
         anchor: View = mockk(relaxed = true),
         browserStore: BrowserStore = mockk(),
@@ -495,6 +551,7 @@ class BrowserToolbarCFRPresenterTest {
             every { openTabsCount } returns 5
             every { shouldShowCookieBannersCFR } returns true
             every { shouldShowReviewQualityCheckCFR } returns true
+            every { shouldShowTabletNavigationCFR } returns true
         },
         toolbar: BrowserToolbar = mockk {
             every { findViewById<View>(R.id.mozac_browser_toolbar_security_indicator) } returns anchor
@@ -512,7 +569,7 @@ class BrowserToolbarCFRPresenterTest {
             browserStore = browserStore,
             settings = settings,
             toolbar = toolbar,
-            sessionId = sessionId,
+            customTabId = sessionId,
             isPrivate = isPrivate,
             onShoppingCfrActionClicked = {},
             onShoppingCfrDisplayed = {},

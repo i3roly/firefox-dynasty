@@ -8,7 +8,7 @@
 # documentation and how to modify this file.
 repo: mozilla-central
 created_at: '2021-10-14T12:50:40.073465'
-updated_at: '2024-08-02T14:33:27.873770+00:00'
+updated_at: '2024-08-28T12:42:03.276491+00:00'
 export:
   path: ./docs/mots/index.rst
   format: rst
@@ -2665,16 +2665,18 @@ modules:
       - *jrmuizel
     machine_name: core_static_analysis_rewriting_for_c
 
-  - name: 'Core: storage'
-    description: Storage APIs, SQLite backend
+  - name: 'Core: SQLite and Embedded Database Bindings'
+    description: Embedded database engines and their code bindings.
     includes:
-      - third_party/sqlite3/**/*
       - storage/**/*
+      - third_party/sqlite3/**/*
+      - toolkit/components/kvstore/**/*
+      - toolkit/modules/Sqlite.sys.mjs
     meta:
       group: dev-platform
-      url: http://developer.mozilla.org/en/docs/Storage
+      url: https://firefox-source-docs.mozilla.org/storage/index.html
       components:
-        - Toolkit::Storage, Core::SQL
+        - Core::SQLite and Embedded Database Bindings
       owners_emeritus:
         - Shawn Wilsher
     owners:
@@ -3397,12 +3399,13 @@ modules:
         owners:
           - *dao
         peers:
-          - *itielyn8
-          - *sfoster
-          - *emilio
-          - *jules
           - *cmkm
+          - *emilio
+          - *hjones
+          - *itielyn8
+          - *jules
           - *kcochrane
+          - *sfoster
         machine_name: desktop_theme
 
       - name: Desktop UI
@@ -4080,7 +4083,7 @@ modules:
       - testing/gtest/**/*
     excludes: []
     owners:
-      - *gbrown
+      - *jmaher
     peers: []
     meta:
       components:
@@ -4116,7 +4119,6 @@ modules:
       - *ahal
     peers:
       - *jmaher
-      - *gbrown
     meta:
       components:
         - 'Testing :: Mochitest'
@@ -4127,7 +4129,7 @@ modules:
       - testing/mozbase
     excludes: []
     owners:
-      - *gbrown
+      - *jmaher
     peers:
       - *ahal
       - *ato
@@ -4224,8 +4226,6 @@ modules:
     excludes: []
     owners:
       - *jmaher
-    peers:
-      - *gbrown
     meta:
       components:
         - Testing::XPCShell Harness
@@ -4372,5 +4372,5 @@ modules:
         - Ryan Tilder
       group: dev-platform
 hashes:
-  config: 6410cc12ee3bad1c67d4d797975e16bb4339cab7
-  export: c3de175b04f17bbfeff4fd79b44521be63f74b51
+  config: fd48eb8147e73f4b39107fe2f56f0d0903fc1166
+  export: e31a31001c2b73c5b6b1a223908fdb75caea2ac4

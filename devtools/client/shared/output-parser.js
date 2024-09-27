@@ -124,6 +124,7 @@ class OutputParser {
   #cssProperties;
   #doc;
   #parsed = [];
+  #stack = [];
 
   /**
    * Parse a CSS property value given a property name.
@@ -158,10 +159,17 @@ class OutputParser {
       name === "shape-outside" ||
       name === "offset-path";
     options.expectFont = name === "font-family";
+    options.isVariable = name.startsWith("--");
     options.supportsColor =
       this.#cssProperties.supportsType(name, "color") ||
       this.#cssProperties.supportsType(name, "gradient") ||
-      (name.startsWith("--") && InspectorUtils.isValidCSSColor(value));
+      // Parse colors for CSS variables declaration if the declaration value or the computed
+      // value are valid colors.
+      (options.isVariable &&
+        (InspectorUtils.isValidCSSColor(value) ||
+          InspectorUtils.isValidCSSColor(
+            options.getVariableData?.(name).computedValue
+          )));
 
     // The filter property is special in that we want to show the
     // swatch even if the value is invalid, because this way the user
@@ -221,6 +229,7 @@ class OutputParser {
       } else if (token.tokenType === "ParenthesisBlock") {
         ++depth;
       } else if (token.tokenType === "CloseParenthesis") {
+        this.#onCloseParenthesis(options);
         --depth;
         if (depth === 0) {
           break;
@@ -231,13 +240,9 @@ class OutputParser {
         options.getVariableData
       ) {
         sawVariable = true;
-        const { node, value, fallbackValue } = this.#parseVariable(
-          token,
-          text,
-          tokenStream,
-          options
-        );
-        functionData.push({ node, value, fallbackValue });
+        const { node, value, computedValue, fallbackValue } =
+          this.#parseVariable(token, text, tokenStream, options);
+        functionData.push({ node, value, computedValue, fallbackValue });
       } else if (token.tokenType === "Function") {
         ++depth;
       }
@@ -298,7 +303,8 @@ class OutputParser {
 
     let varData;
     let varFallbackValue;
-    let varSubsitutedValue;
+    let varSubstitutedValue;
+    let varComputedValue;
 
     // Get the variable value if it is in use.
     if (tokens && tokens.length === 1) {
@@ -316,36 +322,36 @@ class OutputParser {
             // - or if there's no declaration in regular rule, to the registered property initial-value.
             varValue;
 
-      varSubsitutedValue = options.inStartingStyleRule
+      varSubstitutedValue = options.inStartingStyleRule
         ? varStartingStyleValue
         : varValue;
+
+      varComputedValue = varData.computedValue;
     }
 
-    // Get the variable name.
-    const varName = text.substring(tokens[0].startOffset, tokens[0].endOffset);
-
-    if (typeof varSubsitutedValue === "string") {
-      // The variable value is valid, set the variable name's title of the first argument
-      // in var() to display the variable name and value.
-      firstOpts["data-variable"] = STYLE_INSPECTOR_L10N.getFormatStr(
-        "rule.variableValue",
-        varName,
-        varSubsitutedValue
-      );
+    if (typeof varSubstitutedValue === "string") {
+      // The variable value is valid, store the substituted value in a data attribute to
+      // be reused by the variable tooltip.
+      firstOpts["data-variable"] = varSubstitutedValue;
       firstOpts.class = options.matchedVariableClass;
       secondOpts.class = options.unmatchedClass;
+
+      // Display computed value when it exists, is different from the substituted value
+      // we computed, and we're not inside a starting-style rule
+      if (
+        !options.inStartingStyleRule &&
+        typeof varComputedValue === "string" &&
+        varComputedValue !== varSubstitutedValue
+      ) {
+        firstOpts["data-variable-computed"] = varComputedValue;
+      }
 
       // Display starting-style value when not in a starting style rule
       if (
         !options.inStartingStyleRule &&
         typeof varData.startingStyle === "string"
       ) {
-        firstOpts["data-starting-style-variable"] =
-          STYLE_INSPECTOR_L10N.getFormatStr(
-            "rule.variableValue",
-            varName,
-            varData.startingStyle
-          );
+        firstOpts["data-starting-style-variable"] = varData.startingStyle;
       }
 
       if (varData.registeredProperty) {
@@ -358,6 +364,12 @@ class OutputParser {
     } else {
       // The variable is not set and does not have an initial value, mark it unmatched.
       firstOpts.class = options.unmatchedClass;
+
+      // Get the variable name.
+      const varName = text.substring(
+        tokens[0].startOffset,
+        tokens[0].endOffset
+      );
       firstOpts["data-variable"] = STYLE_INSPECTOR_L10N.getFormatStr(
         "rule.variableUnset",
         varName
@@ -376,9 +388,12 @@ class OutputParser {
       const subOptions = Object.assign({}, options);
       subOptions.expectFilter = false;
       const saveParsed = this.#parsed;
+      const savedStack = this.#stack;
       this.#parsed = [];
+      this.#stack = [];
       const rest = this.#doParse(text, subOptions, tokenStream, true);
       this.#parsed = saveParsed;
+      this.#stack = savedStack;
 
       const span = this.#createNode("span", secondOpts);
       span.appendChild(rest);
@@ -389,7 +404,8 @@ class OutputParser {
 
     return {
       node: variableNode,
-      value: varSubsitutedValue,
+      value: varSubstitutedValue,
+      computedValue: varComputedValue,
       fallbackValue: varFallbackValue,
     };
   }
@@ -412,18 +428,15 @@ class OutputParser {
    */
   // eslint-disable-next-line complexity
   #doParse(text, options, tokenStream, stopAtCloseParen) {
-    let parenDepth = stopAtCloseParen ? 1 : 0;
-    let outerMostFunctionTakesColor = false;
-    const colorFunctions = [];
     let fontFamilyNameParts = [];
     let previousWasBang = false;
 
-    const colorOK = function () {
+    const colorOK = () => {
       return (
         options.supportsColor ||
-        (options.expectFilter &&
-          parenDepth === 1 &&
-          outerMostFunctionTakesColor)
+        ((options.expectFilter || options.isVariable) &&
+          this.#stack.length !== 0 &&
+          this.#stack.at(-1).isColorTakingFunction)
       );
     };
 
@@ -455,6 +468,18 @@ class OutputParser {
           const isColorTakingFunction = COLOR_TAKING_FUNCTIONS.has(
             lowerCaseFunctionName
           );
+
+          this.#stack.push({
+            lowerCaseFunctionName,
+            functionName,
+            isColorTakingFunction,
+            // The position of the function separators ("," or "/") in the `parts` property
+            separatorIndexes: [],
+            // The parsed parts of the function that will be rendered on screen.
+            // This can hold both simple strings and DOMNodes.
+            parts: [],
+          });
+
           if (
             isColorTakingFunction ||
             ANGLE_TAKING_FUNCTIONS.has(lowerCaseFunctionName)
@@ -466,31 +491,39 @@ class OutputParser {
             this.#appendTextNode(
               text.substring(token.startOffset, token.endOffset)
             );
-            if (parenDepth === 0) {
-              outerMostFunctionTakesColor = isColorTakingFunction;
-            }
-            if (isColorTakingFunction) {
-              colorFunctions.push({ parenDepth, functionName });
-            }
-            ++parenDepth;
           } else if (
             lowerCaseFunctionName === "var" &&
             options.getVariableData
           ) {
-            const { node: variableNode, value } = this.#parseVariable(
-              token,
-              text,
-              tokenStream,
-              options
-            );
-            if (value && colorOK() && InspectorUtils.isValidCSSColor(value)) {
-              this.#appendColor(value, {
+            const {
+              node: variableNode,
+              value,
+              computedValue,
+            } = this.#parseVariable(token, text, tokenStream, options);
+
+            const variableValue = computedValue ?? value;
+            // InspectorUtils.isValidCSSColor returns true for `light-dark()` function,
+            // but `#isValidColor` returns false. As the latter is used in #appendColor,
+            // we need to check that both functions return true.
+            const colorObj =
+              value &&
+              colorOK() &&
+              InspectorUtils.isValidCSSColor(variableValue)
+                ? new colorUtils.CssColor(variableValue)
+                : null;
+
+            if (colorObj && this.#isValidColor(colorObj)) {
+              const colorFunctionEntry = this.#stack.findLast(
+                entry => entry.isColorTakingFunction
+              );
+              this.#appendColor(variableValue, {
                 ...options,
+                colorObj,
                 variableContainer: variableNode,
-                colorFunction: colorFunctions.at(-1)?.functionName,
+                colorFunction: colorFunctionEntry?.functionName,
               });
             } else {
-              this.#parsed.push(variableNode);
+              this.#append(variableNode);
             }
           } else {
             const {
@@ -509,7 +542,9 @@ class OutputParser {
                     if (typeof data === "string") {
                       return data;
                     }
-                    return data.value ?? data.fallbackValue;
+                    return (
+                      data.computedValue ?? data.value ?? data.fallbackValue
+                    );
                   })
                   .join("") +
                 ")";
@@ -517,9 +552,13 @@ class OutputParser {
                 colorOK() &&
                 InspectorUtils.isValidCSSColor(computedFunctionText)
               ) {
+                const colorFunctionEntry = this.#stack.findLast(
+                  entry => entry.isColorTakingFunction
+                );
+
                 this.#appendColor(computedFunctionText, {
                   ...options,
-                  colorFunction: colorFunctions.at(-1)?.functionName,
+                  colorFunction: colorFunctionEntry?.functionName,
                   valueParts: [
                     functionName,
                     "(",
@@ -535,7 +574,7 @@ class OutputParser {
                   if (typeof data === "string") {
                     this.#appendTextNode(data);
                   } else if (data) {
-                    this.#parsed.push(data.node);
+                    this.#append(data.node);
                   }
                 }
                 this.#appendTextNode(")");
@@ -583,9 +622,12 @@ class OutputParser {
                 colorOK() &&
                 InspectorUtils.isValidCSSColor(functionText)
               ) {
+                const colorFunctionEntry = this.#stack.findLast(
+                  entry => entry.isColorTakingFunction
+                );
                 this.#appendColor(functionText, {
                   ...options,
-                  colorFunction: colorFunctions.at(-1)?.functionName,
+                  colorFunction: colorFunctionEntry?.functionName,
                 });
               } else if (
                 options.expectShape &&
@@ -622,9 +664,12 @@ class OutputParser {
               options.gridClass
             );
           } else if (colorOK() && InspectorUtils.isValidCSSColor(token.text)) {
+            const colorFunctionEntry = this.#stack.findLast(
+              entry => entry.isColorTakingFunction
+            );
             this.#appendColor(token.text, {
               ...options,
-              colorFunction: colorFunctions.at(-1)?.functionName,
+              colorFunction: colorFunctionEntry?.functionName,
             });
           } else if (angleOK(token.text)) {
             this.#appendAngle(token.text, options);
@@ -649,9 +694,12 @@ class OutputParser {
               // color is changed to something like rgb(...).
               this.#appendTextNode(" ");
             }
+            const colorFunctionEntry = this.#stack.findLast(
+              entry => entry.isColorTakingFunction
+            );
             this.#appendColor(original, {
               ...options,
-              colorFunction: colorFunctions.at(-1)?.functionName,
+              colorFunction: colorFunctionEntry?.functionName,
             });
           } else {
             this.#appendTextNode(original);
@@ -698,27 +746,26 @@ class OutputParser {
           break;
 
         case "ParenthesisBlock":
-          ++parenDepth;
+          this.#stack.push({
+            isParenthesis: true,
+            separatorIndexes: [],
+            // The parsed parts of the function that will be rendered on screen.
+            // This can hold both simple strings and DOMNodes.
+            parts: [],
+          });
           this.#appendTextNode(
             text.substring(token.startOffset, token.endOffset)
           );
           break;
 
         case "CloseParenthesis":
-          --parenDepth;
+          this.#onCloseParenthesis(options);
 
-          if (colorFunctions.at(-1)?.parenDepth == parenDepth) {
-            colorFunctions.pop();
-          }
-
-          if (stopAtCloseParen && parenDepth === 0) {
+          if (stopAtCloseParen && this.#stack.length === 0) {
             done = true;
             break;
           }
 
-          if (parenDepth === 0) {
-            outerMostFunctionTakesColor = false;
-          }
           this.#appendTextNode(
             text.substring(token.startOffset, token.endOffset)
           );
@@ -733,6 +780,14 @@ class OutputParser {
           ) {
             this.#appendFontFamily(fontFamilyNameParts.join(""), options);
             fontFamilyNameParts = [];
+          }
+
+          // Add separator for the current function
+          if (this.#stack.length) {
+            this.#appendTextNode(token.text);
+            const entry = this.#stack.at(-1);
+            entry.separatorIndexes.push(entry.parts.length - 1);
+            break;
           }
 
         // falls through
@@ -761,6 +816,15 @@ class OutputParser {
       this.#appendFontFamily(fontFamilyNameParts.join(""), options);
     }
 
+    // We might never encounter a matching closing parenthesis for a function and still
+    // have a "valid" value (e.g. `background: linear-gradient(90deg, red, blue"`)
+    // In such case, go through the stack and handle each items until we have nothing left.
+    if (this.#stack.length) {
+      while (this.#stack.length !== 0) {
+        this.#onCloseParenthesis(options);
+      }
+    }
+
     let result = this.#toDOM();
 
     if (options.expectFilter && !options.filterSwatch) {
@@ -768,6 +832,111 @@ class OutputParser {
     }
 
     return result;
+  }
+
+  #onCloseParenthesis(options) {
+    if (!this.#stack.length) {
+      return;
+    }
+
+    const stackEntry = this.#stack.at(-1);
+    if (
+      stackEntry.lowerCaseFunctionName === "light-dark" &&
+      typeof options.isDarkColorScheme === "boolean" &&
+      // light-dark takes exactly two parameters, so if we don't get exactly 1 separator
+      // at this point, that means that the value is valid at parse time, but is invalid
+      // at computed value time.
+      // TODO: We might want to add a class to indicate that this is invalid at computed
+      // value time (See Bug 1910845)
+      stackEntry.separatorIndexes.length === 1
+    ) {
+      const stackEntryParts = this.#getCurrentStackParts();
+      const separatorIndex = stackEntry.separatorIndexes[0];
+      let startIndex;
+      let endIndex;
+      if (options.isDarkColorScheme) {
+        // If we're using a dark color scheme, we want to mark the first param as
+        // not used.
+
+        // The first "part" is `light-dark(`, so we can start after that.
+        // We want to filter out white space character before the first parameter
+        for (startIndex = 1; startIndex < separatorIndex; startIndex++) {
+          const part = stackEntryParts[startIndex];
+          if (typeof part !== "string" || part.trim() !== "") {
+            break;
+          }
+        }
+
+        // same for the end of the parameter, we want to filter out whitespaces
+        // after the parameter and before the comma
+        for (
+          endIndex = separatorIndex - 1;
+          endIndex >= startIndex;
+          endIndex--
+        ) {
+          const part = stackEntryParts[endIndex];
+          if (typeof part !== "string" || part.trim() !== "") {
+            // We found a non-whitespace part, we need to include it, so increment the endIndex
+            endIndex++;
+            break;
+          }
+        }
+      } else {
+        // If we're not using a dark color scheme, we want to mark the second param as
+        // not used.
+
+        // We want to filter out white space character after the comma and before the
+        // second parameter
+        for (
+          startIndex = separatorIndex + 1;
+          startIndex < stackEntryParts.length;
+          startIndex++
+        ) {
+          const part = stackEntryParts[startIndex];
+          if (typeof part !== "string" || part.trim() !== "") {
+            break;
+          }
+        }
+
+        // same for the end of the parameter, we want to filter out whitespaces
+        // after the parameter and before the closing parenthesis (which is not yet
+        // included in stackEntryParts)
+        for (
+          endIndex = stackEntryParts.length - 1;
+          endIndex > separatorIndex;
+          endIndex--
+        ) {
+          const part = stackEntryParts[endIndex];
+          if (typeof part !== "string" || part.trim() !== "") {
+            // We found a non-whitespace part, we need to include it, so increment the endIndex
+            endIndex++;
+            break;
+          }
+        }
+      }
+
+      const parts = stackEntryParts.slice(startIndex, endIndex);
+
+      // If the item we need to mark is already an element (e.g. a parsed color),
+      // just add a class to it.
+      if (parts.length === 1 && Element.isInstance(parts[0])) {
+        parts[0].classList.add(options.unmatchedClass);
+      } else {
+        // Otherwise, we need to wrap our parts into a specific element so we can
+        // style them
+        const node = this.#createNode("span", {
+          class: options.unmatchedClass,
+        });
+        node.append(...parts);
+        stackEntryParts.splice(startIndex, parts.length, node);
+      }
+    }
+
+    // Our job is done here, pop last stack entry
+    const { parts } = this.#stack.pop();
+    // Put all the parts in the "new" last stack, or the main parsed array if there
+    // is no more entry in the stack
+    this.#getCurrentStackParts().push(...parts);
   }
 
   /**
@@ -784,6 +953,7 @@ class OutputParser {
   #parse(text, options = {}) {
     text = text.trim();
     this.#parsed.length = 0;
+    this.#stack.length = 0;
 
     const tokenStream = new InspectorCSSParserWrapper(text);
     return this.#doParse(text, options, tokenStream, false);
@@ -855,7 +1025,7 @@ class OutputParser {
     );
 
     container.appendChild(value);
-    this.#parsed.push(container);
+    this.#append(container);
   }
 
   #appendLinear(text, options) {
@@ -882,7 +1052,7 @@ class OutputParser {
     );
 
     container.appendChild(value);
-    this.#parsed.push(container);
+    this.#append(container);
   }
 
   /**
@@ -907,7 +1077,7 @@ class OutputParser {
 
     const value = this.#createNode("span", {}, text);
     container.append(value);
-    this.#parsed.push(container);
+    this.#append(container);
   }
 
   /**
@@ -967,7 +1137,7 @@ class OutputParser {
       }
     }
 
-    this.#parsed.push(container);
+    this.#append(container);
   }
 
   /**
@@ -1642,7 +1812,7 @@ class OutputParser {
     );
 
     container.appendChild(value);
-    this.#parsed.push(container);
+    this.#append(container);
   }
 
   /**
@@ -1674,14 +1844,18 @@ class OutputParser {
   /**
    * Append a color to the output.
    *
-   * @param  {String} color
+   * @param {String} color
    *         Color to append
-   * @param  {Object} [options]
-   *         Options object. For valid options and default values see
-   *         #mergeOptions().
+   * @param {Object} [options]
+   * @param {CSSColor} options.colorObj: A css color for the passed color. Will be computed
+   *         if not passed.
+   * @param {DOMNode} options.variableContainer: A DOM Node that is the result of parsing
+   *        a CSS variable
+   * @param {String} options.colorFunction: The color function that is used to produce this color
+   * @param {*} For all the other valid options and default values see #mergeOptions().
    */
   #appendColor(color, options = {}) {
-    const colorObj = new colorUtils.CssColor(color);
+    const colorObj = options.colorObj || new colorUtils.CssColor(color);
 
     if (this.#isValidColor(colorObj)) {
       const container = this.#createNode("span", {
@@ -1745,7 +1919,7 @@ class OutputParser {
         container.appendChild(value);
       }
 
-      this.#parsed.push(container);
+      this.#append(container);
     } else {
       this.#appendTextNode(color);
     }
@@ -1966,7 +2140,8 @@ class OutputParser {
     const attrs = Object.getOwnPropertyNames(attributes);
 
     for (const attr of attrs) {
-      if (attributes[attr]) {
+      const attrValue = attributes[attr];
+      if (attrValue !== null && attrValue !== undefined) {
         node.setAttribute(attr, attributes[attr]);
       }
     }
@@ -1980,7 +2155,7 @@ class OutputParser {
   }
 
   /**
-   * Append a node to the output.
+   * Create and append a node to the output.
    *
    * @param  {String} tagName
    *         Tag type e.g. "div"
@@ -1996,7 +2171,16 @@ class OutputParser {
       node.classList.add(TRUNCATE_NODE_CLASSNAME);
     }
 
-    this.#parsed.push(node);
+    this.#append(node);
+  }
+
+  /**
+   * Append an element or a text node to the output.
+   *
+   * @param {DOMNode|String} item
+   */
+  #append(item) {
+    this.#getCurrentStackParts().push(item);
   }
 
   /**
@@ -2007,16 +2191,17 @@ class OutputParser {
    *         Text to append
    */
   #appendTextNode(text) {
-    const lastItem = this.#parsed[this.#parsed.length - 1];
     if (text.length > TRUNCATE_LENGTH_THRESHOLD) {
       // If the text is too long, force creating a node, which will add the
       // necessary classname to truncate the property correctly.
       this.#appendNode("span", {}, text);
-    } else if (typeof lastItem === "string") {
-      this.#parsed[this.#parsed.length - 1] = lastItem + text;
     } else {
-      this.#parsed.push(text);
+      this.#append(text);
     }
+  }
+
+  #getCurrentStackParts() {
+    return this.#stack.at(-1)?.parts || this.#parsed;
   }
 
   /**
@@ -2037,6 +2222,7 @@ class OutputParser {
     }
 
     this.#parsed.length = 0;
+    this.#stack.length = 0;
     return frag;
   }
 
@@ -2077,30 +2263,32 @@ class OutputParser {
    *          - {RegisteredPropertyResource|undefined} registeredProperty: The registered
    *            property data (syntax, initial value, inherits). Undefined if the variable
    *            is not a registered property.
+   * @param {Boolean} overrides.isDarkColorScheme: Is the currently applied color scheme dark.
    * @return {Object} Overridden options object
    */
   #mergeOptions(overrides) {
     const defaults = {
       useDefaultColorUnit: true,
       defaultColorUnit: "authored",
-      angleClass: "",
-      angleSwatchClass: "",
-      bezierClass: "",
-      bezierSwatchClass: "",
-      colorClass: "",
-      colorSwatchClass: "",
+      angleClass: null,
+      angleSwatchClass: null,
+      bezierClass: null,
+      bezierSwatchClass: null,
+      colorClass: null,
+      colorSwatchClass: null,
       filterSwatch: false,
-      flexClass: "",
-      gridClass: "",
-      shapeClass: "",
-      shapeSwatchClass: "",
+      flexClass: null,
+      gridClass: null,
+      shapeClass: null,
+      shapeSwatchClass: null,
       supportsColor: false,
-      urlClass: "",
-      fontFamilyClass: "",
+      urlClass: null,
+      fontFamilyClass: null,
       baseURI: undefined,
       getVariableData: null,
       unmatchedClass: null,
       inStartingStyleRule: false,
+      isDarkColorScheme: null,
     };
 
     for (const item in overrides) {

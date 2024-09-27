@@ -42,6 +42,7 @@ const KNOWN_ERROR_TITLE_IDS = new Set([
   "unsafeContentType-title",
   "netReset-title",
   "netTimeout-title",
+  "serverError-title",
   "unknownProtocolFound-title",
   "proxyConnectFailure-title",
   "proxyResolveFailure-title",
@@ -159,11 +160,6 @@ function setupAdvancedButton() {
     if (panel.hidden) {
       // Reveal
       revealAdvancedPanelSlowlyAsync();
-
-      // send event to trigger telemetry ping
-      document.dispatchEvent(
-        new CustomEvent("AboutNetErrorUIExpanded", { bubbles: true })
-      );
     } else {
       // Hide
       panel.hidden = true;
@@ -437,7 +433,7 @@ function initPage() {
       learnMore.hidden = false;
 
       const netErrorInfo = document.getNetErrorInfo();
-      recordSecurityUITelemetry(
+      void recordSecurityUITelemetry(
         "security.ui.tlserror",
         "load",
         "abouttlserror",
@@ -555,6 +551,8 @@ function initPage() {
         descriptionTag = "neterror-dns-not-found-trr-server-problem";
       } else if (skipReason == "TRR_BAD_URL") {
         descriptionTag = "neterror-dns-not-found-bad-trr-url";
+      } else if (skipReason == "TRR_SYSTEM_SLEEP_MODE") {
+        descriptionTag = "neterror-dns-not-found-system-sleep";
       }
 
       let trrMode = RPMGetIntPref("network.trr.mode").toString();
@@ -745,6 +743,7 @@ function getNetErrorDescParts() {
     case "netInterrupt":
     case "netReset":
     case "netTimeout":
+    case "serverError":
       return [
         ["li", "neterror-load-error-try-again"],
         ["li", "neterror-load-error-connection"],
@@ -995,7 +994,7 @@ function initPageCertError() {
   }
 
   const failedCertInfo = document.getFailedCertSecurityInfo();
-  recordSecurityUITelemetry(
+  void recordSecurityUITelemetry(
     "security.ui.certerror",
     "load",
     "aboutcerterror",
@@ -1005,7 +1004,7 @@ function initPageCertError() {
   setCertErrorDetails();
 }
 
-function recordSecurityUITelemetry(category, evt, objectName, errorInfo) {
+async function recordSecurityUITelemetry(category, evt, objectName, errorInfo) {
   // Truncate the error code to avoid going over the allowed
   // string size limit for telemetry events.
   let errorCode = errorInfo.errorCodeString.substring(0, 40);
@@ -1018,6 +1017,21 @@ function recordSecurityUITelemetry(category, evt, objectName, errorInfo) {
   if (evt == "load") {
     extraKeys.channel_status = errorInfo.channelStatus.toString();
   }
+  if (category == "security.ui.certerror" && evt == "load") {
+    extraKeys.issued_by_cca = false.toString();
+    let issuer = errorInfo.certChainStrings.at(-1);
+    if (issuer && errorCode == "SEC_ERROR_UNKNOWN_ISSUER") {
+      try {
+        let parsed = await parse(pemToDER(issuer));
+        extraKeys.issued_by_cca = (
+          parsed.issuer.dn == "c=IN, o=India PKI, cn=CCA India 2022 SPL" ||
+          parsed.issuer.dn == "c=IN, o=India PKI, cn=CCA India 2015 SPL"
+        ).toString();
+      } catch (e) {
+        console.error("error parsing issuer certificate:", e);
+      }
+    }
+  }
   RPMRecordTelemetryEvent(category, evt, objectName, errorCode, extraKeys);
 }
 
@@ -1025,7 +1039,7 @@ function recordClickTelemetry(e) {
   let target = e.originalTarget;
   let telemetryId = target.dataset.telemetryId;
   let failedCertInfo = document.getFailedCertSecurityInfo();
-  recordSecurityUITelemetry(
+  void recordSecurityUITelemetry(
     "security.ui.certerror",
     "click",
     telemetryId,

@@ -314,6 +314,8 @@ class MouseInput : public InputData {
    * event or following "mouseup", set to true.
    */
   bool mPreventClickEvent;
+  bool mIgnoreCapturingContent;
+  bool mSynthesizeMoveAfterDispatch;
 };
 
 /**

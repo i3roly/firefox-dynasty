@@ -49,9 +49,7 @@ using namespace js::jit;
 using namespace js::wasm;
 
 using mozilla::IsPowerOfTwo;
-using mozilla::Maybe;
 using mozilla::Nothing;
-using mozilla::Some;
 
 namespace {
 
@@ -270,6 +268,7 @@ class FunctionCompiler {
   const FuncCompileInput& func_;
   const ValTypeVector& locals_;
   size_t lastReadCallSite_;
+  size_t numCallRefs_;
 
   TempAllocator& alloc_;
   MIRGraph& graph_;
@@ -321,6 +320,7 @@ class FunctionCompiler {
         func_(func),
         locals_(locals),
         lastReadCallSite_(0),
+        numCallRefs_(0),
         alloc_(mirGen.alloc()),
         graph_(mirGen.graph()),
         info_(compileInfo),
@@ -347,6 +347,7 @@ class FunctionCompiler {
         func_(func),
         locals_(locals),
         lastReadCallSite_(0),
+        numCallRefs_(0),
         alloc_(callerCompiler_->alloc_),
         graph_(callerCompiler_->graph_),
         info_(compileInfo),
@@ -521,6 +522,9 @@ class FunctionCompiler {
     MOZ_ASSERT(inDeadCode());
     MOZ_ASSERT(done());
     MOZ_ASSERT(func_.callSiteLineNums.length() == lastReadCallSite_);
+    MOZ_ASSERT_IF(
+        compilerEnv().mode() == CompileMode::LazyTiering,
+        codeMeta_.getFuncDefCallRefs(funcIndex()).length == numCallRefs_);
   }
 
   /************************* Read-only interface (after local scope setup) */
@@ -1357,7 +1361,7 @@ class FunctionCompiler {
   // the offset rather than vice versa is that a small offset can be ignored
   // by both explicit bounds checking and bounds check elimination.
   void foldConstantPointer(MemoryAccessDesc* access, MDefinition** base) {
-    uint32_t offsetGuardLimit = GetMaxOffsetGuardLimit(
+    uint64_t offsetGuardLimit = GetMaxOffsetGuardLimit(
         codeMeta_.hugeMemoryEnabled(access->memoryIndex()));
 
     if ((*base)->isConstant()) {
@@ -1369,9 +1373,8 @@ class FunctionCompiler {
       }
 
       uint64_t offset = access->offset64();
-
       if (offset < offsetGuardLimit && basePtr < offsetGuardLimit - offset) {
-        offset += uint32_t(basePtr);
+        offset += basePtr;
         access->setOffset32(uint32_t(offset));
         *base = isMem64(access->memoryIndex()) ? constantI64(int64_t(0))
                                                : constantI32(0);
@@ -1383,7 +1386,7 @@ class FunctionCompiler {
   // be checked, compute the effective address, trapping on overflow.
   void maybeComputeEffectiveAddress(MemoryAccessDesc* access,
                                     MDefinition** base, bool mustAddOffset) {
-    uint32_t offsetGuardLimit = GetMaxOffsetGuardLimit(
+    uint64_t offsetGuardLimit = GetMaxOffsetGuardLimit(
         codeMeta_.hugeMemoryEnabled(access->memoryIndex()));
 
     if (access->offset64() >= offsetGuardLimit ||
@@ -1472,8 +1475,8 @@ class FunctionCompiler {
     MOZ_ASSERT(!inDeadCode());
     MOZ_ASSERT(!codeMeta_.isAsmJS());
 
-    // Attempt to fold an offset into a constant base pointer so as to simplify
-    // the addressing expression.  This may update *base.
+    // Attempt to fold a constant base pointer into the offset so as to simplify
+    // the addressing expression. This may update *base.
     foldConstantPointer(access, base);
 
     // Determine whether an alignment check is needed and whether the offset
@@ -1537,7 +1540,8 @@ class FunctionCompiler {
     return codeMeta_.hugeMemoryEnabled(memoryIndex);
   }
 
-  // Add the offset into the pointer to yield the EA; trap on overflow.
+  // Add the offset into the pointer to yield the EA; trap on overflow. Clears
+  // the offset on the memory access as a result.
   MDefinition* computeEffectiveAddress(MDefinition* base,
                                        MemoryAccessDesc* access) {
     if (inDeadCode()) {
@@ -1934,6 +1938,20 @@ class FunctionCompiler {
                                                    v, instancePointer_);
     curBlock_->add(store);
     return true;
+  }
+
+  // Load the slot on the instance where the result of `ref.func` is cached.
+  // This may be null if a function reference for this function has not been
+  // asked for yet.
+  MDefinition* loadCachedRefFunc(uint32_t funcIndex) {
+    uint32_t exportedFuncIndex = codeMeta().findFuncExportIndex(funcIndex);
+    MWasmLoadInstanceDataField* refFunc = MWasmLoadInstanceDataField::New(
+        alloc(), MIRType::WasmAnyRef,
+        codeMeta_.offsetOfFuncExportInstanceData(exportedFuncIndex) +
+            offsetof(FuncExportInstanceData, func),
+        true, instancePointer_);
+    curBlock_->add(refFunc);
+    return refFunc;
   }
 
   MDefinition* loadTableField(uint32_t tableIndex, unsigned fieldOffset,
@@ -2390,6 +2408,11 @@ class FunctionCompiler {
       return false;
     }
 
+    // We can't inline an imported function.
+    if (codeMeta().funcIsImport(funcIndex)) {
+      return false;
+    }
+
     // Limit the inlining depth.
     if (inliningDepth() > JS::Prefs::wasm_experimental_inline_depth_limit()) {
       return false;
@@ -2599,6 +2622,8 @@ class FunctionCompiler {
       MOZ_ASSERT(callIndirectId.kind() == CallIndirectIdKind::AsmJS);
       uint32_t tableIndex = codeMeta_.asmJSSigToTableIndex[funcTypeIndex];
       const TableDesc& table = codeMeta_.tables[tableIndex];
+      // ensured by asm.js validation
+      MOZ_ASSERT(table.initialLength() <= UINT32_MAX);
       MOZ_ASSERT(IsPowerOfTwo(table.initialLength()));
 
       MDefinition* mask = constantI32(int32_t(table.initialLength() - 1));
@@ -2780,6 +2805,104 @@ class FunctionCompiler {
 #  endif  // ENABLE_WASM_TAIL_CALLS
 
 #endif  // ENABLE_WASM_GC
+
+  [[nodiscard]] MDefinition* stringCast(MDefinition* string) {
+    auto* ins = MWasmTrapIfAnyRefIsNotJSString::New(
+        alloc(), string, wasm::Trap::BadCast, bytecodeOffset());
+    if (!ins) {
+      return ins;
+    }
+    curBlock_->add(ins);
+    return ins;
+  }
+
+  [[nodiscard]] MDefinition* stringTest(MDefinition* string) {
+    auto* ins = MWasmAnyRefIsJSString::New(alloc(), string);
+    if (!ins) {
+      return nullptr;
+    }
+    curBlock_->add(ins);
+    return ins;
+  }
+
+  [[nodiscard]] bool dispatchInlineBuiltinModuleFunc(
+      const BuiltinModuleFunc& builtinModuleFunc, const DefVector& params) {
+    BuiltinInlineOp inlineOp = builtinModuleFunc.inlineOp();
+    MOZ_ASSERT(inlineOp != BuiltinInlineOp::None);
+    switch (inlineOp) {
+      case BuiltinInlineOp::StringCast: {
+        MOZ_ASSERT(params.length() == 1);
+        MDefinition* string = params[0];
+        MDefinition* cast = stringCast(string);
+        if (!cast) {
+          return false;
+        }
+        iter().setResult(string);
+        return true;
+      }
+      case BuiltinInlineOp::StringTest: {
+        MOZ_ASSERT(params.length() == 1);
+        MDefinition* string = params[0];
+        MDefinition* test = stringTest(string);
+        if (!test) {
+          return false;
+        }
+        iter().setResult(test);
+        return true;
+      }
+      case BuiltinInlineOp::None:
+      case BuiltinInlineOp::Limit:
+        break;
+    }
+    MOZ_CRASH();
+  }
+
+  [[nodiscard]] bool callBuiltinModuleFunc(
+      const BuiltinModuleFunc& builtinModuleFunc, const DefVector& params) {
+    MOZ_ASSERT(!inDeadCode());
+
+    BuiltinInlineOp inlineOp = builtinModuleFunc.inlineOp();
+    if (inlineOp != BuiltinInlineOp::None) {
+      return dispatchInlineBuiltinModuleFunc(builtinModuleFunc, params);
+    }
+
+    // It's almost possible to use FunctionCompiler::emitInstanceCallN here.
+    // Unfortunately not currently possible though, since ::emitInstanceCallN
+    // expects an array of arguments along with a size, and that's not what is
+    // available here.  It would be possible if we were prepared to copy
+    // `builtinModuleFunc->params` into a fixed-sized (16 element?) array, add
+    // `memoryBase`, and make the call.
+    const SymbolicAddressSignature& callee = *builtinModuleFunc.sig();
+
+    CallCompileState args;
+    if (!passInstance(callee.argTypes[0], &args) ||
+        !passArgs(params, builtinModuleFunc.funcType()->args(), &args)) {
+      return false;
+    }
+
+    if (builtinModuleFunc.usesMemory()) {
+      if (!passArg(memoryBase(0), MIRType::Pointer, &args)) {
+        return false;
+      }
+    }
+
+    if (!finishCall(&args)) {
+      return false;
+    }
+
+    bool hasResult = !builtinModuleFunc.funcType()->results().empty();
+    MDefinition* result = nullptr;
+    MDefinition** resultOutParam = hasResult ? &result : nullptr;
+    if (!builtinInstanceMethodCall(callee, readBytecodeOffset(), args,
+                                   resultOutParam)) {
+      return false;
+    }
+
+    if (hasResult) {
+      iter().setResult(result);
+    }
+    return true;
+  }
 
   /*********************************************** Control flow generation */
 
@@ -5060,6 +5183,20 @@ class FunctionCompiler {
     return TrapSiteInfo(wasm::BytecodeOffset(readBytecodeOffset()));
   }
 
+  CallRefHint readCallRefHint() {
+    // We don't track anything if we're not using lazy tiering
+    if (compilerEnv_.mode() != CompileMode::LazyTiering) {
+      return CallRefHint::unknown();
+    }
+
+    CallRefMetricsRange rangeInModule =
+        codeMeta_.getFuncDefCallRefs(funcIndex());
+    uint32_t localIndex = numCallRefs_++;
+    MOZ_RELEASE_ASSERT(localIndex < rangeInModule.length);
+    uint32_t moduleIndex = rangeInModule.begin + localIndex;
+    return codeMeta_.getCallRefHint(moduleIndex);
+  }
+
 #if DEBUG
   bool done() const { return iter_.done(); }
 #endif
@@ -5687,6 +5824,14 @@ static bool EmitCall(FunctionCompiler& f, bool asmJSFuncDef) {
 
   DefVector results;
   if (f.codeMeta().funcIsImport(funcIndex)) {
+    BuiltinModuleFuncId knownFuncImport =
+        f.codeMeta().knownFuncImport(funcIndex);
+    if (knownFuncImport != BuiltinModuleFuncId::None) {
+      const BuiltinModuleFunc& builtinModuleFunc =
+          BuiltinModuleFuncs::getFromId(knownFuncImport);
+      return f.callBuiltinModuleFunc(builtinModuleFunc, args);
+    }
+
     CallCompileState call;
     if (!EmitCallArgs(f, funcType, args, &call)) {
       return false;
@@ -7697,9 +7842,94 @@ static bool EmitBrOnNonNull(FunctionCompiler& f) {
   return f.brOnNonNull(relativeDepth, values, type, condition);
 }
 
-static bool EmitCallRef(FunctionCompiler& f) {
-  uint32_t lineOrBytecode = f.readCallSiteLineOrBytecode();
+// Speculatively inline a call_ref that is likely to target the expected
+// function index in this module. A fallback for if the actual callee is not
+// the speculated expected callee is always generated. This leads to a control
+// flow diamond that is roughly:
+//
+// if (ref.func $expectedFuncIndex) == actualCalleeFunc:
+//   (call_inline $expectedFuncIndex)
+// else:
+//   (call_ref actualCalleeFunc)
+static bool EmitSpeculativeInlineCallRef(
+    FunctionCompiler& f, uint32_t bytecodeOffset, const FuncType& funcType,
+    uint32_t expectedFuncIndex, MDefinition* actualCalleeFunc,
+    const DefVector& args, DefVector* results) {
+  // Perform an up front null check on the callee function reference.
+  if (!f.refAsNonNull(actualCalleeFunc)) {
+    return false;
+  }
 
+  // Load the cached value of `ref.func $expectedFuncIndex` for comparing
+  // against `actualCalleeFunc`. This cached value may be null if the `ref.func`
+  // for the expected function has not been executed in this runtime session.
+  //
+  // This is okay because we have done a null check on the `actualCalleeFunc`
+  // already and so comparing it against a null expected callee func will
+  // return false and fall back to the general case. This can only happen if
+  // we've deserialized a cached module in a different session, and then run
+  // the code without ever acquiring a reference to the expected function. In
+  // that case, the expected callee could never be the target of this call_ref,
+  // so performing the fallback path is the right thing to do anyways.
+  MDefinition* expectedCalleeFunc = f.loadCachedRefFunc(expectedFuncIndex);
+  if (!expectedCalleeFunc) {
+    return false;
+  }
+
+  // Check if the callee funcref we have is equals to the expected callee
+  // funcref we're inlining.
+  MDefinition* isExpectedCallee =
+      f.compare(actualCalleeFunc, expectedCalleeFunc, JSOp::Eq,
+                MCompare::Compare_WasmAnyRef);
+  if (!isExpectedCallee) {
+    return false;
+  }
+
+  // Start the 'then' block which will have the inlined code
+  MBasicBlock* elseBlock;
+  if (!f.branchAndStartThen(isExpectedCallee, &elseBlock)) {
+    return false;
+  }
+
+  // Inline the expected callee as we do with direct calls
+  DefVector inlineResults;
+  if (!EmitInlineCall(f, funcType, expectedFuncIndex, args, &inlineResults)) {
+    return false;
+  }
+
+  // Push the results for joining with the 'else' block
+  if (!f.pushDefs(inlineResults)) {
+    return false;
+  }
+
+  // Switch to the 'else' block which will have the fallback `call_ref`
+  if (!f.switchToElse(elseBlock, &elseBlock)) {
+    return false;
+  }
+
+  // Perform a general indirect call to the callee func we have
+  CallCompileState call;
+  if (!EmitCallArgs(f, funcType, args, &call)) {
+    return false;
+  }
+
+  DefVector callResults;
+  if (!f.callRef(funcType, actualCalleeFunc, bytecodeOffset, call,
+                 &callResults)) {
+    return false;
+  }
+
+  // Push the results for joining with the 'then' block
+  if (!f.pushDefs(callResults)) {
+    return false;
+  }
+
+  // Join the two branches together
+  return f.joinIfElse(elseBlock, results);
+}
+
+static bool EmitCallRef(FunctionCompiler& f) {
+  uint32_t bytecodeOffset = f.readBytecodeOffset();
   const FuncType* funcType;
   MDefinition* callee;
   DefVector args;
@@ -7708,7 +7938,22 @@ static bool EmitCallRef(FunctionCompiler& f) {
     return false;
   }
 
+  // We must unconditionally read a call_ref hint so that we stay in sync with
+  // how baseline generates them.
+  CallRefHint hint = f.readCallRefHint();
+
   if (f.inDeadCode()) {
+    return true;
+  }
+
+  if (hint.isInlineFunc() && f.shouldInlineCallDirect(hint.inlineFuncIndex())) {
+    DefVector results;
+    if (!EmitSpeculativeInlineCallRef(f, bytecodeOffset, *funcType,
+                                      hint.inlineFuncIndex(), callee, args,
+                                      &results)) {
+      return false;
+    }
+    f.iter().setResults(results.length(), results);
     return true;
   }
 
@@ -7718,7 +7963,7 @@ static bool EmitCallRef(FunctionCompiler& f) {
   }
 
   DefVector results;
-  if (!f.callRef(*funcType, callee, lineOrBytecode, call, &results)) {
+  if (!f.callRef(*funcType, callee, bytecodeOffset, call, &results)) {
     return false;
   }
 
@@ -8423,12 +8668,6 @@ static bool EmitExternConvertAny(FunctionCompiler& f) {
 #endif  // ENABLE_WASM_GC
 
 static bool EmitCallBuiltinModuleFunc(FunctionCompiler& f) {
-  // It's almost possible to use FunctionCompiler::emitInstanceCallN here.
-  // Unfortunately not currently possible though, since ::emitInstanceCallN
-  // expects an array of arguments along with a size, and that's not what is
-  // available here.  It would be possible if we were prepared to copy
-  // `builtinModuleFunc->params` into a fixed-sized (16 element?) array, add
-  // `memoryBase`, and make the call.
   const BuiltinModuleFunc* builtinModuleFunc;
 
   DefVector params;
@@ -8436,41 +8675,7 @@ static bool EmitCallBuiltinModuleFunc(FunctionCompiler& f) {
     return false;
   }
 
-  uint32_t bytecodeOffset = f.readBytecodeOffset();
-  const SymbolicAddressSignature& callee = *builtinModuleFunc->sig();
-
-  CallCompileState args;
-  if (!f.passInstance(callee.argTypes[0], &args)) {
-    return false;
-  }
-
-  if (!f.passArgs(params, builtinModuleFunc->funcType()->args(), &args)) {
-    return false;
-  }
-
-  if (builtinModuleFunc->usesMemory()) {
-    MDefinition* memoryBase = f.memoryBase(0);
-    if (!f.passArg(memoryBase, MIRType::Pointer, &args)) {
-      return false;
-    }
-  }
-
-  if (!f.finishCall(&args)) {
-    return false;
-  }
-
-  bool hasResult = !builtinModuleFunc->funcType()->results().empty();
-  MDefinition* result = nullptr;
-  MDefinition** resultOutParam = hasResult ? &result : nullptr;
-  if (!f.builtinInstanceMethodCall(callee, bytecodeOffset, args,
-                                   resultOutParam)) {
-    return false;
-  }
-
-  if (hasResult) {
-    f.iter().setResult(result);
-  }
-  return true;
+  return f.callBuiltinModuleFunc(*builtinModuleFunc, params);
 }
 
 bool EmitBodyExprs(FunctionCompiler& f) {
@@ -9926,7 +10131,8 @@ bool wasm::IonDumpFunction(const CompilerEnvironment& compilerEnv,
                            const FuncCompileInput& func,
                            IonDumpContents contents, GenericPrinter& out,
                            UniqueChars* error) {
-  LifoAlloc lifo(TempAllocator::PreferredLifoChunkSize);
+  LifoAlloc lifo(TempAllocator::PreferredLifoChunkSize,
+                 js::BackgroundMallocArena);
   TempAllocator alloc(&lifo);
   JitContext jitContext;
   Decoder d(func.begin, func.end, func.lineOrBytecode, error);

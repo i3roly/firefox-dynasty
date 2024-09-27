@@ -825,8 +825,14 @@ nsresult HTMLEditor::FocusedElementOrDocumentBecomesNotEditable(
     aHTMLEditor->mHasFocus = false;
     aHTMLEditor->mIsInDesignMode = false;
 
-    const RefPtr<Element> focusedElement =
-        nsFocusManager::GetFocusedElementStatic();
+    RefPtr<Element> focusedElement = nsFocusManager::GetFocusedElementStatic();
+    if (focusedElement && !focusedElement->IsInComposedDoc()) {
+      // nsFocusManager may keep storing the focused element even after
+      // disconnected from the tree, but HTMLEditor cannot work with editable
+      // nodes not in a composed document.  Therefore, we should treat no
+      // focused element in the case.
+      focusedElement = nullptr;
+    }
     TextControlElement* const focusedTextControlElement =
         TextControlElement::FromNodeOrNull(focusedElement);
     if ((focusedElement && focusedElement->IsEditable() &&
@@ -854,14 +860,17 @@ nsresult HTMLEditor::FocusedElementOrDocumentBecomesNotEditable(
   // If the element becomes not editable without focus change, IMEStateManager
   // does not have a chance to disable IME.  Therefore, (even if we fail to
   // handle the emulated blur/focus above,) we should notify IMEStateManager of
-  // the editing state change.
-  RefPtr<Element> focusedElement = nsFocusManager::GetFocusedElementStatic();
-  RefPtr<nsPresContext> presContext =
-      focusedElement ? focusedElement->GetPresContext(
-                           Element::PresContextFor::eForComposedDoc)
-                     : aDocument.GetPresContext();
-  if (presContext) {
-    IMEStateManager::MaybeOnEditableStateDisabled(*presContext, focusedElement);
+  // the editing state change.  Note that if the window of the HTMLEditor has
+  // already lost focus, we don't need to do that and we should not touch the
+  // other windows.
+  if (const RefPtr<nsPresContext> presContext = aDocument.GetPresContext()) {
+    const RefPtr<Element> focusedElementInDocument =
+        Element::FromNodeOrNull(aDocument.GetUnretargetedFocusedContent());
+    MOZ_ASSERT_IF(focusedElementInDocument,
+                  focusedElementInDocument->GetPresContext(
+                      Element::PresContextFor::eForComposedDoc));
+    IMEStateManager::MaybeOnEditableStateDisabled(*presContext,
+                                                  focusedElementInDocument);
   }
 
   return rv;
@@ -878,10 +887,13 @@ nsresult HTMLEditor::OnBlur(const EventTarget* aEventTarget) {
                       ? "true"
                       : "false")
                : "N/A"));
+  const Element* eventTargetAsElement =
+      Element::FromEventTargetOrNull(aEventTarget);
 
   // If another element already has focus, we should not maintain the selection
   // because we may not have the rights doing it.
-  if (nsFocusManager::GetFocusedElementStatic()) {
+  const Element* focusedElement = nsFocusManager::GetFocusedElementStatic();
+  if (focusedElement && focusedElement != eventTargetAsElement) {
     // XXX If we had focus and new focused element is a text control, we may
     // need to notify focus of its TextEditor...
     mIsInDesignMode = false;
@@ -892,7 +904,8 @@ nsresult HTMLEditor::OnBlur(const EventTarget* aEventTarget) {
   // If we're in the designMode and blur occurs, the target must be the document
   // node.  If a blur event is fired and the target is an element, it must be
   // delayed blur event at initializing the `HTMLEditor`.
-  if (mIsInDesignMode && Element::FromEventTargetOrNull(aEventTarget)) {
+  if (mIsInDesignMode && eventTargetAsElement &&
+      eventTargetAsElement->IsInComposedDoc()) {
     return NS_OK;
   }
 
@@ -3788,6 +3801,11 @@ nsresult HTMLEditor::InsertLinkAroundSelectionAsAction(
     for (const uint32_t i : IntegerRange(attrCount)) {
       const BorrowedAttrInfo attrInfo = anchor->GetAttrInfoAt(i);
       if (const nsAttrName* attrName = attrInfo.mName) {
+        // We don't need to handle _moz_dirty attribute.  If it's required, the
+        // handler should add it to the new element.
+        if (attrName->IsAtom() && attrName->Equals(nsGkAtoms::mozdirty)) {
+          continue;
+        }
         RefPtr<nsAtom> attributeName = attrName->LocalName();
         MOZ_ASSERT(attrInfo.mValue);
         nsString attrValue;
@@ -6908,12 +6926,12 @@ Element* HTMLEditor::ComputeEditingHostInternal(
   }
 
   auto MaybeLimitInBodyElement =
-      [&](const Element* aCandidiateEditingHost) -> Element* {
-    if (!aCandidiateEditingHost) {
+      [&](const Element* aCandidateEditingHost) -> Element* {
+    if (!aCandidateEditingHost) {
       return nullptr;
     }
     if (aLimitInBodyElement != LimitInBodyElement::Yes) {
-      return const_cast<Element*>(aCandidiateEditingHost);
+      return const_cast<Element*>(aCandidateEditingHost);
     }
     // By default, we should limit editing host to the <body> element for
     // avoiding deleting or creating unexpected elements outside the <body>.
@@ -6921,21 +6939,13 @@ Element* HTMLEditor::ComputeEditingHostInternal(
     // doing this with adding safety checks more.
     if (document->GetBodyElement() &&
         nsContentUtils::ContentIsFlattenedTreeDescendantOf(
-            aCandidiateEditingHost, document->GetBodyElement())) {
-      return const_cast<Element*>(aCandidiateEditingHost);
+            aCandidateEditingHost, document->GetBodyElement())) {
+      return const_cast<Element*>(aCandidateEditingHost);
     }
     // XXX If aContent is an editing host and has no parent node, we reach here,
-    //     but returing the <body> which is not connected to aContent is odd.
+    //     but returning the <body> which is not connected to aContent is odd.
     return document->GetBodyElement();
   };
-
-  if (mIsInDesignMode) {
-    // TODO: In this case, we need to compute editing host from aContent or the
-    //       focus node of selection, and it may be in an editing host in a
-    //       shadow DOM tree etc.  We need to do more complicated things.
-    //       See also InDesignMode().
-    return document->GetBodyElement();
-  }
 
   // We're HTML editor for contenteditable
   AutoEditActionDataSetter editActionData(*this, EditAction::eNotEditing);
@@ -6943,19 +6953,49 @@ Element* HTMLEditor::ComputeEditingHostInternal(
     return nullptr;
   }
 
-  const nsIContent* const content =
-      aContent ? aContent
-               : nsIContent::FromNodeOrNull(SelectionRef().GetFocusNode());
-  if (!content && document->IsInDesignMode()) {
+  const nsIContent* const content = [&]() -> const nsIContent* {
+    if (aContent) {
+      return aContent;
+    }
+    // If the selection has focus node, let's look for its editing host because
+    // selection ranges may be visible for users.
+    nsIContent* const selectionFocusNode = nsIContent::FromNodeOrNull(
+        SelectionRef().GetMayCrossShadowBoundaryFocusNode());
+    if (selectionFocusNode) {
+      return selectionFocusNode;
+    }
+    // Otherwise, let's use the focused element in the window.
+    nsPIDOMWindowInner* const innerWindow = document->GetInnerWindow();
+    if (MOZ_UNLIKELY(!innerWindow)) {
+      return nullptr;
+    }
+    if (Element* focusedElementInWindow = innerWindow->GetFocusedElement()) {
+      if (focusedElementInWindow->ChromeOnlyAccess()) {
+        focusedElementInWindow =
+            Element::FromNodeOrNull(const_cast<nsIContent*>(
+                focusedElementInWindow
+                    ->GetChromeOnlyAccessSubtreeRootParent()));
+      }
+      if (focusedElementInWindow) {
+        return focusedElementInWindow->IsEditable() ? focusedElementInWindow
+                                                    : nullptr;
+      }
+    }
+    // If there is no focused element and the document is in the design mode,
+    // let's return the <body>.
+    if (document->IsInDesignMode()) {
+      return document->GetBodyElement();
+    }
+    // Otherwise, we cannot find the editing host...
+    return nullptr;
+  }();
+  if ((content && content->IsInDesignMode()) ||
+      (!content && document->IsInDesignMode())) {
     return document->GetBodyElement();
   }
 
   if (NS_WARN_IF(!content)) {
     return nullptr;
-  }
-
-  if (content->IsInDesignMode()) {
-    return document->GetBodyElement();
   }
 
   // If the active content isn't editable, we're not active.
@@ -7264,6 +7304,15 @@ nsresult HTMLEditor::GetPreferredIMEState(IMEState* aState) {
 }
 
 already_AddRefed<Element> HTMLEditor::GetInputEventTargetElement() const {
+  // If there is no selection ranges, we'll do nothing.  Therefore,
+  // `beforeinput` event should not be fired.
+  // FIXME: If there is no selection but we've already modified the DOM,
+  // we should fire `input` event on the editing host.  However, we cannot
+  // know which one was the editing host when we touched the DOM.
+  if (MOZ_UNLIKELY(!SelectionRef().RangeCount())) {
+    return nullptr;
+  }
+
   RefPtr<Element> target = ComputeEditingHost(LimitInBodyElement::No);
   if (target) {
     return target.forget();

@@ -246,6 +246,14 @@ features:
         type: List<OnboardingPanel>
         default: ["themes", "toolbar-placement", "sync", "tcp", "privacy-notice"]
 
+  one-click-search:
+    description: Enable/disable the one click search feature.
+    variables:
+      enabled:
+        description: If true, the one click search will be enabled.
+        type: Boolean
+        default: false
+
   glean:
     description: "A feature that provides server-side configurations for Glean metrics (aka Server Knobs)."
     allow-coenrollment: true
@@ -262,6 +270,14 @@ features:
         description: "Glean will delay io for ping lifetime metrics"
         type: Boolean
         default: true
+      ping-lifetime-threshold:
+        description: "Write count threshold when to auto-flush"
+        type: Int
+        default: 1000
+      ping-lifetime-max-time:
+        description: "After what time to auto-flush"
+        type: Int
+        default: 0
 
   splash-screen:
     description: "A feature that extends splash screen duration, allowing additional data fetching time for the app's initial run."
@@ -496,6 +512,48 @@ features:
           When the feature is enabled then microsurveys can be used.
         type: Boolean
         default: true
+
+  set-as-default-prompt:
+    description: >
+      Displays native default browser prompt to existing users.
+    variables:
+      enabled:
+        description: >
+          When the feature is enabled then the Set as default prompt can be triggered for
+          existing users.
+        type: Boolean
+        default: false
+      app-cold-starts-between-prompts:
+        description: >
+          Minimum number of app cold starts before the next prompt should be displayed to
+          the user.
+        type: Int
+        default: 4
+      days-between-prompts:
+        description: >
+          Minimum number of days between displays of Set as default prompt.
+        type: Int
+        default: 14
+      max-number-of-times-to-display:
+        description: >
+          Maximum number of time the prompt should be displayed.
+        type: Int
+        default: 3
+    defaults:
+      - channel: developer
+        value:
+          enabled: true
+      - channel: nightly
+        value:
+          enabled: false
+
+  user-characteristics:
+    description: A feature for control user characteristic data collection
+    variables:
+      currentVersion:
+        description: The current collection version of the user characteristics.
+        type: Int
+        default: 0
 
 types:
   objects: {}

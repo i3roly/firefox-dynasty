@@ -741,7 +741,10 @@ class TestResolver(MozbuildObject):
                     if flavor != "devtools" and test.get("flavor") != flavor:
                         continue
 
-                if subsuite and test.get("subsuite", "undefined") != subsuite:
+                test_subsuite = test.get("subsuite", "undefined")
+                if not test_subsuite:  # sometimes test['subsuite'] == ''
+                    test_subsuite = "undefined"
+                if subsuite and test_subsuite != subsuite:
                     continue
 
                 test_tags = set(test.get("tags", "").split())
@@ -888,6 +891,11 @@ class TestResolver(MozbuildObject):
         if test["name"].startswith(
             ("/webdriver/tests/bidi", "/_mozilla/webdriver/bidi")
         ):
+            depth = depth + 1
+
+        # wpt canvas tests are mostly nested under subfolders of /html/canvas,
+        # increase the depth to ensure chunks can be balanced correctly.
+        if test["name"].startswith("/html/canvas"):
             depth = depth + 1
 
         if test["name"].startswith("/_mozilla/webgpu"):

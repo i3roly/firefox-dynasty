@@ -308,41 +308,43 @@ class Editor extends EventEmitter {
     // Remember the initial value of autoCloseBrackets.
     this.config.autoCloseBracketsSaved = this.config.autoCloseBrackets;
 
-    // Overwrite default tab behavior. If something is selected,
-    // indent those lines. If nothing is selected and we're
+    // If the tab behaviour is not explicitly set to `false` from the config, set a tab behavior.
+    // If something is selected, indent those lines. If nothing is selected and we're
     // indenting with tabs, insert one tab. Otherwise insert N
     // whitespaces where N == indentUnit option.
-    this.config.extraKeys.Tab = cm => {
-      if (config.extraKeys?.Tab) {
-        // If a consumer registers its own extraKeys.Tab, we execute it before doing
-        // anything else. If it returns false, that mean that all the key handling work is
-        // done, so we can do an early return.
-        const res = config.extraKeys.Tab(cm);
-        if (res === false) {
+    if (this.config.extraKeys.Tab !== false) {
+      this.config.extraKeys.Tab = cm => {
+        if (config.extraKeys?.Tab) {
+          // If a consumer registers its own extraKeys.Tab, we execute it before doing
+          // anything else. If it returns false, that mean that all the key handling work is
+          // done, so we can do an early return.
+          const res = config.extraKeys.Tab(cm);
+          if (res === false) {
+            return;
+          }
+        }
+
+        if (cm.somethingSelected()) {
+          cm.indentSelection("add");
           return;
         }
-      }
 
-      if (cm.somethingSelected()) {
-        cm.indentSelection("add");
-        return;
-      }
+        if (this.config.indentWithTabs) {
+          cm.replaceSelection("\t", "end", "+input");
+          return;
+        }
 
-      if (this.config.indentWithTabs) {
-        cm.replaceSelection("\t", "end", "+input");
-        return;
-      }
+        let num = cm.getOption("indentUnit");
+        if (cm.getCursor().ch !== 0) {
+          num -= cm.getCursor().ch % num;
+        }
+        cm.replaceSelection(" ".repeat(num), "end", "+input");
+      };
 
-      let num = cm.getOption("indentUnit");
-      if (cm.getCursor().ch !== 0) {
-        num -= cm.getCursor().ch % num;
+      if (this.config.cssProperties) {
+        // Ensure that autocompletion has cssProperties if it's passed in via the options.
+        this.config.autocompleteOpts.cssProperties = this.config.cssProperties;
       }
-      cm.replaceSelection(" ".repeat(num), "end", "+input");
-    };
-
-    if (this.config.cssProperties) {
-      // Ensure that autocompletion has cssProperties if it's passed in via the options.
-      this.config.autocompleteOpts.cssProperties = this.config.cssProperties;
     }
   }
 
@@ -630,7 +632,7 @@ class Editor extends EventEmitter {
 
     const {
       codemirror,
-      codemirrorView: { EditorView, lineNumbers },
+      codemirrorView: { EditorView, lineNumbers, drawSelection },
       codemirrorState: { EditorState, Compartment },
       codemirrorSearch: { highlightSelectionMatches },
       codemirrorLanguage: {
@@ -731,6 +733,16 @@ class Editor extends EventEmitter {
 
     if (this.config.mode === Editor.modes.js) {
       extensions.push(codemirrorLangJavascript.javascript());
+    }
+
+    if (Services.prefs.prefHasUserValue(CARET_BLINK_TIME)) {
+      // We need to multiply the preference value by 2 to match Firefox cursor rate
+      const cursorBlinkRate = Services.prefs.getIntPref(CARET_BLINK_TIME) * 2;
+      extensions.push(
+        drawSelection({
+          cursorBlinkRate,
+        })
+      );
     }
 
     const cm = new EditorView({
@@ -3204,6 +3216,52 @@ class Editor extends EventEmitter {
   #isInputOrTextarea(element) {
     const name = element.tagName.toLowerCase();
     return name === "input" || name === "textarea";
+  }
+
+  /**
+   * Parse passed code string and returns an HTML string with the same classes CodeMirror
+   * adds to handle syntax highlighting.
+   *
+   * @param {Document} doc: A document that will be used to create elements
+   * @param {String} code: The code to highlight
+   * @returns {String} The HTML string for the parsed code
+   */
+  highlightText(doc, code) {
+    if (!doc) {
+      return code;
+    }
+
+    const outputNode = doc.createElement("div");
+    if (!this.config.cm6) {
+      this.CodeMirror.runMode(code, "application/javascript", outputNode);
+    } else {
+      const { codemirrorLangJavascript, lezerHighlight } = this.#CodeMirror6;
+      const { highlightCode, classHighlighter } = lezerHighlight;
+
+      function emit(text, classes) {
+        const textNode = doc.createTextNode(text);
+        if (classes) {
+          const span = doc.createElement("span");
+          span.appendChild(textNode);
+          span.className = classes;
+          outputNode.appendChild(span);
+        } else {
+          outputNode.appendChild(textNode);
+        }
+      }
+      function emitBreak() {
+        outputNode.appendChild(doc.createTextNode("\n"));
+      }
+
+      highlightCode(
+        code,
+        codemirrorLangJavascript.javascriptLanguage.parser.parse(code),
+        classHighlighter,
+        emit,
+        emitBreak
+      );
+    }
+    return outputNode.innerHTML;
   }
 }
 

@@ -438,6 +438,13 @@ class nsBlockFrame : public nsContainerFrame {
                                 : nullptr;
   }
 
+  void SetLineCursorForDisplay(nsLineBox* aLine) {
+    MOZ_ASSERT(aLine, "must have a line");
+    MOZ_ASSERT(!mLines.empty(), "aLine isn't my line");
+    SetProperty(LineCursorPropertyDisplay(), aLine);
+    AddStateBits(NS_BLOCK_HAS_LINE_CURSOR);
+  }
+
   nsLineBox* NewLineBox(nsIFrame* aFrame, bool aIsBlock) {
     return NS_NewLineBox(PresShell(), aFrame, aIsBlock);
   }
@@ -630,7 +637,7 @@ class nsBlockFrame : public nsContainerFrame {
 
   bool ComputeCustomOverflow(mozilla::OverflowAreas&) override;
 
-  void UnionChildOverflow(mozilla::OverflowAreas&) override;
+  void UnionChildOverflow(mozilla::OverflowAreas&, bool aAsIfScrolled) override;
 
   /**
    * Load all of aFrame's floats into the float manager iff aFrame is not a

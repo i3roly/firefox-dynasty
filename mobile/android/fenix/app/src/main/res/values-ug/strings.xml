@@ -217,6 +217,8 @@
     <string name="browser_menu_manage_extensions">كېڭەيتىلمە باشقۇرۇش</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">تېخىمۇ كۆپ كېڭەيتمە بايقا</string>
+    <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
+    <string name="browser_menu_extensions_disabled_description">ۋاقىتلىق چەكلەنگەن</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">ھېسابات ئۇچۇرى</string>
     <!-- Browser menu button that sends a user to help articles -->
@@ -235,6 +237,8 @@
     <string name="browser_menu_add_to_homescreen">باش ئېكرانغا قوش</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">باش ئېكرانغا قوش…</string>
+    <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
+    <string name="browser_menu_add_to_homescreen_xiaomi">شياۋمى ئۈسكۈنىلىرىدە باش ئېكرانغا تېزلەتمە قوشۇشتا قوشۇمچە ئىجازەتكە ئېھتىياجلىق بولۇشى مۇمكىن. تەڭشەكلىرىڭىزنى تەكشۈرۈڭ.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">قايتا قەدەمداشلا</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -301,6 +305,8 @@
     <string name="browser_menu_switch_to_mobile_site">كۆچمە بېكەتكە ئالماشتۇر</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">قوراللار</string>
+    <!-- Content description (not visible, for screen readers etc.): Back button for the page tools sub-menu -->
+    <string name="browser_menu_back_button_content_description">ئاساسىي تىزىملىككە قايت</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate">ئوقۇرمەن كۆرۈنۈشى، تەرجىمە، بېسىش، ھەمبەھىر، ئەپ ئېچىش</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -332,6 +338,12 @@
     <!-- Browser menu label for the Delete browsing data on quit feature.
         The first parameter is the name of the app defined in app_name (for example: Fenix). -->
     <string name="browser_menu_delete_browsing_data_on_quit">%1$s چېكىن</string>
+
+    <!-- Menu "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_title">يېڭى: ئېقىم سىزىقلىق تىزىملىكى</string>
+    <!-- Text for the message in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_body">مەيلى شەخسىي زىيارەت ھالىتى ياكى ساقلاش مەشغۇلاتى بولسۇن، لازىملىق ئىقتىدارلارنى ئاسانلا تاپقىلى بولىدۇ.</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -425,12 +437,12 @@
 
     <!-- Juno first user onboarding flow experiment, strings are marked unused as they are only referenced by Nimbus experiments. -->
     <!-- Description for learning more about our privacy notice. -->
-    <string name="juno_onboarding_privacy_notice_text">Firefox شەخسىيەت ئۇقتۇرۇشى</string>
+    <string name="juno_onboarding_privacy_notice_text" tools:ignore="BrandUsage">Firefox شەخسىيەت ئۇقتۇرۇشى</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_2">بىخەتەرلىكىڭىزنى ساقلاشنى ياخشى كۆرىمىز</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="UnusedResources">مىليونلىغان كىشىنىڭ نېمىشقا Firefox نى ياقتۇرىدىغانلىقىنى تېپىڭ</string>
+    <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="BrandUsage,UnusedResources">مىليونلىغان كىشىنىڭ نېمىشقا Firefox نى ياقتۇرىدىغانلىقىنى تېپىڭ</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_4" tools:ignore="UnusedResources">بىخەتەر تور زىيارىتىنىڭ تېخىمۇ كۆپ تاللىشى</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
@@ -452,33 +464,33 @@
     <string name="juno_onboarding_sign_in_title_2">ئۈسكۈنىلەر ئارا ئالماشتۇرغاندا شىفىرلىنىدۇ</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="UnusedResources">تىزىمغا كىرىپ قەدەمداشلىسىڭىز، تېخىمۇ بىخەتەر بولىسىز. Firefox ئىم، خەتكۈچ ۋە باشقىلارنى مەخپىيلەشتۈرىدۇ.</string>
+    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="BrandUsage,UnusedResources">تىزىمغا كىرىپ قەدەمداشلىسىڭىز، تېخىمۇ بىخەتەر بولىسىز. Firefox ئىم، خەتكۈچ ۋە باشقىلارنى مەخپىيلەشتۈرىدۇ.</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_3">قەدەمداشلىسىڭىز Firefox ئىم، خەتكۈچلىرىڭىزنى شىفىرلايدۇ.</string>
+    <string name="juno_onboarding_sign_in_description_3" tools:ignore="BrandUsage">قەدەمداشلىسىڭىز Firefox ئىم، خەتكۈچلىرىڭىزنى شىفىرلايدۇ.</string>
     <!-- Text for the button to sign in to sync on the device -->
     <string name="juno_onboarding_sign_in_positive_button" tools:ignore="UnusedResources">تىزىمغا كىرىڭ</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_sign_in_negative_button" tools:ignore="UnusedResources">ھازىر ئەمەس</string>
     <!-- Title for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_enable_notifications_title_nimbus_2">ئۇقتۇرۇشلار Firefox ئارقىلىق تېخىمۇ بىخەتەر بولۇشىڭىزغا ياردەم بېرىدۇ</string>
+    <string name="juno_onboarding_enable_notifications_title_nimbus_2" tools:ignore="BrandUsage">ئۇقتۇرۇشلار Firefox ئارقىلىق تېخىمۇ بىخەتەر بولۇشىڭىزغا ياردەم بېرىدۇ</string>
     <!-- Description for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
        Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_enable_notifications_description_nimbus_2">ئۈسكۈنىڭىز ئارىسىدا بەتكۈچلەرنى بىخەتەر ئەۋەتىپ، Firefox دىكى باشقا شەخسىيەت ئىقتىدارلىرىنى بايقايدۇ.</string>
+    <string name="juno_onboarding_enable_notifications_description_nimbus_2" tools:ignore="BrandUsage">ئۈسكۈنىڭىز ئارىسىدا بەتكۈچلەرنى بىخەتەر ئەۋەتىپ، Firefox دىكى باشقا شەخسىيەت ئىقتىدارلىرىنى بايقايدۇ.</string>
     <!-- Text for the button to request notification permission on the device -->
     <string name="juno_onboarding_enable_notifications_positive_button" tools:ignore="UnusedResources">ئۇقتۇرۇشنى ئاچ</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_enable_notifications_negative_button" tools:ignore="UnusedResources">ھازىر ئەمەس</string>
     <!-- Title for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_title" tools:ignore="UnusedResources">Firefox ئىزدەش ئەپچەنى سىناڭ</string>
+    <string name="juno_onboarding_add_search_widget_title" tools:ignore="BrandUsage,UnusedResources">Firefox ئىزدەش ئەپچەنى سىناڭ</string>
     <!-- Description for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_description" tools:ignore="UnusedResources">باش ئېكرانىڭىزغا Firefox نى جايلاشتۇرسىڭىز، شەخسىيەتنى ئەڭ ئالدىنقى ئورۇنغا قويىدىغان تور كۆرگۈنى خالىغان ۋاقىتتا زىيارەت قىلالايسىز، ئۇ بېكەت ھالقىغان ئىز قوغلاشنى توسىدىغان تور كۆرگۈ.</string>
+    <string name="juno_onboarding_add_search_widget_description" tools:ignore="BrandUsage,UnusedResources">باش ئېكرانىڭىزغا Firefox نى جايلاشتۇرسىڭىز، شەخسىيەتنى ئەڭ ئالدىنقى ئورۇنغا قويىدىغان تور كۆرگۈنى خالىغان ۋاقىتتا زىيارەت قىلالايسىز، ئۇ بېكەت ھالقىغان ئىز قوغلاشنى توسىدىغان تور كۆرگۈ.</string>
     <!-- Text for the button to add search widget on the device used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_positive_button" tools:ignore="UnusedResources">Firefox ئەپچە قوش</string>
+    <string name="juno_onboarding_add_search_widget_positive_button" tools:ignore="BrandUsage,UnusedResources">Firefox ئەپچە قوش</string>
     <!-- Text for the button to dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_add_search_widget_negative_button" tools:ignore="UnusedResources">ھازىر ئەمەس</string>
 
@@ -518,9 +530,9 @@
     <!-- Preference Category for settings related to Search address bar -->
     <string name="preferences_settings_address_bar">ئادرېس بالداق مايىللىقى</string>
     <!-- Preference Category for settings to Firefox Suggest -->
-    <string name="preference_search_address_bar_fx_suggest">ئادرېس بالدىقى - Firefox تەكلىپى</string>
+    <string name="preference_search_address_bar_fx_suggest" tools:ignore="BrandUsage">ئادرېس بالدىقى - Firefox تەكلىپى</string>
     <!-- Preference link to Learn more about Firefox Suggest -->
-    <string name="preference_search_learn_about_fx_suggest">Firefox تەكلىپى ھەققىدىكى تەپسىلاتلار</string>
+    <string name="preference_search_learn_about_fx_suggest" tools:ignore="BrandUsage">Firefox تەكلىپى ھەققىدىكى تەپسىلاتلار</string>
     <!-- Preference link to rating Fenix on the Play Store -->
     <string name="preferences_rate">Google Play دىكى باھا</string>
     <!-- Preference linking to about page for Fenix
@@ -617,8 +629,6 @@
     <string name="toast_override_account_sync_server_done">Mozilla ھېسابات/قەدەمداش مۇلازىمېتىر تەڭشىكى ئۆزگەردى. ئۆزگىرىشنى قوللىنىش ئۈچۈن پىروگراممىدىن چېكىنىۋاتىدۇ…</string>
     <!-- Preference category for account information -->
     <string name="preferences_category_account">ھېسابات</string>
-    <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">قورال بالداق</string>
     <!-- Preference for changing where the AddressBar is positioned -->
     <string name="preferences_toolbar_2">ئادرېس بالداق ئورنى</string>
     <!-- Preference for changing default theme to dark or light mode -->
@@ -786,7 +796,7 @@
     <!-- Title of the Nimbus message for extension general availability-->
     <string name="addon_ga_message_title_2" tools:ignore="UnusedResources">ھازىر يېڭى كېڭەيتىلمە بار</string>
     <!-- Body of the Nimbus message for add-ons general availability. 'Firefox' intentionally hardcoded here-->
-    <string name="addon_ga_message_body" tools:ignore="UnusedResources">ئۆزىڭىزنىڭ Firefox غا ئايلاندۇرىدىغان 100+ يېڭى كېڭەيتىلمىلەرنى تاپالايسىز.</string>
+    <string name="addon_ga_message_body" tools:ignore="BrandUsage,UnusedResources">ئۆزىڭىزنىڭ Firefox غا ئايلاندۇرىدىغان 100+ يېڭى كېڭەيتىلمىلەرنى تاپالايسىز.</string>
 
     <!-- Button text of the Nimbus message for extensions general availability. -->
     <string name="addon_ga_message_button_2" tools:ignore="UnusedResources">كېڭەيتىلمە بايقاش</string>
@@ -850,7 +860,7 @@
     <!-- Name of the "receive tabs" notification channel. Displayed in the "App notifications" system settings for the app -->
     <string name="fxa_received_tab_channel_name">تاپشۇرۇۋالغان بەتكۈچ</string>
     <!-- Description of the "receive tabs" notification channel. Displayed in the "App notifications" system settings for the app -->
-    <string name="fxa_received_tab_channel_description">باشقا Firefox ئۈسكۈنىلىرىدىن تاپشۇرۇۋالغان بەتكۈچ ئۇقتۇرۇشى.</string>
+    <string name="fxa_received_tab_channel_description" tools:ignore="BrandUsage">باشقا Firefox ئۈسكۈنىلىرىدىن تاپشۇرۇۋالغان بەتكۈچ ئۇقتۇرۇشى.</string>
     <!--  The body for these is the URL of the tab received  -->
     <string name="fxa_tab_received_notification_name">بەتكۈچ تاپشۇرۇۋالدى</string>
     <!-- %s is the device name -->
@@ -924,8 +934,6 @@
     <string name="preference_gestures_website_pull_to_refresh">تارتىلما يېڭىلاش</string>
     <!-- Preference for using the dynamic toolbar -->
     <string name="preference_gestures_dynamic_toolbar">دومىلاتقاندا قورال بالداقنى يوشۇر</string>
-    <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">قورال بالداق يانغا سۈرۈلسە بەتكۈچ ئالماشتۇرىدۇ</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">قورال بالداق ئۈستىگە سۈرۈلسە بەتكۈچ ئاچىدۇ</string>
 
@@ -1195,6 +1203,8 @@
     <string name="bookmark_add_folder">قىسقۇچ قوش</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
     <string name="bookmark_saved_snackbar">خەتكۈچ ساقلاندى!</string>
+    <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
+    <string name="bookmark_saved_in_folder_snackbar">«%s» غا ساقلاندى</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">تەھرىرلەش</string>
     <!-- Bookmark overflow menu edit button -->
@@ -1229,8 +1239,12 @@
     <string name="bookmark_url_label">تور ئادرېسى</string>
     <!-- Bookmark FOLDER editing field label -->
     <string name="bookmark_folder_label">قىسقۇچ</string>
+    <!-- Text indicating which folder a bookmark or folder will be saved in -->
+    <string name="bookmark_save_in_label">ساقلا</string>
     <!-- Bookmark NAME editing field label -->
     <string name="bookmark_name_label">ئىسىم</string>
+    <!-- Label for a text input field for a bookmark or folder name -->
+    <string name="bookmark_name_label_normal_case">ئىسمى</string>
     <!-- Bookmark add folder screen title -->
     <string name="bookmark_add_folder_fragment_label">قىسقۇچ قوش</string>
     <!-- Bookmark select folder screen title -->
@@ -1434,7 +1448,7 @@
     <!-- An option to connect additional devices -->
     <string name="sync_connect_device">باشقا ئۈسكۈنىگە باغلىنىدۇ</string>
     <!-- The dialog text shown when additional devices are not available -->
-    <string name="sync_connect_device_dialog">ئاز دېگەندە بىر ئۈسكۈنىدە Firefox تىزىمغا كىرگەندە ئاندىن بەتكۈچ يوللىيالايدۇ.</string>
+    <string name="sync_connect_device_dialog" tools:ignore="BrandUsage">ئاز دېگەندە بىر ئۈسكۈنىدە Firefox تىزىمغا كىرگەندە ئاندىن بەتكۈچ يوللىيالايدۇ.</string>
     <!-- Confirmation dialog button -->
     <string name="sync_confirmation_button">بىلدىم</string>
     <!-- Share error message -->
@@ -1472,11 +1486,11 @@
     <string name="notification_marketing_channel_name">بازارچىلىق</string>
     <!-- Title shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_title" tools:ignore="UnusedResources">Firefox تېز ھەم شەخسىي</string>
+    <string name="nimbus_notification_default_browser_title" tools:ignore="BrandUsage,UnusedResources">Firefox تېز ھەم شەخسىي</string>
 
     <!-- Text shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_text" tools:ignore="UnusedResources">Firefox نى كۆڭۈلدىكى توركۆرگۈ قىلىڭ</string>
+    <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Firefox نى كۆڭۈلدىكى توركۆرگۈ قىلىڭ</string>
     <!-- Title shown in the notification that pops up to re-engage the user -->
     <string name="notification_re_engagement_title">شەخسىي زىيارەتنى سىناڭ</string>
     <!-- Text shown in the notification that pops up to re-engage the user.
@@ -1495,7 +1509,7 @@
     <!-- Survey -->
     <!-- Text shown in the fullscreen message that pops up to ask user to take a short survey.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_survey_message_text">قىسقا تەكشۈرۈشكە قاتنىشىپ Firefox نى تېخىمۇ ياخشىلاشقا ياردەملىشىڭ.</string>
+    <string name="nimbus_survey_message_text" tools:ignore="BrandUsage">قىسقا تەكشۈرۈشكە قاتنىشىپ Firefox نى تېخىمۇ ياخشىلاشقا ياردەملىشىڭ.</string>
     <!-- Preference for taking the short survey. -->
     <string name="preferences_take_survey">تەكشۈرۈشكە قاتنىشىڭ</string>
     <!-- Preference for not taking the short survey. -->
@@ -1641,7 +1655,7 @@
     <!-- Title of QR Pairing Fragment -->
     <string name="sync_scan_code">كودنى تارا</string>
     <!-- Instructions on how to access pairing -->
-    <string name="sign_in_instructions"><![CDATA[كومپيۇتېرىڭىزدىكى Firefox دا <b>https://firefox.com/pair</b> ئاچىدۇ]]></string>
+    <string name="sign_in_instructions" tools:ignore="BrandUsage"><![CDATA[كومپيۇتېرىڭىزدىكى Firefox دا <b>https://firefox.com/pair</b> ئاچىدۇ]]></string>
     <!-- Text shown for sign in pairing when ready -->
     <string name="sign_in_ready_for_scan">تاراشقا تەييار</string>
     <!-- Text shown for settings option for sign with pairing -->
@@ -1649,7 +1663,7 @@
     <!-- Text shown for settings option for sign with email -->
     <string name="sign_in_with_email">ئورنىغا ئېلخەت ئىشلىتىڭ</string>
     <!-- Text shown for settings option for create new account text.'Firefox' intentionally hardcoded here.-->
-    <string name="sign_in_create_account_text"><![CDATA[ھېساباتىڭىز يوق؟ <u> Firefox نى ئۈسكۈنىلەر ئارا قەدەمداشلاش ئۈچۈن بىرنى قۇرۇڭ </u>.]]></string>
+    <string name="sign_in_create_account_text" tools:ignore="BrandUsage"><![CDATA[ھېساباتىڭىز يوق؟ <u> Firefox نى ئۈسكۈنىلەر ئارا قەدەمداشلاش ئۈچۈن بىرنى قۇرۇڭ </u>.]]></string>
     <!-- Text shown in confirmation dialog to sign out of account. The first parameter is the name of the app (e.g. Firefox Preview) -->
     <string name="sign_out_confirmation_message_2">%s ھېساباتىڭىز بىلەن قەدەمداشلاشنى توختىتىدۇ، ئەمما بۇ ئۈسكۈنىدىكى توركۆرگۈ سانلىق مەلۇماتلىرىڭىزنى ئۆچۈرمەيدۇ.</string>
     <!-- Option to continue signing out of account shown in confirmation dialog to sign out of account -->
@@ -2175,7 +2189,7 @@
     <!-- Text displayed when user has disabled tab syncing in Firefox Sync Account -->
     <string name="synced_tabs_enable_tab_syncing">بەتكۈچ قەدەمداشنى قوزغىتىڭ.</string>
     <!-- Text displayed when user has no tabs that have been synced -->
-    <string name="synced_tabs_no_tabs">كونا ئۈسكۈنىڭىزدە Firefox دا ھېچقانداق بەتكۈچ ئاچمىغان.</string>
+    <string name="synced_tabs_no_tabs" tools:ignore="BrandUsage">كونا ئۈسكۈنىڭىزدە Firefox دا ھېچقانداق بەتكۈچ ئاچمىغان.</string>
     <!-- Text displayed in the synced tabs screen when a user is not signed in to Firefox Sync describing Synced Tabs -->
     <string name="synced_tabs_sign_in_message">باشقا ئۈسكۈنىڭىزدىن بەتكۈچ تىزىمىنى كۆرسىتىدۇ.</string>
     <!-- Text displayed on a button in the synced tabs screen to link users to sign in when a user is not signed in to Firefox Sync -->
@@ -2240,7 +2254,7 @@
     <!-- The header text of the auto-close message when the user is asked if they want to turn on the auto-closing of inactive tabs. -->
     <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">بىر ئايدىن كېيىن ئاپتوماتىك ياپامدۇ؟</string>
     <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-    <string name="inactive_tabs_auto_close_message_description" tools:ignore="UnusedResources">Firefox ئۆتكەن بىر ئايدا كۆرمىگەن بەتكۈچلەرنى تاقىۋېتەلەيدۇ.</string>
+    <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox ئۆتكەن بىر ئايدا كۆرمىگەن بەتكۈچلەرنى تاقىۋېتەلەيدۇ.</string>
     <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
     <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">ئاپتوماتىك تاقاشنى ئاچىدۇ</string>
     <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->
@@ -2248,7 +2262,7 @@
 
     <!-- Awesome bar suggestion's headers -->
     <!-- Search suggestions title for Firefox Suggest. -->
-    <string name="firefox_suggest_header">Firefox تەكلىپى</string>
+    <string name="firefox_suggest_header" tools:ignore="BrandUsage">Firefox تەكلىپى</string>
     <!-- Title for search suggestions when Google is the default search suggestion engine. -->
     <string name="google_search_engine_suggestion_header">Google ئىزدەش</string>
     <!-- Title for search suggestions when the default search suggestion engine is anything other than Google. The first parameter is default search engine name. -->
@@ -2258,7 +2272,7 @@
     <!-- Default browser card title -->
     <string name="default_browser_experiment_card_title">كۆڭۈلدىكى توركۆرگۈڭىزنى ئالماشتۇرۇڭ</string>
     <!-- Default browser card text -->
-    <string name="default_browser_experiment_card_text">تور بېكەت، ئېلخەت ۋە ئۇچۇر ئۇلانمىلىرىنى Firefox تا ئاپتوماتىك ئېچىشقا تەڭشەيدۇ.</string>
+    <string name="default_browser_experiment_card_text" tools:ignore="BrandUsage">تور بېكەت، ئېلخەت ۋە ئۇچۇر ئۇلانمىلىرىنى Firefox تا ئاپتوماتىك ئېچىشقا تەڭشەيدۇ.</string>
 
     <!-- Content description for close button in collection placeholder. -->
     <string name="remove_home_collection_placeholder_content_description">چىقىرىۋەت</string>
@@ -2282,7 +2296,7 @@
     <!-- Title of an app feature. Smaller than a heading. The first parameter is product name Pocket -->
     <string name="pocket_stories_feature_title_2">تەمىنلىگۈچى %1$s.</string>
     <!-- Caption for describing a certain feature. The placeholder is for a clickable text (eg: Learn more) which will load an url in a new tab when clicked.  -->
-    <string name="pocket_stories_feature_caption">Firefox جەمەتىنىڭ بىر قىسمى. %s</string>
+    <string name="pocket_stories_feature_caption" tools:ignore="BrandUsage">Firefox جەمەتىنىڭ بىر قىسمى. %s</string>
     <!-- Clickable text for opening an external link for more information about Pocket. -->
     <string name="pocket_stories_feature_learn_more">تەپسىلاتى</string>
 
@@ -2655,8 +2669,6 @@
     <string name="download_language_all_languages_item_preference_to_delete">ھەممە تىلنى ئۆچۈر</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">ئۆچۈر</string>
-    <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
-    <string name="download_languages_item_content_description_in_progress_state" moz:removedIn="129" tools:ignore="UnusedResources">ئىلگىرىلەش</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, deleting is in progress. -->
     <string name="download_languages_item_content_description_delete_in_progress_state">ئىلگىرىلەش</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress.
@@ -2707,8 +2719,6 @@
     <string name="download_language_file_dialog_title">سانلىق مەلۇمات تېجەش ھالىتىدە چۈشۈرەمدۇ(%1$s)؟</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">تەرجىمىنىڭ شەخسىيىتىنى قوغداش ئۈچۈن، تىل قىسمەن ھالدا غەملىكىڭىزگە چۈشۈرۈلىدۇ.</string>
-    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">تەرجىمىنىڭ شەخسىيىتىنى قوغداش ئۈچۈن تىلدىن قىسمەن چۈشۈردۇق.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">سانلىق مەلۇمات تېجەش ھالىتىدە ھەمىشە چۈشۈرىدۇ</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2766,16 +2776,12 @@
     <!-- Microsurvey -->
     <!-- Prompt view -->
     <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
-    <string name="micro_survey_prompt_title" tools:ignore="UnusedResources">Firefox نى ياخشىلىشىمىزغا ياردەم قىلىڭ. بۇنىڭغا پەقەت بىر مىنۇتلا ۋاقىت كېتىدۇ.</string>
+    <string name="micro_survey_prompt_title" tools:ignore="BrandUsage,UnusedResources">Firefox نى ياخشىلىشىمىزغا ياردەم قىلىڭ. بۇنىڭغا پەقەت بىر مىنۇتلا ۋاقىت كېتىدۇ.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">داۋاملاشتۇر</string>
     <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">بۇ تەكشۈرۈشنى تاماملاڭ</string>
-    <!-- The survey header -->
     <string name="micro_survey_survey_header_2">راي سىناشنى تاماملاڭ</string>
-    <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">شەخسىيەت ئۇقتۇرۇشى</string>
     <!-- The privacy notice link -->
     <string name="micro_survey_privacy_notice_2">شەخسىيەت ئۇقتۇرۇشى</string>
     <!-- The submit button label text -->
@@ -2798,17 +2804,21 @@
 
     <!-- Option for likert scale -->
     <string name="likert_scale_option_6" tools:ignore="UnusedResources">ئىشلەتمەيمەن</string>
+    <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+    <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">مەن Firefox تا ئىزدەشنى ئىشلەتمەيمەن</string>
     <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources" moz:removedIn="130">سىزنىڭ Firefox ئىشلىتىشتىكى مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="BrandUsage,UnusedResources" moz:removedIn="130">سىزنىڭ Firefox ئىشلىتىشتىكى مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
     <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Firefox نىڭ بېسىشىنى ياخشىلاشقا ياردەم بېرىڭ. ئازراقلا ۋاقىت كېتىدۇ</string>
-    <!-- Text shown in prompt for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Firefox نىڭ بېسىش ئىقتىدارىغا بولغان رازىمەنلىكىڭىز قانداق؟</string>
-    <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_homepage_title" tools:ignore="UnusedResources">سىزنىڭ Firefox باش بېتىگە بولغان مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
+    <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">Firefox نىڭ بېسىشىنى ياخشىلاشقا ياردەم بېرىڭ. ئازراقلا ۋاقىت كېتىدۇ</string>
+    <!-- Text shown in the survey title for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_survey_printing_title" tools:ignore="BrandUsage,UnusedResources">Firefox نىڭ بېسىش ئىقتىدارىغا بولغان رازىمەنلىكىڭىز قانداق؟</string>
+    <!-- Text shown in the survey title for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_homepage_title" tools:ignore="BrandUsage,UnusedResources">سىزنىڭ Firefox باش بېتىگە بولغان مەمنۇنلۇق تەسىراتىڭىز قانداق؟</string>
+    <!-- Text shown in the survey title for search experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Firefox نىڭ ئىزدەش كەچمىشىگە بولغان رازىمەنلىكىڭىز قانداق؟</string>
     <!-- Accessibility -->
     <!-- Content description for the survey application icon. Note: The word "Firefox" should NOT be translated.  -->
-    <string name="microsurvey_app_icon_content_description">Firefox تۇغى</string>
+    <string name="microsurvey_app_icon_content_description" tools:ignore="BrandUsage">Firefox تۇغى</string>
     <!-- Content description for the survey feature icon. -->
     <string name="microsurvey_feature_icon_content_description">راي سىناش ئىقتىدارى سىنبەلگىسى</string>
     <!-- Content description (not visible, for screen readers etc.) for opening microsurvey bottom sheet. -->
@@ -2836,9 +2846,16 @@
 
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture">پۈتۈن ئېكران ھالىتىدىن چېكىنىشتە، چوققىسىدىن سۆرەپ، قايت قول ئىشارىتى ئىشلىتىلىدۇ</string>
+    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">پۈتۈن ئېكران ھالىتىدىن چېكىنىشتە، چوققىسىدىن سۆرەپ، قايت قول ئىشارىتى ئىشلىتىلىدۇ</string>
     <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button">پۈتۈن ئېكران ھالىتىدىن چېكىنىشتە، چوققىسىدىن سۆرەپ، قايت چېكىلىدۇ</string>
+    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">پۈتۈن ئېكران ھالىتىدىن چېكىنىشتە، چوققىسىدىن سۆرەپ، قايت چېكىلىدۇ</string>
+
+    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
+    <!-- Localisation note: this text should be as short as possible, max 68 chars -->
+    <string name="exit_fullscreen_with_gesture_short">يۇقىرىدىن سۆرەپ ئاندىن قايتۇرۇش قول ئىشارىتى ئىشلىتىلسە چېكىنىدۇ</string>
+    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation. -->
+    <!-- Localisation note: this text should be as short as possible, max 68 chars -->
+    <string name="exit_fullscreen_with_back_button_short">يۇقىرىدىن سۆرەپ ئاندىن قايت توپچە بېسىلسا چېكىنىدۇ</string>
 
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->

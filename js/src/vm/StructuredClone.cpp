@@ -178,17 +178,27 @@ enum StructuredDataType : uint32_t {
 
 /*
  * Format of transfer map:
- *   <SCTAG_TRANSFER_MAP_HEADER, TransferableMapHeader(UNREAD|TRANSFERRED)>
- *   numTransferables (64 bits)
- *   array of:
- *     <SCTAG_TRANSFER_MAP_*, TransferableOwnership>
- *     pointer (64 bits)
- *     extraData (64 bits), eg byte length for ArrayBuffers
+ *   - <SCTAG_TRANSFER_MAP_HEADER, UNREAD|TRANSFERRING|TRANSFERRED>
+ *   - numTransferables (64 bits)
+ *   - array of:
+ *     - <SCTAG_TRANSFER_MAP_*, TransferableOwnership> pointer (64
+ *       bits)
+ *     - extraData (64 bits), eg byte length for ArrayBuffers
+ *     - any data written for custom transferables
  */
 
 // Data associated with an SCTAG_TRANSFER_MAP_HEADER that tells whether the
-// contents have been read out yet or not.
-enum TransferableMapHeader { SCTAG_TM_UNREAD = 0, SCTAG_TM_TRANSFERRED };
+// contents have been read out yet or not. TRANSFERRING is for the case where we
+// have started but not completed reading, which due to errors could mean that
+// there are things still owned by the clone buffer that need to be released, so
+// discarding should not just be skipped.
+enum TransferableMapHeader {
+  SCTAG_TM_UNREAD = 0,
+  SCTAG_TM_TRANSFERRING,
+  SCTAG_TM_TRANSFERRED,
+
+  SCTAG_TM_END
+};
 
 static inline uint64_t PairToUInt64(uint32_t tag, uint32_t data) {
   return uint64_t(data) | (uint64_t(tag) << 32);
@@ -491,6 +501,10 @@ struct JSStructuredCloneReader {
   // SameProcess is the widest (it can store anything it wants)
   // and DifferentProcess is the narrowest (it cannot contain pointers and must
   // be valid cross-process.)
+  //
+  // Although this can be initially set to other "unresolved" values (eg
+  // Unassigned), by the end of a successful readHeader() this will be resolved
+  // to SameProcess or DifferentProcess.
   JS::StructuredCloneScope allowedScope;
 
   const JS::CloneDataPolicy cloneDataPolicy;
@@ -699,6 +713,10 @@ static void ReportDataCloneError(JSContext* cx,
 
     case JS_SCERR_SHMEM_TRANSFERABLE:
       errorNumber = JSMSG_SC_SHMEM_TRANSFERABLE;
+      break;
+
+    case JS_SCERR_TRANSFERABLE_TWICE:
+      errorNumber = JSMSG_SC_TRANSFERABLE_TWICE;
       break;
 
     case JS_SCERR_TYPED_ARRAY_DETACHED:
@@ -3404,10 +3422,30 @@ bool JSStructuredCloneReader::readTransferMap() {
     return in.reportTruncated();
   }
 
-  if (tag != SCTAG_TRANSFER_MAP_HEADER ||
-      TransferableMapHeader(data) == SCTAG_TM_TRANSFERRED) {
+  if (tag != SCTAG_TRANSFER_MAP_HEADER) {
+    // No transfer map header found.
     return true;
   }
+
+  if (data >= SCTAG_TM_END) {
+    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
+                              JSMSG_SC_BAD_SERIALIZED_DATA,
+                              "invalid transfer map header");
+    return false;
+  }
+  auto transferState = static_cast<TransferableMapHeader>(data);
+
+  if (transferState == SCTAG_TM_TRANSFERRED) {
+    return true;
+  }
+
+  if (transferState == SCTAG_TM_TRANSFERRING) {
+    ReportDataCloneError(cx, callbacks, JS_SCERR_TRANSFERABLE_TWICE, closure);
+    return false;
+  }
+
+  headerPos.write(
+      PairToUInt64(SCTAG_TRANSFER_MAP_HEADER, SCTAG_TM_TRANSFERRING));
 
   uint64_t numTransferables;
   MOZ_ALWAYS_TRUE(in.readPair(&tag, &data));
@@ -3440,9 +3478,8 @@ bool JSStructuredCloneReader::readTransferMap() {
     }
 
     if (tag == SCTAG_TRANSFER_MAP_ARRAY_BUFFER) {
-      if (allowedScope == JS::StructuredCloneScope::DifferentProcess ||
-          allowedScope ==
-              JS::StructuredCloneScope::DifferentProcessForIndexedDB) {
+      MOZ_ASSERT(allowedScope <= JS::StructuredCloneScope::LastResolvedScope);
+      if (allowedScope == JS::StructuredCloneScope::DifferentProcess) {
         // Transferred ArrayBuffers in a DifferentProcess clone buffer
         // are treated as if they weren't Transferred at all. We should
         // only see SCTAG_TRANSFER_MAP_STORED_ARRAY_BUFFER.
@@ -3529,7 +3566,7 @@ bool JSStructuredCloneReader::readTransferMap() {
 #ifdef DEBUG
   SCInput::getPair(headerPos.peek(), &tag, &data);
   MOZ_ASSERT(tag == SCTAG_TRANSFER_MAP_HEADER);
-  MOZ_ASSERT(TransferableMapHeader(data) != SCTAG_TM_TRANSFERRED);
+  MOZ_ASSERT(TransferableMapHeader(data) == SCTAG_TM_TRANSFERRING);
 #endif
   headerPos.write(
       PairToUInt64(SCTAG_TRANSFER_MAP_HEADER, SCTAG_TM_TRANSFERRED));
@@ -3889,6 +3926,8 @@ bool JSStructuredCloneReader::read(MutableHandleValue vp, size_t nbytes) {
   if (!readHeader()) {
     return false;
   }
+  MOZ_ASSERT(allowedScope <= JS::StructuredCloneScope::LastResolvedScope,
+             "allowedScope should have been resolved by now");
 
   if (!readTransferMap()) {
     return false;

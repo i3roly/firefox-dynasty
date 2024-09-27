@@ -20,7 +20,7 @@ buildscript {
     dependencies {
         classpath ComponentsDependencies.tools_androidgradle
         classpath ComponentsDependencies.tools_kotlingradle
-        classpath FocusDependencies.osslicenses_plugin
+        classpath ComponentsDependencies.osslicenses_plugin
         classpath "org.mozilla.telemetry:glean-gradle-plugin:${Versions.mozilla_glean}"
         classpath "${ApplicationServicesConfig.groupId}:tooling-nimbus-gradle:${ApplicationServicesConfig.version}"
 
@@ -161,7 +161,8 @@ tasks.register('ktlint', JavaExec) {
     description = "Check Kotlin code style."
     classpath = configurations.ktlint
     mainClass.set("com.pinterest.ktlint.Main")
-    args "app/**/*.kt", "!**/build/**/*.kt", "buildSrc/**/*.kt"
+    args "app/**/*.kt", "!**/build/**/*.kt", "buildSrc/**/*.kt",
+        "--reporter=json,output=build/reports/ktlint/ktlint.json", "--reporter=plain"
 }
 
 

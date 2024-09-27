@@ -19,7 +19,6 @@
 #include "wasm/WasmTable.h"
 
 #include "mozilla/CheckedInt.h"
-#include "mozilla/PodOperations.h"
 
 #include "vm/JSContext.h"
 #include "vm/Realm.h"
@@ -33,7 +32,6 @@
 using namespace js;
 using namespace js::wasm;
 using mozilla::CheckedInt;
-using mozilla::PodZero;
 
 Table::Table(JSContext* cx, const TableDesc& desc,
              Handle<WasmTableObject*> maybeObject, FuncRefVector&& functions)
@@ -49,6 +47,7 @@ Table::Table(JSContext* cx, const TableDesc& desc,
   // referencing.
   elemType_.AddRef();
   MOZ_ASSERT(repr() == TableRepr::Func);
+  MOZ_ASSERT(length_ <= MaxTableElemsRuntime);
 }
 
 Table::Table(JSContext* cx, const TableDesc& desc,
@@ -65,6 +64,7 @@ Table::Table(JSContext* cx, const TableDesc& desc,
   // referencing.
   elemType_.AddRef();
   MOZ_ASSERT(repr() == TableRepr::Ref);
+  MOZ_ASSERT(length_ <= MaxTableElemsRuntime);
 }
 
 Table::~Table() {
@@ -383,7 +383,7 @@ uint32_t Table::grow(uint32_t delta) {
 
   CheckedInt<uint32_t> newLength = oldLength;
   newLength += delta;
-  if (!newLength.isValid() || newLength.value() > MaxTableLength) {
+  if (!newLength.isValid() || newLength.value() > MaxTableElemsRuntime) {
     return -1;
   }
 
@@ -496,7 +496,7 @@ void Table::assertRangeNotNull(uint32_t index, uint32_t length) const {
 }
 #endif  // DEBUG
 
-size_t Table::sizeOfExcludingThis(MallocSizeOf mallocSizeOf) const {
+size_t Table::sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
   if (isFunction()) {
     return functions_.sizeOfExcludingThis(mallocSizeOf);
   }

@@ -35,9 +35,11 @@ import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.concept.engine.translate.TranslationSupport
 import mozilla.components.concept.engine.translate.findLanguage
 import mozilla.components.lib.state.ext.observeAsState
-import mozilla.components.service.fxa.manager.AccountState.NotAuthenticated
 import mozilla.components.support.ktx.android.util.dpToPx
+import mozilla.components.support.ktx.android.view.setNavigationBarColorCompat
+import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
+import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.components
@@ -47,6 +49,7 @@ import org.mozilla.fenix.components.menu.compose.EXTENSIONS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.ExtensionsSubmenu
 import org.mozilla.fenix.components.menu.compose.MAIN_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.MainMenu
+import org.mozilla.fenix.components.menu.compose.MainMenuWithCFR
 import org.mozilla.fenix.components.menu.compose.MenuDialogBottomSheet
 import org.mozilla.fenix.components.menu.compose.SAVE_MENU_ROUTE
 import org.mozilla.fenix.components.menu.compose.SaveSubmenu
@@ -82,14 +85,18 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
     private val args by navArgs<MenuDialogFragmentArgs>()
     private val browsingModeManager get() = (activity as HomeActivity).browsingModeManager
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
-        super.onCreateDialog(savedInstanceState).apply {
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        Events.toolbarMenuVisible.record(NoExtras())
+
+        return super.onCreateDialog(savedInstanceState).apply {
             setOnShowListener {
-                window?.navigationBarColor = if (browsingModeManager.mode.isPrivate) {
+                val navigationBarColor = if (browsingModeManager.mode.isPrivate) {
                     ContextCompat.getColor(context, R.color.fx_mobile_private_layer_color_3)
                 } else {
                     ContextCompat.getColor(context, R.color.fx_mobile_layer_color_3)
                 }
+
+                window?.setNavigationBarColorCompat(navigationBarColor)
 
                 val bottomSheet = findViewById<View?>(R.id.design_bottom_sheet)
                 bottomSheet?.setBackgroundResource(android.R.color.transparent)
@@ -103,6 +110,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                 }
             }
         }
+    }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
     override fun onCreateView(
@@ -145,6 +153,10 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         ?.requestedTranslationPair?.toLanguage
                     val isExtensionsProcessDisabled = browserStore.state.extensionsProcessDisabled
 
+                    val customTab = args.customTabSessionId?.let {
+                        browserStore.state.findCustomTab(it)
+                    }
+
                     val navHostController = rememberNavController()
                     val coroutineScope = rememberCoroutineScope()
                     val store = remember {
@@ -155,10 +167,17 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 } else {
                                     null
                                 },
-                                isDesktopMode = if (args.accesspoint == MenuAccessPoint.Home) {
-                                    settings.openNextTabInDesktopMode
-                                } else {
-                                    selectedTab?.content?.desktopMode ?: false
+                                customTabSessionId = args.customTabSessionId,
+                                isDesktopMode = when (args.accesspoint) {
+                                    MenuAccessPoint.Home -> {
+                                        settings.openNextTabInDesktopMode
+                                    }
+                                    MenuAccessPoint.External -> {
+                                        customTab?.content?.desktopMode ?: false
+                                    }
+                                    else -> {
+                                        selectedTab?.content?.desktopMode ?: false
+                                    }
                                 },
                             ),
                             middleware = listOf(
@@ -213,10 +232,8 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             ),
                         )
                     }
-
-                    val account by syncStore.observeAsState(initialValue = null) { state -> state.account }
-                    val accountState by syncStore.observeAsState(initialValue = NotAuthenticated) { state ->
-                        state.accountState
+                    val isDesktopMode by store.observeAsState(initialValue = false) { state ->
+                        state.isDesktopMode
                     }
                     val recommendedAddons by store.observeAsState(initialValue = emptyList()) { state ->
                         state.extensionMenuState.recommendedAddons
@@ -226,9 +243,6 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     }
                     val isPinned by store.observeAsState(initialValue = false) { state ->
                         state.browserMenuState != null && state.browserMenuState.isPinned
-                    }
-                    val isDesktopMode by store.observeAsState(initialValue = false) { state ->
-                        state.isDesktopMode
                     }
 
                     val isReaderViewActive by store.observeAsState(initialValue = false) { state ->
@@ -246,76 +260,29 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         },
                     ) {
                         composable(route = MAIN_MENU_ROUTE) {
-                            MainMenu(
-                                accessPoint = args.accesspoint,
-                                account = account,
-                                accountState = accountState,
-                                isPrivate = browsingModeManager.mode.isPrivate,
-                                isDesktopMode = isDesktopMode,
-                                isTranslationSupported = isTranslationSupported,
-                                showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
-                                isExtensionsProcessDisabled = isExtensionsProcessDisabled,
-                                onMozillaAccountButtonClick = {
-                                    store.dispatch(
-                                        MenuAction.Navigate.MozillaAccount(
-                                            accountState = accountState,
-                                            accesspoint = args.accesspoint,
-                                        ),
-                                    )
-                                },
-                                onHelpButtonClick = {
-                                    store.dispatch(MenuAction.Navigate.Help)
-                                },
-                                onSettingsButtonClick = {
-                                    store.dispatch(MenuAction.Navigate.Settings)
-                                },
-                                onNewTabMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.NewTab)
-                                },
-                                onNewPrivateTabMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.NewPrivateTab)
-                                },
-                                onSwitchToDesktopSiteMenuClick = {
-                                    if (isDesktopMode) {
-                                        store.dispatch(MenuAction.RequestMobileSite)
-                                    } else {
-                                        store.dispatch(MenuAction.RequestDesktopSite)
-                                    }
-                                },
-                                onFindInPageMenuClick = {
-                                    store.dispatch(MenuAction.FindInPage)
-                                },
-                                onToolsMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.Tools)
-                                },
-                                onSaveMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.Save)
-                                },
-                                onExtensionsMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.Extensions)
-                                },
-                                onBookmarksMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.Bookmarks)
-                                },
-                                onHistoryMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.History)
-                                },
-                                onDownloadsMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.Downloads)
-                                },
-                                onPasswordsMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.Passwords)
-                                },
-                                onCustomizeHomepageMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.CustomizeHomepage)
-                                },
-                                onNewInFirefoxMenuClick = {
-                                    store.dispatch(MenuAction.Navigate.ReleaseNotes)
-                                },
-                                onQuitMenuClick = {
-                                    store.dispatch(MenuAction.DeleteBrowsingDataAndQuit)
-                                },
-                            )
+                            if (settings.shouldShowMenuCFR) {
+                                MainMenuWithCFR(
+                                    accessPoint = args.accesspoint,
+                                    store = store,
+                                    syncStore = syncStore,
+                                    showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
+                                    isPrivate = browsingModeManager.mode.isPrivate,
+                                    isDesktopMode = isDesktopMode,
+                                    isTranslationSupported = isTranslationSupported,
+                                    isExtensionsProcessDisabled = isExtensionsProcessDisabled,
+                                )
+                            } else {
+                                MainMenu(
+                                    accessPoint = args.accesspoint,
+                                    store = store,
+                                    syncStore = syncStore,
+                                    showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
+                                    isPrivate = browsingModeManager.mode.isPrivate,
+                                    isDesktopMode = isDesktopMode,
+                                    isTranslationSupported = isTranslationSupported,
+                                    isExtensionsProcessDisabled = isExtensionsProcessDisabled,
+                                )
+                            }
                         }
 
                         composable(route = TOOLS_MENU_ROUTE) {
@@ -410,8 +377,12 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         composable(route = EXTENSIONS_MENU_ROUTE) {
                             ExtensionsSubmenu(
                                 recommendedAddons = recommendedAddons,
+                                showExtensionsOnboarding = true,
                                 onBackButtonClick = {
                                     store.dispatch(MenuAction.Navigate.Back)
+                                },
+                                onExtensionsLearnMoreClick = {
+                                    store.dispatch(MenuAction.Navigate.ExtensionsLearnMore)
                                 },
                                 onManageExtensionsMenuClick = {
                                     store.dispatch(MenuAction.Navigate.ManageExtensions)
@@ -429,11 +400,8 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         }
 
                         composable(route = CUSTOM_TAB_MENU_ROUTE) {
-                            val customTab = args.customTabSessionId?.let {
-                                browserStore.state.findCustomTab(it)
-                            }
-
                             CustomTabMenu(
+                                isDesktopMode = isDesktopMode,
                                 customTabMenuItems = customTab?.config?.menuItems,
                                 onCustomMenuItemClick = { intent: PendingIntent ->
                                     store.dispatch(
@@ -443,7 +411,13 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         ),
                                     )
                                 },
-                                onSwitchToDesktopSiteMenuClick = {},
+                                onSwitchToDesktopSiteMenuClick = {
+                                    if (isDesktopMode) {
+                                        store.dispatch(MenuAction.RequestMobileSite)
+                                    } else {
+                                        store.dispatch(MenuAction.RequestDesktopSite)
+                                    }
+                                },
                                 onFindInPageMenuClick = {
                                     store.dispatch(MenuAction.FindInPage)
                                 },

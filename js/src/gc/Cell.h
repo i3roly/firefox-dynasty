@@ -444,27 +444,6 @@ inline CellColor TenuredCell::getColor(MarkBitmap* bitmap,
   return CellColor::White;
 }
 
-bool TenuredCell::markIfUnmarked(MarkColor color /* = Black */) const {
-  return chunk()->markBits.markIfUnmarked(this, color);
-}
-
-bool TenuredCell::markIfUnmarkedAtomic(MarkColor color) const {
-  return chunk()->markBits.markIfUnmarkedAtomic(this, color);
-}
-
-void TenuredCell::markBlack() const { chunk()->markBits.markBlack(this); }
-void TenuredCell::markBlackAtomic() const {
-  chunk()->markBits.markBlackAtomic(this);
-}
-
-void TenuredCell::copyMarkBitsFrom(const TenuredCell* src) {
-  MarkBitmap& markBits = chunk()->markBits;
-  markBits.copyMarkBit(this, src, ColorBit::BlackBit);
-  markBits.copyMarkBit(this, src, ColorBit::GrayOrBlackBit);
-}
-
-void TenuredCell::unmark() { chunk()->markBits.unmark(this); }
-
 inline Arena* TenuredCell::arena() const {
   MOZ_ASSERT(isTenured());
   uintptr_t addr = address();
@@ -479,15 +458,15 @@ JS::TraceKind TenuredCell::getTraceKind() const {
 }
 
 JS::Zone* TenuredCell::zone() const {
-  JS::Zone* zone = arena()->zone;
+  JS::Zone* zone = zoneFromAnyThread();
   MOZ_ASSERT(CurrentThreadIsGCMarking() || CurrentThreadCanAccessZone(zone));
   return zone;
 }
 
-JS::Zone* TenuredCell::zoneFromAnyThread() const { return arena()->zone; }
+JS::Zone* TenuredCell::zoneFromAnyThread() const { return arena()->zone(); }
 
 bool TenuredCell::isInsideZone(JS::Zone* zone) const {
-  return zone == arena()->zone;
+  return zone == zoneFromAnyThread();
 }
 
 // Read barrier and pre-write barrier implementation for GC cells.

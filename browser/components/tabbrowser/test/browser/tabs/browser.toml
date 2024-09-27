@@ -248,9 +248,6 @@ support-files = [
 ]
 
 ["browser_overflowScroll.js"]
-skip-if = [
-  "win11_2009", # Bug 1797751
-]
 
 ["browser_paste_event_at_middle_click_on_link.js"]
 support-files = ["file_anchor_elements.html"]
@@ -317,6 +314,8 @@ skip-if = ["true"] # Bug 1616418 Bug 1549985
 
 ["browser_tab_a11y_description.js"]
 
+["browser_tab_groups.js"]
+
 ["browser_tab_label_during_reload.js"]
 
 ["browser_tab_label_picture_in_picture.js"]
@@ -327,8 +326,6 @@ skip-if = ["true"] # Bug 1616418 Bug 1549985
 
 ["browser_tab_manager_keyboard_access.js"]
 skip-if = ["true"] # Bug 1900477
-
-["browser_tab_manager_visibility.js"]
 
 ["browser_tab_move_to_new_window_reload.js"]
 

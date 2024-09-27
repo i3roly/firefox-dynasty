@@ -274,21 +274,23 @@ const assertResultsEquals = (toleranceFunc, actual, graphResources) => {
 
   for (let operandName in actual) {
     const expectedSuboutput = expectedOutputs[operandName];
+    const expectedDescriptor = expectedSuboutput.descriptor;
+    let expectedData = expectedSuboutput.data;
+
     outputData = actual[operandName];
     // If data is scalar and shape is not, it means it's expecting to be
     // filled by the scalar value. Also limit the array size so it doesn't
     // timeout.
-    if (typeof (expectedSuboutput.data) === 'number' &&
-        expectedSuboutput.dimensions &&
-        sizeOfShape(expectedSuboutput.dimensions) > 1) {
+    if (typeof (expectedData) === 'number' && expectedDescriptor.dimensions &&
+        sizeOfShape(expectedDescriptor.dimensions) > 1) {
       const size = Math.min(
-          kMaximumIndexToValidate, sizeOfShape(expectedSuboutput.dimensions));
-      expectedSuboutput.data = new Array(size).fill(expectedSuboutput.data);
+          kMaximumIndexToValidate, sizeOfShape(expectedDescriptor.dimensions));
+      expectedData = new Array(size).fill(expectedData);
       outputData = outputData.subarray(0, kMaximumIndexToValidate);
     }
     doAssert(
-        operatorName, outputData, expectedSuboutput.data, metricType,
-        toleranceValue, expectedSuboutput.dataType);
+        operatorName, outputData, expectedData, metricType, toleranceValue,
+        expectedDescriptor.dataType);
   }
 };
 
@@ -523,6 +525,29 @@ const getExpectedDataTypeOfSingleOutput = (expectedOutput) => {
       expectedDescriptor.dataType;
   return dataType;
 };
+
+const getReducedElementCount =
+    (graphResources) => {
+      const args = graphResources.operators[0].arguments;
+      const inputShape = graphResources.inputs[args[0][Object.keys(args[0])[0]]]
+                             .descriptor.dimensions;
+      const rank = inputShape.length;
+      const options =
+          args.length === 2 ? {...args[1][Object.keys(args[1])[0]]} : {};
+      let sizes;
+
+      if (options && options.axes) {
+        sizes = options.axes.map(
+            (axis) => axis < 0 ? inputShape[axis + rank] : inputShape[axis]);
+      } else {
+        sizes = inputShape;
+      }
+
+      return sizes.length ?
+          sizes.reduce(
+              (accumulator, currentValue) => accumulator * currentValue) :
+          1;
+    }
 
 const webnn_conformance_test =
     (buildGraphAndComputeFunc, toleranceFunc, testResources) => {

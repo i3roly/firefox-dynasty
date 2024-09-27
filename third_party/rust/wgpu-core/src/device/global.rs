@@ -7,7 +7,7 @@ use crate::{
         ResolvedBindGroupEntry, ResolvedBindingResource, ResolvedBufferBinding,
     },
     command, conv,
-    device::{bgl, life::WaitIdleError, queue, DeviceError, DeviceLostClosure, DeviceLostReason},
+    device::{bgl, life::WaitIdleError, DeviceError, DeviceLostClosure, DeviceLostReason},
     global::Global,
     hal_api::HalApi,
     id::{self, AdapterId, DeviceId, QueueId, SurfaceId},
@@ -19,32 +19,24 @@ use crate::{
     present,
     resource::{
         self, BufferAccessError, BufferAccessResult, BufferMapOperation, CreateBufferError,
-        Trackable,
     },
     storage::Storage,
     Label,
 };
 
-use hal::Device as _;
-
 use wgt::{BufferAddress, TextureFormat};
 
-use std::{
-    borrow::Cow,
-    iter,
-    ptr::{self, NonNull},
-    sync::{atomic::Ordering, Arc},
-};
+use std::{borrow::Cow, ptr::NonNull, sync::atomic::Ordering};
 
 use super::{ImplicitPipelineIds, UserClosures};
 
 impl Global {
-    pub fn adapter_is_surface_supported<A: HalApi>(
+    pub fn adapter_is_surface_supported(
         &self,
         adapter_id: AdapterId,
         surface_id: SurfaceId,
     ) -> Result<bool, instance::IsSurfaceSupportedError> {
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let surface_guard = self.surfaces.read();
         let adapter_guard = hub.adapters.read();
@@ -57,13 +49,13 @@ impl Global {
         Ok(adapter.is_surface_supported(surface))
     }
 
-    pub fn surface_get_capabilities<A: HalApi>(
+    pub fn surface_get_capabilities(
         &self,
         surface_id: SurfaceId,
         adapter_id: AdapterId,
     ) -> Result<wgt::SurfaceCapabilities, instance::GetSurfaceSupportError> {
         profiling::scope!("Surface::get_capabilities");
-        self.fetch_adapter_and_surface::<A, _, _>(surface_id, adapter_id, |adapter, surface| {
+        self.fetch_adapter_and_surface::<_, _>(surface_id, adapter_id, |adapter, surface| {
             let mut hal_caps = surface.get_capabilities(adapter)?;
 
             hal_caps.formats.sort_by_key(|f| !f.is_srgb());
@@ -80,8 +72,7 @@ impl Global {
     }
 
     fn fetch_adapter_and_surface<
-        A: HalApi,
-        F: FnOnce(&Adapter<A>, &Surface) -> Result<B, instance::GetSurfaceSupportError>,
+        F: FnOnce(&Adapter, &Surface) -> Result<B, instance::GetSurfaceSupportError>,
         B,
     >(
         &self,
@@ -89,7 +80,7 @@ impl Global {
         adapter_id: AdapterId,
         get_supported_callback: F,
     ) -> Result<B, instance::GetSurfaceSupportError> {
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let surface_guard = self.surfaces.read();
         let adapter_guard = hub.adapters.read();
@@ -103,11 +94,8 @@ impl Global {
         get_supported_callback(adapter, surface)
     }
 
-    pub fn device_features<A: HalApi>(
-        &self,
-        device_id: DeviceId,
-    ) -> Result<wgt::Features, DeviceError> {
-        let hub = A::hub(self);
+    pub fn device_features(&self, device_id: DeviceId) -> Result<wgt::Features, DeviceError> {
+        let hub = &self.hub;
 
         let device = hub
             .devices
@@ -117,11 +105,8 @@ impl Global {
         Ok(device.features)
     }
 
-    pub fn device_limits<A: HalApi>(
-        &self,
-        device_id: DeviceId,
-    ) -> Result<wgt::Limits, DeviceError> {
-        let hub = A::hub(self);
+    pub fn device_limits(&self, device_id: DeviceId) -> Result<wgt::Limits, DeviceError> {
+        let hub = &self.hub;
 
         let device = hub
             .devices
@@ -131,11 +116,11 @@ impl Global {
         Ok(device.limits.clone())
     }
 
-    pub fn device_downlevel_properties<A: HalApi>(
+    pub fn device_downlevel_properties(
         &self,
         device_id: DeviceId,
     ) -> Result<wgt::DownlevelCapabilities, DeviceError> {
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let device = hub
             .devices
@@ -145,7 +130,7 @@ impl Global {
         Ok(device.downlevel.clone())
     }
 
-    pub fn device_create_buffer<A: HalApi>(
+    pub fn device_create_buffer(
         &self,
         device_id: DeviceId,
         desc: &resource::BufferDescriptor,
@@ -153,8 +138,8 @@ impl Global {
     ) -> (id::BufferId, Option<CreateBufferError>) {
         profiling::scope!("Device::create_buffer");
 
-        let hub = A::hub(self);
-        let fid = hub.buffers.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.buffers.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -228,16 +213,20 @@ impl Global {
     /// [`device_create_buffer`]: Global::device_create_buffer
     /// [`usage`]: https://www.w3.org/TR/webgpu/#dom-gputexturedescriptor-usage
     /// [`wgpu_types::BufferUsages`]: wgt::BufferUsages
-    pub fn create_buffer_error<A: HalApi>(&self, id_in: Option<id::BufferId>) {
-        let hub = A::hub(self);
-        let fid = hub.buffers.prepare(id_in);
+    pub fn create_buffer_error(&self, backend: wgt::Backend, id_in: Option<id::BufferId>) {
+        let hub = &self.hub;
+        let fid = hub.buffers.prepare(backend, id_in);
 
         fid.assign_error();
     }
 
-    pub fn create_render_bundle_error<A: HalApi>(&self, id_in: Option<id::RenderBundleId>) {
-        let hub = A::hub(self);
-        let fid = hub.render_bundles.prepare(id_in);
+    pub fn create_render_bundle_error(
+        &self,
+        backend: wgt::Backend,
+        id_in: Option<id::RenderBundleId>,
+    ) {
+        let hub = &self.hub;
+        let fid = hub.render_bundles.prepare(backend, id_in);
 
         fid.assign_error();
     }
@@ -245,68 +234,39 @@ impl Global {
     /// Assign `id_in` an error with the given `label`.
     ///
     /// See `create_buffer_error` for more context and explanation.
-    pub fn create_texture_error<A: HalApi>(&self, id_in: Option<id::TextureId>) {
-        let hub = A::hub(self);
-        let fid = hub.textures.prepare(id_in);
+    pub fn create_texture_error(&self, backend: wgt::Backend, id_in: Option<id::TextureId>) {
+        let hub = &self.hub;
+        let fid = hub.textures.prepare(backend, id_in);
 
         fid.assign_error();
     }
 
     #[cfg(feature = "replay")]
-    pub fn device_wait_for_buffer<A: HalApi>(
+    pub fn device_set_buffer_data(
         &self,
-        device_id: DeviceId,
-        buffer_id: id::BufferId,
-    ) -> Result<(), WaitIdleError> {
-        let hub = A::hub(self);
-
-        let last_submission = match hub.buffers.read().get(buffer_id) {
-            Ok(buffer) => buffer.submission_index(),
-            Err(_) => return Ok(()),
-        };
-
-        hub.devices
-            .get(device_id)
-            .map_err(|_| DeviceError::InvalidDeviceId)?
-            .wait_for_submit(last_submission)
-    }
-
-    #[doc(hidden)]
-    pub fn device_set_buffer_sub_data<A: HalApi>(
-        &self,
-        device_id: DeviceId,
         buffer_id: id::BufferId,
         offset: BufferAddress,
         data: &[u8],
     ) -> BufferAccessResult {
-        profiling::scope!("Device::set_buffer_sub_data");
-
-        let hub = A::hub(self);
-
-        let device = hub
-            .devices
-            .get(device_id)
-            .map_err(|_| DeviceError::InvalidDeviceId)?;
+        let hub = &self.hub;
 
         let buffer = hub
             .buffers
             .get(buffer_id)
             .map_err(|_| BufferAccessError::InvalidBufferId(buffer_id))?;
 
-        #[cfg(feature = "trace")]
-        if let Some(ref mut trace) = *device.trace.lock() {
-            let data_path = trace.make_binary("bin", data);
-            trace.add(trace::Action::WriteBuffer {
-                id: buffer_id,
-                data: data_path,
-                range: offset..offset + data.len() as BufferAddress,
-                queued: false,
-            });
-        }
+        let device = &buffer.device;
 
         device.check_is_valid()?;
         buffer.check_usage(wgt::BufferUsages::MAP_WRITE)?;
-        //assert!(buffer isn't used by the GPU);
+
+        let last_submission = device
+            .lock_life()
+            .get_buffer_latest_submission_index(&buffer);
+
+        if let Some(last_submission) = last_submission {
+            device.wait_for_submit(last_submission)?;
+        }
 
         let snatch_guard = device.snatchable_lock.read();
         let raw_buf = buffer.try_raw(&snatch_guard)?;
@@ -315,11 +275,12 @@ impl Global {
                 .raw()
                 .map_buffer(raw_buf, offset..offset + data.len() as u64)
                 .map_err(DeviceError::from)?;
-            ptr::copy_nonoverlapping(data.as_ptr(), mapping.ptr.as_ptr(), data.len());
+            std::ptr::copy_nonoverlapping(data.as_ptr(), mapping.ptr.as_ptr(), data.len());
             if !mapping.is_coherent {
+                #[allow(clippy::single_range_in_vec_init)]
                 device
                     .raw()
-                    .flush_mapped_ranges(raw_buf, iter::once(offset..offset + data.len() as u64));
+                    .flush_mapped_ranges(raw_buf, &[offset..offset + data.len() as u64]);
             }
             device.raw().unmap_buffer(raw_buf);
         }
@@ -327,60 +288,11 @@ impl Global {
         Ok(())
     }
 
-    #[doc(hidden)]
-    pub fn device_get_buffer_sub_data<A: HalApi>(
-        &self,
-        device_id: DeviceId,
-        buffer_id: id::BufferId,
-        offset: BufferAddress,
-        data: &mut [u8],
-    ) -> BufferAccessResult {
-        profiling::scope!("Device::get_buffer_sub_data");
-
-        let hub = A::hub(self);
-
-        let device = hub
-            .devices
-            .get(device_id)
-            .map_err(|_| DeviceError::InvalidDeviceId)?;
-        device.check_is_valid()?;
-
-        let snatch_guard = device.snatchable_lock.read();
-
-        let buffer = hub
-            .buffers
-            .get(buffer_id)
-            .map_err(|_| BufferAccessError::InvalidBufferId(buffer_id))?;
-        buffer.check_usage(wgt::BufferUsages::MAP_READ)?;
-        //assert!(buffer isn't used by the GPU);
-
-        let raw_buf = buffer.try_raw(&snatch_guard)?;
-        unsafe {
-            let mapping = device
-                .raw()
-                .map_buffer(raw_buf, offset..offset + data.len() as u64)
-                .map_err(DeviceError::from)?;
-            if !mapping.is_coherent {
-                device.raw().invalidate_mapped_ranges(
-                    raw_buf,
-                    iter::once(offset..offset + data.len() as u64),
-                );
-            }
-            ptr::copy_nonoverlapping(mapping.ptr.as_ptr(), data.as_mut_ptr(), data.len());
-            device.raw().unmap_buffer(raw_buf);
-        }
-
-        Ok(())
-    }
-
-    pub fn buffer_destroy<A: HalApi>(
-        &self,
-        buffer_id: id::BufferId,
-    ) -> Result<(), resource::DestroyError> {
+    pub fn buffer_destroy(&self, buffer_id: id::BufferId) -> Result<(), resource::DestroyError> {
         profiling::scope!("Buffer::destroy");
         api_log!("Buffer::destroy {buffer_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let buffer = hub
             .buffers
@@ -400,11 +312,11 @@ impl Global {
         buffer.destroy()
     }
 
-    pub fn buffer_drop<A: HalApi>(&self, buffer_id: id::BufferId, wait: bool) {
+    pub fn buffer_drop(&self, buffer_id: id::BufferId) {
         profiling::scope!("Buffer::drop");
         api_log!("Buffer::drop {buffer_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let buffer = match hub.buffers.unregister(buffer_id) {
             Some(buffer) => buffer,
@@ -422,17 +334,9 @@ impl Global {
             #[cfg(feature = "trace")]
             buffer_id,
         );
-
-        if wait {
-            let last_submit_index = buffer.submission_index();
-            match buffer.device.wait_for_submit(last_submit_index) {
-                Ok(()) => (),
-                Err(e) => log::error!("Failed to wait for buffer {:?}: {}", buffer_id, e),
-            }
-        }
     }
 
-    pub fn device_create_texture<A: HalApi>(
+    pub fn device_create_texture(
         &self,
         device_id: DeviceId,
         desc: &resource::TextureDescriptor,
@@ -440,9 +344,9 @@ impl Global {
     ) -> (id::TextureId, Option<resource::CreateTextureError>) {
         profiling::scope!("Device::create_texture");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        let fid = hub.textures.prepare(id_in);
+        let fid = hub.textures.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -477,18 +381,18 @@ impl Global {
     /// - `hal_texture` must be created from `device_id` corresponding raw handle.
     /// - `hal_texture` must be created respecting `desc`
     /// - `hal_texture` must be initialized
-    pub unsafe fn create_texture_from_hal<A: HalApi>(
+    pub unsafe fn create_texture_from_hal(
         &self,
-        hal_texture: A::Texture,
+        hal_texture: Box<dyn hal::DynTexture>,
         device_id: DeviceId,
         desc: &resource::TextureDescriptor,
         id_in: Option<id::TextureId>,
     ) -> (id::TextureId, Option<resource::CreateTextureError>) {
         profiling::scope!("Device::create_texture_from_hal");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        let fid = hub.textures.prepare(id_in);
+        let fid = hub.textures.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -534,8 +438,8 @@ impl Global {
     ) -> (id::BufferId, Option<CreateBufferError>) {
         profiling::scope!("Device::create_buffer");
 
-        let hub = A::hub(self);
-        let fid = hub.buffers.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.buffers.prepare(A::VARIANT, id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -550,7 +454,7 @@ impl Global {
                 trace.add(trace::Action::CreateBuffer(fid.id(), desc.clone()));
             }
 
-            let buffer = device.create_buffer_from_hal(hal_buffer, desc);
+            let buffer = device.create_buffer_from_hal(Box::new(hal_buffer), desc);
 
             let id = fid.assign(buffer);
             api_log!("Device::create_buffer -> {id:?}");
@@ -564,14 +468,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn texture_destroy<A: HalApi>(
-        &self,
-        texture_id: id::TextureId,
-    ) -> Result<(), resource::DestroyError> {
+    pub fn texture_destroy(&self, texture_id: id::TextureId) -> Result<(), resource::DestroyError> {
         profiling::scope!("Texture::destroy");
         api_log!("Texture::destroy {texture_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let texture = hub
             .textures
@@ -586,29 +487,21 @@ impl Global {
         texture.destroy()
     }
 
-    pub fn texture_drop<A: HalApi>(&self, texture_id: id::TextureId, wait: bool) {
+    pub fn texture_drop(&self, texture_id: id::TextureId) {
         profiling::scope!("Texture::drop");
         api_log!("Texture::drop {texture_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        if let Some(texture) = hub.textures.unregister(texture_id) {
+        if let Some(_texture) = hub.textures.unregister(texture_id) {
             #[cfg(feature = "trace")]
-            if let Some(t) = texture.device.trace.lock().as_mut() {
+            if let Some(t) = _texture.device.trace.lock().as_mut() {
                 t.add(trace::Action::DestroyTexture(texture_id));
-            }
-
-            if wait {
-                let last_submit_index = texture.submission_index();
-                match texture.device.wait_for_submit(last_submit_index) {
-                    Ok(()) => (),
-                    Err(e) => log::error!("Failed to wait for texture {texture_id:?}: {e}"),
-                }
             }
         }
     }
 
-    pub fn texture_create_view<A: HalApi>(
+    pub fn texture_create_view(
         &self,
         texture_id: id::TextureId,
         desc: &resource::TextureViewDescriptor,
@@ -616,9 +509,9 @@ impl Global {
     ) -> (id::TextureViewId, Option<resource::CreateTextureViewError>) {
         profiling::scope!("Texture::create_view");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        let fid = hub.texture_views.prepare(id_in);
+        let fid = hub.texture_views.prepare(texture_id.backend(), id_in);
 
         let error = 'error: {
             let texture = match hub.textures.get(texture_id) {
@@ -655,36 +548,25 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn texture_view_drop<A: HalApi>(
+    pub fn texture_view_drop(
         &self,
         texture_view_id: id::TextureViewId,
-        wait: bool,
     ) -> Result<(), resource::TextureViewDestroyError> {
         profiling::scope!("TextureView::drop");
         api_log!("TextureView::drop {texture_view_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        if let Some(view) = hub.texture_views.unregister(texture_view_id) {
+        if let Some(_view) = hub.texture_views.unregister(texture_view_id) {
             #[cfg(feature = "trace")]
-            if let Some(t) = view.device.trace.lock().as_mut() {
+            if let Some(t) = _view.device.trace.lock().as_mut() {
                 t.add(trace::Action::DestroyTextureView(texture_view_id));
-            }
-
-            if wait {
-                let last_submit_index = view.submission_index();
-                match view.device.wait_for_submit(last_submit_index) {
-                    Ok(()) => (),
-                    Err(e) => {
-                        log::error!("Failed to wait for texture view {texture_view_id:?}: {e}")
-                    }
-                }
             }
         }
         Ok(())
     }
 
-    pub fn device_create_sampler<A: HalApi>(
+    pub fn device_create_sampler(
         &self,
         device_id: DeviceId,
         desc: &resource::SamplerDescriptor,
@@ -692,8 +574,8 @@ impl Global {
     ) -> (id::SamplerId, Option<resource::CreateSamplerError>) {
         profiling::scope!("Device::create_sampler");
 
-        let hub = A::hub(self);
-        let fid = hub.samplers.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.samplers.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -721,11 +603,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn sampler_drop<A: HalApi>(&self, sampler_id: id::SamplerId) {
+    pub fn sampler_drop(&self, sampler_id: id::SamplerId) {
         profiling::scope!("Sampler::drop");
         api_log!("Sampler::drop {sampler_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_sampler) = hub.samplers.unregister(sampler_id) {
             #[cfg(feature = "trace")]
@@ -735,7 +617,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_bind_group_layout<A: HalApi>(
+    pub fn device_create_bind_group_layout(
         &self,
         device_id: DeviceId,
         desc: &binding_model::BindGroupLayoutDescriptor,
@@ -746,8 +628,8 @@ impl Global {
     ) {
         profiling::scope!("Device::create_bind_group_layout");
 
-        let hub = A::hub(self);
-        let fid = hub.bind_group_layouts.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.bind_group_layouts.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -776,9 +658,6 @@ impl Global {
                 bgl.exclusive_pipeline
                     .set(binding_model::ExclusivePipeline::None)
                     .unwrap();
-
-                let bgl = Arc::new(bgl);
-
                 Ok(bgl)
             });
 
@@ -793,16 +672,16 @@ impl Global {
             return (id, None);
         };
 
-        let fid = hub.bind_group_layouts.prepare(id_in);
+        let fid = hub.bind_group_layouts.prepare(device_id.backend(), id_in);
         let id = fid.assign_error();
         (id, Some(error))
     }
 
-    pub fn bind_group_layout_drop<A: HalApi>(&self, bind_group_layout_id: id::BindGroupLayoutId) {
+    pub fn bind_group_layout_drop(&self, bind_group_layout_id: id::BindGroupLayoutId) {
         profiling::scope!("BindGroupLayout::drop");
         api_log!("BindGroupLayout::drop {bind_group_layout_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_layout) = hub.bind_group_layouts.unregister(bind_group_layout_id) {
             #[cfg(feature = "trace")]
@@ -812,7 +691,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_pipeline_layout<A: HalApi>(
+    pub fn device_create_pipeline_layout(
         &self,
         device_id: DeviceId,
         desc: &binding_model::PipelineLayoutDescriptor,
@@ -823,8 +702,8 @@ impl Global {
     ) {
         profiling::scope!("Device::create_pipeline_layout");
 
-        let hub = A::hub(self);
-        let fid = hub.pipeline_layouts.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.pipeline_layouts.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -867,7 +746,7 @@ impl Global {
                 Err(e) => break 'error e,
             };
 
-            let id = fid.assign(Arc::new(layout));
+            let id = fid.assign(layout);
             api_log!("Device::create_pipeline_layout -> {id:?}");
             return (id, None);
         };
@@ -876,11 +755,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn pipeline_layout_drop<A: HalApi>(&self, pipeline_layout_id: id::PipelineLayoutId) {
+    pub fn pipeline_layout_drop(&self, pipeline_layout_id: id::PipelineLayoutId) {
         profiling::scope!("PipelineLayout::drop");
         api_log!("PipelineLayout::drop {pipeline_layout_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
         if let Some(_layout) = hub.pipeline_layouts.unregister(pipeline_layout_id) {
             #[cfg(feature = "trace")]
             if let Some(t) = _layout.device.trace.lock().as_mut() {
@@ -889,7 +768,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_bind_group<A: HalApi>(
+    pub fn device_create_bind_group(
         &self,
         device_id: DeviceId,
         desc: &binding_model::BindGroupDescriptor,
@@ -897,8 +776,8 @@ impl Global {
     ) -> (id::BindGroupId, Option<binding_model::CreateBindGroupError>) {
         profiling::scope!("Device::create_bind_group");
 
-        let hub = A::hub(self);
-        let fid = hub.bind_groups.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.bind_groups.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -916,12 +795,12 @@ impl Global {
                 Err(..) => break 'error binding_model::CreateBindGroupError::InvalidLayout,
             };
 
-            fn map_entry<'a, A: HalApi>(
+            fn map_entry<'a>(
                 e: &BindGroupEntry<'a>,
-                buffer_storage: &Storage<resource::Buffer<A>>,
-                sampler_storage: &Storage<resource::Sampler<A>>,
-                texture_view_storage: &Storage<resource::TextureView<A>>,
-            ) -> Result<ResolvedBindGroupEntry<'a, A>, binding_model::CreateBindGroupError>
+                buffer_storage: &Storage<resource::Buffer>,
+                sampler_storage: &Storage<resource::Sampler>,
+                texture_view_storage: &Storage<resource::TextureView>,
+            ) -> Result<ResolvedBindGroupEntry<'a>, binding_model::CreateBindGroupError>
             {
                 let map_buffer = |bb: &BufferBinding| {
                     buffer_storage
@@ -1016,11 +895,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn bind_group_drop<A: HalApi>(&self, bind_group_id: id::BindGroupId) {
+    pub fn bind_group_drop(&self, bind_group_id: id::BindGroupId) {
         profiling::scope!("BindGroup::drop");
         api_log!("BindGroup::drop {bind_group_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_bind_group) = hub.bind_groups.unregister(bind_group_id) {
             #[cfg(feature = "trace")]
@@ -1044,7 +923,7 @@ impl Global {
     /// input.
     ///
     /// </div>
-    pub fn device_create_shader_module<A: HalApi>(
+    pub fn device_create_shader_module(
         &self,
         device_id: DeviceId,
         desc: &pipeline::ShaderModuleDescriptor,
@@ -1056,8 +935,8 @@ impl Global {
     ) {
         profiling::scope!("Device::create_shader_module");
 
-        let hub = A::hub(self);
-        let fid = hub.shader_modules.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.shader_modules.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -1102,7 +981,7 @@ impl Global {
                 Err(e) => break 'error e,
             };
 
-            let id = fid.assign(Arc::new(shader));
+            let id = fid.assign(shader);
             api_log!("Device::create_shader_module -> {id:?}");
             return (id, None);
         };
@@ -1119,7 +998,7 @@ impl Global {
     ///
     /// This function passes SPIR-V binary to the backend as-is and can potentially result in a
     /// driver crash.
-    pub unsafe fn device_create_shader_module_spirv<A: HalApi>(
+    pub unsafe fn device_create_shader_module_spirv(
         &self,
         device_id: DeviceId,
         desc: &pipeline::ShaderModuleDescriptor,
@@ -1131,8 +1010,8 @@ impl Global {
     ) {
         profiling::scope!("Device::create_shader_module");
 
-        let hub = A::hub(self);
-        let fid = hub.shader_modules.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.shader_modules.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -1143,7 +1022,7 @@ impl Global {
             #[cfg(feature = "trace")]
             if let Some(ref mut trace) = *device.trace.lock() {
                 let data = trace.make_binary("spv", unsafe {
-                    std::slice::from_raw_parts(source.as_ptr() as *const u8, source.len() * 4)
+                    std::slice::from_raw_parts(source.as_ptr().cast::<u8>(), source.len() * 4)
                 });
                 trace.add(trace::Action::CreateShaderModule {
                     id: fid.id(),
@@ -1156,7 +1035,7 @@ impl Global {
                 Ok(shader) => shader,
                 Err(e) => break 'error e,
             };
-            let id = fid.assign(Arc::new(shader));
+            let id = fid.assign(shader);
             api_log!("Device::create_shader_module_spirv -> {id:?}");
             return (id, None);
         };
@@ -1167,11 +1046,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn shader_module_drop<A: HalApi>(&self, shader_module_id: id::ShaderModuleId) {
+    pub fn shader_module_drop(&self, shader_module_id: id::ShaderModuleId) {
         profiling::scope!("ShaderModule::drop");
         api_log!("ShaderModule::drop {shader_module_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(shader_module) = hub.shader_modules.unregister(shader_module_id) {
             #[cfg(feature = "trace")]
@@ -1182,7 +1061,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_command_encoder<A: HalApi>(
+    pub fn device_create_command_encoder(
         &self,
         device_id: DeviceId,
         desc: &wgt::CommandEncoderDescriptor<Label>,
@@ -1190,10 +1069,11 @@ impl Global {
     ) -> (id::CommandEncoderId, Option<DeviceError>) {
         profiling::scope!("Device::create_command_encoder");
 
-        let hub = A::hub(self);
-        let fid = hub
-            .command_buffers
-            .prepare(id_in.map(|id| id.into_command_buffer_id()));
+        let hub = &self.hub;
+        let fid = hub.command_buffers.prepare(
+            device_id.backend(),
+            id_in.map(|id| id.into_command_buffer_id()),
+        );
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -1206,7 +1086,7 @@ impl Global {
                 Err(e) => break 'error e,
             };
 
-            let id = fid.assign(Arc::new(command_buffer));
+            let id = fid.assign(command_buffer);
             api_log!("Device::create_command_encoder -> {id:?}");
             return (id.into_command_encoder_id(), None);
         };
@@ -1215,11 +1095,11 @@ impl Global {
         (id.into_command_encoder_id(), Some(error))
     }
 
-    pub fn command_encoder_drop<A: HalApi>(&self, command_encoder_id: id::CommandEncoderId) {
+    pub fn command_encoder_drop(&self, command_encoder_id: id::CommandEncoderId) {
         profiling::scope!("CommandEncoder::drop");
         api_log!("CommandEncoder::drop {command_encoder_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(cmd_buf) = hub
             .command_buffers
@@ -1229,10 +1109,10 @@ impl Global {
         }
     }
 
-    pub fn command_buffer_drop<A: HalApi>(&self, command_buffer_id: id::CommandBufferId) {
+    pub fn command_buffer_drop(&self, command_buffer_id: id::CommandBufferId) {
         profiling::scope!("CommandBuffer::drop");
         api_log!("CommandBuffer::drop {command_buffer_id:?}");
-        self.command_encoder_drop::<A>(command_buffer_id.into_command_encoder_id())
+        self.command_encoder_drop(command_buffer_id.into_command_encoder_id())
     }
 
     pub fn device_create_render_bundle_encoder(
@@ -1252,7 +1132,7 @@ impl Global {
         (Box::into_raw(Box::new(encoder)), error)
     }
 
-    pub fn render_bundle_encoder_finish<A: HalApi>(
+    pub fn render_bundle_encoder_finish(
         &self,
         bundle_encoder: command::RenderBundleEncoder,
         desc: &command::RenderBundleDescriptor,
@@ -1260,9 +1140,11 @@ impl Global {
     ) -> (id::RenderBundleId, Option<command::RenderBundleError>) {
         profiling::scope!("RenderBundleEncoder::finish");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        let fid = hub.render_bundles.prepare(id_in);
+        let fid = hub
+            .render_bundles
+            .prepare(bundle_encoder.parent().backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(bundle_encoder.parent()) {
@@ -1303,11 +1185,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn render_bundle_drop<A: HalApi>(&self, render_bundle_id: id::RenderBundleId) {
+    pub fn render_bundle_drop(&self, render_bundle_id: id::RenderBundleId) {
         profiling::scope!("RenderBundle::drop");
         api_log!("RenderBundle::drop {render_bundle_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_bundle) = hub.render_bundles.unregister(render_bundle_id) {
             #[cfg(feature = "trace")]
@@ -1317,7 +1199,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_query_set<A: HalApi>(
+    pub fn device_create_query_set(
         &self,
         device_id: DeviceId,
         desc: &resource::QuerySetDescriptor,
@@ -1325,8 +1207,8 @@ impl Global {
     ) -> (id::QuerySetId, Option<resource::CreateQuerySetError>) {
         profiling::scope!("Device::create_query_set");
 
-        let hub = A::hub(self);
-        let fid = hub.query_sets.prepare(id_in);
+        let hub = &self.hub;
+        let fid = hub.query_sets.prepare(device_id.backend(), id_in);
 
         let error = 'error: {
             let device = match hub.devices.get(device_id) {
@@ -1357,11 +1239,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn query_set_drop<A: HalApi>(&self, query_set_id: id::QuerySetId) {
+    pub fn query_set_drop(&self, query_set_id: id::QuerySetId) {
         profiling::scope!("QuerySet::drop");
         api_log!("QuerySet::drop {query_set_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_query_set) = hub.query_sets.unregister(query_set_id) {
             #[cfg(feature = "trace")]
@@ -1371,7 +1253,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_render_pipeline<A: HalApi>(
+    pub fn device_create_render_pipeline(
         &self,
         device_id: DeviceId,
         desc: &pipeline::RenderPipelineDescriptor,
@@ -1383,12 +1265,12 @@ impl Global {
     ) {
         profiling::scope!("Device::create_render_pipeline");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let missing_implicit_pipeline_ids =
             desc.layout.is_none() && id_in.is_some() && implicit_pipeline_ids.is_none();
 
-        let fid = hub.render_pipelines.prepare(id_in);
+        let fid = hub.render_pipelines.prepare(device_id.backend(), id_in);
         let implicit_context = implicit_pipeline_ids.map(|ipi| ipi.prepare(hub));
 
         let error = 'error: {
@@ -1457,7 +1339,6 @@ impl Global {
                         .vertex
                         .stage
                         .zero_initialize_workgroup_memory,
-                    vertex_pulling_transform: desc.vertex.stage.vertex_pulling_transform,
                 };
                 ResolvedVertexState {
                     stage,
@@ -1484,7 +1365,6 @@ impl Global {
                         .vertex
                         .stage
                         .zero_initialize_workgroup_memory,
-                    vertex_pulling_transform: state.stage.vertex_pulling_transform,
                 };
                 Some(ResolvedFragmentState {
                     stage,
@@ -1571,7 +1451,7 @@ impl Global {
 
     /// Get an ID of one of the bind group layouts. The ID adds a refcount,
     /// which needs to be released by calling `bind_group_layout_drop`.
-    pub fn render_pipeline_get_bind_group_layout<A: HalApi>(
+    pub fn render_pipeline_get_bind_group_layout(
         &self,
         pipeline_id: id::RenderPipelineId,
         index: u32,
@@ -1580,7 +1460,7 @@ impl Global {
         id::BindGroupLayoutId,
         Option<binding_model::GetBindGroupLayoutError>,
     ) {
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let error = 'error: {
             let pipeline = match hub.render_pipelines.get(pipeline_id) {
@@ -1588,7 +1468,10 @@ impl Global {
                 Err(_) => break 'error binding_model::GetBindGroupLayoutError::InvalidPipeline,
             };
             let id = match pipeline.layout.bind_group_layouts.get(index as usize) {
-                Some(bg) => hub.bind_group_layouts.prepare(id_in).assign(bg.clone()),
+                Some(bg) => hub
+                    .bind_group_layouts
+                    .prepare(pipeline_id.backend(), id_in)
+                    .assign(bg.clone()),
                 None => {
                     break 'error binding_model::GetBindGroupLayoutError::InvalidGroupIndex(index)
                 }
@@ -1596,15 +1479,18 @@ impl Global {
             return (id, None);
         };
 
-        let id = hub.bind_group_layouts.prepare(id_in).assign_error();
+        let id = hub
+            .bind_group_layouts
+            .prepare(pipeline_id.backend(), id_in)
+            .assign_error();
         (id, Some(error))
     }
 
-    pub fn render_pipeline_drop<A: HalApi>(&self, render_pipeline_id: id::RenderPipelineId) {
+    pub fn render_pipeline_drop(&self, render_pipeline_id: id::RenderPipelineId) {
         profiling::scope!("RenderPipeline::drop");
         api_log!("RenderPipeline::drop {render_pipeline_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_pipeline) = hub.render_pipelines.unregister(render_pipeline_id) {
             #[cfg(feature = "trace")]
@@ -1614,7 +1500,7 @@ impl Global {
         }
     }
 
-    pub fn device_create_compute_pipeline<A: HalApi>(
+    pub fn device_create_compute_pipeline(
         &self,
         device_id: DeviceId,
         desc: &pipeline::ComputePipelineDescriptor,
@@ -1626,12 +1512,12 @@ impl Global {
     ) {
         profiling::scope!("Device::create_compute_pipeline");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let missing_implicit_pipeline_ids =
             desc.layout.is_none() && id_in.is_some() && implicit_pipeline_ids.is_none();
 
-        let fid = hub.compute_pipelines.prepare(id_in);
+        let fid = hub.compute_pipelines.prepare(device_id.backend(), id_in);
         let implicit_context = implicit_pipeline_ids.map(|ipi| ipi.prepare(hub));
 
         let error = 'error: {
@@ -1693,7 +1579,6 @@ impl Global {
                 entry_point: desc.stage.entry_point.clone(),
                 constants: desc.stage.constants.clone(),
                 zero_initialize_workgroup_memory: desc.stage.zero_initialize_workgroup_memory,
-                vertex_pulling_transform: desc.stage.vertex_pulling_transform,
             };
 
             let desc = ResolvedComputePipelineDescriptor {
@@ -1766,7 +1651,7 @@ impl Global {
 
     /// Get an ID of one of the bind group layouts. The ID adds a refcount,
     /// which needs to be released by calling `bind_group_layout_drop`.
-    pub fn compute_pipeline_get_bind_group_layout<A: HalApi>(
+    pub fn compute_pipeline_get_bind_group_layout(
         &self,
         pipeline_id: id::ComputePipelineId,
         index: u32,
@@ -1775,7 +1660,7 @@ impl Global {
         id::BindGroupLayoutId,
         Option<binding_model::GetBindGroupLayoutError>,
     ) {
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let error = 'error: {
             let pipeline = match hub.compute_pipelines.get(pipeline_id) {
@@ -1784,7 +1669,10 @@ impl Global {
             };
 
             let id = match pipeline.layout.bind_group_layouts.get(index as usize) {
-                Some(bg) => hub.bind_group_layouts.prepare(id_in).assign(bg.clone()),
+                Some(bg) => hub
+                    .bind_group_layouts
+                    .prepare(pipeline_id.backend(), id_in)
+                    .assign(bg.clone()),
                 None => {
                     break 'error binding_model::GetBindGroupLayoutError::InvalidGroupIndex(index)
                 }
@@ -1793,15 +1681,18 @@ impl Global {
             return (id, None);
         };
 
-        let id = hub.bind_group_layouts.prepare(id_in).assign_error();
+        let id = hub
+            .bind_group_layouts
+            .prepare(pipeline_id.backend(), id_in)
+            .assign_error();
         (id, Some(error))
     }
 
-    pub fn compute_pipeline_drop<A: HalApi>(&self, compute_pipeline_id: id::ComputePipelineId) {
+    pub fn compute_pipeline_drop(&self, compute_pipeline_id: id::ComputePipelineId) {
         profiling::scope!("ComputePipeline::drop");
         api_log!("ComputePipeline::drop {compute_pipeline_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(_pipeline) = hub.compute_pipelines.unregister(compute_pipeline_id) {
             #[cfg(feature = "trace")]
@@ -1814,7 +1705,7 @@ impl Global {
     /// # Safety
     /// The `data` argument of `desc` must have been returned by
     /// [Self::pipeline_cache_get_data] for the same adapter
-    pub unsafe fn device_create_pipeline_cache<A: HalApi>(
+    pub unsafe fn device_create_pipeline_cache(
         &self,
         device_id: DeviceId,
         desc: &pipeline::PipelineCacheDescriptor<'_>,
@@ -1825,9 +1716,9 @@ impl Global {
     ) {
         profiling::scope!("Device::create_pipeline_cache");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
-        let fid = hub.pipeline_caches.prepare(id_in);
+        let fid = hub.pipeline_caches.prepare(device_id.backend(), id_in);
         let error: pipeline::CreatePipelineCacheError = 'error: {
             let device = match hub.devices.get(device_id) {
                 Ok(device) => device,
@@ -1846,7 +1737,7 @@ impl Global {
             let cache = unsafe { device.create_pipeline_cache(desc) };
             match cache {
                 Ok(cache) => {
-                    let id = fid.assign(Arc::new(cache));
+                    let id = fid.assign(cache);
                     api_log!("Device::create_pipeline_cache -> {id:?}");
                     return (id, None);
                 }
@@ -1859,11 +1750,11 @@ impl Global {
         (id, Some(error))
     }
 
-    pub fn pipeline_cache_drop<A: HalApi>(&self, pipeline_cache_id: id::PipelineCacheId) {
+    pub fn pipeline_cache_drop(&self, pipeline_cache_id: id::PipelineCacheId) {
         profiling::scope!("PipelineCache::drop");
         api_log!("PipelineCache::drop {pipeline_cache_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Some(cache) = hub.pipeline_caches.unregister(pipeline_cache_id) {
             #[cfg(feature = "trace")]
@@ -1874,13 +1765,12 @@ impl Global {
         }
     }
 
-    pub fn surface_configure<A: HalApi>(
+    pub fn surface_configure(
         &self,
         surface_id: SurfaceId,
         device_id: DeviceId,
         config: &wgt::SurfaceConfiguration<Vec<TextureFormat>>,
     ) -> Option<present::ConfigureSurfaceError> {
-        use hal::Surface as _;
         use present::ConfigureSurfaceError as E;
         profiling::scope!("surface_configure");
 
@@ -1985,7 +1875,10 @@ impl Global {
                 config.composite_alpha_mode = new_alpha_mode;
             }
             if !caps.usage.contains(config.usage) {
-                return Err(E::UnsupportedUsage);
+                return Err(E::UnsupportedUsage {
+                    requested: config.usage,
+                    available: caps.usage,
+                });
             }
             if width == 0 || height == 0 {
                 return Err(E::ZeroArea);
@@ -1999,7 +1892,7 @@ impl Global {
             // User callbacks must not be called while we are holding locks.
             let user_callbacks;
             {
-                let hub = A::hub(self);
+                let hub = &self.hub;
                 let surface_guard = self.surfaces.read();
 
                 let device = match hub.devices.get(device_id) {
@@ -2102,11 +1995,8 @@ impl Global {
                 //
                 // https://github.com/gfx-rs/wgpu/issues/4105
 
-                match unsafe {
-                    A::surface_as_hal(surface)
-                        .unwrap()
-                        .configure(device.raw(), &hal_config)
-                } {
+                let surface_raw = surface.raw(device_id.backend()).unwrap();
+                match unsafe { surface_raw.configure(device.raw(), &hal_config) } {
                     Ok(()) => (),
                     Err(error) => {
                         break 'error match error {
@@ -2124,7 +2014,7 @@ impl Global {
 
                 let mut presentation = surface.presentation.lock();
                 *presentation = Some(present::Presentation {
-                    device: super::any_device::AnyDevice::new(device),
+                    device,
                     config: config.clone(),
                     acquired_texture: None,
                 });
@@ -2140,27 +2030,18 @@ impl Global {
     /// Check `device_id` for freeable resources and completed buffer mappings.
     ///
     /// Return `queue_empty` indicating whether there are more queue submissions still in flight.
-    pub fn device_poll<A: HalApi>(
+    pub fn device_poll(
         &self,
         device_id: DeviceId,
-        maintain: wgt::Maintain<queue::WrappedSubmissionIndex>,
+        maintain: wgt::Maintain<crate::SubmissionIndex>,
     ) -> Result<bool, WaitIdleError> {
         api_log!("Device::poll {maintain:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
         let device = hub
             .devices
             .get(device_id)
             .map_err(|_| DeviceError::InvalidDeviceId)?;
-
-        if let wgt::Maintain::WaitForSubmissionIndex(submission_index) = maintain {
-            if submission_index.queue_id != device_id.into_queue_id() {
-                return Err(WaitIdleError::WrongSubmissionIndex(
-                    submission_index.queue_id,
-                    device_id,
-                ));
-            }
-        }
 
         let DevicePoll {
             closures,
@@ -2172,9 +2053,9 @@ impl Global {
         Ok(queue_empty)
     }
 
-    fn poll_single_device<A: HalApi>(
-        device: &crate::device::Device<A>,
-        maintain: wgt::Maintain<queue::WrappedSubmissionIndex>,
+    fn poll_single_device(
+        device: &crate::device::Device,
+        maintain: wgt::Maintain<crate::SubmissionIndex>,
     ) -> Result<DevicePoll, WaitIdleError> {
         let snatch_guard = device.snatchable_lock.read();
         let fence = device.fence.read();
@@ -2190,25 +2071,26 @@ impl Global {
         })
     }
 
-    /// Poll all devices belonging to the backend `A`.
+    /// Poll all devices belonging to the specified backend.
     ///
     /// If `force_wait` is true, block until all buffer mappings are done.
     ///
     /// Return `all_queue_empty` indicating whether there are more queue
     /// submissions still in flight.
-    fn poll_all_devices_of_api<A: HalApi>(
+    fn poll_all_devices_of_api(
         &self,
+        backend: wgt::Backend,
         force_wait: bool,
         closures: &mut UserClosures,
     ) -> Result<bool, WaitIdleError> {
         profiling::scope!("poll_device");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
         let mut all_queue_empty = true;
         {
             let device_guard = hub.devices.read();
 
-            for (_id, device) in device_guard.iter(A::VARIANT) {
+            for (_id, device) in device_guard.iter(backend) {
                 let maintain = if force_wait {
                     wgt::Maintain::Wait
                 } else {
@@ -2243,22 +2125,22 @@ impl Global {
         #[cfg(vulkan)]
         {
             all_queue_empty &=
-                self.poll_all_devices_of_api::<hal::api::Vulkan>(force_wait, &mut closures)?;
+                self.poll_all_devices_of_api(wgt::Backend::Vulkan, force_wait, &mut closures)?;
         }
         #[cfg(metal)]
         {
             all_queue_empty &=
-                self.poll_all_devices_of_api::<hal::api::Metal>(force_wait, &mut closures)?;
+                self.poll_all_devices_of_api(wgt::Backend::Metal, force_wait, &mut closures)?;
         }
         #[cfg(dx12)]
         {
             all_queue_empty &=
-                self.poll_all_devices_of_api::<hal::api::Dx12>(force_wait, &mut closures)?;
+                self.poll_all_devices_of_api(wgt::Backend::Dx12, force_wait, &mut closures)?;
         }
         #[cfg(gles)]
         {
             all_queue_empty &=
-                self.poll_all_devices_of_api::<hal::api::Gles>(force_wait, &mut closures)?;
+                self.poll_all_devices_of_api(wgt::Backend::Gl, force_wait, &mut closures)?;
         }
 
         closures.fire();
@@ -2266,10 +2148,10 @@ impl Global {
         Ok(all_queue_empty)
     }
 
-    pub fn device_start_capture<A: HalApi>(&self, id: DeviceId) {
+    pub fn device_start_capture(&self, id: DeviceId) {
         api_log!("Device::start_capture");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Ok(device) = hub.devices.get(id) {
             if !device.is_valid() {
@@ -2279,10 +2161,10 @@ impl Global {
         }
     }
 
-    pub fn device_stop_capture<A: HalApi>(&self, id: DeviceId) {
+    pub fn device_stop_capture(&self, id: DeviceId) {
         api_log!("Device::stop_capture");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Ok(device) = hub.devices.get(id) {
             if !device.is_valid() {
@@ -2295,47 +2177,45 @@ impl Global {
     // This is a test-only function to force the device into an
     // invalid state by inserting an error value in its place in
     // the registry.
-    pub fn device_make_invalid<A: HalApi>(&self, device_id: DeviceId) {
-        let hub = A::hub(self);
+    pub fn device_make_invalid(&self, device_id: DeviceId) {
+        let hub = &self.hub;
         hub.devices.force_replace_with_error(device_id);
     }
 
-    pub fn pipeline_cache_get_data<A: HalApi>(&self, id: id::PipelineCacheId) -> Option<Vec<u8>> {
+    pub fn pipeline_cache_get_data(&self, id: id::PipelineCacheId) -> Option<Vec<u8>> {
         use crate::pipeline_cache;
         api_log!("PipelineCache::get_data");
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Ok(cache) = hub.pipeline_caches.get(id) {
             // TODO: Is this check needed?
             if !cache.device.is_valid() {
                 return None;
             }
-            if let Some(raw_cache) = cache.raw.as_ref() {
-                let mut vec = unsafe { cache.device.raw().pipeline_cache_get_data(raw_cache) }?;
-                let validation_key = cache.device.raw().pipeline_cache_validation_key()?;
+            let mut vec = unsafe { cache.device.raw().pipeline_cache_get_data(cache.raw()) }?;
+            let validation_key = cache.device.raw().pipeline_cache_validation_key()?;
 
-                let mut header_contents = [0; pipeline_cache::HEADER_LENGTH];
-                pipeline_cache::add_cache_header(
-                    &mut header_contents,
-                    &vec,
-                    &cache.device.adapter.raw.info,
-                    validation_key,
-                );
+            let mut header_contents = [0; pipeline_cache::HEADER_LENGTH];
+            pipeline_cache::add_cache_header(
+                &mut header_contents,
+                &vec,
+                &cache.device.adapter.raw.info,
+                validation_key,
+            );
 
-                let deleted = vec.splice(..0, header_contents).collect::<Vec<_>>();
-                debug_assert!(deleted.is_empty());
+            let deleted = vec.splice(..0, header_contents).collect::<Vec<_>>();
+            debug_assert!(deleted.is_empty());
 
-                return Some(vec);
-            }
+            return Some(vec);
         }
         None
     }
 
-    pub fn device_drop<A: HalApi>(&self, device_id: DeviceId) {
+    pub fn device_drop(&self, device_id: DeviceId) {
         profiling::scope!("Device::drop");
         api_log!("Device::drop {device_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
         if let Some(device) = hub.devices.unregister(device_id) {
             let device_lost_closure = device.lock_life().device_lost_closure.take();
             if let Some(closure) = device_lost_closure {
@@ -2347,11 +2227,7 @@ impl Global {
             // need to wait for submissions or triage them. We know we were
             // just polled, so `life_tracker.free_resources` is empty.
             debug_assert!(device.lock_life().queue_empty());
-            {
-                let mut pending_writes = device.pending_writes.lock();
-                let pending_writes = pending_writes.as_mut().unwrap();
-                pending_writes.deactivate();
-            }
+            device.pending_writes.lock().deactivate();
 
             drop(device);
         }
@@ -2359,12 +2235,12 @@ impl Global {
 
     // This closure will be called exactly once during "lose the device",
     // or when it is replaced.
-    pub fn device_set_device_lost_closure<A: HalApi>(
+    pub fn device_set_device_lost_closure(
         &self,
         device_id: DeviceId,
         device_lost_closure: DeviceLostClosure,
     ) {
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Ok(device) = hub.devices.get(device_id) {
             let mut life_tracker = device.lock_life();
@@ -2384,10 +2260,10 @@ impl Global {
         }
     }
 
-    pub fn device_destroy<A: HalApi>(&self, device_id: DeviceId) {
+    pub fn device_destroy(&self, device_id: DeviceId) {
         api_log!("Device::destroy {device_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Ok(device) = hub.devices.get(device_id) {
             // Follow the steps at
@@ -2410,21 +2286,18 @@ impl Global {
         }
     }
 
-    pub fn device_mark_lost<A: HalApi>(&self, device_id: DeviceId, message: &str) {
+    pub fn device_mark_lost(&self, device_id: DeviceId, message: &str) {
         api_log!("Device::mark_lost {device_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         if let Ok(device) = hub.devices.get(device_id) {
             device.lose(message);
         }
     }
 
-    pub fn device_get_internal_counters<A: HalApi>(
-        &self,
-        device_id: DeviceId,
-    ) -> wgt::InternalCounters {
-        let hub = A::hub(self);
+    pub fn device_get_internal_counters(&self, device_id: DeviceId) -> wgt::InternalCounters {
+        let hub = &self.hub;
         if let Ok(device) = hub.devices.get(device_id) {
             wgt::InternalCounters {
                 hal: device.get_hal_counters(),
@@ -2435,17 +2308,28 @@ impl Global {
         }
     }
 
-    pub fn queue_drop<A: HalApi>(&self, queue_id: QueueId) {
+    pub fn device_generate_allocator_report(
+        &self,
+        device_id: DeviceId,
+    ) -> Option<wgt::AllocatorReport> {
+        let hub = &self.hub;
+        hub.devices
+            .get(device_id)
+            .ok()
+            .and_then(|device| device.generate_allocator_report())
+    }
+
+    pub fn queue_drop(&self, queue_id: QueueId) {
         profiling::scope!("Queue::drop");
         api_log!("Queue::drop {queue_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
         if let Some(queue) = hub.queues.unregister(queue_id) {
             drop(queue);
         }
     }
 
-    pub fn buffer_map_async<A: HalApi>(
+    pub fn buffer_map_async(
         &self,
         buffer_id: id::BufferId,
         offset: BufferAddress,
@@ -2455,7 +2339,7 @@ impl Global {
         profiling::scope!("Buffer::map_async");
         api_log!("Buffer::map_async {buffer_id:?} offset {offset:?} size {size:?} op: {op:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let op_and_err = 'error: {
             let buffer = match hub.buffers.get(buffer_id) {
@@ -2480,7 +2364,7 @@ impl Global {
         Ok(())
     }
 
-    pub fn buffer_get_mapped_range<A: HalApi>(
+    pub fn buffer_get_mapped_range(
         &self,
         buffer_id: id::BufferId,
         offset: BufferAddress,
@@ -2489,7 +2373,7 @@ impl Global {
         profiling::scope!("Buffer::get_mapped_range");
         api_log!("Buffer::get_mapped_range {buffer_id:?} offset {offset:?} size {size:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let buffer = hub
             .buffers
@@ -2530,7 +2414,9 @@ impl Global {
                 Ok((ptr, range_size))
             }
             resource::BufferMapState::Active {
-                ref ptr, ref range, ..
+                ref mapping,
+                ref range,
+                ..
             } => {
                 if offset < range.start {
                     return Err(BufferAccessError::OutOfBoundsUnderrun {
@@ -2549,7 +2435,7 @@ impl Global {
                 let relative_offset = (offset - range.start) as isize;
                 unsafe {
                     Ok((
-                        NonNull::new_unchecked(ptr.as_ptr().offset(relative_offset)),
+                        NonNull::new_unchecked(mapping.ptr.as_ptr().offset(relative_offset)),
                         range_size,
                     ))
                 }
@@ -2559,11 +2445,11 @@ impl Global {
             }
         }
     }
-    pub fn buffer_unmap<A: HalApi>(&self, buffer_id: id::BufferId) -> BufferAccessResult {
+    pub fn buffer_unmap(&self, buffer_id: id::BufferId) -> BufferAccessResult {
         profiling::scope!("unmap", "Buffer");
         api_log!("Buffer::unmap {buffer_id:?}");
 
-        let hub = A::hub(self);
+        let hub = &self.hub;
 
         let buffer = hub
             .buffers

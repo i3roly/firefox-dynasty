@@ -14,6 +14,7 @@
 #include "mozilla/ContentBlockingLog.h"
 #include "mozilla/gfx/Types.h"
 #include "mozilla/TypedEnumBits.h"
+#include "mozilla/dom/MediaDeviceInfoBinding.h"
 #include "js/RealmOptions.h"
 #include "nsHashtablesFwd.h"
 #include "nsICookieJarSettings.h"
@@ -221,6 +222,8 @@ class nsRFPService final : public nsIObserver, public nsIRFPService {
       bool aIsPrivateMode, RFPTarget aTarget,
       const Maybe<RFPTarget>& aOverriddenFingerprintingSettings);
 
+  static bool IsSoftwareRenderingOptionExposed(JSContext*, JSObject*);
+
   // --------------------------------------------------------------------------
   static double TimerResolution(RTPCallerType aRTPCallerType);
 
@@ -325,6 +328,8 @@ class nsRFPService final : public nsIObserver, public nsIRFPService {
   // The method to generate the key for randomization. It can return nothing if
   // the session key is not available due to the randomization is disabled.
   static Maybe<nsTArray<uint8_t>> GenerateKey(nsIChannel* aChannel);
+  static Maybe<nsTArray<uint8_t>> GenerateKeyForServiceWorker(
+      nsIURI* aURI, bool aForeignByAncestorContext);
 
   // The method to add random noises to the image data based on the random key
   // of the given cookieJarSettings.
@@ -367,6 +372,16 @@ class nsRFPService final : public nsIObserver, public nsIRFPService {
   // detect suspicious fingerprinting activities.
   static bool CheckSuspiciousFingerprintingActivity(
       nsTArray<ContentBlockingLog::LogEntry>& aLogs);
+
+  // Generates a fake media device name with given kind and index.
+  // Example: Internal Microphone
+  static void GetMediaDeviceName(nsString& aName,
+                                 mozilla::dom::MediaDeviceKind aKind);
+
+  // Generates a fake media device group name with given kind and index.
+  // Example: Audio Group
+  static void GetMediaDeviceGroup(nsString& aGroup,
+                                  mozilla::dom::MediaDeviceKind aKind);
 
  private:
   nsresult Init();

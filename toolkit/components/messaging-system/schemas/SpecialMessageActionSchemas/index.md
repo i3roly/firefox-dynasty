@@ -345,3 +345,28 @@ Action for reloading the current browser.
 Focuses the urlbar in the window the message was displayed in
 
 * args: (none)
+
+### `BOOKMARK_CURRENT_TAB`
+
+Bookmarks the tab that was selected when the message was displayed
+
+- args:
+```ts
+{
+  // Whether the bookmark dialog should be visible or not.
+  shouldHideDialog?: boolean;
+  // Whether the bookmark confirmation hint should be visible or not.
+  shouldHideConfirmationHint?: boolean;
+}
+```
+
+### `SET_BOOKMARKS_TOOLBAR_VISIBILITY`
+
+Sets the visibility of the bookmarks toolbar.
+
+- args:
+```ts
+{
+  visibility?: string; // "always", "never", or "newtab"
+}
+```

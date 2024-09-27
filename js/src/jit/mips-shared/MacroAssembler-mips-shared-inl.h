@@ -26,6 +26,10 @@ void MacroAssembler::moveGPRToFloat32(Register src, FloatRegister dest) {
   moveToFloat32(src, dest);
 }
 
+void MacroAssembler::moveLowDoubleToGPR(FloatRegister src, Register dest) {
+  MOZ_CRASH("Not supported for this target");
+}
+
 void MacroAssembler::move8ZeroExtend(Register src, Register dest) {
   as_andi(dest, src, 0xff);
 }
@@ -549,15 +553,13 @@ void MacroAssembler::branch16(Condition cond, const Address& lhs, Imm32 rhs,
   }
 }
 
-template <class L>
 void MacroAssembler::branch32(Condition cond, Register lhs, Register rhs,
-                              L label) {
+                              Label* label) {
   ma_b(lhs, rhs, label, cond);
 }
 
-template <class L>
 void MacroAssembler::branch32(Condition cond, Register lhs, Imm32 imm,
-                              L label) {
+                              Label* label) {
   ma_b(lhs, imm, label, cond);
 }
 
@@ -597,9 +599,8 @@ void MacroAssembler::branch32(Condition cond, wasm::SymbolicAddress addr,
   ma_b(SecondScratchReg, imm, label, cond);
 }
 
-template <class L>
 void MacroAssembler::branchPtr(Condition cond, Register lhs, Register rhs,
-                               L label) {
+                               Label* label) {
   ma_b(lhs, rhs, label, cond);
 }
 
@@ -623,9 +624,8 @@ void MacroAssembler::branchPtr(Condition cond, Register lhs, ImmWord rhs,
   ma_b(lhs, rhs, label, cond);
 }
 
-template <class L>
 void MacroAssembler::branchPtr(Condition cond, const Address& lhs, Register rhs,
-                               L label) {
+                               Label* label) {
   loadPtr(lhs, SecondScratchReg);
   branchPtr(cond, SecondScratchReg, rhs, label);
 }
@@ -797,9 +797,8 @@ void MacroAssembler::decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
   branchPtr(cond, lhs, Imm32(0), label);
 }
 
-template <class L>
 void MacroAssembler::branchTest32(Condition cond, Register lhs, Register rhs,
-                                  L label) {
+                                  Label* label) {
   MOZ_ASSERT(cond == Zero || cond == NonZero || cond == Signed ||
              cond == NotSigned);
   if (lhs == rhs) {
@@ -810,9 +809,8 @@ void MacroAssembler::branchTest32(Condition cond, Register lhs, Register rhs,
   }
 }
 
-template <class L>
 void MacroAssembler::branchTest32(Condition cond, Register lhs, Imm32 rhs,
-                                  L label) {
+                                  Label* label) {
   MOZ_ASSERT(cond == Zero || cond == NonZero || cond == Signed ||
              cond == NotSigned);
   ma_and(ScratchRegister, lhs, rhs);
@@ -831,9 +829,8 @@ void MacroAssembler::branchTest32(Condition cond, const AbsoluteAddress& lhs,
   branchTest32(cond, SecondScratchReg, rhs, label);
 }
 
-template <class L>
 void MacroAssembler::branchTestPtr(Condition cond, Register lhs, Register rhs,
-                                   L label) {
+                                   Label* label) {
   MOZ_ASSERT(cond == Zero || cond == NonZero || cond == Signed ||
              cond == NotSigned);
   if (lhs == rhs) {
@@ -850,6 +847,16 @@ void MacroAssembler::branchTestPtr(Condition cond, Register lhs, Imm32 rhs,
              cond == NotSigned);
   ma_and(ScratchRegister, lhs, rhs);
   ma_b(ScratchRegister, ScratchRegister, label, cond);
+}
+
+void MacroAssembler::branchTestPtr(Condition cond, Register lhs, ImmWord rhs,
+                                   Label* label) {
+  MOZ_ASSERT(cond == Zero || cond == NonZero || cond == Signed ||
+             cond == NotSigned);
+  ScratchRegisterScope scratch(asMasm());
+  ma_li(scratch, rhs);
+  as_and(scratch, lhs, scratch);
+  ma_b(scratch, scratch, label, cond);
 }
 
 void MacroAssembler::branchTestPtr(Condition cond, const Address& lhs,
@@ -1287,25 +1294,20 @@ void MacroAssembler::spectreZeroRegister(Condition cond, Register scratch,
 
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedDouble(
     FloatRegister src, const Address& addr) {
-  // FIXME -- see https://bugzilla.mozilla.org/show_bug.cgi?id=1855960
-  return FaultingCodeOffset();
-  ma_sd(src, addr);
+  return ma_sd(src, addr);
 }
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedDouble(
     FloatRegister src, const BaseIndex& addr) {
-  return FaultingCodeOffset();  // FIXME
-  ma_sd(src, addr);
+  return ma_sd(src, addr);
 }
 
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat32(
     FloatRegister src, const Address& addr) {
-  return FaultingCodeOffset();  // FIXME
-  ma_ss(src, addr);
+  return ma_ss(src, addr);
 }
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat32(
     FloatRegister src, const BaseIndex& addr) {
-  return FaultingCodeOffset();  // FIXME
-  ma_ss(src, addr);
+  return ma_ss(src, addr);
 }
 
 FaultingCodeOffset MacroAssembler::storeUncanonicalizedFloat16(

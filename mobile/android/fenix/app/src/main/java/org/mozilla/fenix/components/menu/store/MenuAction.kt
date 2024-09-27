@@ -83,6 +83,16 @@ sealed class MenuAction : Action {
     data object FindInPage : MenuAction()
 
     /**
+     * [MenuAction] dispatched to show the menu CFR.
+     */
+    data object ShowCFR : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when the menu CFR is dismissed.
+     */
+    data object DismissCFR : MenuAction()
+
+    /**
      * [MenuAction] dispatched when the extension state is updated.
      *
      * @property recommendedAddons The recommended [Addon]s to suggest.
@@ -233,6 +243,11 @@ sealed class MenuAction : Action {
          * [Navigate] action dispatched when navigating to the AMO page.
          */
         data object DiscoverMoreExtensions : Navigate()
+
+        /**
+         * [Navigate] action dispatched when navigating to the SUMO page for installing add-ons.
+         */
+        data object ExtensionsLearnMore : Navigate()
 
         /**
          * [Navigate] action dispatched when navigating to the new tab.

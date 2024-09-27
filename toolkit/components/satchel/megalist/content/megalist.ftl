@@ -7,9 +7,8 @@ filter-input =
   .key = F
   .aria-label = Search Your Data
 
-menu-more-options-button = …
-  .aria-label = More
-  .title = Open commands menu
+menu-more-options-button =
+  .title = More options
 
 more-options-popup =
   .aria-label = More Options
@@ -135,6 +134,17 @@ passwords-remove-all-message =
 passwords-origin-label = Website address
 passwords-username-label = Username
 passwords-password-label = Password
+
+passwords-radiogroup-label =
+  .aria-label = Filter passwords
+
+# Radiobutton label to display total number of passwords
+#   $total (number) - Total number of passwords
+passwords-radiobutton-all = All ({ $total })
+
+# Radiobutton label to display total number of alerts
+#   $total (number) - Total number of alerts
+passwords-radiobutton-alerts = Alerts ({ $total })
 
 ## Payments
 

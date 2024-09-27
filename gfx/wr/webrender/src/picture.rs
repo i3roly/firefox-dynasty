@@ -5207,17 +5207,17 @@ impl PicturePrimitive {
                             .intersection(&tile.current_descriptor.local_valid_rect)
                             .unwrap_or_else(|| { tile.is_valid = true; PictureRect::zero() });
 
-                        let scissor_rect = frame_state.composite_state.get_surface_rect(
-                            &tile.local_dirty_rect,
-                            &tile.local_tile_rect,
-                            tile_cache.transform_index,
-                        ).to_i32();
-
                         let valid_rect = frame_state.composite_state.get_surface_rect(
                             &tile.current_descriptor.local_valid_rect,
                             &tile.local_tile_rect,
                             tile_cache.transform_index,
                         ).to_i32();
+
+                        let scissor_rect = frame_state.composite_state.get_surface_rect(
+                            &tile.local_dirty_rect,
+                            &tile.local_tile_rect,
+                            tile_cache.transform_index,
+                        ).to_i32().intersection(&valid_rect).unwrap_or_else(|| { Box2D::zero() });
 
                         if tile.is_visible {
                             // Get the world space rect that this tile will actually occupy on screen
@@ -7853,7 +7853,7 @@ fn get_surface_rects(
     })
 }
 
-fn calculate_uv_rect_kind(
+pub fn calculate_uv_rect_kind(
     clipped: DeviceRect,
     unclipped: DeviceRect,
 ) -> UvRectKind {

@@ -21,7 +21,7 @@ task-defaults:
             safari-tp:
                 - macosx1400.*
             custom-car:
-                - .*64.*shippable.*
+                - (macosx1400|linux|windows.*-64).*shippable.*
             default: []
     test-manifest-loader: null  # don't load tests in the taskgraph
     tier: 3
@@ -53,10 +53,6 @@ task-defaults:
                             - win64-custom-car
                             - win64-minidump-stackwalk
                             - win64-fix-stacks
-                        macosx1015.*:
-                            - macosx64-custom-car
-                            - macosx64-minidump-stackwalk
-                            - macosx64-fix-stacks
                         macosx1400.*:
                             - macosx-arm64-custom-car
                             - macosx64-aarch64-minidump-stackwalk
@@ -76,9 +72,6 @@ task-defaults:
                         windows.*-64.*:
                             - win64-minidump-stackwalk
                             - win64-fix-stacks
-                        macosx1015.*:
-                            - macosx64-minidump-stackwalk
-                            - macosx64-fix-stacks
                         macosx1400.*:
                             - macosx64-aarch64-minidump-stackwalk
                             - macosx64-aarch64-fix-stacks
@@ -96,7 +89,7 @@ browsertime-tp6:
                 safari:
                     - .*macos.*shippable.*
                 custom-car:
-                    - .*64.*shippable.*
+                    - (macosx1400|linux|windows.*-64).*shippable.*
                 default: []
         max-run-time:
             by-subtest:
@@ -312,7 +305,7 @@ browsertime-tp7:
                 safari:
                     - .*macos.*shippable.*
                 custom-car:
-                    - .*64.*shippable.*
+                    - (macosx1400|linux|windows.*-64).*shippable.*
                 default: []
         max-run-time:
             by-subtest:
@@ -362,6 +355,13 @@ browsertime-benchmark:
                             - [speedometer3, sp3]
                             - [motionmark-1-3, mm-1.3]
                             - [motionmark-htmlsuite-1-3, mm-h-1.3]
+                # Bug 1909894, windows 10 + sp3 temporarily
+                windows10-64.*shippable.*-qr.*:
+                    by-app:
+                        safari: []
+                        safari-tp: []
+                        default:
+                            - [speedometer3, sp3]
                 default:
                     by-app:
                         firefox:
@@ -482,7 +482,9 @@ browsertime-benchmark:
                     firefox:
                         by-test-platform:
                             windows.*-32.*: []
-                            .*64.*shippable-qr/.*: [trunk]
+                            # Bug 1909894, windows 10 + sp3 temporarily
+                            windows10-64.*shippable.*-qr.*: [mozilla-central]
+                            (linux|windows11-64|macosx1015|macosx1400).*shippable-qr.*: [trunk]
                             .*nightlyasrelease.*: [autoland, mozilla-central]
                             default: []
                     custom-car:
@@ -874,6 +876,20 @@ browsertime-upload:
         fetch:
             - upload-speed-test-file
 
+browsertime-network-bench:
+    raptor:
+        apps: [firefox]
+        subtests:
+            - h3-upload
+    description: Raptor (browsertime) networking download/upload performance test
+    max-run-time: 2700
+    run-on-projects: []
+    tier: 3
+    treeherder-symbol: Btime(network-bench)
+    fetches:
+        fetch:
+            - upload-speed-test-file
+
 browsertime-pageload-benchmark:
     raptor:
         apps: [firefox]
@@ -990,7 +1006,7 @@ browsertime-indexeddb:
             chrome:
                 - .*shippable.*
             custom-car:
-                - .*64.*shippable.*
+                - (macosx1400|linux|windows.*-64).*shippable.*
             default: []
     raptor:
         apps: [firefox, chrome]

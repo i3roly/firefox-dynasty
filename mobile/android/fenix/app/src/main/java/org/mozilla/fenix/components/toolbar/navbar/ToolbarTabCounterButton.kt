@@ -35,18 +35,16 @@ import org.mozilla.fenix.theme.Theme
  *
  * @param tabCount The number of tabs to display in the tab counter.
  * @param isPrivateMode Whether the browser is in private mode.
- * @param isFeltPrivateBrowsingEnabled Whether the felt private browsing feature is enabled.
  * @param onClick Invoked when the tab counter is clicked.
- * @param menu Optional menu to show when the tab counter is long clicked.
+ * @param menu Optional lazy menu to show when the tab counter is long clicked.
  * @param onLongPress Optional callback for when the tab counter is long clicked.
  */
 @Composable
 fun ToolbarTabCounterButton(
     tabCount: Int,
     isPrivateMode: Boolean,
-    isFeltPrivateBrowsingEnabled: Boolean,
     onClick: () -> Unit,
-    menu: TabCounterMenu? = null,
+    menu: Lazy<TabCounterMenu>? = null,
     onLongPress: () -> Unit = {},
 ) {
     IconButton(
@@ -59,17 +57,17 @@ fun ToolbarTabCounterButton(
                         onClick() // This ensures clicks in the 34dp touch target are caught.
                     }
 
-                    menu?.let { menu ->
-                        setOnLongClickListener {
+                    setOnLongClickListener {
+                        menu?.value?.let { menu ->
                             onLongPress()
                             menu.menuController.show(anchor = it)
                             true
-                        }
+                        } ?: false
                     }
 
                     contentDescription = context.getString(R.string.mozac_feature_tabs_toolbar_tabs_button)
 
-                    toggleCounterMask(isFeltPrivateBrowsingEnabled && isPrivateMode)
+                    toggleCounterMask(isPrivateMode)
                     setBackgroundResource(
                         context.theme.resolveAttribute(
                             android.R.attr.selectableItemBackgroundBorderless,
@@ -102,7 +100,6 @@ private fun ToolbarTabCounterButtonPreview() {
             ToolbarTabCounterButton(
                 tabCount = 5,
                 isPrivateMode = false,
-                isFeltPrivateBrowsingEnabled = false,
                 onClick = {},
             )
         }
@@ -122,7 +119,6 @@ private fun ToolbarTabCounterButtonWithFeltPrivacyPreview() {
             ToolbarTabCounterButton(
                 tabCount = 5,
                 isPrivateMode = true,
-                isFeltPrivateBrowsingEnabled = true,
                 onClick = {},
             )
         }

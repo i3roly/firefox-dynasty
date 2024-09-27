@@ -38,6 +38,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat.getColor
 import androidx.core.content.getSystemService
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.view.OnApplyWindowInsetsListener
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -197,6 +198,7 @@ import org.mozilla.fenix.ext.breadcrumb
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
 import org.mozilla.fenix.ext.hideToolbar
+import org.mozilla.fenix.ext.isKeyboardVisible
 import org.mozilla.fenix.ext.isTablet
 import org.mozilla.fenix.ext.isToolbarAtBottom
 import org.mozilla.fenix.ext.nav
@@ -613,10 +615,9 @@ abstract class BaseBrowserFragment :
                 sessionId = customTabSessionId,
                 view = binding.findInPageView,
                 engineView = binding.engineView,
-                toolbarInfo = FindInPageIntegration.ToolbarInfo(
-                    toolbar = browserToolbarView.layout,
-                    isToolbarDynamic = isToolbarDynamic(context),
-                    isToolbarPlacedAtTop = context.settings().toolbarPosition == ToolbarPosition.TOP,
+                toolbars = listOf(
+                    _bottomToolbarContainerView?.toolbarContainerView,
+                    browserToolbarView.layout as? ViewGroup?,
                 ),
             ),
             owner = this,
@@ -823,6 +824,7 @@ abstract class BaseBrowserFragment :
                 title = ThemeManager.resolveAttributeColor(attribute = R.attr.textPrimary),
                 description = ThemeManager.resolveAttributeColor(attribute = R.attr.textSecondary),
                 background = ThemeManager.resolveAttributeColor(attribute = R.attr.layer1),
+                cancelText = ThemeManager.resolveAttributeColor(attribute = R.attr.textAccent),
                 confirmButton = ThemeManager.resolveAttributeColor(attribute = R.attr.actionPrimary),
                 passwordBox = ThemeManager.resolveAttributeColor(attribute = R.attr.layer2),
                 boxBorder = ThemeManager.resolveAttributeColor(attribute = R.attr.textDisabled),
@@ -832,7 +834,15 @@ abstract class BaseBrowserFragment :
         val bottomToolbarHeight = context.settings().getBottomToolbarHeight(context)
 
         downloadFeature.onDownloadStopped = { downloadState, _, downloadJobStatus ->
-            handleOnDownloadFinished(downloadState, downloadJobStatus, downloadFeature::tryAgain)
+            handleOnDownloadFinished(
+                downloadState = downloadState,
+                downloadJobStatus = downloadJobStatus,
+                tryAgain = downloadFeature::tryAgain,
+                browserToolbars = listOfNotNull(
+                    browserToolbarView,
+                    _bottomToolbarContainerView?.toolbarContainerView,
+                ),
+            )
         }
 
         resumeDownloadDialogState(
@@ -1041,10 +1051,10 @@ abstract class BaseBrowserFragment :
 
         crashContentIntegration.set(
             feature = CrashContentIntegration(
+                context = context,
                 browserStore = requireComponents.core.store,
                 appStore = requireComponents.appStore,
                 toolbar = browserToolbarView.view,
-                isToolbarPlacedAtTop = context.settings().toolbarPosition == ToolbarPosition.TOP,
                 crashReporterView = binding.crashReporterView,
                 components = requireComponents,
                 settings = context.settings(),
@@ -1493,7 +1503,9 @@ abstract class BaseBrowserFragment :
                     Column {
                         Divider()
 
-                        if (!activity.isMicrosurveyPromptDismissed.value) {
+                        if (!activity.isMicrosurveyPromptDismissed.value &&
+                            !(context.isTablet() && context.settings().shouldShowTabletNavigationCFR)
+                        ) {
                             currentMicrosurvey?.let {
                                 if (isToolbarAtBottom) {
                                     updateBrowserToolbarForMicrosurveyPrompt(browserToolbar)
@@ -1530,8 +1542,6 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
-                        } else {
-                            Divider()
                         }
 
                         NavigationButtonsCFR(context = context, activity = activity)
@@ -1605,22 +1615,8 @@ abstract class BaseBrowserFragment :
                 }
             },
         ) {
-            BrowserNavBar(
-                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
-                isFeltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
-                browserStore = context.components.core.store,
-                menuButton = menuButton,
-                newTabMenu = NewTabMenu(
-                    context = context,
-                    onItemTapped = { item ->
-                        browserToolbarInteractor.onTabCounterMenuItemTapped(item)
-                    },
-                    iconColor = when (activity.browsingModeManager.mode.isPrivate) {
-                        true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
-                        else -> null
-                    },
-                ),
-                tabsCounterMenu = FenixTabCounterMenu(
+            val tabCounterMenu = lazy {
+                FenixTabCounterMenu(
                     context = context,
                     onItemTapped = { item ->
                         browserToolbarInteractor.onTabCounterMenuItemTapped(item)
@@ -1633,7 +1629,24 @@ abstract class BaseBrowserFragment :
                     it.updateMenu(
                         toolbarPosition = context.settings().toolbarPosition,
                     )
-                },
+                }
+            }
+
+            BrowserNavBar(
+                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                browserStore = context.components.core.store,
+                menuButton = menuButton,
+                newTabMenu = NewTabMenu(
+                    context = context,
+                    onItemTapped = { item ->
+                        browserToolbarInteractor.onTabCounterMenuItemTapped(item)
+                    },
+                    iconColor = when (activity.browsingModeManager.mode.isPrivate) {
+                        true -> getColor(context, R.color.fx_mobile_private_icon_color_primary)
+                        else -> null
+                    },
+                ),
+                tabsCounterMenu = tabCounterMenu,
                 onBackButtonClick = {
                     if (context.settings().shouldShowNavigationButtonsCFR) {
                         val currentTime = System.currentTimeMillis()
@@ -1705,6 +1718,9 @@ abstract class BaseBrowserFragment :
                             accesspoint = MenuAccessPoint.Browser,
                         ),
                     )
+                },
+                onVisibilityUpdated = {
+                    configureEngineViewWithDynamicToolbarsMaxHeight()
                 },
             )
         }
@@ -2112,6 +2128,40 @@ abstract class BaseBrowserFragment :
         requireComponents.settings.toolbarPosition.androidGravity
 
     /**
+     * Configure the engine view to know where to place website's dynamic elements
+     * depending on the space taken by any dynamic toolbar.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    internal fun configureEngineViewWithDynamicToolbarsMaxHeight() {
+        val toolbarHeights = view?.let { probeToolbarHeights(it) } ?: return
+        getEngineView().setDynamicToolbarMaxHeight(toolbarHeights.first + toolbarHeights.second)
+    }
+
+    /**
+     * Get an instant reading of the top toolbar height and the bottom toolbar height.
+     */
+    private fun probeToolbarHeights(rootView: View): Pair<Int, Int> {
+        val context = rootView.context
+        // Avoid any change for scenarios where the toolbar is not shown / not dynamic
+        if (fullScreenFeature.get()?.isFullScreen == true) return 0 to 0
+        if (!isToolbarDynamic(context)) return 0 to 0
+
+        val topToolbarHeight = context.settings().getTopToolbarHeight(
+            includeTabStrip = customTabSessionId == null && context.isTabStripEnabled(),
+        )
+        val navbarHeight = context.resources.getDimensionPixelSize(R.dimen.browser_navbar_height)
+        val isKeyboardShown = rootView.isKeyboardVisible()
+        val bottomToolbarHeight = context.settings().getBottomToolbarHeight(context).minus(
+            when (isKeyboardShown) {
+                true -> navbarHeight // When keyboard is shown the navbar is expected to be hidden. Ignore it's height.
+                false -> 0
+            },
+        )
+
+        return topToolbarHeight to bottomToolbarHeight
+    }
+
+    /**
      * Updates the site permissions rules based on user settings.
      */
     private fun assignSitePermissionsRules() {
@@ -2263,7 +2313,11 @@ abstract class BaseBrowserFragment :
                 GestureNavUtils,
             ).show()
 
-            activity.enterImmersiveMode()
+            activity.enterImmersiveMode(
+                setOnApplyWindowInsetsListener = { key: String, listener: OnApplyWindowInsetsListener ->
+                    binding.engineView.addWindowInsetsListener(key, listener)
+                },
+            )
             (view as? SwipeGestureLayout)?.isSwipeEnabled = false
             browserToolbarView.collapse()
             browserToolbarView.gone()
@@ -2282,7 +2336,10 @@ abstract class BaseBrowserFragment :
 
             MediaState.fullscreen.record(NoExtras())
         } else {
-            activity.exitImmersiveMode()
+            activity.exitImmersiveMode(
+                unregisterOnApplyWindowInsetsListener = binding.engineView::removeWindowInsetsListener,
+            )
+
             (view as? SwipeGestureLayout)?.isSwipeEnabled = true
             (activity as? HomeActivity)?.let { homeActivity ->
                 // ExternalAppBrowserActivity exclusively handles it's own theming unless in private mode.
@@ -2293,7 +2350,7 @@ abstract class BaseBrowserFragment :
             if (webAppToolbarShouldBeVisible) {
                 browserToolbarView.visible()
                 _bottomToolbarContainerView?.toolbarContainerView?.isVisible = true
-                reinitializeEngineView()
+                reinitializeEngineView(inFullScreen)
                 browserToolbarView.expand()
                 _bottomToolbarContainerView?.toolbarContainerView?.expand()
             }
@@ -2340,8 +2397,9 @@ abstract class BaseBrowserFragment :
         )
     }
 
-    private fun reinitializeEngineView() {
-        val isFullscreen = fullScreenFeature.get()?.isFullScreen == true
+    private fun reinitializeEngineView(
+        isFullscreen: Boolean = fullScreenFeature.get()?.isFullScreen == true,
+    ) {
         val topToolbarHeight = requireContext().settings().getTopToolbarHeight(
             includeTabStrip = customTabSessionId == null && requireContext().isTabStripEnabled(),
         )

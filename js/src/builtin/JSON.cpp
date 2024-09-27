@@ -25,11 +25,12 @@
 #include "js/friend/StackLimits.h"    // js::AutoCheckRecursionLimit
 #include "js/Object.h"                // JS::GetBuiltinClass
 #include "js/Prefs.h"                 // JS::Prefs
+#include "js/ProfilingCategory.h"
 #include "js/PropertySpec.h"
 #include "js/StableStringChars.h"
 #include "js/TypeDecls.h"
 #include "js/Value.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "vm/BooleanObject.h"       // js::BooleanObject
 #include "vm/EqualityOperations.h"  // js::SameValue
 #include "vm/Interpreter.h"
@@ -159,7 +160,7 @@ static MOZ_ALWAYS_INLINE RangedPtr<DstCharT> InfallibleQuoteJSONString(
 
 template <typename SrcCharT, typename DstCharT>
 static size_t QuoteJSONStringHelper(const JSLinearString& linear,
-                                    StringBuffer& sb, size_t sbOffset) {
+                                    StringBuilder& sb, size_t sbOffset) {
   size_t len = linear.length();
 
   JS::AutoCheckCannotGC nogc;
@@ -172,7 +173,7 @@ static size_t QuoteJSONStringHelper(const JSLinearString& linear,
   return dstEnd - dstBegin;
 }
 
-static bool QuoteJSONString(JSContext* cx, StringBuffer& sb, JSString* str) {
+static bool QuoteJSONString(JSContext* cx, StringBuilder& sb, JSString* str) {
   JSLinearString* linear = str->ensureLinear(cx);
   if (!linear) {
     return false;
@@ -223,7 +224,7 @@ using ObjectVector = GCVector<JSObject*, 8>;
 
 class StringifyContext {
  public:
-  StringifyContext(JSContext* cx, StringBuffer& sb, const StringBuffer& gap,
+  StringifyContext(JSContext* cx, StringBuilder& sb, const StringBuilder& gap,
                    HandleObject replacer, const RootedIdVector& propertyList,
                    bool maybeSafely)
       : sb(sb),
@@ -237,8 +238,8 @@ class StringifyContext {
     MOZ_ASSERT_IF(maybeSafely, gap.empty());
   }
 
-  StringBuffer& sb;
-  const StringBuffer& gap;
+  StringBuilder& sb;
+  const StringBuilder& gap;
   RootedObject replacer;
   Rooted<ObjectVector> stack;
   const RootedIdVector& propertyList;
@@ -779,7 +780,7 @@ static bool SerializeJSONProperty(JSContext* cx, const Value& v,
       }
     }
 
-    return NumberValueToStringBuffer(v, scx->sb);
+    return NumberValueToStringBuilder(v, scx->sb);
   }
 
   /* Step 10. */
@@ -1089,7 +1090,7 @@ class OwnNonIndexKeysIterForJSON {
 };
 
 // Steps from https://262.ecma-international.org/14.0/#sec-serializejsonproperty
-static bool EmitSimpleValue(JSContext* cx, StringBuffer& sb, const Value& v) {
+static bool EmitSimpleValue(JSContext* cx, StringBuilder& sb, const Value& v) {
   /* Step 8. */
   if (v.isString()) {
     return QuoteJSONString(cx, sb, v.toString());
@@ -1113,7 +1114,7 @@ static bool EmitSimpleValue(JSContext* cx, StringBuffer& sb, const Value& v) {
       }
     }
 
-    return NumberValueToStringBuffer(v, sb);
+    return NumberValueToStringBuilder(v, sb);
   }
 
   // Unrepresentable values.
@@ -1128,7 +1129,7 @@ static bool EmitSimpleValue(JSContext* cx, StringBuffer& sb, const Value& v) {
 
 // https://262.ecma-international.org/14.0/#sec-serializejsonproperty step 8b
 // where K is an integer index.
-static bool EmitQuotedIndexColon(StringBuffer& sb, uint32_t index) {
+static bool EmitQuotedIndexColon(StringBuilder& sb, uint32_t index) {
   Int32ToCStringBuf cbuf;
   size_t cstrlen;
   const char* cstr = ::Int32ToCString(&cbuf, index, &cstrlen);
@@ -1509,7 +1510,7 @@ static bool FastSerializeJSONProperty(JSContext* cx, Handle<Value> v,
 
 /* https://262.ecma-international.org/14.0/#sec-json.stringify */
 bool js::Stringify(JSContext* cx, MutableHandleValue vp, JSObject* replacer_,
-                   const Value& space_, StringBuffer& sb,
+                   const Value& space_, StringBuilder& sb,
                    StringifyBehavior stringifyBehavior) {
   RootedObject replacer(cx, replacer_);
   RootedValue space(cx, space_);
@@ -1635,7 +1636,7 @@ bool js::Stringify(JSContext* cx, MutableHandleValue vp, JSObject* replacer_,
     }
   }
 
-  StringBuffer gap(cx);
+  StringBuilder gap(cx);
 
   if (space.isNumber()) {
     /* Step 7. */
@@ -1744,7 +1745,7 @@ bool js::Stringify(JSContext* cx, MutableHandleValue vp, JSObject* replacer_,
     if (fastJSON != slowJSON) {
       MOZ_CRASH("JSON.stringify mismatch between fast and slow paths");
     }
-    // Put the JSON back into the StringBuffer for returning.
+    // Put the JSON back into the StringBuilder for returning.
     if (!sb.append(slowJSON)) {
       return false;
     }
@@ -1962,6 +1963,8 @@ template <typename CharT>
 bool js::ParseJSONWithReviver(JSContext* cx,
                               const mozilla::Range<const CharT> chars,
                               HandleValue reviver, MutableHandleValue vp) {
+  js::AutoGeckoProfilerEntry pseudoFrame(cx, "parse JSON",
+                                         JS::ProfilingCategoryPair::JS_Parsing);
   /* https://262.ecma-international.org/14.0/#sec-json.parse steps 2-10. */
   Rooted<ParseRecordObject> pro(cx);
 #ifdef ENABLE_JSON_PARSE_WITH_SOURCE
@@ -2333,10 +2336,13 @@ static const JSFunctionSpec json_static_methods[] = {
     JS_FN("isRawJSON", json_isRawJSON, 1, 0),
     JS_FN("rawJSON", json_rawJSON, 1, 0),
 #endif
-    JS_FS_END};
+    JS_FS_END,
+};
 
 static const JSPropertySpec json_static_properties[] = {
-    JS_STRING_SYM_PS(toStringTag, "JSON", JSPROP_READONLY), JS_PS_END};
+    JS_STRING_SYM_PS(toStringTag, "JSON", JSPROP_READONLY),
+    JS_PS_END,
+};
 
 static JSObject* CreateJSONObject(JSContext* cx, JSProtoKey key) {
   RootedObject proto(cx, &cx->global()->getObjectPrototype());
@@ -2344,7 +2350,15 @@ static JSObject* CreateJSONObject(JSContext* cx, JSProtoKey key) {
 }
 
 static const ClassSpec JSONClassSpec = {
-    CreateJSONObject, nullptr, json_static_methods, json_static_properties};
+    CreateJSONObject,
+    nullptr,
+    json_static_methods,
+    json_static_properties,
+};
 
-const JSClass js::JSONClass = {"JSON", JSCLASS_HAS_CACHED_PROTO(JSProto_JSON),
-                               JS_NULL_CLASS_OPS, &JSONClassSpec};
+const JSClass js::JSONClass = {
+    "JSON",
+    JSCLASS_HAS_CACHED_PROTO(JSProto_JSON),
+    JS_NULL_CLASS_OPS,
+    &JSONClassSpec,
+};

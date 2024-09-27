@@ -11,7 +11,6 @@
 #include "vm/JSFunction-inl.h"
 
 #include "mozilla/ArrayUtils.h"  // mozilla::ArrayLength
-#include "mozilla/CheckedInt.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/Range.h"
 
@@ -41,7 +40,7 @@
 #include "js/StableStringChars.h"
 #include "js/Wrapper.h"
 #include "util/DifferentialTesting.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BooleanObject.h"
 #include "vm/BoundFunctionObject.h"
@@ -71,13 +70,11 @@
 
 using namespace js;
 
-using mozilla::CheckedInt;
 using mozilla::Maybe;
 using mozilla::Some;
 
 using JS::AutoStableStringChars;
 using JS::CompileOptions;
-using JS::SourceOwnership;
 using JS::SourceText;
 
 static bool fun_enumerate(JSContext* cx, HandleObject obj) {
@@ -349,7 +346,9 @@ static bool CallerSetter(JSContext* cx, unsigned argc, Value* vp) {
 
 static const JSPropertySpec function_properties[] = {
     JS_PSGS("arguments", ArgumentsGetter, ArgumentsSetter, 0),
-    JS_PSGS("caller", CallerGetter, CallerSetter, 0), JS_PS_END};
+    JS_PSGS("caller", CallerGetter, CallerSetter, 0),
+    JS_PS_END,
+};
 
 static bool ResolveInterpretedFunctionPrototype(JSContext* cx,
                                                 HandleFunction fun,
@@ -500,7 +499,7 @@ static JSAtom* NameToPrefixedFunctionName(JSContext* cx, JSString* nameStr,
                                           FunctionPrefixKind prefixKind) {
   MOZ_ASSERT(prefixKind != FunctionPrefixKind::None);
 
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (prefixKind == FunctionPrefixKind::Get) {
     if (!sb.append("get ")) {
       return nullptr;
@@ -824,7 +823,7 @@ JSString* js::FunctionToString(JSContext* cx, HandleFunction fun,
     }
   }
 
-  // Fast path for the common case, to avoid StringBuffer overhead.
+  // Fast path for the common case, to avoid StringBuilder overhead.
   if (!addParentheses && haveSource) {
     FunctionToStringCache& cache = cx->zone()->functionToStringCache();
     if (JSString* str = cache.lookup(fun->baseScript())) {
@@ -1114,7 +1113,8 @@ static const JSFunctionSpec function_methods[] = {
                     FunctionBind),
     JS_SYM_FN(hasInstance, fun_symbolHasInstance, 1,
               JSPROP_READONLY | JSPROP_PERMANENT),
-    JS_FS_END};
+    JS_FS_END,
+};
 
 static const JSClassOps JSFunctionClassOps = {
     nullptr,         // addProperty
@@ -1131,19 +1131,24 @@ static const JSClassOps JSFunctionClassOps = {
 
 static const ClassSpec JSFunctionClassSpec = {
     CreateFunctionConstructor, CreateFunctionPrototype, nullptr, nullptr,
-    function_methods,          function_properties};
+    function_methods,          function_properties,
+};
 
 const JSClass js::FunctionClass = {
     "Function",
     JSCLASS_HAS_CACHED_PROTO(JSProto_Function) |
         JSCLASS_HAS_RESERVED_SLOTS(JSFunction::SlotCount),
-    &JSFunctionClassOps, &JSFunctionClassSpec};
+    &JSFunctionClassOps,
+    &JSFunctionClassSpec,
+};
 
 const JSClass js::ExtendedFunctionClass = {
     "Function",
     JSCLASS_HAS_CACHED_PROTO(JSProto_Function) |
         JSCLASS_HAS_RESERVED_SLOTS(FunctionExtended::SlotCount),
-    &JSFunctionClassOps, &JSFunctionClassSpec};
+    &JSFunctionClassOps,
+    &JSFunctionClassSpec,
+};
 
 const JSClass* const js::FunctionClassPtr = &FunctionClass;
 const JSClass* const js::FunctionExtendedClassPtr = &ExtendedFunctionClass;
@@ -1902,7 +1907,7 @@ static JSAtom* SymbolToFunctionName(JSContext* cx, JS::Symbol* symbol,
   }
 
   // Step 5 (reordered).
-  StringBuffer sb(cx);
+  StringBuilder sb(cx);
   if (prefixKind == FunctionPrefixKind::Get) {
     if (!sb.append("get ")) {
       return nullptr;

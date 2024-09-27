@@ -11,11 +11,6 @@ document.addEventListener(
     let mainPopupSet = document.getElementById("mainPopupSet");
     // eslint-disable-next-line complexity
     mainPopupSet.addEventListener("command", event => {
-      if (event.target.hasAttribute("popupReportIndex")) {
-        PopupBlockerObserver.showBlockedPopup(event);
-        return;
-      }
-
       switch (event.target.id) {
         // == tabContextMenu ==
         case "context_openANewTab":
@@ -188,17 +183,6 @@ document.addEventListener(
           BrowserCommands.fullScreen();
           break;
 
-        // == blockedPopupOptions ==
-        case "blockedPopupAllowSite":
-          PopupBlockerObserver.toggleAllowPopupsForSite(event);
-          break;
-        case "blockedPopupEdit":
-          PopupBlockerObserver.editPopupSettings(event);
-          break;
-        case "blockedPopupDontShowMessage":
-          PopupBlockerObserver.dontShowMessage(event);
-          break;
-
         // == pictureInPictureToggleContextMenu ==
         case "context_HidePictureInPictureToggle":
           PictureInPicture.hideToggle();
@@ -316,16 +300,13 @@ document.addEventListener(
           CreateContainerTabMenu(event);
           break;
         case "toolbar-context-menu":
-          onViewToolbarsPopupShowing(
+          ToolbarContextMenu.onViewToolbarsPopupShowing(
             event,
             document.getElementById("viewToolbarsMenuSeparator")
           );
           ToolbarContextMenu.updateDownloadsAutoHide(event.target);
           ToolbarContextMenu.updateDownloadsAlwaysOpenPanel(event.target);
           ToolbarContextMenu.updateExtension(event.target, event);
-          break;
-        case "blockedPopupOptions":
-          PopupBlockerObserver.fillPopupList(event);
           break;
         case "pageActionContextMenu":
           BrowserPageActions.onContextMenuShowing(event, event.target);
@@ -366,9 +347,6 @@ document.addEventListener(
 
     mainPopupSet.addEventListener("popuphiding", event => {
       switch (event.target.id) {
-        case "blockedPopupOptions":
-          PopupBlockerObserver.onPopupHiding(event);
-          break;
         case "tabbrowser-tab-tooltip":
           event.target.removeAttribute("position");
           break;

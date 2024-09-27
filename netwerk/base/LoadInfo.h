@@ -8,7 +8,6 @@
 #define mozilla_LoadInfo_h
 
 #include "mozilla/dom/FeaturePolicy.h"
-#include "nsIContentSecurityPolicy.h"
 #include "nsIInterceptionInfo.h"
 #include "nsILoadInfo.h"
 #include "nsIPrincipal.h"
@@ -260,7 +259,8 @@ class LoadInfo final : public nsILoadInfo {
       bool aIsOriginTrialCoepCredentiallessEnabledForTopLevel,
       nsIURI* aUnstrippedURI, nsIInterceptionInfo* aInterceptionInfo,
       bool aHasInjectedCookieForCookieBannerHandling, bool aWasSchemelessInput,
-      nsILoadInfo::HTTPSUpgradeTelemetryType aHttpsUpgradeTelemetry);
+      nsILoadInfo::HTTPSUpgradeTelemetryType aHttpsUpgradeTelemetry,
+      bool aIsNewWindowTarget);
 
   LoadInfo(const LoadInfo& rhs);
 
@@ -416,6 +416,8 @@ class LoadInfo final : public nsILoadInfo {
 
   nsILoadInfo::HTTPSUpgradeTelemetryType mHttpsUpgradeTelemetry =
       nsILoadInfo::NOT_INITIALIZED;
+
+  bool mIsNewWindowTarget = false;
 };
 
 // This is exposed solely for testing purposes and should not be used outside of

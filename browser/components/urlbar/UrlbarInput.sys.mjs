@@ -9,6 +9,7 @@ import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  ASRouter: "resource:///modules/asrouter/ASRouter.sys.mjs",
   BrowserSearchTelemetry: "resource:///modules/BrowserSearchTelemetry.sys.mjs",
   BrowserUIUtils: "resource:///modules/BrowserUIUtils.sys.mjs",
   BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
@@ -27,6 +28,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UrlbarQueryContext: "resource:///modules/UrlbarUtils.sys.mjs",
   UrlbarProviderOpenTabs: "resource:///modules/UrlbarProviderOpenTabs.sys.mjs",
   UrlbarProvidersManager: "resource:///modules/UrlbarProvidersManager.sys.mjs",
+  UrlbarProviderActionsSearchMode:
+    "resource:///modules/UrlbarProviderActionsSearchMode.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
@@ -62,6 +65,8 @@ const SEARCH_BUTTON_CLASS = "urlbar-search-button";
 
 // The scalar category of TopSites click for Contextual Services
 const SCALAR_CATEGORY_TOPSITES = "contextual.services.topsites.click";
+
+const UNLIMITED_MAX_RESULTS = 99;
 
 let getBoundsWithoutFlushing = element =>
   element.ownerGlobal.windowUtils.getBoundsWithoutFlushing(element);
@@ -420,7 +425,7 @@ export class UrlbarInput {
     ) {
       if (this.window.gBrowser.selectedBrowser.searchTerms) {
         value = this.window.gBrowser.selectedBrowser.searchTerms;
-        valid = !dueToSessionRestore;
+        valid = !dueToSessionRestore && !this.window.gBrowser.userTypedValue;
         if (!isSameDocument) {
           Services.telemetry.scalarAdd(
             "urlbar.persistedsearchterms.view_count",
@@ -491,6 +496,12 @@ export class UrlbarInput {
     this.value = value;
     this.valueIsTyped = !valid;
     this.toggleAttribute("usertyping", !valid && value);
+    this.toggleAttribute(
+      "persistsearchterms",
+      lazy.UrlbarPrefs.isPersistedSearchTermsEnabled() &&
+        !!this.window.gBrowser.selectedBrowser.searchTerms &&
+        valid
+    );
 
     if (this.focused && value != previousUntrimmedValue) {
       if (
@@ -886,7 +897,6 @@ export class UrlbarInput {
    *   mode when handing `searchString` from the fake input to the Urlbar.
    * @param {string} newtabSessionId
    *   Optional. The id of the newtab session that handed off this search.
-   *
    */
   handoff(searchString, searchEngine, newtabSessionId) {
     this._isHandoffSession = true;
@@ -915,7 +925,11 @@ export class UrlbarInput {
     if (!result) {
       return;
     }
-    if (element?.dataset.action && element?.dataset.action != "tabswitch") {
+    if (
+      element?.dataset.action &&
+      element?.dataset.action != "tabswitch" &&
+      result.providerName != lazy.UrlbarProviderActionsSearchMode.name
+    ) {
       this.controller.engagementEvent.record(event, {
         result,
         element,
@@ -1238,19 +1252,13 @@ export class UrlbarInput {
         return;
       }
       case lazy.UrlbarUtils.RESULT_TYPE.DYNAMIC: {
-        if (url) {
-          break;
-        }
-        url = result.payload.url;
-        // Keep the searchMode for telemetry since handleRevert sets it to null.
-        const searchMode = this.searchMode;
-        // Do not revert the Urlbar if we're going to navigate. We want the URL
-        // populated so we can navigate to it.
-        if (!url || !result.payload.shouldNavigate) {
+        if (!url) {
+          // If we're not loading a URL, the engagement is done. First revert
+          // and then record the engagement since providers expect the urlbar to
+          // be reverted when they're notified of the engagement, but before
+          // reverting, copy the search mode since it's nulled on revert.
+          const { searchMode } = this;
           this.handleRevert();
-        }
-        // If we won't be navigating, this is the end of the engagement.
-        if (!url || !result.payload.shouldNavigate) {
           this.controller.engagementEvent.record(event, {
             result,
             element,
@@ -2128,7 +2136,9 @@ export class UrlbarInput {
   }) {
     if (
       !result ||
-      (checkValue && this.value.trim() != result.payload.keyword?.trim())
+      (checkValue &&
+        this.value.trim() != result.payload.keyword?.trim() &&
+        this.value.trim() != result.payload.autofillKeyword?.trim())
     ) {
       return false;
     }
@@ -2387,6 +2397,8 @@ export class UrlbarInput {
         return result.payload.content;
       case lazy.UrlbarUtils.RESULT_TYPE.DYNAMIC:
         return result.payload.input || "";
+      case lazy.UrlbarUtils.RESULT_TYPE.RESTRICT:
+        return result.payload.autofillKeyword + " ";
     }
 
     // Always respect a set urlOverride property.
@@ -2715,8 +2727,9 @@ export class UrlbarInput {
   }
 
   /**
-   * Get the url to load for the search query and records in telemetry that it
-   * is being loaded.
+   * Records in telemetry that a search is being loaded,
+   * updates an incremental total number of searches in a pref,
+   * and informs ASRouter that a search has occurred via a trigger send
    *
    * @param {nsISearchEngine} engine
    *   The engine to generate the query for.
@@ -2735,11 +2748,37 @@ export class UrlbarInput {
    */
   _recordSearch(engine, event, searchActionDetails = {}) {
     const isOneOff = this.view.oneOffSearchButtons.eventTargetIsAOneOff(event);
+    const searchSource = this.getSearchSource(event);
+
+    // Record when the user uses the search bar to be
+    // used for message targeting. This is arbitrarily capped
+    // at 100, only to prevent the number from growing ifinitely.
+    const totalSearches = Services.prefs.getIntPref(
+      "browser.search.totalSearches"
+    );
+    const totalSearchesCap = 100;
+    if (totalSearches <= totalSearchesCap) {
+      Services.prefs.setIntPref(
+        "browser.search.totalSearches",
+        totalSearches + 1
+      );
+    }
+
+    // Sending a trigger to ASRouter when a search happens
+    lazy.ASRouter.sendTriggerMessage({
+      browser: this.window.gBrowser.selectedBrowser,
+      id: "onSearch",
+      context: {
+        isSuggestion: searchActionDetails.isSuggestion || false,
+        searchSource,
+        isOneOff,
+      },
+    });
 
     lazy.BrowserSearchTelemetry.recordSearch(
       this.window.gBrowser.selectedBrowser,
       engine,
-      this.getSearchSource(event),
+      searchSource,
       {
         ...searchActionDetails,
         isOneOff,
@@ -3485,7 +3524,9 @@ export class UrlbarInput {
     this._searchModeLabel.textContent = "";
     this._searchModeIndicatorTitle.removeAttribute("data-l10n-id");
     this._searchModeLabel.removeAttribute("data-l10n-id");
-    this.removeAttribute("searchmodesource");
+
+    let results = this.querySelector(".urlbarView-results");
+    results.removeAttribute("searchmodesource");
 
     if (!engineName && !source) {
       try {
@@ -3518,7 +3559,7 @@ export class UrlbarInput {
         this.inputField,
         `urlbar-placeholder-search-mode-other-${sourceName}`
       );
-      this.setAttribute("searchmodesource", sourceName);
+      results.setAttribute("searchmodesource", sourceName);
     }
 
     this.toggleAttribute("searchmode", true);
@@ -3582,7 +3623,10 @@ export class UrlbarInput {
     this._isHandoffSession = false;
     this.removeAttribute("focused");
 
-    if (this._revertOnBlurValue == this.value) {
+    if (
+      this._revertOnBlurValue == this.value &&
+      !this.window.gBrowser.selectedBrowser.searchTerms
+    ) {
       this.handleRevert();
     } else if (
       this._autofillPlaceholder &&
@@ -3630,6 +3674,7 @@ export class UrlbarInput {
       this.window.gBrowser.selectedBrowser.searchTerms &&
       this.window.gBrowser.userTypedValue == null
     ) {
+      this.toggleAttribute("persistsearchterms", true);
       this.setPageProxyState("valid", true);
     }
 
@@ -3699,6 +3744,7 @@ export class UrlbarInput {
       if (this.focusedViaMousedown) {
         this.#setProxyStateToInvalidOnMouseUp = true;
       } else {
+        this.removeAttribute("persistsearchterms");
         this.setPageProxyState("invalid", true);
       }
     }
@@ -3851,6 +3897,7 @@ export class UrlbarInput {
     if (this.#setProxyStateToInvalidOnMouseUp) {
       this.#setProxyStateToInvalidOnMouseUp = false;
       this.setPageProxyState("invalid", true);
+      this.removeAttribute("persistsearchterms");
     }
   }
 
@@ -4132,10 +4179,16 @@ export class UrlbarInput {
     searchString = null,
     event = null,
   } = {}) {
+    // When we are in actions search mode we can show more results so
+    // increase the limit.
+    let maxResults =
+      this.searchMode?.source != lazy.UrlbarUtils.RESULT_SOURCE.ACTIONS
+        ? lazy.UrlbarPrefs.get("maxRichResults")
+        : UNLIMITED_MAX_RESULTS;
     let options = {
       allowAutofill,
       isPrivate: this.isPrivate,
-      maxResults: lazy.UrlbarPrefs.get("maxRichResults"),
+      maxResults,
       searchString,
       userContextId: parseInt(
         this.window.gBrowser.selectedBrowser.getAttribute("usercontextid") || 0

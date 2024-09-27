@@ -142,6 +142,7 @@ using mozilla::dom::Promise;
 namespace mozilla::net {
 
 LazyLogModule gHttpLog("nsHttp");
+LazyLogModule gHttpIOLog("HttpIO");
 
 #ifdef ANDROID
 static nsCString GetDeviceModelId() {
@@ -384,6 +385,24 @@ nsresult nsHttpHandler::Init() {
       return qlogDir->HumanReadablePath();
     };
     mHttp3QlogDir = initQLogDir();
+
+    if (const char* origin = PR_GetEnv("MOZ_FORCE_QUIC_ON")) {
+      nsCCharSeparatedTokenizer tokens(nsDependentCString(origin), ':');
+      nsAutoCString host;
+      int32_t port = 443;
+      if (tokens.hasMoreTokens()) {
+        host = tokens.nextToken();
+        if (tokens.hasMoreTokens()) {
+          nsresult res;
+          int32_t tmp = tokens.nextToken().ToInteger(&res);
+          if (NS_SUCCEEDED(res)) {
+            port = tmp;
+          }
+        }
+        mAltSvcMappingTemptativeMap.InsertOrUpdate(
+            host, MakeUnique<nsCString>(nsPrintfCString("h3=:%d", port)));
+      }
+    }
   }
 
   // monitor some preference changes
@@ -476,7 +495,6 @@ nsresult nsHttpHandler::Init() {
     obsService->AddObserver(this, "psm:user-certificate-deleted", true);
     obsService->AddObserver(this, "intl:app-locales-changed", true);
     obsService->AddObserver(this, "browser-delayed-startup-finished", true);
-    obsService->AddObserver(this, "network:captive-portal-connectivity", true);
     obsService->AddObserver(this, "network:reset-http3-excluded-list", true);
     obsService->AddObserver(this, "network:socket-process-crashed", true);
 
@@ -574,15 +592,15 @@ nsresult nsHttpHandler::InitConnectionMgr() {
     auto task = [self]() {
       RefPtr<HttpConnectionMgrParent> parent =
           self->mConnMgr->AsHttpConnectionMgrParent();
-      Unused << SocketProcessParent::GetSingleton()
-                    ->SendPHttpConnectionMgrConstructor(
-                        parent,
-                        HttpHandlerInitArgs(
-                            self->mLegacyAppName, self->mLegacyAppVersion,
-                            self->mPlatform, self->mOscpu, self->mMisc,
-                            self->mProduct, self->mProductSub, self->mAppName,
-                            self->mAppVersion, self->mCompatFirefox,
-                            self->mCompatDevice, self->mDeviceModelId));
+      RefPtr<SocketProcessParent> socketParent =
+          SocketProcessParent::GetSingleton();
+      Unused << socketParent->SendPHttpConnectionMgrConstructor(
+          parent,
+          HttpHandlerInitArgs(self->mLegacyAppName, self->mLegacyAppVersion,
+                              self->mPlatform, self->mOscpu, self->mMisc,
+                              self->mProduct, self->mProductSub, self->mAppName,
+                              self->mAppVersion, self->mCompatFirefox,
+                              self->mCompatDevice, self->mDeviceModelId));
     };
     gIOService->CallOrWaitForSocketProcess(std::move(task));
   } else {
@@ -1070,6 +1088,29 @@ void nsHttpHandler::InitUserAgentComponents() {
   mUserAgentIsDirty = true;
 }
 
+#ifdef XP_MACOSX
+void nsHttpHandler::InitMSAuthorities() {
+  if (!StaticPrefs::network_http_microsoft_entra_sso_enabled()) {
+    return;
+  }
+
+  nsAutoCString authorityList;
+
+  if (NS_FAILED(Preferences::GetCString("network.microsoft-sso-authority-list",
+                                        authorityList))) {
+    return;
+  }
+  mMSAuthorities.Clear();
+
+  // Normalize the MS authority list
+  nsCCharSeparatedTokenizer tokenizer(authorityList, ',');
+  while (tokenizer.hasMoreTokens()) {
+    const nsDependentCSubstring& token = tokenizer.nextToken();
+    mMSAuthorities.Insert(token);
+  }
+}
+#endif
+
 uint32_t nsHttpHandler::MaxSocketCount() {
   PR_CallOnce(&nsSocketTransportService::gMaxCountInitOnce,
               nsSocketTransportService::DiscoverMaxCount);
@@ -1152,8 +1193,9 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
       if (!XRE_IsSocketProcess()) {
         mDeviceModelId = mozilla::net::GetDeviceModelId();
         if (gIOService->SocketProcessReady()) {
-          Unused << SocketProcessParent::GetSingleton()
-                        ->SendUpdateDeviceModelId(mDeviceModelId);
+          RefPtr<SocketProcessParent> socketParent =
+              SocketProcessParent::GetSingleton();
+          Unused << socketParent->SendUpdateDeviceModelId(mDeviceModelId);
         }
       }
     } else {
@@ -1880,6 +1922,18 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
     }
   }
 
+#ifdef XP_MACOSX
+  if (XRE_IsParentProcess()) {
+    if (PREF_CHANGED(HTTP_PREF("microsoft-entra-sso.enabled"))) {
+      rv =
+          Preferences::GetBool(HTTP_PREF("microsoft-entra-sso.enabled"), &cVar);
+      if (NS_SUCCEEDED(rv) && cVar) {
+        InitMSAuthorities();
+      }
+    }
+  }
+#endif
+
   // Enable HTTP response timeout if TCP Keepalives are disabled.
   mResponseTimeoutEnabled =
       !mTCPKeepaliveShortLivedEnabled && !mTCPKeepaliveLongLivedEnabled;
@@ -2265,9 +2319,6 @@ nsHttpHandler::Observe(nsISupports* subject, const char* topic,
   } else if (!strcmp(topic, "intl:app-locales-changed")) {
     // If the locale changed, there's a chance the accept language did too
     mAcceptLanguagesIsDirty = true;
-  } else if (!strcmp(topic, "network:captive-portal-connectivity")) {
-    nsAutoCString data8 = NS_ConvertUTF16toUTF8(data);
-    mThroughCaptivePortal = data8.EqualsLiteral("captive");
   } else if (!strcmp(topic, "network:reset-http3-excluded-list")) {
     MutexAutoLock lock(mHttpExclusionLock);
     mExcludedHttp3Origins.Clear();
@@ -2879,6 +2930,14 @@ bool nsHttpHandler::IsHostExcludedForHTTPSRR(const nsACString& aHost) {
 
   return mExcludedHostsForHTTPSRRUpgrade.Contains(aHost);
 }
+
+#ifdef XP_MACOSX
+bool nsHttpHandler::IsHostMSAuthority(const nsACString& aHost) {
+  MOZ_ASSERT(NS_IsMainThread());
+
+  return mMSAuthorities.Contains(aHost);
+}
+#endif
 
 void nsHttpHandler::Exclude0RttTcp(const nsHttpConnectionInfo* ci) {
   MOZ_ASSERT(OnSocketThread());

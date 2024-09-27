@@ -135,16 +135,6 @@ fuzzy-if(Android,0-4,0-87) == dynamic-clipPath-01.svg pass.svg
 == dynamic-conditions-01.svg pass.svg
 == dynamic-conditions-02.svg about:blank
 == dynamic-conditions-03.svg pass.svg
-== dynamic-conditions-04.svg about:blank
-== dynamic-conditions-05.svg pass.svg
-== dynamic-conditions-06.svg about:blank
-== dynamic-conditions-07.svg pass.svg
-== dynamic-conditions-08.svg pass.svg
-== dynamic-conditions-09.svg about:blank
-== dynamic-conditions-10.svg about:blank
-== dynamic-conditions-11.svg pass.svg
-== dynamic-conditions-12.svg pass.svg
-== dynamic-conditions-13.svg about:blank
 == dynamic-feFlood-01.svg pass.svg
 asserts(0-1) == dynamic-feImage-01.svg pass.svg # intermittent assertions (bug 886080)
 == dynamic-fill-01.svg dynamic-fill-01-ref.svg
@@ -360,7 +350,7 @@ fuzzy(0-1,0-10000) == opacity-and-transform-01.svg opacity-and-transform-01-ref.
 
 fuzzy-if(Android,0-8,0-200) == outer-svg-border-and-padding-01.svg outer-svg-border-and-padding-01-ref.svg
 
-fuzzy(0-7,0-214) == outline.html outline-ref.html # Bug 1503525
+fuzzy(0-255,0-214) fuzzy-if(Android,0-255,0-1423) == outline.html outline-ref.html # Bug 1503525
 
 == overflow-on-outer-svg-01.svg overflow-on-outer-svg-01-ref.svg
 == overflow-on-outer-svg-02a.xhtml overflow-on-outer-svg-02-ref.xhtml

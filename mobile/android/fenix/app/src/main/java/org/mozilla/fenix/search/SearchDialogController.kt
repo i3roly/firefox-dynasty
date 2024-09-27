@@ -112,10 +112,15 @@ class SearchDialogController(
 
         val searchEngine = fragmentStore.state.searchEngineSource.searchEngine
         val isDefaultEngine = searchEngine == fragmentStore.state.defaultEngine
+        val newTab = if (settings.enableHomepageAsNewTab) {
+            false
+        } else {
+            fragmentStore.state.tabId == null
+        }
 
         activity.openToBrowserAndLoad(
             searchTermOrURL = url,
-            newTab = fragmentStore.state.tabId == null,
+            newTab = newTab,
             from = BrowserDirection.FromSearchDialog,
             engine = searchEngine,
             forceSearch = !isDefaultEngine,
@@ -172,7 +177,11 @@ class SearchDialogController(
 
         activity.openToBrowserAndLoad(
             searchTermOrURL = url,
-            newTab = fragmentStore.state.tabId == null,
+            newTab = if (settings.enableHomepageAsNewTab) {
+                false
+            } else {
+                fragmentStore.state.tabId == null
+            },
             from = BrowserDirection.FromSearchDialog,
             flags = flags,
         )
@@ -189,7 +198,11 @@ class SearchDialogController(
 
         activity.openToBrowserAndLoad(
             searchTermOrURL = searchTerms,
-            newTab = fragmentStore.state.tabId == null,
+            newTab = if (settings.enableHomepageAsNewTab) {
+                false
+            } else {
+                fragmentStore.state.tabId == null
+            },
             from = BrowserDirection.FromSearchDialog,
             engine = searchEngine,
             forceSearch = true,

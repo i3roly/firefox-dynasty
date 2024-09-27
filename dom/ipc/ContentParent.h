@@ -464,6 +464,13 @@ class ContentParent final : public PContentParent,
    */
   void KillHard(const char* aReason);
 
+  /**
+   * Get a unique identifier for this child process. This ID is unique across
+   * all types of child processes.
+   *
+   * NOTE: The `ContentParentId` wrapper type is a historical artifact from when
+   * the ID was only specific to content processes.
+   */
   ContentParentId ChildID() const { return mChildID; }
 
   /**
@@ -906,8 +913,7 @@ class ContentParent final : public PContentParent,
       const uint32_t& aContentDispositionHint,
       const nsAString& aContentDispositionFilename, const bool& aForceSave,
       const int64_t& aContentLength, const bool& aWasFileChannel,
-      nsIURI* aReferrer, const MaybeDiscarded<BrowsingContext>& aContext,
-      const bool& aShouldCloseWindow);
+      nsIURI* aReferrer, const MaybeDiscarded<BrowsingContext>& aContext);
 
   mozilla::ipc::IPCResult RecvPExternalHelperAppConstructor(
       PExternalHelperAppParent* actor, nsIURI* uri,
@@ -916,8 +922,8 @@ class ContentParent final : public PContentParent,
       const uint32_t& aContentDispositionHint,
       const nsAString& aContentDispositionFilename, const bool& aForceSave,
       const int64_t& aContentLength, const bool& aWasFileChannel,
-      nsIURI* aReferrer, const MaybeDiscarded<BrowsingContext>& aContext,
-      const bool& aShouldCloseWindow) override;
+      nsIURI* aReferrer,
+      const MaybeDiscarded<BrowsingContext>& aContext) override;
 
   already_AddRefed<PHandlerServiceParent> AllocPHandlerServiceParent();
 
@@ -1380,6 +1386,14 @@ class ContentParent final : public PContentParent,
 
   mozilla::ipc::IPCResult RecvGetSystemIcon(nsIURI* aURI,
                                             GetSystemIconResolver&& aResolver);
+
+  mozilla::ipc::IPCResult RecvGetSystemGeolocationPermissionBehavior(
+      GetSystemGeolocationPermissionBehaviorResolver&& aResolver);
+
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY mozilla::ipc::IPCResult
+  RecvRequestGeolocationPermissionFromUser(
+      const MaybeDiscardedBrowsingContext& aBrowsingContext,
+      RequestGeolocationPermissionFromUserResolver&& aResolver);
 
 #ifdef FUZZING_SNAPSHOT
   mozilla::ipc::IPCResult RecvSignalFuzzingReady();

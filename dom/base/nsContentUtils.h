@@ -39,6 +39,7 @@
 #include "mozilla/TimeStamp.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/dom/BindingDeclarations.h"
+#include "mozilla/dom/CacheExpirationTime.h"
 #include "mozilla/dom/FromParser.h"
 #include "mozilla/dom/FetchPriority.h"
 #include "mozilla/fallible.h"
@@ -2126,6 +2127,13 @@ class nsContentUtils {
   }
 
   /**
+   * Gets the about:fingerprintingprotection principal.
+   */
+  static nsIPrincipal* GetFingerprintingProtectionPrincipal() {
+    return sFingerprintingProtectionPrincipal;
+  }
+
+  /**
    * *aResourcePrincipal is a principal describing who may access the contents
    * of a resource. The resource can only be consumed by a principal that
    * subsumes *aResourcePrincipal. MAKE SURE THAT NOTHING EVER ACTS WITH THE
@@ -3440,16 +3448,23 @@ class nsContentUtils {
 
   struct SubresourceCacheValidationInfo {
     // The expiration time, in seconds, if known.
-    mozilla::Maybe<uint32_t> mExpirationTime;
+    mozilla::Maybe<CacheExpirationTime> mExpirationTime;
     bool mMustRevalidate = false;
   };
 
   /**
-   * Gets cache validation info for subresources such as images or CSS
-   * stylesheets.
+   * Gets cache validation info for subresources such as images, CSS
+   * stylesheets, or JS.
    */
   static SubresourceCacheValidationInfo GetSubresourceCacheValidationInfo(
       nsIRequest*, nsIURI*);
+
+  /**
+   * Gets cache expiration time for subresources such as images, CSS
+   * stylesheets, or JS.
+   */
+  static CacheExpirationTime GetSubresourceCacheExpirationTime(nsIRequest*,
+                                                               nsIURI*);
 
   /**
    * Returns true if the request associated with the document should bypass the
@@ -3600,6 +3615,7 @@ class nsContentUtils {
   static nsIScriptSecurityManager* sSecurityManager;
   static nsIPrincipal* sSystemPrincipal;
   static nsIPrincipal* sNullSubjectPrincipal;
+  static nsIPrincipal* sFingerprintingProtectionPrincipal;
 
   static nsIConsoleService* sConsoleService;
 

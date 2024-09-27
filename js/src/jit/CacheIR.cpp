@@ -270,7 +270,7 @@ IRGenerator::IRGenerator(JSContext* cx, HandleScript script, jsbytecode* pc,
       numOptimizedStubs_(state.numOptimizedStubs()) {}
 
 // Allocation sites are usually created during baseline compilation, but we also
-// need to created them when an IC stub is added to a baseline compiled script
+// need to create them when an IC stub is added to a baseline compiled script
 // and when trial inlining.
 gc::AllocSite* IRGenerator::maybeCreateAllocSite() {
   MOZ_ASSERT(BytecodeOpCanHaveAllocSite(JSOp(*pc_)));
@@ -281,7 +281,6 @@ gc::AllocSite* IRGenerator::maybeCreateAllocSite() {
   JSScript* outerScript = frame->outerScript();
   bool hasBaselineScript = outerScript->hasBaselineScript();
   bool isInlined = frame->icScript()->isInlined();
-
   if (!hasBaselineScript && !isInlined) {
     MOZ_ASSERT(frame->runningInInterpreter());
     return outerScript->zone()->unknownAllocSite(JS::TraceKind::Object);
@@ -9764,16 +9763,19 @@ AttachDecision InlinableNativeIRGenerator::tryAttachAssertFloat32() {
     return AttachDecision::NoAction;
   }
 
+  // (Fuzzing unsafe) testing function which must be called with a constant
+  // boolean as its second argument.
+  bool mustBeFloat32 = args_[1].toBoolean();
+
   // Initialize the input operand.
   initializeInputOperand();
 
   // Guard callee is the 'assertFloat32' native function.
   emitNativeCalleeGuard();
 
-  // TODO: Warp doesn't yet optimize Float32 (bug 1655773).
+  ValOperandId valId = writer.loadArgumentFixedSlot(ArgumentKind::Arg0, argc_);
 
-  // NOP when not in IonMonkey.
-  writer.loadUndefinedResult();
+  writer.assertFloat32Result(valId, mustBeFloat32);
   writer.returnFromIC();
 
   trackAttached("AssertFloat32");
@@ -10015,6 +10017,30 @@ AttachDecision InlinableNativeIRGenerator::tryAttachObjectToString() {
   writer.returnFromIC();
 
   trackAttached("ObjectToString");
+  return AttachDecision::Attach;
+}
+
+AttachDecision InlinableNativeIRGenerator::tryAttachBigInt() {
+  // Need a single argument (Int32).
+  if (argc_ != 1 || !args_[0].isInt32()) {
+    return AttachDecision::NoAction;
+  }
+
+  // Initialize the input operand.
+  initializeInputOperand();
+
+  // Guard callee is the 'BigInt' native function.
+  emitNativeCalleeGuard();
+
+  // Guard that the argument is an Int32.
+  ValOperandId argId = writer.loadArgumentFixedSlot(ArgumentKind::Arg0, argc_);
+  Int32OperandId int32Id = writer.guardToInt32(argId);
+
+  // Convert Int32 to BigInt.
+  writer.int32ToBigIntResult(int32Id);
+  writer.returnFromIC();
+
+  trackAttached("BigInt");
   return AttachDecision::Attach;
 }
 
@@ -10981,6 +11007,11 @@ AttachDecision InlinableNativeIRGenerator::tryAttachArrayConstructor() {
     }
   }
 
+  gc::AllocSite* site = generator_.maybeCreateAllocSite();
+  if (!site) {
+    return AttachDecision::NoAction;
+  }
+
   // Initialize the input operand.
   initializeInputOperand();
 
@@ -11005,7 +11036,7 @@ AttachDecision InlinableNativeIRGenerator::tryAttachArrayConstructor() {
     lengthId = writer.loadInt32Constant(0);
   }
 
-  writer.newArrayFromLengthResult(templateObj, lengthId);
+  writer.newArrayFromLengthResult(templateObj, lengthId, site);
   writer.returnFromIC();
 
   trackAttached("ArrayConstructor");
@@ -12048,6 +12079,8 @@ AttachDecision InlinableNativeIRGenerator::tryAttachStub() {
       return tryAttachAtomicsIsLockFree();
 
     // BigInt natives.
+    case InlinableNative::BigInt:
+      return tryAttachBigInt();
     case InlinableNative::BigIntAsIntN:
       return tryAttachBigIntAsIntN();
     case InlinableNative::BigIntAsUintN:

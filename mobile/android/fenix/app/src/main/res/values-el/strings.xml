@@ -124,9 +124,9 @@
 
     <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
     <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_title">Νέο: βέλη εμπρός και πίσω με ένα πάτημα</string>
+    <string name="tablet_nav_bar_cfr_title" moz:removedIn="132" tools:ignore="UnusedResources">Νέο: βέλη εμπρός και πίσω με ένα πάτημα</string>
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_message">Απολαύστε ταχύτερη και πιο προσβάσιμη πλοήγηση από ποτέ.</string>
+    <string name="tablet_nav_bar_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Απολαύστε ταχύτερη και πιο προσβάσιμη πλοήγηση από ποτέ.</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Απαιτείται πρόσβαση στην κάμερα. Μεταβείτε στις Ρυθμίσεις Android, πατήστε «Δικαιώματα» και επιλέξτε «Να επιτρέπεται».</string>
@@ -219,8 +219,14 @@
     <string name="browser_menu_extensions_banner_learn_more">Μάθετε περισσότερα</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">Διαχείριση επεκτάσεων</string>
+    <!-- Content description (not visible, for screen readers etc.): Section heading for recommended extensions.-->
+    <string name="browser_menu_recommended_section_content_description">Προτεινόμενες επεκτάσεις</string>
+    <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extensions. -->
+    <string name="browser_menu_extension_plus_icon_content_description">Προσθήκη επέκτασης</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Ανακαλύψτε περισσότερες επεκτάσεις</string>
+    <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
+    <string name="browser_menu_extensions_disabled_description">Προσωρινά ανενεργή</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Πληροφορίες λογαριασμού</string>
     <!-- Browser menu button that sends a user to help articles -->
@@ -239,6 +245,8 @@
     <string name="browser_menu_add_to_homescreen">Προσθήκη στην αρχική οθόνη</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Προσθήκη στην αρχική οθόνη…</string>
+    <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
+    <string name="browser_menu_add_to_homescreen_xiaomi">Οι συσκευές Xiaomi ενδέχεται να χρειάζονται επιπλέον δικαιώματα για να προσθέσουν συντομεύσεις στην αρχική οθόνη. Παρακαλούμε ελέγξτε τις ρυθμίσεις σας.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Επανασυγχρονισμός</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -309,6 +317,8 @@
     <string name="browser_menu_switch_to_mobile_site">Εναλλαγή σε έκδοση για κινητά</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Εργαλεία</string>
+    <!-- Content description (not visible, for screen readers etc.): Back button for all menu redesign sub-menu -->
+    <string name="browser_menu_back_button_content_description">Επιστροφή στο κύριο μενού</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate">Προβολή ανάγνωσης, μετάφραση, εκτύπωση, κοινή χρήση, άνοιγμα εφαρμογής</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -340,6 +350,12 @@
     <!-- Browser menu label for the Delete browsing data on quit feature.
         The first parameter is the name of the app defined in app_name (for example: Fenix). -->
     <string name="browser_menu_delete_browsing_data_on_quit">Έξοδος από το %1$s</string>
+
+    <!-- Menu "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_title">Νέο: βελτιωμένο μενού</string>
+    <!-- Text for the message in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_body">Βρείτε ό,τι χρειάζεστε πιο γρήγορα, από την ιδιωτική περιήγηση μέχρι τις ενέργειες αποθήκευσης.</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -401,7 +417,7 @@
 
     <!-- Home onboarding -->
     <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
-    <string name="onboarding_home_screen_jump_back_contextual_hint_2">Γνωρίστε την εξατομικευμένη αρχική σας σελίδα. Οι πρόσφατες καρτέλες, οι σελιδοδείκτες και τα αποτελέσματα αναζήτησης θα εμφανίζονται εδώ.</string>
+    <string name="onboarding_home_screen_jump_back_contextual_hint_2" moz:removedIn="132">Γνωρίστε την εξατομικευμένη αρχική σας σελίδα. Οι πρόσφατες καρτέλες, οι σελιδοδείκτες και τα αποτελέσματα αναζήτησης θα εμφανίζονται εδώ.</string>
     <!-- Home onboarding dialog welcome screen title text. -->
     <string name="onboarding_home_welcome_title_2">Καλώς ορίσατε σε ένα πιο προσωπικό διαδίκτυο</string>
     <!-- Home onboarding dialog welcome screen description text. -->
@@ -437,12 +453,12 @@
 
     <!-- Juno first user onboarding flow experiment, strings are marked unused as they are only referenced by Nimbus experiments. -->
     <!-- Description for learning more about our privacy notice. -->
-    <string name="juno_onboarding_privacy_notice_text">Σημείωση απορρήτου του Firefox</string>
+    <string name="juno_onboarding_privacy_notice_text" tools:ignore="BrandUsage">Σημείωση απορρήτου του Firefox</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_2">Μας αρέσει να σας προστατεύουμε</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="UnusedResources">Μάθετε γιατί εκατομμύρια άνθρωποι αγαπούν το Firefox</string>
+    <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="BrandUsage,UnusedResources">Μάθετε γιατί εκατομμύρια άνθρωποι αγαπούν το Firefox</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_4" tools:ignore="UnusedResources">Ασφαλής περιήγηση με περισσότερες επιλογές</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
@@ -464,20 +480,20 @@
     <string name="juno_onboarding_sign_in_title_2">Διατηρήστε την κρυπτογράφηση κατά την εναλλαγή των συσκευών</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="UnusedResources">Όταν είστε συνδεδεμένοι και συγχρονισμένοι, είστε πιο ασφαλείς. Το Firefox κρυπτογραφεί τους κωδικούς πρόσβασης, τους σελιδοδείκτες σας και πολλά άλλα.</string>
+    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="BrandUsage,UnusedResources">Όταν είστε συνδεδεμένοι και συγχρονισμένοι, είστε πιο ασφαλείς. Το Firefox κρυπτογραφεί τους κωδικούς πρόσβασης, τους σελιδοδείκτες σας και πολλά άλλα.</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_3">Το Firefox κρυπτογραφεί τους κωδικούς πρόσβασης, τους σελιδοδείκτες και πολλά άλλα όταν κάνετε συγχρονισμό.</string>
+    <string name="juno_onboarding_sign_in_description_3" tools:ignore="BrandUsage">Το Firefox κρυπτογραφεί τους κωδικούς πρόσβασης, τους σελιδοδείκτες και πολλά άλλα όταν κάνετε συγχρονισμό.</string>
     <!-- Text for the button to sign in to sync on the device -->
     <string name="juno_onboarding_sign_in_positive_button" tools:ignore="UnusedResources">Σύνδεση</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_sign_in_negative_button" tools:ignore="UnusedResources">Όχι τώρα</string>
     <!-- Title for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_enable_notifications_title_nimbus_2">Οι ειδοποιήσεις σάς βοηθούν να παραμένετε ασφαλείς με το Firefox</string>
+    <string name="juno_onboarding_enable_notifications_title_nimbus_2" tools:ignore="BrandUsage">Οι ειδοποιήσεις σάς βοηθούν να παραμένετε ασφαλείς με το Firefox</string>
     <!-- Description for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
        Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_enable_notifications_description_nimbus_2">Στείλτε με ασφάλεια καρτέλες μεταξύ των συσκευών σας και ανακαλύψτε άλλες λειτουργίες απορρήτου στο Firefox.</string>
+    <string name="juno_onboarding_enable_notifications_description_nimbus_2" tools:ignore="BrandUsage">Στείλτε με ασφάλεια καρτέλες μεταξύ των συσκευών σας και ανακαλύψτε άλλες λειτουργίες απορρήτου στο Firefox.</string>
     <!-- Text for the button to request notification permission on the device -->
     <string name="juno_onboarding_enable_notifications_positive_button" tools:ignore="UnusedResources">Ενεργοποίηση ειδοποιήσεων</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
@@ -485,13 +501,13 @@
 
     <!-- Title for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_title" tools:ignore="UnusedResources">Δοκιμή του widget αναζήτησης του Firefox</string>
+    <string name="juno_onboarding_add_search_widget_title" tools:ignore="BrandUsage,UnusedResources">Δοκιμή του widget αναζήτησης του Firefox</string>
     <!-- Description for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_description" tools:ignore="UnusedResources">Με τον Firefox στην αρχική σας οθόνη, θα έχετε εύκολη πρόσβαση στο πρόγραμμα περιήγησης που εστιάζει στο απόρρητό σας, αποκλείοντας τους ιχνηλάτες μεταξύ ιστοτόπων.</string>
+    <string name="juno_onboarding_add_search_widget_description" tools:ignore="BrandUsage,UnusedResources">Με τον Firefox στην αρχική σας οθόνη, θα έχετε εύκολη πρόσβαση στο πρόγραμμα περιήγησης που εστιάζει στο απόρρητό σας, αποκλείοντας τους ιχνηλάτες μεταξύ ιστοτόπων.</string>
     <!-- Text for the button to add search widget on the device used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_positive_button" tools:ignore="UnusedResources">Προσθήκη widget Firefox</string>
+    <string name="juno_onboarding_add_search_widget_positive_button" tools:ignore="BrandUsage,UnusedResources">Προσθήκη widget Firefox</string>
     <!-- Text for the button to dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_add_search_widget_negative_button" tools:ignore="UnusedResources">Όχι τώρα</string>
 
@@ -533,9 +549,9 @@
     <!-- Preference Category for settings related to Search address bar -->
     <string name="preferences_settings_address_bar">Προτιμήσεις γραμμής διευθύνσεων</string>
     <!-- Preference Category for settings to Firefox Suggest -->
-    <string name="preference_search_address_bar_fx_suggest">Γραμμή διευθύνσεων - Προτάσεις Firefox</string>
+    <string name="preference_search_address_bar_fx_suggest" tools:ignore="BrandUsage">Γραμμή διευθύνσεων - Προτάσεις Firefox</string>
     <!-- Preference link to Learn more about Firefox Suggest -->
-    <string name="preference_search_learn_about_fx_suggest">Μάθετε περισσότερα για τις Προτάσεις Firefox</string>
+    <string name="preference_search_learn_about_fx_suggest" tools:ignore="BrandUsage">Μάθετε περισσότερα για τις Προτάσεις Firefox</string>
     <!-- Preference link to rating Fenix on the Play Store -->
     <string name="preferences_rate">Αξιολόγηση στο Google Play</string>
     <!-- Preference linking to about page for Fenix
@@ -631,8 +647,6 @@
     <string name="toast_override_account_sync_server_done">Ο διακομιστής λογαριασμού Mozilla και συγχρονισμού τροποποιήθηκε. Γίνεται τερματισμός της εφαρμογής για εφαρμογή των αλλαγών…</string>
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Λογαριασμός</string>
-    <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Γραμμή εργαλείων</string>
 
     <!-- Preference for changing where the AddressBar is positioned -->
     <string name="preferences_toolbar_2">Τοποθεσία γραμμής διευθύνσεων</string>
@@ -802,7 +816,7 @@
     <!-- Title of the Nimbus message for extension general availability-->
     <string name="addon_ga_message_title_2" tools:ignore="UnusedResources">Διατίθενται τώρα νέες επεκτάσεις</string>
     <!-- Body of the Nimbus message for add-ons general availability. 'Firefox' intentionally hardcoded here-->
-    <string name="addon_ga_message_body" tools:ignore="UnusedResources">Δείτε 100+ νέες επεκτάσεις που σας επιτρέπουν να κάνετε το Firefox δικό σας.</string>
+    <string name="addon_ga_message_body" tools:ignore="BrandUsage,UnusedResources">Δείτε 100+ νέες επεκτάσεις που σας επιτρέπουν να κάνετε το Firefox δικό σας.</string>
 
     <!-- Button text of the Nimbus message for extensions general availability. -->
     <string name="addon_ga_message_button_2" tools:ignore="UnusedResources">Εξερεύνηση επεκτάσεων</string>
@@ -868,7 +882,7 @@
     <!-- Name of the "receive tabs" notification channel. Displayed in the "App notifications" system settings for the app -->
     <string name="fxa_received_tab_channel_name">Ληφθείσες καρτέλες</string>
     <!-- Description of the "receive tabs" notification channel. Displayed in the "App notifications" system settings for the app -->
-    <string name="fxa_received_tab_channel_description">Ειδοποιήσεις για καρτέλες που λαμβάνονται από άλλες συσκευές Firefox.</string>
+    <string name="fxa_received_tab_channel_description" tools:ignore="BrandUsage">Ειδοποιήσεις για καρτέλες που λαμβάνονται από άλλες συσκευές Firefox.</string>
     <!--  The body for these is the URL of the tab received  -->
     <string name="fxa_tab_received_notification_name">Ελήφθη καρτέλα</string>
     <!-- %s is the device name -->
@@ -900,6 +914,10 @@
     <string name="preferences_marketing_data">Δεδομένα μάρκετινγκ</string>
     <!-- Preference description for marketing data collection -->
     <string name="preferences_marketing_data_description2">Κοινή χρήση βασικών δεδομένων χρήσης με το Adjust, την υπηρεσία μας για μάρκετινγκ κινητών</string>
+    <!-- Preference switch title for automatically submitting crash reports -->
+    <string name="preferences_automatically_submit_crashes_title">Αυτόματη υποβολή αναφορών κατάρρευσης</string>
+    <!-- Preference switch description for automatically submitting crash reports -->
+    <string name="preferences_automatically_submit_crashes_description">Αυτόματη κοινοποίηση δεδομένων καταρρεύσεων με τη Mozilla κατά την εκκίνηση, μετά από καταρρεύσεις</string>
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">Μελέτες</string>
     <!-- Summary for studies preferences -->
@@ -938,8 +956,6 @@
     <string name="preference_gestures_website_pull_to_refresh">Τράβηγμα για ανανέωση</string>
     <!-- Preference for using the dynamic toolbar -->
     <string name="preference_gestures_dynamic_toolbar">Κύλιση για απόκρυψη γραμμής εργαλείων</string>
-    <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Ολίσθηση γραμμής εργαλείων προς τα πλάγια για εναλλαγή καρτελών</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Ολίσθηση γραμμής εργαλείων προς τα πάνω για άνοιγμα καρτελών</string>
 
@@ -1199,6 +1215,15 @@
     <!-- Restore tab button text on the tab crash page -->
     <string name="tab_crash_restore">Επαναφορά καρτελών</string>
 
+    <!-- Unsubmitted crash dialog title, The first parameter is the name of the app (e.g. Firefox)  -->
+    <string name="unsubmitted_crash_dialog_title">Έπρεπε να γίνει επανεκκίνηση του %s</string>
+    <!-- Unsubmitted crash dialog checkbox label for automatically sending reports in the future -->
+    <string name="unsubmitted_crash_dialog_checkbox_label">Αυτόματη αποστολή αναφορών κατάρρευσης</string>
+    <!-- Unsubmitted crash dialog negative button to dismiss the dialog -->
+    <string name="unsubmitted_crash_dialog_negative_button">Κλείσιμο</string>
+    <!-- Unsubmitted crash dialog positive button to submit crash report -->
+    <string name="unsubmitted_crash_dialog_positive_button">Αποστολή αναφοράς κατάρρευσης</string>
+
     <!-- Bookmarks -->
     <!-- Confirmation message for a dialog confirming if the user wants to delete the selected folder -->
     <string name="bookmark_delete_folder_confirmation_dialog">Θέλετε σίγουρα να διαγράψετε αυτό το φάκελο;</string>
@@ -1210,6 +1235,8 @@
     <string name="bookmark_add_folder">Προσθήκη φακέλου</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
     <string name="bookmark_saved_snackbar">Ο σελιδοδείκτης αποθηκεύτηκε!</string>
+    <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
+    <string name="bookmark_saved_in_folder_snackbar">Αποθηκεύτηκε στο «%s»</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">ΕΠΕΞΕΡΓΑΣΙΑ</string>
     <!-- Bookmark overflow menu edit button -->
@@ -1243,8 +1270,12 @@
     <string name="bookmark_url_label">URL</string>
     <!-- Bookmark FOLDER editing field label -->
     <string name="bookmark_folder_label">ΦΑΚΕΛΟΣ</string>
+    <!-- Text indicating which folder a bookmark or folder will be saved in -->
+    <string name="bookmark_save_in_label">Αποθήκευση σε</string>
     <!-- Bookmark NAME editing field label -->
     <string name="bookmark_name_label">ΟΝΟΜΑ</string>
+    <!-- Label for a text input field for a bookmark or folder name -->
+    <string name="bookmark_name_label_normal_case">Όνομα</string>
     <!-- Bookmark add folder screen title -->
     <string name="bookmark_add_folder_fragment_label">Προσθήκη φακέλου</string>
     <!-- Bookmark select folder screen title -->
@@ -1273,11 +1304,22 @@
     <!-- Content description for the bookmark list new folder navigation bar button -->
     <string name="bookmark_add_new_folder_button_content_description">Προσθήκη νέου φακέλου</string>
     <!-- Content description for the bookmark navigation bar close button -->
-    <string name="bookmark_close_button_content_description">Κλείσιμο σελιδοδεικτών</string>
+    <string name="bookmark_close_button_content_description" tools:ignore="UnusedResources" moz:removedIn="130">Κλείσιμο σελιδοδεικτών</string>
     <!-- Content description for bookmark search floating action button -->
     <string name="bookmark_search_button_content_description">Αναζήτηση σελιδοδεικτών</string>
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
     <string name="bookmark_item_menu_button_content_description">Μενού στοιχείων για «%s»</string>
+
+    <!-- Title for the bookmark list empty state-->
+    <string name="bookmark_empty_list_title">Δεν υπάρχει κανένας σελιδοδείκτης ακόμα</string>
+    <!-- Description for the bookmark list empty state when you're not signed into sync. -->
+    <string name="bookmark_empty_list_guest_description">Αποθηκεύστε ιστοσελίδες κατά την περιήγησή σας. Συνδεθείτε για να λάβετε σελιδοδείκτες από άλλες συγχρονισμένες συσκευές.</string>
+    <!-- Text for the button to navigate to sync authentication -->
+    <string name="bookmark_empty_list_guest_cta">Σύνδεση για συγχρονισμό</string>
+    <!-- Description for the bookmark list empty state when you're signed into sync. -->
+    <string name="bookmark_empty_list_authenticated_description">Αποθηκεύστε ιστοσελίδες κατά την περιήγησή σας. Θα λάβουμε τους σελιδοδείκτες από άλλες συγχρονισμένες συσκευές.</string>
+    <!-- Description for the bookmark list empty state when you're in an empty folder. -->
+    <string name="bookmark_empty_list_folder_description">Προσθέστε σελιδοδείκτες καθώς περιηγείστε, ώστε να βρείτε αργότερα τις αγαπημένες σας ιστοσελίδες.</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -1451,7 +1493,7 @@
     <!-- An option to connect additional devices -->
     <string name="sync_connect_device">Σύνδεση άλλης συσκευής</string>
     <!-- The dialog text shown when additional devices are not available -->
-    <string name="sync_connect_device_dialog">Για να στείλετε μια καρτέλα, συνδεθείτε στο Firefox σε άλλη μία τουλάχιστον συσκευή.</string>
+    <string name="sync_connect_device_dialog" tools:ignore="BrandUsage">Για να στείλετε μια καρτέλα, συνδεθείτε στο Firefox σε άλλη μία τουλάχιστον συσκευή.</string>
     <!-- Confirmation dialog button -->
     <string name="sync_confirmation_button">Το κατάλαβα</string>
     <!-- Share error message -->
@@ -1492,10 +1534,10 @@
 
     <!-- Title shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_title" tools:ignore="UnusedResources">Το Firefox είναι γρήγορο και ιδιωτικό</string>
+    <string name="nimbus_notification_default_browser_title" tools:ignore="BrandUsage,UnusedResources">Το Firefox είναι γρήγορο και ιδιωτικό</string>
     <!-- Text shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_text" tools:ignore="UnusedResources">Ορισμός του Firefox ως προεπιλογής</string>
+    <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Ορισμός του Firefox ως προεπιλογής</string>
     <!-- Title shown in the notification that pops up to re-engage the user -->
     <string name="notification_re_engagement_title">Δοκιμάστε την ιδιωτική περιήγηση</string>
     <!-- Text shown in the notification that pops up to re-engage the user.
@@ -1515,7 +1557,7 @@
     <!-- Survey -->
     <!-- Text shown in the fullscreen message that pops up to ask user to take a short survey.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_survey_message_text">Συμβάλλετε στη βελτίωση του Firefox παίρνοντας μέρος σε μια σύντομη έρευνα.</string>
+    <string name="nimbus_survey_message_text" tools:ignore="BrandUsage">Συμβάλλετε στη βελτίωση του Firefox παίρνοντας μέρος σε μια σύντομη έρευνα.</string>
     <!-- Preference for taking the short survey. -->
     <string name="preferences_take_survey">Έναρξη έρευνας</string>
     <!-- Preference for not taking the short survey. -->
@@ -1662,7 +1704,7 @@
     <!-- Title of QR Pairing Fragment -->
     <string name="sync_scan_code">Σάρωση κωδικού</string>
     <!-- Instructions on how to access pairing -->
-    <string name="sign_in_instructions"><![CDATA[Στον υπολογιστή σας, ανοίξτε το Firefox και μεταβείτε στο <b>https://firefox.com/pair</b>]]></string>
+    <string name="sign_in_instructions" tools:ignore="BrandUsage"><![CDATA[Στον υπολογιστή σας, ανοίξτε το Firefox και μεταβείτε στο <b>https://firefox.com/pair</b>]]></string>
     <!-- Text shown for sign in pairing when ready -->
     <string name="sign_in_ready_for_scan">Σάρωση</string>
     <!-- Text shown for settings option for sign with pairing -->
@@ -1671,7 +1713,7 @@
     <!-- Text shown for settings option for sign with email -->
     <string name="sign_in_with_email">Χρήση email</string>
     <!-- Text shown for settings option for create new account text.'Firefox' intentionally hardcoded here.-->
-    <string name="sign_in_create_account_text"><![CDATA[Δεν έχετε λογαριασμό; <u>Δημιουργήστε έναν</u> για συγχρονισμό του Firefox μεταξύ συσκευών.]]></string>
+    <string name="sign_in_create_account_text" tools:ignore="BrandUsage"><![CDATA[Δεν έχετε λογαριασμό; <u>Δημιουργήστε έναν</u> για συγχρονισμό του Firefox μεταξύ συσκευών.]]></string>
     <!-- Text shown in confirmation dialog to sign out of account. The first parameter is the name of the app (e.g. Firefox Preview) -->
     <string name="sign_out_confirmation_message_2">Το %s θα σταματήσει να συγχρονίζεται με τον λογαριασμό σας, αλλά δεν θα διαγράψει τα δεδομένα περιήγησης από αυτήν τη συσκευή.</string>
     <!-- Option to continue signing out of account shown in confirmation dialog to sign out of account -->
@@ -2211,7 +2253,7 @@
     <string name="synced_tabs_enable_tab_syncing">Παρακαλούμε ενεργοποιήστε τον συγχρονισμό καρτελών.</string>
 
     <!-- Text displayed when user has no tabs that have been synced -->
-    <string name="synced_tabs_no_tabs">Δεν έχετε καμία άλλη καρτέλα ανοικτή στο Firefox σε άλλες σας συσκευές.</string>
+    <string name="synced_tabs_no_tabs" tools:ignore="BrandUsage">Δεν έχετε καμία άλλη καρτέλα ανοικτή στο Firefox σε άλλες σας συσκευές.</string>
     <!-- Text displayed in the synced tabs screen when a user is not signed in to Firefox Sync describing Synced Tabs -->
     <string name="synced_tabs_sign_in_message">Δείτε μια λίστα καρτελών από τις άλλες συσκευές σας.</string>
     <!-- Text displayed on a button in the synced tabs screen to link users to sign in when a user is not signed in to Firefox Sync -->
@@ -2279,7 +2321,7 @@
     <!-- The header text of the auto-close message when the user is asked if they want to turn on the auto-closing of inactive tabs. -->
     <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Αυτόματο κλείσιμο μετά από έναν μήνα;</string>
     <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-    <string name="inactive_tabs_auto_close_message_description" tools:ignore="UnusedResources">Το Firefox μπορεί να κλείσει τις καρτέλες που δεν έχετε προβάλει τον περασμένο μήνα.</string>
+    <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Το Firefox μπορεί να κλείσει τις καρτέλες που δεν έχετε προβάλει τον περασμένο μήνα.</string>
     <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
     <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">ΕΝΕΡΓΟΠΟΙΗΣΗ ΑΥΤΟΜΑΤΟΥ ΚΛΕΙΣΙΜΑΤΟΣ</string>
 
@@ -2288,7 +2330,7 @@
 
     <!-- Awesome bar suggestion's headers -->
     <!-- Search suggestions title for Firefox Suggest. -->
-    <string name="firefox_suggest_header">Προτάσεις Firefox</string>
+    <string name="firefox_suggest_header" tools:ignore="BrandUsage">Προτάσεις Firefox</string>
 
     <!-- Title for search suggestions when Google is the default search suggestion engine. -->
     <string name="google_search_engine_suggestion_header">Αναζήτηση Google</string>
@@ -2299,7 +2341,7 @@
     <!-- Default browser card title -->
     <string name="default_browser_experiment_card_title">Αλλαγή προεπιλεγμένου προγράμματος περιήγησης</string>
     <!-- Default browser card text -->
-    <string name="default_browser_experiment_card_text">Αυτόματο άνοιγμα συνδέσμων από ιστοτόπους, email και μηνύματα στο Firefox.</string>
+    <string name="default_browser_experiment_card_text" tools:ignore="BrandUsage">Αυτόματο άνοιγμα συνδέσμων από ιστοτόπους, email και μηνύματα στο Firefox.</string>
 
     <!-- Content description for close button in collection placeholder. -->
     <string name="remove_home_collection_placeholder_content_description">Αφαίρεση</string>
@@ -2323,7 +2365,7 @@
     <!-- Title of an app feature. Smaller than a heading. The first parameter is product name Pocket -->
     <string name="pocket_stories_feature_title_2">Με την υποστήριξη του %s.</string>
     <!-- Caption for describing a certain feature. The placeholder is for a clickable text (eg: Learn more) which will load an url in a new tab when clicked.  -->
-    <string name="pocket_stories_feature_caption">Μέρος της οικογένειας του Firefox. %s</string>
+    <string name="pocket_stories_feature_caption" tools:ignore="BrandUsage">Μέρος της οικογένειας του Firefox. %s</string>
     <!-- Clickable text for opening an external link for more information about Pocket. -->
     <string name="pocket_stories_feature_learn_more">Μάθετε περισσότερα</string>
 
@@ -2685,8 +2727,6 @@
     <string name="download_language_all_languages_item_preference_to_delete">Διαγραφή όλων των γλωσσών</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">Διαγραφή</string>
-    <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
-    <string name="download_languages_item_content_description_in_progress_state" moz:removedIn="129" tools:ignore="UnusedResources">Σε εξέλιξη</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, deleting is in progress. -->
     <string name="download_languages_item_content_description_delete_in_progress_state">Σε εξέλιξη</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress.
@@ -2737,8 +2777,6 @@
     <string name="download_language_file_dialog_title">Λήψη στη λειτουργία εξοικονόμησης δεδομένων (%1$s);</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">Κάνουμε μερική λήψη των γλωσσών στην προσωρινή μνήμη για να παραμείνουν ιδιωτικές οι μεταφράσεις.</string>
-    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">Κάνουμε μερική λήψη των γλωσσών για να παραμείνουν ιδιωτικές οι μεταφράσεις.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Πάντα λήψη στη λειτουργία εξοικονόμησης δεδομένων</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2796,16 +2834,12 @@
     <!-- Microsurvey -->
     <!-- Prompt view -->
     <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
-    <string name="micro_survey_prompt_title" tools:ignore="UnusedResources">Βοηθήστε μας να κάνουμε το Firefox καλύτερο. Χρειάζεται μόνο ένα λεπτό.</string>
+    <string name="micro_survey_prompt_title" tools:ignore="BrandUsage,UnusedResources">Βοηθήστε μας να κάνουμε το Firefox καλύτερο. Χρειάζεται μόνο ένα λεπτό.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Συνέχεια</string>
     <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Συμπληρώστε αυτήν την έρευνα</string>
-    <!-- The survey header -->
     <string name="micro_survey_survey_header_2">Παρακαλούμε συμπληρώστε την έρευνα</string>
-    <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Σημείωση απορρήτου</string>
     <!-- The privacy notice link -->
     <string name="micro_survey_privacy_notice_2">Πολιτική απορρήτου</string>
     <!-- The submit button label text -->
@@ -2828,17 +2862,29 @@
 
     <!-- Option for likert scale -->
     <string name="likert_scale_option_6" tools:ignore="UnusedResources">Δεν το χρησιμοποιώ</string>
+    <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+    <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">Δεν χρησιμοποιώ την αναζήτηση στο Firefox</string>
+    <!-- Option for likert scale -->
+    <string name="likert_scale_option_8" tools:ignore="UnusedResources">Δεν χρησιμοποιώ τον συγχρονισμό</string>
     <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources" moz:removedIn="130">Πόσο ικανοποιημένοι είστε με την αρχική σελίδα του Firefox;</string>
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="BrandUsage,UnusedResources" moz:removedIn="130">Πόσο ικανοποιημένοι είστε με την αρχική σελίδα του Firefox;</string>
     <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Συμβάλλετε στη βελτίωση της εκτύπωσης στο Firefox. Θα χρειαστεί μόνο ένα δευτερόλεπτο</string>
-    <!-- Text shown in prompt for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Πόσο ικανοποιημένοι είστε με την εκτύπωση στο Firefox;</string>
-    <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_homepage_title" tools:ignore="UnusedResources">Πόσο ικανοποιημένοι είστε με την αρχική σελίδα του Firefox;</string>
+    <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">Συμβάλλετε στη βελτίωση της εκτύπωσης στο Firefox. Θα χρειαστεί μόνο ένα δευτερόλεπτο</string>
+    <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_prompt_search_title" tools:ignore="BrandUsage,UnusedResources">Βοηθήστε μας να κάνουμε την αναζήτηση στο Firefox καλύτερη. Χρειάζεται μόνο ένα λεπτό</string>
+    <!-- Text shown in prompt for sync microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_prompt_sync_title" tools:ignore="BrandUsage,UnusedResources">Βοηθήστε μας να κάνουμε τον συγχρονισμό στο Firefox καλύτερο. Χρειάζεται μόνο ένα λεπτό</string>
+    <!-- Text shown in the survey title for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_survey_printing_title" tools:ignore="BrandUsage,UnusedResources">Πόσο ικανοποιημένοι είστε με την εκτύπωση στο Firefox;</string>
+    <!-- Text shown in the survey title for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_homepage_title" tools:ignore="BrandUsage,UnusedResources">Πόσο ικανοποιημένοι είστε με την αρχική σελίδα του Firefox;</string>
+    <!-- Text shown in the survey title for search experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Πόσο ικανοποιημένοι είστε με την εμπειρία αναζήτησης στο Firefox;</string>
+    <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">Πόσο ικανοποιημένοι είστε με την εμπειρία συγχρονισμού στο Firefox;</string>
     <!-- Accessibility -->
     <!-- Content description for the survey application icon. Note: The word "Firefox" should NOT be translated.  -->
-    <string name="microsurvey_app_icon_content_description">Λογότυπο Firefox</string>
+    <string name="microsurvey_app_icon_content_description" tools:ignore="BrandUsage">Λογότυπο Firefox</string>
     <!-- Content description for the survey feature icon. -->
     <string name="microsurvey_feature_icon_content_description">Εικονίδιο λειτουργίας έρευνας</string>
     <!-- Content description (not visible, for screen readers etc.) for opening microsurvey bottom sheet. -->
@@ -2866,9 +2912,16 @@
 
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture">Για έξοδο από πλήρη οθόνη, σύρετε από το πάνω μέρος και χρησιμοποιήστε τη χειρονομία επιστροφής</string>
+    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">Για έξοδο από πλήρη οθόνη, σύρετε από το πάνω μέρος και χρησιμοποιήστε τη χειρονομία επιστροφής</string>
     <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button">Για έξοδο από πλήρη οθόνη, σύρετε από το πάνω μέρος και πατήστε το κουμπί επιστροφής</string>
+    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">Για έξοδο από πλήρη οθόνη, σύρετε από το πάνω μέρος και πατήστε το κουμπί επιστροφής</string>
+
+    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
+    <!-- Localisation note: this text should be as short as possible, max 68 chars -->
+    <string name="exit_fullscreen_with_gesture_short">Σύρετε από το πάνω μέρος και χρησιμοποιήστε τη χειρονομία επιστροφής για έξοδο</string>
+    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation. -->
+    <!-- Localisation note: this text should be as short as possible, max 68 chars -->
+    <string name="exit_fullscreen_with_back_button_short">Σύρετε από το πάνω μέρος και πατήστε το κουμπί επιστροφής για έξοδο</string>
 
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->

@@ -212,10 +212,11 @@ export const ContentAnalysis = {
    * Registers for various messages/events that will indicate the
    * need for communicating something to the user.
    */
-  initialize(doc) {
+  initialize(window) {
     if (!lazy.gContentAnalysis.isActive) {
       return;
     }
+    let doc = window.document;
     if (!this.isInitialized) {
       this.isInitialized = true;
       this.initializeDownloadCA();
@@ -395,13 +396,16 @@ export const ContentAnalysis = {
         }
         const responseResult =
           request?.action ?? Ci.nsIContentAnalysisResponse.eUnspecified;
-        await this._showCAResult(
-          windowAndResourceNameOrOperationType.resourceNameOrOperationType,
-          windowAndResourceNameOrOperationType.browsingContext,
-          request.requestToken,
-          responseResult,
-          request.cancelError
-        );
+        // Don't show dialog if this is a cached response
+        if (!request?.isCachedResponse) {
+          await this._showCAResult(
+            windowAndResourceNameOrOperationType.resourceNameOrOperationType,
+            windowAndResourceNameOrOperationType.browsingContext,
+            request.requestToken,
+            responseResult,
+            request.cancelError
+          );
+        }
         this._showAnotherPendingDialog(
           windowAndResourceNameOrOperationType.browsingContext
         );

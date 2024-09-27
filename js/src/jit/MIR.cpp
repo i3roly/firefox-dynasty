@@ -6,7 +6,6 @@
 
 #include "jit/MIR.h"
 
-#include "mozilla/CheckedInt.h"
 #include "mozilla/EndianUtils.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/MathAlgorithms.h"
@@ -34,11 +33,13 @@
 #include "js/ScalarType.h"            // js::Scalar::Type
 #include "util/Text.h"
 #include "util/Unicode.h"
+#include "vm/BigIntType.h"
 #include "vm/Float16.h"
 #include "vm/Iteration.h"    // js::NativeIterator
 #include "vm/PlainObject.h"  // js::PlainObject
 #include "vm/Uint8Clamped.h"
 
+#include "vm/BytecodeUtil-inl.h"
 #include "vm/JSAtomUtils-inl.h"  // TypeName
 
 using namespace js;
@@ -46,11 +47,8 @@ using namespace js::jit;
 
 using JS::ToInt32;
 
-using mozilla::CheckedInt;
-using mozilla::DebugOnly;
 using mozilla::IsFloat32Representable;
 using mozilla::IsPowerOfTwo;
-using mozilla::Maybe;
 using mozilla::NumbersAreIdentical;
 
 NON_GC_POINTER_TYPE_ASSERTIONS_GENERATED
@@ -311,6 +309,40 @@ static MConstant* EvaluateConstantOperands(TempAllocator& alloc,
   }
 
   return MConstant::New(alloc, retVal);
+}
+
+static MConstant* EvaluateConstantNaNOperand(MBinaryInstruction* ins) {
+  auto* left = ins->lhs();
+  auto* right = ins->rhs();
+
+  MOZ_ASSERT(IsTypeRepresentableAsDouble(left->type()));
+  MOZ_ASSERT(IsTypeRepresentableAsDouble(right->type()));
+  MOZ_ASSERT(left->type() == ins->type());
+  MOZ_ASSERT(right->type() == ins->type());
+
+  // Don't fold NaN if we can't return a floating point type.
+  if (!IsFloatingPointType(ins->type())) {
+    return nullptr;
+  }
+
+  MOZ_ASSERT(!left->isConstant() || !right->isConstant(),
+             "EvaluateConstantOperands should have handled this case");
+
+  // One operand must be a constant NaN.
+  MConstant* cst;
+  if (left->isConstant()) {
+    cst = left->toConstant();
+  } else if (right->isConstant()) {
+    cst = right->toConstant();
+  } else {
+    return nullptr;
+  }
+  if (!std::isnan(cst->numberToDouble())) {
+    return nullptr;
+  }
+
+  // Fold to constant NaN.
+  return cst;
 }
 
 static MMul* EvaluateExactReciprocal(TempAllocator& alloc, MDiv* ins) {
@@ -2848,6 +2880,11 @@ MDefinition* MBinaryArithInstruction::foldsTo(TempAllocator& alloc) {
     return folded;
   }
 
+  if (MConstant* folded = EvaluateConstantNaNOperand(this)) {
+    MOZ_ASSERT(!isTruncated());
+    return folded;
+  }
+
   if (mustPreserveNaN_) {
     return this;
   }
@@ -3228,6 +3265,11 @@ MDefinition* MPow::foldsConstantPower(TempAllocator& alloc) {
     return multiply(y, y);
   }
 
+  // Math.pow(x, NaN) == NaN.
+  if (std::isnan(pow)) {
+    return power();
+  }
+
   // No optimization
   return nullptr;
 }
@@ -3239,6 +3281,37 @@ MDefinition* MPow::foldsTo(TempAllocator& alloc) {
   if (MDefinition* def = foldsConstantPower(alloc)) {
     return def;
   }
+  return this;
+}
+
+MDefinition* MBigIntPow::foldsTo(TempAllocator& alloc) {
+  auto* base = lhs();
+  MOZ_ASSERT(base->type() == MIRType::BigInt);
+
+  auto* power = rhs();
+  MOZ_ASSERT(power->type() == MIRType::BigInt);
+
+  // |power| must be a constant.
+  if (!power->isConstant()) {
+    return this;
+  }
+
+  int32_t pow;
+  if (BigInt::isInt32(power->toConstant()->toBigInt(), &pow)) {
+    // x ** 1n == x.
+    if (pow == 1) {
+      return base;
+    }
+
+    // x ** 2n == x*x.
+    if (pow == 2) {
+      auto* mul = MBigIntMul::New(alloc, base, base);
+      mul->setBailoutKind(bailoutKind());
+      return mul;
+    }
+  }
+
+  // No optimization
   return this;
 }
 
@@ -3917,6 +3990,16 @@ MDefinition* MTruncateBigIntToInt64::foldsTo(TempAllocator& alloc) {
     return input->getOperand(0);
   }
 
+  // If the operand converts an I32 to BigInt, extend the I32 to I64.
+  if (input->isInt32ToBigInt()) {
+    auto* int32 = input->toInt32ToBigInt()->input();
+    if (int32->isConstant()) {
+      int32_t c = int32->toConstant()->toInt32();
+      return MConstant::NewInt64(alloc, int64_t(c));
+    }
+    return MExtendInt32ToInt64::New(alloc, int32, /* isUnsigned = */ false);
+  }
+
   // Fold this operation if the input operand is constant.
   if (input->isConstant()) {
     return MConstant::NewInt64(
@@ -3936,6 +4019,17 @@ MDefinition* MToInt64::foldsTo(TempAllocator& alloc) {
   // Unwrap MInt64ToBigInt: MToInt64(MInt64ToBigInt(int64)) = int64.
   if (input->isInt64ToBigInt()) {
     return input->getOperand(0);
+  }
+
+  // Unwrap Int32ToBigInt:
+  // MToInt64(MInt32ToBigInt(int32)) = MExtendInt32ToInt64(int32).
+  if (input->isInt32ToBigInt()) {
+    auto* int32 = input->toInt32ToBigInt()->input();
+    if (int32->isConstant()) {
+      int32_t c = int32->toConstant()->toInt32();
+      return MConstant::NewInt64(alloc, int64_t(c));
+    }
+    return MExtendInt32ToInt64::New(alloc, int32, /* isUnsigned = */ false);
   }
 
   // When the input is an Int64 already, just return it.
@@ -4513,6 +4607,27 @@ static bool FoldComparison(JSOp op, T left, T right) {
   }
 }
 
+static bool FoldBigIntComparison(JSOp op, const BigInt* left, double right) {
+  switch (op) {
+    case JSOp::Lt:
+      return BigInt::lessThan(left, right).valueOr(false);
+    case JSOp::Le:
+      return !BigInt::lessThan(right, left).valueOr(true);
+    case JSOp::Gt:
+      return BigInt::lessThan(right, left).valueOr(false);
+    case JSOp::Ge:
+      return !BigInt::lessThan(left, right).valueOr(true);
+    case JSOp::StrictEq:
+    case JSOp::Eq:
+      return BigInt::equal(left, right);
+    case JSOp::StrictNe:
+    case JSOp::Ne:
+      return !BigInt::equal(left, right);
+    default:
+      MOZ_CRASH("Unexpected op.");
+  }
+}
+
 bool MCompare::evaluateConstantOperands(TempAllocator& alloc, bool* result) {
   if (type() != MIRType::Boolean && type() != MIRType::Int32) {
     return false;
@@ -4633,42 +4748,69 @@ bool MCompare::evaluateConstantOperands(TempAllocator& alloc, bool* result) {
   MConstant* lhs = left->toConstant();
   MConstant* rhs = right->toConstant();
 
-  // Fold away some String equality comparisons.
-  if (lhs->type() == MIRType::String && rhs->type() == MIRType::String) {
-    int32_t comp = 0;  // Default to equal.
-    if (left != right) {
-      comp = CompareStrings(&lhs->toString()->asLinear(),
-                            &rhs->toString()->asLinear());
+  switch (compareType()) {
+    case Compare_Int32:
+    case Compare_Double:
+    case Compare_Float32: {
+      *result =
+          FoldComparison(jsop_, lhs->numberToDouble(), rhs->numberToDouble());
+      return true;
     }
-    *result = FoldComparison(jsop_, comp, 0);
-    return true;
+    case Compare_UInt32: {
+      *result = FoldComparison(jsop_, uint32_t(lhs->toInt32()),
+                               uint32_t(rhs->toInt32()));
+      return true;
+    }
+    case Compare_Int64: {
+      *result = FoldComparison(jsop_, lhs->toInt64(), rhs->toInt64());
+      return true;
+    }
+    case Compare_UInt64: {
+      *result = FoldComparison(jsop_, uint64_t(lhs->toInt64()),
+                               uint64_t(rhs->toInt64()));
+      return true;
+    }
+    case Compare_UIntPtr: {
+      *result = FoldComparison(jsop_, uintptr_t(lhs->toIntPtr()),
+                               uintptr_t(rhs->toIntPtr()));
+      return true;
+    }
+    case Compare_String: {
+      int32_t comp = CompareStrings(&lhs->toString()->asLinear(),
+                                    &rhs->toString()->asLinear());
+      *result = FoldComparison(jsop_, comp, 0);
+      return true;
+    }
+    case Compare_BigInt: {
+      int32_t comp = BigInt::compare(lhs->toBigInt(), rhs->toBigInt());
+      *result = FoldComparison(jsop_, comp, 0);
+      return true;
+    }
+    case Compare_BigInt_Int32:
+    case Compare_BigInt_Double: {
+      *result =
+          FoldBigIntComparison(jsop_, lhs->toBigInt(), rhs->numberToDouble());
+      return true;
+    }
+    case Compare_BigInt_String: {
+      JSLinearString* linear = &rhs->toString()->asLinear();
+      if (!linear->hasIndexValue()) {
+        return false;
+      }
+      *result =
+          FoldBigIntComparison(jsop_, lhs->toBigInt(), linear->getIndexValue());
+      return true;
+    }
+
+    case Compare_Undefined:
+    case Compare_Null:
+    case Compare_Symbol:
+    case Compare_Object:
+    case Compare_WasmAnyRef:
+      return false;
   }
 
-  if (compareType_ == Compare_UInt32) {
-    *result = FoldComparison(jsop_, uint32_t(lhs->toInt32()),
-                             uint32_t(rhs->toInt32()));
-    return true;
-  }
-
-  if (compareType_ == Compare_Int64) {
-    *result = FoldComparison(jsop_, lhs->toInt64(), rhs->toInt64());
-    return true;
-  }
-
-  if (compareType_ == Compare_UInt64) {
-    *result = FoldComparison(jsop_, uint64_t(lhs->toInt64()),
-                             uint64_t(rhs->toInt64()));
-    return true;
-  }
-
-  if (lhs->isTypeRepresentableAsDouble() &&
-      rhs->isTypeRepresentableAsDouble()) {
-    *result =
-        FoldComparison(jsop_, lhs->numberToDouble(), rhs->numberToDouble());
-    return true;
-  }
-
-  return false;
+  MOZ_CRASH("unexpected compare type");
 }
 
 MDefinition* MCompare::tryFoldTypeOf(TempAllocator& alloc) {
@@ -4944,6 +5086,166 @@ MDefinition* MCompare::tryFoldStringIndexOf(TempAllocator& alloc) {
   return MNot::New(alloc, startsWith);
 }
 
+MDefinition* MCompare::tryFoldBigInt64(TempAllocator& alloc) {
+  if (compareType() == Compare_BigInt) {
+    auto* left = lhs();
+    MOZ_ASSERT(left->type() == MIRType::BigInt);
+
+    auto* right = rhs();
+    MOZ_ASSERT(right->type() == MIRType::BigInt);
+
+    // At least one operand must be MInt64ToBigInt.
+    if (!left->isInt64ToBigInt() && !right->isInt64ToBigInt()) {
+      return this;
+    }
+
+    // Unwrap MInt64ToBigInt on both sides and perform a Int64 comparison.
+    if (left->isInt64ToBigInt() && right->isInt64ToBigInt()) {
+      auto* lhsInt64 = left->toInt64ToBigInt();
+      auto* rhsInt64 = right->toInt64ToBigInt();
+
+      // Don't optimize if Int64 against Uint64 comparison.
+      if (lhsInt64->elementType() != rhsInt64->elementType()) {
+        return this;
+      }
+
+      bool isSigned = lhsInt64->elementType() == Scalar::BigInt64;
+      auto compareType =
+          isSigned ? MCompare::Compare_Int64 : MCompare::Compare_UInt64;
+      return MCompare::New(alloc, lhsInt64->input(), rhsInt64->input(), jsop_,
+                           compareType);
+    }
+
+    // The other operand must be a constant.
+    if (!left->isConstant() && !right->isConstant()) {
+      return this;
+    }
+
+    auto* int64ToBigInt = left->isInt64ToBigInt() ? left->toInt64ToBigInt()
+                                                  : right->toInt64ToBigInt();
+    bool isSigned = int64ToBigInt->elementType() == Scalar::BigInt64;
+
+    auto* constant =
+        left->isConstant() ? left->toConstant() : right->toConstant();
+    auto* bigInt = constant->toBigInt();
+
+    // Extract the BigInt value if representable as Int64/Uint64.
+    mozilla::Maybe<int64_t> value;
+    if (isSigned) {
+      int64_t x;
+      if (BigInt::isInt64(bigInt, &x)) {
+        value = mozilla::Some(x);
+      }
+    } else {
+      uint64_t x;
+      if (BigInt::isUint64(bigInt, &x)) {
+        value = mozilla::Some(static_cast<int64_t>(x));
+      }
+    }
+
+    // The comparison is a constant if the BigInt has too many digits.
+    if (!value) {
+      int32_t repr = bigInt->isNegative() ? -1 : 1;
+
+      bool result;
+      if (left == int64ToBigInt) {
+        result = FoldComparison(jsop_, 0, repr);
+      } else {
+        result = FoldComparison(jsop_, repr, 0);
+      }
+      return MConstant::New(alloc, BooleanValue(result));
+    }
+
+    auto* cst = MConstant::NewInt64(alloc, *value);
+    block()->insertBefore(this, cst);
+
+    auto compareType =
+        isSigned ? MCompare::Compare_Int64 : MCompare::Compare_UInt64;
+    if (left == int64ToBigInt) {
+      return MCompare::New(alloc, int64ToBigInt->input(), cst, jsop_,
+                           compareType);
+    }
+    return MCompare::New(alloc, cst, int64ToBigInt->input(), jsop_,
+                         compareType);
+  }
+
+  if (compareType() == Compare_BigInt_Int32) {
+    auto* left = lhs();
+    MOZ_ASSERT(left->type() == MIRType::BigInt);
+
+    auto* right = rhs();
+    MOZ_ASSERT(right->type() == MIRType::Int32);
+
+    // Optimize MInt64ToBigInt against a constant int32.
+    if (!left->isInt64ToBigInt() || !right->isConstant()) {
+      return this;
+    }
+
+    auto* int64ToBigInt = left->toInt64ToBigInt();
+    bool isSigned = int64ToBigInt->elementType() == Scalar::BigInt64;
+
+    int32_t constInt32 = right->toConstant()->toInt32();
+
+    // The unsigned comparison against a negative operand is a constant.
+    if (!isSigned && constInt32 < 0) {
+      bool result = FoldComparison(jsop_, 0, constInt32);
+      return MConstant::New(alloc, BooleanValue(result));
+    }
+
+    auto* cst = MConstant::NewInt64(alloc, int64_t(constInt32));
+    block()->insertBefore(this, cst);
+
+    auto compareType =
+        isSigned ? MCompare::Compare_Int64 : MCompare::Compare_UInt64;
+    return MCompare::New(alloc, int64ToBigInt->input(), cst, jsop_,
+                         compareType);
+  }
+
+  return this;
+}
+
+MDefinition* MCompare::tryFoldBigInt(TempAllocator& alloc) {
+  if (compareType() != Compare_BigInt) {
+    return this;
+  }
+
+  auto* left = lhs();
+  MOZ_ASSERT(left->type() == MIRType::BigInt);
+
+  auto* right = rhs();
+  MOZ_ASSERT(right->type() == MIRType::BigInt);
+
+  // One operand must be a constant.
+  if (!left->isConstant() && !right->isConstant()) {
+    return this;
+  }
+
+  auto* constant =
+      left->isConstant() ? left->toConstant() : right->toConstant();
+  auto* operand = left->isConstant() ? right : left;
+
+  // The constant must be representable as an Int32.
+  int32_t x;
+  if (!BigInt::isInt32(constant->toBigInt(), &x)) {
+    return this;
+  }
+
+  MConstant* int32Const = MConstant::New(alloc, Int32Value(x));
+  block()->insertBefore(this, int32Const);
+
+  auto op = jsop();
+  if (IsStrictEqualityOp(op)) {
+    // Compare_BigInt_Int32 is only valid for loose comparison.
+    op = op == JSOp::StrictEq ? JSOp::Eq : JSOp::Ne;
+  } else if (operand == right) {
+    // Reverse the comparison operator if the operands were reordered.
+    op = ReverseCompareOp(op);
+  }
+
+  return MCompare::New(alloc, operand, int32Const, op,
+                       MCompare::Compare_BigInt_Int32);
+}
+
 MDefinition* MCompare::foldsTo(TempAllocator& alloc) {
   bool result;
 
@@ -4973,6 +5275,14 @@ MDefinition* MCompare::foldsTo(TempAllocator& alloc) {
   }
 
   if (MDefinition* folded = tryFoldStringIndexOf(alloc); folded != this) {
+    return folded;
+  }
+
+  if (MDefinition* folded = tryFoldBigInt64(alloc); folded != this) {
+    return folded;
+  }
+
+  if (MDefinition* folded = tryFoldBigInt(alloc); folded != this) {
     return folded;
   }
 
@@ -5019,6 +5329,11 @@ MDefinition* MNot::foldsTo(TempAllocator& alloc) {
   // Not of a symbol is always false.
   if (input()->type() == MIRType::Symbol) {
     return MConstant::New(alloc, BooleanValue(false));
+  }
+
+  // Drop the conversion in `Not(Int64ToBigInt(int64))` to `Not(int64)`.
+  if (input()->isInt64ToBigInt()) {
+    return MNot::New(alloc, input()->toInt64ToBigInt()->input());
   }
 
   return this;

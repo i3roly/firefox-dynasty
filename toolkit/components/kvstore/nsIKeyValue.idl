@@ -50,12 +50,12 @@ interface nsIKeyValueService : nsISupports {
      */
     void getOrCreate(
         in nsIKeyValueDatabaseCallback callback,
-        in AUTF8String path,
+        in AString path,
         in AUTF8String name);
 
     void getOrCreateWithOptions(
         in nsIKeyValueDatabaseCallback callback,
-        in AUTF8String path,
+        in AString path,
         in AUTF8String name,
         [optional] in nsIKeyValueService_RecoveryStrategy recoveryStrategy);
 };
@@ -69,6 +69,21 @@ interface nsIKeyValueService : nsISupports {
  */
 [scriptable, builtinclass, rust_sync, uuid(c449398e-174c-425b-8195-da6aa0ccd9a5)]
 interface nsIKeyValueDatabase : nsISupports {
+    /**
+     * Determine whether or not the database is empty.
+     */
+    void isEmpty(in nsIKeyValueVariantCallback callback);
+
+    /**
+     * Count the number of key/value pairs in the database.
+     */
+    void count(in nsIKeyValueVariantCallback callback);
+
+    /**
+     * Calculate the size, in bytes, of all keys and values in the database.
+     */
+    void size(in nsIKeyValueVariantCallback callback);
+
     /**
      * Write the specified key/value pair to the database.
      */
@@ -152,6 +167,19 @@ interface nsIKeyValueDatabase : nsISupports {
         in nsIKeyValueEnumeratorCallback callback,
         [optional] in AUTF8String fromKey,
         [optional] in AUTF8String toKey);
+
+    /**
+     * Close the database.
+     *
+     * Subsequent attempts to read from or write to the database will fail.
+     * If the database is already closed, closing it again succeeds
+     * without effect.
+     *
+     * This operation always succeeds if the implementation supports
+     * closing a database (that is, it's not possible for a database to
+     * fail to close), and always fails if it doesn't.
+     */
+    void close(in nsIKeyValueVoidCallback callback);
 };
 
 /**

@@ -4442,6 +4442,27 @@ void MacroAssembler::patchCallToNop(uint8_t* call) {
   new (inst) InstNOP();
 }
 
+CodeOffset MacroAssembler::move32WithPatch(Register dest) {
+  return movWithPatch(ImmWord(uintptr_t(-1)), dest);
+}
+
+void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
+  Register dest;
+  Assembler::RelocStyle rs;
+
+  {
+    BufferInstructionIterator iter(BufferOffset(offset.offset()), &m_buffer);
+    DebugOnly<const uint32_t*> val = GetPtr32Target(iter, &dest, &rs);
+    MOZ_ASSERT(uint32_t((const uint32_t*)val) == uint32_t(-1));
+  }
+
+  // Patch over actual instructions.
+  {
+    BufferInstructionIterator iter(BufferOffset(offset.offset()), &m_buffer);
+    MacroAssembler::ma_mov_patch(Imm32(n), dest, Always, rs, iter);
+  }
+}
+
 void MacroAssembler::pushReturnAddress() { push(lr); }
 
 void MacroAssembler::popReturnAddress() { pop(lr); }
@@ -6055,7 +6076,7 @@ void MacroAssembler::shiftIndex32AndAdd(Register indexTemp32, int shift,
 }
 
 #ifdef ENABLE_WASM_TAIL_CALLS
-void MacroAssembler::wasmMarkSlowCall() { ma_and(lr, lr, lr); }
+void MacroAssembler::wasmMarkCallAsSlow() { ma_and(lr, lr, lr); }
 
 const int32_t SlowCallMarker = 0xe00ee00e;
 
@@ -6067,6 +6088,14 @@ void MacroAssembler::wasmCheckSlowCallsite(Register ra, Label* notSlow,
   ma_mov(Imm32(SlowCallMarker), temp1, Always);
   ma_cmp(temp2, temp1);
   j(Assembler::NotEqual, notSlow);
+}
+
+CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
+                                              const Register reg) {
+  AutoForbidPoolsAndNops afp(this, 2);
+  CodeOffset offset = call(desc, reg);
+  wasmMarkCallAsSlow();
+  return offset;
 }
 #endif  // ENABLE_WASM_TAIL_CALLS
 
@@ -6241,7 +6270,7 @@ void MacroAssemblerARM::wasmLoadImpl(const wasm::MemoryAccessDesc& access,
   MOZ_ASSERT(!access.isWidenSimd128Load());
 
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
 
   Scalar::Type type = access.type();
 
@@ -6362,7 +6391,7 @@ void MacroAssemblerARM::wasmStoreImpl(const wasm::MemoryAccessDesc& access,
   MOZ_ASSERT(ptr == ptrScratch);
 
   access.assertOffsetInGuardPages();
-  uint32_t offset = access.offset();
+  uint32_t offset = access.offset32();
   unsigned byteSize = access.byteSize();
   Scalar::Type type = access.type();
 

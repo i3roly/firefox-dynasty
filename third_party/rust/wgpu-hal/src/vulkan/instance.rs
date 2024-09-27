@@ -23,7 +23,7 @@ unsafe extern "system" fn debug_utils_messenger_callback(
     }
 
     let cd = unsafe { &*callback_data_ptr };
-    let user_data = unsafe { &*(user_data as *mut super::DebugUtilsMessengerUserData) };
+    let user_data = unsafe { &*user_data.cast::<super::DebugUtilsMessengerUserData>() };
 
     const VUID_VKCMDENDDEBUGUTILSLABELEXT_COMMANDBUFFER_01912: i32 = 0x56146426;
     if cd.message_id_number == VUID_VKCMDENDDEBUGUTILSLABELEXT_COMMANDBUFFER_01912 {
@@ -161,7 +161,11 @@ impl super::Swapchain {
             profiling::scope!("vkDeviceWaitIdle");
             // We need to also wait until all presentation work is done. Because there is no way to portably wait until
             // the presentation work is done, we are forced to wait until the device is idle.
-            let _ = unsafe { device.device_wait_idle() };
+            let _ = unsafe {
+                device
+                    .device_wait_idle()
+                    .map_err(super::map_host_device_oom_and_lost_err)
+            };
         };
 
         // We cannot take this by value, as the function returns `self`.
@@ -306,6 +310,8 @@ impl super::Instance {
     /// - `extensions` must be a superset of `desired_extensions()` and must be created from the
     ///   same entry, `instance_api_version`` and flags.
     /// - `android_sdk_version` is ignored and can be `0` for all platforms besides Android
+    /// - If `drop_callback` is [`None`], wgpu-hal will take ownership of `raw_instance`. If
+    ///   `drop_callback` is [`Some`], `raw_instance` must be valid until the callback is called.
     ///
     /// If `debug_utils_user_data` is `Some`, then the validation layer is
     /// available, so create a [`vk::DebugUtilsMessengerEXT`].
@@ -319,7 +325,7 @@ impl super::Instance {
         extensions: Vec<&'static CStr>,
         flags: wgt::InstanceFlags,
         has_nv_optimus: bool,
-        drop_guard: Option<crate::DropGuard>,
+        drop_callback: Option<crate::DropCallback>,
     ) -> Result<Self, crate::InstanceError> {
         log::debug!("Instance version: 0x{:x}", instance_api_version);
 
@@ -359,6 +365,8 @@ impl super::Instance {
             } else {
                 None
             };
+
+        let drop_guard = crate::DropGuard::from_option(drop_callback);
 
         Ok(Self {
             shared: Arc::new(super::InstanceShared {
@@ -515,7 +523,7 @@ impl super::Instance {
         }
 
         let layer = unsafe {
-            crate::metal::Surface::get_metal_layer(view as *mut objc::runtime::Object, None)
+            crate::metal::Surface::get_metal_layer(view.cast::<objc::runtime::Object>(), None)
         };
 
         let surface = {
@@ -523,7 +531,7 @@ impl super::Instance {
                 ext::metal_surface::Instance::new(&self.shared.entry, &self.shared.raw);
             let vk_info = vk::MetalSurfaceCreateInfoEXT::default()
                 .flags(vk::MetalSurfaceCreateFlagsEXT::empty())
-                .layer(layer as *mut _);
+                .layer(layer.cast());
 
             unsafe { metal_loader.create_metal_surface(&vk_info, None).unwrap() }
         };
@@ -551,7 +559,7 @@ impl Drop for super::InstanceShared {
                     .destroy_debug_utils_messenger(du.messenger, None);
                 du
             });
-            if let Some(_drop_guard) = self.drop_guard.take() {
+            if self.drop_guard.is_none() {
                 self.raw.destroy_instance(None);
             }
         }
@@ -825,7 +833,7 @@ impl crate::Instance for super::Instance {
                 extensions,
                 desc.flags,
                 has_nv_optimus,
-                Some(Box::new(())), // `Some` signals that wgpu-hal is in charge of destroying vk_instance
+                None,
             )
         }
     }
@@ -878,10 +886,6 @@ impl crate::Instance for super::Instance {
                 "window handle {window_handle:?} is not a Vulkan-compatible handle"
             ))),
         }
-    }
-
-    unsafe fn destroy_surface(&self, surface: super::Surface) {
-        unsafe { surface.functor.destroy_surface(surface.raw, None) };
     }
 
     unsafe fn enumerate_adapters(
@@ -942,6 +946,12 @@ impl crate::Instance for super::Instance {
     }
 }
 
+impl Drop for super::Surface {
+    fn drop(&mut self) {
+        unsafe { self.functor.destroy_surface(self.raw, None) };
+    }
+}
+
 impl crate::Surface for super::Surface {
     type A = super::Api;
 
@@ -950,7 +960,7 @@ impl crate::Surface for super::Surface {
         device: &super::Device,
         config: &crate::SurfaceConfiguration,
     ) -> Result<(), crate::SurfaceError> {
-        // Safety: `configure`'s contract guarantees there are no resources derived from the swapchain in use.
+        // SAFETY: `configure`'s contract guarantees there are no resources derived from the swapchain in use.
         let mut swap_chain = self.swapchain.write();
         let old = swap_chain
             .take()
@@ -964,7 +974,7 @@ impl crate::Surface for super::Surface {
 
     unsafe fn unconfigure(&self, device: &super::Device) {
         if let Some(sc) = self.swapchain.write().take() {
-            // Safety: `unconfigure`'s contract guarantees there are no resources derived from the swapchain in use.
+            // SAFETY: `unconfigure`'s contract guarantees there are no resources derived from the swapchain in use.
             let swapchain = unsafe { sc.release_resources(&device.shared.raw) };
             unsafe { swapchain.functor.destroy_swapchain(swapchain.raw, None) };
         }
@@ -1044,8 +1054,10 @@ impl crate::Surface for super::Surface {
                         Err(crate::SurfaceError::Outdated)
                     }
                     vk::Result::ERROR_SURFACE_LOST_KHR => Err(crate::SurfaceError::Lost),
-                    other => Err(crate::DeviceError::from(other).into()),
-                }
+                    // We don't use VK_EXT_full_screen_exclusive
+                    // VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT
+                    other => Err(super::map_host_device_oom_and_lost_err(other).into()),
+                };
             }
         };
 

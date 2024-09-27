@@ -358,6 +358,9 @@ with Files("VRDisplay.webidl"):
 with Files("Video*"):
     BUG_COMPONENT = ("Core", "Audio/Video")
 
+with Files("ViewTransition.webidl"):
+    BUG_COMPONENT = ("Core", "CSS Parsing and Computation")
+
 with Files("WaveShaperNode.webidl"):
     BUG_COMPONENT = ("Core", "Web Audio")
 
@@ -397,6 +400,7 @@ with Files("WebTransport*"):
 GENERATED_WEBIDL_FILES = [
     "CSS2Properties.webidl",
     "CSSPageDescriptors.webidl",
+    "CSSPositionTryDescriptors.webidl",
 ]
 
 PREPROCESSED_WEBIDL_FILES = [
@@ -500,6 +504,7 @@ WEBIDL_FILES = [
     "CSSMozDocumentRule.webidl",
     "CSSNamespaceRule.webidl",
     "CSSPageRule.webidl",
+    "CSSPositionTryRule.webidl",
     "CSSPropertyRule.webidl",
     "CSSPseudoElement.webidl",
     "CSSRule.webidl",
@@ -1015,6 +1020,7 @@ WEBIDL_FILES = [
     "VideoPlaybackQuality.webidl",
     "VideoTrack.webidl",
     "VideoTrackList.webidl",
+    "ViewTransition.webidl",
     "VisualViewport.webidl",
     "VRDisplay.webidl",
     "VRDisplayEvent.webidl",

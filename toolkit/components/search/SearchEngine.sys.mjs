@@ -604,7 +604,6 @@ export class SearchEngine {
   _searchUrlPublicSuffix = null;
   /**
    * The unique id of the Search Engine.
-   * The id is an UUID.
    *
    * @type {string}
    */
@@ -1605,6 +1604,15 @@ export class SearchEngine {
       return url.templateHost;
     }
     return "";
+  }
+
+  /**
+   * @returns {string}
+   *   URL to the main page of the search engine.
+   *   By default this is the pre path of the search URL.
+   */
+  get searchForm() {
+    return this.searchURLWithNoTerms.prePath;
   }
 
   /**

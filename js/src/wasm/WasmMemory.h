@@ -138,9 +138,14 @@ static inline size_t MaxMemoryBytes(IndexType t) {
 // platforms.  Also see ComputeMappedSize().)
 extern size_t MaxMemoryBoundsCheckLimit(IndexType t);
 
-static inline uint64_t MaxMemoryLimitField(IndexType indexType) {
-  return indexType == IndexType::I32 ? MaxMemory32LimitField
-                                     : MaxMemory64LimitField;
+static inline uint64_t MaxMemoryPagesValidation(IndexType indexType) {
+  return indexType == IndexType::I32 ? MaxMemory32PagesValidation
+                                     : MaxMemory64PagesValidation;
+}
+
+static inline uint64_t MaxTableElemsValidation(IndexType indexType) {
+  return indexType == IndexType::I32 ? MaxTable32ElemsValidation
+                                     : MaxTable64ElemsValidation;
 }
 
 // Compute the 'clamped' maximum size of a memory. See
@@ -155,7 +160,7 @@ extern Pages ClampedMaxPages(IndexType t, Pages initialPages,
 // vm/ArrayBufferObject.cpp.
 extern size_t ComputeMappedSize(Pages clampedMaxPages);
 
-extern size_t GetMaxOffsetGuardLimit(bool hugeMemory);
+extern uint64_t GetMaxOffsetGuardLimit(bool hugeMemory);
 
 // Return whether the given immediate satisfies the constraints of the platform.
 extern bool IsValidBoundsCheckImmediate(uint32_t i);

@@ -69,7 +69,6 @@ impl ProgrammableStageDescriptor {
             entry_point: cow_label(&self.entry_point),
             constants: Cow::Owned(constants),
             zero_initialize_workgroup_memory: true,
-            vertex_pulling_transform: true,
         }
     }
 }
@@ -290,6 +289,7 @@ pub struct RenderBundleEncoderDescriptor<'a> {
 struct IdentityHub {
     adapters: IdentityManager<markers::Adapter>,
     devices: IdentityManager<markers::Device>,
+    queues: IdentityManager<markers::Queue>,
     buffers: IdentityManager<markers::Buffer>,
     command_buffers: IdentityManager<markers::CommandBuffer>,
     render_bundles: IdentityManager<markers::RenderBundle>,
@@ -309,6 +309,7 @@ impl Default for IdentityHub {
         IdentityHub {
             adapters: IdentityManager::new(),
             devices: IdentityManager::new(),
+            queues: IdentityManager::new(),
             buffers: IdentityManager::new(),
             command_buffers: IdentityManager::new(),
             render_bundles: IdentityManager::new(),
@@ -531,18 +532,23 @@ pub extern "C" fn wgpu_client_serialize_device_descriptor(
     *bb = make_byte_buf(&desc);
 }
 
+#[repr(C)]
+pub struct DeviceQueueId {
+    device: id::DeviceId,
+    queue: id::QueueId,
+}
+
 #[no_mangle]
-pub extern "C" fn wgpu_client_make_device_id(
+pub extern "C" fn wgpu_client_make_device_queue_id(
     client: &Client,
     adapter_id: id::AdapterId,
-) -> id::DeviceId {
+) -> DeviceQueueId {
     let backend = adapter_id.backend();
-    client
-        .identities
-        .lock()
-        .select(backend)
-        .devices
-        .process(backend)
+    let mut identities_guard = client.identities.lock();
+    let hub = identities_guard.select(backend);
+    let device = hub.devices.process(backend);
+    let queue = hub.queues.process(backend);
+    DeviceQueueId { device, queue }
 }
 
 #[no_mangle]

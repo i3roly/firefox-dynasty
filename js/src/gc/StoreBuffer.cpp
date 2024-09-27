@@ -33,7 +33,7 @@ void StoreBuffer::checkAccess() const {
 bool StoreBuffer::WholeCellBuffer::init() {
   MOZ_ASSERT(!head_);
   if (!storage_) {
-    storage_ = MakeUnique<LifoAlloc>(LifoAllocBlockSize);
+    storage_ = MakeUnique<LifoAlloc>(LifoAllocBlockSize, js::MallocArena);
     // This prevents LifoAlloc::Enum from crashing with a release
     // assertion if we ever allocate one entry larger than
     // LifoAllocBlockSize.
@@ -47,7 +47,7 @@ bool StoreBuffer::WholeCellBuffer::init() {
 
 bool StoreBuffer::GenericBuffer::init() {
   if (!storage_) {
-    storage_ = MakeUnique<LifoAlloc>(LifoAllocBlockSize);
+    storage_ = MakeUnique<LifoAlloc>(LifoAllocBlockSize, js::MallocArena);
   }
   clear();
   return bool(storage_);
@@ -196,7 +196,7 @@ ArenaCellSet::ArenaCellSet(Arena* arena, ArenaCellSet* next)
 #ifdef DEBUG
       ,
       minorGCNumberAtCreation(
-          arena->zone->runtimeFromMainThread()->gc.minorGCCount())
+          arena->zone()->runtimeFromMainThread()->gc.minorGCCount())
 #endif
 {
   MOZ_ASSERT(arena);
@@ -204,7 +204,7 @@ ArenaCellSet::ArenaCellSet(Arena* arena, ArenaCellSet* next)
 }
 
 ArenaCellSet* StoreBuffer::WholeCellBuffer::allocateCellSet(Arena* arena) {
-  Zone* zone = arena->zone;
+  Zone* zone = arena->zone();
   JSRuntime* rt = zone->runtimeFromMainThread();
   if (!rt->gc.nursery().isEnabled()) {
     return nullptr;

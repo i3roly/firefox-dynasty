@@ -114,6 +114,12 @@ struct FuncDefInstanceData {
   int32_t hotnessCounter;
 };
 
+// FuncExportInstanceData maintains the exported function JS wrapper for an
+// exported function.
+struct FuncExportInstanceData {
+  GCPtr<JSFunction*> func;
+};
+
 // FuncImportInstanceData describes the region of wasm global memory allocated
 // in the instance's thread-local storage for a function import. This is
 // accessed directly from JIT code and mutated by Instance as exits become
@@ -189,6 +195,28 @@ struct FunctionTableElem {
   // The pointer to the callee's instance's Instance. This must be loaded into
   // InstanceReg before calling 'code'.
   Instance* instance;
+};
+
+// A collection of metrics for a `call_ref` instruction. This is tracked by
+// baseline when we are using lazy tiering to perform speculative inlining.
+//
+// See MacroAssembler::updateCallRefMetrics for how this is written into.
+//
+// Because it contains thread-local data and is written into without
+// synchronization, we cannot access this directly from our function compilers
+// and so we use CallRefHints for that (see WasmModuleTypes.h).
+//
+// TODO: pack this better.
+struct CallRefMetrics {
+  enum State : uint32_t {
+    Unknown,
+    Monomorphic,
+    Polymorphic,
+  };
+
+  State state;
+  uint32_t callCount;
+  GCPtr<JSFunction*> monomorphicTarget;
 };
 
 }  // namespace wasm

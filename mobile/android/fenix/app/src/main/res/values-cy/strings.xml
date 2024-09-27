@@ -119,9 +119,9 @@
 
     <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
     <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_title">Newydd: saethau un tap nôl ac ymlaen</string>
+    <string name="tablet_nav_bar_cfr_title" moz:removedIn="132" tools:ignore="UnusedResources">Newydd: saethau un tap nôl ac ymlaen</string>
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_message">Mwynhewch lywio cyflymach sydd bob amser ar flaenau eich bysedd.</string>
+    <string name="tablet_nav_bar_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Mwynhewch lywio cyflymach sydd bob amser ar flaenau eich bysedd.</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Mae angen mynediad i’r camera. Ewch i osodiadau Android, tapiwch Permissions, a thapio Allow.</string>
@@ -214,8 +214,14 @@
     <string name="browser_menu_extensions_banner_learn_more">Dysgu rhagor</string>
     <!-- Browser menu button that opens the extensions manager -->
     <string name="browser_menu_manage_extensions">Rheoli estyniadau</string>
+    <!-- Content description (not visible, for screen readers etc.): Section heading for recommended extensions.-->
+    <string name="browser_menu_recommended_section_content_description">Estyniadau a argymhellir</string>
+    <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extensions. -->
+    <string name="browser_menu_extension_plus_icon_content_description">Ychwanegu estyniad</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Darganfod rhagor o estyniadau</string>
+    <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
+    <string name="browser_menu_extensions_disabled_description">Wedi\'i analluogi dros dro</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Manylion cyfrif</string>
     <!-- Browser menu button that sends a user to help articles -->
@@ -234,6 +240,8 @@
     <string name="browser_menu_add_to_homescreen">Ychwanegu i’r sgrin Cartref</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Ychwanegu i\'r sgrin Cartref…</string>
+    <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
+    <string name="browser_menu_add_to_homescreen_xiaomi">Efallai y bydd angen caniatâd ychwanegol ar ddyfeisiau Xiaomi i ychwanegu llwybrau byr i\'r sgrin gartref. Gwiriwch eich gosodiadau.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Ailgydweddu</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -302,6 +310,8 @@
     <string name="browser_menu_switch_to_mobile_site">Newid i wefan symudol</string>
     <!-- Browser menu label that navigates to the page tools sub-menu -->
     <string name="browser_menu_tools">Offer</string>
+    <!-- Content description (not visible, for screen readers etc.): Back button for all menu redesign sub-menu -->
+    <string name="browser_menu_back_button_content_description">Nôl i\'r brif ddewislen</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate">Golwg Darllenydd, Cyfieithu, Argraffu, Rhannu, Agor ap</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -333,6 +343,12 @@
     <!-- Browser menu label for the Delete browsing data on quit feature.
         The first parameter is the name of the app defined in app_name (for example: Fenix). -->
     <string name="browser_menu_delete_browsing_data_on_quit">Gadael %1$s</string>
+
+    <!-- Menu "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_title">Newydd: dewislen symlach</string>
+    <!-- Text for the message in the contextual feature recommendation popup promoting the menu feature. -->
+    <string name="menu_cfr_body">Dewch o hyd i\'r hyn sydd ei angen arnoch yn gyflymach, o bori preifat i gadw  gweithredoedd.</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -393,7 +409,7 @@
 
     <!-- Home onboarding -->
     <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
-    <string name="onboarding_home_screen_jump_back_contextual_hint_2">Dyma’ch gwefan cartref personol. Bydd tabiau diweddar, nodau tudalen, a chanlyniadau chwilio yn ymddangos yma.</string>
+    <string name="onboarding_home_screen_jump_back_contextual_hint_2" moz:removedIn="132">Dyma’ch gwefan cartref personol. Bydd tabiau diweddar, nodau tudalen, a chanlyniadau chwilio yn ymddangos yma.</string>
     <!-- Home onboarding dialog welcome screen title text. -->
     <string name="onboarding_home_welcome_title_2">Croeso i rhyngrwyd mwy personol</string>
     <!-- Home onboarding dialog welcome screen description text. -->
@@ -428,12 +444,12 @@
 
     <!-- Juno first user onboarding flow experiment, strings are marked unused as they are only referenced by Nimbus experiments. -->
     <!-- Description for learning more about our privacy notice. -->
-    <string name="juno_onboarding_privacy_notice_text">Hysbysiad preifatrwydd Firefox</string>
+    <string name="juno_onboarding_privacy_notice_text" tools:ignore="BrandUsage">Hysbysiad preifatrwydd Firefox</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_2">Rydyn ni wrth ein bodd yn eich cadw chi’n ddiogel</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="UnusedResources">Deall pam mae miliynau\'n caru Firefox</string>
+    <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="BrandUsage,UnusedResources">Deall pam mae miliynau\'n caru Firefox</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_title_nimbus_4" tools:ignore="UnusedResources">Pori diogel gyda mwy o ddewisiadau</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
@@ -455,20 +471,20 @@
     <string name="juno_onboarding_sign_in_title_2">Cadwch wedi’ch amgryptio pan fyddwch chi’n symud rhwng dyfeisiau</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="UnusedResources">Pan fyddwch chi wedi mewngofnodi ac wedi cydweddu, rydych chi’n fwy diogel. Mae Firefox yn amgryptio’ch cyfrineiriau, nodau tudalen a rhagor.</string>
+    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="BrandUsage,UnusedResources">Pan fyddwch chi wedi mewngofnodi ac wedi cydweddu, rydych chi’n fwy diogel. Mae Firefox yn amgryptio’ch cyfrineiriau, nodau tudalen a rhagor.</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_3">Mae Firefox yn amgryptio\'ch cyfrineiriau, nodau tudalen, a mwy pan fyddwch wedi cydweddu.</string>
+    <string name="juno_onboarding_sign_in_description_3" tools:ignore="BrandUsage">Mae Firefox yn amgryptio\'ch cyfrineiriau, nodau tudalen, a mwy pan fyddwch wedi cydweddu.</string>
     <!-- Text for the button to sign in to sync on the device -->
     <string name="juno_onboarding_sign_in_positive_button" tools:ignore="UnusedResources">Mewngofnodi</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_sign_in_negative_button" tools:ignore="UnusedResources">Nid nawr</string>
     <!-- Title for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_enable_notifications_title_nimbus_2">Mae hysbysiadau’n eich helpu i gadw’n fwy diogel gyda Firefox</string>
+    <string name="juno_onboarding_enable_notifications_title_nimbus_2" tools:ignore="BrandUsage">Mae hysbysiadau’n eich helpu i gadw’n fwy diogel gyda Firefox</string>
     <!-- Description for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
        Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_enable_notifications_description_nimbus_2">Anfonwch dabiau’n ddiogel rhwng eich dyfeisiau a darganfyddwch nodweddion preifatrwydd eraill yn Firefox.</string>
+    <string name="juno_onboarding_enable_notifications_description_nimbus_2" tools:ignore="BrandUsage">Anfonwch dabiau’n ddiogel rhwng eich dyfeisiau a darganfyddwch nodweddion preifatrwydd eraill yn Firefox.</string>
     <!-- Text for the button to request notification permission on the device -->
     <string name="juno_onboarding_enable_notifications_positive_button" tools:ignore="UnusedResources">Troi hysbysiadau ymlaen</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
@@ -476,13 +492,13 @@
 
     <!-- Title for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_title" tools:ignore="UnusedResources">Rhowch gynnig ar declyn chwilio Firefox</string>
+    <string name="juno_onboarding_add_search_widget_title" tools:ignore="BrandUsage,UnusedResources">Rhowch gynnig ar declyn chwilio Firefox</string>
     <!-- Description for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_description" tools:ignore="UnusedResources">Gyda Firefox ar eich sgrin gartref, bydd gennych fynediad hawdd i’r porwr preifatrwydd yn gyntaf sy’n rhwystro tracwyr traws-safle.</string>
+    <string name="juno_onboarding_add_search_widget_description" tools:ignore="BrandUsage,UnusedResources">Gyda Firefox ar eich sgrin gartref, bydd gennych fynediad hawdd i’r porwr preifatrwydd yn gyntaf sy’n rhwystro tracwyr traws-safle.</string>
     <!-- Text for the button to add search widget on the device used by Nimbus experiments. Nimbus experiments do not support string placeholders.
         Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_add_search_widget_positive_button" tools:ignore="UnusedResources">Ychwanegu teclyn Firefox</string>
+    <string name="juno_onboarding_add_search_widget_positive_button" tools:ignore="BrandUsage,UnusedResources">Ychwanegu teclyn Firefox</string>
     <!-- Text for the button to dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_add_search_widget_negative_button" tools:ignore="UnusedResources">Nid nawr</string>
 
@@ -523,9 +539,9 @@
     <!-- Preference Category for settings related to Search address bar -->
     <string name="preferences_settings_address_bar">Dewisiadau bar cyfeiriad</string>
     <!-- Preference Category for settings to Firefox Suggest -->
-    <string name="preference_search_address_bar_fx_suggest">Bar cyfeiriad - Awgrymiadau Firefox</string>
+    <string name="preference_search_address_bar_fx_suggest" tools:ignore="BrandUsage">Bar cyfeiriad - Awgrymiadau Firefox</string>
     <!-- Preference link to Learn more about Firefox Suggest -->
-    <string name="preference_search_learn_about_fx_suggest">Darllen rhagor am Awgrymiadau Firefox</string>
+    <string name="preference_search_learn_about_fx_suggest" tools:ignore="BrandUsage">Darllen rhagor am Awgrymiadau Firefox</string>
     <!-- Preference link to rating Fenix on the Play Store -->
     <string name="preferences_rate">Graddio ar Google Play</string>
     <!-- Preference linking to about page for Fenix
@@ -622,8 +638,6 @@
     <string name="toast_override_account_sync_server_done">Mae eich cyfrif Mozilla/Gweinydd Sync wedi’i addasu. Wrthi’n gadael y rhaglen er mwyn gwneud newidiadau…</string>
     <!-- Preference category for account information -->
     <string name="preferences_category_account">Cyfrif</string>
-    <!-- Preference for changing where the toolbar is positioned -->
-    <string name="preferences_toolbar" moz:removedIn="129" tools:ignore="UnusedResources">Bar Offer</string>
     <!-- Preference for changing where the AddressBar is positioned -->
     <string name="preferences_toolbar_2">Lleoliad y bar cyfeiriad</string>
     <!-- Preference for changing default theme to dark or light mode -->
@@ -790,7 +804,7 @@
     <!-- Title of the Nimbus message for extension general availability-->
     <string name="addon_ga_message_title_2" tools:ignore="UnusedResources">Estyniadau newydd ar gael nawr</string>
     <!-- Body of the Nimbus message for add-ons general availability. 'Firefox' intentionally hardcoded here-->
-    <string name="addon_ga_message_body" tools:ignore="UnusedResources">Edrychwch ar 100+ o estyniadau newydd sy’n gwneud Firefox yn dda i chi.</string>
+    <string name="addon_ga_message_body" tools:ignore="BrandUsage,UnusedResources">Edrychwch ar 100+ o estyniadau newydd sy’n gwneud Firefox yn dda i chi.</string>
 
     <!-- Button text of the Nimbus message for extensions general availability. -->
     <string name="addon_ga_message_button_2" tools:ignore="UnusedResources">Archwilio\'r estyniadau</string>
@@ -857,7 +871,7 @@
     <!-- Name of the "receive tabs" notification channel. Displayed in the "App notifications" system settings for the app -->
     <string name="fxa_received_tab_channel_name">Tabiau derbyniwyd</string>
     <!-- Description of the "receive tabs" notification channel. Displayed in the "App notifications" system settings for the app -->
-    <string name="fxa_received_tab_channel_description">Hysbysiadau am dabiau a dderbyniwyd o ddyfeisiau Firefox eraill.</string>
+    <string name="fxa_received_tab_channel_description" tools:ignore="BrandUsage">Hysbysiadau am dabiau a dderbyniwyd o ddyfeisiau Firefox eraill.</string>
     <!--  The body for these is the URL of the tab received  -->
     <string name="fxa_tab_received_notification_name">Tab wedi’i Dderbyn</string>
     <!-- %s is the device name -->
@@ -889,6 +903,10 @@
     <string name="preferences_marketing_data">Data marchnata</string>
     <!-- Preference description for marketing data collection -->
     <string name="preferences_marketing_data_description2">Yn rhannu data defnydd sylfaenol gydag Adjust, ein gwerthwr marchnata symudol</string>
+    <!-- Preference switch title for automatically submitting crash reports -->
+    <string name="preferences_automatically_submit_crashes_title">Cyflwyno adroddiadau chwalfa yn awtomatig</string>
+    <!-- Preference switch description for automatically submitting crash reports -->
+    <string name="preferences_automatically_submit_crashes_description">Yn rhannu data damwain yn awtomatig wrth gychwyn gyda Mozilla ar ôl damweiniau</string>
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">Astudiaethau</string>
     <!-- Summary for studies preferences -->
@@ -927,8 +945,6 @@
     <string name="preference_gestures_website_pull_to_refresh">Tynnu i adnewyddu</string>
     <!-- Preference for using the dynamic toolbar -->
     <string name="preference_gestures_dynamic_toolbar">Sgrolio i guddio’r bar offer</string>
-    <!-- Preference for switching tabs by swiping horizontally on the toolbar -->
-    <string name="preference_gestures_swipe_toolbar_switch_tabs" moz:removedIn="129" tools:ignore="UnusedResources">Llusgo’r bar offer i’r ochr i newid tabiau</string>
     <!-- Preference for showing the opened tabs by swiping up on the toolbar-->
     <string name="preference_gestures_swipe_toolbar_show_tabs">Llusgo’r bar offer i fyny i agor tabiau</string>
 
@@ -1186,6 +1202,15 @@
     <!-- Restore tab button text on the tab crash page -->
     <string name="tab_crash_restore">Adfer tab</string>
 
+    <!-- Unsubmitted crash dialog title, The first parameter is the name of the app (e.g. Firefox)  -->
+    <string name="unsubmitted_crash_dialog_title">Roedd yn rhaid i %s ailgychwyn</string>
+    <!-- Unsubmitted crash dialog checkbox label for automatically sending reports in the future -->
+    <string name="unsubmitted_crash_dialog_checkbox_label">Anfon adroddiadau damwain yn awtomatig</string>
+    <!-- Unsubmitted crash dialog negative button to dismiss the dialog -->
+    <string name="unsubmitted_crash_dialog_negative_button">Cau</string>
+    <!-- Unsubmitted crash dialog positive button to submit crash report -->
+    <string name="unsubmitted_crash_dialog_positive_button">Anfon adroddiad chwalu</string>
+
     <!-- Bookmarks -->
     <!-- Confirmation message for a dialog confirming if the user wants to delete the selected folder -->
     <string name="bookmark_delete_folder_confirmation_dialog">Ydych chi’n siŵr eich bod am ddileu’r ffolder yma?</string>
@@ -1197,6 +1222,8 @@
     <string name="bookmark_add_folder">Ychwanegu ffolder</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
     <string name="bookmark_saved_snackbar">Nod tudalen wedi’i gadw!</string>
+    <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
+    <string name="bookmark_saved_in_folder_snackbar">Cadwyd yn “%s”</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">GOLYGU</string>
     <!-- Bookmark overflow menu edit button -->
@@ -1230,8 +1257,12 @@
     <string name="bookmark_url_label">URL</string>
     <!-- Bookmark FOLDER editing field label -->
     <string name="bookmark_folder_label">FFOLDER</string>
+    <!-- Text indicating which folder a bookmark or folder will be saved in -->
+    <string name="bookmark_save_in_label">Cadw yn</string>
     <!-- Bookmark NAME editing field label -->
     <string name="bookmark_name_label">ENW</string>
+    <!-- Label for a text input field for a bookmark or folder name -->
+    <string name="bookmark_name_label_normal_case">Enw</string>
     <!-- Bookmark add folder screen title -->
     <string name="bookmark_add_folder_fragment_label">Ychwanegu ffolder</string>
     <!-- Bookmark select folder screen title -->
@@ -1261,11 +1292,22 @@
     <!-- Content description for the bookmark list new folder navigation bar button -->
     <string name="bookmark_add_new_folder_button_content_description">Ychwanegu ffolder newydd</string>
     <!-- Content description for the bookmark navigation bar close button -->
-    <string name="bookmark_close_button_content_description">Cau nodau tudalen</string>
+    <string name="bookmark_close_button_content_description" tools:ignore="UnusedResources" moz:removedIn="130">Cau nodau tudalen</string>
     <!-- Content description for bookmark search floating action button -->
     <string name="bookmark_search_button_content_description">Chwilio’r nodau tudalen</string>
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
     <string name="bookmark_item_menu_button_content_description">Dewislen Eitem %s</string>
+
+    <!-- Title for the bookmark list empty state-->
+    <string name="bookmark_empty_list_title">Dim nodau tudalen eto</string>
+    <!-- Description for the bookmark list empty state when you're not signed into sync. -->
+    <string name="bookmark_empty_list_guest_description">Arbed gwefannau wrth i chi bori. Mewngofnodwch i fachu nodau tudalen o ddyfeisiau eraill sydd wedi\'u cysoni.</string>
+    <!-- Text for the button to navigate to sync authentication -->
+    <string name="bookmark_empty_list_guest_cta">Mewngofnodi i gydweddu</string>
+    <!-- Description for the bookmark list empty state when you're signed into sync. -->
+    <string name="bookmark_empty_list_authenticated_description">Arbed gwefannau wrth i chi bori. Byddwn hefyd yn bachu nodau tudalen o ddyfeisiau synced eraill.</string>
+    <!-- Description for the bookmark list empty state when you're in an empty folder. -->
+    <string name="bookmark_empty_list_folder_description">Ychwanegwch nodau tudalen wrth i chi bori fel y gallwch ddod o hyd i\'ch hoff wefannau yn nes ymlaen.</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -1438,7 +1480,7 @@
     <!-- An option to connect additional devices -->
     <string name="sync_connect_device">Cysylltu dyfais arall</string>
     <!-- The dialog text shown when additional devices are not available -->
-    <string name="sync_connect_device_dialog">I anfon tab, mewngofnodwch i Firefox ar o leiaf un ddyfais arall.</string>
+    <string name="sync_connect_device_dialog" tools:ignore="BrandUsage">I anfon tab, mewngofnodwch i Firefox ar o leiaf un ddyfais arall.</string>
     <!-- Confirmation dialog button -->
     <string name="sync_confirmation_button">Iawn</string>
     <!-- Share error message -->
@@ -1477,10 +1519,10 @@
 
     <!-- Title shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_title" tools:ignore="UnusedResources">Mae Firefox yn gyflym a phreifat</string>
+    <string name="nimbus_notification_default_browser_title" tools:ignore="BrandUsage,UnusedResources">Mae Firefox yn gyflym a phreifat</string>
     <!-- Text shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_text" tools:ignore="UnusedResources">Gwnewch Firefox eich porwr ragosodedig</string>
+    <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Gwnewch Firefox eich porwr ragosodedig</string>
     <!-- Title shown in the notification that pops up to re-engage the user -->
     <string name="notification_re_engagement_title">Rhowch gynnig ar bori preifat</string>
     <!-- Text shown in the notification that pops up to re-engage the user.
@@ -1500,7 +1542,7 @@
     <!-- Survey -->
     <!-- Text shown in the fullscreen message that pops up to ask user to take a short survey.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_survey_message_text">Helpwch i wneud Firefox yn well drwy lanw arolwg byr.</string>
+    <string name="nimbus_survey_message_text" tools:ignore="BrandUsage">Helpwch i wneud Firefox yn well drwy lanw arolwg byr.</string>
     <!-- Preference for taking the short survey. -->
     <string name="preferences_take_survey">Llenwch yr Arolwg</string>
     <!-- Preference for not taking the short survey. -->
@@ -1645,7 +1687,7 @@
     <!-- Title of QR Pairing Fragment -->
     <string name="sync_scan_code">Sganiwch y cod</string>
     <!-- Instructions on how to access pairing -->
-    <string name="sign_in_instructions"><![CDATA[Ar eich cyfrifiadur, agorwch Firefox ac ewch i <b>https://firefox.com/pair</b>]]></string>
+    <string name="sign_in_instructions" tools:ignore="BrandUsage"><![CDATA[Ar eich cyfrifiadur, agorwch Firefox ac ewch i <b>https://firefox.com/pair</b>]]></string>
     <!-- Text shown for sign in pairing when ready -->
     <string name="sign_in_ready_for_scan">Yn barod i sganio</string>
     <!-- Text shown for settings option for sign with pairing -->
@@ -1653,7 +1695,7 @@
     <!-- Text shown for settings option for sign with email -->
     <string name="sign_in_with_email">Defnyddiwch e-bost yn lle hynny</string>
     <!-- Text shown for settings option for create new account text.'Firefox' intentionally hardcoded here.-->
-    <string name="sign_in_create_account_text"><![CDATA[Dim cyfrif? <u>Crëwch un</u> i gydweddu Firefox rhwng dyfeisiau.]]></string>
+    <string name="sign_in_create_account_text" tools:ignore="BrandUsage"><![CDATA[Dim cyfrif? <u>Crëwch un</u> i gydweddu Firefox rhwng dyfeisiau.]]></string>
     <!-- Text shown in confirmation dialog to sign out of account. The first parameter is the name of the app (e.g. Firefox Preview) -->
     <string name="sign_out_confirmation_message_2">Bydd %s yn peidio â chydweddu eich cyfrif ond ni fydd yn dileu eich data pori ar y ddyfais hon.</string>
     <!-- Option to continue signing out of account shown in confirmation dialog to sign out of account -->
@@ -2185,7 +2227,7 @@
     <string name="synced_tabs_enable_tab_syncing">Galluogwch gydweddu tabiau.</string>
 
     <!-- Text displayed when user has no tabs that have been synced -->
-    <string name="synced_tabs_no_tabs">Nid oes gennych unrhyw dabiau ar agor yn Firefox ar eich dyfeisiau eraill.</string>
+    <string name="synced_tabs_no_tabs" tools:ignore="BrandUsage">Nid oes gennych unrhyw dabiau ar agor yn Firefox ar eich dyfeisiau eraill.</string>
     <!-- Text displayed in the synced tabs screen when a user is not signed in to Firefox Sync describing Synced Tabs -->
     <string name="synced_tabs_sign_in_message">Gweld rhestr o dabiau o’ch dyfeisiau eraill.</string>
     <!-- Text displayed on a button in the synced tabs screen to link users to sign in when a user is not signed in to Firefox Sync -->
@@ -2253,7 +2295,7 @@
     <!-- The header text of the auto-close message when the user is asked if they want to turn on the auto-closing of inactive tabs. -->
     <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Autogau ar ôl mis?</string>
     <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-    <string name="inactive_tabs_auto_close_message_description" tools:ignore="UnusedResources">Gall Firefox gau tabiau nad ydych wedi edrych arnyn nhw dros y mis diwethaf.</string>
+    <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Gall Firefox gau tabiau nad ydych wedi edrych arnyn nhw dros y mis diwethaf.</string>
     <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
     <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">TROI AWTOGAU YMLAEN</string>
 
@@ -2262,7 +2304,7 @@
 
     <!-- Awesome bar suggestion's headers -->
     <!-- Search suggestions title for Firefox Suggest. -->
-    <string name="firefox_suggest_header">Awgrymiadau Firefox</string>
+    <string name="firefox_suggest_header" tools:ignore="BrandUsage">Awgrymiadau Firefox</string>
 
     <!-- Title for search suggestions when Google is the default search suggestion engine. -->
     <string name="google_search_engine_suggestion_header">Google Search</string>
@@ -2273,7 +2315,7 @@
     <!-- Default browser card title -->
     <string name="default_browser_experiment_card_title">Newidiwch eich porwr rhagosodedig</string>
     <!-- Default browser card text -->
-    <string name="default_browser_experiment_card_text">Gosod dolenni o wefannau, e-byst, a negeseuon i agor yn awtomatig yn Firefox.</string>
+    <string name="default_browser_experiment_card_text" tools:ignore="BrandUsage">Gosod dolenni o wefannau, e-byst, a negeseuon i agor yn awtomatig yn Firefox.</string>
 
     <!-- Content description for close button in collection placeholder. -->
     <string name="remove_home_collection_placeholder_content_description">Tynnu</string>
@@ -2297,7 +2339,7 @@
     <!-- Title of an app feature. Smaller than a heading. The first parameter is product name Pocket -->
     <string name="pocket_stories_feature_title_2">Wedi’i bweru gan %s.</string>
     <!-- Caption for describing a certain feature. The placeholder is for a clickable text (eg: Learn more) which will load an url in a new tab when clicked.  -->
-    <string name="pocket_stories_feature_caption">Rhan o deulu Firefox. %s</string>
+    <string name="pocket_stories_feature_caption" tools:ignore="BrandUsage">Rhan o deulu Firefox. %s</string>
     <!-- Clickable text for opening an external link for more information about Pocket. -->
     <string name="pocket_stories_feature_learn_more">Darllen rhagor</string>
 
@@ -2656,8 +2698,6 @@
     <string name="download_language_all_languages_item_preference_to_delete">Dileu pob iaith</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item that was downloaded, the user can now delete it. -->
     <string name="download_languages_item_content_description_downloaded_state">Dileu</string>
-    <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress. -->
-    <string name="download_languages_item_content_description_in_progress_state" moz:removedIn="129" tools:ignore="UnusedResources">Ar waith</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, deleting is in progress. -->
     <string name="download_languages_item_content_description_delete_in_progress_state">Ar waith</string>
     <!-- Content description (not visible, for screen readers etc.): For a language list item, downloading is in progress.
@@ -2708,8 +2748,6 @@
     <string name="download_language_file_dialog_title">Llwytho i lawr tra yn y modd cadw data (%1$s)?</string>
     <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation. -->
     <string name="download_language_file_dialog_message_all_languages">Rydym yn llwytho ieithoedd rhannol i\'ch storfa i gadw cyfieithiadau\'n breifat.</string>
-    <!-- Additional information for the data saving mode warning dialog used by the translations feature. This text explains the reason a download is required for a translation without mentioning the cache. -->
-    <string name="download_language_file_dialog_message_all_languages_no_cache" moz:removedIn="129" tools:ignore="UnusedResources">Rydym yn rhannol lwytho i lawr ieithoedd i gadw cyfieithiadau\'n breifat.</string>
     <!-- Checkbox label text on the data saving mode warning dialog used by the translations feature. This checkbox allows users to ignore the data usage warnings. -->
     <string name="download_language_file_dialog_checkbox_text">Llwytho i lawr yn y modd arbed data, bob tro</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file. -->
@@ -2767,16 +2805,12 @@
     <!-- Microsurvey -->
     <!-- Prompt view -->
     <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
-    <string name="micro_survey_prompt_title" tools:ignore="UnusedResources">Helpwch ni i wneud Firefox yn well. Dim ond munud mae\'n ei gymryd.</string>
+    <string name="micro_survey_prompt_title" tools:ignore="BrandUsage,UnusedResources">Helpwch ni i wneud Firefox yn well. Dim ond munud mae\'n ei gymryd.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">Parhau</string>
     <!-- Survey view -->
     <!-- The survey header -->
-    <string name="micro_survey_survey_header" moz:removedIn="129" tools:ignore="UnusedResources">Cwblhewch yr arolwg hwn</string>
-    <!-- The survey header -->
     <string name="micro_survey_survey_header_2">Cwblhewch yr arolwg</string>
-    <!-- The privacy notice link -->
-    <string name="micro_survey_privacy_notice" moz:removedIn="129" tools:ignore="UnusedResources">Hysbysiad Preifatrwydd</string>
     <!-- The privacy notice link -->
     <string name="micro_survey_privacy_notice_2">Hysbysiad preifatrwydd</string>
     <!-- The submit button label text -->
@@ -2798,17 +2832,29 @@
 
     <!-- Option for likert scale -->
     <string name="likert_scale_option_6" tools:ignore="UnusedResources">Dydw i ddim yn ei ddefnyddio</string>
+    <!-- Option for likert scale. Note: The word "Firefox" should NOT be translated. -->
+    <string name="likert_scale_option_7" tools:ignore="BrandUsage,UnusedResources">Dydw i ddim yn defnyddio chwilio ar Firefox</string>
+    <!-- Option for likert scale -->
+    <string name="likert_scale_option_8" tools:ignore="UnusedResources">Dydw i ddim yn defnyddio cysoni</string>
     <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_homepage_title" tools:ignore="UnusedResources" moz:removedIn="130">Pa mor fodlon ydych chi gyda\'ch cartref Firefox?</string>
+    <string name="microsurvey_prompt_homepage_title" tools:ignore="BrandUsage,UnusedResources" moz:removedIn="130">Pa mor fodlon ydych chi gyda\'ch cartref Firefox?</string>
     <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_printing_title" tools:ignore="UnusedResources">Helpwch i wella argraffu yn Firefox. Dim ond eiliad mae\'n ei gymryd</string>
-    <!-- Text shown in prompt for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_survey_printing_title" tools:ignore="UnusedResources">Pa mor fodlon ydych chi gydag argraffu yn Firefox?</string>
-    <!-- Text shown in prompt for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_homepage_title" tools:ignore="UnusedResources">Pa mor fodlon ydych chi gyda\'ch tudalen cartref Firefox?</string>
+    <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">Helpwch i wella argraffu yn Firefox. Dim ond eiliad mae\'n ei gymryd</string>
+    <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_prompt_search_title" tools:ignore="BrandUsage,UnusedResources">Helpwch i wneud chwiliad yn Firefox yn well. Dim ond munud mae\'n ei gymryd</string>
+    <!-- Text shown in prompt for sync microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_prompt_sync_title" tools:ignore="BrandUsage,UnusedResources">Helpwch i wneud cysoni yn Firefox yn well. Dim ond munud mae\'n ei gymryd</string>
+    <!-- Text shown in the survey title for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_survey_printing_title" tools:ignore="BrandUsage,UnusedResources">Pa mor fodlon ydych chi gydag argraffu yn Firefox?</string>
+    <!-- Text shown in the survey title for homepage microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_homepage_title" tools:ignore="BrandUsage,UnusedResources">Pa mor fodlon ydych chi gyda\'ch tudalen cartref Firefox?</string>
+    <!-- Text shown in the survey title for search experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Pa mor fodlon ydych chi gyda\'r profiad chwilio yn Firefox?</string>
+    <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">Pa mor fodlon ydych chi gyda\'r profiad cysoni yn Firefox?</string>
     <!-- Accessibility -->
     <!-- Content description for the survey application icon. Note: The word "Firefox" should NOT be translated.  -->
-    <string name="microsurvey_app_icon_content_description">Logo Firefox</string>
+    <string name="microsurvey_app_icon_content_description" tools:ignore="BrandUsage">Logo Firefox</string>
     <!-- Content description for the survey feature icon. -->
     <string name="microsurvey_feature_icon_content_description">Eicon nodwedd arolwg</string>
     <!-- Content description (not visible, for screen readers etc.) for opening microsurvey bottom sheet. -->
@@ -2836,9 +2882,16 @@
 
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture">I adael y sgrin lawn, llusgwch o\'r brig a defnyddiwch ystum nôl</string>
+    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">I adael y sgrin lawn, llusgwch o\'r brig a defnyddiwch ystum nôl</string>
     <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button">I adael y sgrin lawn, llusgwch o\'r brig a phwyso nôl</string>
+    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">I adael y sgrin lawn, llusgwch o\'r brig a phwyso nôl</string>
+
+    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
+    <!-- Localisation note: this text should be as short as possible, max 68 chars -->
+    <string name="exit_fullscreen_with_gesture_short">Llusgwch o\'r brig a defnyddio ystum nôl i adael</string>
+    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation. -->
+    <!-- Localisation note: this text should be as short as possible, max 68 chars -->
+    <string name="exit_fullscreen_with_back_button_short">Llusgwch o\'r brig a phwyso nôl i adael</string>
 
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->

@@ -365,6 +365,17 @@ class HttpBaseChannel : public nsHashPropertyBag,
   NS_IMETHOD SetIsUserAgentHeaderModified(bool value) override;
   NS_IMETHOD GetIsUserAgentHeaderModified(bool* value) override;
 
+  NS_IMETHOD GetLastTransportStatus(nsresult* aLastTransportStatus) override;
+
+  NS_IMETHOD GetCaps(uint32_t* aCaps) override {
+    if (!aCaps) {
+      return NS_ERROR_INVALID_ARG;
+    }
+
+    *aCaps = mCaps;
+    return NS_OK;
+  }
+
   NS_IMETHOD SetClassicScriptHintCharset(
       const nsAString& aClassicScriptHintCharset) override;
   NS_IMETHOD GetClassicScriptHintCharset(

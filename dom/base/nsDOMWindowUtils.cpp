@@ -1561,7 +1561,7 @@ nsDOMWindowUtils::GetTranslationNodes(nsINode* aRoot,
 
   uint32_t limit = 15000;
 
-  // We begin iteration with content->GetNextNode because we want to explictly
+  // We begin iteration with content->GetNextNode because we want to explicitly
   // skip the root tag from being a translation node.
   nsIContent* content = root;
   while ((limit > 0) && (content = content->GetNextNode(root))) {
@@ -1705,6 +1705,27 @@ nsDOMWindowUtils::GetIsMozAfterPaintPending(bool* aResult) {
   nsPresContext* presContext = GetPresContext();
   if (!presContext) return NS_OK;
   *aResult = presContext->IsDOMPaintEventPending();
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDOMWindowUtils::GetIsWindowFullyOccluded(bool* aResult) {
+  NS_ENSURE_ARG_POINTER(aResult);
+  *aResult = false;
+  if (nsIWidget* widget = GetWidget()) {
+    *aResult = widget->IsFullyOccluded();
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDOMWindowUtils::GetIsCompositorPaused(bool* aResult) {
+  NS_ENSURE_ARG_POINTER(aResult);
+  *aResult = false;
+  CompositorBridgeChild* cbc = GetCompositorBridge();
+  if (cbc) {
+    *aResult = cbc->IsPaused();
+  }
   return NS_OK;
 }
 
@@ -2641,7 +2662,7 @@ nsDOMWindowUtils::GetVisitedDependentComputedStyle(
   {
     ErrorResult rv;
     decl = innerWindow->GetComputedStyle(*aElement, aPseudoElement, rv);
-    ENSURE_SUCCESS(rv, rv.StealNSResult());
+    RETURN_NSRESULT_ON_FAILURE(rv);
   }
 
   nsAutoCString result;

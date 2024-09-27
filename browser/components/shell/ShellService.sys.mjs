@@ -121,10 +121,13 @@ let ShellServiceInternal = {
    * is possible.
    */
   _userChoiceImpossibleTelemetryResult() {
-    if (!ShellService.checkAllProgIDsExist()) {
+    let winShellService = this.shellService.QueryInterface(
+      Ci.nsIWindowsShellService
+    );
+    if (!winShellService.checkAllProgIDsExist()) {
       return "ErrProgID";
     }
-    if (!ShellService.checkBrowserUserChoiceHashes()) {
+    if (!winShellService.checkBrowserUserChoiceHashes()) {
       return "ErrHash";
     }
     return null;
@@ -428,6 +431,16 @@ let ShellServiceInternal = {
 
     // Pretend pinning is not needed/supported if remotely disabled.
     if (lazy.NimbusFeatures.shellService.getVariable("disablePin")) {
+      return false;
+    }
+
+    // Bug 1758770: Pinning private browsing on MSIX is currently
+    // not possible.
+    if (
+      privateBrowsing &&
+      AppConstants.platform === "win" &&
+      Services.sysinfo.getProperty("hasWinPackageId")
+    ) {
       return false;
     }
 

@@ -1004,6 +1004,7 @@ class LTestI64AndBranch : public LControlInstructionHelper<2, INT64_PIECES, 0> {
     setSuccessor(1, ifFalse);
   }
 
+  LInt64Allocation input() const { return getInt64Operand(0); }
   MBasicBlock* ifTrue() const { return getSuccessor(0); }
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
 };
@@ -1150,6 +1151,8 @@ class LCompareI64 : public LInstructionHelper<1, 2 * INT64_PIECES, 0> {
   }
 
   JSOp jsop() const { return jsop_; }
+  LInt64Allocation left() const { return getInt64Operand(LCompareI64::Lhs); }
+  LInt64Allocation right() const { return getInt64Operand(LCompareI64::Rhs); }
   MCompare* mir() { return mir_->toCompare(); }
   const char* extraName() const { return CodeName(jsop_); }
 };
@@ -1179,6 +1182,12 @@ class LCompareI64AndBranch
   JSOp jsop() const { return jsop_; }
   MBasicBlock* ifTrue() const { return getSuccessor(0); }
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
+  LInt64Allocation left() const {
+    return getInt64Operand(LCompareI64AndBranch::Lhs);
+  }
+  LInt64Allocation right() const {
+    return getInt64Operand(LCompareI64AndBranch::Rhs);
+  }
   MTest* mir() const { return mir_->toTest(); }
   MCompare* cmpMir() const { return cmpMir_; }
   const char* extraName() const { return CodeName(jsop_); }
@@ -1259,17 +1268,21 @@ class LCompareFAndBranch : public LControlInstructionHelper<2, 2, 0> {
   MCompare* cmpMir() const { return cmpMir_; }
 };
 
-class LBitAndAndBranch : public LControlInstructionHelper<2, 2, 0> {
-  // This denotes only a single-word AND on the target.  Hence `is64_` is
-  // required to be `false` on a 32-bit target.
-  bool is64_;
-  Assembler::Condition cond_;
+class LCompareBigIntInt32AndBranch : public LControlInstructionHelper<2, 2, 2> {
+  MCompare* cmpMir_;
 
  public:
-  LIR_HEADER(BitAndAndBranch)
-  LBitAndAndBranch(MBasicBlock* ifTrue, MBasicBlock* ifFalse, bool is64,
-                   Assembler::Condition cond = Assembler::NonZero)
-      : LControlInstructionHelper(classOpcode), is64_(is64), cond_(cond) {
+  LIR_HEADER(CompareBigIntInt32AndBranch)
+  LCompareBigIntInt32AndBranch(MCompare* cmpMir, const LAllocation& left,
+                               const LAllocation& right,
+                               const LDefinition& temp1,
+                               const LDefinition& temp2, MBasicBlock* ifTrue,
+                               MBasicBlock* ifFalse)
+      : LControlInstructionHelper(classOpcode), cmpMir_(cmpMir) {
+    setOperand(0, left);
+    setOperand(1, right);
+    setTemp(0, temp1);
+    setTemp(1, temp2);
     setSuccessor(0, ifTrue);
     setSuccessor(1, ifFalse);
   }
@@ -1278,7 +1291,62 @@ class LBitAndAndBranch : public LControlInstructionHelper<2, 2, 0> {
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
   const LAllocation* left() { return getOperand(0); }
   const LAllocation* right() { return getOperand(1); }
-  bool is64() const { return is64_; }
+  const LDefinition* temp1() { return getTemp(0); }
+  const LDefinition* temp2() { return getTemp(1); }
+  MTest* mir() const { return mir_->toTest(); }
+  MCompare* cmpMir() const { return cmpMir_; }
+};
+
+class LBitAndAndBranch : public LControlInstructionHelper<2, 2, 0> {
+  Assembler::Condition cond_;
+
+ public:
+  LIR_HEADER(BitAndAndBranch)
+  LBitAndAndBranch(const LAllocation& left, const LAllocation& right,
+                   MBasicBlock* ifTrue, MBasicBlock* ifFalse,
+                   Assembler::Condition cond = Assembler::NonZero)
+      : LControlInstructionHelper(classOpcode), cond_(cond) {
+    setOperand(0, left);
+    setOperand(1, right);
+    setSuccessor(0, ifTrue);
+    setSuccessor(1, ifFalse);
+  }
+
+  MBasicBlock* ifTrue() const { return getSuccessor(0); }
+  MBasicBlock* ifFalse() const { return getSuccessor(1); }
+  const LAllocation* left() { return getOperand(0); }
+  const LAllocation* right() { return getOperand(1); }
+  Assembler::Condition cond() const {
+    MOZ_ASSERT(cond_ == Assembler::Zero || cond_ == Assembler::NonZero);
+    return cond_;
+  }
+};
+
+class LBitAnd64AndBranch
+    : public LControlInstructionHelper<2, 2 * INT64_PIECES, 0> {
+  Assembler::Condition cond_;
+
+ public:
+  LIR_HEADER(BitAnd64AndBranch)
+
+  static const size_t Lhs = 0;
+  static const size_t Rhs = INT64_PIECES;
+
+  LBitAnd64AndBranch(const LInt64Allocation& left,
+                     const LInt64Allocation& right, MBasicBlock* ifTrue,
+                     MBasicBlock* ifFalse,
+                     Assembler::Condition cond = Assembler::NonZero)
+      : LControlInstructionHelper(classOpcode), cond_(cond) {
+    setInt64Operand(Lhs, left);
+    setInt64Operand(Rhs, right);
+    setSuccessor(0, ifTrue);
+    setSuccessor(1, ifFalse);
+  }
+
+  MBasicBlock* ifTrue() const { return getSuccessor(0); }
+  MBasicBlock* ifFalse() const { return getSuccessor(1); }
+  LInt64Allocation left() const { return getInt64Operand(LCompareI64::Lhs); }
+  LInt64Allocation right() const { return getInt64Operand(LCompareI64::Rhs); }
   Assembler::Condition cond() const {
     MOZ_ASSERT(cond_ == Assembler::Zero || cond_ == Assembler::NonZero);
     return cond_;
@@ -2299,23 +2367,18 @@ class LArrayPopShift : public LInstructionHelper<BOX_PIECES, 1, 2> {
   const LDefinition* temp1() { return getTemp(1); }
 };
 
-class LLoadUnboxedBigInt : public LInstructionHelper<1, 2, 1 + INT64_PIECES> {
+class LLoadUnboxedInt64 : public LInstructionHelper<INT64_PIECES, 2, 0> {
  public:
-  LIR_HEADER(LoadUnboxedBigInt)
+  LIR_HEADER(LoadUnboxedInt64)
 
-  LLoadUnboxedBigInt(const LAllocation& elements, const LAllocation& index,
-                     const LDefinition& temp, const LInt64Definition& temp64)
+  LLoadUnboxedInt64(const LAllocation& elements, const LAllocation& index)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setTemp(0, temp);
-    setInt64Temp(1, temp64);
   }
   const MLoadUnboxedScalar* mir() const { return mir_->toLoadUnboxedScalar(); }
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LDefinition* temp() { return getTemp(0); }
-  const LInt64Definition temp64() { return getInt64Temp(1); }
 };
 
 class LLoadDataViewElement : public LInstructionHelper<1, 3, 2 + INT64_PIECES> {
@@ -2345,6 +2408,25 @@ class LLoadDataViewElement : public LInstructionHelper<1, 3, 2 + INT64_PIECES> {
   const LInt64Definition temp64() { return getInt64Temp(2); }
 };
 
+class LLoadDataViewElement64 : public LInstructionHelper<INT64_PIECES, 3, 0> {
+ public:
+  LIR_HEADER(LoadDataViewElement64)
+
+  LLoadDataViewElement64(const LAllocation& elements, const LAllocation& index,
+                         const LAllocation& littleEndian)
+      : LInstructionHelper(classOpcode) {
+    setOperand(0, elements);
+    setOperand(1, index);
+    setOperand(2, littleEndian);
+  }
+  const MLoadDataViewElement* mir() const {
+    return mir_->toLoadDataViewElement();
+  }
+  const LAllocation* elements() { return getOperand(0); }
+  const LAllocation* index() { return getOperand(1); }
+  const LAllocation* littleEndian() { return getOperand(2); }
+};
+
 class LLoadTypedArrayElementHoleBigInt
     : public LInstructionHelper<BOX_PIECES, 3, 1 + INT64_PIECES> {
  public:
@@ -2372,17 +2454,16 @@ class LLoadTypedArrayElementHoleBigInt
   const LInt64Definition temp64() { return getInt64Temp(1); }
 };
 
-class LStoreUnboxedBigInt : public LInstructionHelper<0, 3, INT64_PIECES> {
+class LStoreUnboxedInt64 : public LInstructionHelper<0, 2 + INT64_PIECES, 0> {
  public:
-  LIR_HEADER(StoreUnboxedBigInt)
+  LIR_HEADER(StoreUnboxedInt64)
 
-  LStoreUnboxedBigInt(const LAllocation& elements, const LAllocation& index,
-                      const LAllocation& value, const LInt64Definition& temp)
+  LStoreUnboxedInt64(const LAllocation& elements, const LAllocation& index,
+                     const LInt64Allocation& value)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp);
+    setInt64Operand(2, value);
   }
 
   const MStoreUnboxedScalar* mir() const {
@@ -2390,8 +2471,7 @@ class LStoreUnboxedBigInt : public LInstructionHelper<0, 3, INT64_PIECES> {
   }
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LAllocation* value() { return getOperand(2); }
-  LInt64Definition temp() { return getInt64Temp(0); }
+  LInt64Allocation value() { return getInt64Operand(2); }
 };
 
 class LStoreDataViewElement
@@ -2423,22 +2503,49 @@ class LStoreDataViewElement
   const LInt64Definition temp64() { return getInt64Temp(1); }
 };
 
-class LStoreTypedArrayElementHoleBigInt
-    : public LInstructionHelper<0, 4, INT64_PIECES> {
+class LStoreDataViewElement64
+    : public LInstructionHelper<0, 3 + INT64_PIECES, INT64_PIECES> {
  public:
-  LIR_HEADER(StoreTypedArrayElementHoleBigInt)
+  LIR_HEADER(StoreDataViewElement64)
 
-  LStoreTypedArrayElementHoleBigInt(const LAllocation& elements,
-                                    const LAllocation& length,
-                                    const LAllocation& index,
-                                    const LAllocation& value,
-                                    const LInt64Definition& temp)
+  LStoreDataViewElement64(const LAllocation& elements, const LAllocation& index,
+                          const LInt64Allocation& value,
+                          const LAllocation& littleEndian,
+                          const LInt64Definition& temp)
+      : LInstructionHelper(classOpcode) {
+    setOperand(0, elements);
+    setOperand(1, index);
+    setInt64Operand(2, value);
+    setOperand(2 + INT64_PIECES, littleEndian);
+    setInt64Temp(0, temp);
+  }
+
+  const MStoreDataViewElement* mir() const {
+    return mir_->toStoreDataViewElement();
+  }
+  const LAllocation* elements() { return getOperand(0); }
+  const LAllocation* index() { return getOperand(1); }
+  LInt64Allocation value() { return getInt64Operand(2); }
+  const LAllocation* littleEndian() { return getOperand(2 + INT64_PIECES); }
+  LInt64Definition temp() { return getInt64Temp(0); }
+};
+
+class LStoreTypedArrayElementHoleInt64
+    : public LInstructionHelper<0, 3 + INT64_PIECES, 1> {
+ public:
+  LIR_HEADER(StoreTypedArrayElementHoleInt64)
+
+  LStoreTypedArrayElementHoleInt64(const LAllocation& elements,
+                                   const LAllocation& length,
+                                   const LAllocation& index,
+                                   const LInt64Allocation& value,
+                                   const LDefinition& temp)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, length);
     setOperand(2, index);
-    setOperand(3, value);
-    setInt64Temp(0, temp);
+    setInt64Operand(3, value);
+    setTemp(0, temp);
   }
 
   const MStoreTypedArrayElementHole* mir() const {
@@ -2447,8 +2554,8 @@ class LStoreTypedArrayElementHoleBigInt
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* length() { return getOperand(1); }
   const LAllocation* index() { return getOperand(2); }
-  const LAllocation* value() { return getOperand(3); }
-  LInt64Definition temp() { return getInt64Temp(0); }
+  LInt64Allocation value() { return getInt64Operand(3); }
+  const LDefinition* temp() { return getTemp(0); }
 };
 
 class LCompareExchangeTypedArrayElement : public LInstructionHelper<1, 4, 4> {
@@ -2656,65 +2763,55 @@ class LAtomicTypedArrayElementBinopForEffect
   }
 };
 
-class LAtomicLoad64 : public LInstructionHelper<1, 2, 1 + INT64_PIECES> {
+class LAtomicLoad64 : public LInstructionHelper<INT64_PIECES, 2, INT64_PIECES> {
  public:
   LIR_HEADER(AtomicLoad64)
 
-  LAtomicLoad64(const LAllocation& elements, const LAllocation& index,
-                const LDefinition& temp, const LInt64Definition& temp64)
+  LAtomicLoad64(const LAllocation& elements, const LAllocation& index)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setTemp(0, temp);
-    setInt64Temp(1, temp64);
+    setInt64Temp(0, LInt64Definition::BogusTemp());
   }
+
+  // x86
+  LAtomicLoad64(const LAllocation& elements, const LAllocation& index,
+                const LInt64Definition& temp)
+      : LInstructionHelper(classOpcode) {
+    setOperand(0, elements);
+    setOperand(1, index);
+    setInt64Temp(0, temp);
+  }
+
   const MLoadUnboxedScalar* mir() const { return mir_->toLoadUnboxedScalar(); }
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LDefinition* temp() { return getTemp(0); }
-  LInt64Definition temp64() { return getInt64Temp(1); }
+  LInt64Definition temp64() { return getInt64Temp(0); }
 };
 
-class LAtomicStore64 : public LInstructionHelper<0, 3, 2 * INT64_PIECES + 1> {
+class LAtomicStore64
+    : public LInstructionHelper<0, 2 + INT64_PIECES, INT64_PIECES> {
  public:
   LIR_HEADER(AtomicStore64)
 
   // x64, ARM64
   LAtomicStore64(const LAllocation& elements, const LAllocation& index,
-                 const LAllocation& value, const LInt64Definition& temp1)
+                 const LInt64Allocation& value)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, LInt64Definition::BogusTemp());
-    setTemp(2 * INT64_PIECES, LDefinition::BogusTemp());
+    setInt64Operand(2, value);
+    setInt64Temp(0, LInt64Definition::BogusTemp());
   }
 
-  // ARM32
+  // x86, ARM32
   LAtomicStore64(const LAllocation& elements, const LAllocation& index,
-                 const LAllocation& value, const LInt64Definition& temp1,
-                 const LInt64Definition& temp2)
+                 const LInt64Allocation& value, const LInt64Definition& temp)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, temp2);
-    setTemp(2 * INT64_PIECES, LDefinition::BogusTemp());
-  }
-
-  // x86
-  LAtomicStore64(const LAllocation& elements, const LAllocation& index,
-                 const LAllocation& value, const LInt64Definition& temp1,
-                 const LDefinition& tempLow)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, LInt64Definition::BogusTemp());
-    setTemp(2 * INT64_PIECES, tempLow);
+    setInt64Operand(2, value);
+    setInt64Temp(0, temp);
   }
 
   const MStoreUnboxedScalar* mir() const {
@@ -2722,69 +2819,24 @@ class LAtomicStore64 : public LInstructionHelper<0, 3, 2 * INT64_PIECES + 1> {
   }
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LAllocation* value() { return getOperand(2); }
-  LInt64Definition temp1() { return getInt64Temp(0); }
-  LInt64Definition temp2() { return getInt64Temp(INT64_PIECES); }
-  const LDefinition* tempLow() { return getTemp(2 * INT64_PIECES); }
+  LInt64Allocation value() { return getInt64Operand(2); }
+  LInt64Definition temp() { return getInt64Temp(0); }
 };
 
 class LCompareExchangeTypedArrayElement64
-    : public LInstructionHelper<1, 4, 3 * INT64_PIECES + 1> {
+    : public LInstructionHelper<INT64_PIECES, 2 + 2 * INT64_PIECES, 0> {
  public:
   LIR_HEADER(CompareExchangeTypedArrayElement64)
 
-  // x64, ARM64
   LCompareExchangeTypedArrayElement64(const LAllocation& elements,
                                       const LAllocation& index,
-                                      const LAllocation& oldval,
-                                      const LAllocation& newval,
-                                      const LInt64Definition& temp1,
-                                      const LInt64Definition& temp2)
+                                      const LInt64Allocation& oldval,
+                                      const LInt64Allocation& newval)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, oldval);
-    setOperand(3, newval);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, temp2);
-    setInt64Temp(2 * INT64_PIECES, LInt64Definition::BogusTemp());
-    setTemp(3 * INT64_PIECES, LDefinition::BogusTemp());
-  }
-
-  // x86
-  LCompareExchangeTypedArrayElement64(const LAllocation& elements,
-                                      const LAllocation& index,
-                                      const LAllocation& oldval,
-                                      const LAllocation& newval,
-                                      const LDefinition& tempLow)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, oldval);
-    setOperand(3, newval);
-    setInt64Temp(0, LInt64Definition::BogusTemp());
-    setInt64Temp(INT64_PIECES, LInt64Definition::BogusTemp());
-    setInt64Temp(2 * INT64_PIECES, LInt64Definition::BogusTemp());
-    setTemp(3 * INT64_PIECES, tempLow);
-  }
-
-  // ARM
-  LCompareExchangeTypedArrayElement64(const LAllocation& elements,
-                                      const LAllocation& index,
-                                      const LAllocation& oldval,
-                                      const LAllocation& newval,
-                                      const LInt64Definition& temp1,
-                                      const LInt64Definition& temp2,
-                                      const LInt64Definition& temp3)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, oldval);
-    setOperand(3, newval);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, temp2);
-    setInt64Temp(2 * INT64_PIECES, temp3);
-    setTemp(3 * INT64_PIECES, LDefinition::BogusTemp());
+    setInt64Operand(2, oldval);
+    setInt64Operand(2 + INT64_PIECES, newval);
   }
 
   const MCompareExchangeTypedArrayElement* mir() const {
@@ -2792,51 +2844,27 @@ class LCompareExchangeTypedArrayElement64
   }
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LAllocation* oldval() { return getOperand(2); }
-  const LAllocation* newval() { return getOperand(3); }
-  LInt64Definition temp1() { return getInt64Temp(0); }
-  LInt64Definition temp2() { return getInt64Temp(INT64_PIECES); }
-  LInt64Definition temp3() { return getInt64Temp(2 * INT64_PIECES); }
-  const LDefinition* tempLow() { return getTemp(3 * INT64_PIECES); }
+  LInt64Allocation oldval() { return getInt64Operand(2); }
+  LInt64Allocation newval() { return getInt64Operand(2 + INT64_PIECES); }
 };
 
 class LAtomicExchangeTypedArrayElement64
-    : public LInstructionHelper<1, 3, INT64_PIECES + 1> {
+    : public LInstructionHelper<INT64_PIECES, 2 + INT64_PIECES, 0> {
  public:
   LIR_HEADER(AtomicExchangeTypedArrayElement64)
 
-  // ARM, ARM64, x64
   LAtomicExchangeTypedArrayElement64(const LAllocation& elements,
                                      const LAllocation& index,
-                                     const LAllocation& value,
-                                     const LInt64Definition& temp1,
-                                     const LDefinition& temp2)
+                                     const LInt64Allocation& value)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setTemp(INT64_PIECES, temp2);
-  }
-
-  // x86
-  LAtomicExchangeTypedArrayElement64(const LAllocation& elements,
-                                     const LAllocation& index,
-                                     const LAllocation& value,
-                                     const LInt64Definition& temp)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp);
-    setTemp(INT64_PIECES, LDefinition::BogusTemp());
+    setInt64Operand(2, value);
   }
 
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LAllocation* value() { return getOperand(2); }
-  LInt64Definition temp1() { return getInt64Temp(0); }
-  const LDefinition* temp2() { return getTemp(INT64_PIECES); }
+  LInt64Allocation value() { return getInt64Operand(2); }
 
   const MAtomicExchangeTypedArrayElement* mir() const {
     return mir_->toAtomicExchangeTypedArrayElement();
@@ -2844,61 +2872,37 @@ class LAtomicExchangeTypedArrayElement64
 };
 
 class LAtomicTypedArrayElementBinop64
-    : public LInstructionHelper<1, 3, 3 * INT64_PIECES> {
+    : public LInstructionHelper<INT64_PIECES, 2 + INT64_PIECES, INT64_PIECES> {
  public:
   LIR_HEADER(AtomicTypedArrayElementBinop64)
 
   // x86
   LAtomicTypedArrayElementBinop64(const LAllocation& elements,
                                   const LAllocation& index,
-                                  const LAllocation& value,
-                                  const LInt64Definition& temp1)
+                                  const LInt64Allocation& value)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, LInt64Definition::BogusTemp());
-    setInt64Temp(2 * INT64_PIECES, LInt64Definition::BogusTemp());
+    setInt64Operand(2, value);
+    setInt64Temp(0, LInt64Definition::BogusTemp());
   }
 
-  // ARM64, x64
+  // ARM, ARM64, x64, LoongArch64, MIPS
   LAtomicTypedArrayElementBinop64(const LAllocation& elements,
                                   const LAllocation& index,
-                                  const LAllocation& value,
-                                  const LInt64Definition& temp1,
-                                  const LInt64Definition& temp2)
+                                  const LInt64Allocation& value,
+                                  const LInt64Definition& temp)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, temp2);
-    setInt64Temp(2 * INT64_PIECES, LInt64Definition::BogusTemp());
-  }
-
-  // ARM
-  LAtomicTypedArrayElementBinop64(const LAllocation& elements,
-                                  const LAllocation& index,
-                                  const LAllocation& value,
-                                  const LInt64Definition& temp1,
-                                  const LInt64Definition& temp2,
-                                  const LInt64Definition& temp3)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, temp2);
-    setInt64Temp(2 * INT64_PIECES, temp3);
+    setInt64Operand(2, value);
+    setInt64Temp(0, temp);
   }
 
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LAllocation* value() { return getOperand(2); }
-  LInt64Definition temp1() { return getInt64Temp(0); }
-  LInt64Definition temp2() { return getInt64Temp(INT64_PIECES); }
-  LInt64Definition temp3() { return getInt64Temp(2 * INT64_PIECES); }
+  LInt64Allocation value() { return getInt64Operand(2); }
+  LInt64Definition temp() { return getInt64Temp(0); }
 
   const MAtomicTypedArrayElementBinop* mir() const {
     return mir_->toAtomicTypedArrayElementBinop();
@@ -2907,60 +2911,37 @@ class LAtomicTypedArrayElementBinop64
 
 // Atomic binary operation where the result is discarded.
 class LAtomicTypedArrayElementBinopForEffect64
-    : public LInstructionHelper<0, 3, 2 * INT64_PIECES + 1> {
+    : public LInstructionHelper<0, 2 + INT64_PIECES, INT64_PIECES> {
  public:
   LIR_HEADER(AtomicTypedArrayElementBinopForEffect64)
-
-  // x86
-  LAtomicTypedArrayElementBinopForEffect64(const LAllocation& elements,
-                                           const LAllocation& index,
-                                           const LAllocation& value,
-                                           const LInt64Definition& temp,
-                                           const LDefinition& tempLow)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp);
-    setInt64Temp(INT64_PIECES, LInt64Definition::BogusTemp());
-    setTemp(2 * INT64_PIECES, tempLow);
-  }
 
   // x64
   LAtomicTypedArrayElementBinopForEffect64(const LAllocation& elements,
                                            const LAllocation& index,
-                                           const LAllocation& value,
+                                           const LInt64Allocation& value)
+      : LInstructionHelper(classOpcode) {
+    setOperand(0, elements);
+    setOperand(1, index);
+    setInt64Operand(2, value);
+    setInt64Temp(0, LInt64Definition::BogusTemp());
+  }
+
+  // ARM32, ARM64, x86, LoongArch64, MIPS
+  LAtomicTypedArrayElementBinopForEffect64(const LAllocation& elements,
+                                           const LAllocation& index,
+                                           const LInt64Allocation& value,
                                            const LInt64Definition& temp)
       : LInstructionHelper(classOpcode) {
     setOperand(0, elements);
     setOperand(1, index);
-    setOperand(2, value);
+    setInt64Operand(2, value);
     setInt64Temp(0, temp);
-    setInt64Temp(INT64_PIECES, LInt64Definition::BogusTemp());
-    setTemp(2 * INT64_PIECES, LDefinition::BogusTemp());
-  }
-
-  // ARM64
-  LAtomicTypedArrayElementBinopForEffect64(const LAllocation& elements,
-                                           const LAllocation& index,
-                                           const LAllocation& value,
-                                           const LInt64Definition& temp1,
-                                           const LInt64Definition& temp2)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, elements);
-    setOperand(1, index);
-    setOperand(2, value);
-    setInt64Temp(0, temp1);
-    setInt64Temp(INT64_PIECES, temp2);
-    setTemp(2 * INT64_PIECES, LDefinition::BogusTemp());
   }
 
   const LAllocation* elements() { return getOperand(0); }
   const LAllocation* index() { return getOperand(1); }
-  const LAllocation* value() { return getOperand(2); }
-  LInt64Definition temp1() { return getInt64Temp(0); }
-  LInt64Definition temp2() { return getInt64Temp(INT64_PIECES); }
-  const LDefinition* tempLow() { return getTemp(2 * INT64_PIECES); }
+  LInt64Allocation value() { return getInt64Operand(2); }
+  LInt64Definition temp() { return getInt64Temp(0); }
 
   const MAtomicTypedArrayElementBinop* mir() const {
     return mir_->toAtomicTypedArrayElementBinop();
@@ -3817,6 +3798,21 @@ class LRandom : public LInstructionHelper<1, 0, 1 + 2 * INT64_PIECES> {
   LInt64Definition temp2() { return getInt64Temp(1 + INT64_PIECES); }
 
   MRandom* mir() const { return mir_->toRandom(); }
+};
+
+class LInt64ToBigInt
+    : public LInstructionHelper<1, INT64_PIECES, INT64_PIECES> {
+ public:
+  LIR_HEADER(Int64ToBigInt)
+
+  LInt64ToBigInt(const LInt64Allocation& input, const LInt64Definition& temp)
+      : LInstructionHelper(classOpcode) {
+    setInt64Operand(0, input);
+    setInt64Temp(0, temp);
+  }
+
+  LInt64Allocation input() { return getInt64Operand(0); }
+  LInt64Definition temp() { return getInt64Temp(0); }
 };
 
 class LBigIntAsIntN64 : public LInstructionHelper<1, 1, 1 + INT64_PIECES> {

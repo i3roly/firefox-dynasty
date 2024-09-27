@@ -6,12 +6,15 @@
 const SPONSORED_QUERY = "sponsored";
 const NONSPONSORED_QUERY = "nonsponsored";
 
+// Avoid timeouts in verify mode
+requestLongerTimeout(3);
+
 // test for exposure events
 add_setup(async function () {
   await initExposureTest();
 });
 
-add_task(async function exposureSponsoredOnLegacyEngagement() {
+add_task(async function exposureSponsoredOnEngagement() {
   await doExposureTest({
     prefs: [
       ["browser.urlbar.exposureResults", suggestResultType("adm_sponsored")],

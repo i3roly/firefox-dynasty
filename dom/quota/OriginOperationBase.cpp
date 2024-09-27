@@ -8,6 +8,7 @@
 
 #include "mozilla/Assertions.h"
 #include "mozilla/MozPromise.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/dom/fs/TargetPtrHolder.h"
 #include "mozilla/dom/quota/OriginOperationCallbacks.h"
 #include "mozilla/dom/quota/QuotaManager.h"
@@ -44,8 +45,7 @@ OriginOperationBase::OriginOperationBase(
     MovingNotNull<RefPtr<QuotaManager>>&& aQuotaManager, const char* aName)
     : BackgroundThreadObject(GetCurrentSerialEventTarget()),
       mQuotaManager(std::move(aQuotaManager)),
-      mResultCode(NS_OK),
-      mActorDestroyed(false)
+      mResultCode(NS_OK)
 #ifdef QM_COLLECTING_OPERATION_TELEMETRY
       ,
       mName(aName)
@@ -54,10 +54,7 @@ OriginOperationBase::OriginOperationBase(
   AssertIsOnOwningThread();
 }
 
-OriginOperationBase::~OriginOperationBase() {
-  AssertIsOnOwningThread();
-  MOZ_ASSERT(mActorDestroyed);
-}
+OriginOperationBase::~OriginOperationBase() { AssertIsOnOwningThread(); }
 
 void OriginOperationBase::RunImmediately() {
   AssertIsOnOwningThread();
@@ -101,6 +98,12 @@ void OriginOperationBase::RunImmediately() {
                QM_TRY(MOZ_TO_RESULT(selfHolder->DoDirectoryWork(
                           *selfHolder->mQuotaManager)),
                       CreateAndRejectBoolPromise);
+
+               uint32_t pauseOnIOThreadMs = StaticPrefs::
+                   dom_quotaManager_originOperations_pauseOnIOThreadMs();
+               if (pauseOnIOThreadMs > 0) {
+                 PR_Sleep(PR_MillisecondsToInterval(pauseOnIOThreadMs));
+               }
 
                return BoolPromise::CreateAndResolve(true, __func__);
              })

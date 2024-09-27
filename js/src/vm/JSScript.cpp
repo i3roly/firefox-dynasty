@@ -15,7 +15,6 @@
 #include "mozilla/DebugOnly.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/MemoryReporting.h"
-#include "mozilla/PodOperations.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Span.h"  // mozilla::{Span,Span}
 #include "mozilla/Sprintf.h"
@@ -58,7 +57,7 @@
 #include "js/Utility.h"  // JS::UniqueChars
 #include "js/Value.h"    // JS::Value
 #include "util/Poison.h"
-#include "util/StringBuffer.h"
+#include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BigIntType.h"  // JS::BigInt
 #include "vm/BytecodeIterator.h"
@@ -94,12 +93,9 @@ using namespace js;
 
 using mozilla::CheckedInt;
 using mozilla::Maybe;
-using mozilla::PodCopy;
 using mozilla::PointerRangeSize;
-using mozilla::Utf8AsUnsignedChars;
 using mozilla::Utf8Unit;
 
-using JS::CompileOptions;
 using JS::ReadOnlyCompileOptions;
 using JS::SourceText;
 
@@ -716,7 +712,8 @@ static const JSClassOps ScriptSourceObjectClassOps = {
 const JSClass ScriptSourceObject::class_ = {
     "ScriptSource",
     JSCLASS_HAS_RESERVED_SLOTS(RESERVED_SLOTS) | JSCLASS_FOREGROUND_FINALIZE,
-    &ScriptSourceObjectClassOps};
+    &ScriptSourceObjectClassOps,
+};
 
 ScriptSourceObject* ScriptSourceObject::create(JSContext* cx,
                                                ScriptSource* source) {
@@ -933,7 +930,8 @@ JSLinearString* JSScript::sourceData(JSContext* cx, HandleScript script) {
                                            script->sourceEnd());
 }
 
-bool BaseScript::appendSourceDataForToString(JSContext* cx, StringBuffer& buf) {
+bool BaseScript::appendSourceDataForToString(JSContext* cx,
+                                             StringBuilder& buf) {
   MOZ_ASSERT(scriptSource()->hasSourceText());
   return scriptSource()->appendSubstring(cx, buf, toStringStart(),
                                          toStringEnd());
@@ -1335,7 +1333,7 @@ JSLinearString* ScriptSource::substringDontDeflate(JSContext* cx, size_t start,
   return NewStringCopyNDontDeflate<CanGC>(cx, units.asChars(), len);
 }
 
-bool ScriptSource::appendSubstring(JSContext* cx, StringBuffer& buf,
+bool ScriptSource::appendSubstring(JSContext* cx, StringBuilder& buf,
                                    size_t start, size_t stop) {
   MOZ_ASSERT(start <= stop);
 

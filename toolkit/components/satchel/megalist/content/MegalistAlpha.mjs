@@ -2,15 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { html, classMap } from "chrome://global/content/vendor/lit.all.mjs";
+import { html } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/megalist/PasswordCard.mjs";
 
 const DISPLAY_MODES = {
-  ALERTS: "alerts",
-  ALL: "all",
+  ALERTS: "SortByAlerts",
+  ALL: "SortByName",
 };
 
 export class MegalistAlpha extends MozLitElement {
@@ -60,26 +60,30 @@ export class MegalistAlpha extends MozLitElement {
     // TODO: implement me!
   }
 
-  #onShowAllButtonClick() {
-    this.displayMode = DISPLAY_MODES.ALL;
-    this.#messageToViewModel("Command", {
-      commandId: "SortByName",
-      snapshotId: 0,
-    });
+  #onRadioButtonChange(e) {
+    this.displayMode = e.target.value;
+    this.#sendCommand(this.displayMode);
   }
 
-  #onSortByAlertsButtonClick() {
-    this.displayMode = DISPLAY_MODES.ALERTS;
-    this.#messageToViewModel("Command", {
-      commandId: "SortByAlerts",
-      snapshotId: 0,
-    });
+  #openMenu(e) {
+    const panelList = this.shadowRoot.querySelector("panel-list");
+    panelList.toggle(e);
   }
 
   #messageToViewModel(messageName, data) {
     window.windowGlobalChild
       .getActor("Megalist")
       .sendAsyncMessage(messageName, data);
+  }
+
+  #sendCommand(commandId, options = {}) {
+    // TODO(Bug 1913302): snapshotId should be optional for global commands.
+    // Right now, we always pass 0 and overwrite when needed.
+    this.#messageToViewModel("Command", {
+      commandId,
+      snapshotId: 0,
+      ...options,
+    });
   }
 
   receiveShowSnapshots({ snapshots }) {
@@ -158,43 +162,83 @@ export class MegalistAlpha extends MozLitElement {
     </div>`;
   }
 
-  renderButton(title, selected, onClick) {
-    return html`<moz-button
-      class=${classMap({ selected })}
-      iconSrc=${selected ? "chrome://global/skin/icons/check.svg" : ""}
-      @click=${onClick}
-    >
-      ${title}
-    </moz-button>`;
-  }
-
-  renderToggleButtons() {
+  renderRadioButtons() {
     return html`
-      <div class="toggle-buttons">
-        ${this.renderButton(
-          `All (${this.header.value.total})`,
-          this.displayMode === DISPLAY_MODES.ALL,
-          this.#onShowAllButtonClick
-        )}
-        ${this.renderButton(
-          `Alerts (${this.header.value.alerts})`,
-          this.displayMode === DISPLAY_MODES.ALERTS,
-          this.#onSortByAlertsButtonClick
-        )}
+      <div data-l10n-id="passwords-radiogroup-label" role="radiogroup">
+        <input
+          @change=${this.#onRadioButtonChange}
+          checked
+          type="radio"
+          id="allLogins"
+          name="logins"
+          value=${DISPLAY_MODES.ALL}
+        />
+        <label
+          for="allLogins"
+          data-l10n-id="passwords-radiobutton-all"
+          data-l10n-args=${JSON.stringify({ total: this.header.value.total })}
+        ></label>
+
+        <input
+          @change=${this.#onRadioButtonChange}
+          type="radio"
+          id="alerts"
+          name="logins"
+          value=${DISPLAY_MODES.ALERTS}
+        />
+        <label
+          for="alerts"
+          data-l10n-id="passwords-radiobutton-alerts"
+          data-l10n-args=${JSON.stringify({ total: this.header.value.alerts })}
+        ></label>
       </div>
     `;
   }
 
-  renderActionsPanel() {
+  renderMenu() {
     return html`
-      <panel-list>
-        <panel-item accesskey="N">Import from another browser…</panel-item>
-        <panel-item accesskey="O">Import from a file…</panel-item>
-        <panel-item accesskey="S">Export passwords</panel-item>
-        <panel-item accesskey="S">Remove all passwords</panel-item>
+      <moz-button
+        @click=${this.#openMenu}
+        type="icon ghost"
+        iconSrc="chrome://global/skin/icons/more.svg"
+        aria-expanded="false"
+        aria-haspopup="menu"
+        data-l10n-id="menu-more-options-button"
+        id="more-options-menubutton"
+      ></moz-button>
+      <panel-list
+        role="menu"
+        aria-labelledby="more-options-menubutton"
+        data-l10n-id="more-options-popup"
+      >
+        <panel-item
+          action="import-from-browser"
+          data-l10n-id="about-logins-menu-menuitem-import-from-another-browser"
+          @click=${() => this.#sendCommand("ImportFromBrowser")}
+        ></panel-item>
+        <panel-item
+          action="import-from-file"
+          data-l10n-id="about-logins-menu-menuitem-import-from-a-file"
+        ></panel-item>
+        <panel-item
+          action="export-logins"
+          data-l10n-id="about-logins-menu-menuitem-export-logins2"
+        ></panel-item>
+        <panel-item
+          action="remove-all-logins"
+          data-l10n-id="about-logins-menu-menuitem-remove-all-logins2"
+        ></panel-item>
         <hr />
-        <panel-item accesskey="Q">Options</panel-item>
-        <panel-item accesskey="Q">Help</panel-item>
+        <panel-item
+          action="open-preferences"
+          data-l10n-id="menu-menuitem-preferences"
+          @click=${() => this.#sendCommand("Settings")}
+        ></panel-item>
+        <panel-item
+          action="open-help"
+          data-l10n-id="about-logins-menu-menuitem-help"
+          @click=${() => this.#sendCommand("Help")}
+        ></panel-item>
       </panel-list>
     `;
   }
@@ -205,7 +249,7 @@ export class MegalistAlpha extends MozLitElement {
     }
 
     return html`<div class="second-row">
-      ${this.renderToggleButtons()} ${this.renderActionsPanel()}
+      ${this.renderRadioButtons()} ${this.renderMenu()}
     </div>`;
   }
 

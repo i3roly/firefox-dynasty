@@ -45,6 +45,8 @@ import androidx.annotation.AnyThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
+import androidx.core.view.OnApplyWindowInsetsListener;
+import androidx.core.view.WindowInsetsCompat;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.Boolean;
@@ -713,6 +715,7 @@ package org.mozilla.geckoview {
     method @UiThread public boolean shouldPinOnScreen();
     method @UiThread public void surfaceChanged(@NonNull GeckoDisplay.SurfaceInfo);
     method @UiThread public void surfaceDestroyed();
+    method @UiThread public void windowInsetsChanged(@NonNull WindowInsetsCompat);
   }
 
   public static interface GeckoDisplay.NewSurfaceProvider {
@@ -896,6 +899,7 @@ package org.mozilla.geckoview {
     method @NonNull public String getTrustedRecursiveResolverUri();
     method public int getTrustedRecusiveResolverMode();
     method public boolean getUseMaxScreenDepth();
+    method @NonNull public int getUserCharacteristicPingCurrentVersion();
     method public boolean getWebFontsEnabled();
     method public boolean getWebManifestEnabled();
     method @NonNull public GeckoRuntimeSettings setAboutConfigEnabled(boolean);
@@ -928,6 +932,7 @@ package org.mozilla.geckoview {
     method @NonNull public GeckoRuntimeSettings setTranslationsOfferPopup(boolean);
     method @NonNull public GeckoRuntimeSettings setTrustedRecursiveResolverMode(int);
     method @NonNull public GeckoRuntimeSettings setTrustedRecursiveResolverUri(@NonNull String);
+    method @NonNull public GeckoRuntimeSettings setUserCharacteristicPingCurrentVersion(int);
     method @NonNull public GeckoRuntimeSettings setWebFontsEnabled(boolean);
     method @NonNull public GeckoRuntimeSettings setWebManifestEnabled(boolean);
     field public static final int ALLOW_ALL = 0;
@@ -1142,7 +1147,6 @@ package org.mozilla.geckoview {
     method @UiThread default public void onPaintStatusReset(@NonNull GeckoSession);
     method @UiThread default public void onPointerIconChange(@NonNull GeckoSession, @NonNull PointerIcon);
     method @UiThread default public void onPreviewImage(@NonNull GeckoSession, @NonNull String);
-    method @Deprecated @DeprecationSchedule(id="session-onProductUrl",version=131) @UiThread default public void onProductUrl(@NonNull GeckoSession);
     method @UiThread default public void onShowDynamicToolbar(@NonNull GeckoSession);
     method @Nullable @UiThread default public GeckoResult<SlowScriptResponse> onSlowScript(@NonNull GeckoSession, @NonNull String);
     method @UiThread default public void onTitleChange(@NonNull GeckoSession, @Nullable String);
@@ -1948,6 +1952,7 @@ package org.mozilla.geckoview {
   @UiThread public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfaceProvider {
     ctor public GeckoView(Context);
     ctor public GeckoView(Context, AttributeSet);
+    method @UiThread public void addWindowInsetsListener(@NonNull String, @Nullable OnApplyWindowInsetsListener);
     method @NonNull @UiThread public GeckoResult<Bitmap> capturePixels();
     method public void coverUntilFirstPaint(int);
     method public void dispatchDraw(@Nullable Canvas);
@@ -1961,6 +1966,7 @@ package org.mozilla.geckoview {
     method public void onDetachedFromWindow();
     method @NonNull public GeckoResult<PanZoomController.InputResultDetail> onTouchEventForDetailResult(@NonNull MotionEvent);
     method @Nullable @UiThread public GeckoSession releaseSession();
+    method @UiThread public void removeWindowInsetsListener(@NonNull String);
     method public void setActivityContextDelegate(@Nullable GeckoView.ActivityContextDelegate);
     method public void setAutofillEnabled(boolean);
     method public void setDynamicToolbarMaxHeight(int);

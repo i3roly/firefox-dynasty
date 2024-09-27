@@ -160,7 +160,7 @@ export class UserCharacteristicsPageService {
 
   shutdown() {}
 
-  createContentPage() {
+  createContentPage(principal) {
     lazy.console.debug("called createContentPage");
 
     lazy.console.debug("Registering actor");
@@ -184,7 +184,6 @@ export class UserCharacteristicsPageService {
         let { promise, resolve } = Promise.withResolvers();
         this._backgroundBrowsers.set(browser, resolve);
 
-        let principal = Services.scriptSecurityManager.getSystemPrincipal();
         let loadURIOptions = {
           triggeringPrincipal: principal,
         };
@@ -224,6 +223,7 @@ export class UserCharacteristicsPageService {
   }
 
   async populateAndCollectErrors(browser, data) {
+    // List of functions to populate Glean metrics
     const populateFuncs = [
       [this.populateIntlLocale, []],
       [this.populateZoomPrefs, []],
@@ -234,14 +234,18 @@ export class UserCharacteristicsPageService {
       [this.populateGamepads, [data.output.gamepads]],
       [this.populateClientInfo, []],
       [this.populateCPUInfo, []],
-      [this.populateScreenInfo, []],
+      [this.populateWindowInfo, []],
+      [this.populateWebGlInfo, [browser.ownerGlobal, browser.ownerDocument]],
     ];
+    // Bind them to the class and run them in parallel.
+    // Timeout if any of them takes too long (5 minutes).
     const results = await Promise.allSettled(
       populateFuncs.map(([f, args]) =>
-        timeoutPromise(f(...args), 5 * 60 * 1000)
+        timeoutPromise(f.bind(this)(...args), 5 * 60 * 1000)
       )
     );
 
+    // data?.output?.errors is previous errors that happened in usercharacteristics.js
     const errors = JSON.parse(data?.output?.errors ?? "[]");
     for (const [i, [func]] of populateFuncs.entries()) {
       if (results[i].status == "rejected") {
@@ -256,7 +260,13 @@ export class UserCharacteristicsPageService {
     Glean.characteristics.jsErrors.set(JSON.stringify(errors));
   }
 
-  async populateScreenInfo() {
+  async collectGleanMetricsFromMap(data, operation = "set") {
+    for (const [key, value] of Object.entries(data)) {
+      Glean.characteristics[key][operation](value);
+    }
+  }
+
+  async populateWindowInfo() {
     // We use two different methods to get any loaded document.
     // First one is, DOMContentLoaded event. If the user loads
     // a new document after actor registration, we will get it.
@@ -280,21 +290,33 @@ export class UserCharacteristicsPageService {
       return;
     }
 
-    const { promise, resolve } = Promise.withResolvers();
+    const { promise: screenInfoPromise, resolve: screenInfoResolve } =
+      Promise.withResolvers();
+    const { promise: pointerInfoPromise, resolve: pointerInfoResolve } =
+      Promise.withResolvers();
 
     Services.obs.addObserver(function observe(_subject, topic, data) {
       Services.obs.removeObserver(observe, topic);
-      ChromeUtils.unregisterWindowActor("UserCharacteristicsScreenInfo");
-      resolve(data.split(","));
+      screenInfoResolve(JSON.parse(data));
     }, "user-characteristics-screen-info-done");
 
-    ChromeUtils.registerWindowActor("UserCharacteristicsScreenInfo", {
+    Services.obs.addObserver(function observe(_subject, topic, data) {
+      Services.obs.removeObserver(observe, topic);
+      pointerInfoResolve(JSON.parse(data));
+    }, "user-characteristics-pointer-info-done");
+
+    Services.obs.addObserver(function observe(_subject, topic, _data) {
+      Services.obs.removeObserver(observe, topic);
+      ChromeUtils.unregisterWindowActor("UserCharacteristicsWindowInfo");
+    }, "user-characteristics-window-info-done");
+
+    ChromeUtils.registerWindowActor("UserCharacteristicsWindowInfo", {
       parent: {
         esModuleURI: "resource://gre/actors/UserCharacteristicsParent.sys.mjs",
       },
       child: {
         esModuleURI:
-          "resource://gre/actors/UserCharacteristicsScreenInfoChild.sys.mjs",
+          "resource://gre/actors/UserCharacteristicsWindowInfoChild.sys.mjs",
         events: {
           DOMContentLoaded: {},
         },
@@ -306,25 +328,23 @@ export class UserCharacteristicsPageService {
         for (const tab of win.gBrowser.tabs) {
           const actor =
             tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
-              "UserCharacteristicsScreenInfo"
+              "UserCharacteristicsWindowInfo"
             );
 
           if (!actor) {
             continue;
           }
 
-          actor.sendAsyncMessage("ScreenInfo:PopulateFromDocument");
+          actor.sendAsyncMessage("WindowInfo:PopulateFromDocument");
         }
       }
     }
 
-    const result = await promise;
-    Glean.characteristics.outerHeight.set(result[0]);
-    Glean.characteristics.innerHeight.set(result[1]);
-    Glean.characteristics.outerWidth.set(result[2]);
-    Glean.characteristics.innerWidth.set(result[3]);
-    Glean.characteristics.availHeight.set(result[4]);
-    Glean.characteristics.availWidth.set(result[5]);
+    const screenResult = await screenInfoPromise;
+    this.collectGleanMetricsFromMap(screenResult);
+
+    const pointerResult = await pointerInfoPromise;
+    this.collectGleanMetricsFromMap(pointerResult);
   }
 
   async populateZoomPrefs() {
@@ -384,6 +404,19 @@ export class UserCharacteristicsPageService {
         "canvasdata11Webgl",
         "canvasdata12Fingerprintjs1",
         "canvasdata13Fingerprintjs2",
+        "canvasdata1software",
+        "canvasdata2software",
+        "canvasdata3software",
+        "canvasdata4software",
+        "canvasdata5software",
+        "canvasdata6software",
+        "canvasdata7software",
+        "canvasdata8software",
+        "canvasdata9software",
+        "canvasdata10software",
+        "canvasdata11Webglsoftware",
+        "canvasdata12Fingerprintjs1software",
+        "canvasdata13Fingerprintjs2software",
         "voices",
         "mediaCapabilities",
         "audioFingerprint",
@@ -411,6 +444,9 @@ export class UserCharacteristicsPageService {
         "oscpu",
         "pdfViewer",
         "platform",
+        "audioFrames",
+        "audioRate",
+        "audioChannels",
       ],
     };
 
@@ -483,6 +519,236 @@ export class UserCharacteristicsPageService {
     Glean.characteristics.cpuModel.set(
       await Services.sysinfo.processInfo.then(r => r.name)
     );
+  }
+
+  async populateWebGlInfo(window, document) {
+    const results = {
+      glVersion: 2,
+      parameters: {
+        v1: [],
+        v2: [],
+        extensions: [],
+      },
+      shader_precision: {
+        FRAGMENT_SHADER: {},
+        VERTEX_SHADER: {},
+      },
+      debug_shaders: {},
+      debug_params: {},
+    };
+
+    const canvas = document.createElement("canvas");
+    let gl = canvas.getContext("webgl2");
+    if (!gl) {
+      gl = canvas.getContext("webgl");
+      results.glVersion = 1;
+    }
+    if (!gl) {
+      lazy.console.error(
+        "Unable to initialize WebGL. Your browser or machine may not support it."
+      );
+      results.glVersion = 0;
+      Glean.characteristics.webglinfo.set(JSON.stringify(results));
+      return;
+    }
+
+    // Some parameters are removed because they need to binded/set first.
+    // We are only interested in fingerprintable parameters.
+    // See https://phabricator.services.mozilla.com/D216337 for removed parameters.
+    const PARAMS = {
+      v1: [
+        "ALIASED_LINE_WIDTH_RANGE",
+        "ALIASED_POINT_SIZE_RANGE",
+        "MAX_COMBINED_TEXTURE_IMAGE_UNITS",
+        "MAX_CUBE_MAP_TEXTURE_SIZE",
+        "MAX_FRAGMENT_UNIFORM_VECTORS",
+        "MAX_RENDERBUFFER_SIZE",
+        "MAX_TEXTURE_IMAGE_UNITS",
+        "MAX_TEXTURE_SIZE",
+        "MAX_VARYING_VECTORS",
+        "MAX_VERTEX_ATTRIBS",
+        "MAX_VERTEX_TEXTURE_IMAGE_UNITS",
+        "MAX_VERTEX_UNIFORM_VECTORS",
+        "MAX_VIEWPORT_DIMS",
+        "SHADING_LANGUAGE_VERSION",
+      ],
+      v2: [
+        "MAX_3D_TEXTURE_SIZE",
+        "MAX_ARRAY_TEXTURE_LAYERS",
+        "MAX_CLIENT_WAIT_TIMEOUT_WEBGL",
+        "MAX_COLOR_ATTACHMENTS",
+        "MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS",
+        "MAX_COMBINED_UNIFORM_BLOCKS",
+        "MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS",
+        "MAX_DRAW_BUFFERS",
+        "MAX_ELEMENT_INDEX",
+        "MAX_ELEMENTS_INDICES",
+        "MAX_ELEMENTS_VERTICES",
+        "MAX_FRAGMENT_INPUT_COMPONENTS",
+        "MAX_FRAGMENT_UNIFORM_BLOCKS",
+        "MAX_FRAGMENT_UNIFORM_COMPONENTS",
+        "MAX_PROGRAM_TEXEL_OFFSET",
+        "MAX_SAMPLES",
+        "MAX_SERVER_WAIT_TIMEOUT",
+        "MAX_TEXTURE_LOD_BIAS",
+        "MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS",
+        "MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS",
+        "MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS",
+        "MAX_UNIFORM_BLOCK_SIZE",
+        "MAX_UNIFORM_BUFFER_BINDINGS",
+        "MAX_VARYING_COMPONENTS",
+        "MAX_VERTEX_OUTPUT_COMPONENTS",
+        "MAX_VERTEX_UNIFORM_BLOCKS",
+        "MAX_VERTEX_UNIFORM_COMPONENTS",
+        "MIN_PROGRAM_TEXEL_OFFSET",
+        "UNIFORM_BUFFER_OFFSET_ALIGNMENT",
+      ],
+      extensions: {
+        EXT_texture_filter_anisotropic: ["MAX_TEXTURE_MAX_ANISOTROPY_EXT"],
+        WEBGL_draw_buffers: [
+          "MAX_COLOR_ATTACHMENTS_WEBGL",
+          "MAX_DRAW_BUFFERS_WEBGL",
+        ],
+        EXT_disjoint_timer_query: ["TIMESTAMP_EXT"],
+        OVR_multiview2: ["MAX_VIEWS_OVR"],
+      },
+    };
+
+    const attemptToArray = value => {
+      if (ArrayBuffer.isView(value)) {
+        return Array.from(value);
+      }
+      return value;
+    };
+    function getParam(param, ext = gl) {
+      const constant = ext[param];
+      const value = attemptToArray(gl.getParameter(constant));
+      return value;
+    }
+
+    // Get all parameters available in WebGL1
+    if (results.glVersion >= 1) {
+      for (const parameter of PARAMS.v1) {
+        results.parameters.v1.push(getParam(parameter));
+      }
+    }
+
+    // Get all parameters available in WebGL2
+    if (results.glVersion === 2) {
+      for (const parameter of PARAMS.v2) {
+        results.parameters.v2.push(getParam(parameter));
+      }
+    }
+
+    // Get all extension parameters
+    for (const extension in PARAMS.extensions) {
+      const ext = gl.getExtension(extension);
+      if (!ext) {
+        results.parameters.extensions.push(null);
+        continue;
+      }
+      results.parameters.extensions.push(
+        PARAMS.extensions[extension].map(param => getParam(param, ext))
+      );
+    }
+
+    for (const shaderType of ["FRAGMENT_SHADER", "VERTEX_SHADER"]) {
+      for (const precisionType of [
+        "LOW_FLOAT",
+        "MEDIUM_FLOAT",
+        "HIGH_FLOAT",
+        "LOW_INT",
+        "MEDIUM_INT",
+        "HIGH_INT",
+      ]) {
+        let { rangeMin, rangeMax, precision } = gl.getShaderPrecisionFormat(
+          gl[shaderType],
+          gl[precisionType]
+        );
+        results.shader_precision[shaderType][precisionType] = {
+          rangeMin,
+          rangeMax,
+          precision,
+        };
+      }
+    }
+
+    const mozDebugExt = gl.getExtension("MOZ_debug");
+    const debugExt = gl.getExtension("WEBGL_debug_renderer_info");
+
+    results.debug_params = {
+      versionRaw: mozDebugExt.getParameter(gl.VERSION),
+      vendorRaw: mozDebugExt.getParameter(gl.VENDOR),
+      rendererRaw: mozDebugExt.getParameter(gl.RENDERER),
+      extensions: gl.getSupportedExtensions().join(" "),
+      extensionsRaw: mozDebugExt.getParameter(mozDebugExt.EXTENSIONS),
+      vendorDebugInfo: gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL),
+      rendererDebugInfo: gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL),
+    };
+
+    if (gl.getExtension("WEBGL_debug_shaders")) {
+      // WEBGL_debug_shaders.getTranslatedShaderSource() produces GPU fingerprintable information
+
+      // Taken from https://github.com/mdn/dom-examples/blob/b12b3a9e85747d3432135e6efa5bbc6581fc0774/webgl-examples/tutorial/sample3/webgl-demo.js#L29
+      const vsSource = `
+        attribute vec4 aVertexPosition;
+        attribute vec4 aVertexColor;
+
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjectionMatrix;
+
+        varying lowp vec4 vColor;
+
+        void main(void) {
+          gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+          vColor = aVertexColor;
+        }
+      `;
+
+      // Taken from https://github.com/mdn/content/blob/acfe8c9f1f4145f77653a2bc64a9744b001358dc/files/en-us/web/api/webgl_api/tutorial/adding_2d_content_to_a_webgl_context/index.md?plain=1#L89
+      const fsSource = `
+        void main() {
+          gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+      `;
+
+      const minimalSource = `void main() {}`;
+
+      // To keep the payload small, we'll hash vsSource and fsSource, but keep minimalSource as is.
+      const translationExt = gl.getExtension("WEBGL_debug_shaders");
+
+      const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fragmentShader, fsSource);
+      gl.compileShader(fragmentShader);
+
+      const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vertexShader, vsSource);
+      gl.compileShader(vertexShader);
+
+      const minimalShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(minimalShader, minimalSource);
+      gl.compileShader(minimalShader);
+
+      async function sha1(message) {
+        const msgUint8 = new TextEncoder().encode(message);
+        const hashBuffer = await window.crypto.subtle.digest("SHA-1", msgUint8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray
+          .map(b => b.toString(16).padStart(2, "0"))
+          .join("");
+        return hashHex;
+      }
+
+      results.debug_shaders = {
+        fs: await sha1(
+          translationExt.getTranslatedShaderSource(fragmentShader)
+        ),
+        vs: await sha1(translationExt.getTranslatedShaderSource(vertexShader)),
+        ms: translationExt.getTranslatedShaderSource(minimalShader),
+      };
+    }
+
+    Glean.characteristics.webglinfo.set(JSON.stringify(results));
   }
 
   async pageLoaded(browsingContext, data) {

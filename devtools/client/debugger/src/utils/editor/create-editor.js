@@ -27,8 +27,10 @@ export function createEditor(useCm6 = false) {
     gutters,
     value: " ",
     extraKeys: {
-      // Override code mirror keymap to avoid conflicts with split console.
+      // Override code mirror keymap to avoid conflicts with split console and tabbing to other elements.
       Esc: false,
+      Tab: false,
+      "Shift-Tab": false,
       "Cmd-F": false,
       "Ctrl-F": false,
       "Cmd-G": false,
@@ -38,8 +40,14 @@ export function createEditor(useCm6 = false) {
   });
 }
 
-export function createHeadlessEditor() {
-  const editor = createEditor();
+/**
+ * Create an headless editor (can be used for syntax highlighting for example)
+ *
+ * @param {Boolean} useCm6: Should the headless editor use CodeMirror 6
+ * @returns {CodeMirror}
+ */
+export function createHeadlessEditor(useCm6) {
+  const editor = createEditor(useCm6);
   editor.appendToLocalElement(document.createElement("div"));
   return editor;
 }

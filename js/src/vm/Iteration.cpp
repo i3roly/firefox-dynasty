@@ -9,7 +9,6 @@
 #include "vm/Iteration.h"
 
 #include "mozilla/ArrayUtils.h"
-#include "mozilla/DebugOnly.h"
 #include "mozilla/Likely.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/MemoryReporting.h"
@@ -51,7 +50,6 @@
 using namespace js;
 
 using mozilla::ArrayEqual;
-using mozilla::DebugOnly;
 using mozilla::Maybe;
 using mozilla::PodCopy;
 
@@ -1452,9 +1450,13 @@ const JSClassOps PropertyIteratorObject::classOps_ = {
 const JSClass PropertyIteratorObject::class_ = {
     "Iterator",
     JSCLASS_HAS_RESERVED_SLOTS(SlotCount) | JSCLASS_BACKGROUND_FINALIZE,
-    &PropertyIteratorObject::classOps_};
+    &PropertyIteratorObject::classOps_,
+};
 
-static const JSClass ArrayIteratorPrototypeClass = {"Array Iterator", 0};
+static const JSClass ArrayIteratorPrototypeClass = {
+    "Array Iterator",
+    0,
+};
 
 enum {
   ArrayIteratorSlotIteratedObject,
@@ -1464,7 +1466,9 @@ enum {
 };
 
 const JSClass ArrayIteratorObject::class_ = {
-    "Array Iterator", JSCLASS_HAS_RESERVED_SLOTS(ArrayIteratorSlotCount)};
+    "Array Iterator",
+    JSCLASS_HAS_RESERVED_SLOTS(ArrayIteratorSlotCount),
+};
 
 ArrayIteratorObject* js::NewArrayIteratorTemplate(JSContext* cx) {
   RootedObject proto(
@@ -1487,9 +1491,14 @@ ArrayIteratorObject* js::NewArrayIterator(JSContext* cx) {
 }
 
 static const JSFunctionSpec array_iterator_methods[] = {
-    JS_SELF_HOSTED_FN("next", "ArrayIteratorNext", 0, 0), JS_FS_END};
+    JS_SELF_HOSTED_FN("next", "ArrayIteratorNext", 0, 0),
+    JS_FS_END,
+};
 
-static const JSClass StringIteratorPrototypeClass = {"String Iterator", 0};
+static const JSClass StringIteratorPrototypeClass = {
+    "String Iterator",
+    0,
+};
 
 enum {
   StringIteratorSlotIteratedObject,
@@ -1498,10 +1507,14 @@ enum {
 };
 
 const JSClass StringIteratorObject::class_ = {
-    "String Iterator", JSCLASS_HAS_RESERVED_SLOTS(StringIteratorSlotCount)};
+    "String Iterator",
+    JSCLASS_HAS_RESERVED_SLOTS(StringIteratorSlotCount),
+};
 
 static const JSFunctionSpec string_iterator_methods[] = {
-    JS_SELF_HOSTED_FN("next", "StringIteratorNext", 0, 0), JS_FS_END};
+    JS_SELF_HOSTED_FN("next", "StringIteratorNext", 0, 0),
+    JS_FS_END,
+};
 
 StringIteratorObject* js::NewStringIteratorTemplate(JSContext* cx) {
   RootedObject proto(
@@ -1524,7 +1537,9 @@ StringIteratorObject* js::NewStringIterator(JSContext* cx) {
 }
 
 static const JSClass RegExpStringIteratorPrototypeClass = {
-    "RegExp String Iterator", 0};
+    "RegExp String Iterator",
+    0,
+};
 
 enum {
   // The regular expression used for iteration. May hold the original RegExp
@@ -1574,12 +1589,14 @@ static_assert(RegExpStringIteratorSlotLastIndex ==
 
 const JSClass RegExpStringIteratorObject::class_ = {
     "RegExp String Iterator",
-    JSCLASS_HAS_RESERVED_SLOTS(RegExpStringIteratorSlotCount)};
+    JSCLASS_HAS_RESERVED_SLOTS(RegExpStringIteratorSlotCount),
+};
 
 static const JSFunctionSpec regexp_string_iterator_methods[] = {
     JS_SELF_HOSTED_FN("next", "RegExpStringIteratorNext", 0, 0),
 
-    JS_FS_END};
+    JS_FS_END,
+};
 
 RegExpStringIteratorObject* js::NewRegExpStringIteratorTemplate(JSContext* cx) {
   RootedObject proto(cx, GlobalObject::getOrCreateRegExpStringIteratorPrototype(
@@ -2222,7 +2239,9 @@ static const JSFunctionSpec wrap_for_valid_iterator_methods[] = {
 };
 
 static const JSClass WrapForValidIteratorPrototypeClass = {
-    "Wrap For Valid Iterator", 0};
+    "Wrap For Valid Iterator",
+    0,
+};
 
 const JSClass WrapForValidIteratorObject::class_ = {
     "Wrap For Valid Iterator",
@@ -2256,7 +2275,10 @@ static const JSFunctionSpec iterator_helper_methods[] = {
     JS_FS_END,
 };
 
-static const JSClass IteratorHelperPrototypeClass = {"Iterator Helper", 0};
+static const JSClass IteratorHelperPrototypeClass = {
+    "Iterator Helper",
+    0,
+};
 
 const JSClass IteratorHelperObject::class_ = {
     "Iterator Helper",

@@ -195,6 +195,8 @@ void nsCocoaWindow::DestroyNativeWindow() {
   // window will definitely no longer be shown.
   Show(false);
 
+  [mWindow removeTrackingArea];
+
   [mWindow releaseJSObjects];
   // We want to unhook the delegate here because we don't want events
   // sent to it after this object has been destroyed.
@@ -1598,6 +1600,11 @@ void nsCocoaWindow::ProcessTransitions() {
 
   mInProcessTransitions = true;
 
+  if (mProcessTransitionsPending) {
+        mProcessTransitionsPending->Cancel();
+        mProcessTransitionsPending = nullptr;
+  }
+
   // Start a loop that will continue as long as we have transitions to process
   // and we aren't waiting on an asynchronous transition to complete. Any
   // transition that starts something async will `continue` this loop to exit.
@@ -1777,6 +1784,10 @@ void nsCocoaWindow::CancelAllTransitions() {
   // ProcessTransitions().
   mTransitionCurrent.reset();
   mIsTransitionCurrentAdded = false;
+  if (mProcessTransitionsPending) {
+      mProcessTransitionsPending->Cancel();
+      mProcessTransitionsPending = nullptr;
+  }
   std::queue<TransitionType>().swap(mTransitionsPending);
 }
 
@@ -1802,10 +1813,12 @@ void nsCocoaWindow::FinishCurrentTransitionIfMatching(
     // ProcessTransitions on the next event loop. Doing this will ensure that
     // any async native transition methods we call (like toggleFullScreen) will
     // succeed.
-    if (!mTransitionsPending.empty()) {
-      NS_DispatchToCurrentThread(NewRunnableMethod(
-          "FinishCurrentTransition", this, &nsCocoaWindow::ProcessTransitions));
-    }
+      if (!mTransitionsPending.empty() && !mProcessTransitionsPending) {
+        mProcessTransitionsPending = NS_NewCancelableRunnableFunction(
+            "ProcessTransitionsPending",
+            [self = RefPtr{this}] { self->ProcessTransitions(); });
+        NS_DispatchToCurrentThread(mProcessTransitionsPending);
+      }
   }
 }
 
@@ -2813,9 +2826,6 @@ void nsCocoaWindow::CocoaWindowDidResize() {
 }
 
 - (void)windowDidResize:(NSNotification*)aNotification {
-  BaseWindow* window = [aNotification object];
-  [window updateTrackingArea];
-
   if (!mGeckoWindow) return;
 
   mGeckoWindow->CocoaWindowDidResize();
@@ -2883,6 +2893,16 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   }
   if ([titlebarContainerView respondsToSelector:@selector(setTransparent:)]) {
     [titlebarContainerView setTransparent:NO];
+  }
+
+  if (@available(macOS 11.0, *)) {
+    if ([window isKindOfClass:[ToolbarWindow class]]) {
+      // In order to work around a drawing bug with windows in full screen
+      // mode, disable titlebar separators for full screen windows of the
+      // ToolbarWindow class. The drawing bug was filed as FB9056136. See bug
+      // 1700211 and bug 1912338 for more details.
+      window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+    }
   }
 
   if (!mGeckoWindow) {
@@ -3193,7 +3213,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 @end
 
 @interface BaseWindow (Private)
-- (void)removeTrackingArea;
 - (void)cursorUpdated:(NSEvent*)aEvent;
 - (void)reflowTitlebarElements;
 @end
@@ -3290,7 +3309,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
   mDrawTitle = NO;
   mTouchBar = nil;
   mIsAnimationSuppressed = NO;
-  [self updateTrackingArea];
 
   return self;
 }
@@ -3403,7 +3421,6 @@ static NSImage* GetMenuMaskImage() {
 
 - (void)dealloc {
   [mTouchBar release];
-  [self removeTrackingArea];
   ChildViewMouseTracker::OnDestroyWindow(self);
   [super dealloc];
 }
@@ -3514,26 +3531,29 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   }
   return nil;
 }
+
 - (void)removeTrackingArea {
-  if (mTrackingArea) {
-    [self.trackingAreaView removeTrackingArea:mTrackingArea];
-    [mTrackingArea release];
-    mTrackingArea = nil;
-  }
+  [mViewWithTrackingArea removeTrackingArea:mTrackingArea];
+
+  [mTrackingArea release];
+  mTrackingArea = nil;
+
+  [mViewWithTrackingArea release];
+  mViewWithTrackingArea = nil;
 }
 
-- (void)updateTrackingArea {
-  [self removeTrackingArea];
+- (void)createTrackingArea {
+  mViewWithTrackingArea = [self.trackingAreaView retain];
+  const NSTrackingAreaOptions options =
+      NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
+      NSTrackingActiveAlways | NSTrackingInVisibleRect;
+  mTrackingArea =
+      [[NSTrackingArea alloc] initWithRect:[mViewWithTrackingArea bounds]
+                                   options:options
+                                     owner:self
+                                  userInfo:nil];
+  [mViewWithTrackingArea addTrackingArea:mTrackingArea];
 
-  NSView* view = self.trackingAreaView;
-  const NSTrackingAreaOptions options = NSTrackingMouseEnteredAndExited |
-                                        NSTrackingMouseMoved |
-                                        NSTrackingActiveAlways;
-  mTrackingArea = [[NSTrackingArea alloc] initWithRect:[view bounds]
-                                               options:options
-                                                 owner:self
-                                              userInfo:nil];
-  [view addTrackingArea:mTrackingArea];
 }
 
 - (void)mouseEntered:(NSEvent*)aEvent {
@@ -3658,11 +3678,11 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   if (aWindow) {
     // When entering full screen mode, titlebar accessory views are inserted
     // into a floating NSWindow which houses the window titlebar and toolbars.
-    // In order to work around a drawing bug with titlebarAppearsTransparent
-    // windows in full screen mode, disable titlebar separators for all
-    // NSWindows that this view is used in, including the floating full screen
-    // toolbar window. The drawing bug was filed as FB9056136. See bug 1700211
-    // for more details.
+    // In order to work around a drawing bug with windows in full screen mode,
+    // disable titlebar separators for all NSWindows that this view is used in
+    // that are not of the ToolbarWindow class, such as the floating full
+    // screen toolbar window. The drawing bug was filed as FB9056136. See bug
+    // 1700211 and bug 1912338 for more details.
     if (@available(macOS 11.0, *)) {
       aWindow.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }

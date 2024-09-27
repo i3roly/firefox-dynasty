@@ -17,7 +17,6 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/net/CookieJarSettings.h"
-#include "mozilla/Telemetry.h"
 #include "mozIThirdPartyUtil.h"
 #include "nsContentUtils.h"
 #include "nsICookiePermission.h"
@@ -163,6 +162,11 @@ nsresult CookieCommons::GetBaseDomainFromHost(
     return NS_OK;
   }
   return rv;
+}
+
+/* static */ bool CookieCommons::IsIPv6BaseDomain(
+    const nsACString& aBaseDomain) {
+  return aBaseDomain.Contains(':');
 }
 
 namespace {
@@ -363,8 +367,6 @@ already_AddRefed<Cookie> CookieCommons::CreateCookieFromDocument(
     CookieParser& aCookieParser, Document* aDocument,
     const nsACString& aCookieString, int64_t currentTimeInUsec,
     nsIEffectiveTLDService* aTLDService, mozIThirdPartyUtil* aThirdPartyUtil,
-    std::function<bool(const nsACString&, const OriginAttributes&)>&&
-        aHasExistingCookiesLambda,
     nsACString& aBaseDomain, OriginAttributes& aAttrs) {
   if (!CookieCommons::IsSchemeSupported(aCookieParser.HostURI())) {
     return nullptr;
@@ -442,11 +444,17 @@ already_AddRefed<Cookie> CookieCommons::CreateCookieFromDocument(
                       : aDocument->EffectiveCookiePrincipal();
   MOZ_ASSERT(cookiePrincipal);
 
+  nsCOMPtr<nsICookieService> service =
+      do_GetService(NS_COOKIESERVICE_CONTRACTID);
+  if (!service) {
+    return nullptr;
+  }
+
   // Check if limit-foreign is required.
   uint32_t dummyRejectedReason = 0;
   if (aDocument->CookieJarSettings()->GetLimitForeignContexts() &&
-      !aHasExistingCookiesLambda(baseDomain,
-                                 cookiePrincipal->OriginAttributesRef()) &&
+      !service->HasExistingCookies(baseDomain,
+                                   cookiePrincipal->OriginAttributesRef()) &&
       !ShouldAllowAccessFor(innerWindow, aCookieParser.HostURI(),
                             &dummyRejectedReason)) {
     return nullptr;
@@ -767,25 +775,6 @@ bool CookieCommons::IsSchemeSupported(const nsACString& aScheme) {
          aScheme.Equals("file");
 }
 
-static bool ContainsUnicodeChars(const nsCString& str) {
-  const auto* start = str.BeginReading();
-  const auto* end = str.EndReading();
-
-  return std::find_if(start, end, [](unsigned char c) { return c >= 0x80; }) !=
-         end;
-}
-
-// static
-void CookieCommons::RecordUnicodeTelemetry(const CookieStruct& cookieData) {
-  auto label = Telemetry::LABELS_NETWORK_COOKIE_UNICODE_BYTE::none;
-  if (ContainsUnicodeChars(cookieData.name())) {
-    label = Telemetry::LABELS_NETWORK_COOKIE_UNICODE_BYTE::unicodeName;
-  } else if (ContainsUnicodeChars(cookieData.value())) {
-    label = Telemetry::LABELS_NETWORK_COOKIE_UNICODE_BYTE::unicodeValue;
-  }
-  Telemetry::AccumulateCategorical(label);
-}
-
 // static
 bool CookieCommons::ChipsLimitEnabledAndChipsCookie(
     const Cookie& cookie, dom::BrowsingContext* aBrowsingContext) {
@@ -811,6 +800,28 @@ bool CookieCommons::ChipsLimitEnabledAndChipsCookie(
   return StaticPrefs::network_cookie_CHIPS_enabled() &&
          StaticPrefs::network_cookie_chips_partitionLimitEnabled() &&
          cookie.IsPartitioned() && cookie.RawIsPartitioned() && tcpEnabled;
+}
+
+void CookieCommons::ComposeCookieString(nsTArray<RefPtr<Cookie>>& aCookieList,
+                                        nsACString& aCookieString) {
+  for (Cookie* cookie : aCookieList) {
+    // check if we have anything to write
+    if (!cookie->Name().IsEmpty() || !cookie->Value().IsEmpty()) {
+      // if we've already added a cookie to the return list, append a "; " so
+      // that subsequent cookies are delimited in the final list.
+      if (!aCookieString.IsEmpty()) {
+        aCookieString.AppendLiteral("; ");
+      }
+
+      if (!cookie->Name().IsEmpty()) {
+        // we have a name and value - write both
+        aCookieString += cookie->Name() + "="_ns + cookie->Value();
+      } else {
+        // just write value
+        aCookieString += cookie->Value();
+      }
+    }
+  }
 }
 
 }  // namespace net

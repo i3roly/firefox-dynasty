@@ -40,6 +40,8 @@ const kPrefProtonToolbarVersion = "browser.proton.toolbar.version";
 const kPrefHomeButtonUsed = "browser.engagement.home-button.has-used";
 const kPrefLibraryButtonUsed = "browser.engagement.library-button.has-used";
 const kPrefSidebarButtonUsed = "browser.engagement.sidebar-button.has-used";
+const kPrefSidebarRevampEnabled = "sidebar.revamp";
+const kPrefSidebarVerticalTabsEnabled = "sidebar.verticalTabs";
 
 const kExpectedWindowURL = AppConstants.BROWSER_CHROME_URL;
 
@@ -192,6 +194,44 @@ XPCOMUtils.defineLazyPreferenceGetter(
   false
 );
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "sidebarRevampEnabled",
+  "sidebar.revamp",
+  false,
+  (pref, oldVal, newVal) => {
+    if (!newVal) {
+      return;
+    }
+    let navbarPlacements = CustomizableUI.getWidgetIdsInArea(
+      CustomizableUI.AREA_NAVBAR
+    );
+    if (!navbarPlacements.includes("sidebar-button")) {
+      // Find a spot for the sidebar-button.
+      // If any of the home, reload or fwd button are in there, we'll place next that.
+      let position;
+      for (let widgetId of [
+        "home-button",
+        "stop-reload-button",
+        "forward-button",
+      ]) {
+        position = navbarPlacements.indexOf(widgetId);
+        if (position > -1) {
+          position += 1;
+          break;
+        }
+      }
+      // Its not currently possible to move the forward-button out of the navbar, but we'll
+      // ensure the insert position is at least 0 just in case
+      CustomizableUI.addWidgetToArea(
+        "sidebar-button",
+        CustomizableUI.AREA_NAVBAR,
+        Math.max(0, position)
+      );
+    }
+  }
+);
+
 ChromeUtils.defineLazyGetter(lazy, "log", () => {
   let { ConsoleAPI } = ChromeUtils.importESModule(
     "resource://gre/modules/Console.sys.mjs"
@@ -249,7 +289,7 @@ var CustomizableUIInternal = {
       Services.policies.isAllowed("removeHomeButtonByDefault")
         ? null
         : "home-button",
-      Services.prefs.getBoolPref("sidebar.revamp") ? "sidebar-button" : null,
+      lazy.sidebarRevampEnabled ? "sidebar-button" : null,
       "spring",
       "urlbar-container",
       "spring",
@@ -310,6 +350,8 @@ var CustomizableUIInternal = {
     SearchWidgetTracker.init();
 
     Services.obs.addObserver(this, "browser-set-toolbar-visibility");
+
+    Services.prefs.addObserver(kPrefSidebarVerticalTabsEnabled, this);
   },
 
   onEnabled(addon) {
@@ -3768,6 +3810,23 @@ var CustomizableUIInternal = {
       let [toolbar, visibility] = JSON.parse(aData);
       CustomizableUI.setToolbarVisibility(toolbar, visibility == "true");
     }
+
+    if (
+      aTopic === "nsPref:changed" &&
+      aData === kPrefSidebarVerticalTabsEnabled
+    ) {
+      let sidebarRevampEnabled = Services.prefs.getBoolPref(
+        kPrefSidebarRevampEnabled,
+        false
+      );
+      let verticalTabsEnabled = Services.prefs.getBoolPref(
+        kPrefSidebarVerticalTabsEnabled,
+        false
+      );
+      if (verticalTabsEnabled && !sidebarRevampEnabled) {
+        Services.prefs.setBoolPref(kPrefSidebarRevampEnabled, true);
+      }
+    }
   },
 };
 Object.freeze(CustomizableUIInternal);
@@ -5503,6 +5562,7 @@ class OverflowableToolbar {
 
     if (!this.#initialized) {
       Services.obs.removeObserver(this, "browser-delayed-startup-finished");
+      Services.prefs.removeObserver(kPrefSidebarVerticalTabsEnabled, this);
       return;
     }
 

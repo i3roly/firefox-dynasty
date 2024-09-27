@@ -331,8 +331,7 @@ pref("media.videocontrols.keyboard-tab-to-all-controls", true);
   pref("media.peerconnection.dtls.version.min", 771);
   pref("media.peerconnection.dtls.version.max", 772);
 
-#if defined(XP_MACOSX) && defined(NIGHTLY_BUILD)
-  // Nightly only due to bug 1908539
+#if defined(XP_MACOSX)
   pref("media.getusermedia.audio.processing.platform.enabled", true);
 #else
   pref("media.getusermedia.audio.processing.platform.enabled", false);
@@ -545,7 +544,7 @@ pref("toolkit.scrollbox.scrollIncrement", 20);
 pref("toolkit.scrollbox.clickToScroll.scrollDelay", 150);
 
 pref("toolkit.shopping.ohttpConfigURL", "https://prod.ohttp-gateway.prod.webservices.mozgcp.net/ohttp-configs");
-pref("toolkit.shopping.ohttpRelayURL", "https://mozilla-ohttp-fakespot.fastly-edge.com/");
+pref("toolkit.shopping.ohttpRelayURL", "https://mozilla-ohttp.fastly-edge.com/");
 pref("toolkit.shopping.environment", "prod");
 
 // Controls logging for Sqlite.sys.mjs.
@@ -566,6 +565,7 @@ pref("toolkit.telemetry.unified", true);
 
 // DAP related preferences
 pref("toolkit.telemetry.dap_enabled", false);
+pref("toolkit.telemetry.dap.logLevel", "Warn");
 // Verification tasks
 pref("toolkit.telemetry.dap_task1_enabled", false);
 pref("toolkit.telemetry.dap_task1_taskid", "");
@@ -574,14 +574,14 @@ pref("toolkit.telemetry.dap_visit_counting_enabled", false);
 // Note: format of patterns is "<proto>://<host>/<path>"
 // See https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Match_patterns
 pref("toolkit.telemetry.dap_visit_counting_experiment_list", "[]");
-// Leader endpoint for the DAP protocol
-pref("toolkit.telemetry.dap_leader", "https://dap-09-3.api.divviup.org/");
-// Not used for anything. Just additional information.
-pref("toolkit.telemetry.dap_leader_owner", "ISRG");
-// Second DAP server. Only two are currently supported.
-pref("toolkit.telemetry.dap_helper", "https://dap.services.mozilla.com");
-pref("toolkit.telemetry.dap_helper_owner", "Mozilla");
-pref("toolkit.telemetry.dap.logLevel", "Warn");
+// DAP protocol Leader endpoint. Operated by DivviUp/ISRG.
+// - HPKE key is base64url-encoded response of the /hpke_config path on server.
+pref("toolkit.telemetry.dap.leader.url", "https://dap-09-3.api.divviup.org");
+pref("toolkit.telemetry.dap.leader.hpke", "ACkAACAAAQABACDk8wgwe2-TqHyaL74uqjVWMcF1zi9pxiwQhu4aPwncYw");
+// DAP protocol Helper endpoint. Operated by Mozilla.
+// - HPKE key is base64url-encoded response of the /hpke_config path on server.
+pref("toolkit.telemetry.dap.helper.url", "https://dap.services.mozilla.com");
+pref("toolkit.telemetry.dap.helper.hpke", "ACkAACAAAQABACAucqWdIQRN6BxumPBRXIlg2JsxcznwWX7vyqzM3cjuQA");
 
 // Controls telemetry logs for the Translations feature throughout Firefox.
 pref("toolkit.telemetry.translations.logLevel", "Error");
@@ -1349,34 +1349,6 @@ pref("network.websocket.delay-failed-reconnects", true);
 // Server-Sent Events
 // Equal to the DEFAULT_RECONNECTION_TIME_VALUE value in nsEventSource.cpp
 pref("dom.server-events.default-reconnection-time", 5000); // in milliseconds
-
-// TLDs are treated as IDN-unsafe and punycode will be used for displaying them
-// in the UI (e.g. URL bar), unless they conform to one of the profiles
-// specified in
-// https://www.unicode.org/reports/tr39/#Restriction_Level_Detection
-// If "network.IDN.restriction_profile" is "high", the Highly Restrictive
-// profile is used.
-// If "network.IDN.restriction_profile" is "moderate", the Moderately
-// Restrictive profile is used.
-// In all other cases, the ASCII-Only profile is used.
-// Note that these preferences are referred to ONLY when
-// "network.IDN_show_punycode" is false. In other words, all IDNs will be shown
-// in punycode if "network.IDN_show_punycode" is true.
-pref("network.IDN.restriction_profile", "high");
-
-// If a domain includes any of the blocklist characters, it may be a spoof
-// attempt and so we always display the domain name as punycode.
-// For a complete list of the blocked IDN characters see:
-//   netwerk/dns/IDNCharacterBlocklist.inc
-
-// This pref may contain characters that will override the hardcoded blocklist,
-// so their presence in a domain name will not cause it to be displayed as
-// punycode.
-// Note that this only removes the characters from the blocklist, but there may
-// be other rules in place that cause it to be displayed as punycode.
-pref("network.IDN.extra_allowed_chars", "");
-// This pref may contain additional blocklist characters
-pref("network.IDN.extra_blocked_chars", "");
 
 // This preference specifies a list of domains for which DNS lookups will be
 // IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
@@ -3215,7 +3187,6 @@ pref("network.psl.onUpdate_notify", false);
 
 #ifdef MOZ_WIDGET_GTK
   pref("widget.disable-workspace-management", false);
-  pref("widget.titlebar-x11-use-shape-mask", false);
 #endif
 
 // All the Geolocation preferences are here.
@@ -3234,10 +3205,6 @@ pref("geo.provider.network.timeout", 60000);
 // Set to false if things are really broken.
 #ifdef XP_WIN
   pref("geo.provider.ms-windows-location", true);
-#endif
-
-#if defined(MOZ_WIDGET_GTK) && defined(MOZ_GPSD)
-  pref("geo.provider.use_gpsd", true);
 #endif
 
 // Region
@@ -3554,11 +3521,7 @@ pref("browser.safebrowsing.reportPhishURL", "https://%LOCALE%.phish-report.mozil
 // Mozilla Safe Browsing provider (for tracking protection and plugin blocking)
 pref("browser.safebrowsing.provider.mozilla.pver", "2.2");
 pref("browser.safebrowsing.provider.mozilla.lists", "base-track-digest256,mozstd-trackwhite-digest256,google-trackwhite-digest256,content-track-digest256,mozplugin-block-digest256,mozplugin2-block-digest256,ads-track-digest256,social-track-digest256,analytics-track-digest256,base-fingerprinting-track-digest256,content-fingerprinting-track-digest256,base-cryptomining-track-digest256,content-cryptomining-track-digest256,fanboyannoyance-ads-digest256,fanboysocial-ads-digest256,easylist-ads-digest256,easyprivacy-ads-digest256,adguard-ads-digest256,social-tracking-protection-digest256,social-tracking-protection-facebook-digest256,social-tracking-protection-linkedin-digest256,social-tracking-protection-twitter-digest256,base-email-track-digest256,content-email-track-digest256");
-#ifdef NIGHTLY_BUILD
-  pref("browser.safebrowsing.provider.mozilla.updateURL", "moz-sbrs:://antitracking");
-#else
-  pref("browser.safebrowsing.provider.mozilla.updateURL", "https://shavar.services.mozilla.com/downloads?client=SAFEBROWSING_ID&appver=%MAJOR_VERSION%&pver=2.2");
-#endif
+pref("browser.safebrowsing.provider.mozilla.updateURL", "moz-sbrs:://antitracking");
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "https://shavar.services.mozilla.com/gethash?client=SAFEBROWSING_ID&appver=%MAJOR_VERSION%&pver=2.2");
 // Set to a date in the past to force immediate download in new profiles.
 pref("browser.safebrowsing.provider.mozilla.nextupdatetime", "1");
@@ -3568,7 +3531,11 @@ pref("browser.safebrowsing.provider.mozilla.lists.base", "moz-std");
 pref("browser.safebrowsing.provider.mozilla.lists.content", "moz-full");
 
 // The table and global pref for blocking plugin content
-pref("urlclassifier.blockedTable", "moztest-block-simple,mozplugin-block-digest256");
+#ifdef NIGHTLY_BUILD
+  pref("urlclassifier.blockedTable", "moztest-block-simple,mozplugin-block-digest256");
+#else
+  pref("urlclassifier.blockedTable", "moztest-block-simple");
+#endif
 
 #ifdef XP_MACOSX
   #if !defined(RELEASE_OR_BETA) || defined(DEBUG)
@@ -3736,6 +3703,12 @@ pref("webextensions.tests", false);
 // 16MB default non-parseable upload limit for requestBody.raw.bytes
 pref("webextensions.webRequest.requestBodyMaxRawBytes", 16777216);
 
+#ifdef NIGHTLY_BUILD
+  pref("webextensions.storage.session.enforceQuota", true);
+#else
+  pref("webextensions.storage.session.enforceQuota", false);
+#endif
+
 pref("webextensions.storage.sync.enabled", true);
 // Should we use the old kinto-based implementation of storage.sync? To be removed in bug 1637465.
 pref("webextensions.storage.sync.kinto", false);
@@ -3776,6 +3749,10 @@ pref("browser.translations.select.enable", false);
 // the application logic logs, and not all of the translated messages, which can be
 // slow and overwhelming.
 pref("browser.translations.logLevel", "Error");
+// The BCP-47 language tags of the most recently translated-into target language.
+// This preference is considered when offering a specific language to translate into,
+// but is not considered as a "known" language when deciding whether to offer Translations at all.
+pref("browser.translations.mostRecentTargetLanguages", "");
 // A comma-separated list of BCP-47 language tags that affect the behavior of translations.
 // Languages listed in the alwaysTranslateLanguages list will trigger auto-translate on page load.
 pref("browser.translations.alwaysTranslateLanguages", "");
@@ -4055,10 +4032,6 @@ pref("devtools.errorconsole.deprecation_warnings", true);
 
 // Disable service worker debugging on all channels (see Bug 1651605).
 pref("devtools.debugger.features.windowless-service-workers", false);
-
-// Bug 1824726 replaced client side throttling with server side throttling.
-// Use a preference in order to rollback in case of trouble.
-pref("devtools.client-side-throttling.enable", false);
 
 // Disable remote debugging protocol logging.
 pref("devtools.debugger.log", false);

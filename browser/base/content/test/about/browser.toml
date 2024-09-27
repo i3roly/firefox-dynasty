@@ -11,6 +11,8 @@ support-files = [
 
 ["browser_aboutCertError.js"]
 
+["browser_aboutCertError_cca_telemetry.js"]
+
 ["browser_aboutCertError_clockSkew.js"]
 
 ["browser_aboutCertError_exception.js"]
@@ -52,6 +54,11 @@ support-files = [
 
 ["browser_aboutNetError_native_fallback.js"]
 skip-if = ["socketprocess_networking"]
+
+["browser_aboutNetError_server_error.js"]
+support-files = [
+  "server_error.sjs",
+]
 
 ["browser_aboutNetError_trr.js"]
 skip-if = ["socketprocess_networking"]

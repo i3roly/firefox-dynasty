@@ -247,17 +247,6 @@ RefPtr<MediaDeviceSetRefCnt> MediaDevices::FilterExposedDevices(
       !Preferences::GetBool("media.setsinkid.enabled") ||
       !FeaturePolicyUtils::IsFeatureAllowed(doc, u"speaker-selection"_ns);
 
-  if (doc->ShouldResistFingerprinting(RFPTarget::MediaDevices)) {
-    RefPtr fakeEngine = new MediaEngineFake();
-    fakeEngine->EnumerateDevices(MediaSourceEnum::Microphone,
-                                 MediaSinkEnum::Other, exposed);
-    fakeEngine->EnumerateDevices(MediaSourceEnum::Camera, MediaSinkEnum::Other,
-                                 exposed);
-    dropMics = dropCams = true;
-    // Speakers are not handled specially with resistFingerprinting because
-    // they are exposed only when explicitly and individually allowed by the
-    // user.
-  }
   bool legacy = StaticPrefs::media_devices_enumerate_legacy_enabled();
   bool outputIsDefault = true;  // First output is the default.
   bool haveDefaultOutput = false;
@@ -321,6 +310,56 @@ RefPtr<MediaDeviceSetRefCnt> MediaDevices::FilterExposedDevices(
     }
     exposed->AppendElement(device);
   }
+
+  if (doc->ShouldResistFingerprinting(RFPTarget::MediaDevices)) {
+    // We expose a single device of each kind.
+    // Legacy mode also achieves the same thing, except for speakers.
+    nsTHashSet<MediaDeviceKind> seenKinds;
+
+    for (uint32_t i = 0; i < exposed->Length(); i++) {
+      RefPtr<mozilla::MediaDevice> device = exposed->ElementAt(i);
+      if (seenKinds.Contains(device->mKind)) {
+        exposed->RemoveElementAt(i);
+        i--;
+        continue;
+      }
+      seenKinds.Insert(device->mKind);
+    }
+
+    // We haven't seen at least one of each kind of device.
+    // Audioinput, Videoinput, Audiooutput.
+    // Insert fake devices.
+    if (seenKinds.Count() != 3) {
+      RefPtr fakeEngine = new MediaEngineFake();
+      RefPtr fakeDevices = new MediaDeviceSetRefCnt();
+      // The order in which we insert the fake devices is important.
+      // Microphone is inserted first, then camera, then speaker.
+      // If we haven't seen a microphone, insert a fake one.
+      if (!seenKinds.Contains(MediaDeviceKind::Audioinput)) {
+        fakeEngine->EnumerateDevices(MediaSourceEnum::Microphone,
+                                     MediaSinkEnum::Other, fakeDevices);
+        exposed->InsertElementAt(0, fakeDevices->LastElement());
+      }
+      // If we haven't seen a camera, insert a fake one.
+      if (!seenKinds.Contains(MediaDeviceKind::Videoinput)) {
+        fakeEngine->EnumerateDevices(MediaSourceEnum::Camera,
+                                     MediaSinkEnum::Other, fakeDevices);
+        exposed->InsertElementAt(1, fakeDevices->LastElement());
+      }
+      // If we haven't seen a speaker, insert a fake one.
+      if (!seenKinds.Contains(MediaDeviceKind::Audiooutput) &&
+          mCanExposeMicrophoneInfo) {
+        RefPtr info = new AudioDeviceInfo(
+            nullptr, u""_ns, u""_ns, u""_ns, CUBEB_DEVICE_TYPE_OUTPUT,
+            CUBEB_DEVICE_STATE_ENABLED, CUBEB_DEVICE_PREF_ALL,
+            CUBEB_DEVICE_FMT_ALL, CUBEB_DEVICE_FMT_S16NE, 2, 44100, 44100,
+            44100, 128, 128);
+        exposed->AppendElement(
+            new MediaDevice(new MediaEngineFake(), info, u""_ns));
+      }
+    }
+  }
+
   return exposed;
 }
 

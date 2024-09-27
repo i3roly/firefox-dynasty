@@ -12,8 +12,6 @@ support-files = [
   "data/engine-fr.xml",
   "data/engineMaker.sjs",
   "data/engineImages.xml",
-  "data/search-config-v2.json",
-  "data/search-config-v2-no-order-hint.json",
   "data/iconsRedirect.sjs",
   "data/search.json",
   "data/search-legacy.json",
@@ -26,9 +24,6 @@ support-files = [
   "data/search-obsolete-distribution.json",
   "data/search-obsolete-langpack.json",
   "data/searchSuggestions.sjs",
-  "data1/search-config-v2.json",
-  "simple-engines/search-config-v2.json",
-  "test-extensions/search-config-v2.json",
 ]
 
 ["test_SearchStaticData.js"]
@@ -46,13 +41,13 @@ prefs = ["browser.search.newSearchConfig.enabled=true"]
 
 ["test_appProvided_icons_updates.js"]
 prefs = ["browser.search.newSearchConfig.enabled=true"]
+tags = "remote-settings"
 
 ["test_async.js"]
 
 ["test_config_engine_params.js"]
-support-files = [
-  "method-extensions/search-config-v2.json",
-]
+
+["test_config_loading_uses_env.js"]
 
 ["test_configExpansion.js"]
 support-files = [
@@ -111,14 +106,6 @@ tags = "remotesettings searchmain"
 ["test_initialization_status_telemetry.js"]
 
 ["test_initialization_with_region.js"]
-
-["test_list_json_locale.js"]
-
-["test_list_json_no_private_default.js"]
-
-["test_list_json_searchdefault.js"]
-
-["test_list_json_searchorder.js"]
 
 ["test_maybereloadengine_order.js"]
 
@@ -224,6 +211,8 @@ support-files = [
 ["test_settings_ignorelist.js"]
 support-files = ["data/search_ignorelist.json"]
 
+["test_settings_migrate_id_format.js"]
+
 ["test_settings_migration_hideOneOffs.js"]
 
 ["test_settings_migration_ids.js"]
@@ -259,11 +248,11 @@ prefs = ["browser.search.newSearchConfig.enabled=true"]
 ["test_webextensions_migrate_to.js"]
 support-files = ["data/search-migration.json"]
 
+["test_webextensions_startup.js"]
+
 ["test_webextensions_startup_duplicate.js"]
 
 ["test_webextensions_startup_remove.js"]
-
-["test_webextensions_startup.js"]
 
 ["test_webextensions_upgrade.js"]
 

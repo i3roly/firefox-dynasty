@@ -48,6 +48,7 @@ export var UrlbarUtils = {
     HEURISTIC_BOOKMARK_KEYWORD: "heuristicBookmarkKeyword",
     HEURISTIC_HISTORY_URL: "heuristicHistoryUrl",
     HEURISTIC_OMNIBOX: "heuristicOmnibox",
+    HEURISTIC_RESTRICT_KEYWORD_AUTOFILL: "heuristicRestrictKeywordAutofill",
     HEURISTIC_SEARCH_TIP: "heuristicSearchTip",
     HEURISTIC_TEST: "heuristicTest",
     HEURISTIC_TOKEN_ALIAS_ENGINE: "heuristicTokenAliasEngine",
@@ -117,6 +118,19 @@ export var UrlbarUtils = {
     OTHER_LOCAL: 5,
     OTHER_NETWORK: 6,
     ADDON: 7,
+    ACTIONS: 8,
+  },
+
+  // Per-result exposure telemetry.
+  EXPOSURE_TELEMETRY: {
+    // Exposure telemetry will not be recorded for the result.
+    NONE: 0,
+    // Exposure telemetry will be recorded for the result and the result will be
+    // visible in the view as usual.
+    SHOWN: 1,
+    // Exposure telemetry will be recorded for the result but the result will
+    // not be present in the view.
+    HIDDEN: 2,
   },
 
   // This defines icon locations that are commonly used in the UI.
@@ -232,6 +246,14 @@ export var UrlbarUtils = {
         pref: "shortcuts.history",
         telemetryLabel: "history",
         uiLabel: "urlbar-searchmode-history",
+      },
+      {
+        source: UrlbarUtils.RESULT_SOURCE.ACTIONS,
+        restrict: lazy.UrlbarTokenizer.RESTRICT.ACTION,
+        icon: "chrome://browser/skin/quickactions.svg",
+        pref: "shortcuts.actions",
+        telemetryLabel: "actions",
+        uiLabel: "urlbar-searchmode-actions",
       },
     ];
   },
@@ -512,6 +534,8 @@ export var UrlbarUtils = {
           return UrlbarUtils.RESULT_GROUP.HEURISTIC_FALLBACK;
         case "Omnibox":
           return UrlbarUtils.RESULT_GROUP.HEURISTIC_OMNIBOX;
+        case "RestrictKeywordsAutofill":
+          return UrlbarUtils.RESULT_GROUP.HEURISTIC_RESTRICT_KEYWORD_AUTOFILL;
         case "TokenAliasEngines":
           return UrlbarUtils.RESULT_GROUP.HEURISTIC_TOKEN_ALIAS_ENGINE;
         case "UrlbarProviderSearchTips":
@@ -570,38 +594,34 @@ export var UrlbarUtils = {
   },
 
   /**
-   * Extracts an url from a result, if possible.
+   * Extracts the URL from a result.
    *
-   * @param {UrlbarResult} result The result to extract from.
-   * @returns {object} a {url, postData} object, or null if a url can't be built
-   *          from this result.
+   * @param {UrlbarResult} result
+   *   The result to extract from.
+   * @returns {object}
+   *   An object: `{ url, postData }`
+   *   `url` will be null if the result doesn't have a URL. `postData` will be
+   *   null if the result doesn't have post data.
    */
   getUrlFromResult(result) {
-    switch (result.type) {
-      case UrlbarUtils.RESULT_TYPE.URL:
-      case UrlbarUtils.RESULT_TYPE.REMOTE_TAB:
-      case UrlbarUtils.RESULT_TYPE.TAB_SWITCH:
-        return { url: result.payload.url, postData: null };
-      case UrlbarUtils.RESULT_TYPE.KEYWORD:
-        return {
-          url: result.payload.url,
-          postData: result.payload.postData
-            ? this.getPostDataStream(result.payload.postData)
-            : null,
-        };
-      case UrlbarUtils.RESULT_TYPE.SEARCH: {
-        if (result.payload.engine) {
-          const engine = Services.search.getEngineByName(result.payload.engine);
-          let [url, postData] = this.getSearchQueryUrl(
-            engine,
-            result.payload.suggestion || result.payload.query
-          );
-          return { url, postData };
-        }
-        break;
-      }
+    if (
+      result.type == UrlbarUtils.RESULT_TYPE.SEARCH &&
+      result.payload.engine
+    ) {
+      const engine = Services.search.getEngineByName(result.payload.engine);
+      let [url, postData] = this.getSearchQueryUrl(
+        engine,
+        result.payload.suggestion || result.payload.query
+      );
+      return { url, postData };
     }
-    return { url: null, postData: null };
+
+    return {
+      url: result.payload.url ?? null,
+      postData: result.payload.postData
+        ? this.getPostDataStream(result.payload.postData)
+        : null,
+    };
   },
 
   /**
@@ -631,21 +651,20 @@ export var UrlbarUtils = {
   },
 
   /**
-   * Get the number of rows a result should span in the autocomplete dropdown.
+   * Gets the number of rows a result should span in the view.
    *
-   * @param {UrlbarResult} result The result.
-   * @param {bool} includeExposureResultHidden If false and
-   *   `result.exposureResultHidden` is true, zero will be returned since the
-   *   result should be hidden and not take up any rows at all. Otherwise the
-   *   result's true span is returned.
+   * @param {UrlbarResult} result
+   *   The result.
+   * @param {bool} includeHiddenExposures
+   *   Whether a span should be returned if the result is a hidden exposure. If
+   *   false and `result.isHiddenExposure` is true, zero will be returned since
+   *   the result should be hidden and not take up any rows at all. Otherwise
+   *   the result's true span is returned.
    * @returns {number}
-   *          The number of rows the result should span in the autocomplete
-   *          dropdown.
+   *   The number of rows the result should span in the view.
    */
-  getSpanForResult(result, { includeExposureResultHidden = false } = {}) {
-    // We know this result will be hidden in the final view so assign it
-    // a span of zero.
-    if (result.exposureResultHidden && !includeExposureResultHidden) {
+  getSpanForResult(result, { includeHiddenExposures = false } = {}) {
+    if (!includeHiddenExposures && result.isHiddenExposure) {
       return 0;
     }
 
@@ -1722,6 +1741,9 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
       satisfiesAutofillThreshold: {
         type: "boolean",
       },
+      searchUrlDomainWithoutSuffix: {
+        type: "string",
+      },
       suggestion: {
         type: "string",
       },
@@ -2090,12 +2112,6 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
       dynamicType: {
         type: "string",
       },
-      // If `shouldNavigate` is `true` and the payload contains a `url`
-      // property, when the result is selected the browser will navigate to the
-      // `url`.
-      shouldNavigate: {
-        type: "boolean",
-      },
     },
   },
   [UrlbarUtils.RESULT_TYPE.RESTRICT]: {
@@ -2108,6 +2124,9 @@ UrlbarUtils.RESULT_PAYLOAD_SCHEMA = {
         type: "string",
       },
       l10nRestrictKeyword: {
+        type: "string",
+      },
+      autofillKeyword: {
         type: "string",
       },
       providesSearchMode: {
@@ -2546,55 +2565,6 @@ export class UrlbarProvider {
    *    The associated controller.
    *
    * onSearchSessionEnd(_queryContext, _controller) {}
-   */
-
-  /**
-   * Called when the user starts and ends an engagement with the urlbar. This is
-   * called for all providers who have implemented this method.
-   *
-   * @param {string} _state
-   *   The state of the engagement, one of the following strings:
-   *
-   *   engagement
-   *       The user picked a result in the urlbar or used paste-and-go.
-   *   abandonment
-   *       The urlbar was blurred (i.e., lost focus).
-   * @param {UrlbarQueryContext} _queryContext
-   *   The engagement's query context.
-   * @param {object} _details
-   *   This object is non-empty only when `state` is "engagement" or
-   *   "abandonment", and it describes the search string and engaged result.
-   *
-   *   For "engagement", it has the following properties:
-   *
-   *   {UrlbarResult} result
-   *       The engaged result. If a result itself was picked, this will be it.
-   *       If an element related to a result was picked (like a button or menu
-   *       command), this will be that result. This property will be present if
-   *       and only if `state` == "engagement", so it can be used to quickly
-   *       tell when the user engaged with a result.
-   *   {Element} element
-   *       The picked DOM element.
-   *   {boolean} isSessionOngoing
-   *       True if the search session remains ongoing or false if the engagement
-   *       ended it. Typically picking a result ends the session but not always.
-   *       Picking a button or menu command may not end the session; dismissals
-   *       do not, for example.
-   *   {string} searchString
-   *       The search string for the engagement's query.
-   *   {number} selIndex
-   *       The index of the picked result.
-   *   {string} selType
-   *       The type of the selected result.  See TelemetryEvent.record() in
-   *       UrlbarController.sys.mjs.
-   *   {string} provider
-   *       The name of the provider that produced the picked result.
-   *
-   *   For "abandonment", only `searchString` is defined.
-   * @param {UrlbarController} _controller
-   *  The associated controller.
-   *
-   * onLegacyEngagement(_state, _queryContext, _details, _controller) {}
    */
 
   /**

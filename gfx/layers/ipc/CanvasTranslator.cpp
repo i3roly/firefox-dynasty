@@ -7,6 +7,7 @@
 #include "CanvasTranslator.h"
 
 #include "gfxGradientCache.h"
+#include "mozilla/DataMutex.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/CanvasManagerParent.h"
 #include "mozilla/gfx/CanvasRenderThread.h"
@@ -26,13 +27,13 @@
 #include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/SyncRunnable.h"
 #include "mozilla/TaskQueue.h"
-#include "mozilla/Telemetry.h"
 #include "GLContext.h"
 #include "RecordedCanvasEventImpl.h"
 
 #if defined(XP_WIN)
 #  include "mozilla/gfx/DeviceManagerDx.h"
 #  include "mozilla/layers/TextureD3D11.h"
+#  include "mozilla/layers/VideoProcessorD3D11.h"
 #endif
 
 namespace mozilla {
@@ -71,6 +72,9 @@ CanvasTranslator::CanvasTranslator(
     const dom::ContentParentId& aContentId, uint32_t aManagerId)
     : mTranslationTaskQueue(gfx::CanvasRenderThread::CreateWorkerTaskQueue()),
       mSharedSurfacesHolder(aSharedSurfacesHolder),
+#if defined(XP_WIN)
+      mVideoProcessorD3D11("CanvasTranslator::mVideoProcessorD3D11"),
+#endif
       mMaxSpinCount(StaticPrefs::gfx_canvas_remote_max_spin_count()),
       mContentId(aContentId),
       mManagerId(aManagerId),
@@ -78,9 +82,6 @@ CanvasTranslator::CanvasTranslator(
           "CanvasTranslator::mCanvasTranslatorEventsLock") {
   mNextEventTimeout = TimeDuration::FromMilliseconds(
       StaticPrefs::gfx_canvas_remote_event_timeout_ms());
-
-  // Track when remote canvas has been activated.
-  Telemetry::ScalarAdd(Telemetry::ScalarID::GFX_CANVAS_REMOTE_ACTIVATED, 1);
 }
 
 CanvasTranslator::~CanvasTranslator() = default;
@@ -101,11 +102,11 @@ bool CanvasTranslator::IsInTaskQueue() const {
   return gfx::CanvasRenderThread::IsInCanvasRenderThread();
 }
 
-static bool CreateAndMapShmem(RefPtr<ipc::SharedMemoryBasic>& aShmem,
+static bool CreateAndMapShmem(RefPtr<ipc::SharedMemory>& aShmem,
                               Handle&& aHandle,
                               ipc::SharedMemory::OpenRights aOpenRights,
                               size_t aSize) {
-  auto shmem = MakeRefPtr<ipc::SharedMemoryBasic>();
+  auto shmem = MakeRefPtr<ipc::SharedMemory>();
   if (!shmem->SetHandle(std::move(aHandle), aOpenRights) ||
       !shmem->Map(aSize)) {
     return false;
@@ -166,14 +167,14 @@ mozilla::ipc::IPCResult CanvasTranslator::RecvInitTranslator(
   mBackendType = aBackendType;
   mOtherPid = OtherPid();
 
-  mHeaderShmem = MakeAndAddRef<ipc::SharedMemoryBasic>();
+  mHeaderShmem = MakeAndAddRef<ipc::SharedMemory>();
   if (!CreateAndMapShmem(mHeaderShmem, std::move(aReadHandle),
                          ipc::SharedMemory::RightsReadWrite, sizeof(Header))) {
     Deactivate();
     return IPC_FAIL(this, "Failed to map canvas header shared memory.");
   }
 
-  mHeader = static_cast<Header*>(mHeaderShmem->memory());
+  mHeader = static_cast<Header*>(mHeaderShmem->Memory());
 
   mWriterSemaphore.reset(CrossProcessSemaphore::Create(std::move(aWriterSem)));
   mWriterSemaphore->CloseHandle();
@@ -246,7 +247,7 @@ ipc::IPCResult CanvasTranslator::RecvRestartTranslation() {
 }
 
 ipc::IPCResult CanvasTranslator::RecvAddBuffer(
-    ipc::SharedMemoryBasic::Handle&& aBufferHandle, uint64_t aBufferSize) {
+    ipc::SharedMemory::Handle&& aBufferHandle, uint64_t aBufferSize) {
   if (mDeactivated) {
     // The other side might have sent a resume message before we deactivated.
     return IPC_OK();
@@ -258,16 +259,15 @@ ipc::IPCResult CanvasTranslator::RecvAddBuffer(
         std::move(aBufferHandle), aBufferSize));
     PostCanvasTranslatorEvents(lock);
   } else {
-    DispatchToTaskQueue(
-        NewRunnableMethod<ipc::SharedMemoryBasic::Handle&&, size_t>(
-            "CanvasTranslator::AddBuffer", this, &CanvasTranslator::AddBuffer,
-            std::move(aBufferHandle), aBufferSize));
+    DispatchToTaskQueue(NewRunnableMethod<ipc::SharedMemory::Handle&&, size_t>(
+        "CanvasTranslator::AddBuffer", this, &CanvasTranslator::AddBuffer,
+        std::move(aBufferHandle), aBufferSize));
   }
 
   return IPC_OK();
 }
 
-bool CanvasTranslator::AddBuffer(ipc::SharedMemoryBasic::Handle&& aBufferHandle,
+bool CanvasTranslator::AddBuffer(ipc::SharedMemory::Handle&& aBufferHandle,
                                  size_t aBufferSize) {
   MOZ_ASSERT(IsInTaskQueue());
   if (mHeader->readerState == State::Failed) {
@@ -292,7 +292,7 @@ bool CanvasTranslator::AddBuffer(ipc::SharedMemoryBasic::Handle&& aBufferHandle,
   CheckAndSignalWriter();
 
   // Default sized buffers will have been queued for recycling.
-  if (mCurrentShmem.Size() == mDefaultBufferSize) {
+  if (mCurrentShmem.IsValid() && mCurrentShmem.Size() == mDefaultBufferSize) {
     mCanvasShmems.emplace(std::move(mCurrentShmem));
   }
 
@@ -309,7 +309,7 @@ bool CanvasTranslator::AddBuffer(ipc::SharedMemoryBasic::Handle&& aBufferHandle,
 }
 
 ipc::IPCResult CanvasTranslator::RecvSetDataSurfaceBuffer(
-    ipc::SharedMemoryBasic::Handle&& aBufferHandle, uint64_t aBufferSize) {
+    ipc::SharedMemory::Handle&& aBufferHandle, uint64_t aBufferSize) {
   if (mDeactivated) {
     // The other side might have sent a resume message before we deactivated.
     return IPC_OK();
@@ -322,18 +322,17 @@ ipc::IPCResult CanvasTranslator::RecvSetDataSurfaceBuffer(
                                                     aBufferSize));
     PostCanvasTranslatorEvents(lock);
   } else {
-    DispatchToTaskQueue(
-        NewRunnableMethod<ipc::SharedMemoryBasic::Handle&&, size_t>(
-            "CanvasTranslator::SetDataSurfaceBuffer", this,
-            &CanvasTranslator::SetDataSurfaceBuffer, std::move(aBufferHandle),
-            aBufferSize));
+    DispatchToTaskQueue(NewRunnableMethod<ipc::SharedMemory::Handle&&, size_t>(
+        "CanvasTranslator::SetDataSurfaceBuffer", this,
+        &CanvasTranslator::SetDataSurfaceBuffer, std::move(aBufferHandle),
+        aBufferSize));
   }
 
   return IPC_OK();
 }
 
 bool CanvasTranslator::SetDataSurfaceBuffer(
-    ipc::SharedMemoryBasic::Handle&& aBufferHandle, size_t aBufferSize) {
+    ipc::SharedMemory::Handle&& aBufferHandle, size_t aBufferSize) {
   MOZ_ASSERT(IsInTaskQueue());
   if (mHeader->readerState == State::Failed) {
     // We failed before we got to the pause event.
@@ -390,7 +389,7 @@ void CanvasTranslator::GetDataSurface(uint64_t aSurfaceRef) {
     return;
   }
 
-  uint8_t* dst = static_cast<uint8_t*>(mDataSurfaceShmem->memory());
+  uint8_t* dst = static_cast<uint8_t*>(mDataSurfaceShmem->Memory());
   const uint8_t* src = map->GetData();
   const uint8_t* endSrc = src + (srcSize.height * srcStride);
   while (src < endSrc) {
@@ -426,6 +425,14 @@ void CanvasTranslator::ActorDestroy(ActorDestroyReason why) {
     MutexAutoLock lock(mCanvasTranslatorEventsLock);
     mPendingCanvasTranslatorEvents.clear();
   }
+
+#if defined(XP_WIN)
+  {
+    auto lock = mVideoProcessorD3D11.Lock();
+    auto& videoProcessor = lock.ref();
+    videoProcessor = nullptr;
+  }
+#endif
 
   DispatchToTaskQueue(NewRunnableMethod("CanvasTranslator::ClearTextureInfo",
                                         this,
@@ -930,8 +937,6 @@ bool CanvasTranslator::CheckForFreshCanvasDevice(int aLineNumber) {
   mDevice = gfx::DeviceManagerDx::Get()->GetCanvasDevice();
   if (!mDevice) {
     // We don't have a canvas device, we need to deactivate.
-    Telemetry::ScalarAdd(
-        Telemetry::ScalarID::GFX_CANVAS_REMOTE_DEACTIVATED_NO_DEVICE, 1);
     Deactivate();
     return false;
   }
@@ -1424,10 +1429,10 @@ CanvasTranslator::MaybeRecycleDataSurfaceForSurfaceDescriptor(
   bool isYuvVideo = false;
   if (aTextureHost->AsMacIOSurfaceTextureHost()) {
     if (aTextureHost->GetFormat() == SurfaceFormat::NV12 ||
-        aTextureHost->GetFormat() == SurfaceFormat::YUV422) {
+        aTextureHost->GetFormat() == SurfaceFormat::YUY2) {
       isYuvVideo = true;
     }
-  } else if (aTextureHost->GetFormat() == gfx::SurfaceFormat::YUV) {
+  } else if (aTextureHost->GetFormat() == gfx::SurfaceFormat::YUV420) {
     isYuvVideo = true;
   }
 
@@ -1491,7 +1496,8 @@ CanvasTranslator::LookupSourceSurfaceFromSurfaceDescriptor(
 
     // TODO reuse DataSourceSurface if no update.
 
-    usedSurf = textureHostD3D11->GetAsSurfaceWithDevice(mDevice);
+    usedSurf =
+        textureHostD3D11->GetAsSurfaceWithDevice(mDevice, mVideoProcessorD3D11);
     if (!usedSurf) {
       MOZ_ASSERT_UNREACHABLE("unexpected to be called");
       usedDescriptor = Nothing();

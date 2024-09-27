@@ -148,10 +148,19 @@ export class PipelineOptions {
       "runtimeFilename",
     ];
 
+    if (options instanceof PipelineOptions) {
+      options = options.getOptions();
+    }
+
+    let optionsKeys = Object.keys(options);
+
     allowedKeys.forEach(key => {
-      if (options[key]) {
-        this[key] = options[key];
+      // If options does not have the key we can ignore it.
+      // We also ignore `null` values.
+      if (!optionsKeys.includes(key) || options[key] == null) {
+        return;
       }
+      this[key] = options[key];
     });
   }
 
@@ -467,7 +476,6 @@ export class EngineProcess {
  * @param {object} options - Configuration options for the ML engine.
  * @param {?function(ProgressAndStatusCallbackParams):void} notificationsCallback A function to call to indicate notifications.
  * @returns {Promise<MLEngine>} - A promise that resolves to the ML engine instance.
- *
  */
 export async function createEngine(options, notificationsCallback = null) {
   const pipelineOptions = new PipelineOptions(options);

@@ -1369,6 +1369,7 @@
   args:
     templateObject: ObjectField
     length: Int32Id
+    site: AllocSiteField
 
 - name: NewTypedArrayFromLengthResult
   shared: true
@@ -3173,6 +3174,13 @@
   args:
     val: Int32Id
 
+- name: Int32ToBigIntResult
+  shared: true
+  transpile: true
+  cost_estimate: 4
+  args:
+    input: Int32Id
+
 - name: BigIntAsIntNResult
   shared: true
   transpile: true
@@ -3389,6 +3397,14 @@
   transpile: true
   cost_estimate: 0
   args:
+
+- name: AssertFloat32Result
+  shared: true
+  transpile: true
+  cost_estimate: 1
+  args:
+    val: ValId
+    mustBeFloat32: BoolImm
 
 - name: AssertRecoveredOnBailoutResult
   shared: true

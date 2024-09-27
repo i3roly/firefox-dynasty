@@ -20,6 +20,7 @@
 #include "js/ScalarType.h"
 #include "js/TypeDecls.h"
 #include "vm/TypeofEqOperand.h"
+#include "vm/UsingHint.h"
 
 class JSJitInfo;
 class JSLinearString;
@@ -496,6 +497,19 @@ ArrayObject* InitRestParameter(JSContext* cx, uint32_t length, Value* rest,
 [[nodiscard]] bool PushVarEnv(JSContext* cx, BaselineFrame* frame,
                               Handle<Scope*> scope);
 
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+[[nodiscard]] bool AddDisposableResource(JSContext* cx, BaselineFrame* frame,
+                                         JS::Handle<JS::Value> val,
+                                         JS::Handle<JS::Value> method,
+                                         JS::Handle<JS::Value> needsClosure,
+                                         UsingHint hint);
+
+[[nodiscard]] bool CreateSuppressedError(JSContext* cx, BaselineFrame* frame,
+                                         JS::Handle<JS::Value> error,
+                                         JS::Handle<JS::Value> suppressed,
+                                         JS::MutableHandle<JS::Value> rval);
+#endif
+
 [[nodiscard]] bool InitBaselineFrameForOsr(BaselineFrame* frame,
                                            InterpreterFrame* interpFrame,
                                            uint32_t numStackValues);
@@ -611,6 +625,8 @@ void TraceCreateObject(JSObject* obj);
 #endif
 
 bool DoStringToInt64(JSContext* cx, HandleString str, uint64_t* res);
+
+BigInt* CreateBigIntFromInt32(JSContext* cx, int32_t i32);
 
 #if JS_BITS_PER_WORD == 32
 BigInt* CreateBigIntFromInt64(JSContext* cx, uint32_t low, uint32_t high);
