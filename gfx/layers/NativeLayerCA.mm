@@ -1635,7 +1635,7 @@ bool NativeLayerCA::Representation::EnqueueSurface(IOSurfaceRef aSurfaceRef) {
       colorSpace = CFTypeRefPtr<CGColorSpaceRef>::WrapUnderCreateRule(
           CGDisplayCopyColorSpace(CGMainDisplayID()));
       auto colorData = CFTypeRefPtr<CFDataRef>::WrapUnderCreateRule(
-          CGColorSpaceCopyICCData(colorSpace.get()));
+          CGColorSpaceCopyICCProfile(colorSpace.get()));
       IOSurfaceSetValue(aSurfaceRef, CFSTR("IOSurfaceColorSpace"),
                         colorData.get());
 

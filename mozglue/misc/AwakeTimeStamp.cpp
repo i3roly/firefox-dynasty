@@ -71,7 +71,7 @@ void AwakeTimeStamp::operator-=(const AwakeTimeDuration& aOther) {
     static RoTimingMach ro_timing_mach_g;
 
     /* mach clock port */
-    static mach_port_t clock_port;
+    extern mach_port_t clock_port;
 
     /* emulate posix clock_gettime */
     static inline int clock_gettime_missing (clockid_t id, struct timespec *tspec)
