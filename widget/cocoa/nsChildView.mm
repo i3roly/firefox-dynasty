@@ -2264,7 +2264,9 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
     mRootCALayer.bounds = NSZeroRect;
     mRootCALayer.anchorPoint = NSZeroPoint;
     mRootCALayer.contentsGravity = kCAGravityTopLeft;
-    
+    if(!nsCocoaFeatures::OnMountainLionOrLater()) {
+      mRootCALayer.geometryFlipped = YES;
+    }
     [mPixelHostingView.layer addSublayer:mRootCALayer];
 
     mLastPressureStage = 0;
