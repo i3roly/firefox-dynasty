@@ -339,12 +339,16 @@ nsTArray<nsCString> TakeStartupURLs() { return std::move(StartupURLs()); }
 #else
       restorationHandler:(void (^)(NSArray*))restorationHandler {
 #endif
-  if (![userActivity.activityType
-          isEqualToString:NSUserActivityTypeBrowsingWeb]) {
-    return NO;
-  }
+  if (@available(macOS 10.10, *)) {
+    if (![userActivity.activityType
+            isEqualToString:NSUserActivityTypeBrowsingWeb]) {
+      return NO;
+    }
 
-  return [self openURLs:@[ userActivity.webpageURL ]];
+    return [self openURLs:@[ userActivity.webpageURL ]];
+  } else {
+    return false;
+  }
 }
 
 - (void)application:(NSApplication*)application
