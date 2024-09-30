@@ -19,6 +19,11 @@ EXPORTS.soundtouch += [
 ]
 
 LOCAL_INCLUDES += ["!/security/rlbox"]
+#they left me no choice. we have to import this file manually/
+#it's using a static lock, so who cares. a couple KB.
+#mozilla devs or enhtusiassts sure af won't help because it's obvious why they deprecated old OSX.
+##HINT: it isn't due to "difficulty". planned obsolescence 
+
 LOCAL_INCLUDES  += ["/xpcom/threads"]
 
 LOCAL_INCLUDES += [
@@ -27,13 +32,6 @@ LOCAL_INCLUDES += [
 ]
 
 SOURCES += ["RLBoxSoundTouch.cpp"]
-#they left me no choice. we have to import this file manually/
-#it's using a static lock, so who cares. a couple KB.
-#mozilla devs or enhtusiassts sure af won't help because it's obvious why they deprecated old OSX.
-##HINT: it isn't due to "difficulty". planned obsolescence 
-
-include("/ipc/chromium/chromium-config.mozbuild")
-
 # Some xpcom things are #included indirectly (but not actually used), and
 # it's simpler to set MOZILLA_INTERNAL_API to make it compile than to
 # disentangle the whole thing.

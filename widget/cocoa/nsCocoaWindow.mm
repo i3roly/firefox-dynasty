@@ -570,7 +570,8 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
       [[[mWindow contentView] superview] setWantsLayer:YES];
     }
   }
-  
+
+  [mWindow createTrackingArea];
   // Make sure the window starts out not draggable by the background.
   // We will turn it on as necessary.
   [mWindow setMovableByWindowBackground:NO]; 
