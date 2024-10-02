@@ -501,9 +501,6 @@ nsresult GfxInfo::GetFeatureStatusImpl(
         case OperatingSystem::OSX10_5:
         case OperatingSystem::OSX10_6:
         case OperatingSystem::OSX10_7:
-          *aStatus = nsIGfxInfo::FEATURE_BLOCKED_OS_VERSION;
-          aFailureId = "FEATURE_FAILURE_CANVAS_OSX_VERSION";
-          break;
         default:
           *aStatus = nsIGfxInfo::FEATURE_STATUS_OK;
           break;
