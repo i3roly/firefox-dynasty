@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 <toolbox id="navigator-toolbox">
+  <script src="chrome://browser/content/navigator-toolbox.js" />
 
   <vbox id="titlebar">
     <!-- Menu -->
@@ -40,8 +41,6 @@
                          data-l10n-id="toolbar-button-firefox-view-2"
                          role="button"
                          aria-pressed="false"
-                         oncommand="FirefoxViewHandler.openTab();"
-                         onmousedown="FirefoxViewHandler.openToolbarMouseEvent(event);"
                          cui-areatype="toolbar"
                          removable="true"/>
 
@@ -57,7 +56,8 @@
 # significantly, there is an optimization in
 # DisplayPortUtils::MaybeCreateDisplayPortInFirstScrollFrameEncountered based
 # the current structure that we may want to revisit.
-            <html:div id="vertical-pinned-tabs-container"></html:div>
+            <html:div id="vertical-pinned-tabs-container" tabindex="-1"></html:div>
+            <html:div id="vertical-pinned-tabs-container-separator"></html:div>
             <arrowscrollbox id="tabbrowser-arrowscrollbox" orient="horizontal" flex="1" clicktoscroll="" scrolledtostart="" scrolledtoend="">
               <tab is="tabbrowser-tab" class="tabbrowser-tab" selected="true" visuallyselected="" fadein=""/>
               <hbox id="tabbrowser-arrowscrollbox-periphery">
@@ -97,7 +97,6 @@
                          delegatesanchor="true"
                          badged="true"
                          onkeypress="gTabsPanel.showAllTabsPanel(event, 'alltabs-button');"
-                         onmousedown="gTabsPanel.showAllTabsPanel(event, 'alltabs-button');"
                          data-l10n-id="tabs-toolbar-list-all-tabs"
                          removable="false"/>
         </hbox>
@@ -110,7 +109,6 @@
         <label data-l10n-id="private-browsing-indicator-label"></label>
       </hbox>
       <toolbarbutton id="content-analysis-indicator"
-                     oncommand="ContentAnalysis.showPanel(this, PanelUI);"
                      class="toolbarbutton-1 content-analysis-indicator-icon"/>
 
 #include titlebar-items.inc.xhtml
@@ -434,7 +432,6 @@
                     class="urlbar-page-action"
                     role="button"
                     data-l10n-id="urlbar-page-action-button"
-                    onmousedown="BrowserPageActions.mainButtonClicked(event);"
                     onkeypress="BrowserPageActions.mainButtonClicked(event);">
                 <image class="urlbar-icon"/>
               </hbox>
@@ -459,7 +456,6 @@
                      delegatesanchor="true"
                      badged="true"
                      key="key_openDownloads"
-                     onmousedown="DownloadsIndicatorView.onCommand(event);"
                      onkeypress="DownloadsIndicatorView.onCommand(event);"
                      ondrop="DownloadsIndicatorView.onDrop(event);"
                      ondragover="DownloadsIndicatorView.onDragOver(event);"
@@ -488,7 +484,6 @@
       <toolbarbutton id="fxa-toolbar-menu-button" class="toolbarbutton-1 chromeclass-toolbar-additional subviewbutton-nav"
                      badged="true"
                      delegatesanchor="true"
-                     onmousedown="gSync.toggleAccountPanel(this, event)"
                      onkeypress="gSync.toggleAccountPanel(this, event)"
                      consumeanchor="fxa-toolbar-menu-button"
                      closemenu="none"
@@ -506,7 +501,6 @@
                      data-l10n-id="unified-extensions-button"
                      hidden="true"
                      onkeypress="gUnifiedExtensions.togglePanel(event)"
-                     onmousedown="gUnifiedExtensions.togglePanel(event)"
                      overflows="false"
                      removable="false"/>
     </hbox>
@@ -561,14 +555,12 @@
                      class="toolbarbutton-1"
                      delegatesanchor="true"
                      flex="1"
-                     data-l10n-id="bookmarks-toolbar-placeholder-button"
-                     oncommand="PlacesToolbarHelper.onPlaceholderCommand();"/>
+                     data-l10n-id="bookmarks-toolbar-placeholder-button"/>
       <hbox flex="1"
             id="PlacesToolbar"
             context="placesContext"
             onmouseup="BookmarksEventHandler.onMouseUp(event);"
             onclick="BookmarksEventHandler.onClick(event, this._placesView);"
-            oncommand="BookmarksEventHandler.onCommand(event);"
             tooltip="bhTooltip"
             popupsinherittooltip="true">
         <hbox id="PlacesToolbarDropIndicatorHolder" align="center" collapsed="true">
@@ -589,9 +581,7 @@
                       placespopup="true"
                       class="toolbar-menupopup"
                       tooltip="bhTooltip" popupsinherittooltip="true"
-                      context="placesContext"
-                      onpopupshowing="document.getElementById('PlacesToolbar')
-                                              ._placesView._onChevronPopupShowing(event);"/>
+                      context="placesContext"/>
         </toolbarbutton>
       </hbox>
     </toolbaritem>
@@ -605,7 +595,6 @@
   <html:template id="BrowserToolbarPalette">
     <toolbarbutton id="import-button"
                    class="toolbarbutton-1 chromeclass-toolbar-additional"
-                   oncommand="MigrationUtils.showMigrationWizard(window, { entrypoint: MigrationUtils.MIGRATION_ENTRYPOINTS.BOOKMARKS_TOOLBAR });"
                    data-l10n-id="browser-import-button2"/>
 
     <toolbarbutton id="new-window-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
@@ -631,8 +620,7 @@
                    ondragenter="PlacesMenuDNDHandler.onDragEnter(event);"
                    ondragover="PlacesMenuDNDHandler.onDragOver(event);"
                    ondragleave="PlacesMenuDNDHandler.onDragLeave(event);"
-                   ondrop="PlacesMenuDNDHandler.onDrop(event);"
-                   oncommand="BookmarkingUI.onCommand(event);">
+                   ondrop="PlacesMenuDNDHandler.onDrop(event);">
       <menupopup id="BMB_bookmarksPopup"
                  is="places-popup-arrow"
                  class="toolbar-menupopup animatable-menupopup"
@@ -641,20 +629,14 @@
                  openInTabs="children"
                  side="top"
                  onmouseup="BookmarksEventHandler.onMouseUp(event);"
-                 oncommand="BookmarksEventHandler.onCommand(event);"
                  onclick="BookmarksEventHandler.onClick(event, this.parentNode._placesView);"
-                 onpopupshowing="BookmarkingUI.onPopupShowing(event);
-                                 if (!this.parentNode._placesView)
-                                   new PlacesMenu(event, `place:parent=${PlacesUtils.bookmarks.menuGuid}`);"
                  tooltip="bhTooltip" popupsinherittooltip="true">
         <menuitem id="BMB_viewBookmarksSidebar"
                   data-l10n-id="bookmarks-tools-sidebar-visibility"
                   data-l10n-args='{ "isVisible": false }'
-                  oncommand="SidebarController.toggle('viewBookmarksSidebar');"
                   key="viewBookmarksSidebarKb"/>
         <menuitem id="BMB_searchBookmarks"
-                  data-l10n-id="bookmarks-search"
-                  oncommand="PlacesCommandHook.searchBookmarks();"/>
+                  data-l10n-id="bookmarks-search"/>
         <!-- NB: temporary solution for bug 985024, this should go away soon. -->
         <menuitem id="BMB_bookmarksShowAllTop"
                   data-l10n-id="bookmarks-manage-bookmarks"
@@ -668,13 +650,10 @@
           <menupopup id="BMB_bookmarksToolbarPopup"
                      is="places-popup"
                      placespopup="true"
-                     context="placesContext"
-                     onpopupshowing="if (!this.parentNode._placesView)
-                                       new PlacesMenu(event, `place:parent=${PlacesUtils.bookmarks.toolbarGuid}`);">
+                     context="placesContext">
             <menuitem id="BMB_viewBookmarksToolbar"
                       data-l10n-id="bookmarks-tools-toolbar-visibility-menuitem"
-                      data-l10n-args='{ "isVisible": false }'
-                      oncommand="BookmarkingUI.toggleBookmarksToolbar('bookmarks-widget');"/>
+                      data-l10n-args='{ "isVisible": false }'/>
             <menuseparator/>
             <!-- Bookmarks toolbar items -->
           </menupopup>
@@ -686,9 +665,7 @@
           <menupopup id="BMB_unsortedBookmarksPopup"
                      is="places-popup"
                      placespopup="true"
-                     context="placesContext"
-                     onpopupshowing="if (!this.parentNode._placesView)
-                                       new PlacesMenu(event, `place:parent=${PlacesUtils.bookmarks.unfiledGuid}`);"/>
+                     context="placesContext"/>
         </menu>
         <menu id="BMB_mobileBookmarks"
               class="menu-iconic bookmark-item subviewbutton"
@@ -698,9 +675,7 @@
           <menupopup id="BMB_mobileBookmarksPopup"
                      is="places-popup"
                      placespopup="true"
-                     context="placesContext"
-                     onpopupshowing="if (!this.parentNode._placesView)
-                                       new PlacesMenu(event, `place:parent=${PlacesUtils.bookmarks.mobileGuid}`);"/>
+                     context="placesContext"/>
         </menu>
 
         <menuseparator/>
@@ -739,7 +714,6 @@
     <toolbarbutton id="library-button" class="toolbarbutton-1 chromeclass-toolbar-additional subviewbutton-nav"
                    removable="true"
                    delegatesanchor="true"
-                   onmousedown="PanelUI.showSubView('appMenu-libraryView', this, event);"
                    onkeypress="PanelUI.showSubView('appMenu-libraryView', this, event);"
                    closemenu="none"
                    cui-areatype="toolbar"

@@ -974,11 +974,11 @@ class FunctionCompiler {
     return ins;
   }
 
-  MDefinition* bitnot(MDefinition* op) {
+  MDefinition* bitnot(MDefinition* op, MIRType type) {
     if (inDeadCode()) {
       return nullptr;
     }
-    auto* ins = MBitNot::New(alloc(), op);
+    auto* ins = MBitNot::New(alloc(), op, type);
     curBlock_->add(ins);
     return ins;
   }
@@ -4972,9 +4972,9 @@ class FunctionCompiler {
     }
     curBlock_->add(limit);
 
-    // Use JSOp::StrictEq, not ::Eq, so that the comparison (and eventually
-    // the entire initialisation loop) will be folded out in the case where
-    // the number of elements is zero.  See MCompare::tryFoldEqualOperands.
+    // Note: the comparison (and eventually the entire initialisation loop) will
+    // be folded out in the case where the number of elements is zero.
+    // See MCompare::tryFoldEqualOperands.
     MDefinition* limitEqualsBase =
         compare(limit, index, JSOp::StrictEq, MCompare::Compare_UInt32);
     if (!limitEqualsBase) {
@@ -6406,13 +6406,14 @@ static bool EmitRotate(FunctionCompiler& f, ValType type, bool isLeftRotation) {
   return true;
 }
 
-static bool EmitBitNot(FunctionCompiler& f, ValType operandType) {
+static bool EmitBitNot(FunctionCompiler& f, ValType operandType,
+                       MIRType mirType) {
   MDefinition* input;
   if (!f.iter().readUnary(operandType, &input)) {
     return false;
   }
 
-  f.iter().setResult(f.bitnot(input));
+  f.iter().setResult(f.bitnot(input, mirType));
   return true;
 }
 
@@ -9997,7 +9998,7 @@ bool EmitBodyExprs(FunctionCompiler& f) {
           case uint32_t(MozOp::I32Neg):
             CHECK(EmitUnaryWithType<MWasmNeg>(f, ValType::I32, MIRType::Int32));
           case uint32_t(MozOp::I32BitNot):
-            CHECK(EmitBitNot(f, ValType::I32));
+            CHECK(EmitBitNot(f, ValType::I32, MIRType::Int32));
           case uint32_t(MozOp::I32Abs):
             CHECK(EmitUnaryWithType<MAbs>(f, ValType::I32, MIRType::Int32));
           case uint32_t(MozOp::F32TeeStoreF64):

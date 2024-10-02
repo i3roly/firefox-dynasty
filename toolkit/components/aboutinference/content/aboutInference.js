@@ -59,6 +59,10 @@ const TASKS = [
 ];
 
 const DTYPE = ["fp32", "fp16", "q8", "int8", "uint8", "q4", "bnb4", "q4f16"];
+const NUM_THREADS = Array.from(
+  { length: navigator.hardwareConcurrency || 4 },
+  (_, i) => i + 1
+);
 
 /**
  * Presets for the pad
@@ -114,6 +118,7 @@ const INFERENCE_PAD_PRESETS = {
     device: "wasm",
   },
 };
+const PREDEFINED = Object.keys(INFERENCE_PAD_PRESETS);
 
 /**
  * Gets an instance of ModelHub. Initializes it if it doesn't already exist.
@@ -141,12 +146,14 @@ function formatBytes(bytes) {
   return `${size[0]} ${size[1]}`;
 }
 
+let updateInterval; // Declare a variable to store the interval ID
+
 /**
  * Displays process information in a table. Only includes processes of type "inference".
  *
  * @async
  */
-async function displayProcessInfo() {
+async function updateProcInfo() {
   let info = await ChromeUtils.requestProcInfo();
   let tableContainer = document.getElementById("runningInference");
   let fragment = document.createDocumentFragment();
@@ -189,30 +196,28 @@ async function displayProcessInfo() {
   if (foundInference) {
     table.appendChild(tbody);
     fragment.appendChild(table);
+
+    if (!updateInterval) {
+      // If the interval hasn't been set yet, set it
+      updateInterval = setInterval(updateProcInfo, 5000);
+    }
   } else {
     let noneLabel = document.createElement("div");
     document.l10n.setAttributes(noneLabel, "about-inference-no-processes");
     fragment.appendChild(noneLabel);
+
+    // If no inference processes are found, stop the interval
+    if (updateInterval) {
+      clearInterval(updateInterval);
+      updateInterval = null; // Reset the interval variable
+    }
   }
 
   tableContainer.innerHTML = "";
   tableContainer.appendChild(fragment);
 }
 
-/**
- * Displays information about the machine learning models and process info.
- *
- * @async
- */
-async function displayInfo() {
-  if (!ML_ENABLE) {
-    let warning = document.getElementById("warning");
-    warning.style.display = "block";
-    document.getElementById("content").style.display = "none";
-  } else {
-    document.getElementById("content").style.display = "block";
-  }
-
+async function updateModels() {
   let cache = await lazy.IndexedDBCache.init();
   let models = await cache.listModels();
   let modelFilesDiv = document.getElementById("modelFiles");
@@ -290,8 +295,38 @@ async function displayInfo() {
 
   modelFilesDiv.innerHTML = "";
   modelFilesDiv.appendChild(fragment);
+}
 
-  await displayProcessInfo();
+async function refreshPage() {
+  const ml_enable = Services.prefs.getBoolPref("browser.ml.enable");
+  const content = document.getElementById("content");
+  const warning = document.getElementById("warning");
+  if (!ml_enable) {
+    if (warning.style.display !== "block") {
+      warning.style.display = "block";
+    }
+    if (content.style.display !== "none") {
+      content.style.display = "none";
+    }
+  } else {
+    if (content.style.display !== "block") {
+      content.style.display = "block";
+    }
+    if (warning.style.display !== "none") {
+      warning.style.display = "none";
+    }
+  }
+  await updateModels();
+  await updateProcInfo();
+}
+
+/**
+ * Displays information about the machine learning models and process info.
+ *
+ * @async
+ */
+async function displayInfo() {
+  await refreshPage();
 }
 
 function setSelectOption(selectId, optionValue) {
@@ -318,6 +353,9 @@ function setSelectOption(selectId, optionValue) {
 }
 
 function loadExample(name) {
+  const textarea = document.getElementById("inferencePad");
+  textarea.value = 0;
+
   let data = INFERENCE_PAD_PRESETS[name];
   let padContent = { inputArgs: data.inputArgs, runOptions: data.runOptions };
   document.getElementById("inferencePad").value = JSON.stringify(
@@ -333,15 +371,6 @@ function loadExample(name) {
   setSelectOption("device", data.device);
 }
 
-function formatJSON() {
-  const textarea = document.getElementById("inferencePad");
-  const jsonInput = textarea.value;
-
-  const jsonObject = JSON.parse(jsonInput);
-  const formattedJson = JSON.stringify(jsonObject, null, 2); // Pretty-print with 2 spaces
-  textarea.value = formattedJson;
-}
-
 async function runInference() {
   document.getElementById("console").value = "";
   const inferencePadValue = document.getElementById("inferencePad").value;
@@ -350,6 +379,7 @@ async function runInference() {
   const taskName = document.getElementById("taskName").value;
   const dtype = document.getElementById("dtype").value;
   const device = document.getElementById("device").value;
+  const numThreads = parseInt(document.getElementById("numThreads").value);
 
   let inputData;
   try {
@@ -375,6 +405,7 @@ async function runInference() {
     modelHubUrlTemplate,
     device,
     dtype,
+    numThreads,
   };
 
   const { createEngine } = ChromeUtils.importESModule(
@@ -384,7 +415,11 @@ async function runInference() {
   appendTextConsole("Creating engine if needed");
   let engine;
   try {
-    engine = await createEngine(initData, appendConsole);
+    engine = await createEngine(initData, progressData => {
+      engineNotification(progressData).catch(err => {
+        console.error("Error in engineNotification:", err);
+      });
+    });
   } catch (e) {
     appendTextConsole(e);
     throw e;
@@ -413,6 +448,9 @@ async function runInference() {
 
   appendTextConsole(`Results: ${JSON.stringify(res, null, 2)}`);
   appendTextConsole(`Metrics: ${JSON.stringify(res.metrics, null, 2)}`);
+
+  await engine.terminate(/* shutdown */ true, /* replacement */ false);
+  await refreshPage();
 }
 
 function updateDownloadProgress(data) {
@@ -458,7 +496,7 @@ function updateDownloadProgress(data) {
   }
 }
 
-function appendConsole(data) {
+async function engineNotification(data) {
   let text;
   const textarea = document.getElementById("console");
   switch (data.type) {
@@ -472,6 +510,7 @@ function appendConsole(data) {
       text = JSON.stringify(data);
   }
   textarea.value += (textarea.value ? "\n" : "") + text;
+  await refreshPage();
 }
 
 function appendTextConsole(text) {
@@ -542,16 +581,41 @@ function fillSelect(elementId, values) {
   });
 }
 
+function showTab(tabIndex) {
+  // Hide all tab-content sections
+  const tabs = document.querySelectorAll(".tab-content");
+  tabs.forEach((tab, index) => {
+    tab.classList.remove("active");
+    if (index === tabIndex) {
+      tab.classList.add("active");
+    }
+  });
+
+  // Update the tab menu active state
+  const menuItems = document.querySelectorAll(".tab-menu li");
+  menuItems.forEach((item, index) => {
+    item.classList.remove("active");
+    if (index === tabIndex) {
+      item.classList.add("active");
+    }
+  });
+}
+
 /**
- * Initializes the display of information when the window loads and sets an interval to update it.
+ * Initializes the pad on window load.
  *
  * @async
  */
 window.onload = async function () {
+  showTab(0);
   fillSelect("dtype", DTYPE);
   fillSelect("taskName", TASKS);
+  fillSelect("numThreads", NUM_THREADS);
+  fillSelect("predefined", PREDEFINED);
+
+  document.getElementById("predefined").value = "summary";
   loadExample("summary");
-  await displayInfo();
+  document.getElementById("console").value = "";
 
   document
     .getElementById("inferenceButton")
@@ -572,6 +636,12 @@ window.onload = async function () {
   document
     .getElementById("http.limit")
     .addEventListener("change", updateHttpContext);
+
+  const menuItems = document.querySelectorAll(".tab-menu li");
+  menuItems.forEach((item, index) => {
+    item.addEventListener("click", () => showTab(index));
+  });
+
   updateHttpContext();
-  setInterval(displayInfo, 5000);
+  await refreshPage();
 };

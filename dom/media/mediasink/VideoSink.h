@@ -87,11 +87,10 @@ class VideoSink : public MediaSink {
   // Sets VideoQueue images into the VideoFrameContainer. Called on the shared
   // state machine thread. The first aMaxFrames (at most) are set.
   // aClockTime and aClockTimeStamp are used as the baseline for deriving
-  // timestamps for the frames; when omitted, aMaxFrames must be 1 and
-  // a null timestamp is passed to the VideoFrameContainer.
+  // timestamps for the frames.
   // If the VideoQueue is empty, this does nothing.
-  void RenderVideoFrames(int32_t aMaxFrames, int64_t aClockTime = 0,
-                         const TimeStamp& aClickTimeStamp = TimeStamp());
+  void RenderVideoFrames(int32_t aMaxFrames, int64_t aClockTime,
+                         const TimeStamp& aClockTimeStamp);
 
   // Triggered while videosink is started, videosink becomes "playing" status,
   // or VideoQueue event arrived.
@@ -148,15 +147,6 @@ class VideoSink : public MediaSink {
   // Max frame number sent to compositor at a time.
   // Based on the pref value obtained in MDSM.
   const uint32_t mVideoQueueSendToCompositorSize;
-
-  // Talos tests for the compositor require at least one frame in the
-  // video queue so that the compositor has something to composit during
-  // the talos test when the decode is stressed. We have a minimum size
-  // on the video queue in order to facilitate this talos test.
-  // Note: Normal playback should not have a queue size of more than 0,
-  // otherwise A/V sync will be ruined! *Only* make this non-zero for
-  // testing purposes.
-  const uint32_t mMinVideoQueueSize;
 
 #ifdef XP_WIN
   // Whether we've called timeBeginPeriod(1) to request high resolution

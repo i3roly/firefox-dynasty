@@ -357,6 +357,10 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // grouped release.
   ["scotchBonnet.enableOverride", false],
 
+  // Allow searchmode to be persisted as the user navigates the
+  // search host.
+  ["scotchBonnet.persistSearchMode", false],
+
   // Feature gate pref for search restrict keywords being shown in the urlbar.
   ["searchRestrictKeywords.featureGate", false],
 
@@ -367,6 +371,9 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // Feature gate pref for secondary actions being shown in the urlbar.
   ["secondaryActions.featureGate", false],
+
+  // Alternative switch to tab implementation using secondaryActions.
+  ["secondaryActions.switchToTab", false],
 
   // Whether to show each local search shortcut button in the view.
   ["shortcuts.bookmarks", true],

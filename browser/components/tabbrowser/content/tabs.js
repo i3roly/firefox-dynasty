@@ -110,6 +110,13 @@
       Services.prefs.addObserver("privacy.userContext", this.boundObserve);
       this.observe(null, "nsPref:changed", "privacy.userContext.enabled");
 
+      document
+        .getElementById("vertical-tabs-newtab-button")
+        .addEventListener("keypress", this);
+      document
+        .getElementById("tabs-newtab-button")
+        .addEventListener("keypress", this);
+
       XPCOMUtils.defineLazyPreferenceGetter(
         this,
         "_tabMinWidthPref",
@@ -505,6 +512,16 @@
       }
 
       event.preventDefault();
+    }
+
+    on_keypress(event) {
+      if (event.defaultPrevented) {
+        return;
+      }
+      if (event.key == " " || event.key == "Enter") {
+        event.preventDefault();
+        event.target.click();
+      }
     }
 
     on_dragstart(event) {
@@ -1936,10 +1953,17 @@
       let size = this.verticalMode ? "height" : "width";
       let translateAxis = this.verticalMode ? "translateY" : "translateX";
       let scrollDirection = this.verticalMode ? "scrollTop" : "scrollLeft";
-
-      let tabSize = draggedTab.getBoundingClientRect()[size];
+      let tabWidth = draggedTab.getBoundingClientRect().width;
+      let tabHeight = draggedTab.getBoundingClientRect().height;
+      let tabSize = this.verticalMode ? tabHeight : tabWidth;
       let shiftSize = tabSize * movingTabs.length;
-      draggedTab._dragData.tabSize = tabSize;
+      let translateX = event.screenX - draggedTab._dragData.screenX;
+      let translateY = event.screenY - draggedTab._dragData.screenY;
+
+      draggedTab._dragData.tabWidth = tabWidth;
+      draggedTab._dragData.tabHeight = tabHeight;
+      draggedTab._dragData.translateX = translateX;
+      draggedTab._dragData.translateY = translateY;
 
       // Move the dragged tab based on the mouse position.
       let firstTab = tabs[0];

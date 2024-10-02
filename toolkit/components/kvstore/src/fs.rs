@@ -4,8 +4,6 @@
 
 use std::{borrow::Borrow, io, path::PathBuf};
 
-use nsstring::nsAString;
-
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct WidePathBuf(Vec<u16>);
 

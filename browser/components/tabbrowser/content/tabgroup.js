@@ -16,6 +16,7 @@
       `;
 
     #labelElement;
+    #colorCode;
 
     constructor() {
       super();
@@ -40,6 +41,10 @@
 
       this.#labelElement = this.querySelector(".tab-group-label");
       this.#labelElement.addEventListener("click", this);
+
+      this.createdDate = Date.now();
+
+      this.addEventListener("TabSelect", this);
 
       this._tabsChangedObserver = new window.MutationObserver(mutationList => {
         for (let mutation of mutationList) {
@@ -70,8 +75,6 @@
         }
       });
       this._tabsChangedObserver.observe(this, { childList: true });
-
-      this.dispatchEvent(new CustomEvent("TabGroupCreate", { bubbles: true }));
     }
 
     disconnectedCallback() {
@@ -79,11 +82,23 @@
     }
 
     get color() {
-      return this.style.getPropertyValue("--tab-group-color");
+      return this.#colorCode;
     }
 
-    set color(val) {
-      this.style.setProperty("--tab-group-color", val);
+    set color(code) {
+      this.#colorCode = code;
+      this.style.setProperty(
+        "--tab-group-color",
+        `var(--tab-group-color-${code})`
+      );
+      this.style.setProperty(
+        "--tab-group-color-invert",
+        `var(--tab-group-color-${code}-invert)`
+      );
+      this.style.setProperty(
+        "--tab-group-color-pale",
+        `var(--tab-group-color-${code}-pale)`
+      );
     }
 
     get id() {
@@ -107,6 +122,9 @@
     }
 
     set collapsed(val) {
+      if (!!val == this.collapsed) {
+        return;
+      }
       this.toggleAttribute("collapsed", val);
       const eventName = val ? "TabGroupCollapse" : "TabGroupExpand";
       this.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
@@ -144,6 +162,10 @@
         event.preventDefault();
         this.collapsed = !this.collapsed;
       }
+    }
+
+    on_TabSelect() {
+      this.collapsed = false;
     }
   }
 

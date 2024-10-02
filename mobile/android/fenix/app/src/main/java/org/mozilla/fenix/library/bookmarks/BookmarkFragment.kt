@@ -22,11 +22,9 @@ import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.get
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavDirections
 import androidx.navigation.NavHostController
-import androidx.navigation.findNavController
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +51,7 @@ import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.GleanMetrics.BookmarksManagement
 import org.mozilla.fenix.HomeActivity
+import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.NavHostActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
@@ -63,6 +62,7 @@ import org.mozilla.fenix.databinding.FragmentBookmarkBinding
 import org.mozilla.fenix.ext.bookmarkStorage
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getRootView
+import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.setTextColor
@@ -72,6 +72,8 @@ import org.mozilla.fenix.library.bookmarks.ui.BookmarksMiddleware
 import org.mozilla.fenix.library.bookmarks.ui.BookmarksScreen
 import org.mozilla.fenix.library.bookmarks.ui.BookmarksState
 import org.mozilla.fenix.library.bookmarks.ui.BookmarksStore
+import org.mozilla.fenix.library.bookmarks.ui.BookmarksSyncMiddleware
+import org.mozilla.fenix.library.bookmarks.ui.BookmarksTelemetryMiddleware
 import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
 import org.mozilla.fenix.snackbar.SnackbarBinding
 import org.mozilla.fenix.tabstray.Page
@@ -109,19 +111,18 @@ class BookmarkFragment : LibraryPageFragment<BookmarkNode>(), UserInteractionHan
             return ComposeView(requireContext()).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 val buildStore = { navController: NavHostController ->
-                    val isSignedIntoSync = requireComponents
-                        .backgroundServices.accountManager.authenticatedAccount() != null
-
                     StoreProvider.get(this@BookmarkFragment) {
                         BookmarksStore(
-                            initialState = BookmarksState.default.copy(isSignedIntoSync = isSignedIntoSync),
+                            initialState = BookmarksState.default,
                             middleware = listOf(
+                                BookmarksTelemetryMiddleware(),
+                                BookmarksSyncMiddleware(requireComponents.backgroundServices.syncStore, lifecycleScope),
                                 BookmarksMiddleware(
                                     bookmarksStorage = requireContext().bookmarkStorage,
                                     clipboardManager = requireActivity().getSystemService(),
                                     addNewTabUseCase = requireComponents.useCases.tabsUseCases.addTab,
                                     navigateToSignIntoSync = {
-                                        findNavController()
+                                        this@BookmarkFragment.findNavController()
                                             .navigate(
                                                 BookmarkFragmentDirections.actionGlobalTurnOnSync(
                                                     entrypoint = FenixFxAEntryPoint.BookmarkView,
@@ -129,9 +130,18 @@ class BookmarkFragment : LibraryPageFragment<BookmarkNode>(), UserInteractionHan
                                             )
                                     },
                                     navController = navController,
-                                    exitBookmarks = { findNavController().popBackStack() },
+                                    exitBookmarks = { this@BookmarkFragment.findNavController().popBackStack() },
+                                    wasPreviousAppDestinationHome = {
+                                        this@BookmarkFragment.findNavController()
+                                            .previousBackStackEntry?.destination?.id == R.id.homeFragment
+                                    },
+                                    navigateToSearch = {
+                                        this@BookmarkFragment.findNavController().navigate(
+                                            NavGraphDirections.actionGlobalSearchDialog(sessionId = null),
+                                        )
+                                    },
                                     shareBookmark = { url, title ->
-                                        findNavController().nav(
+                                        this@BookmarkFragment.findNavController().nav(
                                             R.id.bookmarkFragment,
                                             BookmarkFragmentDirections.actionGlobalShareFragment(
                                                 data = arrayOf(
@@ -260,7 +270,10 @@ class BookmarkFragment : LibraryPageFragment<BookmarkNode>(), UserInteractionHan
 
     override fun onResume() {
         super.onResume()
-        if (requireContext().settings().useNewBookmarks) { return }
+        if (requireContext().settings().useNewBookmarks) {
+            hideToolbar()
+            return
+        }
 
         (activity as NavHostActivity).getSupportActionBarAndInflateIfNecessary().show()
 

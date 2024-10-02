@@ -228,6 +228,8 @@
   --theme-popup-color: light-dark(FieldText, rgb(249, 249, 250));
   --theme-popup-border-color: light-dark(ThreeDShadow, #27272b);
   --theme-popup-dimmed: light-dark(hsla(0, 0%, 80%, 0.3), rgba(249, 249, 250, 0.1));
+  --theme-popup-hover-background: var(--theme-popup-dimmed);
+  --theme-popup-hover-color: var(--theme-popup-color);
 
   /* Styling for devtool buttons */
   --theme-toolbarbutton-background: none;
@@ -276,13 +278,25 @@
   /* This is used for search/filter results underline and need to have a 3:1 contrast against the background */
   --theme-contrast-border: light-dark(var(--yellow-70), var(--yellow-65));
 
+  --theme-search-results-background: var(--theme-contrast-background);
+  --theme-search-results-color: var(--theme-contrast-color);
+  --theme-search-results-border-color: var(--theme-contrast-border);
+
   &[forced-colors-active] {
     /* Color picked from HCM palette created by a11y team */
     --theme-highlight-blue: light-dark(#0060DF, #00DDFF);
     --theme-highlight-red: light-dark(#C50042, #FF9AA2);
+    --theme-highlight-green: light-dark(#005E5E, #3FE1B0);
+    --theme-highlight-purple: #952BB9;
+    --theme-highlight-yellow: light-dark(#FFFFCC, #FFEA80);
+    --theme-highlight-orange: light-dark(#CC3D00, #FFB587);
+    --theme-highlight-pink: light-dark(#FF9AA2, #FFDFE7);
+    --theme-highlight-gray: light-dark(#5B5B66, #F0F0F4);
+
 
     --theme-selection-background: SelectedItem;
     --theme-selection-color: SelectedItemText;
+    --theme-text-color-alt: CanvasText;
     --theme-text-selection-background: Highlight;
     --theme-text-selection-color: HighlightText;
     --theme-text-selection-unfocused-background: Highlight;
@@ -296,5 +310,13 @@
     --theme-icon-disabled-color: GrayText;
     --theme-icon-error-color: ButtonText;
     --theme-icon-warning-color: ButtonText;
+
+    --theme-search-results-background: Mark;
+    --theme-search-results-color: MarkText;
+    --theme-search-results-border-color: MarkText;
+
+    /* Menu/Autocomplete items */
+    --theme-popup-hover-background: SelectedItem;
+    --theme-popup-hover-color: SelectedItemText;
   }
 }

@@ -32,6 +32,7 @@ import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.Scaffold
+import androidx.compose.material.Snackbar
 import androidx.compose.material.SnackbarDuration
 import androidx.compose.material.SnackbarHost
 import androidx.compose.material.SnackbarHostState
@@ -79,15 +80,19 @@ import mozilla.components.ui.icons.R as iconsR
  *
  * @param buildStore A builder function to construct a [BookmarksStore] using the NavController that's local
  * to the nav graph for the Bookmarks view hierarchy.
+ * @param startDestination the screen on which to initialize [BookmarksScreen] with.
  */
 @Composable
-internal fun BookmarksScreen(buildStore: (NavHostController) -> BookmarksStore) {
+internal fun BookmarksScreen(
+    buildStore: (NavHostController) -> BookmarksStore,
+    startDestination: String = BookmarksDestinations.LIST,
+) {
     val navController = rememberNavController()
     val store = buildStore(navController)
     BackHandler { store.dispatch(BackClicked) }
     NavHost(
         navController = navController,
-        startDestination = BookmarksDestinations.LIST,
+        startDestination = startDestination,
     ) {
         composable(route = BookmarksDestinations.LIST) {
             BookmarksList(store = store)
@@ -175,33 +180,24 @@ private fun BookmarksList(
 
     val dialogState = state.bookmarksDeletionDialogState
     if (dialogState is DeletionDialogState.Presenting) {
-        AlertDialog(
-            title = {
-                Text(
-                    text = stringResource(R.string.bookmark_delete_folder_dialog_title, dialogState.count),
-                )
-            },
-            onDismissRequest = { store.dispatch(DeletionDialogAction.CancelTapped) },
-            confirmButton = {
-                TextButton(
-                    onClick = { store.dispatch(DeletionDialogAction.DeleteTapped) },
-                ) {
-                    Text(stringResource(R.string.bookmark_menu_delete_button))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { store.dispatch(DeletionDialogAction.CancelTapped) },
-                ) {
-                    Text(stringResource(R.string.bookmark_delete_negative))
-                }
-            },
+        AlertDialogDeletionWarning(
+            numItems = dialogState.count,
+            onCancelTapped = { store.dispatch(DeletionDialogAction.CancelTapped) },
+            onDeleteTapped = { store.dispatch(DeletionDialogAction.DeleteTapped) },
         )
     }
 
     Scaffold(
         snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    shape = RoundedCornerShape(4.dp),
+                    backgroundColor = FirefoxTheme.colors.actionPrimary,
+                    contentColor = FirefoxTheme.colors.textOnColorPrimary,
+                    actionColor = FirefoxTheme.colors.textOnColorPrimary,
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -308,6 +304,7 @@ private fun BookmarksListTopBar(
     val isCurrentFolderDesktopRoot by store.observeAsState(store.state.currentFolder.isDesktopRoot) {
         store.state.currentFolder.isDesktopRoot
     }
+    val folderTitle by store.observeAsState(store.state.currentFolder.title) { store.state.currentFolder.title }
     var showMenu by remember { mutableStateOf(false) }
     Box {
         BookmarkListOverflowMenu(
@@ -325,7 +322,7 @@ private fun BookmarksListTopBar(
                         val total = selectedItems.size + (recursiveCount ?: 0)
                         stringResource(R.string.bookmarks_multi_select_title, total)
                     } else {
-                        store.state.currentFolder.title
+                        folderTitle
                     },
                 )
             },
@@ -422,11 +419,13 @@ private fun WarnDialog(
             title = {
                 Text(
                     text = stringResource(R.string.open_all_warning_title, dialog.numberOfTabs),
+                    color = FirefoxTheme.colors.textPrimary,
                 )
             },
             text = {
                 Text(
                     text = stringResource(R.string.open_all_warning_message, dialog.numberOfTabs),
+                    color = FirefoxTheme.colors.textPrimary,
                 )
             },
             onDismissRequest = { store.dispatch(OpenTabsConfirmationDialogAction.CancelTapped) },
@@ -434,18 +433,63 @@ private fun WarnDialog(
                 TextButton(
                     onClick = { store.dispatch(OpenTabsConfirmationDialogAction.ConfirmTapped) },
                 ) {
-                    Text(stringResource(R.string.open_all_warning_confirm))
+                    Text(
+                        text = stringResource(R.string.open_all_warning_confirm),
+                        color = FirefoxTheme.colors.actionPrimary,
+                    )
                 }
             },
             dismissButton = {
                 TextButton(
                     onClick = { store.dispatch(OpenTabsConfirmationDialogAction.CancelTapped) },
                 ) {
-                    Text(stringResource(R.string.open_all_warning_cancel))
+                    Text(
+                        text = stringResource(R.string.open_all_warning_cancel),
+                        color = FirefoxTheme.colors.actionPrimary,
+                    )
                 }
             },
+            backgroundColor = FirefoxTheme.colors.layer2,
         )
     }
+}
+
+@Composable
+private fun AlertDialogDeletionWarning(
+    numItems: Int,
+    onCancelTapped: () -> Unit,
+    onDeleteTapped: () -> Unit,
+) {
+    AlertDialog(
+        title = {
+            Text(
+                text = stringResource(R.string.bookmark_delete_folder_dialog_title, numItems),
+                color = FirefoxTheme.colors.textPrimary,
+            )
+        },
+        onDismissRequest = onCancelTapped,
+        confirmButton = {
+            TextButton(
+                onClick = onDeleteTapped,
+            ) {
+                Text(
+                    text = stringResource(R.string.bookmark_menu_delete_button),
+                    color = FirefoxTheme.colors.actionPrimary,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onCancelTapped,
+            ) {
+                Text(
+                    text = stringResource(R.string.bookmark_delete_negative),
+                    color = FirefoxTheme.colors.actionPrimary,
+                )
+            }
+        },
+        backgroundColor = FirefoxTheme.colors.layer2,
+    )
 }
 
 @Composable
@@ -591,7 +635,7 @@ private fun EmptyList(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 32.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -743,14 +787,30 @@ private fun BookmarkListFolderMenu(
 private fun EditFolderScreen(
     store: BookmarksStore,
 ) {
-    val state by store.observeAsState(store.state.bookmarksEditFolderState) { it.bookmarksEditFolderState }
+    val state by store.observeAsState(store.state) { it }
+    val editState = state.bookmarksEditFolderState
+    val dialogState = state.bookmarksDeletionDialogState
+
+    if (dialogState is DeletionDialogState.Presenting) {
+        AlertDialogDeletionWarning(
+            numItems = dialogState.count,
+            onCancelTapped = { store.dispatch(DeletionDialogAction.CancelTapped) },
+            onDeleteTapped = { store.dispatch(DeletionDialogAction.DeleteTapped) },
+        )
+    }
+
     Scaffold(
-        topBar = { EditFolderTopBar(onBackClick = { store.dispatch(BackClicked) }) },
+        topBar = {
+            EditFolderTopBar(
+                onBackClick = { store.dispatch(BackClicked) },
+                onDeleteClick = { store.dispatch(EditFolderAction.DeleteClicked) },
+            )
+        },
         backgroundColor = FirefoxTheme.colors.layer1,
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
             TextField(
-                value = state?.folder?.title ?: "",
+                value = editState?.folder?.title ?: "",
                 onValueChange = { newText -> store.dispatch(EditFolderAction.TitleChanged(newText)) },
                 label = {
                     Text(
@@ -772,7 +832,7 @@ private fun EditFolderScreen(
             )
 
             IconListItem(
-                label = state?.parent?.title ?: "",
+                label = editState?.parent?.title ?: "",
                 beforeIconPainter = painterResource(R.drawable.ic_folder_icon),
                 onClick = { store.dispatch(EditFolderAction.ParentFolderClicked) },
             )
@@ -781,7 +841,10 @@ private fun EditFolderScreen(
 }
 
 @Composable
-private fun EditFolderTopBar(onBackClick: () -> Unit) {
+private fun EditFolderTopBar(
+    onBackClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+) {
     TopAppBar(
         backgroundColor = FirefoxTheme.colors.layer1,
         title = {
@@ -796,6 +859,15 @@ private fun EditFolderTopBar(onBackClick: () -> Unit) {
                 Icon(
                     painter = painterResource(R.drawable.mozac_ic_back_24),
                     contentDescription = stringResource(R.string.bookmark_navigate_back_button_content_description),
+                    tint = FirefoxTheme.colors.iconPrimary,
+                )
+            }
+        },
+        actions = {
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    painter = painterResource(R.drawable.mozac_ic_delete_24),
+                    contentDescription = stringResource(R.string.bookmark_add_new_folder_button_content_description),
                     tint = FirefoxTheme.colors.iconPrimary,
                 )
             }
@@ -873,14 +945,6 @@ private fun EditBookmarkScreen(
 ) {
     val state by store.observeAsState(store.state.bookmarksEditBookmarkState) { it.bookmarksEditBookmarkState }
 
-    LaunchedEffect(Unit) {
-        // If we somehow get to this screen without a `bookmarksEditBookmarkState`
-        // we'll want to navigate them back.
-        if (state == null) {
-            store.dispatch(BackClicked)
-        }
-    }
-
     val bookmark = state?.bookmark ?: return
     val folder = state?.folder ?: return
 
@@ -896,7 +960,7 @@ private fun EditBookmarkScreen(
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp),
+                .padding(16.dp),
         ) {
             BookmarkEditor(
                 bookmarkItem = bookmark,
@@ -928,10 +992,12 @@ private fun BookmarkEditor(
             ClearableTextField(
                 value = bookmarkItem.title,
                 onValueChange = onTitleChanged,
+                placeholder = stringResource(R.string.bookmark_name_label_normal_case),
             )
             ClearableTextField(
                 value = bookmarkItem.url,
                 onValueChange = onURLChanged,
+                placeholder = stringResource(R.string.bookmark_url_label),
             )
         }
     }
@@ -973,6 +1039,7 @@ private fun FolderInfo(
 
 @Composable
 private fun ClearableTextField(
+    placeholder: String,
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -982,6 +1049,13 @@ private fun ClearableTextField(
     TextField(
         value = value,
         onValueChange = onValueChange,
+        placeholder = {
+            Text(
+                text = placeholder,
+                color = FirefoxTheme.colors.textPrimary,
+                style = FirefoxTheme.typography.subtitle1,
+            )
+        },
         singleLine = true,
         trailingIcon = {
             if (isFocused && value.isNotEmpty()) {

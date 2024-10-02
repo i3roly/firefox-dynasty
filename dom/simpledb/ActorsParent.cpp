@@ -42,12 +42,14 @@
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
+#include "mozilla/dom/quota/ThreadUtils.h"
 #include "mozilla/dom/quota/UsageInfo.h"
 #include "mozilla/ipc/BackgroundParent.h"
 #include "mozilla/ipc/BackgroundUtils.h"
 #include "mozilla/ipc/PBackgroundParent.h"
 #include "mozilla/ipc/PBackgroundSharedTypes.h"
 #include "mozilla/ipc/ProtocolUtils.h"
+#include "NotifyUtils.h"
 #include "nsCOMPtr.h"
 #include "nsDebug.h"
 #include "nsError.h"
@@ -708,6 +710,10 @@ void Connection::OnOpen(
   }
 
   gOpenConnections->AppendElement(WrapNotNullUnchecked(this));
+
+  if (mDirectoryLock->Invalidated()) {
+    AllowToClose();
+  }
 }
 
 void Connection::OnClose() {
@@ -982,15 +988,13 @@ void ConnectionOperationBase::SendResults() {
 
       MOZ_ASSERT(response.type() != SDBRequestResponse::T__None);
       MOZ_ASSERT(response.type() != SDBRequestResponse::Tnsresult);
+
+      OnSuccess();
     } else {
       response = mResultCode;
     }
 
     Unused << PBackgroundSDBRequestParent::Send__delete__(this, response);
-
-    if (NS_SUCCEEDED(mResultCode)) {
-      OnSuccess();
-    }
   }
 
   Cleanup();
@@ -1162,6 +1166,8 @@ nsresult OpenOp::SendToIOThread() {
     return rv;
   }
 
+  simpledb::NotifyDatabaseWorkStarted();
+
   return NS_OK;
 }
 
@@ -1280,6 +1286,9 @@ void OpenOp::StreamClosedCallback() {
 nsresult OpenOp::DoDatabaseWork(
     nsIFileRandomAccessStream* aFileRandomAccessStream) {
   AssertIsOnIOThread();
+
+  SleepIfEnabled(
+      StaticPrefs::dom_simpledb_databaseInitialization_pauseOnIOThreadMs());
 
   return NS_OK;
 }

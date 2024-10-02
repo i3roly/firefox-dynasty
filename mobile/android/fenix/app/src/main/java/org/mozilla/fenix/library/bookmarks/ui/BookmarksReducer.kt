@@ -9,6 +9,12 @@ package org.mozilla.fenix.library.bookmarks.ui
  */
 @Suppress("LongMethod")
 internal fun bookmarksReducer(state: BookmarksState, action: BookmarksAction) = when (action) {
+    is InitEditLoaded -> state.copy(
+        bookmarksEditBookmarkState = BookmarksEditBookmarkState(
+            bookmark = action.bookmark,
+            folder = action.folder,
+        ),
+    )
     is BookmarksLoaded -> state.copy(
         currentFolder = action.folder,
         bookmarkItems = action.bookmarkItems,
@@ -94,6 +100,13 @@ internal fun bookmarksReducer(state: BookmarksState, action: BookmarksAction) = 
             folderSelectionGuid = state.bookmarksEditFolderState?.parent?.guid ?: state.currentFolder.guid,
         ),
     )
+    EditFolderAction.DeleteClicked -> state.bookmarksEditFolderState?.folder?.guid?.let {
+        state.copy(
+            bookmarksDeletionDialogState = DeletionDialogState.LoadingCount(
+                listOf(state.bookmarksEditFolderState.folder.guid),
+            ),
+        )
+    } ?: state
     is BookmarksListMenuAction -> state.handleListMenuAction(action)
     SnackbarAction.Undo -> state.copy(bookmarksSnackbarState = BookmarksSnackbarState.None)
     SnackbarAction.Dismissed -> {
@@ -116,12 +129,16 @@ internal fun bookmarksReducer(state: BookmarksState, action: BookmarksAction) = 
             isPrivate = action.isPrivate,
         ),
     )
+    is ReceivedSyncUpdate -> {
+        state.copy(isSignedIntoSync = action.signedIn)
+    }
     OpenTabsConfirmationDialogAction.CancelTapped,
     OpenTabsConfirmationDialogAction.ConfirmTapped,
     -> state.copy(openTabsConfirmationDialog = OpenTabsConfirmationDialog.None)
     SelectFolderAction.ViewAppeared,
     SearchClicked,
     SignIntoSyncClicked,
+    is InitEdit,
     Init,
     -> state
 }
@@ -170,11 +187,11 @@ private fun BookmarksSelectFolderState.respondToBackClick(): BookmarksSelectFold
 }
 
 private fun BookmarksState.respondToBackClick(): BookmarksState = when {
+    bookmarksAddFolderState != null -> copy(bookmarksAddFolderState = null)
     bookmarksSelectFolderState != null -> copy(
         bookmarksMultiselectMoveState = null,
         bookmarksSelectFolderState = bookmarksSelectFolderState.respondToBackClick(),
     )
-    bookmarksAddFolderState != null -> copy(bookmarksAddFolderState = null)
     bookmarksEditFolderState != null -> copy(bookmarksEditFolderState = null)
     bookmarksEditBookmarkState != null -> copy(bookmarksEditBookmarkState = null)
     else -> this

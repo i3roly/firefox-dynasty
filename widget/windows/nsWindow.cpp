@@ -84,6 +84,7 @@
 #include "nsWindowTaskbarConcealer.h"
 #include "nsAppRunner.h"
 
+#include <appmodel.h>
 #include <shellapi.h>
 #include <windows.h>
 #include <wtsapi32.h>
@@ -834,6 +835,28 @@ void nsWindow::DestroyDirectManipulation() {
   }
 }
 
+namespace mozilla::widget {
+
+// A mask specifying the window-styles associated with window-chrome.
+constexpr static const WindowStyles kChromeStylesMask{
+    .style = WS_CAPTION | WS_THICKFRAME,
+    .ex = WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE |
+          WS_EX_STATICEDGE,
+};
+
+WindowStyles WindowStyles::FromHWND(HWND aWnd) {
+  return {.style = ::GetWindowLongPtrW(aWnd, GWL_STYLE),
+          .ex = ::GetWindowLongPtrW(aWnd, GWL_EXSTYLE)};
+}
+
+void SetWindowStyles(HWND aWnd, const WindowStyles& aStyles) {
+  VERIFY_WINDOW_STYLE(aStyles.style);
+  ::SetWindowLongPtrW(aWnd, GWL_STYLE, aStyles.style);
+  ::SetWindowLongPtrW(aWnd, GWL_EXSTYLE, aStyles.ex);
+}
+
+}  // namespace mozilla::widget
+
 // Create the proper widget
 nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
                           const LayoutDeviceIntRect& aRect,
@@ -881,8 +904,10 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   mIsAlert = aInitData->mIsAlert;
   mResizable = aInitData->mResizable;
 
-  DWORD style = WindowStyle();
-  DWORD extendedStyle = WindowExStyle();
+  Styles desiredStyles{
+      .style = static_cast<LONG_PTR>(WindowStyle()),
+      .ex = static_cast<LONG_PTR>(WindowExStyle()),
+  };
 
   if (mWindowType == WindowType::Popup) {
     if (!aParent) {
@@ -890,16 +915,16 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
     }
   } else if (mWindowType == WindowType::Invisible) {
     // Make sure CreateWindowEx succeeds at creating a toplevel window
-    style &= ~0x40000000;  // WS_CHILDWINDOW
+    desiredStyles.style &= ~WS_CHILDWINDOW;
   } else {
     // See if the caller wants to explictly set clip children and clip siblings
     if (aInitData->mClipChildren) {
-      style |= WS_CLIPCHILDREN;
+      desiredStyles.style |= WS_CLIPCHILDREN;
     } else {
-      style &= ~WS_CLIPCHILDREN;
+      desiredStyles.style &= ~WS_CLIPCHILDREN;
     }
     if (aInitData->mClipSiblings) {
-      style |= WS_CLIPSIBLINGS;
+      desiredStyles.style |= WS_CLIPSIBLINGS;
     }
   }
 
@@ -912,10 +937,10 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
     sFirstTopLevelWindowCreated = true;
     mWnd = ConsumePreXULSkeletonUIHandle();
     if (mWnd) {
-      MOZ_ASSERT(style == kPreXULSkeletonUIWindowStyle,
+      MOZ_ASSERT(desiredStyles.style == kPreXULSkeletonUIWindowStyle,
                  "The skeleton UI window style should match the expected "
                  "style for the first window created");
-      MOZ_ASSERT(extendedStyle == kPreXULSkeletonUIWindowStyleEx,
+      MOZ_ASSERT(desiredStyles.ex == kPreXULSkeletonUIWindowStyleEx,
                  "The skeleton UI window extended style should match the "
                  "expected extended style for the first window created");
       MOZ_ASSERT(
@@ -947,15 +972,28 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   }
 
   if (!mWnd) {
-    mWnd =
-        ::CreateWindowExW(extendedStyle, className, L"", style, aRect.X(),
-                          aRect.Y(), aRect.Width(), GetHeight(aRect.Height()),
-                          parent, nullptr, nsToolkit::mDllInstance, nullptr);
+    mWnd = ::CreateWindowExW(desiredStyles.ex, className, L"",
+                             desiredStyles.style, aRect.X(), aRect.Y(),
+                             aRect.Width(), GetHeight(aRect.Height()), parent,
+                             nullptr, nsToolkit::mDllInstance, nullptr);
+    if (!mWnd) {
+      NS_WARNING("nsWindow CreateWindowEx failed.");
+      return NS_ERROR_FAILURE;
+    }
   }
 
-  if (!mWnd) {
-    NS_WARNING("nsWindow CreateWindowEx failed.");
-    return NS_ERROR_FAILURE;
+  {
+    // Some of the chrome mask window styles can be added implicitly by
+    // CreateWindowEx, but we really don't want that.
+    // To be safe, only deal with those bits for now, instead of just
+    // overriding with extendedStyle or style.
+    // This can happen with non-native alert windows for example.
+    const auto actualStyles = Styles::FromHWND(mWnd);
+    auto newStyles = (actualStyles & ~kChromeStylesMask) |
+                     (desiredStyles & kChromeStylesMask);
+    if (newStyles != actualStyles) {
+      SetWindowStyles(mWnd, newStyles);
+    }
   }
 
   if (!sWinCloakEventHook) {
@@ -1005,6 +1043,14 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
       // grouping works properly
       Unused << NS_WARN_IF(!mozilla::widget::WinTaskbar::GenerateAppUserModelID(
           aumid, usePrivateAumid));
+      if (!usePrivateAumid && widget::WinUtils::HasPackageIdentity()) {
+        // On MSIX we should always have a provided process AUMID
+        // that we can explicitly assign to a regular window.
+        UINT32 maxLength = MAX_PATH;
+        aumid.SetLength(maxLength);
+        Unused << NS_WARN_IF(
+            GetCurrentApplicationUserModelId(&maxLength, aumid.get()));
+      }
       if (!FAILED(InitPropVariantFromString(aumid.get(), &pv))) {
         if (!FAILED(pPropStore->SetValue(PKEY_AppUserModel_ID, pv))) {
           pPropStore->Commit();
@@ -1548,6 +1594,9 @@ void nsWindow::Show(bool aState) {
     // that we've taken over the window from the skeleton UI, and we should
     // no longer treat resizes / moves specially.
     mIsShowingPreXULSkeletonUI = false;
+    // Concomitantly, this is also when we change the cursor away from the
+    // default "wait" cursor.
+    SetCursor(Cursor{eCursor_standard});
 #if defined(ACCESSIBILITY)
     // If our HWND has focus and the a11y engine hasn't started yet, fire a
     // focus win event. Windows already did this when the skeleton UI appeared,
@@ -2678,8 +2727,7 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
     mNonClientOffset.left = 0;
     mNonClientOffset.right = 0;
 
-    mozilla::Maybe<UINT> maybeEdge = GetHiddenTaskbarEdge();
-    if (maybeEdge) {
+    if (mozilla::Maybe<UINT> maybeEdge = GetHiddenTaskbarEdge()) {
       auto edge = maybeEdge.value();
       if (ABE_LEFT == edge) {
         mNonClientOffset.left -= kHiddenTaskbarSize;
@@ -2688,19 +2736,13 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
       } else if (ABE_BOTTOM == edge || ABE_TOP == edge) {
         mNonClientOffset.bottom -= kHiddenTaskbarSize;
       }
-
-      // When we are drawing the non-client region, we need
-      // to clear the portion of the NC region that is exposed by the
-      // hidden taskbar.  As above, we clear the bottom of the NC region
-      // when the taskbar is at the top of the screen.
-      UINT clearEdge = (edge == ABE_TOP) ? ABE_BOTTOM : edge;
-      mClearNCEdge = Some(clearEdge);
     }
   } else {
     mNonClientOffset = NormalWindowNonClientOffset();
   }
 
   UpdateOpaqueRegionInternal();
+  mNeedsNCAreaClear = true;
 
   if (aReflowWindow) {
     // Force a reflow of content based on the new client
@@ -2756,7 +2798,7 @@ void nsWindow::SetResizeMargin(mozilla::LayoutDeviceIntCoord aResizeMargin) {
   UpdateNonClientMargins();
 }
 
-void nsWindow::InvalidateNonClientRegion() {
+nsAutoRegion nsWindow::ComputeNonClientHRGN() {
   // +-+-----------------------+-+
   // | | app non-client chrome | |
   // | +-----------------------+ |
@@ -2772,24 +2814,20 @@ void nsWindow::InvalidateNonClientRegion() {
   RECT rect;
   GetWindowRect(mWnd, &rect);
   MapWindowPoints(nullptr, mWnd, (LPPOINT)&rect, 2);
-  HRGN winRgn = CreateRectRgnIndirect(&rect);
+  nsAutoRegion winRgn(::CreateRectRgnIndirect(&rect));
 
   // Subtract app client chrome and app content leaving
   // windows non-client chrome and app non-client chrome
   // in winRgn.
-  GetWindowRect(mWnd, &rect);
+  ::GetWindowRect(mWnd, &rect);
   rect.top += mCaptionHeight;
   rect.right -= mHorResizeMargin;
   rect.bottom -= mVertResizeMargin;
   rect.left += mHorResizeMargin;
-  MapWindowPoints(nullptr, mWnd, (LPPOINT)&rect, 2);
-  HRGN clientRgn = CreateRectRgnIndirect(&rect);
-  CombineRgn(winRgn, winRgn, clientRgn, RGN_DIFF);
-  DeleteObject(clientRgn);
-
-  // triggers ncpaint and paint events for the two areas
-  RedrawWindow(mWnd, nullptr, winRgn, RDW_FRAME | RDW_INVALIDATE);
-  DeleteObject(winRgn);
+  ::MapWindowPoints(nullptr, mWnd, (LPPOINT)&rect, 2);
+  nsAutoRegion clientRgn(::CreateRectRgnIndirect(&rect));
+  ::CombineRgn(winRgn, winRgn, clientRgn, RGN_DIFF);
+  return nsAutoRegion(winRgn.out());
 }
 
 /**************************************************************
@@ -3031,87 +3069,34 @@ void nsWindow::HideWindowChrome(bool aShouldHide) {
     return;
   }
 
-  if (mHideChrome == aShouldHide) return;
-
-  // Data manipulation: styles + ex-styles, and bitmasking operations thereupon.
-  struct Styles {
-    LONG_PTR style, ex;
-    constexpr Styles operator|(Styles const& that) const {
-      return Styles{.style = style | that.style, .ex = ex | that.ex};
-    }
-    constexpr Styles operator&(Styles const& that) const {
-      return Styles{.style = style & that.style, .ex = ex & that.ex};
-    }
-    constexpr Styles operator~() const {
-      return Styles{.style = ~style, .ex = ~ex};
-    }
-
-    // Compute a style-set which matches `zero` where the bits of `this` are 0
-    // and `one` where the bits of `this` are 1.
-    constexpr Styles merge(Styles zero, Styles one) const {
-      Styles const& mask = *this;
-      return (~mask & zero) | (mask & one);
-    }
-
-    // The dual of `merge`, above: returns a pair [zero, one] satisfying
-    // `a.merge(a.split(b)...) == b`. (Or its equivalent in valid C++.)
-    constexpr std::tuple<Styles, Styles> split(Styles data) const {
-      Styles const& mask = *this;
-      return {~mask & data, mask & data};
-    }
-  };
-
-  // Get styles from an HWND.
-  constexpr auto const GetStyles = [](HWND hwnd) {
-    return Styles{.style = ::GetWindowLongPtrW(hwnd, GWL_STYLE),
-                  .ex = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE)};
-  };
-  constexpr auto const SetStyles = [](HWND hwnd, Styles styles) {
-    VERIFY_WINDOW_STYLE(styles.style);
-    ::SetWindowLongPtrW(hwnd, GWL_STYLE, styles.style);
-    ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, styles.ex);
-  };
-
-  // Get styles from *this.
-  auto const GetCachedStyles = [&]() {
-    return mOldStyles.map([](auto const& m) {
-      return Styles{.style = m.style, .ex = m.exStyle};
-    });
-  };
-  auto const SetCachedStyles = [&](Styles styles) {
-    using WStyles = nsWindow::WindowStyles;
-    mOldStyles = Some(WStyles{.style = styles.style, .exStyle = styles.ex});
-  };
-
-  // The mask describing the "chrome" which this function is supposed to remove
-  // (or restore, as the case may be). Other style-flags will be left untouched.
-  constexpr static const Styles kChromeMask{
-      .style = WS_CAPTION | WS_THICKFRAME,
-      .ex = WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE |
-            WS_EX_STATICEDGE};
+  if (mHideChrome == aShouldHide) {
+    return;
+  }
 
   // The desired style-flagset for fullscreen windows. (This happens to be all
   // zeroes, but we don't need to rely on that.)
-  constexpr static const Styles kFullscreenChrome{.style = 0, .ex = 0};
+  constexpr static const WindowStyles kFullscreenChromeStyles{.style = 0,
+                                                              .ex = 0};
 
-  auto const [chromeless, currentChrome] = kChromeMask.split(GetStyles(hwnd));
+  auto const [chromeless, currentChrome] =
+      kChromeStylesMask.split(Styles::FromHWND(hwnd));
   Styles newChrome{}, oldChrome{};
 
   mHideChrome = aShouldHide;
   if (aShouldHide) {
-    newChrome = kFullscreenChrome;
+    newChrome = kFullscreenChromeStyles;
     oldChrome = currentChrome;
   } else {
     // if there's nothing to "restore" it to, just use what's there now
-    oldChrome = GetCachedStyles().refOr(currentChrome);
+    oldChrome = mOldStyles.refOr(currentChrome);
     newChrome = oldChrome;
     if (mFutureMarginsToUse) {
       SetNonClientMargins(mFutureMarginsOnceChromeShows);
     }
   }
 
-  SetCachedStyles(oldChrome);
-  SetStyles(hwnd, kChromeMask.merge(chromeless, newChrome));
+  mOldStyles = Some(oldChrome);
+  SetWindowStyles(hwnd, kChromeStylesMask.merge(chromeless, newChrome));
 }
 
 /**************************************************************
@@ -3870,7 +3855,7 @@ WindowRenderer* nsWindow::GetWindowRenderer() {
     WinCompositorWidgetInitData initData(
         reinterpret_cast<uintptr_t>(mWnd),
         reinterpret_cast<uintptr_t>(static_cast<nsIWidget*>(this)),
-        mTransparencyMode, mFrameState->GetSizeMode());
+        mTransparencyMode);
     // If we're not using the compositor, the options don't actually matter.
     CompositorOptions options(false, false);
     mBasicLayersSurface =
@@ -4986,12 +4971,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       auto GeckoClientToWinScreenRect =
           [&origin](LayoutDeviceIntRect aRect) -> RECT {
         aRect.MoveBy(origin);
-        return {
-            .left = aRect.x,
-            .top = aRect.y,
-            .right = aRect.XMost(),
-            .bottom = aRect.YMost(),
-        };
+        return WinUtils::ToWinRect(aRect);
       };
       auto SetButton = [&](size_t aIndex, WindowButtonType aType) {
         info->rgrect[aIndex] =
@@ -5087,10 +5067,6 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       }
 
     case WM_NCACTIVATE: {
-      /*
-       * WM_NCACTIVATE paints nc areas. Avoid this and re-route painting
-       * through WM_NCPAINT via InvalidateNonClientRegion.
-       */
       if (!mCustomNonClient) {
         break;
       }
@@ -5101,26 +5077,17 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
             "nsWindow::ForcePresent", this, &nsWindow::ForcePresent));
       }
 
-      // let the dwm handle nc painting on glass
-      // Never allow native painting if we are on fullscreen
-      if (mFrameState->GetSizeMode() != nsSizeMode_Fullscreen) break;
-
-      if (wParam == TRUE) {
-        // going active
-        *aRetValue = FALSE;  // ignored
-        result = true;
-        // invalidate to trigger a paint
-        InvalidateNonClientRegion();
-        break;
-      } else {
-        // going inactive
-        *aRetValue = TRUE;  // go ahead and deactive
-        result = true;
-        // invalidate to trigger a paint
-        InvalidateNonClientRegion();
-        break;
-      }
-    }
+      // ::DefWindowProc would paint nc areas. Avoid this, since we just want
+      // dwm to take care of re-displaying the glass effect if any. Quoting the
+      // docs[1]:
+      //
+      //     If this parameter is set to -1, DefWindowProc does not repaint the
+      //     nonclient area to reflect the state change.
+      //
+      // [1]:
+      // https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-ncactivate
+      lParam = -1;
+    } break;
 
     case WM_NCPAINT: {
       /*
@@ -5128,6 +5095,12 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
        * do seem to always send a WM_NCPAINT message, so let's update on that.
        */
       gfxDWriteFont::UpdateSystemTextVars();
+      if (mCustomNonClient) {
+        // We rely on dwm for glass / semi-transparent window painting, so we
+        // just need to make sure to clear the non-client area next time we get
+        // around to doing a main-thread paint.
+        mNeedsNCAreaClear = true;
+      }
     } break;
 
     case WM_POWERBROADCAST:
@@ -7015,18 +6988,6 @@ void nsWindow::OnSizeModeChange() {
   if (NeedsToTrackWindowOcclusionState()) {
     WinWindowOcclusionTracker::Get()->OnWindowVisibilityChanged(
         this, mode != nsSizeMode_Minimized);
-
-    wr::DebugFlags flags{0};
-    flags._0 = gfx::gfxVars::WebRenderDebugFlags();
-    bool debugEnabled = bool(flags & wr::DebugFlags::WINDOW_VISIBILITY_DBG);
-    if (debugEnabled && mCompositorWidgetDelegate) {
-      mCompositorWidgetDelegate->NotifyVisibilityUpdated(mode,
-                                                         mIsFullyOccluded);
-    }
-  }
-
-  if (mCompositorWidgetDelegate) {
-    mCompositorWidgetDelegate->OnWindowModeChange(mode);
   }
 
   if (mWidgetListener) {
@@ -7271,13 +7232,17 @@ void nsWindow::SetWindowTranslucencyInner(TransparencyMode aMode) {
   }
 
   MOZ_ASSERT(WinUtils::GetTopLevelHWND(mWnd, true) == mWnd);
-  LONG_PTR exStyle = ::GetWindowLongPtr(mWnd, GWL_EXSTYLE);
-  if (aMode == TransparencyMode::Transparent) {
-    exStyle |= WS_EX_LAYERED;
-  } else {
-    exStyle &= ~WS_EX_LAYERED;
+  if (IsPopup()) {
+    // This can probably go away if we make transparent popups report true in
+    // WidgetTypeSupportsAcceleration(). See there for context.
+    LONG_PTR exStyle = ::GetWindowLongPtr(mWnd, GWL_EXSTYLE);
+    if (aMode == TransparencyMode::Transparent) {
+      exStyle |= WS_EX_LAYERED;
+    } else {
+      exStyle &= ~WS_EX_LAYERED;
+    }
+    ::SetWindowLongPtrW(mWnd, GWL_EXSTYLE, exStyle);
   }
-  ::SetWindowLongPtrW(mWnd, GWL_EXSTYLE, exStyle);
 
   mTransparencyMode = aMode;
 
@@ -8051,35 +8016,14 @@ void nsWindow::PickerClosed() {
 }
 
 bool nsWindow::WidgetTypeSupportsAcceleration() {
-  // We don't currently support using an accelerated layer manager with
-  // transparent windows so don't even try. I'm also not sure if we even
-  // want to support this case. See bug 593471.
-  //
-  // Windows' support for transparent accelerated surfaces isn't great.
-  // Some possible approaches:
-  //  - Readback the data and update it using
-  //  UpdateLayeredWindow/UpdateLayeredWindowIndirect
-  //    This is what WPF does. See
-  //    CD3DDeviceLevel1::PresentWithGDI/CD3DSwapChainWithSwDC in WpfGfx. The
-  //    rationale for not using IDirect3DSurface9::GetDC is explained here:
-  //    https://web.archive.org/web/20160521191104/https://blogs.msdn.microsoft.com/dwayneneed/2008/09/08/transparent-windows-in-wpf/
-  //  - Use D3D11_RESOURCE_MISC_GDI_COMPATIBLE, IDXGISurface1::GetDC(),
-  //    and UpdateLayeredWindowIndirect.
-  //    This is suggested here:
-  //    https://docs.microsoft.com/en-us/archive/msdn-magazine/2009/december/windows-with-c-layered-windows-with-direct2d
-  //    but might have the same problem that IDirect3DSurface9::GetDC has.
-  //  - Creating the window with the WS_EX_NOREDIRECTIONBITMAP flag and use
-  //  DirectComposition.
-  //    Not supported on Win7.
-  //  - Using DwmExtendFrameIntoClientArea with negative margins and something
-  //  to turn off the glass effect.
-  //    This doesn't work when the DWM is not running (Win7)
-  //
-  // Also see bug 1150376, D3D11 composition can cause issues on some devices
-  // on Windows 7 where presentation fails randomly for windows with drop
-  // shadows.
-  return mTransparencyMode != TransparencyMode::Transparent &&
-         !(IsPopup() && DeviceManagerDx::Get()->IsWARP());
+  if (IsPopup()) {
+    // This transparency+popup checks go back to bug 1150376 and bug 943204,
+    // but removing it causes reproducible timeouts on automation, see bug
+    // 1891063 comment 11.
+    return mTransparencyMode != TransparencyMode::Transparent &&
+           !DeviceManagerDx::Get()->IsWARP();
+  }
+  return true;
 }
 
 bool nsWindow::DispatchTouchEventFromWMPointer(
@@ -8274,7 +8218,7 @@ void nsWindow::GetCompositorWidgetInitData(
   *aInitData = WinCompositorWidgetInitData(
       reinterpret_cast<uintptr_t>(mWnd),
       reinterpret_cast<uintptr_t>(static_cast<nsIWidget*>(this)),
-      mTransparencyMode, mFrameState->GetSizeMode());
+      mTransparencyMode);
 }
 
 bool nsWindow::SynchronouslyRepaintOnResize() { return false; }

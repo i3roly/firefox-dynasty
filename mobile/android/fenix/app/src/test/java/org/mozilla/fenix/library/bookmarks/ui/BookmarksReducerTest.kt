@@ -7,6 +7,7 @@ package org.mozilla.fenix.library.bookmarks.ui
 import mozilla.appservices.places.BookmarkRoot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -208,6 +209,27 @@ class BookmarksReducerTest {
         val result = bookmarksReducer(state, AddFolderAction.ParentFolderClicked)
 
         assertEquals(BookmarkRoot.Mobile.id, result.bookmarksSelectFolderState?.folderSelectionGuid)
+    }
+
+    @Test
+    fun `GIVEN the add folder screen has been reached from the select folder screen WHEN select folder state is still available`() {
+        val state = BookmarksState.default.copy(
+            bookmarksAddFolderState = BookmarksAddFolderState(
+                parent = BookmarkItem.Folder(
+                    guid = BookmarkRoot.Mobile.id,
+                    title = "Bookmarks",
+                ),
+                folderBeingAddedTitle = "",
+            ),
+            bookmarksSelectFolderState = BookmarksSelectFolderState(
+                selectionGuid = "guid0",
+            ),
+        )
+
+        val result = bookmarksReducer(state, BackClicked)
+
+        assertNull(result.bookmarksAddFolderState)
+        assertEquals("guid0", result.bookmarksSelectFolderState?.selectionGuid)
     }
 
     @Test
@@ -565,6 +587,17 @@ class BookmarksReducerTest {
     }
 
     @Test
+    fun `WHEN folder is deleted from folder edit screen THEN load the number of nested bookmarks`() {
+        val folder = BookmarkItem.Folder("Bookmark Folder", "guid0")
+        val state = BookmarksState.default.copy(
+            bookmarksEditFolderState = BookmarksEditFolderState(folder, folder),
+        )
+
+        val result = bookmarksReducer(state, EditFolderAction.DeleteClicked)
+        assertEquals(DeletionDialogState.LoadingCount(listOf("guid0")), result.bookmarksDeletionDialogState)
+    }
+
+    @Test
     fun `GIVEN a deletion dialog that is loading a count WHEN we receive the count THEN present the dialog`() {
         val folder = BookmarkItem.Folder("Bookmark Folder", "guid0")
         val state = BookmarksState.default.copy(
@@ -720,6 +753,22 @@ class BookmarksReducerTest {
         ).forEach {
             assertEquals(BookmarksState.default, bookmarksReducer(state, it))
         }
+    }
+
+    @Test
+    fun `GIVEN a user is initializing on the edit screen WHEN the data loads THEN update the state`() {
+        val state = BookmarksState.default
+        val bookmark = BookmarkItem.Bookmark("ur", "title", "url", "guid")
+        val parent = BookmarkItem.Folder("title", "guid")
+
+        val result = bookmarksReducer(state, InitEditLoaded(bookmark = bookmark, folder = parent))
+        val expected = state.copy(
+            bookmarksEditBookmarkState = BookmarksEditBookmarkState(
+                bookmark = bookmark,
+                folder = parent,
+            ),
+        )
+        assertEquals(expected, result)
     }
 
     @Test

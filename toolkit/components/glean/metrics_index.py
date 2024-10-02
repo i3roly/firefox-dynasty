@@ -16,6 +16,7 @@
 # Order is lexicographical, enforced by t/c/glean/tests/pytest/test_yaml_indices.py
 gecko_metrics = [
     "browser/base/content/metrics.yaml",
+    "devtools/client/shared/metrics.yaml",
     "docshell/base/metrics.yaml",
     "dom/base/use_counter_metrics.yaml",
     "dom/geolocation/metrics.yaml",
@@ -60,6 +61,7 @@ gecko_metrics = [
     "toolkit/components/reportbrokensite/metrics.yaml",
     "toolkit/components/resistfingerprinting/metrics.yaml",
     "toolkit/components/translations/metrics.yaml",
+    "toolkit/content/metrics.yaml",
     "toolkit/mozapps/extensions/metrics.yaml",
     "toolkit/mozapps/handling/metrics.yaml",
     "toolkit/xre/metrics.yaml",
@@ -79,6 +81,7 @@ firefox_desktop_metrics = [
     "browser/components/pocket/metrics.yaml",
     "browser/components/preferences/metrics.yaml",
     "browser/components/privatebrowsing/metrics.yaml",
+    "browser/components/protections/metrics.yaml",
     "browser/components/protocolhandler/metrics.yaml",
     "browser/components/screenshots/metrics.yaml",
     "browser/components/search/metrics.yaml",

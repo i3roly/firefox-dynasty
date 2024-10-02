@@ -15,6 +15,11 @@ internal sealed interface BookmarksAction : Action
  * The Store is initializing.
  */
 internal data object Init : BookmarksAction
+internal data class InitEdit(val guid: String) : BookmarksAction
+internal data class InitEditLoaded(
+    val bookmark: BookmarkItem.Bookmark,
+    val folder: BookmarkItem.Folder,
+) : BookmarksAction
 
 /**
  * Bookmarks have been loaded from the storage layer.
@@ -65,6 +70,7 @@ internal data object AddFolderClicked : BookmarksAction
 internal data object BackClicked : BookmarksAction
 internal data object SignIntoSyncClicked : BookmarksAction
 internal data class EditBookmarkClicked(val bookmark: BookmarkItem.Bookmark) : BookmarksAction
+internal data class ReceivedSyncUpdate(val signedIn: Boolean) : BookmarksAction
 
 /**
  * Actions specific to the Add Folder screen.
@@ -77,9 +83,10 @@ internal sealed class AddFolderAction {
 /**
  * Actions specific to the Edit Folder screen.
  */
-internal sealed class EditFolderAction {
+internal sealed class EditFolderAction : BookmarksAction {
     data class TitleChanged(val updatedText: String) : BookmarksAction
     data object ParentFolderClicked : BookmarksAction
+    data object DeleteClicked : EditFolderAction()
 }
 
 internal sealed class EditBookmarkAction {

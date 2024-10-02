@@ -35,7 +35,6 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
-import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.library.bookmarks.friendlyRootTitle
@@ -52,6 +51,8 @@ class BookmarksMiddlewareTest {
     private lateinit var navController: NavController
     private lateinit var navigateToSignIntoSync: () -> Unit
     private lateinit var exitBookmarks: () -> Unit
+    private lateinit var wasPreviousAppDestinationHome: () -> Boolean
+    private lateinit var navigateToSearch: () -> Unit
     private lateinit var shareBookmark: (String, String) -> Unit
     private lateinit var showTabsTray: (Boolean) -> Unit
     private lateinit var showUrlCopiedSnackbar: () -> Unit
@@ -80,6 +81,8 @@ class BookmarksMiddlewareTest {
         navController = mock()
         navigateToSignIntoSync = { }
         exitBookmarks = { }
+        wasPreviousAppDestinationHome = { false }
+        navigateToSearch = { }
         shareBookmark = { _, _ -> }
         showTabsTray = { _ -> }
         showUrlCopiedSnackbar = { }
@@ -99,7 +102,8 @@ class BookmarksMiddlewareTest {
     }
 
     @Test
-    fun `GIVEN bookmarks in storage when signed into sync WHEN store is initialized THEN bookmarks, including desktop will be loaded as display format`() = runTestOnMain {
+    fun `GIVEN bookmarks in storage and user has a desktop bookmark WHEN store is initialized THEN bookmarks, including desktop will be loaded as display format`() = runTestOnMain {
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(1u)
         `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id)).thenReturn(generateBookmarkTree())
         `when`(bookmarksStorage.getTree(BookmarkRoot.Root.id)).thenReturn(generateDesktopRootTree())
         val middleware = buildMiddleware()
@@ -137,7 +141,6 @@ class BookmarksMiddlewareTest {
     fun `GIVEN last destination was home fragment and in normal browsing mode WHEN a bookmark is clicked THEN open it as a new tab`() {
         val url = "url"
         val bookmarkItem = BookmarkItem.Bookmark(url, "title", url, guid = "")
-        navController.mockBackstack(R.id.homeFragment)
         getBrowsingMode = { BrowsingMode.Normal }
         var capturedUrl = ""
         var capturedNewTab = false
@@ -145,6 +148,7 @@ class BookmarksMiddlewareTest {
             capturedUrl = urlCalled
             capturedNewTab = newTab
         }
+        wasPreviousAppDestinationHome = { true }
 
         val middleware = buildMiddleware()
         val store = middleware.makeStore(
@@ -171,6 +175,7 @@ class BookmarksMiddlewareTest {
             capturedUrl = urlCalled
             capturedNewTab = newTab
         }
+        wasPreviousAppDestinationHome = { false }
 
         val middleware = buildMiddleware()
         val store = middleware.makeStore(
@@ -258,12 +263,14 @@ class BookmarksMiddlewareTest {
 
     @Test
     fun `WHEN search button is clicked THEN navigate to search`() {
+        var navigated = false
+        navigateToSearch = { navigated = true }
         val middleware = buildMiddleware()
         val store = middleware.makeStore()
 
         store.dispatch(SearchClicked)
 
-        verify(navController).navigate(NavGraphDirections.actionGlobalSearchDialog(sessionId = null))
+        assertTrue(navigated)
     }
 
     @Test
@@ -333,6 +340,28 @@ class BookmarksMiddlewareTest {
         verify(bookmarksStorage, never()).addFolder(parentGuid = store.state.currentFolder.guid, title = "")
         verify(navController).popBackStack()
         assertNull(store.state.bookmarksAddFolderState)
+    }
+
+    @Test
+    fun `GIVEN current screen is add folder and previous screen is select folder WHEN back is clicked THEN reload folder tree`() = runTestOnMain {
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id, recursive = true)).thenReturn(generateBookmarkTree())
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id, recursive = false)).thenReturn(generateBookmarkTree())
+        val middleware = buildMiddleware()
+        val store = middleware.makeStore()
+
+        val bookmark = store.state.bookmarkItems.first { it is BookmarkItem.Bookmark } as BookmarkItem.Bookmark
+        val newFolderTitle = "i'm a new folder"
+
+        store.dispatch(BookmarksListMenuAction.Bookmark.EditClicked(bookmark))
+        store.dispatch(AddFolderAction.ParentFolderClicked)
+        store.dispatch(SelectFolderAction.ViewAppeared)
+        store.dispatch(AddFolderClicked)
+        store.dispatch(AddFolderAction.TitleChanged(newFolderTitle))
+        store.dispatch(BackClicked)
+
+        assertNotNull(store.state.bookmarksSelectFolderState)
+        verify(bookmarksStorage, times(2)).getTree(BookmarkRoot.Mobile.id, recursive = true)
     }
 
     @Test
@@ -540,7 +569,8 @@ class BookmarksMiddlewareTest {
     }
 
     @Test
-    fun `GIVEN bookmarks in storage and signed into sync WHEN select folder sub screen view is loaded THEN load folders, including desktop folders into sub screen state`() = runTestOnMain {
+    fun `GIVEN bookmarks in storage and has desktop bookmarks WHEN select folder sub screen view is loaded THEN load folders, including desktop folders into sub screen state`() = runTestOnMain {
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(1u)
         `when`(bookmarksStorage.getTree(BookmarkRoot.Root.id, recursive = true)).thenReturn(generateDesktopRootTree())
         val middleware = buildMiddleware()
         val store = middleware.makeStore(
@@ -719,6 +749,26 @@ class BookmarksMiddlewareTest {
     }
 
     @Test
+    fun `GIVEN a user is on the edit screen with nothing on the backstack WHEN delete is clicked THEN pop the backstack, delete the bookmark and exit bookmarks`() = runTestOnMain {
+        var exited = false
+        exitBookmarks = { exited = true }
+        val middleware = buildMiddleware()
+        val store = middleware.makeStore(
+            initialState = BookmarksState.default.copy(
+                bookmarksEditBookmarkState = BookmarksEditBookmarkState(
+                    bookmark = BookmarkItem.Bookmark("ur", "title", "url", "guid"),
+                    folder = BookmarkItem.Folder("title", "guid"),
+                ),
+            ),
+        )
+        `when`(navController.popBackStack()).thenReturn(false)
+        store.dispatch(EditBookmarkAction.DeleteClicked)
+        verify(navController).popBackStack()
+        verify(bookmarksStorage).deleteNode("guid")
+        assertTrue(exited)
+    }
+
+    @Test
     fun `WHEN edit clicked in folder item menu THEN nav to the edit screen`() {
         val middleware = buildMiddleware()
         val store = middleware.makeStore()
@@ -859,6 +909,27 @@ class BookmarksMiddlewareTest {
         store.dispatch(DeletionDialogAction.DeleteTapped)
         assertEquals(DeletionDialogState.None, store.state.bookmarksDeletionDialogState)
         verify(bookmarksStorage).deleteNode(folder.guid)
+    }
+
+    @Test
+    fun `WHEN delete clicked in folder edit screen THEN present a dialog showing the number of items to be deleted and when delete clicked, delete the selected folder`() = runTestOnMain {
+        val tree = generateBookmarkTree()
+        val folder = tree.children!!.first { it.type == BookmarkNodeType.FOLDER }
+        val folderItem = BookmarkItem.Folder(guid = folder.guid, title = "title")
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(folderItem.guid))).thenReturn(19u)
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id)).thenReturn(tree)
+        val middleware = buildMiddleware()
+        val store = middleware.makeStore()
+
+        store.dispatch(BookmarksListMenuAction.Folder.EditClicked(folderItem))
+        store.dispatch(EditFolderAction.DeleteClicked)
+        assertEquals(DeletionDialogState.Presenting(listOf(folderItem.guid), 19), store.state.bookmarksDeletionDialogState)
+
+        store.dispatch(DeletionDialogAction.DeleteTapped)
+        assertEquals(DeletionDialogState.None, store.state.bookmarksDeletionDialogState)
+        verify(bookmarksStorage).deleteNode(folder.guid)
+        verify(navController).popBackStack()
     }
 
     @Test
@@ -1051,6 +1122,8 @@ class BookmarksMiddlewareTest {
         addNewTabUseCase = addNewTabUseCase,
         navController = navController,
         exitBookmarks = exitBookmarks,
+        wasPreviousAppDestinationHome = wasPreviousAppDestinationHome,
+        navigateToSearch = navigateToSearch,
         navigateToSignIntoSync = navigateToSignIntoSync,
         shareBookmark = shareBookmark,
         showTabsTray = showTabsTray,
