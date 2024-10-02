@@ -29,7 +29,6 @@
   --arrowpanel-dimmed-further: color-mix(in srgb, currentColor 30%, transparent);
 
   --panel-separator-color: color-mix(in srgb, currentColor 25%, transparent);
-  --panel-disabled-color: color-mix(in srgb, currentColor 40%, transparent);
 
   --popup-notification-body-width: calc(31em - calc(2 * var(--arrowpanel-padding)));
 
@@ -49,6 +48,24 @@
   --toolbar-non-lwt-textcolor: -moz-dialogtext;
   --toolbar-bgcolor: var(--toolbar-non-lwt-bgcolor);
   --toolbar-color: var(--toolbar-non-lwt-textcolor);
+
+  /* Override some toolbar colors when not under prefers-contrast. Note that
+   * for the browser window these might be overridden by
+   * browser-colors.css.
+   *
+   * For the light theme we use .05 alpha, to increase the contrast of the
+   * text. For the dark theme, we use a darker background, which works because
+   * the toolbar background applies some white unconditionally.
+   */
+  @media not (prefers-contrast) {
+    --toolbar-field-border-color: transparent;
+    --toolbar-field-background-color: light-dark(rgba(0, 0, 0, .05), rgba(0, 0, 0, .3));
+    --toolbar-field-color: inherit;
+
+    @media (prefers-color-scheme: light) {
+      --toolbar-non-lwt-bgcolor: white;
+    }
+  }
 
   &[lwtheme] {
     --toolbar-bgcolor: rgba(255,255,255,.4);
@@ -75,10 +92,6 @@
     --toolbar-field-focus-border-color: var(--focus-outline-color);
 
     --input-border-color: currentColor;
-
-    &:not([lwtheme]) {
-      --panel-disabled-color: GrayText;
-    }
   }
 
   @media (forced-colors) {
@@ -172,8 +185,8 @@ html|select:where(:not([size], [multiple])) {
 
   font-weight: var(--font-weight-bold);
 
-  color: var(--button-color, ButtonText);
-  background-color: var(--button-bgcolor, ButtonFace);
+  color: var(--button-text-color);
+  background-color: var(--button-background-color);
   background-image: url(chrome://global/skin/icons/arrow-down-12.svg);
   background-position: right 10px center;
   background-repeat: no-repeat;
@@ -185,11 +198,11 @@ html|select:where(:not([size], [multiple])) {
   }
 
   &:hover {
-    background-color: var(--button-hover-bgcolor, color-mix(in srgb, currentColor 10%, ButtonFace));
+    background-color: var(--button-background-color-hover);
   }
 
   &:hover:active {
-    background-color: var(--button-active-bgcolor, color-mix(in srgb, currentColor 20%, ButtonFace));
+    background-color: var(--button-background-color-active);
   }
 
   &:focus-visible {
@@ -292,8 +305,8 @@ button.text-link .button-text {
   appearance: none;
   border: 0;
   border-radius: var(--border-radius-small);
-  color: var(--button-color, inherit);
-  background-color: var(--button-bgcolor, color-mix(in srgb, currentColor 13%, transparent));
+  color: var(--button-text-color);
+  background-color: var(--button-background-color);
   padding: .45em 1em;
   min-height: var(--size-item-large);
   font-weight: 600;
@@ -319,21 +332,21 @@ button.text-link .button-text {
 
   &:not([disabled]) {
     &:hover {
-      background-color: var(--button-hover-bgcolor, color-mix(in srgb, currentColor 17%, transparent));
+      background-color: var(--button-background-color-hover);
     }
     &:hover:active {
-      background-color: var(--button-active-bgcolor, color-mix(in srgb, currentColor 30%, transparent));
+      background-color: var(--button-background-color-active);
     }
     &[default],
     &.primary {
-      color: var(--button-primary-color);
-      background-color: var(--button-primary-bgcolor);
+      color: var(--button-text-color-primary);
+      background-color: var(--color-accent-primary);
 
       &:hover {
-        background-color: var(--button-primary-hover-bgcolor);
+        background-color: var(--color-accent-primary-hover);
       }
       &:hover:active {
-        background-color: var(--button-primary-active-bgcolor);
+        background-color: var(--color-accent-primary-active);
       }
     }
   }

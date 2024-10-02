@@ -115,6 +115,13 @@ search:
 
         If the key is not referenced in the search configuration, then no parameter
         will be added. Only the search team can update the configuration.
+    logEnabled:
+      type: boolean
+      setPref:
+        branch: default
+        pref: browser.search.log
+      description: >-
+        Whether or not enable search log in their console.
     richSuggestionsFeatureGate:
       type: boolean
       setPref:
@@ -122,6 +129,19 @@ search:
         pref: browser.urlbar.richSuggestions.featureGate
       description: >-
         Feature gate that controls whether Rich Suggestions are enabled.
+    scotchBonnetEnableOverride:
+      type: boolean
+      setPref:
+        branch: default
+        pref: browser.urlbar.scotchBonnet.enableOverride
+      description: >-
+        Whether or not enabling scotch bonnet feature.
+        If this variable is true, the following features are available as default.
+        * Unified search button
+        * Secondary action buttons
+        * Search term persistence
+        * Intuitive search keywords
+        * HTTP swap
     serpEventTelemetryCategorizationEnabled:
       type: boolean
       setPref:
@@ -249,6 +269,21 @@ urlbar:
       description: >-
         The index of Fakespot results within the Firefox Suggest section. A
         negative index is relative to the end of the section.
+    keywordExposureResults:
+      type: string
+      setPref:
+        pref: browser.urlbar.keywordExposureResults
+        branch: user
+      description: >-
+        Comma-separated list of result types that should trigger
+        keyword-exposure telemetry. Keyword exposures can be recorded along with
+        result exposures. To enable keyword exposures for a result type, you
+        must add it both to this variable and to `exposureResults`. The only
+        exception is the "rust_exposure" result type, which can be added to this
+        variable even if it's not in `exposureResults` since it's enabled by
+        setting the `quickSuggestExposureSuggestionTypes` variable. Keyword
+        exposures are recorded in the `urlbar-keyword-exposure` ping. See that
+        ping's description for more.
     mdnFeatureGate:
       type: boolean
       setPref:
@@ -282,15 +317,20 @@ urlbar:
     exposureResults:
       type: string
       setPref:
-        branch: default
         pref: browser.urlbar.exposureResults
+        branch: user
       description: >-
-        Comma-separated list of result type combinations, that are used to determine if an exposure event should be fired.
+        Comma-separated list of result types that should trigger exposure
+        telemetry, which is recorded in the `exposure` event. By default
+        exposure results are visible like usual, but they can be hidden by
+        setting the `showExposureResults` variable to false. To also record
+        keyword exposures for a result type, include it in the
+        `keywordExposureResults` variable as well.
     showExposureResults:
       type: boolean
       setPref:
-        branch: default
         pref: browser.urlbar.showExposureResults
+        branch: user
       description: >-
         Boolean used to determine if the results defined in `exposureResults` should be shown in search results. Should be false for Control branch of an experiment.
     pocketFeatureGate:
@@ -311,13 +351,6 @@ urlbar:
       description: >-
         The group-relative suggestedIndex of Pocket suggestions within the Firefox
         Suggest section.
-    potentialExposureKeywords:
-      type: json
-      fallbackPref: browser.urlbar.potentialExposureKeywords
-      description: >-
-        An array of keyword strings that will trigger the
-        `urlbar-potential-exposure` ping when the user types one during a urlbar
-        session.
     quickSuggestAllowPositionInSuggestions:
       type: boolean
       fallbackPref: browser.urlbar.quicksuggest.allowPositionInSuggestions
@@ -356,6 +389,40 @@ urlbar:
       type: boolean
       fallbackPref: browser.urlbar.quicksuggest.enabled
       description: Gate for the Firefox Suggest feature as a whole. If false, the Firefox Suggest preferences UI and Suggest suggestions will not be shown. If true, the preferences UI will be shown, and the user can turn suggestions on or off.
+    quickSuggestExposureSuggestionTypes:
+      type: string
+      setPref:
+        pref: browser.urlbar.quicksuggest.exposureSuggestionTypes
+        branch: user
+      description: >-
+        Comma-separated list of Suggest exposure suggestion types to enable.
+        Exposure suggestions are used to test potential exposures. They trigger
+        exposure telemetry based on a set of keywords you provide but they are
+        never visible. Set this variable to the `suggestion_type` defined in the
+        remote settings record(s) that contains your keywords. If you want to
+        test multiple suggestion types, separate them with commas, but also
+        consider using one experiment branch per type, especially if you are
+        also enabling keyword exposures. Exposure suggestions are recorded in
+        telemetry with the "rust_exposure" result type. It's not necessary to
+        include "rust_exposure" in `exposureResults`. Unless you are testing
+        other results in the same experiment branch, it's also not necessary to
+        set `showExposureResults: false`. To also record keyword exposures,
+        include "rust_exposure" in `keywordExposureResults`.
+    quickSuggestHideSettingsUI:
+      type: boolean
+      fallbackPref: browser.urlbar.quicksuggest.hideSettingsUI
+      description: >-
+        This variable is intended to be used in potential exposure experiments
+        in regions and locales where Suggest normally isn't enabled. Potential
+        exposure suggestions are implemented in Suggest, and this variable lets
+        us enable core Suggest functionality but keep it hidden. Set both
+        `quickSuggestEnabled` and `quickSuggestHideSettingsUI` to true, along
+        with `quickSuggestExposureSuggestionTypes`. This variable does NOT hide
+        visible suggestions and other UI that can be independently enabled with
+        other Nimbus variables. But since all visible suggestions are disabled
+        by default for users not in the Suggest population, as long as you don't
+        set any Nimbus variables to enable other suggestions and UI, Suggest
+        will remain hidden.
     quickSuggestImpressionCapsSponsoredEnabled:
       type: boolean
       fallbackPref: browser.urlbar.quicksuggest.impressionCaps.sponsoredEnabled
@@ -732,6 +799,32 @@ newtab:
       type: boolean
       description: Allow Contile to use additonal sponsored top sites
 
+newtabUnifiedAds:
+  description: Mozilla Ad Routing Service (MARS) unified ads service
+  owner: mcrawford@mozilla.com, sdowne@mozilla.com
+  hasExposure: false
+  variables:
+    unifiedAdsEndpoint:
+      description: The URL for the MARS API endpoint.
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.unifiedAds.endpoint
+    unifiedAdsSpocsEnabled:
+      type: boolean
+      description: >-
+          Enable MARS endpoint to serve ads for recommended stories
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.unifiedAds.spocs.enabled
+    unifiedAdsTilesEnabled:
+      type: boolean
+      description: >-
+          Enable MARS endpoint to serve content for top sites tiles
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.unifiedAds.tiles.enabled
+
 newtabSpocsCache:
   description: The about:newtab sponsored content cache.
   owner: sdowne@mozilla.com
@@ -785,6 +878,30 @@ newtabSponsoredContent:
         branch: user
         pref: browser.newtabpage.activity-stream.discoverystream.spoc-positions
       description: CSV string of spoc position indexes on newtab Pocket grid
+    spocPlacements:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.placements.spocs
+      description: CSV string of spoc placement ids on newtab Pocket grid. A placement id tells our ad server where the ads are intended to be displayed.
+    spocCounts:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.placements.spocs.counts
+      description: CSV string of spoc placement counts on newtab Pocket grid. The count tells the ad server how many ads to return for this position and placement.
+    tilesPlacements:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.placements.tiles
+      description: CSV string of tiles placement ids on newtab tiles section. A placement id tells our ad server where the ads are intended to be displayed.
+    tilesCounts:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.placements.tiles.counts
+      description: CSV string of tiles placement counts on newtab tiles section. The count tells the ad server how many ads to return for this position and placement.
 
 newtabTopicSelection:
   description: the about:newtab topic selection experience.
@@ -837,6 +954,46 @@ newtabTopicSelection:
         branch: user
         pref: browser.newtabpage.activity-stream.discoverystream.topicLabels.locale-topic-label-config
 
+newtabContextualContent:
+  description: about:newtab contextual content feed
+  owner: nbarrett@mozilla.com
+  hasExposure: false
+  variables:
+    contextualContentEnabled:
+      type: boolean
+      setPref:
+        branch: user
+        pref:  browser.newtabpage.activity-stream.discoverystream.contextualContent.enabled
+      description: >-
+        Override the contextual content enabled value set via region/locale
+    localeContextualContentConfig:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.contextualContent.locale-content-config
+      description: >-
+        A comma-separated list of locales that get contextual content by default.
+    regionContextualContentConfig:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.contextualContent.region-content-config
+      description: >-
+        A comma-separated list of regions that get contextual content by default.
+    contextualContentFeeds:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.contextualContent.feeds
+      description: >-
+        CSV list of possible feeds for the contextual content feed
+    contextualContentSelectedFeed:
+      type: string
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.contextualContent.selectedFeed
+      description: >-
+        currently selected feed to display in the Contextual Content component
 
 pocketNewtab:
   description: The Pocket section in newtab
@@ -1418,12 +1575,6 @@ pdfjs:
   exposureDescription: >-
     Exposure is sent each time a pdf is displayed.
   variables:
-    addHighlight:
-      description: Set to true to highlight some text or something else in an existing pdf.
-      type: boolean
-      setPref:
-        branch: default
-        pref: pdfjs.enableHighlightEditor
     enableAltText:
       description: Set to true to enable alt text generation.
       type: boolean
@@ -2027,6 +2178,18 @@ networkPrioritization:
       setPref:
         branch: default
         pref: "network.http.http3.priority"
+    sendNoRFC7540Setting:
+      description: Whether to send the SETTINGS_NO_RFC7540_PRIORITIES for the HTTP2 session.
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.http.http2.send_NO_RFC7540_PRI"
+    h2deps:
+      description: Whether RFC7540 priorities / stream dependencies are enabled
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.http.http2.enabled.deps"
     h3BackgroundTabDeprioritization:
       description: Lowers the priority when the tab is in the background. Potential privacy concerns.
       type: boolean
@@ -2267,6 +2430,48 @@ networkPrioritization:
       setPref:
         branch: default
         pref: "network.fetchpriority.adjustments.images.auto"
+    lowerTrackersPriority:
+      description: Whether to lower priority of resources on the tracking protection list
+      type: boolean
+      setPref:
+        branch: default
+        pref: "privacy.trackingprotection.lower_network_priority"
+    enableHttpTailing:
+      description: Whether certain requests, mainly trackers, are put to the "tail", behind other requests
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.http.tailing.enabled"
+    httpTailingUrgency:
+      description: Priority urgency of tailed request
+      type: int
+      setPref:
+        branch: default
+        pref: "network.http.tailing.urgency"
+    httpTailingDelayQuantum:
+      description: When the page load has not yet reached DOMContentLoaded point, tail requestes are delayed by (non-tailed requests count + 1) * delay-quantum milliseconds.
+      type: int
+      setPref:
+        branch: default
+        pref: "network.http.tailing.delay-quantum"
+    httpTailingDelayQuantumAfterDCL:
+      description: After the page load reached DOMContentLoaded point, tail requestes are delayed by (non-tailed requests count + 1) * delay-quantum-after-domcontentloaded milliseconds.
+      type: int
+      setPref:
+        branch: default
+        pref: "network.http.tailing.delay-quantum-after-domcontentloaded"
+    httpTailingMaxDelay:
+      description:  Upper limit for the calculated delay, prevents long standing and comet-like requests
+      type: int
+      setPref:
+        branch: default
+        pref: "network.http.tailing.delay-max"
+    httpTailingTotalMaxDelay:
+      description: Total limit we delay tailed requests since page load start
+      type: int
+      setPref:
+        branch: default
+        pref: "network.http.tailing.total-max"
 
 networkingAuth:
   description: "Firefox Networking (Necko) Authentication"
@@ -2364,6 +2569,36 @@ etpLevel2PBMPref:
       setPref:
         branch: default
         pref: "privacy.annotate_channels.strict_list.pbmode.enabled"
+
+etpStrictFeatures:
+  description: Prefs to control the strict ETP features
+  owner: tihuang@mozilla.com
+  hasExposure: false
+  variables:
+    features:
+      description: The list of strict ETP features to enable in ETP strict mode.
+      type: string
+      setPref:
+        branch: default
+        pref: "browser.contentblocking.features.strict"
+
+thirdPartyCookieBlocking:
+  description: Prefs to control third-party cookie blocking
+  owner: tihuang@mozilla.com
+  hasExposure: false
+  variables:
+    enabled:
+      description: Whether to enable third-party cookie blocking
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.cookie.cookieBehavior.optInPartitioning"
+    enabledPBM:
+      description: Whether to enable third-party cookie blocking in private browsing mode
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.cookie.cookieBehavior.optInPartitioning.pbmode"
 
 fxaButtonVisibility:
   description: Prefs to control the visibility of the Firefox Accounts toolbar button when not signed in.
@@ -3434,20 +3669,20 @@ pqcrypto:
   owner: jschanck@mozilla.com
   hasExposure: false
   variables:
-    tlsEnableXyber:
+    tlsEnableMlkem:
       type: boolean
       setPref:
         branch: default
         pref: security.tls.enable_kyber
       description: >-
-        Whether to enable Xyber768 for TLS.
-    h3EnableXyber:
+        Whether to enable mlkem768x25519 for TLS.
+    h3EnableMlkem:
       type: boolean
       setPref:
         branch: default
         pref: network.http.http3.enable_kyber
       description: >-
-        Whether to enable Xyber768 for H3/QUIC.
+        Whether to enable mlkem768x25519 for H3/QUIC.
     sendP256:
       type: boolean
       setPref:
@@ -3560,6 +3795,21 @@ chatbot:
         The prefs to set under browser.ml.chat.* with object keys as the
         sub-pref and values objects indicating the desired branch and value
         defaulting to clearing the user branch value.
+
+sidebar:
+  description: Sidebar feature configuration
+  owner: elee@mozilla.com
+  hasExposure: false
+  variables:
+    main.tools:
+      type: string
+      description: sidebar.main.tools pref value to set on user branch
+    revamp:
+      type: boolean
+      description: sidebar.revamp pref value to set on user branch
+    verticalTabs:
+      type: boolean
+      description: sidebar.verticalTabs pref value to set on user branch
 
 fxms_bmb_button:
   description: A feature for the Firefox Messaging System Bookmarks Bar button surface

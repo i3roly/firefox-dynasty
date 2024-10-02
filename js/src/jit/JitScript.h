@@ -451,6 +451,9 @@ class alignas(uintptr_t) JitScript final
 
   EnvironmentObject* templateEnvironment() const { return templateEnv_.ref(); }
 
+  std::pair<CallObject*, NamedLambdaObject*> functionEnvironmentTemplates(
+      JSFunction* fun) const;
+
   bool usesEnvironmentChain() const { return *usesEnvironmentChain_; }
 
   bool resetAllocSites(bool resetNurserySites, bool resetPretenuredSites);
@@ -563,6 +566,12 @@ class alignas(uintptr_t) JitScript final
     }
   }
 #endif
+
+  inline void clearFailedICHash() {
+#ifdef DEBUG
+    failedICHash_.reset();
+#endif
+  }
 };
 
 // Ensures no JitScripts are purged in the current zone.

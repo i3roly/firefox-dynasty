@@ -58,15 +58,8 @@
 # DisplayPortUtils::MaybeCreateDisplayPortInFirstScrollFrameEncountered based
 # the current structure that we may want to revisit.
             <html:div id="vertical-pinned-tabs-container"></html:div>
-            <html:div id="newtab-button-container">
-              <toolbarbutton id="vertical-tabs-newtab-button"
-                                  class="toolbarbutton-1"
-                                  command="cmd_newNavigatorTab"
-                                  onclick="gBrowser.handleNewTabMiddleClick(this, event);"
-                                  tooltip="dynamic-shortcut-tooltip"
-                                  data-l10n-id="tabs-toolbar-new-tab"/>
-            </html:div>
-            <arrowscrollbox id="tabbrowser-arrowscrollbox" orient="horizontal" flex="1" style="min-width: 1px;" clicktoscroll="" scrolledtostart="" scrolledtoend="">
+            <html:div id="vertical-pinned-tabs-container-separator"></html:div>
+            <arrowscrollbox id="tabbrowser-arrowscrollbox" orient="horizontal" flex="1" clicktoscroll="" scrolledtostart="" scrolledtoend="">
               <tab is="tabbrowser-tab" class="tabbrowser-tab" selected="true" visuallyselected="" fadein=""/>
               <hbox id="tabbrowser-arrowscrollbox-periphery">
                 <toolbartabstop/>
@@ -74,10 +67,17 @@
                                class="toolbarbutton-1"
                                command="cmd_newNavigatorTab"
                                onclick="gBrowser.handleNewTabMiddleClick(this, event);"
-                               tooltip="dynamic-shortcut-tooltip"/>
+                               tooltip="dynamic-shortcut-tooltip"
+                               data-l10n-id="tabs-toolbar-new-tab"/>
                 <spacer class="closing-tabs-spacer" style="width: 0;"/>
               </hbox>
             </arrowscrollbox>
+            <toolbarbutton id="vertical-tabs-newtab-button"
+                                class="toolbarbutton-1"
+                                command="cmd_newNavigatorTab"
+                                onclick="gBrowser.handleNewTabMiddleClick(this, event);"
+                                tooltip="dynamic-shortcut-tooltip"
+                                data-l10n-id="tabs-toolbar-new-tab"/>
             <html:span id="tabbrowser-tab-a11y-desc" hidden="true"/>
           </tabs>
 
@@ -325,47 +325,47 @@
                         aria-labelledby="urlbar-search-mode-indicator-close urlbar-search-mode-indicator-title"
                         data-l10n-id="urlbar-search-mode-indicator-close"/>
             </html:div>
-            <hbox class="urlbar-searchmode-and-input-box-container" flex="1">
-              <toolbarbutton id="urlbar-searchmode-switcher"
-                             data-action="openpopup"
-                             align="center"
-                             role="button"
-                             aria-haspopup="menu"
-                             aria-expanded="false"
-                             tooltip="dynamic-shortcut-tooltip"
-                             class="chromeclass-toolbar-additional">
-                <image id="searchmode-switcher-icon" />
-                <image id="searchmode-switcher-dropmarker"
-                       data-l10n-id="urlbar-searchmode-dropmarker"
-                       class="toolbarbutton-icon toolbarbutton-combined-buttons-dropmarker" />
-              </toolbarbutton>
-              <box id="searchmode-switcher-chicklet">
-                <label id="searchmode-switcher-title" />
-                <toolbarbutton id="searchmode-switcher-close"
-                               data-action="exitsearchmode"
-                               role="button"
-                               tooltip="dynamic-shortcut-tooltip"
-                               class="toolbarbutton-icon close-button" />
-              </box>
-              <moz-input-box tooltip="aHTMLTooltip"
-                             class="urlbar-input-box"
-                             flex="1"
-                             role="combobox"
-                             aria-owns="urlbar-results">
-                <html:input id="urlbar-scheme"
-                            required="required"/>
-                <html:input id="urlbar-input"
-                            class="urlbar-input"
-                            anonid="input"
-                            aria-controls="urlbar-results"
-                            aria-autocomplete="both"
-                            inputmode="mozAwesomebar"
-                            data-l10n-id="urlbar-placeholder"
-                            data-l10n-attrs="placeholder"/>
-              </moz-input-box>
+            <toolbarbutton id="urlbar-searchmode-switcher"
+                            data-action="openpopup"
+                            align="center"
+                            role="button"
+                            aria-haspopup="menu"
+                            aria-expanded="false"
+                            tooltip="dynamic-shortcut-tooltip"
+                            class="chromeclass-toolbar-additional">
+              <image id="searchmode-switcher-icon" />
+              <image id="searchmode-switcher-dropmarker"
+                      data-l10n-id="urlbar-searchmode-dropmarker"
+                      class="toolbarbutton-icon toolbarbutton-combined-buttons-dropmarker" />
+            </toolbarbutton>
+            <box id="searchmode-switcher-chicklet">
+              <label id="searchmode-switcher-title" />
+              <toolbarbutton id="searchmode-switcher-close"
+                              data-action="exitsearchmode"
+                              role="button"
+                              data-l10n-id="urlbar-searchmode-exit-button"
+                              class="toolbarbutton-icon close-button" />
+            </box>
+            <moz-input-box tooltip="aHTMLTooltip"
+                            class="urlbar-input-box"
+                            flex="1"
+                            role="combobox"
+                            aria-owns="urlbar-results">
+              <html:input id="urlbar-scheme"
+                          required="required"/>
+              <html:input id="urlbar-input"
+                          class="urlbar-input"
+                          anonid="input"
+                          aria-controls="urlbar-results"
+                          aria-autocomplete="both"
+                          inputmode="mozAwesomebar"
+                          data-l10n-id="urlbar-placeholder"
+                          data-l10n-attrs="placeholder"/>
+            </moz-input-box>
+            <hbox id="urlbar-revert-button-container">
+              <toolbartabstop/>
               <image class="urlbar-icon urlbar-revert-button"
                      role="button"
-                     onclick="gURLBar.handleRevert(true)"
                      data-l10n-id="urlbar-revert-button"/>
             </hbox>
             <image class="urlbar-icon urlbar-go-button"
@@ -373,11 +373,6 @@
                    keyNav="false"
                    onclick="gURLBar.handleCommand(event);"
                    data-l10n-id="urlbar-go-button"/>
-            <image class="urlbar-icon urlbar-show-page-actions-button"
-                   role="button"
-                   onclick="gURLBar.handleRevert(true)"
-                   data-l10n-id="urlbar-show-page-actions-button"
-                   align="center"/>
             <hbox id="page-action-buttons" context="pageActionContextMenu" align="center">
               <toolbartabstop/>
               <hbox id="contextual-feature-recommendation" role="button" hidden="true">
@@ -529,14 +524,6 @@
 
     <toolbaritem id="PanelUI-button"
                  removable="false">
-      <toolbarbutton id="ion-button"
-                     class="toolbarbutton-1"
-                     delegatesanchor="true"
-                     hidden="true"
-                     badged="true"
-                     tooltiptext="Ion"
-                     onmousedown="switchToTabHavingURI('about:ion', true);"
-                     onkeypress="switchToTabHavingURI('about:ion', true);"/>
       <toolbarbutton id="PanelUI-menu-button"
                      class="toolbarbutton-1"
                      delegatesanchor="true"

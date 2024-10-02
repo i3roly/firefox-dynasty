@@ -1272,7 +1272,7 @@ static bool IsMarqueeScrollbox(const nsIFrame& aScrollFrame) {
   return HTMLMarqueeElement::FromNodeOrNull(aScrollFrame.GetContent());
 }
 
-nscoord ScrollContainerFrame::IntrinsicISize(gfxContext* aContext,
+nscoord ScrollContainerFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                              IntrinsicISizeType aType) {
   nscoord result = [&] {
     if (const Maybe<nscoord> containISize = ContainIntrinsicISize()) {
@@ -1282,7 +1282,7 @@ nscoord ScrollContainerFrame::IntrinsicISize(gfxContext* aContext,
         MOZ_UNLIKELY(IsMarqueeScrollbox(*this))) {
       return 0;
     }
-    return mScrolledFrame->IntrinsicISize(aContext, aType);
+    return mScrolledFrame->IntrinsicISize(aInput, aType);
   }();
 
   return NSCoordSaturatingAdd(result,
@@ -2296,12 +2296,18 @@ void ScrollContainerFrame::AsyncScrollCallback(ScrollContainerFrame* aInstance,
 }
 
 void ScrollContainerFrame::SetTransformingByAPZ(bool aTransforming) {
-  if (mTransformingByAPZ && !aTransforming) {
-    PostScrollEndEvent();
+  if (mTransformingByAPZ == aTransforming) {
+    return;
   }
   mTransformingByAPZ = aTransforming;
-  if (!mozilla::css::TextOverflow::HasClippedTextOverflow(this) ||
-      mozilla::css::TextOverflow::HasBlockEllipsis(mScrolledFrame)) {
+  if (aTransforming) {
+    ScrollbarActivityStarted();
+  } else {
+    ScrollbarActivityStopped();
+    PostScrollEndEvent();
+  }
+  if (!css::TextOverflow::HasClippedTextOverflow(this) ||
+      css::TextOverflow::HasBlockEllipsis(mScrolledFrame)) {
     // If the block has some overflow marker stuff we should kick off a paint
     // because we have special behaviour for it when APZ scrolling is active.
     SchedulePaint();
@@ -3409,7 +3415,8 @@ static void AppendToTop(nsDisplayListBuilder* aBuilder,
 struct HoveredStateComparator {
   static bool Hovered(const nsIFrame* aFrame) {
     return aFrame->GetContent()->IsElement() &&
-           aFrame->GetContent()->AsElement()->HasAttr(nsGkAtoms::hover);
+           aFrame->GetContent()->AsElement()->State().HasState(
+               ElementState::HOVER);
   }
 
   bool Equals(nsIFrame* A, nsIFrame* B) const {

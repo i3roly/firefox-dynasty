@@ -14,6 +14,9 @@
 #include "mozilla/dom/quota/DirectoryLockCategory.h"
 #include "mozilla/dom/quota/OriginScope.h"
 #include "mozilla/dom/quota/PersistenceScope.h"
+#include "nsCOMPtr.h"
+
+class nsITimer;
 
 namespace mozilla::dom::quota {
 
@@ -30,6 +33,7 @@ class DirectoryLockImpl final : public ClientDirectoryLock,
   const nsCString mStorageOrigin;
   const Nullable<Client::Type> mClientType;
   MozPromiseHolder<BoolPromise> mAcquirePromiseHolder;
+  nsCOMPtr<nsITimer> mAcquireTimer;
   std::function<void()> mInvalidateCallback;
 
   nsTArray<NotNull<DirectoryLockImpl*>> mBlocking;
@@ -189,6 +193,8 @@ class DirectoryLockImpl final : public ClientDirectoryLock,
   bool MustWait() const override;
 
   nsTArray<RefPtr<DirectoryLock>> LocksMustWaitFor() const override;
+
+  bool Invalidated() const override { return mInvalidated; }
 
   bool Dropped() const override { return mDropped; }
 

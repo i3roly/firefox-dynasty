@@ -77,18 +77,19 @@
 #include <algorithm>
 #include <limits>
 
+#include "mozilla/widget/WinEventObserver.h"
 #include "mozilla/widget/WinMessages.h"
 #include "nsLookAndFeel.h"
 #include "nsWindow.h"
 #include "nsWindowTaskbarConcealer.h"
 #include "nsAppRunner.h"
 
+#include <appmodel.h>
 #include <shellapi.h>
 #include <windows.h>
 #include <wtsapi32.h>
 #include <process.h>
 #include <commctrl.h>
-#include <dbt.h>
 #include <unknwn.h>
 #include <psapi.h>
 #include <rpc.h>
@@ -843,6 +844,10 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   // some comments.
   MOZ_ASSERT(NS_IsMainThread());
 
+  // Ensure that the hidden window exists, so that broadcast Windows messages
+  // (WM_FONTCHANGE et al.) are received and processed.
+  WinEventWindow::Ensure();
+
   widget::InitData defaultInitData;
   if (!aInitData) aInitData = &defaultInitData;
 
@@ -1001,6 +1006,14 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
       // grouping works properly
       Unused << NS_WARN_IF(!mozilla::widget::WinTaskbar::GenerateAppUserModelID(
           aumid, usePrivateAumid));
+      if (!usePrivateAumid && widget::WinUtils::HasPackageIdentity()) {
+        // On MSIX we should always have a provided process AUMID
+        // that we can explicitly assign to a regular window.
+        UINT32 maxLength = MAX_PATH;
+        aumid.SetLength(maxLength);
+        Unused << NS_WARN_IF(
+            GetCurrentApplicationUserModelId(&maxLength, aumid.get()));
+      }
       if (!FAILED(InitPropVariantFromString(aumid.get(), &pv))) {
         if (!FAILED(pPropStore->SetValue(PKEY_AppUserModel_ID, pv))) {
           pPropStore->Commit();
@@ -1015,8 +1028,6 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
     SetBigIcon(icon);
     SetSmallIcon(icon);
   }
-
-  mDeviceNotifyHandle = InputDeviceUtils::RegisterNotification(mWnd);
 
   // If mDefaultScale is set before mWnd has been set, it will have the scale of
   // the primary monitor, rather than the monitor that the window is actually
@@ -1149,9 +1160,6 @@ void nsWindow::Destroy() {
    * cleanup. It also would like to have the HWND intact, so we nullptr it here.
    */
   DestroyLayerManager();
-
-  InputDeviceUtils::UnregisterNotification(mDeviceNotifyHandle);
-  mDeviceNotifyHandle = nullptr;
 
   // The DestroyWindow function destroys the specified window. The function
   // sends WM_DESTROY and WM_NCDESTROY messages to the window to deactivate it
@@ -4913,19 +4921,10 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       MOZ_ASSERT_UNREACHABLE("Our process was supposed to exit.");
     } break;
 
-    case WM_SYSCOLORCHANGE:
-      // No need to invalidate layout for system color changes, but we need to
-      // invalidate style.
-      NotifyThemeChanged(widget::ThemeChangeKind::Style);
-      break;
-
     case WM_THEMECHANGED: {
       // Update non-client margin offsets
       UpdateNonClientMargins();
       nsUXThemeData::UpdateNativeThemeInfo();
-
-      // We assume pretty much everything could've changed here.
-      NotifyThemeChanged(widget::ThemeChangeKind::StyleAndLayout);
 
       UpdateDarkModeToolbar();
 
@@ -4944,81 +4943,6 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
           break;
         default:
           break;
-      }
-    } break;
-
-    case WM_FONTCHANGE: {
-      // We only handle this message for the hidden window,
-      // as we only need to update the (global) font list once
-      // for any given change, not once per window!
-      if (mWindowType != WindowType::Invisible) {
-        break;
-      }
-
-      // update the global font list
-      gfxPlatform::GetPlatform()->UpdateFontList();
-    } break;
-
-    case WM_SETTINGCHANGE: {
-      if (wParam == SPI_SETCLIENTAREAANIMATION ||
-          wParam == SPI_SETKEYBOARDDELAY || wParam == SPI_SETMOUSEVANISH ||
-          wParam == MOZ_SPI_SETCURSORSIZE) {
-        // These need to update LookAndFeel cached values.
-        // They affect reduced motion settings / caret blink count / show
-        // pointer while typing / tooltip offset, so no need to invalidate style
-        // / layout.
-        NotifyThemeChanged(widget::ThemeChangeKind::MediaQueriesOnly);
-        break;
-      }
-      if (wParam == SPI_SETFONTSMOOTHING ||
-          wParam == SPI_SETFONTSMOOTHINGTYPE) {
-        gfxDWriteFont::UpdateSystemTextVars();
-        break;
-      }
-      if (wParam == SPI_SETWORKAREA) {
-        // NB: We also refresh screens on WM_DISPLAYCHANGE but the rcWork
-        // values are sometimes wrong at that point.  This message then
-        // arrives soon afterward, when we can get the right rcWork values.
-        ScreenHelperWin::RefreshScreens();
-        break;
-      }
-      if (auto lParamString = reinterpret_cast<const wchar_t*>(lParam)) {
-        if (!wcscmp(lParamString, L"ImmersiveColorSet")) {
-          // This affects system colors (-moz-win-accentcolor), so gotta pass
-          // the style flag.
-          NotifyThemeChanged(widget::ThemeChangeKind::Style);
-          break;
-        }
-
-        // UserInteractionMode, ConvertibleSlateMode, SystemDockMode may cause
-        // @media(pointer) queries to change, which layout needs to know about
-        //
-        // (WM_SETTINGCHANGE will be sent to all top-level windows, so we
-        //  only respond to the hidden top-level window to avoid hammering
-        //  layout with a bunch of NotifyThemeChanged() calls)
-        //
-        if (mWindowType == WindowType::Invisible) {
-          if (!wcscmp(lParamString, L"UserInteractionMode") ||
-              !wcscmp(lParamString, L"ConvertibleSlateMode") ||
-              !wcscmp(lParamString, L"SystemDockMode")) {
-            NotifyThemeChanged(widget::ThemeChangeKind::MediaQueriesOnly);
-            WindowsUIUtils::UpdateInTabletMode();
-          }
-        }
-      }
-    } break;
-
-    case WM_DEVICECHANGE: {
-      if (wParam == DBT_DEVICEARRIVAL || wParam == DBT_DEVICEREMOVECOMPLETE) {
-        DEV_BROADCAST_HDR* hdr = reinterpret_cast<DEV_BROADCAST_HDR*>(lParam);
-        // Check dbch_devicetype explicitly since we will get other device types
-        // (e.g. DBT_DEVTYP_VOLUME) for some reasons even if we specify
-        // DBT_DEVTYP_DEVICEINTERFACE in the filter for
-        // RegisterDeviceNotification.
-        if (hdr->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE) {
-          // This can only change media queries (any-hover/any-pointer).
-          NotifyThemeChanged(widget::ThemeChangeKind::MediaQueriesOnly);
-        }
       }
     } break;
 
@@ -5701,11 +5625,6 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
             mPointerEvents.GetCachedPointerInfo(msg, wParam));
       }
 
-      break;
-    }
-
-    case WM_DISPLAYCHANGE: {
-      ScreenHelperWin::RefreshScreens();
       break;
     }
 

@@ -61,14 +61,15 @@ StickyScrollContainer::GetStickyScrollContainerForScrollFrame(
   return aFrame->GetProperty(StickyScrollContainerProperty());
 }
 
-static nscoord ComputeStickySideOffset(
-    Side aSide, const StyleRect<LengthPercentageOrAuto>& aOffset,
-    nscoord aPercentBasis) {
-  auto& side = aOffset.Get(aSide);
-  if (side.IsAuto()) {
+static nscoord ComputeStickySideOffset(Side aSide,
+                                       const nsStylePosition& aPosition,
+                                       nscoord aPercentBasis) {
+  const auto& side = aPosition.GetInset(aSide);
+  if (!side.IsLengthPercentage()) {
     return NS_AUTOOFFSET;
   }
-  return nsLayoutUtils::ComputeCBDependentValue(aPercentBasis, side);
+  return nsLayoutUtils::ComputeCBDependentValue(aPercentBasis,
+                                                side.AsLengthPercentage());
 }
 
 // static
@@ -90,14 +91,14 @@ void StickyScrollContainer::ComputeStickyOffsets(nsIFrame* aFrame) {
   nsMargin computedOffsets;
   const nsStylePosition* position = aFrame->StylePosition();
 
-  computedOffsets.left = ComputeStickySideOffset(eSideLeft, position->mOffset,
-                                                 scrollContainerSize.width);
-  computedOffsets.right = ComputeStickySideOffset(eSideRight, position->mOffset,
-                                                  scrollContainerSize.width);
-  computedOffsets.top = ComputeStickySideOffset(eSideTop, position->mOffset,
-                                                scrollContainerSize.height);
-  computedOffsets.bottom = ComputeStickySideOffset(
-      eSideBottom, position->mOffset, scrollContainerSize.height);
+  computedOffsets.left =
+      ComputeStickySideOffset(eSideLeft, *position, scrollContainerSize.width);
+  computedOffsets.right =
+      ComputeStickySideOffset(eSideRight, *position, scrollContainerSize.width);
+  computedOffsets.top =
+      ComputeStickySideOffset(eSideTop, *position, scrollContainerSize.height);
+  computedOffsets.bottom = ComputeStickySideOffset(eSideBottom, *position,
+                                                   scrollContainerSize.height);
 
   // Store the offset
   nsMargin* offsets = aFrame->GetProperty(nsIFrame::ComputedOffsetProperty());

@@ -9,6 +9,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   CreditCard: "resource://gre/modules/CreditCard.sys.mjs",
   CreditCardRulesets: "resource://gre/modules/shared/CreditCardRuleset.sys.mjs",
+  FieldDetail: "resource://gre/modules/shared/FieldScanner.sys.mjs",
   FieldScanner: "resource://gre/modules/shared/FieldScanner.sys.mjs",
   FormAutofillUtils: "resource://gre/modules/shared/FormAutofillUtils.sys.mjs",
   LabelUtils: "resource://gre/modules/shared/LabelUtils.sys.mjs",
@@ -23,6 +24,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
 const MULTI_N_FIELD_NAMES = {
   "cc-number": 4,
 };
+
+const CC_TYPE = 1;
+const ADDR_TYPE = 2;
 
 /**
  * Returns the autocomplete information of fields according to heuristics.
@@ -308,21 +312,13 @@ export const FormAutofillHeuristics = {
     if (fields.length == 1) {
       if (fields[0].fieldName == "address-level2") {
         const prev = scanner.getFieldDetailByIndex(scanner.parsingIndex - 1);
-        if (
-          prev &&
-          !prev.fieldName &&
-          HTMLSelectElement.isInstance(prev.element)
-        ) {
+        if (prev && !prev.fieldName && prev.localName == "select") {
           scanner.updateFieldName(scanner.parsingIndex - 1, "address-level1");
           scanner.parsingIndex += 1;
           return true;
         }
         const next = scanner.getFieldDetailByIndex(scanner.parsingIndex + 1);
-        if (
-          next &&
-          !next.fieldName &&
-          HTMLSelectElement.isInstance(next.element)
-        ) {
+        if (next && !next.fieldName && next.localName == "select") {
           scanner.updateFieldName(scanner.parsingIndex + 1, "address-level1");
           scanner.parsingIndex += 2;
           return true;
@@ -436,9 +432,9 @@ export const FormAutofillHeuristics = {
     // instead of one 16-digit `cc-number` field.
     const N = MULTI_N_FIELD_NAMES["cc-number"];
     if (fieldDetails.length == N) {
-      fieldDetails.forEach((fieldDetail, index) => {
+      fieldDetails.forEach((fd, index) => {
         // part starts with 1
-        fieldDetail.part = index + 1;
+        fd.part = index + 1;
       });
       scanner.parsingIndex += fieldDetails.length;
       return true;
@@ -521,6 +517,33 @@ export const FormAutofillHeuristics = {
   },
 
   /**
+   * If the given field is of a different type than the previous
+   * field, use the alternate field name instead.
+   */
+  _checkForAlternateField(scanner, fieldDetail) {
+    if (fieldDetail.alternativeFieldName) {
+      const previousField = scanner.getFieldDetailByIndex(
+        scanner.parsingIndex - 1
+      );
+      if (previousField) {
+        const preIsCC = lazy.FormAutofillUtils.isCreditCardField(
+          previousField.fieldName
+        );
+        const curIsCC = lazy.FormAutofillUtils.isCreditCardField(
+          fieldDetail.fieldName
+        );
+
+        // If the current type is different from the previous element's type, use
+        // the alternative fieldname instead.
+        if (preIsCC != curIsCC) {
+          fieldDetail.fieldName = fieldDetail.alternativeFieldName;
+          fieldDetail.reason = "update-heuristic-alternate";
+        }
+      }
+    }
+  },
+
+  /**
    * This function should provide all field details of a form which are placed
    * in the belonging section. The details contain the autocomplete info
    * (e.g. fieldName, section, etc).
@@ -531,7 +554,42 @@ export const FormAutofillHeuristics = {
    *        all sections within its field details in the form.
    */
   getFormInfo(form) {
-    const scanner = new lazy.FieldScanner(form, this.inferFieldInfo.bind(this));
+    const elements = Array.from(form.elements).filter(element =>
+      lazy.FormAutofillUtils.isCreditCardOrAddressFieldType(element)
+    );
+
+    const fieldDetails = elements.map(element => {
+      const [fieldName, autocompleteInfo, confidence] = this.inferFieldInfo(
+        element,
+        elements
+      );
+      return lazy.FieldDetail.create(element, form, fieldName, {
+        autocompleteInfo,
+        confidence,
+      });
+    });
+
+    this.parseAndUpdateFieldNamesContent(fieldDetails);
+
+    lazy.LabelUtils.clearLabelMap();
+
+    return fieldDetails;
+  },
+
+  /**
+   * Similar to `parseAndUpdateFieldNamesParent`. The difference is that
+   * the parsing heuristics used in this function are based on information
+   * not currently passed to the parent process. For example,
+   * text strings from associated labels.
+   *
+   * Note that the heuristics run in this function will not be able
+   * to reference field information across frames.
+   *
+   * @param {Array<FieldDetail>} fieldDetails
+   *        An array of the identified fields.
+   */
+  parseAndUpdateFieldNamesContent(fieldDetails) {
+    const scanner = new lazy.FieldScanner(fieldDetails);
 
     while (!scanner.parsingFinished) {
       const savedIndex = scanner.parsingIndex;
@@ -539,8 +597,35 @@ export const FormAutofillHeuristics = {
       // First, we get the inferred field info
       const fieldDetail = scanner.getFieldDetailByIndex(scanner.parsingIndex);
 
+      if (this._parsePhoneFields(scanner, fieldDetail)) {
+        continue;
+      }
+
+      if (savedIndex == scanner.parsingIndex) {
+        scanner.parsingIndex++;
+      }
+    }
+  },
+
+  /**
+   * Iterates through the field details and updates the field names
+   * based on surrounding field information, using various parsing functions.
+   *
+   * @param {Array<FieldDetail>} fieldDetails
+   *        An array of the identified fields.
+   */
+  parseAndUpdateFieldNamesParent(fieldDetails) {
+    const scanner = new lazy.FieldScanner(fieldDetails);
+
+    while (!scanner.parsingFinished) {
+      const savedIndex = scanner.parsingIndex;
+
+      const fieldDetail = scanner.getFieldDetailByIndex(scanner.parsingIndex);
+
+      this._checkForAlternateField(scanner, fieldDetail);
+
+      // Attempt to parse the field using different parsers.
       if (
-        this._parsePhoneFields(scanner, fieldDetail) ||
         this._parseStreetAddressFields(scanner, fieldDetail) ||
         this._parseAddressFields(scanner, fieldDetail) ||
         this._parseCreditCardExpiryFields(scanner, fieldDetail) ||
@@ -550,16 +635,11 @@ export const FormAutofillHeuristics = {
         continue;
       }
 
-      // If there is no field parsed, the parsing cursor can be moved
-      // forward to the next one.
+      // Move the parsing cursor forward if no parser was applied.
       if (savedIndex == scanner.parsingIndex) {
         scanner.parsingIndex++;
       }
     }
-
-    lazy.LabelUtils.clearLabelMap();
-
-    return scanner.fieldDetails;
   },
 
   _getPossibleFieldNames(element) {
@@ -686,8 +766,8 @@ export const FormAutofillHeuristics = {
     }
 
     // Find a matched field name using regexp-based heuristics
-    const matchedFieldName = this._findMatchedFieldName(element, fields);
-    return [matchedFieldName, null, null];
+    const matchedFieldNames = this._findMatchedFieldNames(element, fields);
+    return [matchedFieldNames, null, null];
   },
 
   /**
@@ -867,12 +947,17 @@ export const FormAutofillHeuristics = {
   },
 
   /**
-   * Find the first matching field name from a given list of field names
+   * Find matching field names from a given list of field names
    * that matches an HTML element.
    *
    * The function first tries to match the element against a set of
    * pre-defined regular expression rules. If no match is found, it
    * then checks for label-specific rules, if they exist.
+   *
+   * The return value can contain a maximum of two field names, the
+   * first item the first match found, and the second an alternate field
+   * name always of a different type, where the two type are credit card
+   * and address.
    *
    * Note: For label rules, the keyword is often more general
    * (e.g., "^\\W*address"), hence they are only searched within labels
@@ -880,27 +965,53 @@ export const FormAutofillHeuristics = {
    *
    * @param {HTMLElement} element The element to match.
    * @param {Array<string>} fieldNames An array of field names to compare against.
-   * @returns {string|null} The name of the matched field, or null if no match was found.
+   * @returns {Array} An array of the matching field names.
    */
-  _findMatchedFieldName(element, fieldNames) {
+  _findMatchedFieldNames(element, fieldNames) {
     if (!fieldNames.length) {
-      return null;
+      return [];
     }
 
-    // Attempt to match the element against the default set of rules
-    let matchedFieldName = fieldNames.find(fieldName =>
-      this._matchRegexp(element, this.RULES[fieldName])
-    );
+    // The first element is the field name, and the second element is the type.
+    let fields = fieldNames.map(name => [
+      name,
+      lazy.FormAutofillUtils.isCreditCardField(name) ? CC_TYPE : ADDR_TYPE,
+    ]);
 
-    // If no match is found, and if a label rule exists for the field,
-    // attempt to match against the label rules
-    if (!matchedFieldName) {
-      matchedFieldName = fieldNames.find(fieldName => {
-        const regexp = this.LABEL_RULES[fieldName];
-        return this._matchRegexp(element, regexp, { attribute: false });
-      });
+    let foundType;
+    let attribute = true;
+    let matchedFieldNames = [];
+
+    // Check RULES first, and only check LABEL_RULES if no match is found.
+    for (let rules of [this.RULES, this.LABEL_RULES]) {
+      // Attempt to match the element against the default set of rules.
+      if (
+        fields.find(field => {
+          const [fieldName, type] = field;
+
+          // The same type has been found already, so skip.
+          if (foundType == type) {
+            return false;
+          }
+
+          if (!this._matchRegexp(element, rules[fieldName], { attribute })) {
+            return false;
+          }
+
+          foundType = type;
+          matchedFieldNames.push(fieldName);
+
+          return matchedFieldNames.length == 2;
+        })
+      ) {
+        break;
+      }
+
+      // Don't match attributes for label rules.
+      attribute = false;
     }
-    return matchedFieldName;
+
+    return matchedFieldNames;
   },
 
   /**

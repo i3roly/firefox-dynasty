@@ -34,6 +34,11 @@ var gExceptionPaths = [
   "chrome://activity-stream/content/data/content/assets/mobile-download-qr-existing-user-cn.svg",
   "chrome://activity-stream/content/data/content/assets/mr-amo-collection.svg",
   "chrome://activity-stream/content/data/content/assets/person-typing.svg",
+  "chrome://activity-stream/content/data/content/assets/tabs-side-zap-transparent.svg",
+  "chrome://activity-stream/content/data/content/assets/tabs-top-zap-transparent.svg",
+  "chrome://activity-stream/content/data/content/assets/nuo-taborientation.svg",
+  "chrome://activity-stream/content/data/content/assets/euo-tab-orientation.svg",
+  "chrome://activity-stream/content/data/content/assets/euo-chatbot.svg",
   "chrome://browser/content/assets/moz-vpn.svg",
   "chrome://browser/content/assets/vpn-logo.svg",
   "chrome://browser/content/assets/focus-promo.png",
@@ -85,6 +90,12 @@ var gExceptionPaths = [
 
   // Strip on Share parameter lists
   "chrome://global/content/antitracking/",
+
+  // CSS file is referenced inside JS in login-form.mjs
+  "chrome://global/content/megalist/LoginFormComponent/",
+
+  // The ONNX runtime picks files to run programmaticaly
+  "chrome://global/content/ml/",
 ];
 
 // These are not part of the omni.ja file, so we find them only when running

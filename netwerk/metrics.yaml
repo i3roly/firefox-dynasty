@@ -338,6 +338,22 @@ networking:
     expires: 138
     denominator_metric: networking.set_cookie
 
+  set_cookie_expired_without_server_time:
+    type: rate
+    description: >
+      This counts the number of times a cookie is set already expires but it
+      would not if we considered the server time.
+    bugs:
+      - https://bugzilla.mozilla.org/1909980
+      - https://bugzilla.mozilla.org/1916532
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1909980#c7
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1916532#c7
+    notification_emails:
+      - baku@mozilla.com
+    expires: 138
+    denominator_metric: networking.set_cookie
+
   dns_lookup_time:
     type: timing_distribution
     time_unit: millisecond
@@ -604,6 +620,23 @@ networking:
     notification_emails:
       - necko@mozilla.com
     expires: 136
+
+  http_ip_addr_any_count:
+    type: labeled_counter
+    description: >
+      The number of times we see the IP address 0.0.0.0 or its IPv6 equivalent.
+    bugs:
+    - https://bugzilla.mozilla.org/show_bug.cgi?id=1914583
+    data_reviews:
+    - https://bugzilla.mozilla.org/show_bug.cgi?id=1914583
+    data_sensitivity:
+    - technical
+    notification_emails:
+    - necko@mozilla.com
+    expires: 138
+    labels:
+    - not_blocked_requests
+    - blocked_requests
 
   http_onstart_suspend_total_time:
     type: timing_distribution
@@ -964,6 +997,69 @@ networking:
     expires: never
     telemetry_mirror: HTTP_UPLOAD_THROUGHPUT_MBPS_HTTP_3_100
 
+  http_3_ecn_ce_ect0_ratio_sent: &http_3_ecn_ce_ect0_ratio_sent
+    type: custom_distribution
+    unit: integer
+    range_min: 0
+    range_max: 2000
+    bucket_count: 100
+    histogram_type: exponential
+    description: >
+      HTTP3: ECN CE to ECT0 ratio (multiply by 10000) sent.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902065
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902065
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+
+  http_3_ecn_ce_ect0_ratio_received:
+    <<: *http_3_ecn_ce_ect0_ratio_sent
+    description: >
+      HTTP3: ECN CE to ECT0 ratio (multiply by 10000) received.
+
+  http_3_ecn_path_capability:
+    type: labeled_counter
+    description: >
+      Number of paths known to be ECN capable or not-capable.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902065
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902065
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+    labels:
+      - capable
+      - not-capable
+
+  http_3_loss_ratio:
+    type: custom_distribution
+    unit: integer
+    range_min: 0
+    range_max: 2000
+    bucket_count: 100
+    histogram_type: exponential
+    description: >
+      HTTP3: packet loss ratio (multiply by 10000).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917778
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917778
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+
   cache_metadata_first_read_time: &cache_metadata_first_read_time
     type: timing_distribution
     time_unit: millisecond
@@ -1046,6 +1142,23 @@ networking:
     labels:
       - regular
       - private
+
+  trr_request_count_per_conn:
+    type: labeled_counter
+    description: >
+      Number of DOH requests per connection keyed by HTTP version
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1916352
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1916352
+    notification_emails:
+      - kershaw@mozilla.com
+      - necko@mozilla.com
+    expires: never
+    labels:
+      - h1
+      - h2
+      - h3
 
   http_redirect_to_scheme_top_level: &http_redirect_to_scheme_top_level
     type: labeled_counter
@@ -1414,3 +1527,133 @@ networking:
       - necko@mozilla.com
       - acreskey@mozilla.com
     expires: never
+
+  http_3_udp_datagram_segment_size_sent:
+    type: memory_distribution
+    memory_unit: byte
+    description: >
+      HTTP3 UDP datagram segment size sent.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+
+  http_3_udp_datagram_segment_size_received:
+    type: memory_distribution
+    memory_unit: byte
+    description: >
+      HTTP3 UDP datagram size received.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+
+  http_3_udp_datagram_size_received:
+    type: memory_distribution
+    memory_unit: byte
+    description: >
+      HTTP3 UDP datagram size received.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+
+  http_3_udp_datagram_segments_received:
+    type: custom_distribution
+    unit: integer
+    range_min: 0
+    # Maximum number of UDP segments per datagram.
+    #
+    # See e.g. Linux https://github.com/torvalds/linux/blob/20371ba120635d9ab7fc7670497105af8f33eb08/include/linux/udp.h#L111.
+    range_max: 128
+    bucket_count: 100
+    histogram_type: exponential
+    description: >
+      HTTP3 UDP number of segments per datagram received.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906853
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - necko@mozilla.com
+      - minden@mozilla.com
+    expires: never
+
+network.dns:
+  trr_confirmation_context:
+    type: event
+    description: >
+      This telemetry records the status of the TRR confirmation across.
+      The value of the event is one of:   "ok"   "trying"
+      This event was generated to correspond to the Legacy Telemetry event
+      network.dns.trrConfirmation#context.
+    bugs:
+      - https://bugzil.la/1691408
+      - https://bugzil.la/1694949
+    data_reviews:
+      - https://bugzil.la/1691408
+      - https://bugzil.la/1694949
+    notification_emails:
+      - vgosu@mozilla.com
+      - necko@mozilla.com
+    expires: never
+    extra_keys:
+      value:
+        description: >
+          The `value` of the event. Mirrors to the Legacy Telemetry
+          event's `value` parameter.
+          The `ConfirmationState`.
+        type: quantity
+      trigger:
+        description: >
+          The reason why this confirmation was triggered. Values: [cp-connectivity, pref-change, context-init, retry, failed-lookups]
+        type: string
+      contextReason:
+        description: >
+          The cause of the current confirmation context. Values: [success, pref-change, network-change, shutdown]
+        type: string
+      attemptCount:
+        description: >
+          The number of NS requests that were issued for this confirmation.
+        type: quantity
+      results:
+        description: >
+          String representation of the last 32 confirmation results. Example: nnnnnnttttttttt indicates a number of network (n) failures followed by timeouts (t).
+        type: string
+      failedLookups:
+        description: >
+          When the trigger is failed-lookups, this contains the string representation of the failures that triggered the confirmation.
+        type: string
+      networkID:
+        description: >
+          The network ID for the recorded confirmation attempts
+        type: string
+      captivePortal:
+        description: >
+          One of [unknown, not_captive, unlocked, locked]
+        type: string
+      time:
+        description: >
+          Time from first confirmation attempt to event being recorded
+        type: string
+    telemetry_mirror: NetworkDns_Trrconfirmation_Context

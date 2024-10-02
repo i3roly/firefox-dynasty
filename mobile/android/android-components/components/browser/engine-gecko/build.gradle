@@ -44,7 +44,7 @@ android {
 
     packagingOptions {
         resources {
-            excludes += ['META-INF/proguard/androidx-annotations.pro']
+            excludes += ['META-INF/LICENSE.md', 'META-INF/LICENSE-notice.md']
         }
     }
 
@@ -101,7 +101,10 @@ dependencies {
     androidTestImplementation project(':tooling-fetch-tests')
 }
 
-ext.gleanNamespace = "mozilla.telemetry.glean"
+ext {
+    gleanNamespace = "mozilla.telemetry.glean"
+    gleanPythonEnvDir = gradle.mozconfig.substs.GRADLE_GLEAN_PARSER_VENV
+}
 apply plugin: "org.mozilla.telemetry.glean-gradle-plugin"
 apply from: '../../../android-lint.gradle'
 apply from: '../../../publish.gradle'

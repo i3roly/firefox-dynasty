@@ -331,6 +331,13 @@ const nsTHashSet<const nsINode*>& SelectionNodeCache::MaybeCollect(
     nsTHashSet<const nsINode*> fullySelectedNodes;
     for (size_t rangeIndex = 0; rangeIndex < sel->RangeCount(); ++rangeIndex) {
       AbstractRange* range = sel->GetAbstractRangeAt(rangeIndex);
+      MOZ_ASSERT(range);
+      if(range->Collapsed()) {
+        continue;
+      }
+      if(range->IsStaticRange() && !range->AsStaticRange()->IsValid()) {
+        continue;
+      }
       const RangeBoundary& startRef = range->MayCrossShadowBoundaryStartRef();
       const RangeBoundary& endRef = range->MayCrossShadowBoundaryEndRef();
 
@@ -1845,6 +1852,9 @@ nsresult Selection::SelectFrames(nsPresContext* aPresContext,
     // nothing to do
     return NS_OK;
   }
+
+  MOZ_DIAGNOSTIC_ASSERT_IF(!aRange.IsPositioned(),
+                           !aRange.MayCrossShadowBoundary());
 
   MOZ_DIAGNOSTIC_ASSERT(aRange.IsPositioned());
 

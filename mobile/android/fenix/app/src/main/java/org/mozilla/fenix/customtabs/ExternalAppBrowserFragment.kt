@@ -85,9 +85,11 @@ class ExternalAppBrowserFragment : BaseBrowserFragment() {
 
         customTabsIntegration.set(
             feature = CustomTabsIntegration(
+                context = requireContext(),
                 store = requireComponents.core.store,
+                appStore = requireComponents.appStore,
                 useCases = requireComponents.useCases.customTabsUseCases,
-                toolbar = browserToolbarView.view,
+                browserToolbarView = browserToolbarView,
                 sessionId = customTabSessionId,
                 activity = activity,
                 interactor = browserToolbarInteractor,
@@ -331,6 +333,7 @@ class ExternalAppBrowserFragment : BaseBrowserFragment() {
                         },
                         backgroundColor = navbarIntegration.backgroundColor,
                         buttonTint = navbarIntegration.buttonTint,
+                        buttonDisabledTint = navbarIntegration.buttonDisabledTint,
                         onVisibilityUpdated = {
                             configureEngineViewWithDynamicToolbarsMaxHeight()
                         },

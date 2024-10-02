@@ -794,9 +794,6 @@ void xpc::SetPrefableCompileOptions(JS::PrefableCompileOptions& options) {
 #ifdef NIGHTLY_BUILD
       .setImportAttributes(
           StaticPrefs::javascript_options_experimental_import_attributes())
-      .setImportAttributesAssertSyntax(
-          StaticPrefs::
-              javascript_options_experimental_import_attributes_assert_syntax())
 #endif
       .setAsmJS(StaticPrefs::javascript_options_asmjs())
       .setThrowOnAsmJSValidationFailure(
@@ -987,11 +984,9 @@ static void ReloadPrefsCallback(const char* pref, void* aXpccx) {
       StaticPrefs::
           javascript_options_experimental_regexp_duplicate_named_groups());
 
-#ifdef NIGHTLY_BUILD
   JS_SetGlobalJitCompilerOption(
       cx, JSJITCOMPILER_REGEXP_MODIFIERS,
       StaticPrefs::javascript_options_experimental_regexp_modifiers());
-#endif
 
   // Set options not shared with workers.
   contextOptions
@@ -1454,17 +1449,16 @@ void XPCJSContext::AfterProcessTask(uint32_t aNewRecursionDepth) {
         Telemetry::SetEventRecordingEnabled("slow_script_warning"_ns, true);
       }
 
-      auto uriType = mExecutedChromeScript ? "browser"_ns : "content"_ns;
       // Use AppendFloat to avoid printf-type APIs using locale-specific
       // decimal separators, when we definitely want a `.`.
       nsCString durationStr;
       durationStr.AppendFloat(hangDuration);
-      auto extra = Some<nsTArray<Telemetry::EventExtraEntry>>(
-          {Telemetry::EventExtraEntry{"hang_duration"_ns, durationStr},
-           Telemetry::EventExtraEntry{"uri_type"_ns, uriType}});
-      Telemetry::RecordEvent(
-          Telemetry::EventID::Slow_script_warning_Shown_Browser, Nothing(),
-          extra);
+
+      glean::slow_script_warning::ShownBrowserExtra extra = {
+          .hangDuration = Some(durationStr),
+          .uriType = Some(mExecutedChromeScript ? "browser"_ns : "content"_ns),
+      };
+      glean::slow_script_warning::shown_browser.Record(Some(extra));
     }
   }
 

@@ -733,7 +733,7 @@ nsresult nsDocumentViewer::InitPresentationStuff(bool aDoInitialReflow) {
     nscoord height = p2a * mBounds.height;
 
     mViewManager->SetWindowDimensions(width, height);
-    mPresContext->SetVisibleArea(nsRect(0, 0, width, height));
+    mPresContext->SetInitialVisibleArea(nsRect(0, 0, width, height));
     // We rely on the default zoom not being initialized until here.
     mPresContext->RecomputeBrowsingContextDependentData();
   }
@@ -2622,10 +2622,11 @@ MOZ_CAN_RUN_SCRIPT_BOUNDARY NS_IMETHODIMP nsDocumentViewer::GetContentSize(
     const nscoord minISize = wm.IsVertical() ? constraints.mMinSize.height
                                              : constraints.mMinSize.width;
     const nscoord maxISize = wm.IsVertical() ? aMaxHeight : aMaxWidth;
+    const IntrinsicSizeInput input(rcx.get(), Nothing(), Nothing());
     if (aPrefWidth) {
-      prefISize = std::max(root->GetMinISize(rcx.get()), aPrefWidth);
+      prefISize = std::max(root->GetMinISize(input), aPrefWidth);
     } else {
-      prefISize = root->GetPrefISize(rcx.get());
+      prefISize = root->GetPrefISize(input);
     }
     prefISize = nsPresContext::RoundUpAppUnitsToCSSPixel(
         std::max(minISize, std::min(prefISize, maxISize)));

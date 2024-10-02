@@ -1,9 +1,7 @@
 #!/usr/bin/env python
-# ***** BEGIN LICENSE BLOCK *****
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
-# ***** END LICENSE BLOCK *****
 
 import copy
 import glob
@@ -246,15 +244,6 @@ class AndroidProfileRun(TestingMixin, BaseScript, MozbaseMixin, AndroidMixin):
                 time.sleep(timeout)
 
             driver.quit(in_app=True)
-
-            # Bug 1914354: Remove polling of the profile data which is no longer
-            # needed when using the quit() command from Marionette.
-            for i in range(50):
-                if not adbdevice.process_exist(app):
-                    break
-                time.sleep(2)
-            else:
-                raise Exception("Android App (%s) never quit" % app)
 
             # Pull all the profraw files and en-US.log
             adbdevice.pull(outputdir, "/builds/worker/workspace/")

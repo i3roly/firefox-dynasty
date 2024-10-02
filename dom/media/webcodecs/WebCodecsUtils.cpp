@@ -16,6 +16,7 @@
 #include "mozilla/dom/VideoFrameBinding.h"
 #include "mozilla/gfx/Types.h"
 #include "nsDebug.h"
+#include "nsString.h"
 
 extern mozilla::LazyLogModule gWebCodecsLog;
 
@@ -169,12 +170,6 @@ Result<RefPtr<MediaByteBuffer>, nsresult> GetExtraDataFromArrayBuffer(
     return Err(NS_ERROR_OUT_OF_MEMORY);
   }
   return data->Length() > 0 ? data : nullptr;
-}
-
-bool IsArrayBufferEmpty(
-    const OwningMaybeSharedArrayBufferViewOrMaybeSharedArrayBuffer& aBuffer) {
-  return ProcessTypedArraysFixed(
-      aBuffer, [&](const Span<uint8_t>& aData) { return aData.IsEmpty(); });
 }
 
 bool CopyExtradataToDescription(
@@ -603,7 +598,8 @@ Maybe<CodecType> CodecStringToCodecType(const nsAString& aCodecString) {
   if (StringBeginsWith(aCodecString, u"vp09"_ns)) {
     return Some(CodecType::VP9);
   }
-  if (StringBeginsWith(aCodecString, u"avc1"_ns)) {
+  if (StringBeginsWith(aCodecString, u"avc1"_ns) ||
+      StringBeginsWith(aCodecString, u"avc3"_ns)) {
     return Some(CodecType::H264);
   }
   return Nothing();

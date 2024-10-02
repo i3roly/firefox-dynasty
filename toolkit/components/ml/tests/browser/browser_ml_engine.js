@@ -64,12 +64,14 @@ add_task(async function test_ml_engine_basics() {
   info("Wait for the pending downloads.");
   await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
 
+  const res = await inferencePromise;
   Assert.equal(
-    (await inferencePromise).output.echo,
+    res.output.echo,
     "This gets echoed.",
     "The text get echoed exercising the whole flow."
   );
 
+  Assert.equal(res.output.dtype, "q8", "The config was enriched by RS");
   ok(
     !EngineProcess.areAllEnginesTerminated(),
     "The engine process is still active."
@@ -560,5 +562,39 @@ add_task(async function test_ml_engine_parallel() {
 
   await EngineProcess.destroyMLEngine();
 
+  await cleanup();
+});
+
+/**
+ * Test threading support
+ */
+add_task(async function test_ml_threading_support() {
+  const { cleanup, remoteClients } = await setup();
+
+  info("Get the engine process");
+  const mlEngineParent = await EngineProcess.getMLEngineParent();
+
+  info("Get engineInstance");
+
+  const options = new PipelineOptions({
+    taskName: "summarization",
+    modelId: "test-echo",
+    modelRevision: "main",
+  });
+
+  const engineInstance = await mlEngineParent.getEngine(options);
+
+  info("Run the inference");
+  const inferencePromise = engineInstance.run({
+    args: ["This gets echoed."],
+  });
+
+  info("Wait for the pending downloads.");
+  await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+
+  let res = await inferencePromise;
+
+  ok(res.multiThreadSupported, "Multi-thread should be supported");
+  await EngineProcess.destroyMLEngine();
   await cleanup();
 });

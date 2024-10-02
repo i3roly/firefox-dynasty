@@ -985,7 +985,7 @@ bool nsComputedDOMStyle::NeedsToFlushLayout(nsCSSPropertyID aPropID) const {
       // NOTE(emilio): This is dubious, but matches other browsers.
       // See https://github.com/w3c/csswg-drafts/issues/2328
       Side side = SideForPaddingOrMarginOrInsetProperty(aPropID);
-      return !style->StyleMargin()->mMargin.Get(side).ConvertsToLength();
+      return !style->StyleMargin()->GetMargin(side).ConvertsToLength();
     }
     default:
       return false;
@@ -1821,7 +1821,7 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetHeight() {
                               adjustedValues.TopBottom());
   }
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-  SetValueToSize(val, StylePosition()->mHeight);
+  SetValueToSize(val, StylePosition()->GetHeight());
   return val.forget();
 }
 
@@ -1833,19 +1833,19 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetWidth() {
                               adjustedValues.LeftRight());
   }
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-  SetValueToSize(val, StylePosition()->mWidth);
+  SetValueToSize(val, StylePosition()->GetWidth());
   return val.forget();
 }
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMaxHeight() {
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-  SetValueToMaxSize(val, StylePosition()->mMaxHeight);
+  SetValueToMaxSize(val, StylePosition()->GetMaxHeight());
   return val.forget();
 }
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMaxWidth() {
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-  SetValueToMaxSize(val, StylePosition()->mMaxWidth);
+  SetValueToMaxSize(val, StylePosition()->GetMaxWidth());
   return val.forget();
 }
 
@@ -1868,7 +1868,7 @@ bool nsComputedDOMStyle::ShouldHonorMinSizeAutoInAxis(PhysicalAxis aAxis) {
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMinHeight() {
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-  StyleSize minHeight = StylePosition()->mMinHeight;
+  StyleSize minHeight = StylePosition()->GetMinHeight();
 
   if (minHeight.IsAuto() &&
       !ShouldHonorMinSizeAutoInAxis(PhysicalAxis::Vertical)) {
@@ -1882,7 +1882,7 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMinHeight() {
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMinWidth() {
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
 
-  StyleSize minWidth = StylePosition()->mMinWidth;
+  StyleSize minWidth = StylePosition()->GetMinWidth();
 
   if (minWidth.IsAuto() &&
       !ShouldHonorMinSizeAutoInAxis(PhysicalAxis::Horizontal)) {
@@ -1947,15 +1947,15 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetNonStaticPositionOffset(
     PercentageBaseGetter aHeightGetter) {
   const nsStylePosition* positionData = StylePosition();
   int32_t sign = 1;
-  LengthPercentageOrAuto coord = positionData->mOffset.Get(aSide);
+  auto coord = positionData->GetInset(aSide);
 
-  if (coord.IsAuto()) {
+  if (!coord.IsLengthPercentage()) {
     if (!aResolveAuto) {
       auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
       val->SetString("auto");
       return val.forget();
     }
-    coord = positionData->mOffset.Get(NS_OPPOSITE_SIDE(aSide));
+    coord = positionData->GetInset(NS_OPPOSITE_SIDE(aSide));
     sign = -1;
   }
   if (!coord.IsLengthPercentage()) {
@@ -1980,9 +1980,9 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetNonStaticPositionOffset(
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::GetAbsoluteOffset(
     mozilla::Side aSide) {
-  const auto& offset = StylePosition()->mOffset;
-  const auto& coord = offset.Get(aSide);
-  const auto& oppositeCoord = offset.Get(NS_OPPOSITE_SIDE(aSide));
+  const auto& coord = StylePosition()->GetInset(aSide);
+  const auto& oppositeCoord =
+      StylePosition()->GetInset(NS_OPPOSITE_SIDE(aSide));
 
   if (coord.IsAuto() || oppositeCoord.IsAuto()) {
     return AppUnitsToCSSValue(GetUsedAbsoluteOffset(aSide));
@@ -2059,8 +2059,7 @@ nscoord nsComputedDOMStyle::GetUsedAbsoluteOffset(mozilla::Side aSide) {
 already_AddRefed<CSSValue> nsComputedDOMStyle::GetStaticOffset(
     mozilla::Side aSide) {
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-  SetValueToLengthPercentageOrAuto(val, StylePosition()->mOffset.Get(aSide),
-                                   false);
+  SetValueToInset(val, StylePosition()->GetInset(aSide));
   return val.forget();
 }
 
@@ -2089,10 +2088,10 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetBorderWidthFor(
 }
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::GetMarginFor(Side aSide) {
-  const auto& margin = StyleMargin()->mMargin.Get(aSide);
+  const auto& margin = StyleMargin()->GetMargin(aSide);
   if (!mInnerFrame || margin.ConvertsToLength()) {
     auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
-    SetValueToLengthPercentageOrAuto(val, margin, false);
+    SetValueToMargin(val, margin);
     return val.forget();
   }
   AssertFlushedPendingReflows();
@@ -2184,6 +2183,27 @@ void nsComputedDOMStyle::SetValueToLengthPercentageOrAuto(
   }
   SetValueToLengthPercentage(aValue, aSize.AsLengthPercentage(),
                              aClampNegativeCalc);
+}
+
+void nsComputedDOMStyle::SetValueToInset(nsROCSSPrimitiveValue* aValue,
+                                         const mozilla::StyleInset& aInset) {
+  // This function isn't used for absolutely positioned insets, so just assume
+  // `anchor()` or `anchor-size()` is `auto`.
+  if (!aInset.IsLengthPercentage()) {
+    aValue->SetString("auto");
+    return;
+  }
+  SetValueToLengthPercentage(aValue, aInset.AsLengthPercentage(), false);
+}
+
+void nsComputedDOMStyle::SetValueToMargin(nsROCSSPrimitiveValue* aValue,
+                                          const mozilla::StyleMargin& aMargin) {
+  // May have to compute `anchor-size()` value here.
+  if (!aMargin.IsLengthPercentage()) {
+    aValue->SetString("auto");
+    return;
+  }
+  SetValueToLengthPercentage(aValue, aMargin.AsLengthPercentage(), false);
 }
 
 void nsComputedDOMStyle::SetValueToLengthPercentage(

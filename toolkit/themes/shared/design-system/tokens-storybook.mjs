@@ -82,7 +82,9 @@ export const storybookTables = {
       value: {
         forcedColors: "ButtonFace",
         brand: { default: "color-mix(in srgb, currentColor 7%, transparent)" },
-        platform: { default: "var(--button-bgcolor)" },
+        platform: {
+          default: "color-mix(in srgb, currentColor 13%, transparent)",
+        },
       },
       name: "--button-background-color",
     },
@@ -90,7 +92,9 @@ export const storybookTables = {
       value: {
         forcedColors: "SelectedItemText",
         brand: { default: "color-mix(in srgb, currentColor 14%, transparent)" },
-        platform: { default: "var(--button-hover-bgcolor)" },
+        platform: {
+          default: "color-mix(in srgb, currentColor 17%, transparent)",
+        },
       },
       name: "--button-background-color-hover",
     },
@@ -98,7 +102,9 @@ export const storybookTables = {
       value: {
         forcedColors: "SelectedItemText",
         brand: { default: "color-mix(in srgb, currentColor 21%, transparent)" },
-        platform: { default: "var(--button-active-bgcolor)" },
+        platform: {
+          default: "color-mix(in srgb, currentColor 30%, transparent)",
+        },
       },
       name: "--button-background-color-active",
     },
@@ -418,7 +424,7 @@ export const storybookTables = {
           dark: "var(--color-gray-05)",
           default: "light-dark(var(--color-gray-100), var(--color-gray-05))",
         },
-        platform: { default: "var(--button-color)" },
+        platform: { default: "currentColor" },
       },
       name: "--button-text-color",
     },
@@ -494,7 +500,7 @@ export const storybookTables = {
           dark: "var(--color-gray-100)",
           default: "light-dark(var(--color-gray-05), var(--color-gray-100))",
         },
-        platform: { default: "var(--button-primary-color)" },
+        platform: { default: "AccentColorText" },
       },
       name: "--button-text-color-primary",
     },
@@ -531,6 +537,13 @@ export const storybookTables = {
         prefersContrast: "inherit",
       },
       name: "--text-color-deemphasized",
+    },
+    {
+      value: {
+        default: "color-mix(in srgb, currentColor 40%, transparent)",
+        forcedColors: "GrayText",
+      },
+      name: "--text-color-disabled",
     },
     {
       value: {
@@ -587,7 +600,7 @@ export const storybookTables = {
           dark: "var(--color-cyan-50)",
           default: "light-dark(var(--color-blue-50), var(--color-cyan-50))",
         },
-        platform: { default: "var(--button-primary-bgcolor, AccentColor)" },
+        platform: { default: "AccentColor" },
       },
       name: "--color-accent-primary",
     },
@@ -599,7 +612,9 @@ export const storybookTables = {
           dark: "var(--color-cyan-30)",
           default: "light-dark(var(--color-blue-60), var(--color-cyan-30))",
         },
-        platform: { default: "var(--button-primary-hover-bgcolor)" },
+        platform: {
+          default: "color-mix(in srgb, black 10%, var(--color-accent-primary))",
+        },
       },
       name: "--color-accent-primary-hover",
     },
@@ -611,7 +626,9 @@ export const storybookTables = {
           dark: "var(--color-cyan-20)",
           default: "light-dark(var(--color-blue-70), var(--color-cyan-20))",
         },
-        platform: { default: "var(--button-primary-active-bgcolor)" },
+        platform: {
+          default: "color-mix(in srgb, black 20%, var(--color-accent-primary))",
+        },
       },
       name: "--color-accent-primary-active",
     },
@@ -835,17 +852,17 @@ export const variableLookupTable = {
   "button-background-color": {
     forcedColors: "ButtonFace",
     brand: { default: "color-mix(in srgb, currentColor 7%, transparent)" },
-    platform: { default: "var(--button-bgcolor)" },
+    platform: { default: "color-mix(in srgb, currentColor 13%, transparent)" },
   },
   "button-background-color-hover": {
     forcedColors: "SelectedItemText",
     brand: { default: "color-mix(in srgb, currentColor 14%, transparent)" },
-    platform: { default: "var(--button-hover-bgcolor)" },
+    platform: { default: "color-mix(in srgb, currentColor 17%, transparent)" },
   },
   "button-background-color-active": {
     forcedColors: "SelectedItemText",
     brand: { default: "color-mix(in srgb, currentColor 21%, transparent)" },
-    platform: { default: "var(--button-active-bgcolor)" },
+    platform: { default: "color-mix(in srgb, currentColor 30%, transparent)" },
   },
   "button-background-color-disabled": {
     default: "var(--button-background-color)",
@@ -968,7 +985,7 @@ export const variableLookupTable = {
       dark: "var(--color-gray-05)",
       default: "light-dark(var(--color-gray-100), var(--color-gray-05))",
     },
-    platform: { default: "var(--button-color)" },
+    platform: { default: "currentColor" },
   },
   "button-text-color-active": {
     default: "var(--button-text-color)",
@@ -1017,7 +1034,7 @@ export const variableLookupTable = {
       dark: "var(--color-gray-100)",
       default: "light-dark(var(--color-gray-05), var(--color-gray-100))",
     },
-    platform: { default: "var(--button-primary-color)" },
+    platform: { default: "AccentColorText" },
   },
   "button-text-color-primary-active": "var(--button-text-color-primary-hover)",
   "button-text-color-primary-disabled": "var(--button-text-color-primary)",
@@ -1069,7 +1086,7 @@ export const variableLookupTable = {
       dark: "var(--color-cyan-50)",
       default: "light-dark(var(--color-blue-50), var(--color-cyan-50))",
     },
-    platform: { default: "var(--button-primary-bgcolor, AccentColor)" },
+    platform: { default: "AccentColor" },
   },
   "color-accent-primary-hover": {
     forcedColors: "SelectedItem",
@@ -1078,7 +1095,9 @@ export const variableLookupTable = {
       dark: "var(--color-cyan-30)",
       default: "light-dark(var(--color-blue-60), var(--color-cyan-30))",
     },
-    platform: { default: "var(--button-primary-hover-bgcolor)" },
+    platform: {
+      default: "color-mix(in srgb, black 10%, var(--color-accent-primary))",
+    },
   },
   "color-accent-primary-active": {
     forcedColors: "var(--color-accent-primary-hover)",
@@ -1087,7 +1106,9 @@ export const variableLookupTable = {
       dark: "var(--color-cyan-20)",
       default: "light-dark(var(--color-blue-70), var(--color-cyan-20))",
     },
-    platform: { default: "var(--button-primary-active-bgcolor)" },
+    platform: {
+      default: "color-mix(in srgb, black 20%, var(--color-accent-primary))",
+    },
   },
   "focus-outline":
     "var(--focus-outline-width) solid var(--focus-outline-color)",
@@ -1202,6 +1223,10 @@ export const variableLookupTable = {
   "text-color-deemphasized": {
     default: "color-mix(in srgb, currentColor 69%, transparent)",
     prefersContrast: "inherit",
+  },
+  "text-color-disabled": {
+    default: "color-mix(in srgb, currentColor 40%, transparent)",
+    forcedColors: "GrayText",
   },
   "text-color-error": {
     light: "var(--color-red-50)",

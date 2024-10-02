@@ -11,43 +11,6 @@ add_setup(async function setup() {
   });
 });
 
-add_task(async function basic() {
-  info("Open the urlbar and searchmode switcher popup");
-  await UrlbarTestUtils.promiseAutocompleteResultPopup({
-    window,
-    value: "",
-  });
-  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
-  Assert.ok(
-    !BrowserTestUtils.isVisible(gURLBar.view.panel),
-    "The UrlbarView is not visible"
-  );
-
-  info("Press on the bing menu button and enter search mode");
-  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=Bing]").click();
-  await popupHidden;
-
-  await UrlbarTestUtils.assertSearchMode(window, {
-    engineName: "Bing",
-    entry: "other",
-    source: 3,
-  });
-
-  info("Press the close button and escape search mode");
-  window.document.querySelector("#searchmode-switcher-close").click();
-  await UrlbarTestUtils.assertSearchMode(window, null);
-});
-
-function updateEngine(fun) {
-  let updated = SearchTestUtils.promiseSearchNotification(
-    SearchUtils.MODIFIED_TYPE.CHANGED,
-    SearchUtils.TOPIC_ENGINE_MODIFIED
-  );
-  fun();
-  return updated;
-}
-
 add_task(async function disabled_unified_button() {
   await SpecialPowers.pushPrefEnv({
     set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
@@ -95,6 +58,43 @@ add_task(async function disabled_unified_button() {
   await UrlbarTestUtils.exitSearchMode(window);
   await SpecialPowers.popPrefEnv();
 });
+
+add_task(async function basic() {
+  info("Open the urlbar and searchmode switcher popup");
+  await UrlbarTestUtils.promiseAutocompleteResultPopup({
+    window,
+    value: "",
+  });
+  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+  Assert.ok(
+    !BrowserTestUtils.isVisible(gURLBar.view.panel),
+    "The UrlbarView is not visible"
+  );
+
+  info("Press on the bing menu button and enter search mode");
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+  popup.querySelector("toolbarbutton[label=Bing]").click();
+  await popupHidden;
+
+  await UrlbarTestUtils.assertSearchMode(window, {
+    engineName: "Bing",
+    entry: "other",
+    source: 3,
+  });
+
+  info("Press the close button and escape search mode");
+  window.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+});
+
+function updateEngine(fun) {
+  let updated = SearchTestUtils.promiseSearchNotification(
+    SearchUtils.MODIFIED_TYPE.CHANGED,
+    SearchUtils.TOPIC_ENGINE_MODIFIED
+  );
+  fun();
+  return updated;
+}
 
 add_task(async function new_window() {
   let oldEngine = Services.search.getEngineByName("Bing");
@@ -145,8 +145,7 @@ add_task(async function detect_searchmode_changes() {
   });
 
   info("Press the close button and escape search mode");
-  EventUtils.synthesizeKey("KEY_Escape");
-  EventUtils.synthesizeKey("KEY_Escape");
+  window.document.querySelector("#searchmode-switcher-close").click();
   await UrlbarTestUtils.assertSearchMode(window, null);
 
   await BrowserTestUtils.waitForCondition(() => {
@@ -227,10 +226,11 @@ async function test_navigate_switcher(navKey, navTimes, searchMode) {
 
   await UrlbarTestUtils.assertSearchMode(window, searchMode);
 
-  info("Escape Search mode");
+  info("Exit the search mode");
+  await UrlbarTestUtils.promisePopupClose(window, () => {
+    EventUtils.synthesizeKey("KEY_Escape");
+  });
   EventUtils.synthesizeKey("KEY_Escape");
-  EventUtils.synthesizeKey("KEY_Escape");
-
   await UrlbarTestUtils.assertSearchMode(window, null);
 }
 
@@ -442,4 +442,280 @@ add_task(async function test_search_icon_change_without_keyword_enabled() {
   );
 
   await BrowserTestUtils.closeWindow(newWin);
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_suggestions_after_no_search_mode() {
+  info("Add a search engine as default");
+  let defaultEngine = await SearchTestUtils.installSearchExtension(
+    {
+      name: "default-engine",
+      search_url: "https://www.example.com/",
+      favicon_url: "https://www.example.com/favicon.ico",
+    },
+    {
+      setAsDefault: true,
+      skipUnload: true,
+    }
+  );
+
+  info("Add one more search engine to check the result");
+  let anotherEngine = await SearchTestUtils.installSearchExtension(
+    {
+      name: "another-engine",
+      search_url: "https://example.com/",
+      favicon_url: "https://example.com/favicon.ico",
+    },
+    { skipUnload: true }
+  );
+
+  info("Open urlbar with a query");
+  await UrlbarTestUtils.promiseAutocompleteResultPopup({
+    window,
+    value: "test",
+  });
+  Assert.equal(
+    (await UrlbarTestUtils.getDetailsOfResultAt(window, 0)).result.payload
+      .engine,
+    "default-engine",
+    "Suggest to search from the default engine"
+  );
+
+  info("Open search mode swither");
+  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+
+  info("Press on the another-engine menu button");
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+  popup.querySelector("toolbarbutton[label=another-engine]").click();
+  await popupHidden;
+  Assert.equal(
+    (await UrlbarTestUtils.getDetailsOfResultAt(window, 0)).result.payload
+      .engine,
+    "another-engine",
+    "Suggest to search from the another engine"
+  );
+
+  info("Press the close button and escape search mode");
+  window.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+  Assert.equal(
+    (await UrlbarTestUtils.getDetailsOfResultAt(window, 0)).result.payload
+      .engine,
+    "default-engine",
+    "Suggest to search from the default engine again"
+  );
+
+  await defaultEngine.unload();
+  await anotherEngine.unload();
+});
+
+add_task(async function open_engine_page_directly() {
+  await SearchTestUtils.installSearchExtension(
+    {
+      name: "MozSearch",
+      search_url: "https://example.com/",
+      favicon_url: "https://example.com/favicon.ico",
+    },
+    { setAsDefault: true }
+  );
+
+  const TEST_DATA = [
+    {
+      action: "click",
+      input: "",
+      expected: "https://example.com/",
+    },
+    {
+      action: "click",
+      input: "a b c",
+      expected: "https://example.com/?q=a+b+c",
+    },
+    {
+      action: "key",
+      input: "",
+      expected: "https://example.com/",
+    },
+    {
+      action: "key",
+      input: "a b c",
+      expected: "https://example.com/?q=a+b+c",
+    },
+  ];
+
+  for (let { action, input, expected } of TEST_DATA) {
+    info(`Test for ${JSON.stringify({ action, input, expected })}`);
+
+    info("Open a window");
+    let newWin = await BrowserTestUtils.openNewBrowserWindow();
+
+    info(`Open the result popup with [${input}]`);
+    await UrlbarTestUtils.promiseAutocompleteResultPopup({
+      window: newWin,
+      value: input,
+    });
+
+    info("Open the mode switcher");
+    let popup = await UrlbarTestUtils.openSearchModeSwitcher(newWin);
+
+    info(`Do action of [${action}] on MozSearch menuitem`);
+    let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(newWin);
+    let pageLoaded = BrowserTestUtils.browserLoaded(
+      newWin.gBrowser.selectedBrowser,
+      false,
+      expected
+    );
+
+    if (action == "click") {
+      EventUtils.synthesizeMouseAtCenter(
+        popup.querySelector("toolbarbutton[label=MozSearch]"),
+        {
+          shiftKey: true,
+        },
+        newWin
+      );
+    } else {
+      popup.querySelector("toolbarbutton[label=MozSearch]").focus();
+      EventUtils.synthesizeKey("KEY_Enter", { shiftKey: true }, newWin);
+    }
+
+    await popupHidden;
+    await pageLoaded;
+    Assert.ok(true, "The popup was hidden and expected page was loaded");
+
+    info("Search mode also be changed");
+    await UrlbarTestUtils.assertSearchMode(newWin, {
+      engineName: "MozSearch",
+      isGeneralPurposeEngine: false,
+      isPreview: true,
+      entry: "other",
+    });
+
+    // Cleanup.
+    await PlacesUtils.history.clear();
+    await BrowserTestUtils.closeWindow(newWin);
+  }
+});
+
+add_task(async function test_urlbar_text_after_previewed_search_mode() {
+  info("Open urlbar with a query that shows DuckDuckGo search engine");
+  await UrlbarTestUtils.promiseAutocompleteResultPopup({
+    window,
+    value: "duck",
+  });
+
+  // Sanity check.
+  const target = await UrlbarTestUtils.getDetailsOfResultAt(window, 1);
+  Assert.equal(target.result.payload.engine, "DuckDuckGo");
+  Assert.ok(target.result.payload.providesSearchMode);
+
+  info("Choose the search mode suggestion");
+  EventUtils.synthesizeKey("KEY_Tab", {});
+  await UrlbarTestUtils.assertSearchMode(window, {
+    engineName: "DuckDuckGo",
+    entry: "tabtosearch_onboard",
+    source: 3,
+    isPreview: true,
+  });
+
+  info("Click on the content area");
+  // We intentionally turn off this a11y check, because the following click is
+  // purposefully sent on an arbitrary web content that is not expected to be
+  // tested by itself with the browser mochitests, therefore this rule check
+  // shall be ignored by a11y_checks suite.
+  AccessibilityUtils.setEnv({ mustHaveAccessibleRule: false });
+  EventUtils.synthesizeMouseAtCenter(gBrowser.selectedBrowser, {});
+  AccessibilityUtils.resetEnv();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+
+  info("Choose any search engine from the switcher");
+  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+  popup.querySelector("toolbarbutton[label=Bing]").click();
+  await popupHidden;
+
+  Assert.equal(gURLBar.value, "", "The value of urlbar should be empty");
+
+  // Clean up.
+  window.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+});
+
+add_task(async function test_open_state() {
+  let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
+  let switcher = document.getElementById("urlbar-searchmode-switcher");
+
+  for (let target of [
+    "urlbar-searchmode-switcher",
+    "searchmode-switcher-icon",
+    "searchmode-switcher-dropmarker",
+  ]) {
+    info(`Open search mode switcher popup by clicking on [${target}]`);
+    let popupOpen = BrowserTestUtils.waitForEvent(popup, "popupshown");
+    let button = document.getElementById(target);
+    button.click();
+    await popupOpen;
+    Assert.equal(
+      switcher.getAttribute("open"),
+      "true",
+      "The 'open' attribute should be true"
+    );
+
+    info("Close the popup");
+    popup.hidePopup();
+    await TestUtils.waitForCondition(() => {
+      return !switcher.hasAttribute("open");
+    });
+    Assert.ok(true, "The 'open' attribute should not be set");
+  }
+});
+
+add_task(async function nimbusScotchBonnetEnableOverride() {
+  info("Setup initial local pref");
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
+  });
+  await TestUtils.waitForCondition(() => {
+    return BrowserTestUtils.isHidden(
+      gURLBar.querySelector("#urlbar-searchmode-switcher")
+    );
+  });
+  Assert.ok(true, "Search mode switcher should be hidden");
+
+  info("Setup Numbus value");
+  const cleanUpNimbusEnable = await UrlbarTestUtils.initNimbusFeature(
+    { scotchBonnetEnableOverride: true },
+    "search"
+  );
+  await TestUtils.waitForCondition(() => {
+    return BrowserTestUtils.isVisible(
+      gURLBar.querySelector("#urlbar-searchmode-switcher")
+    );
+  });
+  Assert.ok(true, "Search mode switcher should be visible");
+
+  await cleanUpNimbusEnable();
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function nimbusLogEnabled() {
+  info("Setup initial local pref");
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.search.log", false]],
+  });
+  await TestUtils.waitForCondition(() => {
+    return !Services.prefs.getBoolPref("browser.search.log");
+  });
+
+  info("Setup Numbus value");
+  const cleanUpNimbusEnable = await UrlbarTestUtils.initNimbusFeature(
+    { logEnabled: true },
+    "search"
+  );
+  await TestUtils.waitForCondition(() => {
+    return Services.prefs.getBoolPref("browser.search.log");
+  });
+  Assert.ok(true, "browser.search.log is changed properly");
+
+  await cleanUpNimbusEnable();
+  await SpecialPowers.popPrefEnv();
 });

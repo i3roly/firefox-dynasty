@@ -15,6 +15,7 @@ namespace a11y {
 
 class CacheDomain {
  public:
+  static constexpr uint64_t None = 0;
   static constexpr uint64_t NameAndDescription = ((uint64_t)0x1) << 0;
   static constexpr uint64_t Value = ((uint64_t)0x1) << 1;
   static constexpr uint64_t Bounds = ((uint64_t)0x1) << 2;
@@ -36,6 +37,7 @@ class CacheDomain {
   // Used for MathML.
   static constexpr uint64_t InnerHTML = ((uint64_t)0x1) << 17;
 #endif
+  static constexpr uint64_t TextBounds = ((uint64_t)0x1) << 18;
   static constexpr uint64_t All = ~((uint64_t)0x0);
 };
 
@@ -102,7 +104,7 @@ constexpr int32_t kNumbersInRect = 4;
  * cache should generally use these aliases rather than using nsAtoms directly.
  * There are two exceptions:
  * 1. Some ARIA attributes are copied directly from the DOM node, so these
- * aren't aliased. Specifically,   aria-level, aria-posinset and aria-setsize
+ * aren't aliased. Specifically, aria-level, aria-posinset and aria-setsize
  * are copied as separate cache keys as part of CacheDomain::GroupInfo.
  * 2. Keys for relations are defined in kRelationTypeAtoms above.
  */
@@ -235,10 +237,10 @@ class CacheKey {
   // AccAttributes, CacheDomain::Text
   // Text attributes; font, etc.
   static constexpr nsStaticAtom* TextAttributes = nsGkAtoms::style;
-  // nsTArray<int32_t, 4 * n>, CacheDomain::Text | CacheDomain::Bounds
+  // nsTArray<int32_t, 4 * n>, CacheDomain::TextBounds
   // The bounds of each character in a text leaf.
   static constexpr nsStaticAtom* TextBounds = nsGkAtoms::characterData;
-  // nsTArray<int32_t>, CacheDomain::Text | CacheDomain::Bounds
+  // nsTArray<int32_t>, CacheDomain::TextBounds
   // The text offsets where new lines start.
   static constexpr nsStaticAtom* TextLineStarts = nsGkAtoms::line;
   // nsString, CacheDomain::Value
@@ -254,6 +256,18 @@ class CacheKey {
   // determination.
   static constexpr nsStaticAtom* Viewport = nsGkAtoms::viewport;
 };
+
+// Return true if the given cache domains are already active.
+bool DomainsAreActive(uint64_t aRequiredCacheDomains);
+
+// Check whether the required cache domains are active. If they aren't, then
+// request the requisite cache domains and return true. This function returns
+// false if all required domains are already active.
+bool RequestDomainsIfInactive(uint64_t aRequiredCacheDomains);
+
+#define ASSERT_DOMAINS_ACTIVE(aCacheDomains)  \
+  MOZ_ASSERT(DomainsAreActive(aCacheDomains), \
+             "Required domain(s) are not currently active.")
 
 }  // namespace a11y
 }  // namespace mozilla

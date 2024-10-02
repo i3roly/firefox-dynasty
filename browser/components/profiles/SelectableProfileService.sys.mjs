@@ -19,6 +19,10 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Sqlite: "resource://gre/modules/Sqlite.sys.mjs",
 });
 
+ChromeUtils.defineLazyGetter(lazy, "profilesLocalization", () => {
+  return new Localization(["preview/profiles.ftl"], true);
+});
+
 XPCOMUtils.defineLazyServiceGetter(
   lazy,
   "ProfileService",
@@ -39,7 +43,6 @@ class SelectableProfileServiceClass {
   #currentProfile = null;
   #everyWindowCallbackId = "SelectableProfileService";
 
-  // Do not use. Only for testing.
   constructor() {
     if (Cu.isInAutomation) {
       this.#groupToolkitProfile = {
@@ -47,7 +50,8 @@ class SelectableProfileServiceClass {
         rootDir: Services.dirsvc.get("ProfD", Ci.nsIFile),
       };
     } else {
-      this.#groupToolkitProfile = lazy.ProfileService.currentProfile;
+      this.#groupToolkitProfile =
+        lazy.ProfileService.currentProfile ?? lazy.ProfileService.groupProfile;
     }
   }
 
@@ -56,6 +60,10 @@ class SelectableProfileServiceClass {
     if (Cu.isInAutomation) {
       this.#groupToolkitProfile = mockToolkitProfile;
     }
+  }
+
+  get groupToolkitProfile() {
+    return this.#groupToolkitProfile;
   }
 
   get toolkitProfileRootDir() {
@@ -92,7 +100,7 @@ class SelectableProfileServiceClass {
   }
 
   async getProfilesStorePath() {
-    if (!this.#groupToolkitProfile?.storeID) {
+    if (!this.#groupToolkitProfile.storeID) {
       await this.createProfilesStorePath();
     }
 
@@ -111,14 +119,27 @@ class SelectableProfileServiceClass {
       return;
     }
 
-    this.initWindowTracker();
+    let shouldSetSharedPrefs = !this.groupToolkitProfile.storeID;
 
     await this.initConnection();
 
-    // Get the SelectableProfile by the profile directory
-    this.#currentProfile = await this.getProfileByPath(
-      this.#groupToolkitProfile.rootDir
-    );
+    // When we launch into the startup window, the `ProfD` is not defined so
+    // Services.dirsvc.get("ProfD", Ci.nsIFile) will throw. Leaving the
+    // `currentProfile` as null is fine for the startup window.
+    try {
+      // Get the SelectableProfile by the profile directory
+      this.#currentProfile = await this.getProfileByPath(
+        Services.dirsvc.get("ProfD", Ci.nsIFile)
+      );
+    } catch {}
+
+    if (shouldSetSharedPrefs) {
+      this.setSharedPrefs();
+    }
+
+    // The 'activate' event listeners use #currentProfile, so this line has
+    // to come after #currentProfile has been set.
+    this.initWindowTracker();
 
     this.#initialized = true;
   }
@@ -215,15 +236,29 @@ class SelectableProfileServiceClass {
   async handleEvent(event) {
     switch (event.type) {
       case "activate": {
-        if (
-          this.#groupToolkitProfile.rootDir.path === this.currentProfile.path
-        ) {
-          return;
-        }
-        this.#groupToolkitProfile.rootDir = await this.currentProfile.rootDir;
-        lazy.ProfileService.flush();
+        this.setDefaultProfileForGroup();
+        break;
       }
     }
+  }
+
+  /**
+   * Set the shared prefs that will be needed when creating a
+   * new selectable profile.
+   */
+  setSharedPrefs() {
+    this.setPref(
+      "toolkit.profiles.storeID",
+      Services.prefs.getStringPref("toolkit.profiles.storeID", "")
+    );
+    this.setPref(
+      "browser.profiles.enabled",
+      Services.prefs.getBoolPref("browser.profiles.enabled", true)
+    );
+    this.setPref(
+      "toolkit.telemetry.cachedProfileGroupID",
+      Services.prefs.getStringPref("toolkit.telemetry.cachedProfileGroupID", "")
+    );
   }
 
   /**
@@ -273,7 +308,7 @@ class SelectableProfileServiceClass {
    * and vacuum the group DB.
    */
   async deleteProfileGroup() {
-    if (this.getProfiles().length) {
+    if (this.getAllProfiles().length) {
       return;
     }
 
@@ -283,6 +318,37 @@ class SelectableProfileServiceClass {
   }
 
   // App session lifecycle methods and multi-process support
+
+  /*
+   * Helper that returns an inited Firefox executable process (nsIProcess).
+   * Mostly useful for mocking in unit testing.
+   */
+  getExecutableProcess() {
+    let process = Cc["@mozilla.org/process/util;1"].createInstance(
+      Ci.nsIProcess
+    );
+    let executable = Services.dirsvc.get("XREExeF", Ci.nsIFile);
+    process.init(executable);
+    return process;
+  }
+
+  /**
+   * Launch a new Firefox instance using the given selectable profile.
+   *
+   * @param {SelectableProfile} aProfile The profile to launch
+   * @param {string} url A url to open in launched profile
+   */
+  launchInstance(aProfile, url) {
+    let process = this.getExecutableProcess();
+    let args = ["--profile", aProfile.path];
+    if (Services.appinfo.OS === "Darwin") {
+      args.unshift("-foreground");
+    }
+    if (url) {
+      args.push("-url", url);
+    }
+    process.runw(false, args, args.length);
+  }
 
   /**
    * When the group DB has been updated, either changes to prefs or profiles,
@@ -308,12 +374,16 @@ class SelectableProfileServiceClass {
   refreshPrefs() {}
 
   /**
-   * Update the current default profile by setting its path as the Path
-   * of the nsToolkitProfile for the group.
-   *
-   * @param {SelectableProfile} aSelectableProfile The new default SelectableProfile
+   * Update the default profile by setting the current selectable profile path
+   * as the path of the nsToolkitProfile for the group.
    */
-  setDefault(aSelectableProfile) {}
+  async setDefaultProfileForGroup() {
+    if (this.#groupToolkitProfile.rootDir.path === this.currentProfile.path) {
+      return;
+    }
+    this.#groupToolkitProfile.rootDir = await this.currentProfile.rootDir;
+    lazy.ProfileService.flush();
+  }
 
   /**
    * Update whether to show the selectable profile selector window at startup.
@@ -321,7 +391,14 @@ class SelectableProfileServiceClass {
    *
    * @param {boolean} shouldShow Whether or not we should show the profile selector
    */
-  setShowProfileChooser(shouldShow) {}
+  showProfileSelectorWindow(shouldShow) {
+    if (shouldShow === this.groupToolkitProfile.showProfileSelector) {
+      return;
+    }
+
+    this.groupToolkitProfile.showProfileSelector = shouldShow;
+    lazy.ProfileService.flush();
+  }
 
   /**
    * Update the path to the group DB. Set on the nsToolkitProfile instance
@@ -379,6 +456,61 @@ class SelectableProfileServiceClass {
   }
 
   /**
+   * Create the times.json file and write the "created" timestamp and
+   * "firstUse" as null.
+   * Create the prefs.js file and write all shared prefs to the file.
+   *
+   * @param {nsIFile} profileDir The root dir of the newly created profile
+   */
+  async createProfileInitialFiles(profileDir) {
+    let timesJsonFilePath = await IOUtils.createUniqueFile(
+      profileDir.path,
+      "times.json",
+      0o700
+    );
+
+    await IOUtils.writeJSON(timesJsonFilePath, {
+      created: Date.now(),
+      firstUse: null,
+    });
+
+    let prefsJsFilePath = await IOUtils.createUniqueFile(
+      profileDir.path,
+      "prefs.js",
+      0o700
+    );
+
+    const sharedPrefs = await this.getAllPrefs();
+
+    const LINEBREAK = AppConstants.platform === "win" ? "\r\n" : "\n";
+
+    const prefsJsHeader = [
+      "// Mozilla User Preferences",
+      LINEBREAK,
+      "// DO NOT EDIT THIS FILE.",
+      "//",
+      "// If you make changes to this file while the application is running,",
+      "// the changes will be overwritten when the application exits.",
+      "//",
+      "// To change a preference value, you can either:",
+      "// - modify it via the UI (e.g. via about:config in the browser); or",
+      "// - set it within a user.js file in your profile.",
+      LINEBREAK,
+    ];
+
+    const prefsJsContent = sharedPrefs.map(
+      pref =>
+        `user_pref("${pref.name}", ${
+          pref.type === "string" ? `"${pref.value}"` : `${pref.value}`
+        });`
+    );
+
+    const prefsJs = prefsJsHeader.concat(prefsJsContent);
+
+    await IOUtils.writeUTF8(prefsJsFilePath, prefsJs.join(LINEBREAK));
+  }
+
+  /**
    * Get a relative to the Profiles directory for the given profile directory.
    *
    * @param {nsIFile} aProfilePath Path to profile directory.
@@ -397,6 +529,24 @@ class SelectableProfileServiceClass {
     return relativePath;
   }
 
+  async createNewProfile() {
+    let nextProfileNumber =
+      1 + Math.max(0, ...(await this.getAllProfiles()).map(p => p.id));
+    let [defaultName] = lazy.profilesLocalization.formatMessagesSync([
+      { id: "default-profile-name", args: { number: nextProfileNumber } },
+    ]);
+    let newProfile = {
+      name: defaultName.value,
+      avatar: "default",
+      themeL10nId: "default",
+      themeFg: "var(--text-color)",
+      themeBg: "var(--background-color-box)",
+    };
+
+    let profile = await this.createProfile(newProfile);
+    this.launchInstance(profile);
+  }
+
   /**
    * Create an empty SelectableProfile and add it to the group DB.
    * This is an unmanaged profile from the nsToolkitProfile perspective.
@@ -408,6 +558,7 @@ class SelectableProfileServiceClass {
    */
   async createProfile(profile) {
     let profilePath = await this.createProfileDirs(profile.name);
+    await this.createProfileInitialFiles(profilePath);
     let relativePath = this.getRelativeProfilePath(profilePath);
     profile.path = relativePath;
     await this.#connection.execute(
@@ -490,33 +641,27 @@ class SelectableProfileServiceClass {
    * @param {SelectableProfile} aSelectableProfile The SelectableProfile to be updated
    */
   async updateProfile(aSelectableProfile) {
-    let profile = {
-      id: aSelectableProfile.id,
-      path: aSelectableProfile.path,
-      name: aSelectableProfile.name,
-      avatar: aSelectableProfile.avatar,
-      ...aSelectableProfile.theme,
-    };
+    let profileObj = aSelectableProfile.toObject();
 
     await this.#connection.execute(
       `UPDATE Profiles
        SET path = :path, name = :name, avatar = :avatar, themeL10nId = :themeL10nId, themeFg = :themeFg, themeBg = :themeBg
        WHERE id = :id;`,
-      profile
+      profileObj
     );
   }
 
   /**
    * Get the complete list of profiles in the group.
    *
-   * @returns {SelectableProfile[]}
+   * @returns {Array<SelectableProfile>}
    *   An array of profiles in the group.
    */
-  async getProfiles() {
+  async getAllProfiles() {
     return (
       await this.#connection.executeCached("SELECT * FROM Profiles;")
     ).map(row => {
-      return new SelectableProfile(row);
+      return new SelectableProfile(row, this);
     });
   }
 
@@ -534,7 +679,7 @@ class SelectableProfileServiceClass {
       })
     )[0];
 
-    return row ? new SelectableProfile(row) : null;
+    return row ? new SelectableProfile(row, this) : null;
   }
 
   /**
@@ -554,7 +699,7 @@ class SelectableProfileServiceClass {
       )
     )[0];
 
-    return row ? new SelectableProfile(row) : null;
+    return row ? new SelectableProfile(row, this) : null;
   }
 
   /**
@@ -574,7 +719,7 @@ class SelectableProfileServiceClass {
       )
     )[0];
 
-    return row ? new SelectableProfile(row) : null;
+    return row ? new SelectableProfile(row, this) : null;
   }
 
   // Shared Prefs management

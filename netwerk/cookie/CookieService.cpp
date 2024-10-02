@@ -557,14 +557,17 @@ CookieService::SetCookieStringFromHttp(nsIURI* aHostURI,
         StoragePrincipalHelper::ePartitionedPrincipal);
   }
 
+  nsAutoCString dateHeader;
+  CookieCommons::GetServerDateHeader(aChannel, dateHeader);
+
   // process each cookie in the header
   bool moreCookieToRead = true;
   while (moreCookieToRead) {
     CookieParser cookieParser(crc, aHostURI);
 
     moreCookieToRead = cookieParser.Parse(
-        baseDomain, requireHostMatch, cookieStatus, cookieHeader, true,
-        isForeignAndNotAddon, mustBePartitioned,
+        baseDomain, requireHostMatch, cookieStatus, cookieHeader, dateHeader,
+        true, isForeignAndNotAddon, mustBePartitioned,
         storagePrincipalOriginAttributes.IsPrivateBrowsing());
 
     if (!cookieParser.ContainsCookie()) {
@@ -701,7 +704,8 @@ CookieService::Add(const nsACString& aHost, const nsACString& aPath,
   }
 
   return AddNative(aHost, aPath, aName, aValue, aIsSecure, aIsHttpOnly,
-                   aIsSession, aExpiry, &attrs, aSameSite, aSchemeMap);
+                   aIsSession, aExpiry, &attrs, aSameSite, aSchemeMap, false,
+                   nullptr);
 }
 
 NS_IMETHODIMP_(nsresult)
@@ -709,7 +713,8 @@ CookieService::AddNative(const nsACString& aHost, const nsACString& aPath,
                          const nsACString& aName, const nsACString& aValue,
                          bool aIsSecure, bool aIsHttpOnly, bool aIsSession,
                          int64_t aExpiry, OriginAttributes* aOriginAttributes,
-                         int32_t aSameSite, nsICookie::schemeType aSchemeMap) {
+                         int32_t aSameSite, nsICookie::schemeType aSchemeMap,
+                         bool aIsPartitioned, const nsID* aOperationID) {
   if (NS_WARN_IF(!aOriginAttributes)) {
     return NS_ERROR_FAILURE;
   }
@@ -735,8 +740,8 @@ CookieService::AddNative(const nsACString& aHost, const nsACString& aPath,
   CookieStruct cookieData(nsCString(aName), nsCString(aValue), nsCString(aHost),
                           nsCString(aPath), aExpiry, currentTimeInUsec,
                           Cookie::GenerateUniqueCreationTime(currentTimeInUsec),
-                          aIsHttpOnly, aIsSession, aIsSecure, false, aSameSite,
-                          aSameSite, aSchemeMap);
+                          aIsHttpOnly, aIsSession, aIsSecure, aIsPartitioned,
+                          aSameSite, aSameSite, aSchemeMap);
 
   RefPtr<Cookie> cookie = Cookie::Create(cookieData, key.mOriginAttributes);
   MOZ_ASSERT(cookie);
@@ -744,14 +749,15 @@ CookieService::AddNative(const nsACString& aHost, const nsACString& aPath,
   CookieStorage* storage = PickStorage(*aOriginAttributes);
   storage->AddCookie(nullptr, baseDomain, *aOriginAttributes, cookie,
                      currentTimeInUsec, nullptr, VoidCString(), true,
-                     !aOriginAttributes->mPartitionKey.IsEmpty(), nullptr);
+                     !aOriginAttributes->mPartitionKey.IsEmpty(), nullptr,
+                     aOperationID);
   return NS_OK;
 }
 
 nsresult CookieService::Remove(const nsACString& aHost,
                                const OriginAttributes& aAttrs,
-                               const nsACString& aName,
-                               const nsACString& aPath) {
+                               const nsACString& aName, const nsACString& aPath,
+                               const nsID* aOperationID) {
   // first, normalize the hostname, and fail if it contains illegal characters.
   nsAutoCString host(aHost);
   nsresult rv = NormalizeHost(host);
@@ -769,7 +775,7 @@ nsresult CookieService::Remove(const nsACString& aHost,
 
   CookieStorage* storage = PickStorage(aAttrs);
   storage->RemoveCookie(baseDomain, aAttrs, host, PromiseFlatCString(aName),
-                        PromiseFlatCString(aPath));
+                        PromiseFlatCString(aPath), aOperationID);
 
   return NS_OK;
 }
@@ -784,18 +790,19 @@ CookieService::Remove(const nsACString& aHost, const nsACString& aName,
     return NS_ERROR_INVALID_ARG;
   }
 
-  return RemoveNative(aHost, aName, aPath, &attrs);
+  return RemoveNative(aHost, aName, aPath, &attrs, nullptr);
 }
 
 NS_IMETHODIMP_(nsresult)
 CookieService::RemoveNative(const nsACString& aHost, const nsACString& aName,
                             const nsACString& aPath,
-                            OriginAttributes* aOriginAttributes) {
+                            OriginAttributes* aOriginAttributes,
+                            const nsID* aOperationID) {
   if (NS_WARN_IF(!aOriginAttributes)) {
     return NS_ERROR_FAILURE;
   }
 
-  nsresult rv = Remove(aHost, *aOriginAttributes, aName, aPath);
+  nsresult rv = Remove(aHost, *aOriginAttributes, aName, aPath, aOperationID);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return rv;
   }
@@ -1263,6 +1270,18 @@ CookieService::GetCookiesFromHost(const nsACString& aHost,
                                   JS::Handle<JS::Value> aOriginAttributes,
                                   JSContext* aCx,
                                   nsTArray<RefPtr<nsICookie>>& aResult) {
+  OriginAttributes attrs;
+  if (!aOriginAttributes.isObject() || !attrs.Init(aCx, aOriginAttributes)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+
+  return GetCookiesFromHostNative(aHost, &attrs, aResult);
+}
+
+NS_IMETHODIMP
+CookieService::GetCookiesFromHostNative(const nsACString& aHost,
+                                        OriginAttributes* aAttrs,
+                                        nsTArray<RefPtr<nsICookie>>& aResult) {
   // first, normalize the hostname, and fail if it contains illegal characters.
   nsAutoCString host(aHost);
   nsresult rv = NormalizeHost(host);
@@ -1272,19 +1291,14 @@ CookieService::GetCookiesFromHost(const nsACString& aHost,
   rv = CookieCommons::GetBaseDomainFromHost(mTLDService, host, baseDomain);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  OriginAttributes attrs;
-  if (!aOriginAttributes.isObject() || !attrs.Init(aCx, aOriginAttributes)) {
-    return NS_ERROR_INVALID_ARG;
-  }
-
   if (!IsInitialized()) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 
-  CookieStorage* storage = PickStorage(attrs);
+  CookieStorage* storage = PickStorage(*aAttrs);
 
   nsTArray<RefPtr<Cookie>> cookies;
-  storage->GetCookiesFromHost(baseDomain, attrs, cookies);
+  storage->GetCookiesFromHost(baseDomain, *aAttrs, cookies);
 
   if (cookies.IsEmpty()) {
     return NS_OK;
@@ -1425,7 +1439,7 @@ class RemoveAllSinceRunnable : public Runnable {
       auto* cookie = static_cast<Cookie*>(mList[mIndex].get());
       if (cookie->CreationTime() > mSinceWhen &&
           NS_FAILED(mSelf->Remove(cookie->Host(), cookie->OriginAttributesRef(),
-                                  cookie->Name(), cookie->Path()))) {
+                                  cookie->Name(), cookie->Path(), nullptr))) {
         continue;
       }
     }

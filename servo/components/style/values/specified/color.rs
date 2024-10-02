@@ -139,8 +139,10 @@ pub struct LightDark {
 
 impl LightDark {
     fn compute(&self, cx: &Context) -> ComputedColor {
-        let style_color_scheme = cx.style().get_inherited_ui().clone_color_scheme();
-        let dark = cx.device().is_dark_color_scheme(&style_color_scheme);
+        let dark = cx.device().is_dark_color_scheme(cx.builder.color_scheme);
+        if cx.for_non_inherited_property {
+            cx.rule_cache_conditions.borrow_mut().set_color_scheme_dependency(cx.builder.color_scheme);
+        }
         let used = if dark { &self.dark } else { &self.light };
         used.to_computed_value(cx)
     }
@@ -433,9 +435,10 @@ impl SystemColor {
         use crate::gecko::values::convert_nscolor_to_absolute_color;
         use crate::gecko_bindings::bindings;
 
-        // TODO: We should avoid cloning here most likely, though it's cheap-ish.
-        let style_color_scheme = cx.style().get_inherited_ui().clone_color_scheme();
-        let color = cx.device().system_nscolor(*self, &style_color_scheme);
+        let color = cx.device().system_nscolor(*self, cx.builder.color_scheme);
+        if cx.for_non_inherited_property {
+            cx.rule_cache_conditions.borrow_mut().set_color_scheme_dependency(cx.builder.color_scheme);
+        }
         if color == bindings::NS_SAME_AS_FOREGROUND_COLOR {
             return ComputedColor::currentcolor();
         }
@@ -945,7 +948,8 @@ bitflags! {
 pub struct ColorScheme {
     #[ignore_malloc_size_of = "Arc"]
     idents: crate::ArcSlice<CustomIdent>,
-    bits: ColorSchemeFlags,
+    /// The computed bits for the known color schemes (plus the only keyword).
+    pub bits: ColorSchemeFlags,
 }
 
 impl ColorScheme {

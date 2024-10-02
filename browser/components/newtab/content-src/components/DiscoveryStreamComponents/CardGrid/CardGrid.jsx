@@ -6,6 +6,7 @@ import { DSCard, PlaceholderDSCard } from "../DSCard/DSCard.jsx";
 import { DSEmptyState } from "../DSEmptyState/DSEmptyState.jsx";
 import { DSDismiss } from "content-src/components/DiscoveryStreamComponents/DSDismiss/DSDismiss";
 import { TopicsWidget } from "../TopicsWidget/TopicsWidget.jsx";
+import { ListFeed } from "../ListFeed/ListFeed.jsx";
 import { SafeAnchor } from "../SafeAnchor/SafeAnchor";
 import { FluentOrText } from "../../FluentOrText/FluentOrText.jsx";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
@@ -19,6 +20,9 @@ const PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
 const PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
 const PREF_SPOCS_STARTUPCACHE_ENABLED =
   "discoverystream.spocs.startupCache.enabled";
+const PREF_LIST_FEED_ENABLED = "discoverystream.contextualContent.enabled";
+const PREF_LIST_FEED_SELECTED_FEED =
+  "discoverystream.contextualContent.selectedFeed";
 const INTERSECTION_RATIO = 0.5;
 const VISIBLE = "visible";
 const VISIBILITY_CHANGE_EVENT = "visibilitychange";
@@ -147,6 +151,7 @@ export function OnboardingExperience({ dispatch, windowObj = globalThis }) {
   );
 }
 
+// eslint-disable-next-line no-shadow
 export function IntersectionObserver({
   children,
   windowObj = window,
@@ -344,8 +349,12 @@ export class _CardGrid extends React.PureComponent {
     const selectedTopics = prefs[PREF_TOPICS_SELECTED];
     const availableTopics = prefs[PREF_TOPICS_AVAILABLE];
     const spocsStartupCacheEnabled = prefs[PREF_SPOCS_STARTUPCACHE_ENABLED];
-
-    const recs = this.props.data.recommendations.slice(0, items);
+    const listFeedEnabled = prefs[PREF_LIST_FEED_ENABLED];
+    const listFeedSelectedFeed = prefs[PREF_LIST_FEED_SELECTED_FEED];
+    // filter out recs that should be in ListFeed
+    const recs = this.props.data.recommendations
+      .filter(item => !item.feedName)
+      .slice(0, items);
     const cards = [];
     let essentialReadsCards = [];
     let editorsPicksCards = [];
@@ -438,6 +447,21 @@ export class _CardGrid extends React.PureComponent {
           cards.splice(position.index, 1, widgetComponent);
         }
       }
+    }
+
+    if (listFeedEnabled) {
+      const listFeed = (
+        <ListFeed
+          // only display recs that match selectedFeed for ListFeed
+          recs={this.props.data.recommendations.filter(
+            item => item.feedName === listFeedSelectedFeed
+          )}
+          firstVisibleTimestamp={this.props.firstVisibleTimestamp}
+          type={this.props.type}
+        />
+      );
+      // place the list feed as the 3rd element in the card grid
+      cards.splice(2, 1, listFeed);
     }
 
     let moreRecsHeader = "";

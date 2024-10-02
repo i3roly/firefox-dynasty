@@ -13,12 +13,10 @@ import mozilla.components.lib.state.UiStore
 /**
  * Value type that represents the state of the CFR Tools.
  *
- * @property homepageIntroShown Whether the homepage intro CFR has been shown.
  * @property homepageSyncShown Whether the homepage sync CFR has been shown.
  * @property homepageNavToolbarShown Whether the homepage navigation toolbar CFR has been shown.
  * @property wallpaperSelectorShown Whether the wallpaper selector CFR has been shown.
  * @property navButtonsShown Whether the navigation buttons CFR has been shown.
- * @property tcpShown Whether the total cookies protection CFR has been shown.
  * @property cookieBannerBlockerShown Whether the cookie banner blocker CFR has been shown.
  * @property cookieBannersPrivateModeShown Whether the cookie banners private mode CFR has been shown.
  * @property addPrivateTabToHomeShown Whether the add private tab to home CFR has been shown.
@@ -28,12 +26,10 @@ import mozilla.components.lib.state.UiStore
  * @property pwaShown Whether the progressive web app dialog CFR has been shown.
  */
 data class CfrToolsState(
-    val homepageIntroShown: Boolean = false,
     val homepageSyncShown: Boolean = false,
     val homepageNavToolbarShown: Boolean = false,
     val wallpaperSelectorShown: Boolean = false,
     val navButtonsShown: Boolean = false,
-    val tcpShown: Boolean = false,
     val cookieBannerBlockerShown: Boolean = false,
     val cookieBannersPrivateModeShown: Boolean = false,
     val addPrivateTabToHomeShown: Boolean = false,
@@ -47,11 +43,6 @@ data class CfrToolsState(
  * [Action] implementation related to [CfrToolsStore].
  */
 sealed class CfrToolsAction : Action {
-
-    /**
-     * Toggle whether the homepage intro (jump back in) CFR has been shown.
-     */
-    object ToggleHomepageIntroShown : CfrToolsAction()
 
     /**
      * Toggle whether the homepage sync CFR has been shown.
@@ -72,11 +63,6 @@ sealed class CfrToolsAction : Action {
      * Toggle whether the navigation buttons CFR has been shown.
      */
     object ToggleNavButtonsShown : CfrToolsAction()
-
-    /**
-     * Toggle whether the total cookies protection CFR has been shown.
-     */
-    object ToggleTcpShown : CfrToolsAction()
 
     /**
      * Toggle whether the cookie banner blocker (erase action) CFR has been shown.
@@ -120,8 +106,6 @@ sealed class CfrToolsAction : Action {
 internal object CfrToolsReducer {
     fun reduce(state: CfrToolsState, action: CfrToolsAction): CfrToolsState {
         return when (action) {
-            is CfrToolsAction.ToggleHomepageIntroShown ->
-                state.copy(homepageIntroShown = !state.homepageIntroShown)
             is CfrToolsAction.ToggleHomepageSyncShown ->
                 state.copy(homepageSyncShown = !state.homepageSyncShown)
             is CfrToolsAction.ToggleHomepageNavToolbarShown ->
@@ -130,8 +114,6 @@ internal object CfrToolsReducer {
                 state.copy(wallpaperSelectorShown = !state.wallpaperSelectorShown)
             is CfrToolsAction.ToggleNavButtonsShown ->
                 state.copy(navButtonsShown = !state.navButtonsShown)
-            is CfrToolsAction.ToggleTcpShown ->
-                state.copy(tcpShown = !state.tcpShown)
             is CfrToolsAction.ToggleCookieBannerBlockerShown ->
                 state.copy(cookieBannerBlockerShown = !state.cookieBannerBlockerShown)
             is CfrToolsAction.ToggleCookieBannersPrivateModeShown ->

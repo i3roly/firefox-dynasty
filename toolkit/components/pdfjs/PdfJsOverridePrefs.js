@@ -18,13 +18,8 @@
   // Editing PDFs is not supported on mobile
   pref("pdfjs.annotationEditorMode", -1);
 
-  // Enable the floating PDF.js toolbar on GeckoView (bug 1829366)
-  pref("pdfjs.enableFloatingToolbar", true);
-
 #else
 
-  // Enable highlighting in a pdf.
-  pref("pdfjs.enableHighlightEditor", true);
   #if defined(EARLY_BETA_OR_EARLIER)
     pref("pdfjs.enableHighlightFloatingButton", true);
   #else

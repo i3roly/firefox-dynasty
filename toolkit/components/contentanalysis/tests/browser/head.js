@@ -3,10 +3,6 @@
 
 "use strict";
 
-const { MockRegistrar } = ChromeUtils.importESModule(
-  "resource://testing-common/MockRegistrar.sys.mjs"
-);
-
 // Wraps the given object in an XPConnect wrapper and, if an interface
 // is passed, queries the result to that interface.
 function xpcWrap(obj, iface) {
@@ -45,6 +41,9 @@ function mockService(serviceNames, contractId, interfaceObj, mockService) {
     QueryInterface: ChromeUtils.generateQI(serviceNames),
   };
   let o = xpcWrap(newService, interfaceObj);
+  const { MockRegistrar } = ChromeUtils.importESModule(
+    "resource://testing-common/MockRegistrar.sys.mjs"
+  );
   let cid = MockRegistrar.register(contractId, o);
   registerCleanupFunction(() => {
     MockRegistrar.unregister(cid);
@@ -55,17 +54,24 @@ function mockService(serviceNames, contractId, interfaceObj, mockService) {
 /**
  * Mock the nsIContentAnalysis service with the object mockCAService.
  *
- * @param {object}    mockCAService
- *                    the service to mock for nsIContentAnalysis
- * @returns {object}  The newly-mocked service
+ * @param {object}    mockCAServiceTemplate
+ *                    the mock nsIContentAnalysis template object
+ * @returns {object}  The newly-mocked service that integrates the template
  */
-function mockContentAnalysisService(mockCAService) {
-  return mockService(
+function mockContentAnalysisService(mockCAServiceTemplate) {
+  let realCAService = SpecialPowers.Cc[
+    "@mozilla.org/contentanalysis;1"
+  ].getService(SpecialPowers.Ci.nsIContentAnalysis);
+  let mockCAService = mockService(
     ["nsIContentAnalysis"],
     "@mozilla.org/contentanalysis;1",
     Ci.nsIContentAnalysis,
-    mockCAService
+    mockCAServiceTemplate
   );
+  if (mockCAService) {
+    mockCAService.realCAService = realCAService;
+  }
+  return mockCAService;
 }
 
 /**
@@ -122,16 +128,17 @@ function makeMockContentAnalysis() {
     setupForTest(shouldAllowRequest) {
       this.shouldAllowRequest = shouldAllowRequest;
       this.errorValue = undefined;
-      this.calls = [];
+      this.clearCalls();
     },
 
     setupForTestWithError(errorValue) {
       this.errorValue = errorValue;
-      this.calls = [];
+      this.clearCalls();
     },
 
     clearCalls() {
       this.calls = [];
+      this.browsingContextsForURIs = [];
     },
 
     getAction() {
@@ -186,6 +193,14 @@ function makeMockContentAnalysis() {
 
     cancelAllRequests() {
       // This is called on exit, no need to do anything
+    },
+
+    getURIForBrowsingContext(aBrowsingContext) {
+      // The real implementation walks up the parent chain as long
+      // as the parent principal subsumes the child one. For testing
+      // purposes, just return the browsing context's URI.
+      this.browsingContextsForURIs.push(aBrowsingContext);
+      return aBrowsingContext.currentURI;
     },
   };
 }

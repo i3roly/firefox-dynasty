@@ -19,27 +19,11 @@ add_setup(async function () {
       ["browser.urlbar.showSearchTerms.featureGate", true],
     ],
   });
-  await SearchTestUtils.installSearchExtension(
-    {
-      name: "MozSearch",
-      search_url: "https://www.example.com/",
-      favicon_url: "https://www.example.com/favicon.ico",
-    },
-    { setAsDefault: true }
-  );
-  await Services.search.moveEngine(Services.search.defaultEngine, 0);
-
-  // A non default search engine is used to test selecting a search engine
-  // in the Unified Search Button.
-  await SearchTestUtils.installSearchExtension({
-    name: "NonDefault",
-    search_url: "https://www.mozilla.org/search",
-    favicon_url: "https://www.mozilla.org/favicon.ico",
-  });
-  nonDefaultEngine = Services.search.getEngineByName("NonDefault");
-
+  let cleanup = await installPersistTestEngines();
+  nonDefaultEngine = Services.search.getEngineByName("MochiSearch");
   registerCleanupFunction(async function () {
     await PlacesUtils.history.clear();
+    cleanup();
   });
 });
 
@@ -57,14 +41,6 @@ add_task(async function visibility_of_elements() {
   );
 
   Assert.equal(
-    BrowserTestUtils.isVisible(
-      urlbar.querySelector(".urlbar-show-page-actions-button")
-    ),
-    true,
-    "Show all page actions button is visible."
-  );
-
-  Assert.equal(
     BrowserTestUtils.isVisible(urlbar.querySelector(".urlbar-revert-button")),
     true,
     "Revert button is visible."
@@ -79,9 +55,9 @@ add_task(async function select_default_engine_and_search() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
   await UrlbarTestUtils.openSearchModeSwitcher(window);
 
-  info("Press on the MozSearch menu button and enter Search Mode.");
+  info("Press on the Example menu button and enter Search Mode.");
   let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=MozSearch]").click();
+  popup.querySelector("toolbarbutton[label=Example]").click();
   await popupHidden;
 
   info("Search with the default engine.");
@@ -108,9 +84,9 @@ add_task(async function select_default_engine_and_modify_search_and_blur() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
   await UrlbarTestUtils.openSearchModeSwitcher(window);
 
-  info("Press on the MozSearch menu button and enter Search Mode.");
+  info("Press on the default menu button and enter Search Mode.");
   let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=MozSearch]").click();
+  popup.querySelector("toolbarbutton[label=Example]").click();
   await popupHidden;
 
   // Bug 1909301: When the search term doesn't change, blurring the address bar
@@ -138,9 +114,9 @@ add_task(async function select_non_default_engine_and_search() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
   await UrlbarTestUtils.openSearchModeSwitcher(window);
 
-  info("Press on the NonDefault menu button and enter Search Mode.");
+  info("Press on the non default menu button and enter Search Mode.");
   let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=NonDefault]").click();
+  popup.querySelector("toolbarbutton[label=MochiSearch]").click();
   await popupHidden;
 
   info("Search with the non default engine.");
@@ -148,12 +124,15 @@ add_task(async function select_non_default_engine_and_search() {
   let browserLoadedPromise = BrowserTestUtils.browserLoaded(
     tab.linkedBrowser,
     false,
-    url
+    url,
+    true
   );
   EventUtils.synthesizeKey("KEY_Enter");
   await browserLoadedPromise;
 
-  Assert.equal(gURLBar.value, UrlbarTestUtils.trimURL(url), "Urlbar value");
+  assertSearchStringIsInUrlbar(SEARCH_STRING, {
+    userTypedValue: SEARCH_STRING,
+  });
 
   BrowserTestUtils.removeTab(tab);
 });
@@ -164,17 +143,18 @@ add_task(async function select_non_default_engine_and_modify_search_and_blur() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
   await UrlbarTestUtils.openSearchModeSwitcher(window);
 
-  info("Press on the NonDefault menu button and enter Search Mode.");
+  info("Press on the non default menu button and enter Search Mode.");
   let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=NonDefault]").click();
+  popup.querySelector("toolbarbutton[label=MochiSearch]").click();
   await popupHidden;
 
   EventUtils.synthesizeKey("s");
   gURLBar.blur();
 
   await UrlbarTestUtils.assertSearchMode(window, {
-    engineName: "NonDefault",
-    isGeneralPurposeEngine: false,
+    engineName: "MochiSearch",
+    isGeneralPurposeEngine: true,
+    source: UrlbarUtils.RESULT_SOURCE.SEARCH,
     entry: "other",
   });
 
@@ -198,9 +178,9 @@ add_task(async function select_non_default_engine_and_blur() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
   await UrlbarTestUtils.openSearchModeSwitcher(window);
 
-  info("Press on the NonDefault menu button and enter Search Mode.");
+  info("Press on the non default menu button and enter Search Mode.");
   let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=NonDefault]").click();
+  popup.querySelector("toolbarbutton[label=MochiSearch]").click();
   await popupHidden;
 
   gURLBar.blur();
@@ -212,14 +192,15 @@ add_task(async function select_non_default_engine_and_blur() {
     "Urlbar value matches search string."
   );
   await UrlbarTestUtils.assertSearchMode(window, {
-    engineName: "NonDefault",
-    isGeneralPurposeEngine: false,
+    engineName: "MochiSearch",
+    isGeneralPurposeEngine: true,
+    source: UrlbarUtils.RESULT_SOURCE.SEARCH,
     entry: "other",
   });
 
   Assert.ok(
-    !gURLBar.hasAttribute("persistsearchterms"),
-    "Urlbar does not have persistsearchterms attribute."
+    gURLBar.hasAttribute("persistsearchterms"),
+    "Urlbar has persistsearchterms attribute."
   );
   Assert.equal(
     gURLBar.getAttribute("pageproxystate"),
@@ -236,9 +217,9 @@ add_task(async function select_non_default_engine_and_blur_and_switch_tab() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
   await UrlbarTestUtils.openSearchModeSwitcher(window);
 
-  info("Press on the NonDefault menu button and enter Search Mode.");
+  info("Press on the non default menu button and enter Search Mode.");
   let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=NonDefault]").click();
+  popup.querySelector("toolbarbutton[label=MochiSearch]").click();
   await popupHidden;
 
   gURLBar.blur();
@@ -255,13 +236,14 @@ add_task(async function select_non_default_engine_and_blur_and_switch_tab() {
   );
   await BrowserTestUtils.switchTab(gBrowser, tab);
   await UrlbarTestUtils.assertSearchMode(window, {
-    engineName: "NonDefault",
-    isGeneralPurposeEngine: false,
+    engineName: "MochiSearch",
+    isGeneralPurposeEngine: true,
+    source: UrlbarUtils.RESULT_SOURCE.SEARCH,
     entry: "other",
   });
   Assert.ok(
-    !gURLBar.hasAttribute("persistsearchterms"),
-    "Urlbar does not have persistsearchterms attribute."
+    gURLBar.hasAttribute("persistsearchterms"),
+    "Urlbar does not has persistsearchterms attribute."
   );
   Assert.equal(
     gURLBar.getAttribute("pageproxystate"),
@@ -297,48 +279,6 @@ add_task(async function revert_button() {
   Assert.ok(
     BrowserTestUtils.isHidden(revertButton),
     "Revert button is hidden."
-  );
-
-  Assert.ok(
-    !gURLBar.hasAttribute("persistsearchterms"),
-    "Urlbar does not have persistsearchterms attribute."
-  );
-
-  Assert.equal(
-    gURLBar.getAttribute("pageproxystate"),
-    "valid",
-    "Page proxy state."
-  );
-
-  BrowserTestUtils.removeTab(tab);
-});
-
-// TODO: The expand page actions button just reverts the urlbar
-// but UX has said it will show a popover containing a list of page actions.
-add_task(async function expand_page_actions_button() {
-  let { tab } = await searchWithTab(SEARCH_STRING);
-
-  let urlbar = window.gURLBar;
-
-  let pageActionsContainer = urlbar.querySelector("#page-action-buttons");
-  info("Verify page actions are not visible.");
-  Assert.equal(
-    BrowserTestUtils.isVisible(pageActionsContainer),
-    false,
-    "Page actions are visible."
-  );
-
-  info("Click expand page actions button.");
-  let showPageActionsButton = urlbar.querySelector(
-    ".urlbar-show-page-actions-button"
-  );
-  EventUtils.synthesizeMouseAtCenter(showPageActionsButton, {}, window);
-
-  info("Verify page actions are visible.");
-  Assert.equal(
-    BrowserTestUtils.isVisible(pageActionsContainer),
-    true,
-    "Page actions are visible."
   );
 
   Assert.ok(

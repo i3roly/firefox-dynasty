@@ -546,6 +546,7 @@ export class UrlbarView {
     // implicitly unselected.
     if (this.input.searchMode?.isPreview) {
       this.input.searchMode = null;
+      this.window.gBrowser.userTypedValue = null;
     }
 
     this.resultMenu.hidePopup();
@@ -1247,7 +1248,10 @@ export class UrlbarView {
         ) {
           // We can replace the row's current result with the new one.
           if (result.isHiddenExposure) {
-            this.controller.engagementEvent.addExposure(result);
+            this.controller.engagementEvent.addExposure(
+              result,
+              this.#queryContext
+            );
           } else {
             this.#updateRow(row, result);
           }
@@ -1317,13 +1321,19 @@ export class UrlbarView {
         newSpanCount <= this.#queryContext.maxResults && !seenMisplacedResult;
       if (result.isHiddenExposure) {
         if (canBeVisible) {
-          this.controller.engagementEvent.addExposure(result);
+          this.controller.engagementEvent.addExposure(
+            result,
+            this.#queryContext
+          );
         } else {
           // Add a tentative exposure: The hypothetical row for this
           // hidden-exposure result can't be visible now, but as long as it were
           // not marked stale in a later update, it would be shown when stale
           // rows are removed.
-          this.controller.engagementEvent.addTentativeExposure(result);
+          this.controller.engagementEvent.addTentativeExposure(
+            result,
+            this.#queryContext
+          );
         }
         continue;
       }
@@ -1673,6 +1683,9 @@ export class UrlbarView {
     if (global) {
       button.classList.add("urlbarView-global-action-btn");
     }
+    if (action.classList) {
+      button.classList.add(...action.classList);
+    }
     button.setAttribute("role", "button");
     if (action.icon) {
       let icon = this.#createElement("img");
@@ -1883,13 +1896,12 @@ export class UrlbarView {
       case lazy.UrlbarUtils.RESULT_TYPE.TAB_SWITCH:
         // Hide chichlet when showing secondaryActions.
         if (
-          lazy.UrlbarPrefs.getScotchBonnetPref("secondaryActions.featureGate")
+          !lazy.UrlbarPrefs.getScotchBonnetPref("secondaryActions.featureGate")
         ) {
-          break;
+          actionSetter = () => {
+            this.#setSwitchTabActionChiclet(result, action);
+          };
         }
-        actionSetter = () => {
-          this.#setSwitchTabActionChiclet(result, action);
-        };
         setURL = true;
         break;
       case lazy.UrlbarUtils.RESULT_TYPE.REMOTE_TAB:
@@ -2218,7 +2230,10 @@ export class UrlbarView {
       let visible = this.#isElementVisible(item);
       if (visible) {
         if (item.result.exposureTelemetry) {
-          this.controller.engagementEvent.addExposure(item.result);
+          this.controller.engagementEvent.addExposure(
+            item.result,
+            this.#queryContext
+          );
         }
         this.visibleResults.push(item.result);
       }

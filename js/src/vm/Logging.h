@@ -81,9 +81,10 @@ class LogModule {
   mutable mozilla::AtomicLogLevel* levelPtr{};
 };
 
-#define FOR_EACH_JS_LOG_MODULE(_) \
-  _(baselineCompileHandler)       \
-  JITSPEW_CHANNEL_LIST(_)
+#define FOR_EACH_JS_LOG_MODULE(_)                                            \
+  _(debug)                /* A predefined log module for casual debugging */ \
+  _(wasmCodeMetaStats)    /* Wasm code statistics */                         \
+  JITSPEW_CHANNEL_LIST(_) /* A module for each JitSpew channel. */
 
 // Declare Log modules
 #define DECLARE_MODULE(X) inline constexpr LogModule X##Module(#X);
@@ -92,10 +93,12 @@ FOR_EACH_JS_LOG_MODULE(DECLARE_MODULE);
 
 #undef DECLARE_MODULE
 
+// By default JS_LOGGING is enabled; but if we would like this become
+// conditional this file-internal macro can be used to accomplish that.
+#define JS_LOGGING 1
+
 // The core logging macro for the JS Engine.
-// For now put this under JS_JITSPEW, but longer term this should be enabled
-// on release and so have its own flag.
-#ifdef JS_JITSPEW
+#ifdef JS_LOGGING
 #  define JS_LOG(name, log_level, ...)                                  \
     do {                                                                \
       if (name##Module.shouldLog(log_level)) {                          \
@@ -106,6 +109,8 @@ FOR_EACH_JS_LOG_MODULE(DECLARE_MODULE);
 #else
 #  define JS_LOG(module, log_level, ...)
 #endif
+
+#undef JS_LOGGING
 
 }  // namespace js
 

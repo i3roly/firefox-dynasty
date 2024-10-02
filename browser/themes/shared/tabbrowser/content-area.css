@@ -25,7 +25,16 @@
   }
 }
 
-#appcontent,
+#navigator-toolbox {
+  border-bottom: 0.01px solid var(--chrome-content-separator-color);
+
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "sidebar.revamp") {
+    /* This reserves space for the content area outline */
+    border-bottom-color: var(--toolbar-bgcolor);
+  }
+}
+
 #browser,
 #tabbrowser-tabbox,
 #tabbrowser-tabpanels,
@@ -35,19 +44,14 @@
   min-height: 0;
 }
 
-#appcontent {
-/* stylelint-disable-next-line media-query-no-invalid */
-  @media (-moz-bool-pref: "sidebar.revamp") {
-    border-top: 0.5px solid var(--chrome-content-separator-color);
-    border-inline-start: 0.5px solid var(--chrome-content-separator-color);
-    box-shadow: 0 2px 6px 0 light-dark(rgb(0, 0, 0, 0.2), rgb(0, 0, 0, 0.8));
-    position: relative;
-  }
+#tabbrowser-tabbox {
+  position: relative;
+  margin: 0;
 
   /* stylelint-disable-next-line media-query-no-invalid */
-  @media (not (-moz-bool-pref: "sidebar.position_start")) and (-moz-bool-pref: "sidebar.revamp") {
-    border-inline-end: 0.5px solid var(--chrome-content-separator-color);
-    border-inline-start: none;
+  @media (-moz-bool-pref: "sidebar.revamp") {
+    outline: 0.01px solid var(--chrome-content-separator-color);
+    box-shadow: var(--content-area-shadow);
   }
 }
 
@@ -267,6 +271,13 @@
   margin: 0 3vw;
   padding: 0;
   overflow-x: auto;
+
+  /* Ensure that dialog boxes are pixel-snapped, to keep their internal layout
+   * consistent, regardless of whether the surrounding layout places them at a
+   * fractional position. (This helps prevent arbitrary 1px shifts that could
+   * otherwise appear inside of a vertically-centered dialog when the
+   * viewport-height changes from being odd to even.) */
+  will-change: transform;
 
   &:not(.spotlightBox) {
     box-shadow: 0 2px 14px 0 rgba(0, 0, 0, 0.2);

@@ -315,17 +315,16 @@ skip-if = [
   "os != 'android'",
 ]
 
-["test_bug1913022.js"]
-
 ["test_bug1889130.js"]
 skip-if = ["os == 'win'"] # skip because 0.0.0.0 is invalid in windows platform
+
+["test_bug1913022.js"]
 
 ["test_bug_1918928.js"]
 skip-if = [
   "socketprocess_networking", # confirmation state isn't passed cross-process
   "appname == 'thunderbird'", # bug 1760097
 ]
-
 
 ["test_cache-control_request.js"]
 
@@ -626,6 +625,7 @@ run-sequentially = "node server exceptions dont replay well"
 ["test_hpke_config_manager.js"]
 
 ["test_hpke_out_of_process.js"]
+firefox-appdir = "browser"
 skip-if = ["os == 'android'"] # Bug 1904406
 
 ["test_http1-proxy.js"]
@@ -734,15 +734,6 @@ skip-if = [
   "os == 'win'",
 ]
 run-sequentially = "http3server"
-
-["test_http3_large_post_telemetry.js"]
-disabled = "bug 1771744 - telemetry probe expired"
-# skip-if =
-#   asan
-#   tsan
-#   os == 'win'
-#   os == 'android'
-#   socketprocess_networking
 
 ["test_http3_perf.js"]
 skip-if = [
@@ -858,6 +849,8 @@ run-sequentially = "node server exceptions dont replay well"
 run-sequentially = "node server exceptions dont replay well"
 
 ["test_inhibit_caching.js"]
+
+["test_internal_redirect.js"]
 
 ["test_ioservice.js"]
 
@@ -994,6 +987,12 @@ run-sequentially = "node server exceptions dont replay well"
 
 ["test_proxy_pac.js"]
 
+["test_proxyDNS_leak.js"]
+skip-if = [
+  "os == 'android'",
+  "socketprocess_networking",
+]
+
 ["test_proxyconnect.js"]
 skip-if = [
   "tsan",
@@ -1080,6 +1079,8 @@ run-sequentially = "tlsserver uses fixed port"
 ["test_schema_12_migration.js"]
 
 ["test_schema_13_db.js"]
+
+["test_schema_14_migration.js"]
 
 ["test_schema_2_migration.js"]
 

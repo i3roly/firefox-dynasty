@@ -31,6 +31,39 @@ const MODEL_HUB_URL_TEMPLATE = Services.prefs.getStringPref(
 let modelHub = null;
 let modelCache = null;
 
+const TASKS = [
+  "text-classification",
+  "token-classification",
+  "question-answering",
+  "fill-mask",
+  "summarization",
+  "translation",
+  "text2text-generation",
+  "text-generation",
+  "zero-shot-classification",
+  "audio-classification",
+  "zero-shot-audio-classification",
+  "automatic-speech-recognition",
+  "text-to-audio",
+  "image-to-text",
+  "image-classification",
+  "image-segmentation",
+  "zero-shot-image-classification",
+  "object-detection",
+  "zero-shot-object-detection",
+  "document-question-answering",
+  "image-to-image",
+  "depth-estimation",
+  "feature-extraction",
+  "image-feature-extraction",
+];
+
+const DTYPE = ["fp32", "fp16", "q8", "int8", "uint8", "q4", "bnb4", "q4f16"];
+const NUM_THREADS = Array.from(
+  { length: navigator.hardwareConcurrency || 4 },
+  (_, i) => i + 1
+);
+
 /**
  * Presets for the pad
  */
@@ -41,9 +74,11 @@ const INFERENCE_PAD_PRESETS = {
     ],
     runOptions: {},
     task: "image-to-text",
-    modelId: "Xenova/vit-gpt2-image-captioning",
+    modelId: "mozilla/distilvit",
     modelRevision: "main",
     modelHub: "hf",
+    dtype: "q8",
+    device: "wasm",
   },
   ner: {
     inputArgs: ["Sarah lives in the United States of America"],
@@ -52,6 +87,8 @@ const INFERENCE_PAD_PRESETS = {
     modelId: "Xenova/bert-base-NER",
     modelRevision: "main",
     modelHub: "hf",
+    dtype: "q8",
+    device: "wasm",
   },
   summary: {
     inputArgs: [
@@ -64,6 +101,8 @@ const INFERENCE_PAD_PRESETS = {
     modelId: "Xenova/long-t5-tglobal-base-16384-book-summary",
     modelRevision: "main",
     modelHub: "hf",
+    dtype: "q8",
+    device: "wasm",
   },
   zero: {
     inputArgs: [
@@ -75,6 +114,8 @@ const INFERENCE_PAD_PRESETS = {
     modelId: "Xenova/mobilebert-uncased-mnli",
     modelRevision: "main",
     modelHub: "hf",
+    dtype: "q8",
+    device: "wasm",
   },
 };
 
@@ -292,6 +333,8 @@ function loadExample(name) {
   document.getElementById("modelId").value = data.modelId;
   document.getElementById("modelRevision").value = data.modelRevision;
   setSelectOption("modelHub", data.modelHub);
+  setSelectOption("dtype", data.dtype);
+  setSelectOption("device", data.device);
 }
 
 function formatJSON() {
@@ -309,6 +352,9 @@ async function runInference() {
   const modelId = document.getElementById("modelId").value;
   const modelRevision = document.getElementById("modelRevision").value;
   const taskName = document.getElementById("taskName").value;
+  const dtype = document.getElementById("dtype").value;
+  const device = document.getElementById("device").value;
+  const numThreads = parseInt(document.getElementById("numThreads").value);
 
   let inputData;
   try {
@@ -332,6 +378,9 @@ async function runInference() {
     engineId: "about:inference",
     modelHubRootUrl,
     modelHubUrlTemplate,
+    device,
+    dtype,
+    numThreads,
   };
 
   const { createEngine } = ChromeUtils.importESModule(
@@ -369,8 +418,7 @@ async function runInference() {
   }
 
   appendTextConsole(`Results: ${JSON.stringify(res, null, 2)}`);
-  // Add your code here to handle the data object
-  // For example, send it to a server or process it further
+  appendTextConsole(`Metrics: ${JSON.stringify(res.metrics, null, 2)}`);
 }
 
 function updateDownloadProgress(data) {
@@ -487,19 +535,31 @@ async function updateHttpContext() {
   return context;
 }
 
+var selectedHub;
+var selectedPreset;
+
+function fillSelect(elementId, values) {
+  const selectElement = document.getElementById(elementId);
+  values.forEach(function (task) {
+    const option = document.createElement("option");
+    option.value = task;
+    option.text = task;
+    selectElement.appendChild(option);
+  });
+}
+
 /**
  * Initializes the display of information when the window loads and sets an interval to update it.
  *
  * @async
  */
-
-var selectedHub;
-var selectedPreset;
-
 window.onload = async function () {
-  await displayInfo();
+  fillSelect("dtype", DTYPE);
+  fillSelect("taskName", TASKS);
+  fillSelect("numThreads", NUM_THREADS);
   loadExample("summary");
-  setInterval(displayInfo, 5000);
+  await displayInfo();
+
   document
     .getElementById("inferenceButton")
     .addEventListener("click", runInference);
@@ -519,5 +579,7 @@ window.onload = async function () {
   document
     .getElementById("http.limit")
     .addEventListener("change", updateHttpContext);
+
   updateHttpContext();
+  setInterval(displayInfo, 5000);
 };

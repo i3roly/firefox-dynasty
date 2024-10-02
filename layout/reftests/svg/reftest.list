@@ -350,7 +350,7 @@ fuzzy(0-1,0-10000) == opacity-and-transform-01.svg opacity-and-transform-01-ref.
 
 fuzzy-if(Android,0-8,0-200) == outer-svg-border-and-padding-01.svg outer-svg-border-and-padding-01-ref.svg
 
-fuzzy(0-255,0-214) fuzzy-if(Android,0-255,0-1423) == outline.html outline-ref.html # Bug 1503525
+fuzzy(0-255,0-214) fuzzy-if(Android,0-255,0-1439) == outline.html outline-ref.html # Bug 1503525
 
 == overflow-on-outer-svg-01.svg overflow-on-outer-svg-01-ref.svg
 == overflow-on-outer-svg-02a.xhtml overflow-on-outer-svg-02-ref.xhtml
@@ -367,7 +367,7 @@ fuzzy-if(winWidget,0-16,0-5) == paint-order-01.svg paint-order-01-ref.svg
 == paint-order-02.svg paint-order-02-ref.svg
 == paint-order-03.svg paint-order-03-ref.svg
 
-#fuzzy(0-23,0-60) fails-if(winWidget) == path-01.svg path-01-ref.svg
+fuzzy(0-54,0-77) == path-01.svg path-01-ref.svg
 == path-02.svg pass.svg
 == path-04.svg pass.svg
 == path-05.svg pass.svg
@@ -632,3 +632,5 @@ pref(svg.use-element.recursive-clone-limit.enabled,1) != about:blank explosive-u
 # do not increase fuzz significantly, test was designed to be within 1 color unit
 fuzzy(0-1,0-230400) == 1630900-1.html 1630900-1-ref.html
 # do not increase fuzz significantly, test was designed to be within 1 color unit
+
+== rect-no-backgrounds-print.html rect-no-backgrounds-print-ref.html

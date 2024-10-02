@@ -29,9 +29,7 @@ class FirefoxSuggestTest : TestSetup() {
         HomeActivityTestRule(
             skipOnboarding = true,
             isPocketEnabled = false,
-            isJumpBackInCFREnabled = false,
             isRecentTabsFeatureEnabled = false,
-            isTCPCFREnabled = false,
             isWallpaperOnboardingEnabled = false,
         ),
     ) { it.activity }

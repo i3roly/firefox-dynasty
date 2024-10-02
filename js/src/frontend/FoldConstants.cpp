@@ -30,6 +30,7 @@ using JS::ToUint32;
 struct FoldInfo {
   FrontendContext* fc;
   ParserAtomsTable& parserAtoms;
+  BigIntStencilVector& bigInts;
   FullParseHandler* handler;
 };
 
@@ -526,7 +527,7 @@ static bool IsEffectless(ParseNode* node) {
 
 enum Truthiness { Truthy, Falsy, Unknown };
 
-static Truthiness Boolish(ParseNode* pn) {
+static Truthiness Boolish(const FoldInfo& info, ParseNode* pn) {
   switch (pn->getKind()) {
     case ParseNodeKind::NumberExpr:
       return (pn->as<NumericLiteral>().value() != 0 &&
@@ -535,7 +536,8 @@ static Truthiness Boolish(ParseNode* pn) {
                  : Falsy;
 
     case ParseNodeKind::BigIntExpr:
-      return (pn->as<BigIntLiteral>().isZero()) ? Falsy : Truthy;
+      return info.bigInts[pn->as<BigIntLiteral>().index()].isZero() ? Falsy
+                                                                    : Truthy;
 
     case ParseNodeKind::StringExpr:
     case ParseNodeKind::TemplateStringExpr:
@@ -578,7 +580,7 @@ static bool SimplifyCondition(FoldInfo info, ParseNode** nodePtr) {
   // constant-folded.
 
   ParseNode* node = *nodePtr;
-  if (Truthiness t = Boolish(node); t != Unknown) {
+  if (Truthiness t = Boolish(info, node); t != Unknown) {
     // We can turn function nodes into constant nodes here, but mutating
     // function nodes is tricky --- in particular, mutating a function node
     // that appears on a method list corrupts the method list. However,
@@ -720,6 +722,21 @@ static bool FoldUnaryArithmetic(FoldInfo info, ParseNode** nodePtr) {
                         info.handler->newNumber(d, NoDecimal, node->pn_pos))) {
       return false;
     }
+  } else if (expr->is<BigIntLiteral>()) {
+    auto* literal = &expr->as<BigIntLiteral>();
+    auto& bigInt = info.bigInts[literal->index()];
+
+    if (node->isKind(ParseNodeKind::BitNotExpr)) {
+      if (bigInt.inplaceBitNot()) {
+        return TryReplaceNode(nodePtr, literal);
+      }
+    } else if (node->isKind(ParseNodeKind::NegExpr)) {
+      if (bigInt.inplaceNegate()) {
+        return TryReplaceNode(nodePtr, literal);
+      }
+    } else {
+      MOZ_ASSERT(node->isKind(ParseNodeKind::PosExpr));  // nothing to do
+    }
   }
 
   return true;
@@ -737,7 +754,7 @@ static bool FoldAndOrCoalesce(FoldInfo info, ParseNode** nodePtr) {
   bool isCoalesceNode = node->isKind(ParseNodeKind::CoalesceExpr);
   ParseNode** elem = node->unsafeHeadReference();
   do {
-    Truthiness t = Boolish(*elem);
+    Truthiness t = Boolish(info, *elem);
 
     // If we don't know the constant-folded node's truthiness, we can't
     // reduce this node with its surroundings.  Continue folding any
@@ -849,7 +866,7 @@ static bool FoldConditional(FoldInfo info, ParseNode** nodePtr) {
     }
 
     // Try to constant-fold based on the condition expression.
-    Truthiness t = Boolish(*expr);
+    Truthiness t = Boolish(info, *expr);
     if (t == Unknown) {
       continue;
     }
@@ -915,7 +932,7 @@ static bool FoldIf(FoldInfo info, ParseNode** nodePtr) {
 
     // Eliminate the consequent or alternative if the condition has
     // constant truthiness.
-    Truthiness t = Boolish(*expr);
+    Truthiness t = Boolish(info, *expr);
     if (t == Unknown) {
       continue;
     }
@@ -1318,15 +1335,17 @@ class FoldVisitor : public RewritingParseNodeVisitor<FoldVisitor> {
   using Base = RewritingParseNodeVisitor;
 
   ParserAtomsTable& parserAtoms;
+  BigIntStencilVector& bigInts;
   FullParseHandler* handler;
 
-  FoldInfo info() const { return FoldInfo{fc_, parserAtoms, handler}; }
+  FoldInfo info() const { return FoldInfo{fc_, parserAtoms, bigInts, handler}; }
 
  public:
   FoldVisitor(FrontendContext* fc, ParserAtomsTable& parserAtoms,
-              FullParseHandler* handler)
+              BigIntStencilVector& bigInts, FullParseHandler* handler)
       : RewritingParseNodeVisitor(fc),
         parserAtoms(parserAtoms),
+        bigInts(bigInts),
         handler(handler) {}
 
   bool visitElemExpr(ParseNode*& pn) {
@@ -1573,15 +1592,17 @@ class FoldVisitor : public RewritingParseNodeVisitor<FoldVisitor> {
 };
 
 static bool Fold(FrontendContext* fc, ParserAtomsTable& parserAtoms,
-                 FullParseHandler* handler, ParseNode** pnp) {
-  FoldVisitor visitor(fc, parserAtoms, handler);
+                 BigIntStencilVector& bigInts, FullParseHandler* handler,
+                 ParseNode** pnp) {
+  FoldVisitor visitor(fc, parserAtoms, bigInts, handler);
   return visitor.visit(*pnp);
 }
 static bool Fold(FoldInfo info, ParseNode** pnp) {
-  return Fold(info.fc, info.parserAtoms, info.handler, pnp);
+  return Fold(info.fc, info.parserAtoms, info.bigInts, info.handler, pnp);
 }
 
 bool frontend::FoldConstants(FrontendContext* fc, ParserAtomsTable& parserAtoms,
-                             ParseNode** pnp, FullParseHandler* handler) {
-  return Fold(fc, parserAtoms, handler, pnp);
+                             BigIntStencilVector& bigInts, ParseNode** pnp,
+                             FullParseHandler* handler) {
+  return Fold(fc, parserAtoms, bigInts, handler, pnp);
 }

@@ -5,6 +5,9 @@
 menu-view-genai-chat =
   .label = AI Chatbot
 
+menu-view-review-checker =
+  .label = Review Checker
+
 ## Labels for sidebar history panel
 
 # Variables:
@@ -52,12 +55,14 @@ sidebar-horizontal-tabs =
   .label = Horizontal tabs
 sidebar-customize-tabs-header =
   .label = Tab settings
-sidebar-customize-settings-header =
-  .label = Sidebar settings
-sidebar-visibility-always-show =
-  .label = Always show
-sidebar-visibility-hide-sidebar =
-  .label = Hide sidebar
+sidebar-customize-button-header =
+  .label = Sidebar button
+sidebar-customize-position-header =
+  .label = Sidebar position
+sidebar-visibility-setting-always-show =
+  .label = Expand and collapse sidebar
+sidebar-visibility-setting-hide-sidebar =
+  .label = Show and hide sidebar
 
 ## Labels for sidebar context menu items
 
@@ -75,6 +80,10 @@ sidebar-context-menu-bookmark-tab =
   .label = Bookmark Tab…
 sidebar-context-menu-copy-link =
   .label = Copy Link
+# Variables:
+#   $deviceName (String) - The name of the device the user is closing a tab for
+sidebar-context-menu-close-remote-tab =
+  .label = Close tab on { $deviceName }
 
 ## Labels for sidebar history context menu items
 
@@ -93,12 +102,42 @@ sidebar-menu-bookmarks-label =
   .label = Bookmarks
 sidebar-menu-customize-label =
   .label = Customize sidebar
+sidebar-menu-review-checker-label =
+  .label = Review Checker
 
 ## Headings for sidebar menu panels.
 
+sidebar-panel-header-close-button =
+  .tooltiptext = Close
 sidebar-menu-customize-header =
   .heading = Customize sidebar
 sidebar-menu-history-header =
   .heading = History
 sidebar-menu-syncedtabs-header =
   .heading = Tabs from other devices
+
+## Titles for sidebar menu panels.
+
+sidebar-customize-title = Customize sidebar
+sidebar-history-title = History
+sidebar-syncedtabs-title = Tabs from other devices
+
+## Context for closing synced tabs when hovering over the items
+
+# Context for hovering over the close tab button that will
+# send a push to the device to close said tab
+# Variables:
+#   $deviceName (String) - the name of the device the user is closing a tab for
+synced-tabs-context-close-tab-title =
+    .title = Close tab on { $deviceName }
+
+## Tooltips for the sidebar toolbar button.
+
+sidebar-toolbar-expand-sidebar =
+  .tooltiptext = Expand sidebar
+sidebar-toolbar-collapse-sidebar =
+  .tooltiptext = Collapse sidebar
+sidebar-toolbar-show-sidebar =
+  .tooltiptext = Show sidebar
+sidebar-toolbar-hide-sidebar =
+  .tooltiptext = Hide sidebar

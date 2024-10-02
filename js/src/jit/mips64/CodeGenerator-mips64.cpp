@@ -206,40 +206,6 @@ void CodeGenerator::visitUDivOrModI64(LUDivOrModI64* lir) {
   masm.bind(&done);
 }
 
-void CodeGeneratorMIPS64::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
-                                        Register divisor, Register output,
-                                        Label* fail) {
-  // Callers handle division by zero and integer overflow.
-
-#ifdef MIPSR6
-  masm.as_ddiv(/* result= */ dividend, dividend, divisor);
-#else
-  masm.as_ddiv(dividend, divisor);
-  masm.as_mflo(dividend);
-#endif
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
-}
-
-void CodeGeneratorMIPS64::emitBigIntMod(LBigIntMod* ins, Register dividend,
-                                        Register divisor, Register output,
-                                        Label* fail) {
-  // Callers handle division by zero and integer overflow.
-
-#ifdef MIPSR6
-  masm.as_dmod(/* result= */ dividend, dividend, divisor);
-#else
-  masm.as_ddiv(dividend, divisor);
-  masm.as_mfhi(dividend);
-#endif
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
-}
-
 template <typename T>
 void CodeGeneratorMIPS64::emitWasmLoadI64(T* lir) {
   const MWasmLoad* mir = lir->mir();
@@ -396,13 +362,6 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
   Register output = ToRegister(lir->output());
   MOZ_ASSERT(input == output);
   masm.move64To32(Register64(input), output);
-}
-
-void CodeGenerator::visitNotI64(LNotI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register output = ToRegister(lir->output());
-
-  masm.ma_cmp_set(output, input.reg, zero, Assembler::Equal);
 }
 
 void CodeGenerator::visitBitNotI64(LBitNotI64* ins) {

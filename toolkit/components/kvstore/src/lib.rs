@@ -1,6 +1,7 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#![feature(result_option_inspect)]
 
 extern crate atomic_refcell;
 extern crate crossbeam_utils;
@@ -21,7 +22,7 @@ extern crate xpcom;
 mod error;
 mod fs;
 mod owned_value;
-mod skv;
+pub mod skv;
 mod task;
 
 use atomic_refcell::AtomicRefCell;
@@ -46,8 +47,8 @@ use thin_vec::ThinVec;
 use xpcom::{
     getter_addrefs,
     interfaces::{
-        nsIKeyValueDatabaseCallback, nsIKeyValueEnumeratorCallback, nsIKeyValuePair,
-        nsIKeyValueService, nsIKeyValueVariantCallback, nsIKeyValueVoidCallback,
+        nsIKeyValueDatabaseCallback, nsIKeyValueEnumeratorCallback, nsIKeyValueImporter,
+        nsIKeyValuePair, nsIKeyValueService, nsIKeyValueVariantCallback, nsIKeyValueVoidCallback,
         nsISerialEventTarget, nsIVariant,
     },
     nsIID, xpcom, xpcom_method, RefPtr,
@@ -155,6 +156,21 @@ impl KeyValueService {
 
         TaskRunnable::new("KVService::GetOrCreateWithOptions", task)?
             .dispatch_background_task_with_options(DispatchOptions::default().may_block(true))
+    }
+
+    xpcom_method!(
+        create_importer => CreateImporter(
+            type_: *const nsACString,
+            path: *const nsAString
+        ) -> *const nsIKeyValueImporter
+    );
+
+    fn create_importer(
+        &self,
+        _type: &nsACString,
+        _path: &nsAString,
+    ) -> Result<RefPtr<nsIKeyValueImporter>, nsresult> {
+        Err(nserror::NS_ERROR_NOT_IMPLEMENTED)
     }
 }
 
@@ -331,6 +347,23 @@ impl KeyValueDatabase {
         ));
 
         TaskRunnable::dispatch(TaskRunnable::new("KVDatabase::Delete", task)?, &self.queue)
+    }
+
+    xpcom_method!(
+        delete_range => DeleteRange(
+            callback: *const nsIKeyValueVoidCallback,
+            from_key: *const nsACString,
+            to_key: *const nsACString
+        )
+    );
+
+    fn delete_range(
+        &self,
+        _callback: &nsIKeyValueVoidCallback,
+        _from_key: &nsACString,
+        _to_key: &nsACString,
+    ) -> Result<(), nsresult> {
+        Err(NS_ERROR_NOT_IMPLEMENTED)
     }
 
     xpcom_method!(

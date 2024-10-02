@@ -296,14 +296,13 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
     return mConnMgr->GetSocketThreadTarget(target);
   }
 
-  [[nodiscard]] nsresult SpeculativeConnect(nsHttpConnectionInfo* ci,
-                                            nsIInterfaceRequestor* callbacks,
-                                            uint32_t caps = 0,
-                                            bool aFetchHTTPSRR = false) {
+  [[nodiscard]] nsresult MaybeSpeculativeConnectWithHTTPSRR(
+      nsHttpConnectionInfo* ci, nsIInterfaceRequestor* callbacks, uint32_t caps,
+      bool aFetchHTTPSRR) {
     TickleWifi(callbacks);
     RefPtr<nsHttpConnectionInfo> clone = ci->Clone();
     return mConnMgr->SpeculativeConnect(clone, callbacks, caps, nullptr,
-                                        aFetchHTTPSRR | EchConfigEnabled());
+                                        aFetchHTTPSRR);
   }
 
   [[nodiscard]] nsresult SpeculativeConnect(nsHttpConnectionInfo* ci,
@@ -433,8 +432,7 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
                                                  int32_t port,
                                                  nsACString& hostLine);
 
-  static uint8_t UrgencyFromCoSFlags(uint32_t cos,
-                                     int32_t aSupportsPriority = 0);
+  static uint8_t UrgencyFromCoSFlags(uint32_t cos, int32_t aSupportsPriority);
 
   SpdyInformation* SpdyInfo() { return &mSpdyInfo; }
   bool IsH2MandatorySuiteEnabled() { return mH2MandatorySuiteEnabled; }

@@ -218,6 +218,8 @@ export const SpecialMessageActions = {
       "cookiebanners.service.detectOnly",
       "messaging-system.askForFeedback",
       "browser.toolbars.bookmarks.visibility",
+      "sidebar.verticalTabs",
+      "sidebar.revamp",
     ];
 
     if (
@@ -482,6 +484,9 @@ export const SpecialMessageActions = {
       case "OPEN_PRIVATE_BROWSER_WINDOW":
         // Forcefully open about:privatebrowsing
         window.OpenBrowserWindow({ private: true });
+        break;
+      case "OPEN_SIDEBAR":
+        window.SidebarController.show(action.data);
         break;
       case "OPEN_URL":
         window.openLinkIn(

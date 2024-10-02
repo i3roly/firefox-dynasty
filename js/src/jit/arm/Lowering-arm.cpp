@@ -534,48 +534,56 @@ void LIRGeneratorARM::lowerPowOfTwoI(MPow* mir) {
   define(lir, mir);
 }
 
-void LIRGeneratorARM::lowerBigIntLsh(MBigIntLsh* ins) {
-  auto* lir = new (alloc()) LBigIntLsh(
-      useRegister(ins->lhs()), useRegister(ins->rhs()), temp(), temp(), temp());
+void LIRGeneratorARM::lowerBigIntPtrLsh(MBigIntPtrLsh* ins) {
+  auto* lir = new (alloc()) LBigIntPtrLsh(
+      useRegister(ins->lhs()), useRegister(ins->rhs()), temp(), temp());
+  assignSnapshot(lir, ins->bailoutKind());
   define(lir, ins);
-  assignSafepoint(lir, ins);
 }
 
-void LIRGeneratorARM::lowerBigIntRsh(MBigIntRsh* ins) {
-  auto* lir = new (alloc()) LBigIntRsh(
-      useRegister(ins->lhs()), useRegister(ins->rhs()), temp(), temp(), temp());
+void LIRGeneratorARM::lowerBigIntPtrRsh(MBigIntPtrRsh* ins) {
+  auto* lir = new (alloc()) LBigIntPtrRsh(
+      useRegister(ins->lhs()), useRegister(ins->rhs()), temp(), temp());
+  assignSnapshot(lir, ins->bailoutKind());
   define(lir, ins);
-  assignSafepoint(lir, ins);
 }
 
-void LIRGeneratorARM::lowerBigIntDiv(MBigIntDiv* ins) {
+void LIRGeneratorARM::lowerBigIntPtrDiv(MBigIntPtrDiv* ins) {
   LDefinition temp1, temp2;
   if (ARMFlags::HasIDIV()) {
-    temp1 = temp();
-    temp2 = temp();
+    temp1 = LDefinition::BogusTemp();
+    temp2 = LDefinition::BogusTemp();
   } else {
     temp1 = tempFixed(r0);
     temp2 = tempFixed(r1);
   }
-  auto* lir = new (alloc()) LBigIntDiv(useRegister(ins->lhs()),
-                                       useRegister(ins->rhs()), temp1, temp2);
+  auto* lir = new (alloc()) LBigIntPtrDiv(
+      useRegister(ins->lhs()), useRegister(ins->rhs()), temp1, temp2);
+  assignSnapshot(lir, ins->bailoutKind());
   define(lir, ins);
-  assignSafepoint(lir, ins);
+  if (!ARMFlags::HasIDIV()) {
+    assignSafepoint(lir, ins);
+  }
 }
 
-void LIRGeneratorARM::lowerBigIntMod(MBigIntMod* ins) {
+void LIRGeneratorARM::lowerBigIntPtrMod(MBigIntPtrMod* ins) {
   LDefinition temp1, temp2;
   if (ARMFlags::HasIDIV()) {
     temp1 = temp();
-    temp2 = temp();
+    temp2 = LDefinition::BogusTemp();
   } else {
     temp1 = tempFixed(r0);
     temp2 = tempFixed(r1);
   }
-  auto* lir = new (alloc()) LBigIntMod(useRegister(ins->lhs()),
-                                       useRegister(ins->rhs()), temp1, temp2);
+  auto* lir = new (alloc()) LBigIntPtrMod(
+      useRegister(ins->lhs()), useRegister(ins->rhs()), temp1, temp2);
+  if (ins->canBeDivideByZero()) {
+    assignSnapshot(lir, ins->bailoutKind());
+  }
   define(lir, ins);
-  assignSafepoint(lir, ins);
+  if (!ARMFlags::HasIDIV()) {
+    assignSafepoint(lir, ins);
+  }
 }
 
 void LIRGenerator::visitWasmNeg(MWasmNeg* ins) {

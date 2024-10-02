@@ -32,12 +32,10 @@ class FeatureSettingsHelperDelegate() : FeatureSettingsHelper {
         isHomeOnboardingDialogEnabled = settings.showHomeOnboardingDialog,
         homeOnboardingDialogVersion = getHomeOnboardingVersion(),
         isPocketEnabled = settings.showPocketRecommendationsFeature,
-        isJumpBackInCFREnabled = settings.shouldShowJumpBackInCFR,
         isNavigationBarCFREnabled = settings.shouldShowNavigationBarCFR,
         isRecentTabsFeatureEnabled = settings.showRecentTabsFeature,
         isRecentlyVisitedFeatureEnabled = settings.historyMetadataUIFeature,
         isPWAsPromptEnabled = !settings.userKnowsAboutPwas,
-        isTCPCFREnabled = settings.shouldShowTotalCookieProtectionCFR,
         isWallpaperOnboardingEnabled = settings.showWallpaperOnboarding,
         isDeleteSitePermissionsEnabled = settings.deleteSitePermissions,
         isOpenInAppBannerEnabled = settings.shouldShowOpenInAppBanner,
@@ -46,6 +44,8 @@ class FeatureSettingsHelperDelegate() : FeatureSettingsHelper {
         isLocationPermissionEnabled = getFeaturePermission(PhoneFeature.LOCATION, settings),
         isNavigationToolbarEnabled = settings.navigationToolbarEnabled,
         isMicrosurveyEnabled = settings.microsurveyFeatureEnabled,
+        isSetAsDefaultBrowserPromptEnabled = settings.setAsDefaultBrowserPromptForExistingUsersEnabled,
+        shouldUseBottomToolbar = settings.shouldUseBottomToolbar,
     )
 
     /**
@@ -65,19 +65,19 @@ class FeatureSettingsHelperDelegate() : FeatureSettingsHelper {
         }
 
     override var isPocketEnabled: Boolean by updatedFeatureFlags::isPocketEnabled
-    override var isJumpBackInCFREnabled: Boolean by updatedFeatureFlags::isJumpBackInCFREnabled
     override var isNavigationBarCFREnabled: Boolean by updatedFeatureFlags::isNavigationBarCFREnabled
     override var isWallpaperOnboardingEnabled: Boolean by updatedFeatureFlags::isWallpaperOnboardingEnabled
     override var isRecentTabsFeatureEnabled: Boolean by updatedFeatureFlags::isRecentTabsFeatureEnabled
     override var isRecentlyVisitedFeatureEnabled: Boolean by updatedFeatureFlags::isRecentlyVisitedFeatureEnabled
     override var isPWAsPromptEnabled: Boolean by updatedFeatureFlags::isPWAsPromptEnabled
-    override var isTCPCFREnabled: Boolean by updatedFeatureFlags::isTCPCFREnabled
     override var isOpenInAppBannerEnabled: Boolean by updatedFeatureFlags::isOpenInAppBannerEnabled
     override var etpPolicy: ETPPolicy by updatedFeatureFlags::etpPolicy
     override var composeTopSitesEnabled: Boolean by updatedFeatureFlags::composeTopSitesEnabled
     override var isLocationPermissionEnabled: SitePermissionsRules.Action by updatedFeatureFlags::isLocationPermissionEnabled
     override var isNavigationToolbarEnabled: Boolean by updatedFeatureFlags::isNavigationToolbarEnabled
     override var isMicrosurveyEnabled: Boolean by updatedFeatureFlags::isMicrosurveyEnabled
+    override var isSetAsDefaultBrowserPromptEnabled: Boolean by updatedFeatureFlags::isSetAsDefaultBrowserPromptEnabled
+    override var shouldUseBottomToolbar: Boolean by updatedFeatureFlags::shouldUseBottomToolbar
 
     override fun applyFlagUpdates() {
         Log.i(TAG, "applyFlagUpdates: Trying to apply the updated feature flags: $updatedFeatureFlags")
@@ -97,18 +97,18 @@ class FeatureSettingsHelperDelegate() : FeatureSettingsHelper {
         settings.showHomeOnboardingDialog = featureFlags.isHomeOnboardingDialogEnabled
         setHomeOnboardingVersion(featureFlags.homeOnboardingDialogVersion)
         settings.showPocketRecommendationsFeature = featureFlags.isPocketEnabled
-        settings.shouldShowJumpBackInCFR = featureFlags.isJumpBackInCFREnabled
         settings.shouldShowNavigationBarCFR = featureFlags.isNavigationBarCFREnabled
         settings.showRecentTabsFeature = featureFlags.isRecentTabsFeatureEnabled
         settings.historyMetadataUIFeature = featureFlags.isRecentlyVisitedFeatureEnabled
         settings.userKnowsAboutPwas = !featureFlags.isPWAsPromptEnabled
-        settings.shouldShowTotalCookieProtectionCFR = featureFlags.isTCPCFREnabled
         settings.showWallpaperOnboarding = featureFlags.isWallpaperOnboardingEnabled
         settings.deleteSitePermissions = featureFlags.isDeleteSitePermissionsEnabled
         settings.shouldShowOpenInAppBanner = featureFlags.isOpenInAppBannerEnabled
         settings.enableComposeTopSites = featureFlags.composeTopSitesEnabled
         settings.navigationToolbarEnabled = featureFlags.isNavigationToolbarEnabled
         settings.microsurveyFeatureEnabled = featureFlags.isMicrosurveyEnabled
+        settings.setAsDefaultBrowserPromptForExistingUsersEnabled = featureFlags.isSetAsDefaultBrowserPromptEnabled
+        settings.shouldUseBottomToolbar = featureFlags.shouldUseBottomToolbar
         setETPPolicy(featureFlags.etpPolicy)
         setPermissions(PhoneFeature.LOCATION, featureFlags.isLocationPermissionEnabled)
     }
@@ -118,12 +118,10 @@ private data class FeatureFlags(
     var isHomeOnboardingDialogEnabled: Boolean,
     var homeOnboardingDialogVersion: Int,
     var isPocketEnabled: Boolean,
-    var isJumpBackInCFREnabled: Boolean,
     var isNavigationBarCFREnabled: Boolean,
     var isRecentTabsFeatureEnabled: Boolean,
     var isRecentlyVisitedFeatureEnabled: Boolean,
     var isPWAsPromptEnabled: Boolean,
-    var isTCPCFREnabled: Boolean,
     var isWallpaperOnboardingEnabled: Boolean,
     var isDeleteSitePermissionsEnabled: Boolean,
     var isOpenInAppBannerEnabled: Boolean,
@@ -132,6 +130,8 @@ private data class FeatureFlags(
     var isLocationPermissionEnabled: SitePermissionsRules.Action,
     var isNavigationToolbarEnabled: Boolean,
     var isMicrosurveyEnabled: Boolean,
+    var isSetAsDefaultBrowserPromptEnabled: Boolean,
+    var shouldUseBottomToolbar: Boolean,
 )
 
 internal fun getETPPolicy(settings: Settings): ETPPolicy {

@@ -2598,24 +2598,91 @@ bool SharedContextWebgl::PruneTextureMemory(size_t aMargin, bool aPruneUnused) {
   return mNumTextureHandles < oldItems;
 }
 
-void DrawTargetWebgl::FillRect(const Rect& aRect, const Pattern& aPattern,
-                               const DrawOptions& aOptions) {
-  if (SupportsPattern(aPattern)) {
-    RectDouble xformRect = TransformDouble(aRect);
-    if (aPattern.GetType() == PatternType::COLOR) {
-      if (Maybe<Rect> clipped = RectClippedToViewport(xformRect)) {
-        // If the pattern is transform-invariant and the rect clips to the
-        // viewport, just clip drawing to the viewport to avoid transform
-        // issues.
-        DrawRect(*clipped, aPattern, aOptions, Nothing(), nullptr, false);
-        return;
+// Attempt to convert a linear gradient to a 1D ramp texture.
+Maybe<SurfacePattern> DrawTargetWebgl::LinearGradientToSurface(
+    const RectDouble& aBounds, const Pattern& aPattern) {
+  MOZ_ASSERT(aPattern.GetType() == PatternType::LINEAR_GRADIENT);
+  const auto& gradient = static_cast<const LinearGradientPattern&>(aPattern);
+  // The gradient points must be transformed by the gradient's matrix.
+  Point gradBegin = gradient.mMatrix.TransformPoint(gradient.mBegin);
+  Point gradEnd = gradient.mMatrix.TransformPoint(gradient.mEnd);
+  // Get the gradient points in user-space.
+  Point begin = mTransform.TransformPoint(gradBegin);
+  Point end = mTransform.TransformPoint(gradEnd);
+  // Find the normalized direction of the gradient and its length.
+  Point dir = end - begin;
+  float len = dir.Length();
+  dir = dir / len;
+  // Restrict the rendered bounds to fall within the canvas.
+  Rect visBounds = NarrowToFloat(aBounds.SafeIntersect(RectDouble(GetRect())));
+  // Calculate the distances along the gradient direction of the bounds.
+  float dist0 = (visBounds.TopLeft() - begin).DotProduct(dir);
+  float distX = visBounds.width * dir.x;
+  float distY = visBounds.height * dir.y;
+  float minDist = floorf(
+      std::max(dist0 + std::min(distX, 0.0f) + std::min(distY, 0.0f), 0.0f));
+  float maxDist = ceilf(
+      std::min(dist0 + std::max(distX, 0.0f) + std::max(distY, 0.0f), len));
+  // Calculate the approximate size of the ramp texture, and see if it would be
+  // sufficiently smaller than just rendering the primitive.
+  float subLen = maxDist - minDist;
+  if (subLen > 0 && subLen < 0.5f * visBounds.Area()) {
+    // Create a 1D texture to contain the gradient ramp. Reserve two extra
+    // texels at the beginning and end of the ramp to account for clamping.
+    RefPtr<DrawTargetSkia> dt = new DrawTargetSkia;
+    if (dt->Init(IntSize(int32_t(subLen + 2), 1), SurfaceFormat::B8G8R8A8)) {
+      // Fill the section of the gradient ramp that is actually used.
+      dt->FillRect(Rect(dt->GetRect()),
+                   LinearGradientPattern(Point(1 - minDist, 0.0f),
+                                         Point(len + 1 - minDist, 0.0f),
+                                         gradient.mStops));
+      if (RefPtr<SourceSurface> snapshot = dt->Snapshot()) {
+        // Calculate a matrix that will map the gradient ramp texture onto the
+        // actual direction of the gradient.
+        Point gradDir = (gradEnd - gradBegin) / len;
+        Point tangent = Point(-gradDir.y, gradDir.x) / gradDir.Length();
+        SurfacePattern surfacePattern(
+            snapshot, ExtendMode::CLAMP,
+            Matrix(gradDir.x, gradDir.y, tangent.x, tangent.y, gradBegin.x,
+                   gradBegin.y)
+                .PreTranslate(minDist - 1, 0));
+        if (SupportsPattern(surfacePattern)) {
+          return Some(surfacePattern);
+        }
       }
     }
-    if (RectInsidePrecisionLimits(xformRect)) {
-      DrawRect(aRect, aPattern, aOptions);
+  }
+  return Nothing();
+}
+
+void DrawTargetWebgl::FillRect(const Rect& aRect, const Pattern& aPattern,
+                               const DrawOptions& aOptions) {
+  RectDouble xformRect = TransformDouble(aRect);
+  if (aPattern.GetType() == PatternType::COLOR) {
+    if (Maybe<Rect> clipped = RectClippedToViewport(xformRect)) {
+      // If the pattern is transform-invariant and the rect clips to the
+      // viewport, just clip drawing to the viewport to avoid transform
+      // issues.
+      DrawRect(*clipped, aPattern, aOptions, Nothing(), nullptr, false);
       return;
     }
   }
+  if (RectInsidePrecisionLimits(xformRect)) {
+    if (SupportsPattern(aPattern)) {
+      DrawRect(aRect, aPattern, aOptions);
+      return;
+    }
+    if (aPattern.GetType() == PatternType::LINEAR_GRADIENT) {
+      if (Maybe<SurfacePattern> surface =
+              LinearGradientToSurface(xformRect, aPattern)) {
+        if (DrawRect(aRect, *surface, aOptions, Nothing(), nullptr, true, true,
+                     true)) {
+          return;
+        }
+      }
+    }
+  }
+
   if (!mWebglValid) {
     MarkSkiaChanged(aOptions);
     mSkia->FillRect(aRect, aPattern, aOptions);
@@ -2772,7 +2839,7 @@ void DrawTargetWebgl::Fill(const Path* aPath, const Pattern& aPattern,
   const SkPath& skiaPath = static_cast<const PathSkia*>(aPath)->GetPath();
   SkRect skiaRect = SkRect::MakeEmpty();
   // Draw the path as a simple rectangle with a supported pattern when possible.
-  if (skiaPath.isRect(&skiaRect) && SupportsPattern(aPattern)) {
+  if (skiaPath.isRect(&skiaRect)) {
     RectDouble rect = SkRectToRectDouble(skiaRect);
     RectDouble xformRect = TransformDouble(rect);
     if (aPattern.GetType() == PatternType::COLOR) {
@@ -2784,9 +2851,21 @@ void DrawTargetWebgl::Fill(const Path* aPath, const Pattern& aPattern,
         return;
       }
     }
+
     if (RectInsidePrecisionLimits(xformRect)) {
-      DrawRect(NarrowToFloat(rect), aPattern, aOptions);
-      return;
+      if (SupportsPattern(aPattern)) {
+        DrawRect(NarrowToFloat(rect), aPattern, aOptions);
+        return;
+      }
+      if (aPattern.GetType() == PatternType::LINEAR_GRADIENT) {
+        if (Maybe<SurfacePattern> surface =
+                LinearGradientToSurface(xformRect, aPattern)) {
+          if (DrawRect(NarrowToFloat(rect), *surface, aOptions, Nothing(),
+                       nullptr, true, true, true)) {
+            return;
+          }
+        }
+      }
     }
   }
 
@@ -4250,22 +4329,22 @@ bool SharedContextWebgl::DrawGlyphsAccel(ScaledFont* aFont,
   DeviceColor color = aOptions.mCompositionOp == CompositionOp::OP_CLEAR
                           ? DeviceColor(1, 1, 1, 1)
                           : static_cast<const ColorPattern&>(aPattern).mColor;
-#if defined(XP_MACOSX) || defined(XP_WIN)
-  // macOS and Windows use gamma-aware blending.
-  bool usePreblend = aUseSubpixelAA;
-#else
-  // FreeType backends currently don't use any preblending.
-  bool usePreblend = false;
-#endif
-
-#ifdef XP_MACOSX
+#if defined(XP_MACOSX)
+  // macOS uses gamma-aware blending with font smooth from subpixel AA.
   // If font smoothing is requested, even if there is no subpixel AA, gamma-
   // aware blending might be used and differing amounts of dilation might be
   // applied.
-  if (aFont->GetType() == FontType::MAC &&
-      static_cast<ScaledFontMac*>(aFont)->UseFontSmoothing()) {
-    usePreblend = true;
-  }
+  bool usePreblend = aUseSubpixelAA ||
+                     (aFont->GetType() == FontType::MAC &&
+                      static_cast<ScaledFontMac*>(aFont)->UseFontSmoothing());
+#elif defined(XP_WIN)
+  // Windows uses gamma-aware blending via ClearType with grayscale and subpixel
+  // AA.
+  bool usePreblend =
+      aUseSubpixelAA || aOptions.mAntialiasMode != AntialiasMode::NONE;
+#else
+  // FreeType backends currently don't use any preblending.
+  bool usePreblend = false;
 #endif
 
   // If the font has bitmaps, use the color directly. Otherwise, the texture

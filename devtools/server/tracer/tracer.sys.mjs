@@ -46,13 +46,10 @@ const listeners = new Set();
 
 // Detecting worker is different if this file is loaded via Common JS loader (isWorker global)
 // or as a JSM (constructor name)
+// eslint-disable-next-line no-shadow
 const isWorker =
   globalThis.isWorker ||
   globalThis.constructor.name == "WorkerDebuggerGlobalScope";
-
-// The following preference controls the depth limit which, when hit,
-// will automatically stop the tracer and declare the current stack as an infinite loop.
-const MAX_DEPTH_PREF = "devtools.debugger.javascript-tracing-max-depth";
 
 // This module can be loaded from the worker thread, where we can't use ChromeUtils.
 // So implement custom lazy getters (without XPCOMUtils ESM) from here.
@@ -70,6 +67,8 @@ const customLazy = {
     // this module no longer has WorkerDebuggerGlobalScope as global,
     // but has to use require() to pull Debugger.
     if (isWorker) {
+      // require is defined for workers.
+      // eslint-disable-next-line no-undef
       return require("Debugger");
     }
     const { addDebuggerToGlobal } = ChromeUtils.importESModule(
@@ -222,9 +221,6 @@ class JavaScriptTracer {
     this.traceFunctionReturn = !!options.traceFunctionReturn;
     this.useNativeTracing = !!options.useNativeTracing;
     this.maxDepth = options.maxDepth;
-    this.infiniteLoopDepthLimit = isWorker
-      ? 200
-      : Services.prefs.getIntPref(MAX_DEPTH_PREF, 200);
     this.maxRecords = options.maxRecords;
     this.records = 0;
     if ("pauseOnStep" in options) {
@@ -485,8 +481,14 @@ class JavaScriptTracer {
     // We don't need to maintain a stack of events as that's only consumed by onEnterFrame
     // which only cares about the very lastest event being currently trigerring some code.
     if (notification.phase == "pre") {
-      // We get notified about "real" DOM event, but also when some particular callbacks are called like setTimeout.
+      // We get notified about "real" DOM event when type is "domEvent",
+      // but also when some other DOM APIs are involved.
+      // notification's type will be "setTimeout" when the setTimeout method is called,
+      // or "setTimeoutCallback" when the callback passed to setTimeout is called.
+      // This also work against setInterval/clearTimeout/clearInterval and requestAnimationFrame.
       if (notification.type == "domEvent") {
+        // `targetType` can help distinguish same-name DOM events fired against XHR, window or workers.
+        const { targetType } = notification;
         let { type } = notification.event;
         if (!type) {
           // In the Worker thread, `notification.event` is an opaque wrapper.
@@ -497,7 +499,7 @@ class JavaScriptTracer {
             .makeDebuggeeValue(notification.event)
             .getProperty("type").return;
         }
-        this.currentDOMEvent = `DOM | ${type}`;
+        this.currentDOMEvent = `${targetType}.${type}`;
       } else {
         this.currentDOMEvent = notification.type;
       }
@@ -634,25 +636,6 @@ class JavaScriptTracer {
   }
 
   /**
-   * Notify DevTools and/or the user via stdout that tracing
-   * stopped because of an infinite loop.
-   */
-  notifyInfiniteLoop() {
-    let shouldLogToStdout = listeners.size == 0;
-    for (const listener of listeners) {
-      if (typeof listener.onTracingInfiniteLoop == "function") {
-        shouldLogToStdout |= listener.onTracingInfiniteLoop();
-      }
-    }
-    if (shouldLogToStdout) {
-      this.loggingMethod(
-        this.prefix +
-          `Looks like an infinite recursion? We stopped the JavaScript tracer, but code may still be running!\n(This is configurable via ${MAX_DEPTH_PREF} preference)\n`
-      );
-    }
-  }
-
-  /**
    * Called by the Debugger API (this.dbg) when a new frame is executed.
    *
    * @param {Debugger.Frame} frame
@@ -698,13 +681,6 @@ class JavaScriptTracer {
           return;
         }
         this.records++;
-      }
-
-      // Consider that beyond some depth, we are running an infinite recursive loop and stop the tracer.
-      if (depth == this.infiniteLoopDepthLimit) {
-        this.notifyInfiniteLoop();
-        this.stopTracing("infinite-loop");
-        return;
       }
 
       const frameId = this.frameId++;
@@ -865,7 +841,9 @@ class JavaScriptTracer {
     // and are logging the topmost frame,
     // then log a preliminary dedicated line to mention that event type.
     if (this.currentDOMEvent && depth == 0) {
-      this.loggingMethod(this.prefix + padding + this.currentDOMEvent + "\n");
+      this.loggingMethod(
+        this.prefix + padding + "DOM | " + this.currentDOMEvent + "\n"
+      );
     }
 
     let message = `${padding}[${frame.implementation}]—> ${getTerminalHyperLink(
@@ -1071,9 +1049,6 @@ function maybeGetNativeTrace() {
  *   Where state is a boolean to indicate if tracing has just been enabled of disabled.
  *   It may be immediatelly called if a tracer is already active.
  *
- * - onTracingInfiniteLoop()
- *   Called when the tracer stopped because of an infinite loop.
- *
  * - onTracingFrame({ frame, depth, formatedDisplayName, prefix })
  *   Called each time we enter a new JS frame.
  *   - frame is a Debugger.Frame object
@@ -1106,6 +1081,10 @@ function getFrameDepth(frame) {
     let depth = 0;
     let f = frame;
     while ((f = f.older)) {
+      if (f.depth) {
+        depth = depth + f.depth + 1;
+        break;
+      }
       depth++;
     }
     frame.depth = depth;
@@ -1168,5 +1147,4 @@ export const JSTracer = {
   removeTracingListener,
   NEXT_INTERACTION_MESSAGE,
   DOM_MUTATIONS,
-  MAX_DEPTH_PREF,
 };

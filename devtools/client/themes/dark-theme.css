@@ -188,8 +188,7 @@ body {
   color: var(--theme-contrast-color);
 }
 
-.ruleview-swatch,
-.computed-colorswatch {
+.inspector-swatch {
   box-shadow: 0 0 0 1px #818181;
 }
 
@@ -228,14 +227,6 @@ body {
 }
 .cm-s-mozilla .CodeMirror-lines .CodeMirror-cursor.CodeMirror-secondarycursor {
   border-left-color: #aaa;
-}
-
-.cm-s-mozilla.CodeMirror-focused .CodeMirror-selected { /* selected text (focused) */
-  background: var(--theme-selection-background-hover);
-}
-
-.cm-s-mozilla .CodeMirror-selected { /* selected text (unfocused) */
-  background: var(--theme-selection-background-hover);
 }
 
 .cm-s-mozilla .CodeMirror-activeline-background { /* selected color with alpha */

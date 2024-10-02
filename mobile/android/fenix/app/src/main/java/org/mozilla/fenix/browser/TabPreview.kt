@@ -23,6 +23,7 @@ import mozilla.components.browser.state.selector.getNormalOrPrivateTabs
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.thumbnails.loader.ThumbnailLoader
 import mozilla.components.concept.base.images.ImageLoadRequest
+import mozilla.components.support.utils.ext.isLandscape
 import mozilla.components.ui.tabcounter.TabCounterMenu
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerView
@@ -53,32 +54,39 @@ class TabPreview @JvmOverloads constructor(
 
     private val binding = TabPreviewBinding.inflate(LayoutInflater.from(context), this)
     private val thumbnailLoader = ThumbnailLoader(context.components.core.thumbnailStorage)
+    private val browserStore = context.components.core.store
 
     private var bottomToolbarContainerView: BottomToolbarContainerView? = null
+    private var mockToolbarView: View = binding.fakeToolbar
 
     init {
         initializeView()
     }
 
+    @Suppress("LongMethod")
     private fun initializeView() {
+        val isNavBarVisible = context.shouldAddNavigationBar()
+        val isNavBarEnabled = context.settings().navigationToolbarEnabled
+        val isLandscape = context.isLandscape()
+        val isTablet = context.isTablet()
         val isToolbarAtTop = context.settings().toolbarPosition == ToolbarPosition.TOP
+
+        binding.fakeToolbar.isVisible = !isNavBarEnabled
+        binding.fakeToolbarTwo.isVisible = isNavBarEnabled
+        mockToolbarView = if (isNavBarEnabled) binding.fakeToolbarTwo else binding.fakeToolbar
+        initNavBarLandscapeChanges(isNavBarEnabled && (isLandscape || isTablet))
+
         if (isToolbarAtTop) {
-            binding.fakeToolbar.updateLayoutParams<LayoutParams> {
+            mockToolbarView.updateLayoutParams<LayoutParams> {
                 gravity = Gravity.TOP
             }
-
-            binding.fakeToolbar.background = AppCompatResources.getDrawable(
+            mockToolbarView.background = AppCompatResources.getDrawable(
                 context,
                 ThemeManager.resolveAttribute(R.attr.bottomBarBackgroundTop, context),
             )
         }
 
-        val isNavBarVisible = context.shouldAddNavigationBar()
-        binding.tabButton.isVisible = !isNavBarVisible
-        binding.menuButton.isVisible = !isNavBarVisible
-
         if (isNavBarVisible) {
-            val browserStore = context.components.core.store
             bottomToolbarContainerView = BottomToolbarContainerView(
                 context = context,
                 parent = this,
@@ -87,8 +95,8 @@ class TabPreview @JvmOverloads constructor(
                         Column {
                             if (!isToolbarAtTop) {
                                 // before adding fake navigation bar in the preview, remove fake toolbar
-                                removeView(binding.fakeToolbar)
-                                AndroidView(factory = { _ -> binding.fakeToolbar })
+                                removeView(mockToolbarView)
+                                AndroidView(factory = { _ -> mockToolbarView })
                             } else {
                                 Divider()
                             }
@@ -158,7 +166,7 @@ class TabPreview @JvmOverloads constructor(
         }
 
         binding.previewThumbnail.translationY = if (context.settings().toolbarPosition == ToolbarPosition.TOP) {
-            binding.fakeToolbar.height.toFloat()
+            mockToolbarView.height.toFloat()
         } else {
             0f
         }
@@ -166,16 +174,39 @@ class TabPreview @JvmOverloads constructor(
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (context.settings().navigationToolbarEnabled && !context.isTablet()) {
-            updateNavBarForConfigurationChange(
-                context = context,
-                parent = this,
-                toolbarView = binding.fakeToolbar,
-                bottomToolbarContainerView = bottomToolbarContainerView?.toolbarContainerView,
-                reinitializeNavBar = ::initializeView,
-                reinitializeMicrosurveyPrompt = {},
-            )
+        if (context.settings().navigationToolbarEnabled) {
+            val isTablet = context.isTablet()
+            val isLandscape = context.isLandscape()
+
+            initNavBarLandscapeChanges(isTablet || isLandscape)
+
+            if (!isTablet) {
+                updateNavBarForConfigurationChange(
+                    context = context,
+                    parent = this,
+                    toolbarView = mockToolbarView,
+                    bottomToolbarContainerView = bottomToolbarContainerView?.toolbarContainerView,
+                    reinitializeNavBar = ::initializeView,
+                    reinitializeMicrosurveyPrompt = {},
+                )
+            }
         }
+    }
+
+    /**
+     * Changes the visibility of the landscape changes to the Toolbar if Navigation Toolbar
+     * is active based on layout.
+     */
+    private fun initNavBarLandscapeChanges(isLandscapeOrTablet: Boolean) {
+        val isFeltPrivacyEnabled = context.settings().feltPrivateBrowsingEnabled
+        val isInPrivateMode = browserStore.state.selectedTab?.content?.private ?: false
+        binding.fakeClearDataButton.isVisible = isFeltPrivacyEnabled && isLandscapeOrTablet && isInPrivateMode
+
+        binding.fakeBackButton.isVisible = isLandscapeOrTablet
+        binding.fakeForwardButton.isVisible = isLandscapeOrTablet
+        binding.fakeNewTabButton.isVisible = isLandscapeOrTablet
+        binding.fakeTabCounter.isVisible = isLandscapeOrTablet
+        binding.fakeMenuButton.isVisible = isLandscapeOrTablet
     }
 
     /**

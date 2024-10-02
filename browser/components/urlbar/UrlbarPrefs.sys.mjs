@@ -157,6 +157,11 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // Whether the results panel should be kept open during IME composition.
   ["keepPanelOpenDuringImeComposition", false],
 
+  // Comma-separated list of result types that should trigger keyword-exposure
+  // telemetry. Only applies to results with an `exposureTelemetry` value other
+  // than `NONE`.
+  ["keywordExposureResults", ""],
+
   // As a user privacy measure, don't fetch results from remote services for
   // searches that start by pasting a string longer than this. The pref name
   // indicates search suggestions, but this is used for all remote results.
@@ -246,6 +251,12 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // sponsored and recommended results related to the user's search string.
   ["quicksuggest.enabled", false],
 
+  // Comma-separated list of Suggest exposure suggestion types to enable.
+  ["quicksuggest.exposureSuggestionTypes", ""],
+
+  // Whether Suggest should be hidden in the settings UI even when enabled.
+  ["quicksuggest.hideSettingsUI", false],
+
   // Whether non-sponsored quick suggest results are subject to impression
   // frequency caps. This pref is a fallback for the Nimbus variable
   // `quickSuggestImpressionCapsNonSponsoredEnabled`.
@@ -305,7 +316,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   ["quicksuggest.seenRestarts", 0],
 
   // Whether to show the quick suggest onboarding dialog.
-  ["quicksuggest.shouldShowOnboardingDialog", true],
+  ["quicksuggest.shouldShowOnboardingDialog", false],
 
   // Whether the user has seen the onboarding dialog.
   ["quicksuggest.showedOnboardingDialog", false],
@@ -506,10 +517,6 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // Feature gate pref for weather suggestions in the urlbar.
   ["weather.featureGate", false],
-
-  // When false, the weather suggestion will not be fetched when a VPN is
-  // detected. When true, it will be fetched anyway.
-  ["weather.ignoreVPN", false],
 
   // The minimum prefix length of a weather keyword the user must type to
   // trigger the suggestion. 0 means the min length should be taken from Nimbus
@@ -1101,6 +1108,10 @@ class Preferences {
     return {
       history: {
         "quicksuggest.enabled": false,
+        "quicksuggest.dataCollection.enabled": false,
+        "quicksuggest.shouldShowOnboardingDialog": false,
+        "suggest.quicksuggest.nonsponsored": false,
+        "suggest.quicksuggest.sponsored": false,
       },
       offline: {
         "quicksuggest.enabled": true,
@@ -1570,26 +1581,14 @@ class Preferences {
           ? this.get("autoFill.adaptiveHistory.useCountThreshold")
           : parseFloat(nimbusValue);
       }
-      case "potentialExposureKeywords": {
-        // Get the keywords array from Nimbus or prefs and convert it to a Set.
-        // If the value comes from Nimbus, it will already be an array. If it
-        // comes from prefs, it should be a stringified array.
-        let value = this._readPref(pref);
-        if (typeof value == "string") {
-          try {
-            value = JSON.parse(value);
-          } catch (e) {}
-        }
-        if (!Array.isArray(value)) {
-          value = null;
-        }
-        return new Set(value);
-      }
       case "exposureResults":
+      case "keywordExposureResults":
+      case "quicksuggest.exposureSuggestionTypes":
         return new Set(
           this._readPref(pref)
             .split(",")
             .map(s => s.trim())
+            .filter(s => !!s)
         );
     }
     return this._readPref(pref);

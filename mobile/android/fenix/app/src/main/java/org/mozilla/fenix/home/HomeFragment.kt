@@ -6,16 +6,15 @@ package org.mozilla.fenix.home
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.StrictMode
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.DrawableRes
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Column
@@ -97,7 +96,6 @@ import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.GleanMetrics.HomeScreen
 import org.mozilla.fenix.GleanMetrics.Homepage
-import org.mozilla.fenix.GleanMetrics.Logins
 import org.mozilla.fenix.GleanMetrics.NavigationBar
 import org.mozilla.fenix.GleanMetrics.PrivateBrowsingShortcutCfr
 import org.mozilla.fenix.HomeActivity
@@ -131,8 +129,8 @@ import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.isTablet
 import org.mozilla.fenix.ext.isToolbarAtBottom
 import org.mozilla.fenix.ext.nav
+import org.mozilla.fenix.ext.openSetDefaultBrowserOption
 import org.mozilla.fenix.ext.recordEventInNimbus
-import org.mozilla.fenix.ext.registerForActivityResult
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.scaleToBottomOfView
 import org.mozilla.fenix.ext.settings
@@ -274,8 +272,6 @@ class HomeFragment : Fragment() {
     private val bottomToolbarContainerIntegration = ViewBoundFeatureWrapper<BottomToolbarContainerIntegration>()
     private val homeScreenPopupManager = ViewBoundFeatureWrapper<HomeScreenPopupManager>()
 
-    private lateinit var savedLoginsLauncher: ActivityResultLauncher<Intent>
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // DO NOT ADD ANYTHING ABOVE THIS getProfilerTime CALL!
         val profilerStartTime = requireComponents.core.engine.profiler?.getProfilerTime()
@@ -286,7 +282,6 @@ class HomeFragment : Fragment() {
         if (savedInstanceState != null) {
             bundleArgs.putBoolean(FOCUS_ON_ADDRESS_BAR, false)
         }
-        savedLoginsLauncher = registerForActivityResult { navigateToSavedLoginsFragment() }
 
         // DO NOT MOVE ANYTHING BELOW THIS addMarker CALL!
         requireComponents.core.engine.profiler?.addMarker(
@@ -509,8 +504,6 @@ class HomeFragment : Fragment() {
             interactor = sessionControlInteractor,
             homeFragment = this,
             homeActivity = activity,
-            onShowPinVerification = { intent -> savedLoginsLauncher.launch(intent) },
-            onBiometricAuthenticationSuccessful = { navigateToSavedLoginsFragment() },
         )
 
         if (requireContext().settings().microsurveyFeatureEnabled) {
@@ -569,7 +562,7 @@ class HomeFragment : Fragment() {
                 reinitializeNavBar = ::reinitializeNavBar,
                 reinitializeMicrosurveyPrompt = { initializeMicrosurveyPrompt() },
             )
-            toolbarView?.updateButtonVisibility()
+            toolbarView?.updateButtonVisibility(requireComponents.core.store.state)
         }
 
         // If the microsurvey feature is visible, we should update it's state.
@@ -608,15 +601,12 @@ class HomeFragment : Fragment() {
         val menuButton = MenuButton(context)
         menuButton.recordClickEvent = { NavigationBar.homeMenuTapped.record(NoExtras()) }
         HomeMenuView(
-            view = binding.root,
             context = context,
             lifecycleOwner = viewLifecycleOwner,
             homeActivity = activity,
             navController = findNavController(),
             homeFragment = this,
             menuButton = WeakReference(menuButton),
-            onShowPinVerification = { intent -> savedLoginsLauncher.launch(intent) },
-            onBiometricAuthenticationSuccessful = ::navigateToSavedLoginsFragment,
         ).also { it.build() }
 
         _bottomToolbarContainerView = BottomToolbarContainerView(
@@ -626,18 +616,16 @@ class HomeFragment : Fragment() {
             content = {
                 FirefoxTheme {
                     Column {
-                        Divider()
-
                         if (!activity.isMicrosurveyPromptDismissed.value &&
                             !context.settings().shouldShowNavigationBarCFR
                         ) {
-                            currentMicrosurvey.let {
-                                if (it == null) {
-                                    binding.bottomBarShadow.visibility = View.VISIBLE
-                                } else {
+                            currentMicrosurvey
+                                ?.let {
                                     if (isToolbarAtBottom) {
                                         updateToolbarViewUIForMicrosurveyPrompt()
                                     }
+
+                                    Divider()
 
                                     MicrosurveyRequestPrompt(
                                         microsurvey = it,
@@ -663,7 +651,8 @@ class HomeFragment : Fragment() {
                                         },
                                     )
                                 }
-                            }
+                        } else {
+                            binding.bottomBarShadow.visibility = View.VISIBLE
                         }
 
                         if (isToolbarAtBottom) {
@@ -791,6 +780,7 @@ class HomeFragment : Fragment() {
                 appStore = requireComponents.appStore,
                 bottomToolbarContainerView = bottomToolbarContainerView,
                 sessionId = null,
+                findInPageFeature = { null },
             ),
             owner = this,
             view = binding.root,
@@ -827,20 +817,18 @@ class HomeFragment : Fragment() {
             content = {
                 FirefoxTheme {
                     Column {
-                        Divider()
-
                         val activity = requireActivity() as HomeActivity
                         val shouldShowNavBarCFR =
                             context.shouldAddNavigationBar() && context.settings().shouldShowNavigationBarCFR
 
                         if (!activity.isMicrosurveyPromptDismissed.value && !shouldShowNavBarCFR) {
-                            currentMicrosurvey.let {
-                                if (it == null) {
-                                    binding.bottomBarShadow.visibility = View.VISIBLE
-                                } else {
+                            currentMicrosurvey
+                                ?.let {
                                     if (isToolbarAtTheBottom) {
                                         updateToolbarViewUIForMicrosurveyPrompt()
                                     }
+
+                                    Divider()
 
                                     MicrosurveyRequestPrompt(
                                         microsurvey = it,
@@ -864,7 +852,8 @@ class HomeFragment : Fragment() {
                                         },
                                     )
                                 }
-                            }
+                        } else {
+                            binding.bottomBarShadow.visibility = View.VISIBLE
                         }
 
                         if (isToolbarAtTheBottom) {
@@ -1045,7 +1034,7 @@ class HomeFragment : Fragment() {
             initializeNavBar(activity as HomeActivity)
         }
 
-        toolbarView?.build()
+        toolbarView?.build(requireComponents.core.store.state)
         if (requireContext().isTabStripEnabled()) {
             initTabStrip()
         }
@@ -1069,6 +1058,14 @@ class HomeFragment : Fragment() {
         }
 
         homeViewModel.sessionToDelete = null
+
+        // Determine if we should show the "Set as Default Browser" prompt
+        if (requireContext().settings().shouldShowSetAsDefaultPrompt) {
+            // This is to avoid disk read violations on some devices such as samsung and pixel for android 9/10
+            requireComponents.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
+                showSetAsDefaultBrowserPrompt()
+            }
+        }
 
         requireComponents.appStore.state.wasLastTabClosedPrivate?.also {
             showUndoSnackbar(requireContext().tabClosedUndoMessage(it))
@@ -1159,11 +1156,7 @@ class HomeFragment : Fragment() {
                             appState = appState,
                             settings = settings,
                         ),
-                        privateBrowsingInteractor = sessionControlInteractor,
-                        topSiteInteractor = sessionControlInteractor,
-                        recentTabInteractor = sessionControlInteractor,
-                        recentSyncedTabInteractor = sessionControlInteractor,
-                        bookmarksInteractor = sessionControlInteractor,
+                        interactor = sessionControlInteractor,
                         onTopSitesItemBound = {
                             StartupTimeline.onTopSitesItemBound(activity = (requireActivity() as HomeActivity))
                         },
@@ -1611,16 +1604,12 @@ class HomeFragment : Fragment() {
         }
     }
 
-    /**
-     * Called when authentication succeeds.
-     */
-    private fun navigateToSavedLoginsFragment() {
-        val navController = findNavController()
-        if (navController.currentDestination?.id == R.id.homeFragment) {
-            Logins.openLogins.record(NoExtras())
-            val directions = HomeFragmentDirections.actionLoginsListFragment()
-            navController.navigate(directions)
-        }
+    @VisibleForTesting
+    internal fun showSetAsDefaultBrowserPrompt() {
+        val settings = requireContext().settings()
+        settings.setAsDefaultPromptCalled()
+
+        activity?.openSetDefaultBrowserOption()
     }
 
     companion object {

@@ -231,7 +231,7 @@ async function assertBreakableLines(
 ) {
   await selectSource(dbg, source);
   is(
-    getCM(dbg).lineCount(),
+    getLineCount(dbg),
     numberOfLines,
     `We show the expected number of lines in CodeMirror for ${source}`
   );
@@ -254,14 +254,6 @@ function getRange(start, end) {
     range.push(i);
   }
   return range;
-}
-
-/**
- * Wait for CodeMirror to start searching
- */
-function waitForSearchState(dbg) {
-  const cm = getCM(dbg);
-  return waitFor(() => cm.state.search);
 }
 
 /**

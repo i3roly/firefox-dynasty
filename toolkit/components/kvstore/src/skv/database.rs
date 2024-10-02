@@ -9,6 +9,7 @@ use std::{borrow::Borrow, ops::RangeBounds};
 use rusqlite::ToSql;
 
 use crate::skv::{
+    connection::{ConnectionIncident, ToConnectionIncident},
     key::Key,
     sql::RangeFragment,
     store::{Store, StoreError},
@@ -68,6 +69,27 @@ impl<'a> Database<'a> {
         self.put_or_delete(&[], &[Delete(key)])
     }
 
+    pub fn delete_range(&self, range: impl RangeBounds<Key>) -> Result<(), DatabaseError> {
+        let writer = self.store.writer()?;
+        writer.write(|tx| {
+            let fragment = RangeFragment::new("key", &range);
+            let mut statement = tx.prepare_cached(&format!(
+                "DELETE FROM
+                   data
+                 WHERE
+                   db_id = (SELECT id FROM dbs WHERE name = :name) AND
+                   {fragment}"
+            ))?;
+            let params = match (fragment.start_param(), fragment.end_param()) {
+                (Some(p), Some(q)) => vec![(":name", &self.name as &dyn ToSql), p, q],
+                (Some(p), None) | (None, Some(p)) => vec![(":name", &self.name as &dyn ToSql), p],
+                (None, None) => vec![(":name", &self.name as &dyn ToSql)],
+            };
+            statement.execute(params.as_slice())?;
+            Ok(())
+        })
+    }
+
     pub fn clear(&self) -> Result<(), DatabaseError> {
         let writer = self.store.writer()?;
         writer.write(|tx| {
@@ -84,11 +106,7 @@ impl<'a> Database<'a> {
         range: impl RangeBounds<Key>,
         options: &GetOptions,
     ) -> Result<Vec<(Key, Value)>, DatabaseError> {
-        let reader = match options.concurrent {
-            true => self.store.reader()?,
-            false => self.store.writer()?,
-        };
-        reader.read(|conn| {
+        let r = |conn: &rusqlite::Connection| {
             let fragment = RangeFragment::new("v.key", &range);
             let mut statement = conn.prepare_cached(&format!(
                 "SELECT
@@ -125,7 +143,11 @@ impl<'a> Database<'a> {
                 })
                 .collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(values)
-        })
+        };
+        match options.concurrent {
+            true => self.store.reader()?.read(r),
+            false => self.store.writer()?.read(r),
+        }
     }
 
     pub fn is_empty(&self) -> Result<bool, DatabaseError> {
@@ -182,11 +204,7 @@ impl<'a> Database<'a> {
         options: &GetOptions,
         f: impl FnOnce(&mut rusqlite::Statement<'_>, &[(&str, &dyn ToSql)]) -> Result<T, DatabaseError>,
     ) -> Result<T, DatabaseError> {
-        let reader = match options.concurrent {
-            true => self.store.reader()?,
-            false => self.store.writer()?,
-        };
-        reader.read(|conn| {
+        let r = |conn: &rusqlite::Connection| {
             let mut statement = conn.prepare_cached(
                 "SELECT
                    json(v.value) AS value
@@ -205,7 +223,11 @@ impl<'a> Database<'a> {
                 ":key": key,
             };
             f(&mut statement, params)
-        })
+        };
+        match options.concurrent {
+            true => self.store.reader()?.read(r),
+            false => self.store.writer()?.read(r),
+        }
     }
 
     fn put_or_delete(&self, puts: &[Put], deletes: &[Delete]) -> Result<(), DatabaseError> {
@@ -293,4 +315,13 @@ pub enum DatabaseError {
     Store(#[from] StoreError),
     #[error("sqlite: {0}")]
     Sqlite(#[from] rusqlite::Error),
+}
+
+impl ToConnectionIncident for DatabaseError {
+    fn to_incident(&self) -> Option<ConnectionIncident> {
+        match self {
+            Self::Store(err) => err.to_incident(),
+            Self::Sqlite(err) => err.to_incident(),
+        }
+    }
 }

@@ -9,6 +9,7 @@
 
 #include "mozilla/Assertions.h"  // MOZ_ASSERT
 #include "mozilla/Attributes.h"  // MOZ_STACK_CLASS
+#include "mozilla/Maybe.h"       // mozilla::{Maybe,Some}
 #include "mozilla/Range.h"       // mozilla::Range
 #include "mozilla/RangedPtr.h"   // mozilla::RangedPtr
 
@@ -207,6 +208,10 @@ class MOZ_STACK_CLASS JSONFullParseHandlerAnyChar {
 
   JSContext* cx;
 
+  bool reportLineNumbersFromParsedData = false;
+
+  mozilla::Maybe<JS::ConstUTF8CharsZ> filename;
+
   JS::Value v;
 
   ParseType parseType = ParseType::JSONParse;
@@ -324,7 +329,6 @@ class MOZ_STACK_CLASS JSONFullParseHandler
   void reportError(const char* msg, uint32_t line, uint32_t column);
 };
 
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
 template <typename CharT>
 class MOZ_STACK_CLASS JSONReviveHandler : public JSONFullParseHandler<CharT> {
   using CharPtr = mozilla::RangedPtr<const CharT>;
@@ -416,7 +420,6 @@ class MOZ_STACK_CLASS JSONReviveHandler : public JSONFullParseHandler<CharT> {
  public:
   ParseRecordObject parseRecord;
 };
-#endif  // ENABLE_JSON_PARSE_WITH_SOURCE
 
 template <typename CharT>
 class MOZ_STACK_CLASS JSONSyntaxParseHandler {
@@ -598,10 +601,21 @@ class MOZ_STACK_CLASS JSONParser
    */
   bool parse(JS::MutableHandle<JS::Value> vp);
 
+  void reportLineNumbersFromParsedData(bool b) {
+    this->handler.reportLineNumbersFromParsedData = b;
+  }
+
+  /**
+   * Set a filename to be used in error messages.
+   * This is optional and only used for error reporting.
+   */
+  void setFilename(JS::ConstUTF8CharsZ filename) {
+    this->handler.filename = mozilla::Some(filename);
+  }
+
   void trace(JSTracer* trc);
 };
 
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
 template <typename CharT>
 class MOZ_STACK_CLASS JSONReviveParser
     : JSONPerHandlerParser<CharT, JSONReviveHandler<CharT>> {
@@ -642,7 +656,6 @@ class MOZ_STACK_CLASS JSONReviveParser
 
   void trace(JSTracer* trc);
 };
-#endif  // ENABLE_JSON_PARSE_WITH_SOURCE
 
 template <typename CharT, typename Wrapper>
 class MutableWrappedPtrOperations<JSONParser<CharT>, Wrapper>
@@ -650,6 +663,12 @@ class MutableWrappedPtrOperations<JSONParser<CharT>, Wrapper>
  public:
   bool parse(JS::MutableHandle<JS::Value> vp) {
     return static_cast<Wrapper*>(this)->get().parse(vp);
+  }
+  void setFilename(JS::ConstUTF8CharsZ filename) {
+    static_cast<Wrapper*>(this)->get().setFilename(filename);
+  }
+  void reportLineNumbersFromParsedData(bool b) {
+    static_cast<Wrapper*>(this)->get().reportLineNumbersFromParsedData(b);
   }
 };
 

@@ -64,6 +64,11 @@ const REGION_THUMBS_CONFIG =
 const LOCALE_THUMBS_CONFIG =
   "browser.newtabpage.activity-stream.discoverystream.thumbsUpDown.locale-thumbs-config";
 
+const REGION_CONTEXTUAL_CONTENT_CONFIG =
+  "browser.newtabpage.activity-stream.discoverystream.contextualContent.region-content-config";
+const LOCALE_CONTEXTUAL_CONTENT_CONFIG =
+  "browser.newtabpage.activity-stream.discoverystream.contextualContent.locale-content-config";
+
 // Determine if spocs should be shown for a geo/locale
 function showSpocs({ geo }) {
   const spocsGeoString =
@@ -134,6 +139,27 @@ function showThumbsUpDown({ geo, locale }) {
     .map(s => s.trim())
     .filter(item => item);
   return thumbsUpDownGeo.includes(geo) && thumbsUpDownLocale.includes(locale);
+}
+
+function showContextualContent({ geo, locale }) {
+  const contextualContentGeoString =
+    Services.prefs.getStringPref(REGION_CONTEXTUAL_CONTENT_CONFIG) || "";
+  const contextualContentLocaleString =
+    Services.prefs.getStringPref(LOCALE_CONTEXTUAL_CONTENT_CONFIG) || "";
+
+  const contextualContentGeo = contextualContentGeoString
+    .split(",")
+    .map(s => s.trim())
+    .filter(item => item);
+  const contextualContentLocale = contextualContentLocaleString
+    .split(",")
+    .map(s => s.trim())
+    .filter(item => item);
+
+  return (
+    contextualContentGeo.includes(geo) &&
+    contextualContentLocale.includes(locale)
+  );
 }
 
 // Configure default Activity Stream prefs with a plain `value` or a `getValue`
@@ -208,6 +234,37 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Show sponsored top sites",
       value: true,
+    },
+  ],
+  [
+    "unifiedAds.tiles.enabled",
+    {
+      title:
+        "Use Mozilla Ad Routing Service (MARS) unified ads API for sponsored top sites tiles",
+      value: false,
+    },
+  ],
+  [
+    "unifiedAds.spocs.enabled",
+    {
+      title:
+        "Use Mozilla Ad Routing Service (MARS) unified ads API for sponsored content in recommended stories",
+      value: false,
+    },
+  ],
+  [
+    "unifiedAds.endpoint",
+    {
+      title: "Mozilla Ad Routing Service (MARS) unified ads API endpoint URL",
+      value: "https://ads.mozilla.org/",
+    },
+  ],
+  [
+    "unifiedAds.blockedAds",
+    {
+      title:
+        "CSV list of blocked (dismissed) MARS ads. This payload is sent back every time new ads are fetched.",
+      value: "",
     },
   ],
   [
@@ -392,6 +449,34 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "discoverystream.placements.spocs",
+    {
+      title:
+        "CSV string of spoc placement ids on newtab Pocket grid. A placement id tells our ad server where the ads are intended to be displayed.",
+    },
+  ],
+  [
+    "discoverystream.placements.spocs.counts",
+    {
+      title:
+        "CSV string of spoc placement counts on newtab Pocket grid. The count tells the ad server how many ads to return for this position and placement.",
+    },
+  ],
+  [
+    "discoverystream.placements.tiles",
+    {
+      title:
+        "CSV string of tiles placement ids on newtab tiles section. A placement id tells our ad server where the ads are intended to be displayed.",
+    },
+  ],
+  [
+    "discoverystream.placements.tiles.counts",
+    {
+      title:
+        "CSV string of tiles placement counts on newtab tiles section. The count tells the ad server how many ads to return for this position and placement.",
+    },
+  ],
+  [
     "newtabWallpapers.highlightEnabled",
     {
       title: "Boolean flag to show the highlight about the Wallpaper feature",
@@ -529,7 +614,7 @@ export const PREFS_CONFIG = new Map([
       title:
         "Endpoint prefixes (comma-separated) that are allowed to be requested",
       value:
-        "https://getpocket.cdn.mozilla.net/,https://firefox-api-proxy.cdn.mozilla.net/,https://spocs.getpocket.com/,https://merino.services.mozilla.com/",
+        "https://getpocket.cdn.mozilla.net/,https://firefox-api-proxy.cdn.mozilla.net/,https://spocs.getpocket.com/,https://merino.services.mozilla.com/,https://ads.mozilla.org/",
     },
   ],
   [
@@ -710,6 +795,35 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Controls if spocs should be included in startup cache.",
       value: true,
+    },
+  ],
+  [
+    "discoverystream.contextualContent.enabled",
+    {
+      title: "Controls if contextual content (List feed) is displayed",
+      getValue: showContextualContent,
+    },
+  ],
+  [
+    "discoverystream.contextualContent.feeds",
+    {
+      title: "CSV list of possible topics for the contextual content feed",
+      value: "need_to_know",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.selectedFeed",
+    {
+      title:
+        "currently selected feed (one of discoverystream.contextualContent.feeds) to display in listfeed",
+      value: "need_to_know",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.listFeedTitle",
+    {
+      title: "Title for currently selected feed",
+      value: "",
     },
   ],
   [

@@ -24,6 +24,7 @@ Please note that some targeting attributes require stricter controls on the tele
 * [devToolsOpenedCount](#devtoolsopenedcount)
 * [distributionId](#distributionid)
 * [doesAppNeedPin](#doesappneedpin)
+* [doesAppNeedPinUncached](#doesappneedpinuncached)
 * [doesAppNeedPrivatePin](#doesappneedprivatepin)
 * [firefoxVersion](#firefoxversion)
 * [fxViewButtonAreaType](#fxviewbuttonareatype)
@@ -38,6 +39,7 @@ Please note that some targeting attributes require stricter controls on the tele
 * [isBackgroundTaskMode](#isbackgroundtaskmode)
 * [isChinaRepack](#ischinarepack)
 * [isDefaultBrowser](#isdefaultbrowser)
+* [isDefaultBrowserUncached](#isdefaultbrowseruncached)
 * [isDefaultHandler](#isdefaulthandler)
 * [isDeviceMigration](#isdevicemigration)
 * [isFxAEnabled](#isfxaenabled)
@@ -65,6 +67,7 @@ Please note that some targeting attributes require stricter controls on the tele
 * [screenImpressions](#screenimpressions)
 * [searchEngines](#searchengines)
 * [sync](#sync)
+* [systemArch](#systemarch)
 * [topFrecentSites](#topfrecentsites)
 * [totalBlockedCount](#totalblockedcount)
 * [totalBookmarksCount](#totalbookmarkscount)
@@ -234,6 +237,10 @@ Is Firefox the user's default browser?
 ```ts
 declare const isDefaultBrowser: boolean;
 ```
+
+### `isDefaultBrowserUncached`
+
+Behaves the same as `isDefaultBrowser`, but retrieves the current value directly from shell service instead of using the cached value. This may not be as performant.
 
 ### `isDefaultHandler`
 
@@ -970,6 +977,10 @@ user activity where the first entry is the total urls visited for that day.
 
 Checks if Firefox app can be and isn't pinned to OS taskbar/dock or Windows start menu in MSIX builds.
 
+### `doesAppNeedPinUncached`
+
+Does the same as `doesAppNeedPin`, but retrieves the current value directly from shell service instead of using the cached value. This may not be as performant.
+
 ### `doesAppNeedPrivatePin`
 
 Checks if Firefox Private Browsing Mode can be and isn't pinned to OS taskbar/dock. Currently this only works on certain Windows versions.
@@ -1035,6 +1046,16 @@ An array that maps about:welcome screen IDs to their most recent impression time
 
 ```
 declare const screenImpressions: { [key: string]: Array<UnixEpochNumber> };
+```
+
+### `systemArch`
+
+The architecture of this Firefox build: x86, x86-64 or aarch64.
+
+#### Definition
+
+```ts
+declare const systemArch: string | null;
 ```
 
 ### `totalSearches`

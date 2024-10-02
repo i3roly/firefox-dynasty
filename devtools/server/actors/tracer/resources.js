@@ -52,7 +52,10 @@ class ResourcesTracingListener {
 
   // Index of the next collected frame
   #frameIndex = 0;
-  // Map of frame identifier string to frame index.
+  // Three level of Maps, ultimately storing frame indexes.
+  // The first level of Map is keyed by source ID,
+  // the second by line number,
+  // the last by column number.
   // Frame objects are sent to the client and not being held in memory,
   // we only store their related indexes which are put in trace arrays.
   #frameMap = new Map();
@@ -118,31 +121,6 @@ class ResourcesTracingListener {
         },
       ]);
     }
-    return false;
-  }
-
-  onTracingInfiniteLoop() {
-    const consoleMessageWatcher = getResourceWatcher(
-      this.targetActor,
-      TYPES.CONSOLE_MESSAGE
-    );
-    if (!consoleMessageWatcher) {
-      return true;
-    }
-
-    const message =
-      "Looks like an infinite recursion? We stopped the JavaScript tracer, but code may still be running! " +
-      `(This is configurable via ${lazy.JSTracer.MAX_DEPTH_PREF} preference)`;
-    consoleMessageWatcher.emitMessages([
-      {
-        arguments: [message],
-        styles: [],
-        level: "jstracer",
-        chromeContext: false,
-        timeStamp: ChromeUtils.dateNow(),
-      },
-    ]);
-
     return false;
   }
 
@@ -243,8 +221,18 @@ class ResourcesTracingListener {
   }
 
   #getFrameIndex(implementation, name, sourceId, line, column, url) {
-    const key = `${sourceId}:${line}:${column}`;
-    let frameIndex = this.#frameMap.get(key);
+    let perSourceMap = this.#frameMap.get(sourceId);
+    if (!perSourceMap) {
+      perSourceMap = new Map();
+      this.#frameMap.set(sourceId, perSourceMap);
+    }
+    let perLineMap = perSourceMap.get(line);
+    if (!perLineMap) {
+      perLineMap = new Map();
+      perSourceMap.set(line, perLineMap);
+    }
+    let frameIndex = perLineMap.get(column);
+
     if (frameIndex == undefined) {
       frameIndex = this.#frameIndex++;
 
@@ -259,7 +247,7 @@ class ResourcesTracingListener {
         url,
       ];
 
-      this.#frameMap.set(key, frameIndex);
+      perLineMap.set(column, frameIndex);
       this.#throttledTraces.push(frameArray);
     }
     return frameIndex;

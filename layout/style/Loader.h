@@ -62,7 +62,7 @@ class SheetLoadDataHashKey : public PLDHashEntryHdr {
         mParsingMode(aKey->mParsingMode),
         mCompatMode(aKey->mCompatMode),
         mSRIMetadata(aKey->mSRIMetadata),
-        mIsLinkRelPreload(aKey->mIsLinkRelPreload) {
+        mIsLinkRelPreloadOrEarlyHint(aKey->mIsLinkRelPreloadOrEarlyHint) {
     MOZ_COUNT_CTOR(SheetLoadDataHashKey);
   }
 
@@ -83,7 +83,8 @@ class SheetLoadDataHashKey : public PLDHashEntryHdr {
         mParsingMode(aParsingMode),
         mCompatMode(aCompatMode),
         mSRIMetadata(aSRIMetadata),
-        mIsLinkRelPreload(IsLinkRelPreload(aPreloadKind)) {
+        mIsLinkRelPreloadOrEarlyHint(
+            css::IsLinkRelPreloadOrEarlyHint(aPreloadKind)) {
     MOZ_ASSERT(aURI);
     MOZ_ASSERT(aPrincipal);
     MOZ_ASSERT(aLoaderPrincipal);
@@ -100,7 +101,8 @@ class SheetLoadDataHashKey : public PLDHashEntryHdr {
         mParsingMode(std::move(toMove.mParsingMode)),
         mCompatMode(std::move(toMove.mCompatMode)),
         mSRIMetadata(std::move(toMove.mSRIMetadata)),
-        mIsLinkRelPreload(std::move(toMove.mIsLinkRelPreload)) {
+        mIsLinkRelPreloadOrEarlyHint(
+            std::move(toMove.mIsLinkRelPreloadOrEarlyHint)) {
     MOZ_COUNT_CTOR(SheetLoadDataHashKey);
   }
 
@@ -150,7 +152,7 @@ class SheetLoadDataHashKey : public PLDHashEntryHdr {
   const css::SheetParsingMode mParsingMode;
   const nsCompatibility mCompatMode;
   dom::SRIMetadata mSRIMetadata;
-  const bool mIsLinkRelPreload;
+  const bool mIsLinkRelPreloadOrEarlyHint;
 };
 
 namespace css {
@@ -246,12 +248,7 @@ class Loader final {
   }
 
   nsCompatibility CompatMode(StylePreloadKind aPreloadKind) const {
-    // For Link header preload, we guess non-quirks, because otherwise it is
-    // useless for modern pages.
-    //
-    // Link element preload is generally good because the speculative html
-    // parser deals with quirks mode properly.
-    if (aPreloadKind == StylePreloadKind::FromLinkRelPreloadHeader) {
+    if (css::ShouldAssumeStandardsMode(aPreloadKind)) {
       return eCompatibility_FullStandards;
     }
     return mDocumentCompatMode;
@@ -478,6 +475,14 @@ class Loader final {
   friend class SheetLoadData;
   friend class StreamLoader;
 
+  enum class UsePreload : bool { No, Yes };
+  enum class UseLoadGroup : bool { No, Yes };
+
+  nsresult NewStyleSheetChannel(SheetLoadData& aLoadData, CORSMode aCorsMode,
+                                UsePreload aUsePreload,
+                                UseLoadGroup aUseLoadGroup,
+                                nsIChannel** aOutChannel);
+
   // Only to be called by `LoadSheet`.
   [[nodiscard]] bool MaybeDeferLoad(SheetLoadData& aLoadData,
                                     SheetState aSheetState,
@@ -524,6 +529,8 @@ class Loader final {
                               nsIURI* aTargetURI, nsINode* aRequestingNode,
                               const nsAString& aNonce, StylePreloadKind);
 
+  bool MaybePutIntoLoadsPerformed(SheetLoadData& aLoadData);
+
   std::tuple<RefPtr<StyleSheet>, SheetState> CreateSheet(
       const SheetInfo& aInfo, css::SheetParsingMode aParsingMode,
       bool aSyncLoad, css::StylePreloadKind aPreloadKind) {
@@ -569,6 +576,9 @@ class Loader final {
 
   // Synchronously notify of a cached load data.
   void NotifyOfCachedLoad(RefPtr<SheetLoadData>);
+
+  // Notify observers of a cached stylesheet being.
+  void NotifyObserversForCachedSheet(SheetLoadData&);
 
   // Start the loads of all the sheets in mPendingDatas
   void StartDeferredLoads();

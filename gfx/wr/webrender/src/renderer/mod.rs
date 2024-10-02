@@ -71,7 +71,7 @@ use crate::gpu_cache::{GpuCacheUpdate, GpuCacheUpdateList};
 use crate::gpu_cache::{GpuCacheDebugChunk, GpuCacheDebugCmd};
 use crate::gpu_types::{ScalingInstance, SvgFilterInstance, SVGFEFilterInstance, CopyInstance, PrimitiveInstanceData};
 use crate::gpu_types::{BlurInstance, ClearInstance, CompositeInstance};
-use crate::internal_types::{TextureSource, TextureCacheCategory, FrameId};
+use crate::internal_types::{TextureSource, TextureSourceExternal, TextureCacheCategory, FrameId, FrameVec};
 #[cfg(any(feature = "capture", feature = "replay"))]
 use crate::internal_types::DebugOutput;
 use crate::internal_types::{CacheTextureId, FastHashMap, FastHashSet, RenderedDocument, ResultMsg};
@@ -533,7 +533,7 @@ impl TextureResolver {
                 device.bind_texture(sampler, &self.dummy_cache_texture, swizzle);
                 swizzle
             }
-            TextureSource::External(ref index, _) => {
+            TextureSource::External(TextureSourceExternal { ref index, .. }) => {
                 let texture = self.external_images
                     .get(index)
                     .expect("BUG: External image should be resolved by now");
@@ -574,7 +574,7 @@ impl TextureResolver {
         default_value: TexelRect,
     ) -> TexelRect {
         match source {
-            TextureSource::External(ref index, _) => {
+            TextureSource::External(TextureSourceExternal { ref index, .. }) => {
                 let texture = self.external_images
                     .get(index)
                     .expect("BUG: External image should be resolved by now");
@@ -593,7 +593,11 @@ impl TextureResolver {
             TextureSource::TextureCache(id, _) => {
                 self.texture_cache_map[&id].texture.get_dimensions()
             },
-            TextureSource::External(index, _) => {
+            TextureSource::External(TextureSourceExternal { index, .. }) => {
+                // If UV coords are normalized then this value will be incorrect. However, the
+                // texture size is currently only used to set the uTextureSize uniform, so that
+                // shaders without access to textureSize() can normalize unnormalized UVs. Which
+                // means this is not a problem.
                 let uv_rect = self.external_images[&index].get_uv_rect();
                 (uv_rect.uv1 - uv_rect.uv0).abs().to_size().to_i32()
             },
@@ -623,6 +627,8 @@ impl TextureResolver {
         let mut external_image_bytes = 0;
         for img in self.external_images.values() {
             let uv_rect = img.get_uv_rect();
+            // If UV coords are normalized then this value will be incorrect. This is unfortunate
+            // but doesn't impact end users at all.
             let size = (uv_rect.uv1 - uv_rect.uv0).abs().to_size().to_i32();
 
             // Assume 4 bytes per pixels which is true most of the time but
@@ -1013,7 +1019,7 @@ impl Renderer {
                     // because a) we don't need to render to the main framebuffer
                     // so it is cheaper not to, and b) doing so without a
                     // subsequent present would break partial present.
-                    if let Some(mut prev_doc) = self.active_documents.remove(&document_id) {
+                    let prev_frame_memory = if let Some(mut prev_doc) = self.active_documents.remove(&document_id) {
                         doc.profile.merge(&mut prev_doc.profile);
 
                         if prev_doc.frame.must_be_drawn() {
@@ -1025,6 +1031,17 @@ impl Renderer {
                                 0,
                             ).ok();
                         }
+
+                        Some(prev_doc.frame.allocator_memory)
+                    } else {
+                        None
+                    };
+
+                    // TODO: Send the memory back to the render backen thread for reuse.
+                    if let Some(memory) = prev_frame_memory {
+                        // We just dropped the frame a few lives above. There should be no
+                        // live allocations left in the frame's memory.
+                        memory.assert_memory_reusable();
                     }
 
                     self.active_documents.insert(document_id, doc);
@@ -2182,8 +2199,8 @@ impl Renderer {
     fn handle_prims(
         &mut self,
         draw_target: &DrawTarget,
-        prim_instances: &[FastHashMap<TextureSource, Vec<PrimitiveInstanceData>>],
-        prim_instances_with_scissor: &FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSource, Vec<PrimitiveInstanceData>>>,
+        prim_instances: &[FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>],
+        prim_instances_with_scissor: &FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>>,
         projection: &default::Transform3D<f32>,
         stats: &mut RendererStats,
     ) {
@@ -2454,7 +2471,7 @@ impl Renderer {
 
     fn handle_scaling(
         &mut self,
-        scalings: &FastHashMap<TextureSource, Vec<ScalingInstance>>,
+        scalings: &FastHashMap<TextureSource, FrameVec<ScalingInstance>>,
         projection: &default::Transform3D<f32>,
         stats: &mut RendererStats,
     ) {
@@ -2463,7 +2480,6 @@ impl Renderer {
         }
 
         let _timer = self.gpu_profiler.start_timer(GPU_TAG_SCALE);
-
         for (source, instances) in scalings {
             let buffer_kind = source.image_buffer_kind();
 
@@ -2475,18 +2491,17 @@ impl Renderer {
             let instances = match source {
                 TextureSource::External(..) => {
                     uv_override_instances = instances.iter().map(|instance| {
+                        let mut new_instance = instance.clone();
                         let texel_rect: TexelRect = self.texture_resolver.get_uv_rect(
                             &source,
                             instance.source_rect.cast().into()
                         ).into();
-                        ScalingInstance {
-                            target_rect: instance.target_rect,
-                            source_rect: DeviceRect::new(texel_rect.uv0, texel_rect.uv1),
-                        }
+                        new_instance.source_rect = DeviceRect::new(texel_rect.uv0, texel_rect.uv1);
+                        new_instance
                     }).collect::<Vec<_>>();
-                    &uv_override_instances
+                    uv_override_instances.as_slice()
                 }
-                _ => &instances
+                _ => instances.as_slice()
             };
 
             self.shaders
@@ -3083,6 +3098,7 @@ impl Renderer {
                         surface_rect.to_f32(),
                         PremultipliedColorF::WHITE,
                         uv_rect,
+                        plane.texture.uses_normalized_uvs(),
                         (false, false),
                     );
 
@@ -3142,8 +3158,8 @@ impl Renderer {
             let tile = &composite_state.tiles[item.key];
 
             let clip_rect = item.rectangle;
+            let tile_rect = composite_state.get_device_rect(&tile.local_rect, tile.transform_index);
             let transform = composite_state.get_device_transform(tile.transform_index);
-            let tile_rect = transform.map_rect(&tile.local_rect);
             let flip = (transform.scale.x < 0.0, transform.scale.y < 0.0);
 
             // Work out the draw params based on the tile surface
@@ -3231,6 +3247,7 @@ impl Renderer {
                                 clip_rect,
                                 PremultipliedColorF::WHITE,
                                 uv_rect,
+                                plane.texture.uses_normalized_uvs(),
                                 flip,
                             );
                             let features = instance.get_rgb_features();
@@ -3657,7 +3674,7 @@ impl Renderer {
 
     fn draw_blurs(
         &mut self,
-        blurs: &FastHashMap<TextureSource, Vec<BlurInstance>>,
+        blurs: &FastHashMap<TextureSource, FrameVec<BlurInstance>>,
         stats: &mut RendererStats,
     ) {
         for (texture, blurs) in blurs {
@@ -4943,20 +4960,26 @@ impl Renderer {
 
         for item in items {
             match item {
-                DebugItem::Rect { rect, outer_color, inner_color } => {
-                    debug_renderer.add_quad(
-                        rect.min.x,
-                        rect.min.y,
-                        rect.max.x,
-                        rect.max.y,
-                        (*inner_color).into(),
-                        (*inner_color).into(),
-                    );
+                DebugItem::Rect { rect, outer_color, inner_color, thickness } => {
+                    if inner_color.a > 0.001 {
+                        let rect = rect.inflate(-thickness as f32, -thickness as f32);
+                        debug_renderer.add_quad(
+                            rect.min.x,
+                            rect.min.y,
+                            rect.max.x,
+                            rect.max.y,
+                            (*inner_color).into(),
+                            (*inner_color).into(),
+                        );    
+                    }
 
-                    debug_renderer.add_rect(
-                        &rect.to_i32(),
-                        (*outer_color).into(),
-                    );
+                    if outer_color.a > 0.001 {
+                        debug_renderer.add_rect(
+                            &rect.to_i32(),
+                            *thickness,
+                            (*outer_color).into(),
+                        );
+                    }
                 }
                 DebugItem::Text { ref msg, position, color } => {
                     debug_renderer.add_text(
@@ -5042,6 +5065,7 @@ impl Renderer {
 
         debug_renderer.add_rect(
             &target_rect.inflate(1, 1),
+            1,
             debug_colors::RED.into(),
         );
 
@@ -5384,11 +5408,6 @@ impl Renderer {
         self.device.end_frame();
     }
 
-    fn size_of<T>(&self, ptr: *const T) -> usize {
-        let ops = self.size_of_ops.as_ref().unwrap();
-        unsafe { ops.malloc_size_of(ptr) }
-    }
-
     /// Collects a memory report.
     pub fn report_memory(&self, swgl: *mut c_void) -> MemoryReport {
         let mut report = MemoryReport::default();
@@ -5400,8 +5419,9 @@ impl Renderer {
 
         // Render task CPU memory.
         for (_id, doc) in &self.active_documents {
-            report.render_tasks += self.size_of(doc.frame.render_tasks.tasks.as_ptr());
-            report.render_tasks += self.size_of(doc.frame.render_tasks.task_data.as_ptr());
+            let frame_alloc_stats = doc.frame.allocator_memory.get_stats();
+            report.frame_allocator += frame_alloc_stats.reserved_bytes;
+            report.render_tasks += doc.frame.render_tasks.report_memory();
         }
 
         // Vertex data GPU memory.
@@ -5729,7 +5749,7 @@ impl Renderer {
                 .expect("Unable to lock the external image handler!");
             for def in &deferred_images {
                 info!("\t{}", def.short_path);
-                let ExternalImageData { id, channel_index, image_type } = def.external;
+                let ExternalImageData { id, channel_index, image_type, .. } = def.external;
                 // The image rendering parameter is irrelevant because no filtering happens during capturing.
                 let ext_image = handler.lock(id, channel_index);
                 let (data, short_path) = match ext_image.source {

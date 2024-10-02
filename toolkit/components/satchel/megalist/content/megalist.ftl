@@ -3,9 +3,9 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 filter-input =
-  .placeholder = Search Your Data
+  .placeholder = Search passwords
   .key = F
-  .aria-label = Search Your Data
+  .aria-label = Search passwords
 
 menu-more-options-button =
   .title = More options
@@ -73,6 +73,25 @@ passwords-import-file-picker-tsv-filter-title =
      *[other] TSV File
   }
 
+passwords-import-success-heading =
+  .heading = Passwords imported
+
+# Variables
+#   $added (number) - Number of added passwords
+#   $modified (number) - Number of modified passwords
+passwords-import-success-message =
+  New passwords added: { $added }<br/>Existing passwords updated: { $modified }
+
+passwords-import-detailed-report = View detailed report
+passwords-import-success-button = Done
+
+passwords-import-error-heading-and-message =
+  .heading = Couldn’t import passwords
+  .message = Make sure your file includes a column for websites, usernames, and passwords.
+passwords-import-error-button-try-again = Try Again
+passwords-import-error-button-cancel = Cancel
+passwords-import-learn-more = Learn about importing passwords
+
 # Title of the file picker dialog
 passwords-export-file-picker-title = Export Passwords from { -brand-short-name }
 # The default file name shown in the file picker when exporting saved logins.
@@ -131,9 +150,13 @@ passwords-remove-all-message =
     *[other] This will remove your saved passwords and any breach alerts. You cannot undo this action.
   }
 
-passwords-origin-label = Website address
+passwords-origin-label = Website
+# The attribute .data-after describes the text that should be displayed for the ::after pseudo-selector
 passwords-username-label = Username
+  .data-after = Copied
+# The attribute .data-after describes the text that should be displayed for the ::after pseudo-selector
 passwords-password-label = Password
+  .data-after = Copied
 
 passwords-radiogroup-label =
   .aria-label = Filter passwords
@@ -145,6 +168,48 @@ passwords-radiobutton-all = All ({ $total })
 # Radiobutton label to display total number of alerts
 #   $total (number) - Total number of alerts
 passwords-radiobutton-alerts = Alerts ({ $total })
+
+## Login Form
+
+passwords-create-label =
+  .label = Add password
+passwords-edit-label =
+  .label = Edit password
+passwords-origin-tooltip = Enter the exact address where you’ll sign in to this site.
+passwords-username-tooltip = Enter the username, email address, or account number you use to sign in.
+passwords-password-tooltip = Enter the password used to sign in to this account.
+
+website-icon =
+  .alt = Website Icon
+copy-icon =
+  .alt = Copy
+check-icon =
+  .alt = Copied
+alert-icon =
+  .alt = Warning
+
+# Variables
+#   $url (string) - The url associated with the login
+origin-login-line =
+  .aria-label = Visit { $url }
+  .title = Visit { $url }
+# Variables
+#   $username (string) - The username associated with the login
+username-login-line =
+  .aria-label = Copy Username { $username }
+  .title = Copy Username { $username }
+password-login-line =
+  .aria-label = Copy Password
+  .title = Copy Password
+edit-login-button = Edit
+  .tooltiptext = Edit Password
+
+show-password-button =
+  .aria-label = Show Password
+  .title = Show Password
+hide-password-button =
+  .aria-label = Hide Password
+  .title = Hide Password
 
 ## Payments
 

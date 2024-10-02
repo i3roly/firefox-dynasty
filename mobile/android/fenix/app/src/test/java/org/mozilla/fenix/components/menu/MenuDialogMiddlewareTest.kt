@@ -193,6 +193,34 @@ class MenuDialogMiddlewareTest {
     }
 
     @Test
+    fun `GIVEN at least one addon is installed WHEN init action is dispatched THEN initial extension state is updated`() =
+        runTestOnMain {
+            val addon = Addon(id = "ext1")
+            val addonTwo = Addon(
+                id = "ext2",
+                installedState = Addon.InstalledState(
+                    id = "id",
+                    version = "1.0",
+                    optionsPageUrl = "",
+                ),
+            )
+            val addonThree = Addon(id = "ext3")
+            whenever(addonManager.getAddons()).thenReturn(listOf(addon, addonTwo, addonThree))
+
+            val store = createStore()
+
+            assertEquals(0, store.state.extensionMenuState.recommendedAddons.size)
+
+            // Wait for InitAction and middleware
+            store.waitUntilIdle()
+
+            // Wait for UpdateExtensionState and middleware
+            store.waitUntilIdle()
+
+            assertTrue(store.state.extensionMenuState.recommendedAddons.isEmpty())
+        }
+
+    @Test
     fun `WHEN add bookmark action is dispatched for a selected tab THEN bookmark is added`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
@@ -667,6 +695,8 @@ class MenuDialogMiddlewareTest {
     fun `GIVEN selected tab has external app WHEN open in app action is dispatched THEN the site is opened in app`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
+        var dismissWasCalled = false
+
         val browserMenuState = BrowserMenuState(
             selectedTab = createTab(
                 url = url,
@@ -677,6 +707,7 @@ class MenuDialogMiddlewareTest {
             menuState = MenuState(
                 browserMenuState = browserMenuState,
             ),
+            onDismiss = { dismissWasCalled = true },
         )
 
         val getRedirect: AppLinksUseCases.GetAppLinkRedirect = mock()
@@ -696,12 +727,15 @@ class MenuDialogMiddlewareTest {
         store.waitUntilIdle()
 
         verify(openAppLinkRedirect).invoke(appIntent = intent)
+        assertTrue(dismissWasCalled)
     }
 
     @Test
     fun `GIVEN selected tab does not have external app WHEN open in app action is dispatched THEN the site is not opened in app`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
+        var dismissWasCalled = false
+
         val browserMenuState = BrowserMenuState(
             selectedTab = createTab(
                 url = url,
@@ -712,6 +746,7 @@ class MenuDialogMiddlewareTest {
             menuState = MenuState(
                 browserMenuState = browserMenuState,
             ),
+            onDismiss = { dismissWasCalled = true },
         )
 
         val getRedirect: AppLinksUseCases.GetAppLinkRedirect = mock()
@@ -728,6 +763,7 @@ class MenuDialogMiddlewareTest {
         store.waitUntilIdle()
 
         verify(openAppLinkRedirect, never()).invoke(appIntent = intent)
+        assertFalse(dismissWasCalled)
     }
 
     @Test
@@ -744,6 +780,8 @@ class MenuDialogMiddlewareTest {
             onSuccess = any(),
             onError = any(),
         )
+
+        assertEquals(store.state.extensionMenuState.addonInstallationInProgress, addon)
     }
 
     @Test

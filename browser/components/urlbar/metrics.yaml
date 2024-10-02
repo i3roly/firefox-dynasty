@@ -84,9 +84,10 @@ urlbar:
           group names are: `heuristic`, `adaptive_history`, `search_history`,
           `search_suggest`, `search_suggest_rich`, `trending_search`,
           `trending_search_rich`, `top_pick`, `top_site`, `remote_tab`,
-          `addon`, `general`, `suggest`, `about_page` and `suggested_index`. If
-          the group did not fall into any of these, this will be `unknown` and
-          a bug should be filed to investigate it.
+          `addon`, `general`, `suggest`, `about_page`, `suggested_index`, and
+          `restrict_keyword`.
+          If the group did not fall into any of these,
+          this will be `unknown` and a bug should be filed to investigate it.
         type: string
       results:
         description: >
@@ -116,6 +117,10 @@ urlbar:
           `merino_wikipedia`,
           `recent_search`,
           `remote_tab`,
+          `restrict_keyword_actions`,
+          `restrict_keyword_bookmarks`,
+          `restrict_keyword_history`,
+          `restrict_keyword_tabs`,
           `rs_adm_nonsponsored`,
           `rs_adm_sponsored`,
           `rs_amo`,
@@ -124,6 +129,7 @@ urlbar:
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
+          `rust_exposure`,
           `rust_fakespot_amazon`,
           `rust_fakespot_bestbuy`,
           `rust_fakespot_other`,
@@ -161,10 +167,12 @@ urlbar:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1800414
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1805717
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1842247
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917992
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1800414#c2
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1805717#c4
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1842247#c3
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917992
     data_sensitivity:
       - interaction
     notification_emails:
@@ -259,6 +267,10 @@ urlbar:
           `merino_wikipedia`,
           `recent_search`,
           `remote_tab`,
+          `restrict_keyword_actions`,
+          `restrict_keyword_bookmarks`,
+          `restrict_keyword_history`,
+          `restrict_keyword_tabs`,
           `rs_adm_nonsponsored`,
           `rs_adm_sponsored`,
           `rs_amo`,
@@ -267,6 +279,7 @@ urlbar:
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
+          `rust_exposure`,
           `rust_fakespot_amazon`,
           `rust_fakespot_bestbuy`,
           `rust_fakespot_other`,
@@ -344,11 +357,12 @@ urlbar:
           group names are: `heuristic`, `adaptive_history`, `search_history`,
           `search_suggest`, `search_suggest_rich`, `trending_search`,
           `trending_search_rich`, `top_pick`, `top_site`, `recent_search`,
-          `remote_tab`, `addon`, `general`, `suggest`, `about_page` and
-          `suggested_index`. If the group did not fall into any of these, this
-          will be `unknown` and a bug should be filed to investigate it. If
-          engagement_type is `drop_go` or `paste_go`, this will be empty string
-          because no results are shown.
+          `remote_tab`, `addon`, `general`, `suggest`, `about_page`,
+          `suggested_index`, and `restrict_keyword`.
+          If the group did not fall into any of these, this will be `unknown`
+          and a bug should be filed to investigate it. If engagement_type is
+          `drop_go` or `paste_go`, this  will be empty string because no results
+          are shown.
         type: string
       results:
         description: >
@@ -377,6 +391,10 @@ urlbar:
           `merino_wikipedia`,
           `recent_search`,
           `remote_tab`,
+          `restrict_keyword_actions`,
+          `restrict_keyword_bookmarks`,
+          `restrict_keyword_history`,
+          `restrict_keyword_tabs`,
           `rs_adm_nonsponsored`,
           `rs_adm_sponsored`,
           `rs_amo`,
@@ -385,6 +403,7 @@ urlbar:
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
+          `rust_exposure`,
           `rust_fakespot_amazon`,
           `rust_fakespot_bestbuy`,
           `rust_fakespot_other`,
@@ -466,10 +485,22 @@ urlbar:
     extra_keys:
       results:
         description: >
-          Comma separated list of results that were visible to the user.
+          Comma separated list of results that were exposed to the user.
+        type: string
+      terminal:
+        description: >
+          Comma separated list of booleans that indicates whether the results
+          were present at the end of the urlbar session. This list is parallel
+          to the `results` list. i.e., the boolean at index i is true if the
+          result at index i was present at the end of the session. For example,
+          if `results` is "bookmark,history,search_suggest" and the bookmark was
+          not present at the end of the session, the history result was present,
+          and the search suggestion was not present, then `terminal` will be
+          "false,true,false".
         type: string
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1819766
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1918299
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1819766#c9
     data_sensitivity:
@@ -478,39 +509,44 @@ urlbar:
       - fx-search-telemetry@mozilla.com
     expires: never
 
-  potential_exposure:
+  keyword_exposure:
     type: event
     description: >
-      This event is recorded in the `urlbar-potential-exposure` ping, which is
-      submitted at the end of urlbar sessions during which the user typed a
-      keyword defined by the Nimbus variable `potentialExposureKeywords`. A
-      "session" begins when the user focuses the urlbar and ends with an
-      engagement or abandonment. The ping will contain one event per unique
-      keyword that is typed during the session. This ping is not submitted for
-      sessions in private windows.
+      When keyword exposures are enabled, this event is recorded in the
+      `urlbar-keyword-exposure` ping, which is submitted at the end of urlbar
+      sessions during which one or more exposure results are matched. The ping
+      will contain one `keyword_exposure` event for each instance where a result
+      is matched during the session. See the `urlbar-keyword-exposure` ping for
+      details.
     extra_keys:
+      result:
+        type: string
+        description: >
+          The type of result that was matched.
       keyword:
         type: string
         description: >
-          The matched keyword.
+          The keyword that matched the result.
       terminal:
         type: boolean
         description: >
-          Whether the matched keyword was present at the end of the urlbar
-          session. If true, the session ended with the keyword. If false, the
-          keyword was typed at some point during the session but the session
-          did not end with it.
+          Whether the matched result and keyword were present at the end of the
+          urlbar session. If true, the session ended with them. If false, the
+          result and keyword were matched at some point during the session but
+          the session did not end with them.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1881875
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1915507
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1881875
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1915507
     data_sensitivity:
       - stored_content
     notification_emails:
       - fx-search-telemetry@mozilla.com
     expires: never
     send_in_pings:
-      - urlbar-potential-exposure
+      - urlbar-keyword-exposure
 
   quick_suggest_contextual_opt_in:
     type: event
@@ -899,3 +935,89 @@ quick_suggest:
     expires: never
     send_in_pings:
       - quick-suggest
+
+# Metrics from the Rust suggest component.
+#
+# We can't record metrics from Rust directly.  To work around that we:
+#   - Define the metrics here.
+#   - Define API calls in Rust suggest component that return the metrics
+#     alongside the normal results.
+#   - Record the metrics in the JS code in this component
+
+suggest:
+  ingest_time:
+    type: labeled_timing_distribution
+    description: Time for ingestion (excluding download time), labelled by record type
+    time_unit: microsecond
+    labels:
+      - icon
+      - data
+      - amo-suggestions
+      - pocket-suggestions
+      - yelp-suggestions
+      - mdn-suggestions
+      - weather
+      - configuration
+      - amp-mobile-suggestions
+      - fakespot-suggestions
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1908397
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1911664
+    notification_emails:
+      - disco-team@mozilla.com
+      - bdk@mozilla.com
+    expires: "never"
+    data_sensitivity:
+      - technical
+
+  ingest_download_time:
+    type: labeled_timing_distribution
+    description: Download time for ingestion, labelled by record type
+    time_unit: microsecond
+    labels:
+      - icon
+      - data
+      - amo-suggestions
+      - pocket-suggestions
+      - yelp-suggestions
+      - mdn-suggestions
+      - weather
+      - configuration
+      - amp-mobile-suggestions
+      - fakespot-suggestions
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1908397
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1911664
+    notification_emails:
+      - disco-team@mozilla.com
+      - bdk@mozilla.com
+    expires: "never"
+    data_sensitivity:
+      - technical
+
+  query_time:
+    type: labeled_timing_distribution
+    description: Time executing queries, labelled by provider type
+    time_unit: microsecond
+    labels:
+      - amp
+      - ampmobile
+      - wikipedia
+      - amo
+      - pocket
+      - yelp
+      - mdn
+      - weather
+      - fakespot
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1908397
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1911664
+    notification_emails:
+      - disco-team@mozilla.com
+      - bdk@mozilla.com
+    expires: "never"
+    data_sensitivity:
+      - technical

@@ -21,6 +21,7 @@
 #include "mozilla/dom/HTMLFrameElement.h"
 #include "mozilla/dom/ImageDocument.h"
 #include "mozilla/dom/BrowserParent.h"
+#include "mozilla/dom/RemoteBrowser.h"
 
 #include "nsCOMPtr.h"
 #include "nsGenericHTMLElement.h"
@@ -555,7 +556,7 @@ nsresult nsSubDocumentFrame::GetFrameName(nsAString& aResult) const {
 }
 #endif
 
-nscoord nsSubDocumentFrame::IntrinsicISize(gfxContext* aContext,
+nscoord nsSubDocumentFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                            IntrinsicISizeType aType) {
   // Note: when computing max-content inline size (i.e. when aType is
   // IntrinsicISizeType::PrefISize), if the subdocument is an SVG document, then
@@ -695,19 +696,17 @@ void nsSubDocumentFrame::Reflow(nsPresContext* aPresContext,
 }
 
 bool nsSubDocumentFrame::ReflowFinished() {
-  RefPtr<nsFrameLoader> frameloader = FrameLoader();
-  if (frameloader) {
-    AutoWeakFrame weakFrame(this);
-
-    frameloader->UpdatePositionAndSize(this);
-
-    if (weakFrame.IsAlive()) {
-      // Make sure that we can post a reflow callback in the future.
-      mPostedReflowCallback = false;
-    }
-  } else {
-    mPostedReflowCallback = false;
+  mPostedReflowCallback = false;
+  nsFrameLoader* fl = FrameLoader();
+  if (!fl) {
+    return false;
   }
+  if (fl->IsRemoteFrame() && fl->HasRemoteBrowserBeenSized()) {
+    // For remote frames we don't need to update the size and position instantly
+    // (but we should try to do so if we haven't shown it yet).
+    return false;
+  }
+  RefPtr { fl } -> UpdatePositionAndSize(this);
   return false;
 }
 
@@ -1203,8 +1202,8 @@ nsPoint nsSubDocumentFrame::GetExtraOffset() const {
 
 void nsSubDocumentFrame::SubdocumentIntrinsicSizeOrRatioChanged() {
   const nsStylePosition* pos = StylePosition();
-  bool dependsOnIntrinsics =
-      !pos->mWidth.ConvertsToLength() || !pos->mHeight.ConvertsToLength();
+  bool dependsOnIntrinsics = !pos->GetWidth().ConvertsToLength() ||
+                             !pos->GetHeight().ConvertsToLength();
 
   if (dependsOnIntrinsics || pos->mObjectFit != StyleObjectFit::Fill) {
     auto dirtyHint = dependsOnIntrinsics
@@ -1253,13 +1252,6 @@ nsDisplayRemote::nsDisplayRemote(nsDisplayListBuilder* aBuilder,
 namespace mozilla {
 
 void nsDisplayRemote::Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) {
-  nsPresContext* pc = mFrame->PresContext();
-  nsFrameLoader* fl = GetFrameLoader();
-  if (pc->GetPrintSettings() && fl->IsRemoteFrame()) {
-    // See the comment below in CreateWebRenderCommands() as for why doing this.
-    fl->UpdatePositionAndSize(static_cast<nsSubDocumentFrame*>(mFrame));
-  }
-
   DrawTarget* target = aCtx->GetDrawTarget();
   if (!target->IsRecording() || mPaintData.mTabId == 0) {
     NS_WARNING("Remote iframe not rendered");
@@ -1274,7 +1266,8 @@ void nsDisplayRemote::Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) {
   //
   // Similarly, rendering the inner document will scale up by the cross process
   // paint scale again, so we also need to account for that.
-  const int32_t appUnitsPerDevPixel = pc->AppUnitsPerDevPixel();
+  const int32_t appUnitsPerDevPixel =
+      mFrame->PresContext()->AppUnitsPerDevPixel();
 
   gfxContextMatrixAutoSaveRestore saveMatrix(aCtx);
   gfxFloat targetAuPerDev =
@@ -1298,57 +1291,19 @@ bool nsDisplayRemote::CreateWebRenderCommands(
     return true;
   }
 
-  nsPresContext* pc = mFrame->PresContext();
-  nsFrameLoader* fl = GetFrameLoader();
-
   auto* subDocFrame = static_cast<nsSubDocumentFrame*>(mFrame);
   nsRect destRect = subDocFrame->GetDestRect();
-  if (RefPtr<RemoteBrowser> remoteBrowser = fl->GetRemoteBrowser()) {
-    if (pc->GetPrintSettings()) {
-      // HACK(emilio): Usually we update sizing/positioning from
-      // ReflowFinished(). Print documents have no incremental reflow at all
-      // though, so we can't rely on it firing after a frame becomes remote.
-      // Thus, if we're painting a remote frame, update its sizing and position
-      // now.
-      //
-      // UpdatePositionAndSize() can cause havoc for non-remote frames but
-      // luckily we don't care about those, so this is fine.
-      fl->UpdatePositionAndSize(subDocFrame);
-    }
-
-    // Adjust mItemVisibleRect, which is relative to the reference frame, to be
-    // relative to this frame.
+  if (aDisplayListBuilder->IsForPainting()) {
+    subDocFrame->SetRasterScale(aSc.GetInheritedScale());
     const nsRect buildingRect = GetBuildingRect() - ToReferenceFrame();
     Maybe<nsRect> visibleRect =
         buildingRect.EdgeInclusiveIntersection(destRect);
     if (visibleRect) {
       *visibleRect -= destRect.TopLeft();
     }
-
-    // Generate an effects update notifying the browser it is visible
-    MatrixScales scale = aSc.GetInheritedScale();
-
-    ParentLayerToScreenScale2D transformToAncestorScale =
-        ParentLayerToParentLayerScale(
-            pc->GetPresShell() ? pc->GetPresShell()->GetCumulativeResolution()
-                               : 1.f) *
-        nsLayoutUtils::GetTransformToAncestorScaleCrossProcessForFrameMetrics(
-            mFrame);
-
-    aDisplayListBuilder->AddEffectUpdate(
-        remoteBrowser, EffectsInfo::VisibleWithinRect(
-                           visibleRect, scale, transformToAncestorScale));
-
-    // Create a WebRenderRemoteData to notify the RemoteBrowser when it is no
-    // longer visible
-    RefPtr<WebRenderRemoteData> userData =
-        aManager->CommandBuilder()
-            .CreateOrRecycleWebRenderUserData<WebRenderRemoteData>(this,
-                                                                   nullptr);
-    userData->SetRemoteBrowser(remoteBrowser);
+    subDocFrame->SetVisibleRect(visibleRect);
   }
-
-  nscoord auPerDevPixel = pc->AppUnitsPerDevPixel();
+  nscoord auPerDevPixel = mFrame->PresContext()->AppUnitsPerDevPixel();
   nsPoint layerOffset =
       aDisplayListBuilder->ToReferenceFrame(mFrame) + destRect.TopLeft();
   mOffset = LayoutDevicePoint::FromAppUnits(layerOffset, auPerDevPixel);

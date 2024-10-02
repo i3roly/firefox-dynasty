@@ -20,9 +20,6 @@ class CfrToolsPreferencesMiddleware(
         action: CfrToolsAction,
     ) {
         when (action) {
-            is CfrToolsAction.ToggleHomepageIntroShown -> {
-                settings.shouldShowJumpBackInCFR = !settings.shouldShowJumpBackInCFR
-            }
             is CfrToolsAction.ToggleHomepageSyncShown -> {
                 settings.showSyncCFR = !settings.showSyncCFR
             }
@@ -34,9 +31,6 @@ class CfrToolsPreferencesMiddleware(
             }
             is CfrToolsAction.ToggleNavButtonsShown -> {
                 settings.shouldShowNavigationButtonsCFR = !settings.shouldShowNavigationButtonsCFR
-            }
-            is CfrToolsAction.ToggleTcpShown -> {
-                settings.shouldShowTotalCookieProtectionCFR = !settings.shouldShowTotalCookieProtectionCFR
             }
             is CfrToolsAction.ToggleCookieBannerBlockerShown -> {
                 settings.shouldShowEraseActionCFR = !settings.shouldShowEraseActionCFR

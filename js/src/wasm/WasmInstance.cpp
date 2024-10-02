@@ -54,6 +54,7 @@
 #include "wasm/WasmDebug.h"
 #include "wasm/WasmDebugFrame.h"
 #include "wasm/WasmFeatures.h"
+#include "wasm/WasmHeuristics.h"
 #include "wasm/WasmInitExpr.h"
 #include "wasm/WasmJS.h"
 #include "wasm/WasmMemory.h"
@@ -2698,23 +2699,20 @@ void Instance::resetTemporaryStackLimit(JSContext* cx) {
 
 int32_t Instance::computeInitialHotnessCounter(uint32_t funcIndex) {
   MOZ_ASSERT(code().mode() == CompileMode::LazyTiering);
-  // Use `150 * (bodyLength ^ 1.5)` as a proxy for Ion compilation cost, and at
-  // least 10.  This is a temporary heuristic which may be improved in future.
-  float thresholdF =
-      float(codeMeta()
-                .funcDefRanges[funcIndex - codeMeta().numFuncImports]
-                .bodyLength);
-  thresholdF = thresholdF * sqrtf(thresholdF);
-  thresholdF *= 150.0;
-  thresholdF = std::max<float>(thresholdF, 10.0);   // at least 10
-  thresholdF = std::min<float>(thresholdF, 2.0e9);  // at most 2 billion
-  int32_t thresholdI = int32_t(thresholdF);
-  MOZ_RELEASE_ASSERT(thresholdI >= 0);
-  return thresholdI;
+  uint32_t bodyLength =
+      codeMeta()
+          .funcDefRanges[funcIndex - codeMeta().numFuncImports]
+          .bodyLength;
+  return codeMeta().lazyTieringHeuristics.estimateIonCompilationCost(
+      bodyLength);
 }
 
 void Instance::resetHotnessCounter(uint32_t funcIndex) {
   funcDefInstanceData(funcIndex)->hotnessCounter = INT32_MAX;
+}
+
+int32_t Instance::readHotnessCounter(uint32_t funcIndex) const {
+  return funcDefInstanceData(funcIndex)->hotnessCounter;
 }
 
 void Instance::submitCallRefHints(uint32_t funcIndex) {
@@ -2723,6 +2721,7 @@ void Instance::submitCallRefHints(uint32_t funcIndex) {
   CallRefMetricsRange range = codeMeta().getFuncDefCallRefs(funcIndex);
   for (uint32_t callRefIndex = range.begin;
        callRefIndex < range.begin + range.length; callRefIndex++) {
+    MOZ_RELEASE_ASSERT(callRefIndex < codeMeta().numCallRefMetrics);
     CallRefMetrics& metrics = callRefMetrics_[callRefIndex];
     if (metrics.state == CallRefMetrics::State::Monomorphic &&
         metrics.callCount >= callCountThreshold) {
@@ -2914,8 +2913,8 @@ uintptr_t Instance::traceFrame(JSTracer* trc, const wasm::WasmFrameIter& wfi,
       continue;
     }
 
-    TraceNullableRoot(trc, (AnyRef*)&stackWords[i],
-                      "Instance::traceWasmFrame: normal word");
+    TraceManuallyBarrieredNullableEdge(trc, (AnyRef*)&stackWords[i],
+                                       "Instance::traceWasmFrame: normal word");
   }
 
   // Deal with any GC-managed fields in the DebugFrame, if it is
@@ -2927,7 +2926,7 @@ uintptr_t Instance::traceFrame(JSTracer* trc, const wasm::WasmFrameIter& wfi,
     for (size_t i = 0; i < MaxRegisterResults; i++) {
       if (debugFrame->hasSpilledRegisterRefResult(i)) {
         char* resultRefP = debugFrameP + DebugFrame::offsetOfRegisterResult(i);
-        TraceNullableRoot(
+        TraceManuallyBarrieredNullableEdge(
             trc, (AnyRef*)resultRefP,
             "Instance::traceWasmFrame: DebugFrame::resultResults_");
       }
@@ -2936,8 +2935,9 @@ uintptr_t Instance::traceFrame(JSTracer* trc, const wasm::WasmFrameIter& wfi,
     if (debugFrame->hasCachedReturnJSValue()) {
       char* cachedReturnJSValueP =
           debugFrameP + DebugFrame::offsetOfCachedReturnJSValue();
-      TraceRoot(trc, (js::Value*)cachedReturnJSValueP,
-                "Instance::traceWasmFrame: DebugFrame::cachedReturnJSValue_");
+      TraceManuallyBarrieredEdge(
+          trc, (js::Value*)cachedReturnJSValueP,
+          "Instance::traceWasmFrame: DebugFrame::cachedReturnJSValue_");
     }
   }
 

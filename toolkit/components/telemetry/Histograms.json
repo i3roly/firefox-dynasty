@@ -2448,17 +2448,17 @@
     "n_values": 8,
     "releaseChannelCollection": "opt-out",
     "description": "Type of canvas fingerprinter detected (keyed by known_fingerprinting_text or unknown), 0 = none",
-    "bug_numbers": [1847990]
+    "bug_numbers": [1847990, 1912169]
   },
   "FONT_FINGERPRINTING_PER_TAB": {
     "record_in_processes": ["main"],
     "products": ["firefox", "fennec"],
     "alert_emails": ["seceng-telemetry@mozilla.com"],
-    "expires_in_version": "132",
+    "expires_in_version": "138",
     "kind": "boolean",
     "releaseChannelCollection": "opt-out",
     "description": "Whether a probable font fingerprinting attempt was detected",
-    "bug_numbers": [1847990]
+    "bug_numbers": [1847990, 1912169]
   },
   "TOTAL_CONTENT_PAGE_LOAD_TIME": {
     "record_in_processes": ["main", "content"],
@@ -2946,13 +2946,6 @@
     "expires_in_version": "never",
     "kind": "boolean",
     "description": "Whether a HTTP transaction was routed via Alt-Svc or not."
-  },
-  "HTTP_TRANSACTION_USE_ALTSVC_OE": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "boolean",
-    "description": "Whether a HTTP transaction routed via Alt-Svc was scheme=http"
   },
   "HTTP_ALTSVC_ENTRIES_PER_HEADER": {
     "record_in_processes": ["main", "content"],
@@ -3575,7 +3568,7 @@
       "necko@mozilla.com",
       "djackson@mozilla.com"
     ],
-    "bug_numbers": [182287],
+    "bug_numbers": [1822876],
     "releaseChannelCollection": "opt-out",
     "expires_in_version": "never",
     "kind": "enumerated",
@@ -3664,16 +3657,6 @@
     "n_values": 48,
     "description": "HTTP: Protocol Version Used on Response from nsHttp.h"
   },
-  "HTTP_09_INFO": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "enumerated",
-    "n_values": 4,
-    "description": "HTTP 09 Response Breakdown: lowbit subresource, high bit nonstd port",
-    "bug_numbers": [1262572],
-    "alert_emails": ["necko@mozilla.com"]
-  },
   "SPDY_PARALLEL_STREAMS": {
     "record_in_processes": ["main", "socket"],
     "products": ["firefox", "fennec"],
@@ -3756,14 +3739,6 @@
     "high": 99,
     "n_buckets": 20,
     "description": "SPDY: SYN Reply Header Ratio (lower better)"
-  },
-  "SPDY_NPN_CONNECT": {
-    "record_in_processes": ["main", "socket"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["necko@mozilla.com"],
-    "expires_in_version": "never",
-    "kind": "boolean",
-    "description": "SPDY: NPN Negotiated"
   },
   "SPDY_KBREAD_PER_CONN2": {
     "record_in_processes": ["main", "socket"],
@@ -4141,30 +4116,6 @@
     "n_values": 100,
     "keyed": true,
     "description": "Error code when http3 connection is closed. Look at Http3Session for more details."
-  },
-  "HTTP3_0RTT_STATE": {
-    "record_in_processes": ["main", "socket"],
-    "products": ["firefox"],
-    "alert_emails": ["necko@mozilla.com", "ddamjanovic@mozilla.com"],
-    "bug_numbers": [1688850],
-    "expires_in_version": "never",
-    "releaseChannelCollection": "opt-out",
-    "kind": "enumerated",
-    "n_values": 5,
-    "description": "Collect what is the outcome when 0rtt is used: (0)0RTT_NOT_USED, (1)0RTT_USED_SUCCESS, (2)0RTT_USED_REJECT, (3)0RTT_USED_CONN_ERROR, (4)0RTT_CONN_CLOSED_BY_NECKO."
-  },
-  "HTTP3_0RTT_STATE_DURATION": {
-    "record_in_processes": ["main", "socket"],
-    "products": ["firefox"],
-    "alert_emails": ["necko@mozilla.com", "ddamjanovic@mozilla.com"],
-    "bug_numbers": [1688850],
-    "expires_in_version": "never",
-    "releaseChannelCollection": "opt-out",
-    "kind": "exponential",
-    "high": 30000,
-    "n_buckets": 50,
-    "keyed": true,
-    "description": "The time a connection was in the zero rtt state, it is keyed by the zero rtt outcome."
   },
   "HTTP3_TIME_TO_REUSE_IDLE_CONNECTTION_MS": {
     "record_in_processes": ["main", "content"],
@@ -4697,17 +4648,6 @@
     "description": "TRR managed to verify NS entry; Keyed by TRR domain",
     "bug_numbers": [1453825, 1640867, 1646452],
     "alert_emails": ["necko@mozilla.com", "vgosu@mozilla.com"]
-  },
-  "DNS_TRR_REQUEST_PER_CONN": {
-    "record_in_processes": ["main", "socket"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": ["necko@mozilla.com"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 5000,
-    "n_buckets": 100,
-    "bug_numbers": [1470853],
-    "description": "Number of DOH requests per connection"
   },
   "DNS_TRR_SUCCESS3": {
     "record_in_processes": ["main", "socket"],

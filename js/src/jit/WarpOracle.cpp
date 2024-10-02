@@ -283,20 +283,8 @@ WarpEnvironment WarpScriptOracle::createEnvironment() {
     return WarpEnvironment(ConstantObjectEnvironment(obj));
   }
 
-  JSObject* templateEnv = script_->jitScript()->templateEnvironment();
-
-  CallObject* callObjectTemplate = nullptr;
-  if (fun->needsCallObject()) {
-    callObjectTemplate = &templateEnv->as<CallObject>();
-  }
-
-  NamedLambdaObject* namedLambdaTemplate = nullptr;
-  if (fun->needsNamedLambdaEnvironment()) {
-    if (callObjectTemplate) {
-      templateEnv = templateEnv->enclosingEnvironment();
-    }
-    namedLambdaTemplate = &templateEnv->as<NamedLambdaObject>();
-  }
+  auto [callObjectTemplate, namedLambdaTemplate] =
+      script_->jitScript()->functionEnvironmentTemplates(fun);
 
   return WarpEnvironment(
       FunctionEnvironment(callObjectTemplate, namedLambdaTemplate));
@@ -441,12 +429,14 @@ AbortReasonOr<WarpScriptSnapshot*> WarpScriptOracle::createScriptSnapshot() {
         break;
       }
 
-      case JSOp::BindGName: {
+      case JSOp::BindUnqualifiedGName: {
         Rooted<GlobalObject*> global(cx_, &script_->global());
         Rooted<PropertyName*> name(cx_, loc.getPropertyName(script_));
-        if (JSObject* env = MaybeOptimizeBindGlobalName(cx_, global, name)) {
+        if (JSObject* env =
+                MaybeOptimizeBindUnqualifiedGlobalName(cx_, global, name)) {
           MOZ_ASSERT(env->isTenured());
-          if (!AddOpSnapshot<WarpBindGName>(alloc_, opSnapshots, offset, env)) {
+          if (!AddOpSnapshot<WarpBindUnqualifiedGName>(alloc_, opSnapshots,
+                                                       offset, env)) {
             return abort(AbortReason::Alloc);
           }
         } else {
@@ -548,6 +538,8 @@ AbortReasonOr<WarpScriptSnapshot*> WarpScriptOracle::createScriptSnapshot() {
       case JSOp::StrictEq:
       case JSOp::StrictNe:
       case JSOp::BindName:
+      case JSOp::BindUnqualifiedName:
+      case JSOp::GetBoundName:
       case JSOp::Add:
       case JSOp::Sub:
       case JSOp::Mul:
@@ -718,6 +710,11 @@ AbortReasonOr<WarpScriptSnapshot*> WarpScriptOracle::createScriptSnapshot() {
       case JSOp::Try:
       case JSOp::Finally:
       case JSOp::NewPrivateName:
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+      case JSOp::AddDisposable:
+      case JSOp::TakeDisposeCapability:
+      case JSOp::CreateSuppressedError:
+#endif
         // Supported by WarpBuilder. Nothing to do.
         break;
 

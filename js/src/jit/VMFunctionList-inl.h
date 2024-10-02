@@ -48,8 +48,8 @@ namespace jit {
 // non-argument Values the VM wrapper should pop from the stack. This is used
 // for tail calls for Baseline ICs. This list must be sorted on the name field.
 #define VMFUNCTION_LIST(_)                                                     \
-  IF_EXPLICIT_RESOURCE_MANAGEMENT(                                             \
-      _(AddDisposableResource, js::jit::AddDisposableResource))                \
+  IF_EXPLICIT_RESOURCE_MANAGEMENT(_(AddDisposableResourceToCapability,         \
+                                    js::AddDisposableResourceToCapability))    \
   _(AddOrUpdateSparseElementHelper, js::AddOrUpdateSparseElementHelper)        \
   _(AddSlotAndCallAddPropHook, js::AddSlotAndCallAddPropHook)                  \
   _(ArgumentsObjectCreateForInlinedIon,                                        \
@@ -83,6 +83,7 @@ namespace jit {
   _(BigIntBitNot, JS::BigInt::bitNot)                                          \
   _(BigIntBitOr, JS::BigInt::bitOr)                                            \
   _(BigIntBitXor, JS::BigInt::bitXor)                                          \
+  _(BigIntCreateFromIntPtr, JS::BigInt::createFromIntPtr)                      \
   _(BigIntDec, JS::BigInt::dec)                                                \
   _(BigIntDiv, JS::BigInt::div)                                                \
   _(BigIntInc, JS::BigInt::inc)                                                \
@@ -134,7 +135,7 @@ namespace jit {
   _(CreateGenerator, js::jit::CreateGenerator)                                 \
   _(CreateGeneratorFromFrame, js::jit::CreateGeneratorFromFrame)               \
   IF_EXPLICIT_RESOURCE_MANAGEMENT(                                             \
-      _(CreateSuppressedError, js::jit::CreateSuppressedError))                \
+      _(CreateSuppressedError, js::CreateSuppressedError))                     \
   _(CreateThisFromIC, js::jit::CreateThisFromIC)                               \
   _(CreateThisFromIon, js::jit::CreateThisFromIon)                             \
   _(DebugAfterYield, js::jit::DebugAfterYield)                                 \

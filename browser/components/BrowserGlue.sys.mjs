@@ -259,7 +259,7 @@ let JSWINDOWACTORS = {
     includeChrome: true,
     matches: ["chrome://global/content/megalist/megalist.html"],
     allFrames: true,
-    enablePreference: "browser.megalist.enabled",
+    enablePreference: "browser.contextual-password-manager.enabled",
   },
 
   AboutLogins: {
@@ -761,8 +761,11 @@ let JSWINDOWACTORS = {
     },
     child: {
       esModuleURI: "resource:///actors/ProfilesChild.sys.mjs",
+      events: {
+        DOMDocElementInserted: { wantUntrusted: true },
+      },
     },
-    matches: ["about:profilemanager"],
+    matches: ["about:editprofile", "about:deleteprofile"],
     enablePreference: "browser.profiles.enabled",
   },
 
@@ -1362,11 +1365,7 @@ BrowserGlue.prototype = {
               "launch_on_login",
               true
             );
-            Services.telemetry.recordEvent(
-              "launch_on_login",
-              "last_profile_disable",
-              "startup"
-            );
+            Glean.launchOnLogin.lastProfileDisableStartup.record();
           }
           Services.prefs.setBoolPref(launchOnLoginPref, false);
           // To reduce confusion when running multiple Gecko profiles,
@@ -2106,10 +2105,6 @@ BrowserGlue.prototype = {
         "security.protectionspopup.recordEventTelemetry"
       )
     );
-    Services.telemetry.setEventRecordingEnabled(
-      "security.ui.app_menu",
-      Services.prefs.getBoolPref("security.app_menu.recordEventTelemetry")
-    );
 
     let tpEnabled = Services.prefs.getBoolPref(
       "privacy.trackingprotection.enabled"
@@ -2413,84 +2408,6 @@ BrowserGlue.prototype = {
     _checkHTTPSOnlyPBMPref();
   },
 
-  _monitorIonPref() {
-    const PREF_ION_ID = "toolkit.telemetry.pioneerId";
-
-    const _checkIonPref = async () => {
-      for (let win of Services.wm.getEnumerator("navigator:browser")) {
-        win.document.getElementById("ion-button").hidden =
-          !Services.prefs.getStringPref(PREF_ION_ID, null);
-      }
-    };
-
-    const windowListener = {
-      onOpenWindow(xulWindow) {
-        const win = xulWindow.docShell.domWindow;
-        win.addEventListener("load", () => {
-          const ionButton = win.document.getElementById("ion-button");
-          if (ionButton) {
-            ionButton.hidden = !Services.prefs.getStringPref(PREF_ION_ID, null);
-          }
-        });
-      },
-      onCloseWindow() {},
-    };
-
-    Services.prefs.addObserver(PREF_ION_ID, _checkIonPref);
-    Services.wm.addListener(windowListener);
-    _checkIonPref();
-  },
-
-  _monitorIonStudies() {
-    const STUDY_ADDON_COLLECTION_KEY = "pioneer-study-addons-v1";
-    const PREF_ION_NEW_STUDIES_AVAILABLE =
-      "toolkit.telemetry.pioneer-new-studies-available";
-
-    const _badgeIcon = async () => {
-      for (let win of Services.wm.getEnumerator("navigator:browser")) {
-        win.document
-          .getElementById("ion-button")
-          .querySelector(".toolbarbutton-badge")
-          .classList.add("feature-callout");
-      }
-    };
-
-    const windowListener = {
-      onOpenWindow(xulWindow) {
-        const win = xulWindow.docShell.domWindow;
-        win.addEventListener("load", () => {
-          const ionButton = win.document.getElementById("ion-button");
-          if (ionButton) {
-            const badge = ionButton.querySelector(".toolbarbutton-badge");
-            if (
-              Services.prefs.getBoolPref(PREF_ION_NEW_STUDIES_AVAILABLE, false)
-            ) {
-              badge.classList.add("feature-callout");
-            } else {
-              badge.classList.remove("feature-callout");
-            }
-          }
-        });
-      },
-      onCloseWindow() {},
-    };
-
-    // Update all open windows if the pref changes.
-    Services.prefs.addObserver(PREF_ION_NEW_STUDIES_AVAILABLE, _badgeIcon);
-
-    // Badge any currently-open windows.
-    if (Services.prefs.getBoolPref(PREF_ION_NEW_STUDIES_AVAILABLE, false)) {
-      _badgeIcon();
-    }
-
-    lazy.RemoteSettings(STUDY_ADDON_COLLECTION_KEY).on("sync", async () => {
-      Services.prefs.setBoolPref(PREF_ION_NEW_STUDIES_AVAILABLE, true);
-    });
-
-    // When a new window opens, check if we need to badge the icon.
-    Services.wm.addListener(windowListener);
-  },
-
   _monitorGPCPref() {
     const FEATURE_PREF_ENABLED = "privacy.globalprivacycontrol.enabled";
     const FUNCTIONALITY_PREF_ENABLED =
@@ -2595,8 +2512,6 @@ BrowserGlue.prototype = {
 
     this._monitorWebcompatReporterPref();
     this._monitorHTTPSOnlyPref();
-    this._monitorIonPref();
-    this._monitorIonStudies();
     this._setupSearchDetection();
 
     this._monitorGPCPref();
@@ -3312,6 +3227,13 @@ BrowserGlue.prototype = {
       },
 
       {
+        name: "SSLKEYLOGFILE telemetry",
+        task: () => {
+          Glean.sslkeylogging.enabled.set(Services.env.exists("SSLKEYLOGFILE"));
+        },
+      },
+
+      {
         name: "browser-startup-idle-tasks-finished",
         task: () => {
           // Use idleDispatch a second time to run this after the per-window
@@ -3420,10 +3342,6 @@ BrowserGlue.prototype = {
         Services.search.runBackgroundChecks();
       },
 
-      function reportInstallationTelemetry() {
-        lazy.BrowserUsageTelemetry.reportInstallationTelemetry();
-      },
-
       function trustObjectTelemetry() {
         let certdb = Cc["@mozilla.org/security/x509certdb;1"].getService(
           Ci.nsIX509CertDB
@@ -3432,6 +3350,12 @@ BrowserGlue.prototype = {
         certdb.countTrustObjects();
       },
     ];
+
+    if (AppConstants.platform == "win") {
+      idleTasks.push(function reportInstallationTelemetry() {
+        lazy.BrowserUsageTelemetry.reportInstallationTelemetry();
+      });
+    }
 
     for (let task of idleTasks) {
       ChromeUtils.idleDispatch(async () => {
@@ -3520,7 +3444,6 @@ BrowserGlue.prototype = {
 
     let windowcount = 0;
     let pagecount = 0;
-    let pinnedcount = 0;
     for (let win of lazy.BrowserWindowTracker.orderedWindows) {
       if (win.closed) {
         continue;
@@ -3528,7 +3451,6 @@ BrowserGlue.prototype = {
       windowcount++;
       let tabbrowser = win.gBrowser;
       if (tabbrowser) {
-        pinnedcount += tabbrowser._numPinnedTabs;
         pagecount += tabbrowser.visibleTabs.length - tabbrowser._numPinnedTabs;
       }
     }
@@ -3615,26 +3537,6 @@ BrowserGlue.prototype = {
       null,
       checkboxLabel.value,
       warnOnClose
-    );
-    Services.telemetry.setEventRecordingEnabled("close_tab_warning", true);
-    let warnCheckbox = warnOnClose.value ? "checked" : "unchecked";
-
-    let sessionWillBeRestored =
-      Services.prefs.getIntPref("browser.startup.page") == 3 ||
-      Services.prefs.getBoolPref("browser.sessionstore.resume_session_once");
-    Services.telemetry.recordEvent(
-      "close_tab_warning",
-      "shown",
-      "application",
-      null,
-      {
-        source: this._quitSource,
-        button: buttonPressed == 0 ? "close" : "cancel",
-        warn_checkbox: warnCheckbox,
-        closing_wins: "" + windowcount,
-        closing_tabs: "" + (pagecount + pinnedcount),
-        will_restore: sessionWillBeRestored ? "yes" : "no",
-      }
     );
 
     // If the user has unticked the box, and has confirmed closing, stop showing
@@ -3957,7 +3859,7 @@ BrowserGlue.prototype = {
   _migrateUI() {
     // Use an increasing number to keep track of the current migration state.
     // Completely unrelated to the current Firefox release number.
-    const UI_VERSION = 149;
+    const UI_VERSION = 150;
     const BROWSER_DOCURL = AppConstants.BROWSER_CHROME_URL;
 
     if (!Services.prefs.prefHasUserValue("browser.migration.version")) {
@@ -4739,6 +4641,10 @@ BrowserGlue.prototype = {
       });
     }
 
+    if (currentUIVersion < 150) {
+      Services.prefs.clearUserPref("toolkit.telemetry.pioneerId");
+    }
+
     // Update the migration version.
     Services.prefs.setIntPref("browser.migration.version", UI_VERSION);
   },
@@ -4842,12 +4748,9 @@ BrowserGlue.prototype = {
 
     // Record why the dialog is showing or not.
     Services.telemetry.setEventRecordingEnabled("upgrade_dialog", true);
-    Services.telemetry.recordEvent(
-      "upgrade_dialog",
-      "trigger",
-      "reason",
-      dialogReason || "satisfied"
-    );
+    Glean.upgradeDialog.triggerReason.record({
+      value: dialogReason || "satisfied",
+    });
 
     // Show the upgrade dialog if allowed and remember the version.
     if (!dialogReason) {
@@ -4961,7 +4864,7 @@ BrowserGlue.prototype = {
       return;
     }
 
-    if (Services.appShell.hiddenDOMWindow.openPreferences) {
+    if (AppConstants.platform == "macosx") {
       Services.appShell.hiddenDOMWindow.openPreferences(...args);
     }
   },
@@ -5324,11 +5227,7 @@ BrowserGlue.prototype = {
       // Record events when preferences change
       if (topic === "nsPref:changed") {
         if (enabled) {
-          Services.telemetry.recordEvent(
-            "pictureinpicture.settings",
-            "enable",
-            "settings"
-          );
+          Glean.pictureinpictureSettings.enableSettings.record();
         }
       }
     };

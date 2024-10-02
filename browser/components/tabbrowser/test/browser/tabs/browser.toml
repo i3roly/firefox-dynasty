@@ -23,12 +23,9 @@ prefs = [
 
 ["browser_audioTabIcon.js"]
 tags = "audiochannel"
-skip-if = [
-  "apple_silicon && !debug" # Bug 1862716
-]
 
 ["browser_bfcache_exemption_about_pages.js"]
-skip-if = ["!fission"]
+run-if = ["fission"]
 
 ["browser_blank_tab_label.js"]
 
@@ -190,7 +187,7 @@ https_first_disabled = true
 ["browser_multiselect_tabs_using_Shift_and_Ctrl.js"]
 
 ["browser_multiselect_tabs_using_keyboard.js"]
-skip-if = ["os == 'mac'"] # Skipped because macOS keyboard support requires changing system settings
+run-if = ["os != 'mac'"] # Skipped because macOS keyboard support requires changing system settings
 
 ["browser_multiselect_tabs_using_selectedTabs.js"]
 
@@ -200,7 +197,10 @@ https_first_disabled = true
 ["browser_navigate_home_focuses_addressbar.js"]
 
 ["browser_navigate_through_urls_origin_attributes.js"]
-skip-if = ["verify && os == 'mac'"]
+skip-if = [
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && verify",
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64' && verify",
+]
 
 ["browser_new_file_whitelisted_http_tab.js"]
 https_first_disabled = true
@@ -210,12 +210,14 @@ support-files = [
 ]
 
 ["browser_new_tab_bookmarks_toolbar_height.js"]
-skip-if = ["!verify && os == 'mac'"] # Bug 1872477
+skip-if = [
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64'", # Bug 1872477
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64'", # Bug 1872477
+]
 support-files = ["file_observe_height_changes.html"]
 
 ["browser_new_tab_in_privilegedabout_process_pref.js"]
 https_first_disabled = true
-skip-if = ["os == 'linux' && debug"] # Bug 1581500.
 
 ["browser_new_tab_insert_position.js"]
 https_first_disabled = true
@@ -236,7 +238,10 @@ https_first_disabled = true
 ["browser_origin_attrs_in_remote_type.js"]
 
 ["browser_origin_attrs_rel.js"]
-skip-if = ["verify && os == 'mac'"]
+skip-if = [
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && verify",
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64' && verify",
+]
 support-files = ["file_rel_opener_noopener.html"]
 
 ["browser_originalURI.js"]
@@ -261,7 +266,8 @@ support-files = ["file_anchor_elements.html"]
 ["browser_positional_attributes.js"]
 skip-if = [
   "verify && os == 'win'",
-  "verify && os == 'mac'",
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && verify",
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64' && verify",
 ]
 
 ["browser_preloadedBrowser_zoom.js"]
@@ -275,10 +281,6 @@ https_first_disabled = true
 ["browser_relatedTabs_reset.js"]
 
 ["browser_reload_deleted_file.js"]
-skip-if = [
-  "debug && os == 'mac'", #Bug 1421183, disabled on Linux/OSX for leaked windows
-  "debug && os == 'linux'", #Bug 1421183, disabled on Linux/OSX for leaked windows
-]
 
 ["browser_removeTabsToTheEnd.js"]
 
@@ -325,7 +327,6 @@ skip-if = ["true"] # Bug 1616418 Bug 1549985
 ["browser_tab_manager_drag.js"]
 
 ["browser_tab_manager_keyboard_access.js"]
-skip-if = ["true"] # Bug 1900477
 
 ["browser_tab_move_to_new_window_reload.js"]
 

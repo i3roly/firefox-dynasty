@@ -650,6 +650,21 @@ browser.engagement:
     record_in_processes:
       - 'main'
 
+  max_concurrent_vertical_tab_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of maximum number of tabs with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+
   tab_open_event_count:
     bug_numbers:
       - 1271304
@@ -665,6 +680,21 @@ browser.engagement:
     products:
       - 'firefox'
       - 'fennec'
+    record_in_processes:
+      - 'main'
+
+  vertical_tab_open_event_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of tab open events with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
     record_in_processes:
       - 'main'
 
@@ -723,6 +753,21 @@ browser.engagement:
     record_in_processes:
       - 'main'
 
+  max_concurrent_vertical_tab_pinned_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of maximum number of pinned tabs with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+
   tab_pinned_event_count:
     bug_numbers:
       - 1505535
@@ -738,6 +783,21 @@ browser.engagement:
     products:
       - 'firefox'
       - 'fennec'
+    record_in_processes:
+      - 'main'
+
+  vertical_tab_pinned_event_count:
+    bug_numbers:
+      - 1899352
+    description: >
+      The count of tab pinned events with vertical tabs enabled.
+    expires: never
+    kind: uint
+    notification_emails:
+      - vsabino@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
     record_in_processes:
       - 'main'
 
@@ -3596,24 +3656,6 @@ devtools.accessibility:
     record_in_processes:
       - 'main'
 
-devtools.application:
-  opened_count:
-    bug_numbers:
-      - 1451734
-    description: >
-      Number of times the DevTools Application panel has been opened.
-    expires: "66"
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-      - jdescottes@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
 devtools.toolbox:
   tabs_reordered:
     bug_numbers:
@@ -5608,10 +5650,11 @@ browser.searchinit:
       - 1811158
       - 1846899
       - 1881408
+      - 1916866
     description: >
       Records the number of secure (i.e., using https) OpenSearch search
       engines a given user has installed
-    expires: "133"
+    expires: "145"
     keyed: false
     kind: uint
     notification_emails:
@@ -5628,10 +5671,11 @@ browser.searchinit:
       - 1811158
       - 1846899
       - 1881408
+      - 1916866
     description: >
       Records the number of insecure (i.e., using http) OpenSearch search
       engines a given user has installed
-    expires: "133"
+    expires: "145"
     keyed: false
     kind: uint
     notification_emails:
@@ -5648,10 +5692,11 @@ browser.searchinit:
       - 1811158
       - 1846899
       - 1881408
+      - 1916866
     description: >
       Records the number of OpenSearch search engines with secure updates
       enabled (i.e., using https) a given user has installed
-    expires: "133"
+    expires: "145"
     keyed: false
     kind: uint
     notification_emails:
@@ -5668,10 +5713,11 @@ browser.searchinit:
       - 1811158
       - 1846899
       - 1881408
+      - 1916866
     description: >
       Records the number of OpenSearch search engines with insecure updates
       enabled (i.e., using http) a given user has installed
-    expires: "133"
+    expires: "145"
     keyed: false
     kind: uint
     notification_emails:
@@ -5749,10 +5795,11 @@ startup:
   profile_database_version:
     bug_numbers:
       - 1878339
+      - 1916867
     description: >
       The version of the profiles.ini database loaded during startup. A value
       of "0" is used to indicate that no file was present during startup.
-    expires: "133"
+    expires: "140"
     keyed: false
     kind: string
     notification_emails:
@@ -5771,10 +5818,11 @@ startup:
   profile_count:
     bug_numbers:
       - 1878339
+      - 1916867
     description: >
       This records the number of known profiles after startup completes. This
       includes any profiles that were created during startup.
-    expires: "133"
+    expires: "140"
     keyed: false
     kind: uint
     notification_emails:
@@ -6880,6 +6928,74 @@ urlbar.picked:
         - 1671508
       description: >
         Counts how many times this result type was picked at a given index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_actions:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict actions result was picked at a given
+        index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_bookmarks:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict bookmarks result was picked at a
+        given index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_history:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict history result was picked at a given
+        index.
+      expires: never
+      kind: uint
+      keyed: true
+      notification_emails:
+        - fx-search-telemetry@mozilla.com
+      release_channel_collection: opt-out
+      products:
+        - 'firefox'
+      record_in_processes:
+        - main
+
+    restrict_keyword_tabs:
+      bug_numbers:
+        - 1917992
+      description: >
+        Counts how many times this restrict tabs result was picked at a given
+        index.
       expires: never
       kind: uint
       keyed: true

@@ -6,7 +6,7 @@ import {
   ProgressBar,
   WelcomeScreen,
 } from "content-src/components/MultiStageAboutWelcome";
-import { Themes } from "content-src/components/Themes";
+import { SingleSelect } from "content-src/components/SingleSelect";
 import React from "react";
 import { shallow, mount } from "enzyme";
 import { AboutWelcomeDefaults } from "modules/AboutWelcomeDefaults.sys.mjs";
@@ -217,16 +217,16 @@ describe("MultiStageAboutWelcome module", () => {
 
   describe("WelcomeScreen component", () => {
     describe("easy setup screen", () => {
-      const screen = AboutWelcomeDefaults.getDefaults().screens.find(
+      const easySetupScreen = AboutWelcomeDefaults.getDefaults().screens.find(
         s => s.id === "AW_EASY_SETUP_NEEDS_DEFAULT_AND_PIN"
       );
       let EASY_SETUP_SCREEN_PROPS;
 
       beforeEach(() => {
         EASY_SETUP_SCREEN_PROPS = {
-          id: screen.id,
-          content: screen.content,
-          messageId: `${DEFAULT_PROPS.message_id}_${screen.id}`,
+          id: easySetupScreen.id,
+          content: easySetupScreen.content,
+          messageId: `${DEFAULT_PROPS.message_id}_${easySetupScreen.id}`,
           UTMTerm: DEFAULT_PROPS.utm_term,
           flowParams: null,
           totalNumberOfScreens: 1,
@@ -367,7 +367,7 @@ describe("MultiStageAboutWelcome module", () => {
       });
 
       it("should check this.props.activeTheme in the rendered input", () => {
-        const wrapper = shallow(<Themes {...THEME_SCREEN_PROPS} />);
+        const wrapper = shallow(<SingleSelect {...THEME_SCREEN_PROPS} />);
 
         const selectedThemeInput = wrapper.find(".theme input[checked=true]");
         assert.strictEqual(
@@ -459,10 +459,203 @@ describe("MultiStageAboutWelcome module", () => {
       it("should handle wallpaper click", () => {
         const wrapper = mount(<WelcomeScreen {...WALLPAPER_SCREEN_PROPS} />);
         const wallpaperOptions = wrapper.find(
-          ".tiles-theme-section .theme input[name='mountain']"
+          ".tiles-single-select-section .select-item input[value='mountain']"
         );
         wallpaperOptions.simulate("click");
         assert.calledTwice(AboutWelcomeUtils.handleUserAction);
+      });
+    });
+
+    describe("Single select picker screen", () => {
+      let SINGLE_SELECT_SCREEN_PROPS;
+      beforeEach(() => {
+        SINGLE_SELECT_SCREEN_PROPS = {
+          content: {
+            title: {
+              raw: "Test title",
+            },
+            subtitle: {
+              raw: "Test subtitle",
+            },
+            tiles: {
+              type: "single-select",
+              selected: "test1",
+              action: {
+                picker: "<event>",
+              },
+              data: [
+                {
+                  id: "test1",
+                  label: {
+                    raw: "test1 label",
+                  },
+                  action: {
+                    type: "SET_PREF",
+                    data: {
+                      pref: {
+                        name: "sidebar.revamp",
+                        value: true,
+                      },
+                    },
+                  },
+                },
+                {
+                  defaultValue: true,
+                  id: "test2",
+                  label: {
+                    raw: "test2 label",
+                  },
+                  flair: {
+                    text: {
+                      raw: "New!",
+                    },
+                  },
+                  action: {
+                    type: "SET_PREF",
+                    data: {
+                      pref: {
+                        name: "sidebar.revamp",
+                        value: false,
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+            secondary_button: {
+              label: {
+                raw: "Skip this step",
+              },
+              action: {
+                navigate: true,
+              },
+              has_arrow_icon: true,
+            },
+          },
+          navigate: sandbox.stub(),
+          setActiveSingleSelect: sandbox.stub(),
+        };
+        sandbox.stub(AboutWelcomeUtils, "handleUserAction").resolves();
+      });
+      it("should select the configured default value if present", async () => {
+        const wrapper = mount(
+          <WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />
+        );
+        assert.ok(
+          wrapper
+            .find(".tiles-single-select-section .select-item .test1")
+            .exists()
+        );
+      });
+      it("should preselect the active value if present", async () => {
+        SINGLE_SELECT_SCREEN_PROPS.activeSingleSelect = "test2";
+        const wrapper = mount(
+          <WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />
+        );
+        assert.ok(
+          wrapper
+            .find(".tiles-single-select-section .select-item .test2")
+            .exists()
+        );
+      });
+      it("should handle item click", () => {
+        const wrapper = mount(
+          <WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />
+        );
+        const selectOption = wrapper.find(
+          ".tiles-single-select-section .select-item input[value='test1']"
+        );
+        selectOption.simulate("click");
+        assert.calledOnce(AboutWelcomeUtils.handleUserAction);
+      });
+      it("should handle item key down selection", () => {
+        const wrapper = mount(
+          <WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />
+        );
+        const selectOption = wrapper.find(
+          ".tiles-single-select-section .select-item input[value='test1']"
+        );
+        selectOption.simulate("keydown", { key: "Enter" });
+        assert.calledOnce(AboutWelcomeUtils.handleUserAction);
+      });
+      it("should render flair", () => {
+        const wrapper = mount(
+          <WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />
+        );
+        const flair = wrapper.find(".flair");
+        assert.ok(flair.exists());
+        assert.ok(flair.text() === "New!");
+      });
+      it("should automatically trigger the selected tile's action for an approved action", () => {
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.autoTrigger = true;
+        mount(<WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />);
+        assert.calledOnce(AboutWelcomeUtils.handleUserAction);
+      });
+      it("should not trigger the selected tile's action for an unapproved action", () => {
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.autoTrigger = true;
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.data[0].action = "OPEN_URL";
+
+        mount(<WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />);
+
+        assert.notCalled(AboutWelcomeUtils.handleUserAction);
+      });
+      it("should not trigger the selected tile's action for an unapproved pref with SET_PREF action", () => {
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.autoTrigger = true;
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.data[0].action.data.pref =
+          "unapproved.pref";
+
+        mount(<WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />);
+
+        assert.notCalled(AboutWelcomeUtils.handleUserAction);
+      });
+      it("should trigger all of the selected tile's actions if MULTI_ACTION is used with SET_PREF and allowed prefs", () => {
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.autoTrigger = true;
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.data[0].action = {
+          type: "MULTI_ACTION",
+          data: {
+            actions: [
+              {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "sidebar.revamp",
+                  },
+                },
+              },
+              {
+                type: "SET_PREF",
+                data: {
+                  pref: {
+                    name: "sidebar.verticalTabs",
+                  },
+                },
+              },
+            ],
+          },
+        };
+        mount(<WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />);
+        assert.calledOnce(AboutWelcomeUtils.handleUserAction);
+      });
+      it("should not trigger any of the selected tile's action if MULTI_ACTION is used with one unallowed pref", () => {
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.autoTrigger = true;
+        SINGLE_SELECT_SCREEN_PROPS.content.tiles.data[0].action = {
+          type: "MULTI_ACTION",
+          data: {
+            actions: [
+              {
+                type: "OPEN_URL",
+              },
+              {
+                type: "SET_PREF",
+                data: {
+                  pref: "sidebar.verticalTabs",
+                },
+              },
+            ],
+          },
+        };
+        mount(<WelcomeScreen {...SINGLE_SELECT_SCREEN_PROPS} />);
+        assert.notCalled(AboutWelcomeUtils.handleUserAction);
       });
     });
 

@@ -14,6 +14,8 @@ prefs = [
 
 ["browser_extensions_sidebar.js"]
 
+["browser_glean_sidebar.js"]
+
 ["browser_hide_sidebar_on_popup.js"]
 
 ["browser_history_sidebar.js"]
@@ -25,6 +27,8 @@ skip-if = ["true"] # Bug 1916025
 run-if = ["os == 'mac'"] # Mac only feature
 
 ["browser_sidebar_max_width.js"]
+
+["browser_sidebar_nimbus.js"]
 
 ["browser_sidebar_panel_header.js"]
 
@@ -38,6 +42,10 @@ run-if = ["os == 'mac'"] # Mac only feature
 
 ["browser_toolbar_sidebar_button.js"]
 
+["browser_verticalTabs_widget_placements.js"]
+
 ["browser_vertical_tabs.js"]
+
+["browser_vertical_tabs_cui_reset.js"]
 
 ["browser_view_sidebar_menu.js"]

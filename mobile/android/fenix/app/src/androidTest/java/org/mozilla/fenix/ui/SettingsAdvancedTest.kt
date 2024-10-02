@@ -81,7 +81,6 @@ class SettingsAdvancedTest : TestSetup() {
         navigationToolbar {
         }.enterURLAndEnterToBrowser(externalLinksPage.url) {
             clickPageObject(playStoreLink)
-            waitForPageToLoad(pageLoadWaitingTime = waitingTimeLong)
             verifyUrl(playStoreUrl)
         }
     }
@@ -109,7 +108,6 @@ class SettingsAdvancedTest : TestSetup() {
         navigationToolbar {
         }.enterURLAndEnterToBrowser(externalLinksPage.url) {
             clickPageObject(playStoreLink)
-            waitForPageToLoad(pageLoadWaitingTime = waitingTimeLong)
             verifyUrl(playStoreUrl)
         }
     }

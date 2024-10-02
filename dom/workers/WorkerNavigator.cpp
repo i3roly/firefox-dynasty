@@ -83,7 +83,10 @@ void WorkerNavigator::Invalidate() {
 
   mWebGpu = nullptr;
 
-  mLocks = nullptr;
+  if (mLocks) {
+    mLocks->Shutdown();
+    mLocks = nullptr;
+  }
 }
 
 JSObject* WorkerNavigator::WrapObject(JSContext* aCx,
@@ -139,21 +142,17 @@ void WorkerNavigator::GetPlatform(nsString& aPlatform, CallerType aCallerType,
   WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
   MOZ_ASSERT(workerPrivate);
 
-  if (aCallerType != CallerType::System) {
-    if (workerPrivate->ShouldResistFingerprinting(
-            RFPTarget::NavigatorPlatform)) {
-      // See nsRFPService.h for spoofed value.
-      aPlatform.AssignLiteral(SPOOFED_PLATFORM);
-      return;
-    }
-
-    if (!mProperties.mPlatformOverridden.IsEmpty()) {
-      aPlatform = mProperties.mPlatformOverridden;
-      return;
-    }
+  // navigator.platform is the same for default and spoofed values. The
+  // "general.platform.override" pref should override the default platform,
+  // but the spoofed platform should override the pref.
+  if (aCallerType == CallerType::System ||
+      workerPrivate->ShouldResistFingerprinting(RFPTarget::NavigatorPlatform) ||
+      mProperties.mPlatformOverridden.IsEmpty()) {
+    aPlatform = mProperties.mPlatform;
+  } else {
+    // from "general.platform.override" pref.
+    aPlatform = mProperties.mPlatformOverridden;
   }
-
-  aPlatform = mProperties.mPlatform;
 }
 
 namespace {

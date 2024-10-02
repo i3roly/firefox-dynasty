@@ -207,8 +207,7 @@ class CanvasDataShmemHolder {
   void Destroy() {
     class DestroyRunnable final : public dom::WorkerThreadRunnable {
      public:
-      DestroyRunnable(dom::WorkerPrivate* aWorkerPrivate,
-                      CanvasDataShmemHolder* aShmemHolder)
+      explicit DestroyRunnable(CanvasDataShmemHolder* aShmemHolder)
           : dom::WorkerThreadRunnable("CanvasDataShmemHolder::Destroy"),
             mShmemHolder(aShmemHolder) {}
 
@@ -237,7 +236,7 @@ class CanvasDataShmemHolder {
     if (mCanvasChild) {
       if (mWorkerRef) {
         if (!mWorkerRef->Private()->IsOnCurrentThread()) {
-          auto task = MakeRefPtr<DestroyRunnable>(mWorkerRef->Private(), this);
+          auto task = MakeRefPtr<DestroyRunnable>(this);
           dom::WorkerPrivate* worker = mWorkerRef->Private();
           mMutex.Unlock();
           task->Dispatch(worker);
@@ -389,6 +388,14 @@ void CanvasChild::EndTransaction() {
                             &CanvasChild::DropFreeBuffersWhenDormant),
           StaticPrefs::gfx_canvas_remote_drop_buffer_milliseconds());
     }
+  }
+
+  // If we are continuously drawing/recording, then we need to periodically
+  // flush our external surface/image references, to ensure they actually get
+  // freed on a timely basis.
+  if (mRecorder) {
+    mRecorder->ClearProcessedExternalSurfaces();
+    mRecorder->ClearProcessedExternalImages();
   }
 
   ++mTransactionsSinceGetDataSurface;

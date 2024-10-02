@@ -89,6 +89,7 @@ export const DefaultMeta = ({
   mayHaveThumbsUpDown,
   onThumbsUpClick,
   onThumbsDownClick,
+  isListCard,
   state,
 }) => (
   <div className="meta">
@@ -106,7 +107,7 @@ export const DefaultMeta = ({
       <header className="title clamp">{title}</header>
       {excerpt && <p className="excerpt clamp">{excerpt}</p>}
     </div>
-    {mayHaveThumbsUpDown && (
+    {!isListCard && mayHaveThumbsUpDown && (
       <DSThumbsUpDownButtons
         onThumbsDownClick={onThumbsDownClick}
         onThumbsUpClick={onThumbsUpClick}
@@ -199,6 +200,19 @@ export class _DSCard extends React.PureComponent {
         height: 101,
       },
     ];
+
+    this.listCardImageSizes = [
+      {
+        mediaMatcher: "(min-width: 1122px)",
+        width: 75,
+        height: 75,
+      },
+      {
+        mediaMatcher: "default",
+        width: 50,
+        height: 50,
+      },
+    ];
   }
 
   doesLinkTopicMatchSelectedTopic() {
@@ -243,6 +257,7 @@ export class _DSCard extends React.PureComponent {
             topic: this.props.topic,
             matches_selected_topic: matchesSelectedTopic,
             selected_topics: this.props.selectedTopics,
+            is_list_card: this.props.isListCard,
           },
         })
       );
@@ -264,6 +279,7 @@ export class _DSCard extends React.PureComponent {
               recommendation_id: this.props.recommendation_id,
               topic: this.props.topic,
               selected_topics: this.props.selectedTopics,
+              is_list_card: this.props.isListCard,
             },
           ],
         })
@@ -302,6 +318,7 @@ export class _DSCard extends React.PureComponent {
             topic: this.props.topic,
             matches_selected_topic: matchesSelectedTopic,
             selected_topics: this.props.selectedTopics,
+            is_list_card: this.props.isListCard,
           },
         })
       );
@@ -320,6 +337,7 @@ export class _DSCard extends React.PureComponent {
               recommendation_id: this.props.recommendation_id,
               topic: this.props.topic,
               selected_topics: this.props.selectedTopics,
+              is_list_card: this.props.isListCard,
             },
           ],
         })
@@ -522,12 +540,16 @@ export class _DSCard extends React.PureComponent {
   }
 
   render() {
+    const { isRecentSave, DiscoveryStream, saveToPocketCard, isListCard } =
+      this.props;
     if (this.props.placeholder || !this.state.isSeen) {
       // placeholder-seen is used to ensure the loading animation is only used if the card is visible.
       const placeholderClassName = this.state.isSeen ? `placeholder-seen` : ``;
       return (
         <div
-          className={`ds-card placeholder ${placeholderClassName}`}
+          className={`ds-card placeholder ${placeholderClassName} ${
+            isListCard ? "list-card-placeholder" : ""
+          }`}
           ref={this.setPlaceholderRef}
         >
           <div className="placeholder-image placeholder-fill" />
@@ -538,7 +560,6 @@ export class _DSCard extends React.PureComponent {
       );
     }
 
-    const { isRecentSave, DiscoveryStream, saveToPocketCard } = this.props;
     let source = this.props.source || this.props.publisher;
     if (!source) {
       try {
@@ -602,10 +623,12 @@ export class _DSCard extends React.PureComponent {
 
     return (
       <article
-        className={`ds-card ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
+        className={`ds-card ${
+          isListCard ? "list-feed-card" : ""
+        }${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
         ref={this.setContextMenuButtonHostRef}
       >
-        {this.props.showTopics && this.props.topic && (
+        {this.props.showTopics && this.props.topic && !isListCard && (
           <span
             className="ds-card-topic"
             data-l10n-id={`newtab-topic-label-${this.props.topic}`}
@@ -616,7 +639,7 @@ export class _DSCard extends React.PureComponent {
             extraClassNames="img"
             source={this.props.image_src}
             rawSource={this.props.raw_image_src}
-            sizes={this.dsImageSizes}
+            sizes={isListCard ? this.listCardImageSizes : this.dsImageSizes}
             url={this.props.url}
             title={this.props.title}
             isRecentSave={isRecentSave}
@@ -672,11 +695,14 @@ export class _DSCard extends React.PureComponent {
           onThumbsUpClick={this.onThumbsUpClick}
           onThumbsDownClick={this.onThumbsDownClick}
           state={this.state}
+          isListCard={isListCard}
         />
 
         <div className="card-stp-button-hover-background">
           <div className="card-stp-button-position-wrapper">
-            {saveToPocketCard && <>{!this.props.flightId && stpButton()}</>}
+            {saveToPocketCard && !isListCard && (
+              <>{!this.props.flightId && stpButton()}</>
+            )}
 
             <DSLinkMenu
               id={this.props.id}
@@ -701,6 +727,7 @@ export class _DSCard extends React.PureComponent {
               isRecentSave={isRecentSave}
               recommendation_id={this.props.recommendation_id}
               tile_id={this.props.id}
+              block_key={this.props.id}
               scheduled_corpus_item_id={this.props.scheduled_corpus_item_id}
               recommended_at={this.props.recommended_at}
               received_rank={this.props.received_rank}

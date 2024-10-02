@@ -38,6 +38,7 @@ export class SidebarHistory extends SidebarPage {
     this._menuSortBySite = doc.getElementById("sidebar-history-sort-by-site");
     this._menu.addEventListener("command", this);
     this.addContextMenuListeners();
+    this.addSidebarFocusedListeners();
     this.controller.updateCache();
   }
 
@@ -45,6 +46,7 @@ export class SidebarHistory extends SidebarPage {
     super.disconnectedCallback();
     this._menu.removeEventListener("command", this);
     this.removeContextMenuListeners();
+    this.removeSidebarFocusedListeners();
   }
 
   handleContextMenuEvent(e) {
@@ -74,6 +76,10 @@ export class SidebarHistory extends SidebarPage {
     }
   }
 
+  handleSidebarFocusedEvent() {
+    this.searchTextbox?.focus();
+  }
+
   onPrimaryAction(e) {
     navigateToLink(e);
   }
@@ -87,7 +93,10 @@ export class SidebarHistory extends SidebarPage {
    * The template to use for cards-container.
    */
   get cardsTemplate() {
-    if (this.controller.searchResults) {
+    if (this.controller.isHistoryPending) {
+      // don't render cards until initial history visits entries are available
+      return "";
+    } else if (this.controller.searchResults) {
       return this.#searchResultsTemplate();
     } else if (!this.controller.isHistoryEmpty) {
       return this.#historyCardsTemplate();
@@ -224,11 +233,6 @@ export class SidebarHistory extends SidebarPage {
     this._menu.openPopup(e.target, menuPos, 0, 0, false, false, e);
   }
 
-  shouldUpdate() {
-    // don't update/render until initial history visits entries are available
-    return !this.controller.isHistoryPending;
-  }
-
   willUpdate() {
     this._menuSortByDate.setAttribute(
       "checked",
@@ -260,7 +264,6 @@ export class SidebarHistory extends SidebarPage {
             data-l10n-attrs="placeholder"
             @fxview-search-textbox-query=${this.onSearchQuery}
             .size=${15}
-            autofocus
           ></fxview-search-textbox>
           <moz-button
             class="menu-button"

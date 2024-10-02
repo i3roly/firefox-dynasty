@@ -229,17 +229,19 @@ void PointerEvent::GetPointerType(nsAString& aPointerType) {
     return;
   }
 
+#if SPOOFED_MAX_TOUCH_POINTS <= 0
   if (ShouldResistFingerprinting()) {
     aPointerType.AssignLiteral("mouse");
     return;
   }
+#endif
 
   ConvertPointerTypeToString(mEvent->AsPointerEvent()->mInputSource,
                              aPointerType);
 }
 
 int32_t PointerEvent::PointerId() {
-  return ShouldResistFingerprinting()
+  return (ShouldResistFingerprinting(true))
              ? PointerEventHandler::GetSpoofedPointerIdForRFP()
              : mEvent->AsPointerEvent()->pointerId;
 }
@@ -339,6 +341,8 @@ bool PointerEvent::EnableGetCoalescedEvents(JSContext* aCx, JSObject* aGlobal) {
 void PointerEvent::GetCoalescedEvents(
     nsTArray<RefPtr<PointerEvent>>& aPointerEvents) {
   WidgetPointerEvent* widgetEvent = mEvent->AsPointerEvent();
+  MOZ_ASSERT(widgetEvent);
+  EnsureFillingCoalescedEvents(*widgetEvent);
   if (mCoalescedEvents.IsEmpty() && widgetEvent &&
       widgetEvent->mCoalescedWidgetEvents &&
       !widgetEvent->mCoalescedWidgetEvents->mEvents.IsEmpty()) {
@@ -347,6 +351,7 @@ void PointerEvent::GetCoalescedEvents(
          widgetEvent->mCoalescedWidgetEvents->mEvents) {
       RefPtr<PointerEvent> domEvent =
           NS_NewDOMPointerEvent(owner, nullptr, &event);
+      domEvent->mCoalescedOrPredictedEvent = true;
 
       // The dom event is derived from an OS generated widget event. Setup
       // mWidget and mPresContext since they are necessary to calculate
@@ -380,9 +385,31 @@ void PointerEvent::GetCoalescedEvents(
   aPointerEvents.AppendElements(mCoalescedEvents);
 }
 
+void PointerEvent::EnsureFillingCoalescedEvents(
+    WidgetPointerEvent& aWidgetEvent) {
+  if (!aWidgetEvent.IsTrusted() || aWidgetEvent.mMessage != ePointerMove ||
+      !mCoalescedEvents.IsEmpty() ||
+      (aWidgetEvent.mCoalescedWidgetEvents &&
+       !aWidgetEvent.mCoalescedWidgetEvents->mEvents.IsEmpty()) ||
+      mCoalescedOrPredictedEvent) {
+    return;
+  }
+  if (!aWidgetEvent.mCoalescedWidgetEvents) {
+    aWidgetEvent.mCoalescedWidgetEvents = new WidgetPointerEventHolder();
+  }
+  WidgetPointerEvent* const coalescedEvent =
+      aWidgetEvent.mCoalescedWidgetEvents->mEvents.AppendElement(
+          WidgetPointerEvent(true, aWidgetEvent.mMessage,
+                             aWidgetEvent.mWidget));
+  MOZ_ASSERT(coalescedEvent);
+  PointerEventHandler::InitCoalescedEventFromPointerEvent(*coalescedEvent,
+                                                          aWidgetEvent);
+}
+
 void PointerEvent::GetPredictedEvents(
     nsTArray<RefPtr<PointerEvent>>& aPointerEvents) {
   // XXX Add support for native predicted events, bug 1550461
+  // And when doing so, update mCoalescedOrPredictedEvent here.
   if (mEvent->IsTrusted() && mEvent->mTarget) {
     for (RefPtr<PointerEvent>& pointerEvent : mPredictedEvents) {
       // Only set event target when it's null.
@@ -394,7 +421,7 @@ void PointerEvent::GetPredictedEvents(
   aPointerEvents.AppendElements(mPredictedEvents);
 }
 
-bool PointerEvent::ShouldResistFingerprinting() const {
+bool PointerEvent::ShouldResistFingerprinting(bool aForPointerId) const {
   // There are three simple situations we don't need to spoof this pointer
   // event.
   //   1. The pref privcy.resistFingerprinting' is false, we fast return here
@@ -403,17 +430,19 @@ bool PointerEvent::ShouldResistFingerprinting() const {
   //   3. This event is a mouse pointer event.
   //  We don't need to check for the system group since pointer events won't be
   //  dispatched to the system group.
-  if (!nsContentUtils::ShouldResistFingerprinting("Efficiency Check",
-                                                  RFPTarget::PointerEvents) ||
+  RFPTarget target =
+      aForPointerId ? RFPTarget::PointerId : RFPTarget::PointerEvents;
+  if (!nsContentUtils::ShouldResistFingerprinting("Efficiency Check", target) ||
       !mEvent->IsTrusted() ||
-      mEvent->AsPointerEvent()->mInputSource ==
-          MouseEvent_Binding::MOZ_SOURCE_MOUSE) {
+      (mEvent->AsPointerEvent()->mInputSource ==
+           MouseEvent_Binding::MOZ_SOURCE_MOUSE &&
+       SPOOFED_MAX_TOUCH_POINTS == 0)) {
     return false;
   }
 
   // Pref is checked above, so use true as fallback.
   nsCOMPtr<Document> doc = GetDocument();
-  return doc ? doc->ShouldResistFingerprinting(RFPTarget::PointerEvents) : true;
+  return doc ? doc->ShouldResistFingerprinting(target) : true;
 }
 
 }  // namespace mozilla::dom

@@ -7,10 +7,20 @@ import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/megalist/PasswordCard.mjs";
+// eslint-disable-next-line import/no-unassigned-import
+import "chrome://global/content/megalist/Dialog.mjs";
+
+// eslint-disable-next-line import/no-unassigned-import
+import "chrome://global/content/megalist/NotificationMessageBar.mjs";
 
 const DISPLAY_MODES = {
   ALERTS: "SortByAlerts",
   ALL: "SortByName",
+};
+
+const DIALOGS = {
+  REMOVE_ALL: "remove-all",
+  EXPORT: "export-passwords",
 };
 
 export class MegalistAlpha extends MozLitElement {
@@ -20,6 +30,7 @@ export class MegalistAlpha extends MozLitElement {
     this.searchText = "";
     this.records = [];
     this.header = null;
+    this.notification = null;
     this.displayMode = DISPLAY_MODES.ALL;
 
     window.addEventListener("MessageFromViewModel", ev =>
@@ -33,13 +44,16 @@ export class MegalistAlpha extends MozLitElement {
       searchText: { type: String },
       records: { type: Array },
       header: { type: Object },
+      notification: { type: Object },
       displayMode: { type: String },
+      dialogType: { type: String },
     };
   }
 
   connectedCallback() {
     super.connectedCallback();
     this.#messageToViewModel("Refresh");
+    this.#sendCommand(this.displayMode);
   }
 
   #onMessageFromViewModel({ detail }) {
@@ -63,6 +77,10 @@ export class MegalistAlpha extends MozLitElement {
   #onRadioButtonChange(e) {
     this.displayMode = e.target.value;
     this.#sendCommand(this.displayMode);
+  }
+
+  #closeDialog() {
+    this.dialogType = null;
   }
 
   #openMenu(e) {
@@ -99,6 +117,10 @@ export class MegalistAlpha extends MozLitElement {
     this.requestUpdate();
   }
 
+  receiveSetNotification(notification) {
+    this.notification = notification;
+  }
+
   #createLoginRecords(snapshots) {
     const header = snapshots.shift();
     const records = [];
@@ -116,23 +138,29 @@ export class MegalistAlpha extends MozLitElement {
 
   // TODO: This should be passed to virtualized list with an explicit height.
   renderListItem({ origin: displayOrigin, username, password }) {
-    return html`<password-card
+    return html` <password-card
+      role="group"
       .origin=${displayOrigin}
       .username=${username}
       .password=${password}
       .messageToViewModel=${this.#messageToViewModel.bind(this)}
-    ></password-card>`;
+    >
+    </password-card>`;
   }
 
   // TODO: Temporary. Should be rendered by the virtualized list.
   renderList() {
     return this.records.length
       ? html`
-          <div class="passwords-list">
+          <div class="passwords-list" role="listbox" tabindex="0">
             ${this.records.map(record => this.renderListItem(record))}
           </div>
         `
       : "";
+  }
+
+  #openDialog(dialog = "") {
+    this.dialogType = dialog;
   }
 
   renderSearch() {
@@ -219,14 +247,18 @@ export class MegalistAlpha extends MozLitElement {
         <panel-item
           action="import-from-file"
           data-l10n-id="about-logins-menu-menuitem-import-from-a-file"
+          @click=${() => this.#sendCommand("Import")}
         ></panel-item>
         <panel-item
           action="export-logins"
           data-l10n-id="about-logins-menu-menuitem-export-logins2"
+          @click=${() => this.#openDialog(DIALOGS.EXPORT)}
         ></panel-item>
         <panel-item
           action="remove-all-logins"
           data-l10n-id="about-logins-menu-menuitem-remove-all-logins2"
+          @click=${() => this.#openDialog(DIALOGS.REMOVE_ALL)}
+          .disabled=${!this.header.value.total}
         ></panel-item>
         <hr />
         <panel-item
@@ -253,14 +285,65 @@ export class MegalistAlpha extends MozLitElement {
     </div>`;
   }
 
+  renderDialog() {
+    if (!this.dialogType) {
+      return "";
+    }
+
+    if (this.dialogType === DIALOGS.REMOVE_ALL) {
+      return html`<remove-all-dialog
+        .onClick=${() => {
+          this.#sendCommand("RemoveAll");
+          this.#closeDialog();
+        }}
+        .onClose=${() => {
+          this.#closeDialog();
+        }}
+        loginsCount=${this.header.value.total}
+      ></remove-all-dialog>`;
+    } else if (this.dialogType === DIALOGS.EXPORT) {
+      return html`<export-all-dialog
+        .onClick=${() => {
+          this.#sendCommand("Export");
+          this.#closeDialog();
+        }}
+        .onClose=${() => {
+          this.#closeDialog();
+        }}
+        loginsCount=${this.header.value.total}
+      ></export-all-dialog>`;
+    }
+
+    return "";
+  }
+
+  renderNotification() {
+    if (!this.notification) {
+      return "";
+    }
+
+    return html`
+      <notification-message-bar
+        .notification=${this.notification}
+        .onDismiss=${() => {
+          this.notification = null;
+        }}
+        .messageHandler=${commandId => this.#sendCommand(commandId)}
+      >
+      </notification-message-bar>
+    `;
+  }
+
   render() {
     return html`
       <link
         rel="stylesheet"
         href="chrome://global/content/megalist/megalist.css"
       />
+      ${this.renderDialog()}
       <div class="container">
-        ${this.renderFirstRow()} ${this.renderSecondRow()} ${this.renderList()}
+        ${this.renderFirstRow()} ${this.renderSecondRow()}
+        ${this.renderNotification()} ${this.renderList()}
       </div>
     `;
   }

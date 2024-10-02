@@ -10,13 +10,13 @@
 #include "mozilla/dom/CSSImportRule.h"
 #include "mozilla/dom/CSSRuleBinding.h"
 #include "mozilla/dom/CSSStyleRule.h"
+#include "mozilla/dom/CSSNestedDeclarations.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/ShadowRoot.h"
 #include "mozilla/IntegerRange.h"
 #include "mozilla/ServoStyleSet.h"
 #include "mozilla/StyleSheetInlines.h"
-#include "nsStyleSheetService.h"
 
 using namespace mozilla::dom;
 
@@ -81,6 +81,7 @@ void ServoStyleRuleMap::RuleRemoved(StyleSheet& aStyleSheet,
 
   switch (aStyleRule.Type()) {
     case StyleCssRuleType::Style:
+    case StyleCssRuleType::NestedDeclarations:
     case StyleCssRuleType::Import:
     case StyleCssRuleType::Media:
     case StyleCssRuleType::Supports:
@@ -118,9 +119,14 @@ size_t ServoStyleRuleMap::SizeOfIncludingThis(
 
 void ServoStyleRuleMap::FillTableFromRule(css::Rule& aRule) {
   switch (aRule.Type()) {
+    case StyleCssRuleType::NestedDeclarations: {
+      auto& rule = static_cast<CSSNestedDeclarations&>(aRule);
+      mTable.InsertOrUpdate(rule.RawStyle(), &rule);
+      break;
+    }
     case StyleCssRuleType::Style: {
       auto& rule = static_cast<CSSStyleRule&>(aRule);
-      mTable.InsertOrUpdate(rule.Raw(), &rule);
+      mTable.InsertOrUpdate(rule.RawStyle(), &rule);
       [[fallthrough]];
     }
     case StyleCssRuleType::LayerBlock:

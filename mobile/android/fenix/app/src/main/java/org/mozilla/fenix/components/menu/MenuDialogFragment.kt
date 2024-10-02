@@ -12,6 +12,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +37,7 @@ import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.concept.engine.translate.TranslationSupport
 import mozilla.components.concept.engine.translate.findLanguage
 import mozilla.components.lib.state.ext.observeAsState
+import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.ktx.android.util.dpToPx
 import mozilla.components.support.ktx.android.view.setNavigationBarColorCompat
 import mozilla.telemetry.glean.private.NoExtras
@@ -67,6 +70,11 @@ import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.settings.deletebrowsingdata.deleteAndQuit
 import org.mozilla.fenix.theme.FirefoxTheme
+import org.mozilla.fenix.utils.contentGrowth
+import org.mozilla.fenix.utils.enterMenu
+import org.mozilla.fenix.utils.enterSubmenu
+import org.mozilla.fenix.utils.exitMenu
+import org.mozilla.fenix.utils.exitSubmenu
 
 // EXPANDED_MIN_RATIO is used for BottomSheetBehavior.halfExpandedRatio().
 // That value needs to be less than the PEEK_HEIGHT.
@@ -74,7 +82,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
 // three states instead of the expected two states required by design.
 private const val PEEK_HEIGHT = 460
 private const val EXPANDED_MIN_RATIO = 0.0001f
-private const val TOP_EXPANDED_OFFSET = 80
+private const val EXPANDED_OFFSET = 80
 private const val HIDING_FRICTION = 0.9f
 
 /**
@@ -84,6 +92,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
     private val args by navArgs<MenuDialogFragmentArgs>()
     private val browsingModeManager get() = (activity as HomeActivity).browsingModeManager
+    private val webExtensionsMenuBinding = ViewBoundFeatureWrapper<WebExtensionsMenuBinding>()
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Events.toolbarMenuVisible.record(NoExtras())
@@ -104,7 +113,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     isFitToContents = true
                     peekHeight = PEEK_HEIGHT.dpToPx(resources.displayMetrics)
                     halfExpandedRatio = EXPANDED_MIN_RATIO
-                    expandedOffset = TOP_EXPANDED_OFFSET
+                    maxHeight = resources.displayMetrics.heightPixels - EXPANDED_OFFSET.dpToPx(resources.displayMetrics)
                     state = BottomSheetBehavior.STATE_COLLAPSED
                     hideFriction = HIDING_FRICTION
                 }
@@ -235,6 +244,18 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     val isDesktopMode by store.observeAsState(initialValue = false) { state ->
                         state.isDesktopMode
                     }
+
+                    webExtensionsMenuBinding.set(
+                        feature = WebExtensionsMenuBinding(
+                            browserStore = browserStore,
+                            menuStore = store,
+                            iconSize = 24.dpToPx(requireContext().resources.displayMetrics),
+                            onDismiss = { this@MenuDialogFragment.dismiss() },
+                        ),
+                        owner = this@MenuDialogFragment,
+                        view = this,
+                    )
+
                     val recommendedAddons by store.observeAsState(initialValue = emptyList()) { state ->
                         state.extensionMenuState.recommendedAddons
                     }
@@ -249,6 +270,14 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         state.browserMenuState != null && state.browserMenuState.selectedTab.readerState.active
                     }
 
+                    val addonInstallationInProgress by store.observeAsState(initialValue = null) { state ->
+                        state.extensionMenuState.addonInstallationInProgress
+                    }
+
+                    val webExtensionMenuItems by store.observeAsState(initialValue = emptyList()) { state ->
+                        state.extensionMenuState.webExtensionMenuItems
+                    }
+
                     NavHost(
                         navController = navHostController,
                         startDestination = when (args.accesspoint) {
@@ -259,7 +288,45 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             MenuAccessPoint.External -> CUSTOM_TAB_MENU_ROUTE
                         },
                     ) {
-                        composable(route = MAIN_MENU_ROUTE) {
+                        composable(
+                            route = MAIN_MENU_ROUTE,
+                            enterTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            popEnterTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            exitTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                            popExitTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                        ) {
                             if (settings.shouldShowMenuCFR) {
                                 MainMenuWithCFR(
                                     accessPoint = args.accesspoint,
@@ -285,7 +352,45 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             }
                         }
 
-                        composable(route = TOOLS_MENU_ROUTE) {
+                        composable(
+                            route = TOOLS_MENU_ROUTE,
+                            enterTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            popEnterTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            exitTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                            popExitTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                        ) {
                             val appLinksRedirect = if (selectedTab?.content?.url != null) {
                                 appLinksUseCases.appLinkRedirect(selectedTab.content.url)
                             } else {
@@ -336,7 +441,45 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             )
                         }
 
-                        composable(route = SAVE_MENU_ROUTE) {
+                        composable(
+                            route = SAVE_MENU_ROUTE,
+                            enterTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            popEnterTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            exitTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                            popExitTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                        ) {
                             SaveSubmenu(
                                 isBookmarked = isBookmarked,
                                 isPinned = isPinned,
@@ -374,10 +517,50 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                             )
                         }
 
-                        composable(route = EXTENSIONS_MENU_ROUTE) {
+                        composable(
+                            route = EXTENSIONS_MENU_ROUTE,
+                            enterTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            popEnterTransition = {
+                                (
+                                    enterSubmenu().togetherWith(
+                                        exitMenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).targetContentEnter
+                            },
+                            exitTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                            popExitTransition = {
+                                (
+                                    enterMenu().togetherWith(
+                                        exitSubmenu(),
+                                    ) using SizeTransform { initialSize, targetSize ->
+                                        contentGrowth(initialSize, targetSize)
+                                    }
+                                    ).initialContentExit
+                            },
+                        ) {
                             ExtensionsSubmenu(
                                 recommendedAddons = recommendedAddons,
-                                showExtensionsOnboarding = true,
+                                addonInstallationInProgress = addonInstallationInProgress,
+                                showExtensionsOnboarding = recommendedAddons.isNotEmpty(),
+                                webExtensionMenuItems = webExtensionMenuItems,
                                 onBackButtonClick = {
                                     store.dispatch(MenuAction.Navigate.Back)
                                 },

@@ -1,8 +1,5 @@
 "use strict";
 
-const { TelemetryArchive } = ChromeUtils.importESModule(
-  "resource://gre/modules/TelemetryArchive.sys.mjs"
-);
 const { TelemetryUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/TelemetryUtils.sys.mjs"
 );
@@ -19,15 +16,10 @@ const { TestUtils } = ChromeUtils.importESModule(
 );
 
 // All tests run privileged unless otherwise specified not to.
-function createExtension(
-  backgroundScript,
-  permissions,
-  isPrivileged = true,
-  telemetry
-) {
+function createExtension(backgroundScript, permissions, isPrivileged = true) {
   let extensionData = {
     background: backgroundScript,
-    manifest: { permissions, telemetry },
+    manifest: { permissions },
     isPrivileged,
   };
 
@@ -38,8 +30,7 @@ async function run(test) {
   let extension = createExtension(
     test.backgroundScript,
     test.permissions || ["telemetry"],
-    test.isPrivileged,
-    test.telemetry
+    test.isPrivileged
   );
   await extension.startup();
   await extension.awaitFinish(test.doneSignal);
@@ -49,6 +40,8 @@ async function run(test) {
 // Currently unsupported on Android: blocked on 1220177.
 // See 1280234 c67 for discussion.
 if (AppConstants.MOZ_BUILD_APP === "browser") {
+  AddonTestUtils.init(this);
+
   add_task(async function test_telemetry_without_telemetry_permission() {
     await run({
       backgroundScript: () => {
@@ -544,6 +537,8 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
     Services.telemetry.clearEvents();
     Services.telemetry.setEventRecordingEnabled("telemetry.test", true);
 
+    ExtensionTestUtils.failOnSchemaWarnings(false);
+
     await run({
       backgroundScript: async () => {
         await browser.telemetry.recordEvent(
@@ -556,16 +551,22 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
       doneSignal: "record_event_ok",
     });
 
-    TelemetryTestUtils.assertEvents(
-      [
-        {
-          category: "telemetry.test",
-          method: "test1",
-          object: "object1",
-        },
-      ],
-      { category: "telemetry.test" }
+    const snapshot = Services.telemetry.snapshotEvents(
+      Ci.nsITelemetry.DATASET_PRERELEASE_CHANNELS,
+      true
     );
+    if ("parent" in snapshot) {
+      Assert.ok(
+        snapshot.parent.every(
+          ([, /*timestamp*/ category, method, object /* value, extra */]) =>
+            category != "telemetry.test" &&
+            method != "test1" &&
+            object != "object1"
+        )
+      );
+    }
+
+    ExtensionTestUtils.failOnSchemaWarnings(true);
 
     Services.telemetry.setEventRecordingEnabled("telemetry.test", false);
     Services.telemetry.clearEvents();
@@ -575,6 +576,8 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
   add_task(async function test_telemetry_record_event_value_must_be_string() {
     Services.telemetry.clearEvents();
     Services.telemetry.setEventRecordingEnabled("telemetry.test", true);
+
+    ExtensionTestUtils.failOnSchemaWarnings(false);
 
     await run({
       backgroundScript: async () => {
@@ -597,17 +600,24 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
       doneSignal: "record_event_string_value",
     });
 
-    TelemetryTestUtils.assertEvents(
-      [
-        {
-          category: "telemetry.test",
-          method: "test1",
-          object: "object1",
-          value: "value1",
-        },
-      ],
-      { category: "telemetry.test" }
+    const snapshot = Services.telemetry.snapshotEvents(
+      Ci.nsITelemetry.DATASET_PRERELEASE_CHANNELS,
+      true
     );
+    const testEvents =
+      snapshot.parent?.filter(
+        ([, category, method, object]) =>
+          category == "telemetry.test" &&
+          method == "test1" &&
+          object == "object1"
+      ) ?? [];
+    Assert.equal(
+      testEvents.length,
+      0,
+      "Deprecated telemetry.recordEvent should be no-op."
+    );
+
+    ExtensionTestUtils.failOnSchemaWarnings(true);
 
     Services.telemetry.setEventRecordingEnabled("telemetry.test", false);
     Services.telemetry.clearEvents();
@@ -739,36 +749,43 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
   add_task(async function test_telemetry_register_events() {
     Services.telemetry.clearEvents();
 
-    await run({
-      backgroundScript: async () => {
-        await browser.telemetry.registerEvents("telemetry.test.dynamic", {
-          test1: {
-            methods: ["test1"],
-            objects: ["object1"],
-            extra_keys: [],
-          },
-        });
-        await browser.telemetry.recordEvent(
-          "telemetry.test.dynamic",
-          "test1",
-          "object1"
-        );
-        browser.test.notifyPass("register_events");
-      },
-      doneSignal: "register_events",
+    ExtensionTestUtils.failOnSchemaWarnings(false);
+
+    const { messages } = await promiseConsoleOutput(async () => {
+      await run({
+        backgroundScript: async () => {
+          await browser.telemetry.registerEvents("telemetry.test.dynamic", {
+            test1: {
+              methods: ["test1"],
+              objects: ["object1"],
+              extra_keys: [],
+            },
+          });
+          await browser.telemetry.recordEvent(
+            "telemetry.test.dynamic",
+            "test1",
+            "object1"
+          );
+          browser.test.notifyPass("register_events");
+        },
+        doneSignal: "register_events",
+      });
     });
 
-    TelemetryTestUtils.assertEvents(
-      [
-        {
-          category: "telemetry.test.dynamic",
-          method: "test1",
-          object: "object1",
-        },
+    const expectedRegisterEventsMessage =
+      /`registerEvents` has been deprecated since Firefox 132 \(see bug 1894533\)/;
+    const expectedRecordEventMessage =
+      /`recordEvent` has been deprecated since Firefox 132 \(see bug 1894533\)/;
+
+    AddonTestUtils.checkMessages(messages, {
+      expected: [
+        { message: expectedRegisterEventsMessage },
+        { message: expectedRecordEventMessage },
       ],
-      { category: "telemetry.test.dynamic" },
-      { process: "dynamic" }
-    );
+      forbidUnexpected: true,
+    });
+
+    ExtensionTestUtils.failOnSchemaWarnings(true);
   });
 
   add_task(async function test_telemetry_submit_ping() {
@@ -787,96 +804,6 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
       () => archiveTester.promiseFindPing("webext-test", []),
       "Failed to find the webext-test ping"
     );
-  });
-
-  add_task(async function test_telemetry_submit_encrypted_ping() {
-    await run({
-      backgroundScript: async () => {
-        try {
-          await browser.telemetry.submitEncryptedPing(
-            { payload: "encrypted-webext-test" },
-            {
-              schemaName: "schema-name",
-              schemaVersion: 123,
-            }
-          );
-          browser.test.fail(
-            "Expected exception without required manifest entries set."
-          );
-        } catch (e) {
-          browser.test.assertTrue(
-            e,
-            /Encrypted telemetry pings require ping_type and public_key to be set in manifest./
-          );
-          browser.test.notifyPass("submit_encrypted_ping_fail");
-        }
-      },
-      doneSignal: "submit_encrypted_ping_fail",
-    });
-
-    const telemetryManifestEntries = {
-      ping_type: "encrypted-webext-ping",
-      schemaNamespace: "schema-namespace",
-      public_key: {
-        id: "pioneer-dev-20200423",
-        key: {
-          crv: "P-256",
-          kty: "EC",
-          x: "Qqihp7EryDN2-qQ-zuDPDpy5mJD5soFBDZmzPWTmjwk",
-          y: "PiEQVUlywi2bEsA3_5D0VFrCHClCyUlLW52ajYs-5uc",
-        },
-      },
-    };
-
-    await run({
-      backgroundScript: async () => {
-        await browser.telemetry.submitEncryptedPing(
-          {
-            payload: "encrypted-webext-test",
-          },
-          {
-            schemaName: "schema-name",
-            schemaVersion: 123,
-          }
-        );
-        browser.test.notifyPass("submit_encrypted_ping_pass");
-      },
-      permissions: ["telemetry"],
-      doneSignal: "submit_encrypted_ping_pass",
-      isPrivileged: true,
-      telemetry: telemetryManifestEntries,
-    });
-
-    telemetryManifestEntries.pioneer_id = true;
-    telemetryManifestEntries.study_name = "test123";
-    Services.prefs.setStringPref("toolkit.telemetry.pioneerId", "test123");
-
-    await run({
-      backgroundScript: async () => {
-        await browser.telemetry.submitEncryptedPing(
-          { payload: "encrypted-webext-test" },
-          {
-            schemaName: "schema-name",
-            schemaVersion: 123,
-          }
-        );
-        browser.test.notifyPass("submit_encrypted_ping_pass");
-      },
-      permissions: ["telemetry"],
-      doneSignal: "submit_encrypted_ping_pass",
-      isPrivileged: true,
-      telemetry: telemetryManifestEntries,
-    });
-
-    let pings;
-    await TestUtils.waitForCondition(async function () {
-      pings = await TelemetryArchive.promiseArchivedPingList();
-      return pings.length >= 3;
-    }, "Wait until we have at least 3 pings in the telemetry archive");
-
-    equal(pings.length, 3);
-    equal(pings[1].type, "encrypted-webext-ping");
-    equal(pings[2].type, "encrypted-webext-ping");
   });
 
   add_task(async function test_telemetry_can_upload_enabled() {

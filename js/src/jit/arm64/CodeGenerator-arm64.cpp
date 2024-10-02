@@ -799,24 +799,19 @@ void CodeGenerator::visitModMaskI(LModMaskI* ins) {
   }
 }
 
-void CodeGeneratorARM64::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
-                                       Register divisor, Register output,
-                                       Label* fail) {
+void CodeGeneratorARM64::emitBigIntPtrDiv(LBigIntPtrDiv* ins, Register dividend,
+                                          Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
   const ARMRegister dividend64(dividend, 64);
   const ARMRegister divisor64(divisor, 64);
+  const ARMRegister output64(output, 64);
 
-  masm.Sdiv(/* result= */ dividend64, dividend64, divisor64);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
+  masm.Sdiv(/* result= */ output64, dividend64, divisor64);
 }
 
-void CodeGeneratorARM64::emitBigIntMod(LBigIntMod* ins, Register dividend,
-                                       Register divisor, Register output,
-                                       Label* fail) {
+void CodeGeneratorARM64::emitBigIntPtrMod(LBigIntPtrMod* ins, Register dividend,
+                                          Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
   const ARMRegister dividend64(dividend, 64);
@@ -827,11 +822,7 @@ void CodeGeneratorARM64::emitBigIntMod(LBigIntMod* ins, Register dividend,
   masm.Sdiv(output64, dividend64, divisor64);
 
   // Compute the remainder: output = dividend - (output * divisor).
-  masm.Msub(/* result= */ dividend64, output64, divisor64, dividend64);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
+  masm.Msub(/* result= */ output64, output64, divisor64, dividend64);
 }
 
 void CodeGenerator::visitBitNotI(LBitNotI* ins) {
@@ -1321,14 +1312,6 @@ void CodeGenerator::visitWasmUint32ToDouble(LWasmUint32ToDouble* lir) {
 void CodeGenerator::visitWasmUint32ToFloat32(LWasmUint32ToFloat32* lir) {
   masm.convertUInt32ToFloat32(ToRegister(lir->input()),
                               ToFloatRegister(lir->output()));
-}
-
-void CodeGenerator::visitNotI(LNotI* ins) {
-  ARMRegister input = toWRegister(ins->input());
-  ARMRegister output = toWRegister(ins->output());
-
-  masm.Cmp(input, ZeroRegister32);
-  masm.Cset(output, Assembler::Zero);
 }
 
 //        NZCV
@@ -2005,13 +1988,6 @@ void CodeGenerator::visitMulI64(LMulI64* lir) {
   } else {
     masm.mul64(ToRegister64(lhs), ToRegister64(rhs), output);
   }
-}
-
-void CodeGenerator::visitNotI64(LNotI64* lir) {
-  const Register64 input = ToRegister64(lir->getInt64Operand(0));
-  const Register64 output = ToOutRegister64(lir);
-  masm.Cmp(ARMRegister(input.reg, 64), ZeroRegister64);
-  masm.Cset(ARMRegister(output.reg, 64), Assembler::Zero);
 }
 
 void CodeGenerator::visitSubI64(LSubI64* lir) {

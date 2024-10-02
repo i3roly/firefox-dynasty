@@ -338,10 +338,6 @@ BrowserParent::BrowserParent(ContentParent* aManager, const TabId& aTabId,
 
   RequestingAccessKeyEventData::OnBrowserParentCreated();
 
-  // When the input event queue is disabled, we don't need to handle the case
-  // that some input events are dispatched before PBrowserConstructor.
-  mIsReadyToHandleInputEvents = !ContentParent::IsInputEventQueueSupported();
-
   // Make sure to compute our process priority if needed before the block of
   // code below. This makes sure the block below prioritizes our process if
   // needed.
@@ -2962,6 +2958,7 @@ mozilla::ipc::IPCResult BrowserParent::RecvOnStateChange(
     request = MakeAndAddRef<RemoteWebProgressRequest>(
         aRequestData.requestURI(), aRequestData.originalRequestURI(),
         aRequestData.matchedList());
+    request->SetCanceledReason(aRequestData.canceledReason());
   }
 
   if (aStateChangeData.isSome()) {
@@ -3021,6 +3018,7 @@ mozilla::ipc::IPCResult BrowserParent::RecvOnLocationChange(
     request = MakeAndAddRef<RemoteWebProgressRequest>(
         aRequestData.requestURI(), aRequestData.originalRequestURI(),
         aRequestData.matchedList());
+    request->SetCanceledReason(aRequestData.canceledReason());
   }
 
   browsingContext->SetCurrentRemoteURI(aLocation);
@@ -3128,6 +3126,7 @@ mozilla::ipc::IPCResult BrowserParent::RecvNotifyContentBlockingEvent(
   nsCOMPtr<nsIRequest> request = MakeAndAddRef<RemoteWebProgressRequest>(
       aRequestData.requestURI(), aRequestData.originalRequestURI(),
       aRequestData.matchedList());
+  request->SetCanceledReason(aRequestData.canceledReason());
 
   wgp->NotifyContentBlockingEvent(
       aEvent, request, aBlocked, aTrackingOrigin, aTrackingFullHashes, aReason,
@@ -3298,13 +3297,49 @@ bool BrowserParent::SendSelectionEvent(WidgetSelectionEvent& aEvent) {
   return true;
 }
 
-bool BrowserParent::SendInsertText(const nsString& aStringToInsert) {
+bool BrowserParent::SendSimpleContentCommandEvent(
+    const mozilla::WidgetContentCommandEvent& aEvent) {
+  MOZ_ASSERT(aEvent.mMessage != eContentCommandInsertText);
+  MOZ_ASSERT(aEvent.mMessage != eContentCommandReplaceText);
+  MOZ_ASSERT(aEvent.mMessage != eContentCommandPasteTransferable);
+  MOZ_ASSERT(aEvent.mMessage != eContentCommandLookUpDictionary);
+  MOZ_ASSERT(aEvent.mMessage != eContentCommandScroll);
+
   if (mIsDestroyed) {
     return false;
   }
+  mContentCache.OnContentCommandEvent(aEvent);
   return Manager()->IsInputPriorityEventEnabled()
-             ? PBrowserParent::SendInsertText(aStringToInsert)
-             : PBrowserParent::SendNormalPriorityInsertText(aStringToInsert);
+             ? PBrowserParent::SendSimpleContentCommandEvent(aEvent.mMessage)
+             : PBrowserParent::SendNormalPrioritySimpleContentCommandEvent(
+                   aEvent.mMessage);
+}
+
+bool BrowserParent::SendInsertText(const WidgetContentCommandEvent& aEvent) {
+  if (mIsDestroyed) {
+    return false;
+  }
+  mContentCache.OnContentCommandEvent(aEvent);
+  return Manager()->IsInputPriorityEventEnabled()
+             ? PBrowserParent::SendInsertText(aEvent.mString.ref())
+             : PBrowserParent::SendNormalPriorityInsertText(
+                   aEvent.mString.ref());
+}
+
+bool BrowserParent::SendReplaceText(const WidgetContentCommandEvent& aEvent) {
+  if (mIsDestroyed) {
+    return false;
+  }
+  mContentCache.OnContentCommandEvent(aEvent);
+  return Manager()->IsInputPriorityEventEnabled()
+             ? PBrowserParent::SendReplaceText(
+                   aEvent.mSelection.mReplaceSrcString, aEvent.mString.ref(),
+                   aEvent.mSelection.mOffset,
+                   aEvent.mSelection.mPreventSetSelection)
+             : PBrowserParent::SendNormalPriorityReplaceText(
+                   aEvent.mSelection.mReplaceSrcString, aEvent.mString.ref(),
+                   aEvent.mSelection.mOffset,
+                   aEvent.mSelection.mPreventSetSelection);
 }
 
 bool BrowserParent::SendPasteTransferable(IPCTransferable&& aTransferable) {

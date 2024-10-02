@@ -48,7 +48,6 @@ fun CfrTools() {
 @Composable
 private fun ResetCfrTool() {
     var addPrivateTabToHomeCfrShown by rememberSaveable { mutableStateOf(false) }
-    var homepageIntroCfrShown by rememberSaveable { mutableStateOf(false) }
     var homepageNavToolbarCfrShown by rememberSaveable { mutableStateOf(false) }
     var homepageSyncCfrShown by rememberSaveable { mutableStateOf(false) }
     var wallpaperSelectorCfrShown by rememberSaveable { mutableStateOf(false) }
@@ -57,7 +56,6 @@ private fun ResetCfrTool() {
     var cookieBannerBlockerCfrShown by rememberSaveable { mutableStateOf(false) }
     var cookieBannersPrivateModeCfrShown by rememberSaveable { mutableStateOf(false) }
     var navButtonsCfrShown by rememberSaveable { mutableStateOf(false) }
-    var tcpCfrShown by rememberSaveable { mutableStateOf(false) }
     var openInAppCfrShown by rememberSaveable { mutableStateOf(false) }
 
     Column(
@@ -99,15 +97,6 @@ private fun ResetCfrTool() {
                 checked = addPrivateTabToHomeCfrShown,
                 onCfrToggle = {
                     addPrivateTabToHomeCfrShown = !addPrivateTabToHomeCfrShown
-                },
-            )
-
-            CfrToggle(
-                title = stringResource(R.string.debug_drawer_cfr_tools_homepage_intro_title),
-                description = stringResource(R.string.debug_drawer_cfr_tools_homepage_intro_description),
-                checked = homepageIntroCfrShown,
-                onCfrToggle = {
-                    homepageIntroCfrShown = !homepageIntroCfrShown
                 },
             )
 
@@ -200,15 +189,6 @@ private fun ResetCfrTool() {
                 checked = navButtonsCfrShown,
                 onCfrToggle = {
                     navButtonsCfrShown = !navButtonsCfrShown
-                },
-            )
-
-            CfrToggle(
-                title = stringResource(R.string.debug_drawer_cfr_tools_tcp_title),
-                description = stringResource(R.string.debug_drawer_cfr_tools_tcp_description),
-                checked = tcpCfrShown,
-                onCfrToggle = {
-                    tcpCfrShown = !tcpCfrShown
                 },
             )
         }

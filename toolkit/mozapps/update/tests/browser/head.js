@@ -102,7 +102,7 @@ add_setup(async function setupTestCommon() {
   ds.unregisterProvider(dirProvider);
 
   setUpdateTimerPrefs();
-  reloadUpdateManagerData(true);
+  await reloadUpdateManagerData(true);
   removeUpdateFiles(true);
   UpdateListener.reset();
   AppMenuNotifications.removeNotification(/.*/);
@@ -121,7 +121,7 @@ registerCleanupFunction(async () => {
   Services.env.set("MOZ_TEST_STAGING_ERROR", "");
   UpdateListener.reset();
   AppMenuNotifications.removeNotification(/.*/);
-  reloadUpdateManagerData(true);
+  await reloadUpdateManagerData(true);
   // Pass false when the log files are needed for troubleshooting the tests.
   removeUpdateFiles(true);
   // Always try to restore the original updater files. If none of the updater
@@ -315,10 +315,13 @@ function moveRealUpdater() {
   return (async function () {
     try {
       // Move away the real updater
-      let greBinDir = getGREBinDir();
-      let updater = greBinDir.clone();
+      let updaterBackup = getGREBinDir();
+      let updater = getGREBinDir();
       updater.append(FILE_UPDATER_BIN);
-      updater.moveTo(greBinDir, FILE_UPDATER_BIN_BAK);
+      if (AppConstants.platform == "macosx") {
+        updaterBackup = updaterBackup.parent.parent.parent;
+      }
+      updater.moveTo(updaterBackup, FILE_UPDATER_BIN_BAK);
 
       let greDir = getGREDir();
       let updateSettingsIni = greDir.clone();
@@ -406,6 +409,9 @@ function restoreUpdaterBackup() {
   let greBinDir = getGREBinDir();
   let updater = greBinDir.clone();
   let updaterBackup = greBinDir.clone();
+  if (AppConstants.platform == "macosx") {
+    updaterBackup = updaterBackup.parent.parent.parent;
+  }
   updater.append(FILE_UPDATER_BIN);
   updaterBackup.append(FILE_UPDATER_BIN_BAK);
   if (updaterBackup.exists()) {
@@ -658,7 +664,7 @@ function runDoorhangerUpdateTest(params, steps) {
       // Perform a startup processing doorhanger test.
       writeStatusFile(STATE_FAILED_CRC_ERROR);
       writeUpdatesToXMLFile(getLocalUpdatesXMLString(params.updates), true);
-      reloadUpdateManagerData();
+      await reloadUpdateManagerData();
       await testPostUpdateProcessing();
     }
 

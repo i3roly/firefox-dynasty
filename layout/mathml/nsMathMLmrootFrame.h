@@ -19,7 +19,7 @@ class PresShell;
 // <msqrt> and <mroot> -- form a radical
 //
 
-class nsMathMLmrootFrame final : public nsMathMLContainerFrame {
+class nsMathMLmrootFrame : public nsMathMLContainerFrame {
  public:
   NS_DECL_FRAMEARENA_HELPERS(nsMathMLmrootFrame)
 
@@ -32,18 +32,14 @@ class nsMathMLmrootFrame final : public nsMathMLContainerFrame {
                     nsIFrame* aPrevInFlow) override;
 
   NS_IMETHOD
-  TransmitAutomaticData() override;
+  InheritAutomaticData(nsIFrame* aParent) final;
 
-  virtual void Reflow(nsPresContext* aPresContext, ReflowOutput& aDesiredSize,
-                      const ReflowInput& aReflowInput,
-                      nsReflowStatus& aStatus) override;
+  NS_IMETHOD
+  TransmitAutomaticData() override;
 
   void GetRadicalXOffsets(nscoord aIndexWidth, nscoord aSqrWidth,
                           nsFontMetrics* aFontMetrics, nscoord* aIndexOffset,
                           nscoord* aSqrOffset);
-
-  nsresult MeasureForWidth(DrawTarget* aDrawTarget,
-                           ReflowOutput& aDesiredSize) final;
 
   virtual void BuildDisplayList(nsDisplayListBuilder* aBuilder,
                                 const nsDisplayListSet& aLists) override;
@@ -62,6 +58,9 @@ class nsMathMLmrootFrame final : public nsMathMLContainerFrame {
 
  private:
   bool ShouldUseRowFallback();
+  bool IsMrowLike() final;
+  nsresult Place(DrawTarget* aDrawTarget, const PlaceFlags& aFlags,
+                 ReflowOutput& aDesiredSize) final;
 };
 
 #endif /* nsMathMLmrootFrame_h___ */

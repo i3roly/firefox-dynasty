@@ -119,6 +119,7 @@
 #  include "mozilla/WindowsBCryptInitialization.h"
 #  include "mozilla/WindowsDllBlocklist.h"
 #  include "mozilla/WindowsMsctfInitialization.h"
+#  include "mozilla/WindowsOleAut32Initialization.h"
 #  include "mozilla/WindowsProcessMitigations.h"
 #  include "mozilla/WindowsVersion.h"
 #  include "mozilla/WinHeaderOnlyUtils.h"
@@ -2526,7 +2527,7 @@ nsresult LaunchChild(bool aBlankCommandLine, bool aTryExec) {
 #  if defined(XP_MACOSX)
   InitializeMacApp();
   CommandLineServiceMac::SetupMacCommandLine(gRestartArgc, gRestartArgv, true);
-  LaunchChildMac(gRestartArgc, gRestartArgv);
+  LaunchMacApp(gRestartArgc, gRestartArgv);
 #  else
   nsCOMPtr<nsIFile> lf;
   nsresult rv = XRE_GetBinaryPath(getter_AddRefs(lf));
@@ -4113,7 +4114,8 @@ int XREMain::XRE_mainInit(bool* aExitFlag) {
       mozilla::Version(mAppData->maxVersion) < gToolkitVersion) {
     Output(true,
            "Error: Platform version '%s' is not compatible with\n"
-           "minVersion >= %s\nmaxVersion <= %s\n",
+           "minVersion >= %s\nmaxVersion <= %s\n"
+           "Maybe try to reinstall " MOZ_APP_DISPLAYNAME "?\n",
            (const char*)gToolkitVersion, (const char*)mAppData->minVersion,
            (const char*)mAppData->maxVersion);
     return 1;
@@ -5123,15 +5125,24 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
   }
 
   if (gDoProfileReset) {
-    if (EnvHasValue("MOZ_RESET_PROFILE_RESTART")) {
+    if (!EnvHasValue("MOZ_RESET_PROFILE_RESTART")) {
+      if (ARG_FOUND == CheckArgExists("first-startup")) {
+        // If the profile reset was initiated by the stub installer, we want to
+        // set MOZ_RESET_PROFILE_SESSION so we can check for it later when the
+        // Firefox Profile Migrator runs. At that point we set overrides to
+        // ensure users see the right homepage.
+        SaveToEnv("MOZ_RESET_PROFILE_SESSION=0");
+      } else if (gDoMigration) {
+        // Otherwise this is a profile reset and migration triggered via the
+        // command line during development and we want to restore the session
+        // and perform the approriate homepage overrides.
+        SaveToEnv("MOZ_RESET_PROFILE_SESSION=1");
+      }
+    } else {
+      // If the profile reset was initiated by the user, such as through
+      // about:support, we want to restore their session.
+      SaveToEnv("MOZ_RESET_PROFILE_SESSION=1");
       SaveToEnv("MOZ_RESET_PROFILE_RESTART=");
-      // We only want to restore the previous session if the profile refresh was
-      // triggered by user. And if it was a user-triggered profile refresh
-      // through, say, the safeMode dialog or the troubleshooting page, the
-      // MOZ_RESET_PROFILE_RESTART env variable would be set. Hence we set
-      // MOZ_RESET_PROFILE_MIGRATE_SESSION here so that Firefox profile migrator
-      // would migrate old session data later.
-      SaveToEnv("MOZ_RESET_PROFILE_MIGRATE_SESSION=1");
     }
     // Unlock the source profile.
     mProfileLock->Unlock();
@@ -5628,25 +5639,12 @@ nsresult XREMain::XRE_mainRun() {
     SaveToEnv("XRE_RESTARTED_BY_PROFILE_MANAGER=");
 
     if (!AppShutdown::IsInOrBeyond(ShutdownPhase::AppShutdownConfirmed)) {
-      // Don't create the hidden window during startup on
-      // platforms that don't always need it.
 #ifdef XP_MACOSX
-      bool lazyHiddenWindow = false;
-#else
-      bool lazyHiddenWindow = true;
-#endif
-
-#ifdef MOZ_BACKGROUNDTASKS
-      if (BackgroundTasks::IsBackgroundTaskMode()) {
-        // Background tasks aren't going to load a chrome XUL document.
-        lazyHiddenWindow = true;
-      }
-#endif
-
-      if (!lazyHiddenWindow) {
+      if (!BackgroundTasks::IsBackgroundTaskMode()) {
         rv = appStartup->CreateHiddenWindow();
         NS_ENSURE_SUCCESS(rv, NS_ERROR_FAILURE);
       }
+#endif
 
 #ifdef XP_WIN
       Preferences::RegisterCallbackAndCall(
@@ -5969,6 +5967,10 @@ int XREMain::XRE_main(int argc, char* argv[], const BootstrapConfig& aConfig) {
   }
 #  endif  // _M_IX86 || _M_X64
 
+  {
+    DebugOnly<bool> result = WindowsOleAut32Initialization();
+    MOZ_ASSERT(result);
+  }
 #endif  // defined(XP_WIN)
 
   // Once we unset the exception handler, we lose the ability to properly

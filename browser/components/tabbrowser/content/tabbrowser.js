@@ -122,6 +122,12 @@
         "browser.tabs.allow_transparent_browser",
         false
       );
+      XPCOMUtils.defineLazyPreferenceGetter(
+        this,
+        "_tabGroupsEnabled",
+        "browser.tabs.groups.enabled",
+        false
+      );
 
       if (AppConstants.MOZ_CRASHREPORTER) {
         ChromeUtils.defineESModuleGetters(this, {
@@ -2751,7 +2757,8 @@
       let animate =
         !skipAnimation &&
         !pinned &&
-        this.tabContainer.getAttribute("overflow") != "true" &&
+        !this.tabContainer.verticalMode &&
+        !this.tabContainer.overflowing &&
         !gReduceMotion;
 
       let uriInfo = this._determineURIToLoad(uriString, createLazyBrowser);
@@ -2929,7 +2936,7 @@
     },
 
     addTabGroup(color, label = "", tabs) {
-      if (!tabs.length) {
+      if (!tabs?.length) {
         throw new Error("Cannot create tab group with zero tabs");
       }
 
@@ -2942,8 +2949,31 @@
       return group;
     },
 
-    removeTabGroup(group) {
-      this.removeTabs(group.tabs);
+    /**
+     * Removes the tab group. This has the effect of closing all the tabs
+     * in the group.
+     *
+     *
+     * @param {MozTabbrowserTabGroup} [group]
+     *   The tab group to remove.
+     * @param {object} [options]
+     *   Options to use when removing tabs. @see removeTabs for more info.
+     */
+    removeTabGroup(group, options = {}) {
+      this.removeTabs(group.tabs, options);
+    },
+
+    adoptTabGroup(group, index) {
+      if (group.ownerDocument == document) {
+        return;
+      }
+
+      let newTabs = [];
+      for (let tab of group.tabs) {
+        newTabs.push(this.adoptTab(tab, index));
+      }
+
+      this.addTabGroup(group.color, group.label, newTabs);
     },
 
     _determineURIToLoad(uriString, createLazyBrowser) {
@@ -3125,10 +3155,6 @@
         usingPreloadedContent,
       };
 
-      if (BookmarkingUI.isOnNewTabPage(uri)) {
-        this.getPanel(b).classList.add("newTabBrowserPanel");
-      }
-
       // Hack to ensure that the about:newtab, and about:welcome favicon is loaded
       // instantaneously, to avoid flickering and improve perceived performance.
       this.setDefaultIcon(tab, uri);
@@ -3254,11 +3280,14 @@
         let tabWasReused = false;
 
         // Re-use existing selected tab if possible to avoid the overhead of
-        // selecting a new tab.
+        // selecting a new tab. For now, we only do this for horizontal tabs;
+        // we'll let tabs.js handle pinning for vertical tabs until we unify
+        // the logic for both horizontal and vertical tabs in bug 1910097.
         if (
           select &&
           this.selectedTab.userContextId == userContextId &&
-          !SessionStore.isTabRestoring(this.selectedTab)
+          !SessionStore.isTabRestoring(this.selectedTab) &&
+          !this.tabContainer.verticalMode
         ) {
           tabWasReused = true;
           tab = this.selectedTab;
@@ -3423,7 +3452,7 @@
       }
     },
 
-    warnAboutClosingTabs(tabsToClose, aCloseTabs, aSource) {
+    warnAboutClosingTabs(tabsToClose, aCloseTabs) {
       // We want to warn about closing duplicates even if there was only a
       // single duplicate, so we intentionally place this above the check for
       // tabsToClose <= 1.
@@ -3527,39 +3556,6 @@
         warnOnClose
       );
 
-      Services.telemetry.setEventRecordingEnabled("close_tab_warning", true);
-      let closeTabEnumKey =
-        Object.entries(this.closingTabsEnum)
-          .find(([, v]) => v == aCloseTabs)?.[0]
-          ?.toLowerCase() || "some";
-
-      let warnCheckbox = warnOnClose.value ? "checked" : "unchecked";
-      if (!checkboxLabel) {
-        warnCheckbox = "not-present";
-      }
-      let sessionWillBeRestored =
-        Services.prefs.getIntPref("browser.startup.page") == 3 ||
-        Services.prefs.getBoolPref("browser.sessionstore.resume_session_once");
-      let closesWindow = aCloseTabs == this.closingTabsEnum.ALL;
-      Services.telemetry.recordEvent(
-        "close_tab_warning",
-        "shown",
-        closesWindow ? "window" : "tabs",
-        null,
-        {
-          source: aSource || `close-${closeTabEnumKey}-tabs`,
-          button: buttonPressed == 0 ? "close" : "cancel",
-          warn_checkbox: warnCheckbox,
-          closing_tabs: "" + tabsToClose,
-          closing_wins: "" + +closesWindow, // ("1" or "0", depending on the value)
-          // This value doesn't really apply to whether this warning
-          // gets shown, but having pings be consistent (and perhaps
-          // being able to see trends for users with/without sessionrestore)
-          // seems useful:
-          will_restore: sessionWillBeRestored ? "yes" : "no",
-        }
-      );
-
       var reallyClose = buttonPressed == 0;
 
       // don't set the pref unless they press OK and it's false
@@ -3601,7 +3597,7 @@
           let lastRelatedTab =
             openerTab && this._lastRelatedTabMap.get(openerTab);
           let previousTab = lastRelatedTab || openerTab || this.selectedTab;
-          if (!previousTab.hidden) {
+          if (previousTab.visible) {
             index = previousTab._tPos + 1;
           } else if (previousTab == FirefoxViewHandler.tab) {
             index = 0;
@@ -3662,7 +3658,7 @@
 
     getTabsToTheStartFrom(aTab) {
       let tabsToStart = [];
-      if (aTab.hidden) {
+      if (!aTab.visible) {
         return tabsToStart;
       }
       let tabs = this.visibleTabs;
@@ -3686,7 +3682,7 @@
 
     getTabsToTheEndFrom(aTab) {
       let tabsToEnd = [];
-      if (aTab.hidden) {
+      if (!aTab.visible) {
         return tabsToEnd;
       }
       let tabs = this.visibleTabs;
@@ -4159,7 +4155,8 @@
         return;
       }
 
-      let isLastTab = !aTab.hidden && this.visibleTabs.length == 1;
+      let isVisibleTab = aTab.visible;
+      let isLastTab = isVisibleTab && this.visibleTabs.length == 1;
       // We have to sample the tab width now, since _beginRemoveTab might
       // end up modifying the DOM in such a way that aTab gets a new
       // frame created for it (for example, by updating the visually selected
@@ -4181,8 +4178,9 @@
       }
 
       let lockTabSizing =
+        !this.tabContainer.verticalMode &&
         !aTab.pinned &&
-        !aTab.hidden &&
+        isVisibleTab &&
         aTab._fullyOpen &&
         triggeringEvent?.inputSource == MouseEvent.MOZ_SOURCE_MOUSE &&
         triggeringEvent?.target.closest(".tabbrowser-tab");
@@ -4197,7 +4195,8 @@
         gReduceMotion ||
         isLastTab ||
         aTab.pinned ||
-        aTab.hidden ||
+        !isVisibleTab ||
+        this.tabContainer.verticalMode ||
         this._removingTabs.size >
           3 /* don't want lots of concurrent animations */ ||
         !aTab.hasAttribute(
@@ -4312,7 +4311,7 @@
 
       var closeWindow = false;
       var newTab = false;
-      if (!aTab.hidden && this.visibleTabs.length == 1) {
+      if (aTab.visible && this.visibleTabs.length == 1) {
         closeWindow =
           closeWindowWithLastTab != null
             ? closeWindowWithLastTab
@@ -4688,26 +4687,19 @@
       }
 
       if (
-        aTab.owner &&
-        !aTab.owner.hidden &&
-        !aTab.owner.closing &&
+        aTab.owner?.visible &&
         !excludeTabs.has(aTab.owner) &&
         Services.prefs.getBoolPref("browser.tabs.selectOwnerOnClose")
       ) {
         return aTab.owner;
       }
 
-      // Switch to a visible tab unless there aren't any others remaining
-      let remainingTabs = this.visibleTabs;
-      let numTabs = remainingTabs.length;
-      if (numTabs == 0 || (numTabs == 1 && remainingTabs[0] == aTab)) {
-        remainingTabs = Array.prototype.filter.call(
-          this.tabs,
-          tab => !tab.closing && !excludeTabs.has(tab)
-        );
-      }
-
       // Try to find a remaining tab that comes after the given tab
+      let remainingTabs = Array.prototype.filter.call(
+        this.visibleTabs,
+        tab => !excludeTabs.has(tab)
+      );
+
       let tab = this.tabContainer.findNextTab(aTab, {
         direction: 1,
         filter: _tab => remainingTabs.includes(_tab),
@@ -5395,7 +5387,7 @@
     moveTabForward() {
       let nextTab = this.tabContainer.findNextTab(this.selectedTab, {
         direction: 1,
-        filter: tab => !tab.hidden,
+        filter: tab => tab.visible,
       });
 
       if (nextTab) {
@@ -5463,7 +5455,7 @@
     moveTabBackward() {
       let previousTab = this.tabContainer.findNextTab(this.selectedTab, {
         direction: -1,
-        filter: tab => !tab.hidden,
+        filter: tab => tab.visible,
       });
 
       if (previousTab) {
@@ -5738,7 +5730,7 @@
     },
 
     _mayTabBeMultiselected(aTab) {
-      return aTab.isConnected && !aTab.closing && !aTab.hidden;
+      return aTab.visible;
     },
 
     _startMultiSelectChange() {
@@ -7250,13 +7242,6 @@
             this.mTab.linkedBrowser.mute();
           }
 
-          gBrowser
-            .getPanel(this.mBrowser)
-            .classList.toggle(
-              "newTabBrowserPanel",
-              BookmarkingUI.isOnNewTabPage(aLocation)
-            );
-
           if (gBrowser.isFindBarInitialized(this.mTab)) {
             let findBar = gBrowser.getCachedFindBar(this.mTab);
 
@@ -7834,6 +7819,15 @@ var TabContextMenu = {
       menuItem.disabled = disabled;
     }
 
+    let contextNewTabButton = document.getElementById("context_openANewTab");
+    // update context menu item strings for vertical tabs
+    document.l10n.setAttributes(
+      contextNewTabButton,
+      gBrowser.tabContainer?.verticalMode
+        ? "tab-context-new-tab-open-vertical"
+        : "tab-context-new-tab-open"
+    );
+
     // Session store
     document.getElementById("context_undoCloseTab").disabled =
       SessionStore.getClosedTabCount() == 0;
@@ -7841,6 +7835,16 @@ var TabContextMenu = {
     // Show/hide fullscreen context menu items and set the
     // autohide item's checked state to mirror the autohide pref.
     showFullScreenViewContextMenuItems(aPopupMenu);
+
+    let contextAddTabToNewGroup = document.getElementById(
+      "context_addTabToNewGroup"
+    );
+    if (gBrowser._tabGroupsEnabled) {
+      contextAddTabToNewGroup.hidden = false;
+      contextAddTabToNewGroup.setAttribute("data-l10n-args", tabCountInfo);
+    } else {
+      contextAddTabToNewGroup.hidden = true;
+    }
 
     // Only one of Reload_Tab/Reload_Selected_Tabs should be visible.
     document.getElementById("context_reloadTab").hidden = multiselectionContext;
@@ -7916,16 +7920,35 @@ var TabContextMenu = {
     document.getElementById("context_duplicateTabs").hidden =
       !multiselectionContext;
 
-    // Disable "Close Tabs to the Left/Right" if there are no tabs
-    // preceding/following it.
     let closeTabsToTheStartItem = document.getElementById(
       "context_closeTabsToTheStart"
     );
-    let noTabsToStart = !gBrowser.getTabsToTheStartFrom(this.contextTab).length;
-    closeTabsToTheStartItem.disabled = noTabsToStart;
+
+    // update context menu item strings for vertical tabs
+    document.l10n.setAttributes(
+      closeTabsToTheStartItem,
+      gBrowser.tabContainer?.verticalMode
+        ? "close-tabs-to-the-start-vertical"
+        : "close-tabs-to-the-start"
+    );
+
     let closeTabsToTheEndItem = document.getElementById(
       "context_closeTabsToTheEnd"
     );
+
+    // update context menu item strings for vertical tabs
+    document.l10n.setAttributes(
+      closeTabsToTheEndItem,
+      gBrowser.tabContainer?.verticalMode
+        ? "close-tabs-to-the-end-vertical"
+        : "close-tabs-to-the-end"
+    );
+
+    // Disable "Close Tabs to the Left/Right" if there are no tabs
+    // preceding/following it.
+    let noTabsToStart = !gBrowser.getTabsToTheStartFrom(this.contextTab).length;
+    closeTabsToTheStartItem.disabled = noTabsToStart;
+
     let noTabsToEnd = !gBrowser.getTabsToTheEndFrom(this.contextTab).length;
     closeTabsToTheEndItem.disabled = noTabsToEnd;
 

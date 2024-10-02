@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 from subprocess import PIPE, Popen
 
+import filters
 from base_python_support import BasePythonSupport
 from logger.logger import RaptorLogger
 
@@ -21,6 +22,7 @@ LOG = RaptorLogger(component="raptor-browsertime")
 
 class NetworkBench(BasePythonSupport):
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self._is_chrome = False
         self.browsertime_node = None
         self.backend_server = None
@@ -30,6 +32,7 @@ class NetworkBench(BasePythonSupport):
         self.caddy_stdout = None
         self.caddy_stderr = None
         self.http_version = "h1"
+        self.transfer_type = "download"
 
     def setup_test(self, test, args):
         from cmdline import CHROME_ANDROID_APPS, CHROMIUM_DISTROS
@@ -40,12 +43,15 @@ class NetworkBench(BasePythonSupport):
             args.app in CHROMIUM_DISTROS or args.app in CHROME_ANDROID_APPS
         )
 
-        prefix = test.get("name").split("-")[0]
-        if prefix == "h3":
-            self.http_version = "h3"
-        elif prefix == "h2":
-            self.http_version = "h2"
-        LOG.info("http_version: '%s'" % self.http_version)
+        test_name = test.get("name").split("-", 2)
+        self.http_version = test_name[0] if test_name[0] in ["h3", "h2"] else "unknown"
+        self.transfer_type = (
+            test_name[1] if test_name[1] in ["download", "upload"] else "unknown"
+        )
+        LOG.info(f"http_version: '{self.http_version}', type: '{self.transfer_type}'")
+
+        if self.http_version == "unknown" or self.transfer_type == "unknown":
+            raise Exception("Unsupported test")
 
     def check_caddy_installed(self):
         try:
@@ -204,15 +210,22 @@ class NetworkBench(BasePythonSupport):
             ]
         if self.http_version == "h3":
             self.caddy_port = self.find_free_port(socket.SOCK_DGRAM)
-            cmd += [
-                "--firefox.preference",
-                f"network.http.http3.alt-svc-mapping-for-testing:localhost;h3=:{self.caddy_port}",
-            ]
+            if not self._is_chrome:
+                cmd += [
+                    "--firefox.preference",
+                    f"network.http.http3.alt-svc-mapping-for-testing:localhost;h3=:{self.caddy_port}",
+                ]
+            else:
+                spki = "VCIlmPM9NkgFQtrs4Oa5TeFcDu6MWRTKSNdePEhOgD8="
+                cmd += [
+                    f"--chrome.args=--origin-to-force-quic-on=localhost:{self.caddy_port}",
+                    f"--chrome.args=--ignore-certificate-errors-spki-list={spki}",
+                ]
         else:
             self.caddy_port = self.find_free_port(socket.SOCK_STREAM)
 
         cmd += [
-            "--browsertime.upload_url",
+            "--browsertime.server_url",
             f"https://localhost:{self.caddy_port}",
         ]
 
@@ -220,23 +233,62 @@ class NetworkBench(BasePythonSupport):
 
         # We know that cmd[0] is the path to nodejs.
         self.browsertime_node = Path(cmd[0])
-        self.backend_server = self.start_backend_server("upload_backend.js")
+        self.backend_server = self.start_backend_server("benchmark_backend_server.js")
         if self.backend_server:
             self.caddy_server = self.start_caddy()
         if self.caddy_server is None:
             raise Exception("Failed to start test servers")
 
     def handle_result(self, bt_result, raw_result, last_result=False, **kwargs):
-        # TODO
-        LOG.info("handle_result: %s" % raw_result)
+        bandwidth_key = (
+            "upload-bandwidth"
+            if self.transfer_type == "upload"
+            else "download-bandwidth"
+        )
+
+        def get_bandwidth(data):
+            try:
+                extras = data.get("extras", [])
+                if extras and isinstance(extras, list):
+                    custom_data = extras[0].get("custom_data", {})
+                    if bandwidth_key in custom_data:
+                        return custom_data[bandwidth_key]
+                return None  # Return None if any key or index is missing
+            except Exception:
+                return None
+
+        bandwidth = get_bandwidth(raw_result)
+        if not bandwidth:
+            return
+
+        LOG.info(f"Bandwidth: [{' '.join(map(str, bandwidth))}]")
+        bt_result["measurements"].setdefault(bandwidth_key, []).append(bandwidth)
 
     def _build_subtest(self, measurement_name, replicates, test):
-        # TODO
-        LOG.info("_build_subtest")
+        unit = test.get("unit", "Mbit/s")
+        if test.get("subtest_unit"):
+            unit = test.get("subtest_unit")
+
+        return {
+            "name": measurement_name,
+            "lowerIsBetter": test.get("lower_is_better", False),
+            "alertThreshold": float(test.get("alert_threshold", 2.0)),
+            "unit": unit,
+            "replicates": replicates,
+            "value": round(filters.geometric_mean(replicates[0]), 3),
+        }
 
     def summarize_test(self, test, suite, **kwargs):
-        # TODO
-        LOG.info("summarize_test")
+        suite["type"] = "benchmark"
+        if suite["subtests"] == {}:
+            suite["subtests"] = []
+        for measurement_name, replicates in test["measurements"].items():
+            if not replicates:
+                continue
+            suite["subtests"].append(
+                self._build_subtest(measurement_name, replicates, test)
+            )
+        suite["subtests"].sort(key=lambda subtest: subtest["name"])
 
     def shutdown_server(self, name, proc):
         LOG.info("%s server shutting down ..." % name)

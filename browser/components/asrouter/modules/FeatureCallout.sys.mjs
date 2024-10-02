@@ -1328,6 +1328,9 @@ export class FeatureCallout {
       AWSendToParent: (name, data) => getActionHandler(name)(data),
       AWFinish: () => this.endTour(),
       AWEvaluateScreenTargeting: getActionHandler("EVALUATE_SCREEN_TARGETING"),
+      AWEvaluateAttributeTargeting: getActionHandler(
+        "EVALUATE_ATTRIBUTE_TARGETING"
+      ),
     };
     for (const [name, func] of Object.entries(this._windowFuncs)) {
       this.win[name] = func;
@@ -1911,6 +1914,7 @@ export class FeatureCallout {
     "link-color",
     "link-color-hover",
     "link-color-active",
+    "icon-success-color",
   ];
 
   /** @type {Object<String, FeatureCalloutTheme>} */
@@ -2053,6 +2057,7 @@ export class FeatureCallout {
         "link-color-hover": "rgb(0, 97, 224)",
         "link-color-active": "color-mix(in srgb, rgb(0, 97, 224) 80%, #000)",
         "link-color-visited": "rgb(0, 97, 224)",
+        "icon-success-color": "#2AC3A2",
       },
       dark: {
         "accent-color": "rgb(0, 221, 255)",
@@ -2067,6 +2072,7 @@ export class FeatureCallout {
         "link-color-hover": "rgb(0,221,255)",
         "link-color-active": "color-mix(in srgb, rgb(0, 221, 255) 60%, #FFF)",
         "link-color-visited": "rgb(0, 221, 255)",
+        "icon-success-color": "#54FFBD",
       },
       hcm: {
         background: "-moz-dialog",
@@ -2103,30 +2109,30 @@ export class FeatureCallout {
         color: "var(--arrowpanel-color)",
         border: "var(--arrowpanel-border-color)",
         "accent-color": "var(--focus-outline-color)",
-        "button-background": "var(--button-bgcolor)",
-        "button-color": "var(--button-color)",
+        "button-background": "var(--button-background-color)",
+        "button-color": "var(--button-text-color)",
         "button-border": "transparent",
-        "button-background-hover": "var(--button-hover-bgcolor)",
-        "button-color-hover": "var(--button-color)",
+        "button-background-hover": "var(--button-background-color-hover)",
+        "button-color-hover": "var(--button-text-color)",
         "button-border-hover": "transparent",
-        "button-background-active": "var(--button-active-bgcolor)",
-        "button-color-active": "var(--button-color)",
+        "button-background-active": "var(--button-background-color-active)",
+        "button-color-active": "var(--button-text-color)",
         "button-border-active": "transparent",
-        "primary-button-background": "var(--button-primary-bgcolor)",
-        "primary-button-color": "var(--button-primary-color)",
+        "primary-button-background": "var(--color-accent-primary)",
+        "primary-button-color": "var(--button-text-color-primary)",
         "primary-button-border": "transparent",
-        "primary-button-background-hover":
-          "var(--button-primary-hover-bgcolor)",
-        "primary-button-color-hover": "var(--button-primary-color)",
+        "primary-button-background-hover": "var(--color-accent-primary-hover)",
+        "primary-button-color-hover": "var(--button-text-color-primary)",
         "primary-button-border-hover": "transparent",
         "primary-button-background-active":
-          "var(--button-primary-active-bgcolor)",
-        "primary-button-color-active": "var(--button-primary-color)",
+          "var(--color-accent-primary-active)",
+        "primary-button-color-active": "var(--button-text-color-primary)",
         "primary-button-border-active": "transparent",
         "link-color": "LinkText",
         "link-color-hover": "LinkText",
         "link-color-active": "ActiveText",
         "link-color-visited": "VisitedText",
+        "icon-success-color": "var(--attention-dot-color)",
       },
       hcm: {
         background: "var(--arrowpanel-background)",

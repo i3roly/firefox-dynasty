@@ -39,8 +39,9 @@ nsMathMLmunderoverFrame::~nsMathMLmunderoverFrame() = default;
 nsresult nsMathMLmunderoverFrame::AttributeChanged(int32_t aNameSpaceID,
                                                    nsAtom* aAttribute,
                                                    int32_t aModType) {
-  if (nsGkAtoms::accent_ == aAttribute ||
-      nsGkAtoms::accentunder_ == aAttribute) {
+  if (aNameSpaceID == kNameSpaceID_None &&
+      (nsGkAtoms::accent_ == aAttribute ||
+       nsGkAtoms::accentunder_ == aAttribute)) {
     // When we have automatic data to update within ourselves, we ask our
     // parent to re-layout its children
     return ReLayoutChildren(GetParent());
@@ -223,9 +224,9 @@ XXX The winner is the outermost setting in conflicting settings like these:
     // if we have an accentunder attribute, it overrides what the underscript
     // said
     if (mContent->AsElement()->GetAttr(nsGkAtoms::accentunder_, value)) {
-      if (value.EqualsLiteral("true")) {
+      if (value.LowerCaseEqualsLiteral("true")) {
         mEmbellishData.flags |= NS_MATHML_EMBELLISH_ACCENTUNDER;
-      } else if (value.EqualsLiteral("false")) {
+      } else if (value.LowerCaseEqualsLiteral("false")) {
         mEmbellishData.flags &= ~NS_MATHML_EMBELLISH_ACCENTUNDER;
       }
     }
@@ -244,9 +245,9 @@ XXX The winner is the outermost setting in conflicting settings like these:
 
     // if we have an accent attribute, it overrides what the overscript said
     if (mContent->AsElement()->GetAttr(nsGkAtoms::accent_, value)) {
-      if (value.EqualsLiteral("true")) {
+      if (value.LowerCaseEqualsLiteral("true")) {
         mEmbellishData.flags |= NS_MATHML_EMBELLISH_ACCENTOVER;
-      } else if (value.EqualsLiteral("false")) {
+      } else if (value.LowerCaseEqualsLiteral("false")) {
         mEmbellishData.flags &= ~NS_MATHML_EMBELLISH_ACCENTOVER;
       }
     }

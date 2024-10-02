@@ -276,7 +276,7 @@ typedef struct inheritanceStr inheritance;
 
 /************************************************************************/
 
-/* SSL Session Cache has a smaller set of functions to initialize than 
+/* SSL Session Cache has a smaller set of functions to initialize than
  * ssl does. some ssl_functions can't be initialized before NSS has been
  * initialized, and the cache may be configured before NSS is initialized
  * so thus the special init function */
@@ -342,7 +342,7 @@ UnlockSet(cacheDesc *cache, PRUint32 set)
 /************************************************************************/
 
 /* Put a certificate in the cache.  Update the cert index in the sce.
-*/
+ */
 static PRUint32
 CacheCert(cacheDesc *cache, CERTCertificate *cert, sidCacheEntry *sce)
 {
@@ -399,7 +399,7 @@ Get32BitNameHash(const SECItem *name)
 }
 
 /* Put a name in the cache.  Update the cert index in the sce.
-*/
+ */
 static PRUint32
 CacheSrvName(cacheDesc *cache, SECItem *name, sidCacheEntry *sce)
 {
@@ -1860,8 +1860,6 @@ getSvrWrappingKey(unsigned int symWrapMechIndex,
                   cacheDesc *cache,
                   PRUint32 lockTime)
 {
-    PRUint32 ndx = (wrapKeyIndex * SSL_NUM_WRAP_MECHS) + symWrapMechIndex;
-    SSLWrappedSymWrappingKey *pwswk = cache->keyCacheData + ndx;
     PRUint32 now = 0;
     PRBool rv = SECFailure;
 
@@ -1869,6 +1867,10 @@ getSvrWrappingKey(unsigned int symWrapMechIndex,
         PORT_SetError(SSL_ERROR_SERVER_CACHE_NOT_CONFIGURED);
         return SECFailure;
     }
+
+    PRUint32 ndx = (wrapKeyIndex * SSL_NUM_WRAP_MECHS) + symWrapMechIndex;
+    SSLWrappedSymWrappingKey *pwswk = cache->keyCacheData + ndx;
+
     if (!lockTime) {
         now = LockSidCacheLock(cache->keyCacheLock, 0);
         if (!now) {

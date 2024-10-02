@@ -12,11 +12,13 @@ use crate::selector_map::PrecomputedHashMap;
 use crate::str::HTML_SPACE_CHARACTERS;
 use crate::values::computed::LengthPercentage as ComputedLengthPercentage;
 use crate::values::computed::{Context, Percentage, ToComputedValue};
-use crate::values::generics::position::AspectRatio as GenericAspectRatio;
 use crate::values::generics::position::Position as GenericPosition;
 use crate::values::generics::position::PositionComponent as GenericPositionComponent;
 use crate::values::generics::position::PositionOrAuto as GenericPositionOrAuto;
 use crate::values::generics::position::ZIndex as GenericZIndex;
+use crate::values::generics::position::{AnchorSide, AspectRatio as GenericAspectRatio};
+use crate::values::generics::position::{GenericAnchorFunction, GenericInset};
+use crate::values::specified;
 use crate::values::specified::{AllowQuirks, Integer, LengthPercentage, NonNegativeNumber};
 use crate::values::DashedIdent;
 use crate::{Atom, Zero};
@@ -493,6 +495,7 @@ impl PositionAnchor {
     Clone,
     Copy,
     Debug,
+    Default,
     Eq,
     MallocSizeOf,
     Parse,
@@ -504,19 +507,71 @@ impl PositionAnchor {
     ToResolvedValue,
     ToShmem,
 )]
-#[css(bitflags(mixed = "flip-block,flip-inline,flip-start"))]
+#[repr(u8)]
+/// How to swap values for the automatically-generated position tactic.
+pub enum PositionTryFallbacksTryTacticKeyword {
+    /// Magic value for no change.
+    #[css(skip)]
+    #[default]
+    None,
+    /// Swap the values in the block axis.
+    FlipBlock,
+    /// Swap the values in the inline axis.
+    FlipInline,
+    /// Swap the values in the start properties.
+    FlipStart,
+}
+
+impl PositionTryFallbacksTryTacticKeyword {
+    fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
 #[repr(C)]
+/// Changes for the automatically-generated position option.
+/// Note that this is order-dependent - e.g. `flip-start flip-inline` != `flip-inline flip-start`.
+///
 /// https://drafts.csswg.org/css-anchor-position-1/#typedef-position-try-fallbacks-try-tactic
-/// <try-tactic>
-pub struct PositionTryFallbacksTryTactic(u8);
-bitflags! {
-    impl PositionTryFallbacksTryTactic: u8 {
-        /// `flip-block`
-        const FLIP_BLOCK = 1 << 0;
-        /// `flip-inline`
-        const FLIP_INLINE = 1 << 1;
-        /// `flip-start`
-        const FLIP_START = 1 << 2;
+pub struct PositionTryFallbacksTryTactic(
+    pub PositionTryFallbacksTryTacticKeyword,
+    pub PositionTryFallbacksTryTacticKeyword,
+    pub PositionTryFallbacksTryTacticKeyword,
+);
+
+impl Parse for PositionTryFallbacksTryTactic {
+    fn parse<'i, 't>(
+        _context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        let first = input.try_parse(PositionTryFallbacksTryTacticKeyword::parse)?;
+        let second = input.try_parse(PositionTryFallbacksTryTacticKeyword::parse).unwrap_or_default();
+        let third = input.try_parse(PositionTryFallbacksTryTacticKeyword::parse).unwrap_or_default();
+        if first == second || first == third || (!second.is_none() && second == third) {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self(first, second, third))
+    }
+}
+
+impl PositionTryFallbacksTryTactic {
+    fn is_empty(&self) -> bool {
+        self.0.is_none()
     }
 }
 
@@ -548,7 +603,7 @@ impl Parse for DashedIdentAndOrTryTactic {
     ) -> Result<Self, ParseError<'i>> {
         let mut result = Self {
             ident: DashedIdent::empty(),
-            try_tactic: PositionTryFallbacksTryTactic::empty(),
+            try_tactic: PositionTryFallbacksTryTactic::default(),
         };
 
         loop {
@@ -1684,5 +1739,77 @@ impl AspectRatio {
                 NonNegativeNumber::new(h),
             )),
         }
+    }
+}
+
+/// A specified value for inset types.
+pub type Inset = GenericInset<specified::Percentage, LengthPercentage>;
+
+impl Inset {
+    /// Parses an inset type, allowing the unitless length quirk.
+    /// <https://quirks.spec.whatwg.org/#the-unitless-length-quirk>
+    #[inline]
+    pub fn parse_quirky<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        allow_quirks: AllowQuirks,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(l) = input.try_parse(|i| LengthPercentage::parse_quirky(context, i, allow_quirks))
+        {
+            return Ok(Self::LengthPercentage(l));
+        }
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        if let Ok(inner) = input.try_parse(|i| AnchorFunction::parse(context, i)) {
+            return Ok(Self::AnchorFunction(Box::new(inner)));
+        }
+        Ok(Self::AnchorSizeFunction(Box::new(
+            specified::AnchorSizeFunction::parse(context, input)?,
+        )))
+    }
+}
+
+impl Parse for Inset {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_quirky(context, input, AllowQuirks::No)
+    }
+}
+
+/// A specified value for `anchor()` function.
+pub type AnchorFunction = GenericAnchorFunction<specified::Percentage, LengthPercentage>;
+
+impl Parse for AnchorFunction {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        if !static_prefs::pref!("layout.css.anchor-positioning.enabled") {
+            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError));
+        }
+        input.expect_function_matching("anchor")?;
+        input.parse_nested_block(|i| {
+            let target_element = i.try_parse(|i| DashedIdent::parse(context, i)).ok();
+            let side = AnchorSide::parse(context, i)?;
+            let target_element = if target_element.is_none() {
+                i.try_parse(|i| DashedIdent::parse(context, i)).ok()
+            } else {
+                target_element
+            };
+            let fallback = i
+                .try_parse(|i| {
+                    i.expect_comma()?;
+                    LengthPercentage::parse(context, i)
+                })
+                .ok();
+            Ok(Self {
+                target_element: target_element.unwrap_or_else(DashedIdent::empty),
+                side,
+                fallback: fallback.into(),
+            })
+        })
     }
 }

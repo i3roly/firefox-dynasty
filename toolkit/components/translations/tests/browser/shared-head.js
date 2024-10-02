@@ -37,6 +37,8 @@ const PDF_TEST_PAGE_URL =
   URL_COM_PREFIX + DIR_PATH + "translations-tester-pdf-file.pdf";
 const SELECT_TEST_PAGE_URL =
   URL_COM_PREFIX + DIR_PATH + "translations-tester-select.html";
+const TEXT_CLEANING_URL =
+  URL_COM_PREFIX + DIR_PATH + "translations-text-cleaning.html";
 
 const PIVOT_LANGUAGE = "en";
 const LANGUAGE_PAIRS = [
@@ -116,6 +118,7 @@ async function openAboutTranslations({
     pageHeader: '[data-l10n-id="about-translations-header"]',
     fromLanguageSelect: "select#language-from",
     toLanguageSelect: "select#language-to",
+    languageSwapButton: "button#language-swap",
     translationTextarea: "textarea#translation-from",
     translationResult: "#translation-to",
     translationResultBlank: "#translation-to-blank",

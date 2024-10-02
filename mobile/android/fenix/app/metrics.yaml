@@ -18,6 +18,10 @@ events:
           The method used to open Fenix. Possible values are: `app_icon`,
           `custom_tab` or `link`
         type: string
+      deal_id:
+        description: |
+          Deal id, such as 'vivo-cpa-2024', or null
+        type: string
     bugs:
       - https://github.com/mozilla-mobile/fenix/issues/968
       - https://github.com/mozilla-mobile/fenix/issues/10616
@@ -137,10 +141,10 @@ events:
           include:
           add_to_homescreen, add_to_top_sites, addons_manager, back, back_long_press,
           bookmark, bookmarks, desktop_view_off, desktop_view_on, downloads,
-          find_in_page, forward, forward_long_press, history, new_tab, open_in_app,
-          open_in_fenix, quit, reader_mode_appearance, reload, remove_from_top_sites,
-          save_to_collection, set_default_browser, settings, share, stop,
-          sync_account, translate and print_content.
+          find_in_page, forward, forward_long_press, history, new_tab, new_private_tab,
+          open_in_app, open_in_fenix, quit, reader_mode_appearance, reload,
+          remove_from_top_sites, save_to_collection, set_default_browser, settings,
+          share, stop, sync_account, translate and print_content.
         type: string
     bugs:
       - https://github.com/mozilla-mobile/fenix/issues/1024
@@ -6173,23 +6177,6 @@ tracking_protection:
     metadata:
       tags:
         - TrackingProtection
-  tcp_cfr_shown:
-    type: event
-    description: |
-      The Total Cookie Protection CFR was shown to the user.
-    bugs:
-      - https://github.com/mozilla-mobile/fenix/issues/26224
-    data_reviews:
-      - https://github.com/mozilla-mobile/fenix/pull/26226#issuecomment-1204007332
-      - https://github.com/mozilla-mobile/firefox-android/pull/3319
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-    metadata:
-      tags:
-        - TrackingProtection
   tcp_cfr_implicit_dismissal:
     type: event
     description: |
@@ -6213,24 +6200,6 @@ tracking_protection:
     description: |
       The Total Cookie Protection CFR was dismissed by the user by clicking on
       the "X" button to close the popup.
-    bugs:
-      - https://github.com/mozilla-mobile/fenix/issues/26224
-    data_reviews:
-      - https://github.com/mozilla-mobile/fenix/pull/26226#issuecomment-1204007332
-      - https://github.com/mozilla-mobile/firefox-android/pull/3319
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-    metadata:
-      tags:
-        - TrackingProtection
-  tcp_sumo_link_clicked:
-    type: event
-    description: |
-      A user clicked the link in the Total Cookie Protection CFR to open a new
-      SUMO tab detailing the Total Cookie Protection feature.
     bugs:
       - https://github.com/mozilla-mobile/fenix/issues/26224
     data_reviews:
@@ -9999,48 +9968,6 @@ recent_tabs:
     notification_emails:
       - android-probes@mozilla.com
     expires: never
-  jump_back_in_cfr_shown:
-    type: event
-    description: |
-      Jump back in CFR has been displayed to the user.
-    bugs:
-      - https://github.com/mozilla-mobile/fenix/issues/26191
-    data_reviews:
-      - https://github.com/mozilla-mobile/fenix/pull/26202
-      - https://github.com/mozilla-mobile/firefox-android/pull/3319
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-  jump_back_in_cfr_dismissed:
-    type: event
-    description: |
-      Jump back in CFR has been dismissed clicking the X button.
-    bugs:
-      - https://github.com/mozilla-mobile/fenix/issues/26191
-    data_reviews:
-      - https://github.com/mozilla-mobile/fenix/pull/26202
-      - https://github.com/mozilla-mobile/firefox-android/pull/3319
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-  jump_back_in_cfr_cancelled:
-    type: event
-    description: |
-      Jump back in CFR has been cancelled clicking the outside the CFR.
-    bugs:
-      - https://github.com/mozilla-mobile/fenix/issues/26191
-    data_reviews:
-      - https://github.com/mozilla-mobile/fenix/pull/26202
-      - https://github.com/mozilla-mobile/firefox-android/pull/3319
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
 
 home_bookmarks:
   shown:
@@ -10998,25 +10925,6 @@ shopping:
     type: event
     description: |
       The shopping icon from the address bar was clicked.
-    send_in_pings:
-      - events
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1843508
-    data_reviews:
-      - https://github.com/mozilla-mobile/firefox-android/pull/3619
-      - https://github.com/mozilla-mobile/firefox-android/pull/4039
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-    metadata:
-      tags:
-        - Shopping
-  address_bar_feature_callout_displayed:
-    type: event
-    description: |
-      The shopping CFR was displayed to the user.
     send_in_pings:
       - events
     bugs:
@@ -12035,32 +11943,6 @@ address_toolbar:
     notification_emails:
       - android-probes@mozilla.com
     expires: never
-  tablet_navigation_cfr_shown:
-    type: event
-    description: |
-      Tablet navigation bar CFR was shown to the user.
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1908425
-    data_reviews:
-      - https://phabricator.services.mozilla.com/D218373
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
-  tablet_navigation_cfr_dismissed:
-    type: event
-    description: |
-      A user has dismissed the tablet navigation bar CFR.
-    bugs:
-      - https://bugzilla.mozilla.org/show_bug.cgi?id=1908425
-    data_reviews:
-      - https://phabricator.services.mozilla.com/D218373
-    data_sensitivity:
-      - interaction
-    notification_emails:
-      - android-probes@mozilla.com
-    expires: never
 
 customization_settings:
   dynamic_toolbar:
@@ -12102,4 +11984,19 @@ nimbus_system:
     notification_emails:
       - chumphreys@mozilla.com
       - project-nimbus@mozilla.com
+    expires: never
+
+partnerships:
+  vivo_file_check_error:
+    type: event
+    description: |
+      When there is an error checking if the vivo firefox file exists
+    data_sensitivity:
+      - technical
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1912325
+    data_reviews:
+      - https://phabricator.services.mozilla.com/D218866
+    notification_emails:
+      - android-probes@mozilla.com
     expires: never

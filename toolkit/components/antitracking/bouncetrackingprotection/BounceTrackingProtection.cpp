@@ -535,7 +535,7 @@ BounceTrackingProtection::ClearAll() {
 }
 
 NS_IMETHODIMP
-BounceTrackingProtection::ClearBySiteHostAndOA(
+BounceTrackingProtection::ClearBySiteHostAndOriginAttributes(
     const nsACString& aSiteHost, JS::Handle<JS::Value> aOriginAttributes,
     JSContext* aCx) {
   NS_ENSURE_ARG_POINTER(aCx);
@@ -553,10 +553,23 @@ BounceTrackingProtection::ClearBySiteHostAndOA(
 }
 
 NS_IMETHODIMP
-BounceTrackingProtection::ClearBySiteHost(const nsACString& aSiteHost) {
-  BounceTrackingState::ResetAll();
+BounceTrackingProtection::ClearBySiteHostAndOriginAttributesPattern(
+    const nsACString& aSiteHost, JS::Handle<JS::Value> aOriginAttributesPattern,
+    JSContext* aCx) {
+  NS_ENSURE_ARG_POINTER(aCx);
 
-  return mStorage->ClearBySiteHost(aSiteHost, nullptr);
+  OriginAttributesPattern pattern;
+  if (!aOriginAttributesPattern.isObject() ||
+      !pattern.Init(aCx, aOriginAttributesPattern)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+
+  // Clear per-tab state.
+  BounceTrackingState::ResetAllForOriginAttributesPattern(pattern);
+
+  // Clear global state including on-disk state.
+  return mStorage->ClearByOriginAttributesPattern(pattern,
+                                                  Some(nsCString(aSiteHost)));
 }
 
 NS_IMETHODIMP
@@ -772,28 +785,40 @@ nsresult BounceTrackingProtection::LogBounceTrackersClassifiedToWebConsole(
   return NS_OK;
 }
 
-RefPtr<GenericPromise>
+RefPtr<GenericNonExclusivePromise>
 BounceTrackingProtection::EnsureRemoteExceptionListService() {
-  // Check if mRemoteExceptionList is already initialized.
-  if (mRemoteExceptionList) {
-    return GenericPromise::CreateAndResolve(true, __func__);
+  // mRemoteExceptionList already initialized or currently initializing.
+  if (mRemoteExceptionListInitPromise) {
+    return mRemoteExceptionListInitPromise;
   }
 
   // Create the service instance.
   nsresult rv;
   mRemoteExceptionList =
-      do_CreateInstance(NS_NSIBTPEXCEPTIONLISTSERVICE_CONTRACTID, &rv);
-  NS_ENSURE_SUCCESS(rv, GenericPromise::CreateAndReject(rv, __func__));
+      do_GetService(NS_NSIBTPEXCEPTIONLISTSERVICE_CONTRACTID, &rv);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    mRemoteExceptionListInitPromise =
+        GenericNonExclusivePromise::CreateAndReject(rv, __func__);
+    return mRemoteExceptionListInitPromise;
+  }
 
   // Call the init method and get the Promise. It resolves once the allow-list
   // entries have been imported.
   RefPtr<dom::Promise> jsPromise;
   rv = mRemoteExceptionList->Init(this, getter_AddRefs(jsPromise));
-  NS_ENSURE_SUCCESS(rv, GenericPromise::CreateAndReject(rv, __func__));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    mRemoteExceptionListInitPromise =
+        GenericNonExclusivePromise::CreateAndReject(rv, __func__);
+    return mRemoteExceptionListInitPromise;
+  }
   MOZ_ASSERT(jsPromise);
 
-  // Convert to MozPromise so it can be handled from C++ side.
-  return PromiseNativeWrapper::ConvertJSPromiseToMozPromise(jsPromise);
+  // Convert to MozPromise so it can be handled from C++ side. Also store the
+  // promise so that subsequent calls to this method can wait for init too.
+  mRemoteExceptionListInitPromise =
+      PromiseNativeWrapper::ConvertJSPromiseToMozPromise(jsPromise);
+
+  return mRemoteExceptionListInitPromise;
 }
 
 RefPtr<BounceTrackingProtection::PurgeBounceTrackersMozPromise>
@@ -826,8 +851,8 @@ BounceTrackingProtection::PurgeBounceTrackers() {
   // Wait for the remote exception list service to be ready before purging.
   EnsureRemoteExceptionListService()->Then(
       GetCurrentSerialEventTarget(), __func__,
-      [self,
-       resultPromise](const GenericPromise::ResolveOrRejectValue& aResult) {
+      [self, resultPromise](
+          const GenericNonExclusivePromise::ResolveOrRejectValue& aResult) {
         if (aResult.IsReject()) {
           nsresult rv = aResult.RejectValue();
           resultPromise->Reject(rv, __func__);
@@ -1052,8 +1077,14 @@ nsresult BounceTrackingProtection::PurgeBounceTrackersForStateGlobal(
       cb->OnDataDeleted(0);
     } else {
       // TODO: Bug 1842067: Clear by site + OA.
-      rv = clearDataService->DeleteDataFromBaseDomain(host, false,
-                                                      TRACKER_PURGE_FLAGS, cb);
+
+      // nsIClearDataService expects a schemeless site which for IPV6 addresses
+      // includes brackets. Add them if needed.
+      nsAutoCString hostToPurge(host);
+      nsContentUtils::MaybeFixIPv6Host(hostToPurge);
+
+      rv = clearDataService->DeleteDataFromSiteAndOriginAttributesPatternString(
+          hostToPurge, u""_ns, false, TRACKER_PURGE_FLAGS, cb);
       if (NS_WARN_IF(NS_FAILED(rv))) {
         clearPromise->Reject(0, __func__);
       }

@@ -991,6 +991,23 @@ class LTestIAndBranch : public LControlInstructionHelper<2, 1, 0> {
   MBasicBlock* ifFalse() const { return getSuccessor(1); }
 };
 
+// Takes in intptr input and tests it for truthiness.
+class LTestIPtrAndBranch : public LControlInstructionHelper<2, 1, 0> {
+ public:
+  LIR_HEADER(TestIPtrAndBranch)
+
+  LTestIPtrAndBranch(const LAllocation& in, MBasicBlock* ifTrue,
+                     MBasicBlock* ifFalse)
+      : LControlInstructionHelper(classOpcode) {
+    setOperand(0, in);
+    setSuccessor(0, ifTrue);
+    setSuccessor(1, ifFalse);
+  }
+
+  MBasicBlock* ifTrue() const { return getSuccessor(0); }
+  MBasicBlock* ifFalse() const { return getSuccessor(1); }
+};
+
 // Takes in an int64 input and tests it for truthiness.
 class LTestI64AndBranch : public LControlInstructionHelper<2, INT64_PIECES, 0> {
  public:
@@ -1891,266 +1908,6 @@ class LModPowTwoD : public LInstructionHelper<1, 1, 0> {
   uint32_t divisor() const { return divisor_; }
   const LAllocation* lhs() { return getOperand(0); }
   MMod* mir() const { return mir_->toMod(); }
-};
-
-class LBigIntAdd : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntAdd)
-
-  LBigIntAdd(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntSub : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntSub)
-
-  LBigIntSub(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntMul : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntMul)
-
-  LBigIntMul(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntDiv : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntDiv)
-
-  LBigIntDiv(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-
-  const MBigIntDiv* mir() const { return mirRaw()->toBigIntDiv(); }
-};
-
-class LBigIntMod : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntMod)
-
-  LBigIntMod(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-
-  const MBigIntMod* mir() const { return mirRaw()->toBigIntMod(); }
-};
-
-class LBigIntPow : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntPow)
-
-  LBigIntPow(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-
-  const MBigIntPow* mir() const { return mirRaw()->toBigIntPow(); }
-};
-
-class LBigIntBitAnd : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntBitAnd)
-
-  LBigIntBitAnd(const LAllocation& lhs, const LAllocation& rhs,
-                const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntBitOr : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntBitOr)
-
-  LBigIntBitOr(const LAllocation& lhs, const LAllocation& rhs,
-               const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntBitXor : public LBinaryMath<2> {
- public:
-  LIR_HEADER(BigIntBitXor)
-
-  LBigIntBitXor(const LAllocation& lhs, const LAllocation& rhs,
-                const LDefinition& temp1, const LDefinition& temp2)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntLsh : public LBinaryMath<3> {
- public:
-  LIR_HEADER(BigIntLsh)
-
-  LBigIntLsh(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2,
-             const LDefinition& temp3)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-    setTemp(2, temp3);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-  const LDefinition* temp3() { return getTemp(2); }
-};
-
-class LBigIntRsh : public LBinaryMath<3> {
- public:
-  LIR_HEADER(BigIntRsh)
-
-  LBigIntRsh(const LAllocation& lhs, const LAllocation& rhs,
-             const LDefinition& temp1, const LDefinition& temp2,
-             const LDefinition& temp3)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-    setTemp(2, temp3);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-  const LDefinition* temp3() { return getTemp(2); }
-};
-
-class LBigIntIncrement : public LUnaryMath<2> {
- public:
-  LIR_HEADER(BigIntIncrement)
-
-  LBigIntIncrement(const LAllocation& input, const LDefinition& temp1,
-                   const LDefinition& temp2)
-      : LUnaryMath(classOpcode) {
-    setOperand(0, input);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntDecrement : public LUnaryMath<2> {
- public:
-  LIR_HEADER(BigIntDecrement)
-
-  LBigIntDecrement(const LAllocation& input, const LDefinition& temp1,
-                   const LDefinition& temp2)
-      : LUnaryMath(classOpcode) {
-    setOperand(0, input);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
-};
-
-class LBigIntNegate : public LUnaryMath<1> {
- public:
-  LIR_HEADER(BigIntNegate)
-
-  LBigIntNegate(const LAllocation& input, const LDefinition& temp)
-      : LUnaryMath(classOpcode) {
-    setOperand(0, input);
-    setTemp(0, temp);
-  }
-
-  const LDefinition* temp() { return getTemp(0); }
-};
-
-class LBigIntBitNot : public LUnaryMath<2> {
- public:
-  LIR_HEADER(BigIntBitNot)
-
-  LBigIntBitNot(const LAllocation& input, const LDefinition& temp1,
-                const LDefinition& temp2)
-      : LUnaryMath(classOpcode) {
-    setOperand(0, input);
-    setTemp(0, temp1);
-    setTemp(1, temp2);
-  }
-
-  const LDefinition* temp1() { return getTemp(0); }
-  const LDefinition* temp2() { return getTemp(1); }
 };
 
 // Convert a value to an int32.

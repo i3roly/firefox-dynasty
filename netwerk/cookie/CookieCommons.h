@@ -69,6 +69,9 @@ class CookieCommons final {
 
   static bool PathMatches(Cookie* aCookie, const nsACString& aPath);
 
+  static bool PathMatches(const nsACString& aCookiePath,
+                          const nsACString& aPath);
+
   static nsresult GetBaseDomain(nsIEffectiveTLDService* aTLDService,
                                 nsIURI* aHostURI, nsACString& aBaseDomain,
                                 bool& aRequireHostMatch);
@@ -112,8 +115,16 @@ class CookieCommons final {
   static already_AddRefed<nsICookieJarSettings> GetCookieJarSettings(
       nsIChannel* aChannel);
 
-  static bool ShouldIncludeCrossSiteCookieForDocument(Cookie* aCookie,
-                                                      dom::Document* aDocument);
+  static bool ShouldIncludeCrossSiteCookie(Cookie* aCookie,
+                                           bool aPartitionForeign,
+                                           bool aInPrivateBrowsing,
+                                           bool aUsingStorageAccess);
+
+  static bool ShouldIncludeCrossSiteCookie(int32_t aSameSiteAttr,
+                                           bool aCookiePartitioned,
+                                           bool aPartitionForeign,
+                                           bool aInPrivateBrowsing,
+                                           bool aUsingStorageAccess);
 
   static bool IsSchemeSupported(nsIPrincipal* aPrincipal);
   static bool IsSchemeSupported(nsIURI* aURI);
@@ -142,6 +153,29 @@ class CookieCommons final {
 
   static void ComposeCookieString(nsTArray<RefPtr<Cookie>>& aCookieList,
                                   nsACString& aCookieString);
+
+  static void GetServerDateHeader(nsIChannel* aChannel,
+                                  nsACString& aServerDateHeader);
+
+  enum class SecurityChecksResult {
+    // A sandboxed context detected.
+    eSandboxedError,
+    // A security error needs to be thrown.
+    eSecurityError,
+    // This context should not see cookies without returning errors.
+    eDoNotContinue,
+    // No security issues found. Proceed to expose cookies.
+    eContinue,
+  };
+
+  // Runs the security checks requied by specs on the current context (Document
+  // or Worker) to see if it's allowed to set/get cookies. In case it does
+  // (eContinue), the cookie principals are returned. Use the
+  // `aCookiePartitionedPrincipal` to retrieve CHIP cookies. Use
+  // `aCookiePrincipal` to retrieve non-CHIP cookies.
+  static SecurityChecksResult CheckGlobalAndRetrieveCookiePrincipals(
+      mozilla::dom::Document* aDocument, nsIPrincipal** aCookiePrincipal,
+      nsIPrincipal** aCookiePartitionedPrincipal);
 };
 
 }  // namespace net

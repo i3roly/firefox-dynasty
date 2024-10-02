@@ -343,7 +343,7 @@ void PointerEventHandler::CheckPointerCaptureState(WidgetPointerEvent* aEvent) {
   // from chrome if the capture info exists in this case. And we don't have to
   // do anything if the pointer id is the same as the spoofed one.
   if (nsContentUtils::ShouldResistFingerprinting("Efficiency Check",
-                                                 RFPTarget::PointerEvents) &&
+                                                 RFPTarget::PointerId) &&
       aEvent->pointerId != (uint32_t)GetSpoofedPointerIdForRFP() &&
       !captureInfo) {
     PointerCaptureInfo* spoofedCaptureInfo =
@@ -655,6 +655,33 @@ void PointerEventHandler::InitPointerEventFromTouch(
   aPointerEvent.mInputSource = aTouchEvent.mInputSource;
   aPointerEvent.mFromTouchEvent = true;
   aPointerEvent.mPressure = aTouch.mForce;
+}
+
+/* static */
+void PointerEventHandler::InitCoalescedEventFromPointerEvent(
+    WidgetPointerEvent& aCoalescedEvent,
+    const WidgetPointerEvent& aSourceEvent) {
+  aCoalescedEvent.mFlags.mCancelable = false;
+  aCoalescedEvent.mFlags.mBubbles = false;
+
+  aCoalescedEvent.mTimeStamp = aSourceEvent.mTimeStamp;
+  aCoalescedEvent.mRefPoint = aSourceEvent.mRefPoint;
+  aCoalescedEvent.mModifiers = aSourceEvent.mModifiers;
+
+  // WidgetMouseEventBase
+  aCoalescedEvent.mButton = aSourceEvent.mButton;
+  aCoalescedEvent.mButtons = aSourceEvent.mButtons;
+  aCoalescedEvent.mPressure = aSourceEvent.mPressure;
+  aCoalescedEvent.mInputSource = aSourceEvent.mInputSource;
+
+  // pointerId, tiltX, tiltY, twist, tangentialPressure and convertToPointer.
+  aCoalescedEvent.AssignPointerHelperData(aSourceEvent);
+
+  // WidgetPointerEvent
+  aCoalescedEvent.mWidth = aSourceEvent.mWidth;
+  aCoalescedEvent.mHeight = aSourceEvent.mHeight;
+  aCoalescedEvent.mIsPrimary = aSourceEvent.mIsPrimary;
+  aCoalescedEvent.mFromTouchEvent = aSourceEvent.mFromTouchEvent;
 }
 
 /* static */

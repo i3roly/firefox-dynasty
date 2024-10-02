@@ -44,7 +44,8 @@ prefs = [
 ["browser_aboutSessionRestore.js"]
 skip-if = [
   "verify && debug && os == 'win'",
-  "verify && debug && os == 'mac'",
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && debug && verify",
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64' && debug && verify",
 ]
 
 ["browser_async_duplicate_tab.js"]
@@ -58,7 +59,6 @@ run-if = ["crashreporter"]
 
 ["browser_async_window_flushing.js"]
 https_first_disabled = true
-skip-if = ["true"] # Bug 1775616
 
 ["browser_attributes.js"]
 
@@ -90,6 +90,7 @@ https_first_disabled = true
 ["browser_closed_tabs_closed_windows.js"]
 
 ["browser_closed_tabs_windows.js"]
+skip-if = ["os == 'linux' && os_version == '18.04' && processor == 'x86_64' && !debug"] # Bug 1836198
 
 ["browser_cookies.js"]
 
@@ -102,10 +103,7 @@ https_first_disabled = true
 ["browser_crashedTabs.js"]
 https_first_disabled = true
 run-if = ["crashreporter"]
-skip-if = [
-  "verify",
-  "os == 'mac'", # high frequency intermittent
-]
+skip-if = ["verify"]
 
 ["browser_docshell_uuid_consistency.js"]
 
@@ -114,7 +112,6 @@ skip-if = [
 ["browser_duplicate_tab_in_new_window.js"]
 
 ["browser_dying_cache.js"]
-skip-if = ["os == 'win'"] # bug 1331853
 
 ["browser_dynamic_frames.js"]
 
@@ -139,7 +136,6 @@ skip-if = ["asan"] # test runs too long
 ["browser_formdata_face.js"]
 
 ["browser_formdata_format.js"]
-skip-if = ["!debug && os == 'linux'"] # Bug 1535645
 
 ["browser_formdata_max_size.js"]
 
@@ -162,17 +158,15 @@ https_first_disabled = true
 run-if = ["crashreporter"]
 skip-if = [
   "asan",
-  "os == 'win' && fission && verify", # bug 1709907
-  "os == 'mac' && fission", # Bug 1711008; high frequency intermittent
+  "os == 'win' && verify", # bug 1709907
 ]
 
 ["browser_label_and_icon.js"]
 https_first_disabled = true
 skip-if = [
   "apple_silicon", # Disabled due to bleedover with other tests when run in regular suites; passes in "failures" jobs
-  "apple_catalina && !debug", # Bug 1638958
-  "os == 'linux' && !debug", # Bug 1638958
-  "win11_2009 && !debug", # Bug 1775605
+  "os == 'win' && os_version == '11.2009' && processor == 'x86_64' && opt && msix", # Bug 1775605
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && opt", # Bug 1638958
 ]
 
 ["browser_movePendingTabToNewWindow.js"]
@@ -180,7 +174,6 @@ https_first_disabled = true
 tags = "os_integration"
 
 ["browser_multiple_navigateAndRestore.js"]
-skip-if = ["os == 'linux' && debug"] #Bug 1570468
 
 ["browser_multiple_select_after_load.js"]
 
@@ -201,10 +194,7 @@ tags = "openUILinkIn"
 ["browser_pending_tabs.js"]
 
 ["browser_pinned_tabs.js"]
-skip-if = [
-  "debug",
-  "ccov", # Bug 1625525
-]
+skip-if = ["ccov"] # Bug 1625525
 
 ["browser_privatetabs.js"]
 
@@ -223,7 +213,10 @@ skip-if = ["true"] # Bug 1646894
 ["browser_restoreLastActionCorrectOrder.js"]
 
 ["browser_restoreLastClosedTabOrWindowOrSession.js"]
-skip-if = ["os == 'mac' && !debug"] # Bug 1838996
+skip-if = [
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && opt", # Bug 1838996
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64' && opt", # Bug 1838996
+]
 
 ["browser_restoreTabContainer.js"]
 
@@ -251,24 +244,17 @@ skip-if = ["true"] #Bug 1455602
 
 ["browser_revive_crashed_bg_tabs.js"]
 https_first_disabled = true
-skip-if = ["!crashreporter"]
+run-if = ["crashreporter"]
 
 ["browser_scrollPositions.js"]
 https_first_disabled = true
-skip-if = [
-  "!fission",
-  "os == 'linux'", # Bug 1716445
-]
+run-if = ["fission"]
 
 ["browser_scrollPositionsReaderMode.js"]
 
 ["browser_sessionHistory.js"]
 https_first_disabled = true
 support-files = ["file_sessionHistory_hashchange.html"]
-skip-if = [
-  "os == 'linux'", # Bug 1775608
-  "os == 'mac' && os_version == '10.15' && debug", # Bug 1775608
-]
 
 ["browser_sessionStorage.js"]
 tags = "os_integration"
@@ -278,9 +264,6 @@ tags = "os_integration"
 ["browser_sessionStoreContainer.js"]
 
 ["browser_should_restore_tab.js"]
-skip-if = [
-  "os == 'linux' && os_version == '18.04' && debug", #Bug 1848488
-]
 
 ["browser_sizemodeBeforeMinimized.js"]
 
@@ -294,7 +277,7 @@ skip-if = [
 https_first_disabled = true
 
 ["browser_tabicon_after_bg_tab_crash.js"]
-skip-if = ["!crashreporter"]
+run-if = ["crashreporter"]
 
 ["browser_tabs_in_urlbar.js"]
 https_first_disabled = true
@@ -305,14 +288,14 @@ skip-if = ["debug"]
 ["browser_undoCloseById_targetWindow.js"]
 
 ["browser_unrestored_crashedTabs.js"]
-skip-if = ["!crashreporter"]
+run-if = ["crashreporter"]
 
 ["browser_upgrade_backup.js"]
 skip-if = [
-  "debug",
   "asan",
   "tsan",
-  "verify && debug && os == 'mac'", # Bug 1435394 disabled on Linux, OSX and Windows
+  "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && debug && verify",
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64' && debug && verify",
 ]
 
 ["browser_urlbarSearchMode.js"]

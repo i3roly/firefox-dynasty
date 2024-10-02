@@ -7,16 +7,18 @@
 #include "builtin/DisposableStackObject.h"
 
 #include "builtin/Array.h"
+#include "builtin/DisposableStackObjectBase.h"
 #include "js/friend/ErrorMessages.h"
 #include "js/PropertyAndElement.h"
 #include "js/PropertySpec.h"
 #include "vm/BytecodeUtil.h"
+#include "vm/DisposableRecord.h"
 #include "vm/GlobalObject.h"
+#include "vm/Interpreter.h"
 #include "vm/JSContext.h"
 #include "vm/JSObject.h"
 #include "vm/UsingHint.h"
 
-#include "vm/Interpreter-inl.h"
 #include "vm/NativeObject-inl.h"
 
 using namespace js;
@@ -85,49 +87,6 @@ using namespace js;
   return val.isObject() && val.toObject().is<DisposableStackObject>();
 }
 
-ArrayObject* DisposableStackObject::getOrCreateDisposeCapability(
-    JSContext* cx) {
-  ArrayObject* disposablesList = nullptr;
-
-  if (isDisposableResourceStackEmpty()) {
-    disposablesList = NewDenseEmptyArray(cx);
-    if (!disposablesList) {
-      return nullptr;
-    }
-    setReservedSlot(DISPOSABLE_RESOURCE_STACK_SLOT,
-                    ObjectValue(*disposablesList));
-  } else {
-    disposablesList = nonEmptyDisposableResourceStack();
-  }
-
-  return disposablesList;
-}
-
-inline bool DisposableStackObject::isDisposableResourceStackEmpty() const {
-  return getReservedSlot(DISPOSABLE_RESOURCE_STACK_SLOT).isUndefined();
-}
-
-inline void DisposableStackObject::clearDisposableResourceStack() {
-  setReservedSlot(DISPOSABLE_RESOURCE_STACK_SLOT, JS::UndefinedValue());
-}
-
-inline ArrayObject* DisposableStackObject::nonEmptyDisposableResourceStack()
-    const {
-  MOZ_ASSERT(!isDisposableResourceStackEmpty());
-  return &getReservedSlot(DISPOSABLE_RESOURCE_STACK_SLOT)
-              .toObject()
-              .as<ArrayObject>();
-}
-
-inline DisposableStackObject::DisposableState DisposableStackObject::state()
-    const {
-  return DisposableState(uint8_t(getReservedSlot(STATE_SLOT).toInt32()));
-}
-
-inline void DisposableStackObject::setState(DisposableState state) {
-  setReservedSlot(STATE_SLOT, JS::Int32Value(int32_t(state)));
-}
-
 /**
  * Explicit Resource Management Proposal
  * 27.3.3.6 DisposableStack.prototype.use ( value )
@@ -178,6 +137,12 @@ inline void DisposableStackObject::setState(DisposableState state) {
 // Explicit Resource Management Proposal
 // DisposeResources ( disposeCapability, completion )
 // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-disposeresources
+//
+// This implementation of DisposeResources is specifically for DisposableStack.
+// This implements the subset of steps that specific for sync disposals.
+//
+// TODO: Consider unifying the implementation of DisposeResources by introducing
+// a special call like syntax that directly generates bytecode (Bug 1917491).
 template <typename ClearFn>
 MOZ_ALWAYS_INLINE bool DisposeResources(
     JSContext* cx, JS::Handle<ArrayObject*> disposeCapability, ClearFn clear) {
@@ -318,24 +283,6 @@ bool DisposableStackObject::disposeResources(JSContext* cx) {
   return JS::CallNonGenericMethod<is, dispose_impl>(cx, args);
 }
 
-static bool ThrowIfOnDisposeNotCallable(JSContext* cx,
-                                        JS::Handle<JS::Value> onDispose) {
-  if (IsCallable(onDispose)) {
-    return true;
-  }
-
-  JS::UniqueChars bytes =
-      DecompileValueGenerator(cx, JSDVG_SEARCH_STACK, onDispose, nullptr);
-  if (!bytes) {
-    return false;
-  }
-
-  JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr, JSMSG_NOT_FUNCTION,
-                           bytes.get());
-
-  return false;
-}
-
 /**
  * Explicit Resource Management Proposal
  * 27.3.3.2 DisposableStack.prototype.defer ( onDispose )
@@ -418,17 +365,11 @@ static bool ThrowIfOnDisposeNotCallable(JSContext* cx,
   // Step 5. Set newDisposableStack.[[DisposableState]] to pending.
   // Step 6. Set newDisposableStack.[[DisposeCapability]] to
   // disposableStack.[[DisposeCapability]].
-  JS::Rooted<JSObject*> proto(cx);
-  if (!GetPrototypeFromBuiltinConstructor(cx, args, JSProto_DisposableStack,
-                                          &proto)) {
-    return false;
-  }
-
   JS::Rooted<JS::Value> existingDisposeCapability(
       cx, disposableStack->getReservedSlot(
               DisposableStackObject::DISPOSABLE_RESOURCE_STACK_SLOT));
   DisposableStackObject* newDisposableStack =
-      DisposableStackObject::create(cx, proto, existingDisposeCapability);
+      DisposableStackObject::create(cx, nullptr, existingDisposeCapability);
   if (!newDisposableStack) {
     return false;
   }
@@ -449,30 +390,6 @@ static bool ThrowIfOnDisposeNotCallable(JSContext* cx,
                                               JS::Value* vp) {
   JS::CallArgs args = CallArgsFromVp(argc, vp);
   return JS::CallNonGenericMethod<is, move_impl>(cx, args);
-}
-
-enum AdoptClosureSlots {
-  AdoptClosureSlot_ValueSlot = 0,
-  AdoptClosureSlot_OnDisposeSlot,
-};
-
-/**
- * Explicit Resource Management Proposal
- * 27.3.3.1 DisposableStack.prototype.adopt ( value, onDispose )
- * https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-disposablestack.prototype.adopt
- * Step 5.a
- */
-static bool AdoptClosure(JSContext* cx, unsigned argc, JS::Value* vp) {
-  JS::CallArgs args = CallArgsFromVp(argc, vp);
-
-  JS::Rooted<JSFunction*> callee(cx, &args.callee().as<JSFunction>());
-  JS::Rooted<JS::Value> value(
-      cx, callee->getExtendedSlot(AdoptClosureSlot_ValueSlot));
-  JS::Rooted<JS::Value> onDispose(
-      cx, callee->getExtendedSlot(AdoptClosureSlot_OnDisposeSlot));
-
-  // Step 5.a. Return ? Call(onDispose, undefined, « value »).
-  return Call(cx, onDispose, JS::UndefinedHandleValue, value, args.rval());
 }
 
 /**

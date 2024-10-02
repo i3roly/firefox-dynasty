@@ -7,6 +7,7 @@ import {
   ifDefined,
   nothing,
   repeat,
+  when,
 } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
@@ -93,7 +94,10 @@ export default class SidebarMain extends MozLitElement {
       event.explicitOriginalTarget.flattenedTreeParentNode;
     if (
       this.contextMenuTarget.getAttribute("extensionId") ||
-      this.contextMenuTarget.className.includes("tab")
+      this.contextMenuTarget.className.includes("tab") ||
+      document
+        .getElementById("vertical-tabs")
+        .contains(this.contextMenuTarget.flattenedTreeParentNode)
     ) {
       this.updateExtensionContextMenuItems();
       return;
@@ -217,6 +221,9 @@ export default class SidebarMain extends MozLitElement {
 
   showView(view) {
     window.SidebarController.toggle(view);
+    if (view === "viewCustomizeSidebar") {
+      Glean.sidebarCustomize.iconClick.record();
+    }
   }
 
   entrypointTemplate(action) {
@@ -268,14 +275,24 @@ export default class SidebarMain extends MozLitElement {
             action => action.view,
             action => this.entrypointTemplate(action)
           )}
-        </button-group>
-        <div class="bottom-actions actions-list">
-          ${repeat(
-            this.bottomActions,
-            action => action.view,
-            action => this.entrypointTemplate(action)
+          ${when(window.SidebarController.sidebarVerticalTabsEnabled, () =>
+            repeat(
+              this.bottomActions,
+              action => action.view,
+              action => this.entrypointTemplate(action)
+            )
           )}
-        </div>
+        </button-group>
+        ${when(
+          !window.SidebarController.sidebarVerticalTabsEnabled,
+          () => html` <div class="bottom-actions actions-list">
+            ${repeat(
+              this.bottomActions,
+              action => action.view,
+              action => this.entrypointTemplate(action)
+            )}
+          </div>`
+        )}
       </div>
     `;
   }

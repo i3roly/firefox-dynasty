@@ -12,28 +12,21 @@ add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
     set: [["browser.urlbar.showSearchTerms.featureGate", true]],
   });
-
-  await SearchTestUtils.installSearchExtension(
-    {
-      name: "MozSearch",
-      search_url: "https://www.example.com/",
-      search_url_get_params: "q={searchTerms}&pc=fake_code",
-    },
-    { setAsDefault: true }
-  );
-
+  let cleanup = await installPersistTestEngines();
   registerCleanupFunction(async function () {
     await PlacesUtils.history.clear();
+    cleanup();
   });
 });
 
 function synthesizeRevert() {
   gURLBar.focus();
+  info("Double escape and revert Urlbar.");
   EventUtils.synthesizeKey("KEY_Escape", { repeat: 2 });
 }
 
 // Users should be able to revert the URL bar
-add_task(async function revert() {
+add_task(async function double_escape_revert() {
   let { tab, expectedSearchUrl } = await searchWithTab(SEARCH_STRING);
   synthesizeRevert();
 
@@ -42,6 +35,24 @@ add_task(async function revert() {
     UrlbarTestUtils.trimURL(expectedSearchUrl),
     `Urlbar should have the reverted URI ${expectedSearchUrl} as its value.`
   );
+
+  BrowserTestUtils.removeTab(tab);
+});
+
+add_task(async function click_revert() {
+  let { tab, expectedSearchUrl } = await searchWithTab(SEARCH_STRING);
+
+  info("Click on Revert button.");
+  let revertButton = gURLBar.querySelector(".urlbar-revert-button");
+  revertButton.click();
+
+  Assert.equal(
+    gURLBar.value,
+    UrlbarTestUtils.trimURL(expectedSearchUrl),
+    `Urlbar should have the reverted URI ${expectedSearchUrl} as its value.`
+  );
+
+  Assert.ok(gURLBar.focused, "Urlbar is focused.");
 
   BrowserTestUtils.removeTab(tab);
 });
@@ -88,10 +99,8 @@ add_task(async function revert_and_change_tab() {
   // Switch back to the original tab.
   await BrowserTestUtils.switchTab(gBrowser, tab);
 
-  // Because the urlbar is focused, the pageproxystate should be invalid.
   assertSearchStringIsInUrlbar(SEARCH_STRING, {
     pageProxyState: "invalid",
-    persistSearchTerms: false,
   });
 
   BrowserTestUtils.removeTab(tab);
@@ -124,6 +133,7 @@ add_task(async function revert_when_using_content() {
     "pageshow"
   );
   tab.linkedBrowser.goBack();
+  Assert.ok(gURLBar.focused, "Address bar is focused.");
   await pageShowPromise;
   assertSearchStringIsInUrlbar(SEARCH_STRING);
 
@@ -133,6 +143,7 @@ add_task(async function revert_when_using_content() {
   );
   tab.linkedBrowser.goForward();
   await pageShowPromise;
+  Assert.ok(gURLBar.focused, "Address bar is focused.");
   assertSearchStringIsInUrlbar("another search string");
 
   BrowserTestUtils.removeTab(tab);

@@ -43,10 +43,8 @@ class SitePermissionsTest : TestSetup() {
 
     @get:Rule
     val activityTestRule = HomeActivityIntentTestRule(
-        isJumpBackInCFREnabled = false,
         isNavigationBarCFREnabled = false,
         isPWAsPromptEnabled = false,
-        isTCPCFREnabled = false,
         isDeleteSitePermissionsEnabled = true,
     )
 
@@ -55,6 +53,7 @@ class SitePermissionsTest : TestSetup() {
         Manifest.permission.RECORD_AUDIO,
         Manifest.permission.CAMERA,
         Manifest.permission.ACCESS_COARSE_LOCATION,
+        Manifest.permission.ACCESS_FINE_LOCATION,
     )
 
     @get: Rule

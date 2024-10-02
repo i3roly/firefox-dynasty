@@ -60,6 +60,57 @@ using mozilla::Telemetry::Common::SupportedProduct;
 
 namespace TelemetryIPCAccumulator = mozilla::TelemetryIPCAccumulator;
 
+namespace geckoprofiler::markers {
+
+struct ScalarMarker {
+  static constexpr mozilla::Span<const char> MarkerTypeName() {
+    return mozilla::MakeStringSpan("Scalar");
+  }
+  static void StreamJSONMarkerData(
+      mozilla::baseprofiler::SpliceableJSONWriter& aWriter,
+      const mozilla::ProfilerString8View& aName, const uint32_t& aKind,
+      const nsCString& aKey, const ScalarVariant& aValue) {
+    aWriter.UniqueStringProperty("id", aName);
+    if (!aKey.IsEmpty()) {
+      aWriter.StringProperty("key", mozilla::MakeStringSpan(aKey.get()));
+    }
+    if (aKind == nsITelemetry::SCALAR_TYPE_COUNT) {
+      aWriter.UniqueStringProperty("scalarType", "uint");
+      aWriter.IntProperty("val", aValue.as<uint32_t>());
+    } else if (aKind == nsITelemetry::SCALAR_TYPE_STRING) {
+      aWriter.UniqueStringProperty("scalarType", "string");
+      aWriter.StringProperty(
+          "val", mozilla::MakeStringSpan(
+                     NS_ConvertUTF16toUTF8(aValue.as<nsString>()).get()));
+    } else {
+      aWriter.UniqueStringProperty("scalarType", "bool");
+      aWriter.BoolProperty("val", aValue.as<bool>());
+    }
+  }
+  using MS = mozilla::MarkerSchema;
+  static MS MarkerTypeDisplay() {
+    MS schema{MS::Location::MarkerChart, MS::Location::MarkerTable};
+    schema.AddKeyLabelFormatSearchable("id", "Scalar Name",
+                                       MS::Format::UniqueString,
+                                       MS::Searchable::Searchable);
+    schema.AddKeyLabelFormatSearchable("key", "Key", MS::Format::String,
+                                       MS::Searchable::Searchable);
+    schema.AddKeyLabelFormatSearchable("scalarType", "Type",
+                                       MS::Format::UniqueString,
+                                       MS::Searchable::Searchable);
+    schema.AddKeyLabelFormatSearchable("val", "Value", MS::Format::String,
+                                       MS::Searchable::Searchable);
+    schema.SetTooltipLabel(
+        "{marker.data.id}[{marker.data.key}] {marker.data.val}");
+    schema.SetTableLabel(
+        "{marker.name} - {marker.data.id}[{marker.data.key}]: "
+        "{marker.data.val}");
+    return schema;
+  }
+};
+
+}  // namespace geckoprofiler::markers
+
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 //
@@ -1246,6 +1297,9 @@ void internal_LogScalarError(const nsACString& aScalarName, ScalarResult aSr) {
       return;
   }
 
+  PROFILER_MARKER_TEXT("ScalarError", TELEMETRY,
+                       mozilla::MarkerStack::Capture(),
+                       NS_ConvertUTF16toUTF8(errorMessage));
   LogToBrowserConsole(nsIScriptError::warningFlag, errorMessage);
 }
 
@@ -1334,6 +1388,10 @@ ScalarResult internal_CanRecordScalar(const StaticMutexAutoLock& lock,
                                       bool aForce = false) {
   // Make sure that we have a keyed scalar if we are trying to change one.
   if (internal_IsKeyedScalar(lock, aId) != aKeyed) {
+    const BaseScalarInfo& info = internal_GetScalarInfo(lock, aId);
+    PROFILER_MARKER_TEXT(
+        "ScalarError", TELEMETRY, mozilla::MarkerStack::Capture(),
+        nsPrintfCString("KeyedTypeMismatch for %s", info.name()));
     return ScalarResult::KeyedTypeMismatch;
   }
 
@@ -1345,6 +1403,10 @@ ScalarResult internal_CanRecordScalar(const StaticMutexAutoLock& lock,
 
   // Can we record in this process?
   if (!aForce && !internal_CanRecordProcess(lock, aId)) {
+    const BaseScalarInfo& info = internal_GetScalarInfo(lock, aId);
+    PROFILER_MARKER_TEXT(
+        "ScalarError", TELEMETRY, mozilla::MarkerStack::Capture(),
+        nsPrintfCString("CannotRecordInProcess for %s", info.name()));
     return ScalarResult::CannotRecordInProcess;
   }
 
@@ -1445,6 +1507,9 @@ nsresult internal_GetScalarByEnum(const StaticMutexAutoLock& lock,
           static_cast<const DynamicScalarInfo&>(info);
       if (dynInfo.mDynamicExpiration) {
         // The Dynamic scalar is expired.
+        PROFILER_MARKER_TEXT(
+            "ScalarError", TELEMETRY, mozilla::MarkerStack::Capture(),
+            nsPrintfCString("ExpiredDynamicScalar: %s", info.name()));
         return NS_ERROR_NOT_AVAILABLE;
       }
     }
@@ -1456,6 +1521,9 @@ nsresult internal_GetScalarByEnum(const StaticMutexAutoLock& lock,
   // The scalar storage wasn't already allocated. Check if the scalar is expired
   // and then allocate the storage, if needed.
   if (IsExpiredVersion(info.expiration())) {
+    PROFILER_MARKER_TEXT("ScalarError", TELEMETRY,
+                         mozilla::MarkerStack::Capture(),
+                         nsPrintfCString("ExpiredScalar: %s", info.name()));
     return NS_ERROR_NOT_AVAILABLE;
   }
 
@@ -1468,6 +1536,68 @@ nsresult internal_GetScalarByEnum(const StaticMutexAutoLock& lock,
   *aRet = scalar;
   return NS_OK;
 }
+
+// For JS consummers.
+static void internal_profilerMarker_impl(
+    const StaticMutexAutoLock& lock, const nsACString& aName,
+    ScalarActionType aType, nsIVariant* aValue, ScalarKey uniqueId,
+    const nsAString& aKey = EmptyString()) {
+  const BaseScalarInfo& info = internal_GetScalarInfo(lock, uniqueId);
+  // Convert the nsIVariant to a Variant.
+  mozilla::Maybe<ScalarVariant> variantValue;
+  ScalarResult sr = GetVariantFromIVariant(aValue, info.kind, variantValue);
+  if (sr == ScalarResult::Ok) {
+    PROFILER_MARKER(aType == ScalarActionType::eSet
+                        ? mozilla::ProfilerString8View("Scalar::Set")
+                    : aType == ScalarActionType::eAdd
+                        ? mozilla::ProfilerString8View("Scalar::Add")
+                        : mozilla::ProfilerString8View("Scalar::SetMaximum"),
+                    TELEMETRY, {}, ScalarMarker, PromiseFlatCString(aName),
+                    info.kind, NS_ConvertUTF16toUTF8(aKey), *variantValue);
+  }
+}
+
+// For C++ consummers.
+static void internal_profilerMarker_impl(
+    const StaticMutexAutoLock& lock, ScalarActionType aType,
+    const ScalarVariant& aValue, ScalarKey uniqueId,
+    const nsAString& aKey = EmptyString()) {
+  const BaseScalarInfo& info = internal_GetScalarInfo(lock, uniqueId);
+  PROFILER_MARKER(
+      aType == ScalarActionType::eSet
+          ? mozilla::ProfilerString8View("Scalar::Set")
+      : aType == ScalarActionType::eAdd
+          ? mozilla::ProfilerString8View("Scalar::Add")
+          : mozilla::ProfilerString8View("Scalar::SetMaximum"),
+      TELEMETRY, {}, ScalarMarker,
+      mozilla::ProfilerString8View::WrapNullTerminatedString(info.name()),
+      info.kind, NS_ConvertUTF16toUTF8(aKey), aValue);
+}
+
+// For child process data coming from IPCs
+static void internal_profilerMarker_impl(
+    const StaticMutexAutoLock& lock, const ScalarAction& aAction,
+    const nsCString& aKey = EmptyCString()) {
+  ScalarKey uniqueId{aAction.mId, aAction.mDynamic};
+  const BaseScalarInfo& info = internal_GetScalarInfo(lock, uniqueId);
+
+  PROFILER_MARKER(
+      aAction.mActionType == ScalarActionType::eSet
+          ? mozilla::ProfilerString8View("ChildScalar::Set")
+      : aAction.mActionType == ScalarActionType::eAdd
+          ? mozilla::ProfilerString8View("ChildScalar::Add")
+          : mozilla::ProfilerString8View("ChildScalar::SetMaximum"),
+      TELEMETRY, {}, ScalarMarker,
+      mozilla::ProfilerString8View::WrapNullTerminatedString(info.name()),
+      info.kind, aKey, *aAction.mData);
+}
+
+#define internal_profilerMarker(...)                       \
+  do {                                                     \
+    if (profiler_thread_is_being_profiled_for_markers()) { \
+      internal_profilerMarker_impl(__VA_ARGS__);           \
+    }                                                      \
+  } while (false)
 
 /**
  * Update the scalar with the provided value. This is used by the JS API.
@@ -1495,6 +1625,8 @@ ScalarResult internal_UpdateScalar(const StaticMutexAutoLock& lock,
     }
     return sr;
   }
+
+  internal_profilerMarker(lock, aName, aType, aValue, uniqueId);
 
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
@@ -1646,6 +1778,8 @@ ScalarResult internal_UpdateKeyedScalar(const StaticMutexAutoLock& lock,
     }
     return sr;
   }
+
+  internal_profilerMarker(lock, aName, aType, aValue, uniqueId, aKey);
 
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
@@ -1997,6 +2131,8 @@ void internal_ApplyScalarActions(
       continue;
     }
 
+    internal_profilerMarker(lock, upd);
+
     // Get the type of this scalar from the scalar ID. We already checked
     // for its validity a few lines above.
     const uint32_t scalarType = internal_GetScalarInfo(lock, uniqueId).kind;
@@ -2116,6 +2252,8 @@ void internal_ApplyKeyedScalarActions(
     // Get the type of this scalar from the scalar ID. We already checked
     // for its validity a few lines above.
     const uint32_t scalarType = internal_GetScalarInfo(lock, uniqueId).kind;
+
+    internal_profilerMarker(lock, upd, upd.mKey);
 
     // Extract the data from the mozilla::Variant.
     switch (upd.mActionType) {
@@ -2350,6 +2488,9 @@ void TelemetryScalar::Add(mozilla::Telemetry::ScalarID aId, uint32_t aValue) {
     return;
   }
 
+  internal_profilerMarker(locker, ScalarActionType::eAdd, ScalarVariant(aValue),
+                          uniqueId);
+
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
     TelemetryIPCAccumulator::RecordChildScalarAction(
@@ -2389,6 +2530,9 @@ void TelemetryScalar::Add(mozilla::Telemetry::ScalarID aId,
     // We can't record this scalar. Bail out.
     return;
   }
+
+  internal_profilerMarker(locker, ScalarActionType::eAdd, ScalarVariant(aValue),
+                          uniqueId, aKey);
 
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
@@ -2499,6 +2643,9 @@ void TelemetryScalar::Set(mozilla::Telemetry::ScalarID aId, uint32_t aValue) {
     return;
   }
 
+  internal_profilerMarker(locker, ScalarActionType::eSet, ScalarVariant(aValue),
+                          uniqueId);
+
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
     TelemetryIPCAccumulator::RecordChildScalarAction(
@@ -2538,6 +2685,9 @@ void TelemetryScalar::Set(mozilla::Telemetry::ScalarID aId,
     return;
   }
 
+  internal_profilerMarker(locker, ScalarActionType::eSet,
+                          ScalarVariant(nsString(aValue)), uniqueId);
+
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
     TelemetryIPCAccumulator::RecordChildScalarAction(
@@ -2575,6 +2725,9 @@ void TelemetryScalar::Set(mozilla::Telemetry::ScalarID aId, bool aValue) {
     // We can't record this scalar. Bail out.
     return;
   }
+
+  internal_profilerMarker(locker, ScalarActionType::eSet, ScalarVariant(aValue),
+                          uniqueId);
 
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
@@ -2616,6 +2769,9 @@ void TelemetryScalar::Set(mozilla::Telemetry::ScalarID aId,
     return;
   }
 
+  internal_profilerMarker(locker, ScalarActionType::eSet, ScalarVariant(aValue),
+                          uniqueId, aKey);
+
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
     TelemetryIPCAccumulator::RecordChildKeyedScalarAction(
@@ -2655,6 +2811,9 @@ void TelemetryScalar::Set(mozilla::Telemetry::ScalarID aId,
     // We can't record this scalar. Bail out.
     return;
   }
+
+  internal_profilerMarker(locker, ScalarActionType::eSet, ScalarVariant(aValue),
+                          uniqueId, aKey);
 
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
@@ -2769,6 +2928,9 @@ void TelemetryScalar::SetMaximum(mozilla::Telemetry::ScalarID aId,
     return;
   }
 
+  internal_profilerMarker(locker, ScalarActionType::eSetMaximum,
+                          ScalarVariant(aValue), uniqueId);
+
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
     TelemetryIPCAccumulator::RecordChildScalarAction(
@@ -2808,6 +2970,9 @@ void TelemetryScalar::SetMaximum(mozilla::Telemetry::ScalarID aId,
     // We can't record this scalar. Bail out.
     return;
   }
+
+  internal_profilerMarker(locker, ScalarActionType::eSetMaximum,
+                          ScalarVariant(aValue), uniqueId, aKey);
 
   // Accumulate in the child process if needed.
   if (!XRE_IsParentProcess()) {
@@ -3307,50 +3472,25 @@ void TelemetryScalar::RecordDiscardedData(
   ScalarBase* scalar = nullptr;
   mozilla::DebugOnly<nsresult> rv;
 
-  rv = internal_GetScalarByEnum(
-      locker,
-      ScalarKey{
-          static_cast<uint32_t>(ScalarID::TELEMETRY_DISCARDED_ACCUMULATIONS),
-          false},
-      aProcessType, &scalar);
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
-  scalar->AddValue(aDiscardedData.mDiscardedHistogramAccumulations);
+#define REPORT_DISCARDED(id, member)                                         \
+  if (aDiscardedData.member) {                                               \
+    ScalarKey uniqueId =                                                     \
+        ScalarKey{static_cast<uint32_t>(ScalarID::id), false};               \
+    rv = internal_GetScalarByEnum(locker, uniqueId, aProcessType, &scalar);  \
+    MOZ_ASSERT(NS_SUCCEEDED(rv));                                            \
+    internal_profilerMarker(locker, ScalarActionType::eAdd,                  \
+                            ScalarVariant(aDiscardedData.member), uniqueId); \
+    scalar->AddValue(aDiscardedData.member);                                 \
+  }
 
-  rv = internal_GetScalarByEnum(
-      locker,
-      ScalarKey{static_cast<uint32_t>(
-                    ScalarID::TELEMETRY_DISCARDED_KEYED_ACCUMULATIONS),
-                false},
-      aProcessType, &scalar);
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
-  scalar->AddValue(aDiscardedData.mDiscardedKeyedHistogramAccumulations);
-
-  rv = internal_GetScalarByEnum(
-      locker,
-      ScalarKey{
-          static_cast<uint32_t>(ScalarID::TELEMETRY_DISCARDED_SCALAR_ACTIONS),
-          false},
-      aProcessType, &scalar);
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
-  scalar->AddValue(aDiscardedData.mDiscardedScalarActions);
-
-  rv = internal_GetScalarByEnum(
-      locker,
-      ScalarKey{static_cast<uint32_t>(
-                    ScalarID::TELEMETRY_DISCARDED_KEYED_SCALAR_ACTIONS),
-                false},
-      aProcessType, &scalar);
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
-  scalar->AddValue(aDiscardedData.mDiscardedKeyedScalarActions);
-
-  rv = internal_GetScalarByEnum(
-      locker,
-      ScalarKey{
-          static_cast<uint32_t>(ScalarID::TELEMETRY_DISCARDED_CHILD_EVENTS),
-          false},
-      aProcessType, &scalar);
-  MOZ_ASSERT(NS_SUCCEEDED(rv));
-  scalar->AddValue(aDiscardedData.mDiscardedChildEvents);
+  REPORT_DISCARDED(TELEMETRY_DISCARDED_ACCUMULATIONS,
+                   mDiscardedHistogramAccumulations)
+  REPORT_DISCARDED(TELEMETRY_DISCARDED_KEYED_ACCUMULATIONS,
+                   mDiscardedKeyedHistogramAccumulations)
+  REPORT_DISCARDED(TELEMETRY_DISCARDED_SCALAR_ACTIONS, mDiscardedScalarActions)
+  REPORT_DISCARDED(TELEMETRY_DISCARDED_KEYED_SCALAR_ACTIONS,
+                   mDiscardedKeyedScalarActions)
+  REPORT_DISCARDED(TELEMETRY_DISCARDED_CHILD_EVENTS, mDiscardedChildEvents)
 }
 
 /**

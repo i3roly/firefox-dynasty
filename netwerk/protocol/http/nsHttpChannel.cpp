@@ -607,7 +607,7 @@ nsresult nsHttpChannel::OnBeforeConnect() {
 
   // Check to see if we should redirect this channel elsewhere by
   // nsIHttpChannel.redirectTo API request
-  if (mAPIRedirectToURI) {
+  if (mAPIRedirectTo) {
     return AsyncCall(&nsHttpChannel::HandleAsyncAPIRedirect);
   }
 
@@ -667,7 +667,10 @@ nsresult nsHttpChannel::OnBeforeConnect() {
 
   RefPtr<mozilla::dom::BrowsingContext> bc;
   mLoadInfo->GetBrowsingContext(getter_AddRefs(bc));
-  if (bc && bc->Top()->GetForceOffline()) {
+  // If bypassing the cache and we're forced offline
+  // we can just return the error here.
+  if (bc && bc->Top()->GetForceOffline() &&
+      BYPASS_LOCAL_CACHE(mLoadFlags, LoadPreferCacheLoadOverBypass())) {
     return NS_ERROR_OFFLINE;
   }
 
@@ -779,11 +782,20 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
     return aStatus;
   }
 
-  if (mURI->SchemeIs("https") || aShouldUpgrade || !LoadUseHTTPSSVC()) {
+  RefPtr<mozilla::dom::BrowsingContext> bc;
+  mLoadInfo->GetBrowsingContext(getter_AddRefs(bc));
+  bool forceOffline = bc && bc->Top()->GetForceOffline();
+
+  if (mURI->SchemeIs("https") || aShouldUpgrade || !LoadUseHTTPSSVC() ||
+      forceOffline) {
     return ContinueOnBeforeConnect(aShouldUpgrade, aStatus);
   }
 
   auto shouldSkipUpgradeWithHTTPSRR = [&]() -> bool {
+    if (mCaps & NS_HTTP_DISALLOW_HTTPS_RR) {
+      return true;
+    }
+
     // Skip using HTTPS RR to upgrade when this is not a top-level load and the
     // loading principal is http.
     if ((mLoadInfo->GetExternalContentPolicyType() !=
@@ -803,6 +815,11 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
 
     // Don't block the channel when TRR is not used.
     if (!trrEnabled) {
+      return true;
+    }
+
+    auto dnsStrategy = GetProxyDNSStrategy();
+    if (dnsStrategy != ProxyDNSStrategy::ORIGIN) {
       return true;
     }
 
@@ -828,11 +845,6 @@ nsresult nsHttpChannel::MaybeUseHTTPSRRForUpgrade(bool aShouldUpgrade,
     StoreWaitHTTPSSVCRecord(false);
     bool hasHTTPSRR = (mHTTPSSVCRecord.ref() != nullptr);
     return ContinueOnBeforeConnect(hasHTTPSRR, aStatus, hasHTTPSRR);
-  }
-
-  auto dnsStrategy = GetProxyDNSStrategy();
-  if (!(dnsStrategy & DNS_PREFETCH_ORIGIN)) {
-    return ContinueOnBeforeConnect(aShouldUpgrade, aStatus);
   }
 
   LOG(("nsHttpChannel::MaybeUseHTTPSRRForUpgrade [%p] wait for HTTPS RR",
@@ -889,7 +901,7 @@ nsresult nsHttpChannel::ContinueOnBeforeConnect(bool aShouldUpgrade,
   }
 
   // ensure that we are using a valid hostname
-  if (!net_IsValidHostName(nsDependentCString(mConnectionInfo->Origin()))) {
+  if (!net_IsValidDNSHost(nsDependentCString(mConnectionInfo->Origin()))) {
     return NS_ERROR_UNKNOWN_HOST;
   }
 
@@ -1076,6 +1088,21 @@ nsresult nsHttpChannel::HandleOverrideResponse() {
 nsresult nsHttpChannel::Connect() {
   LOG(("nsHttpChannel::Connect [this=%p]\n", this));
 
+  if (mAPIRedirectTo) {
+    LOG(("nsHttpChannel::Connect [internal=%d]\n", mAPIRedirectTo->second()));
+
+    nsresult rv = StartRedirectChannelToURI(
+        mAPIRedirectTo->first(),
+        mAPIRedirectTo->second() ? nsIChannelEventSink::REDIRECT_PERMANENT |
+                                       nsIChannelEventSink::REDIRECT_INTERNAL
+                                 : nsIChannelEventSink::REDIRECT_PERMANENT);
+    mAPIRedirectTo = Nothing();
+    if (NS_SUCCEEDED(rv)) {
+      return NS_OK;
+    }
+    return NS_ERROR_FAILURE;
+  }
+
   // If mOverrideResponse is set, bypass the rest of the connection and reply
   // immediately with a response built using the data from mOverrideResponse.
   if (mOverrideResponse) {
@@ -1192,10 +1219,19 @@ nsresult nsHttpChannel::ContinueConnect() {
                      "CORS preflight must have been finished by the time we "
                      "do the rest of ContinueConnect");
 
+  RefPtr<mozilla::dom::BrowsingContext> bc;
+  mLoadInfo->GetBrowsingContext(getter_AddRefs(bc));
+
   // we may or may not have a cache entry at this point
   if (mCacheEntry) {
     // read straight from the cache if possible...
     if (mCachedContentIsValid) {
+      // If we're forced offline, and set to bypass the cache, return offline.
+      if (bc && bc->Top()->GetForceOffline() &&
+          BYPASS_LOCAL_CACHE(mLoadFlags, LoadPreferCacheLoadOverBypass())) {
+        return NS_ERROR_OFFLINE;
+      }
+
       nsRunnableMethod<nsHttpChannel>* event = nullptr;
       nsresult rv;
       if (!LoadCachedContentIsPartial()) {
@@ -1230,6 +1266,11 @@ nsresult nsHttpChannel::ContinueConnect() {
   if (mLoadFlags & LOAD_NO_NETWORK_IO) {
     LOG(("  mLoadFlags & LOAD_NO_NETWORK_IO"));
     return NS_ERROR_DOCUMENT_NOT_CACHED;
+  }
+
+  // We're about to hit the network. Don't if we're forced offline.
+  if (bc && bc->Top()->GetForceOffline()) {
+    return NS_ERROR_OFFLINE;
   }
 
   // hit the net...
@@ -1357,13 +1398,13 @@ void nsHttpChannel::SpeculativeConnect() {
   NS_NewNotificationCallbacksAggregation(mCallbacks, mLoadGroup,
                                          getter_AddRefs(callbacks));
   if (!callbacks) return;
-
-  Unused << gHttpHandler->SpeculativeConnect(
+  bool httpsRRAllowed = !(mCaps & NS_HTTP_DISALLOW_HTTPS_RR);
+  Unused << gHttpHandler->MaybeSpeculativeConnectWithHTTPSRR(
       mConnectionInfo, callbacks,
       mCaps & (NS_HTTP_DISALLOW_SPDY | NS_HTTP_TRR_MODE_MASK |
                NS_HTTP_DISABLE_IPV4 | NS_HTTP_DISABLE_IPV6 |
                NS_HTTP_DISALLOW_HTTP3 | NS_HTTP_REFRESH_DNS),
-      gHttpHandler->EchConfigEnabled());
+      gHttpHandler->EchConfigEnabled() && httpsRRAllowed);
 }
 
 void nsHttpChannel::DoNotifyListenerCleanup() {
@@ -2735,14 +2776,16 @@ nsresult nsHttpChannel::ContinueProcessResponse2(nsresult rv) {
     return CallOnStartRequest();
   }
 
-  if (mAPIRedirectToURI && !mCanceled) {
+  if (mAPIRedirectTo && !mCanceled) {
     MOZ_ASSERT(!LoadOnStartRequestCalled());
-    nsCOMPtr<nsIURI> redirectTo;
-    mAPIRedirectToURI.swap(redirectTo);
 
     PushRedirectAsyncFunc(&nsHttpChannel::ContinueProcessResponse3);
-    rv = StartRedirectChannelToURI(redirectTo,
-                                   nsIChannelEventSink::REDIRECT_TEMPORARY);
+    rv = StartRedirectChannelToURI(
+        mAPIRedirectTo->first(),
+        mAPIRedirectTo->second() ? nsIChannelEventSink::REDIRECT_TEMPORARY |
+                                       nsIChannelEventSink::REDIRECT_INTERNAL
+                                 : nsIChannelEventSink::REDIRECT_TEMPORARY);
+    mAPIRedirectTo = Nothing();
     if (NS_SUCCEEDED(rv)) {
       return NS_OK;
     }
@@ -3053,19 +3096,6 @@ void nsHttpChannel::UpdateCacheDisposition(bool aSuccessfulReval,
     }
     AccumulateCacheHitTelemetry(cacheDisposition, this);
     mCacheDisposition = cacheDisposition;
-
-    if (mResponseHead->Version() == HttpVersion::v0_9) {
-      // DefaultPortTopLevel = 0, DefaultPortSubResource = 1,
-      // NonDefaultPortTopLevel = 2, NonDefaultPortSubResource = 3
-      uint32_t v09Info = 0;
-      if (!(mLoadFlags & LOAD_INITIAL_DOCUMENT_URI)) {
-        v09Info += 1;
-      }
-      if (mConnectionInfo->OriginPort() != mConnectionInfo->DefaultPort()) {
-        v09Info += 2;
-      }
-      Telemetry::Accumulate(Telemetry::HTTP_09_INFO, v09Info);
-    }
   }
 
   ReportHttpResponseVersion(mResponseHead->Version());
@@ -3308,7 +3338,8 @@ nsresult nsHttpChannel::StartRedirectChannelToHttps() {
 
 void nsHttpChannel::HandleAsyncAPIRedirect() {
   MOZ_ASSERT(!mCallOnResume, "How did that happen?");
-  MOZ_ASSERT(mAPIRedirectToURI, "How did that happen?");
+  MOZ_ASSERT(mAPIRedirectTo, "How did that happen?");
+  MOZ_ASSERT(mAPIRedirectTo->first(), "How did that happen?");
 
   if (mSuspendCount) {
     LOG(("Waiting until resume to do async API redirect [this=%p]\n", this));
@@ -3320,7 +3351,10 @@ void nsHttpChannel::HandleAsyncAPIRedirect() {
   }
 
   nsresult rv = StartRedirectChannelToURI(
-      mAPIRedirectToURI, nsIChannelEventSink::REDIRECT_PERMANENT);
+      mAPIRedirectTo->first(), mAPIRedirectTo->second()
+                                   ? nsIChannelEventSink::REDIRECT_PERMANENT |
+                                         nsIChannelEventSink::REDIRECT_INTERNAL
+                                   : nsIChannelEventSink::REDIRECT_PERMANENT);
   if (NS_FAILED(rv)) {
     rv = ContinueAsyncRedirectChannelToURI(rv);
     if (NS_FAILED(rv)) {
@@ -3526,9 +3560,9 @@ nsresult nsHttpChannel::StartRedirectChannelToURI(nsIURI* upgradedURI,
 nsresult nsHttpChannel::ContinueAsyncRedirectChannelToURI(nsresult rv) {
   LOG(("nsHttpChannel::ContinueAsyncRedirectChannelToURI [this=%p]", this));
 
-  // Since we handle mAPIRedirectToURI also after on-examine-response handler
+  // Since we handle mAPIRedirectTo uri also after on-examine-response handler
   // rather drop it here to avoid any redirect loops, even just hypothetical.
-  mAPIRedirectToURI = nullptr;
+  mAPIRedirectTo = Nothing();
 
   if (NS_SUCCEEDED(rv)) {
     rv = OpenRedirectChannel(rv);
@@ -4153,10 +4187,10 @@ nsresult nsHttpChannel::OpenCacheEntryInternal(bool isHttps) {
     return NS_OK;
   }
 
-  if (offline || (mLoadFlags & INHIBIT_CACHING) ||
-      (bc && bc->Top()->GetForceOffline())) {
+  bool forceOffline = bc && bc->Top()->GetForceOffline();
+  if (offline || (mLoadFlags & INHIBIT_CACHING) || forceOffline) {
     if (BYPASS_LOCAL_CACHE(mLoadFlags, LoadPreferCacheLoadOverBypass()) &&
-        !offline) {
+        !offline && !forceOffline) {
       return NS_OK;
     }
     cacheEntryOpenFlags = nsICacheStorage::OPEN_READONLY;
@@ -6258,7 +6292,7 @@ nsHttpChannel::CancelByURLClassifier(nsresult aErrorCode) {
 
   // Check to see if we should redirect this channel elsewhere by
   // nsIHttpChannel.redirectTo API request
-  if (mAPIRedirectToURI) {
+  if (mAPIRedirectTo) {
     StoreChannelClassifierCancellationPending(1);
     return AsyncCall(&nsHttpChannel::HandleAsyncAPIRedirect);
   }
@@ -6281,7 +6315,7 @@ void nsHttpChannel::ContinueCancellingByURLClassifier(nsresult aErrorCode) {
 
   // Check to see if we should redirect this channel elsewhere by
   // nsIHttpChannel.redirectTo API request
-  if (mAPIRedirectToURI) {
+  if (mAPIRedirectTo) {
     Unused << AsyncCall(&nsHttpChannel::HandleAsyncAPIRedirect);
     return;
   }
@@ -6779,29 +6813,16 @@ nsHttpChannel::GetOrCreateChannelClassifier() {
   return classifier.forget();
 }
 
-uint16_t nsHttpChannel::GetProxyDNSStrategy() {
-  // This function currently only supports returning DNS_PREFETCH_ORIGIN.
-  // Support for the rest of the DNS_* flags will be added later.
-
+ProxyDNSStrategy nsHttpChannel::GetProxyDNSStrategy() {
   // When network_dns_force_use_https_rr is true, return DNS_PREFETCH_ORIGIN.
   // This ensures that we always perform HTTPS RR query.
-  if (!mProxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
-    return DNS_PREFETCH_ORIGIN;
+  nsCOMPtr<nsProxyInfo> proxyInfo(static_cast<nsProxyInfo*>(mProxyInfo.get()));
+  if (!proxyInfo || StaticPrefs::network_dns_force_use_https_rr()) {
+    return ProxyDNSStrategy::ORIGIN;
   }
-
-  uint32_t flags = 0;
-  nsAutoCString type;
-  mProxyInfo->GetFlags(&flags);
-  mProxyInfo->GetType(type);
 
   // If the proxy is not to perform name resolution itself.
-  if (!(flags & nsIProxyInfo::TRANSPARENT_PROXY_RESOLVES_HOST)) {
-    if (type.EqualsLiteral("socks")) {
-      return DNS_PREFETCH_ORIGIN;
-    }
-  }
-
-  return 0;
+  return GetProxyDNSStrategyHelper(proxyInfo->Type(), proxyInfo->Flags());
 }
 
 // BeginConnect() SHOULD NOT call AsyncAbort(). AsyncAbort will be called by
@@ -6975,7 +6996,6 @@ nsresult nsHttpChannel::BeginConnect() {
     mapping->GetConnectionInfo(getter_AddRefs(mConnectionInfo), proxyInfo,
                                originAttributes);
     Telemetry::Accumulate(Telemetry::HTTP_TRANSACTION_USE_ALTSVC, true);
-    Telemetry::Accumulate(Telemetry::HTTP_TRANSACTION_USE_ALTSVC_OE, !isHttps);
   } else if (mConnectionInfo) {
     LOG(("nsHttpChannel %p Using channel supplied connection info", this));
     Telemetry::Accumulate(Telemetry::HTTP_TRANSACTION_USE_ALTSVC, false);
@@ -6987,11 +7007,13 @@ nsresult nsHttpChannel::BeginConnect() {
   }
 
   bool trrEnabled = false;
+  auto dnsStrategy = GetProxyDNSStrategy();
   bool httpsRRAllowed =
       !LoadBeConservative() && !(mCaps & NS_HTTP_BE_CONSERVATIVE) &&
       !(mLoadInfo->TriggeringPrincipal()->IsSystemPrincipal() &&
         mLoadInfo->GetExternalContentPolicyType() !=
             ExtContentPolicy::TYPE_DOCUMENT) &&
+      dnsStrategy == ProxyDNSStrategy::ORIGIN &&
       !mConnectionInfo->UsingConnect() && canUseHTTPSRRonNetwork(trrEnabled) &&
       StaticPrefs::network_dns_use_https_rr_as_altsvc();
   if (!httpsRRAllowed) {
@@ -7102,16 +7124,7 @@ nsresult nsHttpChannel::BeginConnect() {
     ReEvaluateReferrerAfterTrackingStatusIsKnown();
   }
 
-  rv = MaybeStartDNSPrefetch();
-  if (NS_FAILED(rv)) {
-    auto dnsStrategy = GetProxyDNSStrategy();
-    if (dnsStrategy & DNS_BLOCK_ON_ORIGIN_RESOLVE) {
-      // TODO: Should this be fatal?
-      return rv;
-    }
-    // Otherwise this shouldn't be fatal.
-    return NS_OK;
-  }
+  MaybeStartDNSPrefetch();
 
   rv = CallOrWaitForResume(
       [](nsHttpChannel* self) { return self->PrepareToConnect(); });
@@ -7131,7 +7144,7 @@ nsresult nsHttpChannel::BeginConnect() {
   return NS_OK;
 }
 
-nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
+void nsHttpChannel::MaybeStartDNSPrefetch() {
   // Start a DNS lookup very early in case the real open is queued the DNS can
   // happen in parallel. Do not do so in the presence of an HTTP proxy as
   // all lookups other than for the proxy itself are done by the proxy.
@@ -7147,7 +7160,7 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
   // timing we used.
   if ((mLoadFlags & (LOAD_NO_NETWORK_IO | LOAD_ONLY_FROM_CACHE)) ||
       LoadAuthRedirectedChannel()) {
-    return NS_OK;
+    return;
   }
 
   auto dnsStrategy = GetProxyDNSStrategy();
@@ -7155,10 +7168,10 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
   LOG(
       ("nsHttpChannel::MaybeStartDNSPrefetch [this=%p, strategy=%u] "
        "prefetching%s\n",
-       this, dnsStrategy,
+       this, static_cast<uint32_t>(dnsStrategy),
        mCaps & NS_HTTP_REFRESH_DNS ? ", refresh requested" : ""));
 
-  if (dnsStrategy & DNS_PREFETCH_ORIGIN) {
+  if (dnsStrategy == ProxyDNSStrategy::ORIGIN) {
     OriginAttributes originAttributes;
     StoragePrincipalHelper::GetOriginAttributesForNetworkState(
         this, originAttributes);
@@ -7170,20 +7183,8 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
     if (mCaps & NS_HTTP_REFRESH_DNS) {
       dnsFlags |= nsIDNSService::RESOLVE_BYPASS_CACHE;
     }
-    nsresult rv = mDNSPrefetch->PrefetchHigh(dnsFlags);
 
-    if (dnsStrategy & DNS_BLOCK_ON_ORIGIN_RESOLVE) {
-      LOG(("  blocking on prefetching origin"));
-
-      if (NS_WARN_IF(NS_FAILED(rv))) {
-        LOG(("  lookup failed with 0x%08" PRIx32 ", aborting request",
-             static_cast<uint32_t>(rv)));
-        return rv;
-      }
-
-      // Resolved in OnLookupComplete.
-      mDNSBlockingThenable = mDNSBlockingPromise.Ensure(__func__);
-    }
+    Unused << mDNSPrefetch->PrefetchHigh(dnsFlags);
 
     bool unused;
     if (StaticPrefs::network_dns_use_https_rr_as_altsvc() && !mHTTPSSVCRecord &&
@@ -7203,8 +7204,6 @@ nsresult nsHttpChannel::MaybeStartDNSPrefetch() {
                                         });
     }
   }
-
-  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -7948,19 +7947,19 @@ nsresult nsHttpChannel::ContinueOnStartRequest1(nsresult result) {
 
   // before we start any content load, check for redirectTo being called
   // this code is executed mainly before we start load from the cache
-  if (mAPIRedirectToURI && !mCanceled) {
+  if (mAPIRedirectTo && !mCanceled) {
     nsAutoCString redirectToSpec;
-    mAPIRedirectToURI->GetAsciiSpec(redirectToSpec);
+    mAPIRedirectTo->first()->GetAsciiSpec(redirectToSpec);
     LOG(("  redirectTo called with uri=%s", redirectToSpec.BeginReading()));
 
     MOZ_ASSERT(!LoadOnStartRequestCalled());
-
-    nsCOMPtr<nsIURI> redirectTo;
-    mAPIRedirectToURI.swap(redirectTo);
-
     PushRedirectAsyncFunc(&nsHttpChannel::ContinueOnStartRequest2);
-    rv = StartRedirectChannelToURI(redirectTo,
-                                   nsIChannelEventSink::REDIRECT_TEMPORARY);
+    rv = StartRedirectChannelToURI(
+        mAPIRedirectTo->first(),
+        mAPIRedirectTo->second() ? nsIChannelEventSink::REDIRECT_TEMPORARY |
+                                       nsIChannelEventSink::REDIRECT_INTERNAL
+                                 : nsIChannelEventSink::REDIRECT_TEMPORARY);
+    mAPIRedirectTo = Nothing();
     if (NS_SUCCEEDED(rv)) {
       return NS_OK;
     }

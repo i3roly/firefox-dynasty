@@ -10,7 +10,7 @@
  * of nsILoginManager and nsILoginManagerStorage.
  */
 
-import { Logic } from "resource://gre/modules/LoginManager.shared.mjs";
+import { Logic } from "resource://gre/modules/LoginManager.shared.sys.mjs";
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
 const lazy = {};
@@ -440,9 +440,6 @@ export const LoginHelper = {
     );
     this.generationAvailable = Services.prefs.getBoolPref(
       "signon.generation.available"
-    );
-    this.generationConfidenceThreshold = parseFloat(
-      Services.prefs.getStringPref("signon.generation.confidenceThreshold")
     );
     this.generationEnabled = Services.prefs.getBoolPref(
       "signon.generation.enabled"
@@ -1625,8 +1622,8 @@ export const LoginHelper = {
     if (expirationTime && Date.now() < expirationTime) {
       isAuthorized = true;
       telemetryEvent = {
-        object: token.hasPassword ? "master_password" : "os_auth",
-        method: "reauthenticate",
+        name:
+          "reauthenticate" + (token.hasPassword ? "MasterPassword" : "OsAuth"),
         value: "success_no_prompt",
       };
       return {
@@ -1639,8 +1636,7 @@ export const LoginHelper = {
     if (!token.hasPassword && !OSReauthEnabled) {
       isAuthorized = true;
       telemetryEvent = {
-        object: "os_auth",
-        method: "reauthenticate",
+        name: "reauthenticateOsAuth",
         value: "success_disabled",
       };
       return {
@@ -1662,8 +1658,7 @@ export const LoginHelper = {
         : "success_unsupported_platform";
 
       telemetryEvent = {
-        object: "os_auth",
-        method: "reauthenticate",
+        name: "reauthenticateOsAuth",
         value: isAuthorized ? value : "fail",
       };
       return {
@@ -1695,8 +1690,7 @@ export const LoginHelper = {
     }
     isAuthorized = token.isLoggedIn();
     telemetryEvent = {
-      object: "master_password",
-      method: "reauthenticate",
+      name: "reauthenticateMasterPassword",
       value: isAuthorized ? "success" : "fail",
     };
     return {

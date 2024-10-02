@@ -861,11 +861,44 @@
     }
 </%helpers:shorthand>
 
+<%helpers:shorthand
+    name="position-try"
+    engines="gecko"
+    gecko_pref="layout.css.anchor-positioning.enabled",
+    sub_properties="position-try-order position-try-fallbacks"
+    spec="https://drafts.csswg.org/css-anchor-position-1/#position-try-prop"
+>
+    use crate::values::specified::position::{PositionTryOrder, PositionTryFallbacks};
+    use crate::parser::Parse;
+
+    pub fn parse_value<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Longhands, ParseError<'i>> {
+        let order = input.try_parse(|i| PositionTryOrder::parse(i)).unwrap_or(PositionTryOrder::normal());
+        let fallbacks = PositionTryFallbacks::parse(context, input)?;
+        Ok(expanded! {
+            position_try_order: order,
+            position_try_fallbacks: fallbacks,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result where W: fmt::Write {
+            if *self.position_try_order != PositionTryOrder::Normal {
+                self.position_try_order.to_css(dest)?;
+                dest.write_char(' ')?;
+            }
+            self.position_try_fallbacks.to_css(dest)
+        }
+    }
+</%helpers:shorthand>
+
 // See https://github.com/w3c/csswg-drafts/issues/3525 for the quirks stuff.
 ${helpers.four_sides_shorthand(
     "inset",
     "%s",
-    "specified::LengthPercentageOrAuto::parse",
+    "specified::Inset::parse",
     engines="gecko servo",
     spec="https://drafts.csswg.org/css-logical/#propdef-inset",
     rule_types_allowed=DEFAULT_RULES_AND_POSITION_TRY,
@@ -876,7 +909,7 @@ ${helpers.two_properties_shorthand(
     "inset-block",
     "inset-block-start",
     "inset-block-end",
-    "specified::LengthPercentageOrAuto::parse",
+    "specified::Inset::parse",
     engines="gecko servo",
     spec="https://drafts.csswg.org/css-logical/#propdef-inset-block",
     rule_types_allowed=DEFAULT_RULES_AND_POSITION_TRY,
@@ -886,7 +919,7 @@ ${helpers.two_properties_shorthand(
     "inset-inline",
     "inset-inline-start",
     "inset-inline-end",
-    "specified::LengthPercentageOrAuto::parse",
+    "specified::Inset::parse",
     engines="gecko servo",
     spec="https://drafts.csswg.org/css-logical/#propdef-inset-inline",
     rule_types_allowed=DEFAULT_RULES_AND_POSITION_TRY,

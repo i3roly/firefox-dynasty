@@ -37,7 +37,7 @@ use crate::str::CssStringWriter;
 use crate::values::{
     computed,
     resolved,
-    specified::{font::SystemFont, length::LineHeightBase},
+    specified::{font::SystemFont, length::LineHeightBase, color::ColorSchemeFlags},
 };
 use std::cell::Cell;
 use super::{
@@ -2357,6 +2357,10 @@ pub struct StyleBuilder<'a> {
     /// TODO(emilio): Make private.
     pub writing_mode: WritingMode,
 
+    /// The color-scheme bits. Needed because they may otherwise be different between visited and
+    /// unvisited colors.
+    pub color_scheme: ColorSchemeFlags,
+
     /// The effective zoom.
     pub effective_zoom: computed::Zoom,
 
@@ -2386,7 +2390,7 @@ impl<'a> StyleBuilder<'a> {
         let inherited_style = parent_style.unwrap_or(reset_style);
 
         let flags = inherited_style.flags.inherited();
-        StyleBuilder {
+        Self {
             device,
             stylist,
             inherited_style,
@@ -2399,6 +2403,7 @@ impl<'a> StyleBuilder<'a> {
             invalid_non_custom_properties: LonghandIdSet::default(),
             writing_mode: inherited_style.writing_mode,
             effective_zoom: inherited_style.effective_zoom,
+            color_scheme: inherited_style.get_inherited_ui().color_scheme_bits(),
             flags: Cell::new(flags),
             visited_style: None,
             % for style_struct in data.active_style_structs():
@@ -2425,7 +2430,7 @@ impl<'a> StyleBuilder<'a> {
     ) -> Self {
         let reset_style = device.default_computed_values();
         let inherited_style = parent_style.unwrap_or(reset_style);
-        StyleBuilder {
+        Self {
             device,
             stylist,
             inherited_style,
@@ -2438,6 +2443,7 @@ impl<'a> StyleBuilder<'a> {
             invalid_non_custom_properties: LonghandIdSet::default(),
             writing_mode: style_to_derive_from.writing_mode,
             effective_zoom: style_to_derive_from.effective_zoom,
+            color_scheme: style_to_derive_from.get_inherited_ui().color_scheme_bits(),
             flags: Cell::new(style_to_derive_from.flags),
             visited_style: None,
             % for style_struct in data.active_style_structs():
@@ -2722,6 +2728,19 @@ impl<'a> StyleBuilder<'a> {
         self.get_box().clone_zoom()
     }
 
+    /// The zoom we need to apply for this element, without including ancestor effective zooms.
+    pub fn resolved_specified_zoom(&self) -> computed::Zoom {
+        let zoom = self.specified_zoom();
+        if zoom.is_document() {
+            // If our inherited effective zoom has derived to zero, there's not much we can do.
+            // This value is not exposed to content anyways (it's used for scrollbars and to avoid
+            // zoom affecting canvas).
+            self.inherited_effective_zoom().inverted().unwrap_or(computed::Zoom::ONE)
+        } else {
+            zoom
+        }
+    }
+
     /// Inherited zoom.
     pub fn inherited_effective_zoom(&self) -> computed::Zoom {
         self.inherited_style.effective_zoom
@@ -2758,7 +2777,7 @@ impl<'a> StyleBuilder<'a> {
         let lh = device.calc_line_height(&font, writing_mode, None);
         if line_height_base == LineHeightBase::InheritedStyle {
             // Apply our own zoom if our style source is the parent style.
-            computed::NonNegativeLength::new(self.get_box().clone_zoom().zoom(lh.px()))
+            computed::NonNegativeLength::new(self.resolved_specified_zoom().zoom(lh.px()))
         } else {
             lh
         }

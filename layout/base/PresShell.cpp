@@ -231,7 +231,6 @@ PresShell::CapturingContentInfo PresShell::sCapturingContentInfo;
 
 // RangePaintInfo is used to paint ranges to offscreen buffers
 struct RangePaintInfo {
-  RefPtr<nsRange> mRange;
   nsDisplayListBuilder mBuilder;
   nsDisplayList mList;
 
@@ -243,9 +242,8 @@ struct RangePaintInfo {
   // to paint them at this resolution.
   float mResolution = 1.0;
 
-  RangePaintInfo(nsRange* aRange, nsIFrame* aFrame)
-      : mRange(aRange),
-        mBuilder(aFrame, nsDisplayListBuilderMode::Painting, false),
+  explicit RangePaintInfo(nsIFrame* aFrame)
+      : mBuilder(aFrame, nsDisplayListBuilderMode::Painting, false),
         mList(&mBuilder) {
     MOZ_COUNT_CTOR(RangePaintInfo);
     mBuilder.BeginFrame();
@@ -576,8 +574,23 @@ class MOZ_STACK_CLASS AutoPointerEventTargetUpdater final {
     mFromTouch = aEvent->AsPointerEvent()->mFromTouchEvent;
     // Touch event target may have no frame, e.g., removed from the DOM
     MOZ_ASSERT_IF(!mFromTouch, aFrame);
-    mOriginalPointerEventTarget = aShell->mPointerEventTarget =
-        aFrame ? aFrame->GetContent() : aTargetContent;
+    // The frame may be a text frame, but the event target should be an element
+    // node.  Therefore, refer aTargetContent first, then, if we have only a
+    // frame, we should use inclusive ancestor of the content.
+    mOriginalPointerEventTarget =
+        aShell->mPointerEventTarget = [&]() -> nsIContent* {
+      nsIContent* const target =
+          aTargetContent ? aTargetContent
+                         : (aFrame ? aFrame->GetContent() : nullptr);
+      if (MOZ_UNLIKELY(!target)) {
+        return nullptr;
+      }
+      if (target->IsElement() ||
+          !IsForbiddenDispatchingToNonElementContent(aEvent->mMessage)) {
+        return target;
+      }
+      return target->GetInclusiveFlattenedTreeAncestorElement();
+    }();
   }
 
   ~AutoPointerEventTargetUpdater() {
@@ -3734,9 +3747,9 @@ bool PresShell::ScrollFrameIntoView(
     }
     // If we're targetting a sticky element, make sure not to apply
     // scroll-padding on the direction we're stuck.
-    const auto& offsets = aFrame->StylePosition()->mOffset;
+    const auto* stylePosition = aFrame->StylePosition();
     for (auto side : AllPhysicalSides()) {
-      if (offsets.Get(side).IsAuto()) {
+      if (stylePosition->GetInset(side).IsAuto()) {
         continue;
       }
       // See if this axis is stuck.
@@ -4777,24 +4790,27 @@ nsRect PresShell::ClipListToRange(nsDisplayListBuilder* aBuilder,
     nsIFrame* frame = i->Frame();
     nsIContent* content = frame->GetContent();
     if (content) {
-      bool atStart = (content == aRange->GetStartContainer());
-      bool atEnd = (content == aRange->GetEndContainer());
+      bool atStart =
+          content == aRange->GetMayCrossShadowBoundaryStartContainer();
+      bool atEnd = content == aRange->GetMayCrossShadowBoundaryEndContainer();
       if ((atStart || atEnd) && frame->IsTextFrame()) {
         auto [frameStartOffset, frameEndOffset] = frame->GetOffsets();
 
-        int32_t hilightStart =
-            atStart ? std::max(static_cast<int32_t>(aRange->StartOffset()),
+        int32_t highlightStart =
+            atStart ? std::max(static_cast<int32_t>(
+                                   aRange->MayCrossShadowBoundaryStartOffset()),
                                frameStartOffset)
                     : frameStartOffset;
-        int32_t hilightEnd =
-            atEnd ? std::min(static_cast<int32_t>(aRange->EndOffset()),
+        int32_t highlightEnd =
+            atEnd ? std::min(static_cast<int32_t>(
+                                 aRange->MayCrossShadowBoundaryEndOffset()),
                              frameEndOffset)
                   : frameEndOffset;
-        if (hilightStart < hilightEnd) {
+        if (highlightStart < highlightEnd) {
           // determine the location of the start and end edges of the range.
           nsPoint startPoint, endPoint;
-          frame->GetPointFromOffset(hilightStart, &startPoint);
-          frame->GetPointFromOffset(hilightEnd, &endPoint);
+          frame->GetPointFromOffset(highlightStart, &startPoint);
+          frame->GetPointFromOffset(highlightEnd, &endPoint);
 
           // The clip rectangle is determined by taking the the start and
           // end points of the range, offset from the reference frame.
@@ -4828,8 +4844,9 @@ nsRect PresShell::ClipListToRange(nsDisplayListBuilder* aBuilder,
       // Don't try to descend into subdocuments.
       // If this ever changes we'd need to add handling for subdocuments with
       // different zoom levels.
-      else if (content->GetUncomposedDoc() ==
-               aRange->GetStartContainer()->GetUncomposedDoc()) {
+      else if (content->GetComposedDoc() ==
+               aRange->GetMayCrossShadowBoundaryStartContainer()
+                   ->GetComposedDoc()) {
         // if the node is within the range, append it to the temporary list
         bool before, after;
         nsresult rv =
@@ -4874,14 +4891,18 @@ UniquePtr<RangePaintInfo> PresShell::CreateRangePaintInfo(
   // If the start or end of the range is the document, just use the root
   // frame, otherwise get the common ancestor of the two endpoints of the
   // range.
-  nsINode* startContainer = aRange->GetStartContainer();
-  nsINode* endContainer = aRange->GetEndContainer();
+  nsINode* startContainer = aRange->GetMayCrossShadowBoundaryStartContainer();
+  nsINode* endContainer = aRange->GetMayCrossShadowBoundaryEndContainer();
   Document* doc = startContainer->GetComposedDoc();
   if (startContainer == doc || endContainer == doc) {
     ancestorFrame = rootFrame;
   } else {
-    nsINode* ancestor = nsContentUtils::GetClosestCommonInclusiveAncestor(
-        startContainer, endContainer);
+    nsINode* ancestor =
+        StaticPrefs::dom_shadowdom_selection_across_boundary_enabled()
+            ? nsContentUtils::GetClosestCommonShadowIncludingInclusiveAncestor(
+                  startContainer, endContainer)
+            : nsContentUtils::GetClosestCommonInclusiveAncestor(startContainer,
+                                                                endContainer);
     NS_ASSERTION(!ancestor || ancestor->IsContent(),
                  "common ancestor is not content");
 
@@ -4906,7 +4927,7 @@ UniquePtr<RangePaintInfo> PresShell::CreateRangePaintInfo(
   }
 
   // get a display list containing the range
-  auto info = MakeUnique<RangePaintInfo>(aRange, ancestorFrame);
+  auto info = MakeUnique<RangePaintInfo>(ancestorFrame);
   info->mBuilder.SetIncludeAllOutOfFlows();
   if (aForPrimarySelection) {
     info->mBuilder.SetSelectedFramesOnly();
@@ -4914,7 +4935,9 @@ UniquePtr<RangePaintInfo> PresShell::CreateRangePaintInfo(
   info->mBuilder.EnterPresShell(ancestorFrame);
 
   ContentSubtreeIterator subtreeIter;
-  nsresult rv = subtreeIter.Init(aRange);
+  nsresult rv = StaticPrefs::dom_shadowdom_selection_across_boundary_enabled()
+                    ? subtreeIter.InitWithAllowCrossShadowBoundary(aRange)
+                    : subtreeIter.Init(aRange);
   if (NS_FAILED(rv)) {
     return nullptr;
   }
@@ -8243,11 +8266,24 @@ nsresult PresShell::EventHandler::HandleEventAtFocusedContent(
 
   // If we cannot handle the event with mPresShell, let's try to handle it
   // with parent PresShell.
+  // However, we don't want to handle IME related events with parent document
+  // because it may leak the content of parent document and the IME state was
+  // set for the empty document.  So, dispatching on the parent document may be
+  // handled by nobody. Additionally, IMEContentObserver may send notifications
+  // to PuppetWidget in a content process while document which is in the design
+  // mode but does not have content nodes has focus.  At that time, PuppetWidget
+  // makes ContentCacheInChild collect the latest content data with dispatching
+  // query content events.  Therefore, we want they handle in the empty document
+  // rather than the parent document.  So, we must not retarget in this case
+  // anyway.
   mPresShell->mCurrentEventTarget.SetFrameAndContent(
       aGUIEvent->mMessage, nullptr, eventTargetElement);
-  if (!mPresShell->GetCurrentEventContent() ||
-      !mPresShell->GetCurrentEventFrame() ||
-      InZombieDocument(mPresShell->mCurrentEventTarget.mContent)) {
+  if (aGUIEvent->mClass != eCompositionEventClass &&
+      aGUIEvent->mClass != eQueryContentEventClass &&
+      aGUIEvent->mClass != eSelectionEventClass &&
+      (!mPresShell->GetCurrentEventContent() ||
+       !mPresShell->GetCurrentEventFrame() ||
+       InZombieDocument(mPresShell->mCurrentEventTarget.mContent))) {
     return RetargetEventToParent(aGUIEvent, aEventStatus);
   }
 
@@ -8391,18 +8427,12 @@ nsresult PresShell::EventHandler::HandleEventWithTarget(
     nsIContent** aTargetContent, nsIContent* aOverrideClickTarget) {
   MOZ_ASSERT(aEvent);
   MOZ_DIAGNOSTIC_ASSERT(aEvent->IsTrusted());
-
-#if DEBUG
-  MOZ_ASSERT(!aNewEventFrame ||
-                 aNewEventFrame->PresContext()->GetPresShell() == mPresShell,
+  MOZ_ASSERT(!aNewEventFrame || aNewEventFrame->PresShell() == mPresShell,
              "wrong shell");
-  if (aNewEventContent) {
-    Document* doc = aNewEventContent->GetComposedDoc();
-    NS_ASSERTION(doc, "event for content that isn't in a document");
-    // NOTE: We don't require that the document still have a PresShell.
-    // See bug 1375940.
-  }
-#endif
+  // NOTE: We don't require that the document still have a PresShell.
+  // See bug 1375940.
+  NS_ASSERTION(!aNewEventContent || aNewEventContent->IsInComposedDoc(),
+               "event for content that isn't in a document");
   NS_ENSURE_STATE(!aNewEventContent ||
                   aNewEventContent->GetComposedDoc() == GetDocument());
   if (aEvent->mClass == ePointerEventClass ||
@@ -8692,7 +8722,11 @@ void PresShell::EventHandler::FinalizeHandlingEvent(
           if (aEvent->mMessage == eKeyDown &&
               !aEvent->mFlags.mDefaultPrevented) {
             if (RefPtr<Document> doc = GetDocument()) {
-              doc->HandleEscKey();
+              if (StaticPrefs::dom_closewatcher_enabled()) {
+                doc->ProcessCloseRequest();
+              } else {
+                doc->HandleEscKey();
+              }
             }
           }
         }
@@ -8933,6 +8967,11 @@ nsresult PresShell::EventHandler::DispatchEventToDOM(
     if (mPresShell->mCurrentEventTarget.mFrame) {
       rv = mPresShell->mCurrentEventTarget.mFrame->GetContentForEvent(
           aEvent, getter_AddRefs(targetContent));
+      if (targetContent && !targetContent->IsElement() &&
+          IsForbiddenDispatchingToNonElementContent(aEvent->mMessage)) {
+        targetContent =
+            targetContent->GetInclusiveFlattenedTreeAncestorElement();
+      }
     }
     if (NS_SUCCEEDED(rv) && targetContent) {
       eventTarget = targetContent;
@@ -11746,17 +11785,17 @@ PresShell::WindowSizeConstraints PresShell::GetWindowSizeConstraints() {
     return {minSize, maxSize};
   }
   const auto* pos = rootFrame->StylePosition();
-  if (pos->mMinWidth.ConvertsToLength()) {
-    minSize.width = pos->mMinWidth.ToLength();
+  if (pos->GetMinWidth().ConvertsToLength()) {
+    minSize.width = pos->GetMinWidth().ToLength();
   }
-  if (pos->mMinHeight.ConvertsToLength()) {
-    minSize.height = pos->mMinHeight.ToLength();
+  if (pos->GetMinHeight().ConvertsToLength()) {
+    minSize.height = pos->GetMinHeight().ToLength();
   }
-  if (pos->mMaxWidth.ConvertsToLength()) {
-    maxSize.width = pos->mMaxWidth.ToLength();
+  if (pos->GetMaxWidth().ConvertsToLength()) {
+    maxSize.width = pos->GetMaxWidth().ToLength();
   }
-  if (pos->mMaxHeight.ConvertsToLength()) {
-    maxSize.height = pos->mMaxHeight.ToLength();
+  if (pos->GetMaxHeight().ConvertsToLength()) {
+    maxSize.height = pos->GetMaxHeight().ToLength();
   }
   return {minSize, maxSize};
 }
@@ -12207,7 +12246,7 @@ PresShell::ProximityToViewportResult PresShell::DetermineProximityToViewport() {
     // 14.2.3.2
     bool intersects =
         DOMIntersectionObserver::Intersect(
-            input, *element,
+            input, *element, DOMIntersectionObserver::BoxToUse::OverflowClip,
             DOMIntersectionObserver::IsForProximityToViewport::Yes)
             .Intersects();
     element->SetVisibleForContentVisibility(intersects);

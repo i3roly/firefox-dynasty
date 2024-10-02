@@ -27,9 +27,7 @@ class CrashReportingTest : TestSetup() {
     val activityTestRule = AndroidComposeTestRule(
         HomeActivityIntentTestRule(
             isPocketEnabled = false,
-            isJumpBackInCFREnabled = false,
             isWallpaperOnboardingEnabled = false,
-            isTCPCFREnabled = false,
         ),
     ) { it.activity }
 

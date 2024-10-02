@@ -4,6 +4,7 @@
 
 package org.mozilla.fenix.components.menu.compose
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,13 +16,24 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import mozilla.components.feature.addons.Addon
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.menu.compose.header.SubmenuHeader
+import org.mozilla.fenix.components.menu.store.WebExtensionMenuItem
 import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.compose.list.TextListItem
@@ -34,7 +46,9 @@ internal const val EXTENSIONS_MENU_ROUTE = "extensions_menu"
 @Composable
 internal fun ExtensionsSubmenu(
     recommendedAddons: List<Addon>,
+    webExtensionMenuItems: List<WebExtensionMenuItem>,
     showExtensionsOnboarding: Boolean,
+    addonInstallationInProgress: Addon?,
     onBackButtonClick: () -> Unit,
     onExtensionsLearnMoreClick: () -> Unit,
     onManageExtensionsMenuClick: () -> Unit,
@@ -46,6 +60,7 @@ internal fun ExtensionsSubmenu(
         header = {
             SubmenuHeader(
                 header = stringResource(id = R.string.browser_menu_extensions),
+                backButtonContentDescription = stringResource(R.string.browser_menu_back_button_content_description),
                 onClick = onBackButtonClick,
             )
         },
@@ -65,6 +80,26 @@ internal fun ExtensionsSubmenu(
             )
         }
 
+        if (webExtensionMenuItems.isNotEmpty()) {
+            MenuGroup {
+                for (webExtensionMenuItem in webExtensionMenuItems) {
+                    WebExtensionMenuItem(
+                        label = webExtensionMenuItem.label,
+                        iconPainter = if (webExtensionMenuItem.icon != null) {
+                            BitmapPainter(image = webExtensionMenuItem.icon.asImageBitmap())
+                        } else {
+                            painterResource(R.drawable.mozac_ic_web_extension_default_icon)
+                        },
+                        enabled = webExtensionMenuItem.enabled,
+                        badgeText = webExtensionMenuItem.badgeText,
+                        badgeTextColor = webExtensionMenuItem.badgeTextColor,
+                        badgeBackgroundColor = webExtensionMenuItem.badgeBackgroundColor,
+                        onClick = webExtensionMenuItem.onClick,
+                    )
+                }
+            }
+        }
+
         MenuGroup {
             MenuItem(
                 label = stringResource(id = R.string.browser_menu_manage_extensions),
@@ -75,6 +110,7 @@ internal fun ExtensionsSubmenu(
 
         RecommendedAddons(
             recommendedAddons = recommendedAddons,
+            addonInstallationInProgress = addonInstallationInProgress,
             onAddonClick = onAddonClick,
             onInstallAddonClick = onInstallAddonClick,
             onDiscoverMoreExtensionsMenuClick = onDiscoverMoreExtensionsMenuClick,
@@ -85,6 +121,7 @@ internal fun ExtensionsSubmenu(
 @Composable
 private fun RecommendedAddons(
     recommendedAddons: List<Addon>,
+    addonInstallationInProgress: Addon?,
     onAddonClick: (Addon) -> Unit,
     onInstallAddonClick: (Addon) -> Unit,
     onDiscoverMoreExtensionsMenuClick: () -> Unit,
@@ -96,9 +133,16 @@ private fun RecommendedAddons(
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val recommendedSectionContentDescription =
+                stringResource(id = R.string.browser_menu_recommended_section_content_description)
             Text(
                 text = stringResource(id = R.string.mozac_feature_addons_recommended_section),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics {
+                        heading()
+                        this.contentDescription = recommendedSectionContentDescription
+                    },
                 color = FirefoxTheme.colors.textSecondary,
                 style = FirefoxTheme.typography.subtitle2,
             )
@@ -110,6 +154,7 @@ private fun RecommendedAddons(
             for (addon in recommendedAddons) {
                 AddonMenuItem(
                     addon = addon,
+                    addonInstallationInProgress = addonInstallationInProgress,
                     onClick = { onAddonClick(addon) },
                     onIconClick = { onInstallAddonClick(addon) },
                 )
@@ -119,6 +164,9 @@ private fun RecommendedAddons(
 
             TextListItem(
                 label = stringResource(id = R.string.browser_menu_discover_more_extensions),
+                modifier = Modifier.semantics {
+                    this.role = Role.Button
+                },
                 onClick = onDiscoverMoreExtensionsMenuClick,
                 iconPainter = painterResource(R.drawable.mozac_ic_external_link_24),
                 iconTint = FirefoxTheme.colors.iconSecondary,
@@ -150,6 +198,27 @@ private fun ExtensionsSubmenuPreview() {
                     ),
                 ),
                 showExtensionsOnboarding = true,
+                addonInstallationInProgress = Addon(
+                    id = "id",
+                    translatableName = mapOf(Addon.DEFAULT_LOCALE to "name"),
+                    translatableDescription = mapOf(Addon.DEFAULT_LOCALE to "description"),
+                    translatableSummary = mapOf(Addon.DEFAULT_LOCALE to "summary"),
+                ),
+                webExtensionMenuItems = listOf(
+                    WebExtensionMenuItem(
+                        label = "label",
+                        enabled = true,
+                        icon = BitmapFactory.decodeResource(
+                            LocalContext.current.resources,
+                            R.drawable.googleg_standard_color_18,
+                        ),
+                        badgeText = "1",
+                        badgeTextColor = Color.White.toArgb(),
+                        badgeBackgroundColor = Color.Gray.toArgb(),
+                        onClick = {
+                        },
+                    ),
+                ),
                 onBackButtonClick = {},
                 onExtensionsLearnMoreClick = {},
                 onManageExtensionsMenuClick = {},
@@ -183,7 +252,23 @@ private fun ExtensionsSubmenuPrivatePreview() {
                         translatableSummary = mapOf(Addon.DEFAULT_LOCALE to "summary"),
                     ),
                 ),
+                webExtensionMenuItems = listOf(
+                    WebExtensionMenuItem(
+                        label = "label",
+                        enabled = true,
+                        icon = BitmapFactory.decodeResource(
+                            LocalContext.current.resources,
+                            R.drawable.googleg_standard_color_18,
+                        ),
+                        badgeText = "1",
+                        badgeTextColor = Color.White.toArgb(),
+                        badgeBackgroundColor = Color.Gray.toArgb(),
+                        onClick = {
+                        },
+                    ),
+                ),
                 showExtensionsOnboarding = true,
+                addonInstallationInProgress = null,
                 onBackButtonClick = {},
                 onExtensionsLearnMoreClick = {},
                 onManageExtensionsMenuClick = {},

@@ -566,6 +566,12 @@ nsresult nsLoadGroup::RemoveRequestFromHashtable(nsIRequest* request,
 
   mRequests.RemoveEntry(entry);
 
+  // Cache the status of mDefaultLoadRequest, It'll be used later in
+  // TelemetryReport.
+  if (request == mDefaultLoadRequest) {
+    mDefaultStatus = aStatus;
+  }
+
   // Collect telemetry stats only when default request is a timed channel.
   // Don't include failed requests in the timing statistics.
   if (mDefaultLoadIsTimed && NS_SUCCEEDED(aStatus)) {
@@ -579,21 +585,25 @@ nsresult nsLoadGroup::RemoveRequestFromHashtable(nsIRequest* request,
         ++mCachedRequests;
       }
 
-      rv = timedChannel->GetAsyncOpen(&timeStamp);
-      if (NS_SUCCEEDED(rv) && !timeStamp.IsNull()) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::HTTP_SUBITEM_OPEN_LATENCY_TIME,
-            mDefaultRequestCreationTime, timeStamp);
-      }
+      if (request == mDefaultLoadRequest) {
+        TelemetryReportChannel(timedChannel, true);
+      } else {
+        rv = timedChannel->GetAsyncOpen(&timeStamp);
+        if (NS_SUCCEEDED(rv) && !timeStamp.IsNull()) {
+          Telemetry::AccumulateTimeDelta(
+              Telemetry::HTTP_SUBITEM_OPEN_LATENCY_TIME,
+              mDefaultRequestCreationTime, timeStamp);
+        }
 
-      rv = timedChannel->GetResponseStart(&timeStamp);
-      if (NS_SUCCEEDED(rv) && !timeStamp.IsNull()) {
-        Telemetry::AccumulateTimeDelta(
-            Telemetry::HTTP_SUBITEM_FIRST_BYTE_LATENCY_TIME,
-            mDefaultRequestCreationTime, timeStamp);
-      }
+        rv = timedChannel->GetResponseStart(&timeStamp);
+        if (NS_SUCCEEDED(rv) && !timeStamp.IsNull()) {
+          Telemetry::AccumulateTimeDelta(
+              Telemetry::HTTP_SUBITEM_FIRST_BYTE_LATENCY_TIME,
+              mDefaultRequestCreationTime, timeStamp);
+        }
 
-      TelemetryReportChannel(timedChannel, false);
+        TelemetryReportChannel(timedChannel, false);
+      }
     }
   }
 
@@ -801,22 +811,14 @@ nsLoadGroup::SetDefaultLoadFlags(uint32_t aFlags) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void nsLoadGroup::TelemetryReport() {
-  nsresult defaultStatus = NS_ERROR_INVALID_ARG;
   // We should only report HTTP_PAGE_* telemetry if the defaultRequest was
   // actually successful.
-  if (mDefaultLoadRequest) {
-    mDefaultLoadRequest->GetStatus(&defaultStatus);
-  }
-  if (mDefaultLoadIsTimed && NS_SUCCEEDED(defaultStatus)) {
+  if (mDefaultLoadIsTimed && NS_SUCCEEDED(mDefaultStatus)) {
     Telemetry::Accumulate(Telemetry::HTTP_REQUEST_PER_PAGE, mTimedRequests);
     if (mTimedRequests) {
       Telemetry::Accumulate(Telemetry::HTTP_REQUEST_PER_PAGE_FROM_CACHE,
                             mCachedRequests * 100 / mTimedRequests);
     }
-
-    nsCOMPtr<nsITimedChannel> timedChannel =
-        do_QueryInterface(mDefaultLoadRequest);
-    if (timedChannel) TelemetryReportChannel(timedChannel, true);
   }
 
   mTimedRequests = 0;
@@ -875,8 +877,9 @@ void nsLoadGroup::TelemetryReportChannel(nsITimedChannel* aTimedChannel,
   TimeStamp responseEnd;
   rv = aTimedChannel->GetResponseEnd(&responseEnd);
   if (NS_FAILED(rv)) return;
-
+#ifndef ANDROID
   bool useHttp3 = false;
+#endif
   bool supportHttp3 = false;
   nsCOMPtr<nsIHttpChannelInternal> httpChannel =
       do_QueryInterface(aTimedChannel);
@@ -884,7 +887,9 @@ void nsLoadGroup::TelemetryReportChannel(nsITimedChannel* aTimedChannel,
     uint32_t major;
     uint32_t minor;
     if (NS_SUCCEEDED(httpChannel->GetResponseVersion(&major, &minor))) {
+#ifndef ANDROID
       useHttp3 = major == 3;
+#endif
       if (major == 2) {
         if (NS_FAILED(httpChannel->GetSupportsHTTP3(&supportHttp3))) {
           supportHttp3 = false;
@@ -993,6 +998,7 @@ void nsLoadGroup::TelemetryReportChannel(nsITimedChannel* aTimedChannel,
     HTTP_REQUEST_HISTOGRAMS(SUB)
   }
 
+#ifndef ANDROID
   if ((useHttp3 || supportHttp3) && cacheReadStart.IsNull() &&
       cacheReadEnd.IsNull()) {
     nsCString key = (useHttp3) ? ((aDefaultRequest) ? "uses_http3_page"_ns
@@ -1001,34 +1007,34 @@ void nsLoadGroup::TelemetryReportChannel(nsITimedChannel* aTimedChannel,
                                                     : "supports_http3_sub"_ns);
 
     if (!secureConnectionStart.IsNull() && !connectEnd.IsNull()) {
-      Telemetry::AccumulateTimeDelta(Telemetry::HTTP3_TLS_HANDSHAKE, key,
-                                     secureConnectionStart, connectEnd);
+      mozilla::glean::network::http3_tls_handshake.Get(key)
+          .AccumulateRawDuration(connectEnd - secureConnectionStart);
     }
 
     if (supportHttp3 && !connectStart.IsNull() && !connectEnd.IsNull()) {
-      Telemetry::AccumulateTimeDelta(Telemetry::SUP_HTTP3_TCP_CONNECTION, key,
-                                     connectStart, connectEnd);
+      mozilla::glean::network::sup_http3_tcp_connection.Get(key)
+          .AccumulateRawDuration(connectEnd - connectStart);
     }
 
     if (!requestStart.IsNull() && !responseEnd.IsNull()) {
-      Telemetry::AccumulateTimeDelta(Telemetry::HTTP3_OPEN_TO_FIRST_SENT, key,
-                                     asyncOpen, requestStart);
+      mozilla::glean::network::http3_open_to_first_sent.Get(key)
+          .AccumulateRawDuration(requestStart - asyncOpen);
 
-      Telemetry::AccumulateTimeDelta(
-          Telemetry::HTTP3_FIRST_SENT_TO_LAST_RECEIVED, key, requestStart,
-          responseEnd);
+      mozilla::glean::network::http3_first_sent_to_last_received.Get(key)
+          .AccumulateRawDuration(responseEnd - requestStart);
 
       if (!responseStart.IsNull()) {
-        Telemetry::AccumulateTimeDelta(Telemetry::HTTP3_OPEN_TO_FIRST_RECEIVED,
-                                       key, asyncOpen, responseStart);
+        mozilla::glean::network::http3_open_to_first_received.Get(key)
+            .AccumulateRawDuration(responseStart - asyncOpen);
       }
 
       if (!responseEnd.IsNull()) {
-        Telemetry::AccumulateTimeDelta(Telemetry::HTTP3_COMPLETE_LOAD, key,
-                                       asyncOpen, responseEnd);
+        mozilla::glean::network::http3_complete_load.Get(key)
+            .AccumulateRawDuration(responseEnd - asyncOpen);
       }
     }
   }
+#endif
 
   bool hasHTTPSRR = false;
   if (httpChannel && NS_SUCCEEDED(httpChannel->GetHasHTTPSRR(&hasHTTPSRR)) &&
