@@ -12,6 +12,8 @@ newtab-personalize-icon-label =
     .aria-label = Personalize new tab
 newtab-personalize-dialog-label =
     .aria-label = Personalize
+newtab-logo-and-wordmark =
+    .aria-label = { -brand-full-name }
 
 ## Search box component.
 
@@ -236,6 +238,8 @@ newtab-pocket-cta-text = Save the stories you love in { -pocket-brand-name }, an
 newtab-pocket-pocket-firefox-family = { -pocket-brand-name } is part of the { -brand-product-name } family
 
 # A save to Pocket button that shows over the card thumbnail on hover.
+newtab-pocket-image =
+    .aria-label = { -pocket-brand-name }
 newtab-pocket-save = Save
 newtab-pocket-saved = Saved
 

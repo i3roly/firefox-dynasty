@@ -87,6 +87,7 @@
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "mozilla/dom/quota/QuotaObject.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
+#include "mozilla/dom/quota/ThreadUtils.h"
 #include "mozilla/dom/quota/UsageInfo.h"
 #include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/ipc/BackgroundChild.h"
@@ -96,6 +97,7 @@
 #include "mozilla/ipc/PBackgroundSharedTypes.h"
 #include "mozilla/ipc/ProtocolUtils.h"
 #include "mozilla/storage/Variant.h"
+#include "NotifyUtils.h"
 #include "nsBaseHashtable.h"
 #include "nsCOMPtr.h"
 #include "nsClassHashtable.h"
@@ -6888,6 +6890,8 @@ void PrepareDatastoreOp::SendToIOThread() {
 
   MOZ_ALWAYS_SUCCEEDS(
       quotaManager->IOThread()->Dispatch(this, NS_DISPATCH_NORMAL));
+
+  localstorage::NotifyDatabaseWorkStarted();
 }
 
 nsresult PrepareDatastoreOp::DatabaseWork() {
@@ -7163,6 +7167,9 @@ nsresult PrepareDatastoreOp::DatabaseWork() {
       MOZ_ALWAYS_SUCCEEDS(shadowConnection->Close());
     }
 
+    SleepIfEnabled(
+        StaticPrefs::dom_storage_databaseInitialization_pauseOnIOThreadMs());
+
     // Must set this before dispatching otherwise we will race with the owning
     // thread.
     mNestedState = NestedState::BeginLoadData;
@@ -7421,6 +7428,9 @@ void PrepareDatastoreOp::GetResponse(LSRequestResponse& aResponse) {
       }
     }
 
+    MOZ_ASSERT(mDirectoryLock);
+    MOZ_ASSERT_IF(mDirectoryLock->Invalidated(), mInvalidated);
+
     mDatastore = new Datastore(
         mOriginMetadata, mPrivateBrowsingId, mUsage, mSizeOfKeys, mSizeOfItems,
         std::move(mDirectoryLock), std::move(mConnection),
@@ -7470,6 +7480,7 @@ void PrepareDatastoreOp::GetResponse(LSRequestResponse& aResponse) {
 
   if (mForPreload) {
     LSRequestPreloadDatastoreResponse preloadDatastoreResponse;
+    preloadDatastoreResponse.invalidated() = mInvalidated;
 
     aResponse = preloadDatastoreResponse;
   } else {

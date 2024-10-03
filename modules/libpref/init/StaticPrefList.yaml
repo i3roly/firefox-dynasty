@@ -2306,6 +2306,12 @@
   value: false
   mirror: always
 
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.cache.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
 # Disable capture attribute for input elements; only supported on GeckoView.
 - name: dom.capture.enabled
   type: bool
@@ -4310,8 +4316,14 @@
 
 # Is support for Storage test APIs enabled?
 - name: dom.storage.testing
-  type: bool
+  type: SequentiallyConsistentAtomicBool
   value: false
+  mirror: always
+
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.storage.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
   mirror: always
 
 # For area and anchor elements with target=_blank and no rel set to
@@ -10297,9 +10309,8 @@
 # video frames would be out of sync with audio, and VideoPlaybackQuality
 # metrics would provide no indication of the poor playback. [1]
 # For normal playback, this is false, which does not restore A/V sync in this
-# situation, but the out-of-date frames are dropped and the video playback
-# stalls.  The dropped frame count is reported to content in
-# VideoPlaybackQuality metrics.
+# situation, but some out-of-date frames are dropped.  The dropped frame count
+# is reported to content in VideoPlaybackQuality metrics.
 # [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1258870#c6
 - name: media.ruin-av-sync.enabled
   type: RelaxedAtomicBool

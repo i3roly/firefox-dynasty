@@ -84,13 +84,13 @@ class VideoSink : public MediaSink {
 
   void EnsureHighResTimersOnOnlyIfPlaying();
 
-  // Sets VideoQueue images into the VideoFrameContainer. Called on the shared
-  // state machine thread. The first aMaxFrames (at most) are set.
+  // Sets images and frame dimensions into the VideoFrameContainer. Called on
+  // the shared state machine thread.
   // aClockTime and aClockTimeStamp are used as the baseline for deriving
   // timestamps for the frames.
-  // If the VideoQueue is empty, this does nothing.
-  void RenderVideoFrames(int32_t aMaxFrames, int64_t aClockTime,
-                         const TimeStamp& aClockTimeStamp);
+  // If aFrames is empty, this does nothing.
+  void RenderVideoFrames(Span<const RefPtr<VideoData>> aFrames,
+                         int64_t aClockTime, const TimeStamp& aClockTimeStamp);
 
   // Triggered while videosink is started, videosink becomes "playing" status,
   // or VideoQueue event arrived.
@@ -131,6 +131,10 @@ class VideoSink : public MediaSink {
   // The presentation end time of the last video frame which has been displayed.
   media::TimeUnit mVideoFrameEndTime;
 
+  // Total duration of sequential frames that have been dropped in this sink
+  // without any sent to the compositor
+  media::TimeUnit mDroppedInSinkSequenceDuration;
+  // Accounting for frames dropped in the compositor
   uint32_t mOldCompositorDroppedCount;
   uint32_t mPendingDroppedCount;
 

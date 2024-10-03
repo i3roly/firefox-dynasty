@@ -8,6 +8,7 @@
 #include "CacheCommon.h"
 
 #include "mozilla/AutoRestore.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/dom/SafeRefPtr.h"
 #include "mozilla/dom/cache/Action.h"
 #include "mozilla/dom/cache/FileUtils.h"
@@ -18,9 +19,11 @@
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
+#include "mozilla/dom/quota/ThreadUtils.h"
 #include "mozilla/ipc/PBackgroundSharedTypes.h"
 #include "mozilla/Maybe.h"
 #include "mozIStorageConnection.h"
+#include "NotifyUtils.h"
 #include "nsIPrincipal.h"
 #include "nsIRunnable.h"
 #include "nsIThread.h"
@@ -55,6 +58,7 @@ using mozilla::dom::quota::DirectoryLock;
 using mozilla::dom::quota::PERSISTENCE_TYPE_DEFAULT;
 using mozilla::dom::quota::PersistenceType;
 using mozilla::dom::quota::QuotaManager;
+using mozilla::dom::quota::SleepIfEnabled;
 
 class Context::Data final : public Action::Data {
  public:
@@ -253,6 +257,8 @@ void Context::QuotaInitRunnable::DirectoryLockAcquired(DirectoryLock* aLock) {
     Complete(rv);
     return;
   }
+
+  NotifyDatabaseWorkStarted();
 }
 
 void Context::QuotaInitRunnable::DirectoryLockFailed() {
@@ -414,6 +420,9 @@ Context::QuotaInitRunnable::Run() {
 
         mCipherKeyManager =
             cacheQuotaClient->GetOrCreateCipherKeyManager(*mDirectoryMetadata);
+
+        SleepIfEnabled(
+            StaticPrefs::dom_cache_databaseInitialization_pauseOnIOThreadMs());
 
         mState = STATE_RUN_ON_TARGET;
 
@@ -903,7 +912,10 @@ void Context::CancelAll() {
   }
 
   mState = STATE_CONTEXT_CANCELED;
-  mPendingActions.Clear();
+  // Allow completion of pending actions in Context::OnQuotaInit
+  if (!mInitRunnable) {
+    mPendingActions.Clear();
+  }
   for (const auto& activity : mActivityList.ForwardRange()) {
     activity->Cancel();
   }
@@ -1060,6 +1072,9 @@ void Context::OnQuotaInit(
   }
 
   if (mState == STATE_CONTEXT_CANCELED) {
+    if (NS_SUCCEEDED(aRv)) {
+      aRv = NS_ERROR_ABORT;
+    }
     for (uint32_t i = 0; i < mPendingActions.Length(); ++i) {
       mPendingActions[i].mAction->CompleteOnInitiatingThread(aRv);
     }
@@ -1073,6 +1088,7 @@ void Context::OnQuotaInit(
   // is ensured by NS_FAILED(aRv) above
   MOZ_DIAGNOSTIC_ASSERT(mDirectoryMetadata);
   MOZ_DIAGNOSTIC_ASSERT(mDirectoryLock);
+  MOZ_DIAGNOSTIC_ASSERT(!mDirectoryLock->Invalidated());
   MOZ_DIAGNOSTIC_ASSERT_IF(mDirectoryMetadata->mIsPrivate, mCipherKeyManager);
 
   MOZ_DIAGNOSTIC_ASSERT(mState == STATE_CONTEXT_INIT);
