@@ -157,9 +157,10 @@ void NativeMenuMac::IconUpdated() {
     if (menuImage) {
       [menuImage setTemplate:YES];
     }
-    mContainerStatusBarItem.button.image = menuImage;
+    if(@available(macOS 10.10, *)) {
+       mContainerStatusBarItem.button.image = menuImage;
+    }
   }
-
   NS_OBJC_END_TRY_ABORT_BLOCK;
 }
 

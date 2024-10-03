@@ -195,6 +195,8 @@ void nsCocoaWindow::DestroyNativeWindow() {
   // window will definitely no longer be shown.
   Show(false);
 
+  [mWindow removeTrackingArea];
+
   [mWindow releaseJSObjects];
   // We want to unhook the delegate here because we don't want events
   // sent to it after this object has been destroyed.
