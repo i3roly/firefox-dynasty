@@ -830,6 +830,9 @@ void nsChildView::Resize(double aX, double aY, double aWidth, double aHeight,
 // paint has been handled completely, which is when we return to the event loop
 // after layer display.
 void nsChildView::SuspendAsyncCATransactions() {
+  if (!nsCocoaFeatures::OnMavericksOrLater()) {
+    return;
+  }
   if (mUnsuspendAsyncCATransactionsRunnable) {
     mUnsuspendAsyncCATransactionsRunnable->Cancel();
     mUnsuspendAsyncCATransactionsRunnable = nullptr;
@@ -5289,7 +5292,7 @@ nsresult nsChildView::RestoreHiDPIMode() {
 }
 
 - (BOOL)wantsUpdateLayer {
-  return YES;
+  return nsCocoaFeatures::OnMavericksOrLater();
 }
 
 - (void)updateLayer {
