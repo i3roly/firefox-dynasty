@@ -194,6 +194,7 @@ void nsCocoaWindow::DestroyNativeWindow() {
   // do this now, then these side effects will never execute, though the
   // window will definitely no longer be shown.
   Show(false);
+
   [mWindow removeTrackingArea];
 
   [mWindow releaseJSObjects];
