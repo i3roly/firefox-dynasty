@@ -561,7 +561,7 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
   if(!nsCocoaFeatures::OnMavericksOrLater()) {
   // This is necessary for sub-Mavericks systems to ensure
   // we don't expose the superview of any non-tooltip/popup window
-    if(mWindowType != WindowType::Popup) { 
+    if(windowClass == [ToolbarWindow class]) { 
       // - maskstobounds (doDrawrect) to ensure the titlebar and menu
       //   items' GLcontext rounding are honoured, AND;
       // - superview setWantsLayer here  to ensure our
