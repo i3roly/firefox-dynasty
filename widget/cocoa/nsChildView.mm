@@ -132,28 +132,6 @@ using mozilla::gfx::Matrix4x4;
 // out to the bounding-box if there are more
 #define MAX_RECTS_IN_REGION 100
 
-
-struct MOZ_STACK_CLASS AutoCATransaction final {
-  AutoCATransaction() {
-#ifdef XP_MACOSX
-    [NSAnimationContext beginGrouping];
-#else
-    [CATransaction begin];
-#endif
-    // By default, mutating a CALayer property triggers an animation which
-    // smoothly transitions the property to the new value. We don't need these
-    // animations, and this call turns them off:
-    [CATransaction setDisableActions:YES];
-  }
-  ~AutoCATransaction() {
-#ifdef XP_MACOSX
-    [NSAnimationContext endGrouping];
-#else
-    [CATransaction commit];
-#endif
-  }
-};
-
 LazyLogModule sCocoaLog("nsCocoaWidgets");
 
 extern "C" {
@@ -386,7 +364,6 @@ void nsChildView::TearDownView() {
   // an invalid contentView (for the consequences see bmo bugs 381087 and
   // 374260).
   if ([mView isEqual:[win contentView]]) {
-    AutoCATransaction CATransaction;
     [mView release];
   } else {
     // Stop NSView hierarchy being changed during [ChildView drawRect:]
@@ -854,7 +831,7 @@ void nsChildView::Resize(double aX, double aY, double aWidth, double aHeight,
 // after layer display.
 void nsChildView::SuspendAsyncCATransactions() {
   if (!nsCocoaFeatures::OnMavericksOrLater()) {
-      return;
+    return;
   }
   if (mUnsuspendAsyncCATransactionsRunnable) {
     mUnsuspendAsyncCATransactionsRunnable->Cancel();
@@ -2355,7 +2332,6 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   [mNonDraggableViewsContainer release];
   [mPixelHostingView removeFromSuperview];
   [mPixelHostingView release];
-  AutoCATransaction CATransaction1;
   [mRootCALayer release];
 
   if (gLastDragView == self) {
@@ -4444,7 +4420,6 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
   [self removeFromSuperview];
-  AutoCATransaction CATransaction;
   [self release];
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
@@ -5313,13 +5288,13 @@ nsresult nsChildView::RestoreHiDPIMode() {
                "wantsUpdateLayer, so "
                "drawRect should not be called.");
   } else { //because lion doesn't have these functions we have to duplicate this call
-  //to effectively mimic updateLayer 
-    [(ChildView*)[self superview] doDrawRect:aRect]; 
+  //to effectively mimic updateLayer
+    [(ChildView*)[self superview] doDrawRect:aRect];
   }
 }
 
 - (BOOL)wantsUpdateLayer {
-  return YES;
+  return nsCocoaFeatures::OnMavericksOrLater();
 }
 
 - (void)updateLayer {

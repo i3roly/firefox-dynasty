@@ -569,8 +569,8 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
       //   losing the rounded corners on popup menus.
       [[[mWindow contentView] superview] setWantsLayer:YES];
     }
-  } 
-   
+  }
+ 
   [mWindow createTrackingArea];
 
   // Make sure the window starts out not draggable by the background.
