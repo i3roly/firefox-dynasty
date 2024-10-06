@@ -83,6 +83,45 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
     (allow mach-lookup (global-name crashPort)))
 
   (allow signal (target self))
+  (allow job-creation (literal "/Library/CoreMediaIO/Plug-Ins/DAL"))
+  (allow iokit-set-properties (iokit-property "IOAudioControlValue"))
+
+    (allow mach-lookup
+      ; bug 1655655
+      (global-name "com.apple.trustd.agent"))
+
+
+  (allow user-preference-read
+    (preference-domain
+        "kCFPreferencesAnyApplication"
+        "com.apple.ATS"
+        "com.apple.CoreGraphics"
+        "com.apple.DownloadAssessment"
+        "com.apple.HIToolbox"
+        "com.apple.LaunchServices"
+        "com.apple.MultitouchSupport" ;; FIXME: Remove when <rdar://problem/13011633> is fixed.
+        "com.apple.QTKit"
+        "com.apple.ServicesMenu.Services" ;; Needed for NSAttributedString <rdar://problem/10844321>
+        "com.apple.WebFoundation"
+        "com.apple.avfoundation"
+        "com.apple.coremedia"
+        "com.apple.crypto"
+        "com.apple.driver.AppleBluetoothMultitouch.mouse"
+        "com.apple.driver.AppleBluetoothMultitouch.trackpad"
+        "com.apple.driver.AppleHIDMouse"
+        "com.apple.lookup.shared"
+        "com.apple.mediaaccessibility"
+        "com.apple.networkConnect"
+        "com.apple.security"
+        "com.apple.security.common"
+        "com.apple.security.revocation"
+        "com.apple.speech.voice.prefs"
+        "com.apple.systemsound"
+        "com.apple.universalaccess"
+        "edu.mit.Kerberos"
+        "pbs" ;; Needed for NSAttributedString <rdar://problem/10844321>
+    ))  
+
   (allow sysctl-read)
   (allow iokit-open (iokit-user-client-class "IOHIDParamUserClient"))
   (allow file-read*
