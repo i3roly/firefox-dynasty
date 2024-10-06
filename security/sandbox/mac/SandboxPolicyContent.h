@@ -34,12 +34,12 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
 
   ;; OS X 10.7 (Lion) compatibility
   ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
-  (if (<= macosVersion 1007)
-    (begin
-    (define ipc-posix-shm* ipc-posix-shm)
-    (define ipc-posix-shm-read-data ipc-posix-shm)
-    (define ipc-posix-shm-read* ipc-posix-shm)
-    (define ipc-posix-shm-write-data ipc-posix-shm)))
+  (if (not (defined? 'ipc-posix-shm*))
+      (define ipc-posix-shm* ipc-posix-shm))
+  (if (not (defined? 'ipc-posix-shm-read*))
+      (define ipc-posix-shm-read* ipc-posix-shm))
+  (if (not (defined? 'ipc-posix-shm-write-data))
+      (define ipc-posix-shm-write-data ipc-posix-shm))
 
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
@@ -183,11 +183,15 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
            (home-regex (string-append "/Library/Preferences/" (regex-quote domain)))))
 
   (if (<= macosVersion 1007)
-   (allow ipc-posix-shm)
    (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
-     (ipc-posix-name-regex #"^CFPBS:")))
+     (ipc-posix-name-regex "^/tmp/com.apple.csseed:")
+      (ipc-posix-name-regex "^CFPBS:")
+      (ipc-posix-name-regex "^AudioIO")))
 
   (allow signal (target self))
+  (allow job-creation (literal "/Library/CoreMediaIO/Plug-Ins/DAL"))
+  (allow iokit-set-properties (iokit-property "IOAudioControlValue"))
+
   (if (string? crashPort)
     (allow mach-lookup (global-name crashPort)))
   (if (string=? hasWindowServer "TRUE")
@@ -208,10 +212,9 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
   (if (= macosVersion 1009)
     (allow mach-lookup (global-name "com.apple.xpcd")))
 
-  (if (>= macosVersion 1100)
     (allow mach-lookup
       ; bug 1655655
-      (global-name "com.apple.trustd.agent")))
+      (global-name "com.apple.trustd.agent"))
 
   (allow iokit-open
      (iokit-user-client-class "IOHIDParamUserClient"))
@@ -261,6 +264,37 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
 
   (if (>= macosVersion 1008)
   (allow user-preference-read (preference-domain "com.apple.ATS")))
+
+  (allow user-preference-read
+    (preference-domain
+        "kCFPreferencesAnyApplication"
+        "com.apple.ATS"
+        "com.apple.CoreGraphics"
+        "com.apple.DownloadAssessment"
+        "com.apple.HIToolbox"
+        "com.apple.LaunchServices"
+        "com.apple.MultitouchSupport" ;; FIXME: Remove when <rdar://problem/13011633> is fixed.
+        "com.apple.QTKit"
+        "com.apple.ServicesMenu.Services" ;; Needed for NSAttributedString <rdar://problem/10844321>
+        "com.apple.WebFoundation"
+        "com.apple.avfoundation"
+        "com.apple.coremedia"
+        "com.apple.crypto"
+        "com.apple.driver.AppleBluetoothMultitouch.mouse"
+        "com.apple.driver.AppleBluetoothMultitouch.trackpad"
+        "com.apple.driver.AppleHIDMouse"
+        "com.apple.lookup.shared"
+        "com.apple.mediaaccessibility"
+        "com.apple.networkConnect"
+        "com.apple.security"
+        "com.apple.security.common"
+        "com.apple.security.revocation"
+        "com.apple.speech.voice.prefs"
+        "com.apple.systemsound"
+        "com.apple.universalaccess"
+        "edu.mit.Kerberos"
+        "pbs" ;; Needed for NSAttributedString <rdar://problem/10844321>
+    ))
 
   ; Needed for some global preferences (such as scrolling behavior)
   (allow file-read-data
@@ -365,7 +399,7 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
       (profile-subpath "/extensions")
       (profile-subpath "/chrome")))
 
-; accelerated graphics
+  ; accelerated graphics
   (if (>= macosVersion 1008)
         (allow user-preference-read 
          (preference-domain "com.apple.opengl")
@@ -376,16 +410,25 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
   (if (>= macosVersion 1014)
      (allow mach-lookup
       (global-name "com.apple.MTLCompilerService")))
-  (allow iokit-open
-      (iokit-connection "IOAccelerator")
-      (iokit-user-client-class "IOAccelerationUserClient")
-      (iokit-user-client-class "IOSurfaceRootUserClient")
-      (iokit-user-client-class "IOSurfaceSendRight")
-      (iokit-user-client-class "IOFramebufferSharedUserClient")
-      (iokit-user-client-class "AGPMClient")
-      (iokit-user-client-class "AppleGraphicsControlClient"))
 
-; bug 1153809
+  ; Needed for WebGL - https://crbug.com/75343
+  (allow iokit-open
+    (iokit-connection "IOAccelerator")
+    (iokit-user-client-class "AGPMClient")
+    (iokit-user-client-class "AppleGraphicsControlClient")
+    (iokit-user-client-class "AppleGraphicsPolicyClient")
+    (iokit-user-client-class "AppleIntelMEUserClient")
+    (iokit-user-client-class "AppleMGPUPowerControlClient")
+    (iokit-user-client-class "AppleSNBFBUserClient")
+    (iokit-user-client-class "IOAccelerationUserClient")
+    (iokit-user-client-class "IOFramebufferSharedUserClient")
+    (iokit-user-client-class "IOHIDParamUserClient")
+    (iokit-user-client-class "IOSurfaceRootUserClient")
+    (iokit-user-client-class "IOSurfaceSendRight")
+    (iokit-user-client-class "RootDomainUserClient")
+  )
+
+  ; bug 1153809
   (allow iokit-open
       (iokit-user-client-class "NVDVDContextTesla")
       (iokit-user-client-class "Gen6DVDContext"))
@@ -409,6 +452,14 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
     (global-name "com.apple.FontObjectsServer"))
   (if (<= macosVersion 1011)
     (allow mach-lookup (global-name "com.apple.FontServer")))
+
+  ;; Allow the OpenGL Profiler to attach.
+  (if (defined? 'mach-register)
+      (allow mach-register (global-name-regex #"^_oglprof_attach_<[0-9]+>$")))
+  
+  ;; MediaAccessibility
+  (allow file-read* (home-literal "/Library/Preferences/com.apple.mediaaccessibility.plist"))
+  (allow file-read* file-write* (home-literal "/Library/Preferences/com.apple.mediaaccessibility.public.plist"))
 
   ; Fonts
   ; Workaround for sandbox extensions not being automatically
@@ -459,10 +510,11 @@ static const char SandboxPolicyContentAudioAddend[] = R"SANDBOX_LITERAL(
     (define ipc-posix-shm-read* ipc-posix-shm) 
     (define ipc-posix-shm-write-data ipc-posix-shm)))
 
-  (if (<= macosVersion 1007)
-  (allow ipc-posix-shm)
-  (allow ipc-posix-shm-read* ipc-posix-shm-write-data
-    (ipc-posix-name-regex #"^AudioIO")))
+    (if (<= macosVersion 1007)
+     (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
+       (ipc-posix-name-regex "^/tmp/com.apple.csseed:")
+        (ipc-posix-name-regex "^CFPBS:")
+        (ipc-posix-name-regex "^AudioIO")))
 
   (allow mach-lookup
     (global-name "com.apple.audio.coreaudiod")
@@ -470,7 +522,15 @@ static const char SandboxPolicyContentAudioAddend[] = R"SANDBOX_LITERAL(
 
   (allow iokit-open (iokit-user-client-class "IOAudioEngineUserClient"))
 
-  (allow file-read* (subpath "/Library/Audio/Plug-Ins"))
+  ;; FIXME: These should be removed when <rdar://problem/9217757> is fixed.
+  (home-subpath "/Library/Audio/Plug-Ins/Components")
+  (home-subpath "/Library/Preferences/QuickTime Preferences")
+  (home-literal "/Library/Caches/com.apple.coreaudio.components.plist")
+  (subpath "/Library/Audio/Plug-Ins/Components")
+  (subpath "/Library/Audio/Plug-Ins/HAL")
+  (subpath "/Library/Video/Plug-Ins")
+  (subpath "/Library/QuickTime")
+
 
   (allow device-microphone)
 )SANDBOX_LITERAL";

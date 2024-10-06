@@ -20,12 +20,13 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
 
   ;; OS X 10.7 (Lion) compatibility
   ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
-  (if (<= macosVersion 1007)
-    (begin
-    (define ipc-posix-shm* ipc-posix-shm)
-    (define ipc-posix-shm-read-data ipc-posix-shm)
-    (define ipc-posix-shm-read* ipc-posix-shm)
-    (define ipc-posix-shm-write-data ipc-posix-shm)))
+  ;; OS X 10.7 (Lion) compatibility
+  (if (not (defined? 'ipc-posix-shm*))
+      (define ipc-posix-shm* ipc-posix-shm))
+  (if (not (defined? 'ipc-posix-shm-read*))
+      (define ipc-posix-shm-read* ipc-posix-shm))
+  (if (not (defined? 'ipc-posix-shm-write-data))
+      (define ipc-posix-shm-write-data ipc-posix-shm))
 
 
   (define (moz-deny feature)
@@ -147,13 +148,18 @@ static const char SandboxPolicySocket[] = R"SANDBOX_LITERAL(
     (literal "/var")
     (literal "/var/run"))
 
-  ; Certificate databases
-  (allow file-read*
-    (subpath "/private/var/db/mds")
-    (subpath "/Library/Keychains")
-    (subpath "/System/Library/Keychains")
-    (subpath "/System/Library/Security")
-    (home-subpath "/Library/Keychains"))
+   ; Certificate databases.
+   (allow file-read*
+     (literal "/Library/Preferences/com.apple.security.plist")
+     (home-literal "/Library/Preferences/com.apple.security.plist")
+     ; https://crbug.com/1024000
+     (home-literal "/Library/Preferences/com.apple.security.revocation.plist")
+     (subpath "/Library/Keychains")
+     (subpath "/System/Library/Keychains")
+     (subpath "/System/Library/Security")
+     (subpath "/private/var/db/mds")
+     (home-literal "/Library/Keychains")
+   )
 
   ; For enabling TCSM
  (if (> macosVersion 1009) 
