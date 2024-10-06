@@ -39,12 +39,12 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (moz-deny file-map-executable))
 
   ;; OS X 10.7 (Lion) compatibility
-  (if (not (defined? 'ipc-posix-shm*))
-      (define ipc-posix-shm* ipc-posix-shm))
-  (if (not (defined? 'ipc-posix-shm-read*))
-      (define ipc-posix-shm-read* ipc-posix-shm))
-  (if (not (defined? 'ipc-posix-shm-write-data))
-      (define ipc-posix-shm-write-data ipc-posix-shm))
+  (if (<= macosVersion 1007)
+    (begin
+    (define ipc-posix-shm* ipc-posix-shm)
+    (define ipc-posix-shm-read-data ipc-posix-shm)
+    (define ipc-posix-shm-read* ipc-posix-shm)
+    (define ipc-posix-shm-write-data ipc-posix-shm)))
 
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
   (if (>= macosVersion 1009)

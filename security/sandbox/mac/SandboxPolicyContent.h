@@ -34,12 +34,12 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
 
   ;; OS X 10.7 (Lion) compatibility
   ; see https://opensource.apple.com/source/WebKit2/WebKit2-7601.3.9/Resources/PlugInSandboxProfiles/com.apple.WebKit.plugin-common.sb.auto.html
-  (if (not (defined? 'ipc-posix-shm*))
-      (define ipc-posix-shm* ipc-posix-shm))
-  (if (not (defined? 'ipc-posix-shm-read*))
-      (define ipc-posix-shm-read* ipc-posix-shm))
-  (if (not (defined? 'ipc-posix-shm-write-data))
-      (define ipc-posix-shm-write-data ipc-posix-shm))
+  (if (<= macosVersion 1007)
+    (begin
+    (define ipc-posix-shm* ipc-posix-shm)
+    (define ipc-posix-shm-read-data ipc-posix-shm)
+    (define ipc-posix-shm-read* ipc-posix-shm)
+    (define ipc-posix-shm-write-data ipc-posix-shm)))
 
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
@@ -259,8 +259,8 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
   (allow file-read-data (literal "/Library/Preferences/com.apple.HIToolbox.plist"))
 
   (if (>= macosVersion 1008)
-  (allow user-preference-read (preference-domain "com.apple.ATS")))
-
+  (begin
+  (allow user-preference-read (preference-domain "com.apple.ATS"))
   (allow user-preference-read
     (preference-domain
         "kCFPreferencesAnyApplication"
@@ -290,7 +290,7 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
         "com.apple.universalaccess"
         "edu.mit.Kerberos"
         "pbs" ;; Needed for NSAttributedString <rdar://problem/10844321>
-    ))
+    ))))
 
   ; Needed for some global preferences (such as scrolling behavior)
   (allow file-read-data
