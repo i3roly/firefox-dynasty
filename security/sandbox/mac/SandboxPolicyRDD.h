@@ -19,13 +19,6 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (define crashPort (param "CRASH_PORT"))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
    
-  (if (<= macosVersion 1007)
-  (begin
-  (define ipc-posix-shm* ipc-posix-shm)
-  (define ipc-posix-shm-read-data ipc-posix-shm)
-  (define ipc-posix-shm-read* ipc-posix-shm)
-  (define ipc-posix-shm-write-data ipc-posix-shm)))
-
 
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
@@ -45,8 +38,16 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (if (defined? 'file-map-executable)
     (moz-deny file-map-executable))
 
+  ;; OS X 10.7 (Lion) compatibility
+  (if (not (defined? 'ipc-posix-shm*))
+      (define ipc-posix-shm* ipc-posix-shm))
+  (if (not (defined? 'ipc-posix-shm-read*))
+      (define ipc-posix-shm-read* ipc-posix-shm))
+  (if (not (defined? 'ipc-posix-shm-write-data))
+      (define ipc-posix-shm-write-data ipc-posix-shm))
+
   ; Needed for things like getpriority()/setpriority()/pthread_setname()
-  (if (= macosVersion 1009)
+  (if (>= macosVersion 1009)
   (allow process-info-pidinfo process-info-setcontrol (target self)))
 
   (if (defined? 'file-map-executable)
@@ -72,8 +73,15 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (allow sysctl-read)
   (allow file-read*
     (literal "/dev/random")
-    (literal "/dev/urandom")
     (subpath "/usr/share/icu"))
+  
+  ; for some reason <=10.9 don't like urandom
+  ; and enabling this will prevent media playback
+  ; from encrypted sources. set this to >= 10.10 for now
+  ; and move it up if it's an issue
+  (if (> macosVersion 1010)
+     (allow file-read*
+      (literal "/dev/urandom")))
 
   ; Timezone
   (allow file-read*
@@ -140,9 +148,10 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
            (home-regex (string-append "/Library/Preferences/" (regex-quote domain)))))
 
   (if (<= macosVersion 1007)
-   (allow ipc-posix-shm)
    (allow ipc-posix-shm-read-data ipc-posix-shm-write-data
-     (ipc-posix-name-regex #"^CFPBS:")))
+     (ipc-posix-name-regex "^/tmp/com.apple.csseed:")
+      (ipc-posix-name-regex "^CFPBS:")
+      (ipc-posix-name-regex "^AudioIO")))
 
   (allow mach-lookup
     (global-name "com.apple.CoreServices.coreservicesd")
@@ -188,7 +197,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (iokit-property "MetalPluginName")
       (iokit-property "MetalPluginClassName")))
 
-; accelerated graphics
+  ; accelerated graphics
   (if (>= macosVersion 1008)
        (allow user-preference-read 
         (preference-domain "com.apple.opengl")
@@ -199,7 +208,6 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (if (>= macosVersion 1014)
     (allow mach-lookup
       (global-name "com.apple.MTLCompilerService")))
-
   (allow iokit-open
       (iokit-connection "IOAccelerator")
       (iokit-user-client-class "IOAccelerationUserClient")
@@ -208,10 +216,11 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (iokit-user-client-class "IOFramebufferSharedUserClient")
       (iokit-user-client-class "AGPMClient")
       (iokit-user-client-class "AppleGraphicsControlClient"))
- 
+
   (if (>= macosVersion 1013)
    (allow mach-lookup
      (global-name "com.apple.audio.AudioComponentRegistrar")))
+
 
 )SANDBOX_LITERAL";
 

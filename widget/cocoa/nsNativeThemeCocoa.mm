@@ -2416,7 +2416,7 @@ Maybe<nsNativeThemeCocoa::WidgetInfo> nsNativeThemeCocoa::ComputeWidgetInfo(
       return Some(WidgetInfo::Tooltip());
     case StyleAppearance::Checkbox:
     case StyleAppearance::Radio: {
-      bool isCheckbox = aAppearance == StyleAppearance::Checkbox;
+      bool isCheckbox = (aAppearance == StyleAppearance::Checkbox);
 
       CheckboxOrRadioParams params;
       params.state = CheckboxOrRadioState::eOff;
@@ -2445,11 +2445,14 @@ Maybe<nsNativeThemeCocoa::WidgetInfo> nsNativeThemeCocoa::ComputeWidgetInfo(
         // text, and default buttons in inactive windows have white background
         // and black text.)
         DocumentState docState = aFrame->PresContext()->Document()->State();
-        ControlParams params = ComputeControlParams(aFrame, elementState);
-        params.insideActiveWindow =
+        bool isInActiveWindow =
             !docState.HasState(DocumentState::WINDOW_INACTIVE);
-        return Some(WidgetInfo::Button(
-            ButtonParams{params, ButtonType::eDefaultPushButton}));
+        bool hasDefaultButtonLook = isInActiveWindow && !elementState.HasState(ElementState::ACTIVE);
+        ButtonType buttonType =
+            hasDefaultButtonLook ? ButtonType::eDefaultPushButton : ButtonType::eRegularPushButton;
+        ControlParams params = ComputeControlParams(aFrame, elementState);
+        params.insideActiveWindow = isInActiveWindow;
+        return Some(WidgetInfo::Button(ButtonParams{params, buttonType}));
       }
       if (IsButtonTypeMenu(aFrame)) {
         ControlParams controlParams =
@@ -2971,7 +2974,6 @@ bool nsNativeThemeCocoa::CreateWebRenderCommandsForWidget(
     case StyleAppearance::Menuseparator:
       return false;
 
-    case StyleAppearance::Checkbox:
     case StyleAppearance::Tooltip:
       if (!VibrancyManager::SystemSupportsVibrancy()) {
         nsPresContext* presContext = aFrame->PresContext();
@@ -2981,6 +2983,7 @@ bool nsNativeThemeCocoa::CreateWebRenderCommandsForWidget(
                           wr::ToColorF(ToDeviceColor(kTooltipBackgroundColor)));
       }
       return true;
+    case StyleAppearance::Checkbox:
     case StyleAppearance::Radio:
     case StyleAppearance::Button:
     case StyleAppearance::MozMacHelpButton:
@@ -3060,6 +3063,14 @@ LayoutDeviceIntMargin nsNativeThemeCocoa::GetWidgetBorder(
 
     case StyleAppearance::Toolbarbutton: {
       result = DirectionAwareMargin(LayoutDeviceIntMargin(1, 4, 1, 4), aFrame);
+      break;
+    }
+
+    case StyleAppearance::Checkbox:
+    case StyleAppearance::Radio: {
+      // nsCheckboxRadioFrame::GetIntrinsicWidth and nsCheckboxRadioFrame::GetIntrinsicHeight
+      // assume a border width of 2px.
+      result.SizeTo(2, 2, 2, 2);
       break;
     }
 
