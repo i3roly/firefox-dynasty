@@ -90,7 +90,7 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
       ; bug 1655655
       (global-name "com.apple.trustd.agent"))
 
-
+  (if (>= macosVersion 1008)
   (allow user-preference-read
     (preference-domain
         "kCFPreferencesAnyApplication"
@@ -120,7 +120,7 @@ static const char SandboxPolicyGMP[] = R"SANDBOX_LITERAL(
         "com.apple.universalaccess"
         "edu.mit.Kerberos"
         "pbs" ;; Needed for NSAttributedString <rdar://problem/10844321>
-    ))  
+    )))  
 
   (allow sysctl-read)
   (allow iokit-open (iokit-user-client-class "IOHIDParamUserClient"))
