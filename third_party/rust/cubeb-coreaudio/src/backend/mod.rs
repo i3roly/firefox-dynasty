@@ -3743,16 +3743,7 @@ impl<'ctx> CoreStreamData<'ctx> {
             let r = audio_unit_set_property(
                 self.input_unit,
                 kAudioUnitProperty_StreamFormat,
-                if using_voice_processing_unit {
-                    // With a VPIO unit the output scope includes all channels in the hw.
-                    // The VPIO unit however is only MONO which the input scope reflects.
-                    kAudioUnitScope_Input
-                } else {
-                    // With a HAL unit the output scope for the output bus returns the number of
-                    // output channels of the hw, as we want. The input scope seems limited to
-                    // two channels.
-                    kAudioUnitScope_Output
-                },
+                kAudioUnitScope_Input,
                 AU_OUT_BUS,
                 &self.input_dev_desc,
                 mem::size_of::<AudioStreamBasicDescription>(),
@@ -3829,6 +3820,32 @@ impl<'ctx> CoreStreamData<'ctx> {
                 return Err(Error::error());
             }
 
+            // Simple case of stereo output, map to the stereo pair (that might not be the first
+            // two channels). Fall back to regular mixing if this fails.
+            let mut maybe_need_mixer = true;
+            if self.output_stream_params.channels() == 2
+                && self.output_stream_params.layout() == ChannelLayout::STEREO
+            {
+                let layout = AudioChannelLayout {
+                    mChannelLayoutTag: kAudioChannelLayoutTag_Stereo,
+                    ..Default::default()
+                };
+                let r = audio_unit_set_property(
+                    self.output_unit,
+                    kAudioUnitProperty_AudioChannelLayout,
+                    kAudioUnitScope_Input,
+                    AU_OUT_BUS,
+                    &layout,
+                    mem::size_of::<AudioChannelLayout>(),
+                );
+                if r != NO_ERR {
+                    cubeb_log!(
+                        "AudioUnitSetProperty/output/kAudioUnitProperty_AudioChannelLayout rv={}",
+                        r
+                    );
+                }
+                maybe_need_mixer = r != NO_ERR;
+            }
 
             // Notice: when we are using aggregate device, the output_hw_desc.mChannelsPerFrame is
             // the total of all the output channel count of the devices added in the aggregate device.
