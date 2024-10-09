@@ -949,10 +949,10 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         default = true,
     )
 
-    var shouldUseBottomToolbar by lazyFeatureFlagPreference(
-        appContext.getPreferenceKey(R.string.pref_key_toolbar_bottom),
-        featureFlag = true,
-        default = { shouldDefaultToBottomToolbar() },
+    var shouldUseBottomToolbar by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_toolbar_bottom),
+        default = shouldDefaultToBottomToolbar(),
+        persistDefaultIfNotExists = true,
     )
 
     val toolbarPosition: ToolbarPosition
@@ -2231,4 +2231,17 @@ class Settings(private val appContext: Context) : PreferencesHolder {
             daysBetweenDefaultBrowserPrompts * ONE_DAY_MS &&
             numberOfSetAsDefaultPromptShownTimes < maxNumberOfDefaultBrowserPrompts &&
             coldStartsBetweenSetAsDefaultPrompts >= appColdStartsToShowDefaultPrompt
+
+    /**
+     * Updates the relevant settings when the "Set as Default Browser" prompt is shown.
+     *
+     * This method increments the count of how many times the prompt has been shown,
+     * records the current time as the last time the prompt was shown, and resets
+     * the counter for the number of cold starts between prompts.
+     */
+    fun setAsDefaultPromptCalled() {
+        numberOfSetAsDefaultPromptShownTimes += 1
+        lastSetAsDefaultPromptShownTimeInMillis = System.currentTimeMillis()
+        coldStartsBetweenSetAsDefaultPrompts = 0
+    }
 }
