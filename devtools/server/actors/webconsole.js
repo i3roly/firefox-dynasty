@@ -12,7 +12,6 @@ const {
 } = require("resource://devtools/shared/specs/webconsole.js");
 
 const { ThreadActor } = require("resource://devtools/server/actors/thread.js");
-const { ObjectActor } = require("resource://devtools/server/actors/object.js");
 const {
   LongStringActor,
 } = require("resource://devtools/server/actors/string.js");
@@ -132,23 +131,22 @@ function isObject(value) {
  * @constructor
  * @param object connection
  *        The connection to the client, DevToolsServerConnection.
- * @param object [parentActor]
+ * @param object [targetActor]
  *        Optional, the parent actor.
  */
 class WebConsoleActor extends Actor {
-  constructor(connection, parentActor) {
+  constructor(connection, targetActor) {
     super(connection, webconsoleSpec);
 
-    this.parentActor = parentActor;
+    this.targetActor = targetActor;
 
-    this.dbg = this.parentActor.dbg;
+    this.dbg = this.targetActor.dbg;
 
     this._gripDepth = 0;
     this._evalCounter = 0;
     this._listeners = new Set();
     this._lastConsoleInputEvaluation = undefined;
 
-    this.objectGrip = this.objectGrip.bind(this);
     this._onWillNavigate = this._onWillNavigate.bind(this);
     this._onChangedToplevelDocument =
       this._onChangedToplevelDocument.bind(this);
@@ -157,7 +155,7 @@ class WebConsoleActor extends Actor {
     this.onDocumentEvent = this.onDocumentEvent.bind(this);
 
     EventEmitter.on(
-      this.parentActor,
+      this.targetActor,
       "changed-toplevel-document",
       this._onChangedToplevelDocument
     );
@@ -192,10 +190,10 @@ class WebConsoleActor extends Actor {
    * @type nsIDOMWindow, WorkerGlobalScope or Sandbox
    */
   get global() {
-    if (this.parentActor.isRootActor) {
+    if (this.targetActor.isRootActor) {
       return this._getWindowForBrowserConsole();
     }
-    return this.parentActor.window || this.parentActor.workerGlobal;
+    return this.targetActor.targetGlobal;
   }
 
   /**
@@ -215,7 +213,7 @@ class WebConsoleActor extends Actor {
     // In case of WebExtension reload of the background page, the last
     // chrome window might be a dead wrapper, from which we can't check for window.closed.
     if (!window || Cu.isDeadWrapper(window) || window.closed) {
-      window = this.parentActor.window;
+      window = this.targetActor.window;
       if (!window) {
         // Try to find the Browser Console window to use instead.
         window = Services.wm.getMostRecentWindow("devtools:webconsole");
@@ -280,7 +278,7 @@ class WebConsoleActor extends Actor {
     this._evalGlobal = global;
 
     if (!this._progressListenerActive) {
-      EventEmitter.on(this.parentActor, "will-navigate", this._onWillNavigate);
+      EventEmitter.on(this.targetActor, "will-navigate", this._onWillNavigate);
       this._progressListenerActive = true;
     }
   }
@@ -331,7 +329,7 @@ class WebConsoleActor extends Actor {
     super.destroy();
 
     EventEmitter.off(
-      this.parentActor,
+      this.targetActor,
       "changed-toplevel-document",
       this._onChangedToplevelDocument
     );
@@ -348,7 +346,7 @@ class WebConsoleActor extends Actor {
    * @return object
    */
   createValueGrip(value) {
-    return createValueGrip(value, this, this.objectGrip);
+    return createValueGrip(this.targetActor.threadActor, value, this);
   }
 
   /**
@@ -375,27 +373,6 @@ class WebConsoleActor extends Actor {
     }
     const dbgGlobal = this.dbg.makeGlobalObjectReference(this.global);
     return dbgGlobal.makeDebuggeeValue(value);
-  }
-
-  /**
-   * Create a grip for the given object.
-   *
-   * @param object object
-   *        The object you want.
-   * @param object pool
-   *        A Pool where the new actor instance is added.
-   * @param object
-   *        The object grip.
-   */
-  objectGrip(object, pool) {
-    const actor = new ObjectActor(this.parentActor.threadActor, object, {
-      getGripDepth: () => this._gripDepth,
-      incrementGripDepth: () => this._gripDepth++,
-      decrementGripDepth: () => this._gripDepth--,
-      createValueGrip: v => this.createValueGrip(v),
-    });
-    pool.manage(actor);
-    return actor.form();
   }
 
   /**
@@ -488,9 +465,9 @@ class WebConsoleActor extends Actor {
   // eslint-disable-next-line complexity
   async startListeners(listeners) {
     const startedListeners = [];
-    const global = !this.parentActor.isRootActor ? this.global : null;
+    const global = !this.targetActor.isRootActor ? this.global : null;
     const isTargetActorContentProcess =
-      this.parentActor.targetType === Targets.TYPES.PROCESS;
+      this.targetActor.targetType === Targets.TYPES.PROCESS;
 
     for (const event of listeners) {
       switch (event) {
@@ -504,7 +481,7 @@ class WebConsoleActor extends Actor {
               global,
               this.onConsoleServiceMessage,
               {
-                matchExactWindow: this.parentActor.ignoreSubFrames,
+                matchExactWindow: this.targetActor.ignoreSubFrames,
               }
             );
             this.consoleServiceListener.init();
@@ -519,8 +496,8 @@ class WebConsoleActor extends Actor {
               global,
               this.onConsoleAPICall,
               {
-                matchExactWindow: this.parentActor.ignoreSubFrames,
-                ...(this.parentActor.consoleAPIListenerOptions || {}),
+                matchExactWindow: this.targetActor.ignoreSubFrames,
+                ...(this.targetActor.consoleAPIListenerOptions || {}),
               }
             );
             this.consoleAPIListener.init();
@@ -572,7 +549,7 @@ class WebConsoleActor extends Actor {
           }
           if (!this.documentEventsListener) {
             this.documentEventsListener = new DocumentEventsListener(
-              this.parentActor
+              this.targetActor
             );
 
             this.documentEventsListener.on("dom-loading", data =>
@@ -691,7 +668,7 @@ class WebConsoleActor extends Actor {
     const consoleServiceCachedMessages =
       messageTypes.includes("PageError") || messageTypes.includes("LogMessage")
         ? this.consoleServiceListener?.getCachedMessages(
-            !this.parentActor.isRootActor
+            !this.targetActor.isRootActor
           )
         : null;
 
@@ -708,7 +685,7 @@ class WebConsoleActor extends Actor {
             this.global?.performance?.timing?.navigationStart;
 
           const cache = this.consoleAPIListener.getCachedMessages(
-            !this.parentActor.isRootActor
+            !this.targetActor.isRootActor
           );
           cache.forEach(cachedMessage => {
             // Filter out messages that came from a ServiceWorker but happened
@@ -904,13 +881,13 @@ class WebConsoleActor extends Actor {
     // done for the client. This is used to disable all types of breakpoints for all sources
     // via `disabledBreaks`. When this flag is used, `reportExceptionsWhenBreaksAreDisabled`
     // allows to still pause on exceptions.
-    this.parentActor.threadActor.insideClientEvaluation = evalOptions;
+    this.targetActor.threadActor.insideClientEvaluation = evalOptions;
 
     let evalInfo;
     try {
       evalInfo = evalWithDebugger(input, evalOptions, this);
     } finally {
-      this.parentActor.threadActor.insideClientEvaluation = null;
+      this.targetActor.threadActor.insideClientEvaluation = null;
     }
 
     return new Promise((resolve, reject) => {
@@ -1066,9 +1043,9 @@ class WebConsoleActor extends Actor {
     if (!awaitResult) {
       try {
         const objectActor =
-          this.parentActor.threadActor.getThreadLifetimeObject(result);
+          this.targetActor.threadActor.getThreadLifetimeObject(result);
         if (objectActor) {
-          resultGrip = this.parentActor.threadActor.createValueGrip(result);
+          resultGrip = this.targetActor.threadActor.createValueGrip(result);
         } else {
           resultGrip = this.createValueGrip(result);
         }
@@ -1275,7 +1252,7 @@ class WebConsoleActor extends Actor {
       return;
     }
 
-    const windowId = !this.parentActor.isRootActor
+    const windowId = !this.targetActor.isRootActor
       ? WebConsoleUtils.getInnerWindowId(this.global)
       : null;
 
@@ -1288,11 +1265,11 @@ class WebConsoleActor extends Actor {
       ConsoleAPIStorage.clearEvents(id);
     });
 
-    if (this.parentActor.isRootActor || !this.global) {
+    if (this.targetActor.isRootActor || !this.global) {
       // If were dealing with the root actor (e.g. the browser console), we want
       // to remove all cached messages, not only the ones specific to a window.
       Services.console.reset();
-    } else if (this.parentActor.ignoreSubFrames) {
+    } else if (this.targetActor.ignoreSubFrames) {
       Services.console.resetWindow(windowId);
     } else {
       WebConsoleUtils.getInnerWindowIDsForFrames(this.global).forEach(id =>
@@ -1327,7 +1304,7 @@ class WebConsoleActor extends Actor {
 
   getActorIdForInternalSourceId(id) {
     const actor =
-      this.parentActor.sourcesManager.getSourceActorByInternalSourceId(id);
+      this.targetActor.sourcesManager.getSourceActorByInternalSourceId(id);
     return actor ? actor.actorID : null;
   }
 
@@ -1656,7 +1633,7 @@ class WebConsoleActor extends Actor {
   _onWillNavigate({ isTopLevel }) {
     if (isTopLevel) {
       this._evalGlobal = null;
-      EventEmitter.off(this.parentActor, "will-navigate", this._onWillNavigate);
+      EventEmitter.off(this.targetActor, "will-navigate", this._onWillNavigate);
       this._progressListenerActive = false;
     }
   }

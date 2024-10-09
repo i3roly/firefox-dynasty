@@ -2284,7 +2284,7 @@
 # limit.
 - name: dom.popup_maximum
   type: int32_t
-  value: 20
+  value: -1
   mirror: always
 
 # Enable experimental popup blocker changes.
@@ -2434,7 +2434,7 @@
 # Enable/disable contenteditable="plaintext-only".
 - name: dom.element.contenteditable.plaintext-only.enabled
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 - name: dom.element.transform-getters.enabled
@@ -2707,7 +2707,7 @@
 
 - name: dom.fetchKeepalive.enabled
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # The maximum number of pending fetch keepalive requests per browser instance
@@ -4244,6 +4244,18 @@
   value: true
   mirror: always
 
+# A pref that is used to enable testing features.
+- name: dom.fs.testing
+  type: SequentiallyConsistentAtomicBool
+  value: false
+  mirror: always
+
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.fs.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
 # LocalStorage data limit as determined by summing up the lengths of all string
 # keys and values. This is consistent with the legacy implementation and other
 # browser engines. This value should really only ever change in unit testing
@@ -4322,6 +4334,12 @@
 
 # A pref that is used to slow down database initialization for testing purposes.
 - name: dom.storage.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A pref that is used to slow down request finalization for testing purposes.
+- name: dom.storage.requestFinalization.pauseOnDOMFileThreadMs
   type: RelaxedAtomicUint32
   value: 0
   mirror: always
@@ -5078,13 +5096,6 @@
   type: String
   value: "#FFFFFF"
   mirror: never
-
-# Whether HTMLEditor consides block or inline element with computed style or
-# only with the default style of HTML definition.
-- name: editor.block_inline_check.use_computed_style
-  type: bool
-  value: true
-  mirror: always
 
 # Delay to mask last input character in password fields.
 # If negative value, to use platform's default behavior.
@@ -8102,6 +8113,27 @@
     mirror: always
     set_spidermonkey_pref: startup
 
+  # Experimental support for Math.sumPrecise in JavaScript.
+-   name: javascript.options.experimental.math_sumprecise
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Iterator.range in JavaScript.
+-   name: javascript.options.experimental.iterator_range
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Joint Iteration in JavaScript.
+-   name: javascript.options.experimental.joint_iteration
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
 #endif  // NIGHTLY_BUILD
 
 -   name: javascript.options.experimental.json_parse_with_source
@@ -8542,7 +8574,7 @@
 
 - name: layers.force-synchronous-resize
   type: RelaxedAtomicBool
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WAYLAND) || defined(XP_WIN)
   # We want to control it by nsWindow::SynchronouslyRepaintOnResize() on Linux/Wayland.
   value: false
 #else
@@ -11022,6 +11054,12 @@
   value: true
   mirror: always
 
+# The delay time (ms) before releasing an audio wakelock.
+-   name: media.wakelock.audio.delay-releasing.ms
+    type: RelaxedAtomicUint32
+    value: 10000
+    mirror: always
+
 # When video continues later than the current media time for this period of
 # time, then it will trigger skip-to-next-keyframe mechanism. As this aims to
 # solve the drop frames issue where video decoding too slow for high
@@ -11471,6 +11509,14 @@
   type: bool
   value: false
   mirror: always
+
+# Turns on legacy (non-spec) exposure of camera and microphone information
+# from enumerateDevices and devicechange ahead of successful getUserMedia
+# calls only for certain domains (ignored if above pref is true).
+- name: media.devices.enumerate.legacy.allowlist
+  type: String
+  value: "slack.com,*.slack.com"
+  mirror: never
 
 # WebRTC prefs follow
 
@@ -12153,7 +12199,7 @@
 # but still checks for capacity overflow and reports telemetry
 - name: network.cookie.chips.partitionLimitDryRun
   type: bool
-  value: true
+  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # The actual CHIPS parition limit in bytes
@@ -13962,6 +14008,13 @@
 # Whether to use HTTPS RR and ignore NS_HTTP_DISALLOW_HTTPS_RR
 # This pref is only set when running tests
 - name: network.dns.force_use_https_rr
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# When true, we check if the cname is the same as the target name of the record.
+# If not, the record will not be used.
+- name: network.dns.https_rr.check_record_with_cname
   type: RelaxedAtomicBool
   value: false
   mirror: always

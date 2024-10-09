@@ -2349,7 +2349,7 @@ void Loader::NotifyOfCachedLoad(RefPtr<SheetLoadData> aLoadData) {
 void Loader::NotifyObserversForCachedSheet(SheetLoadData& aLoadData) {
   nsCOMPtr<nsIObserverService> obsService = services::GetObserverService();
 
-  if (!obsService->HasObservers("http-on-stylesheet-cache-response")) {
+  if (!obsService->HasObservers("http-on-resource-cache-response")) {
     return;
   }
 
@@ -2363,14 +2363,18 @@ void Loader::NotifyObserversForCachedSheet(SheetLoadData& aLoadData) {
 
   RefPtr<HttpBaseChannel> httpBaseChannel = do_QueryObject(channel);
   if (httpBaseChannel) {
-    httpBaseChannel->SetDummyChannelForCachedResource();
+    const net::nsHttpResponseHead* responseHead = nullptr;
+    if (aLoadData.GetNetworkMetadata()) {
+      responseHead = aLoadData.GetNetworkMetadata()->GetResponseHead();
+    }
+    httpBaseChannel->SetDummyChannelForCachedResource(responseHead);
   }
 
   channel->SetContentType("text/css"_ns);
 
   // TODO: Populate other fields (bug 1915626).
 
-  obsService->NotifyObservers(channel, "http-on-stylesheet-cache-response",
+  obsService->NotifyObservers(channel, "http-on-resource-cache-response",
                               nullptr);
 }
 

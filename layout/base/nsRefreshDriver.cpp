@@ -2315,8 +2315,15 @@ void nsRefreshDriver::DetermineProximityToViewportAndNotifyResizeObservers() {
 }
 
 static CallState UpdateAndReduceAnimations(Document& aDocument) {
-  for (DocumentTimeline* timeline : aDocument.Timelines()) {
-    timeline->WillRefresh();
+  {
+    AutoTArray<RefPtr<DocumentTimeline>, 32> timelinesToTick;
+    for (DocumentTimeline* timeline : aDocument.Timelines()) {
+      timelinesToTick.AppendElement(timeline);
+    }
+
+    for (DocumentTimeline* tl : timelinesToTick) {
+      tl->WillRefresh();
+    }
   }
 
   if (nsPresContext* pc = aDocument.GetPresContext()) {
@@ -2346,7 +2353,8 @@ void nsRefreshDriver::UpdateAnimationsAndSendEvents() {
     // [1]:
     // https://drafts.csswg.org/web-animations-1/#update-animations-and-send-events
     nsAutoMicroTask mt;
-    UpdateAndReduceAnimations(*mPresContext->Document());
+    RefPtr doc = mPresContext->Document();
+    UpdateAndReduceAnimations(*doc);
   }
 
   // Hold all AnimationEventDispatcher in mAnimationEventFlushObservers as
@@ -2451,7 +2459,6 @@ void nsRefreshDriver::RunFrameRequestCallbacks(
     AUTO_PROFILER_TRACING_MARKER_INNERWINDOWID(
         "Paint", "requestAnimationFrame callbacks", GRAPHICS,
         doc->InnerWindowID());
-    const TimeStamp startTime = TimeStamp::Now();
     for (const auto& callback : callbacks) {
       if (doc->IsCanceledFrameRequestCallback(callback.mHandle)) {
         continue;
@@ -2465,14 +2472,6 @@ void nsRefreshDriver::RunFrameRequestCallbacks(
       // mutated by the call.
       LogFrameRequestCallback::Run run(callback.mCallback);
       MOZ_KnownLive(callback.mCallback)->Call(timeStamp);
-    }
-
-    if (doc->GetReadyStateEnum() == Document::READYSTATE_COMPLETE) {
-      glean::performance_responsiveness::req_anim_frame_callback
-          .AccumulateRawDuration(TimeStamp::Now() - startTime);
-    } else {
-      glean::performance_pageload::req_anim_frame_callback
-          .AccumulateRawDuration(TimeStamp::Now() - startTime);
     }
   }
 }

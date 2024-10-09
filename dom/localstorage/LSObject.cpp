@@ -184,7 +184,7 @@ class RequestHelper final : public Runnable, public LSRequestChildCallback {
   NS_DECL_NSIRUNNABLE
 
   // LSRequestChildCallback
-  void OnResponse(const LSRequestResponse& aResponse) override;
+  void OnResponse(LSRequestResponse&& aResponse) override;
 };
 
 void AssertExplicitSnapshotInvariants(const LSObject& aObject) {
@@ -922,10 +922,11 @@ nsresult LSObject::EnsureDatabase() {
   MOZ_ASSERT(response.type() ==
              LSRequestResponse::TLSRequestPrepareDatastoreResponse);
 
-  const LSRequestPrepareDatastoreResponse& prepareDatastoreResponse =
-      response.get_LSRequestPrepareDatastoreResponse();
+  LSRequestPrepareDatastoreResponse prepareDatastoreResponse =
+      std::move(response.get_LSRequestPrepareDatastoreResponse());
 
-  uint64_t datastoreId = prepareDatastoreResponse.datastoreId();
+  auto childEndpoint =
+      std::move(prepareDatastoreResponse.databaseChildEndpoint());
 
   // The datastore is now ready on the parent side (prepared by the asynchronous
   // request on the RemoteLazyInputStream thread).
@@ -938,13 +939,17 @@ nsresult LSObject::EnsureDatabase() {
 
   RefPtr<LSDatabaseChild> actor = new LSDatabaseChild(database);
 
-  MOZ_ALWAYS_TRUE(backgroundActor->SendPBackgroundLSDatabaseConstructor(
-      actor, *mStoragePrincipalInfo, mPrivateBrowsingId, datastoreId));
+  MOZ_ALWAYS_TRUE(childEndpoint.Bind(actor));
 
   database->SetActor(actor);
 
   glean::ls_preparelsdatabase::processing_time.StopAndAccumulate(
       std::move(latencyTimerId));
+
+  if (prepareDatastoreResponse.invalidated()) {
+    database->RequestAllowToClose();
+    return NS_ERROR_ABORT;
+  }
 
   mDatabase = std::move(database);
 
@@ -1157,7 +1162,7 @@ RequestHelper::Run() {
   }
 }
 
-void RequestHelper::OnResponse(const LSRequestResponse& aResponse) {
+void RequestHelper::OnResponse(LSRequestResponse&& aResponse) {
   AssertIsOnDOMFileThread();
 
   MonitorAutoLock lock(mMonitor);
@@ -1166,7 +1171,7 @@ void RequestHelper::OnResponse(const LSRequestResponse& aResponse) {
 
   mActor = nullptr;
 
-  mResponse = aResponse;
+  mResponse = std::move(aResponse);
 
   mState = State::Complete;
 

@@ -37,7 +37,7 @@ android {
         applicationId "org.mozilla"
         minSdkVersion config.minSdkVersion
         compileSdk config.compileSdkVersion
-        targetSdkVersion config.targetSdkVersion
+        targetSdkVersion 35
         versionCode 11 // This versionCode is "frozen" for local builds. For "release" builds we
                        // override this with a generated versionCode at build time.
         // The versionName is dynamically overridden for all the build variants at build time.
@@ -359,8 +359,8 @@ dependencies {
     testImplementation ComponentsDependencies.testing_mockwebserver
     testImplementation project(':lib-fetch-okhttp')
 
-    androidTestImplementation FocusDependencies.fastlane
-    androidTestImplementation FocusDependencies.falcon // Required by fastlane
+    androidTestImplementation ComponentsDependencies.testing_fastlane
+    androidTestImplementation ComponentsDependencies.testing_falcon
 
     constraints {
         implementation (ComponentsDependencies.androidx_tracing) {

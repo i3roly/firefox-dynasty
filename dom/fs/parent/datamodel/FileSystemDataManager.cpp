@@ -13,6 +13,7 @@
 #include "FileSystemFileManager.h"
 #include "FileSystemHashSource.h"
 #include "FileSystemParentTypes.h"
+#include "NotifyUtils.h"
 #include "ResultStatement.h"
 #include "SchemaVersion001.h"
 #include "SchemaVersion002.h"
@@ -30,6 +31,7 @@
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
+#include "mozilla/dom/quota/ThreadUtils.h"
 #include "mozilla/dom/quota/UsageInfo.h"
 #include "mozilla/ipc/BackgroundParent.h"
 #include "nsBaseHashtable.h"
@@ -322,17 +324,33 @@ void FileSystemDataManager::Unregister() {
 void FileSystemDataManager::RegisterActor(
     NotNull<FileSystemManagerParent*> aActor) {
   MOZ_ASSERT(!mBackgroundThreadAccessible.Access()->mActors.Contains(aActor));
+  MOZ_ASSERT(mState == State::Open);
+  MOZ_ASSERT(mDirectoryLock);
 
   mBackgroundThreadAccessible.Access()->mActors.Insert(aActor);
 
 #ifdef DEBUG
   aActor->SetRegistered(true);
 #endif
+
+  // It can happen that FileSystemDataManager::AbortOperationsForLocks is
+  // called during async CreateFileSystemManagerParent operation when the actor
+  // is not yet registered. FileSystemDataManager::RequestAllowToClose is not
+  // able to propagate the RequestAllowToClose notification to the actor in
+  // that case. However, one a new actor is registered, we can check the
+  // directory lock if it has been invalidated and eventually notify the actor
+  // about the abort.
+
+  if (mDirectoryLock->Invalidated()) {
+    aActor->RequestAllowToClose();
+  }
 }
 
 void FileSystemDataManager::UnregisterActor(
     NotNull<FileSystemManagerParent*> aActor) {
   MOZ_ASSERT(mBackgroundThreadAccessible.Access()->mActors.Contains(aActor));
+  MOZ_ASSERT(mState == State::Open);
+  MOZ_ASSERT(mDirectoryLock);
 
   mBackgroundThreadAccessible.Access()->mActors.Remove(aActor);
 
@@ -547,22 +565,28 @@ RefPtr<BoolPromise> FileSystemDataManager::BeginOpen() {
               return BoolPromise::CreateAndReject(NS_ERROR_ABORT, __func__);
             }
 
+            NotifyDatabaseWorkStarted();
+
             return BoolPromise::CreateAndResolve(true, __func__);
           })
-      ->Then(mQuotaManager->IOThread(), __func__,
-             [self = RefPtr<FileSystemDataManager>(this)](
-                 const BoolPromise::ResolveOrRejectValue& value) {
-               if (value.IsReject()) {
-                 return BoolPromise::CreateAndReject(value.RejectValue(),
-                                                     __func__);
-               }
+      ->Then(
+          mQuotaManager->IOThread(), __func__,
+          [self = RefPtr<FileSystemDataManager>(this)](
+              const BoolPromise::ResolveOrRejectValue& value) {
+            if (value.IsReject()) {
+              return BoolPromise::CreateAndReject(value.RejectValue(),
+                                                  __func__);
+            }
 
-               QM_TRY(MOZ_TO_RESULT(
-                          EnsureFileSystemDirectory(self->mOriginMetadata)),
-                      CreateAndRejectBoolPromise);
+            QM_TRY(
+                MOZ_TO_RESULT(EnsureFileSystemDirectory(self->mOriginMetadata)),
+                CreateAndRejectBoolPromise);
 
-               return BoolPromise::CreateAndResolve(true, __func__);
-             })
+            quota::SleepIfEnabled(
+                StaticPrefs::dom_fs_databaseInitialization_pauseOnIOThreadMs());
+
+            return BoolPromise::CreateAndResolve(true, __func__);
+          })
       ->Then(
           MutableIOTaskQueuePtr(), __func__,
           [self = RefPtr<FileSystemDataManager>(this)](

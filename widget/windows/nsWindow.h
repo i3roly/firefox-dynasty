@@ -195,7 +195,6 @@ class nsWindow final : public nsBaseWidget {
   // nsIWidget interface
   using nsBaseWidget::Create;  // for Create signature not overridden here
   [[nodiscard]] nsresult Create(nsIWidget* aParent,
-                                nsNativeWidget aNativeParent,
                                 const LayoutDeviceIntRect& aRect,
                                 InitData* aInitData = nullptr) override;
   void Destroy() override;
@@ -708,8 +707,8 @@ class nsWindow final : public nsBaseWidget {
   void OnCloakChanged(bool aCloaked);
 
 #ifdef DEBUG
-  virtual nsresult SetHiDPIMode(bool aHiDPI) override;
-  virtual nsresult RestoreHiDPIMode() override;
+  nsresult SetHiDPIMode(bool aHiDPI) override;
+  nsresult RestoreHiDPIMode() override;
 #endif
 
   // Get the orientation of the hidden taskbar, on the screen that this window

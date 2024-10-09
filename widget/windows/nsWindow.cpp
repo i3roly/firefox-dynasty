@@ -858,8 +858,7 @@ void SetWindowStyles(HWND aWnd, const WindowStyles& aStyles) {
 }  // namespace mozilla::widget
 
 // Create the proper widget
-nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
-                          const LayoutDeviceIntRect& aRect,
+nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
                           widget::InitData* aInitData) {
   // Historical note: there was once some belief and/or intent that nsWindows
   // could be created on arbitrary threads, and this may still be reflected in
@@ -873,12 +872,12 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   widget::InitData defaultInitData;
   if (!aInitData) aInitData = &defaultInitData;
 
-  nsIWidget* baseParent =
-      aInitData->mWindowType == WindowType::Dialog ||
-              aInitData->mWindowType == WindowType::TopLevel ||
-              aInitData->mWindowType == WindowType::Invisible
-          ? nullptr
-          : aParent;
+  MOZ_DIAGNOSTIC_ASSERT(aInitData->mWindowType != WindowType::Invisible);
+
+  nsIWidget* baseParent = aInitData->mWindowType == WindowType::Dialog ||
+                                  aInitData->mWindowType == WindowType::TopLevel
+                              ? nullptr
+                              : aParent;
 
   mIsTopWidgetWindow = (nullptr == baseParent);
   mBounds = aRect;
@@ -888,14 +887,10 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
 
   BaseCreate(baseParent, aInitData);
 
-  HWND parent;
+  HWND parent = nullptr;
   if (aParent) {  // has a nsIWidget parent
-    parent = aParent ? (HWND)aParent->GetNativeData(NS_NATIVE_WINDOW) : nullptr;
+    parent = (HWND)aParent->GetNativeData(NS_NATIVE_WINDOW);
     mParent = aParent;
-  } else {  // has a nsNative parent
-    parent = (HWND)aNativeParent;
-    mParent =
-        aNativeParent ? WinUtils::GetNSWindowPtr((HWND)aNativeParent) : nullptr;
   }
 
   mIsRTL = aInitData->mRTL;
@@ -909,15 +904,8 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
       .ex = static_cast<LONG_PTR>(WindowExStyle()),
   };
 
-  if (mWindowType == WindowType::Popup) {
-    if (!aParent) {
-      parent = nullptr;
-    }
-  } else if (mWindowType == WindowType::Invisible) {
-    // Make sure CreateWindowEx succeeds at creating a toplevel window
-    desiredStyles.style &= ~WS_CHILDWINDOW;
-  } else {
-    // See if the caller wants to explictly set clip children and clip siblings
+  if (mWindowType != WindowType::Popup) {
+    // See if the caller wants to explicitly set clip children and clip siblings
     if (aInitData->mClipChildren) {
       desiredStyles.style |= WS_CLIPCHILDREN;
     } else {
@@ -1093,8 +1081,7 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
   }
 
-  if (mWindowType != WindowType::Invisible &&
-      MouseScrollHandler::Device::IsFakeScrollableWindowNeeded()) {
+  if (MouseScrollHandler::Device::IsFakeScrollableWindowNeeded()) {
     // Ugly Thinkpad Driver Hack (Bugs 507222 and 594977)
     //
     // We create two zero-sized windows as descendants of the top-level window,
@@ -1263,8 +1250,6 @@ static LPWSTR const gStockApplicationIcon = MAKEINTRESOURCEW(32512);
 static const wchar_t* ChooseWindowClass(WindowType aWindowType) {
   const wchar_t* className = [aWindowType] {
     switch (aWindowType) {
-      case WindowType::Invisible:
-        return kClassNameHidden;
       case WindowType::Dialog:
         return kClassNameDialog;
       case WindowType::Popup:
@@ -1348,7 +1333,6 @@ DWORD nsWindow::WindowStyle() {
       [[fallthrough]];
 
     case WindowType::TopLevel:
-    case WindowType::Invisible:
       style = WS_OVERLAPPED | WS_CLIPCHILDREN | WS_DLGFRAME | WS_BORDER |
               WS_THICKFRAME | kTitlebarItemsWindowStyles;
       break;
@@ -5853,24 +5837,23 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       break;
 
     case WM_GESTURENOTIFY: {
-      if (mWindowType != WindowType::Invisible) {
-        // A GestureNotify event is dispatched to decide which single-finger
-        // panning direction should be active (including none) and if pan
-        // feedback should be displayed. Java and plugin windows can make their
-        // own calls.
+      // A GestureNotify event is dispatched to decide which single-finger
+      // panning direction should be active (including none) and if pan
+      // feedback should be displayed. Java and plugin windows can make their
+      // own calls.
 
-        GESTURENOTIFYSTRUCT* gestureinfo = (GESTURENOTIFYSTRUCT*)lParam;
-        nsPointWin touchPoint;
-        touchPoint = gestureinfo->ptsLocation;
-        touchPoint.ScreenToClient(mWnd);
-        WidgetGestureNotifyEvent gestureNotifyEvent(true, eGestureNotify, this);
-        gestureNotifyEvent.mRefPoint =
-            LayoutDeviceIntPoint::FromUnknownPoint(touchPoint);
-        nsEventStatus status;
-        DispatchEvent(&gestureNotifyEvent, status);
-        mDisplayPanFeedback = gestureNotifyEvent.mDisplayPanFeedback;
-        if (!mTouchWindow)
-          mGesture.SetWinGestureSupport(mWnd, gestureNotifyEvent.mPanDirection);
+      GESTURENOTIFYSTRUCT* gestureinfo = (GESTURENOTIFYSTRUCT*)lParam;
+      nsPointWin touchPoint;
+      touchPoint = gestureinfo->ptsLocation;
+      touchPoint.ScreenToClient(mWnd);
+      WidgetGestureNotifyEvent gestureNotifyEvent(true, eGestureNotify, this);
+      gestureNotifyEvent.mRefPoint =
+          LayoutDeviceIntPoint::FromUnknownPoint(touchPoint);
+      nsEventStatus status;
+      DispatchEvent(&gestureNotifyEvent, status);
+      mDisplayPanFeedback = gestureNotifyEvent.mDisplayPanFeedback;
+      if (!mTouchWindow) {
+        mGesture.SetWinGestureSupport(mWnd, gestureNotifyEvent.mPanDirection);
       }
       result = false;  // should always bubble to DefWindowProc
     } break;
@@ -6550,11 +6533,6 @@ void nsWindow::OnWindowPosChanging(WINDOWPOS* info) {
     }
   }
 
-  // prevent rude external programs from making hidden window visible
-  if (mWindowType == WindowType::Invisible) {
-    info->flags &= ~SWP_SHOWWINDOW;
-  }
-
   // When waking from sleep or switching out of tablet mode, Windows 10
   // Version 1809 will reopen popup windows that should be hidden. Detect
   // this case and refuse to show the window.
@@ -7187,7 +7165,7 @@ a11y::LocalAccessible* nsWindow::GetAccessible() {
   if (a11y::PlatformDisabledState() == a11y::ePlatformIsDisabled)
     return nullptr;
 
-  if (mInDtor || mOnDestroyCalled || mWindowType == WindowType::Invisible) {
+  if (mInDtor || mOnDestroyCalled) {
     return nullptr;
   }
 

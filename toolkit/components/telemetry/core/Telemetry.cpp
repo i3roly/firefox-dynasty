@@ -1634,13 +1634,6 @@ TelemetryImpl::ClearEvents() {
 }
 
 NS_IMETHODIMP
-TelemetryImpl::SetEventRecordingEnabled(const nsACString& aCategory,
-                                        bool aEnabled) {
-  TelemetryEvent::SetEventRecordingEnabled(aCategory, aEnabled);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
 TelemetryImpl::FlushBatchedChildTelemetry() {
   TelemetryIPCAccumulator::IPCTimerFired(nullptr, nullptr);
   return NS_OK;
@@ -2010,10 +2003,6 @@ void ScalarSet(mozilla::Telemetry::ScalarID aId, const nsAString& aKey,
 void ScalarSetMaximum(mozilla::Telemetry::ScalarID aId, const nsAString& aKey,
                       uint32_t aVal) {
   TelemetryScalar::SetMaximum(aId, aKey, aVal);
-}
-
-void SetEventRecordingEnabled(const nsACString& aCategory, bool aEnabled) {
-  TelemetryEvent::SetEventRecordingEnabled(aCategory, aEnabled);
 }
 
 void ShutdownTelemetry() { TelemetryImpl::ShutdownTelemetry(); }

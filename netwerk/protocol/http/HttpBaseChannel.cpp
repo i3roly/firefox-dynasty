@@ -2300,8 +2300,8 @@ HttpBaseChannel::RedirectTo(nsIURI* targetURI) {
 }
 
 NS_IMETHODIMP
-HttpBaseChannel::InternalRedirectTo(nsIURI* targetURI) {
-  LOG(("HttpBaseChannel::InternalRedirectTo [this=%p]", this));
+HttpBaseChannel::TransparentRedirectTo(nsIURI* targetURI) {
+  LOG(("HttpBaseChannel::TransparentRedirectTo [this=%p]", this));
   RedirectTo(targetURI);
   MOZ_ASSERT(mAPIRedirectTo, "How did this happen?");
   mAPIRedirectTo->second() = true;
@@ -5034,7 +5034,8 @@ nsresult HttpBaseChannel::SetupReplacementChannel(nsIURI* newURI,
   nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(newChannel);
 
   ReplacementReason redirectType =
-      (redirectFlags & nsIChannelEventSink::REDIRECT_INTERNAL)
+      redirectFlags & (nsIChannelEventSink::REDIRECT_INTERNAL |
+                       nsIChannelEventSink::REDIRECT_TRANSPARENT)
           ? ReplacementReason::InternalRedirect
           : ReplacementReason::Redirect;
   ReplacementChannelConfig config = CloneReplacementChannelConfig(
@@ -6459,11 +6460,25 @@ bool HttpBaseChannel::Http3Allowed() const {
          LoadAllowHttp3();
 }
 
-void HttpBaseChannel::SetDummyChannelForCachedResource() {
+UniquePtr<nsHttpResponseHead>
+HttpBaseChannel::MaybeCloneResponseHeadForCachedResource() {
+  if (!mResponseHead) {
+    return nullptr;
+  }
+
+  return MakeUnique<nsHttpResponseHead>(*mResponseHead);
+}
+
+void HttpBaseChannel::SetDummyChannelForCachedResource(
+    const nsHttpResponseHead* aMaybeResponseHead /* = nullptr */) {
   mDummyChannelForCachedResource = true;
   MOZ_ASSERT(!mResponseHead,
              "SetDummyChannelForCachedResource should only be called once");
-  mResponseHead = MakeUnique<nsHttpResponseHead>();
+  if (aMaybeResponseHead) {
+    mResponseHead = MakeUnique<nsHttpResponseHead>(*aMaybeResponseHead);
+  } else {
+    mResponseHead = MakeUnique<nsHttpResponseHead>();
+  }
 }
 
 void HttpBaseChannel::SetEarlyHints(

@@ -86,6 +86,7 @@ class QuotaManager final : public BackgroundThreadObject {
   friend class DirectoryLockImpl;
   friend class GroupInfo;
   friend class InitOp;
+  friend class InitTemporaryStorageOp;
   friend class OriginInfo;
   friend class ShutdownStorageOp;
 
@@ -277,6 +278,7 @@ class QuotaManager final : public BackgroundThreadObject {
       const PersistenceScope& aPersistenceScope,
       const OriginScope& aOriginScope,
       const Nullable<Client::Type>& aClientType, bool aExclusive,
+      bool aInitializeOrigins = false,
       DirectoryLockCategory aCategory = DirectoryLockCategory::None,
       Maybe<RefPtr<UniversalDirectoryLock>&> aPendingDirectoryLockOut =
           Nothing());
@@ -420,8 +422,10 @@ class QuotaManager final : public BackgroundThreadObject {
     return mTemporaryStorageInitialized;
   }
 
+ private:
   nsresult EnsureTemporaryStorageIsInitializedInternal();
 
+ public:
   RefPtr<OriginUsageMetadataArrayPromise> GetUsage(
       bool aGetAll, RefPtr<BoolPromise> aOnCancelPromise = nullptr);
 
@@ -434,8 +438,11 @@ class QuotaManager final : public BackgroundThreadObject {
 
   RefPtr<BoolPromise> ClearStoragesForOrigin(
       const Maybe<PersistenceType>& aPersistenceType,
-      const PrincipalInfo& aPrincipalInfo,
-      const Maybe<Client::Type>& aClientType);
+      const PrincipalInfo& aPrincipalInfo);
+
+  RefPtr<BoolPromise> ClearStoragesForClient(
+      Maybe<PersistenceType> aPersistenceType,
+      const PrincipalInfo& aPrincipalInfo, Client::Type aClientType);
 
   RefPtr<BoolPromise> ClearStoragesForOriginPrefix(
       const Maybe<PersistenceType>& aPersistenceType,

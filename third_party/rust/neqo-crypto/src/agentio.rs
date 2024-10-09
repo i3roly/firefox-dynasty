@@ -143,7 +143,7 @@ pub struct AgentIoInputContext<'a> {
     input: &'a mut AgentIoInput,
 }
 
-impl<'a> Drop for AgentIoInputContext<'a> {
+impl Drop for AgentIoInputContext<'_> {
     fn drop(&mut self) {
         self.input.reset();
     }

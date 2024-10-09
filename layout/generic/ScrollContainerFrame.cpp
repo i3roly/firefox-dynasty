@@ -11,7 +11,6 @@
 #include "ScrollPositionUpdate.h"
 #include "mozilla/layers/LayersTypes.h"
 #include "nsIXULRuntime.h"
-#include "base/compiler_specific.h"
 #include "DisplayItemClip.h"
 #include "nsCOMPtr.h"
 #include "nsIDocumentViewer.h"
@@ -6898,6 +6897,16 @@ nsRect ScrollContainerFrame::GetScrolledRect() const {
   }
 
   return result;
+}
+
+nsRect ScrollContainerFrame::GetScrollPortRectAccountingForMaxDynamicToolbar()
+    const {
+  auto rect = mScrollPort;
+  if (mIsRoot && PresContext()->HasDynamicToolbar()) {
+    rect.SizeTo(nsLayoutUtils::ExpandHeightForDynamicToolbar(PresContext(),
+                                                             rect.Size()));
+  }
+  return rect;
 }
 
 StyleDirection ScrollContainerFrame::GetScrolledFrameDir() const {

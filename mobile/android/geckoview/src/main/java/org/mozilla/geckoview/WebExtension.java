@@ -1565,7 +1565,7 @@ public class WebExtension {
       /** The extension did not have the expected ID. */
       public static final int ERROR_INVALID_DOMAIN = -8;
 
-      /** The extension is blocklisted. */
+      /** The extension is (hard) blocked. */
       public static final int ERROR_BLOCKLISTED = -10;
 
       /** The extension is incompatible. */
@@ -1576,6 +1576,9 @@ public class WebExtension {
 
       /** The extension can only be installed via Enterprise Policies. */
       public static final int ERROR_ADMIN_INSTALL_ONLY = -13;
+
+      /** The extension is soft-blocked. */
+      public static final int ERROR_SOFT_BLOCKED = -14;
 
       /** The extension install was canceled. */
       public static final int ERROR_USER_CANCELED = -100;
@@ -1632,11 +1635,15 @@ public class WebExtension {
           ErrorCodes.ERROR_POSTPONED,
           ErrorCodes.ERROR_UNSUPPORTED_ADDON_TYPE,
           ErrorCodes.ERROR_ADMIN_INSTALL_ONLY,
+          ErrorCodes.ERROR_SOFT_BLOCKED,
         })
     public @interface Codes {}
 
     /** One of {@link ErrorCodes} that provides more information about this exception. */
     public final @Codes int code;
+
+    /** An optional ID of the extension that caused the exception. */
+    public final @Nullable String extensionId;
 
     /** An optional name of the extension that caused the exception. */
     public final @Nullable String extensionName;
@@ -1644,6 +1651,7 @@ public class WebExtension {
     /** For testing */
     protected InstallException() {
       this.code = ErrorCodes.ERROR_NETWORK_FAILURE;
+      this.extensionId = null;
       this.extensionName = null;
     }
 
@@ -1652,13 +1660,24 @@ public class WebExtension {
       return "InstallException: " + code;
     }
 
+    /* package */ InstallException(
+        final @Codes int code,
+        final @Nullable String extensionId,
+        final @Nullable String extensionName) {
+      this.code = code;
+      this.extensionId = extensionId;
+      this.extensionName = extensionName;
+    }
+
     /* package */ InstallException(final @Codes int code, final @Nullable String extensionName) {
       this.code = code;
+      this.extensionId = null;
       this.extensionName = extensionName;
     }
 
     /* package */ InstallException(final @Codes int code) {
       this.code = code;
+      this.extensionId = null;
       this.extensionName = null;
     }
   }
@@ -1792,6 +1811,12 @@ public class WebExtension {
      * The extension has been disabled because it is not compatible with the application version.
      */
     public static final int APP_VERSION = 1 << 5;
+
+    /**
+     * The extension has been disabled by the soft-blocklist. The details of why this extension was
+     * blocked can be found in {@link MetaData#blocklistState}.
+     */
+    public static final int SOFT_BLOCKLIST = 1 << 6;
   }
 
   @Retention(RetentionPolicy.SOURCE)
@@ -1803,6 +1828,7 @@ public class WebExtension {
         DisabledFlags.APP,
         DisabledFlags.SIGNATURE,
         DisabledFlags.APP_VERSION,
+        DisabledFlags.SOFT_BLOCKLIST,
       })
   public @interface EnabledFlags {}
 
@@ -2143,6 +2169,8 @@ public class WebExtension {
           disabledFlags |= DisabledFlags.USER;
         } else if (flag.equals("blocklistDisabled")) {
           disabledFlags |= DisabledFlags.BLOCKLIST;
+        } else if (flag.equals("softBlocklistDisabled")) {
+          disabledFlags |= DisabledFlags.SOFT_BLOCKLIST;
         } else if (flag.equals("appDisabled")) {
           disabledFlags |= DisabledFlags.APP;
         } else if (flag.equals("signatureDisabled")) {

@@ -609,14 +609,14 @@ cargo-vet:
     fetch:
         type: git
         repo: https://github.com/mozilla/cargo-vet
-        revision: b4761a95010b946c8be44762e3ca1884d17d9fbf
+        revision: c23b21659b9902d97bef2f54c8e14529031092c5
 
 symbol-scrapers:
     description: Linux distribution symbol scraper source
     fetch:
         type: git
         repo: https://github.com/mozilla/symbol-scrapers
-        revision: 985fa2efaa0d16b1a8acda74f2a4f65560dd8254
+        revision: 00de13e086204f342e4776e92ecede30b8a1ce43
 
 xz-5.4.4:
     description: xz 5.4.4 source code
@@ -696,7 +696,7 @@ mozilla-pdf.js:
     fetch:
         type: git
         repo: https://github.com/mozilla/pdf.js
-        revision: 9735a840ad9e8b6f87d24279504400f6da13acfe
+        revision: 81cf42df470f85eb60150bdffca380e3eee79c08
 
 xmlstarlet-1.6.1:
     description: xmlstarlet for Android Performance Tests

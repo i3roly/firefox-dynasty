@@ -309,8 +309,7 @@ class nsChildView final : public nsBaseWidget {
   nsChildView();
 
   // nsIWidget interface
-  [[nodiscard]] virtual nsresult Create(nsIWidget* aParent,
-                                        nsNativeWidget aNativeParent,
+  [[nodiscard]] nsresult Create(nsIWidget* aParent,
                                         const LayoutDeviceIntRect& aRect,
                                         InitData* = nullptr) override;
 

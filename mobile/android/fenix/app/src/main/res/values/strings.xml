@@ -208,8 +208,6 @@
     <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extension.
       The first parameter is the name of the extension (for example: ClearURLs). -->
     <string name="browser_menu_extension_plus_icon_content_description_2">Add %1$s</string>
-    <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extensions. -->
-    <string name="browser_menu_extension_plus_icon_content_description" moz:removedIn="124" tools:ignore="UnusedResources">Add extension</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Discover more extensions</string>
     <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
@@ -298,6 +296,18 @@
     <string name="browser_menu_tools">Tools</string>
     <!-- Content description (not visible, for screen readers etc.): Back button for all menu redesign sub-menu -->
     <string name="browser_menu_back_button_content_description">Back to main menu</string>
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar. The placeholder will be updated by, for example, "Main menu". -->
+    <string name="browser_menu_handlebar_content_description">Close %1$s sheet</string>
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar main menu. -->
+    <string name="browser_main_menu_handlebar_content_description">Main menu</string>
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar extensions menu. -->
+    <string name="browser_extensions_menu_handlebar_content_description">Extensions menu</string>
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar save menu. -->
+    <string name="browser_save_menu_handlebar_content_description">Save menu</string>
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar tools menu. -->
+    <string name="browser_tools_menu_handlebar_content_description">Tools menu</string>
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
+    <string name="browser_custom_tab_menu_handlebar_content_description">Custom tab menu</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate">Reader View, Translate, Print, Share, Open app</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -407,18 +417,6 @@
     <!-- Content description (not visible, for screen readers etc.): Close button for the home onboarding dialog -->
     <string name="onboarding_home_content_description_close_button">Close</string>
 
-    <!-- Notification pre-permission dialog -->
-    <!-- Enable notification pre permission dialog title
-        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
-    <string name="onboarding_home_enable_notifications_title" moz:removedIn="124" tools:ignore="UnusedResources">Notifications help you do more with %s</string>
-    <!-- Enable notification pre permission dialog description with rationale
-        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
-    <string name="onboarding_home_enable_notifications_description" moz:removedIn="124" tools:ignore="UnusedResources">Sync your tabs between devices, manage downloads, get tips about making the most of %s’s privacy protection, and more.</string>
-    <!-- Text for the button to request notification permission on the device -->
-    <string name="onboarding_home_enable_notifications_positive_button" moz:removedIn="124" tools:ignore="UnusedResources">Continue</string>
-    <!-- Text for the button to not request notification permission on the device and dismiss the dialog -->
-    <string name="onboarding_home_enable_notifications_negative_button" moz:removedIn="124" tools:ignore="UnusedResources">Not now</string>
-
     <!-- Juno first user onboarding flow experiment, strings are marked unused as they are only referenced by Nimbus experiments. -->
     <!-- Description for learning more about our privacy notice. -->
     <string name="juno_onboarding_privacy_notice_text" tools:ignore="BrandUsage">Firefox privacy notice</string>
@@ -435,20 +433,12 @@
     <string name="juno_onboarding_default_browser_description_nimbus_4" tools:ignore="UnusedResources">More than 100 million people protect their privacy by choosing a browser that’s backed by a nonprofit.</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_description_nimbus_5" tools:ignore="UnusedResources">Known trackers? Blocked automatically. Extensions? Try all 700. PDFs? Our built-in reader makes them easy to manage.</string>
-    <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
-    <string name="juno_onboarding_default_browser_description_nimbus_2" moz:RemovedIn="124" tools:ignore="UnusedResources">Our non-profit backed browser helps stop companies from secretly following you around the web.\n\nLearn more in our privacy notice.</string>
-    <!-- Text for the link to the privacy notice webpage for set as firefox default browser screen.
-    This is part of the string with the key "juno_onboarding_default_browser_description". -->
-    <string name="juno_onboarding_default_browser_description_link_text" moz:RemovedIn="124" tools:ignore="UnusedResources">privacy notice</string>
     <!-- Text for the button to set firefox as default browser on the device -->
     <string name="juno_onboarding_default_browser_positive_button" tools:ignore="UnusedResources">Set as default browser</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_default_browser_negative_button" tools:ignore="UnusedResources">Not now</string>
     <!-- Title for sign in to sync screen. -->
     <string name="juno_onboarding_sign_in_title_2">Stay encrypted when you hop between devices</string>
-    <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
-     Note: The word "Firefox" should NOT be translated -->
-    <string name="juno_onboarding_sign_in_description_2" moz:RemovedIn="130" tools:ignore="BrandUsage,UnusedResources">When you’re signed in and synced, you’re safer. Firefox encrypts your passwords, bookmarks, and more.</string>
     <!-- Description for sign in to sync screen. Nimbus experiments do not support string placeholders.
      Note: The word "Firefox" should NOT be translated -->
     <string name="juno_onboarding_sign_in_description_3" tools:ignore="BrandUsage">Firefox encrypts your passwords, bookmarks, and more when you’re synced.</string>
@@ -598,7 +588,7 @@
     <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is off for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
     <string name="reduce_cookie_banner_details_panel_description_off_for_site_1">Turn off and %1$s will clear cookies and reload this site. This may sign you out or empty shopping carts.</string>
     <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is on for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
-    <string name="reduce_cookie_banner_details_panel_description_on_for_site_3" >Turn on and %1$s will try to automatically refuse all cookie banners on this site.</string>
+    <string name="reduce_cookie_banner_details_panel_description_on_for_site_3">Turn on and %1$s will try to automatically refuse all cookie banners on this site.</string>
     <!--Title for the cookie banner re-engagement CFR, the placeholder is replaced with app name -->
     <string name="cookie_banner_cfr_title">%1$s just refused cookies for you</string>
     <!--Message for the cookie banner re-engagement CFR -->
@@ -1190,7 +1180,7 @@
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">Add folder</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar" tools:ignore="UnusedResources" moz:removedIn="132">Bookmark saved!</string>
+    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">Bookmark saved!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">Saved in “%s”</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1262,25 +1252,25 @@
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Enter search terms</string>
     <!-- Content description for the bookmark navigation bar back button -->
-    <string name ="bookmark_navigate_back_button_content_description">Navigate back</string>
+    <string name="bookmark_navigate_back_button_content_description">Navigate back</string>
     <!-- Content description for the bookmark list new folder navigation bar button -->
-    <string name ="bookmark_add_new_folder_button_content_description">Add a new folder</string>
+    <string name="bookmark_add_new_folder_button_content_description">Add a new folder</string>
     <!-- Content description for bookmark search floating action button -->
-    <string name ="bookmark_search_button_content_description">Search bookmarks</string>
+    <string name="bookmark_search_button_content_description">Search bookmarks</string>
     <!-- Content description for icon to open the overflow menu for selected bookmarks -->
-    <string name ="bookmark_selected_menu_button_content_description">Overflow menu</string>
+    <string name="bookmark_selected_menu_button_content_description">Overflow menu</string>
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
-    <string name ="bookmark_item_menu_button_content_description">Item Menu for %s</string>
+    <string name="bookmark_item_menu_button_content_description">Item Menu for %s</string>
     <!-- Title for the bookmark list empty state-->
-    <string name ="bookmark_empty_list_title">No bookmarks yet</string>
+    <string name="bookmark_empty_list_title">No bookmarks yet</string>
     <!-- Description for the bookmark list empty state when you're not signed into sync. -->
-    <string name ="bookmark_empty_list_guest_description">Save sites as you browse. Sign in to grab bookmarks from other synced devices.</string>
+    <string name="bookmark_empty_list_guest_description">Save sites as you browse. Sign in to grab bookmarks from other synced devices.</string>
     <!-- Text for the button to navigate to sync authentication -->
-    <string name ="bookmark_empty_list_guest_cta">Sign in to sync</string>
+    <string name="bookmark_empty_list_guest_cta">Sign in to sync</string>
     <!-- Description for the bookmark list empty state when you're signed into sync. -->
-    <string name ="bookmark_empty_list_authenticated_description">Save sites as you browse. We’ll also grab bookmarks from other synced devices.</string>
+    <string name="bookmark_empty_list_authenticated_description">Save sites as you browse. We’ll also grab bookmarks from other synced devices.</string>
     <!-- Description for the bookmark list empty state when you're in an empty folder. -->
-    <string name ="bookmark_empty_list_folder_description">Add bookmarks as you browse so you can find your favorite sites later.</string>
+    <string name="bookmark_empty_list_folder_description">Add bookmarks as you browse so you can find your favorite sites later.</string>
     <!-- Description for the add new folder button when selecting a folder. -->
     <string name="bookmark_select_folder_new_folder_button_title">New folder</string>
 
@@ -1441,7 +1431,7 @@
     <string name="toast_copy_link_to_clipboard">Copied to clipboard</string>
     <!-- An option from the share dialog to sign into sync -->
     <string name="sync_sign_in">Sign in to Sync</string>
-     <!-- An option from the three dot menu to sync and save data -->
+    <!-- An option from the three dot menu to sync and save data -->
     <string name="sync_menu_sync_and_save_data">Sync and save data</string>
     <!-- An option from the share dialog to send link to all other sync devices -->
     <string name="sync_send_to_all">Send to all devices</string>
@@ -1598,8 +1588,6 @@
     <!-- Title text of a delete browsing data dialog. -->
     <string name="delete_history_prompt_title">Time range to delete</string>
     <!-- Body text of a delete browsing data dialog. -->
-    <string name="delete_history_prompt_body" moz:RemovedIn="130" tools:ignore="UnusedResources">Removes history (including history synced from other devices), cookies and other browsing data.</string>
-    <!-- Body text of a delete browsing data dialog. -->
     <string name="delete_history_prompt_body_2">Removes history (including history synced from other devices)</string>
     <!-- Radio button in the delete browsing data dialog to delete history items for the last hour. -->
     <string name="delete_history_prompt_button_last_hour">Last hour</string>
@@ -1715,8 +1703,6 @@
     <!-- Preference for enhanced tracking protection for the custom protection settings -->
     <string name="preference_enhanced_tracking_protection_custom_cryptominers">Cryptominers</string>
     <!-- Preference for enhanced tracking protection for the custom protection settings -->
-    <string name="preference_enhanced_tracking_protection_custom_fingerprinters" moz:RemovedIn="130" tools:ignore="UnusedResources">Fingerprinters</string>
-    <!-- Preference for enhanced tracking protection for the custom protection settings -->
     <string name="preference_enhanced_tracking_protection_custom_known_fingerprinters">Known Fingerprinters</string>
     <!-- Button label for navigating to the Enhanced Tracking Protection details -->
     <string name="enhanced_tracking_protection_details">Details</string>
@@ -1740,10 +1726,6 @@
     <string name="etp_cryptominers_title">Cryptominers</string>
     <!-- Description of cryptominers that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_cryptominers_description">Prevents malicious scripts gaining access to your device to mine digital currency.</string>
-    <!-- Category of trackers (fingerprinters) that can be blocked by Enhanced Tracking Protection -->
-    <string name="etp_fingerprinters_title" moz:RemovedIn="130" tools:ignore="UnusedResources">Fingerprinters</string>
-    <!-- Description of fingerprinters that can be blocked by Enhanced Tracking Protection -->
-    <string name="etp_fingerprinters_description" moz:RemovedIn="130" tools:ignore="UnusedResources">Stops uniquely identifiable data from being collected about your device that can be used for tracking purposes.</string>
     <!-- Description of fingerprinters that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_known_fingerprinters_description">Stops uniquely identifiable data from being collected about your device that can be used for tracking purposes.</string>
     <!-- Category of trackers (tracking content) that can be blocked by Enhanced Tracking Protection -->
@@ -2018,7 +2000,7 @@
     <!-- The text for the "Delete address" button for deleting an address -->
     <string name="addressess_delete_address_button">Delete address</string>
     <!-- The title for the "Delete address" confirmation dialog -->
-    <string name="addressess_confirm_dialog_message_2" >Delete this address?</string>
+    <string name="addressess_confirm_dialog_message_2">Delete this address?</string>
     <!-- The text for the positive button on "Delete address" dialog -->
     <string name="addressess_confirm_dialog_ok_button">Delete</string>
     <!-- The text for the negative button on "Delete address" dialog -->
@@ -2249,7 +2231,7 @@
     <string name="radio_preference_info_content_description">Click for more details</string>
 
     <!-- Content description for the action bar "up" button -->
-    <string name="action_bar_up_description" moz:removedIn="124" tools:ignore="UnusedResources">Navigate up</string>
+    <string name="action_bar_up_description">Navigate up</string>
 
     <!-- Content description for privacy content close button -->
     <string name="privacy_content_close_button_content_description">Close</string>
@@ -2388,8 +2370,6 @@
     <string name="review_quality_check_contextual_onboarding_learn_more">Using the power of %1$s by Mozilla, we help you avoid biased and inauthentic reviews. Our AI model is always improving to protect you as you shop. %2$s</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
     <string name="review_quality_check_contextual_onboarding_learn_more_link">Learn more</string>
-    <!-- Caption text to be displayed in review quality check contextual onboarding card above the opt-in button. First parameter is Firefox app name, third parameter is the Fakespot product name. Second & fourth are for clickable texts defined in review_quality_check_contextual_onboarding_privacy_policy_3 and review_quality_check_contextual_onboarding_terms_use. -->
-    <string name="review_quality_check_contextual_onboarding_caption_3" moz:RemovedIn="124" tools:ignore="UnusedResources">By selecting “Yes, try it” you agree to %1$s’s %2$s and %3$s’s %4$s.</string>
     <!-- Caption text to be displayed in review quality check contextual onboarding card above the opt-in button. First parameter is Firefox app name, third parameter is the Fakespot product name. Second & fourth are for clickable texts defined in review_quality_check_contextual_onboarding_privacy_policy_3 and review_quality_check_contextual_onboarding_terms_use. -->
     <string name="review_quality_check_contextual_onboarding_caption_4">By selecting “Yes, try it” you agree to %1$s’s %2$s and %3$s’s %4$s.</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot privacy notice. -->

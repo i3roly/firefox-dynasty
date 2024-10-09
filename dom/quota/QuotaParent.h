@@ -86,8 +86,13 @@ class Quota final : public PQuotaParent {
 
   virtual mozilla::ipc::IPCResult RecvClearStoragesForOrigin(
       const Maybe<PersistenceType>& aPersistenceType,
-      const PrincipalInfo& aPrincipalInfo, const Maybe<Type>& aClientType,
+      const PrincipalInfo& aPrincipalInfo,
       ClearStoragesForOriginResolver&& aResolve) override;
+
+  virtual mozilla::ipc::IPCResult RecvClearStoragesForClient(
+      const Maybe<PersistenceType>& aPersistenceType,
+      const PrincipalInfo& aPrincipalInfo, const Type& aClientType,
+      ClearStoragesForClientResolver&& aResolve) override;
 
   virtual mozilla::ipc::IPCResult RecvClearStoragesForOriginPrefix(
       const Maybe<PersistenceType>& aPersistenceType,

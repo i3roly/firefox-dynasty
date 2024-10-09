@@ -175,7 +175,7 @@
   margin: 0;
 }
 .asrouter-admin .sourceLabel:not(:empty) {
-  background: var(--in-content-box-background);
+  background: var(--background-color-box);
   padding: 2px 5px;
   border-radius: 3px;
 }
@@ -324,6 +324,12 @@
 .asrouter-admin h2 .no-margins,
 .asrouter-admin p .no-margins {
   margin: 0;
+}
+.asrouter-admin .targeting-editor {
+  resize: vertical;
+}
+.asrouter-admin .targeting-editor.small {
+  white-space: nowrap;
 }
 .asrouter-admin .impressions-section {
   display: flex;

@@ -102,12 +102,23 @@ sealed class MenuAction : Action {
     ) : MenuAction()
 
     /**
-     * [MenuAction] dispatched when web extension items list is updated.
+     * [MenuAction] dispatched when browser web extension items list is updated.
      *
-     * @property webExtensionMenuItems The list of [WebExtensionMenuItem] to be shown in the menu.
+     * @property webExtensionBrowserMenuItem browserMenuItem The list of [WebExtensionMenuItem.WebExtensionBrowserMenuItem]
+     * to be shown in the menu.
      */
-    data class UpdateWebExtensionMenuItems(
-        val webExtensionMenuItems: List<WebExtensionMenuItem>,
+    data class UpdateWebExtensionBrowserMenuItems(
+        val webExtensionBrowserMenuItem: List<WebExtensionMenuItem.WebExtensionBrowserMenuItem>,
+    ) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when page web extension items list is updated.
+     *
+     * @property webExtensionPageMenuItem The list of [WebExtensionMenuItem.WebExtensionPageMenuItem]
+     * to be shown in the menu.
+     */
+    data class UpdateWebExtensionPageMenuItems(
+        val webExtensionPageMenuItem: List<WebExtensionMenuItem.WebExtensionPageMenuItem>,
     ) : MenuAction()
 
     /**
@@ -127,6 +138,16 @@ sealed class MenuAction : Action {
     ) : MenuAction()
 
     /**
+     * [MenuAction] dispatched when we what to show manage extensions menu item.
+     *
+     * @property isVisible Indicates if manage extensions menu item
+     * should be displayed to the user.
+     */
+    data class UpdateManageExtensionsMenuItemVisibility(
+        val isVisible: Boolean,
+    ) : MenuAction()
+
+    /**
      * [MenuAction] dispatched when an addon installation was completed with success.
      *
      * @property addon The [Addon] that was installed.
@@ -142,6 +163,15 @@ sealed class MenuAction : Action {
      */
     data class InstallAddonFailed(
         val addon: Addon,
+    ) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when extensions promotion banner onboarding should be visible or not.
+     *
+     * @property showExtensionsOnboarding Show extensions promotion banner onboarding.
+     */
+    data class UpdateShowExtensionsOnboarding(
+        val showExtensionsOnboarding: Boolean,
     ) : MenuAction()
 
     /**

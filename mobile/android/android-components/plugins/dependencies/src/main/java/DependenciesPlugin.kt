@@ -19,7 +19,7 @@ object Versions {
     const val serialization = "1.6.3"
     const val python_envs_plugin = "0.0.31"
 
-    const val mozilla_glean = "61.1.0"
+    const val mozilla_glean = "61.2.0"
 
     const val robolectric = "4.13"
     const val maven_ant_tasks = "2.1.3"
@@ -33,7 +33,7 @@ object Versions {
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
     const val lint = "31.6.1"
-    const val detekt = "1.23.6"
+    const val detekt = "1.23.7"
     const val ktlint = "0.49.1"
 
     const val sentry = "7.14.0"
@@ -61,7 +61,7 @@ object Versions {
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
         const val collection = "1.4.4"
-        const val compose_bom = "2024.09.02"
+        const val compose_bom = "2024.09.03"
         const val constraintlayout = "2.1.4"
         const val constraintlayout_compose = "1.0.1"
         const val coordinatorlayout = "1.2.0"
@@ -69,11 +69,11 @@ object Versions {
         const val core_splashscreen = "1.0.1"
         const val datastore="1.1.1"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.8.3"
+        const val fragment = "1.8.4"
         const val lifecycle = "2.8.6"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
-        const val navigation = "2.8.1"
+        const val navigation = "2.8.2"
         const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
@@ -109,8 +109,11 @@ object Versions {
         const val androidx_test_orchestrator = "1.5.0"
         const val androidx_test_runner = "1.6.1"
         const val androidx_test_uiautomator = "2.3.0"
+        const val falcon = "2.2.0"
+        const val fastlane = "2.1.1"
         const val junit = "5.11.1"
         const val mockito = "5.14.1"
+        const val mockk = "1.13.12"
     }
 }
 
@@ -127,7 +130,11 @@ object ComponentsDependencies {
     const val junit_vintage = "org.junit.vintage:junit-vintage-engine:${Versions.Testing.junit}"
 
     const val testing_robolectric = "org.robolectric:robolectric:${Versions.robolectric}"
+    const val testing_falcon = "com.jraska:falcon:${Versions.Testing.falcon}"
+    const val testing_fastlane = "tools.fastlane:screengrab:${Versions.Testing.fastlane}"
     const val testing_mockito = "org.mockito:mockito-core:${Versions.Testing.mockito}"
+    const val testing_mockk = "io.mockk:mockk:${Versions.Testing.mockk}"
+    const val testing_mockk_android = "io.mockk:mockk-android:${Versions.Testing.mockk}"
     const val testing_mockwebserver = "com.squareup.okhttp3:mockwebserver:${Versions.okhttp}"
     const val testing_coroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-test:${Versions.coroutines}"
     const val testing_maven_ant_tasks = "org.apache.maven:maven-ant-tasks:${Versions.maven_ant_tasks}"

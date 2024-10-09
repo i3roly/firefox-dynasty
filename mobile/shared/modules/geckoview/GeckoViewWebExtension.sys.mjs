@@ -340,8 +340,10 @@ async function exportExtension(aAddon, aSourceURI) {
   if (userDisabled) {
     disabledFlags.push("userDisabled");
   }
-  if (blocklistState !== Ci.nsIBlocklistService.STATE_NOT_BLOCKED) {
+  if (blocklistState === Ci.nsIBlocklistService.STATE_BLOCKED) {
     disabledFlags.push("blocklistDisabled");
+  } else if (blocklistState === Ci.nsIBlocklistService.STATE_SOFTBLOCKED) {
+    disabledFlags.push("softBlocklistDisabled");
   }
   if (embedderDisabled) {
     disabledFlags.push("appDisabled");
@@ -598,6 +600,7 @@ class AddonInstallObserver {
     lazy.EventDispatcher.instance.sendRequest({
       type: "GeckoView:WebExtension:OnInstallationFailed",
       extension,
+      addonId: aAddon?.id,
       addonName: aAddonName,
       error: aError,
     });

@@ -271,8 +271,7 @@ nsChildView::~nsChildView() {
 }
 
 
-nsresult nsChildView::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
-                             const LayoutDeviceIntRect& aRect,
+nsresult nsChildView::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
                              widget::InitData* aInitData) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
@@ -288,19 +287,13 @@ nsresult nsChildView::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
 
   BaseCreate(aParent, aInitData);
 
+  mParentWidget = nil;
   mParentView = nil;
   if (aParent) {
     // This is the popup window case. aParent is the nsCocoaWindow for the
     // popup window, and mParentView will be its content view.
-    mParentView = (NSView*)aParent->GetNativeData(NS_NATIVE_WIDGET);
     mParentWidget = aParent;
-  } else {
-    // This is the top-level window case.
-    // aNativeParent will be the contentView of our window, since that's what
-    // nsCocoaWindow returns when asked for an NS_NATIVE_VIEW.
-    // We do not have a direct "parent widget" association with the top level
-    // window's nsCocoaWindow object.
-    mParentView = reinterpret_cast<NSView*>(aNativeParent);
+    mParentView = (NSView*)aParent->GetNativeData(NS_NATIVE_WIDGET);
   }
 
   // create our parallel NSView and hook it up to our parent. Recall
