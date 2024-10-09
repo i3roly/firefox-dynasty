@@ -216,64 +216,72 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
   VideoInfo info(1920, 1080);
   bool vtReportsSupport = false;
   if (__builtin_available(macOS 10.13, *)) {
-    if (!VTIsHardwareDecodeSupported) {
-      return false;
-    }
-    switch (aCodec) {
-      case MediaCodec::AV1: {
-        info.mMimeType = "video/av1";
-
-        // Build up a fake CBox
-        bool hasSeqHdr;
-        AOMDecoder::AV1SequenceInfo seqInfo;
-        AOMDecoder::OperatingPoint op;
-        seqInfo.mOperatingPoints.AppendElement(op);
-        seqInfo.mImage = {1920, 1080};
-        AOMDecoder::WriteAV1CBox(seqInfo, info.mExtraData, hasSeqHdr);
-
-        vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
-        break;
-      }
-      case MediaCodec::VP9:
-        info.mMimeType = "video/vp9";
-        VPXDecoder::GetVPCCBox(info.mExtraData, VPXDecoder::VPXStreamInfo());
-        vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9);
-        break;
-      case MediaCodec::H264:
-        // 1806391 - H264 hardware decode check crashes on 10.12 - 10.14
-        if (__builtin_available(macos 10.15, *)) {
-          info.mMimeType = "video/avc";
-          vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
-        }
-        break;
-      default:
-        vtReportsSupport = false;
-        break;
-    }
-    // VT reports HW decode is supported -- verify by creating an actual decoder
-    if (vtReportsSupport) {
-      RefPtr<AppleVTDecoder> decoder =
-          new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
-      MediaResult rv = decoder->InitializeSession();
-      if (!NS_SUCCEEDED(rv)) {
-        MOZ_LOG(
-            sPDMLog, LogLevel::Debug,
-            ("Apple HW decode failure while initializing VT decoder session"));
+      if (!VTIsHardwareDecodeSupported) {
         return false;
       }
-      nsAutoCString failureReason;
-      // IsHardwareAccelerated appears to return invalid results for H.264 so
-      // we assume that the earlier VTIsHardwareDecodeSupported call is correct.
-      // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1716196#c7
-      bool hwSupport = decoder->IsHardwareAccelerated(failureReason) ||
-                       aCodec == MediaCodec::H264;
-      if (!hwSupport) {
-        MOZ_LOG(sPDMLog, LogLevel::Debug,
-                ("Apple HW decode failure: '%s'", failureReason.BeginReading()));
+      switch (aCodec) {
+        case MediaCodec::AV1: {
+          info.mMimeType = "video/av1";
+
+          // Build up a fake CBox
+          bool hasSeqHdr;
+          AOMDecoder::AV1SequenceInfo seqInfo;
+          AOMDecoder::OperatingPoint op;
+          seqInfo.mOperatingPoints.AppendElement(op);
+          seqInfo.mImage = {1920, 1080};
+          AOMDecoder::WriteAV1CBox(seqInfo, info.mExtraData, hasSeqHdr);
+
+          vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1);
+          break;
+        }
+        case MediaCodec::VP9:
+          info.mMimeType = "video/vp9";
+          VPXDecoder::GetVPCCBox(info.mExtraData, VPXDecoder::VPXStreamInfo());
+          vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9);
+          break;
+        case MediaCodec::H264:
+          // 1806391 - H264 hardware decode check crashes on 10.12 - 10.14
+          if (__builtin_available(macos 10.15, *)) {
+            info.mMimeType = "video/avc";
+            vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
+          }
+          break;
+        default:
+          vtReportsSupport = false;
+          break;
       }
-      decoder->Shutdown();
-      return hwSupport;
+  } else if (__builtin_available(macOS 10.7, *)) { //VTDecoder is only 10.7 and up.
+    if (aCodec == media::MediaCodec::H264) {
+      // VTIsHardwareDecodeSupported function is only available on 10.13+.
+      // For earlier versions, we must check H264 support by always
+      // attempting to create a decoder.
+      info.mMimeType = "video/avc";
+      vtReportsSupport = true;
     }
+  }
+    // VT reports HW decode is supported -- verify by creating an actual decoder
+  if (vtReportsSupport) {
+    RefPtr<AppleVTDecoder> decoder =
+        new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
+    MediaResult rv = decoder->InitializeSession();
+    if (!NS_SUCCEEDED(rv)) {
+      MOZ_LOG(
+          sPDMLog, LogLevel::Debug,
+          ("Apple HW decode failure while initializing VT decoder session"));
+      return false;
+    }
+    nsAutoCString failureReason;
+    // IsHardwareAccelerated appears to return invalid results for H.264 so
+    // we assume that the earlier VTIsHardwareDecodeSupported call is correct.
+    // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1716196#c7
+    bool hwSupport = decoder->IsHardwareAccelerated(failureReason) ||
+                     aCodec == MediaCodec::H264;
+    if (!hwSupport) {
+      MOZ_LOG(sPDMLog, LogLevel::Debug,
+              ("Apple HW decode failure: '%s'", failureReason.BeginReading()));
+    }
+    decoder->Shutdown();
+    return hwSupport;
   }
   return false;
 }
