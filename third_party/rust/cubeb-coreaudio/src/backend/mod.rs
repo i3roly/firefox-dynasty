@@ -72,6 +72,7 @@ const VPIO_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 const MACOS_KERNEL_MAJOR_VERSION_MONTEREY: u32 = 21;
 const MACOS_KERNEL_MAJOR_VERSION_MAVERICKS: u32 = 13;
+const MACOS_KERNEL_MAJOR_VERSION_LION: u32 = 11;
 
 #[derive(Debug, PartialOrd, PartialEq)]
 enum ParseMacOSKernelVersionError {
@@ -1023,11 +1024,13 @@ extern "C" fn audiounit_property_listener_callback(
     {
         let callback = stm.device_changed_callback.lock().unwrap();
         if let Some(device_changed_callback) = *callback {
+            cubeb_log!("Calling device changed callback");
             unsafe {
                 device_changed_callback(stm.user_ptr);
             }
         }
     }
+    cubeb_log!("Reinitializing stream with new device because of device change, async");
     stm.reinit_async();
 
     NO_ERR
@@ -2629,7 +2632,11 @@ impl AudioUnitContext {
 
 impl ContextOps for AudioUnitContext {
     fn init(_context_name: Option<&CStr>) -> Result<Context> {
-        set_notification_runloop();
+        if macos_kernel_major_version() != Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+            //the solution for now is to avoid this call for LION systems until
+            //we can figure out something else. using the old backend isn't acceptable.
+            set_notification_runloop();
+        }
         let mut ctx = Box::new(AudioUnitContext::new());
         let queue_label = format!("{}.context.{:p}", DISPATCH_QUEUE_LABEL, ctx.as_ref());
         let shared_vp_queue = Queue::new(
@@ -3151,7 +3158,7 @@ impl<'ctx> CoreStreamData<'ctx> {
         stm.queue.debug_assert_is_current();
     }
 
-    fn start_audiounits(&self) -> Result<()> {
+    fn start_audiounits(&mut self) -> Result<()> {
         self.debug_assert_is_on_stream_queue();
         // Only allowed to be called after the stream is initialized
         // and before the stream is destroyed.
@@ -3181,6 +3188,7 @@ impl<'ctx> CoreStreamData<'ctx> {
         if !self.output_unit.is_null() {
             start_audiounit(self.output_unit)?;
         }
+        self.units_running = true;
         Ok(())
     }
 
@@ -3311,6 +3319,7 @@ impl<'ctx> CoreStreamData<'ctx> {
                 .map(|id| log_device_and_get_model_uid(id, DeviceType::INPUT))
                 .unwrap_or_default(),
             out_id
+                .or_else(|| get_default_device(DeviceType::OUTPUT))
                 .map(|id| log_device_and_get_model_uid(id, DeviceType::OUTPUT))
                 .unwrap_or_default(),
         );
@@ -3775,7 +3784,16 @@ impl<'ctx> CoreStreamData<'ctx> {
             let r = audio_unit_get_property(
                 self.output_unit,
                 kAudioUnitProperty_StreamFormat,
-                kAudioUnitScope_Input,
+                if using_voice_processing_unit {
+                    // With a VPIO unit the output scope includes all channels in the hw.
+                    // The VPIO unit however is only MONO which the input scope reflects.
+                    kAudioUnitScope_Input
+                } else {
+                    // With a HAL unit the output scope for the output bus returns the number of
+                    // output channels of the hw, as we want. The input scope seems limited to
+                    // two channels.
+                    kAudioUnitScope_Output
+                },
                 AU_OUT_BUS,
                 &mut output_hw_desc,
                 &mut size,
@@ -3802,13 +3820,44 @@ impl<'ctx> CoreStreamData<'ctx> {
                 return Err(Error::error());
             }
 
+            // Simple case of stereo output, map to the stereo pair (that might not be the first
+            // two channels). Fall back to regular mixing if this fails.
+            let mut maybe_need_mixer = true;
+            if self.output_stream_params.channels() == 2
+                && self.output_stream_params.layout() == ChannelLayout::STEREO
+            {
+                let layout = AudioChannelLayout {
+                    mChannelLayoutTag: kAudioChannelLayoutTag_Stereo,
+                    ..Default::default()
+                };
+                let r = audio_unit_set_property(
+                    self.output_unit,
+                    kAudioUnitProperty_AudioChannelLayout,
+                    kAudioUnitScope_Input,
+                    AU_OUT_BUS,
+                    &layout,
+                    mem::size_of::<AudioChannelLayout>(),
+                );
+                if r != NO_ERR {
+                    cubeb_log!(
+                        "AudioUnitSetProperty/output/kAudioUnitProperty_AudioChannelLayout rv={}",
+                        r
+                    );
+                }
+                maybe_need_mixer = r != NO_ERR;
+            }
+            
             // Notice: when we are using aggregate device, the output_hw_desc.mChannelsPerFrame is
             // the total of all the output channel count of the devices added in the aggregate device.
             // Due to our aggregate device settings, the data recorded by the input device's output
             // channels will be appended at the end of the raw data given by the output callback.
             let params = unsafe {
                 let mut p = *self.output_stream_params.as_ptr();
-                p.channels = output_hw_desc.mChannelsPerFrame;
+                p.channels = if maybe_need_mixer {
+                    output_hw_desc.mChannelsPerFrame
+                } else {
+                    self.output_stream_params.channels()
+                };
                 if using_voice_processing_unit {
                     // VPIO will always use the sample rate of the input hw for both input and output,
                     // as reported to us. (We can override it but we cannot improve quality this way).
@@ -3862,32 +3911,6 @@ impl<'ctx> CoreStreamData<'ctx> {
                 device_layout
             );
 
-            // Simple case of stereo output, map to the stereo pair (that might not be the first
-            // two channels). Fall back to regular mixing if this fails.
-            let mut maybe_need_mixer = true;
-            if self.output_stream_params.channels() == 2
-                && self.output_stream_params.layout() == ChannelLayout::STEREO
-            {
-                let layout = AudioChannelLayout {
-                    mChannelLayoutTag: kAudioChannelLayoutTag_Stereo,
-                    ..Default::default()
-                };
-                let r = audio_unit_set_property(
-                    self.output_unit,
-                    kAudioUnitProperty_AudioChannelLayout,
-                    kAudioUnitScope_Input,
-                    AU_OUT_BUS,
-                    &layout,
-                    mem::size_of::<AudioChannelLayout>(),
-                );
-                if r != NO_ERR {
-                    cubeb_log!(
-                        "AudioUnitSetProperty/output/kAudioUnitProperty_AudioChannelLayout rv={}",
-                        r
-                    );
-                }
-                maybe_need_mixer = r != NO_ERR;
-            }
 
             if maybe_need_mixer {
                 // The mixer will be set up when
@@ -4572,6 +4595,7 @@ struct AudioUnitStream<'ctx> {
     stopped: AtomicBool,
     draining: AtomicBool,
     reinit_pending: AtomicBool,
+    delayed_reinit: bool,
     destroy_pending: AtomicBool,
     // Latency requested by the user.
     latency_frames: u32,
@@ -4619,6 +4643,7 @@ impl<'ctx> AudioUnitStream<'ctx> {
             stopped: AtomicBool::new(true),
             draining: AtomicBool::new(false),
             reinit_pending: AtomicBool::new(false),
+            delayed_reinit: false,
             destroy_pending: AtomicBool::new(false),
             latency_frames,
             output_device_latency_frames: AtomicU32::new(0),
@@ -4678,7 +4703,8 @@ impl<'ctx> AudioUnitStream<'ctx> {
         }
 
         if self.stopped.load(Ordering::SeqCst) {
-            // Something stopped the stream, we must not reinit.
+            // Something stopped the stream, reinit on next start
+            self.delayed_reinit = true;
             return Ok(());
         }
 
@@ -4702,6 +4728,7 @@ impl<'ctx> AudioUnitStream<'ctx> {
                 .flags
                 .contains(device_flags::DEV_SELECTED_DEFAULT)
         {
+            cubeb_log!("Using new default output device");
             self.core_stream_data.output_device =
                 match create_device_info(kAudioObjectUnknown, DeviceType::OUTPUT) {
                     None => {
@@ -4720,6 +4747,7 @@ impl<'ctx> AudioUnitStream<'ctx> {
                 .flags
                 .contains(device_flags::DEV_SELECTED_DEFAULT)
         {
+            cubeb_log!("Using new default input device");
             self.core_stream_data.input_device =
                 match create_device_info(kAudioObjectUnknown, DeviceType::INPUT) {
                     None => {
@@ -4730,6 +4758,7 @@ impl<'ctx> AudioUnitStream<'ctx> {
                 }
         }
 
+        cubeb_log!("Reinit: setup");
         self.core_stream_data
             .setup(&mut self.context.shared_voice_processing_unit)
             .map_err(|e| {
@@ -4751,7 +4780,6 @@ impl<'ctx> AudioUnitStream<'ctx> {
                 e
             })?;
         }
-
         Ok(())
     }
 
@@ -4769,6 +4797,7 @@ impl<'ctx> AudioUnitStream<'ctx> {
         // Use a new thread, through the queue, to avoid deadlock when calling
         // Get/SetProperties method from inside notify callback
         queue.run_async(move || {
+            cubeb_log!("Reinitialization of stream");
             let stm_ptr = self as *const AudioUnitStream;
             if self.destroy_pending.load(Ordering::SeqCst) {
                 cubeb_log!(
@@ -4865,24 +4894,55 @@ impl<'ctx> Drop for AudioUnitStream<'ctx> {
 
 impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
     fn start(&mut self) -> Result<()> {
+        let was_stopped = self.stopped.load(Ordering::SeqCst);
+        let was_draining = self.draining.load(Ordering::SeqCst);
         self.stopped.store(false, Ordering::SeqCst);
         self.draining.store(false, Ordering::SeqCst);
-        // Execute start in serial queue to avoid racing with destroy or reinit.
-        let mut result = Err(Error::error());
-        let started = &mut result;
-        let stream = &self;
-        self.queue.run_sync(move || {
-            *started = stream.core_stream_data.start_audiounits();
-        });
 
-        result?;
+
+        //self.queue
+            //.clone()
+            //.run_sync(|| -> Result<()> {
+                // Need reinitialization: device was changed when paused. It will be started after
+                // reinit because self.stopped is false.
+                if self.delayed_reinit {
+                    let rv = self.reinit().map_err(|e| {
+                        cubeb_log!(
+                            "({:p}) delayed reinit during start failed.",
+                            self.core_stream_data.stm_ptr
+                        );
+                    e
+                    });
+                    // In case of failure, restore the state
+                    if rv.is_err() {
+                        self.stopped.store(was_stopped, Ordering::SeqCst);
+                        self.draining.store(was_draining, Ordering::SeqCst);
+                        return rv;
+                    }
+                    self.delayed_reinit = false;
+                    return Ok(());
+                } else {
+                    // Execute start in serial queue to avoid racing with destroy or reinit.
+                    let rv = self.core_stream_data.start_audiounits();
+                    if rv.is_err() {
+                        cubeb_log!("({:p}) start failed.", self.core_stream_data.stm_ptr);
+                        self.stopped.store(was_stopped, Ordering::SeqCst);
+                        self.draining.store(was_draining, Ordering::SeqCst);
+                        return rv;
+                    }
+                    return Ok(());
+                }
+            //})
+            //.unwrap()?;
         self.notify_state_changed(State::Started);
-
+       
         cubeb_log!(
             "Cubeb stream ({:p}) started successfully.",
             self as *const AudioUnitStream
         );
         Ok(())
+
+
     }
     fn stop(&mut self) -> Result<()> {
         if !self.stopped.swap(true, Ordering::SeqCst) {
