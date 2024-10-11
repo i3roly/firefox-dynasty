@@ -4,7 +4,6 @@
 // accompanying file LICENSE for details.
 #![allow(unused_assignments)]
 #![allow(unused_must_use)]
-
 extern crate coreaudio_sys_utils;
 extern crate libc;
 extern crate ringbuf;
@@ -57,7 +56,6 @@ const NO_ERR: OSStatus = 0;
 const AU_OUT_BUS: AudioUnitElement = 0;
 const AU_IN_BUS: AudioUnitElement = 1;
 
-const DISPATCH_QUEUE_LABEL: &str = "org.mozilla.cubeb";
 const PRIVATE_AGGREGATE_DEVICE_NAME: &str = "CubebAggregateDevice";
 const VOICEPROCESSING_AGGREGATE_DEVICE_NAME: &str = "VPAUAggregateAudioDevice";
 
@@ -72,9 +70,11 @@ const VPIO_IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
 const MACOS_KERNEL_MAJOR_VERSION_MONTEREY: u32 = 21;
 const MACOS_KERNEL_MAJOR_VERSION_MAVERICKS: u32 = 13;
+const MACOS_KERNEL_MAJOR_VERSION_SIERRA: u32 = 16;
 const MACOS_KERNEL_MAJOR_VERSION_LION: u32 = 11;
 
 #[derive(Debug, PartialOrd, PartialEq)]
+
 enum ParseMacOSKernelVersionError {
     SysCtl,
     Malformed,
@@ -108,7 +108,6 @@ bitflags! {
         const DEV_SELECTED_DEFAULT  = 0b0000_0100; // User selected to use the system default device
     }
 }
-
 
 #[cfg(feature = "audio-dump")]
 fn dump_audio(stream: cubeb_audio_dump_stream_t, audio_samples: *mut c_void, count: u32) {
@@ -230,7 +229,7 @@ fn set_notification_runloop() {
 
 fn create_device_info(devid: AudioDeviceID, devtype: DeviceType) -> Option<device_info> {
     assert_ne!(devid, kAudioObjectSystemObject);
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
 
     let mut flags = match devtype {
         DeviceType::INPUT => device_flags::DEV_INPUT,
@@ -1030,6 +1029,7 @@ extern "C" fn audiounit_property_listener_callback(
             }
         }
     }
+
     cubeb_log!("Reinitializing stream with new device because of device change, async");
     stm.reinit_async();
 
@@ -1037,7 +1037,7 @@ extern "C" fn audiounit_property_listener_callback(
 }
 
 fn get_default_device(devtype: DeviceType) -> Option<AudioObjectID> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     match get_default_device_id(devtype) {
         Err(e) => {
             cubeb_log!("Cannot get default {:?} device. Error: {}", devtype, e);
@@ -1052,7 +1052,7 @@ fn get_default_device(devtype: DeviceType) -> Option<AudioObjectID> {
 }
 
 fn get_default_device_id(devtype: DeviceType) -> std::result::Result<AudioObjectID, OSStatus> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     let address = get_property_address(
         match devtype {
             DeviceType::INPUT => Property::HardwareDefaultInputDevice,
@@ -1100,7 +1100,7 @@ fn audiounit_convert_channel_layout(layout: &AudioChannelLayout) -> Result<Vec<m
 }
 
 fn audiounit_get_preferred_channel_layout(output_unit: AudioUnit) -> Result<Vec<mixer::Channel>> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     let mut rv = NO_ERR;
     let mut size: usize = 0;
     rv = audio_unit_get_property_info(
@@ -1143,7 +1143,7 @@ fn audiounit_get_preferred_channel_layout(output_unit: AudioUnit) -> Result<Vec<
 // This is for output AudioUnit only. Calling this by input-only AudioUnit is prone
 // to crash intermittently.
 fn audiounit_get_current_channel_layout(output_unit: AudioUnit) -> Result<Vec<mixer::Channel>> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     let mut rv = NO_ERR;
     let mut size: usize = 0;
     rv = audio_unit_get_property_info(
@@ -1184,7 +1184,7 @@ fn audiounit_get_current_channel_layout(output_unit: AudioUnit) -> Result<Vec<mi
 }
 
 fn get_channel_layout(output_unit: AudioUnit) -> Result<Vec<mixer::Channel>> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     audiounit_get_current_channel_layout(output_unit)
         .or_else(|_| {
             // The kAudioUnitProperty_AudioChannelLayout property isn't known before
@@ -1224,7 +1224,7 @@ fn create_audiounit(device: &device_info) -> Result<AudioUnit> {
     assert!(!device
         .flags
         .contains(device_flags::DEV_INPUT | device_flags::DEV_OUTPUT));
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
 
     let unit = create_blank_audiounit()?;
     let mut bus = AU_OUT_BUS;
@@ -1277,7 +1277,7 @@ fn get_voiceprocessing_audiounit(
     in_device: &device_info,
     out_device: &device_info,
 ) -> Result<OwningHandle<VoiceProcessingUnit>> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     assert!(in_device.flags.contains(device_flags::DEV_INPUT));
     assert!(!in_device.flags.contains(device_flags::DEV_OUTPUT));
     assert!(!out_device.flags.contains(device_flags::DEV_INPUT));
@@ -1427,9 +1427,9 @@ fn create_voiceprocessing_audiounit() -> Result<VoiceProcessingUnit> {
                             "Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
                             id,
                             r
-                    );
+                        );
                 }
-            } 
+            }
         }
     };
 
@@ -1629,7 +1629,7 @@ fn get_channel_count(
     devtype: DeviceType,
 ) -> std::result::Result<u32, OSStatus> {
     assert_ne!(devid, kAudioObjectUnknown);
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
 
     let devstreams = get_device_streams(devid, devtype)?;
     let mut count: u32 = 0;
@@ -1651,7 +1651,7 @@ fn get_range_of_sample_rates(
     devid: AudioObjectID,
     devtype: DeviceType,
 ) -> std::result::Result<(f64, f64), String> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     let result = get_ranges_of_device_sample_rate(devid, devtype);
     if let Err(e) = result {
         return Err(format!("status {}", e));
@@ -1673,7 +1673,7 @@ fn get_range_of_sample_rates(
 }
 
 fn get_fixed_latency(devid: AudioObjectID, devtype: DeviceType) -> u32 {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     let device_latency = match get_device_latency(devid, devtype) {
         Ok(latency) => latency,
         Err(e) => {
@@ -1698,14 +1698,13 @@ fn get_fixed_latency(devid: AudioObjectID, devtype: DeviceType) -> u32 {
         } else {
             get_stream_latency(devstreams[0].stream)
         }
-    }).map_err(|e| {
+    }).inspect_err(|e| {
         cubeb_log!(
             "Cannot get the stream, or the latency of the first stream on device {} in {:?} scope. Error: {}",
             devid,
             devtype,
             e
         );
-        e
     }).unwrap_or(0); // default stream latency
 
     device_latency + stream_latency
@@ -1716,7 +1715,7 @@ fn get_device_group_id(
     id: AudioDeviceID,
     devtype: DeviceType,
 ) -> std::result::Result<CString, OSStatus> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     match get_device_transport_type(id, devtype) {
         Ok(kAudioDeviceTransportTypeBuiltIn) => {
             cubeb_log!(
@@ -1752,7 +1751,7 @@ fn get_device_group_id(
 }
 
 fn get_custom_group_id(id: AudioDeviceID, devtype: DeviceType) -> Option<CString> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
 
     const IMIC: u32 = 0x696D_6963; // "imic" (internal microphone)
     const ISPK: u32 = 0x6973_706B; // "ispk" (internal speaker)
@@ -1795,12 +1794,12 @@ fn get_device_label(
     id: AudioDeviceID,
     devtype: DeviceType,
 ) -> std::result::Result<StringRef, OSStatus> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     get_device_source_name(id, devtype).or_else(|_| get_device_name(id, devtype))
 }
 
 fn get_device_global_uid(id: AudioDeviceID) -> std::result::Result<StringRef, OSStatus> {
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     get_device_uid(id, DeviceType::INPUT | DeviceType::OUTPUT)
 }
 
@@ -1984,7 +1983,7 @@ fn destroy_cubeb_device_info(device: &mut ffi::cubeb_device_info) {
 
 fn audiounit_get_devices_of_type(devtype: DeviceType) -> Vec<AudioObjectID> {
     assert!(devtype.intersects(DeviceType::INPUT | DeviceType::OUTPUT));
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
 
     let mut devices = get_devices();
 
@@ -2290,7 +2289,7 @@ impl<T: Send> SharedStorage<T> {
     }
 
     fn clear(&self) {
-        //debug_assert_running_serially();
+        debug_assert_running_serially();
         let mut guard = self.storage.lock().unwrap();
         SharedStorage::clear_locked(&mut guard);
     }
@@ -2318,7 +2317,7 @@ impl<T: Send> SharedStorage<T> {
             generation
         );
         let storage = storage.clone();
-        //queue.run_sync(move || {
+        queue.run_after(Instant::now() + storage.idle_timeout, move || {
             let mut guard = storage.storage.lock().unwrap();
             if generation != guard.generation {
                 cubeb_log!(
@@ -2329,7 +2328,7 @@ impl<T: Send> SharedStorage<T> {
                 return;
             }
             SharedStorage::clear_locked(&mut guard);
-        //});
+        });
     }
 }
 
@@ -2433,7 +2432,7 @@ impl SharedVoiceProcessingUnitManager {
     // Take an already existing, shared, vpio unit, if one is available.
     #[cfg(test)]
     fn take(&mut self) -> Result<OwningHandle<VoiceProcessingUnit>> {
-        //debug_assert_running_serially();
+        debug_assert_running_serially();
         let mut guard = self.sync_storage.lock().unwrap();
         self.ensure_storage_locked(&mut guard);
         let storage = guard.as_mut().unwrap();
@@ -2443,7 +2442,7 @@ impl SharedVoiceProcessingUnitManager {
 
     // Take an already existing, shared, vpio unit, or create one if none are available.
     fn take_or_create(&mut self) -> Result<OwningHandle<VoiceProcessingUnit>> {
-        //debug_assert_running_serially();
+        debug_assert_running_serially();
         let mut guard = self.sync_storage.lock().unwrap();
         self.ensure_storage_locked(&mut guard);
         let storage = guard.as_mut().unwrap();
@@ -2457,7 +2456,7 @@ unsafe impl Sync for SharedVoiceProcessingUnitManager {}
 
 impl Drop for SharedVoiceProcessingUnitManager {
     fn drop(&mut self) {
-        //debug_assert_not_running_serially();
+        debug_assert_not_running_serially();
         self.queue.run_final(|| {
             let mut guard = self.sync_storage.lock().unwrap();
             if guard.is_none() {
@@ -2489,7 +2488,13 @@ pub struct AudioUnitContext {
 
 impl AudioUnitContext {
     fn new() -> Self {
-        let serial_queue = Queue::new(DISPATCH_QUEUE_LABEL);
+        let queue_label = format!("{}.context", DISPATCH_QUEUE_LABEL);
+        let serial_queue =
+            Queue::new_with_target(queue_label.as_str(), get_serial_queue_singleton());
+        let shared_vp_queue = Queue::new_with_target(
+            format!("{}.context.shared_vpio", DISPATCH_QUEUE_LABEL).as_str(),
+            &serial_queue,
+        );
         let host_time_to_ns_ratio = {
             let mut timebase_info = mach_timebase_info { numer: 0, denom: 0 };
             unsafe {
@@ -2499,11 +2504,11 @@ impl AudioUnitContext {
         };
         Self {
             _ops: &OPS as *const _,
-            serial_queue: Queue::new(DISPATCH_QUEUE_LABEL),
+            serial_queue,
             latency_controller: Mutex::new(LatencyController::default()),
             devices: Mutex::new(SharedDevices::default()),
             host_time_to_ns_ratio,
-            shared_voice_processing_unit: SharedVoiceProcessingUnitManager::new(serial_queue),
+            shared_voice_processing_unit: SharedVoiceProcessingUnitManager::new(shared_vp_queue),
         }
     }
 
@@ -2632,15 +2637,14 @@ impl AudioUnitContext {
 
 impl ContextOps for AudioUnitContext {
     fn init(_context_name: Option<&CStr>) -> Result<Context> {
-        if macos_kernel_major_version() != Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
-            //the solution for now is to avoid this call for LION systems until
-            //we can figure out something else. using the old backend isn't acceptable.
-            set_notification_runloop();
-        }
+        run_serially(set_notification_runloop);
         let mut ctx = Box::new(AudioUnitContext::new());
         let queue_label = format!("{}.context.{:p}", DISPATCH_QUEUE_LABEL, ctx.as_ref());
-        let shared_vp_queue = Queue::new(
-            format!("{}.shared_vpio", queue_label).as_str()
+        ctx.serial_queue =
+            Queue::new_with_target(queue_label.as_str(), get_serial_queue_singleton());
+        let shared_vp_queue = Queue::new_with_target(
+            format!("{}.shared_vpio", queue_label).as_str(),
+            &ctx.serial_queue,
         );
         ctx.shared_voice_processing_unit = SharedVoiceProcessingUnitManager::new(shared_vp_queue);
         Ok(unsafe { Context::from_ptr(Box::into_raw(ctx) as *mut _) })
@@ -2655,8 +2659,8 @@ impl ContextOps for AudioUnitContext {
     }
     #[cfg(not(target_os = "ios"))]
     fn max_channel_count(&mut self) -> Result<u32> {
-        //self.serial_queue
-         //   .run_sync(|| {
+        self.serial_queue
+            .run_sync(|| {
                 let device = match get_default_device(DeviceType::OUTPUT) {
                     None => {
                         cubeb_log!("Could not get default output device");
@@ -2668,8 +2672,8 @@ impl ContextOps for AudioUnitContext {
                     cubeb_log!("Cannot get the channel count. Error: {}", e);
                     Error::error()
                 })
-           // })
-            //.unwrap()
+            })
+            .unwrap()
     }
     #[cfg(target_os = "ios")]
     fn min_latency(&mut self, _params: StreamParams) -> Result<u32> {
@@ -2677,8 +2681,8 @@ impl ContextOps for AudioUnitContext {
     }
     #[cfg(not(target_os = "ios"))]
     fn min_latency(&mut self, _params: StreamParams) -> Result<u32> {
-        //self.serial_queue
-            //.run_sync(|| {
+        self.serial_queue
+            .run_sync(|| {
                 let device = match get_default_device(DeviceType::OUTPUT) {
                     None => {
                         cubeb_log!("Could not get default output device");
@@ -2694,8 +2698,8 @@ impl ContextOps for AudioUnitContext {
                     })?;
 
                 Ok(cmp::max(range.mMinimum as u32, SAFE_MIN_LATENCY_FRAMES))
-            //})
-            //..unwrap()
+            })
+            .unwrap()
     }
     #[cfg(target_os = "ios")]
     fn preferred_sample_rate(&mut self) -> Result<u32> {
@@ -2703,8 +2707,8 @@ impl ContextOps for AudioUnitContext {
     }
     #[cfg(not(target_os = "ios"))]
     fn preferred_sample_rate(&mut self) -> Result<u32> {
-        //self.serial_queue
-        //    .run_sync(|| {
+        self.serial_queue
+            .run_sync(|| {
                 let device = match get_default_device(DeviceType::OUTPUT) {
                     None => {
                         cubeb_log!("Could not get default output device");
@@ -2720,8 +2724,8 @@ impl ContextOps for AudioUnitContext {
                     Error::error()
                 })?;
                 Ok(rate as u32)
-          //  })
-          //  .unwrap()
+            })
+            .unwrap()
     }
     fn supported_input_processing_params(&mut self) -> Result<InputProcessingParams> {
         Ok(InputProcessingParams::ECHO_CANCELLATION
@@ -2733,9 +2737,9 @@ impl ContextOps for AudioUnitContext {
         devtype: DeviceType,
         collection: &DeviceCollectionRef,
     ) -> Result<()> {
-       // let device_infos = self
-       //     .serial_queue
-       //     .run_sync(|| {
+        let device_infos = self
+            .serial_queue
+            .run_sync(|| {
                 let mut dev_types = vec![DeviceType::INPUT, DeviceType::OUTPUT];
                 dev_types.retain(|&dt| devtype.contains(dt));
                 let device_ids: Vec<(DeviceType, Vec<AudioObjectID>)> = dev_types
@@ -2751,9 +2755,9 @@ impl ContextOps for AudioUnitContext {
                         }
                     }
                 }
-         //       device_infos
-           // })
-           // .unwrap();
+                device_infos
+            })
+            .unwrap();
         let (ptr, len) = if device_infos.is_empty() {
             (ptr::null_mut(), 0)
         } else {
@@ -2813,10 +2817,10 @@ impl ContextOps for AudioUnitContext {
         }
 
         let in_stm_settings = if let Some(params) = input_stream_params {
-            let in_device = match /*self
+            let in_device = match self
                 .serial_queue
-                .run_sync(||*/ create_device_info(input_device as AudioDeviceID, DeviceType::INPUT)
-                //.unwrap()
+                .run_sync(|| create_device_info(input_device as AudioDeviceID, DeviceType::INPUT))
+                .unwrap()
             {
                 None => {
                     cubeb_log!("Fail to create device info for input");
@@ -2831,10 +2835,10 @@ impl ContextOps for AudioUnitContext {
         };
 
         let out_stm_settings = if let Some(params) = output_stream_params {
-            let out_device = match /*self
+            let out_device = match self
                 .serial_queue
-                .run_sync(|| */create_device_info(output_device as AudioDeviceID, DeviceType::OUTPUT)
-                //.unwrap()
+                .run_sync(|| create_device_info(output_device as AudioDeviceID, DeviceType::OUTPUT))
+                .unwrap()
             {
                 None => {
                     cubeb_log!("Fail to create device info for output");
@@ -2873,15 +2877,20 @@ impl ContextOps for AudioUnitContext {
             DISPATCH_QUEUE_LABEL,
             boxed_stream.as_ref()
         );
-        boxed_stream.queue = Queue::new(queue_label.as_str());
+        boxed_stream.queue = Queue::new_with_target(queue_label.as_str(), &boxed_stream.queue);
 
         boxed_stream.core_stream_data =
             CoreStreamData::new(boxed_stream.as_ref(), in_stm_settings, out_stm_settings);
 
-        let mut result = Ok(());
-        boxed_stream.queue.clone().run_sync(|| {
-            result = boxed_stream.core_stream_data.setup(&mut boxed_stream.context.shared_voice_processing_unit);
-        });
+        let result = boxed_stream
+            .queue
+            .clone()
+            .run_sync(|| {
+                boxed_stream
+                    .core_stream_data
+                    .setup(&mut boxed_stream.context.shared_voice_processing_unit)
+            })
+            .unwrap();
         if let Err(r) = result {
             cubeb_log!(
                 "({:p}) Could not setup the audiounit stream.",
@@ -2906,9 +2915,9 @@ impl ContextOps for AudioUnitContext {
         if devtype == DeviceType::UNKNOWN {
             return Err(Error::invalid_parameter());
         }
-        //self.serial_queue
-           // .clone()
-            //.run_sync(|| {
+        self.serial_queue
+            .clone()
+            .run_sync(|| {
                 if collection_changed_callback.is_some() {
                     self.add_devices_changed_listener(
                         devtype,
@@ -2918,8 +2927,8 @@ impl ContextOps for AudioUnitContext {
                 } else {
                     self.remove_devices_changed_listener(devtype)
                 }
-          //  })
-            //.unwrap()
+            })
+            .unwrap()
     }
 }
 
@@ -3261,13 +3270,14 @@ impl<'ctx> CoreStreamData<'ctx> {
     #[allow(non_upper_case_globals)]
     fn should_force_vpio_for_input_device(id: AudioDeviceID) -> bool {
         assert!(id != kAudioObjectUnknown);
-        //debug_assert_running_serially();
+        debug_assert_running_serially();
         match get_device_transport_type(id, DeviceType::INPUT) {
             Ok(kAudioDeviceTransportTypeBuiltIn) => {
                 cubeb_log!(
                     "Input device {} is on the VPIO force list because it is built in, \
                      and its volume is known to be very low without VPIO whenever VPIO \
-                     is hooked up to it elsewhere."
+                     is hooked up to it elsewhere.",
+                    id
                 );
                 true
             }
@@ -3290,7 +3300,7 @@ impl<'ctx> CoreStreamData<'ctx> {
                 if devtype == DeviceType::INPUT {
                     "Input"
                 } else {
-                    //debug_assert_eq!(devtype, DeviceType::OUTPUT);
+                    debug_assert_eq!(devtype, DeviceType::OUTPUT);
                     "Output"
                 },
                 get_device_uid(id, devtype).map(|s| s.into_string()).unwrap_or_default(),
@@ -3319,7 +3329,6 @@ impl<'ctx> CoreStreamData<'ctx> {
                 .map(|id| log_device_and_get_model_uid(id, DeviceType::INPUT))
                 .unwrap_or_default(),
             out_id
-                .or_else(|| get_default_device(DeviceType::OUTPUT))
                 .map(|id| log_device_and_get_model_uid(id, DeviceType::OUTPUT))
                 .unwrap_or_default(),
         );
@@ -3347,7 +3356,8 @@ impl<'ctx> CoreStreamData<'ctx> {
                 .contains(StreamPrefs::VOICE)
                 || CoreStreamData::should_force_vpio_for_input_device(self.input_device.id))
             && !self.should_block_vpio_for_device_pair(&self.input_device, &self.output_device)
-            && macos_kernel_major_version() != Ok(MACOS_KERNEL_MAJOR_VERSION_MONTEREY);
+            && (macos_kernel_major_version() != Ok(MACOS_KERNEL_MAJOR_VERSION_MONTEREY)
+                && macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_SIERRA));
 
         let should_use_aggregate_device = {
             // It's impossible to create an aggregate device from an aggregate device, and it's
@@ -3620,12 +3630,11 @@ impl<'ctx> CoreStreamData<'ctx> {
                 StreamParams::from(p)
             };
 
-            self.input_dev_desc = create_stream_description(&params).map_err(|e| {
+            self.input_dev_desc = create_stream_description(&params).inspect_err(|_| {
                 cubeb_log!(
                     "({:p}) Setting format description for input failed.",
                     self.stm_ptr
                 );
-                e
             })?;
 
             #[cfg(feature = "audio-dump")]
@@ -3866,12 +3875,11 @@ impl<'ctx> CoreStreamData<'ctx> {
                 StreamParams::from(p)
             };
 
-            self.output_dev_desc = create_stream_description(&params).map_err(|e| {
+            self.output_dev_desc = create_stream_description(&params).inspect_err(|_| {
                 cubeb_log!(
                     "({:p}) Could not initialize the audio stream description.",
                     self.stm_ptr
                 );
-                e
             })?;
 
             #[cfg(feature = "audio-dump")]
@@ -3896,12 +3904,11 @@ impl<'ctx> CoreStreamData<'ctx> {
 
             let device_layout = self
                 .get_output_channel_layout()
-                .map_err(|e| {
+                .inspect_err(|_| {
                     cubeb_log!(
                         "({:p}) Could not get any channel layout. Defaulting to no channels.",
                         self.stm_ptr
                     );
-                    e
                 })
                 .unwrap_or_default();
 
@@ -4139,16 +4146,14 @@ impl<'ctx> CoreStreamData<'ctx> {
                     );
                 }
                 Some(id) => {
-                    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
-                        let r = audio_device_duck(id, 1.0, ptr::null_mut(), 0.5);
-                        if r != NO_ERR {
-                            cubeb_log!(
-                                "({:p}) Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
-                                self.stm_ptr,
-                                id,
-                                r
-                            );
-                        }
+                    let r = audio_device_duck(id, 1.0, ptr::null_mut(), 0.5);
+                    if r != NO_ERR {
+                        cubeb_log!(
+                            "({:p}) Failed to undo ducking of voiceprocessing on output device {}. Proceeding... Error: {}",
+                            self.stm_ptr,
+                            id,
+                            r
+                        );
                     }
                 }
             };
@@ -4760,9 +4765,8 @@ impl<'ctx> AudioUnitStream<'ctx> {
         cubeb_log!("Reinit: setup");
         self.core_stream_data
             .setup(&mut self.context.shared_voice_processing_unit)
-            .map_err(|e| {
+            .inspect_err(|_| {
                 cubeb_log!("({:p}) Setup failed.", self.core_stream_data.stm_ptr);
-                e
             })?;
 
         if let Ok(volume) = vol_rv {
@@ -4771,14 +4775,14 @@ impl<'ctx> AudioUnitStream<'ctx> {
 
         // If the stream was running, start it again.
         if !self.stopped.load(Ordering::SeqCst) {
-            self.core_stream_data.start_audiounits().map_err(|e| {
+            self.core_stream_data.start_audiounits().inspect_err(|_| {
                 cubeb_log!(
                     "({:p}) Start audiounit failed.",
                     self.core_stream_data.stm_ptr
                 );
-                e
             })?;
         }
+
         Ok(())
     }
 
@@ -4898,19 +4902,17 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
         self.stopped.store(false, Ordering::SeqCst);
         self.draining.store(false, Ordering::SeqCst);
 
-
-        //self.queue
-            //.clone()
-            //.run_sync(|| -> Result<()> {
+        self.queue
+            .clone()
+            .run_sync(|| -> Result<()> {
                 // Need reinitialization: device was changed when paused. It will be started after
                 // reinit because self.stopped is false.
                 if self.delayed_reinit {
-                    let rv = self.reinit().map_err(|e| {
+                    let rv = self.reinit().inspect_err(|_| {
                         cubeb_log!(
                             "({:p}) delayed reinit during start failed.",
                             self.core_stream_data.stm_ptr
                         );
-                    e
                     });
                     // In case of failure, restore the state
                     if rv.is_err() {
@@ -4919,7 +4921,7 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
                         return rv;
                     }
                     self.delayed_reinit = false;
-                    return Ok(());
+                    Ok(())
                 } else {
                     // Execute start in serial queue to avoid racing with destroy or reinit.
                     let rv = self.core_stream_data.start_audiounits();
@@ -4929,19 +4931,18 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
                         self.draining.store(was_draining, Ordering::SeqCst);
                         return rv;
                     }
-                    return Ok(());
+                    Ok(())
                 }
-            //})
-            //.unwrap()?;
+            })
+            .unwrap()?;
+
         self.notify_state_changed(State::Started);
-       
+
         cubeb_log!(
             "Cubeb stream ({:p}) started successfully.",
             self as *const AudioUnitStream
         );
         Ok(())
-
-
     }
     fn stop(&mut self) -> Result<()> {
         if !self.stopped.swap(true, Ordering::SeqCst) {
@@ -5026,12 +5027,10 @@ impl<'ctx> StreamOps for AudioUnitStream<'ctx> {
     }
     fn set_volume(&mut self, volume: f32) -> Result<()> {
         // Execute set_volume in serial queue to avoid racing with destroy or reinit.
-        let mut result = Err(Error::error());
-        let set = &mut result;
-        let stream = &self;
-        self.queue.run_sync(move || {
-            *set = set_volume(stream.core_stream_data.output_unit, volume);
-        });
+        let result = self
+            .queue
+            .run_sync(|| set_volume(self.core_stream_data.output_unit, volume))
+            .unwrap();
 
         result?;
 
