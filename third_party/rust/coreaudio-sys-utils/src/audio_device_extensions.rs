@@ -19,7 +19,6 @@ pub fn audio_device_duck(
     in_start_time: *const AudioTimeStamp,
     in_ramp_duration: f32,
 ) -> OSStatus {
-    // can't use this unless we rework queue, if someone wants to do that
-    //debug_assert_running_serially();
+    debug_assert_running_serially();
     unsafe { AudioDeviceDuck(in_device, in_ducked_level, in_start_time, in_ramp_duration) }
 }
