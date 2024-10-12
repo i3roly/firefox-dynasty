@@ -73,15 +73,8 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (allow sysctl-read)
   (allow file-read*
     (literal "/dev/random")
+    (literal "/dev/urandom")
     (subpath "/usr/share/icu"))
-  
-  ; for some reason <=10.9 don't like urandom
-  ; and enabling this will prevent media playback
-  ; from encrypted sources. set this to >= 10.10 for now
-  ; and move it up if it's an issue
-  (if (> macosVersion 1010)
-     (allow file-read*
-      (literal "/dev/urandom")))
 
   ; Timezone
   (allow file-read*

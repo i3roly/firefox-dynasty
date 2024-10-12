@@ -144,7 +144,10 @@ bool AppleDecoderModule::IsVideoSupported(
     const VideoInfo& aConfig,
     const CreateDecoderParams::OptionSet& aOptions) const {
   if (MP4Decoder::IsH264(aConfig.mMimeType)) {
-    return true;
+    if(__builtin_available(macOS 10.10, *))
+      return true;
+    else
+      return false;
   }
   if (AOMDecoder::IsAV1(aConfig.mMimeType)) {
     if (!sCanUseAV1Decoder ||
