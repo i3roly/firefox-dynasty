@@ -70,11 +70,7 @@ mozilla::detail::MutexImpl::MutexImpl() {
       TRY_CALL_PTHREADS(pthread_mutexattr_setpolicy_np(&attr, POLICY_KIND),
                         "mozilla::detail::MutexImpl::MutexImpl: "
                         "pthread_mutexattr_setpolicy_np failed");
-    } else if(__builtin_available(macOS 10.7, *)) { //it's '2' for 10.7->10.12
-      TRY_CALL_PTHREADS(pthread_mutexattr_setpolicy_np(&attr, (2)),
-                        "mozilla::detail::MutexImpl::MutexImpl: "
-                        "pthread_mutexattr_setpolicy_np failed");
-    }
+    } 
 #  endif
   attrp = &attr;
 #endif
