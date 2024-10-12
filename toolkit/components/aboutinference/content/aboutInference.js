@@ -15,18 +15,23 @@ ChromeUtils.defineESModuleGetters(lazy, {
   HttpInference: "chrome://global/content/ml/HttpInference.sys.mjs",
   IndexedDBCache: "chrome://global/content/ml/ModelHub.sys.mjs",
   ModelHub: "chrome://global/content/ml/ModelHub.sys.mjs",
+  getInferenceProcessInfo: "chrome://global/content/ml/Utils.sys.mjs",
 });
+
+const { EngineProcess, PipelineOptions } = ChromeUtils.importESModule(
+  "chrome://global/content/ml/EngineProcess.sys.mjs"
+);
 
 /**
  * Preferences for machine learning enablement and model hub configuration.
  */
-const ML_ENABLE = Services.prefs.getBoolPref("browser.ml.enable");
 const MODEL_HUB_ROOT_URL = Services.prefs.getStringPref(
   "browser.ml.modelHubRootUrl"
 );
 const MODEL_HUB_URL_TEMPLATE = Services.prefs.getStringPref(
   "browser.ml.modelHubUrlTemplate"
 );
+const THIRTY_SECONDS = 30 * 1000;
 
 let modelHub = null;
 let modelCache = null;
@@ -63,6 +68,7 @@ const NUM_THREADS = Array.from(
   { length: navigator.hardwareConcurrency || 4 },
   (_, i) => i + 1
 );
+let engineParent = null;
 
 /**
  * Presets for the pad
@@ -117,7 +123,18 @@ const INFERENCE_PAD_PRESETS = {
     dtype: "q8",
     device: "wasm",
   },
+  feature: {
+    inputArgs: [["This is an example sentence", "Each sentence is converted"]],
+    runOptions: { pooling: "mean", normalize: true },
+    task: "feature-extraction",
+    modelId: "Xenova/all-MiniLM-L6-v2",
+    modelRevision: "main",
+    modelHub: "hf",
+    dtype: "q8",
+    device: "wasm",
+  },
 };
+
 const PREDEFINED = Object.keys(INFERENCE_PAD_PRESETS);
 
 /**
@@ -146,7 +163,121 @@ function formatBytes(bytes) {
   return `${size[0]} ${size[1]}`;
 }
 
-let updateInterval; // Declare a variable to store the interval ID
+let updateStatusInterval = null;
+
+/**
+ * Displays engines info in a table.
+ *
+ * @async
+ */
+
+async function updateStatus() {
+  if (!engineParent) {
+    return;
+  }
+
+  let info;
+
+  // Fetch the engine status info
+  try {
+    info = await engineParent.getStatus();
+  } catch (e) {
+    engineParent = null; // let's re-create it on errors.
+    info = new Map();
+  }
+
+  // Get the container where the table will be displayed
+  let tableContainer = document.getElementById("statusTableContainer");
+
+  // Clear the container if the map is empty
+  if (info.size === 0) {
+    tableContainer.innerHTML = ""; // Clear any existing table
+    if (updateStatusInterval) {
+      clearInterval(updateStatusInterval); // Clear the interval if it exists
+      updateStatusInterval = null; // Reset the interval variable
+    }
+    return; // Exit the function early if there's no data to display
+  }
+
+  // Create the fragment for the table content
+  let fragment = document.createDocumentFragment();
+
+  // Create the table element
+  let table = document.createElement("table");
+  table.border = "1";
+
+  // Create the header of the table
+  let thead = document.createElement("thead");
+  let headerRow = document.createElement("tr");
+
+  let columns = [
+    "Engine ID",
+    "Status",
+    "Model ID",
+    "Quantization",
+    "Device",
+    "Timeout",
+  ];
+
+  columns.forEach(col => {
+    let th = document.createElement("th");
+    th.textContent = col;
+    headerRow.appendChild(th);
+  });
+
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  // Create the body of the table
+  let tbody = document.createElement("tbody");
+
+  // Iterate over the info map
+  for (let [engineId, engineInfo] of info.entries()) {
+    let row = document.createElement("tr");
+
+    // Create a cell for each piece of data
+    let engineIdCell = document.createElement("td");
+    engineIdCell.textContent = engineId;
+    row.appendChild(engineIdCell);
+
+    let statusCell = document.createElement("td");
+    statusCell.textContent = engineInfo.status;
+    row.appendChild(statusCell);
+
+    let modelIdCell = document.createElement("td");
+    modelIdCell.textContent = engineInfo.options?.modelId || "N/A";
+    row.appendChild(modelIdCell);
+
+    let dtypeCell = document.createElement("td");
+    dtypeCell.textContent = engineInfo.options?.dtype || "N/A";
+    row.appendChild(dtypeCell);
+
+    let deviceCell = document.createElement("td");
+    deviceCell.textContent = engineInfo.options?.device || "N/A";
+    row.appendChild(deviceCell);
+
+    let timeoutCell = document.createElement("td");
+    timeoutCell.textContent = engineInfo.options?.timeoutMS || "N/A";
+    row.appendChild(timeoutCell);
+
+    // Append the row to the table body
+    tbody.appendChild(row);
+  }
+
+  table.appendChild(tbody);
+  fragment.appendChild(table);
+
+  // Replace the old table with the new one
+  tableContainer.innerHTML = "";
+  tableContainer.appendChild(fragment);
+
+  // If no interval exists, set it to update the table periodically
+  if (!updateStatusInterval) {
+    updateStatusInterval = setInterval(updateStatus, 1000); // Update every second
+  }
+}
+
+let updateInterval;
 
 /**
  * Displays process information in a table. Only includes processes of type "inference".
@@ -154,8 +285,8 @@ let updateInterval; // Declare a variable to store the interval ID
  * @async
  */
 async function updateProcInfo() {
-  let info = await ChromeUtils.requestProcInfo();
-  let tableContainer = document.getElementById("runningInference");
+  let info = await lazy.getInferenceProcessInfo();
+  let tableContainer = document.getElementById("procInfoTableContainer");
   let fragment = document.createDocumentFragment();
   let table = document.createElement("table");
   table.border = "1";
@@ -171,24 +302,21 @@ async function updateProcInfo() {
   thead.appendChild(headerRow);
   table.appendChild(thead);
 
-  let foundInference = false;
+  let foundInference = "pid" in info;
   let tbody = document.createElement("tbody");
 
-  for (const child of info.children) {
-    if (child.type === "inference") {
-      foundInference = true;
-      let row = document.createElement("tr");
+  if (foundInference) {
+    let row = document.createElement("tr");
 
-      let pidCell = document.createElement("td");
-      pidCell.textContent = child.pid;
-      row.appendChild(pidCell);
+    let pidCell = document.createElement("td");
+    pidCell.textContent = info.pid;
+    row.appendChild(pidCell);
 
-      let memoryCell = document.createElement("td");
-      memoryCell.textContent = formatBytes(child.memory);
-      row.appendChild(memoryCell);
+    let memoryCell = document.createElement("td");
+    memoryCell.textContent = formatBytes(info.memory);
+    row.appendChild(memoryCell);
 
-      tbody.appendChild(row);
-    }
+    tbody.appendChild(row);
   }
 
   table.appendChild(tbody);
@@ -299,25 +427,46 @@ async function updateModels() {
 
 async function refreshPage() {
   const ml_enable = Services.prefs.getBoolPref("browser.ml.enable");
+  const gpu_enabled =
+    Services.prefs.getBoolPref("dom.webgpu.enabled") &&
+    Services.prefs.getBoolPref("dom.webgpu.workers.enabled") &&
+    Services.prefs.getBoolPref("gfx.webgpu.force-enabled");
+
   const content = document.getElementById("content");
   const warning = document.getElementById("warning");
+
   if (!ml_enable) {
-    if (warning.style.display !== "block") {
-      warning.style.display = "block";
-    }
-    if (content.style.display !== "none") {
-      content.style.display = "none";
-    }
+    content.style.display = "none";
   } else {
-    if (content.style.display !== "block") {
-      content.style.display = "block";
+    content.style.display = "block";
+  }
+
+  if (!ml_enable || !gpu_enabled) {
+    warning.style.display = "block";
+    let text = [];
+    if (!ml_enable) {
+      text.push(
+        "browser.ml.enable is set to False ! Toggle it to activate local inference."
+      );
     }
-    if (warning.style.display !== "none") {
-      warning.style.display = "none";
+    if (!gpu_enabled) {
+      text.push(
+        "WebGPU is not enabled, set dom.webgpu.enabled, dom.webgpu.workers.enabled and gfx.webgpu.force-enabled to true."
+      );
     }
+
+    warning.innerHTML = "";
+    text.forEach(message => {
+      let messageDiv = document.createElement("div");
+      messageDiv.textContent = message;
+      warning.appendChild(messageDiv);
+    });
+  } else {
+    warning.style.display = "none";
   }
   await updateModels();
   await updateProcInfo();
+  await updateStatus();
 }
 
 /**
@@ -371,6 +520,43 @@ function loadExample(name) {
   setSelectOption("device", data.device);
 }
 
+function findMaxMemory(metrics) {
+  return metrics.reduce((max, metric) => {
+    return metric.memory > max ? metric.memory : max;
+  }, 0);
+}
+
+function findTotalTime(metrics) {
+  // Create an object to store arrays of time differences for each name
+  const timeMapping = {};
+
+  metrics.forEach(metricStart => {
+    if (metricStart.name.includes("Start")) {
+      // Find all corresponding metricEnd for the same name
+      const metricEnd = metrics.find(
+        metric =>
+          metric.name === metricStart.name.replace("Start", "End") &&
+          metric.when > metricStart.when
+      );
+
+      if (metricEnd) {
+        const timeDifference = metricEnd.when - metricStart.when;
+        const baseName = metricStart.name.replace("Start", "");
+
+        // Initialize an array if it doesn't exist for this baseName
+        if (!timeMapping[baseName]) {
+          timeMapping[baseName] = [];
+        }
+
+        // Push the time difference to the array
+        timeMapping[baseName].push(timeDifference);
+      }
+    }
+  });
+
+  return timeMapping;
+}
+
 async function runInference() {
   document.getElementById("console").value = "";
   const inferencePadValue = document.getElementById("inferencePad").value;
@@ -380,6 +566,7 @@ async function runInference() {
   const dtype = document.getElementById("dtype").value;
   const device = document.getElementById("device").value;
   const numThreads = parseInt(document.getElementById("numThreads").value);
+  const numRuns = parseInt(document.getElementById("numRuns").value);
 
   let inputData;
   try {
@@ -406,16 +593,16 @@ async function runInference() {
     device,
     dtype,
     numThreads,
+    timeoutMS: THIRTY_SECONDS,
   };
-
-  const { createEngine } = ChromeUtils.importESModule(
-    "chrome://global/content/ml/EngineProcess.sys.mjs"
-  );
 
   appendTextConsole("Creating engine if needed");
   let engine;
   try {
-    engine = await createEngine(initData, progressData => {
+    const pipelineOptions = new PipelineOptions(initData);
+    const engineParent = await getEngineParent();
+
+    engine = await engineParent.getEngine(pipelineOptions, progressData => {
       engineNotification(progressData).catch(err => {
         console.error("Error in engineNotification:", err);
       });
@@ -430,26 +617,42 @@ async function runInference() {
   const request = { args: inputData.inputArgs, options: inputData.runOptions };
 
   let res;
-
-  try {
-    res = await engine.run(request);
-  } catch (e) {
-    appendTextConsole(e);
-    if (
-      e.message.includes("Invalid model hub root url: https://huggingface.co")
-    ) {
-      appendTextConsole(
-        "Make sure you started Firefox with MOZ_ALLOW_EXTERNAL_ML_HUB=1"
-      );
+  for (let i = 0; i < numRuns; i++) {
+    try {
+      res = await engine.run(request);
+    } catch (e) {
+      appendTextConsole(e);
+      if (
+        e.message.includes("Invalid model hub root url: https://huggingface.co")
+      ) {
+        appendTextConsole(
+          "Make sure you started Firefox with MOZ_ALLOW_EXTERNAL_ML_HUB=1"
+        );
+      }
+      engineParent = null; // let's re-create it on errors.
+      throw e;
     }
 
-    throw e;
+    const results_filter = (key, value) => {
+      if (key === "metrics") {
+        return undefined;
+      }
+      return value;
+    };
+
+    appendTextConsole(`Results: ${JSON.stringify(res, results_filter, 2)}`);
   }
 
-  appendTextConsole(`Results: ${JSON.stringify(res, null, 2)}`);
   appendTextConsole(`Metrics: ${JSON.stringify(res.metrics, null, 2)}`);
-
-  await engine.terminate(/* shutdown */ true, /* replacement */ false);
+  const maxMemory = findMaxMemory(res.metrics);
+  appendTextConsole(
+    `Resident Set Size (RSS) approximative peak usage: ${formatBytes(
+      maxMemory
+    )}`
+  );
+  appendTextConsole(
+    `Timers: ${JSON.stringify(findTotalTime(res.metrics), null, 2)}`
+  );
   await refreshPage();
 }
 
@@ -599,6 +802,13 @@ function showTab(tabIndex) {
       item.classList.add("active");
     }
   });
+}
+
+async function getEngineParent() {
+  if (!engineParent) {
+    engineParent = await EngineProcess.getMLEngineParent();
+  }
+  return engineParent;
 }
 
 /**

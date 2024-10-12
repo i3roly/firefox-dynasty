@@ -21,6 +21,7 @@
   --tab-pinned-container-margin-inline-expanded: var(--space-small);
   --tab-border-radius: 4px;
   --tab-overflow-clip-margin: 2px;
+  --tab-close-button-padding: 6px;
   --tab-shadow-max-size: 6px;
   --tab-block-margin: 4px;
   --tab-icon-end-margin: 5.5px;
@@ -555,7 +556,7 @@
   margin-inline-end: calc(var(--tab-inline-padding) / -2);
   width: 24px;
   height: 24px;
-  padding: 6px;
+  padding: var(--tab-close-button-padding);
   border-radius: var(--tab-border-radius);
   list-style-image: url(chrome://global/skin/icons/close-12.svg);
 
@@ -788,14 +789,23 @@ tab-group {
 
   .panel-header {
     min-height: auto;
+    > h1 {
+      margin-top: 0;
+      margin-bottom: var(--space-small);
+    }
   }
 
   toolbarseparator {
-    margin-top: var(--space-medium);
+    margin-block: var(--space-medium);
   }
 
   .panel-body {
     padding-block: var(--space-medium);
+  }
+
+  &.tab-group-editor-mode-create .tab-group-edit-mode-only,
+  &:not(.tab-group-editor-mode-create) .tab-group-create-mode-only {
+    display: none;
   }
 
   .tab-group-editor-name {
@@ -835,6 +845,21 @@ tab-group {
     height: 16px;
     border-radius: 20%;
     background-color: light-dark(var(--tabgroup-swatch-color), var(--tabgroup-swatch-color-invert));
+  }
+
+  .tab-group-edit-actions,
+  .tab-group-delete {
+    padding-block: 0;
+    > toolbarbutton {
+     justify-content: flex-start;
+    }
+  }
+
+  toolbarbutton {
+    margin: 0;
+  }
+  .tab-group-delete label {
+    color: var(--text-color-error);
   }
 }
 
@@ -1073,6 +1098,10 @@ tab-group {
     height: var(--tab-min-height);
   }
 
+  .tab-close-button {
+    margin-inline-end: calc(-1 * var(--tab-close-button-padding));
+  }
+
   &:not([expanded]) {
     .tabbrowser-tab {
       padding: 0;
@@ -1192,8 +1221,18 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   list-style-image: url("chrome://browser/content/firefoxview/view-opentabs.svg");
 
   > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+    --panel-and-palette-icon-size: 20px;
     width: 20px;
     margin: -2px;
+  }
+
+  #TabsToolbar & {
+    list-style-image: url("chrome://global/skin/icons/arrow-down.svg");
+
+    > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+      width: 16px;
+      margin: 0;
+    }
   }
 
   #tabbrowser-tabs[hiddensoundplaying] ~ & > .toolbarbutton-badge-stack > .toolbarbutton-badge {
@@ -1350,4 +1389,10 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
       }
     }
   }
+}
+
+.tab-contextmenu-group-icon {
+  list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+  -moz-context-properties: fill;
+  fill: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
 }

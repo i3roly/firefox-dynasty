@@ -2472,23 +2472,6 @@ findbar:
       - 'main'
 
 sidebar:
-  opened:
-    bug_numbers:
-      - 1648530
-    description: >
-      The number of times the sidebar was opened, per view (e.g.: bookmarks, history,
-      synced tabs).
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - emalysz@mozilla.com
-      - rtestard@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
   search:
     bug_numbers:
       - 1648524
@@ -4042,6 +4025,21 @@ gfx:
     notification_emails:
       - gfx-telemetry-alerts@mozilla.com
       - bwerth@mozilla.com
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+    release_channel_collection: opt-out
+  tmp_writable:
+    bug_numbers:
+      - 1923741
+    description: >
+      Is the system temporary directory writable
+    expires: "134"
+    kind: boolean
+    notification_emails:
+      - gfx-telemetry-alerts@mozilla.com
+      - aosmond@mozilla.com
     products:
       - 'firefox'
     record_in_processes:
@@ -6070,7 +6068,6 @@ networking:
       - 'firefox'
     record_in_processes:
       - 'main'
-      - 'content'
 
   https_rr_prefs_usage:
     bug_numbers:

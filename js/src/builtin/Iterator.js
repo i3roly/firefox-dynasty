@@ -6,6 +6,17 @@ function IteratorIdentity() {
   return this;
 }
 
+#ifdef NIGHTLY_BUILD
+/**
+ *  Iterator.range ( start, end, optionOrStep )
+ *
+ * https://tc39.es/proposal-iterator.range/#sec-iterator.range
+ */
+function IteratorRange(start, end, optionOrStep) {
+  return false;
+}
+#endif
+
 /* ECMA262 7.2.7 */
 function IteratorNext(iteratorRecord, value) {
   // Steps 1-2.
@@ -962,3 +973,15 @@ function IteratorFind(predicate) {
     }
   }
 }
+
+
+#ifdef NIGHTLY_BUILD
+/** 
+ * Iterator.zip (iterables [, options])
+ * 
+ * https://tc39.es/proposal-joint-iteration/#sec-iterator.zip
+ */
+function IteratorZip(predicate) {
+  return false;
+}
+#endif

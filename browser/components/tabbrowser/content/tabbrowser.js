@@ -381,7 +381,19 @@
     },
 
     get visibleTabs() {
-      return this.tabContainer._getVisibleTabs();
+      return this.tabContainer.visibleTabs;
+    },
+
+    /**
+     * Returns the number of tabs in the current window, including hidden tabs
+     * and tabs in collapsed groups, but excluding the Firefox View tab.
+     */
+    get openTabCount() {
+      let count = this.tabs.length - this._removingTabs.size;
+      if (FirefoxViewHandler.tab) {
+        count--;
+      }
+      return count;
     },
 
     getDuplicateTabsToClose(aTab) {
@@ -2941,9 +2953,13 @@
       return t;
     },
 
-    addTabGroup(color, label = "", tabs) {
+    addTabGroup(color = "", label = "", tabs) {
       if (!tabs?.length) {
         throw new Error("Cannot create tab group with zero tabs");
+      }
+
+      if (!color) {
+        color = this.tabGroupMenu.nextUnusedColor;
       }
 
       let group = document.createXULElement("tab-group", { is: "tab-group" });
@@ -4534,11 +4550,6 @@
       aTab.remove();
       this.tabContainer._invalidateCachedTabs();
 
-      // Update hashiddentabs if this tab was hidden.
-      if (aTab.hidden) {
-        this.tabContainer._updateHiddenTabsStatus();
-      }
-
       // ... and fix up the _tPos properties immediately.
       for (let i = aTab._tPos; i < this.tabs.length; i++) {
         this.tabs[i]._tPos = i;
@@ -5119,19 +5130,6 @@
       return aTab.linkedBrowser;
     },
 
-    showOnlyTheseTabs(aTabs) {
-      for (let tab of this.tabs) {
-        if (!aTabs.includes(tab)) {
-          this.hideTab(tab);
-        } else {
-          this.showTab(tab);
-        }
-      }
-
-      this.tabContainer._updateHiddenTabsStatus();
-      this.tabContainer._handleTabSelect(true);
-    },
-
     showTab(aTab) {
       if (!aTab.hidden || aTab == FirefoxViewHandler.tab) {
         return;
@@ -5140,7 +5138,6 @@
       this.tabContainer._invalidateCachedVisibleTabs();
 
       this.tabContainer._updateCloseButtons();
-      this.tabContainer._updateHiddenTabsStatus();
       if (aTab.multiselected) {
         this._updateMultiselectedTabCloseButtonTooltip();
       }
@@ -5166,7 +5163,6 @@
       this.tabContainer._invalidateCachedVisibleTabs();
 
       this.tabContainer._updateCloseButtons();
-      this.tabContainer._updateHiddenTabsStatus();
       if (aTab.multiselected) {
         this._updateMultiselectedTabCloseButtonTooltip();
       }
@@ -7776,6 +7772,7 @@ var TabBarVisibility = {
 
   update(force = false) {
     let toolbar = document.getElementById("TabsToolbar");
+    let navbar = document.getElementById("nav-bar");
     let hideTabstrip = false;
     let isPopup = !window.toolbar.visible;
     let isVerticalTabs = Services.prefs.getBoolPref(
@@ -7793,7 +7790,7 @@ var TabBarVisibility = {
     if (nonPopupWithVerticalTabs) {
       // TabsInTitlebar decides if we can draw within the titlebar area.
       // In vertical tabs mode, the toolbar with the horizontal tabstrip gets hidden
-      // and the navbar becomes a titlebar. This makie TabsInTitlebar a bit of a misnomer.
+      // and the navbar becomes a titlebar. This makes TabsInTitlebar a bit of a misnomer.
       // We'll fix this in Bug 1921034.
       hideTabstrip = true;
       TabsInTitlebar.allowedBy("tabs-visible", true);
@@ -7801,24 +7798,24 @@ var TabBarVisibility = {
       TabsInTitlebar.allowedBy("tabs-visible", !hideTabstrip);
     }
 
+    navbar.toggleAttribute("tabs-hidden", hideTabstrip);
+    // Should the nav-bar look and function like a titlebar?
+    navbar.classList.toggle(
+      "browser-titlebar",
+      TabsInTitlebar.enabled && hideTabstrip
+    );
+
     if (
       hideTabstrip == toolbar.collapsed &&
       !force &&
       this._initialUpdateDone
     ) {
+      // no further updates needed, toolbar.collapsed already matches hideTabstrip
       return;
     }
     this._initialUpdateDone = true;
 
     toolbar.collapsed = hideTabstrip;
-    let navbar = document.getElementById("nav-bar");
-    navbar.toggleAttribute("tabs-hidden", hideTabstrip);
-    // Should the nav-bar look and function  like a titlebar?
-    navbar.classList.toggle(
-      "browser-titlebar",
-      TabsInTitlebar.enabled && hideTabstrip
-    );
-    navbar.classList.toggle("titlebar-color", hideTabstrip);
 
     document.getElementById("menu_closeWindow").hidden = hideTabstrip;
     document.l10n.setAttributes(
@@ -7947,15 +7944,14 @@ var TabContextMenu = {
             document.l10n.setAttributes(item, "tab-context-unnamed-group");
           }
 
-          item.classList.add("menuitem-iconic");
-          item.setAttribute(
-            "image",
-            `data:image/svg+xml;utf8,
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="32" height="32" rx="2" fill="${encodeURIComponent(
-                group.color
-              )}"/>
-            </svg>`
+          item.classList.add("menuitem-iconic", "tab-contextmenu-group-icon");
+          item.style.setProperty(
+            "--tab-group-color",
+            group.style.getPropertyValue("--tab-group-color")
+          );
+          item.style.setProperty(
+            "--tab-group-color-invert",
+            group.style.getPropertyValue("--tab-group-color-invert")
           );
           submenu.appendChild(item);
         });
@@ -8261,7 +8257,7 @@ var TabContextMenu = {
 
   moveTabsToNewGroup() {
     gBrowser.addTabGroup(
-      "red",
+      null,
       "",
       gBrowser.selectedTabs.includes(this.contextTab)
         ? gBrowser.selectedTabs

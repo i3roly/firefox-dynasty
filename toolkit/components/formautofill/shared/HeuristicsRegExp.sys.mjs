@@ -197,9 +197,8 @@ export const HeuristicsRegExp = {
         "cc-?name" +
         "|card-?name" +
         "|cardholder-?name" +
-        "|cardholder" +
+        "|cardholder",
         // "|(^name$)" + // Removed to avoid overwriting "name", above.
-        "|(^nom$)",
 
       "cc-number":
         "cc-?number" +
@@ -640,6 +639,7 @@ export const HeuristicsRegExp = {
     {
       "address-line2":
         "address|line" +
+        "|house|building|apartment|floor" +    // de-DE
         "|adresse" +      // fr-FR
         "|indirizzo" +    // it-IT
         "|地址" +         // zh-CN

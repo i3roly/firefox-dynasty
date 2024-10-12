@@ -587,6 +587,7 @@ const AVAILABLE_INJECTIONS = [
         "*://*.lafoodbank.org/*", // 127006
         "*://rutamayacoffee.com/*", // 129353
         "*://ottoandspike.com.au/*", // bugzilla 1644602
+        "*://give.umrelief.org/give/*", // bugzilla 1916407
       ],
       js: [
         {
@@ -1047,6 +1048,20 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
+    id: "1922175",
+    platform: "all",
+    domain: "app.livingsecurity.com",
+    bug: "1922175",
+    contentScripts: {
+      matches: ["*://app.livingsecurity.com/*"],
+      js: [
+        {
+          file: "injections/js/bug1896383-error-capturestacktrace-shim.js",
+        },
+      ],
+    },
+  },
+  {
     id: "bug1889326",
     platform: "desktop",
     domain: "Office 365 email handling prompt",
@@ -1171,6 +1186,34 @@ const AVAILABLE_INJECTIONS = [
       js: [
         {
           file: "injections/js/bug1899937-plus.nhk.jp-request-picture-in-picture.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1886616",
+    platform: "all",
+    domain: "www.six-group.com",
+    bug: "1886616",
+    contentScripts: {
+      matches: ["*://www.six-group.com/*/market-data/etf/etf-explorer.html*"],
+      css: [
+        {
+          file: "injections/css/bug1886616-www.six-group.com-select-fix.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1896349",
+    platform: "all",
+    domain: "vivaldi.com",
+    bug: "1896349",
+    contentScripts: {
+      matches: ["*://vivaldi.com/*"],
+      css: [
+        {
+          file: "injections/css/bug1896349-vivaldi.com-selected-text-fix.css",
         },
       ],
     },

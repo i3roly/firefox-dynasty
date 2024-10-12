@@ -79,6 +79,7 @@
 #include "mozilla/dom/quota/DirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/FirstInitializationAttemptsImpl.h"
+#include "mozilla/dom/quota/HashKeys.h"
 #include "mozilla/dom/quota/OriginScope.h"
 #include "mozilla/dom/quota/PersistenceScope.h"
 #include "mozilla/dom/quota/PersistenceType.h"
@@ -2753,20 +2754,12 @@ using PrepareDatastoreOpArray =
 
 StaticAutoPtr<PrepareDatastoreOpArray> gPrepareDatastoreOps;
 
-// nsCStringHashKey with disabled memmove
-class nsCStringHashKeyDM : public nsCStringHashKey {
- public:
-  explicit nsCStringHashKeyDM(const nsCStringHashKey::KeyTypePointer aKey)
-      : nsCStringHashKey(aKey) {}
-  enum { ALLOW_MEMMOVE = false };
-};
-
 // When CheckedUnsafePtr's checking is enabled, it's necessary to ensure that
 // the hashtable uses the copy constructor instead of memmove for moving entries
 // since memmove will break CheckedUnsafePtr in a memory-corrupting way.
-using DatastoreHashKey =
-    std::conditional<DiagnosticAssertEnabled::value, nsCStringHashKeyDM,
-                     nsCStringHashKey>::type;
+using DatastoreHashKey = std::conditional<DiagnosticAssertEnabled::value,
+                                          nsCStringHashKeyWithDisabledMemmove,
+                                          nsCStringHashKey>::type;
 
 using DatastoreHashtable =
     nsBaseHashtable<DatastoreHashKey, NotNull<CheckedUnsafePtr<Datastore>>,

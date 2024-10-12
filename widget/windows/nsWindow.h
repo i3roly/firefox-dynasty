@@ -659,6 +659,8 @@ class nsWindow final : public nsBaseWidget {
   void UpdateOpaqueRegion(const LayoutDeviceIntRegion&) override;
   void UpdateOpaqueRegionInternal();
 
+  void SetColorScheme(const mozilla::Maybe<mozilla::ColorScheme>&) override;
+
   bool DispatchTouchEventFromWMPointer(UINT msg, LPARAM aLParam,
                                        const WinPointerInfo& aPointerInfo,
                                        mozilla::MouseButton aButton);
@@ -776,12 +778,12 @@ class nsWindow final : public nsBaseWidget {
   bool mTouchWindow = false;
   bool mDisplayPanFeedback = false;
   bool mHideChrome = false;
-  bool mIsRTL;
+  bool mIsRTL = false;
   bool mMousePresent = false;
   bool mSimulatedClientArea = false;
   bool mDestroyCalled = false;
-  bool mOpeningAnimationSuppressed;
-  bool mAlwaysOnTop;
+  bool mOpeningAnimationSuppressed = false;
+  bool mAlwaysOnTop = false;
   bool mIsEarlyBlankWindow = false;
   bool mIsShowingPreXULSkeletonUI = false;
   bool mResizable = false;

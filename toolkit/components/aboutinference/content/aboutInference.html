@@ -105,6 +105,15 @@
                 </select>
               </div>
               <div>
+                <label for="numRuns">Number of runs:</label>
+                <span class="tooltip"
+                  >ℹ️
+                  <span class="tooltiptext">Number of times to run</span>
+                </span>
+                <input id="numRuns" type="number" min="1" value="1" />
+              </div>
+
+              <div>
                 <label for="numThreads">Number of threads:</label>
                 <span class="tooltip"
                   >ℹ️
@@ -135,7 +144,9 @@
 
           <fieldset>
             <legend data-l10n-id="about-inference-processes-title"></legend>
-            <div id="runningInference"></div>
+            <div id="statusTableContainer"></div>
+            <hr />
+            <div id="procInfoTableContainer"></div>
             <h3>Downloads</h3>
             <div id="downloads"></div>
             <h3>Console</h3>

@@ -77,7 +77,7 @@ LCovSource::LCovSource(LifoAlloc* alloc, UniqueChars name)
 
 void LCovSource::exportInto(GenericPrinter& out) {
   if (hadOutOfMemory()) {
-    out.reportOutOfMemory();
+    out.setPendingOutOfMemory();
   } else {
     out.printf("SF:%s\n", name_.get());
 
@@ -408,19 +408,16 @@ LCovSource* LCovRealm::lookupOrAdd(const char* name) {
 
   UniqueChars source_name = DuplicateString(name);
   if (!source_name) {
-    outTN_.reportOutOfMemory();
     return nullptr;
   }
 
   // Allocate a new LCovSource for the current top-level.
   LCovSource* source = alloc_.new_<LCovSource>(&alloc_, std::move(source_name));
   if (!source) {
-    outTN_.reportOutOfMemory();
     return nullptr;
   }
 
   if (!sources_.emplaceBack(source)) {
-    outTN_.reportOutOfMemory();
     return nullptr;
   }
 

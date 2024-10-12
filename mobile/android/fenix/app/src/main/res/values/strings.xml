@@ -371,7 +371,9 @@
 
     <!-- Search Fragment -->
     <!-- Button in the search view that lets a user search by scanning a QR code -->
-    <string name="search_scan_button">Scan</string>
+    <string name="search_scan_button" moz:removedIn="133" tools:ignore="UnusedResources">Scan</string>
+    <!-- Button in the search view that lets a user search by scanning a QR code -->
+    <string name="search_scan_button_2">Scan QR code</string>
     <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
     <string name="search_shortcuts_engine_settings">Search engine settings</string>
     <!-- Button in the search view that lets a user navigate to the site in their clipboard -->
@@ -473,9 +475,13 @@
     <!-- Onboarding sub header for the add-ons card, used by Nimbus experiments. -->
     <string name="onboarding_add_on_sub_header" tools:ignore="UnusedResources">Add third-party extensions to enhance your security, productivity, and more.</string>
     <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_explore_more_extensions" tools:ignore="UnusedResources">Explore more extensions.</string>
+    <string name="onboarding_add_on_explore_more_extensions" tools:ignore="UnusedResources" moz:removedIn="133">Explore more extensions.</string>
     <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_start_browsing_button" tools:ignore="UnusedResources">Start browsing.</string>
+    <string name="onboarding_add_on_start_browsing_button" tools:ignore="UnusedResources" moz:removedIn="133">Start browsing.</string>
+    <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
+    <string name="onboarding_add_on_explore_more_extensions_2" tools:ignore="UnusedResources">Explore more extensions</string>
+    <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
+    <string name="onboarding_add_on_start_browsing_button_2" tools:ignore="UnusedResources">Start browsing</string>
     <!-- Ublock name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Ublock Origin" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_ublock_name" tools:ignore="UnusedResources">uBlock Origin</string>
     <!-- Ublock description for the onboarding add-ons card, used by Nimbus experiments. -->
@@ -492,7 +498,6 @@
     <string name="onboarding_add_on_dark_reader_name" tools:ignore="UnusedResources">Dark Reader</string>
     <!-- Privacy Badger description for the onboarding add-ons card, used by Nimbus experiments. -->
     <string name="onboarding_add_on_dark_reader_description" tools:ignore="UnusedResources">Custom dark mode for the mobile web.</string>
-
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -545,7 +550,9 @@
     <!-- Preference category for privacy and security settings -->
     <string name="preferences_category_privacy_security">Privacy and security</string>
     <!-- Preference for advanced site permissions -->
-    <string name="preferences_site_permissions">Site permissions</string>
+    <string name="preferences_site_permissions" moz:removedIn="133" tools:ignore="UnusedResources">Site permissions</string>
+    <!-- Preference for advanced site settings -->
+    <string name="preferences_site_settings">Site settings</string>
     <!-- Preference for private browsing options -->
     <string name="preferences_private_browsing_options">Private browsing</string>
     <!-- Preference for opening links in a private tab-->
@@ -1180,7 +1187,7 @@
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">Add folder</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">Bookmark saved!</string>
+    <string name="bookmark_saved_snackbar">Bookmark saved!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">Saved in “%s”</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1246,9 +1253,7 @@
     <!-- Bookmark snackbar message for deleting a single item. Parameter is the title of the item being deleted -->
     <string name="bookmark_delete_single_item">Deleted %s</string>
     <!-- Bookmark snackbar message for deleting multiple items. Parameter is the number of items being deleted -->
-    <string name="bookmark_delete_multiple_items">Deleted %s items</string>
-    <!-- Bookmark folder deletion dialog title. Parameter is the number of items being deleted -->
-    <string name="bookmark_delete_folder_dialog_title">Are you sure you want to delete %s items?</string>
+    <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources">Deleted items: %s</string>
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Enter search terms</string>
     <!-- Content description for the bookmark navigation bar back button -->
@@ -1257,8 +1262,6 @@
     <string name="bookmark_add_new_folder_button_content_description">Add a new folder</string>
     <!-- Content description for bookmark search floating action button -->
     <string name="bookmark_search_button_content_description">Search bookmarks</string>
-    <!-- Content description for icon to open the overflow menu for selected bookmarks -->
-    <string name="bookmark_selected_menu_button_content_description">Overflow menu</string>
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
     <string name="bookmark_item_menu_button_content_description">Item Menu for %s</string>
     <!-- Title for the bookmark list empty state-->
@@ -1272,7 +1275,7 @@
     <!-- Description for the bookmark list empty state when you're in an empty folder. -->
     <string name="bookmark_empty_list_folder_description">Add bookmarks as you browse so you can find your favorite sites later.</string>
     <!-- Description for the add new folder button when selecting a folder. -->
-    <string name="bookmark_select_folder_new_folder_button_title">New folder</string>
+    <string name="bookmark_select_folder_new_folder_button_title" tools:ignore="UnusedResources">New folder</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -1355,6 +1358,12 @@
     <string name="studies_on">On</string>
     <!-- Summary of studies data on quit preference if it is set to off -->
     <string name="studies_off">Off</string>
+    <!-- Category header of a preference that allows a user to alter settings related to web permissions. -->
+    <string name="preferences_category_permissions">Permissions</string>
+    <!-- Category header of a preference that allows a user to alter settings related to web content. -->
+    <string name="preferences_category_content">Content</string>
+    <!-- Preference for altering the default browsing mode. When enabled, the desktop site will always be requested. -->
+    <string name="preference_feature_desktop_mode_default">Always request desktop site</string>
 
     <!-- Collections -->
     <!-- Collections header on home fragment -->
@@ -1508,9 +1517,9 @@
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">Tabs closed: %1$s</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved" moz:removedIn="132" tools:ignore="UnusedResources">Bookmarks saved!</string>
+    <string name="snackbar_message_bookmarks_saved">Bookmarks saved!</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs. Parameter will be replaced by the name of the folder the bookmark was saved into.-->
-    <string name="snackbar_message_bookmarks_saved_in">Bookmarks saved in “%s”!</string>
+    <string name="snackbar_message_bookmarks_saved_in" tools:ignore="UnusedResources">Bookmarks saved in “%s”!</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
     <string name="snackbar_added_to_shortcuts">Added to shortcuts!</string>
     <!-- Text shown in snackbar when user closes a private tab -->

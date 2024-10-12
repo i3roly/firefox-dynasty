@@ -1404,6 +1404,42 @@ const AVAILABLE_UA_OVERRIDES = [
       },
     },
   },
+  {
+    /*
+     * Bug 1919004 - UA override for www.editoracontexto.com.br
+     * Webcompat issue #141641 - https://webcompat.com/issues/141641
+     *
+     * Site presents its desktop CSS to Firefox on Android.
+     */
+    id: "bug1919004",
+    platform: "android",
+    domain: "www.editoracontexto.com.br",
+    bug: "1919004",
+    config: {
+      matches: ["*://www.editoracontexto.com.br/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1921410 - UA override for beta.maps.apple.com
+     * Webcompat issue #140205 - https://webcompat.com/issues/140205
+     *
+     * Apple Maps beta artifically blocks Linux.
+     */
+    id: "bug1921410",
+    platform: "linux",
+    domain: "beta.maps.apple.com",
+    bug: "1921410",
+    config: {
+      matches: ["*://beta.maps.apple.com/*"],
+      uaTransformer: originalUA => {
+        return UAHelpers.getWindowsUA(originalUA);
+      },
+    },
+  },
 ];
 
 module.exports = AVAILABLE_UA_OVERRIDES;

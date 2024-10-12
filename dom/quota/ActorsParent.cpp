@@ -96,6 +96,7 @@
 #include "mozilla/dom/quota/DirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/FileUtils.h"
+#include "mozilla/dom/quota/MozPromiseUtils.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "mozilla/dom/quota/QuotaManagerService.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
@@ -1332,6 +1333,13 @@ bool IsDirectoryLockBlockedByUninitStorageOperation(
     const RefPtr<DirectoryLock>& aDirectoryLock) {
   return IsDirectoryLockBlockedBy(aDirectoryLock,
                                   DirectoryLockCategory::UninitStorage);
+}
+
+bool IsDirectoryLockBlockedByUninitStorageOrUninitOriginsOperation(
+    const RefPtr<DirectoryLock>& aDirectoryLock) {
+  return IsDirectoryLockBlockedBy(aDirectoryLock,
+                                  {DirectoryLockCategory::UninitStorage,
+                                   DirectoryLockCategory::UninitOrigins});
 }
 
 }  // namespace
@@ -4934,7 +4942,7 @@ RefPtr<BoolPromise> QuotaManager::InitializeStorage() {
 
   // If storage is initialized but there's a clear storage or shutdown storage
   // operation already scheduled, we can't immediately resolve the promise and
-  // return from the function because the clear or shutdown storage operation
+  // return from the function because the clear and shutdown storage operation
   // uninitializes storage.
   if (mStorageInitialized &&
       !IsDirectoryLockBlockedByUninitStorageOperation(directoryLock)) {
@@ -5373,15 +5381,22 @@ RefPtr<BoolPromise> QuotaManager::InitializePersistentOrigin(
                 GetInfoFromValidatedPrincipalInfo(aPrincipalInfo),
                 CreateAndRejectBoolPromise);
 
-  // XXX Resolve the promise immediately if the persistent origin is already
-  // initialized (this can't be done yet because there's currently no way to
-  // check if a persistent origin is already initialized on the PBackground
-  // thread).
-
   RefPtr<UniversalDirectoryLock> directoryLock = CreateDirectoryLockInternal(
       PersistenceScope::CreateFromValue(PERSISTENCE_TYPE_PERSISTENT),
       OriginScope::FromOrigin(principalMetadata.mOrigin),
       Nullable<Client::Type>(), /* aExclusive */ false);
+
+  // If persistent origin is initialized but there's a clear storage, shutdown
+  // storage, clear origin, or shutdown origin operation already scheduled, we
+  // can't immediately resolve the promise and return from the function because
+  // the clear and shutdown storage operations uninitialize storage (which also
+  // includes uninitialization of origins) and because clear and shutdown origin
+  // operations uninitialize origins directly.
+  if (IsPersistentOriginInitialized(aPrincipalInfo) &&
+      !IsDirectoryLockBlockedByUninitStorageOrUninitOriginsOperation(
+          directoryLock)) {
+    return BoolPromise::CreateAndResolve(true, __func__);
+  }
 
   return directoryLock->Acquire()->Then(
       GetCurrentSerialEventTarget(), __func__,
@@ -5400,6 +5415,21 @@ RefPtr<BoolPromise> QuotaManager::InitializePersistentOrigin(
     const PrincipalInfo& aPrincipalInfo,
     RefPtr<UniversalDirectoryLock> aDirectoryLock) {
   AssertIsOnOwningThread();
+  MOZ_ASSERT(aDirectoryLock);
+  MOZ_ASSERT(aDirectoryLock->Acquired());
+
+  // If persistent origin is initialized and the directory lock for the
+  // initialize persistent origin operation is acquired, we can immediately
+  // resolve the promise and return from the function because there can't be a
+  // clear storage, shutdown storage, clear origin, or shutdown origin
+  // operation which would uninitialize storage (which also includes
+  // uninitialization of origins), or which would uninitialize origins
+  // directly.
+  if (IsPersistentOriginInitialized(aPrincipalInfo)) {
+    DropDirectoryLock(aDirectoryLock);
+
+    return BoolPromise::CreateAndResolve(true, __func__);
+  }
 
   auto initializePersistentOriginOp = CreateInitializePersistentOriginOp(
       WrapMovingNotNullUnchecked(this), aPrincipalInfo,
@@ -5409,7 +5439,46 @@ RefPtr<BoolPromise> QuotaManager::InitializePersistentOrigin(
 
   initializePersistentOriginOp->RunImmediately();
 
-  return initializePersistentOriginOp->OnResults();
+  return Map<BoolPromise>(
+      initializePersistentOriginOp->OnResults(),
+      [self = RefPtr(this),
+       origin = GetOriginFromValidatedPrincipalInfo(aPrincipalInfo)](
+          const BoolPromise::ResolveOrRejectValue& aValue) {
+        self->NoteInitializedOrigin(PERSISTENCE_TYPE_PERSISTENT, origin);
+
+        return aValue.ResolveValue();
+      });
+}
+
+RefPtr<BoolPromise> QuotaManager::PersistentOriginInitialized(
+    const PrincipalInfo& aPrincipalInfo) {
+  AssertIsOnOwningThread();
+
+  auto persistentOriginInitializedOp = CreatePersistentOriginInitializedOp(
+      WrapMovingNotNullUnchecked(this), aPrincipalInfo);
+
+  RegisterNormalOriginOp(*persistentOriginInitializedOp);
+
+  persistentOriginInitializedOp->RunImmediately();
+
+  return persistentOriginInitializedOp->OnResults();
+}
+
+bool QuotaManager::IsPersistentOriginInitialized(
+    const PrincipalInfo& aPrincipalInfo) {
+  AssertIsOnOwningThread();
+
+  auto origin = GetOriginFromValidatedPrincipalInfo(aPrincipalInfo);
+
+  return IsOriginInitialized(PERSISTENCE_TYPE_PERSISTENT, origin);
+}
+
+bool QuotaManager::IsPersistentOriginInitializedInternal(
+    const OriginMetadata& aOriginMetadata) const {
+  AssertIsOnIOThread();
+  MOZ_ASSERT(aOriginMetadata.mPersistenceType == PERSISTENCE_TYPE_PERSISTENT);
+
+  return mInitializedOriginsInternal.Contains(aOriginMetadata.mOrigin);
 }
 
 Result<std::pair<nsCOMPtr<nsIFile>, bool>, nsresult>
@@ -5482,15 +5551,22 @@ RefPtr<BoolPromise> QuotaManager::InitializeTemporaryOrigin(
                 GetInfoFromValidatedPrincipalInfo(aPrincipalInfo),
                 CreateAndRejectBoolPromise);
 
-  // XXX Resolve the promise immediately if the temporary origin is already
-  // initialized (this can't be done yet because there's currently no way to
-  // check if a temporary origin is already initialized on the PBackground
-  // thread).
-
   RefPtr<UniversalDirectoryLock> directoryLock = CreateDirectoryLockInternal(
       PersistenceScope::CreateFromValue(aPersistenceType),
       OriginScope::FromOrigin(principalMetadata.mOrigin),
       Nullable<Client::Type>(), /* aExclusive */ false);
+
+  // If temporary origin is initialized but there's a clear storage, shutdown
+  // storage, clear origin, or shutdown origin operation already scheduled, we
+  // can't immediately resolve the promise and return from the function because
+  // the clear and shutdown storage operations uninitialize storage (which also
+  // includes uninitialization of origins) and because clear and shutdown origin
+  // operations uninitialize origins directly.
+  if (IsTemporaryOriginInitialized(aPersistenceType, aPrincipalInfo) &&
+      !IsDirectoryLockBlockedByUninitStorageOrUninitOriginsOperation(
+          directoryLock)) {
+    return BoolPromise::CreateAndResolve(true, __func__);
+  }
 
   return directoryLock->Acquire()->Then(
       GetCurrentSerialEventTarget(), __func__,
@@ -5509,6 +5585,21 @@ RefPtr<BoolPromise> QuotaManager::InitializeTemporaryOrigin(
     PersistenceType aPersistenceType, const PrincipalInfo& aPrincipalInfo,
     RefPtr<UniversalDirectoryLock> aDirectoryLock) {
   AssertIsOnOwningThread();
+  MOZ_ASSERT(aDirectoryLock);
+  MOZ_ASSERT(aDirectoryLock->Acquired());
+
+  // If temporary origin is initialized and the directory lock for the
+  // initialize temporary origin operation is acquired, we can immediately
+  // resolve the promise and return from the function because there can't be a
+  // clear storage, shutdown storage, clear origin, or shutdown origin
+  // operation which would uninitialize storage (which also includes
+  // uninitialization of origins), or which would uninitialize origins
+  // directly.
+  if (IsTemporaryOriginInitialized(aPersistenceType, aPrincipalInfo)) {
+    DropDirectoryLock(aDirectoryLock);
+
+    return BoolPromise::CreateAndResolve(true, __func__);
+  }
 
   auto initializeTemporaryOriginOp = CreateInitializeTemporaryOriginOp(
       WrapMovingNotNullUnchecked(this), aPersistenceType, aPrincipalInfo,
@@ -5518,7 +5609,38 @@ RefPtr<BoolPromise> QuotaManager::InitializeTemporaryOrigin(
 
   initializeTemporaryOriginOp->RunImmediately();
 
-  return initializeTemporaryOriginOp->OnResults();
+  return Map<BoolPromise>(
+      initializeTemporaryOriginOp->OnResults(),
+      [self = RefPtr(this), aPersistenceType,
+       origin = GetOriginFromValidatedPrincipalInfo(aPrincipalInfo)](
+          const BoolPromise::ResolveOrRejectValue& aValue) {
+        self->NoteInitializedOrigin(aPersistenceType, origin);
+
+        return aValue.ResolveValue();
+      });
+}
+
+RefPtr<BoolPromise> QuotaManager::TemporaryOriginInitialized(
+    PersistenceType aPersistenceType, const PrincipalInfo& aPrincipalInfo) {
+  AssertIsOnOwningThread();
+
+  auto temporaryOriginInitializedOp = CreateTemporaryOriginInitializedOp(
+      WrapMovingNotNullUnchecked(this), aPersistenceType, aPrincipalInfo);
+
+  RegisterNormalOriginOp(*temporaryOriginInitializedOp);
+
+  temporaryOriginInitializedOp->RunImmediately();
+
+  return temporaryOriginInitializedOp->OnResults();
+}
+
+bool QuotaManager::IsTemporaryOriginInitialized(
+    PersistenceType aPersistenceType, const PrincipalInfo& aPrincipalInfo) {
+  AssertIsOnOwningThread();
+
+  auto origin = GetOriginFromValidatedPrincipalInfo(aPrincipalInfo);
+
+  return IsOriginInitialized(aPersistenceType, origin);
 }
 
 bool QuotaManager::IsTemporaryOriginInitializedInternal(
@@ -5658,7 +5780,7 @@ RefPtr<BoolPromise> QuotaManager::InitializeTemporaryStorage() {
 
   // If temporary storage is initialized but there's a clear storage or
   // shutdown storage operation already scheduled, we can't immediately resolve
-  // the promise and return from the function because the clear or shutdown
+  // the promise and return from the function because the clear and shutdown
   // storage operation uninitializes storage.
   if (mTemporaryStorageInitialized &&
       !IsDirectoryLockBlockedByUninitStorageOperation(directoryLock)) {
@@ -5844,7 +5966,14 @@ RefPtr<BoolPromise> QuotaManager::ClearStoragesForOrigin(
 
   clearOriginOp->RunImmediately();
 
-  return clearOriginOp->OnResults();
+  return Map<BoolPromise>(
+      clearOriginOp->OnResults(),
+      [self = RefPtr(this)](
+          OriginMetadataArrayPromise::ResolveOrRejectValue&& aValue) {
+        self->NoteUninitializedOrigins(aValue.ResolveValue());
+
+        return true;
+      });
 }
 
 RefPtr<BoolPromise> QuotaManager::ClearStoragesForClient(
@@ -5875,7 +6004,14 @@ RefPtr<BoolPromise> QuotaManager::ClearStoragesForOriginPrefix(
 
   clearStoragesForOriginPrefixOp->RunImmediately();
 
-  return clearStoragesForOriginPrefixOp->OnResults();
+  return Map<BoolPromise>(
+      clearStoragesForOriginPrefixOp->OnResults(),
+      [self = RefPtr(this)](
+          OriginMetadataArrayPromise::ResolveOrRejectValue&& aValue) {
+        self->NoteUninitializedOrigins(aValue.ResolveValue());
+
+        return true;
+      });
 }
 
 RefPtr<BoolPromise> QuotaManager::ClearStoragesForOriginAttributesPattern(
@@ -5889,7 +6025,14 @@ RefPtr<BoolPromise> QuotaManager::ClearStoragesForOriginAttributesPattern(
 
   clearDataOp->RunImmediately();
 
-  return clearDataOp->OnResults();
+  return Map<BoolPromise>(
+      clearDataOp->OnResults(),
+      [self = RefPtr(this)](
+          OriginMetadataArrayPromise::ResolveOrRejectValue&& aValue) {
+        self->NoteUninitializedOrigins(aValue.ResolveValue());
+
+        return true;
+      });
 }
 
 RefPtr<BoolPromise> QuotaManager::ClearPrivateRepository() {
@@ -5902,7 +6045,13 @@ RefPtr<BoolPromise> QuotaManager::ClearPrivateRepository() {
 
   clearPrivateRepositoryOp->RunImmediately();
 
-  return clearPrivateRepositoryOp->OnResults();
+  return Map<BoolPromise>(
+      clearPrivateRepositoryOp->OnResults(),
+      [self = RefPtr(this)](const BoolPromise::ResolveOrRejectValue& aValue) {
+        self->NoteUninitializedRepository(PERSISTENCE_TYPE_PRIVATE);
+
+        return aValue.ResolveValue();
+      });
 }
 
 RefPtr<BoolPromise> QuotaManager::ClearStorage() {
@@ -5921,11 +6070,50 @@ RefPtr<BoolPromise> QuotaManager::ClearStorage() {
           return BoolPromise::CreateAndReject(aValue.RejectValue(), __func__);
         }
 
+        self->mInitializedOrigins.Clear();
         self->mTemporaryStorageInitialized = false;
         self->mStorageInitialized = false;
 
         return BoolPromise::CreateAndResolve(true, __func__);
       });
+}
+
+RefPtr<BoolPromise> QuotaManager::ShutdownStoragesForOrigin(
+    Maybe<PersistenceType> aPersistenceType,
+    const PrincipalInfo& aPrincipalInfo) {
+  AssertIsOnOwningThread();
+
+  auto shutdownOriginOp = CreateShutdownOriginOp(
+      WrapMovingNotNullUnchecked(this), aPersistenceType, aPrincipalInfo);
+
+  RegisterNormalOriginOp(*shutdownOriginOp);
+
+  shutdownOriginOp->RunImmediately();
+
+  return Map<BoolPromise>(
+      shutdownOriginOp->OnResults(),
+      [self = RefPtr(this)](
+          OriginMetadataArrayPromise::ResolveOrRejectValue&& aValue) {
+        self->NoteUninitializedOrigins(aValue.ResolveValue());
+
+        return true;
+      });
+}
+
+RefPtr<BoolPromise> QuotaManager::ShutdownStoragesForClient(
+    Maybe<PersistenceType> aPersistenceType,
+    const PrincipalInfo& aPrincipalInfo, Client::Type aClientType) {
+  AssertIsOnOwningThread();
+
+  auto shutdownClientOp =
+      CreateShutdownClientOp(WrapMovingNotNullUnchecked(this), aPersistenceType,
+                             aPrincipalInfo, aClientType);
+
+  RegisterNormalOriginOp(*shutdownClientOp);
+
+  shutdownClientOp->RunImmediately();
+
+  return shutdownClientOp->OnResults();
 }
 
 RefPtr<BoolPromise> QuotaManager::ShutdownStorage(
@@ -5951,6 +6139,7 @@ RefPtr<BoolPromise> QuotaManager::ShutdownStorage(
           return BoolPromise::CreateAndReject(aValue.RejectValue(), __func__);
         }
 
+        self->mInitializedOrigins.Clear();
         self->mTemporaryStorageInitialized = false;
         self->mStorageInitialized = false;
 
@@ -6983,6 +7172,70 @@ bool QuotaManager::IsSanitizedOriginValid(const nsACString& aSanitizedOrigin) {
 
         return result == OriginParser::ValidOrigin;
       });
+}
+
+void QuotaManager::NoteInitializedOrigin(PersistenceType aPersistenceType,
+                                         const nsACString& aOrigin) {
+  AssertIsOnOwningThread();
+
+  auto& boolArray = mInitializedOrigins.LookupOrInsertWith(aOrigin, []() {
+    BoolArray boolArray;
+    boolArray.AppendElements(PERSISTENCE_TYPE_INVALID);
+    std::fill(boolArray.begin(), boolArray.end(), false);
+    return boolArray;
+  });
+
+  boolArray[aPersistenceType] = true;
+}
+
+void QuotaManager::NoteUninitializedOrigins(
+    const OriginMetadataArray& aOriginMetadataArray) {
+  AssertIsOnOwningThread();
+
+  for (const auto& originMetadata : aOriginMetadataArray) {
+    auto entry = mInitializedOrigins.Lookup(originMetadata.mOrigin);
+    if (!entry) {
+      return;
+    }
+
+    auto& boolArray = *entry;
+
+    if (boolArray[originMetadata.mPersistenceType]) {
+      boolArray[originMetadata.mPersistenceType] = false;
+
+      if (std::all_of(boolArray.begin(), boolArray.end(),
+                      [](bool entry) { return !entry; })) {
+        entry.Remove();
+      }
+    }
+  }
+}
+
+void QuotaManager::NoteUninitializedRepository(
+    PersistenceType aPersistenceType) {
+  AssertIsOnOwningThread();
+
+  for (auto iter = mInitializedOrigins.Iter(); !iter.Done(); iter.Next()) {
+    auto& boolArray = iter.Data();
+
+    if (boolArray[aPersistenceType]) {
+      boolArray[aPersistenceType] = false;
+
+      if (std::all_of(boolArray.begin(), boolArray.end(),
+                      [](bool entry) { return !entry; })) {
+        iter.Remove();
+      }
+    }
+  }
+}
+
+bool QuotaManager::IsOriginInitialized(PersistenceType aPersistenceType,
+                                       const nsACString& aOrigin) const {
+  AssertIsOnOwningThread();
+
+  const auto entry = mInitializedOrigins.Lookup(aOrigin);
+
+  return entry && (*entry)[aPersistenceType];
 }
 
 Result<nsCString, nsresult> QuotaManager::EnsureStorageOriginFromOrigin(

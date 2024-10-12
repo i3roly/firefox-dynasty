@@ -347,19 +347,16 @@ tasks:
         description: Run debug wrench reftests on Android emulator
         attributes:
             build_platform: android
-        worker-type: t-linux-kvm  # privileged:true doesn't work on b-linux
+        worker-type: t-linux-kvm
         worker:
             max-run-time: 5400
             docker-image: {in-tree: ubuntu1804-test}
-            privileged: true  # for access to /dev/kvm for hw accel in the emulator
+            kvm: true
             artifacts:
                 - type: directory
                   name: public/build/logs
                   path: /builds/worker/workspace/build/logs
             env:
-                # need hard-coded URLs until bug 1551875 is fixed
-                TASKCLUSTER_ROOT_URL: 'https://taskcluster.net'
-                TASKCLUSTER_PROXY_URL: 'http://taskcluster'
                 MOZHARNESS_SCRIPT: android_wrench.py
                 MOZHARNESS_CONFIG: android/wrench.py
                 NEED_WINDOW_MANAGER: 'true'
@@ -396,19 +393,16 @@ tasks:
         description: Run release wrench reftests on Android emulator
         attributes:
             build_platform: android
-        worker-type: t-linux-kvm  # privileged:true doesn't work on b-linux
+        worker-type: t-linux-kvm
         worker:
             max-run-time: 5400
             docker-image: {in-tree: ubuntu1804-test}
-            privileged: true  # for access to /dev/kvm for hw accel in the emulator
+            kvm: true
             artifacts:
                 - type: directory
                   name: public/build/logs
                   path: /builds/worker/workspace/build/logs
             env:
-                # need hard-coded URLs until bug 1551875 is fixed
-                TASKCLUSTER_ROOT_URL: 'https://taskcluster.net'
-                TASKCLUSTER_PROXY_URL: 'http://taskcluster'
                 MOZHARNESS_SCRIPT: android_wrench.py
                 MOZHARNESS_CONFIG: android/wrench.py
                 NEED_WINDOW_MANAGER: 'true'

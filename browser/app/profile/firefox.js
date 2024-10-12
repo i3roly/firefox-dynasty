@@ -433,6 +433,9 @@ pref("browser.urlbar.suggest.engines",              true);
 pref("browser.urlbar.suggest.calculator",           false);
 pref("browser.urlbar.suggest.recentsearches",       true);
 
+pref("browser.urlbar.deduplication.enabled", false);
+pref("browser.urlbar.deduplication.thresholdDays", 7);
+
 pref("browser.urlbar.scotchBonnet.enableOverride", false);
 
 // Enable trending suggestions and recent searches.
@@ -498,6 +501,10 @@ pref("browser.urlbar.quicksuggest.enabled", false);
 
 // Whether Suggest should be hidden in the settings UI even when enabled.
 pref("browser.urlbar.quicksuggest.hideSettingsUI", false);
+
+// Ranking mode of QuickSuggest. Currently used for relevance ranking
+// experimentation. It can be any of "default", "interest", and "random".
+pref("browser.urlbar.quicksuggest.rankingMode", "default");
 
 // Whether Firefox Suggest will use the new Rust backend instead of the original
 // JS backend.

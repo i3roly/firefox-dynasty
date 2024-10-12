@@ -7,6 +7,7 @@ package mozilla.components.concept.engine
 import mozilla.components.concept.engine.EngineSession.CookieBannerHandlingMode
 import mozilla.components.concept.engine.EngineSession.SafeBrowsingPolicy
 import mozilla.components.concept.engine.EngineSession.TrackingProtectionPolicy
+import mozilla.components.concept.engine.fission.WebContentIsolationStrategy
 import mozilla.components.concept.engine.history.HistoryTrackingDelegate
 import mozilla.components.concept.engine.mediaquery.PreferredColorScheme
 import mozilla.components.concept.engine.request.RequestInterceptor
@@ -278,6 +279,16 @@ abstract class Settings {
      * Setting to control the user characteristic ping current version.
      */
     open var userCharacteristicPingCurrentVersion: Int by UnsupportedSetting()
+
+    /**
+     * Setting to control whether the desktop user agent is used.
+     */
+    open val desktopModeEnabled: Boolean by UnsupportedSetting()
+
+    /**
+     * Setting to control the web content isolation strategy used by fission.
+     */
+    open var webContentIsolationStrategy: WebContentIsolationStrategy? by UnsupportedSetting()
 }
 
 /**
@@ -333,7 +344,13 @@ data class DefaultSettings(
     override var queryParameterStrippingStripList: String = "",
     override var emailTrackerBlockingPrivateBrowsing: Boolean = false,
     override var userCharacteristicPingCurrentVersion: Int = 0,
-) : Settings()
+    override var webContentIsolationStrategy: WebContentIsolationStrategy? =
+        WebContentIsolationStrategy.ISOLATE_HIGH_VALUE,
+    val getDesktopMode: () -> Boolean = { false },
+) : Settings() {
+    override val desktopModeEnabled: Boolean
+        get() = getDesktopMode()
+}
 
 class UnsupportedSetting<T> {
     operator fun getValue(thisRef: Any?, prop: KProperty<*>): T {

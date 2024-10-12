@@ -247,6 +247,14 @@
   value: @IS_NIGHTLY_BUILD@
   mirror: always
 
+# Whether to enable all accessibility cache domains on startup.
+#  * false: enable domains as needed
+#  * true:  enable all domains regardless of need (cache everything)
+- name: accessibility.enable_all_cache_domains
+  type: bool
+  value: false
+  mirror: once
+
 # Whether form controls and images should be focusable with mouse, in content
 # documents.
 #
@@ -7969,6 +7977,13 @@
 #endif
   mirror: always
 
+# Use the realm local dom alloc site.
+- name: javascript.options.dom_alloc_site
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: always
+
 # Use better error message when accessing property of null or undefined.
 - name: javascript.options.property_error_message_fix
   type: bool
@@ -8071,6 +8086,13 @@
   mirror: always
   set_spidermonkey_pref: startup
 
+# Experimental support for Uint8Array base64/hex in JavaScript.
+-   name: javascript.options.experimental.uint8array_base64
+    type: bool
+    value: true
+    mirror: always
+    set_spidermonkey_pref: startup
+
 #ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
 -   name: javascript.options.experimental.async_iterator_helpers
@@ -8081,13 +8103,6 @@
 
   # Experimental support for Symbols as WeakMap keys in JavaScript.
 -   name: javascript.options.experimental.symbols_as_weakmap_keys
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Uint8Array base64/hex in JavaScript.
--   name: javascript.options.experimental.uint8array_base64
     type: bool
     value: false
     mirror: always
@@ -8113,6 +8128,13 @@
     mirror: always
     set_spidermonkey_pref: startup
 
+  # Experimental support for Error.isError in JavaScript.
+-   name: javascript.options.experimental.error_iserror
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
   # Experimental support for Math.sumPrecise in JavaScript.
 -   name: javascript.options.experimental.math_sumprecise
     type: bool
@@ -8129,6 +8151,13 @@
 
   # Experimental support for Joint Iteration in JavaScript.
 -   name: javascript.options.experimental.joint_iteration
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Atomics.pause in JavaScript.
+-   name: javascript.options.experimental.atomics_pause
     type: bool
     value: false
     mirror: always
@@ -8595,6 +8624,8 @@
   type: bool
 #if defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(MOZ_X11)
+  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
@@ -9188,6 +9219,13 @@
 - name: layout.css.has-selector.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+  rust: true
+
+# Whether the `:has-slotted` pseudo class is enabled
+- name: layout.css.has-slotted-selector.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
   rust: true
 
@@ -12274,7 +12312,7 @@
 # Use sever time (Date header) to adjust the expire cookie attribute
 - name: network.cookie.useServerTime
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # If we should attempt to race the cache and network.
@@ -14319,7 +14357,7 @@
 
 # Is support for Permissions.query enabled for camera and microphone?
 - name: permissions.media.query.enabled
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -15609,12 +15647,15 @@
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.
-# - "all" => filters that contain all revocations,
-# - "specified" => filters that contain revocations with specified reason codes,
-# - "priority" => filters that contain high priority revocations.
+# - "all" => bloom-filter cascades that contain all revocations,
+# - "experimental" => clubcards that contain all revocations.
 - name: security.pki.crlite_channel
   type: String
-  value: "specified"
+#ifdef NIGHTLY_BUILD
+  value: "experimental"
+#else
+  value: "all"
+#endif
   mirror: never
 
 - name: security.pki.use_modern_crypto_with_pkcs12
@@ -15729,17 +15770,17 @@
 
 - name: security.tls.enable_certificate_compression_zlib
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 - name: security.tls.enable_certificate_compression_brotli
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 - name: security.tls.enable_certificate_compression_zstd
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 - name: security.ssl.treat_unsafe_negotiation_as_broken

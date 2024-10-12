@@ -80,11 +80,6 @@ struct ClearResetOriginParams
   bool clientTypeIsExplicit;
 };
 
-struct ResetOriginParams
-{
-  ClearResetOriginParams commonParams;
-};
-
 struct PersistedParams
 {
   PrincipalInfo principalInfo;
@@ -108,7 +103,6 @@ union RequestParams
 {
   StorageNameParams;
   GetFullOriginMetadataParams;
-  ResetOriginParams;
   PersistedParams;
   PersistParams;
   EstimateParams;
@@ -132,6 +126,13 @@ parent:
       returns(BoolResponse response);
 
   async TemporaryStorageInitialized()
+      returns(BoolResponse response);
+
+  async PersistentOriginInitialized(PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
+  async TemporaryOriginInitialized(PersistenceType persistenceType,
+                                   PrincipalInfo principalInfo)
       returns(BoolResponse response);
 
   async InitializeStorage()
@@ -188,6 +189,15 @@ parent:
       returns(BoolResponse response);
 
   async ClearStorage()
+      returns(BoolResponse response);
+
+  async ShutdownStoragesForOrigin(PersistenceType? persistenceType,
+                                  PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
+  async ShutdownStoragesForClient(PersistenceType? persistenceType,
+                                  PrincipalInfo principalInfo,
+                                  Type clientType)
       returns(BoolResponse response);
 
   async ShutdownStorage()

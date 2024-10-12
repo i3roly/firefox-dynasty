@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 browser.jar:
+    content/browser/profiles/avatar.css           (content/avatar.css)
+    content/browser/profiles/avatar.mjs           (content/avatar.mjs)
     content/browser/profiles/delete-profile-card.css (content/delete-profile-card.css)
     content/browser/profiles/delete-profile-card.mjs (content/delete-profile-card.mjs)
     content/browser/profiles/delete-profile.html    (content/delete-profile.html)
@@ -13,5 +15,7 @@ browser.jar:
     content/browser/profiles/profile-card.mjs     (content/profile-card.mjs)
     content/browser/profiles/profile-selector.css (content/profile-selector.css)
     content/browser/profiles/profile-selector.mjs (content/profile-selector.mjs)
+    content/browser/profiles/profiles-theme-card.css (content/profiles-theme-card.css)
+    content/browser/profiles/profiles-theme-card.mjs (content/profiles-theme-card.mjs)
     content/browser/profiles/profiles.html        (content/profiles.html)
     content/browser/profiles/assets/              (content/assets/*)

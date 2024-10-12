@@ -892,6 +892,7 @@ LiveRange* LiveBundle::rangeFor(CodePosition pos) const {
 
 void LiveBundle::addRange(LiveRange* range) {
   MOZ_ASSERT(!range->bundle());
+  MOZ_ASSERT(range->hasVreg());
   range->setBundle(this);
   InsertSortedList(ranges_, range);
 }
@@ -1375,10 +1376,7 @@ bool BacktrackingAllocator::minimalBundle(LiveBundle* bundle, bool* pfixed) {
   LiveBundle::RangeIterator iter = bundle->rangesBegin();
   LiveRange* range = *iter;
 
-  if (!range->hasVreg()) {
-    *pfixed = true;
-    return true;
-  }
+  MOZ_ASSERT(range->hasVreg(), "Call ranges are not added to LiveBundles");
 
   // If a bundle contains multiple ranges, splitAtAllRegisterUses will split
   // each range into a separate bundle.
@@ -3229,7 +3227,7 @@ bool BacktrackingAllocator::trySplitBeforeFirstRegisterUse(LiveBundle* bundle,
 // register uses".  When combined with how ::splitAt works, the effect is to
 // spill the bundle.
 
-bool BacktrackingAllocator::chooseBundleSplit(LiveBundle* bundle, bool fixed,
+bool BacktrackingAllocator::chooseBundleSplit(LiveBundle* bundle, bool hasCall,
                                               LiveBundle* conflict) {
   bool success = false;
 
@@ -3243,7 +3241,7 @@ bool BacktrackingAllocator::chooseBundleSplit(LiveBundle* bundle, bool fixed,
     return true;
   }
 
-  if (fixed) {
+  if (hasCall) {
     return splitAcrossCalls(bundle);
   }
 
@@ -3350,9 +3348,13 @@ bool BacktrackingAllocator::computeRequirement(LiveBundle* bundle,
 
 bool BacktrackingAllocator::tryAllocateRegister(PhysicalRegister& r,
                                                 LiveBundle* bundle,
-                                                bool* success, bool* pfixed,
+                                                bool* success, bool* hasCall,
                                                 LiveBundleVector& conflicting) {
   *success = false;
+
+  // If we know this bundle contains a call (where all registers are spilled) we
+  // shouldn't try again to allocate a register.
+  MOZ_ASSERT(!*hasCall);
 
   if (!r.allocatable) {
     return true;
@@ -3388,9 +3390,11 @@ bool BacktrackingAllocator::tryAllocateRegister(PhysicalRegister& r,
           return false;
         }
       } else {
+        // This bundle contains a call instruction.
+        MOZ_ASSERT(lookupFirstCallPositionInRange(range->from(), range->to()));
         JitSpewIfEnabled(JitSpew_RegAlloc, "  %s collides with fixed use %s",
                          rAlias.reg.name(), existing->toString().get());
-        *pfixed = true;
+        *hasCall = true;
         return true;
       }
       MOZ_ASSERT(r.reg.numAliased() == numAliased);
@@ -3453,7 +3457,7 @@ bool BacktrackingAllocator::tryAllocateRegister(PhysicalRegister& r,
 }
 
 bool BacktrackingAllocator::tryAllocateAnyRegister(
-    LiveBundle* bundle, bool* success, bool* pfixed,
+    LiveBundle* bundle, bool* success, bool* hasCall,
     LiveBundleVector& conflicting) {
   // Search for any available register which the bundle can be allocated to.
 
@@ -3464,11 +3468,16 @@ bool BacktrackingAllocator::tryAllocateAnyRegister(
       if (!LDefinition::isFloatRegCompatible(type, registers[i].reg.fpu())) {
         continue;
       }
-      if (!tryAllocateRegister(registers[i], bundle, success, pfixed,
+      if (!tryAllocateRegister(registers[i], bundle, success, hasCall,
                                conflicting)) {
         return false;
       }
       if (*success) {
+        break;
+      }
+      if (*hasCall) {
+        // This bundle contains a call instruction. Calls require spilling all
+        // registers, so we have to split or spill this bundle.
         break;
       }
     }
@@ -3476,11 +3485,16 @@ bool BacktrackingAllocator::tryAllocateAnyRegister(
   }
 
   for (size_t i = 0; i < AnyRegister::FirstFloatReg; i++) {
-    if (!tryAllocateRegister(registers[i], bundle, success, pfixed,
+    if (!tryAllocateRegister(registers[i], bundle, success, hasCall,
                              conflicting)) {
       return false;
     }
     if (*success) {
+      break;
+    }
+    if (*hasCall) {
+      // This bundle contains a call instruction. Calls require spilling all
+      // registers, so we have to split or spill this bundle.
       break;
     }
   }
@@ -3511,7 +3525,7 @@ bool BacktrackingAllocator::evictBundle(LiveBundle* bundle) {
 
 bool BacktrackingAllocator::tryAllocateFixed(LiveBundle* bundle,
                                              Requirement requirement,
-                                             bool* success, bool* pfixed,
+                                             bool* success, bool* hasCall,
                                              LiveBundleVector& conflicting) {
   // Spill bundles which are required to be in a certain stack slot.
   if (!requirement.allocation().isRegister()) {
@@ -3522,34 +3536,21 @@ bool BacktrackingAllocator::tryAllocateFixed(LiveBundle* bundle,
   }
 
   AnyRegister reg = requirement.allocation().toRegister();
-  return tryAllocateRegister(registers[reg.code()], bundle, success, pfixed,
+  return tryAllocateRegister(registers[reg.code()], bundle, success, hasCall,
                              conflicting);
 }
 
 bool BacktrackingAllocator::tryAllocateNonFixed(LiveBundle* bundle,
                                                 Requirement requirement,
                                                 Requirement hint, bool* success,
-                                                bool* pfixed,
+                                                bool* hasCall,
                                                 LiveBundleVector& conflicting) {
-  // If we want, but do not require a bundle to be in a specific register,
-  // only look at that register for allocating and evict or spill if it is
-  // not available. Picking a separate register may be even worse than
-  // spilling, as it will still necessitate moves and will tie up more
-  // registers than if we spilled.
-  if (hint.kind() == Requirement::FIXED) {
-    AnyRegister reg = hint.allocation().toRegister();
-    if (!tryAllocateRegister(registers[reg.code()], bundle, success, pfixed,
-                             conflicting)) {
-      return false;
-    }
-    if (*success) {
-      return true;
-    }
-  }
+  MOZ_ASSERT(hint.kind() != Requirement::FIXED);
+  MOZ_ASSERT(conflicting.empty());
 
   // Spill bundles which have no hint or register requirement.
   if (requirement.kind() == Requirement::NONE &&
-      hint.kind() != Requirement::REGISTER) {
+      hint.kind() == Requirement::NONE) {
     JitSpew(JitSpew_RegAlloc,
             "  postponed spill (no hint or register requirement)");
     if (!spilledBundles.append(bundle)) {
@@ -3559,13 +3560,11 @@ bool BacktrackingAllocator::tryAllocateNonFixed(LiveBundle* bundle,
     return true;
   }
 
-  if (conflicting.empty() || minimalBundle(bundle)) {
-    if (!tryAllocateAnyRegister(bundle, success, pfixed, conflicting)) {
-      return false;
-    }
-    if (*success) {
-      return true;
-    }
+  if (!tryAllocateAnyRegister(bundle, success, hasCall, conflicting)) {
+    return false;
+  }
+  if (*success) {
+    return true;
   }
 
   // Spill bundles which have no register requirement if they didn't get
@@ -3614,28 +3613,30 @@ bool BacktrackingAllocator::processBundle(const MIRGenerator* mir,
   // for higher weight bundles.
 
   Requirement requirement, hint;
-  bool canAllocate = computeRequirement(bundle, &requirement, &hint);
+  bool doesNotHaveFixedConflict =
+      computeRequirement(bundle, &requirement, &hint);
 
-  bool fixed;
+  bool hasCall = false;
   LiveBundleVector conflicting;
-  for (size_t attempt = 0;; attempt++) {
-    if (mir->shouldCancel("Backtracking Allocation (processBundle loop)")) {
-      return false;
-    }
 
-    if (canAllocate) {
+  if (doesNotHaveFixedConflict) {
+    for (size_t attempt = 0;; attempt++) {
+      if (mir->shouldCancel("Backtracking Allocation (processBundle loop)")) {
+        return false;
+      }
+
       bool success = false;
-      fixed = false;
+      hasCall = false;
       conflicting.clear();
 
       // Ok, let's try allocating for this bundle.
       if (requirement.kind() == Requirement::FIXED) {
-        if (!tryAllocateFixed(bundle, requirement, &success, &fixed,
+        if (!tryAllocateFixed(bundle, requirement, &success, &hasCall,
                               conflicting)) {
           return false;
         }
       } else {
-        if (!tryAllocateNonFixed(bundle, requirement, hint, &success, &fixed,
+        if (!tryAllocateNonFixed(bundle, requirement, hint, &success, &hasCall,
                                  conflicting)) {
           return false;
         }
@@ -3646,9 +3647,9 @@ bool BacktrackingAllocator::processBundle(const MIRGenerator* mir,
         return true;
       }
 
-      // If that didn't work, but we have one or more non-fixed bundles
-      // known to be conflicting, maybe we can evict them and try again.
-      if ((attempt < MAX_ATTEMPTS || minimalBundle(bundle)) && !fixed &&
+      // If that didn't work, but we have one or more non-call bundles known to
+      // be conflicting, maybe we can evict them and try again.
+      if ((attempt < MAX_ATTEMPTS || minimalBundle(bundle)) && !hasCall &&
           !conflicting.empty() &&
           maximumSpillWeight(conflicting) < computeSpillWeight(bundle)) {
         for (size_t i = 0; i < conflicting.length(); i++) {
@@ -3658,17 +3659,20 @@ bool BacktrackingAllocator::processBundle(const MIRGenerator* mir,
         }
         continue;
       }
+
+      // We have to split this bundle.
+      break;
     }
-
-    // A minimal bundle cannot be split any further. If we try to split it
-    // it at this point we will just end up with the same bundle and will
-    // enter an infinite loop. Weights and the initial live ranges must
-    // be constructed so that any minimal bundle is allocatable.
-    MOZ_ASSERT(!minimalBundle(bundle));
-
-    LiveBundle* conflict = conflicting.empty() ? nullptr : conflicting[0];
-    return chooseBundleSplit(bundle, canAllocate && fixed, conflict);
   }
+
+  // A minimal bundle cannot be split any further. If we try to split it
+  // it at this point we will just end up with the same bundle and will
+  // enter an infinite loop. Weights and the initial live ranges must
+  // be constructed so that any minimal bundle is allocatable.
+  MOZ_ASSERT(!minimalBundle(bundle));
+
+  LiveBundle* conflict = conflicting.empty() ? nullptr : conflicting[0];
+  return chooseBundleSplit(bundle, hasCall, conflict);
 }
 
 // Helper for ::tryAllocatingRegistersForSpillBundles
@@ -3696,7 +3700,7 @@ bool BacktrackingAllocator::tryAllocatingRegistersForSpillBundles() {
   for (auto it = spilledBundles.begin(); it != spilledBundles.end(); it++) {
     LiveBundle* bundle = *it;
     LiveBundleVector conflicting;
-    bool fixed = false;
+    bool hasCall = false;
     bool success = false;
 
     if (mir->shouldCancel("Backtracking Try Allocating Spilled Bundles")) {
@@ -3706,7 +3710,7 @@ bool BacktrackingAllocator::tryAllocatingRegistersForSpillBundles() {
     JitSpewIfEnabled(JitSpew_RegAlloc, "Spill or allocate %s",
                      bundle->toString().get());
 
-    if (!tryAllocateAnyRegister(bundle, &success, &fixed, conflicting)) {
+    if (!tryAllocateAnyRegister(bundle, &success, &hasCall, conflicting)) {
       return false;
     }
 

@@ -217,7 +217,7 @@ export class _DSCard extends React.PureComponent {
 
   doesLinkTopicMatchSelectedTopic() {
     // Edge case for clicking on a card when topic selections have not be set
-    if (this.props.selectedTopics === "") {
+    if (!this.props.selectedTopics) {
       return "not-set";
     }
 
@@ -675,6 +675,7 @@ export class _DSCard extends React.PureComponent {
                 recommended_at: this.props.recommended_at,
                 received_rank: this.props.received_rank,
                 topic: this.props.topic,
+                is_list_card: this.props.isListCard,
               },
             ]}
             dispatch={this.props.dispatch}
@@ -739,6 +740,7 @@ export class _DSCard extends React.PureComponent {
               scheduled_corpus_item_id={this.props.scheduled_corpus_item_id}
               recommended_at={this.props.recommended_at}
               received_rank={this.props.received_rank}
+              is_list_card={this.props.isListCard}
             />
           </div>
         </div>

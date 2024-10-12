@@ -138,6 +138,24 @@ function temporaryStorageInitialized(callback) {
   return request;
 }
 
+function persistentOriginInitialized(principal, callback) {
+  let request =
+    SpecialPowers._getQuotaManager().persistentOriginInitialized(principal);
+  request.callback = callback;
+
+  return request;
+}
+
+function temporaryOriginInitialized(persistence, principal, callback) {
+  let request = SpecialPowers._getQuotaManager().temporaryOriginInitialized(
+    persistence,
+    principal
+  );
+  request.callback = callback;
+
+  return request;
+}
+
 function init(callback) {
   let request = SpecialPowers._getQuotaManager().init();
   request.callback = callback;
@@ -241,10 +259,10 @@ function clearPrivateBrowsing(callback) {
 }
 
 function resetClient(principal, client) {
-  let request = Services.qms.resetStoragesForPrincipal(
+  let request = Services.qms.resetStoragesForClient(
     principal,
-    "default",
-    client
+    client,
+    "default"
   );
 
   return request;
