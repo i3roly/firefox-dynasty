@@ -53,30 +53,6 @@
 #  include "GLLibraryEGL.h"
 #endif
 
-#include <sys/utsname.h>
-
-//mavericks needs a bigger stack, optimised or not. so let's sing it one more
-//time.. i'm blue--da ba dee, da ba dai, da ba dee daba dai--box
-// See Source/WebKit/chromium/base/mac/mac_util.mm DarwinMajorVersionInternal for original source.
-static int readVersion() {
-    struct utsname info;
-    if (uname(&info) != 0) {
-        return 0;
-    }
-    if (strcmp(info.sysname, "Darwin") != 0) {
-        return 0;
-    }
-    char* dot = strchr(info.release, '.');
-    if (!dot) {
-        return 0;
-    }
-    int version = atoi(info.release);
-    return version;
-}
-static int darwinVersion() {
-    static int darwin_version = readVersion();
-    return darwin_version;
-}
 using namespace mozilla;
 
 static already_AddRefed<gl::GLContext> CreateGLContext(nsACString& aError);
