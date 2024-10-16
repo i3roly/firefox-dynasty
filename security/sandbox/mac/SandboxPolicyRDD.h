@@ -25,6 +25,11 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (deny feature)
       (deny feature (with no-log))))
 
+  ;;; older macs need this to let the VT decoder get through
+  ;;; i have no idea what service it is on sub 1013 systems
+  (if (<= macosVersion 1012) 
+   (allow default))
+  
   (moz-deny default)
   ; These are not included in (deny default)
   (if (>= macosVersion 1009) 
@@ -213,6 +218,7 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (if (>= macosVersion 1013)
    (allow mach-lookup
      (global-name "com.apple.audio.AudioComponentRegistrar")))
+
 
 
 )SANDBOX_LITERAL";
