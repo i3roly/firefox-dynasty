@@ -109,10 +109,6 @@ JS_PUBLIC_API const JSClass* js::ProtoKeyToClass(JSProtoKey key) {
   return protoTable[key];
 }
 
-static bool IsIteratorHelpersEnabled() {
-  return JS::Prefs::experimental_iterator_helpers();
-}
-
 static bool IsAsyncIteratorHelpersEnabled() {
 #ifdef NIGHTLY_BUILD
   return JS::Prefs::experimental_async_iterator_helpers();
@@ -138,6 +134,7 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
     case JSProto_RegExp:
     case JSProto_Error:
     case JSProto_InternalError:
+    case JSProto_Iterator:
     case JSProto_AggregateError:
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
     case JSProto_SuppressedError:
@@ -248,9 +245,6 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
     case JSProto_FinalizationRegistry:
       return JS::GetWeakRefsEnabled() == JS::WeakRefSpecifier::Disabled;
 
-    case JSProto_Iterator:
-      return !IsIteratorHelpersEnabled();
-
     case JSProto_AsyncIterator:
       return !IsAsyncIteratorHelpersEnabled();
 
@@ -352,10 +346,8 @@ bool GlobalObject::resolveConstructor(JSContext* cx,
 
   // %IteratorPrototype%.map.[[Prototype]] is %Generator% and
   // %Generator%.prototype.[[Prototype]] is %IteratorPrototype%.
-  // A workaround in initIteratorProto prevents runaway mutual recursion while
-  // setting these up. Ensure the workaround is triggered already:
   if (key == JSProto_GeneratorFunction &&
-      !global->hasBuiltinProto(ProtoKind::IteratorProto)) {
+      !global->hasPrototype(JSProto_Iterator)) {
     if (!getOrCreateIteratorPrototype(cx, global)) {
       return false;
     }
@@ -446,6 +438,19 @@ bool GlobalObject::resolveConstructor(JSContext* cx,
     if (!JS::MaybeFreezeCtorAndPrototype(cx, ctor, proto)) {
       return false;
     }
+  }
+
+  // If the prototype exists, mark the object as used as a prototype to enable
+  // Watchtower observation of protos which may not yet actually have an
+  // instance which yet uses it as a proto!
+  //
+  // You might well be asking: "Why not set IsUsedAsPrototype when constructing
+  // the proto object?". This ends up leading to a fair amount of complexity in
+  // how standard protos are linked together and the properties we want to
+  // enforce. Generally, it's fine if we don't watch for mutations on protos
+  // until they get exposed to user code.
+  if (proto && !JSObject::setFlag(cx, proto, ObjectFlag::IsUsedAsPrototype)) {
+    return false;
   }
 
   if (!isObjectOrFunction) {
@@ -1026,16 +1031,10 @@ bool GlobalObject::addIntrinsicValue(JSContext* cx,
 /* static */
 JSObject* GlobalObject::createIteratorPrototype(JSContext* cx,
                                                 Handle<GlobalObject*> global) {
-  if (!IsIteratorHelpersEnabled()) {
-    return getOrCreateBuiltinProto(cx, global, ProtoKind::IteratorProto,
-                                   initIteratorProto);
-  }
-
   if (!ensureConstructor(cx, global, JSProto_Iterator)) {
     return nullptr;
   }
   JSObject* proto = &global->getPrototype(JSProto_Iterator);
-  global->initBuiltinProto(ProtoKind::IteratorProto, proto);
   return proto;
 }
 

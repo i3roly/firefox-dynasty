@@ -131,6 +131,13 @@ function storageInitialized(callback) {
   return request;
 }
 
+function persistentStorageInitialized(callback) {
+  let request = SpecialPowers._getQuotaManager().persistentStorageInitialized();
+  request.callback = callback;
+
+  return request;
+}
+
 function temporaryStorageInitialized(callback) {
   let request = SpecialPowers._getQuotaManager().temporaryStorageInitialized();
   request.callback = callback;
@@ -163,6 +170,13 @@ function init(callback) {
   return request;
 }
 
+function initializePersistentStorage(callback) {
+  let request = SpecialPowers._getQuotaManager().initializePersistentStorage();
+  request.callback = callback;
+
+  return request;
+}
+
 function initTemporaryStorage(callback) {
   let request = SpecialPowers._getQuotaManager().initTemporaryStorage();
   request.callback = callback;
@@ -178,10 +192,16 @@ function initPersistentOrigin(principal, callback) {
   return request;
 }
 
-function initTemporaryOrigin(persistence, principal, callback) {
+function initTemporaryOrigin(
+  persistence,
+  principal,
+  createIfNonExistent = true,
+  callback
+) {
   let request = SpecialPowers._getQuotaManager().initializeTemporaryOrigin(
     persistence,
-    principal
+    principal,
+    createIfNonExistent
   );
   request.callback = callback;
 
@@ -659,8 +679,13 @@ function verifyStorage(packageDefinitionRelativePaths, key, sharedKey) {
 
 async function verifyInitializationStatus(
   expectStorageIsInitialized,
+  expectPersistentStorageIsInitialized,
   expectTemporaryStorageIsInitialized
 ) {
+  if (!expectStorageIsInitialized && expectPersistentStorageIsInitialized) {
+    throw new Error("Invalid expectation");
+  }
+
   if (!expectStorageIsInitialized && expectTemporaryStorageIsInitialized) {
     throw new Error("Invalid expectation");
   }
@@ -670,10 +695,20 @@ async function verifyInitializationStatus(
 
   const storageIsInitialized = request.result;
 
+  request = persistentStorageInitialized();
+  await requestFinished(request);
+
+  const persistentStorageIsInitialized = request.result;
+
   request = temporaryStorageInitialized();
   await requestFinished(request);
 
   const temporaryStorageIsInitialized = request.result;
+
+  ok(
+    !(!storageIsInitialized && persistentStorageIsInitialized),
+    "Initialization status is consistent"
+  );
 
   ok(
     !(!storageIsInitialized && temporaryStorageIsInitialized),
@@ -684,6 +719,15 @@ async function verifyInitializationStatus(
     ok(storageIsInitialized, "Storage is initialized");
   } else {
     ok(!storageIsInitialized, "Storage is not initialized");
+  }
+
+  if (expectPersistentStorageIsInitialized) {
+    ok(persistentStorageIsInitialized, "Persistent storage is initialized");
+  } else {
+    ok(
+      !persistentStorageIsInitialized,
+      "Persistent storage is not initialized"
+    );
   }
 
   if (expectTemporaryStorageIsInitialized) {

@@ -367,12 +367,12 @@ pref("browser.overlink-delay", 80);
 
 pref("browser.theme.colorway-closet", true);
 
-#ifdef XP_MACOSX
-#ifdef NIGHTLY_BUILD
-pref("browser.theme.macos.native-theme", true);
+#if defined(MOZ_WIDGET_GTK)
+  pref("browser.theme.native-theme", true);
+#elif defined(XP_MACOSX) && defined(NIGHTLY_BUILD)
+  pref("browser.theme.native-theme", true);
 #else
-pref("browser.theme.macos.native-theme", false);
-#endif
+  pref("browser.theme.native-theme", false);
 #endif
 
 // Whether expired built-in colorways themes that are active or retained
@@ -3016,6 +3016,11 @@ pref("devtools.debugger.features.map-await-expression", true);
 pref("devtools.debugger.features.async-captured-stacks", true);
 pref("devtools.debugger.features.async-live-stacks", false);
 pref("devtools.debugger.hide-ignored-sources", false);
+#if defined(NIGHTLY_BUILD)
+  pref("devtools.debugger.features.codemirror-next", true);
+#else
+  pref("devtools.debugger.features.codemirror-next", false);
+#endif
 
 // Disable autohide for DevTools popups and tooltips.
 // This is currently not exposed by any UI to avoid making

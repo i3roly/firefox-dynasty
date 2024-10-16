@@ -32,6 +32,7 @@
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/net/DNSPacket.h"
 #include "nsIDNSService.h"
+#include "nsINetworkLinkService.h"
 
 namespace mozilla::net {
 
@@ -163,7 +164,7 @@ static MOZ_ALWAYS_INLINE nsresult _GetTTLData_Windows(const nsACString& aHost,
 static MOZ_ALWAYS_INLINE nsresult
 _DNSQuery_A_SingleLabel(const nsACString& aCanonHost, uint16_t aAddressFamily,
                         uint16_t aFlags, AddrInfo** aAddrInfo) {
-  bool setCanonName = aFlags & nsHostResolver::RES_CANON_NAME;
+  bool setCanonName = aFlags & nsIDNSService::RESOLVE_CANONICAL_NAME;
   nsAutoCString canonName;
   const DWORD flags = (DNS_QUERY_STANDARD | DNS_QUERY_NO_MULTICAST |
                        DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE);
@@ -202,7 +203,7 @@ _DNSQuery_A_SingleLabel(const nsACString& aCanonHost, uint16_t aAddressFamily,
 
 static MOZ_ALWAYS_INLINE nsresult
 _GetAddrInfo_Portable(const nsACString& aCanonHost, uint16_t aAddressFamily,
-                      uint16_t aFlags, AddrInfo** aAddrInfo) {
+                      nsIDNSService::DNSFlags aFlags, AddrInfo** aAddrInfo) {
   MOZ_ASSERT(!aCanonHost.IsEmpty());
   MOZ_ASSERT(aAddrInfo);
 
@@ -210,7 +211,7 @@ _GetAddrInfo_Portable(const nsACString& aCanonHost, uint16_t aAddressFamily,
   // need to translate the aFlags into a form that PR_GetAddrInfoByName
   // accepts.
   int prFlags = PR_AI_ADDRCONFIG;
-  if (!(aFlags & nsHostResolver::RES_CANON_NAME)) {
+  if (!(aFlags & nsIDNSService::RESOLVE_CANONICAL_NAME)) {
     prFlags |= PR_AI_NOCANONNAME;
   }
 
@@ -219,6 +220,17 @@ _GetAddrInfo_Portable(const nsACString& aCanonHost, uint16_t aAddressFamily,
   bool disableIPv4 = aAddressFamily == PR_AF_INET6;
   if (disableIPv4) {
     aAddressFamily = PR_AF_UNSPEC;
+  }
+
+  if (StaticPrefs::network_dns_skip_ipv6_when_no_addresses() &&
+      !nsINetworkLinkService::HasNonLocalIPv6Address()) {
+    // If the family was AF_UNSPEC initially, make it AF_INET
+    // when there are no IPv6 addresses.
+    // If the DNS request specified IPv6 specifically, let it
+    // go through.
+    if (aAddressFamily == PR_AF_UNSPEC && !disableIPv4) {
+      aAddressFamily = PR_AF_INET;
+    }
   }
 
 #if defined(DNSQUERY_AVAILABLE)
@@ -250,12 +262,12 @@ _GetAddrInfo_Portable(const nsACString& aCanonHost, uint16_t aAddressFamily,
   }
 
   nsAutoCString canonName;
-  if (aFlags & nsHostResolver::RES_CANON_NAME) {
+  if (aFlags & nsIDNSService::RESOLVE_CANONICAL_NAME) {
     canonName.Assign(PR_GetCanonNameFromAddrInfo(prai));
   }
 
   bool filterNameCollision =
-      !(aFlags & nsHostResolver::RES_ALLOW_NAME_COLLISION);
+      !(aFlags & nsIDNSService::RESOLVE_ALLOW_NAME_COLLISION);
   RefPtr<AddrInfo> ai(new AddrInfo(aCanonHost, prai, disableIPv4,
                                    filterNameCollision, canonName));
   PR_FreeAddrInfo(prai);
@@ -297,7 +309,7 @@ nsresult GetAddrInfoShutdown() {
 }
 
 bool FindAddrOverride(const nsACString& aHost, uint16_t aAddressFamily,
-                      uint16_t aFlags, AddrInfo** aAddrInfo) {
+                      nsIDNSService::DNSFlags aFlags, AddrInfo** aAddrInfo) {
   RefPtr<NativeDNSResolverOverride> overrideService = gOverrideService;
   if (!overrideService) {
     return false;
@@ -308,7 +320,7 @@ bool FindAddrOverride(const nsACString& aHost, uint16_t aAddressFamily,
     return false;
   }
   nsCString* cname = nullptr;
-  if (aFlags & nsHostResolver::RES_CANON_NAME) {
+  if (aFlags & nsIDNSService::RESOLVE_CANONICAL_NAME) {
     cname = overrideService->mCnames.Lookup(aHost).DataPtrOrNull();
   }
 
@@ -334,7 +346,8 @@ bool FindAddrOverride(const nsACString& aHost, uint16_t aAddressFamily,
 }
 
 nsresult GetAddrInfo(const nsACString& aHost, uint16_t aAddressFamily,
-                     uint16_t aFlags, AddrInfo** aAddrInfo, bool aGetTtl) {
+                     nsIDNSService::DNSFlags aFlags, AddrInfo** aAddrInfo,
+                     bool aGetTtl) {
   if (NS_WARN_IF(aHost.IsEmpty()) || NS_WARN_IF(!aAddrInfo)) {
     return NS_ERROR_NULL_POINTER;
   }
@@ -347,7 +360,7 @@ nsresult GetAddrInfo(const nsACString& aHost, uint16_t aAddressFamily,
 #ifdef DNSQUERY_AVAILABLE
   // The GetTTLData needs the canonical name to function properly
   if (aGetTtl) {
-    aFlags |= nsHostResolver::RES_CANON_NAME;
+    aFlags |= nsIDNSService::RESOLVE_CANONICAL_NAME;
   }
 #endif
 
@@ -477,7 +490,8 @@ nsresult ParseHTTPSRecord(nsCString& aHost, DNSPacket& aDNSPacket,
   return NS_OK;
 }
 
-nsresult ResolveHTTPSRecord(const nsACString& aHost, uint16_t aFlags,
+nsresult ResolveHTTPSRecord(const nsACString& aHost,
+                            nsIDNSService::DNSFlags aFlags,
                             TypeRecordResultType& aResult, uint32_t& aTTL) {
   if (gOverrideService) {
     return FindHTTPSRecordOverride(aHost, aResult) ? NS_OK
@@ -488,7 +502,7 @@ nsresult ResolveHTTPSRecord(const nsACString& aHost, uint16_t aFlags,
 }
 
 nsresult CreateAndResolveMockHTTPSRecord(const nsACString& aHost,
-                                         uint16_t aFlags,
+                                         nsIDNSService::DNSFlags aFlags,
                                          TypeRecordResultType& aResult,
                                          uint32_t& aTTL) {
   nsCString buffer;
@@ -631,8 +645,9 @@ NS_IMETHODIMP NativeDNSResolverOverride::ClearOverrides() {
 
 // If there is no platform specific implementation of ResolveHTTPSRecordImpl
 // we link a dummy implementation here.
-// Otherwise this is implemented in GetAddrInfoWin/Linux/etc
-nsresult ResolveHTTPSRecordImpl(const nsACString& aHost, uint16_t aFlags,
+// Otherwise this is implemented in PlatformDNSWin/Linux/etc
+nsresult ResolveHTTPSRecordImpl(const nsACString& aHost,
+                                nsIDNSService::DNSFlags aFlags,
                                 TypeRecordResultType& aResult, uint32_t& aTTL) {
   return NS_ERROR_NOT_IMPLEMENTED;
 }

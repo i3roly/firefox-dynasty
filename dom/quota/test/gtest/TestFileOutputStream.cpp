@@ -57,12 +57,6 @@ TEST_F(TestFileOutputStream, extendFileStreamWithSetEOF) {
 
       auto originMetadata = GetOutputStreamTestOriginMetadata();
 
-      {
-        auto res = quotaManager->EnsureTemporaryOriginIsInitializedInternal(
-            originMetadata);
-        ASSERT_TRUE(res.isOk());
-      }
-
       const int64_t groupLimit =
           static_cast<int64_t>(quotaManager->GetGroupLimit());
       ASSERT_TRUE(mQuotaLimit * 1024LL == groupLimit);
@@ -80,7 +74,8 @@ TEST_F(TestFileOutputStream, extendFileStreamWithSetEOF) {
                                               quota::Client::Type::SDB);
 
       {
-        auto testPathRes = quotaManager->GetOriginDirectory(originMetadata);
+        auto testPathRes =
+            quotaManager->GetOrCreateTemporaryOriginDirectory(originMetadata);
 
         ASSERT_TRUE(testPathRes.isOk());
 

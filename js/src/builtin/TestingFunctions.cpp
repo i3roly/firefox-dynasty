@@ -1780,6 +1780,10 @@ static bool DisassembleNative(JSContext* cx, unsigned argc, Value* vp) {
   uint8_t* jit_end = nullptr;
 
   if (fun->isAsmJSNative() || fun->isWasmWithJitEntry()) {
+    if (IsAsmJSModule(fun)) {
+      JS_ReportErrorASCII(cx, "Can't disassemble asm.js module function.");
+      return false;
+    }
     if (fun->isAsmJSNative()) {
       sprinter.printf("; backend=asmjs\n");
     }
@@ -2678,6 +2682,7 @@ static bool SelectForGC(JSContext* cx, unsigned argc, Value* vp) {
   for (unsigned i = 0; i < args.length(); i++) {
     if (args[i].isObject()) {
       if (!cx->runtime()->gc.selectForMarking(&args[i].toObject())) {
+        ReportOutOfMemory(cx);
         return false;
       }
     }

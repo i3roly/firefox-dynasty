@@ -1218,6 +1218,90 @@ const AVAILABLE_INJECTIONS = [
       ],
     },
   },
+  {
+    id: "bug1836872",
+    platform: "desktop",
+    domain: "docs.google.com",
+    bug: "1836872",
+    contentScripts: {
+      matches: ["*://docs.google.com/document/*"],
+      css: [
+        {
+          file: "injections/css/bug1836872-docs.google.com-font-submenus-inaccessible.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1779908",
+    platform: "desktop",
+    domain: "docs.google.com",
+    bug: "1779908",
+    contentScripts: {
+      matches: ["*://play.google.com/store/*"],
+      css: [
+        {
+          file: "injections/css/bug1779908-play.google.com-scrollbar-fix.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1879879",
+    platform: "all",
+    domain: "developers.pinterest.com",
+    bug: "1879879",
+    contentScripts: {
+      matches: ["*://developers.pinterest.com/docs/*"],
+      css: [
+        {
+          file: "injections/css/bug1879879-developers.pinterest.com-list-alignment-fix.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1856915",
+    platform: "android",
+    domain: "login.yahoo.com",
+    bug: "1856915",
+    contentScripts: {
+      matches: ["*://login.yahoo.com/account/*"],
+      css: [
+        {
+          file: "injections/css/bug1856915-login.yahoo.com-unhide-password-button-fix.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1841730",
+    platform: "desktop",
+    domain: "www.korg.com",
+    bug: "1841730",
+    contentScripts: {
+      matches: ["*://www.korg.com/*/support/download/product/*"],
+      js: [
+        {
+          file: "injections/js/bug1841730-www.korg.com-fix-broken-page-loads.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1895051",
+    platform: "all",
+    domain: "www.zhihu.com",
+    bug: "1895051",
+    contentScripts: {
+      matches: ["*://www.zhihu.com/question/*"],
+      css: [
+        {
+          file: "injections/css/bug1895051-www.zhihu.com-broken-button-fix.css",
+        },
+      ],
+    },
+  },
 ];
 
 module.exports = AVAILABLE_INJECTIONS;

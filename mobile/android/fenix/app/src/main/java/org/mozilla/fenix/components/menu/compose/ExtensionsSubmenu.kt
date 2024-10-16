@@ -40,12 +40,13 @@ import org.mozilla.fenix.compose.list.TextListItem
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.Theme
 
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "LongMethod")
 @Composable
 internal fun ExtensionsSubmenu(
     recommendedAddons: List<Addon>,
     webExtensionMenuItems: List<WebExtensionMenuItem.WebExtensionBrowserMenuItem>,
     showExtensionsOnboarding: Boolean,
+    showDisabledExtensionsOnboarding: Boolean,
     showManageExtensions: Boolean,
     addonInstallationInProgress: Addon?,
     onBackButtonClick: () -> Unit,
@@ -54,6 +55,7 @@ internal fun ExtensionsSubmenu(
     onAddonClick: (Addon) -> Unit,
     onInstallAddonClick: (Addon) -> Unit,
     onDiscoverMoreExtensionsMenuClick: () -> Unit,
+    webExtensionMenuItemClick: () -> Unit,
 ) {
     MenuScaffold(
         header = {
@@ -64,16 +66,27 @@ internal fun ExtensionsSubmenu(
             )
         },
     ) {
-        if (showExtensionsOnboarding) {
+        if (showExtensionsOnboarding || showDisabledExtensionsOnboarding) {
             ExtensionsSubmenuBanner(
-                title = stringResource(
-                    R.string.browser_menu_extensions_banner_onboarding_header,
-                    stringResource(R.string.app_name),
-                ),
-                description = stringResource(
-                    R.string.browser_menu_extensions_banner_onboarding_body,
-                    stringResource(R.string.app_name),
-                ),
+                title = if (showExtensionsOnboarding) {
+                    stringResource(
+                        R.string.browser_menu_extensions_banner_onboarding_header,
+                        stringResource(R.string.app_name),
+                    )
+                } else {
+                    stringResource(R.string.browser_menu_disabled_extensions_banner_onboarding_header)
+                },
+                description = if (showExtensionsOnboarding) {
+                    stringResource(
+                        R.string.browser_menu_extensions_banner_onboarding_body,
+                        stringResource(R.string.app_name),
+                    )
+                } else {
+                    stringResource(
+                        R.string.browser_menu_disabled_extensions_banner_onboarding_body,
+                        stringResource(R.string.browser_menu_manage_extensions),
+                    )
+                },
                 linkText = stringResource(R.string.browser_menu_extensions_banner_learn_more),
                 onClick = onExtensionsLearnMoreClick,
             )
@@ -95,7 +108,10 @@ internal fun ExtensionsSubmenu(
                         badgeText = webExtensionMenuItem.badgeText,
                         badgeTextColor = webExtensionMenuItem.badgeTextColor,
                         badgeBackgroundColor = webExtensionMenuItem.badgeBackgroundColor,
-                        onClick = webExtensionMenuItem.onClick,
+                        onClick = {
+                            webExtensionMenuItemClick()
+                            webExtensionMenuItem.onClick()
+                        },
                     )
                 }
             }
@@ -201,6 +217,7 @@ private fun ExtensionsSubmenuPreview() {
                     ),
                 ),
                 showExtensionsOnboarding = true,
+                showDisabledExtensionsOnboarding = true,
                 showManageExtensions = true,
                 addonInstallationInProgress = Addon(
                     id = "id",
@@ -229,6 +246,7 @@ private fun ExtensionsSubmenuPreview() {
                 onAddonClick = {},
                 onInstallAddonClick = {},
                 onDiscoverMoreExtensionsMenuClick = {},
+                webExtensionMenuItemClick = {},
             )
         }
     }
@@ -272,6 +290,7 @@ private fun ExtensionsSubmenuPrivatePreview() {
                     ),
                 ),
                 showExtensionsOnboarding = true,
+                showDisabledExtensionsOnboarding = false,
                 showManageExtensions = false,
                 addonInstallationInProgress = null,
                 onBackButtonClick = {},
@@ -280,6 +299,7 @@ private fun ExtensionsSubmenuPrivatePreview() {
                 onAddonClick = {},
                 onInstallAddonClick = {},
                 onDiscoverMoreExtensionsMenuClick = {},
+                webExtensionMenuItemClick = {},
             )
         }
     }

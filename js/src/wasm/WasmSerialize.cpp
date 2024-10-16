@@ -1159,7 +1159,7 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
   // NOTE: keep the field sequence here in sync with the sequence in the
   // declaration of CodeMetadata.
 
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 1128);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 1120);
   // Serialization doesn't handle asm.js or debug enabled modules
   MOZ_RELEASE_ASSERT(mode == MODE_SIZE || !item->isAsmJS());
 
@@ -1219,12 +1219,6 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
            mode, SharedBytes,
            &CodeRefPtr<mode, const ShareableBytes, CodeShareableBytes>>(
       coder, &item->bytecode)));
-
-  // We don't serialize `lazyTieringHeuristics` or `inliningHeuristics` because
-  // they store copies of various prefs.  Serializing them would have the
-  // effect that changing the prefs, restarting the browser and reloading
-  // cached wasm content would ignore the prefs change for cached content, but
-  // not for new content.
 
   // Serialize stats, taking care not to be holding the lock when the actual
   // serialization/deserialization happens.
@@ -1479,6 +1473,14 @@ CoderResult CodeModule(Coder<mode>& coder, CoderArg<mode, Module> item) {
 }  // namespace wasm
 }  // namespace js
 
+bool Module::canSerialize() const {
+  // TODO(bug 1903131): JS string builtins don't support serialization
+  // TODO(bug 1913109): lazy tiering doesn't support serialization
+  return code_->mode() != CompileMode::LazyTiering &&
+         codeMeta().features().builtinModules.hasNone() &&
+         !codeMeta().debugEnabled;
+}
+
 static bool GetSerializedSize(const Module& module, size_t* size) {
   Coder<MODE_SIZE> coder(module.codeMeta().types.get());
   auto result = CodeModule(coder, &module);
@@ -1490,7 +1492,7 @@ static bool GetSerializedSize(const Module& module, size_t* size) {
 }
 
 bool Module::serialize(Bytes* bytes) const {
-  MOZ_RELEASE_ASSERT(!codeMeta().debugEnabled);
+  MOZ_RELEASE_ASSERT(canSerialize());
   MOZ_RELEASE_ASSERT(code_->hasCompleteTier(Tier::Serialized));
 
   size_t serializedSize;

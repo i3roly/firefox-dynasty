@@ -36,7 +36,7 @@ object Versions {
     const val detekt = "1.23.7"
     const val ktlint = "0.49.1"
 
-    const val sentry = "7.14.0"
+    const val sentry = "7.15.0"
 
     const val zxing = "3.5.3"
 
@@ -111,9 +111,9 @@ object Versions {
         const val androidx_test_uiautomator = "2.3.0"
         const val falcon = "2.2.0"
         const val fastlane = "2.1.1"
-        const val junit = "5.11.1"
-        const val mockito = "5.14.1"
-        const val mockk = "1.13.12"
+        const val junit = "5.11.2"
+        const val mockito = "5.14.2"
+        const val mockk = "1.13.13"
     }
 }
 

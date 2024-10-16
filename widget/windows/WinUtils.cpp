@@ -18,6 +18,7 @@
 #include "mozilla/ArrayUtils.h"
 #include "mozilla/BackgroundHangMonitor.h"
 #include "mozilla/ClearOnShutdown.h"
+#include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/DataSurfaceHelpers.h"
@@ -2067,6 +2068,12 @@ bool WinUtils::GetTimezoneName(wchar_t* aBuffer) {
   wcscpy_s(aBuffer, 128, tzInfo.TimeZoneKeyName);
 
   return true;
+}
+
+bool WinUtils::MicaEnabled() {
+  static bool sEnabled =
+      IsWin1122H2OrLater() && StaticPrefs::widget_windows_mica_AtStartup();
+  return sEnabled;
 }
 
 // There are undocumented APIs to query/change the system DPI settings found by

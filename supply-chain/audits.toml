@@ -52,6 +52,22 @@ start = "2021-06-21"
 end = "2024-04-21"
 notes = "No unsafe code, rather straight-forward parser."
 
+[[wildcard-audits.clubcard]]
+who = "John M. Schanck <jschanck@mozilla.com>"
+criteria = "safe-to-deploy"
+user-id = 175410 # John Schanck (jschanck)
+start = "2024-10-01"
+end = "2025-10-01"
+notes = "Maintained by the CryptoEng team at Mozilla."
+
+[[wildcard-audits.clubcard-crlite]]
+who = "John M. Schanck <jschanck@mozilla.com>"
+criteria = "safe-to-deploy"
+user-id = 175410 # John Schanck (jschanck)
+start = "2024-10-01"
+end = "2025-10-01"
+notes = "Maintained by the CryptoEng team at Mozilla."
+
 [[wildcard-audits.cocoa]]
 who = "Bobby Holley <bobbyholley@gmail.com>"
 criteria = "safe-to-deploy"
@@ -3238,11 +3254,11 @@ delta = "0.20.0 -> 22.0.0"
 [[audits.naga]]
 who = [
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
-    "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:ee0d1703e5f4a267ce9b87d50b824190b45b5a79"
+delta = "22.0.0 -> 22.0.0@git:d70ef62e9e0683789f745c6a4354495f39354c15"
 importable = false
 
 [[audits.net2]]
@@ -3426,6 +3442,12 @@ delta = "1.13.1 -> 1.16.0"
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.1"
+
+[[audits.once_cell]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.20.1 -> 1.20.2"
+notes = "This update works around a Cargo bug that forces the addition of `portable-atomic` into a lockfile, which we have never needed to use."
 
 [[audits.oneshot]]
 who = "Ben Dean-Kawamura <bdk@mozilla.com>"
@@ -5286,11 +5308,11 @@ delta = "0.20.0 -> 22.0.0"
 [[audits.wgpu-core]]
 who = [
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
-    "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:ee0d1703e5f4a267ce9b87d50b824190b45b5a79"
+delta = "22.0.0 -> 22.0.0@git:d70ef62e9e0683789f745c6a4354495f39354c15"
 importable = false
 
 [[audits.wgpu-hal]]
@@ -5359,11 +5381,11 @@ delta = "0.20.0 -> 22.0.0"
 [[audits.wgpu-hal]]
 who = [
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
-    "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:ee0d1703e5f4a267ce9b87d50b824190b45b5a79"
+delta = "22.0.0 -> 22.0.0@git:d70ef62e9e0683789f745c6a4354495f39354c15"
 importable = false
 
 [[audits.wgpu-types]]
@@ -5432,11 +5454,11 @@ delta = "0.20.0 -> 22.0.0"
 [[audits.wgpu-types]]
 who = [
     "Teodor Tanasoaia <ttanasoaia@mozilla.com>",
-    "Erich Gubler <erichdongubler@gmail.com>",
     "Jim Blandy <jimb@red-bean.com>",
+    "Erich Gubler <erichdongubler@gmail.com>",
 ]
 criteria = "safe-to-deploy"
-delta = "22.0.0 -> 22.0.0@git:ee0d1703e5f4a267ce9b87d50b824190b45b5a79"
+delta = "22.0.0 -> 22.0.0@git:d70ef62e9e0683789f745c6a4354495f39354c15"
 importable = false
 
 [[audits.whatsys]]

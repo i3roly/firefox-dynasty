@@ -2302,6 +2302,16 @@ void Document::AccumulatePageLoadTelemetry(
       aEventTelemetryDataOut.loadTime =
           mozilla::Some(static_cast<uint32_t>(loadTime.ToMilliseconds()));
     }
+
+    TimeStamp requestStart;
+    timedChannel->GetRequestStart(&requestStart);
+    if (requestStart) {
+      TimeDuration timeToRequestStart = requestStart - navigationStart;
+      if (timeToRequestStart > zeroDuration) {
+        aEventTelemetryDataOut.timeToRequestStart = mozilla::Some(
+            static_cast<uint32_t>(timeToRequestStart.ToMilliseconds()));
+      }
+    }
   }
 
   aEventTelemetryDataOut.features = mozilla::Some(mPageloadEventFeatures);
@@ -15527,6 +15537,9 @@ void Document::HidePopover(Element& aPopover, bool aFocusPreviousElement,
   auto cleanupHidingFlag = MakeScopeExit([&]() {
     if (auto* popoverData = popoverHTMLEl->GetPopoverData()) {
       popoverData->SetIsShowingOrHiding(wasShowingOrHiding);
+      if (auto* closeWatcher = popoverData->GetCloseWatcher()) {
+        closeWatcher->Destroy();
+      }
     }
   });
 
@@ -15560,8 +15573,7 @@ void Document::HidePopover(Element& aPopover, bool aFocusPreviousElement,
   if (fireEvents) {
     // Intentionally ignore the return value here as only on open event for
     // beforetoggle the cancelable attribute is initialized to true.
-    popoverHTMLEl->FireToggleEvent(PopoverVisibilityState::Showing,
-                                   PopoverVisibilityState::Hidden,
+    popoverHTMLEl->FireToggleEvent(u"open"_ns, u"closed"_ns,
                                    u"beforetoggle"_ns);
 
     // https://html.spec.whatwg.org/multipage/popover.html#hide-popover-algorithm

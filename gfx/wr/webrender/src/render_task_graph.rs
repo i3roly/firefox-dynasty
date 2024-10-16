@@ -22,8 +22,7 @@ use crate::image_source::{resolve_image, resolve_cached_render_task};
 use smallvec::SmallVec;
 use topological_sort::TopologicalSort;
 
-use crate::render_target::{RenderTargetList, ColorRenderTarget};
-use crate::render_target::{PictureCacheTarget, TextureCacheRenderTarget, AlphaRenderTarget};
+use crate::render_target::{RenderTargetList, PictureCacheTarget, RenderTarget};
 use crate::util::{Allocation, VecHelper};
 use std::{usize, f32};
 
@@ -644,13 +643,16 @@ impl RenderTaskGraphBuilder {
                 // We'll handle it later and it's easier to not have to
                 // deal with unexpected location variants like
                 // RenderTaskLocation::CacheRequest when we do.
-                let source = cache_item.texture_id;
                 task.uv_rect_handle = cache_item.uv_rect_handle;
-                task.location = RenderTaskLocation::Static {
-                    surface: StaticRenderTaskSurface::ReadOnly { source },
-                    rect: cache_item.uv_rect,
-                };
+                if let RenderTaskLocation::CacheRequest { .. } = &task.location {
+                    let source = cache_item.texture_id;
+                    task.location = RenderTaskLocation::Static {
+                        surface: StaticRenderTaskSurface::ReadOnly { source },
+                        rect: cache_item.uv_rect,
+                    };
+                }
             }
+
             // Give the render task an opportunity to add any
             // information to the GPU cache, if appropriate.
             let target_rect = task.get_target_rect();
@@ -853,9 +855,9 @@ fn assign_free_pass(
 #[cfg_attr(feature = "replay", derive(Deserialize))]
 pub struct RenderPass {
     /// The subpasses that describe targets being rendered to in this pass
-    pub alpha: RenderTargetList<AlphaRenderTarget>,
-    pub color: RenderTargetList<ColorRenderTarget>,
-    pub texture_cache: FastHashMap<CacheTextureId, TextureCacheRenderTarget>,
+    pub alpha: RenderTargetList,
+    pub color: RenderTargetList,
+    pub texture_cache: FastHashMap<CacheTextureId, RenderTarget>,
     pub picture_cache: FrameVec<PictureCacheTarget>,
     pub textures_to_invalidate: FrameVec<CacheTextureId>,
 }

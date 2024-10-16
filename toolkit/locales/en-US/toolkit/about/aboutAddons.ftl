@@ -488,7 +488,7 @@ recent-updates-heading = Recent Updates
 release-notes-loading = Loading…
 release-notes-error = Sorry, but there was an error loading the release notes.
 
-addon-permissions-empty = This extension doesn’t require any permissions
+addon-permissions-empty2 = This extension doesn’t require any permissions.
 addon-permissions-required = Required permissions for core functionality:
 addon-permissions-optional = Optional permissions for added functionality:
 addon-permissions-learnmore = Learn more about permissions
@@ -538,17 +538,19 @@ details-notification-unsigned-and-disabled2 =
 details-notification-unsigned2 =
     .message = { $name } could not be verified for use in { -brand-short-name }. Proceed with caution.
 
-details-notification-blocked2 =
-    .message = { $name } has been disabled due to security or stability issues.
+details-notification-hard-blocked-extension =
+    .message = This extension is blocked for violating Mozilla’s policies and has been disabled.
+details-notification-hard-blocked-other =
+    .message = This add-on is blocked for violating Mozilla’s policies and has been disabled.
 details-notification-blocked-link2 = See Details
 
-details-notification-softblocked-extension-disabled =
-    .message = This extension violates Mozilla’s policies and has been disabled. You can enable it, but this may be risky.
-details-notification-softblocked-extension-enabled =
+details-notification-soft-blocked-extension-disabled =
+    .message = This extension is restricted for violating Mozilla’s policies and has been disabled. You can enable it, but this may be risky.
+details-notification-soft-blocked-extension-enabled =
     .message = This extension violates Mozilla’s policies. Using it may be risky.
-details-notification-softblocked-other-disabled =
-    .message = This add-on violates Mozilla’s policies and has been disabled. You can enable it, but this may be risky.
-details-notification-softblocked-other-enabled =
+details-notification-soft-blocked-other-disabled =
+    .message = This add-on is restricted for violating Mozilla’s policies and has been disabled. You can enable it, but this may be risky.
+details-notification-soft-blocked-other-enabled =
     .message = This add-on violates Mozilla’s policies. Using it may be risky.
 details-notification-softblocked-link2 = See Details
 

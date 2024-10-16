@@ -5065,7 +5065,7 @@ class Maintenance final : public Runnable {
   nsTHashMap<nsStringHashKey, DatabaseMaintenance*> mDatabaseMaintenances;
   nsresult mResultCode;
   Atomic<bool> mAborted;
-  bool mInitializeOriginsFailed;
+  bool mOpenStorageForAllRepositoriesFailed;
   State mState;
 
  public:
@@ -5075,7 +5075,7 @@ class Maintenance final : public Runnable {
         mStartTime(PR_Now()),
         mResultCode(NS_OK),
         mAborted(false),
-        mInitializeOriginsFailed(false),
+        mOpenStorageForAllRepositoriesFailed(false),
         mState(State::Initial) {
     AssertIsOnBackgroundThread();
     MOZ_ASSERT(aQuotaClient);
@@ -5144,7 +5144,7 @@ class Maintenance final : public Runnable {
   nsresult CreateIndexedDatabaseManager();
 
   RefPtr<UniversalDirectoryLockPromise> OpenStorageDirectory(
-      bool aInitializeOrigins);
+      const PersistenceScope& aPersistenceScope, bool aInitializeOrigins);
 
   // Runs on the PBackground thread. Once QuotaManager has given a lock it will
   // call DirectoryOpen().
@@ -13077,7 +13077,7 @@ nsresult Maintenance::CreateIndexedDatabaseManager() {
 }
 
 RefPtr<UniversalDirectoryLockPromise> Maintenance::OpenStorageDirectory(
-    bool aInitializeOrigins) {
+    const PersistenceScope& aPersistenceScope, bool aInitializeOrigins) {
   AssertIsOnBackgroundThread();
   MOZ_ASSERT(!QuotaClient::IsShuttingDownOnBackgroundThread());
   MOZ_ASSERT(!mDirectoryLock);
@@ -13089,7 +13089,7 @@ RefPtr<UniversalDirectoryLockPromise> Maintenance::OpenStorageDirectory(
 
   // Return a shared lock for <profile>/storage/*/*/idb
   return quotaManager->OpenStorageDirectory(
-      PersistenceScope::CreateFromNull(), OriginScope::FromNull(),
+      aPersistenceScope, OriginScope::FromNull(),
       Nullable<Client::Type>(Client::IDB),
       /* aExclusive */ false, aInitializeOrigins, DirectoryLockCategory::None,
       SomeRef(mPendingDirectoryLock));
@@ -13109,11 +13109,13 @@ nsresult Maintenance::OpenDirectory() {
 
   mState = State::DirectoryOpenPending;
 
-  // Since idle maintenance may occur before temporary storage is initialized,
-  // make sure it's initialized here (all non-persistent origins need to be
-  // cleaned up and quota info needs to be loaded for them).
+  // Since idle maintenance may occur before persistent or temporary storage is
+  // initialized, make sure it's initialized here (all persistent and
+  // non-persistent origins need to be cleaned up and quota info needs to be
+  // loaded for non-persistent origins).
 
-  OpenStorageDirectory(/* aInitializeOrigins */ true)
+  OpenStorageDirectory(PersistenceScope::CreateFromNull(),
+                       /* aInitializeOrigins */ true)
       ->Then(
           GetCurrentSerialEventTarget(), __func__,
           [self = RefPtr(this)](
@@ -13128,7 +13130,7 @@ nsresult Maintenance::OpenDirectory() {
             // persistent repository can still be processed.
 
             self->mPendingDirectoryLock = nullptr;
-            self->mInitializeOriginsFailed = true;
+            self->mOpenStorageForAllRepositoriesFailed = true;
 
             if (NS_WARN_IF(QuotaClient::IsShuttingDownOnBackgroundThread()) ||
                 self->IsAborted()) {
@@ -13136,7 +13138,9 @@ nsresult Maintenance::OpenDirectory() {
               return;
             }
 
-            self->OpenStorageDirectory(/* aInitializeOrigins */ false)
+            self->OpenStorageDirectory(PersistenceScope::CreateFromValue(
+                                           PERSISTENCE_TYPE_PERSISTENT),
+                                       /* aInitializeOrigins */ true)
                 ->Then(GetCurrentSerialEventTarget(), __func__,
                        [self](const UniversalDirectoryLockPromise::
                                   ResolveOrRejectValue& aValue) {
@@ -13241,7 +13245,7 @@ nsresult Maintenance::DirectoryWork() {
 
     const bool persistent = persistenceType == PERSISTENCE_TYPE_PERSISTENT;
 
-    if (!persistent && mInitializeOriginsFailed) {
+    if (!persistent && mOpenStorageForAllRepositoriesFailed) {
       // Non-persistent (best effort) repositories can't be processed if
       // temporary storage initialization failed.
       continue;
@@ -13277,7 +13281,7 @@ nsresult Maintenance::DirectoryWork() {
     // Loop over "<origin>/idb" directories.
     QM_TRY(CollectEachFile(
         *persistenceDir,
-        [this, &quotaManager, persistent, persistenceType, &idbDirName](
+        [this, &quotaManager, persistenceType, &idbDirName](
             const nsCOMPtr<nsIFile>& originDir) -> Result<Ok, nsresult> {
           if (NS_WARN_IF(QuotaClient::IsShuttingDownOnNonBackgroundThread()) ||
               IsAborted()) {
@@ -13305,27 +13309,6 @@ nsresult Maintenance::DirectoryWork() {
               // that and don't do any maintenance for such databases.
               if (metadata.mIsPrivate) {
                 return Ok{};
-              }
-
-              if (persistent) {
-                // We have to check that all persistent origins are cleaned up,
-                // but there's no way to do that by one call, we need to
-                // initialize (and possibly clean up) them one by one
-                // (EnsureTemporaryStorageIsInitializedInternal cleans up only
-                // non-persistent origins).
-
-                QM_TRY_UNWRAP(
-                    const DebugOnly<bool> created,
-                    quotaManager
-                        ->EnsurePersistentOriginIsInitializedInternal(metadata)
-                        .map([](const auto& res) { return res.second; }),
-                    // Not much we can do here...
-                    Ok{});
-
-                // We found this origin directory by traversing the repository,
-                // so EnsurePersistentOriginIsInitializedInternal shouldn't
-                // report that a new directory has been created.
-                MOZ_ASSERT(!created);
               }
 
               QM_TRY_INSPECT(const auto& idbDir,
@@ -15255,18 +15238,15 @@ nsresult OpenDatabaseOp::DoDatabaseWork() {
 
   QM_TRY_INSPECT(
       const auto& dbDirectory,
-      ([persistenceType, &quotaManager, this]()
-           -> mozilla::Result<std::pair<nsCOMPtr<nsIFile>, bool>, nsresult> {
+      ([persistenceType, &quotaManager,
+        this]() -> mozilla::Result<nsCOMPtr<nsIFile>, nsresult> {
         if (persistenceType == PERSISTENCE_TYPE_PERSISTENT) {
-          QM_TRY_RETURN(
-              quotaManager->EnsurePersistentOriginIsInitializedInternal(
-                  mOriginMetadata));
+          QM_TRY_RETURN(quotaManager->GetOriginDirectory(mOriginMetadata));
         }
 
-        QM_TRY_RETURN(quotaManager->EnsureTemporaryOriginIsInitializedInternal(
-            mOriginMetadata));
-      }()
-                  .map([](const auto& res) { return res.first; })));
+        QM_TRY_RETURN(
+            quotaManager->GetOrCreateTemporaryOriginDirectory(mOriginMetadata));
+      }()));
 
   QM_TRY(MOZ_TO_RESULT(
       dbDirectory->Append(NS_LITERAL_STRING_FROM_CSTRING(IDB_DIRECTORY_NAME))));
@@ -16842,17 +16822,17 @@ nsresult GetDatabasesOp::DoDatabaseWork() {
     }
   }
 
-  QM_TRY(([&quotaManager, this]()
-              -> mozilla::Result<std::pair<nsCOMPtr<nsIFile>, bool>, nsresult> {
+  // XXX Is this really needed ?
+  QM_TRY(([&quotaManager,
+           this]() -> mozilla::Result<nsCOMPtr<nsIFile>, nsresult> {
     if (mPersistenceType == PERSISTENCE_TYPE_PERSISTENT) {
-      QM_TRY_RETURN(quotaManager->EnsurePersistentOriginIsInitializedInternal(
-          mOriginMetadata));
+      QM_TRY_RETURN(quotaManager->GetOriginDirectory(mOriginMetadata));
     }
 
-    QM_TRY_RETURN(quotaManager->EnsureTemporaryOriginIsInitializedInternal(
-        mOriginMetadata));
+    QM_TRY_RETURN(
+        quotaManager->GetOrCreateTemporaryOriginDirectory(mOriginMetadata));
   }()
-                     .map([](const auto& res) { return Ok{}; })));
+                          .map([](const auto& res) { return Ok{}; })));
 
   {
     QM_TRY_INSPECT(const bool& exists,
