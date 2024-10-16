@@ -886,19 +886,20 @@ checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 
 [[package]]
 name = "clubcard"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d413adde685b0ec7e867186296768474efc2aa952063f40a5198baf760ca983"
+checksum = "8ec3fe691cfeac642b45d2acee55f4c745fe9eed548380fd41d1fb7daf54297c"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "clubcard-crlite"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a85947de44196eb8effe46a2af1ac43e9309b7add92d805b411b7b98254935c9"
+checksum = "dd2c6f668aeaab6cf4c9637400ce5bc1f7ab1cf9b424dd0125273f16bd26ca25"
 dependencies = [
+ "base64 0.21.3",
  "bincode",
  "clubcard",
  "serde",
@@ -2510,9 +2511,9 @@ dependencies = [
 
 [[package]]
 name = "glean"
-version = "61.1.0"
+version = "61.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b40ab6c0f040b60a82ad3a1fa7e398bbe40ff4c070c4d3f6e4218d993c509a27"
+checksum = "639c884b018a14c4b36c85c412e92bc4a9d53ea6968eb22758b722d0e34e2bd4"
 dependencies = [
  "glean-core",
  "inherent",
@@ -2523,9 +2524,9 @@ dependencies = [
 
 [[package]]
 name = "glean-core"
-version = "61.1.0"
+version = "61.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fe3b11146d25bdcc85cb226fe34095524cd12f9d72353438ce25387e6684108"
+checksum = "9005a01cdc3de27bb3f0ca7053c1c1d77873fe2cc2878751b65e9557c5e3c6a5"
 dependencies = [
  "android_logger",
  "bincode",
