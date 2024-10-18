@@ -14,7 +14,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource://gre/modules/ContentRelevancyManager.sys.mjs",
   CONTEXTUAL_SERVICES_PING_TYPES:
     "resource:///modules/PartnerLinkAttribution.sys.mjs",
-  Interest: "resource://gre/modules/RustRelevancy.sys.mjs",
   MerinoClient: "resource:///modules/MerinoClient.sys.mjs",
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
   SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
@@ -38,29 +37,6 @@ ChromeUtils.defineLazyGetter(lazy, "contextId", () => {
 
 // Used for suggestions that don't otherwise have a score.
 const DEFAULT_SUGGESTION_SCORE = 0.2;
-
-const TELEMETRY_PREFIX = "contextual.services.quicksuggest";
-
-const TELEMETRY_SCALARS = {
-  BLOCK_DYNAMIC_WIKIPEDIA: `${TELEMETRY_PREFIX}.block_dynamic_wikipedia`,
-  BLOCK_NONSPONSORED: `${TELEMETRY_PREFIX}.block_nonsponsored`,
-  BLOCK_SPONSORED: `${TELEMETRY_PREFIX}.block_sponsored`,
-  CLICK_DYNAMIC_WIKIPEDIA: `${TELEMETRY_PREFIX}.click_dynamic_wikipedia`,
-  CLICK_NAV_NOTMATCHED: `${TELEMETRY_PREFIX}.click_nav_notmatched`,
-  CLICK_NAV_SHOWN_HEURISTIC: `${TELEMETRY_PREFIX}.click_nav_shown_heuristic`,
-  CLICK_NAV_SHOWN_NAV: `${TELEMETRY_PREFIX}.click_nav_shown_nav`,
-  CLICK_NAV_SUPERCEDED: `${TELEMETRY_PREFIX}.click_nav_superceded`,
-  CLICK_NONSPONSORED: `${TELEMETRY_PREFIX}.click_nonsponsored`,
-  CLICK_SPONSORED: `${TELEMETRY_PREFIX}.click_sponsored`,
-  HELP_NONSPONSORED: `${TELEMETRY_PREFIX}.help_nonsponsored`,
-  HELP_SPONSORED: `${TELEMETRY_PREFIX}.help_sponsored`,
-  IMPRESSION_DYNAMIC_WIKIPEDIA: `${TELEMETRY_PREFIX}.impression_dynamic_wikipedia`,
-  IMPRESSION_NAV_NOTMATCHED: `${TELEMETRY_PREFIX}.impression_nav_notmatched`,
-  IMPRESSION_NAV_SHOWN: `${TELEMETRY_PREFIX}.impression_nav_shown`,
-  IMPRESSION_NAV_SUPERCEDED: `${TELEMETRY_PREFIX}.impression_nav_superceded`,
-  IMPRESSION_NONSPONSORED: `${TELEMETRY_PREFIX}.impression_nonsponsored`,
-  IMPRESSION_SPONSORED: `${TELEMETRY_PREFIX}.impression_sponsored`,
-};
 
 /**
  * A provider that returns a suggested url to the user based on what
@@ -96,13 +72,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
   }
 
   /**
-   * @returns {object} An object mapping from mnemonics to scalar names.
-   */
-  get TELEMETRY_SCALARS() {
-    return { ...TELEMETRY_SCALARS };
-  }
-
-  /**
    * Whether this provider should be invoked for the given context.
    * If this method returns false, the providers manager won't start a query
    * with this provider, to save on resources.
@@ -111,8 +80,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
    * @returns {boolean} Whether this provider should be invoked for the search.
    */
   isActive(queryContext) {
-    this.#topPicksResultFromLastQuery = null;
-
     // If the sources don't include search or the user used a restriction
     // character other than search, don't allow any suggestions.
     if (
@@ -238,9 +205,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
           if (!result.isHiddenExposure) {
             remainingCount--;
           }
-          if (result.payload.telemetryType == "top_picks") {
-            this.#topPicksResultFromLastQuery = result;
-          }
         }
       }
     }
@@ -286,7 +250,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
     this.#recordEngagement(queryContext, this.#sessionResult, details);
 
     this.#sessionResult = null;
-    this.#topPicksResultFromLastQuery = null;
   }
 
   /**
@@ -513,101 +476,10 @@ class ProviderQuickSuggest extends UrlbarProvider {
         result.payload.isSponsored ? "sponsored" : "nonsponsored"
       );
 
-      // Record engagement scalars and pings.
-      this.#recordEngagementScalars({ result, resultSelType, resultClicked });
+      // Record engagement pings.
       if (!queryContext.isPrivate) {
         this.#recordEngagementPings({ result, resultSelType, resultClicked });
       }
-    }
-
-    // Navigational suggestions telemetry requires special handling and does not
-    // depend on a result being visible.
-    if (
-      lazy.UrlbarPrefs.get("recordNavigationalSuggestionTelemetry") &&
-      queryContext.heuristicResult
-    ) {
-      this.#recordNavSuggestionTelemetry({
-        queryContext,
-        result,
-        resultSelType,
-        resultClicked,
-        details,
-      });
-    }
-  }
-
-  /**
-   * Helper for engagement telemetry that records engagement scalars.
-   *
-   * @param {object} options
-   *   Options object
-   * @param {UrlbarResult} options.result
-   *   The quick suggest result related to the engagement. Must not be null.
-   * @param {string} options.resultSelType
-   *   If an element in the result's row was clicked, this should be its
-   *   `selType`. Otherwise it should be an empty string.
-   * @param {boolean} options.resultClicked
-   *   True if the main part of the result's row was clicked; false if a button
-   *   like help or dismiss was clicked or if no part of the row was clicked.
-   */
-  #recordEngagementScalars({ result, resultSelType, resultClicked }) {
-    // Navigational suggestion scalars are handled separately.
-    if (result.payload.telemetryType == "top_picks") {
-      return;
-    }
-
-    // Indexes recorded in quick suggest telemetry are 1-based, so add 1 to the
-    // 0-based `result.rowIndex`.
-    let telemetryResultIndex = result.rowIndex + 1;
-
-    let scalars = [];
-    switch (result.payload.telemetryType) {
-      case "adm_nonsponsored":
-        scalars.push(TELEMETRY_SCALARS.IMPRESSION_NONSPONSORED);
-        if (resultClicked) {
-          scalars.push(TELEMETRY_SCALARS.CLICK_NONSPONSORED);
-        } else {
-          switch (resultSelType) {
-            case "help":
-              scalars.push(TELEMETRY_SCALARS.HELP_NONSPONSORED);
-              break;
-            case "dismiss":
-              scalars.push(TELEMETRY_SCALARS.BLOCK_NONSPONSORED);
-              break;
-          }
-        }
-        break;
-      case "adm_sponsored":
-        scalars.push(TELEMETRY_SCALARS.IMPRESSION_SPONSORED);
-        if (resultClicked) {
-          scalars.push(TELEMETRY_SCALARS.CLICK_SPONSORED);
-        } else {
-          switch (resultSelType) {
-            case "help":
-              scalars.push(TELEMETRY_SCALARS.HELP_SPONSORED);
-              break;
-            case "dismiss":
-              scalars.push(TELEMETRY_SCALARS.BLOCK_SPONSORED);
-              break;
-          }
-        }
-        break;
-      case "wikipedia":
-        scalars.push(TELEMETRY_SCALARS.IMPRESSION_DYNAMIC_WIKIPEDIA);
-        if (resultClicked) {
-          scalars.push(TELEMETRY_SCALARS.CLICK_DYNAMIC_WIKIPEDIA);
-        } else {
-          switch (resultSelType) {
-            case "dismiss":
-              scalars.push(TELEMETRY_SCALARS.BLOCK_DYNAMIC_WIKIPEDIA);
-              break;
-          }
-        }
-        break;
-    }
-
-    for (let scalar of scalars) {
-      Services.telemetry.keyedScalarAdd(scalar, telemetryResultIndex, 1);
     }
   }
 
@@ -698,64 +570,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
         pingType: lazy.CONTEXTUAL_SERVICES_PING_TYPES.QS_BLOCK,
         iabCategory: result.payload.sponsoredIabCategory,
       });
-    }
-  }
-
-  /**
-   * Helper for engagement telemetry that records telemetry specific to
-   * navigational suggestions.
-   *
-   * @param {object} options
-   *   Options object
-   * @param {UrlbarQueryContext} options.queryContext
-   *   The query context.
-   * @param {UrlbarResult} options.result
-   *   The quick suggest result related to the engagement, or null if no result
-   *   was present.
-   * @param {boolean} options.resultClicked
-   *   True if the main part of the result's row was clicked; false if a button
-   *   like help or dismiss was clicked or if no part of the row was clicked.
-   * @param {object} options.details
-   *   The `details` object that was passed to `onEngagement()` or
-   *   `onSearchSessionEnd()`.
-   */
-  #recordNavSuggestionTelemetry({
-    queryContext,
-    result,
-    resultClicked,
-    details,
-  }) {
-    let scalars = [];
-    let heuristicClicked =
-      details.selIndex == 0 && queryContext.heuristicResult;
-
-    if (result?.payload.telemetryType == "top_picks") {
-      // nav suggestion shown
-      scalars.push(TELEMETRY_SCALARS.IMPRESSION_NAV_SHOWN);
-      if (resultClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_SHOWN_NAV);
-      } else if (heuristicClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_SHOWN_HEURISTIC);
-      }
-    } else if (this.#topPicksResultFromLastQuery?.payload.dupedHeuristic) {
-      // nav suggestion duped heuristic
-      scalars.push(TELEMETRY_SCALARS.IMPRESSION_NAV_SUPERCEDED);
-      if (heuristicClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_SUPERCEDED);
-      }
-    } else {
-      // nav suggestion not matched or otherwise not shown
-      scalars.push(TELEMETRY_SCALARS.IMPRESSION_NAV_NOTMATCHED);
-      if (heuristicClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_NOTMATCHED);
-      }
-    }
-
-    let heuristicType = UrlbarUtils.searchEngagementTelemetryType(
-      queryContext.heuristicResult
-    );
-    for (let scalar of scalars) {
-      Services.telemetry.keyedScalarAdd(scalar, heuristicType, 1);
     }
   }
 
@@ -883,20 +697,11 @@ class ProviderQuickSuggest extends UrlbarProvider {
   async #updateScorebyRelevance(suggestions) {
     for (let suggestion of suggestions) {
       if (suggestion.categories?.length) {
-        // UniFFI currently uses 1-based encoding for enums regardless of how
-        // it's defined upstream. Manually adjust that until that off-by-1
-        // handling gets fixed in the future.
-        //
-        // `INCONCLUSIVE` should be 0 as defined by upstream. If not, increment
-        // the categories by 1 provided by Merino or Remote Settings as they
-        // are guaranteed to use the correct encoding.
-        let categories = suggestion.categories;
-        if (lazy.Interest.INCONCLUSIVE !== 0) {
-          categories = categories.map(category => ++category);
-        }
-
         try {
-          let score = await lazy.ContentRelevancyManager.score(categories);
+          let score = await lazy.ContentRelevancyManager.score(
+            suggestion.categories,
+            true // adjustment needed b/c Merino uses the original encoding
+          );
           let oldScore = suggestion.score;
           if (isNaN(oldScore)) {
             oldScore = DEFAULT_SUGGESTION_SCORE;
@@ -979,9 +784,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
   get _test_merino() {
     return this.#merino;
   }
-
-  // The "top_picks" result added during the most recent query, if any.
-  #topPicksResultFromLastQuery = null;
 
   // The result from this provider that was visible at the end of the current
   // search session, if the session ended in an engagement.

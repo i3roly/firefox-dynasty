@@ -19,6 +19,9 @@ document.addEventListener(
         case "context_moveTabToNewGroup":
           TabContextMenu.moveTabsToNewGroup();
           break;
+        case "context_ungroupTab":
+          TabContextMenu.ungroupTabs();
+          break;
         case "context_reloadTab":
           gBrowser.reloadTab(TabContextMenu.contextTab);
           break;
@@ -257,6 +260,47 @@ document.addEventListener(
         case "select-translations-panel-about-translations-menuitem":
           SelectTranslationsPanel.onAboutTranslations();
           break;
+
+        // == customizationPanelItemContextMenu ==
+        case "customizationPanelItemContextMenuManageExtension":
+          ToolbarContextMenu.openAboutAddonsForContextAction(
+            event.target.parentElement
+          );
+          break;
+
+        case "customizationPanelItemContextMenuRemoveExtension":
+          ToolbarContextMenu.removeExtensionForContextAction(
+            event.target.parentElement
+          );
+          break;
+
+        case "customizationPanelItemContextMenuReportExtension":
+          ToolbarContextMenu.reportExtensionForContextAction(
+            event.target.parentElement,
+            "toolbar_context_menu"
+          );
+          break;
+
+        case "customizationPanelItemContextMenuPin":
+          gCustomizeMode.addToPanel(
+            event.target.parentNode.triggerNode,
+            "panelitem-context"
+          );
+          break;
+
+        case "customizationPanelItemContextMenuUnpin":
+          gCustomizeMode.addToToolbar(
+            event.target.parentNode.triggerNode,
+            "panelitem-context"
+          );
+          break;
+
+        case "customizationPanelItemContextMenuRemove":
+          gCustomizeMode.removeFromArea(
+            event.target.parentNode.triggerNode,
+            "panelitem-context"
+          );
+          break;
       }
     });
 
@@ -342,6 +386,10 @@ document.addEventListener(
           break;
         case "unified-extensions-context-menu":
           gUnifiedExtensions.updateContextMenu(event.target, event);
+          break;
+        case "customizationPanelItemContextMenu":
+          gCustomizeMode.onPanelContextMenuShowing(event);
+          ToolbarContextMenu.updateExtension(event.target);
           break;
       }
     });

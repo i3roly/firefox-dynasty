@@ -112,10 +112,10 @@ void js::ReportNotObjectArg(JSContext* cx, const char* nth, const char* fun,
   MOZ_ASSERT(!v.isObject());
 
   UniqueChars bytes;
-  if (const char* chars = ValueToSourceForError(cx, v, bytes)) {
-    JS_ReportErrorNumberLatin1(cx, GetErrorMessage, nullptr,
-                               JSMSG_OBJECT_REQUIRED_ARG, nth, fun, chars);
-  }
+  const char* chars = ValueToSourceForError(cx, v, bytes);
+  MOZ_ASSERT(chars);
+  JS_ReportErrorNumberLatin1(cx, GetErrorMessage, nullptr,
+                             JSMSG_OBJECT_REQUIRED_ARG, nth, fun, chars);
 }
 
 JS_PUBLIC_API const char* JS::InformalValueTypeName(const Value& v) {
@@ -2318,16 +2318,17 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
   // It's gently surprising that this is JSProto_Function, but the trick
   // to realize is that this is a -constructor function-, not a function
   // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_joint_iteration() &&
-      id == NameToId(cx->names().zip)) {
+  if (key == JSProto_Function && !JS::Prefs::experimental_iterator_range() &&
+      (id == NameToId(cx->names().range))) {
     return true;
   }
 
   // It's gently surprising that this is JSProto_Function, but the trick
   // to realize is that this is a -constructor function-, not a function
   // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_iterator_range() &&
-      (id == NameToId(cx->names().range))) {
+  if (key == JSProto_Function && !JS::Prefs::experimental_joint_iteration() &&
+      (id == NameToId(cx->names().zip) ||
+       id == NameToId(cx->names().zipKeyed))) {
     return true;
   }
 #endif

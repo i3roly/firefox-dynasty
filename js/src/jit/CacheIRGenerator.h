@@ -637,6 +637,16 @@ class MOZ_RAII InlinableNativeIRGenerator {
 
   AtomicsReadWriteModifyOperands emitAtomicsReadWriteModifyOperands();
 
+  enum class DateComponent {
+    FullYear,
+    Month,
+    Date,
+    Day,
+    Hours,
+    Minutes,
+    Seconds,
+  };
+
   AttachDecision tryAttachArrayPush();
   AttachDecision tryAttachArrayPopShift(InlinableNative native);
   AttachDecision tryAttachArrayJoin();
@@ -762,6 +772,8 @@ class MOZ_RAII InlinableNativeIRGenerator {
   AttachDecision tryAttachSetSize();
   AttachDecision tryAttachMapHas();
   AttachDecision tryAttachMapGet();
+  AttachDecision tryAttachDateGetTime(InlinableNative native);
+  AttachDecision tryAttachDateGet(DateComponent component);
 #ifdef FUZZING_JS_FUZZILLI
   AttachDecision tryAttachFuzzilliHash();
 #endif

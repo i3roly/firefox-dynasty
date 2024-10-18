@@ -3960,6 +3960,12 @@
   value: @IS_NIGHTLY_BUILD@
   mirror: always
 
+# If true, HTTPS-First will upgrade non-default ports
+- name: dom.security.https_first_for_custom_ports
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
 # If true, top-level requests in Private Browsing Mode will get
 # upgraded to HTTPS. (If dom.security.https_first
 # is set to true then this pref has no effect)
@@ -5887,6 +5893,8 @@
   value: true
 #elif defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(XP_WIN)
+  value: true
 #else
   value: false
 #endif
@@ -6251,7 +6259,7 @@
 # Whether to disable the automatic detection and use of direct2d.
 - name: gfx.direct2d.disabled
   type: bool
-  value: false
+  value: true
   mirror: once
 
 # Whether to attempt to enable Direct2D regardless of automatic detection or
@@ -8153,6 +8161,14 @@
     mirror: always
     set_spidermonkey_pref: startup
 
+  # Experimental support for Iterator Sequencing in JavaScript.
+-   name: javascript.options.experimental.iterator_sequencing
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+
 #endif  // NIGHTLY_BUILD
 
 -   name: javascript.options.experimental.json_parse_with_source
@@ -9395,7 +9411,7 @@
 # Is support for -moz-prefixed transform properties enabled?
 - name: layout.css.prefixes.transforms
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Is support for -moz-prefixed transition properties enabled?
@@ -10849,7 +10865,7 @@
 -   name: media.ffmpeg.encoder.enabled
     type: RelaxedAtomicBool
 #if !defined(MOZ_WIDGET_ANDROID)
-    value: @IS_NIGHTLY_BUILD@
+    value: true
 #else
     value: false
 #endif
@@ -11833,6 +11849,11 @@
   mirror: always
 
 - name: media.webrtc.tls_tunnel_for_all_proxy
+  type: bool
+  value: true
+  mirror: always
+
+- name: media.webrtc.disallow_HTTPS_upgrade_for_TURN
   type: bool
   value: true
   mirror: always

@@ -105,15 +105,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_count_partitioned:
     type: custom_distribution
@@ -127,15 +129,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_count_unpartitioned:
     type: custom_distribution
@@ -149,15 +153,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_count_part_by_key:
     type: custom_distribution
@@ -172,15 +178,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_count_unpart_by_key:
     type: custom_distribution
@@ -195,15 +203,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_purge_max:
     type: custom_distribution
@@ -219,15 +229,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_purge_entry_max:
     type: custom_distribution
@@ -243,15 +255,17 @@ networking:
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1828942#TDB
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892158
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   cookie_chips_partition_limit_overflow:
     type: custom_distribution
@@ -264,14 +278,16 @@ networking:
     unit: integer
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1878391
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1878391
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922606
     data_sensitivity:
       - technical
     notification_emails:
       - necko@mozilla.com
       - edgul@mozilla.com
-    expires: 134
+    expires: 146
 
   sqlite_cookies_block_main_thread:
     type: timing_distribution
@@ -399,6 +415,26 @@ networking:
       - acreskey@mozilla.com
     expires: never
     telemetry_mirror: DNS_LOOKUP_TIME
+
+  trr_fetch_duration:
+    type: labeled_timing_distribution
+    time_unit: millisecond
+    description: >
+      Time for a successful DoH request, from AsyncOpen to ReturnData
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922235
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922235
+    notification_emails:
+      - necko@mozilla.com
+    labels:
+      - h1
+      - h1_network_only
+      - h2
+      - h2_network_only
+      - h3
+      - h3_network_only
+    expires: never
 
   dns_renewal_time:
     type: timing_distribution
@@ -1434,6 +1470,7 @@ networking:
       Whether a top-level HTTP request gets upgraded to HTTPS and the reason for it
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1883954
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922559
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1883954
     notification_emails:
@@ -1460,6 +1497,7 @@ networking:
       - https_rr
       - web_extension_upgrade
       - upgrade_exception
+      - skip_upgrade
 
   http_channel_sub_open_to_first_sent_https_rr:
     type: timing_distribution

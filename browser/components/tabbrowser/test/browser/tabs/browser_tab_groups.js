@@ -18,6 +18,14 @@ async function removeTabGroup(group) {
   await removePromise;
 }
 
+function createManyTabs(number) {
+  return Array.from({ length: number }, () => {
+    return BrowserTestUtils.addTab(gBrowser, "about:blank", {
+      skipAnimation: true,
+    });
+  });
+}
+
 add_task(async function test_tabGroupCreateAndAddTab() {
   let tab1 = BrowserTestUtils.addTab(gBrowser, "about:blank");
   let group = gBrowser.addTabGroup([tab1]);
@@ -32,6 +40,19 @@ add_task(async function test_tabGroupCreateAndAddTab() {
   Assert.ok(group.tabs.includes(tab2), "tab1 is in group");
 
   await removeTabGroup(group);
+});
+
+add_task(async function test_tabGroupCreateAndAddTabAtPosition() {
+  let tabs = createManyTabs(10);
+  let tabToGroup = tabs[5];
+  let originalPos = tabToGroup._tPos;
+  gBrowser.addTabGroup([tabs[5]], { insertBefore: tabs[5] });
+
+  Assert.equal(tabToGroup._tPos, originalPos, "tab has not changed position");
+
+  tabs.forEach(t => {
+    BrowserTestUtils.removeTab(t);
+  });
 });
 
 add_task(async function test_getTabGroups() {
@@ -444,7 +465,8 @@ const withTabMenu = async function (tab, callback) {
     "context_moveTabToNewGroup"
   );
   const moveTabToGroupItem = document.getElementById("context_moveTabToGroup");
-  await callback(moveTabToNewGroupItem, moveTabToGroupItem);
+  const ungroupTabItem = document.getElementById("context_ungroupTab");
+  await callback(moveTabToNewGroupItem, moveTabToGroupItem, ungroupTabItem);
 
   tabContextMenu.hidePopup();
 };
@@ -462,10 +484,17 @@ add_task(async function test_tabGroupTabContextMenuWithoutPref() {
     skipAnimation: true,
   });
 
-  await withTabMenu(tab, async (moveTabToNewGroupItem, moveTabToGroupItem) => {
-    Assert.ok(moveTabToNewGroupItem.hidden, "moveTabToNewGroupItem is hidden");
-    Assert.ok(moveTabToGroupItem.hidden, "moveTabToGroupItem is hidden");
-  });
+  await withTabMenu(
+    tab,
+    async (moveTabToNewGroupItem, moveTabToGroupItem, ungroupTabItem) => {
+      Assert.ok(
+        moveTabToNewGroupItem.hidden,
+        "moveTabToNewGroupItem is hidden"
+      );
+      Assert.ok(moveTabToGroupItem.hidden, "moveTabToGroupItem is hidden");
+      Assert.ok(ungroupTabItem.hidden, "ungroupTabItem is hidden");
+    }
+  );
 
   BrowserTestUtils.removeTab(tab);
   await SpecialPowers.popPrefEnv();
@@ -508,11 +537,7 @@ add_task(async function test_tabGroupContextMenuMoveTabToNewGroup() {
  * appears in the context menu, and clicking it moves the tabs to a new group
  */
 add_task(async function test_tabGroupContextMenuMoveTabsToNewGroup() {
-  const tabs = Array.from({ length: 3 }, () => {
-    return BrowserTestUtils.addTab(gBrowser, "about:blank", {
-      skipAnimation: true,
-    });
-  });
+  const tabs = createManyTabs(3);
 
   // Click the first tab in our test group to make sure the default tab at the
   // start of the tab strip is deselected
@@ -607,11 +632,7 @@ add_task(
       skipAnimation: true,
     });
 
-    const otherTabs = Array.from({ length: 3 }, () => {
-      return BrowserTestUtils.addTab(gBrowser, "about:blank", {
-        skipAnimation: true,
-      });
-    });
+    const otherTabs = createManyTabs(3);
 
     otherTabs.forEach(t => {
       EventUtils.synthesizeMouseAtCenter(
@@ -778,7 +799,7 @@ add_task(async function test_tabGroupContextMenuMoveTabToGroupNewGroup() {
 /*
  * Tests that the "move tab to group > [group name]" option moves a tab to the selected group
  */
-add_task(async function test_tabGroupContextMenuMoveTabToGroupNewGroup() {
+add_task(async function test_tabGroupContextMenuMoveTabToExistingGroup() {
   let otherTab = BrowserTestUtils.addTab(gBrowser, "about:blank", {
     skipAnimation: true,
   });
@@ -865,11 +886,7 @@ add_task(
  */
 add_task(
   async function test_tabGroupContextMenuManySelectedTabsFromManyGroups() {
-    const tabs = Array.from({ length: 3 }, () => {
-      return BrowserTestUtils.addTab(gBrowser, "about:blank", {
-        skipAnimation: true,
-      });
-    });
+    const tabs = createManyTabs(3);
 
     let group1 = gBrowser.addTabGroup([tabs[0]]);
     let group2 = gBrowser.addTabGroup([tabs[1]]);
@@ -916,11 +933,7 @@ add_task(
  */
 add_task(
   async function test_tabGroupContextMenuManySelectedTabsFromSameGroup() {
-    const tabsToSelect = Array.from({ length: 3 }, () => {
-      return BrowserTestUtils.addTab(gBrowser, "about:blank", {
-        skipAnimation: true,
-      });
-    });
+    const tabsToSelect = createManyTabs(3);
     let selectedTabGroup = gBrowser.addTabGroup(tabsToSelect);
     let otherTab = BrowserTestUtils.addTab(gBrowser, "about:blank", {
       skipAnimation: true,
@@ -959,6 +972,115 @@ add_task(
     await removeTabGroup(otherGroup);
   }
 );
+
+// Context menu tests: "remove from group" option
+// ---
+
+/* Tests that if no groups exist within the selection, the "remove from group"
+ * option does not exist
+ */
+add_task(async function test_removeFromGroupHiddenIfNoGroupInSelection() {
+  let unrelatedGroupedTab = BrowserTestUtils.addTab(gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+  let unrelatedGroup = gBrowser.addTabGroup([unrelatedGroupedTab]);
+
+  let tab = BrowserTestUtils.addTab(gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+
+  await withTabMenu(tab, async (_m1, _m2, ungroupTabItem) => {
+    Assert.ok(ungroupTabItem.hidden, "ungroupTabItem is hidden");
+  });
+
+  BrowserTestUtils.removeTab(tab);
+  await removeTabGroup(unrelatedGroup);
+});
+
+/* Tests that if a single tab is selected and that tab is part of a group, the
+ * "remove from group" option exists and clicking the item removes the tab from
+ * the group
+ */
+add_task(async function test_removeFromGroupForSingleTab() {
+  const tabs = createManyTabs(3);
+  let group = gBrowser.addTabGroup(tabs);
+  let extraTab = BrowserTestUtils.addTab(gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+  let tabToClick = tabs[1];
+
+  Assert.equal(tabToClick.group, group, "tab is in group");
+
+  await withTabMenu(tabToClick, async (_m1, _m2, ungroupTabItem) => {
+    Assert.ok(!ungroupTabItem.hidden, "ungroupTabItem is visible");
+
+    ungroupTabItem.click();
+  });
+
+  Assert.ok(!tabToClick.group, "tab is no longer in group");
+  Assert.equal(
+    gBrowser.tabs[3],
+    tabToClick,
+    "tab has been moved just outside the group in the tab strip"
+  );
+
+  await removeTabGroup(group);
+  BrowserTestUtils.removeTab(tabToClick);
+  BrowserTestUtils.removeTab(extraTab);
+});
+
+/* Tests that if many tabs are selected and at least some of those tabs are
+ * part of a group, the "remove from group" option exists and clicking the item
+ * removes all tabs from their groups
+ */
+add_task(async function test_removeFromGroupForMultipleTabs() {
+  // initial tab strip: [group1, group1, group1, none, none, group2, group2, none, group3, none]
+  let tabs = createManyTabs(10);
+  gBrowser.addTabGroup([tabs[0], tabs[1], tabs[2]], { insertBefore: tabs[0] });
+  gBrowser.addTabGroup([tabs[5], tabs[6]], { insertBefore: tabs[5] });
+  gBrowser.addTabGroup([tabs[8]], { insertBefore: tabs[8] });
+
+  // Click the first tab in our test group to make sure the default tab at the
+  // start of the tab strip is deselected
+  EventUtils.synthesizeMouseAtCenter(tabs[1], {});
+
+  // select a few tabs, both in and out of groups
+  [tabs[3], tabs[6], tabs[8]].forEach(t => {
+    gBrowser.addToMultiSelectedTabs(t);
+  });
+
+  let tabToClick = tabs[3];
+
+  await withTabMenu(tabToClick, async (_m1, _m2, ungroupTabItem) => {
+    Assert.ok(!ungroupTabItem.hidden, "ungroupTabItem is visible");
+
+    ungroupTabItem.click();
+  });
+
+  Assert.ok(!tabs[1].group, "group1 tab is no longer in group");
+  Assert.ok(!tabs[6].group, "group2 tab is no longer in group");
+  Assert.ok(!tabs[8].group, "group3 tab is no longer in group");
+
+  Assert.equal(
+    tabs[1],
+    gBrowser.tabs[3],
+    "ungrouped tab from group1 is adjacent to group1"
+  );
+  Assert.equal(
+    tabs[6],
+    gBrowser.tabs[7],
+    "ungrouped tab from group2 has not changed position"
+  );
+  Assert.equal(
+    tabs[8],
+    gBrowser.tabs[9],
+    "ungrouped tab from group3 has not changed position"
+  );
+
+  tabs.forEach(t => {
+    BrowserTestUtils.removeTab(t);
+  });
+});
 
 /*
  * Tests that gBrowser.tabs does not contain tab groups after tabs have been

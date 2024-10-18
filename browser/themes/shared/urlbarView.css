@@ -724,10 +724,6 @@
     :root[uidensity=compact] & {
       padding-block: 3px;
 
-      .urlbarView-row[type=remotetab] & {
-        padding-inline: 6px;
-      }
-
       &.urlbarView-userContext {
         border-block-start-width: 3px;
       }
@@ -949,7 +945,7 @@
 .urlbarView-results[searchmodesource=actions] {
   white-space: wrap;
 
-  > .urlbarView-row {
+  > .urlbarView-row[dynamicType="actions"] {
     display: inline-flex;
   }
 }

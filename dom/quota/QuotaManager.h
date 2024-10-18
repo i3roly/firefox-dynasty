@@ -18,6 +18,7 @@
 #include "mozilla/Mutex.h"
 #include "mozilla/RefPtr.h"
 #include "mozilla/Result.h"
+#include "mozilla/ThreadBound.h"
 #include "mozilla/dom/Nullable.h"
 #include "mozilla/dom/ipc/IdType.h"
 #include "mozilla/dom/quota/Assertions.h"
@@ -47,11 +48,9 @@
 class mozIStorageConnection;
 class nsIEventTarget;
 class nsIFile;
-class nsIPrincipal;
 class nsIRunnable;
 class nsIThread;
 class nsITimer;
-class nsPIDOMWindowOuter;
 
 namespace mozilla {
 
@@ -90,10 +89,16 @@ class QuotaManager final : public BackgroundThreadObject {
   friend class InitOp;
   friend class InitializePersistentOriginOp;
   friend class InitializePersistentStorageOp;
+  friend class InitializeTemporaryGroupOp;
   friend class InitializeTemporaryOriginOp;
   friend class InitTemporaryStorageOp;
   friend class OriginInfo;
+  friend class PersistOp;
   friend class ShutdownStorageOp;
+
+  friend Result<PrincipalMetadata, nsresult> GetInfoFromValidatedPrincipalInfo(
+      QuotaManager& aQuotaManager,
+      const mozilla::ipc::PrincipalInfo& aPrincipalInfo);
 
   using PrincipalInfo = mozilla::ipc::PrincipalInfo;
   using DirectoryLockTable =
@@ -389,6 +394,26 @@ class QuotaManager final : public BackgroundThreadObject {
   nsresult EnsurePersistentStorageIsInitializedInternal();
 
  public:
+  RefPtr<BoolPromise> InitializeTemporaryGroup(
+      const PrincipalInfo& aPrincipalInfo);
+
+  RefPtr<BoolPromise> InitializeTemporaryGroup(
+      const PrincipalInfo& aPrincipalInfo,
+      RefPtr<UniversalDirectoryLock> aDirectoryLock);
+
+  RefPtr<BoolPromise> TemporaryGroupInitialized(
+      const PrincipalInfo& aPrincipalInfo);
+
+  bool IsTemporaryGroupInitialized(const PrincipalInfo& aPrincipalInfo);
+
+  bool IsTemporaryGroupInitializedInternal(
+      const PrincipalMetadata& aPrincipalMetadata) const;
+
+ private:
+  Result<Ok, nsresult> EnsureTemporaryGroupIsInitializedInternal(
+      const PrincipalMetadata& aPrincipalMetadata);
+
+ public:
   RefPtr<BoolPromise> InitializePersistentOrigin(
       const PrincipalInfo& aPrincipalInfo);
 
@@ -519,8 +544,7 @@ class QuotaManager final : public BackgroundThreadObject {
                                const OriginScope& aOriginScope,
                                const Nullable<Client::Type>& aClientType);
 
-  void OriginClearCompleted(PersistenceType aPersistenceType,
-                            const nsACString& aOrigin,
+  void OriginClearCompleted(const OriginMetadata& aOriginMetadata,
                             const Nullable<Client::Type>& aClientType);
 
   void RepositoryClearCompleted(PersistenceType aPersistenceType);
@@ -614,33 +638,6 @@ class QuotaManager final : public BackgroundThreadObject {
                            const nsACString& aOrigin, Client::Type aClientType,
                            nsACString& aDatabaseId);
 
-  static bool IsPrincipalInfoValid(const PrincipalInfo& aPrincipalInfo);
-
-  Result<PrincipalMetadata, nsresult> GetInfoFromValidatedPrincipalInfo(
-      const PrincipalInfo& aPrincipalInfo);
-
-  static Result<PrincipalInfo, nsresult> PrincipalMetadataToPrincipalInfo(
-      const PrincipalMetadata& aPrincipalMetadata);
-
-  static nsAutoCString GetOriginFromValidatedPrincipalInfo(
-      const PrincipalInfo& aPrincipalInfo);
-
-  static Result<PrincipalMetadata, nsresult> GetInfoFromPrincipal(
-      nsIPrincipal* aPrincipal);
-
-  static Result<PrincipalMetadata, nsresult> GetInfoFromWindow(
-      nsPIDOMWindowOuter* aWindow);
-
-  static Result<nsAutoCString, nsresult> GetOriginFromPrincipal(
-      nsIPrincipal* aPrincipal);
-
-  static Result<nsAutoCString, nsresult> GetOriginFromWindow(
-      nsPIDOMWindowOuter* aWindow);
-
-  static nsLiteralCString GetOriginForChrome();
-
-  static PrincipalMetadata GetInfoForChrome();
-
   static bool IsOriginInternal(const nsACString& aOrigin);
 
   static bool AreOriginsEqualOnDisk(const nsACString& aOrigin1,
@@ -674,6 +671,8 @@ class QuotaManager final : public BackgroundThreadObject {
   void LockedRemoveQuotaForRepository(PersistenceType aPersistenceType);
 
   void LockedRemoveQuotaForOrigin(const OriginMetadata& aOriginMetadata);
+
+  bool LockedHasGroupInfoPair(const nsACString& aGroup) const;
 
   already_AddRefed<GroupInfo> LockedGetOrCreateGroupInfo(
       PersistenceType aPersistenceType, const nsACString& aSuffix,
@@ -780,6 +779,14 @@ class QuotaManager final : public BackgroundThreadObject {
 
   void ClearDirectoryLockTables();
 
+  void AddTemporaryOrigin(const FullOriginMetadata& aFullOriginMetadata);
+
+  void RemoveTemporaryOrigin(const OriginMetadata& aOriginMetadata);
+
+  void RemoveTemporaryOrigins(PersistenceType aPersistenceType);
+
+  void RemoveTemporaryOrigins();
+
   void NoteInitializedOrigin(PersistenceType aPersistenceType,
                              const nsACString& aOrigin);
 
@@ -814,6 +821,13 @@ class QuotaManager final : public BackgroundThreadObject {
   template <typename Func>
   auto ExecuteInitialization(Initialization aInitialization,
                              const nsACString& aContext, Func&& aFunc)
+      -> std::invoke_result_t<Func, const FirstInitializationAttempt<
+                                        Initialization, StringGenerator>&>;
+
+  template <typename Func>
+  auto ExecuteGroupInitialization(const nsACString& aGroup,
+                                  const GroupInitialization aInitialization,
+                                  const nsACString& aContext, Func&& aFunc)
       -> std::invoke_result_t<Func, const FirstInitializationAttempt<
                                         Initialization, StringGenerator>&>;
 
@@ -869,9 +883,22 @@ class QuotaManager final : public BackgroundThreadObject {
   DirectoryLockTable mDefaultDirectoryLockTable;
   DirectoryLockTable mPrivateDirectoryLockTable;
 
+  // Things touched on the owning (PBackground) thread only.
+  struct BackgroundThreadAccessible {
+    nsTHashSet<nsCString> mInitializedGroups;
+  };
+  ThreadBound<BackgroundThreadAccessible> mBackgroundThreadAccessible;
+
   using BoolArray = AutoTArray<bool, PERSISTENCE_TYPE_INVALID>;
   nsTHashMap<nsCStringHashKeyWithDisabledMemmove, BoolArray>
       mInitializedOrigins;
+
+  // Things touched on the IO thread only.
+  struct IOThreadAccessible {
+    nsTHashMap<nsCStringHashKey, nsTArray<FullOriginMetadata>>
+        mAllTemporaryOrigins;
+  };
+  ThreadBound<IOThreadAccessible> mIOThreadAccessible;
 
   // A list of all successfully initialized persistent origins. This list isn't
   // protected by any mutex but it is only ever touched on the IO thread.

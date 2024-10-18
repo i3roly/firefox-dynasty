@@ -75,7 +75,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // Whether to show a link for using the search functionality provided by the
   // active view if the the view utilizes OpenSearch.
-  ["contextualSearch.enabled", true],
+  ["contextualSearch.enabled", false],
 
   // Whether using `ctrl` when hitting return/enter in the URL bar
   // (or clicking 'go') should prefix 'www.' and suffix
@@ -145,6 +145,10 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // When true, `javascript:` URLs are not included in search results.
   ["filter.javascript", true],
+
+  // Focus the content document when pressing the Escape key, if there's no
+  // remaining typed history.
+  ["focusContentDocumentOnEsc", true],
 
   // Applies URL highlighting and other styling to the text in the urlbar input.
   ["formatting.enabled", true],

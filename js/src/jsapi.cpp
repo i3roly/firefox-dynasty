@@ -1642,10 +1642,7 @@ JS_PUBLIC_API bool JS::GetFirstArgumentAsTypeHint(JSContext* cx,
 
   UniqueChars bytes;
   const char* source = ValueToSourceForError(cx, args.get(0), bytes);
-  if (!source) {
-    ReportOutOfMemory(cx);
-    return false;
-  }
+  MOZ_ASSERT(source);
 
   JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                            JSMSG_NOT_EXPECTED_TYPE, "Symbol.toPrimitive",
@@ -4674,9 +4671,15 @@ const char* AutoFilename::get() const {
   return filename_.as<UniqueChars>().get();
 }
 
-JS_PUBLIC_API bool DescribeScriptedCaller(JSContext* cx, AutoFilename* filename,
+JS_PUBLIC_API bool DescribeScriptedCaller(AutoFilename* filename, JSContext* cx,
                                           uint32_t* lineno,
                                           JS::ColumnNumberOneOrigin* column) {
+#ifdef DEBUG
+  auto noThrow = mozilla::MakeScopeExit([=]() {
+    MOZ_ASSERT(!cx->isThrowingOutOfMemory() && !cx->isThrowingOverRecursed() &&
+               !cx->isExceptionPending());
+  });
+#endif
   if (filename) {
     filename->reset();
   }

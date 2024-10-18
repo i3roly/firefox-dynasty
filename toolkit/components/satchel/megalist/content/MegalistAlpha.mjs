@@ -5,6 +5,12 @@
 import { html } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  // eslint-disable-next-line mozilla/no-browser-refs-in-toolkit
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+});
+
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/megalist/PasswordCard.mjs";
 // eslint-disable-next-line import/no-unassigned-import
@@ -26,6 +32,7 @@ export class MegalistAlpha extends MozLitElement {
     this.records = [];
     this.header = null;
     this.notification = null;
+    this.reauthResolver = null;
     this.displayMode = DISPLAY_MODES.ALL;
 
     window.addEventListener("MessageFromViewModel", ev =>
@@ -111,6 +118,17 @@ export class MegalistAlpha extends MozLitElement {
     this.notification = notification;
   }
 
+  receiveReauthResponse(isAuthorized) {
+    this.reauthResolver?.(isAuthorized);
+  }
+
+  reauthCommandHandler(commandFn) {
+    return new Promise((resolve, _reject) => {
+      this.reauthResolver = resolve;
+      commandFn();
+    });
+  }
+
   #createLoginRecords(snapshots) {
     const header = snapshots.shift();
     const records = [];
@@ -129,11 +147,25 @@ export class MegalistAlpha extends MozLitElement {
   // TODO: This should be passed to virtualized list with an explicit height.
   renderListItem({ origin: displayOrigin, username, password }) {
     return html` <password-card
+      @keypress=${e => {
+        if (e.shiftKey && e.key === "Tab") {
+          e.preventDefault();
+          this.shadowRoot.querySelector("#more-options-menubutton").focus();
+        } else if (e.key === "Tab") {
+          e.preventDefault();
+          const webContent =
+            lazy.BrowserWindowTracker.getTopWindow().gBrowser.selectedTab
+              .linkedBrowser;
+          webContent.focus();
+        }
+      }}
       role="group"
+      aria-label=${displayOrigin.value}
       .origin=${displayOrigin}
       .username=${username}
       .password=${password}
       .messageToViewModel=${this.#messageToViewModel.bind(this)}
+      .reauthCommandHandler=${commandFn => this.reauthCommandHandler(commandFn)}
     >
     </password-card>`;
   }
@@ -142,7 +174,20 @@ export class MegalistAlpha extends MozLitElement {
   renderList() {
     return this.records.length
       ? html`
-          <div class="passwords-list" role="listbox" tabindex="0">
+          <div
+            class="passwords-list"
+            role="listbox"
+            tabindex="0"
+            data-l10n-id="passwords-list-label"
+            @keypress=${e => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                this.shadowRoot
+                  .querySelector("password-card")
+                  .originLine.focus();
+              }
+            }}
+          >
             ${this.records.map(record => this.renderListItem(record))}
           </div>
         `
@@ -151,7 +196,12 @@ export class MegalistAlpha extends MozLitElement {
 
   renderSearch() {
     return html`
-      <div class="searchContainer">
+      <div
+        class="searchContainer"
+        @click=${() => {
+          this.shadowRoot.querySelector(".search").focus();
+        }}
+      >
         <div class="searchIcon"></div>
         <input
           class="search"

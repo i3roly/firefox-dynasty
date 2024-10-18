@@ -2176,6 +2176,7 @@ static const JSClass* ClassFor(JSContext* cx, GuardClassKind kind) {
     case GuardClassKind::Set:
     case GuardClassKind::Map:
     case GuardClassKind::BoundFunction:
+    case GuardClassKind::Date:
       return ClassFor(kind);
     case GuardClassKind::WindowProxy:
       return cx->runtime()->maybeWindowProxyClass();
@@ -10806,6 +10807,61 @@ bool CacheIRCompiler::emitMapSizeResult(ObjOperandId mapId) {
 
   masm.loadMapObjectSize(map, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+  return true;
+}
+
+bool CacheIRCompiler::emitDateFillLocalTimeSlots(ObjOperandId dateId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register date = allocator.useRegister(masm, dateId);
+  AutoScratchRegister scratch(allocator, masm);
+
+  masm.dateFillLocalTimeSlots(date, scratch, liveVolatileRegs());
+  return true;
+}
+
+bool CacheIRCompiler::emitDateHoursFromSecondsIntoYearResult(
+    ValOperandId secondsIntoYearId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  ValueOperand secondsIntoYear =
+      allocator.useValueRegister(masm, secondsIntoYearId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  masm.dateHoursFromSecondsIntoYear(secondsIntoYear, output.valueReg(),
+                                    scratch1, scratch2);
+  return true;
+}
+
+bool CacheIRCompiler::emitDateMinutesFromSecondsIntoYearResult(
+    ValOperandId secondsIntoYearId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  ValueOperand secondsIntoYear =
+      allocator.useValueRegister(masm, secondsIntoYearId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  masm.dateMinutesFromSecondsIntoYear(secondsIntoYear, output.valueReg(),
+                                      scratch1, scratch2);
+  return true;
+}
+
+bool CacheIRCompiler::emitDateSecondsFromSecondsIntoYearResult(
+    ValOperandId secondsIntoYearId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  ValueOperand secondsIntoYear =
+      allocator.useValueRegister(masm, secondsIntoYearId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  masm.dateSecondsFromSecondsIntoYear(secondsIntoYear, output.valueReg(),
+                                      scratch1, scratch2);
   return true;
 }
 

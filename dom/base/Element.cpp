@@ -115,6 +115,7 @@
 #include "mozilla/dom/Text.h"
 #include "mozilla/dom/TrustedHTML.h"
 #include "mozilla/dom/TrustedTypesConstants.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
 #include "mozilla/dom/UnbindContext.h"
 #include "mozilla/dom/WindowBinding.h"
 #include "mozilla/dom/XULCommandEvent.h"
@@ -1755,40 +1756,25 @@ already_AddRefed<nsIHTMLCollection> Element::GetElementsByClassName(
   return nsContentUtils::GetElementsByClassName(this, aClassNames);
 }
 
-bool Element::HasSharedRoot(const Element* aElement) const {
-  nsINode* root = SubtreeRoot();
-  nsINode* attrSubtreeRoot = aElement->SubtreeRoot();
-  do {
-    if (root == attrSubtreeRoot) {
-      return true;
-    }
-    auto* shadow = ShadowRoot::FromNode(root);
-    if (!shadow || !shadow->GetHost()) {
-      break;
-    }
-    root = shadow->GetHost()->SubtreeRoot();
-  } while (true);
-  return false;
-}
-
-Element* Element::GetElementByIdInDocOrSubtree(nsAtom* aID) const {
-  if (auto* docOrShadowRoot = GetContainingDocumentOrShadowRoot()) {
-    return docOrShadowRoot->GetElementById(aID);
-  }
-
-  return nsContentUtils::MatchElementId(SubtreeRoot()->AsContent(), aID);
-}
-
 Element* Element::GetAttrAssociatedElement(nsAtom* aAttr) const {
   if (const nsExtendedDOMSlots* slots = GetExistingExtendedDOMSlots()) {
-    nsWeakPtr weakAttrEl = slots->mExplicitlySetAttrElementMap.Get(aAttr);
+    nsWeakPtr weakAttrEl = slots->mExplicitlySetAttrElements.Get(aAttr);
     if (nsCOMPtr<Element> attrEl = do_QueryReferent(weakAttrEl)) {
       // If reflectedTarget's explicitly set attr-element |attrEl| is
       // a descendant of any of element's shadow-including ancestors, then
       // return |atrEl|.
-      if (HasSharedRoot(attrEl)) {
-        return attrEl;
-      }
+      nsINode* root = SubtreeRoot();
+      nsINode* attrSubtreeRoot = attrEl->SubtreeRoot();
+      do {
+        if (root == attrSubtreeRoot) {
+          return attrEl;
+        }
+        auto* shadow = ShadowRoot::FromNode(root);
+        if (!shadow || !shadow->GetHost()) {
+          break;
+        }
+        root = shadow->GetHost()->SubtreeRoot();
+      } while (true);
       return nullptr;
     }
   }
@@ -1801,102 +1787,23 @@ Element* Element::GetAttrAssociatedElement(nsAtom* aAttr) const {
   MOZ_ASSERT(value->Type() == nsAttrValue::eAtom,
              "Attribute used for attr associated element must be parsed");
 
-  return GetElementByIdInDocOrSubtree(value->GetAtomValue());
-}
+  nsAtom* valueAtom = value->GetAtomValue();
+  if (auto* docOrShadowRoot = GetContainingDocumentOrShadowRoot()) {
+    return docOrShadowRoot->GetElementById(valueAtom);
+  }
 
-void Element::GetAttrAssociatedElements(
-    nsAtom* aAttr, bool* aUseCachedValue,
-    Nullable<nsTArray<RefPtr<Element>>>& aElements) {
-  MOZ_ASSERT(aElements.IsNull());
-
-  auto& [explicitlySetAttrElements, cachedAttrElements] =
-      ExtendedDOMSlots()->mAttrElementsMap.LookupOrInsert(aAttr);
-
-  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-elements
-  auto getAttrAssociatedElements =
-      [&, &explicitlySetAttrElements =
-              explicitlySetAttrElements]() -> Maybe<nsTArray<RefPtr<Element>>> {
-    nsTArray<RefPtr<Element>> elements;
-
-    if (explicitlySetAttrElements) {
-      // 3. If reflectedTarget's explicitly set attr-elements is not null
-      for (const nsWeakPtr& weakEl : *explicitlySetAttrElements) {
-        // For each attrElement in reflectedTarget's explicitly set
-        // attr-elements:
-        if (nsCOMPtr<Element> attrEl = do_QueryReferent(weakEl)) {
-          // If attrElement is not a descendant of any of element's
-          // shadow-including ancestors, then continue.
-          if (!HasSharedRoot(attrEl)) {
-            continue;
-          }
-          // Append attrElement to elements.
-          elements.AppendElement(attrEl);
-        }
-      }
-    } else {
-      // 4. Otherwise
-      //   1. Let contentAttributeValue be the result of running
-      //   reflectedTarget's get the content attribute.
-      const nsAttrValue* value = GetParsedAttr(aAttr);
-      //   2. If contentAttributeValue is null, then return null.
-      if (!value) {
-        return Nothing();
-      }
-
-      //   3. Let tokens be contentAttributeValue, split on ASCII whitespace.
-      MOZ_ASSERT(value->Type() == nsAttrValue::eAtomArray ||
-                     value->Type() == nsAttrValue::eAtom,
-                 "Attribute used for attr associated elements must be parsed");
-      for (uint32_t i = 0; i < value->GetAtomCount(); i++) {
-        // For each id of tokens:
-        if (auto* candidate = GetElementByIdInDocOrSubtree(
-                value->AtomAt(static_cast<int32_t>(i)))) {
-          // Append candidate to elements.
-          elements.AppendElement(candidate);
-        }
-      }
+  nsINode* root = SubtreeRoot();
+  for (auto* node = root; node; node = node->GetNextNode(root)) {
+    if (node->HasID() && node->AsContent()->GetID() == valueAtom) {
+      return node->AsElement();
     }
-
-    return Some(std::move(elements));
-  };
-
-  // getter steps:
-  // 1. Let elements be the result of running this's get the attr-associated
-  // elements.
-  auto elements = getAttrAssociatedElements();
-
-  if (elements && elements == cachedAttrElements) {
-    // 2. If the contents of elements is equal to the contents of this's cached
-    // attr-associated elements, then return this's cached attr-associated
-    // elements object.
-    MOZ_ASSERT(!*aUseCachedValue);
-    *aUseCachedValue = true;
-    return;
   }
-
-  // 3. Let elementsAsFrozenArray be elements, converted to a FrozenArray<T>?.
-  //    (the binding code takes aElements and returns it as a FrozenArray)
-  // 5. Set this's cached attr-associated elements object to
-  //    elementsAsFrozenArray.
-  //    (the binding code stores the attr-associated elements object in a slot)
-  // 6. Return elementsAsFrozenArray.
-  if (elements) {
-    aElements.SetValue(elements->Clone());
-  }
-
-  // 4. Set this's cached attr-associated elements to elements.
-  cachedAttrElements = std::move(elements);
+  return nullptr;
 }
 
 void Element::ClearExplicitlySetAttrElement(nsAtom* aAttr) {
   if (auto* slots = GetExistingExtendedDOMSlots()) {
-    slots->mExplicitlySetAttrElementMap.Remove(aAttr);
-  }
-}
-
-void Element::ClearExplicitlySetAttrElements(nsAtom* aAttr) {
-  if (auto* slots = GetExistingExtendedDOMSlots()) {
-    slots->mAttrElementsMap.Remove(aAttr);
+    slots->mExplicitlySetAttrElements.Remove(aAttr);
   }
 }
 
@@ -1919,7 +1826,7 @@ void Element::ExplicitlySetAttrElement(nsAtom* aAttr, Element* aElement) {
 #endif
     SetAttr(aAttr, EmptyString(), IgnoreErrors());
     nsExtendedDOMSlots* slots = ExtendedDOMSlots();
-    slots->mExplicitlySetAttrElementMap.InsertOrUpdate(
+    slots->mExplicitlySetAttrElements.InsertOrUpdate(
         aAttr, do_GetWeakReference(aElement));
 #ifdef ACCESSIBILITY
     if (accService) {
@@ -1943,69 +1850,14 @@ void Element::ExplicitlySetAttrElement(nsAtom* aAttr, Element* aElement) {
 #endif
 }
 
-void Element::ExplicitlySetAttrElements(
-    nsAtom* aAttr,
-    const Nullable<Sequence<OwningNonNull<Element>>>& aElements) {
-#ifdef ACCESSIBILITY
-  nsAccessibilityService* accService = GetAccService();
-#endif
-  // Accessibility requires that no other attribute changes occur between
-  // AttrElementWillChange and AttrElementChanged. Scripts could cause
-  // this, so don't let them run here. We do this even if accessibility isn't
-  // running so that the JS behavior is consistent regardless of accessibility.
-  // Otherwise, JS might be able to use this difference to determine whether
-  // accessibility is running, which would be a privacy concern.
-  nsAutoScriptBlocker scriptBlocker;
-
-#ifdef ACCESSIBILITY
-  if (accService) {
-    accService->NotifyAttrElementWillChange(this, aAttr);
-  }
-#endif
-
-  if (aElements.IsNull()) {
-    ClearExplicitlySetAttrElements(aAttr);
-    UnsetAttr(aAttr, IgnoreErrors());
-  } else {
-    SetAttr(aAttr, EmptyString(), IgnoreErrors());
-    auto& entry = ExtendedDOMSlots()->mAttrElementsMap.LookupOrInsert(aAttr);
-    entry.first.emplace(nsTArray<nsWeakPtr>());
-    for (Element* el : aElements.Value()) {
-      entry.first->AppendElement(do_GetWeakReference(el));
-    }
-  }
-
-#ifdef ACCESSIBILITY
-  if (accService) {
-    accService->NotifyAttrElementChanged(this, aAttr);
-  }
-#endif
-}
-
 Element* Element::GetExplicitlySetAttrElement(nsAtom* aAttr) const {
   if (const nsExtendedDOMSlots* slots = GetExistingExtendedDOMSlots()) {
-    nsWeakPtr weakAttrEl = slots->mExplicitlySetAttrElementMap.Get(aAttr);
+    nsWeakPtr weakAttrEl = slots->mExplicitlySetAttrElements.Get(aAttr);
     if (nsCOMPtr<Element> attrEl = do_QueryReferent(weakAttrEl)) {
       return attrEl;
     }
   }
   return nullptr;
-}
-
-void Element::GetExplicitlySetAttrElements(
-    nsAtom* aAttr, nsTArray<Element*>& aElements) const {
-  if (const nsExtendedDOMSlots* slots = GetExistingExtendedDOMSlots()) {
-    if (auto attrElementsMaybeEntry = slots->mAttrElementsMap.Lookup(aAttr)) {
-      auto& [attrElements, cachedAttrElements] = attrElementsMaybeEntry.Data();
-      if (attrElements) {
-        for (const nsWeakPtr& weakEl : *attrElements) {
-          if (nsCOMPtr<Element> attrEl = do_QueryReferent(weakEl)) {
-            aElements.AppendElement(attrEl);
-          }
-        }
-      }
-    }
-  }
 }
 
 void Element::GetElementsWithGrid(nsTArray<RefPtr<Element>>& aElements) {
@@ -2966,14 +2818,7 @@ bool Element::ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,
   }
 
   if (aNamespaceID == kNameSpaceID_None) {
-    if (aAttribute == nsGkAtoms::_class || aAttribute == nsGkAtoms::part ||
-        aAttribute == nsGkAtoms::aria_controls ||
-        aAttribute == nsGkAtoms::aria_describedby ||
-        aAttribute == nsGkAtoms::aria_details ||
-        aAttribute == nsGkAtoms::aria_errormessage ||
-        aAttribute == nsGkAtoms::aria_flowto ||
-        aAttribute == nsGkAtoms::aria_labelledby ||
-        aAttribute == nsGkAtoms::aria_owns) {
+    if (aAttribute == nsGkAtoms::_class || aAttribute == nsGkAtoms::part) {
       aResult.ParseAtomArray(aValue);
       return true;
     }
@@ -3045,14 +2890,6 @@ void Element::AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
       }
     } else if (aName == nsGkAtoms::aria_activedescendant) {
       ClearExplicitlySetAttrElement(aName);
-    } else if (aName == nsGkAtoms::aria_controls ||
-               aName == nsGkAtoms::aria_describedby ||
-               aName == nsGkAtoms::aria_details ||
-               aName == nsGkAtoms::aria_errormessage ||
-               aName == nsGkAtoms::aria_flowto ||
-               aName == nsGkAtoms::aria_labelledby ||
-               aName == nsGkAtoms::aria_owns) {
-      ClearExplicitlySetAttrElements(aName);
     }
   }
 }
@@ -3108,16 +2945,6 @@ void Element::OnAttrSetButNotChanged(int32_t aNamespaceID, nsAtom* aName,
   if (aNamespaceID == kNameSpaceID_None &&
       aName == nsGkAtoms::aria_activedescendant) {
     ClearExplicitlySetAttrElement(aName);
-  }
-
-  if (aNamespaceID == kNameSpaceID_None &&
-      (aName == nsGkAtoms::aria_controls ||
-       aName == nsGkAtoms::aria_describedby ||
-       aName == nsGkAtoms::aria_details ||
-       aName == nsGkAtoms::aria_errormessage ||
-       aName == nsGkAtoms::aria_flowto || aName == nsGkAtoms::aria_labelledby ||
-       aName == nsGkAtoms::aria_owns)) {
-    ClearExplicitlySetAttrElements(aName);
   }
 }
 
@@ -4161,9 +3988,32 @@ void Element::GetInnerHTML(nsAString& aInnerHTML, OOMReporter& aError) {
   GetMarkup(false, aInnerHTML);
 }
 
-void Element::SetInnerHTML(const nsAString& aInnerHTML,
+void Element::GetInnerHTML(OwningTrustedHTMLOrNullIsEmptyString& aInnerHTML,
+                           OOMReporter& aError) {
+  GetInnerHTML(aInnerHTML.SetAsNullIsEmptyString(), aError);
+}
+
+void Element::SetInnerHTML(const TrustedHTMLOrNullIsEmptyString& aInnerHTML,
                            nsIPrincipal* aSubjectPrincipal,
                            ErrorResult& aError) {
+  constexpr nsLiteralString sink = u"Element innerHTML"_ns;
+
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aInnerHTML, sink, kTrustedTypesOnlySinkGroup, *this,
+          compliantStringHolder, aError);
+
+  if (aError.Failed()) {
+    return;
+  }
+
+  SetInnerHTMLTrusted(*compliantString, aSubjectPrincipal, aError);
+}
+
+void Element::SetInnerHTMLTrusted(const nsAString& aInnerHTML,
+                                  nsIPrincipal* aSubjectPrincipal,
+                                  ErrorResult& aError) {
   SetInnerHTMLInternal(aInnerHTML, aError);
 }
 
@@ -4227,188 +4077,16 @@ void Element::SetOuterHTML(const nsAString& aOuterHTML, ErrorResult& aError) {
 
 enum nsAdjacentPosition { eBeforeBegin, eAfterBegin, eBeforeEnd, eAfterEnd };
 
-// https://w3c.github.io/trusted-types/dist/spec/#abstract-opdef-does-sink-type-require-trusted-types
-static bool DoesSinkTypeRequireTrustedTypes(nsIContentSecurityPolicy* aCSP,
-                                            const nsAString& aSinkGroup) {
-  uint32_t numPolicies = 0;
-  if (aCSP) {
-    aCSP->GetPolicyCount(&numPolicies);
-  }
-  for (uint32_t i = 0; i < numPolicies; ++i) {
-    const nsCSPPolicy* policy = aCSP->GetPolicy(i);
-
-    if (policy->AreTrustedTypesForSinkGroupRequired(aSinkGroup)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-namespace SinkTypeMismatch {
-enum class Value { Blocked, Allowed };
-
-static constexpr size_t kTrimmedSourceLength = 40;
-static constexpr nsLiteralString kSampleSeparator = u"|"_ns;
-}  // namespace SinkTypeMismatch
-
-// https://w3c.github.io/trusted-types/dist/spec/#abstract-opdef-should-sink-type-mismatch-violation-be-blocked-by-content-security-policy
-static SinkTypeMismatch::Value ShouldSinkTypeMismatchViolationBeBlockedByCSP(
-    nsIContentSecurityPolicy* aCSP, const nsAString& aSink,
-    const nsAString& aSinkGroup, const nsAString& aSource) {
-  SinkTypeMismatch::Value result = SinkTypeMismatch::Value::Allowed;
-
-  uint32_t numPolicies = 0;
-  if (aCSP) {
-    aCSP->GetPolicyCount(&numPolicies);
-  }
-
-  for (uint32_t i = 0; i < numPolicies; ++i) {
-    const auto* policy = aCSP->GetPolicy(i);
-
-    if (!policy->AreTrustedTypesForSinkGroupRequired(aSinkGroup)) {
-      continue;
-    }
-
-    auto caller = JSCallingLocation::Get();
-
-    const nsDependentSubstring trimmedSource = Substring(
-        aSource, /* aStartPos */ 0, SinkTypeMismatch::kTrimmedSourceLength);
-    const nsString sample =
-        aSink + SinkTypeMismatch::kSampleSeparator + trimmedSource;
-
-    CSPViolationData cspViolationData{
-        i,
-        CSPViolationData::Resource{
-            CSPViolationData::BlockedContentSource::TrustedTypesSink},
-        nsIContentSecurityPolicy::REQUIRE_TRUSTED_TYPES_FOR_DIRECTIVE,
-        caller.FileName(),
-        caller.mLine,
-        caller.mColumn,
-        /* aElement */ nullptr,
-        sample};
-
-    // For Workers, a pointer to an object needs to be passed
-    // (https://bugzilla.mozilla.org/show_bug.cgi?id=1901492).
-    nsICSPEventListener* cspEventListener = nullptr;
-
-    aCSP->LogTrustedTypesViolationDetailsUnchecked(
-        std::move(cspViolationData),
-        NS_LITERAL_STRING_FROM_CSTRING(
-            REQUIRE_TRUSTED_TYPES_FOR_SCRIPT_OBSERVER_TOPIC),
-        cspEventListener);
-
-    if (policy->getDisposition() == nsCSPPolicy::Disposition::Enforce) {
-      result = SinkTypeMismatch::Value::Blocked;
-    }
-  }
-
-  return result;
-}
-
-// https://w3c.github.io/trusted-types/dist/spec/#abstract-opdef-process-value-with-a-default-policy
-// specialized for `TrustedHTML`.
-static void ProcessValueWithADefaultPolicy(RefPtr<TrustedHTML>& aResult,
-                                           ErrorResult& aError) {
-  // TODO: implement default-policy support,
-  // https://bugzilla.mozilla.org/show_bug.cgi?id=1903717.
-
-  aResult = nullptr;
-}
-
-// https://w3c.github.io/trusted-types/dist/spec/#get-trusted-type-compliant-string-algorithm
-// specialized for TrustedHTML.
-// @param aCSP May be null.
-static void GetTrustedTypesCompliantString(const TrustedHTMLOrString& aInput,
-                                           nsIContentSecurityPolicy* aCSP,
-                                           const nsAString& aSink,
-                                           const nsAString& aSinkGroup,
-                                           nsAString& aResult,
-                                           ErrorResult& aError) {
-  if (!StaticPrefs::dom_security_trusted_types_enabled()) {
-    // A `TrustedHTML` string might've been created before the pref was set to
-    //  `false`.
-    aResult = aInput.IsString() ? aInput.GetAsString()
-                                : aInput.GetAsTrustedHTML().mData;
-    return;
-  }
-
-  if (aInput.IsTrustedHTML()) {
-    aResult = aInput.GetAsTrustedHTML().mData;
-    return;
-  }
-
-  if (!DoesSinkTypeRequireTrustedTypes(aCSP, aSinkGroup)) {
-    aResult = aInput.GetAsString();
-    return;
-  }
-
-  RefPtr<TrustedHTML> convertedInput;
-  ProcessValueWithADefaultPolicy(convertedInput, aError);
-
-  if (aError.Failed()) {
-    return;
-  }
-
-  if (!convertedInput) {
-    if (ShouldSinkTypeMismatchViolationBeBlockedByCSP(aCSP, aSink, aSinkGroup,
-                                                      aInput.GetAsString()) ==
-        SinkTypeMismatch::Value::Allowed) {
-      aResult = aInput.GetAsString();
-      return;
-    }
-
-    aError.ThrowTypeError("Sink type mismatch violation blocked by CSP"_ns);
-    return;
-  }
-
-  aResult = convertedInput->mData;
-}
-
-// https://html.spec.whatwg.org/#the-insertadjacenthtml()-method
-struct InsertAdjacentHTMLConstants {
-  // https://github.com/w3c/trusted-types/issues/542
-  static constexpr nsLiteralString kSinkGroup =
-      kValidRequireTrustedTypesForDirectiveValue;
-
-  static constexpr nsLiteralString kSink = u"Element insertAdjacentHTML"_ns;
-};
-
-// The global object's CSP may differ from the owner-document's one.
-// E.g. when a document is created via
-// `document.implementation.createHTMLDocument("")` is not connected to a
-// browsing context.
-static nsIContentSecurityPolicy* GetCspFromScopeObjectsInnerWindow(
-    const Document& aOwnerDoc, ErrorResult& aError) {
-  nsIGlobalObject* globalObject = aOwnerDoc.GetScopeObject();
-  if (!globalObject) {
-    aError.ThrowTypeError("No global object");
-    return nullptr;
-  }
-
-  nsPIDOMWindowInner* piDOMWindowInner = globalObject->GetAsInnerWindow();
-  if (!piDOMWindowInner) {
-    aError.ThrowTypeError("No inner window");
-    return nullptr;
-  }
-
-  return piDOMWindowInner->GetCsp();
-}
-
 void Element::InsertAdjacentHTML(
     const nsAString& aPosition, const TrustedHTMLOrString& aTrustedHTMLOrString,
     ErrorResult& aError) {
-  nsIContentSecurityPolicy* csp =
-      GetCspFromScopeObjectsInnerWindow(*OwnerDoc(), aError);
-  if (aError.Failed()) {
-    return;
-  }
+  constexpr nsLiteralString kSink = u"Element insertAdjacentHTML"_ns;
 
-  nsAutoString compliantString;
-
-  GetTrustedTypesCompliantString(
-      aTrustedHTMLOrString, csp, InsertAdjacentHTMLConstants::kSink,
-      InsertAdjacentHTMLConstants::kSinkGroup, compliantString, aError);
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aTrustedHTMLOrString, kSink, kTrustedTypesOnlySinkGroup, *this,
+          compliantStringHolder, aError);
 
   if (aError.Failed()) {
     return;
@@ -4464,7 +4142,7 @@ void Element::InsertAdjacentHTML(
       contextLocal = nsGkAtoms::body;
     }
     aError = nsContentUtils::ParseFragmentHTML(
-        compliantString, destination, contextLocal, contextNs,
+        *compliantString, destination, contextLocal, contextNs,
         doc->GetCompatibilityMode() == eCompatibility_NavQuirks, true);
     // HTML5 parser has notified, but not fired mutation events.
     nsContentUtils::FireMutationEventsForDirectParsing(doc, destination,
@@ -4474,7 +4152,7 @@ void Element::InsertAdjacentHTML(
 
   // couldn't parse directly
   RefPtr<DocumentFragment> fragment = nsContentUtils::CreateContextualFragment(
-      destination, compliantString, true, aError);
+      destination, *compliantString, true, aError);
   if (aError.Failed()) {
     return;
   }

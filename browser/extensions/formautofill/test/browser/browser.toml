@@ -22,6 +22,8 @@ skip-if = [
   "os == 'mac'",
 ]
 
+["browser_autofill_address_housenumber.js"]
+
 ["browser_autofill_address_select.js"]
 
 ["browser_autofill_address_select_inexact.js"]
@@ -33,6 +35,8 @@ skip-if = [
 ["browser_autofill_duplicate_fields.js"]
 
 ["browser_autofill_invisible_fields.js"]
+
+["browser_autofill_invisible_iframe_fields.js"]
 
 ["browser_autofill_sandboxed_iframe.js"]
 

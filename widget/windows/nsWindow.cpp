@@ -943,10 +943,19 @@ nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
       mIsCloaked = mozilla::IsCloaked(mWnd);
       mFrameState->ConsumePreXULSkeletonState(WasPreXULSkeletonUIMaximized());
 
+      MOZ_ASSERT(BoundsUseDesktopPixels());
+      auto scale = GetDesktopToDeviceScale();
+      mBounds = mLastPaintBounds = LayoutDeviceIntRect::FromUnknownRect(
+          DesktopIntRect::Round(LayoutDeviceRect(GetBounds()) / scale)
+              .ToUnknownRect());
+
       // These match the margins set in browser-tabsintitlebar.js with
       // default prefs on Windows. Bug 1673092 tracks lining this up with
       // that more correctly instead of hard-coding it.
       SetNonClientMargins(LayoutDeviceIntMargin(0, 2, 2, 2));
+      // The skeleton UI already painted over the NC area, so there's no need
+      // to do that again; the effective non-client margins haven't changed.
+      mNeedsNCAreaClear = false;
 
       // Reset the WNDPROC for this window and its whole class, as we had
       // to use our own WNDPROC when creating the the skeleton UI window.
@@ -1585,6 +1594,13 @@ void nsWindow::Show(bool aState) {
     // The first time we decide to actually show the window is when we decide
     // that we've taken over the window from the skeleton UI, and we should
     // no longer treat resizes / moves specially.
+    //
+    // NOTE(emilio): mIsShowingPreXULSkeletonUI feels a bit odd, or at least
+    // misnamed. During regular startup we create the skeleton UI, then the
+    // early blank window consumes it, and at that point we set
+    // mIsShowingPreXULSkeletonUI to false, but in fact, we're still showing
+    // the skeleton UI (because the blank window is, well, blank). We should
+    // consider guarding this with !mIsEarlyBlankWindow...
     mIsShowingPreXULSkeletonUI = false;
     // Concomitantly, this is also when we change the cursor away from the
     // default "wait" cursor.
@@ -1920,6 +1936,38 @@ void nsWindow::Move(double aX, double aY) {
     return;
   }
 
+  // Normally, when the skeleton UI is disabled, we resize+move the window
+  // before showing it in order to ensure that it restores to the correct
+  // position when the user un-maximizes it. However, when we are using the
+  // skeleton UI, this results in the skeleton UI window being moved around
+  // undesirably before being locked back into the maximized position. To
+  // avoid this, we simply set the placement to restore to via
+  // SetWindowPlacement. It's a little bit more of a dance, though, since we
+  // need to convert the workspace coords that SetWindowPlacement uses to the
+  // screen space coordinates we normally use with SetWindowPos.
+  if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
+    WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
+    VERIFY(::GetWindowPlacement(mWnd, &pl));
+
+    HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
+    if (NS_WARN_IF(!monitor)) {
+      return;
+    }
+    MONITORINFO mi = {sizeof(MONITORINFO)};
+    VERIFY(::GetMonitorInfo(monitor, &mi));
+
+    int32_t deltaX =
+        x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
+    int32_t deltaY =
+        y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
+    pl.rcNormalPosition.left += deltaX;
+    pl.rcNormalPosition.right += deltaX;
+    pl.rcNormalPosition.top += deltaY;
+    pl.rcNormalPosition.bottom += deltaY;
+    VERIFY(::SetWindowPlacement(mWnd, &pl));
+    return;
+  }
+
   mBounds.MoveTo(x, y);
 
   if (mWnd) {
@@ -1944,45 +1992,13 @@ void nsWindow::Move(double aX, double aY) {
       }
     }
 #endif
-
-    // Normally, when the skeleton UI is disabled, we resize+move the window
-    // before showing it in order to ensure that it restores to the correct
-    // position when the user un-maximizes it. However, when we are using the
-    // skeleton UI, this results in the skeleton UI window being moved around
-    // undesirably before being locked back into the maximized position. To
-    // avoid this, we simply set the placement to restore to via
-    // SetWindowPlacement. It's a little bit more of a dance, though, since we
-    // need to convert the workspace coords that SetWindowPlacement uses to the
-    // screen space coordinates we normally use with SetWindowPos.
-    if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
-      WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
-      VERIFY(::GetWindowPlacement(mWnd, &pl));
-
-      HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
-      if (NS_WARN_IF(!monitor)) {
-        return;
-      }
-      MONITORINFO mi = {sizeof(MONITORINFO)};
-      VERIFY(::GetMonitorInfo(monitor, &mi));
-
-      int32_t deltaX =
-          x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
-      int32_t deltaY =
-          y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
-      pl.rcNormalPosition.left += deltaX;
-      pl.rcNormalPosition.right += deltaX;
-      pl.rcNormalPosition.top += deltaY;
-      pl.rcNormalPosition.bottom += deltaY;
-      VERIFY(::SetWindowPlacement(mWnd, &pl));
-    } else {
-      UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE;
-      double oldScale = mDefaultScale;
-      mResizeState = IN_SIZEMOVE;
-      VERIFY(::SetWindowPos(mWnd, nullptr, x, y, 0, 0, flags));
-      mResizeState = NOT_RESIZING;
-      if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
-        ChangedDPI();
-      }
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE;
+    double oldScale = mDefaultScale;
+    mResizeState = IN_SIZEMOVE;
+    VERIFY(::SetWindowPos(mWnd, nullptr, x, y, 0, 0, flags));
+    mResizeState = NOT_RESIZING;
+    if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
+      ChangedDPI();
     }
 
     ResizeDirectManipulationViewport();
@@ -2015,6 +2031,18 @@ void nsWindow::Resize(double aWidth, double aHeight, bool aRepaint) {
     return;
   }
 
+  // Refer to the comment above a similar check in nsWindow::Move
+  if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
+    WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
+    VERIFY(::GetWindowPlacement(mWnd, &pl));
+    pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
+    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
+    mResizeState = RESIZING;
+    VERIFY(::SetWindowPlacement(mWnd, &pl));
+    mResizeState = NOT_RESIZING;
+    return;
+  }
+
   // Set cached value for lightweight and printing
   bool wasLocking = mAspectRatio != 0.0;
   mBounds.SizeTo(width, height);
@@ -2023,33 +2051,18 @@ void nsWindow::Resize(double aWidth, double aHeight, bool aRepaint) {
   }
 
   if (mWnd) {
-    // Refer to the comment above a similar check in nsWindow::Move
-    if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
-      WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
-      VERIFY(::GetWindowPlacement(mWnd, &pl));
-      pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
-      pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
-      mResizeState = RESIZING;
-      VERIFY(::SetWindowPlacement(mWnd, &pl));
-      mResizeState = NOT_RESIZING;
-    } else {
-      UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE;
-
-      if (!aRepaint) {
-        flags |= SWP_NOREDRAW;
-      }
-
-      double oldScale = mDefaultScale;
-      mResizeState = RESIZING;
-      VERIFY(
-          ::SetWindowPos(mWnd, nullptr, 0, 0, width, GetHeight(height), flags));
-
-      mResizeState = NOT_RESIZING;
-      if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
-        ChangedDPI();
-      }
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE;
+    if (!aRepaint) {
+      flags |= SWP_NOREDRAW;
     }
-
+    double oldScale = mDefaultScale;
+    mResizeState = RESIZING;
+    VERIFY(
+        ::SetWindowPos(mWnd, nullptr, 0, 0, width, GetHeight(height), flags));
+    mResizeState = NOT_RESIZING;
+    if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
+      ChangedDPI();
+    }
     ResizeDirectManipulationViewport();
   }
 
@@ -2086,53 +2099,54 @@ void nsWindow::Resize(double aX, double aY, double aWidth, double aHeight,
     return;
   }
 
+  // Refer to the comment above a similar check in nsWindow::Move
+  if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
+    WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
+    VERIFY(::GetWindowPlacement(mWnd, &pl));
+
+    HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
+    if (NS_WARN_IF(!monitor)) {
+      return;
+    }
+    MONITORINFO mi = {sizeof(MONITORINFO)};
+    VERIFY(::GetMonitorInfo(monitor, &mi));
+
+    int32_t deltaX =
+        x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
+    int32_t deltaY =
+        y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
+    pl.rcNormalPosition.left += deltaX;
+    pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
+    pl.rcNormalPosition.top += deltaY;
+    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
+    VERIFY(::SetWindowPlacement(mWnd, &pl));
+    return;
+  }
+
   // Set cached value for lightweight and printing
   mBounds.SetRect(x, y, width, height);
 
   if (mWnd) {
-    // Refer to the comment above a similar check in nsWindow::Move
-    if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
-      WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
-      VERIFY(::GetWindowPlacement(mWnd, &pl));
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    if (!aRepaint) {
+      flags |= SWP_NOREDRAW;
+    }
 
-      HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
-      if (NS_WARN_IF(!monitor)) {
-        return;
-      }
-      MONITORINFO mi = {sizeof(MONITORINFO)};
-      VERIFY(::GetMonitorInfo(monitor, &mi));
+    double oldScale = mDefaultScale;
+    mResizeState = RESIZING;
+    VERIFY(
+        ::SetWindowPos(mWnd, nullptr, x, y, width, GetHeight(height), flags));
+    mResizeState = NOT_RESIZING;
+    if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
+      ChangedDPI();
+    }
 
-      int32_t deltaX =
-          x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
-      int32_t deltaY =
-          y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
-      pl.rcNormalPosition.left += deltaX;
-      pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
-      pl.rcNormalPosition.top += deltaY;
-      pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
-      VERIFY(::SetWindowPlacement(mWnd, &pl));
-    } else {
-      UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
-      if (!aRepaint) {
-        flags |= SWP_NOREDRAW;
-      }
-
-      double oldScale = mDefaultScale;
-      mResizeState = RESIZING;
-      VERIFY(
-          ::SetWindowPos(mWnd, nullptr, x, y, width, GetHeight(height), flags));
-      mResizeState = NOT_RESIZING;
-      if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
-        ChangedDPI();
-      }
-
-      if (mTransitionWnd) {
-        // If we have a fullscreen transition window, we need to make
-        // it topmost again, otherwise the taskbar may be raised by
-        // the system unexpectedly when we leave fullscreen state.
-        ::SetWindowPos(mTransitionWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-      }
+    if (mTransitionWnd) {
+      // If we have a fullscreen transition window, we need to make
+      // it topmost again, otherwise the taskbar may be raised by
+      // the system unexpectedly when we leave fullscreen state.
+      ::SetWindowPos(mTransitionWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     ResizeDirectManipulationViewport();
@@ -2734,6 +2748,8 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
   }
 
   UpdateOpaqueRegionInternal();
+  // We probably shouldn't need to clear the NC-area if we're an opaque window,
+  // but we need to in order to work around bug 642851.
   mNeedsNCAreaClear = true;
 
   if (aReflowWindow) {
@@ -2746,8 +2762,14 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
 }
 
 nsresult nsWindow::SetNonClientMargins(const LayoutDeviceIntMargin& margins) {
-  if (!mIsTopWidgetWindow || mBorderStyle == BorderStyle::None) {
+  if (!mIsTopWidgetWindow || mBorderStyle == BorderStyle::None ||
+      margins.top < -1 || margins.bottom < -1 || margins.left < -1 ||
+      margins.right < -1) {
     return NS_ERROR_INVALID_ARG;
+  }
+
+  if (mNonClientMargins == margins) {
+    return NS_OK;
   }
 
   if (mHideChrome) {
@@ -2755,29 +2777,18 @@ nsresult nsWindow::SetNonClientMargins(const LayoutDeviceIntMargin& margins) {
     mFutureMarginsToUse = true;
     return NS_OK;
   }
+
   mFutureMarginsToUse = false;
 
-  // Request for a reset
-  if (margins.top == -1 && margins.left == -1 && margins.right == -1 &&
-      margins.bottom == -1) {
-    mCustomNonClient = false;
-    mNonClientMargins = margins;
-    // Force a reflow of content based on the new client
-    // dimensions.
-    ResetLayout();
-    return NS_OK;
-  }
-
-  if (margins.top < -1 || margins.bottom < -1 || margins.left < -1 ||
-      margins.right < -1) {
-    return NS_ERROR_INVALID_ARG;
-  }
-
+  // -1 margins request a reset
+  mCustomNonClient = margins != LayoutDeviceIntMargin(-1, -1, -1, -1);
   mNonClientMargins = margins;
-  mCustomNonClient = true;
-  if (!UpdateNonClientMargins()) {
-    NS_WARNING("UpdateNonClientMargins failed!");
-    return NS_OK;
+
+  // Force a reflow of content based on the new client dimensions.
+  if (mCustomNonClient) {
+    UpdateNonClientMargins();
+  } else {
+    ResetLayout();
   }
 
   return NS_OK;
@@ -2955,8 +2966,8 @@ static HCURSOR CursorForImage(const nsIWidget::Cursor& aCursor,
   LayoutDeviceIntPoint hotspot =
       RoundedToInt(CSSIntPoint(aCursor.mHotspotX, aCursor.mHotspotY) * aScale);
   HCURSOR cursor;
-  nsresult rv = nsWindowGfx::CreateIcon(aCursor.mContainer, true, hotspot,
-                                        layoutSize, &cursor);
+  nsresult rv = nsWindowGfx::CreateIcon(aCursor.mContainer, nullptr, true,
+                                        hotspot, layoutSize, &cursor);
   if (NS_FAILED(rv)) {
     return nullptr;
   }
@@ -5085,7 +5096,8 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
        * do seem to always send a WM_NCPAINT message, so let's update on that.
        */
       gfxDWriteFont::UpdateSystemTextVars();
-      if (mCustomNonClient) {
+      if (mCustomNonClient &&
+          mTransparencyMode == TransparencyMode::Transparent) {
         // We rely on dwm for glass / semi-transparent window painting, so we
         // just need to make sure to clear the non-client area next time we get
         // around to doing a main-thread paint.

@@ -599,7 +599,7 @@ bool XPCJSContext::InterruptCallback(JSContext* cx) {
     JS::AutoFilename scriptFilename;
     // Computing the line number can be very expensive (see bug 1330231 for
     // example), so don't request it here.
-    if (JS::DescribeScriptedCaller(cx, &scriptFilename)) {
+    if (JS::DescribeScriptedCaller(&scriptFilename, cx)) {
       if (const char* file = scriptFilename.get()) {
         filename.Assign(file, strlen(file));
       }
@@ -1332,7 +1332,7 @@ nsresult XPCJSContext::Initialize() {
       cx, kStackQuota, kStackQuota - kSystemCodeBuffer,
       kStackQuota - kSystemCodeBuffer - kTrustedScriptBuffer);
 
-  PROFILER_SET_JS_CONTEXT(cx);
+  PROFILER_SET_JS_CONTEXT(this);
 
   JS_AddInterruptCallback(cx, InterruptCallback);
 

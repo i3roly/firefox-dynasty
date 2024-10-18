@@ -83,6 +83,7 @@
 #include "mozilla/dom/quota/OriginScope.h"
 #include "mozilla/dom/quota/PersistenceScope.h"
 #include "mozilla/dom/quota/PersistenceType.h"
+#include "mozilla/dom/quota/PrincipalUtils.h"
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "mozilla/dom/quota/StorageHelpers.h"
 #include "mozilla/dom/quota/QuotaManager.h"
@@ -2672,8 +2673,7 @@ class QuotaClient final : public mozilla::dom::quota::Client {
   nsresult AboutToClearOrigins(const PersistenceScope& aPersistenceScope,
                                const OriginScope& aOriginScope) override;
 
-  void OnOriginClearCompleted(PersistenceType aPersistenceType,
-                              const nsACString& aOrigin) override;
+  void OnOriginClearCompleted(const OriginMetadata& aOriginMetadata) override;
 
   void OnRepositoryClearCompleted(PersistenceType aPersistenceType) override;
 
@@ -3091,7 +3091,7 @@ bool VerifyPrincipalInfo(const PrincipalInfo& aPrincipalInfo,
                          bool aCheckClientPrincipal) {
   AssertIsOnBackgroundThread();
 
-  if (NS_WARN_IF(!QuotaManager::IsPrincipalInfoValid(aPrincipalInfo))) {
+  if (NS_WARN_IF(!quota::IsPrincipalInfoValid(aPrincipalInfo))) {
     return false;
   }
 
@@ -6706,15 +6706,14 @@ nsresult PrepareDatastoreOp::Start() {
       commonParams.storagePrincipalInfo();
 
   if (storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo) {
-    mOriginMetadata = {QuotaManager::GetInfoForChrome(),
-                       PERSISTENCE_TYPE_DEFAULT};
+    mOriginMetadata = {quota::GetInfoForChrome(), PERSISTENCE_TYPE_DEFAULT};
   } else {
     MOZ_ASSERT(storagePrincipalInfo.type() ==
                PrincipalInfo::TContentPrincipalInfo);
 
     QM_TRY_UNWRAP(auto principalMetadata,
-                  QuotaManager::Get()->GetInfoFromValidatedPrincipalInfo(
-                      storagePrincipalInfo));
+                  quota::GetInfoFromValidatedPrincipalInfo(
+                      *QuotaManager::Get(), storagePrincipalInfo));
 
     mOriginMetadata.mSuffix = std::move(principalMetadata.mSuffix);
     mOriginMetadata.mGroup = std::move(principalMetadata.mGroup);
@@ -7918,13 +7917,12 @@ nsresult PrepareObserverOp::Start() {
   const PrincipalInfo& storagePrincipalInfo = params.storagePrincipalInfo();
 
   if (storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo) {
-    mOrigin = QuotaManager::GetOriginForChrome();
+    mOrigin = quota::GetOriginForChrome();
   } else {
     MOZ_ASSERT(storagePrincipalInfo.type() ==
                PrincipalInfo::TContentPrincipalInfo);
 
-    mOrigin =
-        QuotaManager::GetOriginFromValidatedPrincipalInfo(storagePrincipalInfo);
+    mOrigin = quota::GetOriginFromValidatedPrincipalInfo(storagePrincipalInfo);
   }
 
   mState = State::SendingReadyMessage;
@@ -8132,10 +8130,10 @@ nsresult PreloadedOp::Start() {
   MOZ_ASSERT(
       storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo ||
       storagePrincipalInfo.type() == PrincipalInfo::TContentPrincipalInfo);
-  mOrigin = storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo
-                ? nsCString{QuotaManager::GetOriginForChrome()}
-                : QuotaManager::GetOriginFromValidatedPrincipalInfo(
-                      storagePrincipalInfo);
+  mOrigin =
+      storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo
+          ? nsCString{quota::GetOriginForChrome()}
+          : quota::GetOriginFromValidatedPrincipalInfo(storagePrincipalInfo);
 
   mState = State::SendingResults;
   MOZ_ALWAYS_SUCCEEDS(OwningEventTarget()->Dispatch(this, NS_DISPATCH_NORMAL));
@@ -8189,10 +8187,10 @@ nsresult GetStateOp::Start() {
   MOZ_ASSERT(
       storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo ||
       storagePrincipalInfo.type() == PrincipalInfo::TContentPrincipalInfo);
-  mOrigin = storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo
-                ? nsCString{QuotaManager::GetOriginForChrome()}
-                : QuotaManager::GetOriginFromValidatedPrincipalInfo(
-                      storagePrincipalInfo);
+  mOrigin =
+      storagePrincipalInfo.type() == PrincipalInfo::TSystemPrincipalInfo
+          ? nsCString{quota::GetOriginForChrome()}
+          : quota::GetOriginFromValidatedPrincipalInfo(storagePrincipalInfo);
 
   mState = State::SendingResults;
   MOZ_ALWAYS_SUCCEEDS(OwningEventTarget()->Dispatch(this, NS_DISPATCH_NORMAL));
@@ -8596,7 +8594,7 @@ nsresult QuotaClient::AboutToClearOrigins(
   // `CreateAerchivedOriginScope` because it calls `GenerateOriginKey2` which
   // doesn't support the system principal.
   if (aOriginScope.IsOrigin() &&
-      aOriginScope.GetOrigin() == QuotaManager::GetOriginForChrome()) {
+      aOriginScope.GetOrigin() == quota::GetOriginForChrome()) {
     return NS_OK;
   }
 
@@ -8714,8 +8712,8 @@ nsresult QuotaClient::AboutToClearOrigins(
   return NS_OK;
 }
 
-void QuotaClient::OnOriginClearCompleted(PersistenceType aPersistenceType,
-                                         const nsACString& aOrigin) {
+void QuotaClient::OnOriginClearCompleted(
+    const OriginMetadata& aOriginMetadata) {
   AssertIsOnIOThread();
 }
 

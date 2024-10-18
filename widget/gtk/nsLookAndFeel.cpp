@@ -29,7 +29,7 @@
 #include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/AutoRestore.h"
-#include "mozilla/Telemetry.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/WidgetUtilsGtk.h"
 #include "ScreenHelperGTK.h"
@@ -1330,7 +1330,11 @@ static nsCString GetGtkSettingsStringKey(const char* aKey) {
 }
 
 static nsCString GetGtkTheme() {
-  return GetGtkSettingsStringKey("gtk-theme-name");
+  auto theme = GetGtkSettingsStringKey("gtk-theme-name");
+  if (theme.IsEmpty()) {
+    theme.AssignLiteral("Adwaita");
+  }
+  return theme;
 }
 
 static bool GetPreferDarkTheme() {
@@ -2450,9 +2454,9 @@ nsresult nsLookAndFeel::GetKeyboardLayoutImpl(nsACString& aLayout) {
 
 void nsLookAndFeel::RecordLookAndFeelSpecificTelemetry() {
   // Gtk version we're on.
-  nsString version;
+  nsCString version;
   version.AppendPrintf("%d.%d", gtk_major_version, gtk_minor_version);
-  Telemetry::ScalarSet(Telemetry::ScalarID::WIDGET_GTK_VERSION, version);
+  glean::widget::gtk_version.Set(version);
 }
 
 bool nsLookAndFeel::ShouldHonorThemeScrollbarColors() {

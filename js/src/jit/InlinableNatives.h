@@ -72,6 +72,15 @@
   _(DataViewSetBigInt64)                           \
   _(DataViewSetBigUint64)                          \
                                                    \
+  _(DateGetTime)                                   \
+  _(DateGetFullYear)                               \
+  _(DateGetMonth)                                  \
+  _(DateGetDate)                                   \
+  _(DateGetDay)                                    \
+  _(DateGetHours)                                  \
+  _(DateGetMinutes)                                \
+  _(DateGetSeconds)                                \
+                                                   \
   _(FunctionBind)                                  \
                                                    \
   _(IntlGuardToCollator)                           \
@@ -237,6 +246,8 @@
   _(IntrinsicRegExpExecForTest)                    \
   _(IntrinsicTypedArrayByteOffset)                 \
   _(IntrinsicTypedArrayElementSize)                \
+                                                   \
+  _(IntrinsicThisTimeValue)                        \
                                                    \
   INLINABLE_EXPLICIT_RESOURCE_MANAGEMENENT_LIST(_) \
   INLINABLE_NATIVE_FUZZILLI_LIST(_)

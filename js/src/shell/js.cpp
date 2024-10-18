@@ -124,10 +124,10 @@
 #include "js/CompilationAndEvaluation.h"
 #include "js/CompileOptions.h"  // JS::ReadOnlyCompileOptions, JS::CompileOptions, JS::OwningCompileOptions, JS::DecodeOptions, JS::InstantiateOptions
 #include "js/ContextOptions.h"  // JS::ContextOptions{,Ref}
-#include "js/Debug.h"           // JS::dbg::ShouldAvoidSideEffects
-#include "js/Equality.h"        // JS::SameValue
-#include "js/ErrorReport.h"     // JS::PrintError
-#include "js/Exception.h"       // JS::StealPendingExceptionStack
+#include "js/Debug.h"     // JS::dbg::ShouldAvoidSideEffects, JS::ExecutionTrace
+#include "js/Equality.h"  // JS::SameValue
+#include "js/ErrorReport.h"                 // JS::PrintError
+#include "js/Exception.h"                   // JS::StealPendingExceptionStack
 #include "js/experimental/BindingAllocs.h"  // JS_NewObjectWithGivenProtoAndUseAllocSite
 #include "js/experimental/CodeCoverage.h"   // js::EnableCodeCoverage
 #include "js/experimental/CompileScript.h"  // JS::NewFrontendContext, JS::DestroyFrontendContext, JS::HadFrontendErrors, JS::ConvertFrontendErrorsToRuntimeErrors, JS::CompileGlobalScriptToStencil, JS::CompileModuleScriptToStencil
@@ -4432,7 +4432,7 @@ static bool EvalInContext(JSContext* cx, unsigned argc, Value* vp) {
   JS::AutoFilename filename;
   uint32_t lineno;
 
-  DescribeScriptedCaller(cx, &filename, &lineno);
+  DescribeScriptedCaller(&filename, cx, &lineno);
   {
     sobj = UncheckedUnwrap(sobj, true);
 
@@ -5321,11 +5321,7 @@ static bool ParseModule(JSContext* cx, unsigned argc, Value* vp) {
       if (JS_LinearStringEqualsLiteral(linearStr, "json")) {
         jsonModule = true;
       } else if (!JS_LinearStringEqualsLiteral(linearStr, "js")) {
-        UniqueChars modType = JS_EncodeStringToUTF8(cx, str);
-        JS_ReportErrorASCII(
-            cx,
-            "unexpected moduleType string (expected 'js' or 'json'), got %s",
-            modType.get());
+        JS_ReportErrorASCII(cx, "moduleType string ('js' or 'json') expected");
         return false;
       }
     }
@@ -6967,7 +6963,7 @@ static bool ThisFilename(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
   JS::AutoFilename filename;
-  if (!DescribeScriptedCaller(cx, &filename) || !filename.get()) {
+  if (!DescribeScriptedCaller(&filename, cx) || !filename.get()) {
     args.rval().setString(cx->runtime()->emptyString);
     return true;
   }
@@ -9422,6 +9418,273 @@ static bool CreateSideEffectfulResolveObject(JSContext* cx, unsigned argc,
   return true;
 }
 
+#ifdef MOZ_EXECUTION_TRACING
+
+static bool EnableExecutionTracing(JSContext* cx, unsigned argc,
+                                   JS::Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  if (!JS_TracerBeginTracing(cx)) {
+    return false;
+  }
+
+  args.rval().setUndefined();
+  return true;
+}
+
+static bool GetExecutionTrace(JSContext* cx, unsigned argc, JS::Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  JS::ExecutionTrace trace;
+  if (!JS_TracerSnapshotTrace(trace)) {
+    JS_ReportErrorASCII(cx, "Failed to get the execution trace");
+    return false;
+  }
+
+  JS::Rooted<JSString*> functionEnterStr(cx,
+                                         JS_AtomizeString(cx, "FunctionEnter"));
+  if (!functionEnterStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> functionLeaveStr(cx,
+                                         JS_AtomizeString(cx, "FunctionLeave"));
+  if (!functionLeaveStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> labelEnterStr(cx, JS_AtomizeString(cx, "LabelEnter"));
+  if (!labelEnterStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> labelLeaveStr(cx, JS_AtomizeString(cx, "LabelLeave"));
+  if (!labelLeaveStr) {
+    return false;
+  }
+
+  JS::Rooted<JSString*> interpreterStr(cx, JS_AtomizeString(cx, "interpreter"));
+  if (!interpreterStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> baselineStr(cx, JS_AtomizeString(cx, "baseline"));
+  if (!baselineStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> ionStr(cx, JS_AtomizeString(cx, "ion"));
+  if (!ionStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> wasmStr(cx, JS_AtomizeString(cx, "wasm"));
+  if (!wasmStr) {
+    return false;
+  }
+
+  JS::Rooted<JSString*> kindStr(cx, JS_AtomizeString(cx, "kind"));
+  if (!kindStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> kindId(cx, JS::PropertyKey::NonIntAtom(kindStr));
+
+  JS::Rooted<JSString*> implementationStr(
+      cx, JS_AtomizeString(cx, "implementation"));
+  if (!implementationStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> implementationId(
+      cx, JS::PropertyKey::NonIntAtom(implementationStr));
+
+  JS::Rooted<JSString*> timeStr(cx, JS_AtomizeString(cx, "time"));
+  if (!timeStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> timeId(cx, JS::PropertyKey::NonIntAtom(timeStr));
+
+  JS::Rooted<JSString*> eventsStr(cx, JS_AtomizeString(cx, "events"));
+  if (!eventsStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> eventsId(cx,
+                                       JS::PropertyKey::NonIntAtom(eventsStr));
+
+  JS::Rooted<JS::PropertyKey> lineNumberId(cx,
+                                           NameToId(cx->names().lineNumber));
+  JS::Rooted<JS::PropertyKey> columnNumberId(
+      cx, NameToId(cx->names().columnNumber));
+  JS::Rooted<JS::PropertyKey> scriptId(cx, NameToId(cx->names().script));
+  JS::Rooted<JS::PropertyKey> nameId(cx, NameToId(cx->names().name));
+  JS::Rooted<JS::PropertyKey> labelId(cx, NameToId(cx->names().label));
+
+  JS::Rooted<JSObject*> contextObj(cx);
+  JS::Rooted<ArrayObject*> eventsArray(cx);
+  JS::Rooted<JSObject*> eventObj(cx);
+  JS::Rooted<JSString*> str(cx);
+
+  JS::Rooted<ArrayObject*> traceArray(cx, NewDenseEmptyArray(cx));
+  if (!traceArray) {
+    return false;
+  }
+
+  for (const auto& context : trace.contexts) {
+    contextObj = JS_NewPlainObject(cx);
+    if (!contextObj) {
+      return false;
+    }
+
+    eventsArray = NewDenseEmptyArray(cx);
+    if (!eventsArray) {
+      return false;
+    }
+
+    for (const auto& event : context.events) {
+      eventObj = JS_NewPlainObject(cx);
+      if (!eventObj) {
+        return false;
+      }
+
+      switch (event.kind) {
+        case JS::ExecutionTrace::EventKind::FunctionEnter:
+          str = functionEnterStr;
+          break;
+        case JS::ExecutionTrace::EventKind::FunctionLeave:
+          str = functionLeaveStr;
+          break;
+        case JS::ExecutionTrace::EventKind::LabelEnter:
+          str = labelEnterStr;
+          break;
+        case JS::ExecutionTrace::EventKind::LabelLeave:
+          str = labelLeaveStr;
+          break;
+        default:
+          MOZ_CRASH("Unexpected EventKind");
+          break;
+      }
+      if (!JS_DefinePropertyById(cx, eventObj, kindId, str, JSPROP_ENUMERATE)) {
+        return false;
+      }
+
+      if (event.kind == JS::ExecutionTrace::EventKind::FunctionEnter ||
+          event.kind == JS::ExecutionTrace::EventKind::FunctionLeave) {
+        switch (event.functionEvent.implementation) {
+          case JS::ExecutionTrace::ImplementationType::Interpreter:
+            str = interpreterStr;
+            break;
+          case JS::ExecutionTrace::ImplementationType::Baseline:
+            str = baselineStr;
+            break;
+          case JS::ExecutionTrace::ImplementationType::Ion:
+            str = ionStr;
+            break;
+          case JS::ExecutionTrace::ImplementationType::Wasm:
+            str = wasmStr;
+            break;
+          default:
+            MOZ_CRASH("Unexpected ImplementationType");
+            break;
+        }
+        if (!JS_DefinePropertyById(cx, eventObj, implementationId, str,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+
+        if (!JS_DefinePropertyById(cx, eventObj, lineNumberId,
+                                   event.functionEvent.lineNumber,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+
+        if (!JS_DefinePropertyById(cx, eventObj, columnNumberId,
+                                   event.functionEvent.column,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+
+        if (auto p = context.scriptUrls.lookup(event.functionEvent.scriptId)) {
+          str = JS_NewStringCopyUTF8Z(
+              cx, JS::ConstUTF8CharsZ(trace.stringBuffer.begin() + p->value()));
+          if (!str) {
+            return false;
+          }
+
+          if (!JS_DefinePropertyById(cx, eventObj, scriptId, str,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        } else {
+          if (!JS_DefinePropertyById(cx, eventObj, scriptId,
+                                     JS::UndefinedHandleValue,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        }
+
+        if (auto p = context.atoms.lookup(event.functionEvent.functionNameId)) {
+          str = JS_NewStringCopyUTF8Z(
+              cx, JS::ConstUTF8CharsZ(trace.stringBuffer.begin() + p->value()));
+          if (!str) {
+            return false;
+          }
+
+          if (!JS_DefinePropertyById(cx, eventObj, nameId, str,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        } else {
+          if (!JS_DefinePropertyById(cx, eventObj, nameId,
+                                     JS::UndefinedHandleValue,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        }
+      } else {
+        str = JS_NewStringCopyUTF8Z(
+            cx, JS::ConstUTF8CharsZ(trace.stringBuffer.begin() +
+                                    event.labelEvent.label));
+        if (!str) {
+          return false;
+        }
+
+        if (!JS_DefinePropertyById(cx, eventObj, labelId, str,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+      }
+
+      if (!JS_DefinePropertyById(cx, eventObj, timeId, event.time,
+                                 JSPROP_ENUMERATE)) {
+        return false;
+      }
+
+      if (!NewbornArrayPush(cx, eventsArray, JS::ObjectValue(*eventObj))) {
+        return false;
+      }
+    }
+
+    if (!JS_DefinePropertyById(cx, contextObj, eventsId, eventsArray,
+                               JSPROP_ENUMERATE)) {
+      return false;
+    }
+
+    if (!NewbornArrayPush(cx, traceArray, JS::ObjectValue(*contextObj))) {
+      return false;
+    }
+  }
+
+  args.rval().setObject(*traceArray);
+  return true;
+}
+
+static bool DisableExecutionTracing(JSContext* cx, unsigned argc,
+                                    JS::Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  if (!JS_TracerEndTracing(cx)) {
+    return false;
+  }
+
+  args.rval().setUndefined();
+  return true;
+}
+
+#endif  // MOZ_EXECUTION_TRACING
+
 // clang-format off
 static const JSFunctionSpecWithHelp shell_functions[] = {
     JS_FN_HELP("options", Options, 0, 0,
@@ -10211,6 +10474,20 @@ TestAssertRecoveredOnBailout,
 "unless you're willing to update your code if these experimental APIs change\n"
 "underneath you."),
 #endif // JS_HAS_INTL_API
+
+#ifdef MOZ_EXECUTION_TRACING
+    JS_FN_HELP("enableExecutionTracing", EnableExecutionTracing, 0, 0,
+"enableExecutionTracing()",
+"  Enable execution tracing for the current context."),
+
+    JS_FN_HELP("getExecutionTrace", GetExecutionTrace, 0, 0,
+"getExecutionTrace()",
+"  Get the execution trace."),
+
+    JS_FN_HELP("disableExecutionTracing", DisableExecutionTracing, 0, 0,
+"disableExecutionTracing()",
+"  Disable execution tracing for the current context."),
+#endif   // MOZ_EXECUTION_TRACING
 
     JS_FS_HELP_END
 };
@@ -12762,6 +13039,8 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "wasm-js-string-builtins",
                         "Enable WebAssembly js-string-builtins proposal.") ||
       !op.addBoolOption('\0', "enable-promise-try", "Enable Promise.try") ||
+      !op.addBoolOption('\0', "enable-iterator-sequencing",
+                        "Enable Iterator Sequencing") ||
       !op.addBoolOption('\0', "enable-math-sumprecise",
                         "Enable Math.sumPrecise") ||
       !op.addBoolOption('\0', "enable-error-iserror", "Enable Error.isError") ||
@@ -12847,6 +13126,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-error-iserror")) {
     JS::Prefs::setAtStartup_experimental_error_iserror(true);
+  }
+  if (op.getBoolOption("enable-iterator-sequencing")) {
+    JS::Prefs::setAtStartup_experimental_iterator_sequencing(true);
   }
   if (op.getBoolOption("enable-math-sumprecise")) {
     JS::Prefs::setAtStartup_experimental_math_sumprecise(true);

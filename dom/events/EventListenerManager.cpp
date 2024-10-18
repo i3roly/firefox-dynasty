@@ -1030,8 +1030,8 @@ nsresult EventListenerManager::SetEventHandler(nsAtom* aName,
     JS::ColumnNumberOneOrigin columnNum;
 
     JSContext* cx = nsContentUtils::GetCurrentJSContext();
-    if (cx && !JS::DescribeScriptedCaller(cx, nullptr, &lineNum, &columnNum)) {
-      JS_ClearPendingException(cx);
+    if (cx) {
+      JS::DescribeScriptedCaller(nullptr, cx, &lineNum, &columnNum);
     }
 
     if (csp) {
@@ -1328,7 +1328,7 @@ bool EventListenerManager::HandleEventSingleListener(
 
   if (NS_SUCCEEDED(result)) {
     Maybe<EventCallbackDebuggerNotificationGuard> dbgGuard;
-    if (dom::ChromeUtils::IsDevToolsOpened()) {
+    if (dom::ChromeUtils::IsDevToolsOpened() || profiler_is_active()) {
       dbgGuard.emplace(aCurrentTarget, aDOMEvent);
     }
     nsAutoMicroTask mt;

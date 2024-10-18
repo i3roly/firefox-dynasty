@@ -242,6 +242,7 @@ bool js::jit::CanInlineNativeCrossRealm(InlinableNative native) {
     case InlinableNative::IntrinsicTypedArrayByteOffset:
     case InlinableNative::IntrinsicTypedArrayElementSize:
     case InlinableNative::IntrinsicArrayIteratorPrototypeOptimizable:
+    case InlinableNative::IntrinsicThisTimeValue:
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
     case InlinableNative::IntrinsicGuardToAsyncDisposableStack:
     case InlinableNative::IntrinsicGuardToDisposableStack:
@@ -295,6 +296,14 @@ bool js::jit::CanInlineNativeCrossRealm(InlinableNative native) {
     case InlinableNative::DataViewSetFloat64:
     case InlinableNative::DataViewSetBigInt64:
     case InlinableNative::DataViewSetBigUint64:
+    case InlinableNative::DateGetTime:
+    case InlinableNative::DateGetFullYear:
+    case InlinableNative::DateGetMonth:
+    case InlinableNative::DateGetDate:
+    case InlinableNative::DateGetDay:
+    case InlinableNative::DateGetHours:
+    case InlinableNative::DateGetMinutes:
+    case InlinableNative::DateGetSeconds:
     case InlinableNative::FunctionBind:
     case InlinableNative::MapGet:
     case InlinableNative::MapHas:
