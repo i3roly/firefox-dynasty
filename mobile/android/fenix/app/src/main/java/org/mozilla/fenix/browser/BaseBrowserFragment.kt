@@ -322,7 +322,9 @@ abstract class BaseBrowserFragment :
     @VisibleForTesting
     internal var browserInitialized: Boolean = false
     private var initUIJob: Job? = null
-    protected var webAppToolbarShouldBeVisible = true
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    internal var webAppToolbarShouldBeVisible = true
 
     internal val sharedViewModel: SharedViewModel by activityViewModels()
     private val homeViewModel: HomeScreenViewModel by activityViewModels()
@@ -2435,14 +2437,15 @@ abstract class BaseBrowserFragment :
     @VisibleForTesting
     internal fun reinitializeEngineView() {
         val isFullscreen = fullScreenFeature.get()?.isFullScreen == true
+        val shouldToolbarsBeHidden = isFullscreen || !webAppToolbarShouldBeVisible
         val topToolbarHeight = requireContext().settings().getTopToolbarHeight(
             includeTabStrip = customTabSessionId == null && requireContext().isTabStripEnabled(),
         )
         val bottomToolbarHeight = requireContext().settings().getBottomToolbarHeight(requireContext())
 
         initializeEngineView(
-            topToolbarHeight = if (isFullscreen) 0 else topToolbarHeight,
-            bottomToolbarHeight = if (isFullscreen) 0 else bottomToolbarHeight,
+            topToolbarHeight = if (shouldToolbarsBeHidden) 0 else topToolbarHeight,
+            bottomToolbarHeight = if (shouldToolbarsBeHidden) 0 else bottomToolbarHeight,
         )
     }
 
