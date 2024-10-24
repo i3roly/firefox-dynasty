@@ -91,6 +91,7 @@
   MACRO_(close, "close")                                                       \
   MACRO_(collation, "collation")                                               \
   MACRO_(collections, "collections")                                           \
+  MACRO_(column, "column")                                                     \
   MACRO_(columnNumber, "columnNumber")                                         \
   MACRO1(comma_, ",")                                                          \
   MACRO_(compact, "compact")                                                   \
@@ -167,6 +168,7 @@
   MACRO_(emptyRegExp_, "(?:)")                                                 \
   MACRO_(encodeURI, "encodeURI")                                               \
   MACRO_(encodeURIComponent, "encodeURIComponent")                             \
+  MACRO_(end, "end")                                                           \
   MACRO_(endRange, "endRange")                                                 \
   MACRO_(endTimestamp, "endTimestamp")                                         \
   MACRO_(entries, "entries")                                                   \

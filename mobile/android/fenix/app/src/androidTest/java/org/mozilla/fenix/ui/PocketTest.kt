@@ -85,7 +85,6 @@ class PocketTest : TestSetup() {
     fun pocketDiscoverMoreButtonTest() {
         runWithCondition(isNetworkConnected()) {
             homeScreen {
-                scrollToPocketProvokingStories()
                 verifyDiscoverMoreStoriesButton()
             }.clickPocketDiscoverMoreButton {
                 verifyUrl("getpocket.com/explore")

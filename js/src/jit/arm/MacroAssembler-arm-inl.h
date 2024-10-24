@@ -654,6 +654,10 @@ void MacroAssembler::lshiftPtr(Register src, Register dest) {
   ma_lsl(src, dest, dest);
 }
 
+void MacroAssembler::flexibleLshiftPtr(Register shift, Register srcDest) {
+  flexibleLshift32(shift, srcDest);
+}
+
 void MacroAssembler::lshift64(Imm32 imm, Register64 dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   if (imm.value == 0) {
@@ -712,6 +716,10 @@ void MacroAssembler::rshiftPtr(Register src, Register dest) {
   ma_lsr(src, dest, dest);
 }
 
+void MacroAssembler::flexibleRshiftPtr(Register shift, Register srcDest) {
+  flexibleRshift32(shift, srcDest);
+}
+
 void MacroAssembler::rshift32(Register src, Register dest) {
   ma_lsr(src, dest, dest);
 }
@@ -732,6 +740,15 @@ void MacroAssembler::rshiftPtrArithmetic(Imm32 imm, Register dest) {
   if (imm.value) {
     ma_asr(imm, dest, dest);
   }
+}
+
+void MacroAssembler::rshiftPtrArithmetic(Register src, Register dest) {
+  ma_asr(src, dest, dest);
+}
+
+void MacroAssembler::flexibleRshiftPtrArithmetic(Register shift,
+                                                 Register srcDest) {
+  flexibleRshift32Arithmetic(shift, srcDest);
 }
 
 void MacroAssembler::rshift64Arithmetic(Imm32 imm, Register64 dest) {
@@ -1103,7 +1120,11 @@ void MacroAssembler::cmp64Set(Condition cond, Register64 lhs, Register64 rhs,
 
 void MacroAssembler::cmp64Set(Condition cond, Register64 lhs, Imm64 rhs,
                               Register dest) {
-  if (lhs.high == dest || lhs.low == dest) {
+  if (rhs.value == 0 &&
+      (cond == Assembler::Equal || cond == Assembler::NotEqual)) {
+    ma_orr(lhs.low, lhs.high, dest);
+    cmp32Set(cond, dest, Imm32(0), dest);
+  } else if (lhs.high == dest || lhs.low == dest) {
     cmp64SetAliased(cond, lhs, rhs, dest);
   } else {
     cmp64SetNonAliased(cond, lhs, rhs, dest);
@@ -1688,6 +1709,21 @@ void MacroAssembler::branchTruncateDoubleToInt32(FloatRegister src,
   ma_b(fail, Assembler::Equal);
 }
 
+void MacroAssembler::branchInt64NotInPtrRange(Register64 src, Label* label) {
+  // The high-word needs to be either all zero or all one, depending on the MSB
+  // of the low-word.
+  as_cmp(src.high, asr(src.low, 31));
+  ma_b(label, Assembler::NotEqual);
+}
+
+void MacroAssembler::branchUInt64NotInPtrRange(Register64 src, Label* label) {
+  ScratchRegisterScope scratch(*this);
+
+  // The low-word MSB and all bits in the high-word must be zero.
+  as_orr(scratch, src.high, asr(src.low, 31), SetCC);
+  ma_b(label, Assembler::NonZero);
+}
+
 template <typename T>
 void MacroAssembler::branchAdd32(Condition cond, T src, Register dest,
                                  Label* label) {
@@ -1749,6 +1785,10 @@ void MacroAssembler::branchSubPtr(Condition cond, T src, Register dest,
 void MacroAssembler::branchMulPtr(Condition cond, Register src, Register dest,
                                   Label* label) {
   branchMul32(cond, src, dest, label);
+}
+
+void MacroAssembler::branchNegPtr(Condition cond, Register reg, Label* label) {
+  branchNeg32(cond, reg, label);
 }
 
 void MacroAssembler::decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
@@ -2357,6 +2397,11 @@ void MacroAssembler::cmp32Move32(Condition cond, Register lhs,
   cmp32Move32(cond, lhs, scratch, src, dest);
 }
 
+void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Imm32 rhs,
+                                   Register src, Register dest) {
+  cmp32MovePtr(cond, lhs, rhs, src, dest);
+}
+
 void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Register rhs,
                                    Register src, Register dest) {
   cmp32Move32(cond, lhs, rhs, src, dest);
@@ -2402,6 +2447,13 @@ void MacroAssembler::test32LoadPtr(Condition cond, const Address& addr,
   test32(addr, mask);
   ScratchRegisterScope scratch(*this);
   ma_ldr(src, dest, scratch, Offset, cond);
+}
+
+void MacroAssembler::test32MovePtr(Condition cond, Register operand, Imm32 mask,
+                                   Register src, Register dest) {
+  MOZ_ASSERT(cond == Assembler::Zero || cond == Assembler::NonZero);
+  test32(operand, mask);
+  ma_mov(src, dest, LeaveCC, cond);
 }
 
 void MacroAssembler::test32MovePtr(Condition cond, const Address& addr,

@@ -88,6 +88,165 @@ const ERROR_L10N_IDS = new Map([
 ]);
 
 customElements.define(
+  "addon-webext-permissions-notification",
+  class MozAddonPermissionsNotification extends customElements.get(
+    "popupnotification"
+  ) {
+    show() {
+      super.show();
+
+      if (!this.notification) {
+        return;
+      }
+
+      if (!this.notification.options?.customElementOptions) {
+        throw new Error(
+          "Mandatory customElementOptions property missing from notification options"
+        );
+      }
+
+      this.textEl = this.querySelector("#addon-webext-perm-text");
+      this.introEl = this.querySelector("#addon-webext-perm-intro");
+      this.permsSingleEl = this.querySelector(
+        "#addon-webext-perm-single-entry"
+      );
+      this.permsListEl = this.querySelector("#addon-webext-perm-list");
+
+      this.render();
+    }
+
+    get hasNoPermissions() {
+      const { strings, showIncognitoCheckbox } =
+        this.notification.options.customElementOptions;
+      return !(showIncognitoCheckbox || strings.msgs.length);
+    }
+
+    get hasMultiplePermissionsEntries() {
+      const { strings, showIncognitoCheckbox } =
+        this.notification.options.customElementOptions;
+      return (
+        strings.msgs.length > 1 ||
+        (strings.msgs.length === 1 && showIncognitoCheckbox)
+      );
+    }
+
+    render() {
+      const { strings, showIncognitoCheckbox } =
+        this.notification.options.customElementOptions;
+
+      const { textEl, introEl, permsSingleEl, permsListEl } = this;
+
+      const HTML_NS = "http://www.w3.org/1999/xhtml";
+      const doc = this.ownerDocument;
+
+      this.#clearChildElements();
+
+      if (strings.text) {
+        textEl.textContent = strings.text;
+        // By default, multiline strings don't get formatted properly. These
+        // are presently only used in site permission add-ons, so we treat it
+        // as a special case to avoid unintended effects on other things.
+        if (strings.text.includes("\n\n")) {
+          textEl.classList.add("addon-webext-perm-text-multiline");
+        }
+        textEl.hidden = false;
+      }
+
+      if (strings.listIntro) {
+        introEl.textContent = strings.listIntro;
+        introEl.hidden = false;
+      }
+
+      // Return earlier if there are no permissions to list.
+      if (this.hasNoPermissions) {
+        return;
+      }
+
+      // If there are multiple permissions entries to be shown,
+      // add to the list element one entry for each granted permission
+      // (and one for the private browsing checkbox, if it should
+      // be shown) and return earlier.
+      if (this.hasMultiplePermissionsEntries) {
+        for (let msg of strings.msgs) {
+          let item = doc.createElementNS(HTML_NS, "li");
+          item.classList.add("webext-perm-granted");
+          item.textContent = msg;
+          permsListEl.appendChild(item);
+        }
+        if (showIncognitoCheckbox) {
+          let item = doc.createElementNS(HTML_NS, "li");
+          item.classList.add(
+            "webext-perm-optional",
+            "webext-perm-privatebrowsing"
+          );
+          item.appendChild(this.#createPrivateBrowsingCheckbox());
+          permsListEl.appendChild(item);
+        }
+        permsListEl.hidden = false;
+        return;
+      }
+
+      // Render a single permission entry, which will be either:
+      // - an entry for the private browsing checkbox
+      // - or single granted permission entry.
+      if (showIncognitoCheckbox) {
+        permsSingleEl.appendChild(this.#createPrivateBrowsingCheckbox());
+        permsSingleEl.hidden = false;
+        permsSingleEl.classList.add(
+          "webext-perm-optional",
+          "webext-perm-privatebrowsing"
+        );
+        return;
+      }
+
+      permsSingleEl.textContent = strings.msgs[0];
+      permsSingleEl.hidden = false;
+    }
+
+    #clearChildElements() {
+      const { textEl, introEl, permsSingleEl, permsListEl } = this;
+
+      // Clear all changes to the child elements that may have been changed
+      // by a previous call of the render method.
+      textEl.textContent = "";
+      textEl.hidden = true;
+      textEl.classList.remove("addon-webext-perm-text-multiline");
+
+      introEl.textContent = "";
+      introEl.hidden = true;
+
+      permsSingleEl.textContent = "";
+      permsSingleEl.hidden = true;
+      permsSingleEl.classList.remove(
+        "webext-perm-optional",
+        "webext-perm-privatebrowsing"
+      );
+
+      permsListEl.textContent = "";
+      permsListEl.hidden = true;
+    }
+
+    #createPrivateBrowsingCheckbox() {
+      const { onPrivateBrowsingAllowedChanged, grantPrivateBrowsingAllowed } =
+        this.notification.options.customElementOptions;
+
+      const doc = this.ownerDocument;
+
+      let checkboxEl = doc.createXULElement("checkbox");
+      checkboxEl.checked = grantPrivateBrowsingAllowed;
+      checkboxEl.addEventListener("CheckboxStateChange", () => {
+        onPrivateBrowsingAllowedChanged?.(checkboxEl.checked);
+      });
+      doc.l10n.setAttributes(
+        checkboxEl,
+        "popup-notification-addon-privatebrowsing-checkbox"
+      );
+      return checkboxEl;
+    }
+  }
+);
+
+customElements.define(
   "addon-progress-notification",
   class MozAddonProgressNotification extends customElements.get(
     "popupnotification"

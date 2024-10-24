@@ -8,10 +8,7 @@
 @namespace html "http://www.w3.org/1999/xhtml";
 @namespace xul "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
-/* TODO(bug 1845150): Remove notification-message from the host selectors in
- * this file */
-
-:host(:is(.anonymous-content-host, notification-message)),
+:host(.anonymous-content-host),
 :root {
   --in-content-page-color: rgb(21, 20, 26);
   --in-content-page-background: var(--background-color-canvas);
@@ -27,10 +24,8 @@
   --in-content-icon-color: rgb(91,91,102);
   --in-content-accent-color: var(--in-content-primary-button-background);
   --in-content-accent-color-active: var(--in-content-primary-button-background-hover);
-  --in-content-border-hover: var(--grey-90-a50);
   --in-content-border-invalid: var(--red-50);
   --in-content-border-color: #d7d7db;
-  --in-content-warning-icon-color: #ffa436;
   --in-content-success-icon-color: #2ac3a2;
   --in-content-button-text-color: var(--in-content-text-color);
   --in-content-button-text-color-hover: var(--in-content-text-color);
@@ -75,7 +70,6 @@
   --grey-90-a10: rgba(12, 12, 13, 0.1);
   --grey-90-a20: rgba(12, 12, 13, 0.2);
   --grey-90-a30: rgba(12, 12, 13, 0.3);
-  --grey-90-a50: rgba(12, 12, 13, 0.5);
   --grey-90-a60: rgba(12, 12, 13, 0.6);
   --green-60: #12bc00;
   --green-70: #058b00;
@@ -102,7 +96,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :host(:is(.anonymous-content-host, notification-message)),
+  :host(.anonymous-content-host),
   :root {
     /* Keep these in sync with:
      *
@@ -120,10 +114,8 @@
     --in-content-box-info-background: rgba(249,249,250,0.15);
 
     --in-content-border-color: rgba(249,249,250,0.2);
-    --in-content-border-hover: rgba(249,249,250,0.3);
     --in-content-border-invalid: rgb(255,132,139);
 
-    --in-content-warning-icon-color: #ffbd4f;
     --in-content-success-icon-color: #54FFBD;
 
     --in-content-icon-color: rgb(251,251,254);
@@ -157,7 +149,7 @@
 }
 
 @media (forced-colors) {
-  :host(:is(.anonymous-content-host, notification-message)),
+  :host(.anonymous-content-host),
   :root {
     --in-content-page-color: CanvasText;
 
@@ -174,7 +166,6 @@
     --in-content-accent-color: SelectedItem;
     --in-content-accent-color-active: SelectedItem;
 
-    --in-content-border-hover: ThreeDShadow;
     /* This is not great, but there is no suitable keyword for this.
      * In theory, we shouldn't be conveying invalid state just with a colour
      * change... */

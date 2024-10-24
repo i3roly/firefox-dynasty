@@ -258,8 +258,10 @@ class Nursery {
   [[nodiscard]] inline bool addStringBuffer(JSLinearString* s);
 
   [[nodiscard]] inline bool addExtensibleStringBuffer(
-      JSLinearString* s, mozilla::StringBuffer* buffer);
-  inline void removeExtensibleStringBuffer(JSLinearString* s);
+      JSLinearString* s, mozilla::StringBuffer* buffer,
+      bool updateMallocBytes = true);
+  inline void removeExtensibleStringBuffer(JSLinearString* s,
+                                           bool updateMallocBytes = true);
 
   size_t sizeOfMallocedBuffers(mozilla::MallocSizeOf mallocSizeOf) const;
 
@@ -423,6 +425,8 @@ class Nursery {
     return (currentEnd() - position()) +
            (maxChunkCount() - currentChunk() - 1) * gc::ChunkSize;
   }
+
+  inline void addMallocedBufferBytes(size_t nbytes);
 
   // Calculate the promotion rate of the most recent minor GC.
   // The valid_for_tenuring parameter is used to return whether this

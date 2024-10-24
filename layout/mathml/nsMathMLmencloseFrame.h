@@ -32,7 +32,6 @@ class PresShell;
 
 enum nsMencloseNotation {
   NOTATION_LONGDIV,
-  NOTATION_RADICAL,
   NOTATION_ROUNDEDBOX,
   NOTATION_CIRCLE,
   NOTATION_LEFT,
@@ -57,9 +56,6 @@ class nsMathMLmencloseFrame : public nsMathMLContainerFrame {
   nsresult Place(DrawTarget* aDrawTarget, const PlaceFlags& aFlags,
                  ReflowOutput& aDesiredSize) override;
 
-  virtual nsresult MeasureForWidth(DrawTarget* aDrawTarget,
-                                   ReflowOutput& aDesiredSize) override;
-
   virtual nsresult AttributeChanged(int32_t aNameSpaceID, nsAtom* aAttribute,
                                     int32_t aModType) override;
 
@@ -71,9 +67,6 @@ class nsMathMLmencloseFrame : public nsMathMLContainerFrame {
   NS_IMETHOD
   InheritAutomaticData(nsIFrame* aParent) override;
 
-  NS_IMETHOD
-  TransmitAutomaticData() override;
-
   virtual nscoord FixInterFrameSpacing(ReflowOutput& aDesiredSize) override;
 
   bool IsMrowLike() override {
@@ -82,12 +75,8 @@ class nsMathMLmencloseFrame : public nsMathMLContainerFrame {
 
  protected:
   explicit nsMathMLmencloseFrame(ComputedStyle* aStyle,
-                                 nsPresContext* aPresContext,
-                                 ClassID aID = kClassID);
+                                 nsPresContext* aPresContext);
   virtual ~nsMathMLmencloseFrame();
-
-  nsresult PlaceInternal(DrawTarget* aDrawTarget, const PlaceFlags& aFlags,
-                         ReflowOutput& aDesiredSize);
 
   // functions to parse the "notation" attribute.
   nsresult AddNotation(const nsAString& aNotation);
@@ -100,9 +89,8 @@ class nsMathMLmencloseFrame : public nsMathMLContainerFrame {
   }
 
   nscoord mRuleThickness;
-  nscoord mRadicalRuleThickness;
   nsTArray<nsMathMLChar> mMathMLChar;
-  int8_t mLongDivCharIndex, mRadicalCharIndex;
+  int8_t mLongDivCharIndex;
   nscoord mContentWidth;
   nsresult AllocateMathMLChar(nsMencloseNotation mask);
 

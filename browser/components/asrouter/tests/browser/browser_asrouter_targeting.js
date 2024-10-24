@@ -520,6 +520,18 @@ add_task(async function checkAddonsInfo() {
     "should correctly provide `isWebExtension` property"
   );
 
+  ok(
+    Object.prototype.hasOwnProperty.call(testAddon, "hidden") &&
+      testAddon.hidden === false,
+    "should correctly provide `hidden` property"
+  );
+
+  ok(
+    Object.prototype.hasOwnProperty.call(testAddon, "isBuiltin") &&
+      testAddon.isBuiltin === false,
+    "should correctly provide `isBuiltin` property"
+  );
+
   // As we installed our test addon the addons database must be initialised, so
   // (in this test environment) we expect to receive "full" data
 
@@ -1678,6 +1690,15 @@ add_task(async function check_archBits() {
   ok(bits === 32 || bits === 64, "archBits is either 32 or 64");
 });
 
+add_task(async function check_systemArch() {
+  const arch = ASRouterTargeting.Environment.systemArch;
+  is(typeof arch, "string", "systemArch should be a string");
+  ok(
+    ["x86", "x86-64", "aarch64"].includes(arch),
+    "systemArch is either x86, x86-64 or aarch64"
+  );
+});
+
 add_task(async function check_memoryMB() {
   const memory = ASRouterTargeting.Environment.memoryMB;
   is(typeof memory, "number", "Memory is a number");
@@ -1700,3 +1721,85 @@ add_task(async function check_totalSearches() {
     "should return a value of 20"
   );
 });
+
+add_task(async function checkisDefaultBrowserUncached() {
+  const expected = ShellService.isDefaultBrowser();
+  const result = await ASRouterTargeting.Environment.isDefaultBrowserUncached;
+  is(
+    typeof result,
+    "boolean",
+    "isDefaultBrowserUncached should be a boolean value"
+  );
+  is(
+    result,
+    expected,
+    "isDefaultBrowserUncached should be equal to ShellService.isDefaultBrowser()"
+  );
+  const message = {
+    id: "foo",
+    targeting: `isDefaultBrowserUncached == ${expected.toString()}`,
+  };
+  is(
+    await ASRouterTargeting.findMatchingMessage({ messages: [message] }),
+    message,
+    "should select correct item by isDefaultBrowserUncached"
+  );
+});
+
+add_task(async function check_doesAppNeedPin() {
+  const expected = await ShellService.doesAppNeedPin();
+  const result = await ASRouterTargeting.Environment.doesAppNeedPinUncached;
+  is(
+    typeof (await ASRouterTargeting.Environment.doesAppNeedPinUncached),
+    "boolean",
+    "Should return a boolean"
+  );
+  is(
+    result,
+    expected,
+    "doesAppNeedPinUncached should be equal to ShellService.doesAppNeedPin()"
+  );
+  const message = {
+    id: "foo",
+    targeting: `doesAppNeedPinUncached == ${expected.toString()}`,
+  };
+  is(
+    await ASRouterTargeting.findMatchingMessage({ messages: [message] }),
+    message,
+    "should select correct item by doesAppNeedPinUncached"
+  );
+});
+
+add_task(
+  async function check_activeNotifications_newtab_topic_selection_modal_shown_past() {
+    // 10 minutes ago
+    let timestamp10MinsAgo = `${new Date().getTime() - 600000}`;
+    await pushPrefs([
+      "browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.lastDisplayed",
+      timestamp10MinsAgo,
+    ]);
+
+    is(
+      await ASRouterTargeting.Environment.activeNotifications,
+      false,
+      "activeNotifications should be false if the topic selection modal on newtab was last shown more than a minute ago"
+    );
+  }
+);
+
+add_task(
+  async function check_activeNotifications_newtab_topic_selection_modal_shown_recently() {
+    // 1 second ago
+    let timestamp1SecAgo = `${new Date().getTime() - 1000}`;
+    await pushPrefs([
+      "browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.lastDisplayed",
+      timestamp1SecAgo,
+    ]);
+
+    is(
+      await ASRouterTargeting.Environment.activeNotifications,
+      true,
+      "activeNotifications should be true if the topic selection modal on newtab was last shown less than a minute ago"
+    );
+  }
+);

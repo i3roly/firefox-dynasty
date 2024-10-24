@@ -516,6 +516,9 @@ class HomeScreenRobot {
 //    }
 
     fun verifyDiscoverMoreStoriesButton() {
+        Log.i(TAG, "verifyDiscoverMoreStoriesButton: Trying to scroll into view the \"Powered By Pocket\" home screen section")
+        homeScreenList().scrollIntoView(mDevice.findObject(UiSelector().resourceId("pocket.header")))
+        Log.i(TAG, "verifyDiscoverMoreStoriesButton: Scrolled into view the \"Powered By Pocket\" home screen section")
         Log.i(TAG, "verifyDiscoverMoreStoriesButton: Trying to scroll into view the Pocket \"Discover more\" button")
         pocketStoriesList().scrollIntoView(UiSelector().text("Discover more"))
         Log.i(TAG, "verifyDiscoverMoreStoriesButton: Scrolled into view the Pocket \"Discover more\" button")
@@ -587,24 +590,6 @@ class HomeScreenRobot {
             homeScreenList().scrollToEnd(LISTS_MAXSWIPES)
             Log.i(TAG, "verifyCustomizeHomepageButton: Performed ${LISTS_MAXSWIPES}x a scroll action to the end of the home screen")
             assertUIObjectExists(itemContainingText("Customize homepage"), exists = false)
-        }
-    }
-
-    fun verifyJumpBackInMessage(composeTestRule: ComposeTestRule, exists: Boolean) {
-        if (exists) {
-            Log.i(TAG, "verifyJumpBackInMessage: Trying to verify that the jump back in contextual message exists")
-            composeTestRule
-                .onNodeWithText(
-                    getStringResource(R.string.onboarding_home_screen_jump_back_contextual_hint_2),
-                ).assertExists()
-            Log.i(TAG, "verifyJumpBackInMessage: Verified that the jump back in contextual message exists")
-        } else {
-            Log.i(TAG, "verifyJumpBackInMessage: Trying to verify that the jump back in contextual message does not exist")
-            composeTestRule
-                .onNodeWithText(
-                    getStringResource(R.string.onboarding_home_screen_jump_back_contextual_hint_2),
-                ).assertDoesNotExist()
-            Log.i(TAG, "verifyJumpBackInMessage: Verified that the jump back in contextual message does not exist")
         }
     }
 

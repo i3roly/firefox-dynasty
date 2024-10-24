@@ -21,6 +21,7 @@
 #include "mozilla/dom/BrowsingContext.h"
 #include "mozilla/dom/CanonicalBrowsingContext.h"
 #include "mozilla/dom/Directory.h"
+#include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/Logging.h"
 #include "mozilla/ipc/UtilityProcessManager.h"
 #include "mozilla/ProfilerLabels.h"
@@ -227,9 +228,28 @@ static nsTArray<T> Copy(nsTArray<T> const& arr) {
 
 // The possible execution strategies of AsyncExecute.
 enum Strategy {
+  // Always and only open the dialog in-process. This is effectively the
+  // only behavior in older versions of Gecko.
   LocalOnly,
+
+  // Always and only open the dialog out-of-process.
   RemoteOnly,
+
+  // Open the dialog out-of-process. If that fails in any way, try to recover by
+  // opening it in-process.
   RemoteWithFallback,
+
+  // Try to open the dialog out-of-process. If and only if the process can't
+  // even be created, fall back to in-process.
+  //
+  // This heuristic is crafted to avoid the out-of-process file-dialog causing
+  // user-experience regressions compared to the previous "LocalOnly" behavior:
+  //  * If the file-dialog actually crashes, then it would have brought down the
+  //    entire browser. In this case just surfacing an error is a strict
+  //    improvement.
+  //  * If the utility process simply fails to start, there's usually nothing
+  //    preventing the dialog from being opened in-process instead. Producing an
+  //    error would be a degradation.
   FallbackUnlessCrash,
 };
 
@@ -622,14 +642,18 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
   // options
   {
     FILEOPENDIALOGOPTIONS fos = 0;
-    fos |= FOS_SHAREAWARE | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM;
+
+    // FOS_OVERWRITEPROMPT: always confirm on overwrite in Save dialogs
+    // FOS_FORCEFILESYSTEM: provide only filesystem-objects, not more exotic
+    //    entities like libraries
+    fos |= FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM;
 
     // Handle add to recent docs settings
     if (IsPrivacyModeEnabled() || !mAddToRecentDocs) {
       fos |= FOS_DONTADDTORECENT;
     }
 
-    // mode specific
+    // mode specification
     switch (mMode) {
       case modeOpen:
         fos |= FOS_FILEMUSTEXIST;
@@ -813,7 +837,13 @@ nsFilePicker::CheckContentAnalysisService() {
                                                                    __func__);
   }
 
-  nsCOMPtr<nsIURI> uri = mBrowsingContext->Canonical()->GetCurrentURI();
+  nsCOMPtr<nsIURI> uri =
+      mozilla::contentanalysis::ContentAnalysis::GetURIForBrowsingContext(
+          mBrowsingContext->Canonical());
+  if (!uri) {
+    return nsFilePicker::ContentAnalysisResponse::CreateAndReject(
+        NS_ERROR_FAILURE, __func__);
+  }
 
   auto processOneItem = [self = RefPtr{this},
                          contentAnalysis = std::move(contentAnalysis),

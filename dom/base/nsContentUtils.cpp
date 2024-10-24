@@ -3944,59 +3944,6 @@ nsPresContext* nsContentUtils::GetContextForContent(
 }
 
 // static
-bool nsContentUtils::CanLoadImage(nsIURI* aURI, nsINode* aNode,
-                                  Document* aLoadingDocument,
-                                  nsIPrincipal* aLoadingPrincipal) {
-  MOZ_ASSERT(aURI, "Must have a URI");
-  MOZ_ASSERT(aLoadingDocument, "Must have a document");
-  MOZ_ASSERT(aLoadingPrincipal, "Must have a loading principal");
-
-  nsresult rv;
-
-  auto appType = nsIDocShell::APP_TYPE_UNKNOWN;
-
-  {
-    nsCOMPtr<nsIDocShellTreeItem> docShellTreeItem =
-        aLoadingDocument->GetDocShell();
-    if (docShellTreeItem) {
-      nsCOMPtr<nsIDocShellTreeItem> root;
-      docShellTreeItem->GetInProcessRootTreeItem(getter_AddRefs(root));
-
-      nsCOMPtr<nsIDocShell> docShell(do_QueryInterface(root));
-
-      if (docShell) {
-        appType = docShell->GetAppType();
-      }
-    }
-  }
-
-  if (appType != nsIDocShell::APP_TYPE_EDITOR) {
-    // Editor apps get special treatment here, editors can load images
-    // from anywhere.  This allows editor to insert images from file://
-    // into documents that are being edited.
-    rv = sSecurityManager->CheckLoadURIWithPrincipal(
-        aLoadingPrincipal, aURI, nsIScriptSecurityManager::ALLOW_CHROME,
-        aLoadingDocument->InnerWindowID());
-    if (NS_FAILED(rv)) {
-      return false;
-    }
-  }
-
-  nsCOMPtr<nsILoadInfo> secCheckLoadInfo = new mozilla::net::LoadInfo(
-      aLoadingPrincipal,
-      aLoadingPrincipal,  // triggering principal
-      aNode, nsILoadInfo::SEC_ONLY_FOR_EXPLICIT_CONTENTSEC_CHECK,
-      nsIContentPolicy::TYPE_INTERNAL_IMAGE);
-
-  int16_t decision = nsIContentPolicy::ACCEPT;
-
-  rv = NS_CheckContentLoadPolicy(aURI, secCheckLoadInfo, &decision,
-                                 GetContentPolicy());
-
-  return NS_SUCCEEDED(rv) && NS_CP_ACCEPTED(decision);
-}
-
-// static
 bool nsContentUtils::IsInPrivateBrowsing(const Document* aDoc) {
   if (!aDoc) {
     return false;
@@ -5205,6 +5152,10 @@ bool nsContentUtils::HasNonEmptyAttr(const nsIContent* aContent,
 bool nsContentUtils::WantMutationEvents(nsINode* aNode, uint32_t aType,
                                         nsINode* aTargetForSubtreeModified) {
   Document* doc = aNode->OwnerDoc();
+  if (!doc->MutationEventsEnabled()) {
+    return false;
+  }
+
   if (!doc->FireMutationEvents()) {
     return false;
   }
@@ -8038,6 +7989,20 @@ bool nsContentUtils::IsJavascriptMIMEType(const nsACString& aMIMEType) {
   return false;
 }
 
+bool nsContentUtils::IsJsonMimeType(const nsAString& aMimeType) {
+  // Table ordered from most to least likely JSON MIME types.
+  static constexpr std::string_view jsonTypes[] = {"application/json",
+                                                   "text/json"};
+
+  for (std::string_view type : jsonTypes) {
+    if (aMimeType.LowerCaseEqualsASCII(type.data(), type.length())) {
+      return true;
+    }
+  }
+
+  return StringEndsWith(aMimeType, u"+json"_ns);
+}
+
 bool nsContentUtils::PrefetchPreloadEnabled(nsIDocShell* aDocShell) {
   //
   // SECURITY CHECK: disable prefetching and preloading from mailnews!
@@ -8122,10 +8087,12 @@ uint64_t nsContentUtils::GetInnerWindowID(nsILoadGroup* aLoadGroup) {
 // static
 void nsContentUtils::MaybeFixIPv6Host(nsACString& aHost) {
   if (aHost.FindChar(':') != -1) {  // Escape IPv6 address
-    MOZ_ASSERT(!aHost.Length() ||
-               (aHost[0] != '[' && aHost[aHost.Length() - 1] != ']'));
-    aHost.Insert('[', 0);
-    aHost.Append(']');
+    MOZ_ASSERT(!aHost.IsEmpty());
+    if (aHost.Length() >= 2 && aHost[0] != '[' &&
+        aHost[aHost.Length() - 1] != ']') {
+      aHost.Insert('[', 0);
+      aHost.Append(']');
+    }
   }
 }
 
@@ -11283,13 +11250,13 @@ bool nsContentUtils::IsURIInList(nsIURI* aURI, const nsCString& aList) {
     return false;
   }
 
-  nsAutoCString scheme;
-  aURI->GetScheme(scheme);
-  if (!scheme.EqualsLiteral("http") && !scheme.EqualsLiteral("https")) {
+  if (aList.IsEmpty()) {
     return false;
   }
 
-  if (aList.IsEmpty()) {
+  nsAutoCString scheme;
+  aURI->GetScheme(scheme);
+  if (!scheme.EqualsLiteral("http") && !scheme.EqualsLiteral("https")) {
     return false;
   }
 

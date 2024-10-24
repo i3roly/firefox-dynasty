@@ -17,32 +17,6 @@ import org.mozilla.fenix.debugsettings.cfrs.CfrToolsStore
 class CfrToolsStoreTest {
 
     @Test
-    fun `GIVEN the homepage intro CFR has been shown WHEN the homepage intro CFR is toggled THEN its preference is set to false`() {
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                homepageIntroShown = true,
-            ),
-        )
-
-        assertTrue(store.state.homepageIntroShown)
-        store.dispatch(CfrToolsAction.ToggleHomepageIntroShown)
-        assertFalse(store.state.homepageIntroShown)
-    }
-
-    @Test
-    fun `GIVEN the homepage intro CFR has not been shown WHEN the homepage intro CFR is toggled THEN its preference is set to true`() {
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                homepageIntroShown = false,
-            ),
-        )
-
-        assertFalse(store.state.homepageIntroShown)
-        store.dispatch(CfrToolsAction.ToggleHomepageIntroShown)
-        assertTrue(store.state.homepageIntroShown)
-    }
-
-    @Test
     fun `GIVEN the homepage sync CFR has been shown WHEN the homepage sync CFR is toggled THEN its preference is set to false`() {
         val store = CfrToolsStore(
             initialState = CfrToolsState(
@@ -144,32 +118,6 @@ class CfrToolsStoreTest {
         assertFalse(store.state.navButtonsShown)
         store.dispatch(CfrToolsAction.ToggleNavButtonsShown)
         assertTrue(store.state.navButtonsShown)
-    }
-
-    @Test
-    fun `GIVEN the TCP CFR has been shown WHEN the TCP CFR is toggled THEN its preference is set to false`() {
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                tcpShown = true,
-            ),
-        )
-
-        assertTrue(store.state.tcpShown)
-        store.dispatch(CfrToolsAction.ToggleTcpShown)
-        assertFalse(store.state.tcpShown)
-    }
-
-    @Test
-    fun `GIVEN the TCP CFR has not been shown WHEN the TCP CFR is toggled THEN its preference is set to true`() {
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                tcpShown = false,
-            ),
-        )
-
-        assertFalse(store.state.tcpShown)
-        store.dispatch(CfrToolsAction.ToggleTcpShown)
-        assertTrue(store.state.tcpShown)
     }
 
     @Test

@@ -688,7 +688,7 @@ add_task(async function wheelTests() {
   );
 
   let scrollOverflowEvent = BrowserTestUtils.waitForEvent(
-    document.getElementById("tabbrowser-arrowscrollbox"),
+    gBrowser.tabContainer.arrowScrollbox,
     "overflow"
   );
   BrowserTestUtils.overflowTabs(registerCleanupFunction, window, {
@@ -754,6 +754,37 @@ add_task(async function tabContentChangeTests() {
     previewPanel.querySelector(".tab-preview-title").innerText,
     "New Tab Title",
     "Preview of tab shows new tab title"
+  );
+
+  await closePreviews();
+  BrowserTestUtils.removeTab(tab);
+});
+
+/**
+ * In vertical tabs mode, tab preview should be displayed to the side
+ * and not beneath the tab.
+ */
+add_task(async function tabPreview_verticalTabsPositioning() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["sidebar.revamp", true],
+      ["sidebar.verticalTabs", true],
+    ],
+  });
+
+  const previewPanel = document.getElementById("tab-preview-panel");
+  const tab = await BrowserTestUtils.openNewForegroundTab(
+    gBrowser,
+    "about:blank"
+  );
+  await openPreview(tab);
+
+  let tabRect = tab.getBoundingClientRect();
+  let panelRect = previewPanel.getBoundingClientRect();
+
+  Assert.ok(
+    Math.abs(tabRect.top - panelRect.top) < 5,
+    "Preview panel not displayed beneath tab"
   );
 
   await closePreviews();

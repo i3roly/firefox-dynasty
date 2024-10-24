@@ -16,10 +16,6 @@ const { ModelHub, IndexedDBCache } = ChromeUtils.importESModule(
   "chrome://global/content/ml/ModelHub.sys.mjs"
 );
 
-const { getRuntimeWasmFilename } = ChromeUtils.importESModule(
-  "chrome://global/content/ml/Utils.sys.mjs"
-);
-
 const { createEngine, PipelineOptions } = ChromeUtils.importESModule(
   "chrome://global/content/ml/EngineProcess.sys.mjs"
 );
@@ -34,7 +30,7 @@ Services.scriptloader.loadSubScript(
 function getDefaultWasmRecords() {
   return [
     {
-      name: getRuntimeWasmFilename(),
+      name: MLEngineParent.WASM_FILENAME,
       version: MLEngineParent.WASM_MAJOR_VERSION + ".0",
     },
   ];
@@ -120,13 +116,14 @@ async function createOptionsRemoteClient(record = null) {
 
   if (!record) {
     record = {
-      taskName: "echo",
+      taskName: "moz-echo",
       modelId: "mozilla/distilvit",
       processorId: "mozilla/distilvit",
       tokenizerId: "mozilla/distilvit",
       modelRevision: "main",
       processorRevision: "main",
       tokenizerRevision: "main",
+      dtype: "q8",
       id: "74a71cfd-1734-44e6-85c0-69cf3e874138",
     };
   }

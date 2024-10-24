@@ -7,6 +7,11 @@ const { PlacesTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/PlacesTestUtils.sys.mjs"
 );
 
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  HistoryController: "resource:///modules/HistoryController.sys.mjs",
+});
+
 const URLs = [
   "http://mochi.test:8888/browser/",
   "https://www.example.com/",
@@ -21,16 +26,9 @@ const yesterday = new Date(
   today.getDate() - 1
 );
 
-// Set the date for the first day of the last month
-const lastMonth = new Date(today);
-lastMonth.setDate(1);
-if (lastMonth.getMonth() === 0) {
-  // If today's date is in January, use first day in December from the previous year
-  lastMonth.setMonth(11);
-  lastMonth.setFullYear(lastMonth.getFullYear() - 1);
-} else {
-  lastMonth.setMonth(lastMonth.getMonth() - 1);
-}
+// Get date for the second-last day of the previous month.
+// (Do not use the last day, since that could be the same as yesterday's date.)
+const lastMonth = new Date(today.getFullYear(), today.getMonth(), -1);
 
 const dates = [today, yesterday, lastMonth];
 
@@ -54,16 +52,18 @@ registerCleanupFunction(async () => {
   await BrowserTestUtils.closeWindow(win);
 });
 
-async function showHistorySidebar() {
+async function showHistorySidebar({ waitForPendingHistory = true } = {}) {
   const { SidebarController } = win;
   if (SidebarController.currentID !== "viewHistorySidebar") {
     await SidebarController.show("viewHistorySidebar");
   }
   const { contentDocument, contentWindow } = SidebarController.browser;
   const component = contentDocument.querySelector("sidebar-history");
-  await BrowserTestUtils.waitForCondition(
-    () => !component.controller.isHistoryPending
-  );
+  if (waitForPendingHistory) {
+    await BrowserTestUtils.waitForCondition(
+      () => !component.controller.isHistoryPending
+    );
+  }
   await component.updateComplete;
   return { component, contentWindow };
 }
@@ -93,6 +93,52 @@ add_task(async function test_history_cards_created() {
       "Card shows the correct number of visits."
     );
   }
+  win.SidebarController.hide();
+});
+
+add_task(async function test_history_searchbox_focus() {
+  const { component } = await showHistorySidebar();
+  const { searchTextbox } = component;
+
+  ok(component.shadowRoot.activeElement, "check activeElement is present");
+  Assert.equal(
+    component.shadowRoot.activeElement,
+    searchTextbox,
+    "Check search box is focused"
+  );
+  win.SidebarController.hide();
+});
+
+add_task(async function test_history_searchbox_focused_with_history_pending() {
+  const sandbox = sinon.createSandbox();
+
+  // This stubs any new instance created so that isHistoryPending getter always
+  // returns true to simulate waiting for history to load.
+  sandbox
+    .stub(lazy.HistoryController.prototype, "isHistoryPending")
+    .value(true);
+
+  const { SidebarController } = win;
+
+  // Show the new history sidebar but don't wait for pendingHistory as this will timeout
+  // since the check isHistoryPending will always return true.
+  const { component } = await showHistorySidebar({
+    waitForPendingHistory: false,
+  });
+  const { searchTextbox } = component;
+
+  ok(component.shadowRoot.activeElement, "check activeElement is present");
+  Assert.equal(
+    component.shadowRoot.activeElement,
+    searchTextbox,
+    "Check search box is focused"
+  );
+
+  // Clean-up by hiding the sidebar, because the instance associated with this
+  // History Sidebar remains overidden and the sandbox.restore() only affects
+  // new instances that are created.
+  SidebarController.hide();
+  sandbox.restore();
 });
 
 add_task(async function test_history_search() {
@@ -134,6 +180,7 @@ add_task(async function test_history_search() {
     () => !component.lists[0].emptyState,
     "The original cards are restored."
   );
+  win.SidebarController.hide();
 });
 
 add_task(async function test_history_sort() {
@@ -182,6 +229,7 @@ add_task(async function test_history_sort() {
       "The cards for Today and Yesterday are expanded."
     );
   }
+  win.SidebarController.hide();
 });
 
 add_task(async function test_history_keyboard_navigation() {
@@ -211,6 +259,7 @@ add_task(async function test_history_keyboard_navigation() {
     () => EventUtils.synthesizeKey("KEY_Enter", {}, contentWindow),
     URLs[0]
   );
+  win.SidebarController.hide();
 });
 
 add_task(async function test_history_hover_buttons() {
@@ -242,6 +291,7 @@ add_task(async function test_history_hover_buttons() {
     () => lists[0].rowEls.length === URLs.length - 1,
     "The removed entry should no longer be visible."
   );
+  win.SidebarController.hide();
 });
 
 add_task(async function test_history_context_menu() {
@@ -249,7 +299,11 @@ add_task(async function test_history_context_menu() {
     component: { lists },
   } = await showHistorySidebar();
   const contextMenu = win.SidebarController.currentContextMenu;
-  let rows = lists[0].rowEls;
+
+  let rows = await TestUtils.waitForCondition(
+    () => lists[0].rowEls.length && lists[0].rowEls,
+    "History rows are shown."
+  );
 
   function getItem(item) {
     return win.document.getElementById("sidebar-history-context-" + item);
@@ -294,6 +348,7 @@ add_task(async function test_history_context_menu() {
   );
   const copiedUrl = SpecialPowers.getClipboardData("text/plain");
   is(copiedUrl, url, "The copied URL is correct.");
+  win.SidebarController.hide();
 });
 
 add_task(async function test_history_empty_state() {
@@ -304,4 +359,5 @@ add_task(async function test_history_empty_state() {
     () => component.emptyState
   );
   ok(BrowserTestUtils.isVisible(emptyState), "Empty state is displayed.");
+  win.SidebarController.hide();
 });

@@ -498,8 +498,8 @@ class SnapshotIterator {
 
   Value read() { return allocationValue(readAllocation()); }
 
-  // Like |read()| but also supports Int64 allocations, which are returned as
-  // BigInt values.
+  // Like |read()| but also supports IntPtr and Int64 allocations, which are
+  // returned as BigInt values.
   bool readMaybeUnpackedBigInt(JSContext* cx, MutableHandle<Value> result);
 
   int32_t readInt32() {
@@ -563,9 +563,13 @@ class SnapshotIterator {
 
  private:
   int64_t allocationInt64(const RValueAllocation& alloc);
+  intptr_t allocationIntPtr(const RValueAllocation& alloc);
 
  public:
   int64_t readInt64() { return allocationInt64(readAllocation()); }
+
+  // Read either a BigInt or unpacked BigInt.
+  JS::BigInt* readBigInt(JSContext* cx);
 
   void traceAllocation(JSTracer* trc);
 

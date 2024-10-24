@@ -3,6 +3,10 @@
 
 "use strict";
 
+const { isInitialDocument } = ChromeUtils.importESModule(
+  "chrome://remote/content/shared/messagehandler/transports/BrowsingContextUtils.sys.mjs"
+);
+
 // We are forcing the actors to shutdown while queries are unresolved.
 const { PromiseTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/PromiseTestUtils.sys.mjs"
@@ -16,9 +20,76 @@ PromiseTestUtils.allowMatchingRejectionsGlobally(
 // and then trigger reload and navigations to simulate AbortErrors and force the
 // MessageHandler to retry the commands, when possible.
 
+// If no retryOnAbort argument is provided, the framework will retry automatically.
+add_task(async function test_default_retry() {
+  let tab = BrowserTestUtils.addTab(
+    gBrowser,
+    "https://example.com/document-builder.sjs?html=tab"
+  );
+
+  let rootMessageHandler = createRootMessageHandler("session-id-retry");
+
+  try {
+    const initialBrowsingContext = tab.linkedBrowser.browsingContext;
+    ok(
+      isInitialDocument(initialBrowsingContext),
+      "Module method needs to run in the initial document"
+    );
+
+    info("Call a module method which will throw");
+    const onBlockedOneTime = rootMessageHandler.handleCommand({
+      moduleName: "retry",
+      commandName: "blockedOneTime",
+      destination: {
+        type: WindowGlobalMessageHandler.type,
+        id: initialBrowsingContext.id,
+      },
+    });
+
+    await onBlockedOneTime;
+
+    ok(
+      !isInitialDocument(tab.linkedBrowser.browsingContext),
+      "module method to be successful"
+    );
+  } finally {
+    await cleanup(rootMessageHandler, tab, false);
+  }
+
+  // Now try again with a normal navigation which has to retry as well.
+
+  tab = BrowserTestUtils.addTab(
+    gBrowser,
+    "https://example.com/document-builder.sjs?html=tab"
+  );
+  await BrowserTestUtils.browserLoaded(tab.linkedBrowser);
+
+  try {
+    rootMessageHandler = createRootMessageHandler("session-id-no-retry");
+    const browsingContext = tab.linkedBrowser.browsingContext;
+
+    info("Call a module method which will throw");
+    const onBlockedOneTime = rootMessageHandler.handleCommand({
+      moduleName: "retry",
+      commandName: "blockedOneTime",
+      destination: {
+        type: WindowGlobalMessageHandler.type,
+        id: browsingContext.id,
+      },
+    });
+
+    // Reloading the tab will reject the pending query with an AbortError.
+    await BrowserTestUtils.reloadTab(tab);
+
+    await onBlockedOneTime;
+  } finally {
+    await cleanup(rootMessageHandler, tab);
+  }
+});
+
 // Test that without retry behavior, a pending command rejects when the
 // underlying JSWindowActor pair is destroyed.
-add_task(async function test_no_retry() {
+add_task(async function test_forced_no_retry() {
   const tab = BrowserTestUtils.addTab(
     gBrowser,
     "https://example.com/document-builder.sjs?html=tab"
@@ -37,6 +108,7 @@ add_task(async function test_no_retry() {
         type: WindowGlobalMessageHandler.type,
         id: browsingContext.id,
       },
+      retryOnAbort: false,
     });
 
     // Reloading the tab will reject the pending query with an AbortError.
@@ -56,7 +128,7 @@ add_task(async function test_no_retry() {
 // succeed. Check that they only resolve when the expected number of "retries"
 // was reached. For commands which require more "retries" than we allow, check
 // that we still fail with an AbortError once all the attempts are consumed.
-add_task(async function test_retry() {
+add_task(async function test_forced_retry() {
   const tab = BrowserTestUtils.addTab(
     gBrowser,
     "https://example.com/document-builder.sjs?html=tab"

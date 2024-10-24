@@ -1094,7 +1094,7 @@ impl Http3Client {
             ReceiveOutput::NewStream(NewStreamType::Push(push_id)) => {
                 self.handle_new_push_stream(stream_id, push_id)
             }
-            ReceiveOutput::NewStream(NewStreamType::Http) => Err(Error::HttpStreamCreation),
+            ReceiveOutput::NewStream(NewStreamType::Http(_)) => Err(Error::HttpStreamCreation),
             ReceiveOutput::NewStream(NewStreamType::WebTransportStream(session_id)) => {
                 self.base_handler.webtransport_create_stream_remote(
                     StreamId::from(session_id),
@@ -1162,7 +1162,7 @@ impl Http3Client {
                     message_type: MessageType::Response,
                     stream_type: Http3StreamType::Push,
                     stream_id,
-                    header_frame_type_read: false,
+                    first_frame_type: None,
                 },
                 Rc::clone(&self.base_handler.qpack_decoder),
                 Box::new(RecvPushEvents::new(push_id, Rc::clone(&self.push_handler))),
@@ -2620,7 +2620,7 @@ mod tests {
         force_idle(&mut client, &mut server);
 
         let idle_timeout = ConnectionParameters::default().get_idle_timeout();
-        assert_eq!(client.process_output(now()).callback(), idle_timeout);
+        assert_eq!(client.process_output(now()).callback(), idle_timeout / 2);
     }
 
     // Helper function: read response when a server sends HTTP_RESPONSE_2.
@@ -4351,7 +4351,7 @@ mod tests {
         assert_eq!(*server.conn.state(), State::Init);
         let out = server.conn.process(out.as_dgram_ref(), now());
 
-        // Check that control and qpack streams anda SETTINGS frame are received.
+        // Check that control and qpack streams and a SETTINGS frame are received.
         // Also qpack encoder stream will send "change capacity" instruction because it has
         // the peer settings already.
         server.check_control_qpack_request_streams_resumption(
@@ -5114,7 +5114,7 @@ mod tests {
         assert!(!fin);
 
         force_idle(&mut client, &mut server);
-        assert_eq!(client.process_output(now()).callback(), idle_timeout);
+        assert_eq!(client.process_output(now()).callback(), idle_timeout / 2);
     }
 
     #[test]

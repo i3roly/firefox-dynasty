@@ -102,11 +102,47 @@ sealed class MenuAction : Action {
     ) : MenuAction()
 
     /**
+     * [MenuAction] dispatched when web extension items list is updated.
+     *
+     * @property webExtensionMenuItems The list of [WebExtensionMenuItem] to be shown in the menu.
+     */
+    data class UpdateWebExtensionMenuItems(
+        val webExtensionMenuItems: List<WebExtensionMenuItem>,
+    ) : MenuAction()
+
+    /**
      * [MenuAction] dispatched when an addon is to be installed.
      *
      * @property addon The [Addon] to install.
      */
     data class InstallAddon(val addon: Addon) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when an addon installation is in progress.
+     *
+     * @property addon The [Addon] to install.
+     */
+    data class UpdateInstallAddonInProgress(
+        val addon: Addon,
+    ) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when an addon installation was completed with success.
+     *
+     * @property addon The [Addon] that was installed.
+     */
+    data class InstallAddonSuccess(
+        val addon: Addon,
+    ) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when an addon installation failed.
+     *
+     * @property addon The [Addon] whose installation failed.
+     */
+    data class InstallAddonFailed(
+        val addon: Addon,
+    ) : MenuAction()
 
     /**
      * [MenuAction] dispatched when a custom item is tapped in the custom tab menu.

@@ -34,6 +34,7 @@
 #include "nsDOMAttributeMap.h"
 #include "nsAtom.h"
 #include "mozilla/dom/NodeInfo.h"
+#include "mozilla/dom/CloseWatcher.h"
 #include "mozilla/dom/Event.h"
 #include "mozilla/dom/ScriptLoader.h"
 #include "mozilla/dom/CustomElementRegistry.h"
@@ -420,51 +421,49 @@ int32_t nsAttrChildContentList::IndexOf(nsIContent* aContent) {
 
 //----------------------------------------------------------------------
 uint32_t nsParentNodeChildContentList::Length() {
-  if (!mIsCacheValid && !ValidateCache()) {
-    return 0;
-  }
-
-  MOZ_ASSERT(mIsCacheValid);
-
-  return mCachedChildArray.Length();
+  return mNode ? mNode->GetChildCount() : 0;
 }
 
 nsIContent* nsParentNodeChildContentList::Item(uint32_t aIndex) {
-  if (!mIsCacheValid && !ValidateCache()) {
-    return nullptr;
+  if (!mIsCacheValid) {
+    if (MOZ_UNLIKELY(!mNode)) {
+      return nullptr;
+    }
+    // Try to avoid the cache for some common cases, see bug 1917511.
+    if (aIndex == 0) {
+      return mNode->GetFirstChild();
+    }
+    uint32_t childCount = mNode->GetChildCount();
+    if (aIndex >= childCount) {
+      return nullptr;
+    }
+    if (aIndex + 1 == childCount) {
+      return mNode->GetLastChild();
+    }
+    ValidateCache();
+    MOZ_ASSERT(mIsCacheValid);
   }
-
-  MOZ_ASSERT(mIsCacheValid);
-
   return mCachedChildArray.SafeElementAt(aIndex, nullptr);
 }
 
 int32_t nsParentNodeChildContentList::IndexOf(nsIContent* aContent) {
-  if (!mIsCacheValid && !ValidateCache()) {
-    return -1;
-  }
-
-  MOZ_ASSERT(mIsCacheValid);
-
+  EnsureCacheValid();
   return mCachedChildArray.IndexOf(aContent);
 }
 
-bool nsParentNodeChildContentList::ValidateCache() {
+void nsParentNodeChildContentList::ValidateCache() {
   MOZ_ASSERT(!mIsCacheValid);
   MOZ_ASSERT(mCachedChildArray.IsEmpty());
 
-  nsINode* parent = GetParentObject();
-  if (!parent) {
-    return false;
+  if (MOZ_UNLIKELY(!mNode)) {
+    return;
   }
 
-  for (nsIContent* node = parent->GetFirstChild(); node;
+  for (nsIContent* node = mNode->GetFirstChild(); node;
        node = node->GetNextSibling()) {
     mCachedChildArray.AppendElement(node);
   }
   mIsCacheValid = true;
-
-  return true;
 }
 
 //----------------------------------------------------------------------

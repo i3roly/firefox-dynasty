@@ -41,6 +41,7 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
 
   void AddChildAt(uint32_t aIdx, RemoteAccessible* aChild) {
     mChildren.InsertElementAt(aIdx, aChild);
+    UpdateChildIndexCache(static_cast<int32_t>(aIdx));
     if (IsHyperText()) {
       InvalidateCachedHyperTextOffsets();
     }
@@ -62,7 +63,7 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
   RemoteAccessible* RemotePrevSibling() const {
     if (IsDoc()) {
       // The normal code path doesn't work for documents because the parent
-      // might be a local OuterDoc, but IndexInParent() will return 1.
+      // might be a local OuterDoc, but IndexInParent() will return 0.
       // A document is always a single child of an OuterDoc anyway.
       return nullptr;
     }
@@ -70,12 +71,13 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
     if (idx == -1) {
       return nullptr;  // No parent.
     }
+    MOZ_ASSERT(RemoteParent());
     return idx > 0 ? RemoteParent()->mChildren[idx - 1] : nullptr;
   }
   RemoteAccessible* RemoteNextSibling() const {
     if (IsDoc()) {
       // The normal code path doesn't work for documents because the parent
-      // might be a local OuterDoc, but IndexInParent() will return 1.
+      // might be a local OuterDoc, but IndexInParent() will return 0.
       // A document is always a single child of an OuterDoc anyway.
       return nullptr;
     }
@@ -85,6 +87,7 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
     }
     MOZ_ASSERT(idx >= 0);
     size_t newIdx = idx + 1;
+    MOZ_ASSERT(RemoteParent());
     return newIdx < RemoteParent()->mChildren.Length()
                ? RemoteParent()->mChildren[newIdx]
                : nullptr;
@@ -106,15 +109,12 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
     return RemotePrevSibling();
   }
 
-  // XXX evaluate if this is fast enough.
   virtual int32_t IndexInParent() const override {
-    RemoteAccessible* parent = RemoteParent();
-    if (!parent) {
-      return -1;
-    }
-    return parent->mChildren.IndexOf(
-        static_cast<const RemoteAccessible*>(this));
+    MOZ_ASSERT(mParent || mIndexInParent == -1,
+               "IndexInParent should be -1 if no parent");
+    return mIndexInParent;
   }
+
   virtual uint32_t EmbeddedChildCount() override;
   virtual int32_t IndexOfEmbeddedChild(Accessible* aChild) override;
   virtual Accessible* EmbeddedChildAt(uint32_t aChildIdx) override;
@@ -129,6 +129,9 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
    */
   void RemoveChild(RemoteAccessible* aChild) {
     mChildren.RemoveElement(aChild);
+    MOZ_ASSERT(aChild->mIndexInParent != -1);
+    UpdateChildIndexCache(aChild->mIndexInParent);
+    aChild->mIndexInParent = -1;
     if (IsHyperText()) {
       InvalidateCachedHyperTextOffsets();
     }
@@ -479,6 +482,17 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
   virtual nsTArray<int32_t>& GetCachedHyperTextOffsets() override;
 
  private:
+  /**
+   * Update mIndexInParent on each child starting at aStartIdx up to the last
+   * child. This should be called when a child is added or removed.
+   */
+  void UpdateChildIndexCache(int32_t aStartIdx) {
+    int32_t count = static_cast<int32_t>(mChildren.Length());
+    for (int32_t idx = aStartIdx; idx < count; ++idx) {
+      mChildren[idx]->mIndexInParent = idx;
+    }
+  }
+
   RemoteAccessible* mParent;
 
   friend DocAccessibleParent;
@@ -494,6 +508,7 @@ class RemoteAccessible : public Accessible, public HyperTextAccessibleBase {
   DocAccessibleParent* mDoc;
   uintptr_t mWrapper;
   uint64_t mID;
+  int32_t mIndexInParent = -1;
 
  protected:
   virtual const Accessible* Acc() const override { return this; }

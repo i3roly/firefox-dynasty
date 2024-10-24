@@ -294,8 +294,8 @@ void SVGForeignObjectFrame::NotifySVGChanged(uint32_t aFlags) {
 
     // Our coordinate context's width/height has changed. If we have a
     // percentage width/height our dimensions will change so we must reflow.
-    if (StylePosition()->mWidth.HasPercent() ||
-        StylePosition()->mHeight.HasPercent()) {
+    if (StylePosition()->GetWidth().HasPercent() ||
+        StylePosition()->GetHeight().HasPercent()) {
       needNewBounds = true;
       needReflow = true;
     }
@@ -366,13 +366,10 @@ SVGBBox SVGForeignObjectFrame::GetBBoxContribution(
 gfxMatrix SVGForeignObjectFrame::GetCanvasTM() {
   if (!mCanvasTM) {
     NS_ASSERTION(GetParent(), "null parent");
-
     auto* parent = static_cast<SVGContainerFrame*>(GetParent());
     auto* content = static_cast<SVGForeignObjectElement*>(GetContent());
-
-    gfxMatrix tm = content->PrependLocalTransformsTo(parent->GetCanvasTM());
-
-    mCanvasTM = MakeUnique<gfxMatrix>(tm);
+    mCanvasTM = MakeUnique<gfxMatrix>(content->ChildToUserSpaceTransform() *
+                                      parent->GetCanvasTM());
   }
   return *mCanvasTM;
 }

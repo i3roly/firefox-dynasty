@@ -36,6 +36,7 @@ class StyleSheet;
 enum class PseudoStyleType : uint8_t;
 enum class PointerCapabilities : uint8_t;
 enum class UpdateAnimationsTasks : uint8_t;
+enum class StyleColorGamut : uint8_t;
 struct Keyframe;
 struct StyleStylesheetContents;
 
@@ -44,7 +45,6 @@ class LoaderReusableStyleSheets;
 }
 namespace dom {
 enum class CompositeOperationOrAuto : uint8_t;
-enum class ScreenColorGamut : uint8_t;
 }  // namespace dom
 }  // namespace mozilla
 
@@ -492,10 +492,10 @@ GeckoImplicitScopeRoot Gecko_StyleSheet_ImplicitScopeRoot(
 bool Gecko_IsDocumentBody(const mozilla::dom::Element* element);
 
 bool Gecko_IsDarkColorScheme(const mozilla::dom::Document*,
-                             const mozilla::StyleColorScheme*);
+                             const mozilla::StyleColorSchemeFlags*);
 nscolor Gecko_ComputeSystemColor(mozilla::StyleSystemColor,
                                  const mozilla::dom::Document*,
-                                 const mozilla::StyleColorScheme*);
+                                 const mozilla::StyleColorSchemeFlags*);
 
 // We use an int32_t here instead of a LookAndFeel::IntID/FloatID because
 // forward-declaring a nested enum/struct is impossible.
@@ -583,7 +583,7 @@ bool Gecko_MediaFeatures_UseOverlayScrollbars(const mozilla::dom::Document*);
 int32_t Gecko_MediaFeatures_GetColorDepth(const mozilla::dom::Document*);
 int32_t Gecko_MediaFeatures_GetMonochromeBitsPerPixel(
     const mozilla::dom::Document*);
-mozilla::dom::ScreenColorGamut Gecko_MediaFeatures_ColorGamut(
+mozilla::StyleColorGamut Gecko_MediaFeatures_ColorGamut(
     const mozilla::dom::Document*);
 
 void Gecko_MediaFeatures_GetDeviceSize(const mozilla::dom::Document*,

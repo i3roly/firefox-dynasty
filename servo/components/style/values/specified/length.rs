@@ -15,7 +15,8 @@ use crate::parser::{Parse, ParserContext};
 use crate::values::computed::{self, CSSPixelLength, Context};
 use crate::values::generics::length as generics;
 use crate::values::generics::length::{
-    GenericLengthOrNumber, GenericLengthPercentageOrNormal, GenericMaxSize, GenericSize,
+    GenericAnchorSizeFunction, GenericLengthOrNumber, GenericLengthPercentageOrNormal,
+    GenericMargin, GenericMaxSize, GenericSize,
 };
 use crate::values::generics::NonNegative;
 use crate::values::specified::calc::{self, CalcNode};
@@ -104,7 +105,7 @@ impl FontBaseSize {
             Self::InheritedStyle => {
                 // If we're using the size from our inherited style, we still need to apply our
                 // own zoom.
-                let zoom = style.get_box().clone_zoom();
+                let zoom = style.resolved_specified_zoom();
                 style.get_parent_font().clone_font_size().zoom(zoom)
             },
         }
@@ -2013,8 +2014,10 @@ impl Size {
         parse_size_non_length!(Size, input, "auto" => Auto);
         parse_fit_content_function!(Size, input, context, allow_quirks);
 
-        let length = NonNegativeLengthPercentage::parse_quirky(context, input, allow_quirks)?;
-        Ok(GenericSize::LengthPercentage(length))
+        if let Ok(length) = input.try_parse(|i| NonNegativeLengthPercentage::parse_quirky(context, i, allow_quirks)) {
+            return Ok(GenericSize::LengthPercentage(length));
+        }
+        Ok(Self::AnchorSizeFunction(Box::new(GenericAnchorSizeFunction::parse(context, input)?)))
     }
 
     /// Returns `0%`.
@@ -2046,10 +2049,48 @@ impl MaxSize {
         parse_size_non_length!(MaxSize, input, "none" => None);
         parse_fit_content_function!(MaxSize, input, context, allow_quirks);
 
-        let length = NonNegativeLengthPercentage::parse_quirky(context, input, allow_quirks)?;
-        Ok(GenericMaxSize::LengthPercentage(length))
+        if let Ok(length) = input.try_parse(|i| NonNegativeLengthPercentage::parse_quirky(context, i, allow_quirks)) {
+            return Ok(GenericMaxSize::LengthPercentage(length));
+        }
+        Ok(Self::AnchorSizeFunction(Box::new(GenericAnchorSizeFunction::parse(context, input)?)))
     }
 }
 
 /// A specified non-negative `<length>` | `<number>`.
 pub type NonNegativeLengthOrNumber = GenericLengthOrNumber<NonNegativeLength, NonNegativeNumber>;
+
+/// A specified value for `anchor-size` function.
+pub type AnchorSizeFunction = GenericAnchorSizeFunction<LengthPercentage>;
+
+/// A specified value for `margin` properties.
+pub type Margin = GenericMargin<LengthPercentage>;
+
+impl Margin {
+    /// Parses an inset type, allowing the unitless length quirk.
+    /// <https://quirks.spec.whatwg.org/#the-unitless-length-quirk>
+    #[inline]
+    pub fn parse_quirky<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+        allow_quirks: AllowQuirks,
+    ) -> Result<Self, ParseError<'i>> {
+        if let Ok(l) = input.try_parse(|i| LengthPercentage::parse_quirky(context, i, allow_quirks))
+        {
+            return Ok(Self::LengthPercentage(l));
+        }
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        let inner = AnchorSizeFunction::parse(context, input)?;
+        Ok(Self::AnchorSizeFunction(Box::new(inner)))
+    }
+}
+
+impl Parse for Margin {
+    fn parse<'i, 't>(
+        context: &ParserContext,
+        input: &mut Parser<'i, 't>,
+    ) -> Result<Self, ParseError<'i>> {
+        Self::parse_quirky(context, input, AllowQuirks::No)
+    }
+}

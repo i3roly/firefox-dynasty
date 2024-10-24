@@ -44,12 +44,11 @@ if (isNode()) {
   pref("devtools.debugger.skip-pausing", false);
   pref("devtools.debugger.log-actions", true);
   pref("devtools.debugger.log-event-breakpoints", false);
-  pref("devtools.debugger.javascript-tracing-log-method", "console");
+  pref("devtools.debugger.javascript-tracing-log-method", "debugger-sidebar");
   pref("devtools.debugger.javascript-tracing-values", false);
   pref("devtools.debugger.javascript-tracing-on-next-interaction", false);
   pref("devtools.debugger.javascript-tracing-on-next-load", false);
   pref("devtools.debugger.javascript-tracing-function-return", false);
-  pref("devtools.debugger.javascript-tracing-native", false);
   pref("devtools.debugger.hide-ignored-sources", false);
   pref("devtools.debugger.source-map-ignore-list-enabled", true);
   pref("devtools.debugger.features.wasm", true);

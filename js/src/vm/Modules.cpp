@@ -31,6 +31,7 @@
 #include "vm/JSAtomUtils.h"             // AtomizeString
 #include "vm/JSContext.h"               // CHECK_THREAD, JSContext
 #include "vm/JSObject.h"                // JSObject
+#include "vm/JSONParser.h"              // JSONParser
 #include "vm/List.h"                    // ListObject
 #include "vm/Runtime.h"                 // JSRuntime
 
@@ -133,15 +134,42 @@ JS_PUBLIC_API JSObject* JS::CompileModule(JSContext* cx,
 
 JS_PUBLIC_API JSObject* JS::CompileJsonModule(
     JSContext* cx, const ReadOnlyCompileOptions& options,
+    SourceText<mozilla::Utf8Unit>& srcBuf) {
+  size_t length = srcBuf.length();
+  auto chars =
+      UniqueTwoByteChars(UTF8CharsToNewTwoByteCharsZ(
+                             cx, JS::UTF8Chars(srcBuf.get(), srcBuf.length()),
+                             &length, js::MallocArena)
+                             .get());
+  if (!chars) {
+    return nullptr;
+  }
+
+  JS::SourceText<char16_t> source;
+  if (!source.init(cx, std::move(chars), length)) {
+    return nullptr;
+  }
+
+  return CompileJsonModule(cx, options, source);
+}
+
+JS_PUBLIC_API JSObject* JS::CompileJsonModule(
+    JSContext* cx, const ReadOnlyCompileOptions& options,
     SourceText<char16_t>& srcBuf) {
   MOZ_ASSERT(!cx->zone()->isAtomsZone());
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
 
-  JS::RootedValue jsonValue(cx);
   auto charRange =
       mozilla::Range<const char16_t>(srcBuf.get(), srcBuf.length());
-  if (!js::ParseJSONWithReviver(cx, charRange, NullHandleValue, &jsonValue)) {
+  Rooted<JSONParser<char16_t>> parser(
+      cx, cx, charRange, JSONParser<char16_t>::ParseType::JSONParse);
+
+  parser.reportLineNumbersFromParsedData(true);
+  parser.setFilename(options.filename());
+
+  JS::RootedValue jsonValue(cx);
+  if (!parser.parse(&jsonValue)) {
     return nullptr;
   }
 
@@ -184,6 +212,10 @@ JS_PUBLIC_API void JS::ClearModulePrivate(JSObject* module) {
 
 JS_PUBLIC_API JS::Value JS::GetModulePrivate(JSObject* module) {
   return module->as<ModuleObject>().scriptSourceObject()->getPrivate();
+}
+
+JS_PUBLIC_API bool JS::IsCyclicModule(JSObject* module) {
+  return module->as<ModuleObject>().hasCyclicModuleFields();
 }
 
 JS_PUBLIC_API bool JS::ModuleLink(JSContext* cx, Handle<JSObject*> moduleArg) {
@@ -239,8 +271,37 @@ JS_PUBLIC_API JSString* JS::GetRequestedModuleSpecifier(
   CHECK_THREAD(cx);
   cx->check(moduleRecord);
 
-  auto& module = moduleRecord->as<ModuleObject>();
-  return module.requestedModules()[index].moduleRequest()->specifier();
+  auto* moduleRequest = moduleRecord->as<ModuleObject>()
+                            .requestedModules()[index]
+                            .moduleRequest();
+
+  // This implements step 7.1.1 in HostLoadImportedModule.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#hostloadimportedmodule
+  //
+  // If moduleRequest.[[Attributes]] contains a Record entry such that
+  // entry.[[Key]] is not "type",
+  if (moduleRequest->hasFirstUnsupportedAttributeKey()) {
+    UniqueChars printableKey = AtomToPrintableString(
+        cx, moduleRequest->getFirstUnsupportedAttributeKey());
+    JS_ReportErrorNumberASCII(
+        cx, GetErrorMessage, nullptr,
+        JSMSG_IMPORT_ATTRIBUTES_STATIC_IMPORT_UNSUPPORTED_ATTRIBUTE,
+        printableKey ? printableKey.get() : "");
+    return nullptr;
+  }
+
+  // This implements step 7.1.5 in HostLoadImportedModule.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#validate-requested-module-specifiers
+  //
+  // If the result of running the module type allowed steps given moduleType and
+  // settings is false.
+  if (moduleRequest->moduleType() == JS::ModuleType::Unknown) {
+    JS_ReportErrorNumberASCII(cx, js::GetErrorMessage, nullptr,
+                              JSMSG_BAD_MODULE_TYPE);
+    return nullptr;
+  }
+
+  return moduleRequest->specifier();
 }
 
 JS_PUBLIC_API void JS::GetRequestedModuleSourcePos(
@@ -257,10 +318,27 @@ JS_PUBLIC_API void JS::GetRequestedModuleSourcePos(
   *columnNumber = module.requestedModules()[index].columnNumber();
 }
 
+JS_PUBLIC_API JS::ModuleType JS::GetRequestedModuleType(
+    JSContext* cx, Handle<JSObject*> moduleRecord, uint32_t index) {
+  AssertHeapIsIdle();
+  CHECK_THREAD(cx);
+  cx->check(moduleRecord);
+
+  auto& module = moduleRecord->as<ModuleObject>();
+  return module.requestedModules()[index].moduleRequest()->moduleType();
+}
+
 JS_PUBLIC_API JSScript* JS::GetModuleScript(JS::HandleObject moduleRecord) {
   AssertHeapIsIdle();
 
-  return moduleRecord->as<ModuleObject>().script();
+  auto& module = moduleRecord->as<ModuleObject>();
+
+  // A synthetic module does not have a script associated with it.
+  if (module.hasSyntheticModuleFields()) {
+    return nullptr;
+  }
+
+  return module.script();
 }
 
 JS_PUBLIC_API JSObject* JS::GetModuleObject(HandleScript moduleScript) {
@@ -300,8 +378,9 @@ JS_PUBLIC_API JSObject* JS::GetModuleEnvironment(JSContext* cx,
   return moduleObj->as<ModuleObject>().environment();
 }
 
-JS_PUBLIC_API JSObject* JS::CreateModuleRequest(
-    JSContext* cx, Handle<JSString*> specifierArg) {
+JS_PUBLIC_API JSObject* JS::CreateModuleRequest(JSContext* cx,
+                                                Handle<JSString*> specifierArg,
+                                                JS::ModuleType moduleType) {
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
 
@@ -310,9 +389,7 @@ JS_PUBLIC_API JSObject* JS::CreateModuleRequest(
     return nullptr;
   }
 
-  Rooted<ImportAttributeVector> attributes(cx);
-
-  return ModuleRequestObject::create(cx, specifierAtom, attributes);
+  return ModuleRequestObject::create(cx, specifierAtom, moduleType);
 }
 
 JS_PUBLIC_API JSString* JS::GetModuleRequestSpecifier(
@@ -322,6 +399,15 @@ JS_PUBLIC_API JSString* JS::GetModuleRequestSpecifier(
   cx->check(moduleRequestArg);
 
   return moduleRequestArg->as<ModuleRequestObject>().specifier();
+}
+
+JS_PUBLIC_API JS::ModuleType JS::GetModuleRequestType(
+    JSContext* cx, Handle<JSObject*> moduleRequestArg) {
+  AssertHeapIsIdle();
+  CHECK_THREAD(cx);
+  cx->check(moduleRequestArg);
+
+  return moduleRequestArg->as<ModuleRequestObject>().moduleType();
 }
 
 JS_PUBLIC_API void JS::ClearModuleEnvironment(JSObject* moduleObj) {

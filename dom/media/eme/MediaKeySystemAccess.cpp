@@ -274,6 +274,7 @@ static bool IsMFCDMAllowedByOrigin(const Maybe<nsCString>& aOrigin) {
   MOZ_ASSERT(prefValue == Filer::eBlockedListEnabled);
   static nsTArray<nsCString> kBlockedOrigins({
       "https://on.orf.at"_ns,
+      "https://www.hulu.com"_ns,
   });
   for (const auto& blockedOrigin : kBlockedOrigins) {
     if (FindInReadable(blockedOrigin, *aOrigin)) {
@@ -383,8 +384,8 @@ static bool CanDecryptAndDecode(
     CodecType aCodecType,
     const KeySystemConfig::ContainerSupport& aContainerSupport,
     const nsTArray<KeySystemConfig::EMECodecString>& aCodecs,
-    const Maybe<CryptoScheme>& aScheme,
-    DecoderDoctorDiagnostics* aDiagnostics) {
+    const Maybe<CryptoScheme>& aScheme, DecoderDoctorDiagnostics* aDiagnostics,
+    Maybe<bool> aShouldResistFingerprinting) {
   MOZ_ASSERT(aCodecType != Invalid);
   for (const KeySystemConfig::EMECodecString& codec : aCodecs) {
     MOZ_ASSERT(!codec.IsEmpty());
@@ -396,7 +397,8 @@ static bool CanDecryptAndDecode(
 
     if (aContainerSupport.Decrypts(codec, aScheme)) {
       IgnoredErrorResult rv;
-      MediaSource::IsTypeSupported(aContentType, aDiagnostics, rv);
+      MediaSource::IsTypeSupported(aContentType, aDiagnostics, rv,
+                                   aShouldResistFingerprinting);
       if (!rv.Failed()) {
         // GMP can decrypt and is allowed to return compressed samples to
         // Gecko to decode, and Gecko has a decoder.
@@ -773,9 +775,13 @@ static Sequence<MediaKeySystemMediaCapability> GetSupportedCapabilities(
     // restrictions...
     const auto& containerSupport =
         supportedInMP4 ? aKeySystem.mMP4 : aKeySystem.mWebM;
+    Maybe<bool> shouldResistFingerprinting =
+        aDocument ? Some(aDocument->ShouldResistFingerprinting(
+                        RFPTarget::MediaCapabilities))
+                  : Nothing();
     if (!CanDecryptAndDecode(aKeySystem.mKeySystem, contentTypeString,
                              majorType, containerSupport, codecs, scheme,
-                             aDiagnostics)) {
+                             aDiagnostics, shouldResistFingerprinting)) {
       EME_LOG(
           "MediaKeySystemConfiguration (label='%s') "
           "MediaKeySystemMediaCapability('%s','%s','%s') unsupported; "
@@ -1169,26 +1175,29 @@ void MediaKeySystemAccess::NotifyObservers(nsPIDOMWindowInner* aWindow,
 }
 
 static nsCString ToCString(const nsString& aString) {
-  nsCString str("'");
+  nsCString str("\"");
   str.Append(NS_ConvertUTF16toUTF8(aString));
-  str.AppendLiteral("'");
+  str.AppendLiteral("\"");
   return str;
 }
 
 static nsCString ToCString(const MediaKeysRequirement aValue) {
-  nsCString str("'");
+  nsCString str("\"");
   str.AppendASCII(GetEnumString(aValue));
-  str.AppendLiteral("'");
+  str.AppendLiteral("\"");
   return str;
 }
 
 static nsCString ToCString(const MediaKeySystemMediaCapability& aValue) {
   nsCString str;
-  str.AppendLiteral("{contentType=");
-  str.Append(ToCString(aValue.mContentType));
-  str.AppendLiteral(", robustness=");
+  str.AppendLiteral(R"({"contentType":")");
+  // Escape any quotes in the content type
+  nsString escapedContentType(aValue.mContentType);
+  escapedContentType.ReplaceSubstring(u"\"", u"\\\"");
+  str.Append(NS_ConvertUTF16toUTF8(escapedContentType));
+  str.AppendLiteral(R"(", "robustness":)");
   str.Append(ToCString(aValue.mRobustness));
-  str.AppendLiteral(", encryptionScheme=");
+  str.AppendLiteral(R"(, "encryptionScheme":)");
   str.Append(ToCString(aValue.mEncryptionScheme));
   str.AppendLiteral("}");
   return str;
@@ -1246,25 +1255,25 @@ nsCString ToCString(
 nsCString MediaKeySystemAccess::ToCString(
     const MediaKeySystemConfiguration& aConfig) {
   nsCString str;
-  str.AppendLiteral("{label=");
+  str.AppendLiteral(R"({"label":)");
   str.Append(mozilla::dom::ToCString(aConfig.mLabel));
 
-  str.AppendLiteral(", initDataTypes=");
+  str.AppendLiteral(R"(, "initDataTypes":)");
   str.Append(mozilla::dom::ToCString(aConfig.mInitDataTypes));
 
-  str.AppendLiteral(", audioCapabilities=");
+  str.AppendLiteral(R"(, "audioCapabilities":)");
   str.Append(mozilla::dom::ToCString(aConfig.mAudioCapabilities));
 
-  str.AppendLiteral(", videoCapabilities=");
+  str.AppendLiteral(R"(, "videoCapabilities":)");
   str.Append(mozilla::dom::ToCString(aConfig.mVideoCapabilities));
 
-  str.AppendLiteral(", distinctiveIdentifier=");
+  str.AppendLiteral(R"(, "distinctiveIdentifier":)");
   str.Append(mozilla::dom::ToCString(aConfig.mDistinctiveIdentifier));
 
-  str.AppendLiteral(", persistentState=");
+  str.AppendLiteral(R"(, "persistentState":)");
   str.Append(mozilla::dom::ToCString(aConfig.mPersistentState));
 
-  str.AppendLiteral(", sessionTypes=");
+  str.AppendLiteral(R"(, "sessionTypes":)");
   str.Append(mozilla::dom::ToCString(aConfig.mSessionTypes));
 
   str.AppendLiteral("}");

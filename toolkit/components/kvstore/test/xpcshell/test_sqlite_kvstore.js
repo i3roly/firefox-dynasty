@@ -3,9 +3,8 @@
 
 "use strict";
 
-const { SQLiteKeyValueService } = ChromeUtils.importESModule(
-  "resource://gre/modules/kvstore.sys.mjs"
-);
+const { KeyValueService, SQLiteKeyValueService, KeyValueImporter } =
+  ChromeUtils.importESModule("resource://gre/modules/kvstore.sys.mjs");
 
 add_setup(async function setup() {
   do_get_profile();
@@ -15,6 +14,15 @@ async function makeDatabaseDir(name) {
   const databaseDir = PathUtils.join(PathUtils.profileDir, name);
   await IOUtils.makeDirectory(databaseDir);
   return databaseDir;
+}
+
+async function allEntries(db) {
+  return Array.from(await db.enumerate(), ({ key, value }) => ({ key, value }));
+}
+
+async function allKeys(db) {
+  let entries = await allEntries(db);
+  return entries.map(({ key }) => key);
 }
 
 add_task(async function getOrCreate() {
@@ -171,6 +179,61 @@ add_task(async function extendedCharacterKey() {
   Assert.strictEqual(key, "Héllo, wőrld!");
 
   await database.delete("Héllo, wőrld!");
+});
+
+add_task(async function deleteRange() {
+  const databaseDir = await makeDatabaseDir("deleteRange");
+  const database = await SQLiteKeyValueService.getOrCreate(databaseDir, "db");
+
+  await database.writeMany({
+    "bool/a": true,
+    "bool/b": true,
+    "double/a": 12.34,
+    "double/b": 56.78,
+    "int/a": 12,
+    "int/b": 34,
+    "int/c": 56,
+    "int/d": 78,
+    "string/a": "Héllo",
+    "string/b": "Wőrld",
+  });
+
+  await database.deleteRange(null, "double/a");
+  Assert.deepEqual(await allKeys(database), [
+    "double/a",
+    "double/b",
+    "int/a",
+    "int/b",
+    "int/c",
+    "int/d",
+    "string/a",
+    "string/b",
+  ]);
+
+  await database.deleteRange("int/a", "string");
+  Assert.deepEqual(await allKeys(database), [
+    "double/a",
+    "double/b",
+    "string/a",
+    "string/b",
+  ]);
+
+  await database.deleteRange("string/b", "string/a");
+  Assert.deepEqual(await allKeys(database), [
+    "double/a",
+    "double/b",
+    "string/a",
+    "string/b",
+  ]);
+
+  await database.deleteRange("string");
+  Assert.deepEqual(await allKeys(database), ["double/a", "double/b"]);
+
+  await database.deleteRange("string");
+  Assert.deepEqual(await allKeys(database), ["double/a", "double/b"]);
+
+  await database.deleteRange();
+  Assert.deepEqual(await allKeys(database), []);
 });
 
 add_task(async function clear() {
@@ -438,22 +501,16 @@ add_task(async function inMemory() {
   const database = await SQLiteKeyValueService.getOrCreate(":memory:", "db");
   await database.put("int-key", 1234);
   await database.put("double-key", 56.78);
-  Assert.deepEqual(
-    Array.from(await database.enumerate(), ({ key, value }) => ({
-      key,
-      value,
-    })),
-    [
-      {
-        key: "double-key",
-        value: 56.78,
-      },
-      {
-        key: "int-key",
-        value: 1234,
-      },
-    ]
-  );
+  Assert.deepEqual(await allEntries(database), [
+    {
+      key: "double-key",
+      value: 56.78,
+    },
+    {
+      key: "int-key",
+      value: 1234,
+    },
+  ]);
 
   const otherDatabase = await SQLiteKeyValueService.getOrCreate(
     ":memory:",
@@ -461,22 +518,16 @@ add_task(async function inMemory() {
   );
   await otherDatabase.put("string-key", "Héllo, wőrld!");
   await otherDatabase.put("bool-key", true);
-  Assert.deepEqual(
-    Array.from(await otherDatabase.enumerate(), ({ key, value }) => ({
-      key,
-      value,
-    })),
-    [
-      {
-        key: "bool-key",
-        value: true,
-      },
-      {
-        key: "string-key",
-        value: "Héllo, wőrld!",
-      },
-    ]
-  );
+  Assert.deepEqual(await allEntries(otherDatabase), [
+    {
+      key: "bool-key",
+      value: true,
+    },
+    {
+      key: "string-key",
+      value: "Héllo, wőrld!",
+    },
+  ]);
 });
 
 add_task(async function enumeration() {
@@ -625,6 +676,477 @@ add_task(async function enumeration() {
   await database.delete("double-key");
   await database.delete("string-key");
   await database.delete("bool-key");
+});
+
+add_task(async function importFromRkv() {
+  const databaseDir = await makeDatabaseDir("importFromRkv");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("bool-key", true);
+  await oldFooDB.put("double-key", 56.78);
+
+  const oldBarDB = await KeyValueService.getOrCreate(databaseDir, "bar");
+  await oldBarDB.put("int-key", 1234);
+  await oldBarDB.put("string-key", "Héllo, wőrld!");
+
+  const newFooDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "foo");
+  const newBarDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "bar");
+
+  {
+    const importer = SQLiteKeyValueService.createImporter(
+      SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+      databaseDir
+    );
+    Assert.strictEqual(importer.path, databaseDir);
+    Assert.strictEqual(
+      importer.type,
+      SQLiteKeyValueService.Importer.RKV_SAFE_MODE
+    );
+
+    importer.addDatabase("foo");
+
+    await importer.import();
+
+    Assert.deepEqual(await allEntries(newFooDB), [
+      { key: "bool-key", value: true },
+      { key: "double-key", value: 56.78 },
+    ]);
+    Assert.strictEqual(await newBarDB.isEmpty(), true);
+  }
+
+  {
+    const importer = SQLiteKeyValueService.createImporter(
+      SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+      databaseDir
+    );
+
+    importer.addDatabase("bar");
+
+    await importer.import();
+
+    Assert.deepEqual(await allEntries(newBarDB), [
+      { key: "int-key", value: 1234 },
+      { key: "string-key", value: "Héllo, wőrld!" },
+    ]);
+  }
+
+  await newFooDB.close();
+  await newBarDB.close();
+});
+
+add_task(async function importAllFromRkv() {
+  const databaseDir = await makeDatabaseDir("importAllFromRkv");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("bool-key", true);
+  await oldFooDB.put("double-key", 56.78);
+
+  const oldBarDB = await KeyValueService.getOrCreate(databaseDir, "bar");
+  await oldBarDB.put("int-key", 1234);
+  await oldBarDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    databaseDir
+  );
+
+  importer.addAllDatabases();
+
+  await importer.import();
+
+  const newFooDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "foo");
+  Assert.deepEqual(await allEntries(newFooDB), [
+    { key: "bool-key", value: true },
+    { key: "double-key", value: 56.78 },
+  ]);
+
+  const newBarDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "bar");
+  Assert.deepEqual(await allEntries(newBarDB), [
+    { key: "int-key", value: 1234 },
+    { key: "string-key", value: "Héllo, wőrld!" },
+  ]);
+
+  await newFooDB.close();
+  await newBarDB.close();
+});
+
+add_task(async function importOrErrorFromRkv() {
+  const databaseDir = await makeDatabaseDir("importOrErrorFromRkv");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("bool-key", true);
+  await oldFooDB.put("int-key", 1234);
+
+  const newFooDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("bool-key", true);
+  await oldFooDB.put("int-key", 1234);
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    databaseDir
+  );
+
+  importer
+    .addDatabase("foo")
+    .setConflictPolicy(KeyValueImporter.ConflictPolicy.ERROR);
+
+  // Both databases contain identical values, so this import should succeed.
+  await importer.import();
+
+  await newFooDB.put("int-key", 5678);
+
+  // The values are different now, so this import should fail.
+  await Assert.rejects(importer.import(), /conflict: 'int-key'/);
+
+  await newFooDB.close();
+});
+
+add_task(async function importOrIgnoreFromRkv() {
+  const databaseDir = await makeDatabaseDir("importOrIgnoreFromRkv");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("int-key", 1234);
+
+  const newFooDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "foo");
+  await newFooDB.put("int-key", 5678);
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    databaseDir
+  );
+
+  importer
+    .addDatabase("foo")
+    .setConflictPolicy(KeyValueImporter.ConflictPolicy.IGNORE);
+
+  await importer.import();
+
+  Assert.deepEqual(await allEntries(newFooDB), [
+    { key: "int-key", value: 5678 },
+  ]);
+
+  await newFooDB.close();
+});
+
+add_task(async function importOrReplaceFromRkv() {
+  const databaseDir = await makeDatabaseDir("importOrReplaceFromRkv");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("int-key", 1234);
+
+  const newFooDB = await SQLiteKeyValueService.getOrCreate(databaseDir, "foo");
+  await newFooDB.put("int-key", 5678);
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    databaseDir
+  );
+
+  importer
+    .addDatabase("foo")
+    .setConflictPolicy(KeyValueImporter.ConflictPolicy.REPLACE);
+
+  await importer.import();
+
+  Assert.deepEqual(await allEntries(newFooDB), [
+    { key: "int-key", value: 1234 },
+  ]);
+
+  await newFooDB.close();
+});
+
+add_task(async function importFromRkvAndKeep() {
+  const databaseDir = await makeDatabaseDir("importFromRkvAndKeep");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("bool-key", true);
+  await oldFooDB.put("double-key", 56.78);
+
+  const oldBarDB = await KeyValueService.getOrCreate(databaseDir, "bar");
+  await oldBarDB.put("int-key", 1234);
+  await oldBarDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    databaseDir
+  );
+
+  importer.addAllDatabases();
+
+  await importer.import();
+
+  Assert.deepEqual(await allEntries(oldFooDB), [
+    { key: "bool-key", value: true },
+    { key: "double-key", value: 56.78 },
+  ]);
+
+  Assert.deepEqual(await allEntries(oldBarDB), [
+    { key: "int-key", value: 1234 },
+    { key: "string-key", value: "Héllo, wőrld!" },
+  ]);
+});
+
+add_task(async function importFromRkvAndDelete() {
+  const databaseDir = await makeDatabaseDir("importFromRkvAndDelete");
+
+  const oldFooDB = await KeyValueService.getOrCreate(databaseDir, "foo");
+  await oldFooDB.put("bool-key", true);
+  await oldFooDB.put("double-key", 56.78);
+
+  const oldBarDB = await KeyValueService.getOrCreate(databaseDir, "bar");
+  await oldBarDB.put("int-key", 1234);
+  await oldBarDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    databaseDir
+  );
+
+  importer
+    .addAllDatabases()
+    .setCleanupPolicy(KeyValueImporter.CleanupPolicy.DELETE);
+
+  await importer.import();
+
+  Assert.deepEqual(await allEntries(oldFooDB), []);
+  Assert.deepEqual(await allEntries(oldBarDB), []);
+});
+
+add_task(async function importFromMultipleRkvDirs() {
+  const destinationDir = await makeDatabaseDir("importFromMultipleRkvDirs");
+
+  const fooDatabaseDir = PathUtils.join(destinationDir, "foo");
+  await IOUtils.makeDirectory(fooDatabaseDir);
+  const barDatabaseDir = PathUtils.join(destinationDir, "bar");
+  await IOUtils.makeDirectory(barDatabaseDir);
+
+  const oldBazDB = await KeyValueService.getOrCreate(destinationDir, "baz");
+  await oldBazDB.put("bool-key", true);
+
+  const oldQuxDB = await KeyValueService.getOrCreate(fooDatabaseDir, "qux");
+  await oldQuxDB.put("double-key", 56.78);
+
+  const oldBlargDB = await KeyValueService.getOrCreate(fooDatabaseDir, "blarg");
+  await oldBlargDB.put("int-key", 1234);
+
+  const oldBorkDB = await KeyValueService.getOrCreate(barDatabaseDir, "bork");
+  await oldBorkDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    destinationDir
+  );
+
+  // Configure the importer to import four databases from three different
+  // directories. Delete the imported keys from the old `qux` and `bork
+  // databases, but keep them in the old `baz` and `blarg` databases.
+
+  importer.addDatabase("baz");
+
+  let fooSpec = importer.addPath(fooDatabaseDir);
+  fooSpec
+    .addDatabase("qux")
+    .setCleanupPolicy(KeyValueImporter.CleanupPolicy.DELETE);
+  fooSpec.addDatabase("blarg");
+
+  let barSpec = importer.addPath(barDatabaseDir);
+  barSpec
+    .addAllDatabases()
+    .setCleanupPolicy(KeyValueImporter.CleanupPolicy.DELETE);
+
+  await importer.import();
+
+  const newBazDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "baz"
+  );
+  const newQuxDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "qux"
+  );
+  const newBlargDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "blarg"
+  );
+  const newBorkDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "bork"
+  );
+
+  Assert.deepEqual(await allEntries(newBazDB), [
+    { key: "bool-key", value: true },
+  ]);
+  Assert.deepEqual(await allEntries(newQuxDB), [
+    { key: "double-key", value: 56.78 },
+  ]);
+  Assert.deepEqual(await allEntries(newBlargDB), [
+    { key: "int-key", value: 1234 },
+  ]);
+  Assert.deepEqual(await allEntries(newBorkDB), [
+    { key: "string-key", value: "Héllo, wőrld!" },
+  ]);
+
+  Assert.deepEqual(await allKeys(oldBazDB), ["bool-key"]);
+  Assert.deepEqual(await allKeys(oldQuxDB), []);
+  Assert.deepEqual(await allKeys(oldBlargDB), ["int-key"]);
+  Assert.deepEqual(await allKeys(oldBorkDB), []);
+
+  await newBazDB.close();
+  await newQuxDB.close();
+  await newBlargDB.close();
+  await newBorkDB.close();
+});
+
+add_task(async function importOrErrorFromMultipleRkvDirs() {
+  const destinationDir = await makeDatabaseDir(
+    "importOrReplaceFromMultipleRkvDirs"
+  );
+
+  const fooDatabaseDir = PathUtils.join(destinationDir, "foo");
+  await IOUtils.makeDirectory(fooDatabaseDir);
+  const barDatabaseDir = PathUtils.join(destinationDir, "bar");
+  await IOUtils.makeDirectory(barDatabaseDir);
+
+  const oldFooBazDB = await KeyValueService.getOrCreate(fooDatabaseDir, "baz");
+  await oldFooBazDB.put("bool-key", true);
+  await oldFooBazDB.put("double-key", 56.78);
+
+  const oldBarBazDB = await KeyValueService.getOrCreate(barDatabaseDir, "baz");
+  await oldBarBazDB.put("double-key", 12.34);
+  await oldBarBazDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    destinationDir
+  );
+
+  // `fooDatabaseDir` and `barDatabaseDir` both contain databases named `baz`,
+  // with conflicting values for `double-key`. Since we add `fooDatabaseDir`
+  // first, we'll import its `baz` first, then fail when we try to import
+  // `baz` from `barDatabaseDir`.
+
+  importer.addPath(fooDatabaseDir).addAllDatabases();
+  importer
+    .addPath(barDatabaseDir)
+    .addAllDatabases()
+    .setConflictPolicy(KeyValueImporter.ConflictPolicy.ERROR);
+
+  await Assert.rejects(importer.import(), /conflict: 'double-key'/);
+
+  const newBazDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "baz"
+  );
+  Assert.deepEqual(await allEntries(newBazDB), [
+    { key: "bool-key", value: true },
+    { key: "double-key", value: 56.78 },
+  ]);
+
+  await newBazDB.close();
+});
+
+add_task(async function importOrIgnoreFromMultipleRkvDirs() {
+  const destinationDir = await makeDatabaseDir(
+    "importOrReplaceFromMultipleRkvDirs"
+  );
+
+  const fooDatabaseDir = PathUtils.join(destinationDir, "foo");
+  await IOUtils.makeDirectory(fooDatabaseDir);
+  const barDatabaseDir = PathUtils.join(destinationDir, "bar");
+  await IOUtils.makeDirectory(barDatabaseDir);
+
+  const oldFooBazDB = await KeyValueService.getOrCreate(fooDatabaseDir, "baz");
+  await oldFooBazDB.put("bool-key", true);
+  await oldFooBazDB.put("double-key", 56.78);
+  await oldFooBazDB.put("int-key", 1234);
+
+  const oldBarBazDB = await KeyValueService.getOrCreate(barDatabaseDir, "baz");
+  await oldBarBazDB.put("double-key", 12.34);
+  await oldBarBazDB.put("int-key", 5678);
+  await oldBarBazDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    destinationDir
+  );
+
+  // `fooDatabaseDir` and `barDatabaseDir` both contain databases named `baz`,
+  // with conflicting values for `double-key` and `int-key`. We'll import
+  // from `fooDatabaseDir` first, then `barDatabaseDir`; ignoring the
+  // conflicting pairs from the latter.
+
+  importer.addPath(fooDatabaseDir).addAllDatabases();
+  importer
+    .addPath(barDatabaseDir)
+    .addAllDatabases()
+    .setConflictPolicy(KeyValueImporter.ConflictPolicy.IGNORE);
+
+  await importer.import();
+
+  const newBazDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "baz"
+  );
+  Assert.deepEqual(await allEntries(newBazDB), [
+    { key: "bool-key", value: true },
+    { key: "double-key", value: 56.78 },
+    { key: "int-key", value: 1234 },
+    { key: "string-key", value: "Héllo, wőrld!" },
+  ]);
+
+  await newBazDB.close();
+});
+
+add_task(async function importOrReplaceFromMultipleRkvDirs() {
+  const destinationDir = await makeDatabaseDir(
+    "importOrReplaceFromMultipleRkvDirs"
+  );
+
+  const fooDatabaseDir = PathUtils.join(destinationDir, "foo");
+  await IOUtils.makeDirectory(fooDatabaseDir);
+  const barDatabaseDir = PathUtils.join(destinationDir, "bar");
+  await IOUtils.makeDirectory(barDatabaseDir);
+
+  const oldFooBazDB = await KeyValueService.getOrCreate(fooDatabaseDir, "baz");
+  await oldFooBazDB.put("bool-key", true);
+  await oldFooBazDB.put("double-key", 56.78);
+  await oldFooBazDB.put("int-key", 1234);
+
+  const oldBarBazDB = await KeyValueService.getOrCreate(barDatabaseDir, "baz");
+  await oldBarBazDB.put("double-key", 12.34);
+  await oldBarBazDB.put("int-key", 5678);
+  await oldBarBazDB.put("string-key", "Héllo, wőrld!");
+
+  const importer = SQLiteKeyValueService.createImporter(
+    SQLiteKeyValueService.Importer.RKV_SAFE_MODE,
+    destinationDir
+  );
+
+  // `fooDatabaseDir` and `barDatabaseDir` both contain databases named `baz`,
+  // with conflicting values for `double-key` and `int-key`. We'll import
+  // from `fooDatabaseDir` first, then `barDatabaseDir`; replacing the
+  // conflicting pairs with the pairs from `barDatabaseDir`.
+
+  importer.addPath(fooDatabaseDir).addAllDatabases();
+  importer
+    .addPath(barDatabaseDir)
+    .addAllDatabases()
+    .setConflictPolicy(KeyValueImporter.ConflictPolicy.REPLACE);
+
+  await importer.import();
+
+  const newBazDB = await SQLiteKeyValueService.getOrCreate(
+    destinationDir,
+    "baz"
+  );
+  Assert.deepEqual(await allEntries(newBazDB), [
+    { key: "bool-key", value: true },
+    { key: "double-key", value: 12.34 },
+    { key: "int-key", value: 5678 },
+    { key: "string-key", value: "Héllo, wőrld!" },
+  ]);
+
+  await newBazDB.close();
 });
 
 add_task(async function stats() {

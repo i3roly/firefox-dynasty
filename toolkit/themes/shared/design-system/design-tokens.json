@@ -155,7 +155,7 @@
               "default": "color-mix(in srgb, currentColor 7%, transparent)"
             },
             "platform": {
-              "default": "var(--button-bgcolor)"
+              "default": "color-mix(in srgb, currentColor 13%, transparent)"
             }
           }
         },
@@ -166,7 +166,7 @@
               "default": "color-mix(in srgb, currentColor 14%, transparent)"
             },
             "platform": {
-              "default": "var(--button-hover-bgcolor)"
+              "default": "color-mix(in srgb, currentColor 17%, transparent)"
             }
           }
         },
@@ -177,7 +177,7 @@
               "default": "color-mix(in srgb, currentColor 21%, transparent)"
             },
             "platform": {
-              "default": "var(--button-active-bgcolor)"
+              "default": "color-mix(in srgb, currentColor 30%, transparent)"
             }
           }
         },
@@ -421,7 +421,7 @@
               "dark": "{color.gray.05}"
             },
             "platform": {
-              "default": "var(--button-color)"
+              "default": "currentColor"
             }
           }
         },
@@ -501,7 +501,7 @@
                 "dark": "{color.gray.100}"
               },
               "platform": {
-                "default": "var(--button-primary-color)"
+                "default": "AccentColorText"
               }
             }
           },
@@ -662,7 +662,7 @@
               "dark": "{color.cyan.50}"
             },
             "platform": {
-              "default": "var(--button-primary-bgcolor, AccentColor)"
+              "default": "AccentColor"
             }
           }
         },
@@ -674,7 +674,7 @@
               "dark": "{color.cyan.30}"
             },
             "platform": {
-              "default": "var(--button-primary-hover-bgcolor)"
+              "default": "color-mix(in srgb, black 10%, var(--color-accent-primary))"
             }
           }
         },
@@ -686,7 +686,7 @@
               "dark": "{color.cyan.20}"
             },
             "platform": {
-              "default": "var(--button-primary-active-bgcolor)"
+              "default": "color-mix(in srgb, black 20%, var(--color-accent-primary))"
             }
           }
         }
@@ -956,6 +956,12 @@
         "value": {
           "default": "color-mix(in srgb, currentColor 69%, transparent)",
           "prefersContrast": "inherit"
+        }
+      },
+      "disabled": {
+        "value": {
+          "default": "color-mix(in srgb, currentColor 40%, transparent)",
+          "forcedColors": "GrayText"
         }
       },
       "error": {

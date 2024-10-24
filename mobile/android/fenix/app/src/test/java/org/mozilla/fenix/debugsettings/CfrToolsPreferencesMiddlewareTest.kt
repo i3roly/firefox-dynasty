@@ -32,40 +32,6 @@ class CfrToolsPreferencesMiddlewareTest {
     }
 
     @Test
-    fun `GIVEN the homepage intro CFR should not be shown WHEN the toggle homepage intro CFR action is dispatched THEN its preference is set to should be shown`() {
-        settings.shouldShowJumpBackInCFR = false
-        assertFalse(settings.shouldShowJumpBackInCFR)
-
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                homepageIntroShown = true,
-            ),
-            middlewares = listOf(
-                middleware,
-            ),
-        )
-        store.dispatch(CfrToolsAction.ToggleHomepageIntroShown)
-        assertTrue(settings.shouldShowJumpBackInCFR)
-    }
-
-    @Test
-    fun `GIVEN the homepage intro CFR should be shown WHEN the toggle homepage intro CFR action is dispatched THEN its preference is set to should not be shown`() {
-        settings.shouldShowJumpBackInCFR = true
-        assertTrue(settings.shouldShowJumpBackInCFR)
-
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                homepageIntroShown = false,
-            ),
-            middlewares = listOf(
-                middleware,
-            ),
-        )
-        store.dispatch(CfrToolsAction.ToggleHomepageIntroShown)
-        assertFalse(settings.shouldShowJumpBackInCFR)
-    }
-
-    @Test
     fun `GIVEN the homepage sync CFR should not be shown WHEN the toggle homepage sync CFR action is dispatched THEN its preference is set to should be shown`() {
         settings.showSyncCFR = false
         assertFalse(settings.showSyncCFR)
@@ -199,40 +165,6 @@ class CfrToolsPreferencesMiddlewareTest {
         )
         store.dispatch(CfrToolsAction.ToggleNavButtonsShown)
         assertFalse(settings.shouldShowNavigationButtonsCFR)
-    }
-
-    @Test
-    fun `GIVEN the TCP CFR should not be shown WHEN the toggle TCP CFR action is dispatched THEN its preference is set to should be shown`() {
-        settings.shouldShowTotalCookieProtectionCFR = false
-        assertFalse(settings.shouldShowTotalCookieProtectionCFR)
-
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                tcpShown = true,
-            ),
-            middlewares = listOf(
-                middleware,
-            ),
-        )
-        store.dispatch(CfrToolsAction.ToggleTcpShown)
-        assertTrue(settings.shouldShowTotalCookieProtectionCFR)
-    }
-
-    @Test
-    fun `GIVEN the TCP CFR should be shown WHEN the toggle TCP CFR action is dispatched THEN its preference is set to should not be shown`() {
-        settings.shouldShowTotalCookieProtectionCFR = true
-        assertTrue(settings.shouldShowTotalCookieProtectionCFR)
-
-        val store = CfrToolsStore(
-            initialState = CfrToolsState(
-                tcpShown = false,
-            ),
-            middlewares = listOf(
-                middleware,
-            ),
-        )
-        store.dispatch(CfrToolsAction.ToggleTcpShown)
-        assertFalse(settings.shouldShowTotalCookieProtectionCFR)
     }
 
     @Test

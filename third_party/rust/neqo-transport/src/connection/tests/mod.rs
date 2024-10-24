@@ -17,7 +17,7 @@ use neqo_common::{event::Provider, qdebug, qtrace, Datagram, Decoder, Role};
 use neqo_crypto::{random, AllowZeroRtt, AuthenticationStatus, ResumptionToken};
 use test_fixture::{fixture_init, new_neqo_qlog, now, DEFAULT_ADDR};
 
-use super::{CloseReason, Connection, ConnectionId, Output, State};
+use super::{test_internal, CloseReason, Connection, ConnectionId, Output, State};
 use crate::{
     addr_valid::{AddressValidation, ValidateAddress},
     cc::CWND_INITIAL_PKTS,
@@ -28,6 +28,7 @@ use crate::{
     pmtud::Pmtud,
     recovery::ACK_ONLY_SIZE_LIMIT,
     stats::{FrameStats, Stats, MAX_PTO_COUNTS},
+    tparams::{DISABLE_MIGRATION, GREASE_QUIC_BIT},
     ConnectionIdDecoder, ConnectionIdGenerator, ConnectionParameters, Error, StreamId, StreamType,
     Version,
 };
@@ -586,10 +587,10 @@ fn send_something_paced_with_modifier(
                 .dgram()
                 .expect("send_something: should have something to send")
         }
-        Output::Datagram(d) => modifier(d).unwrap(),
+        Output::Datagram(d) => d,
         Output::None => panic!("send_something: got Output::None"),
     };
-    (dgram, now)
+    (modifier(dgram).unwrap(), now)
 }
 
 fn send_something_paced(
@@ -614,6 +615,29 @@ fn send_something(sender: &mut Connection, now: Instant) -> Datagram {
     send_something_with_modifier(sender, now, Some)
 }
 
+/// Send something, but add a little something extra into the output.
+fn send_with_extra<W>(sender: &mut Connection, writer: W, now: Instant) -> Datagram
+where
+    W: test_internal::FrameWriter + 'static,
+{
+    sender.test_frame_writer = Some(Box::new(writer));
+    let res = send_something_with_modifier(sender, now, Some);
+    sender.test_frame_writer = None;
+    res
+}
+
+/// Send something on a stream from `sender` through a modifier to `receiver`.
+/// Return any ACK that might result.
+fn send_with_modifier_and_receive(
+    sender: &mut Connection,
+    receiver: &mut Connection,
+    now: Instant,
+    modifier: fn(Datagram) -> Option<Datagram>,
+) -> Option<Datagram> {
+    let dgram = send_something_with_modifier(sender, now, modifier);
+    receiver.process(Some(&dgram), now).dgram()
+}
+
 /// Send something on a stream from `sender` to `receiver`.
 /// Return any ACK that might result.
 fn send_and_receive(
@@ -621,8 +645,7 @@ fn send_and_receive(
     receiver: &mut Connection,
     now: Instant,
 ) -> Option<Datagram> {
-    let dgram = send_something(sender, now);
-    receiver.process(Some(&dgram), now).dgram()
+    send_with_modifier_and_receive(sender, receiver, now, Some)
 }
 
 fn get_tokens(client: &mut Connection) -> Vec<ResumptionToken> {
@@ -666,4 +689,22 @@ fn create_server() {
     assert_default_stats(&stats);
     // Server won't have a default path, so no RTT.
     assert_eq!(stats.rtt, Duration::from_secs(0));
+}
+
+#[test]
+fn tp_grease() {
+    for enable in [true, false] {
+        let client = new_client(ConnectionParameters::default().grease(enable));
+        let grease = client.tps.borrow_mut().local.get_empty(GREASE_QUIC_BIT);
+        assert_eq!(enable, grease);
+    }
+}
+
+#[test]
+fn tp_disable_migration() {
+    for disable in [true, false] {
+        let client = new_client(ConnectionParameters::default().disable_migration(disable));
+        let disable_migration = client.tps.borrow_mut().local.get_empty(DISABLE_MIGRATION);
+        assert_eq!(disable, disable_migration);
+    }
 }

@@ -8,12 +8,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import mozilla.components.feature.top.sites.TopSite
 import org.mozilla.fenix.components.appstate.AppState
+import org.mozilla.fenix.components.components
 import org.mozilla.fenix.ext.shouldShowRecentSyncedTabs
 import org.mozilla.fenix.ext.shouldShowRecentTabs
 import org.mozilla.fenix.home.bookmarks.Bookmark
+import org.mozilla.fenix.home.collections.CollectionsState
 import org.mozilla.fenix.home.recentsyncedtabs.RecentSyncedTab
 import org.mozilla.fenix.home.recentsyncedtabs.RecentSyncedTabState
 import org.mozilla.fenix.home.recenttabs.RecentTab
+import org.mozilla.fenix.home.recentvisits.RecentlyVisitedItem
 import org.mozilla.fenix.home.topsites.TopSiteColors
 import org.mozilla.fenix.utils.Settings
 
@@ -38,10 +41,13 @@ internal sealed class HomepageState {
      * @property recentTabs List of [RecentTab] to display.
      * @property syncedTab The [RecentSyncedTab] to display.
      * @property bookmarks List of [Bookmark] to display.
+     * @property recentlyVisited List of [RecentlyVisitedItem] to display.
+     * @property collectionsState State of the collections section to display.
      * @property showTopSites Whether to show top sites or not.
      * @property showRecentTabs Whether to show recent tabs or not.
      * @property showRecentSyncedTab Whether to show recent synced tab or not.
      * @property showBookmarks Whether to show bookmarks.
+     * @property showRecentlyVisited Whether to show recent history section.
      * @property topSiteColors The color set defined by [TopSiteColors] used to style a top site.
      * @property cardBackgroundColor Background color for card items.
      * @property buttonBackgroundColor Background [Color] for buttons.
@@ -52,10 +58,13 @@ internal sealed class HomepageState {
         val recentTabs: List<RecentTab>,
         val syncedTab: RecentSyncedTab?,
         val bookmarks: List<Bookmark>,
+        val recentlyVisited: List<RecentlyVisitedItem>,
+        val collectionsState: CollectionsState,
         val showTopSites: Boolean,
         val showRecentTabs: Boolean,
         val showRecentSyncedTab: Boolean,
         val showBookmarks: Boolean,
+        val showRecentlyVisited: Boolean,
         val topSiteColors: TopSiteColors,
         val cardBackgroundColor: Color,
         val buttonBackgroundColor: Color,
@@ -82,23 +91,29 @@ internal sealed class HomepageState {
                     )
                 } else {
                     Normal(
-                        showTopSites = settings.showTopSitesFeature && topSites.isNotEmpty(),
-                        topSiteColors = TopSiteColors.colors(wallpaperState = wallpaperState),
                         topSites = topSites,
-                        showRecentTabs = shouldShowRecentTabs(settings),
                         recentTabs = recentTabs,
-                        cardBackgroundColor = wallpaperState.cardBackgroundColor,
-                        showRecentSyncedTab = shouldShowRecentSyncedTabs(),
                         syncedTab = when (recentSyncedTabState) {
                             RecentSyncedTabState.None,
                             RecentSyncedTabState.Loading,
                             -> null
                             is RecentSyncedTabState.Success -> recentSyncedTabState.tabs.firstOrNull()
                         },
+                        bookmarks = bookmarks,
+                        recentlyVisited = recentHistory,
+                        collectionsState = CollectionsState.build(
+                            appState = appState,
+                            browserState = components.core.store.state,
+                        ),
+                        showTopSites = settings.showTopSitesFeature && topSites.isNotEmpty(),
+                        showRecentTabs = shouldShowRecentTabs(settings),
+                        showBookmarks = settings.showBookmarksHomeFeature && bookmarks.isNotEmpty(),
+                        showRecentSyncedTab = shouldShowRecentSyncedTabs(),
+                        showRecentlyVisited = settings.historyMetadataUIFeature && recentHistory.isNotEmpty(),
+                        topSiteColors = TopSiteColors.colors(wallpaperState = wallpaperState),
+                        cardBackgroundColor = wallpaperState.cardBackgroundColor,
                         buttonBackgroundColor = wallpaperState.buttonBackgroundColor,
                         buttonTextColor = wallpaperState.buttonTextColor,
-                        showBookmarks = settings.showBookmarksHomeFeature && bookmarks.isNotEmpty(),
-                        bookmarks = bookmarks,
                     )
                 }
             }

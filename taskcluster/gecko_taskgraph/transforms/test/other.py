@@ -293,8 +293,12 @@ def setup_raptor_external_browser_platforms(config, tasks):
             continue
 
         if is_external_browser(task["try-name"]):
-            task["build-platform"] = "linux64/opt"
-            task["build-label"] = "build-linux64/opt"
+            if "win" in task["build-label"]:
+                task["build-platform"] = "windows2012-64/opt"
+                task["build-label"] = "build-win64/opt"
+            else:
+                task["build-platform"] = "linux64/opt"
+                task["build-label"] = "build-linux64/opt"
 
         yield task
 
@@ -395,20 +399,20 @@ def setup_browsertime(config, tasks):
 
         cd_fetches = {
             "android.*": [
-                "linux64-chromedriver-127",
                 "linux64-chromedriver-128",
+                "linux64-chromedriver-129",
             ],
             "linux.*": [
                 "linux64-chromedriver-127",
-                "linux64-chromedriver-128",
+                "linux64-chromedriver-129",
             ],
             "macosx1015.*": [
-                "mac64-chromedriver-127",
                 "mac64-chromedriver-128",
+                "mac64-chromedriver-129",
             ],
             "macosx1400.*": [
-                "mac-arm-chromedriver-127",
                 "mac-arm-chromedriver-128",
+                "mac-arm-chromedriver-129",
             ],
             "windows.*aarch64.*": [
                 "win32-chromedriver-121",
@@ -416,8 +420,8 @@ def setup_browsertime(config, tasks):
                 "win32-chromedriver-123",
             ],
             "windows.*-64.*": [
-                "win64-chromedriver-127",
                 "win64-chromedriver-128",
+                "win64-chromedriver-129",
             ],
         }
 

@@ -42,10 +42,10 @@ class CodeGeneratorWasm32 : public CodeGeneratorShared {
   void emitTableSwitchDispatch(MTableSwitch*, Register, Register) {
     MOZ_CRASH();
   }
-  void emitBigIntDiv(LBigIntDiv*, Register, Register, Register, Label*) {
+  void emitBigIntPtrDiv(LBigIntPtrDiv*, Register, Register, Register) {
     MOZ_CRASH();
   }
-  void emitBigIntMod(LBigIntMod*, Register, Register, Register, Label*) {
+  void emitBigIntPtrMod(LBigIntPtrMod*, Register, Register, Register) {
     MOZ_CRASH();
   }
   ValueOperand ToValue(LInstruction*, size_t) { MOZ_CRASH(); }

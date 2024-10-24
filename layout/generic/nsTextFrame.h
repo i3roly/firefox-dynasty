@@ -25,7 +25,6 @@
 #endif
 
 class nsTextPaintStyle;
-class nsLineList_iterator;
 struct SelectionDetails;
 class nsTextFragment;
 
@@ -394,12 +393,12 @@ class nsTextFrame : public nsIFrame {
 
   void MarkIntrinsicISizesDirty() final;
 
-  nscoord IntrinsicISize(gfxContext* aContext,
+  nscoord IntrinsicISize(const mozilla::IntrinsicSizeInput& aInput,
                          mozilla::IntrinsicISizeType aType) final;
 
-  void AddInlineMinISize(gfxContext* aRenderingContext,
+  void AddInlineMinISize(const mozilla::IntrinsicSizeInput& aInput,
                          InlineMinISizeData* aData) override;
-  void AddInlinePrefISize(gfxContext* aRenderingContext,
+  void AddInlinePrefISize(const mozilla::IntrinsicSizeInput& aInput,
                           InlinePrefISizeData* aData) override;
   SizeComputationResult ComputeSize(
       gfxContext* aRenderingContext, mozilla::WritingMode aWM,
@@ -671,7 +670,7 @@ class nsTextFrame : public nsIFrame {
   gfxSkipCharsIterator EnsureTextRun(TextRunType aWhichTextRun,
                                      DrawTarget* aRefDrawTarget = nullptr,
                                      nsIFrame* aLineContainer = nullptr,
-                                     const nsLineList_iterator* aLine = nullptr,
+                                     const LineListIterator* aLine = nullptr,
                                      uint32_t* aFlowEndInTextRun = nullptr);
 
   gfxTextRun* GetTextRun(TextRunType aWhichTextRun) const {

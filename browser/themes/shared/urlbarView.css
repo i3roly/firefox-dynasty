@@ -52,9 +52,9 @@
   --urlbarView-labeled-row-label-top: calc(-1.27em - 2px);
   --urlbarView-labeled-tip-margin-top-extra: 8px;
 
-  --urlbarView-action-button-background-color: light-dark(white, #1C1B22);
-  --urlbarView-action-button-hover-color: light-dark(#5B5B66, var(--buttons-destructive-color));
-  --urlbarView-action-button-selected-color: light-dark(#1C1B22, var(--urlbarView-action-button-background-color));
+  --urlbarView-action-button-background-color: light-dark(white, var(--color-gray-90));
+  --urlbarView-action-button-hover-color: light-dark(var(--color-gray-70), var(--color-gray-05));
+  --urlbarView-action-button-selected-color: light-dark(var(--color-gray-90), var(--urlbarView-action-button-background-color));
 
   &:-moz-locale-dir(rtl) {
     --urlbarView-action-slide-in-distance: -200px;
@@ -392,7 +392,7 @@
 
 .urlbarView-button-menu {
   background-image: url("chrome://global/skin/icons/more.svg");
-  background-color: var(--button-bgcolor);
+  background-color: var(--button-background-color);
 
   .urlbarView-results:not([disable-resultmenu-autohide]) > .urlbarView-row:not(:hover, [selected]) > .urlbarView-row-inner + &:not([open]):empty {
     display: none;
@@ -437,21 +437,21 @@
   flex-shrink: 0;
 
   &:not(:hover) {
-    background-color: var(--button-bgcolor);
+    background-color: var(--button-background-color);
   }
 
   &:is([selected], [primary]) {
-    color: var(--button-primary-color);
-    background-color: var(--button-primary-bgcolor);
-    outline-color: var(--button-primary-bgcolor);
+    color: var(--button-text-color-primary);
+    background-color: var(--color-accent-primary);
+    outline-color: var(--color-accent-primary);
     outline-offset: var(--focus-outline-offset);
 
     &:hover {
-      background-color: var(--button-primary-hover-bgcolor);
+      background-color: var(--color-accent-primary-hover);
     }
 
     &:hover:active {
-      background-color: var(--button-primary-active-bgcolor);
+      background-color: var(--color-accent-primary-active);
     }
   }
 }
@@ -714,7 +714,7 @@
 }
 
 /* Switch-to-tab and Clipboard action text is styled as a chiclet. */
-.urlbarView-row:is([type=switchtab], [type=remotetab], [type=clipboard]) {
+.urlbarView-row[has-action]:is([type=switchtab], [type=remotetab], [type=clipboard]) {
   > .urlbarView-row-inner > .urlbarView-no-wrap > .urlbarView-action {
     color: var(--urlbar-box-text-color);
     background-color: var(--urlbar-box-focus-bgcolor);
@@ -918,6 +918,54 @@
   }
 }
 
+.urlbarView-row:has(.urlbarView-actions-container:not(:empty)) {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.urlbarView-actions-container {
+  margin-inline-start: calc(var(--urlbarView-item-inline-padding) + var(--urlbarView-favicon-margin-start) + var(--urlbarView-favicon-width) + var(--urlbarView-icon-margin-end));
+  margin-block-end: var(--urlbarView-item-block-padding);
+}
+
+.urlbarView-action-btn {
+  font-size: smaller;
+  color: var(--toolbar-field-focus-color);
+  border-radius: var(--toolbarbutton-border-radius);
+  border: 1px solid transparent;
+  padding: .4em .6em;
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--urlbarView-action-button-background-color);
+  box-shadow: 0 0px 4px rgba(0, 0, 0, 0.23);
+
+  > img {
+    width: 16px;
+    height: 16px;
+    margin-inline-end: .4em;
+    -moz-context-properties: fill, fill-opacity;
+  }
+
+  &:hover {
+    color: var(--urlbarView-result-button-hover-color);
+    background-color: var(--urlbarView-action-button-hover-color);
+  }
+
+  &[selected] {
+    color: light-dark(var(--urlbarView-result-button-hover-color), var(--toolbar-field-focus-color));
+    background-color: var(--urlbarView-action-button-selected-color);
+    border-color: light-dark(transparent, white);
+  }
+
+  &.urlbarView-userContext {
+    border-top-color: var(--identity-tab-color);
+  }
+
+  .urlbarView[action-override] &[data-action=tabswitch] {
+    display: none;
+  }
+}
+
 /* Search one-offs */
 
 #urlbar .search-one-offs:not([hidden]) {
@@ -1040,44 +1088,4 @@
 #PopupSearchAutoComplete .autocomplete-richlistitem[selected] {
   background: var(--urlbarView-highlight-background);
   color: var(--urlbarView-highlight-color);
-}
-
-.urlbarView-row:has(.urlbarView-actions-container:not(:empty)) {
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.urlbarView-actions-container {
-  margin-inline-start: calc(var(--urlbarView-item-inline-padding) + var(--urlbarView-favicon-margin-start) + var(--urlbarView-favicon-width) + var(--urlbarView-icon-margin-end));
-  margin-block-end: var(--urlbarView-item-block-padding);
-}
-
-.urlbarView-action-btn {
-  font-size: smaller;
-  color: var(--toolbar-field-focus-color);
-  border-radius: var(--toolbarbutton-border-radius);
-  border: 1px solid transparent;
-  padding: .4em .6em;
-  display: inline-flex;
-  align-items: center;
-  background-color: var(--urlbarView-action-button-background-color);
-  box-shadow: 0 0px 4px rgba(0, 0, 0, 0.23);
-}
-
-.urlbarView-action-btn img {
-  width: 16px;
-  height: 16px;
-  margin-inline-end: .4em;
-  -moz-context-properties: fill, fill-opacity;
-}
-
-.urlbarView-action-btn:hover {
-  color: var(--urlbarView-result-button-hover-color);
-  background-color: var(--urlbarView-action-button-hover-color);
-}
-
-.urlbarView-action-btn[selected] {
-  color: light-dark(var(--urlbarView-result-button-hover-color), var(--toolbar-field-focus-color));
-  background-color: var(--urlbarView-action-button-selected-color);
-  border-color: light-dark(transparent, white);
 }

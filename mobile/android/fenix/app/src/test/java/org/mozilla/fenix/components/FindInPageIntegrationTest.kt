@@ -39,6 +39,7 @@ class FindInPageIntegrationTest {
     private val engine: EngineView = mockk(relaxed = true)
     private val toolbar1: ViewGroup = mockk(relaxed = true)
     private val toolbar2: ViewGroup = mockk(relaxed = true)
+    private val toolbarsResetCallback: () -> Unit = mockk(relaxed = true)
     private val engineView: FrameLayout = mockk(relaxed = true)
     private val engineViewLayoutParams
         get() = engineView.layoutParams as FrameLayout.LayoutParams
@@ -54,7 +55,8 @@ class FindInPageIntegrationTest {
 
         integration.launch()
 
-        verify { engine.setDynamicToolbarMaxHeight(findInPageHeight) }
+        assertEquals(true, integration.isFeatureActive)
+        verify { engine.setDynamicToolbarMaxHeight(0) }
         verify { engineView.translationY = 0f }
         assertEquals(engineViewLayoutParams.topMargin, 0)
         assertEquals(engineViewLayoutParams.bottomMargin, findInPageHeight)
@@ -77,7 +79,8 @@ class FindInPageIntegrationTest {
 
         integration.launch()
 
-        verify { engine.setDynamicToolbarMaxHeight(findInPageHeight) }
+        assertEquals(true, integration.isFeatureActive)
+        verify { engine.setDynamicToolbarMaxHeight(0) }
         verify { engineView.translationY = 0f }
         assertEquals(engineViewLayoutParams.topMargin, 0)
         assertEquals(engineViewLayoutParams.bottomMargin, findInPageHeight)
@@ -95,13 +98,10 @@ class FindInPageIntegrationTest {
 
         integration.feature.unbind()
 
+        assertEquals(false, integration.isFeatureActive)
         verify { appStore.dispatch(FindInPageAction.FindInPageDismissed) }
         verify { findInPageBar.isVisible = false }
-        val updatedContentHeight = toolbar1.height + toolbar2.height
-        verify { engine.setDynamicToolbarMaxHeight(updatedContentHeight) }
-        verify { engineView.translationY = engineViewTranslationY }
-        assertEquals(engineViewLayoutParams.topMargin, engineViewTopMargin)
-        assertEquals(engineViewLayoutParams.bottomMargin, engineViewBottomMargin)
+        verify { toolbarsResetCallback.invoke() }
         listOf(toolbar1, toolbar2).forEach {
             verify { it.isVisible = true }
         }
@@ -142,7 +142,8 @@ class FindInPageIntegrationTest {
             sessionId = customSessionId,
             view = findInPageBar,
             engineView = engine,
-            toolbars = toolbars,
+            toolbars = { toolbars },
+            toolbarsResetCallback = toolbarsResetCallback,
             findInPageHeight = findInPageHeight,
         )
     }

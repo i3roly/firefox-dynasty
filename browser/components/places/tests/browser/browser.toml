@@ -20,7 +20,7 @@ prefs = [
 ["browser_autoshow_bookmarks_toolbar.js"]
 
 ["browser_bookmarkMenu_hiddenWindow.js"]
-skip-if = ["os != 'mac'"] # Mac-only functionality
+run-if = ["os == 'mac'"] # Mac-only functionality
 
 ["browser_bookmarkProperties_addFolderDefaultButton.js"]
 
@@ -106,6 +106,8 @@ support-files = ["favicon-normal16.png"]
 
 ["browser_click_bookmarks_on_toolbar.js"]
 https_first_disabled = true
+
+["browser_closePanelview.js"]
 
 ["browser_controller_onDrop.js"]
 

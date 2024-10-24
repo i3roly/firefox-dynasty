@@ -666,7 +666,7 @@ async function populateVoiceList() {
     return uri;
   }
 
-  async function stringifyVoices(voices) {
+  async function processVoices(voices) {
     voices = voices
       .map(voice => ({
         voiceURI: trimVoiceURI(voice.voiceURI),
@@ -688,18 +688,18 @@ async function populateVoiceList() {
     );
     const defaultVoice = voices.find(voice => voice.default);
 
-    voices = voices.map(voice => voice.voiceURI);
+    voices = voices.map(voice => voice.voiceURI).sort();
 
-    return JSON.stringify({
-      count: voices.length,
-      localServices: localServices.length,
-      defaultVoice: defaultVoice ? defaultVoice.voiceURI : null,
-      samples: sample(voices, 5),
-      sha1: await sha1(voices.join("|")),
-      allHash: ssdeep.digest(voices.join("|")),
-      localHash: ssdeep.digest(localServices.join("|")),
-      nonLocalHash: ssdeep.digest(nonLocalServices.join("|")),
-    });
+    return {
+      voicesCount: voices.length,
+      voicesLocalCount: localServices.length,
+      voicesDefault: defaultVoice ? defaultVoice.voiceURI : null,
+      voicesSample: sample(voices, 5).join(","),
+      voicesSha1: await sha1(voices.join("|")),
+      voicesAllSsdeep: ssdeep.digest(voices.join("|")),
+      voicesLocalSsdeep: ssdeep.digest(localServices.join("|")),
+      voicesNonlocalSsdeep: ssdeep.digest(nonLocalServices.join("|")),
+    };
   }
 
   function fetchVoices() {
@@ -722,9 +722,7 @@ async function populateVoiceList() {
     return Promise.race([promise, timeout]);
   }
 
-  return {
-    voices: fetchVoices().then(stringifyVoices),
-  };
+  return fetchVoices().then(processVoices);
 }
 
 async function populateMediaCapabilities() {
@@ -814,11 +812,18 @@ async function populateMediaCapabilities() {
       }
     }
 
-    return JSON.stringify(capabilities);
+    return capabilities;
   }
 
+  const capabilities = await getCapabilities();
+
   return {
-    mediaCapabilities: getCapabilities(),
+    mediaCapabilitiesUnsupported: JSON.stringify(capabilities.unsupported),
+    mediaCapabilitiesNotSmooth: JSON.stringify(capabilities.notSmooth),
+    mediaCapabilitiesNotEfficient: JSON.stringify(
+      capabilities.notPowerEfficient
+    ),
+    mediaCapabilitiesH264: JSON.stringify(capabilities.h264),
   };
 }
 
@@ -1012,12 +1017,11 @@ async function populateICEFoundations() {
 
     // With no other peers, we wouldn't get prflx candidates.
     // Relay type of candidates require a turn server.
-    // So, we'll only get host and srflx candidates.
+    // srflx candidates require a stun server.
+    // So, we'll only get host candidates.
     const result = {
-      hostLatencies: [],
-      hostFoundations: [],
-      srflxLatencies: [],
-      srflxFoundations: [],
+      latencies: [],
+      foundations: [],
     };
 
     let lastTime;
@@ -1028,14 +1032,12 @@ async function populateICEFoundations() {
       return latency;
     }
 
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
-    });
+    const pc = new RTCPeerConnection();
     pc.onicecandidate = e => {
       const latency = calculateLatency();
       if (e.candidate && e.candidate.candidate !== "") {
-        result[e.candidate.type + "Latencies"].push(latency);
-        result[e.candidate.type + "Foundations"].push(e.candidate.foundation);
+        result.latencies.push(latency);
+        result.foundations.push(e.candidate.foundation);
       }
     };
     pc.onicegatheringstatechange = () => {
@@ -1058,51 +1060,33 @@ async function populateICEFoundations() {
 
   // Run get candidates multiple times to see if foundation order changes
   // and calculate standard deviation of latencies
-  const allLatencies = {
-    srflx: [],
-    host: [],
-  };
-  const allFoundations = {
-    srflx: {},
-    host: {},
-  };
+  const latencies = [];
+  const foundations = {};
   for (let i = 0; i < 10; i++) {
     const result = await getFoundationsAndLatencies();
-    const hostFoundations = result.hostFoundations.join("");
-    const srflxFoundations = result.srflxFoundations.join("");
 
-    allLatencies.host.push(result.hostLatencies);
-    allLatencies.srflx.push(result.srflxLatencies);
+    latencies.push(result.latencies);
 
+    const hostFoundations = result.foundations.join("");
     if (hostFoundations) {
-      allFoundations.host[hostFoundations] =
-        (allFoundations.host[hostFoundations] ?? 0) + 1;
-    }
-    if (srflxFoundations) {
-      allFoundations.srflx[srflxFoundations] =
-        (allFoundations.srflx[srflxFoundations] ?? 0) + 1;
+      foundations[hostFoundations] = (foundations[hostFoundations] ?? 0) + 1;
     }
   }
 
-  const sdLatencies = {
-    host: [],
-    srflx: [],
-  };
-  for (let i = 0; i < (allLatencies.host?.[0]?.length ?? 0); i++) {
-    sdLatencies.host.push(standardDeviation(allLatencies.host.map(a => a[i])));
+  const sdLatencies = [];
+  for (let i = 0; i < (latencies?.[0]?.length ?? 0); i++) {
+    sdLatencies.push(standardDeviation(latencies.map(a => a[i])));
   }
-  for (let i = 0; i < (allLatencies.srflx?.[0]?.length ?? 0); i++) {
-    sdLatencies.srflx.push(
-      standardDeviation(allLatencies.srflx.map(a => a[i]))
-    );
-  }
+
+  const sd =
+    sdLatencies.length > 1
+      ? (sdLatencies.reduce((acc, val) => acc + val, 0) / sdLatencies.length) *
+        1000
+      : 0;
 
   return {
-    iceFoundations: JSON.stringify({
-      uniqueHostOrder: Object.keys(allFoundations.host).length,
-      uniqueSrflxOrder: Object.keys(allFoundations.srflx).length,
-      sdLatencies,
-    }),
+    iceSd: sd,
+    iceOrder: Object.keys(foundations).length,
   };
 }
 

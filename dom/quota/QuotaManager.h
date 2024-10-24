@@ -26,6 +26,7 @@
 #include "mozilla/dom/quota/DirectoryLockCategory.h"
 #include "mozilla/dom/quota/ForwardDecls.h"
 #include "mozilla/dom/quota/InitializationTypes.h"
+#include "mozilla/dom/quota/NotifyUtils.h"
 #include "mozilla/dom/quota/OriginOperationCallbacks.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "nsCOMPtr.h"
@@ -287,7 +288,10 @@ class QuotaManager final : public BackgroundThreadObject {
   // while they are still in use.
   // After a lock is acquired, client is notified by resolving the returned
   // promise. If the lock couldn't be acquired, client is notified by rejecting
-  // the returned promise.
+  // the returned promise. The returned lock could have been invalidated by a
+  // clear operation so consumers are supposed to check that and eventually
+  // release the lock as soon as possible (this is usually not needed for short
+  // lived operations).
   // A lock is a reference counted object and at the time the returned promise
   // is resolved, there are no longer other strong references except the one
   // held by the resolve value itself. So it's up to client to add a new
@@ -470,7 +474,7 @@ class QuotaManager final : public BackgroundThreadObject {
       client->StartIdleMaintenance();
     }
 
-    NotifyMaintenanceStarted();
+    NotifyMaintenanceStarted(*this);
   }
 
   void StopIdleMaintenance() {
@@ -483,6 +487,10 @@ class QuotaManager final : public BackgroundThreadObject {
 
   void AssertCurrentThreadOwnsQuotaMutex() {
     mQuotaMutex.AssertCurrentThreadOwns();
+  }
+
+  void AssertNotCurrentThreadOwnsQuotaMutex() {
+    mQuotaMutex.AssertNotCurrentThreadOwns();
   }
 
   nsIThread* IOThread() { return mIOThread->get(); }
@@ -524,10 +532,6 @@ class QuotaManager final : public BackgroundThreadObject {
 
   Maybe<FullOriginMetadata> GetFullOriginMetadata(
       const OriginMetadata& aOriginMetadata);
-
-  void NotifyStoragePressure(uint64_t aUsage);
-
-  void NotifyMaintenanceStarted();
 
   // Record a quota client shutdown step, if shutting down.
   // Assumes that the QuotaManager singleton is alive.

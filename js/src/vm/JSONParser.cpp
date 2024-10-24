@@ -595,6 +595,17 @@ void JSONTokenizer<CharT, ParserT>::error(const char* msg) {
   parser->error(msg);
 }
 
+static void ReportJSONSyntaxError(FrontendContext* fc, ErrorMetadata&& metadata,
+                                  unsigned errorNumber, ...) {
+  va_list args;
+  va_start(args, errorNumber);
+
+  js::ReportCompileErrorLatin1VA(fc, std::move(metadata), nullptr, errorNumber,
+                                 &args);
+
+  va_end(args);
+}
+
 // JSONFullParseHandlerAnyChar uses an AutoSelectGCHeap to switch to allocating
 // in the tenured heap if we trigger more than one nursery collection.
 //
@@ -839,8 +850,22 @@ void JSONFullParseHandler<CharT>::reportError(const char* msg, uint32_t line,
   char lineString[MaxWidth];
   SprintfLiteral(lineString, "%" PRIu32, line);
 
-  JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr, JSMSG_JSON_BAD_PARSE,
-                            msg, lineString, columnString);
+  if (reportLineNumbersFromParsedData) {
+    AutoReportFrontendContext fc(cx);
+
+    ErrorMetadata metadata;
+    metadata.isMuted = false;
+    metadata.filename = filename.valueOr(JS::ConstUTF8CharsZ(""));
+    metadata.lineNumber = line;
+    metadata.columnNumber = JS::ColumnNumberOneOrigin(column);
+
+    ReportJSONSyntaxError(&fc, std::move(metadata), JSMSG_JSON_BAD_PARSE, msg,
+                          lineString, columnString);
+  } else {
+    JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
+                              JSMSG_JSON_BAD_PARSE, msg, lineString,
+                              columnString);
+  }
 }
 
 template <typename CharT, typename HandlerT>
@@ -1044,12 +1069,10 @@ template class js::JSONPerHandlerParser<Latin1Char,
 template class js::JSONPerHandlerParser<char16_t,
                                         js::JSONFullParseHandler<char16_t>>;
 
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
 template class js::JSONPerHandlerParser<Latin1Char,
                                         js::JSONReviveHandler<Latin1Char>>;
 template class js::JSONPerHandlerParser<char16_t,
                                         js::JSONReviveHandler<char16_t>>;
-#endif
 
 template class js::JSONPerHandlerParser<Latin1Char,
                                         js::JSONSyntaxParseHandler<Latin1Char>>;
@@ -1082,7 +1105,6 @@ void JSONParser<CharT>::trace(JSTracer* trc) {
 template class js::JSONParser<Latin1Char>;
 template class js::JSONParser<char16_t>;
 
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
 template <typename CharT>
 inline bool JSONReviveHandler<CharT>::objectOpen(Vector<StackEntry, 10>& stack,
                                                  PropertyVector** properties) {
@@ -1222,7 +1244,6 @@ void JSONReviveParser<CharT>::trace(JSTracer* trc) {
 
 template class js::JSONReviveParser<Latin1Char>;
 template class js::JSONReviveParser<char16_t>;
-#endif  // ENABLE_JSON_PARSE_WITH_SOURCE
 
 template <typename CharT>
 inline bool JSONSyntaxParseHandler<CharT>::objectOpen(
@@ -1256,17 +1277,6 @@ inline bool JSONSyntaxParseHandler<CharT>::finishArray(
     Vector<StackEntry, 10>& stack, DummyValue* vp, ElementVector* elements) {
   stack.popBack();
   return true;
-}
-
-static void ReportJSONSyntaxError(FrontendContext* fc, ErrorMetadata&& metadata,
-                                  unsigned errorNumber, ...) {
-  va_list args;
-  va_start(args, errorNumber);
-
-  js::ReportCompileErrorLatin1VA(fc, std::move(metadata), nullptr, errorNumber,
-                                 &args);
-
-  va_end(args);
 }
 
 template <typename CharT>

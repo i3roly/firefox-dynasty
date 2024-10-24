@@ -1214,6 +1214,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void quotient32(Register rhs, Register srcDest, bool isUnsigned)
       DEFINED_ON(mips_shared, arm, arm64, loong64, riscv64, wasm32);
 
+  inline void quotient64(Register rhs, Register srcDest, bool isUnsigned)
+      DEFINED_ON(arm64, loong64, riscv64);
+
   // As above, but srcDest must be eax and tempEdx must be edx.
   inline void quotient32(Register rhs, Register srcDest, Register tempEdx,
                          bool isUnsigned) DEFINED_ON(x86_shared);
@@ -1224,6 +1227,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // On ARM, the chip must have hardware division instructions.
   inline void remainder32(Register rhs, Register srcDest, bool isUnsigned)
       DEFINED_ON(mips_shared, arm, arm64, loong64, riscv64, wasm32);
+
+  inline void remainder64(Register rhs, Register srcDest, bool isUnsigned)
+      DEFINED_ON(arm64, loong64, riscv64);
 
   // As above, but srcDest must be eax and tempEdx must be edx.
   inline void remainder32(Register rhs, Register srcDest, Register tempEdx,
@@ -1239,6 +1245,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void flexibleRemainder32(Register rhs, Register srcDest, bool isUnsigned,
                            const LiveRegisterSet& volatileLiveRegs)
       DEFINED_ON(mips_shared, arm, arm64, x86_shared, loong64, riscv64, wasm32);
+  void flexibleRemainderPtr(Register rhs, Register srcDest, bool isUnsigned,
+                            const LiveRegisterSet& volatileLiveRegs) PER_ARCH;
 
   // Perform an integer division, returning the integer part rounded toward
   // zero. rhs must not be zero, and the division must not overflow.
@@ -1250,6 +1258,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void flexibleQuotient32(Register rhs, Register srcDest, bool isUnsigned,
                           const LiveRegisterSet& volatileLiveRegs)
       DEFINED_ON(mips_shared, arm, arm64, x86_shared, loong64, riscv64);
+  void flexibleQuotientPtr(Register rhs, Register srcDest, bool isUnsigned,
+                           const LiveRegisterSet& volatileLiveRegs) PER_ARCH;
 
   // Perform an integer division, returning the integer part rounded toward
   // zero. rhs must not be zero, and the division must not overflow. The
@@ -1350,6 +1360,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // |base| and |power| are preserved, the other input registers are clobbered.
   void pow32(Register base, Register power, Register dest, Register temp1,
              Register temp2, Label* onOver);
+  void powPtr(Register base, Register power, Register dest, Register temp1,
+              Register temp2, Label* onOver);
 
   void sameValueDouble(FloatRegister left, FloatRegister right,
                        FloatRegister temp, Register dest);
@@ -1401,6 +1413,7 @@ class MacroAssembler : public MacroAssemblerSpecific {
                                  Register srcDest) PER_SHARED_ARCH;
   inline void lshiftPtr(Register shift, Register srcDest) PER_ARCH;
   inline void rshiftPtr(Register shift, Register srcDest) PER_ARCH;
+  inline void rshiftPtrArithmetic(Register shift, Register srcDest) PER_ARCH;
 
   // These variants do not have the above constraint, but may emit some extra
   // instructions on x86_shared. They also handle shift >= 32 consistently by
@@ -1412,6 +1425,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
                                Register srcDest) PER_SHARED_ARCH;
   inline void flexibleRshift32Arithmetic(Register shift,
                                          Register srcDest) PER_SHARED_ARCH;
+  inline void flexibleLshiftPtr(Register shift, Register srcDest) PER_ARCH;
+  inline void flexibleRshiftPtr(Register shift, Register srcDest) PER_ARCH;
+  inline void flexibleRshiftPtrArithmetic(Register shift,
+                                          Register srcDest) PER_ARCH;
 
   inline void lshift64(Register shift, Register64 srcDest) PER_ARCH;
   inline void rshift64(Register shift, Register64 srcDest) PER_ARCH;
@@ -1662,6 +1679,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void branchFloat32NotInUInt64Range(Address src, Register temp,
                                             Label* fail);
 
+  // Branch if the (un)signed int64 is outside the range of a signed intptr.
+  inline void branchInt64NotInPtrRange(Register64 src, Label* label) PER_ARCH;
+  inline void branchUInt64NotInPtrRange(Register64 src, Label* label) PER_ARCH;
+
   template <typename T>
   inline void branchAdd32(Condition cond, T src, Register dest,
                           Label* label) PER_SHARED_ARCH;
@@ -1690,6 +1711,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
                            Label* label) PER_SHARED_ARCH;
 
   inline void branchMulPtr(Condition cond, Register src, Register dest,
+                           Label* label) PER_SHARED_ARCH;
+
+  inline void branchNegPtr(Condition cond, Register reg,
                            Label* label) PER_SHARED_ARCH;
 
   inline void decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
@@ -2065,6 +2089,17 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // Create an unconditional branch to the address given as argument.
   inline void branchToComputedAddress(const BaseIndex& address) PER_ARCH;
 
+  // Subtract a constant in the range 1 .. 127 inclusive from the value stored
+  // at `address`, write the result back to `address`, and jump to `label` if
+  // the updated value is negative.  The subtract is a 32-bit operation even
+  // though the value to be subtracted must fit in 7 bits.
+  CodeOffset sub32FromMemAndBranchIfNegativeWithPatch(
+      Address address, Label* label) PER_SHARED_ARCH;
+
+  // Patch in the value to be subtracted.  Must be 1 .. 127 inclusive.
+  void patchSub32FromMemAndBranchIfNegative(CodeOffset offset,
+                                            Imm32 imm) PER_SHARED_ARCH;
+
  private:
   template <typename T, typename S, typename L>
   inline void branchPtrImpl(Condition cond, const T& lhs, const S& rhs, L label)
@@ -2172,6 +2207,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
                           Register src, Register dest)
       DEFINED_ON(arm, arm64, loong64, riscv64, wasm32, mips_shared, x86_shared);
 
+  inline void cmpPtrMovePtr(Condition cond, Register lhs, Imm32 rhs,
+                            Register src, Register dest) PER_ARCH;
+
   inline void cmpPtrMovePtr(Condition cond, Register lhs, Register rhs,
                             Register src, Register dest) PER_ARCH;
 
@@ -2200,6 +2238,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
 
   inline void test32LoadPtr(Condition cond, const Address& addr, Imm32 mask,
                             const Address& src, Register dest)
+      DEFINED_ON(arm, arm64, loong64, riscv64, wasm32, mips_shared, x86, x64);
+
+  inline void test32MovePtr(Condition cond, Register operand, Imm32 mask,
+                            Register src, Register dest)
       DEFINED_ON(arm, arm64, loong64, riscv64, wasm32, mips_shared, x86, x64);
 
   inline void test32MovePtr(Condition cond, const Address& addr, Imm32 mask,
@@ -5027,39 +5069,25 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void loadBigInt64(Register bigInt, Register64 dest);
 
   /**
-   * Load the first digit from |bigInt| into |dest|. Handles the case when the
-   * BigInt digits length is zero.
+   * Load the first digit from |bigInt| into |dest|.
    *
-   * Note: A BigInt digit is a pointer-sized value.
+   * Note: A BigInt digit is a pointer-sized value storing an unsigned number.
    */
-  void loadFirstBigIntDigitOrZero(Register bigInt, Register dest);
+  void loadBigIntDigit(Register bigInt, Register dest);
 
   /**
-   * Load the number stored in |bigInt| into |dest|. Handles the case when the
-   * BigInt digits length is zero. Jumps to |fail| when the number can't be
-   * saved into a single pointer-sized register.
+   * Load the first digit from |bigInt| into |dest|. Jumps to |fail| when there
+   * is more than one BigInt digit.
+   *
+   * Note: A BigInt digit is a pointer-sized value storing an unsigned number.
    */
-  void loadBigInt(Register bigInt, Register dest, Label* fail);
+  void loadBigIntDigit(Register bigInt, Register dest, Label* fail);
 
   /**
-   * Load the number stored in |bigInt| into |dest|. Doesn't handle the case
-   * when the BigInt digits length is zero. Jumps to |fail| when the number
-   * can't be saved into a single pointer-sized register.
+   * Load the number stored in |bigInt| into |dest|. Jumps to |fail| when the
+   * number can't be saved into a single pointer-sized register.
    */
-  void loadBigIntNonZero(Register bigInt, Register dest, Label* fail);
-
-  /**
-   * Load the absolute number stored in |bigInt| into |dest|. Handles the case
-   * when the BigInt digits length is zero. Jumps to |fail| when the number
-   * can't be saved into a single pointer-sized register.
-   */
-  void loadBigIntAbsolute(Register bigInt, Register dest, Label* fail);
-
-  /**
-   * In-place modifies the BigInt digit to a signed pointer-sized value. Jumps
-   * to |fail| when the digit exceeds the representable range.
-   */
-  void bigIntDigitToSignedPtr(Register bigInt, Register digit, Label* fail);
+  void loadBigIntPtr(Register bigInt, Register dest, Label* fail);
 
   /**
    * Initialize a BigInt from |val|. Clobbers |val| when |temp| is invalid and
@@ -5072,12 +5100,7 @@ class MacroAssembler : public MacroAssemblerSpecific {
    * Initialize a BigInt from the signed, pointer-sized register |val|.
    * Clobbers |val|!
    */
-  void initializeBigInt(Register bigInt, Register val);
-
-  /**
-   * Initialize a BigInt from the pointer-sized register |val|.
-   */
-  void initializeBigIntAbsolute(Register bigInt, Register val);
+  void initializeBigIntPtr(Register bigInt, Register val);
 
   /**
    * Copy a BigInt. Jumps to |fail| on allocation failure or when the BigInt
@@ -5757,15 +5780,15 @@ class MacroAssembler : public MacroAssemblerSpecific {
   template <typename IdType>
 #ifdef JS_CODEGEN_X86
   // See MegamorphicSetElement in LIROps.yaml
-  void emitMegamorphicCachedSetSlot(IdType id, Register obj, Register scratch1,
-                                    ValueOperand value, Label* cacheHit,
-                                    void (*emitPreBarrier)(MacroAssembler&,
-                                                           const Address&,
-                                                           MIRType));
+  void emitMegamorphicCachedSetSlot(
+      IdType id, Register obj, Register scratch1, ValueOperand value,
+      const LiveRegisterSet& liveRegs, Label* cacheHit,
+      void (*emitPreBarrier)(MacroAssembler&, const Address&, MIRType));
 #else
   void emitMegamorphicCachedSetSlot(
       IdType id, Register obj, Register scratch1, Register scratch2,
-      Register scratch3, ValueOperand value, Label* cacheHit,
+      Register scratch3, ValueOperand value, const LiveRegisterSet& liveRegs,
+      Label* cacheHit,
       void (*emitPreBarrier)(MacroAssembler&, const Address&, MIRType));
 #endif
 
@@ -5808,6 +5831,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
 
   void loadResizableTypedArrayByteOffsetMaybeOutOfBoundsIntPtr(
       Register obj, Register output, Register scratch);
+
+  void computeImplicitThis(Register env, ValueOperand output, Label* slowPath);
 
  private:
   void isCallableOrConstructor(bool isCallable, Register obj, Register output,

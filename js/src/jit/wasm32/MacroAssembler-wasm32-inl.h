@@ -140,6 +140,10 @@ void MacroAssembler::rshiftPtrArithmetic(Imm32 imm, Register dest) {
   MOZ_CRASH();
 }
 
+void MacroAssembler::rshiftPtrArithmetic(Register shift, Register srcDest) {
+  MOZ_CRASH();
+}
+
 void MacroAssembler::lshift64(Imm32 imm, Register64 dest) { MOZ_CRASH(); }
 
 void MacroAssembler::rshift64(Imm32 imm, Register64 dest) { MOZ_CRASH(); }
@@ -615,6 +619,11 @@ void MacroAssembler::fallibleUnboxPtr(const BaseIndex& src, Register dest,
   MOZ_CRASH();
 }
 
+void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Imm32 rhs,
+                                   Register src, Register dest) {
+  MOZ_CRASH();
+}
+
 void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Register rhs,
                                    Register src, Register dest) {
   MOZ_CRASH();
@@ -806,6 +815,10 @@ void MacroAssembler::branchMulPtr(Condition cond, Register src, Register dest,
   MOZ_CRASH();
 }
 
+void MacroAssembler::branchNegPtr(Condition cond, Register reg, Label* label) {
+  MOZ_CRASH();
+}
+
 void MacroAssembler::decBranchPtr(Condition cond, Register lhs, Imm32 rhs,
                                   Label* label) {
   MOZ_CRASH();
@@ -870,6 +883,11 @@ void MacroAssembler::branchTruncateDoubleMaybeModUint32(FloatRegister src,
   MOZ_CRASH();
 }
 
+void MacroAssembler::test32MovePtr(Condition cond, Register operand, Imm32 mask,
+                                   Register src, Register dest) {
+  MOZ_CRASH();
+}
+
 void MacroAssembler::test32MovePtr(Condition cond, const Address& addr,
                                    Imm32 mask, Register src, Register dest) {
   MOZ_CRASH();
@@ -928,6 +946,14 @@ void MacroAssembler::branchTruncateFloat32ToInt32(FloatRegister src,
 
 void MacroAssembler::branchTruncateDoubleToInt32(FloatRegister src,
                                                  Register dest, Label* fail) {
+  MOZ_CRASH();
+}
+
+void MacroAssembler::branchInt64NotInPtrRange(Register64 src, Label* label) {
+  MOZ_CRASH();
+}
+
+void MacroAssembler::branchUInt64NotInPtrRange(Register64 src, Label* label) {
   MOZ_CRASH();
 }
 
@@ -1133,6 +1159,19 @@ void MacroAssembler::flexibleRshift32(Register shift, Register srcDest) {
 
 void MacroAssembler::flexibleRshift32Arithmetic(Register shift,
                                                 Register srcDest) {
+  MOZ_CRASH();
+}
+
+void MacroAssembler::flexibleLshiftPtr(Register shift, Register srcDest) {
+  MOZ_CRASH();
+}
+
+void MacroAssembler::flexibleRshiftPtr(Register shift, Register srcDest) {
+  MOZ_CRASH();
+}
+
+void MacroAssembler::flexibleRshiftPtrArithmetic(Register shift,
+                                                 Register srcDest) {
   MOZ_CRASH();
 }
 

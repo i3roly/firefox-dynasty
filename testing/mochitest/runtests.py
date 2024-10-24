@@ -1790,6 +1790,7 @@ toolbar#nav-bar {
                 disabled=disabled,
                 filters=filters,
                 noDefaultFilters=noDefaultFilters,
+                strictExpressions=True,
                 **info
             )
 
@@ -3394,7 +3395,6 @@ toolbar#nav-bar {
                 #
                 # Currently for automation, the pref defaults to true (but can be
                 # overridden with --setpref).
-                "serviceworker_e10s": True,
                 "sessionHistoryInParent": not options.disable_fission
                 or not self.extraPrefs.get(
                     "fission.disableSessionHistoryInParent",
@@ -3422,6 +3422,11 @@ toolbar#nav-bar {
                 "xorigin": options.xOriginTests,
                 "condprof": options.conditionedProfile,
                 "msix": "WindowsApps" in options.app,
+                "android_version": mozinfo.info.get("android_version", -1),
+                "android": mozinfo.info.get("android", False),
+                "is_emulator": mozinfo.info.get("is_emulator", False),
+                "cm6": mozinfo.info.get("cm6", False),
+                "coverage": mozinfo.info.get("coverage", False),
             }
         )
 
@@ -3766,11 +3771,6 @@ toolbar#nav-bar {
                 self.log.info(
                     "runtests.py | Running with cross-origin iframes: {}".format(
                         mozinfo.info.get("xorigin", False)
-                    )
-                )
-                self.log.info(
-                    "runtests.py | Running with serviceworker_e10s: {}".format(
-                        mozinfo.info.get("serviceworker_e10s", False)
                     )
                 )
                 self.log.info(

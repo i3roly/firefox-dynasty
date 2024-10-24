@@ -7,23 +7,16 @@ skip-if = ["os == 'android'"]
 prefs = ["browser.search.removeEngineInfobar.enabled=true"]
 
 support-files = [
-  "data/engine.xml",
-  "data/engine2.xml",
-  "data/engine-fr.xml",
-  "data/engineMaker.sjs",
-  "data/engineImages.xml",
-  "data/iconsRedirect.sjs",
-  "data/search.json",
-  "data/search-legacy.json",
-  "data/search-legacy-correct-default-engine-hashes.json",
-  "data/search-legacy-no-ids.json",
-  "data/search-legacy-old-loadPaths.json",
-  "data/search-legacy-wrong-default-engine-hashes.json",
-  "data/search-legacy-wrong-third-party-engine-hashes.json",
-  "data/search-obsolete-app.json",
-  "data/search-obsolete-distribution.json",
-  "data/search-obsolete-langpack.json",
-  "data/searchSuggestions.sjs",
+  "icons/bigIcon.ico",
+  "icons/remoteIcon.ico",
+  "icons/svgIcon.svg",
+  "opensearch/fr-domain-iso8859-1.xml",
+  "opensearch/generic1.xml",
+  "opensearch/generic2.xml",
+  "settings/v1-metadata-migration.json",
+  "sjs/engineMaker.sjs",
+  "sjs/iconsRedirect.sjs",
+  "sjs/searchSuggestions.sjs",
 ]
 
 ["test_SearchStaticData.js"]
@@ -100,6 +93,7 @@ tags = "remotesettings searchmain"
 ["test_identifiers.js"]
 
 ["test_ignorelist.js"]
+support-files = ["settings/ignorelist.json"]
 
 ["test_ignorelist_update.js"]
 
@@ -126,9 +120,7 @@ support-files = [
 
 ["test_opensearch_icon.js"]
 support-files = [
-  "data/bigIcon.ico",
-  "data/remoteIcon.ico",
-  "data/svgIcon.svg",
+  "opensearch/images.xml",
 ]
 
 ["test_opensearch_icons_invalid.js"]
@@ -201,6 +193,12 @@ support-files = [
 ["test_sendSubmissionURL.js"]
 
 ["test_settings.js"]
+support-files = [
+  "settings/settings-loading.json",
+  "settings/v6-correct-default-engine-hashes.json",
+  "settings/v6-wrong-default-engine-hashes.json",
+  "settings/v6-wrong-third-party-engine-hashes.json",
+]
 
 ["test_settings_broken.js"]
 
@@ -208,24 +206,28 @@ support-files = [
 
 ["test_settings_good.js"]
 
-["test_settings_ignorelist.js"]
-support-files = ["data/search_ignorelist.json"]
-
 ["test_settings_migrate_id_format.js"]
 
 ["test_settings_migration_hideOneOffs.js"]
 
 ["test_settings_migration_ids.js"]
+support-files = ["settings/v6-ids-upgrade.json"]
 
 ["test_settings_migration_loadPath.js"]
+support-files = ["settings/v7-loadPath-migration.json"]
 
 ["test_settings_migration_renames.js"]
-support-files = ["data/search-migration-renames.json"]
+support-files = ["settings/v6-migration-renames.json"]
 prefs = ["browser.search.newSearchConfig.enabled=true"]
 
 ["test_settings_none.js"]
 
 ["test_settings_obsolete.js"]
+support-files = [
+  "settings/v1-obsolete-app.json",
+  "settings/v1-obsolete-distribution.json",
+  "settings/v1-obsolete-langpack.json",
+]
 
 ["test_settings_persist.js"]
 
@@ -246,7 +248,7 @@ prefs = ["browser.search.newSearchConfig.enabled=true"]
 ["test_webextensions_language_switch.js"]
 
 ["test_webextensions_migrate_to.js"]
-support-files = ["data/search-migration.json"]
+support-files = ["settings/v1-migrate-to-webextension.json"]
 
 ["test_webextensions_startup.js"]
 

@@ -276,16 +276,12 @@ def add_extra_options(config, tests):
 
         # Adding device name if we're on android
         test_platform = test["test-platform"]
-        if test_platform.startswith("android-hw-a51"):
-            extra_options.append("--device-name=a51")
-        elif test_platform.startswith("android-hw-a55"):
+        if test_platform.startswith("android-hw-a55"):
             extra_options.append("--device-name=a55")
         elif test_platform.startswith("android-hw-p5"):
             extra_options.append("--device-name=p5_aarch64")
         elif test_platform.startswith("android-hw-p6"):
             extra_options.append("--device-name=p6_aarch64")
-        elif test_platform.startswith("android-hw-s21"):
-            extra_options.append("--device-name=s21_aarch64")
         elif test_platform.startswith("android-hw-s24"):
             extra_options.append("--device-name=s24_aarch64")
 
@@ -319,6 +315,11 @@ def add_extra_options(config, tests):
                 extra_options.append(
                     "--test-url-params={}".format(param.replace(" ", ""))
                 )
+
+        if "android-hw-p6" in test_platform or "android-hw-s24" in test_platform:
+            extra_options.append("--power-test")
+        elif "windows" in test_platform and "speedometer3" in test["test-name"]:
+            extra_options.append("--power-test")
 
         extra_options.append("--project={}".format(config.params.get("project")))
 
@@ -356,6 +357,16 @@ def handle_lull_schedule(config, tests):
             lull_schedule = test["raptor"].pop("lull-schedule")
             if lull_schedule:
                 test.setdefault("attributes", {})["lull-schedule"] = lull_schedule
+        yield test
+
+
+@transforms.add
+def apply_raptor_device_optimization(config, tests):
+    # Bug 1919389
+    # For now, only change the back stop optimization strategy for A55 devices
+    for test in tests:
+        if test["test-platform"].startswith("android-hw-a55"):
+            test["optimization"] = {"skip-unless-backstop": None}
         yield test
 
 

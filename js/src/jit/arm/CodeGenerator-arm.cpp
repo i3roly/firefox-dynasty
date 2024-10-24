@@ -779,28 +779,20 @@ void CodeGenerator::visitModMaskI(LModMaskI* ins) {
   }
 }
 
-void CodeGeneratorARM::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
-                                     Register divisor, Register output,
-                                     Label* fail) {
+void CodeGeneratorARM::emitBigIntPtrDiv(LBigIntPtrDiv* ins, Register dividend,
+                                        Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
   if (ARMFlags::HasIDIV()) {
-    masm.ma_sdiv(dividend, divisor, /* result= */ dividend);
-
-    // Create and return the result.
-    masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-    masm.initializeBigInt(output, dividend);
-
+    masm.ma_sdiv(dividend, divisor, /* result= */ output);
     return;
   }
 
   // idivmod returns the quotient in r0, and the remainder in r1.
-  MOZ_ASSERT(dividend == r0);
-  MOZ_ASSERT(divisor == r1);
+  MOZ_ASSERT(ToRegister(ins->temp0()) == r0);
+  MOZ_ASSERT(ToRegister(ins->temp1()) == r1);
 
   LiveRegisterSet volatileRegs = liveVolatileRegs(ins);
-  volatileRegs.takeUnchecked(dividend);
-  volatileRegs.takeUnchecked(divisor);
   volatileRegs.takeUnchecked(output);
 
   masm.PushRegsInMask(volatileRegs);
@@ -811,39 +803,26 @@ void CodeGeneratorARM::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
   masm.passABIArg(divisor);
   masm.callWithABI<Fn, __aeabi_idivmod>(ABIType::Int64,
                                         CheckUnsafeCallWithABI::DontCheckOther);
+  masm.move32(r0, output);
 
   masm.PopRegsInMask(volatileRegs);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
 }
 
-void CodeGeneratorARM::emitBigIntMod(LBigIntMod* ins, Register dividend,
-                                     Register divisor, Register output,
-                                     Label* fail) {
+void CodeGeneratorARM::emitBigIntPtrMod(LBigIntPtrMod* ins, Register dividend,
+                                        Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
   if (ARMFlags::HasIDIV()) {
-    {
-      ScratchRegisterScope scratch(masm);
-      masm.ma_smod(dividend, divisor, /* result= */ dividend, scratch);
-    }
-
-    // Create and return the result.
-    masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-    masm.initializeBigInt(output, dividend);
-
+    ScratchRegisterScope scratch(masm);
+    masm.ma_smod(dividend, divisor, /* result= */ output, scratch);
     return;
   }
 
   // idivmod returns the quotient in r0, and the remainder in r1.
-  MOZ_ASSERT(dividend == r0);
-  MOZ_ASSERT(divisor == r1);
+  MOZ_ASSERT(ToRegister(ins->temp0()) == r0);
+  MOZ_ASSERT(ToRegister(ins->temp1()) == r1);
 
   LiveRegisterSet volatileRegs = liveVolatileRegs(ins);
-  volatileRegs.takeUnchecked(dividend);
-  volatileRegs.takeUnchecked(divisor);
   volatileRegs.takeUnchecked(output);
 
   masm.PushRegsInMask(volatileRegs);
@@ -854,12 +833,9 @@ void CodeGeneratorARM::emitBigIntMod(LBigIntMod* ins, Register dividend,
   masm.passABIArg(divisor);
   masm.callWithABI<Fn, __aeabi_idivmod>(ABIType::Int64,
                                         CheckUnsafeCallWithABI::DontCheckOther);
+  masm.move32(r1, output);
 
   masm.PopRegsInMask(volatileRegs);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, dividend, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, divisor);
 }
 
 void CodeGenerator::visitBitNotI(LBitNotI* ins) {
@@ -1343,21 +1319,6 @@ void CodeGenerator::visitWasmUint32ToDouble(LWasmUint32ToDouble* lir) {
 void CodeGenerator::visitWasmUint32ToFloat32(LWasmUint32ToFloat32* lir) {
   masm.convertUInt32ToFloat32(ToRegister(lir->input()),
                               ToFloatRegister(lir->output()));
-}
-
-void CodeGenerator::visitNotI(LNotI* ins) {
-  // It is hard to optimize !x, so just do it the basic way for now.
-  masm.as_cmp(ToRegister(ins->input()), Imm8(0));
-  masm.emitSet(Assembler::Equal, ToRegister(ins->output()));
-}
-
-void CodeGenerator::visitNotI64(LNotI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register output = ToRegister(lir->output());
-
-  masm.ma_orr(input.low, input.high, output);
-  masm.as_cmp(output, Imm8(0));
-  masm.emitSet(Assembler::Equal, output);
 }
 
 void CodeGenerator::visitNotD(LNotD* ins) {

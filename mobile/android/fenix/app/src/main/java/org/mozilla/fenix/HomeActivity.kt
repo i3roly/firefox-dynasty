@@ -6,6 +6,7 @@ package org.mozilla.fenix
 
 import android.annotation.SuppressLint
 import android.app.assist.AssistContent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.Intent.ACTION_MAIN
@@ -98,6 +99,8 @@ import org.mozilla.fenix.components.appstate.OrientationMode
 import org.mozilla.fenix.components.metrics.BreadcrumbsRecorder
 import org.mozilla.fenix.components.metrics.GrowthDataWorker
 import org.mozilla.fenix.components.metrics.fonts.FontEnumerationWorker
+import org.mozilla.fenix.crashes.CrashReporterBinding
+import org.mozilla.fenix.crashes.UnsubmittedCrashDialog
 import org.mozilla.fenix.customtabs.ExternalAppBrowserActivity
 import org.mozilla.fenix.databinding.ActivityHomeBinding
 import org.mozilla.fenix.debugsettings.data.DefaultDebugSettingsRepository
@@ -147,6 +150,7 @@ import org.mozilla.fenix.tabstray.TabsTrayFragment
 import org.mozilla.fenix.theme.DefaultThemeManager
 import org.mozilla.fenix.theme.ThemeManager
 import org.mozilla.fenix.utils.Settings
+import org.mozilla.fenix.utils.changeAppLauncherIconBackgroundColor
 import java.lang.ref.WeakReference
 import java.util.Locale
 
@@ -181,6 +185,13 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             store = components.core.store,
             context = this@HomeActivity,
             fragmentManager = supportFragmentManager,
+        )
+    }
+
+    private val crashReporterBinding by lazy {
+        CrashReporterBinding(
+            store = components.appStore,
+            onReporting = ::showCrashReporter,
         )
     }
 
@@ -363,12 +374,16 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             val safeIntent = intent?.toSafeIntent()
             safeIntent
                 ?.let(::getIntentSource)
-                ?.also {
-                    Events.appOpened.record(Events.AppOpenedExtra(it))
+                ?.also { source ->
+                    Events.appOpened.record(
+                        Events.AppOpenedExtra(
+                            source = source,
+                        ),
+                    )
                     // This will record an event in Nimbus' internal event store. Used for behavioral targeting
                     recordEventInNimbus("app_opened")
 
-                    if (safeIntent.action.equals(ACTION_OPEN_PRIVATE_TAB) && it == APP_ICON) {
+                    if (safeIntent.action.equals(ACTION_OPEN_PRIVATE_TAB) && source == APP_ICON) {
                         AppIcon.newPrivateTabTapped.record(NoExtras())
                     }
                 }
@@ -381,6 +396,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             extensionsProcessDisabledBackgroundController,
             serviceWorkerSupport,
             webExtensionPromptFeature,
+            crashReporterBinding,
         )
 
         if (shouldAddToRecentsScreen(intent)) {
@@ -571,6 +587,18 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
                 "finishing" to isFinishing.toString(),
             ),
         )
+
+        if (FxNimbus.features.alternativeAppLauncherIcon.value().enabled) {
+            // User has been enrolled in alternative app icon experiment.
+            with(applicationContext) {
+                changeAppLauncherIconBackgroundColor(
+                    packageManager = applicationContext.packageManager,
+                    appAlias = ComponentName(this, "$packageName.App"),
+                    alternativeAppAlias = ComponentName(this, "$packageName.AlternativeApp"),
+                    resetToDefault = FxNimbus.features.alternativeAppLauncherIcon.value().resetToDefault,
+                )
+            }
+        }
     }
 
     final override fun onPause() {
@@ -1326,6 +1354,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
                 (systemGestureInsets?.left ?: 0) > 0 && (systemGestureInsets?.right ?: 0) > 0
             NavigationBar.osNavigationUsesGestures.set(isUsingGesturesNavigation)
         }
+    }
+
+    private fun showCrashReporter() {
+        UnsubmittedCrashDialog(
+            dispatcher = { action -> components.appStore.dispatch(AppAction.CrashActionWrapper(action)) },
+        ).show(supportFragmentManager, UnsubmittedCrashDialog.TAG)
     }
 
     companion object {

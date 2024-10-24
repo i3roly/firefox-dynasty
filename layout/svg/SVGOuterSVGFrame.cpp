@@ -122,7 +122,7 @@ NS_QUERYFRAME_TAIL_INHERITING(SVGDisplayContainerFrame)
 //----------------------------------------------------------------------
 // nsIFrame methods
 
-nscoord SVGOuterSVGFrame::IntrinsicISize(gfxContext* aContext,
+nscoord SVGOuterSVGFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                          IntrinsicISizeType aType) {
   if (aType == IntrinsicISizeType::MinISize) {
     return GetIntrinsicSize().ISize(GetWritingMode()).valueOr(0);
@@ -489,8 +489,7 @@ nsresult SVGOuterSVGFrame::AttributeChanged(int32_t aNameSpaceID,
   if (aNameSpaceID == kNameSpaceID_None &&
       !HasAnyStateBits(NS_FRAME_FIRST_REFLOW | NS_FRAME_IS_NONDISPLAY)) {
     if (aAttribute == nsGkAtoms::viewBox ||
-        aAttribute == nsGkAtoms::preserveAspectRatio ||
-        aAttribute == nsGkAtoms::transform) {
+        aAttribute == nsGkAtoms::preserveAspectRatio) {
       // make sure our cached transform matrix gets (lazily) updated
       mCanvasTM = nullptr;
 
@@ -566,8 +565,7 @@ void SVGOuterSVGFrame::NotifyViewportOrTransformChanged(uint32_t aFlags) {
                                     FULL_ZOOM_CHANGED)),
              "Unexpected aFlags value");
 
-  SVGSVGElement* content = static_cast<SVGSVGElement*>(GetContent());
-
+  auto* content = static_cast<SVGSVGElement*>(GetContent());
   if (aFlags & COORD_CONTEXT_CHANGED) {
     if (content->HasViewBox()) {
       // Percentage lengths on children resolve against the viewBox rect so we
@@ -634,7 +632,7 @@ SVGBBox SVGOuterSVGFrame::GetBBoxContribution(
           !PrincipalChildList().FirstChild()->GetNextSibling(),
       "We should have a single, anonymous, child");
   // We must defer to our child so that we don't include our
-  // content->PrependLocalTransformsTo() transforms.
+  // content->ChildToUserSpaceTransform() transform.
   auto* anonKid = static_cast<SVGOuterSVGAnonChildFrame*>(
       PrincipalChildList().FirstChild());
   return anonKid->GetBBoxContribution(aToBBoxUserspace, aFlags);
@@ -649,8 +647,8 @@ gfxMatrix SVGOuterSVGFrame::GetCanvasTM() {
     float devPxPerCSSPx = 1.0f / nsPresContext::AppUnitsToFloatCSSPixels(
                                      PresContext()->AppUnitsPerDevPixel());
 
-    gfxMatrix tm = content->PrependLocalTransformsTo(
-        gfxMatrix::Scaling(devPxPerCSSPx, devPxPerCSSPx));
+    gfxMatrix tm = content->ChildToUserSpaceTransform().PostScale(
+        devPxPerCSSPx, devPxPerCSSPx);
     mCanvasTM = MakeUnique<gfxMatrix>(tm);
   }
   return *mCanvasTM;
@@ -789,33 +787,14 @@ void SVGOuterSVGAnonChildFrame::BuildDisplayList(
 }
 
 bool SVGOuterSVGFrame::HasChildrenOnlyTransform(Matrix* aTransform) const {
-  // Our elements 'transform' attribute is applied to our SVGOuterSVGFrame
-  // parent, and the element's children-only transforms are applied to us, the
-  // anonymous child frame.
   auto* content = static_cast<SVGSVGElement*>(GetContent());
   if (!content->HasChildrenOnlyTransform()) {
     return false;
   }
   if (aTransform) {
-    // Outer-<svg> doesn't use x/y, so we can pass eChildToUserSpace here.
-    *aTransform = gfx::ToMatrix(
-        content->PrependLocalTransformsTo(gfxMatrix(), eChildToUserSpace));
-    if (aTransform->HasNonTranslation()) {
-      // The nsDisplayTransform code will apply this transform to our inner kid,
-      // including to its frame position.  We don't want our frame position to
-      // be scaled though, so we need to correct for that in the transform.
-      // XXX Yeah, this is a bit hacky.
-      // viewBox, currentScale and currentTranslate should only produce a
-      // rectilinear transform.
-      MOZ_ASSERT(aTransform->IsRectilinear(),
-                 "Non-rectilinear transform will break the following logic");
-      CSSPoint pos =
-          CSSPixel::FromAppUnits(GetContentRectRelativeToSelf().TopLeft());
-      CSSPoint scaledPos =
-          CSSPoint(aTransform->_11 * pos.x, aTransform->_22 * pos.y);
-      CSSPoint deltaPos = scaledPos - pos;
-      *aTransform *= Matrix::Translation(-deltaPos.x, -deltaPos.y);
-    }
+    // Outer-<svg> doesn't use x/y, so we can use the child-to-user-space
+    // transform here.
+    *aTransform = gfx::ToMatrix(content->ChildToUserSpaceTransform());
   }
   return true;
 }

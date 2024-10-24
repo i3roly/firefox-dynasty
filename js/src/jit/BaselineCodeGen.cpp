@@ -109,9 +109,6 @@ BaselineInterpreterGenerator::BaselineInterpreterGenerator(JSContext* cx,
     : BaselineCodeGen(cx, alloc /* no handlerArgs */) {}
 
 bool BaselineCompilerHandler::init(JSContext* cx) {
-  JS_LOG(baselineCompileHandler, mozilla::LogLevel::Debug,
-         "Baseline Compile Init");
-
   if (!analysis_.init(alloc_)) {
     return false;
   }
@@ -1270,22 +1267,9 @@ bool BaselineCompilerCodeGen::initEnvironmentChain() {
   // both, the NamedLambdaObject must enclose the CallObject. If one of the
   // allocations fails, we perform the whole operation in C++.
 
-  JSObject* templateEnv = handler.script()->jitScript()->templateEnvironment();
-  MOZ_ASSERT(templateEnv);
-
-  CallObject* callObjectTemplate = nullptr;
-  if (handler.function()->needsCallObject()) {
-    callObjectTemplate = &templateEnv->as<CallObject>();
-  }
-
-  NamedLambdaObject* namedLambdaTemplate = nullptr;
-  if (handler.function()->needsNamedLambdaEnvironment()) {
-    if (callObjectTemplate) {
-      templateEnv = templateEnv->enclosingEnvironment();
-    }
-    namedLambdaTemplate = &templateEnv->as<NamedLambdaObject>();
-  }
-
+  auto [callObjectTemplate, namedLambdaTemplate] =
+      handler.script()->jitScript()->functionEnvironmentTemplates(
+          handler.function());
   MOZ_ASSERT(namedLambdaTemplate || callObjectTemplate);
 
   AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
@@ -3258,13 +3242,14 @@ bool BaselineCodeGen<Handler>::emit_GetGName() {
 }
 
 template <>
-bool BaselineCompilerCodeGen::tryOptimizeBindGlobalName() {
+bool BaselineCompilerCodeGen::tryOptimizeBindUnqualifiedGlobalName() {
   JSScript* script = handler.script();
   MOZ_ASSERT(!script->hasNonSyntacticScope());
 
   Rooted<GlobalObject*> global(cx, &script->global());
   Rooted<PropertyName*> name(cx, script->getName(handler.pc()));
-  if (JSObject* binding = MaybeOptimizeBindGlobalName(cx, global, name)) {
+  if (JSObject* binding =
+          MaybeOptimizeBindUnqualifiedGlobalName(cx, global, name)) {
     frame.push(ObjectValue(*binding));
     return true;
   }
@@ -3272,14 +3257,14 @@ bool BaselineCompilerCodeGen::tryOptimizeBindGlobalName() {
 }
 
 template <>
-bool BaselineInterpreterCodeGen::tryOptimizeBindGlobalName() {
-  // Interpreter doesn't optimize simple BindGNames.
+bool BaselineInterpreterCodeGen::tryOptimizeBindUnqualifiedGlobalName() {
+  // Interpreter doesn't optimize simple BindUnqualifiedGNames.
   return false;
 }
 
 template <typename Handler>
-bool BaselineCodeGen<Handler>::emit_BindGName() {
-  if (tryOptimizeBindGlobalName()) {
+bool BaselineCodeGen<Handler>::emit_BindUnqualifiedGName() {
+  if (tryOptimizeBindUnqualifiedGlobalName()) {
     return true;
   }
 
@@ -3707,6 +3692,21 @@ template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_GetName() {
   frame.syncStack(0);
 
+  masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+
+  // Call IC.
+  if (!emitNextIC()) {
+    return false;
+  }
+
+  // Mark R0 as pushed stack value.
+  frame.push(R0);
+  return true;
+}
+
+template <typename Handler>
+bool BaselineCodeGen<Handler>::emit_BindUnqualifiedName() {
+  frame.syncStack(0);
   masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
 
   // Call IC.
@@ -4500,20 +4500,28 @@ bool BaselineCodeGen<Handler>::emit_OptimizeSpreadCall() {
 
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_ImplicitThis() {
-  frame.syncStack(0);
-  masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+  frame.popRegsAndSync(1);
 
-  prepareVMCall();
+  Register env = R1.scratchReg();
+  masm.unboxObject(R0, env);
 
-  pushScriptNameArg(R1.scratchReg(), R2.scratchReg());
-  pushArg(R0.scratchReg());
+  Label slowPath, skipCall;
+  masm.computeImplicitThis(env, R0, &slowPath);
+  masm.jump(&skipCall);
 
-  using Fn = bool (*)(JSContext*, HandleObject, Handle<PropertyName*>,
-                      MutableHandleValue);
-  if (!callVM<Fn, ImplicitThisOperation>()) {
-    return false;
+  masm.bind(&slowPath);
+  {
+    prepareVMCall();
+
+    pushArg(env);
+
+    using Fn = void (*)(JSContext*, HandleObject, MutableHandleValue);
+    if (!callVM<Fn, ImplicitThisOperation>()) {
+      return false;
+    }
   }
 
+  masm.bind(&skipCall);
   frame.push(R0);
   return true;
 }
@@ -4882,31 +4890,25 @@ bool BaselineCodeGen<Handler>::emit_LeaveWith() {
 template <typename Handler>
 bool BaselineCodeGen<Handler>::emit_AddDisposable() {
   frame.syncStack(0);
-
-  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
-  MOZ_ASSERT(!regs.has(FramePointer));
   prepareVMCall();
 
-  Register needsClosure = regs.takeAny();
-  Register method = regs.takeAny();
-  Register value = regs.takeAny();
-  Register baselineFrame = regs.takeAny();
-  Register hint = regs.takeAny();
+  pushUint8BytecodeOperandArg(R0.scratchReg());  // hint
 
-  masm.loadBaselineFramePtr(FramePointer, baselineFrame);
-  masm.loadValue(frame.addressOfStackValue(-1), ValueOperand(needsClosure));
-  masm.loadValue(frame.addressOfStackValue(-2), ValueOperand(method));
-  masm.loadValue(frame.addressOfStackValue(-3), ValueOperand(value));
+  masm.unboxBoolean(frame.addressOfStackValue(-1), R0.scratchReg());
+  pushArg(R0.scratchReg());  // needsClosure
 
-  pushUint8BytecodeOperandArg(hint);
-  pushArg(needsClosure);
-  pushArg(method);
-  pushArg(value);
-  pushArg(baselineFrame);
+  masm.loadValue(frame.addressOfStackValue(-2), R1);
+  pushArg(R1);  // method
 
-  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::Handle<JS::Value>,
-                      JS::Handle<JS::Value>, JS::Handle<JS::Value>, UsingHint);
-  if (!callVM<Fn, jit::AddDisposableResource>()) {
+  masm.loadValue(frame.addressOfStackValue(-3), R2);
+  pushArg(R2);  // object
+
+  masm.loadPtr(frame.addressOfEnvironmentChain(), R0.scratchReg());
+  pushArg(R0.scratchReg());
+
+  using Fn = bool (*)(JSContext*, JS::Handle<JSObject*>, JS::Handle<JS::Value>,
+                      JS::Handle<JS::Value>, bool, UsingHint);
+  if (!callVM<Fn, js::AddDisposableResourceToCapability>()) {
     return false;
   }
   frame.popn(3);
@@ -4932,19 +4934,17 @@ bool BaselineCodeGen<Handler>::emit_CreateSuppressedError() {
   frame.popRegsAndSync(2);
   prepareVMCall();
 
-  masm.loadBaselineFramePtr(FramePointer, R2.scratchReg());
-
-  using Fn = bool (*)(JSContext*, BaselineFrame*, JS::Handle<JS::Value>,
-                      JS::Handle<JS::Value>, JS::MutableHandle<JS::Value>);
-
   pushArg(R1);  // suppressed
   pushArg(R0);  // error
-  pushArg(R2.scratchReg());
 
-  if (!callVM<Fn, jit::CreateSuppressedError>()) {
+  using Fn = ErrorObject* (*)(JSContext*, JS::Handle<JS::Value>,
+                              JS::Handle<JS::Value>);
+
+  if (!callVM<Fn, js::CreateSuppressedError>()) {
     return false;
   }
 
+  masm.tagValue(JSVAL_TYPE_OBJECT, ReturnReg, R0);
   frame.push(R0);
   return true;
 }

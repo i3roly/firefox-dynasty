@@ -35,6 +35,7 @@ import mozilla.components.browser.state.state.CustomTabMenuItem
 import mozilla.components.browser.state.state.createCustomTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.browser.toolbar.BrowserToolbar
+import mozilla.components.browser.toolbar.display.DisplayToolbar
 import mozilla.components.concept.toolbar.Toolbar
 import mozilla.components.feature.session.SessionUseCases
 import mozilla.components.feature.tabs.CustomTabsUseCases
@@ -45,6 +46,7 @@ import mozilla.components.support.test.ext.joinBlocking
 import mozilla.components.support.test.middleware.CaptureActionsMiddleware
 import mozilla.components.support.test.mock
 import mozilla.components.support.test.robolectric.testContext
+import mozilla.components.support.test.whenever
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -67,6 +69,12 @@ class CustomTabsToolbarFeatureTest {
     fun `start without sessionId invokes nothing`() {
         val store = BrowserStore()
         val toolbar: BrowserToolbar = mock()
+        val display: DisplayToolbar = mock()
+        val colors: DisplayToolbar.Colors = mock()
+        whenever(toolbar.display).thenReturn(display)
+        whenever(display.colors).thenReturn(colors)
+        whenever(colors.menu).thenReturn(0)
+
         val useCases = CustomTabsUseCases(
             store = store,
             loadUrlUseCase = SessionUseCases(store).loadUrl,
@@ -155,6 +163,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         val feature = CustomTabsToolbarFeature(store, toolbar, sessionId = "mozilla", useCases = useCases, window = window) {}
 
         feature.init(tab.config)
@@ -195,6 +204,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         `when`(window.insetsController).thenReturn(mock())
 
         val feature = CustomTabsToolbarFeature(store, toolbar, sessionId = "mozilla", useCases = useCases, window = window) {}
@@ -233,6 +243,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         `when`(window.insetsController).thenReturn(mock())
         val initialDisplayToolbarColors = toolbar.display.colors
 
@@ -297,6 +308,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         `when`(window.insetsController).thenReturn(mock())
 
         run {
@@ -341,6 +353,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         `when`(window.insetsController).thenReturn(mock())
 
         run {
@@ -386,6 +399,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         `when`(window.insetsController).thenReturn(mock())
 
         run {
@@ -431,6 +445,7 @@ class CustomTabsToolbarFeatureTest {
         )
         val window: Window = mock()
         `when`(window.decorView).thenReturn(mock())
+        `when`(window.context).thenReturn(testContext)
         `when`(window.insetsController).thenReturn(mock())
 
         run {

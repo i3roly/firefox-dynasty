@@ -1876,7 +1876,7 @@ bool BuildTextRunsScanner::ContinueTextRunAcrossFrames(nsTextFrame* aFrame1,
         //
         // 1. Any of margin/border/padding separating the two typographic
         //    character units in the inline axis is non-zero.
-        const auto& margin = ctx->StyleMargin()->mMargin.Get(aSide);
+        const auto& margin = ctx->StyleMargin()->GetMargin(aSide);
         if (!margin.ConvertsToLength() ||
             margin.AsLengthPercentage().ToLength() != 0) {
           return true;
@@ -4275,11 +4275,11 @@ class nsContinuingTextFrame final : public nsTextFrame {
     return mFirstContinuation;
   };
 
-  void AddInlineMinISize(gfxContext* aRenderingContext,
+  void AddInlineMinISize(const IntrinsicSizeInput& aInput,
                          InlineMinISizeData* aData) final {
     // Do nothing, since the first-in-flow accounts for everything.
   }
-  void AddInlinePrefISize(gfxContext* aRenderingContext,
+  void AddInlinePrefISize(const IntrinsicSizeInput& aInput,
                           InlinePrefISizeData* aData) final {
     // Do nothing, since the first-in-flow accounts for everything.
   }
@@ -4402,9 +4402,9 @@ nsIFrame* nsContinuingTextFrame::FirstInFlow() const {
 // XXX We really need to make :first-letter happen during frame
 // construction.
 
-nscoord nsTextFrame::IntrinsicISize(gfxContext* aContext,
+nscoord nsTextFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                     IntrinsicISizeType aType) {
-  return IntrinsicISizeFromInline(aContext, aType);
+  return IntrinsicISizeFromInline(aInput, aType);
 }
 
 //----------------------------------------------------------------------
@@ -4823,10 +4823,9 @@ static bool IsUnderlineRight(const ComputedStyle& aStyle) {
   if (!langAtom) {
     return false;
   }
-  nsDependentAtomString langStr(langAtom);
-  return (StringBeginsWith(langStr, u"ja"_ns) ||
-          StringBeginsWith(langStr, u"ko"_ns)) &&
-         (langStr.Length() == 2 || langStr[2] == '-');
+  return nsStyleUtil::MatchesLanguagePrefix(langAtom, u"ja") ||
+         nsStyleUtil::MatchesLanguagePrefix(langAtom, u"ko") ||
+         nsStyleUtil::MatchesLanguagePrefix(langAtom, u"mn");
 }
 
 void nsTextFrame::GetTextDecorations(
@@ -4883,8 +4882,8 @@ void nsTextFrame::GetTextDecorations(
       // This handles the <a href="blah.html"><font color="green">La
       // la la</font></a> case. The link underline should be green.
       useOverride = true;
-      overrideColor =
-          nsLayoutUtils::GetColor(f, &nsStyleTextReset::mTextDecorationColor);
+      overrideColor = nsLayoutUtils::GetTextColor(
+          f, &nsStyleTextReset::mTextDecorationColor);
     }
 
     nsBlockFrame* fBlock = do_QueryFrame(f);
@@ -4938,11 +4937,11 @@ void nsTextFrame::GetTextDecorations(
         //     for SVG text, and have e.g. text-decoration-color:red to
         //     override the fill paint of the decoration.
         color = aColorResolution == eResolvedColors
-                    ? nsLayoutUtils::GetColor(f, &nsStyleSVG::mFill)
+                    ? nsLayoutUtils::GetTextColor(f, &nsStyleSVG::mFill)
                     : NS_SAME_AS_FOREGROUND_COLOR;
       } else {
-        color =
-            nsLayoutUtils::GetColor(f, &nsStyleTextReset::mTextDecorationColor);
+        color = nsLayoutUtils::GetTextColor(
+            f, &nsStyleTextReset::mTextDecorationColor);
       }
 
       bool swapUnderlineAndOverline =
@@ -5103,7 +5102,7 @@ nsRect nsTextFrame::UpdateTextEmphasis(WritingMode aWM,
   info->advance = info->textRun->GetAdvanceWidth();
 
   // Calculate the baseline offset
-  LogicalSide side = styleText->TextEmphasisSide(aWM);
+  LogicalSide side = styleText->TextEmphasisSide(aWM, StyleFont()->mLanguage);
   LogicalSize frameSize = GetLogicalSize(aWM);
   // The overflow rect is inflated in the inline direction by half
   // advance of the emphasis mark on each side, so that even if a mark
@@ -6538,7 +6537,7 @@ void nsTextFrame::DrawEmphasisMarks(gfxContext* aContext, WritingMode aWM,
   nscolor color =
       aDecorationOverrideColor
           ? *aDecorationOverrideColor
-          : nsLayoutUtils::GetColor(this, &nsStyleText::mTextEmphasisColor);
+          : nsLayoutUtils::GetTextColor(this, &nsStyleText::mTextEmphasisColor);
   aContext->SetColor(sRGBColor::FromABGR(color));
   gfx::Point pt;
   if (!isTextCombined) {
@@ -8153,8 +8152,14 @@ ClusterIterator::ClusterIterator(nsTextFrame* aTextFrame, int32_t aPosition,
   }
 
   mFrag = aTextFrame->TextFragment();
+
+  const uint32_t textOffset =
+      AssertedCast<uint32_t>(aTextFrame->GetContentOffset());
+  const uint32_t textLen =
+      AssertedCast<uint32_t>(aTextFrame->GetContentLength());
+
   // If we're in a password field, some characters may be masked.  In such
-  // case, we need to treat each masked character is a mask character since
+  // case, we need to treat each masked character as a mask character since
   // we shouldn't expose word boundary which is hidden by the masking.
   if (aTextFrame->GetContent() && mFrag->GetLength() > 0 &&
       aTextFrame->GetContent()->HasFlag(NS_MAYBE_MASKED) &&
@@ -8166,24 +8171,38 @@ ClusterIterator::ClusterIterator(nsTextFrame* aTextFrame, int32_t aPosition,
     // can be just AddRefed in `mMaskedFrag`.
     nsString maskedText;
     maskedText.SetCapacity(mFrag->GetLength());
-    for (uint32_t i = 0; i < mFrag->GetLength(); ++i) {
-      mIterator.SetOriginalOffset(i);
-      uint32_t skippedOffset = mIterator.GetSkippedOffset();
+    // Note that aTextFrame may not cover the whole of mFrag (in cases with
+    // bidi continuations), so we cannot rely on its textrun (and associated
+    // styles) being available for the entire fragment.
+    uint32_t i = 0;
+    // Just copy any text that precedes what aTextFrame covers.
+    while (i < textOffset) {
+      maskedText.Append(mFrag->CharAt(i++));
+    }
+    // For the range covered by aTextFrame, mask chars if appropriate.
+    while (i < textOffset + textLen) {
+      uint32_t skippedOffset = mIterator.ConvertOriginalToSkipped(i);
+      bool mask =
+          skippedOffset < transformedTextRun->GetLength()
+              ? transformedTextRun->mStyles[skippedOffset]->mMaskPassword
+              : false;
       if (mFrag->IsHighSurrogateFollowedByLowSurrogateAt(i)) {
-        if (transformedTextRun->mStyles[skippedOffset]->mMaskPassword) {
+        if (mask) {
           maskedText.Append(kPasswordMask);
           maskedText.Append(kPasswordMask);
         } else {
           maskedText.Append(mFrag->CharAt(i));
           maskedText.Append(mFrag->CharAt(i + 1));
         }
-        ++i;
+        i += 2;
       } else {
-        maskedText.Append(
-            transformedTextRun->mStyles[skippedOffset]->mMaskPassword
-                ? kPasswordMask
-                : mFrag->CharAt(i));
+        maskedText.Append(mask ? kPasswordMask : mFrag->CharAt(i));
+        ++i;
       }
+    }
+    // Copy any trailing text from the fragment.
+    while (i < mFrag->GetLength()) {
+      maskedText.Append(mFrag->CharAt(i++));
     }
     mMaskedFrag.SetTo(maskedText, mFrag->IsBidi(), true);
     mFrag = &mMaskedFrag;
@@ -8194,11 +8213,6 @@ ClusterIterator::ClusterIterator(nsTextFrame* aTextFrame, int32_t aPosition,
       mFrag, aTrimSpaces ? nsTextFrame::TrimmedOffsetFlags::Default
                          : nsTextFrame::TrimmedOffsetFlags::NoTrimAfter |
                                nsTextFrame::TrimmedOffsetFlags::NoTrimBefore);
-
-  const uint32_t textOffset =
-      AssertedCast<uint32_t>(aTextFrame->GetContentOffset());
-  const uint32_t textLen =
-      AssertedCast<uint32_t>(aTextFrame->GetContentLength());
 
   // Allocate an extra element to record the word break at the end of the line
   // or text run in mWordBreak[textLen].
@@ -8863,7 +8877,7 @@ static bool IsUnreflowedLetterFrame(nsIFrame* aFrame) {
 // XXX Need to do something here to avoid incremental reflow bugs due to
 // first-line changing min-width
 /* virtual */
-void nsTextFrame::AddInlineMinISize(gfxContext* aRenderingContext,
+void nsTextFrame::AddInlineMinISize(const IntrinsicSizeInput& aInput,
                                     InlineMinISizeData* aData) {
   // Check if this textframe belongs to a first-letter frame that has not yet
   // been reflowed; if so, we need to deal with splitting off a continuation
@@ -8902,7 +8916,7 @@ void nsTextFrame::AddInlineMinISize(gfxContext* aRenderingContext,
       }
 
       // This will process all the text frames that share the same textrun as f.
-      f->AddInlineMinISizeForFlow(aRenderingContext, aData, trtype);
+      f->AddInlineMinISizeForFlow(aInput.mContext, aData, trtype);
       lastTextRun = f->GetTextRun(trtype);
     }
   }
@@ -9030,7 +9044,7 @@ void nsTextFrame::AddInlinePrefISizeForFlow(gfxContext* aRenderingContext,
 // XXX Need to do something here to avoid incremental reflow bugs due to
 // first-line and first-letter changing pref-width
 /* virtual */
-void nsTextFrame::AddInlinePrefISize(gfxContext* aRenderingContext,
+void nsTextFrame::AddInlinePrefISize(const IntrinsicSizeInput& aInput,
                                      InlinePrefISizeData* aData) {
   float inflation = nsLayoutUtils::FontSizeInflationFor(this);
   TextRunType trtype = (inflation == 1.0f) ? eNotInflated : eInflated;
@@ -9062,7 +9076,7 @@ void nsTextFrame::AddInlinePrefISize(gfxContext* aRenderingContext,
       }
 
       // This will process all the text frames that share the same textrun as f.
-      f->AddInlinePrefISizeForFlow(aRenderingContext, aData, trtype);
+      f->AddInlinePrefISizeForFlow(aInput.mContext, aData, trtype);
       lastTextRun = f->GetTextRun(trtype);
     }
   }

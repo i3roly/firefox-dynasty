@@ -22,14 +22,22 @@
 <script>
 async function getViewportMetrics() {
   return SpecialPowers.spawn(parent, [], () => {
-    return [ content.window.innerHeight, content.window.visualViewport.height ];
+    return [ content.window.innerHeight,
+             content.window.visualViewport.height,
+             content.window.visualViewport.width ];
   });
 }
 
-let initial_window_height, initial_visual_viewport_height;
+let initial_window_height, initial_visual_viewport_width, initial_visual_viewport_height;
 
 // setup a meta viewport tag in the top document.
-add_task(async () => {
+add_setup(async () => {
+  // Try to close the software keyboard to invoke `documentElement.focus()`.
+  document.documentElement.focus();
+  await SimpleTest.promiseWaitForCondition(
+    () => document.activeElement == document.documentElement,
+    "Waiting for focus");
+
   await SpecialPowers.spawn(parent, [], async () => {
     const initial_scale = content.window.visualViewport.scale;
 
@@ -56,12 +64,23 @@ add_task(async () => {
   });
 
   SimpleTest.registerCleanupFunction(async () => {
-    await SpecialPowers.spawn(parent, [], () => {
+    await SpecialPowers.spawn(parent, [], async () => {
       const meta = content.document.querySelector("#interactive-widget");
-      meta.remove();
+      meta.setAttribute("content", "");
+      // Flush the change above.
+      content.document.documentElement.getBoundingClientRect();
+      // A dummy Promise to make sure that SpecialPowers.spawn's Promise will
+      // never be resolved until this script has run in the parent context.
+      await new Promise(resolve => resolve());
     });
   });
-  [ initial_window_height, initial_visual_viewport_height ] = await getViewportMetrics();
+  [ initial_window_height,
+    initial_visual_viewport_height, initial_visual_viewport_width ] = await getViewportMetrics();
+  ok(initial_visual_viewport_width < initial_visual_viewport_height,
+     `the visual viewport height (${initial_visual_viewport_height}) is less ` +
+     `than the visual viewport width (${initial_visual_viewport_width}), ` +
+     `it hightly suspects the virtual keyboard persists there, thus ` +
+     `we can't run this interactive-widget tests properly`);
 });
 
 async function setupInteractiveWidget(aValue) {

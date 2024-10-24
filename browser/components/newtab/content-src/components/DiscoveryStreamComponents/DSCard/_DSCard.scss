@@ -19,23 +19,6 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
     border-radius: var(--border-radius-medium);
     position: relative;
     overflow: hidden;
-  }
-
-  &.placeholder-seen {
-    &::before {
-      content: '';
-      display: block;
-      position: absolute;
-      top: 0;
-      inset-inline-start: -100%;
-      height: 100%;
-      width: 100%;
-      background: linear-gradient(90deg, rgba(255, 255, 255, 0%) 0%, var(--newtab-background-color-secondary) 50%, rgba(255, 255, 255, 0%) 100%);
-
-      @media (prefers-reduced-motion: no-preference) {
-        animation: loading 1.5s infinite;
-      }
-    }
 
     .placeholder-fill {
       background: var(--newtab-button-active-background);
@@ -66,6 +49,24 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
       margin-inline: var(--space-large);
       margin-block-end: var(--space-large);
     }
+  }
+
+  &.placeholder-seen {
+    &::before {
+      content: '';
+      display: block;
+      position: absolute;
+      top: 0;
+      inset-inline-start: -100%;
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0%) 0%, var(--newtab-background-color-secondary) 50%, rgba(255, 255, 255, 0%) 100%);
+      z-index: 2;
+
+      @media (prefers-reduced-motion: no-preference) {
+        animation: loading 1.5s infinite;
+      }
+    }
 
     @keyframes loading {
       0% {
@@ -92,7 +93,7 @@ $ds-card-image-gradient-solid: rgba(0, 0, 0, 100%);
     height: 0;
     transition: opacity;
     transition-duration: 0s;
-    padding-top: 50%;
+    padding-block-start: 50%;
     pointer-events: none;
     background: $black-40;
     border-radius: 8px 8px 0 0;

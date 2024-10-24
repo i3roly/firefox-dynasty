@@ -7,10 +7,9 @@ use askama::Template;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
-use uniffi_bindgen::ComponentInterface;
 
 mod ci_list;
 mod render;
@@ -28,6 +27,12 @@ struct CliArgs {
     // This is a really convoluted set of arguments, but we're only expecting to be called by
     // `mach_commands.py`
     #[clap(long, value_name = "FILE")]
+    library_path: Utf8PathBuf,
+
+    #[clap(long, value_name = "FILE")]
+    fixtures_library_path: Utf8PathBuf,
+
+    #[clap(long, value_name = "FILE")]
     js_dir: Utf8PathBuf,
 
     #[clap(long, value_name = "FILE")]
@@ -35,21 +40,13 @@ struct CliArgs {
 
     #[clap(long, value_name = "FILE")]
     cpp_path: Utf8PathBuf,
-
-    #[clap(long, value_name = "FILE")]
-    fixture_cpp_path: Utf8PathBuf,
 }
 
-/// Configuration for all components, read from `uniffi.toml`
-type ConfigMap = HashMap<String, Config>;
+type Component = uniffi_bindgen::Component<Config>;
 
 /// Configuration for a single Component
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
-    crate_name: String,
-    udl_file: String,
-    #[serde(default)]
-    fixture: bool,
     #[serde(default)]
     receiver_thread: ReceiverThreadConfig,
 }
@@ -74,29 +71,35 @@ fn render(out_path: Utf8PathBuf, template: impl Template) -> Result<()> {
 
 fn render_cpp(
     path: Utf8PathBuf,
-    prefix: &str,
-    components: &Vec<(ComponentInterface, Config)>,
+    components: &[Component],
+    fixture_components: &[Component],
     function_ids: &FunctionIds,
     object_ids: &ObjectIds,
     callback_ids: &CallbackIds,
 ) -> Result<()> {
     render(
         path,
-        CPPScaffoldingTemplate::new(prefix, components, function_ids, object_ids, callback_ids),
+        CPPScaffoldingTemplate::new(
+            components,
+            fixture_components,
+            function_ids,
+            object_ids,
+            callback_ids,
+        ),
     )
 }
 
 fn render_js(
     out_dir: Utf8PathBuf,
-    components: &Vec<(ComponentInterface, Config)>,
+    components: &[Component],
     function_ids: &FunctionIds,
     object_ids: &ObjectIds,
     callback_ids: &CallbackIds,
 ) -> Result<()> {
-    for (ci, config) in components {
+    for c in components {
         let template = JSBindingsTemplate {
-            ci,
-            config,
+            ci: &c.ci,
+            config: &c.config,
             function_ids,
             object_ids,
             callback_ids,
@@ -109,24 +112,14 @@ fn render_js(
 
 pub fn run_main() -> Result<()> {
     let args = CliArgs::parse();
-    let config_map: ConfigMap =
-        toml::from_str(include_str!("../config.toml")).expect("Error parsing config.toml");
-    let components = ComponentUniverse::new(config_map)?;
+    let components = ComponentUniverse::new(args.library_path, args.fixtures_library_path)?;
     let function_ids = FunctionIds::new(&components);
     let object_ids = ObjectIds::new(&components);
     let callback_ids = CallbackIds::new(&components);
 
     render_cpp(
         args.cpp_path,
-        "UniFFI",
         &components.components,
-        &function_ids,
-        &object_ids,
-        &callback_ids,
-    )?;
-    render_cpp(
-        args.fixture_cpp_path,
-        "UniFFIFixtures",
         &components.fixture_components,
         &function_ids,
         &object_ids,

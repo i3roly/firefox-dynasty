@@ -64,9 +64,9 @@ class FenixSnackbarKtTest {
     fun `WHEN bookmarkMessage is called with different parameters THEN correct text will be set`() {
         val mockContext: Context = mockk {
             every { getString(R.string.bookmark_saved_snackbar) }
-                .answers { "test1" }
+                .answers { "Bookmark saved in title!" }
             every { getString(R.string.snackbar_message_bookmarks_saved) }
-                .answers { "test2" }
+                .answers { "Bookmarks saved in title!" }
         }
         val snackbar: FenixSnackbar = mockk {
             every { context }.answers { mockContext }
@@ -77,8 +77,8 @@ class FenixSnackbarKtTest {
         snackbar.bookmarkMessage(2)
 
         verifyOrder {
-            snackbar.setText("test1")
-            snackbar.setText("test2")
+            snackbar.setText("Bookmark saved in title!")
+            snackbar.setText("Bookmarks saved in title!")
         }
     }
 

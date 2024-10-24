@@ -17,8 +17,10 @@ from .base import (AsyncCallbackHandler,
                    RefTestImplementation,
                    TestharnessExecutor,
                    TimedRunner,
+                   get_pages,
                    strip_server)
 from .protocol import (BaseProtocolPart,
+                       PrintProtocolPart,
                        TestharnessProtocolPart,
                        Protocol,
                        SelectorProtocolPart,
@@ -42,6 +44,7 @@ from .protocol import (BaseProtocolPart,
                        BidiScriptProtocolPart,
                        DevicePostureProtocolPart,
                        StorageProtocolPart,
+                       VirtualPressureSourceProtocolPart,
                        merge_dicts)
 
 from typing import List, Optional, Tuple
@@ -316,6 +319,53 @@ class WebDriverTestharnessProtocolPart(TestharnessProtocolPart):
                 pass
 
 
+class WebDriverPrintProtocolPart(PrintProtocolPart):
+    CM_PER_INCH = 2.54
+
+    def setup(self):
+        self.webdriver = self.parent.webdriver
+        self.runner_handle = None
+
+    def load_runner(self):
+        url = urljoin(self.parent.executor.server_url("http"), "/print_pdf_runner.html")
+        self.logger.debug("Loading %s" % url)
+        try:
+            self.webdriver.url = url
+        except Exception as e:
+            self.logger.critical(
+                "Loading initial page %s failed. Ensure that the "
+                "there are no other programs bound to this port and "
+                "that your firewall rules or network setup does not "
+                "prevent access.\n%s" % (url, traceback.format_exc(e)))
+            raise
+        self.runner_handle = self.webdriver.window_handle
+
+    def render_as_pdf(self, width, height):
+        # All units passed to `print()` are in cm. See [0] for testing specifications.
+        #
+        # [0]: https://web-platform-tests.org/writing-tests/print-reftests.html
+        margin = 0.5 * self.CM_PER_INCH
+        pdf_base64 = self.webdriver.print(page={"width": width, "height": height},
+                                          margin={"top": margin, "right": margin, "bottom": margin,
+                                                  "left": margin},
+                                          background=True,
+                                          shrink_to_fit=False)
+        return pdf_base64
+
+    def pdf_to_png(self, pdf_base64, ranges):
+        handle = self.webdriver.window_handle
+        self.webdriver.window_handle = self.runner_handle
+        try:
+            rv = self.webdriver.execute_async_script("""
+let callback = arguments[arguments.length - 1];
+render('%s').then(result => callback(result))""" % pdf_base64)
+            page_numbers = get_pages(ranges, len(rv))
+            rv = [item for i, item in enumerate(rv) if i + 1 in page_numbers]
+            return rv
+        finally:
+            self.webdriver.window_handle = handle
+
+
 class WebDriverSelectorProtocolPart(SelectorProtocolPart):
     def setup(self):
         self.webdriver = self.parent.webdriver
@@ -379,6 +429,7 @@ class WebDriverWindowProtocolPart(WindowProtocolPart):
     def get_rect(self):
         self.logger.info("Getting rect")
         return self.webdriver.window.rect
+
 
 class WebDriverSendKeysProtocolPart(SendKeysProtocolPart):
     def setup(self):
@@ -486,6 +537,7 @@ class WebDriverSPCTransactionsProtocolPart(SPCTransactionsProtocolPart):
         body = {"mode": mode}
         return self.webdriver.send_session_command("POST", "secure-payment-confirmation/set-mode", body)
 
+
 class WebDriverRPHRegistrationsProtocolPart(RPHRegistrationsProtocolPart):
     def setup(self):
         self.webdriver = self.parent.webdriver
@@ -493,6 +545,7 @@ class WebDriverRPHRegistrationsProtocolPart(RPHRegistrationsProtocolPart):
     def set_rph_registration_mode(self, mode):
         body = {"mode": mode}
         return self.webdriver.send_session_command("POST", "custom-handlers/set-mode", body)
+
 
 class WebDriverFedCMProtocolPart(FedCMProtocolPart):
     def setup(self):
@@ -550,6 +603,7 @@ class WebDriverVirtualSensorPart(VirtualSensorProtocolPart):
     def get_virtual_sensor_information(self, sensor_type):
         return self.webdriver.send_session_command("GET", "sensor/%s" % sensor_type)
 
+
 class WebDriverDevicePostureProtocolPart(DevicePostureProtocolPart):
     def setup(self):
         self.webdriver = self.parent.webdriver
@@ -561,6 +615,7 @@ class WebDriverDevicePostureProtocolPart(DevicePostureProtocolPart):
     def clear_device_posture(self):
         return self.webdriver.send_session_command("DELETE", "deviceposture")
 
+
 class WebDriverStorageProtocolPart(StorageProtocolPart):
     def setup(self):
         self.webdriver = self.parent.webdriver
@@ -568,9 +623,28 @@ class WebDriverStorageProtocolPart(StorageProtocolPart):
     def run_bounce_tracking_mitigations(self):
         return self.webdriver.send_session_command("DELETE", "storage/run_bounce_tracking_mitigations")
 
+
+class WebDriverVirtualPressureSourceProtocolPart(VirtualPressureSourceProtocolPart):
+    def setup(self):
+        self.webdriver = self.parent.webdriver
+
+    def create_virtual_pressure_source(self, source_type, metadata):
+        body = {"type": source_type}
+        body.update(metadata)
+        return self.webdriver.send_session_command("POST", "pressuresource", body)
+
+    def update_virtual_pressure_source(self, source_type, sample):
+        body = {"sample": sample}
+        return self.webdriver.send_session_command("POST", "pressuresource/%s" % source_type, body)
+
+    def remove_virtual_pressure_source(self, source_type):
+        return self.webdriver.send_session_command("DELETE", "pressuresource/%s" % source_type)
+
+
 class WebDriverProtocol(Protocol):
     enable_bidi = False
     implements = [WebDriverBaseProtocolPart,
+                  WebDriverPrintProtocolPart,
                   WebDriverTestharnessProtocolPart,
                   WebDriverSelectorProtocolPart,
                   WebDriverAccessibilityProtocolPart,
@@ -589,7 +663,8 @@ class WebDriverProtocol(Protocol):
                   WebDriverDebugProtocolPart,
                   WebDriverVirtualSensorPart,
                   WebDriverDevicePostureProtocolPart,
-                  WebDriverStorageProtocolPart]
+                  WebDriverStorageProtocolPart,
+                  WebDriverVirtualPressureSourceProtocolPart]
 
     def __init__(self, executor, browser, capabilities, **kwargs):
         super().__init__(executor, browser)
@@ -625,6 +700,8 @@ class WebDriverProtocol(Protocol):
         self.webdriver.start()
 
     def teardown(self):
+        if not self.webdriver:
+            return
         self.logger.debug("Hanging up on WebDriver session")
         try:
             self.webdriver.end()
@@ -699,23 +776,29 @@ class WebDriverRun(TimedRunner):
             self.result = True, self.func(self.protocol, self.url, self.timeout)
         except (webdriver_error.TimeoutException, webdriver_error.ScriptTimeoutException):
             self.result = False, ("EXTERNAL-TIMEOUT", None)
-        except socket.timeout:
-            # Checking if the browser is alive below is likely to hang, so mark
-            # this case as a CRASH unconditionally.
-            self.result = False, ("CRASH", None)
         except Exception as e:
-            if (isinstance(e, webdriver_error.WebDriverException) and
-                    e.http_status == 408 and
-                    e.status_code == "asynchronous script timeout"):
-                # workaround for https://bugs.chromium.org/p/chromedriver/issues/detail?id=2001
-                self.result = False, ("EXTERNAL-TIMEOUT", None)
-            else:
+            status, message = None, None
+            if isinstance(e, socket.timeout):
+                # Checking if the browser is alive in this case is likely to hang,
+                # so mark it as a CRASH unconditionally.
+                status = "CRASH"
+            elif isinstance(e, webdriver_error.WebDriverException):
+                # In a multiple processes architecture, the browser process might be
+                # alive even when the renderer process has crashed.
+                # TODO(https://github.com/w3c/webdriver/issues/1308): The http
+                # status and status code below are chromium specific. Replace
+                # that with a standarded code once the issue is resolved.
+                if e.http_status == 500 and e.status_code == "disconnected":
+                    status = "CRASH"
+            if status is None:
                 status = "INTERNAL-ERROR" if self.protocol.is_alive() else "CRASH"
+
+            if status != "EXTERNAL-TIMEOUT":
                 message = str(getattr(e, "message", ""))
                 if message:
                     message += "\n"
                 message += traceback.format_exc()
-                self.result = False, (status, message)
+            self.result = False, (status, message)
         finally:
             self.result_flag.set()
 
@@ -766,7 +849,8 @@ class WebDriverTestharnessExecutor(TestharnessExecutor):
                                      self.extra_timeout).run()
 
         if success:
-            return self.convert_result(test, data)
+            data, extra = data
+            return self.convert_result(test, data, extra=extra)
 
         return (test.make_result(*data), [])
 
@@ -874,6 +958,10 @@ class WebDriverTestharnessExecutor(TestharnessExecutor):
             # Use protocol loop to run the async cleanup.
             protocol.loop.run_until_complete(protocol.bidi_events.unsubscribe_all())
 
+        extra = {}
+        if (leak_part := getattr(protocol, "leak", None)) and (counters := leak_part.check()):
+            extra["leak_counters"] = counters
+
         # Attempt to clean up any leftover windows, if allowed. This is
         # preferable as it will blame the correct test if something goes wrong
         # closing windows, but if the user wants to see the test results we
@@ -885,7 +973,7 @@ class WebDriverTestharnessExecutor(TestharnessExecutor):
             # TODO: what to do if there are more then 1 unexpected exceptions?
             raise unexpected_exceptions[0]
 
-        return rv
+        return rv, extra
 
     def _get_next_message_classic(self, protocol, url, _):
         """
@@ -979,6 +1067,9 @@ class WebDriverRefTestExecutor(RefTestExecutor):
 
         result = self.implementation.run_test(test)
 
+        if (leak_part := getattr(self.protocol, "leak", None)) and (counters := leak_part.check()):
+            result.setdefault("extra", {})["leak_counters"] = counters
+
         if self.debug_test and result["status"] in ["PASS", "FAIL", "ERROR"] and "extra" in result:
             self.protocol.debug.load_reftest_analyzer(test, result)
 
@@ -998,7 +1089,6 @@ class WebDriverRefTestExecutor(RefTestExecutor):
 
     def _screenshot(self, protocol, url, timeout):
         self.protocol.base.load(url)
-
         self.protocol.base.execute_script(self.wait_script, True)
 
         screenshot = self.protocol.webdriver.screenshot()
@@ -1010,6 +1100,51 @@ class WebDriverRefTestExecutor(RefTestExecutor):
             screenshot = screenshot.split(",", 1)[1]
 
         return screenshot
+
+
+class WebDriverPrintRefTestExecutor(WebDriverRefTestExecutor):
+    is_print = True
+
+    def setup(self, runner, protocol=None):
+        super().setup(runner, protocol)
+        self.protocol.pdf_print.load_runner()
+        self.has_window = False
+        with open(os.path.join(here, "reftest.js")) as f:
+            self.script = f.read()
+
+    def screenshot(self, test, viewport_size, dpi, page_ranges):
+        # https://github.com/web-platform-tests/wpt/issues/7140
+        assert dpi is None
+
+        if not self.has_window:
+            self.protocol.base.execute_script(self.script)
+            self.protocol.base.set_window(self.protocol.webdriver.handles[-1])
+            self.has_window = True
+
+        self.viewport_size = viewport_size
+        self.page_ranges = page_ranges.get(test.url)
+        timeout = self.timeout_multiplier * test.timeout if self.debug_info is None else None
+        test_url = self.test_url(test)
+
+        return WebDriverRun(self.logger,
+                            self._render,
+                            self.protocol,
+                            test_url,
+                            timeout,
+                            self.extra_timeout).run()
+
+    def _render(self, protocol, url, timeout):
+        protocol.webdriver.url = url
+        protocol.base.execute_script(self.wait_script, asynchronous=True)
+
+        pdf = protocol.pdf_print.render_as_pdf(*self.viewport_size)
+        screenshots = protocol.pdf_print.pdf_to_png(pdf, self.page_ranges)
+        for i, screenshot in enumerate(screenshots):
+            # strip off the data:img/png, part of the url
+            if screenshot.startswith("data:image/png;base64,"):
+                screenshots[i] = screenshot.split(",", 1)[1]
+
+        return screenshots
 
 
 class WebDriverCrashtestExecutor(CrashtestExecutor):
@@ -1052,6 +1187,7 @@ class WebDriverCrashtestExecutor(CrashtestExecutor):
     def do_crashtest(self, protocol, url, timeout):
         protocol.base.load(url)
         protocol.base.execute_script(self.wait_script, asynchronous=True)
-
-        return {"status": "PASS",
-                "message": None}
+        result = {"status": "PASS", "message": None}
+        if (leak_part := getattr(protocol, "leak", None)) and (counters := leak_part.check()):
+            result["extra"] = {"leak_counters": counters}
+        return result

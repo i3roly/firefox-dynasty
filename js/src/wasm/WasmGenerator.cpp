@@ -495,6 +495,7 @@ bool ModuleGenerator::linkCompiledCode(CompiledCode& code) {
 
   for (const CallRefMetricsPatch& patch : code.callRefMetricsPatches) {
     if (!patch.hasOffsetOfOffsetPatch()) {
+      numCallRefMetrics_ += 1;
       continue;
     }
 
@@ -1084,6 +1085,15 @@ bool ModuleGenerator::prepareTier1() {
 }
 
 bool ModuleGenerator::startCompleteTier() {
+#ifdef JS_JITSPEW
+  JS_LOG(wasmCodeMetaStats, mozilla::LogLevel::Info,
+         "CM=..%06lx  MG::startCompleteTier (%s, %u imports, %u functions)",
+         (unsigned long)(uintptr_t(codeMeta_) & 0xFFFFFFL),
+         tier() == Tier::Baseline ? "BL" : "OPT",
+         (uint32_t)codeMeta_->numFuncImports,
+         (uint32_t)codeMeta_->numFuncs() - (uint32_t)codeMeta_->numFuncImports);
+#endif
+
   if (!startCodeBlock(CodeBlock::kindFromTier(tier()))) {
     return false;
   }
@@ -1156,6 +1166,24 @@ bool ModuleGenerator::startCompleteTier() {
 }
 
 bool ModuleGenerator::startPartialTier(uint32_t funcIndex) {
+#ifdef JS_JITSPEW
+  UTF8Bytes name;
+  if (codeMeta_->namePayload.get()) {
+    if (!codeMeta_->getFuncNameForWasm(NameContext::Standalone, funcIndex,
+                                       &name) ||
+        !name.append("\0", 1)) {
+      return false;
+    }
+  }
+  uint32_t bytecodeLen =
+      codeMeta_->funcDefRanges[funcIndex - codeMeta_->numFuncImports]
+          .bodyLength;
+  JS_LOG(wasmCodeMetaStats, mozilla::LogLevel::Info,
+         "CM=..%06lx  MG::startPartialTier  sz=%-4u  %s",
+         (unsigned long)(uintptr_t(codeMeta_) & 0xFFFFFFL), bytecodeLen,
+         name.length() > 0 ? name.begin() : "(unknown-name)");
+#endif
+
   if (!startCodeBlock(CodeBlock::kindFromTier(tier()))) {
     return false;
   }
@@ -1315,6 +1343,16 @@ SharedModule ModuleGenerator::finishModule(
     memcpy(codeMeta->debugHash, hash, sizeof(ModuleHash));
   }
 
+  // Update statistics in the CodeMeta.
+  {
+    auto guard = codeMeta->stats.writeLock();
+    guard->completeNumFuncs = codeMeta->numFuncDefs();
+    guard->completeBCSize = 0;
+    for (const FuncDefRange& fr : codeMeta->funcDefRanges) {
+      guard->completeBCSize += fr.bodyLength;
+    }
+  }
+
   MutableCode code = js_new<Code>(mode(), *codeMeta_, codeMetaForAsmJS_);
   if (!code || !code->initialize(
                    std::move(funcImports_), std::move(sharedStubsCodeBlock_),
@@ -1374,6 +1412,13 @@ SharedModule ModuleGenerator::finishModule(
                                                          bytes.length());
     }
   }
+
+#ifdef JS_JITSPEW
+  JS_LOG(wasmCodeMetaStats, mozilla::LogLevel::Info,
+         "CM=..%06lx  MG::finishModule      (%s, complete tier)",
+         (unsigned long)(uintptr_t(codeMeta_) & 0xFFFFFFL),
+         tier() == Tier::Baseline ? "BL" : "OPT");
+#endif
 
   return module;
 }

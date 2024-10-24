@@ -174,6 +174,7 @@ using dom::MediaStreamConstraints;
 using dom::MediaStreamError;
 using dom::MediaStreamTrack;
 using dom::MediaStreamTrackSource;
+using dom::MediaTrackCapabilities;
 using dom::MediaTrackConstraints;
 using dom::MediaTrackConstraintSet;
 using dom::MediaTrackSettings;
@@ -408,6 +409,12 @@ class DeviceListener : public SupportsWeakPtr {
    * associated with aTrack.
    */
   void GetSettings(MediaTrackSettings& aOutSettings) const;
+
+  /**
+   * Gets the main thread MediaTrackCapabilities from the MediaEngineSource
+   * associated with aTrack.
+   */
+  void GetCapabilities(MediaTrackCapabilities& aOutCapabilities) const;
 
   /**
    * Posts a task to set the enabled state of the device associated with this
@@ -830,6 +837,12 @@ class LocalTrackSource : public MediaStreamTrackSource {
     }
   }
 
+  void GetCapabilities(MediaTrackCapabilities& aOutCapabilities) override {
+    if (mListener) {
+      mListener->GetCapabilities(aOutCapabilities);
+    }
+  }
+
   void Stop() override {
     if (mListener) {
       mListener->Stop();
@@ -1114,6 +1127,12 @@ LocalMediaDevice::GetCanRequestOsLevelPrompt(bool* aCanRequestOsLevelPrompt) {
 void LocalMediaDevice::GetSettings(MediaTrackSettings& aOutSettings) {
   MOZ_ASSERT(NS_IsMainThread());
   Source()->GetSettings(aOutSettings);
+}
+
+void LocalMediaDevice::GetCapabilities(
+    MediaTrackCapabilities& aOutCapabilities) {
+  MOZ_ASSERT(NS_IsMainThread());
+  Source()->GetCapabilities(aOutCapabilities);
 }
 
 MediaEngineSource* LocalMediaDevice::Source() {
@@ -1769,7 +1788,16 @@ void GetUserMediaStreamTask::PrepareDOMStream() {
                       return DeviceListener::DeviceListenerPromise::
                           CreateAndResolve(true, __func__);
                     },
-                    [] {
+                    [](nsresult aError) {
+                      MOZ_ASSERT(NS_FAILED(aError));
+                      if (aError == NS_ERROR_UNEXPECTED) {
+                        return DeviceListener::DeviceListenerPromise::
+                            CreateAndReject(
+                                MakeRefPtr<MediaMgrError>(
+                                    MediaMgrError::Name::NotAllowedError),
+                                __func__);
+                      }
+                      MOZ_ASSERT(aError == NS_ERROR_ABORT);
                       return DeviceListener::DeviceListenerPromise::
                           CreateAndReject(MakeRefPtr<MediaMgrError>(
                                               MediaMgrError::Name::AbortError,
@@ -2153,9 +2181,15 @@ MediaManager::MaybeRequestPermissionAndEnumerateRawDevices(
   }
 
   if (!deviceAccessPromise) {
-    // No device access request needed. Proceed directly.
-    deviceAccessPromise =
-        NativePromise::CreateAndResolve(CamerasAccessStatus::Granted, __func__);
+    // No device access request needed. We can proceed directly, but we still
+    // need to update camera availability, because the camera engine is always
+    // created together with the WebRTC backend, which is done because
+    // devicechange events must work before prompting in cases where persistent
+    // permission has already been given. Making a request to camera access not
+    // allowing a permission request does exactly what we need in this case.
+    ipc::PBackgroundChild* backgroundChild =
+        ipc::BackgroundChild::GetOrCreateForCurrentThread();
+    deviceAccessPromise = backgroundChild->SendRequestCameraAccess(false);
   }
 
   return deviceAccessPromise->Then(
@@ -2190,8 +2224,9 @@ MediaManager::MaybeRequestPermissionAndEnumerateRawDevices(
               "rejected");
         }
 
-        if (aParams.mFlags.contains(EnumerationFlag::AllowPermissionRequest)) {
-          MOZ_ASSERT(aValue.ResolveValue() == CamerasAccessStatus::Granted);
+        if (aParams.VideoInputType() == MediaSourceEnum::Camera &&
+            aParams.mFlags.contains(EnumerationFlag::AllowPermissionRequest) &&
+            aValue.ResolveValue() == CamerasAccessStatus::Granted) {
           EnsureNoPlaceholdersInDeviceCache();
         }
 
@@ -4334,6 +4369,20 @@ void DeviceListener::GetSettings(MediaTrackSettings& aOutSettings) const {
       mediaSource == MediaSourceEnum::Microphone) {
     aOutSettings.mDeviceId.Construct(device->mID);
     aOutSettings.mGroupId.Construct(device->mGroupID);
+  }
+}
+
+void DeviceListener::GetCapabilities(
+    MediaTrackCapabilities& aOutCapabilities) const {
+  MOZ_ASSERT(NS_IsMainThread(), "Only call on main thread");
+  LocalMediaDevice* device = GetDevice();
+  device->GetCapabilities(aOutCapabilities);
+
+  MediaSourceEnum mediaSource = device->GetMediaSource();
+  if (mediaSource == MediaSourceEnum::Camera ||
+      mediaSource == MediaSourceEnum::Microphone) {
+    aOutCapabilities.mDeviceId.Construct(device->mID);
+    aOutCapabilities.mGroupId.Construct(device->mGroupID);
   }
 }
 

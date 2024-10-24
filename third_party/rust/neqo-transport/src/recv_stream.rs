@@ -92,32 +92,19 @@ impl RecvStreams {
     }
 
     pub fn clear_terminal(&mut self, send_streams: &SendStreams, role: Role) -> (u64, u64) {
-        let recv_to_remove = self
-            .streams
-            .iter()
-            .filter_map(|(id, stream)| {
-                // Remove all streams for which the receiving is done (or aborted).
-                // But only if they are unidirectional, or we have finished sending.
-                if stream.is_terminal() && (id.is_uni() || !send_streams.exists(*id)) {
-                    Some(*id)
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
         let mut removed_bidi = 0;
         let mut removed_uni = 0;
-        for id in &recv_to_remove {
-            self.streams.remove(id);
-            if id.is_remote_initiated(role) {
+        self.streams.retain(|id, s| {
+            let dead = s.is_terminal() && (id.is_uni() || !send_streams.exists(*id));
+            if dead && id.is_remote_initiated(role) {
                 if id.is_bidi() {
                     removed_bidi += 1;
                 } else {
                     removed_uni += 1;
                 }
             }
-        }
+            !dead
+        });
 
         (removed_bidi, removed_uni)
     }
@@ -1483,7 +1470,7 @@ mod tests {
         assert!(s.has_frames_to_write());
 
         // consume it
-        let mut builder = PacketBuilder::short(Encoder::new(), false, []);
+        let mut builder = PacketBuilder::short(Encoder::new(), false, None::<&[u8]>);
         let mut token = Vec::new();
         s.write_frame(&mut builder, &mut token, &mut FrameStats::default());
 
@@ -1597,7 +1584,7 @@ mod tests {
         s.read(&mut buf).unwrap();
         assert!(session_fc.borrow().frame_needed());
         // consume it
-        let mut builder = PacketBuilder::short(Encoder::new(), false, []);
+        let mut builder = PacketBuilder::short(Encoder::new(), false, None::<&[u8]>);
         let mut token = Vec::new();
         session_fc
             .borrow_mut()
@@ -1618,7 +1605,7 @@ mod tests {
         s.read(&mut buf).unwrap();
         assert!(session_fc.borrow().frame_needed());
         // consume it
-        let mut builder = PacketBuilder::short(Encoder::new(), false, []);
+        let mut builder = PacketBuilder::short(Encoder::new(), false, None::<&[u8]>);
         let mut token = Vec::new();
         session_fc
             .borrow_mut()
@@ -1866,7 +1853,7 @@ mod tests {
         assert!(s.fc().unwrap().frame_needed());
 
         // Write the fc update frame
-        let mut builder = PacketBuilder::short(Encoder::new(), false, []);
+        let mut builder = PacketBuilder::short(Encoder::new(), false, None::<&[u8]>);
         let mut token = Vec::new();
         let mut stats = FrameStats::default();
         fc.borrow_mut()

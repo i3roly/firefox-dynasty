@@ -17,51 +17,33 @@
  */
 @import url(chrome://devtools/skin/compatibility.css) layer(shared);
 
-/* Tooltip specific theme variables */
-.theme-dark {
-  --bezier-diagonal-color: #eee;
-  --bezier-grid-color: rgba(255, 255, 255, 0.1);
-
-  /* Tooltips */
-  --theme-tooltip-color: var(--theme-text-color-strong);
-  --theme-tooltip-background: var(--theme-popup-background);
-  --theme-tooltip-shadow-color: rgba(25, 25, 25, 0.76);
-
-  /* Doorhangers */
-  /* These colors are based on the colors used for doorhangers elsewhere in
-   * Firefox. */
-  --theme-arrowpanel-background: var(--theme-popup-background);
-  --theme-arrowpanel-color: var(--theme-popup-color);
-  --theme-arrowpanel-border-color: var(--theme-popup-border-color);
-  --theme-arrowpanel-separator: rgba(249,249,250,.1);
-  --theme-arrowpanel-dimmed: var(--theme-popup-dimmed);
-  --theme-arrowpanel-dimmed-further: rgba(249,249,250,.15);
-  --theme-arrowpanel-disabled-color: rgba(249,249,250,.5);
-}
-
-.theme-light {
-  --bezier-diagonal-color: rgba(0, 0, 0, 0.2);
-  --bezier-grid-color: rgba(0, 0, 0, 0.05);
-
-  /* Tooltips */
-  --theme-tooltip-color: var(--theme-body-color);
-  --theme-tooltip-background: rgb(255, 255, 255);
-  --theme-tooltip-shadow-color: var(--grey-90-a10);
-
-  /* Doorhangers */
-  /* These colors are based on the colors used for doorhangers elsewhere in
-   * Firefox. */
-  --theme-arrowpanel-background: var(--theme-popup-background);
-  --theme-arrowpanel-color: var(--theme-popup-color);
-  --theme-arrowpanel-border-color: var(--theme-popup-border-color);
-  --theme-arrowpanel-separator: ThreeDShadow;
-  --theme-arrowpanel-dimmed: var(--theme-popup-dimmed);
-  --theme-arrowpanel-dimmed-further: hsla(0,0%,80%,.45);
-  --theme-arrowpanel-disabled-color: GrayText;
-}
-
 :root {
   --theme-arrowpanel-border-radius: 3.5px;
+
+  --bezier-diagonal-color: light-dark(rgba(0, 0, 0, 0.2), #eee);
+  --bezier-grid-color: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.1));
+
+  /* Tooltips */
+  --theme-tooltip-color: light-dark(var(--theme-body-color), var(--theme-text-color-strong));
+  --theme-tooltip-background: light-dark(rgb(255, 255, 255), var(--theme-popup-background));
+  --theme-tooltip-shadow-color: light-dark(var(--grey-90-a10), rgba(25, 25, 25, 0.76));
+
+  /* Doorhangers */
+  /* These colors are based on the colors used for doorhangers elsewhere in Firefox. */
+  --theme-arrowpanel-background: var(--theme-popup-background);
+  --theme-arrowpanel-color: var(--theme-popup-color);
+  --theme-arrowpanel-border-color: var(--theme-popup-border-color);
+  --theme-arrowpanel-separator: light-dark(ThreeDShadow, rgba(249,249,250,.1));
+  --theme-arrowpanel-active-background: light-dark(hsla(0,0%,80%,.45), rgba(249,249,250,.15));
+  --theme-arrowpanel-active-outline-color: transparent;
+  --theme-arrowpanel-disabled-color: light-dark(GrayText, rgba(249,249,250,.5));
+
+  &[forced-colors-active] {
+    /* The active state have a different background but with an outline in HCM */
+    --theme-arrowpanel-active-background: SelectedItem;
+    --theme-arrowpanel-active-color: SelectedItemText;
+    --theme-arrowpanel-active-outline-color: ButtonText;
+  }
 }
 
 :root[platform="mac"].theme-light {
@@ -219,7 +201,7 @@ strong {
 
 .devtools-tooltip-query-container header {
   --block-end-space: 5px;
-  border-block-end: 1px solid var(--theme-arrowpanel-dimmed);
+  border-block-end: 1px solid var(--theme-popup-dimmed);
   padding-block-end: var(--block-end-space);
   margin-block-end: var(--block-end-space);
   max-width: 100%;
@@ -403,8 +385,7 @@ strong {
   width: 21px;
   height: 21px;
   margin-left: 4px;
-  background: linear-gradient(-45deg,
-    var(--theme-tooltip-background) 50%, transparent 50%);
+  background: var(--theme-tooltip-background);
   border: 0 none;
   pointer-events: all;
   box-sizing: border-box;
@@ -548,12 +529,15 @@ strong {
     }
 
     &:not([disabled],[open],:active):hover {
-      background-color: var(--theme-arrowpanel-dimmed);
+      background-color: var(--theme-popup-hover-background);
+      color: var(--theme-popup-hover-color);
     }
 
     &:not([disabled]):is([open],:hover:active) {
-      background-color: var(--theme-arrowpanel-dimmed-further);
+      background-color: var(--theme-arrowpanel-active-background);
+      color: var(--theme-arrowpanel-active-color);
       box-shadow: 0 1px 0 hsla(210,4%,10%,.03) inset;
+      outline: 1px solid var(--theme-arrowpanel-active-outline-color);
     }
 
     &[disabled] {

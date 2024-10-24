@@ -1098,6 +1098,8 @@ class Document : public nsINode,
    */
   void DisableCookieAccess() { mDisableCookieAccess = true; }
 
+  bool CookieAccessDisabled() const { return mDisableCookieAccess; }
+
   void SetLinkHandlingEnabled(bool aValue) { mLinksEnabled = aValue; }
   bool LinkHandlingEnabled() { return mLinksEnabled; }
 
@@ -1873,6 +1875,12 @@ class Document : public nsINode,
    * blocked by the dialog or hide popover if popover is shown.
    */
   MOZ_CAN_RUN_SCRIPT void HandleEscKey();
+
+  /**
+   * Process any active CloseWatchers in the document, such
+   * as fullscreen elements, popovers, dialogs.
+   */
+  MOZ_CAN_RUN_SCRIPT void ProcessCloseRequest();
 
   void AddModalDialog(HTMLDialogElement&);
   void RemoveModalDialog(HTMLDialogElement&);
@@ -3008,7 +3016,6 @@ class Document : public nsINode,
     NotMedia,
     Video,
     Image,
-    Plugin,
   };
 
   virtual enum MediaDocumentKind MediaDocumentKind() const {
@@ -3137,6 +3144,9 @@ class Document : public nsINode,
 
   // WebIDL method for chrome code.
   void GetConnectedShadowRoots(nsTArray<RefPtr<ShadowRoot>>&) const;
+
+  void SynchronouslyUpdateRemoteBrowserDimensions(
+      bool aIncludeInactive = false);
 
   // Notifies any responsive content added by AddResponsiveContent upon media
   // features values changing.
@@ -3656,6 +3666,10 @@ class Document : public nsINode,
   bool FireMutationEvents() const { return mFireMutationEvents; }
   void SetFireMutationEvents(bool aFire) { mFireMutationEvents = aFire; }
 
+  // Even if mutation events are disabled by default,
+  // dom.mutation_events.forceEnable can be used to enable them per site.
+  bool MutationEventsEnabled();
+
   // This should be called when this document receives events which are likely
   // to be user interaction with the document, rather than the byproduct of
   // interaction with the browser (i.e. a keypress to scroll the view port,
@@ -3749,6 +3763,8 @@ class Document : public nsINode,
   // Update intersection observers in this document and all
   // same-process subdocuments.
   void UpdateIntersections(TimeStamp aNowTime);
+  // Update the EffectsInfo of remote browsers.
+  void UpdateRemoteFrameEffects(bool aIncludeInactive = false);
   MOZ_CAN_RUN_SCRIPT void NotifyIntersectionObservers();
 
   DOMIntersectionObserver* GetLazyLoadObserver() { return mLazyLoadObserver; }
@@ -3814,8 +3830,13 @@ class Document : public nsINode,
   MOZ_CAN_RUN_SCRIPT void
   DetermineProximityToViewportAndNotifyResizeObservers();
 
-  ViewTransition* StartViewTransition(
+  already_AddRefed<ViewTransition> StartViewTransition(
       const Optional<OwningNonNull<ViewTransitionUpdateCallback>>&);
+  ViewTransition* GetActiveViewTransition() const {
+    return mActiveViewTransition;
+  }
+  void ClearActiveViewTransition();
+  void PerformPendingViewTransitionOperations();
 
   // Getter for PermissionDelegateHandler. Performs lazy initialization.
   PermissionDelegateHandler* GetPermissionDelegateHandler();
@@ -4924,6 +4945,8 @@ class Document : public nsINode,
 
   bool mFireMutationEvents : 1;
 
+  Maybe<bool> mMutationEventsEnabled;
+
   // The fingerprinting protections overrides for this document. The value will
   // override the default enabled fingerprinting protections for this document.
   // This will only get populated if these is one that comes from the local
@@ -5352,6 +5375,9 @@ class Document : public nsINode,
   RefPtr<ChromeObserver> mChromeObserver;
 
   RefPtr<HTMLAllCollection> mAll;
+
+  // https://drafts.csswg.org/css-view-transitions-1/#document-active-view-transition
+  RefPtr<ViewTransition> mActiveViewTransition;
 
   nsTHashSet<RefPtr<WorkerDocumentListener>> mWorkerListeners;
 

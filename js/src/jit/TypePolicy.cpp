@@ -244,6 +244,7 @@ bool ComparePolicy::adjustInputs(TempAllocator& alloc,
     case MCompare::Compare_Int32:
       return convertOperand(0, MIRType::Int32) &&
              convertOperand(1, MIRType::Int32);
+    case MCompare::Compare_IntPtr:
     case MCompare::Compare_UIntPtr:
       MOZ_ASSERT(compare->lhs()->type() == MIRType::IntPtr);
       MOZ_ASSERT(compare->rhs()->type() == MIRType::IntPtr);
@@ -462,6 +463,17 @@ template bool Int32OrIntPtrPolicy<0>::staticAdjustInputs(TempAllocator& alloc,
                                                          MInstruction* def);
 template bool Int32OrIntPtrPolicy<1>::staticAdjustInputs(TempAllocator& alloc,
                                                          MInstruction* def);
+
+template <unsigned Op>
+bool IntPtrPolicy<Op>::staticAdjustInputs(TempAllocator& alloc,
+                                          MInstruction* def) {
+  // We don't (yet) support converting other types to IntPtr.
+  MOZ_ASSERT(def->getOperand(Op)->type() == MIRType::IntPtr);
+  return true;
+}
+
+template bool IntPtrPolicy<0>::staticAdjustInputs(TempAllocator& alloc,
+                                                  MInstruction* def);
 
 template <unsigned Op>
 bool ConvertToInt32Policy<Op>::staticAdjustInputs(TempAllocator& alloc,
@@ -1006,9 +1018,13 @@ bool ClampPolicy::adjustInputs(TempAllocator& alloc, MInstruction* ins) const {
   _(FloatingPointPolicy<0>)                                                   \
   _(UnboxedInt32Policy<0>)                                                    \
   _(UnboxedInt32Policy<1>)                                                    \
+  _(IntPtrPolicy<0>)                                                          \
   _(TruncateToInt32OrToInt64Policy<2>)                                        \
   _(MixPolicy<ObjectPolicy<0>, StringPolicy<1>, BoxPolicy<2>>)                \
   _(MixPolicy<ObjectPolicy<0>, BoxPolicy<1>, BoxPolicy<2>>)                   \
+  IF_EXPLICIT_RESOURCE_MANAGEMENT(                                            \
+      _(MixPolicy<ObjectPolicy<0>, BoxPolicy<1>, BoxPolicy<2>,                \
+                  BooleanPolicy<3>>))                                         \
   _(MixPolicy<ObjectPolicy<0>, BoxPolicy<1>, ObjectPolicy<2>>)                \
   _(MixPolicy<ObjectPolicy<0>, BoxPolicy<1>, UnboxedInt32Policy<2>>)          \
   _(MixPolicy<ObjectPolicy<0>, UnboxedInt32Policy<1>, BoxPolicy<2>>)          \

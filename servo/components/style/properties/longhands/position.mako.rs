@@ -9,8 +9,8 @@
 % for index, side in enumerate(PHYSICAL_SIDES):
     ${helpers.predefined_type(
         side,
-        "LengthPercentageOrAuto",
-        "computed::LengthPercentageOrAuto::auto()",
+        "Inset",
+        "computed::Inset::auto()",
         engines="gecko servo",
         spec="https://www.w3.org/TR/CSS2/visuren.html#propdef-%s" % side,
         allow_quirks="Yes",
@@ -25,8 +25,8 @@
 % for side in LOGICAL_SIDES:
     ${helpers.predefined_type(
         "inset-%s" % side,
-        "LengthPercentageOrAuto",
-        "computed::LengthPercentageOrAuto::auto()",
+        "Inset",
+        "computed::Inset::auto()",
         engines="gecko servo",
         spec="https://drafts.csswg.org/css-logical-props/#propdef-inset-%s" % side,
         rule_types_allowed=DEFAULT_RULES_AND_POSITION_TRY,
@@ -320,7 +320,7 @@ ${helpers.single_keyword(
 ${helpers.single_keyword(
     "object-fit",
     "fill contain cover none scale-down",
-    engines="gecko",
+    engines="gecko servo",
     animation_type="discrete",
     spec="https://drafts.csswg.org/css-images/#propdef-object-fit",
     gecko_enum_prefix = "StyleObjectFit",
@@ -331,7 +331,7 @@ ${helpers.predefined_type(
     "object-position",
     "Position",
     "computed::Position::center()",
-    engines="gecko",
+    engines="gecko servo",
     boxed=True,
     spec="https://drafts.csswg.org/css-images-3/#the-object-position",
     affects="layout",

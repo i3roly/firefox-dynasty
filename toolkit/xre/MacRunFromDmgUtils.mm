@@ -259,43 +259,6 @@ static void ShowInstallFailedDialog() {
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
-/**
- * Helper to launch macOS tasks via NSTask.
- */
-static void LaunchTask(NSString* aPath, NSArray* aArguments) {
-  if (@available(macOS 10.13, *)) {
-    NSTask* task = [[NSTask alloc] init];
-    [task setExecutableURL:[NSURL fileURLWithPath:aPath]];
-    if (aArguments) {
-      [task setArguments:aArguments];
-    }
-    [task launchAndReturnError:nil];
-    [task release];
-  } else {
-    NSArray* arguments = aArguments;
-    if (!arguments) {
-      arguments = @[];
-    }
-    [NSTask launchedTaskWithLaunchPath:aPath arguments:arguments];
-}
-}
-
-static void LaunchInstalledApp(NSString* aBundlePath) {
-  LaunchTask([[NSBundle bundleWithPath:aBundlePath] executablePath], nil);
-}
-
-static void RegisterAppWithLaunchServices(NSString* aBundlePath) {
-  NSArray* arguments = @[ @"-f", aBundlePath ];
-  LaunchTask(@"/System/Library/Frameworks/CoreServices.framework/Frameworks/"
-             @"LaunchServices.framework/Support/lsregister",
-             arguments);
-}
-
-static void StripQuarantineBit(NSString* aBundlePath) {
-  NSArray* arguments = @[ @"-d", @"com.apple.quarantine", aBundlePath ];
-  LaunchTask(@"/usr/bin/xattr", arguments);
-}
-
 #ifdef MOZ_UPDATER
 bool LaunchElevatedDmgInstall(NSString* aBundlePath, NSArray* aArguments) {
   NSTask* task;
@@ -333,8 +296,6 @@ static bool InstallFromPath(NSString* aBundlePath, NSString* aDestPath) {
   bool installSuccessful = false;
   NSFileManager* fileManager = [NSFileManager defaultManager];
   if ([fileManager copyItemAtPath:aBundlePath toPath:aDestPath error:nil]) {
-    RegisterAppWithLaunchServices(aDestPath);
-    StripQuarantineBit(aDestPath);
     installSuccessful = true;
   }
 
@@ -503,8 +464,7 @@ bool MaybeInstallAndRelaunch() {
     // a more sophisticated user intentionally running from .dmg.
     if ([fileManager fileExistsAtPath:destPath]) {
       if (AskUserIfWeShouldLaunchExistingInstall()) {
-        StripQuarantineBit(destPath);
-        LaunchInstalledApp(destPath);
+        LaunchMacAppWithBundle(destPath);
         return true;
       }
       return false;
@@ -519,7 +479,7 @@ bool MaybeInstallAndRelaunch() {
       return false;
     }
 
-    LaunchInstalledApp(destPath);
+    LaunchMacAppWithBundle(destPath);
 
     return true;
   }

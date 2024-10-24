@@ -3759,6 +3759,404 @@ bool CacheIRCompiler::emitBigIntDecResult(BigIntOperandId inputId) {
   return emitBigIntUnaryOperationShared<Fn, BigInt::dec>(inputId);
 }
 
+bool CacheIRCompiler::emitBigIntToIntPtr(BigIntOperandId inputId,
+                                         IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register input = allocator.useRegister(masm, inputId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.loadBigIntPtr(input, output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitIntPtrToBigIntResult(IntPtrOperandId inputId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoCallVM callvm(masm, this, allocator);
+  Register input = allocator.useRegister(masm, inputId);
+
+  callvm.prepare();
+
+  masm.Push(input);
+
+  using Fn = BigInt* (*)(JSContext*, intptr_t);
+  callvm.call<Fn, JS::BigInt::createFromIntPtr>();
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrAdd(IntPtrOperandId lhsId,
+                                       IntPtrOperandId rhsId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.movePtr(rhs, output);
+  masm.branchAddPtr(Assembler::Overflow, lhs, output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrSub(IntPtrOperandId lhsId,
+                                       IntPtrOperandId rhsId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.movePtr(lhs, output);
+  masm.branchSubPtr(Assembler::Overflow, rhs, output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrMul(IntPtrOperandId lhsId,
+                                       IntPtrOperandId rhsId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.movePtr(rhs, output);
+  masm.branchMulPtr(Assembler::Overflow, lhs, output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrDiv(IntPtrOperandId lhsId,
+                                       IntPtrOperandId rhsId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  static constexpr auto DigitMin = std::numeric_limits<
+      mozilla::SignedStdintTypeForSize<sizeof(BigInt::Digit)>::Type>::min();
+
+  // Prevent division by 0.
+  masm.branchTestPtr(Assembler::Zero, rhs, rhs, failure->label());
+
+  // Prevent INTPTR_MIN / -1.
+  Label notOverflow;
+  masm.branchPtr(Assembler::NotEqual, lhs, ImmWord(DigitMin), &notOverflow);
+  masm.branchPtr(Assembler::Equal, rhs, Imm32(-1), failure->label());
+  masm.bind(&notOverflow);
+
+  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
+                               liveVolatileFloatRegs());
+  masm.movePtr(lhs, output);
+  masm.flexibleQuotientPtr(rhs, output, false, volatileRegs);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrMod(IntPtrOperandId lhsId,
+                                       IntPtrOperandId rhsId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  static constexpr auto DigitMin = std::numeric_limits<
+      mozilla::SignedStdintTypeForSize<sizeof(BigInt::Digit)>::Type>::min();
+
+  // Prevent division by 0.
+  masm.branchTestPtr(Assembler::Zero, rhs, rhs, failure->label());
+
+  masm.movePtr(lhs, output);
+
+  // Prevent INTPTR_MIN / -1.
+  Label notOverflow;
+  masm.branchPtr(Assembler::NotEqual, lhs, ImmWord(DigitMin), &notOverflow);
+  masm.branchPtr(Assembler::NotEqual, rhs, Imm32(-1), &notOverflow);
+  masm.movePtr(ImmWord(0), output);
+  masm.bind(&notOverflow);
+
+  LiveRegisterSet volatileRegs(GeneralRegisterSet::Volatile(),
+                               liveVolatileFloatRegs());
+  masm.flexibleRemainderPtr(rhs, output, false, volatileRegs);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrPow(IntPtrOperandId lhsId,
+                                       IntPtrOperandId rhsId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+  AutoScratchRegister scratch1(allocator, masm);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.powPtr(lhs, rhs, output, scratch1, scratch2, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrBitOr(IntPtrOperandId lhsId,
+                                         IntPtrOperandId rhsId,
+                                         IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  masm.movePtr(rhs, output);
+  masm.orPtr(lhs, output);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrBitXor(IntPtrOperandId lhsId,
+                                          IntPtrOperandId rhsId,
+                                          IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  masm.movePtr(rhs, output);
+  masm.xorPtr(lhs, output);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrBitAnd(IntPtrOperandId lhsId,
+                                          IntPtrOperandId rhsId,
+                                          IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  masm.movePtr(rhs, output);
+  masm.andPtr(lhs, output);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrLeftShift(IntPtrOperandId lhsId,
+                                             IntPtrOperandId rhsId,
+                                             IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+  AutoScratchRegister scratch(allocator, masm);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  Label done;
+
+  masm.movePtr(lhs, output);
+
+  // 0n << x == 0n
+  masm.branchPtr(Assembler::Equal, lhs, Imm32(0), &done);
+
+  // x << DigitBits with x != 0n always exceeds pointer-sized storage.
+  masm.branchPtr(Assembler::GreaterThanOrEqual, rhs, Imm32(BigInt::DigitBits),
+                 failure->label());
+
+  // x << -DigitBits == x >> DigitBits, which is either 0n or -1n.
+  Label shift;
+  masm.branchPtr(Assembler::GreaterThan, rhs,
+                 Imm32(-int32_t(BigInt::DigitBits)), &shift);
+  {
+    masm.rshiftPtrArithmetic(Imm32(BigInt::DigitBits - 1), output);
+    masm.jump(&done);
+  }
+  masm.bind(&shift);
+
+  // |x << -y| is computed as |x >> y|.
+  Label leftShift;
+  masm.branchPtr(Assembler::GreaterThanOrEqual, rhs, Imm32(0), &leftShift);
+  {
+    masm.movePtr(rhs, scratch);
+    masm.negPtr(scratch);
+    masm.flexibleRshiftPtrArithmetic(scratch, output);
+    masm.jump(&done);
+  }
+  masm.bind(&leftShift);
+
+  masm.flexibleLshiftPtr(rhs, output);
+
+  // Check for overflow: ((lhs << rhs) >> rhs) == lhs.
+  masm.movePtr(output, scratch);
+  masm.flexibleRshiftPtrArithmetic(rhs, scratch);
+  masm.branchPtr(Assembler::NotEqual, scratch, lhs, failure->label());
+
+  masm.bind(&done);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrRightShift(IntPtrOperandId lhsId,
+                                              IntPtrOperandId rhsId,
+                                              IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register lhs = allocator.useRegister(masm, lhsId);
+  Register rhs = allocator.useRegister(masm, rhsId);
+  Register output = allocator.defineRegister(masm, resultId);
+  AutoScratchRegister scratch1(allocator, masm);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  Label done;
+
+  masm.movePtr(lhs, output);
+
+  // 0n >> x == 0n
+  masm.branchPtr(Assembler::Equal, lhs, Imm32(0), &done);
+
+  // x >> -DigitBits == x << DigitBits, which exceeds pointer-sized storage.
+  masm.branchPtr(Assembler::LessThanOrEqual, rhs,
+                 Imm32(-int32_t(BigInt::DigitBits)), failure->label());
+
+  // x >> DigitBits is either 0n or -1n.
+  Label shift;
+  masm.branchPtr(Assembler::LessThan, rhs, Imm32(BigInt::DigitBits), &shift);
+  {
+    masm.rshiftPtrArithmetic(Imm32(BigInt::DigitBits - 1), output);
+    masm.jump(&done);
+  }
+  masm.bind(&shift);
+
+  // |x >> -y| is computed as |x << y|.
+  Label rightShift;
+  masm.branchPtr(Assembler::GreaterThanOrEqual, rhs, Imm32(0), &rightShift);
+  {
+    masm.movePtr(rhs, scratch1);
+    masm.negPtr(scratch1);
+    masm.flexibleLshiftPtr(scratch1, output);
+
+    // Check for overflow: ((lhs << rhs) >> rhs) == lhs.
+    masm.movePtr(output, scratch2);
+    masm.flexibleRshiftPtrArithmetic(scratch1, scratch2);
+    masm.branchPtr(Assembler::NotEqual, scratch2, lhs, failure->label());
+
+    masm.jump(&done);
+  }
+  masm.bind(&rightShift);
+
+  masm.flexibleRshiftPtrArithmetic(rhs, output);
+
+  masm.bind(&done);
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrNegation(IntPtrOperandId inputId,
+                                            IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register input = allocator.useRegister(masm, inputId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.movePtr(input, output);
+  masm.branchNegPtr(Assembler::Overflow, output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrInc(IntPtrOperandId inputId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register input = allocator.useRegister(masm, inputId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.movePtr(input, output);
+  masm.branchAddPtr(Assembler::Overflow, Imm32(1), output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrDec(IntPtrOperandId inputId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register input = allocator.useRegister(masm, inputId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.movePtr(input, output);
+  masm.branchSubPtr(Assembler::Overflow, Imm32(1), output, failure->label());
+  return true;
+}
+
+bool CacheIRCompiler::emitBigIntPtrNot(IntPtrOperandId inputId,
+                                       IntPtrOperandId resultId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register input = allocator.useRegister(masm, inputId);
+  Register output = allocator.defineRegister(masm, resultId);
+
+  masm.movePtr(input, output);
+  masm.notPtr(output);
+  return true;
+}
+
 bool CacheIRCompiler::emitTruncateDoubleToUInt32(NumberOperandId inputId,
                                                  Int32OperandId resultId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
@@ -10000,7 +10398,7 @@ bool CacheIRCompiler::emitInt32ToBigIntResult(Int32OperandId inputId) {
                      failure->label());
 
   masm.move32SignExtendToPtr(input, scratch2);
-  masm.initializeBigInt(scratch1, scratch2);
+  masm.initializeBigIntPtr(scratch1, scratch2);
 
   masm.tagValue(JSVAL_TYPE_BIGINT, scratch1, output.valueReg());
   return true;

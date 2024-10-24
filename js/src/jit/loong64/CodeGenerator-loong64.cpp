@@ -470,26 +470,18 @@ void CodeGenerator::visitUDivOrModI64(LUDivOrModI64* lir) {
   masm.bind(&done);
 }
 
-void CodeGeneratorLOONG64::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
-                                         Register divisor, Register output,
-                                         Label* fail) {
+void CodeGeneratorLOONG64::emitBigIntPtrDiv(LBigIntPtrDiv* ins,
+                                            Register dividend, Register divisor,
+                                            Register output) {
   // Callers handle division by zero and integer overflow.
-  masm.as_div_d(/* result= */ dividend, dividend, divisor);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
+  masm.as_div_d(/* result= */ output, dividend, divisor);
 }
 
-void CodeGeneratorLOONG64::emitBigIntMod(LBigIntMod* ins, Register dividend,
-                                         Register divisor, Register output,
-                                         Label* fail) {
+void CodeGeneratorLOONG64::emitBigIntPtrMod(LBigIntPtrMod* ins,
+                                            Register dividend, Register divisor,
+                                            Register output) {
   // Callers handle division by zero and integer overflow.
-  masm.as_mod_d(/* result= */ dividend, dividend, divisor);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
+  masm.as_mod_d(/* result= */ output, dividend, divisor);
 }
 
 void CodeGenerator::visitWasmLoadI64(LWasmLoadI64* lir) {
@@ -618,13 +610,6 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
   Register output = ToRegister(lir->output());
   MOZ_ASSERT(input == output);
   masm.move64To32(Register64(input), output);
-}
-
-void CodeGenerator::visitNotI64(LNotI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register output = ToRegister(lir->output());
-
-  masm.ma_cmp_set(output, input.reg, zero, Assembler::Equal);
 }
 
 void CodeGenerator::visitWasmTruncateToInt64(LWasmTruncateToInt64* lir) {
@@ -1757,11 +1742,6 @@ void CodeGenerator::visitWasmUint32ToDouble(LWasmUint32ToDouble* lir) {
 void CodeGenerator::visitWasmUint32ToFloat32(LWasmUint32ToFloat32* lir) {
   masm.convertUInt32ToFloat32(ToRegister(lir->input()),
                               ToFloatRegister(lir->output()));
-}
-
-void CodeGenerator::visitNotI(LNotI* ins) {
-  masm.cmp32Set(Assembler::Equal, ToRegister(ins->input()), Imm32(0),
-                ToRegister(ins->output()));
 }
 
 void CodeGenerator::visitNotD(LNotD* ins) {

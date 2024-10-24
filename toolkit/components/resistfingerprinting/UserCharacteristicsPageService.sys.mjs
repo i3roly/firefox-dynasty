@@ -6,7 +6,7 @@
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  HiddenFrame: "resource://gre/modules/HiddenFrame.sys.mjs",
+  HiddenBrowserManager: "resource://gre/modules/HiddenFrame.sys.mjs",
   Preferences: "resource://gre/modules/Preferences.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
@@ -27,94 +27,6 @@ ChromeUtils.defineLazyGetter(lazy, "contentPrefs", () => {
   );
 });
 
-const BACKGROUND_WIDTH = 1024;
-const BACKGROUND_HEIGHT = 768;
-
-/**
- * A manager for hidden browsers. Responsible for creating and destroying a
- * hidden frame to hold them.
- * All of this is copied from PageDataService.sys.mjs
- */
-class HiddenBrowserManager {
-  /**
-   * The hidden frame if one has been created.
-   *
-   * @type {HiddenFrame | null}
-   */
-  #frame = null;
-  /**
-   * The number of hidden browser elements currently in use.
-   *
-   * @type {number}
-   */
-  #browsers = 0;
-
-  /**
-   * Creates and returns a new hidden browser.
-   *
-   * @returns {Browser}
-   */
-  async #acquireBrowser() {
-    this.#browsers++;
-    if (!this.#frame) {
-      this.#frame = new lazy.HiddenFrame();
-    }
-
-    let frame = await this.#frame.get();
-    let doc = frame.document;
-    let browser = doc.createXULElement("browser");
-    browser.setAttribute("remote", "true");
-    browser.setAttribute("type", "content");
-    browser.setAttribute(
-      "style",
-      `
-        width: ${BACKGROUND_WIDTH}px;
-        min-width: ${BACKGROUND_WIDTH}px;
-        height: ${BACKGROUND_HEIGHT}px;
-        min-height: ${BACKGROUND_HEIGHT}px;
-      `
-    );
-    browser.setAttribute("maychangeremoteness", "true");
-    doc.documentElement.appendChild(browser);
-
-    return browser;
-  }
-
-  /**
-   * Releases the given hidden browser.
-   *
-   * @param {Browser} browser
-   *   The hidden browser element.
-   */
-  #releaseBrowser(browser) {
-    browser.remove();
-
-    this.#browsers--;
-    if (this.#browsers == 0) {
-      this.#frame.destroy();
-      this.#frame = null;
-    }
-  }
-
-  /**
-   * Calls a callback function with a new hidden browser.
-   * This function will return whatever the callback function returns.
-   *
-   * @param {Callback} callback
-   *   The callback function will be called with the browser element and may
-   *   be asynchronous.
-   * @returns {T}
-   */
-  async withHiddenBrowser(callback) {
-    let browser = await this.#acquireBrowser();
-    try {
-      return await callback(browser);
-    } finally {
-      this.#releaseBrowser(browser);
-    }
-  }
-}
-
 export class UserCharacteristicsPageService {
   classId = Components.ID("{ce3e9659-e311-49fb-b18b-7f27c6659b23}");
   QueryInterface = ChromeUtils.generateQI([
@@ -123,13 +35,6 @@ export class UserCharacteristicsPageService {
 
   _initialized = false;
   _isParentProcess = false;
-
-  /**
-   * A manager for hidden browsers.
-   *
-   * @type {HiddenBrowserManager}
-   */
-  _browserManager = new HiddenBrowserManager();
 
   /**
    * A map of hidden browsers to a resolve function that should be passed the
@@ -178,7 +83,7 @@ export class UserCharacteristicsPageService {
       remoteTypes: ["privilegedabout"],
     });
 
-    return this._browserManager.withHiddenBrowser(async browser => {
+    return lazy.HiddenBrowserManager.withHiddenBrowser(async browser => {
       lazy.console.debug(`In withHiddenBrowser`);
       try {
         let { promise, resolve } = Promise.withResolvers();
@@ -230,7 +135,7 @@ export class UserCharacteristicsPageService {
       [this.populateDevicePixelRatio, [browser.ownerGlobal]],
       [this.populateDisabledMediaPrefs, []],
       [this.populateMathOps, []],
-      [this.populateMapableData, [data.output]],
+      [this.populateMappableData, [data.output]],
       [this.populateGamepads, [data.output.gamepads]],
       [this.populateClientInfo, []],
       [this.populateCPUInfo, []],
@@ -245,8 +150,8 @@ export class UserCharacteristicsPageService {
       )
     );
 
-    // data?.output?.errors is previous errors that happened in usercharacteristics.js
-    const errors = JSON.parse(data?.output?.errors ?? "[]");
+    // data?.output?.jsErrors is previous errors that happened in usercharacteristics.js
+    const errors = JSON.parse(data?.output?.jsErrors ?? "[]");
     for (const [i, [func]] of populateFuncs.entries()) {
       if (results[i].status == "rejected") {
         const error = `${func.name}: ${await stringifyError(
@@ -382,7 +287,7 @@ export class UserCharacteristicsPageService {
     }
   }
 
-  async populateMapableData(data) {
+  async populateMappableData(data) {
     // We set data from usercharacteristics.js
     // We could do Object.keys(data), but this
     // is more explicit and provides better
@@ -417,13 +322,24 @@ export class UserCharacteristicsPageService {
         "canvasdata11Webglsoftware",
         "canvasdata12Fingerprintjs1software",
         "canvasdata13Fingerprintjs2software",
-        "voices",
-        "mediaCapabilities",
+        "voicesCount",
+        "voicesLocalCount",
+        "voicesDefault",
+        "voicesSample",
+        "voicesSha1",
+        "voicesAllSsdeep",
+        "voicesLocalSsdeep",
+        "voicesNonlocalSsdeep",
+        "mediaCapabilitiesUnsupported",
+        "mediaCapabilitiesNotSmooth",
+        "mediaCapabilitiesNotEfficient",
+        "mediaCapabilitiesH264",
         "audioFingerprint",
         "jsErrors",
         "pointerType",
         "anyPointerType",
-        "iceFoundations",
+        "iceSd",
+        "iceOrder",
         "motionDecimals",
         "orientationDecimals",
         "orientationabsDecimals",
@@ -529,12 +445,12 @@ export class UserCharacteristicsPageService {
         v2: [],
         extensions: [],
       },
-      shader_precision: {
+      shaderPrecision: {
         FRAGMENT_SHADER: {},
         VERTEX_SHADER: {},
       },
-      debug_shaders: {},
-      debug_params: {},
+      debugShaders: {},
+      debugParams: {},
     };
 
     const canvas = document.createElement("canvas");
@@ -665,7 +581,7 @@ export class UserCharacteristicsPageService {
           gl[shaderType],
           gl[precisionType]
         );
-        results.shader_precision[shaderType][precisionType] = {
+        results.shaderPrecision[shaderType][precisionType] = {
           rangeMin,
           rangeMax,
           precision,
@@ -676,7 +592,7 @@ export class UserCharacteristicsPageService {
     const mozDebugExt = gl.getExtension("MOZ_debug");
     const debugExt = gl.getExtension("WEBGL_debug_renderer_info");
 
-    results.debug_params = {
+    results.debugParams = {
       versionRaw: mozDebugExt.getParameter(gl.VERSION),
       vendorRaw: mozDebugExt.getParameter(gl.VENDOR),
       rendererRaw: mozDebugExt.getParameter(gl.RENDERER),
@@ -739,7 +655,7 @@ export class UserCharacteristicsPageService {
         return hashHex;
       }
 
-      results.debug_shaders = {
+      results.debugShaders = {
         fs: await sha1(
           translationExt.getTranslatedShaderSource(fragmentShader)
         ),
@@ -748,7 +664,35 @@ export class UserCharacteristicsPageService {
       };
     }
 
-    Glean.characteristics.webglinfo.set(JSON.stringify(results));
+    // General
+    Glean.characteristics.glVersion.set(results.glVersion);
+    // Debug Params
+    Glean.characteristics.glExtensions.set(results.debugParams.extensions);
+    Glean.characteristics.glExtensionsRaw.set(
+      results.debugParams.extensionsRaw
+    );
+    Glean.characteristics.glRenderer.set(results.debugParams.rendererDebugInfo);
+    Glean.characteristics.glRendererRaw.set(results.debugParams.rendererRaw);
+    Glean.characteristics.glVendor.set(results.debugParams.vendorDebugInfo);
+    Glean.characteristics.glVendorRaw.set(results.debugParams.vendorRaw);
+    Glean.characteristics.glVersionRaw.set(results.debugParams.versionRaw);
+    // Debug Shaders
+    Glean.characteristics.glFragmentShader.set(results.debugShaders.fs);
+    Glean.characteristics.glVertexShader.set(results.debugShaders.vs);
+    Glean.characteristics.glMinimalSource.set(results.debugShaders.ms);
+    // Parameters
+    Glean.characteristics.glParamsExtensions.set(
+      JSON.stringify(results.parameters.extensions)
+    );
+    Glean.characteristics.glParamsV1.set(JSON.stringify(results.parameters.v1));
+    Glean.characteristics.glParamsV2.set(JSON.stringify(results.parameters.v2));
+    // Shader Precision
+    Glean.characteristics.glPrecisionFragment.set(
+      JSON.stringify(results.shaderPrecision.FRAGMENT_SHADER)
+    );
+    Glean.characteristics.glPrecisionVertex.set(
+      JSON.stringify(results.shaderPrecision.VERTEX_SHADER)
+    );
   }
 
   async pageLoaded(browsingContext, data) {

@@ -282,6 +282,9 @@ class alignas(16) Instance {
   // takes |highestByteVisitedInPrevFrame|, which is the address of the
   // highest byte scanned in the frame below this one on the stack, and in
   // turn it returns the address of the highest byte scanned in this frame.
+  //
+  // The method does not assert RootMarkingPhase since it can be used to trace
+  // suspended stacks.
   uintptr_t traceFrame(JSTracer* trc, const wasm::WasmFrameIter& wfi,
                        uint8_t* nextPC,
                        uintptr_t highestByteVisitedInPrevFrame);
@@ -388,6 +391,7 @@ class alignas(16) Instance {
 
   int32_t computeInitialHotnessCounter(uint32_t funcIndex);
   void resetHotnessCounter(uint32_t funcIndex);
+  int32_t readHotnessCounter(uint32_t funcIndex) const;
   void submitCallRefHints(uint32_t funcIndex);
 
   bool debugFilter(uint32_t funcIndex) const;

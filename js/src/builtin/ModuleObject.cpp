@@ -1642,6 +1642,9 @@ ModuleRequestObject* frontend::StencilModuleMetadata::createModuleRequestObject(
 
   Rooted<ModuleRequestObject*> moduleRequestObject(
       cx, ModuleRequestObject::create(cx, specifier, attributes));
+  if (!moduleRequestObject) {
+    return nullptr;
+  }
 
   if (request.firstUnsupportedAttributeKey) {
     Rooted<JSAtom*> unsupportedAttributeKey(
@@ -2352,18 +2355,6 @@ static bool EvaluateDynamicImportOptions(
   if (!GetProperty(cx, attributesWrapperObject, attributesWrapperObject, withId,
                    &attributesValue)) {
     return false;
-  }
-
-  // Step 11.d. If the host supports the deprecated assert keyword for import
-  // attributes and attributesObj is undefined, then
-  if (attributesValue.isUndefined() &&
-      cx->options().importAttributesAssertSyntax()) {
-    // Step 11.d.i. Set attributesObj to Completion(Get(options, "assert")).
-    RootedId assertId(cx, NameToId(cx->names().assert_));
-    if (!GetProperty(cx, attributesWrapperObject, attributesWrapperObject,
-                     assertId, &attributesValue)) {
-      return false;
-    }
   }
 
   // Step 11.e. If attributesObj is not undefined, then

@@ -2769,6 +2769,7 @@ void net_EnsurePSMInit() {
 
   DebugOnly<bool> rv = EnsureNSSInitializedChromeOrContent();
   MOZ_ASSERT(rv);
+  nsHttpHandler::CheckThirdPartyRoots();
 }
 
 bool NS_IsAboutBlank(nsIURI* uri) {
@@ -3047,6 +3048,14 @@ nsresult NS_ShouldSecureUpgrade(
   }
   // If no loadInfo exist there is nothing to upgrade here.
   if (!aLoadInfo) {
+    aShouldUpgrade = false;
+    return NS_OK;
+  }
+  // The loadInfo indicates no HTTPS upgrade.
+  bool skipHTTPSUpgrade = false;
+  Unused << aLoadInfo->GetSkipHTTPSUpgrade(&skipHTTPSUpgrade);
+  if (skipHTTPSUpgrade) {
+    aLoadInfo->SetHttpsUpgradeTelemetry(nsILoadInfo::SKIP_HTTPS_UPGRADE);
     aShouldUpgrade = false;
     return NS_OK;
   }
@@ -3468,20 +3477,18 @@ already_AddRefed<nsIURI> TryChangeProtocol(nsIURI* aURI,
     return nullptr;
   }
 
-  if (StaticPrefs::network_url_strict_protocol_setter()) {
-    nsAutoCString newScheme;
-    rv = clone->GetScheme(newScheme);
-    if (NS_FAILED(rv) || !net::IsSchemeChangePermitted(aURI, newScheme)) {
-      nsAutoCString url;
-      Unused << clone->GetSpec(url);
-      AutoTArray<nsString, 2> params;
-      params.AppendElement(NS_ConvertUTF8toUTF16(url));
-      params.AppendElement(NS_ConvertUTF8toUTF16(newScheme));
-      nsContentUtils::ReportToConsole(
-          nsIScriptError::warningFlag, "Strict Url Protocol Setter"_ns, nullptr,
-          nsContentUtils::eNECKO_PROPERTIES, "StrictUrlProtocolSetter", params);
-      return nullptr;
-    }
+  nsAutoCString newScheme;
+  rv = clone->GetScheme(newScheme);
+  if (NS_FAILED(rv) || !net::IsSchemeChangePermitted(aURI, newScheme)) {
+    nsAutoCString url;
+    Unused << clone->GetSpec(url);
+    AutoTArray<nsString, 2> params;
+    params.AppendElement(NS_ConvertUTF8toUTF16(url));
+    params.AppendElement(NS_ConvertUTF8toUTF16(newScheme));
+    nsContentUtils::ReportToConsole(
+        nsIScriptError::warningFlag, "Strict Url Protocol Setter"_ns, nullptr,
+        nsContentUtils::eNECKO_PROPERTIES, "StrictUrlProtocolSetter", params);
+    return nullptr;
   }
 
   nsAutoCString href;

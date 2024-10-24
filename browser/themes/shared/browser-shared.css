@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+@import url("chrome://browser/skin/browser-colors.css");
 @import url("chrome://browser/skin/addons/extension-controlled.css");
 @import url("chrome://browser/skin/addons/unified-extensions.css");
 @import url("chrome://browser/skin/downloads/indicator.css");
@@ -27,8 +28,6 @@
 @import url("chrome://browser/skin/UITour.css");
 @import url("chrome://browser/skin/formautofill-notification.css");
 
-@namespace html url("http://www.w3.org/1999/xhtml");
-
 :root,
 body {
   height: 100%;
@@ -39,7 +38,7 @@ body {
 :root {
   user-select: none;
   color-scheme: light dark;
-  accent-color: var(--button-primary-bgcolor);
+  accent-color: var(--color-accent-primary);
   text-rendering: optimizeLegibility;
   min-height: 95px;
   min-width: 95px;
@@ -58,57 +57,15 @@ body {
   --browser-stack-z-index-dialog-stack: 2;
   --browser-stack-z-index-rdm-toolbar: 3;
 
-  --toolbox-non-lwt-bgcolor: -moz-headerbar;
-  --toolbox-non-lwt-textcolor: -moz-headerbartext;
-  --toolbox-non-lwt-bgcolor-inactive: -moz-headerbarinactive;
-  --toolbox-non-lwt-textcolor-inactive: -moz-headerbarinactivetext;
-
   --toolbarbutton-border-radius: 4px;
-
-  --chrome-content-separator-color: ThreeDShadow;
-  /* stylelint-disable-next-line media-query-no-invalid */
-  @media (-moz-bool-pref: "sidebar.revamp") {
-    --chrome-content-separator-color: var(--lwt-sidebar-border-color, light-dark(rgba(0,0,0,.3), rgba(255,255,255,.3)));
-  }
-
-  --tabs-navbar-separator-color: ThreeDShadow;
-  --tabs-navbar-separator-style: solid;
-
-  --short-notification-background: #0250BB;
-  --short-notification-gradient: #9059FF;
-
-  --button-bgcolor: color-mix(in srgb, currentColor 13%, transparent);
-  --button-hover-bgcolor: color-mix(in srgb, currentColor 17%, transparent);
-  --button-active-bgcolor: color-mix(in srgb, currentColor 30%, transparent);
-  --button-color: currentColor;
-  --button-primary-bgcolor: AccentColor;
-  --button-primary-hover-bgcolor: color-mix(in srgb, black 10%, AccentColor);
-  --button-primary-active-bgcolor: color-mix(in srgb, black 20%, AccentColor);
-  --button-primary-color: AccentColorText;
-
-  --buttons-destructive-bgcolor: #e22850;
-  --buttons-destructive-hover-bgcolor: #c50042;
-  --buttons-destructive-active-bgcolor: #810220;
-  --buttons-destructive-color: #fbfbfe;
-
   --identity-box-margin-inline: 4px;
-  --urlbar-box-bgcolor: var(--button-bgcolor);
-  --urlbar-box-focus-bgcolor: var(--button-bgcolor);
-  --urlbar-box-hover-bgcolor: var(--button-hover-bgcolor);
-  --urlbar-box-active-bgcolor: var(--button-active-bgcolor);
-  --urlbar-box-text-color: inherit;
-  --urlbar-box-hover-text-color: var(--urlbar-box-text-color);
   --urlbar-min-height: max(32px, 1.4em);
-  --urlbar-icon-fill-opacity: 0.9;
   --urlbar-icon-padding: calc((var(--urlbar-min-height) - 2px /* border */ - 2px /* padding */ - 16px /* icon */) / 2);
+
   /* This should be used for icons and chiclets inside the input field. It makes
      the gap around them more uniform when they are close to the field edges */
   --urlbar-icon-border-radius: calc(var(--toolbarbutton-border-radius) - 1px);
-  --urlbar-searchmode-and-input-box-container-border-color: color-mix(in srgb, currentColor 30%, transparent);
-  --urlbar-searchmode-and-input-box-container-shadow: 0 2px 6px rgba(0, 0, 0, 15%);
-  --urlbar-search-mode-picker-persisted-background-color: color-mix(in srgb, currentColor 14%, transparent);
-  --urlbar-search-mode-picker-persisted-background-color-hover: color-mix(in srgb, currentColor 28%, transparent);
-  --urlbar-search-mode-picker-persisted-background-color-active: color-mix(in srgb, currentColor 35%, transparent);
+  --urlbar-searchmodeswitcher-spacing: 6px;
 
   --pocket-icon-fill: #ef4056;
 
@@ -117,6 +74,7 @@ body {
   --lwt-background-tiling: no-repeat;
 
   --ext-theme-background-transition: background-color 0.1s cubic-bezier(.17,.67,.83,.67);
+
   --inactive-window-transition: 0.2s ease;
   --inactive-titlebar-opacity: .6;
   /**
@@ -130,33 +88,12 @@ body {
   @media (-moz-platform: windows) {
     --inactive-titlebar-opacity: .75;
   }
-
-  &:where([tabsintitlebar]) {
-    --toolbox-non-lwt-bgcolor: ActiveCaption;
-    --toolbox-non-lwt-textcolor: CaptionText;
-    --toolbox-non-lwt-bgcolor-inactive: InactiveCaption;
-    --toolbox-non-lwt-textcolor-inactive: InactiveCaptionText;
+  @media (prefers-reduced-motion) {
+    --inactive-window-transition: 0s;
   }
 
   &[lwtheme] {
     color: var(--lwt-text-color);
-
-    --link-color: light-dark(rgb(0, 97, 224), rgb(0, 221, 255));
-    --tabs-navbar-separator-color: light-dark(rgba(0,0,0,.1), rgba(0,0,0,.3));
-    --attention-dot-color: light-dark(#2ac3a2, #54ffbd);
-
-    /* stylelint-disable-next-line media-query-no-invalid */
-    @media not (-moz-bool-pref: "sidebar.revamp") {
-      --chrome-content-separator-color: light-dark(rgba(0,0,0,.3), rgba(255,255,255,.3));
-    }
-
-    @media not (prefers-contrast) {
-      --focus-outline-color: light-dark(#0061E0, #00DDFF);
-    }
-  }
-
-  @media (prefers-contrast) {
-    --urlbar-icon-fill-opacity: 1;
   }
 
   &[uidensity=compact] {
@@ -165,18 +102,6 @@ body {
 
   &[uidensity=touch] {
     --urlbar-min-height: max(34px, 1.4em);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    /* Increase the contrast of urlbar boxes in dark mode.
-       In practice these are bumped-up --button(-hover)-bgcolor rules */
-    --urlbar-box-bgcolor: color-mix(in srgb, currentColor 16%, transparent);
-    --urlbar-box-focus-bgcolor: color-mix(in srgb, currentColor 16%, transparent);
-    --urlbar-box-hover-bgcolor: color-mix(in srgb, currentColor 22%, transparent);
-  }
-
-  @media (prefers-reduced-motion) {
-    --inactive-window-transition: 0s;
   }
 }
 
@@ -192,9 +117,6 @@ body {
 #navigator-toolbox {
   appearance: none;
 
-  /* Toolbar / content area border */
-  border-bottom: 0.01px solid var(--chrome-content-separator-color);
-
   background-color: var(--toolbox-non-lwt-bgcolor);
   color: var(--toolbox-non-lwt-textcolor);
 
@@ -204,11 +126,6 @@ body {
   &:-moz-window-inactive {
     background-color: var(--toolbox-non-lwt-bgcolor-inactive);
     color: var(--toolbox-non-lwt-textcolor-inactive);
-  }
-
-  /* stylelint-disable-next-line media-query-no-invalid */
-  @media (-moz-bool-pref: "sidebar.revamp") {
-    border-bottom: none;
   }
 
   &[fullscreenShouldAnimate] {
@@ -437,28 +354,11 @@ body {
 
   /* Bookmarks toolbar empty message */
 
+  /* If the toolbar is not initialized set a zero width, but retain height. */
   &[collapsed=false]:not([initialized]) > #personal-toolbar-empty {
     visibility: hidden;
-  }
-
-  /*
-   * Make the empty bookmarks toolbar message take up no horizontal space.
-   * This avoids two issues:
-   * 1) drag/drop of urls/bookmarks to the toolbar not working, because they
-   *    land on the personal-toolbar-empty element.
-   * 2) buttons in the toolbar moving horizontally while the window opens,
-   *    because the element is first shown at full width and then completely
-   *    hidden.
-   * TODO(emilio): The comment above was never quite true (the message did take
-   * horizontal space, see bug 1812636). Figure out how much of this rule is
-   * really needed.
-   */
-  &[collapsed=false] > #personal-toolbar-empty[nowidth] > #personal-toolbar-empty-description {
-    margin-inline: 0;
-    min-width: 0;
-    white-space: nowrap;
-    position: relative;
-    z-index: 1;
+    width: 0;
+    overflow-x: hidden;
   }
 
   /* Bookmarks toolbar in customize mode */
@@ -471,6 +371,10 @@ body {
   }
 }
 
+#personal-toolbar-empty-description {
+  white-space: nowrap;
+}
+
 #personal-bookmarks {
   position: relative;
   -moz-window-dragging: inherit;
@@ -480,37 +384,6 @@ toolbarpaletteitem > #personal-bookmarks > #PlacesToolbar,
 toolbarpaletteitem:has(> toolbarbutton.fxms-bmb-button),
 #personal-bookmarks:is([overflowedItem=true], [cui-areatype="panel"]) > #PlacesToolbar {
   display: none;
-}
-
-/* Bookmarks toolbar only-on-new-tab mode */
-
-:root {
-  --bookmarks-toolbar-overlapping-browser-height: max(28px, 2em);
-}
-
-:root[BookmarksToolbarOverlapsBrowser] {
-  #PersonalToolbar {
-    height: var(--bookmarks-toolbar-overlapping-browser-height);
-  }
-
-  #navigator-toolbox {
-    /* Overlap the content area by the height of the bookmarks toolbar so that
-       temporarily showing the toolbar for new tabs doesn't resize the content
-       area for all tabs. */
-    margin-bottom: calc(-1 * var(--bookmarks-toolbar-overlapping-browser-height));
-    z-index: 1;
-  }
-
-  .newTabBrowserPanel,
-  #sidebar-main,
-  #sidebar-box,
-  .sidebar-animation-screenshot {
-    /* Make room for the bookmarks toolbar so that it won't visibly overlap the
-       new tab page and sidebar contents. We do not put this padding on #browser
-       as that would resize the content area for all tabs including background
-       tabs, which is what we explicitly want to avoid doing here. */
-    margin-top: var(--bookmarks-toolbar-overlapping-browser-height);
-  }
 }
 
 /* Bookmarks toolbar drop indicator */
@@ -580,7 +453,7 @@ menupopup::part(drop-indicator) {
   background-color: var(--toolbar-bgcolor);
   color: var(--toolbar-color);
   color-scheme: var(--toolbar-color-scheme);
-  border-top-color: var(--chrome-content-separator-color, ThreeDShadow);
+  border-top-color: var(--chrome-content-separator-color);
 
   :root[lwtheme] & {
     background-color: var(--lwt-accent-color);
@@ -1200,8 +1073,7 @@ popupnotificationcontent {
   will-change: transform;
 
   @media not (prefers-contrast) {
-  /* TODO: Should this be in browser-custom-colors to respect system theming on
-   * Linux? */
+    /* TODO: Should this be in browser-colors to respect system theming on Linux? */
     --swipe-nav-icon-primary-color: light-dark(#0060DF, #00DDFF);
     --swipe-nav-icon-accent-color: light-dark(#FFFFFF, #000000);
   }

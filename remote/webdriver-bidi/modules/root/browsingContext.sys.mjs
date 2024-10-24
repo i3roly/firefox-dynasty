@@ -1037,6 +1037,7 @@ class BrowsingContextModule extends RootBiDiModule {
         serializationOptions: serializationOptionsWithDefaults,
         startNodes,
       },
+      retryOnAbort: true,
     });
 
     return {
@@ -1452,6 +1453,13 @@ class BrowsingContextModule extends RootBiDiModule {
     }
 
     if (targetHeight !== currentHeight || targetWidth !== currentWidth) {
+      if (!context.isActive) {
+        // Force a synchronous update of the remote browser dimensions so that
+        // background tabs get resized.
+        browser.ownerDocument.synchronouslyUpdateRemoteBrowserDimensions(
+          /* aIncludeInactive = */ true
+        );
+      }
       // Wait until the viewport has been resized
       await this.messageHandler.forwardCommand({
         moduleName: "browsingContext",
@@ -1464,6 +1472,7 @@ class BrowsingContextModule extends RootBiDiModule {
           height: targetHeight,
           width: targetWidth,
         },
+        retryOnAbort: true,
       });
     }
   }
@@ -1616,6 +1625,7 @@ class BrowsingContextModule extends RootBiDiModule {
       if (listener.isStarted) {
         listener.stop();
       }
+      listener.destroy();
 
       if (wait === WaitCondition.Interactive) {
         await this.messageHandler.eventsDispatcher.off(
@@ -1660,9 +1670,9 @@ class BrowsingContextModule extends RootBiDiModule {
    * @param {BrowsingContext} context
    *     The browsing context to get the information from.
    * @param {object=} options
-   * @param {boolean=} options.isRoot
-   *     Flag that indicates if this browsing context is the root of all the
-   *     browsing contexts to be returned. Defaults to true.
+   * @param {boolean=} options.includeParentId
+   *     Flag that indicates if the parent ID should be included.
+   *     Defaults to true.
    * @param {number=} options.maxDepth
    *     Depth of the browsing context tree to traverse. If not specified
    *     the whole tree is returned.
@@ -1670,14 +1680,14 @@ class BrowsingContextModule extends RootBiDiModule {
    *     The information about the browsing context.
    */
   #getBrowsingContextInfo(context, options = {}) {
-    const { isRoot = true, maxDepth = null } = options;
+    const { includeParentId = true, maxDepth = null } = options;
 
     let children = null;
     if (maxDepth === null || maxDepth > 0) {
       children = context.children.map(context =>
         this.#getBrowsingContextInfo(context, {
           maxDepth: maxDepth === null ? maxDepth : maxDepth - 1,
-          isRoot: false,
+          includeParentId: false,
         })
       );
     }
@@ -1699,7 +1709,7 @@ class BrowsingContextModule extends RootBiDiModule {
       userContext,
     };
 
-    if (isRoot) {
+    if (includeParentId) {
       // Only emit the parent id for the top-most browsing context.
       const parentId = lazy.TabManager.getIdForBrowsingContext(context.parent);
       contextInfo.parent = parentId;

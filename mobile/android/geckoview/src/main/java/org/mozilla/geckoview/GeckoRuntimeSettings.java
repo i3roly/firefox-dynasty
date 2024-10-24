@@ -355,6 +355,17 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
     }
 
     /**
+     * Sets whether Session History in Parent (SHIP) should be disabled or not.
+     *
+     * @param value A flag determining whether SHIP should be disabled or not.
+     * @return The builder instance.
+     */
+    public @NonNull Builder disableShip(final boolean value) {
+      getSettings().mDisableShip.set(value);
+      return this;
+    }
+
+    /**
      * When set, the specified {@link android.app.Service} will be started by an {@link
      * android.content.Intent} with action {@link GeckoRuntime#ACTION_CRASHED} when a crash is
      * encountered. Crash details can be found in the Intent extras, such as {@link
@@ -605,6 +616,8 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
   /* package */ final Pref<Boolean> mAboutConfig = new Pref<>("general.aboutConfig.enable", false);
   /* package */ final Pref<Boolean> mForceUserScalable =
       new Pref<>("browser.ui.zoom.force-user-scalable", false);
+  /* package */ final PrefWithoutDefault<Integer> mWebContentIsolationStrategy =
+      new PrefWithoutDefault<>("fission.webContentIsolationStrategy");
   /* package */ final Pref<Boolean> mAutofillLogins =
       new Pref<Boolean>("signon.autofillForms", true);
   /* package */ final Pref<Boolean> mAutomaticallyOfferPopup =
@@ -638,12 +651,14 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
       new Pref<Boolean>("privacy.fingerprintingProtection", false);
   /* package */ final Pref<Boolean> mFingerprintingProtectionPrivateMode =
       new Pref<Boolean>("privacy.fingerprintingProtection.pbmode", true);
-  /* package */ final Pref<String> mFingerprintingProtectionOverrides =
-      new Pref<>("privacy.fingerprintingProtection.overrides", "");
+  /* package */ final PrefWithoutDefault<String> mFingerprintingProtectionOverrides =
+      new PrefWithoutDefault<>("privacy.fingerprintingProtection.overrides");
   /* package */ final Pref<Boolean> mFdlibmMathEnabled =
       new Pref<Boolean>("javascript.options.use_fdlibm_for_sin_cos_tan", false);
   /* package */ final Pref<Integer> mUserCharacteristicPingCurrentVersion =
       new Pref<>("toolkit.telemetry.user_characteristics_ping.current_version", 0);
+  /* package */ PrefWithoutDefault<Boolean> mDisableShip =
+      new PrefWithoutDefault<Boolean>("fission.disableSessionHistoryInParent");
 
   /* package */ int mPreferredColorScheme = COLOR_SCHEME_SYSTEM;
 
@@ -1470,6 +1485,59 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
     return this;
   }
 
+  /** See the `WebContentIsolationStrategy` enum in `ProcessIsolation.cpp`. */
+  @Retention(RetentionPolicy.SOURCE)
+  @IntDef({STRATEGY_ISOLATE_NOTHING, STRATEGY_ISOLATE_EVERYTHING, STRATEGY_ISOLATE_HIGH_VALUE})
+  public @interface WebContentIsolationStrategy {};
+
+  /**
+   * All web content is loaded into a shared `web` content process. This is similar to the
+   * non-Fission behaviour, however remote subframes may still be used for sites with special
+   * isolation behaviour, such as extension or mozillaweb content processes.
+   */
+  public static final int STRATEGY_ISOLATE_NOTHING = 0;
+
+  /**
+   * Web content is always isolated into its own `webIsolated` content process based on site-origin,
+   * and will only load in a shared `web` content process if site-origin could not be determined.
+   */
+  public static final int STRATEGY_ISOLATE_EVERYTHING = 1;
+
+  /**
+   * Only isolates web content loaded by sites which are considered "high value". A site is
+   * considered "high value" if it has been granted a `highValue*` permission by the permission
+   * manager, which is done in response to certain actions.
+   */
+  public static final int STRATEGY_ISOLATE_HIGH_VALUE = 2;
+
+  /**
+   * Get the strategy used to control how sites are isolated into separate processes when Fission is
+   * enabled. This pref has no effect if Fission is disabled.
+   *
+   * <p>Setting should conform to {@link WebContentIsolationStrategy}, but is not automatically
+   * mapped.
+   *
+   * @return The web content isolation strategy.
+   */
+  public @Nullable Integer getWebContentIsolationStrategy() {
+    return mWebContentIsolationStrategy.get();
+  }
+
+  /**
+   * Set the strategy used to control how sites are isolated into separate processes when Fission is
+   * enabled. This pref has no effect if Fission is disabled.
+   *
+   * <p>Setting must conform to {@link WebContentIsolationStrategy} options.
+   *
+   * @param strategy The specified strategy defined by {@link WebContentIsolationStrategy}.
+   * @return This GeckoRuntimeSettings instance.
+   */
+  public @NonNull GeckoRuntimeSettings setWebContentIsolationStrategy(
+      final @NonNull @WebContentIsolationStrategy Integer strategy) {
+    mWebContentIsolationStrategy.commit(strategy);
+    return this;
+  }
+
   /**
    * Gets whether or not force user scalable zooming should be enabled or not.
    *
@@ -1729,6 +1797,21 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
   public @NonNull GeckoRuntimeSettings setUserCharacteristicPingCurrentVersion(final int version) {
     mUserCharacteristicPingCurrentVersion.commit(version);
     return this;
+  }
+
+  /**
+   * Retrieve the status of the disable session history in parent (SHIP) preference. May be null if
+   * the value hasn't been specifically initialized.
+   *
+   * <p>Note, there is no conventional setter because this may only be set before Gecko is
+   * initialized.
+   *
+   * <p>Set before initialization using {@link Builder#disableShip(boolean)}.
+   *
+   * @return True if SHIP is disabled, false if SHIP is enabled.
+   */
+  public @Nullable Boolean getDisableShip() {
+    return mDisableShip.get();
   }
 
   // For internal use only

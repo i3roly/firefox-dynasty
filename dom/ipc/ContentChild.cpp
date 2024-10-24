@@ -2090,22 +2090,18 @@ mozilla::ipc::IPCResult ContentChild::RecvRegisterChromeItem(
   return IPC_OK();
 }
 mozilla::ipc::IPCResult ContentChild::RecvClearStyleSheetCache(
-    const Maybe<RefPtr<nsIPrincipal>>& aForPrincipal,
-    const Maybe<nsCString>& aBaseDomain) {
-  nsIPrincipal* principal =
-      aForPrincipal ? aForPrincipal.value().get() : nullptr;
-  const nsCString* baseDomain = aBaseDomain ? aBaseDomain.ptr() : nullptr;
-  SharedStyleSheetCache::Clear(principal, baseDomain);
+    const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
+    const Maybe<nsCString>& aSchemelessSite,
+    const Maybe<OriginAttributesPattern>& aPattern) {
+  SharedStyleSheetCache::Clear(aPrincipal, aSchemelessSite, aPattern);
   return IPC_OK();
 }
 
 mozilla::ipc::IPCResult ContentChild::RecvClearScriptCache(
-    const Maybe<RefPtr<nsIPrincipal>>& aForPrincipal,
-    const Maybe<nsCString>& aBaseDomain) {
-  nsIPrincipal* principal =
-      aForPrincipal ? aForPrincipal.value().get() : nullptr;
-  const nsCString* baseDomain = aBaseDomain ? aBaseDomain.ptr() : nullptr;
-  SharedScriptCache::Clear(principal, baseDomain);
+    const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
+    const Maybe<nsCString>& aSchemelessSite,
+    const Maybe<OriginAttributesPattern>& aPattern) {
+  SharedScriptCache::Clear(aPrincipal, aSchemelessSite, aPattern);
   return IPC_OK();
 }
 
@@ -2118,15 +2114,16 @@ mozilla::ipc::IPCResult ContentChild::RecvClearImageCacheFromPrincipal(
     loader = imgLoader::NormalLoader();
   }
 
-  loader->RemoveEntriesInternal(aPrincipal, nullptr);
+  loader->RemoveEntriesInternal(Some(aPrincipal), Nothing(), Nothing());
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult ContentChild::RecvClearImageCacheFromBaseDomain(
-    const nsCString& aBaseDomain) {
-  imgLoader::NormalLoader()->RemoveEntriesInternal(nullptr, &aBaseDomain);
-  imgLoader::PrivateBrowsingLoader()->RemoveEntriesInternal(nullptr,
-                                                            &aBaseDomain);
+mozilla::ipc::IPCResult ContentChild::RecvClearImageCacheFromSite(
+    const nsCString& aSchemelessSite, const OriginAttributesPattern& aPattern) {
+  imgLoader::NormalLoader()->RemoveEntriesInternal(
+      Nothing(), Some(aSchemelessSite), Some(aPattern));
+  imgLoader::PrivateBrowsingLoader()->RemoveEntriesInternal(
+      Nothing(), Some(aSchemelessSite), Some(aPattern));
 
   return IPC_OK();
 }
@@ -2557,11 +2554,11 @@ mozilla::ipc::IPCResult ContentChild::RecvFlushMemory(const nsString& reason) {
   return IPC_OK();
 }
 
-mozilla::ipc::IPCResult ContentChild::RecvActivateA11y() {
+mozilla::ipc::IPCResult ContentChild::RecvActivateA11y(uint64_t aCacheDomains) {
 #ifdef ACCESSIBILITY
   // Start accessibility in content process if it's running in chrome
   // process.
-  GetOrCreateAccService(nsAccessibilityService::eMainProcess);
+  GetOrCreateAccService(nsAccessibilityService::eMainProcess, aCacheDomains);
 #endif  // ACCESSIBILITY
   return IPC_OK();
 }
@@ -2571,6 +2568,18 @@ mozilla::ipc::IPCResult ContentChild::RecvShutdownA11y() {
   // Try to shutdown accessibility in content process if it's shutting down in
   // chrome process.
   MaybeShutdownAccService(nsAccessibilityService::eMainProcess);
+#endif
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult ContentChild::RecvSetCacheDomains(
+    uint64_t aCacheDomains) {
+#ifdef ACCESSIBILITY
+  nsAccessibilityService* accService = GetAccService();
+  if (!accService) {
+    return IPC_FAIL(this, "Accessibility service should exist");
+  }
+  accService->SetCacheDomains(aCacheDomains);
 #endif
   return IPC_OK();
 }

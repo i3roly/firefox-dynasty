@@ -419,6 +419,12 @@ class Browsertime(Perftest):
             # want to enable them everywhere shortly (bug 1770152)
             self.results_handler.perfstats = True
 
+        if test.get("support_class", None):
+            # Add a flag to denote when a test uses a support class.
+            # Used to prevent running cpuTime/wallClock measurements
+            # on tests that don't support it yet
+            browsertime_options.extend(["--browsertime.support_class", "true"])
+
         if self.config["app"] in ("fenix",):
             # Fenix can take a lot of time to startup
             browsertime_options.extend(
@@ -962,6 +968,18 @@ class Browsertime(Perftest):
             new_path = os.pathsep.join([ffmpeg_dir, old_path])
             env["PATH"] = new_path
 
+        # Used to enable usage of browsertime packages within user scripts
+        if self.config["run_local"]:
+            env["BROWSERTIME_ROOT"] = str(
+                pathlib.Path(
+                    os.environ["MOZ_DEVELOPER_REPO_DIR"], "tools", "browsertime"
+                )
+            )
+        else:
+            env["BROWSERTIME_ROOT"] = str(
+                pathlib.Path(os.environ["MOZ_FETCHES_DIR"], "browsertime")
+            )
+
         LOG.info("PATH: {}".format(env["PATH"]))
 
         try:
@@ -1044,7 +1062,10 @@ class Browsertime(Perftest):
                         "USB_POWER_METER_SERIAL_NUMBER", ""
                     )
 
-                cmd.extend(["--android.usbPowerTesting", "true"])
+                if test.get("type") == "benchmark":
+                    cmd.extend(["--browsertime.power_test", "true"])
+                else:
+                    cmd.extend(["--android.usbPowerTesting", "true"])
 
             mozprocess.run_and_wait(
                 cmd,

@@ -2044,6 +2044,57 @@ mozilla::ipc::IPCResult BrowserChild::RecvEndDragSession(
   return IPC_OK();
 }
 
+mozilla::ipc::IPCResult BrowserChild::RecvStoreDropTargetAndDelayEndDragSession(
+    const LayoutDeviceIntPoint& aPt, uint32_t aDropEffect, uint32_t aDragAction,
+    nsIPrincipal* aPrincipal, nsIContentSecurityPolicy* aCsp) {
+  // cf. RecvRealDragEvent
+  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
+  MOZ_ASSERT(dragSession);
+  dragSession->SetDragAction(aDragAction);
+  dragSession->SetTriggeringPrincipal(aPrincipal);
+  dragSession->SetCsp(aCsp);
+  RefPtr<DataTransfer> initialDataTransfer = dragSession->GetDataTransfer();
+  if (initialDataTransfer) {
+    initialDataTransfer->SetDropEffectInt(aDropEffect);
+  }
+
+  bool canDrop = true;
+  if (!dragSession || NS_FAILED(dragSession->GetCanDrop(&canDrop)) ||
+      !canDrop) {
+    // Don't record the target or delay EDS calls.
+    return IPC_OK();
+  }
+
+  auto parentToChildTf = GetChildToParentConversionMatrix().MaybeInverse();
+  NS_ENSURE_TRUE(parentToChildTf, IPC_OK());
+  LayoutDevicePoint floatPt(aPt);
+  LayoutDevicePoint floatTf = parentToChildTf->TransformPoint(floatPt);
+  WidgetQueryContentEvent queryEvent(true, eQueryDropTargetHittest,
+                                     mPuppetWidget);
+  queryEvent.mRefPoint = RoundedToInt(floatTf);
+  DispatchWidgetEventViaAPZ(queryEvent);
+  if (queryEvent.mReply && queryEvent.mReply->mDropElement) {
+    mDelayedDropPoint = queryEvent.mRefPoint;
+    dragSession->StoreDropTargetAndDelayEndDragSession(
+        queryEvent.mReply->mDropElement, queryEvent.mReply->mDropFrame);
+  } else {
+    MOZ_ASSERT(false, "Didn't get reply from eQueryDropTargetHittest event!");
+  }
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult
+BrowserChild::RecvDispatchToDropTargetAndResumeEndDragSession(
+    bool aShouldDrop) {
+  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
+  MOZ_ASSERT(dragSession);
+  RefPtr<nsIWidget> widget = mPuppetWidget;
+  dragSession->DispatchToDropTargetAndResumeEndDragSession(
+      widget, mDelayedDropPoint, aShouldDrop);
+  mDelayedDropPoint = {};
+  return IPC_OK();
+}
+
 void BrowserChild::RequestEditCommands(NativeKeyBindingsType aType,
                                        const WidgetKeyboardEvent& aEvent,
                                        nsTArray<CommandInt>& aCommands) {
@@ -2261,6 +2312,20 @@ mozilla::ipc::IPCResult BrowserChild::RecvNormalPrioritySelectionEvent(
   return RecvSelectionEvent(aEvent);
 }
 
+mozilla::ipc::IPCResult BrowserChild::RecvSimpleContentCommandEvent(
+    const EventMessage& aMessage) {
+  WidgetContentCommandEvent localEvent(true, aMessage, mPuppetWidget);
+  DispatchWidgetEventViaAPZ(localEvent);
+  Unused << SendOnEventNeedingAckHandled(aMessage, 0u);
+  return IPC_OK();
+}
+
+mozilla::ipc::IPCResult
+BrowserChild::RecvNormalPrioritySimpleContentCommandEvent(
+    const EventMessage& aMessage) {
+  return RecvSimpleContentCommandEvent(aMessage);
+}
+
 mozilla::ipc::IPCResult BrowserChild::RecvInsertText(
     const nsAString& aStringToInsert) {
   // Use normal event path to reach focused document.
@@ -2268,6 +2333,7 @@ mozilla::ipc::IPCResult BrowserChild::RecvInsertText(
                                        mPuppetWidget);
   localEvent.mString = Some(nsString(aStringToInsert));
   DispatchWidgetEventViaAPZ(localEvent);
+  Unused << SendOnEventNeedingAckHandled(eContentCommandInsertText, 0u);
   return IPC_OK();
 }
 
@@ -2287,6 +2353,7 @@ mozilla::ipc::IPCResult BrowserChild::RecvReplaceText(
   localEvent.mSelection.mOffset = aOffset;
   localEvent.mSelection.mPreventSetSelection = aPreventSetSelection;
   DispatchWidgetEventViaAPZ(localEvent);
+  Unused << SendOnEventNeedingAckHandled(eContentCommandReplaceText, 0u);
   return IPC_OK();
 }
 
@@ -3823,6 +3890,9 @@ nsresult BrowserChild::PrepareRequestData(nsIRequest* aRequest,
 
   rv = channel->GetOriginalURI(
       getter_AddRefs(aRequestData.originalRequestURI()));
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  rv = channel->GetCanceledReason(aRequestData.canceledReason());
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIClassifiedChannel> classifiedChannel = do_QueryInterface(channel);

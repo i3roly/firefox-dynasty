@@ -1511,7 +1511,12 @@ impl Writer {
                     }
                     match sampling {
                         // Center sampling is the default in SPIR-V.
-                        None | Some(crate::Sampling::Center) => (),
+                        None
+                        | Some(
+                            crate::Sampling::Center
+                            | crate::Sampling::First
+                            | crate::Sampling::Either,
+                        ) => (),
                         Some(crate::Sampling::Centroid) => {
                             self.decorate(id, Decoration::Centroid, &[]);
                         }
@@ -1962,7 +1967,7 @@ impl Writer {
                     source_file_id,
                 });
                 self.debugs.append(&mut Instruction::source_auto_continued(
-                    spirv::SourceLanguage::Unknown,
+                    debug_info.language,
                     0,
                     &debug_info_inner,
                 ));

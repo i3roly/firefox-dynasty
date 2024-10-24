@@ -27,6 +27,7 @@
 #include "Http2StreamTunnel.h"
 #include "LoadContextInfo.h"
 #include "mozilla/EndianUtils.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Sprintf.h"
 #include "mozilla/StaticPrefs_network.h"
@@ -240,7 +241,8 @@ Http2Session::~Http2Session() {
   Shutdown(NS_OK);
 
   if (mTrrStreams) {
-    Telemetry::Accumulate(Telemetry::DNS_TRR_REQUEST_PER_CONN, mTrrStreams);
+    mozilla::glean::networking::trr_request_count_per_conn.Get("h2"_ns).Add(
+        static_cast<int32_t>(mTrrStreams));
   }
   Telemetry::Accumulate(Telemetry::SPDY_PARALLEL_STREAMS, mConcurrentHighWater);
   Telemetry::Accumulate(Telemetry::SPDY_REQUEST_PER_CONN_3, mCntActivated);
@@ -1038,11 +1040,13 @@ void Http2Session::SendHello() {
     // The value portion of the setting pair is already initialized to 0
     numberOfEntries++;
 
-    NetworkEndian::writeUint16(
-        packet + kFrameHeaderBytes + (6 * numberOfEntries),
-        SETTINGS_TYPE_MAX_CONCURRENT);
-    // The value portion of the setting pair is already initialized to 0
-    numberOfEntries++;
+    if (StaticPrefs::network_http_http2_send_push_max_concurrent_frame()) {
+      NetworkEndian::writeUint16(
+          packet + kFrameHeaderBytes + (6 * numberOfEntries),
+          SETTINGS_TYPE_MAX_CONCURRENT);
+      // The value portion of the setting pair is already initialized to 0
+      numberOfEntries++;
+    }
 
     mWaitingForSettingsAck = true;
   }
@@ -1068,7 +1072,8 @@ void Http2Session::SendHello() {
       !gHttpHandler->CriticalRequestPrioritization();
 
   // See bug 1909666. Sending this new setting could break some websites.
-  if (disableRFC7540Priorities) {
+  if (disableRFC7540Priorities &&
+      StaticPrefs::network_http_http2_send_NO_RFC7540_PRI()) {
     NetworkEndian::writeUint16(
         packet + kFrameHeaderBytes + (6 * numberOfEntries),
         SETTINGS_NO_RFC7540_PRIORITIES);
@@ -2210,11 +2215,11 @@ nsresult Http2Session::RecvPushPromise(Http2Session* self) {
     uint32_t priorityDependency = pushedWeak->PriorityDependency();
     uint8_t priorityWeight = pushedWeak->PriorityWeight();
     self->SendPriorityFrame(promisedID, priorityDependency, priorityWeight);
-  } else {
+  } else if (StaticPrefs::network_http_http2_push_priority_update()) {
     nsHttpTransaction* trans = associatedStream->HttpTransaction();
     if (trans) {
       uint8_t urgency = nsHttpHandler::UrgencyFromCoSFlags(
-          trans->GetClassOfService().Flags());
+          trans->GetClassOfService().Flags(), trans->Priority());
 
       // if the initial stream was kUrgentStartGroupID or kLeaderGroupID
       // which are equivalent to urgency 1 and 2 then set the pushed stream

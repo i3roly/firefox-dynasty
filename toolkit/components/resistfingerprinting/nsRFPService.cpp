@@ -239,6 +239,12 @@ bool nsRFPService::IsRFPEnabledFor(
     const Maybe<RFPTarget>& aOverriddenFingerprintingSettings) {
   MOZ_ASSERT(aTarget != RFPTarget::AllTargets);
 
+#if SPOOFED_MAX_TOUCH_POINTS > 0
+  if (aTarget == RFPTarget::PointerId) {
+    return false;
+  }
+#endif
+
   if (StaticPrefs::privacy_resistFingerprinting_DoNotUseDirectly() ||
       (aIsPrivateMode &&
        StaticPrefs::privacy_resistFingerprinting_pbmode_DoNotUseDirectly())) {
@@ -1351,16 +1357,15 @@ Maybe<nsTArray<uint8_t>> nsRFPService::GenerateKey(nsIChannel* aChannel) {
 
 // static
 Maybe<nsTArray<uint8_t>> nsRFPService::GenerateKeyForServiceWorker(
-    nsIURI* aURI, bool aForeignByAncestorContext) {
+    nsIURI* aFirstPartyURI, nsIPrincipal* aPrincipal,
+    bool aForeignByAncestorContext) {
   MOZ_ASSERT(XRE_IsParentProcess());
-  MOZ_ASSERT(aURI);
+  MOZ_ASSERT(aFirstPartyURI);
 
   RefPtr<nsRFPService> service = GetOrCreate();
 
-  RefPtr<nsIPrincipal> principal =
-      BasePrincipal::CreateContentPrincipal(aURI->GetSpecOrDefault());
-  OriginAttributes attrs = principal->OriginAttributesRef();
-  attrs.SetPartitionKey(aURI, aForeignByAncestorContext);
+  OriginAttributes attrs = aPrincipal->OriginAttributesRef();
+  attrs.SetPartitionKey(aFirstPartyURI, aForeignByAncestorContext);
 
   nsAutoCString oaSuffix;
   attrs.CreateSuffix(oaSuffix);
@@ -1430,51 +1435,26 @@ nsRFPService::CleanRandomKeyByPrincipal(nsIPrincipal* aPrincipal) {
 }
 
 NS_IMETHODIMP
-nsRFPService::CleanRandomKeyByDomain(const nsACString& aDomain) {
+nsRFPService::CleanRandomKeyBySite(
+    const nsACString& aSchemelessSite,
+    JS::Handle<JS::Value> aOriginAttributesPattern, JSContext* aCx) {
   MOZ_ASSERT(XRE_IsParentProcess());
+  NS_ENSURE_ARG_POINTER(aCx);
 
-  // Get http URI from the domain.
-  nsCOMPtr<nsIURI> httpURI;
-  nsresult rv = NS_NewURI(getter_AddRefs(httpURI), "http://"_ns + aDomain);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Use the originAttributes to get the partitionKey.
-  OriginAttributes attrs;
-  attrs.SetPartitionKey(httpURI, false);
-
-  // Create a originAttributesPattern and set the http partitionKey to the
-  // pattern.
   OriginAttributesPattern pattern;
-  pattern.mPartitionKey.Reset();
-  pattern.mPartitionKey.Construct(attrs.mPartitionKey);
+  if (!aOriginAttributesPattern.isObject() ||
+      !pattern.Init(aCx, aOriginAttributesPattern)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+
+  if (!pattern.mPartitionKeyPattern.WasPassed()) {
+    pattern.mPartitionKeyPattern.Construct();
+  }
+  pattern.mPartitionKeyPattern.Value().mBaseDomain.Construct(
+      NS_ConvertUTF8toUTF16(aSchemelessSite));
+
   ClearBrowsingSessionKey(pattern);
 
-  // We must also include the cross-site embeds of this principal that end up
-  // re-embedded back into the same principal's top level, otherwise state will
-  // persist for this target
-  attrs.SetPartitionKey(httpURI, true);
-  pattern.mPartitionKey.Reset();
-  pattern.mPartitionKey.Construct(attrs.mPartitionKey);
-  ClearBrowsingSessionKey(pattern);
-
-  // Get https URI from the domain.
-  nsCOMPtr<nsIURI> httpsURI;
-  rv = NS_NewURI(getter_AddRefs(httpsURI), "https://"_ns + aDomain);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Use the originAttributes to get the partitionKey and set to the pattern.
-  attrs.SetPartitionKey(httpsURI, false);
-  pattern.mPartitionKey.Reset();
-  pattern.mPartitionKey.Construct(attrs.mPartitionKey);
-  ClearBrowsingSessionKey(pattern);
-
-  // We must also include the cross-site embeds of this principal that end up
-  // re-embedded back into the same principal's top level, otherwise state will
-  // persist for this target
-  attrs.SetPartitionKey(httpsURI, true);
-  pattern.mPartitionKey.Reset();
-  pattern.mPartitionKey.Construct(attrs.mPartitionKey);
-  ClearBrowsingSessionKey(pattern);
   return NS_OK;
 }
 
@@ -2380,4 +2360,35 @@ void nsRFPService::GetMediaDeviceGroup(nsString& aGroup,
       aGroup = u"Speaker Device Group"_ns;
       break;
   }
+}
+
+/* static */
+uint16_t nsRFPService::ViewportSizeToAngle(int32_t aWidth, int32_t aHeight) {
+#ifdef MOZ_WIDGET_ANDROID
+  bool neutral = aHeight >= aWidth;
+#else
+  bool neutral = aWidth >= aHeight;
+#endif
+  if (neutral) {
+    return 0;
+  }
+  return 90;
+}
+
+/* static */
+dom::OrientationType nsRFPService::ViewportSizeToOrientationType(
+    int32_t aWidth, int32_t aHeight) {
+  if (aWidth >= aHeight) {
+    return dom::OrientationType::Landscape_primary;
+  }
+  return dom::OrientationType::Portrait_primary;
+}
+
+/* static */
+dom::OrientationType nsRFPService::GetDefaultOrientationType() {
+#ifdef MOZ_WIDGET_ANDROID
+  return dom::OrientationType::Portrait_primary;
+#else
+  return dom::OrientationType::Landscape_primary;
+#endif
 }

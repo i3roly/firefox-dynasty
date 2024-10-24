@@ -895,8 +895,8 @@ void TransportLayerDtls::Handshake() {
     MOZ_MTLOG(ML_NOTICE, LAYER_INFO << "****** SSL handshake completed ******");
     if (!cert_ok_) {
       MOZ_MTLOG(ML_ERROR, LAYER_INFO << "Certificate check never occurred");
-      TL_SET_STATE(TS_ERROR);
       RecordHandshakeCompletionTelemetry("CERT_FAILURE");
+      TL_SET_STATE(TS_ERROR);
       return;
     }
     if (!CheckAlpn()) {
@@ -904,14 +904,14 @@ void TransportLayerDtls::Handshake() {
       // Forcibly close the connection so that the peer isn't left hanging
       // (assuming the close_notify isn't dropped).
       ssl_fd_ = nullptr;
-      TL_SET_STATE(TS_ERROR);
       RecordHandshakeCompletionTelemetry("ALPN_FAILURE");
+      TL_SET_STATE(TS_ERROR);
       return;
     }
 
+    RecordHandshakeCompletionTelemetry("SUCCESS");
     TL_SET_STATE(TS_OPEN);
 
-    RecordHandshakeCompletionTelemetry("SUCCESS");
     RecordTlsTelemetry();
     timer_ = nullptr;
   } else {
@@ -941,8 +941,8 @@ void TransportLayerDtls::Handshake() {
         const char* err_msg = PR_ErrorToName(err);
         MOZ_MTLOG(ML_ERROR, LAYER_INFO << "DTLS handshake error " << err << " ("
                                        << err_msg << ")");
-        TL_SET_STATE(TS_ERROR);
         RecordHandshakeCompletionTelemetry(err_msg);
+        TL_SET_STATE(TS_ERROR);
         break;
     }
   }

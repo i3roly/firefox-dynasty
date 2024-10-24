@@ -9,6 +9,9 @@
 #include "jsapi.h"
 #include "jsfriendapi.h"
 
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+#  include "builtin/AsyncDisposableStackObject.h"
+#endif
 #include "builtin/AtomicsObject.h"
 #include "builtin/BigInt.h"
 #include "builtin/DataViewObject.h"
@@ -141,6 +144,7 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
     case JSProto_SuppressedError:
     case JSProto_DisposableStack:
+    case JSProto_AsyncDisposableStack:
 #endif
     case JSProto_EvalError:
     case JSProto_RangeError:
@@ -596,13 +600,25 @@ GlobalObject* GlobalObject::createInternal(JSContext* cx,
   MOZ_ASSERT(clasp->flags & JSCLASS_IS_GLOBAL);
   MOZ_ASSERT(clasp->isTrace(JS_GlobalObjectTraceHook));
 
-  JSObject* obj = NewTenuredObjectWithGivenProto(cx, clasp, nullptr);
+  ObjectFlags objectFlags = {
+      ObjectFlag::QualifiedVarObj,
+      ObjectFlag::GenerationCountedGlobal,
+  };
+
+  JSObject* obj =
+      NewTenuredObjectWithGivenProto(cx, clasp, nullptr, objectFlags);
   if (!obj) {
     return nullptr;
   }
 
   Rooted<GlobalObject*> global(cx, &obj->as<GlobalObject>());
+
+  // Global holds both variables qualified with `var` and those that are not.
   MOZ_ASSERT(global->isUnqualifiedVarObj());
+  MOZ_ASSERT(global->isQualifiedVarObj());
+
+  // Global objects support generation counts.
+  MOZ_ASSERT(global->isGenerationCountedGlobal());
 
   {
     auto data = cx->make_unique<GlobalObjectData>(cx->zone());
@@ -632,13 +648,6 @@ GlobalObject* GlobalObject::createInternal(JSContext* cx,
   global->data().emptyGlobalScope.init(emptyGlobalScope);
 
   if (!GlobalObject::createIntrinsicsHolder(cx, global)) {
-    return nullptr;
-  }
-
-  if (!JSObject::setQualifiedVarObj(cx, global)) {
-    return nullptr;
-  }
-  if (!JSObject::setGenerationCountedGlobal(cx, global)) {
     return nullptr;
   }
 
@@ -880,6 +889,7 @@ GlobalObject::getOrCreateFinalizationRegistryData() {
   return maybeFinalizationRegistryData();
 }
 
+#ifndef NIGHTLY_BUILD
 bool GlobalObject::addToVarNames(JSContext* cx, JS::Handle<JSAtom*> name) {
   MOZ_ASSERT(name);
 
@@ -890,6 +900,7 @@ bool GlobalObject::addToVarNames(JSContext* cx, JS::Handle<JSAtom*> name) {
 
   return true;
 }
+#endif
 
 /* static */
 bool GlobalObject::createIntrinsicsHolder(JSContext* cx,
@@ -1054,15 +1065,22 @@ void GlobalObject::releaseData(JS::GCContext* gcx) {
   gcx->delete_(this, data, MemoryUse::GlobalObjectData);
 }
 
-GlobalObjectData::GlobalObjectData(Zone* zone) : varNames(zone) {}
+GlobalObjectData::GlobalObjectData(Zone* zone)
+#ifndef NIGHTLY_BUILD
+    : varNames(zone)
+#endif
+{
+}
 
 GlobalObjectData::~GlobalObjectData() = default;
 
 void GlobalObjectData::trace(JSTracer* trc, GlobalObject* global) {
+#ifndef NIGHTLY_BUILD
   // Atoms are always tenured so don't need to be traced during minor GC.
   if (trc->runtime()->heapState() != JS::HeapState::MinorCollecting) {
     varNames.trace(trc);
   }
+#endif
 
   for (auto& ctorWithProto : builtinConstructors) {
     TraceNullableEdge(trc, &ctorWithProto.constructor, "global-builtin-ctor");
@@ -1129,6 +1147,8 @@ void GlobalObjectData::addSizeOfIncludingThis(
         regExpRealm.regExpStatics->sizeOfIncludingThis(mallocSizeOf);
   }
 
+#ifndef NIGHTLY_BUILD
   info->objectsMallocHeapGlobalVarNamesSet +=
       varNames.shallowSizeOfExcludingThis(mallocSizeOf);
+#endif
 }

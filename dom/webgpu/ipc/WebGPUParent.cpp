@@ -24,6 +24,10 @@
 #  include "mozilla/gfx/DeviceManagerDx.h"
 #endif
 
+#if MOZ_WIDGET_GTK
+#  include "mozilla/webgpu/ExternalTextureDMABuf.h"
+#endif
+
 namespace mozilla::webgpu {
 
 const uint64_t POLL_TIME_MS = 100;
@@ -71,6 +75,51 @@ extern void* wgpu_server_get_external_texture_handle(void* aParam,
   MOZ_ASSERT_UNREACHABLE("unexpected to be called");
 #endif
   return sharedHandle;
+}
+
+extern int32_t wgpu_server_get_dma_buf_fd(void* aParam, WGPUTextureId aId) {
+  auto* parent = static_cast<WebGPUParent*>(aParam);
+
+  auto texture = parent->GetExternalTexture(aId);
+  if (!texture) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    return -1;
+  }
+
+#ifdef MOZ_WIDGET_GTK
+  auto* textureDMABuf = texture->AsExternalTextureDMABuf();
+  if (!textureDMABuf) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    return -1;
+  }
+  auto fd = textureDMABuf->CloneDmaBufFd();
+  // fd should be closed by the caller.
+  return fd.release();
+#else
+  MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+  return -1;
+#endif
+}
+
+extern WGPUVkImageHandle* wgpu_server_get_vk_image_handle(void* aParam,
+                                                          WGPUTextureId aId) {
+  auto* parent = static_cast<WebGPUParent*>(aParam);
+
+  auto texture = parent->GetExternalTexture(aId);
+  if (!texture) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    return nullptr;
+  }
+
+#if defined(MOZ_WIDGET_GTK)
+  auto* textureDMABuf = texture->AsExternalTextureDMABuf();
+  if (!textureDMABuf) {
+    return nullptr;
+  }
+  return textureDMABuf->GetHandle();
+#else
+  return nullptr;
+#endif
 }
 
 }  // namespace ffi
@@ -293,8 +342,7 @@ void WebGPUParent::ReportError(const Maybe<RawId> aDeviceId,
 }
 
 ipc::IPCResult WebGPUParent::RecvInstanceRequestAdapter(
-    const dom::GPURequestAdapterOptions& aOptions,
-    const nsTArray<RawId>& aTargetIds,
+    const dom::GPURequestAdapterOptions& aOptions, RawId aAdapterId,
     InstanceRequestAdapterResolver&& resolver) {
   ffi::WGPURequestAdapterOptions options = {};
   if (aOptions.mPowerPreference.WasPassed()) {
@@ -308,15 +356,14 @@ ipc::IPCResult WebGPUParent::RecvInstanceRequestAdapter(
   auto luid = GetCompositorDeviceLuid();
 
   ErrorBuffer error;
-  int8_t index = ffi::wgpu_server_instance_request_adapter(
-      mContext.get(), &options, aTargetIds.Elements(), aTargetIds.Length(),
-      luid.ptrOr(nullptr), error.ToFFI());
+  bool success = ffi::wgpu_server_instance_request_adapter(
+      mContext.get(), &options, aAdapterId, luid.ptrOr(nullptr), error.ToFFI());
 
   ByteBuf infoByteBuf;
   // Rust side expects an `Option`, so 0 maps to `None`.
   uint64_t adapterId = 0;
-  if (index >= 0) {
-    adapterId = aTargetIds[index];
+  if (success) {
+    adapterId = aAdapterId;
   }
   ffi::wgpu_server_adapter_pack_info(mContext.get(), adapterId,
                                      ToFFI(&infoByteBuf));
@@ -325,10 +372,8 @@ ipc::IPCResult WebGPUParent::RecvInstanceRequestAdapter(
 
   // free the unused IDs
   ipc::ByteBuf dropByteBuf;
-  for (size_t i = 0; i < aTargetIds.Length(); ++i) {
-    if (static_cast<int8_t>(i) != index) {
-      wgpu_server_adapter_free(aTargetIds[i], ToFFI(&dropByteBuf));
-    }
+  if (!success) {
+    wgpu_server_adapter_free(aAdapterId, ToFFI(&dropByteBuf));
   }
   if (dropByteBuf.mData && !SendDropAction(std::move(dropByteBuf))) {
     NS_ERROR("Unable to free free unused adapter IDs");
@@ -1530,8 +1575,8 @@ std::shared_ptr<ExternalTexture> WebGPUParent::CreateExternalTexture(
   MOZ_RELEASE_ASSERT(mExternalTextures.find(aTextureId) ==
                      mExternalTextures.end());
 
-  UniquePtr<ExternalTexture> texture =
-      ExternalTexture::Create(aWidth, aHeight, aFormat, aUsage);
+  UniquePtr<ExternalTexture> texture = ExternalTexture::Create(
+      mContext.get(), aDeviceId, aWidth, aHeight, aFormat, aUsage);
   if (!texture) {
     return nullptr;
   }

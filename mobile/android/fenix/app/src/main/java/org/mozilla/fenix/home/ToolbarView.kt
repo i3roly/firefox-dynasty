@@ -4,7 +4,6 @@
 
 package org.mozilla.fenix.home
 
-import android.content.Intent
 import android.view.Gravity
 import android.view.ViewGroup
 import androidx.annotation.VisibleForTesting
@@ -39,8 +38,6 @@ class ToolbarView(
     private val interactor: ToolbarInteractor,
     private val homeFragment: HomeFragment,
     private val homeActivity: HomeActivity,
-    private val onShowPinVerification: (Intent) -> Unit,
-    private val onBiometricAuthenticationSuccessful: () -> Unit,
 ) {
 
     private var context = homeFragment.requireContext()
@@ -58,8 +55,10 @@ class ToolbarView(
 
     /**
      * Setups the home screen toolbar.
+     *
+     * @param browserState [BrowserState] is used to update button visibility.
      */
-    fun build() {
+    fun build(browserState: BrowserState) {
         binding.toolbar.compoundDrawablePadding =
             context.resources.getDimensionPixelSize(R.dimen.search_bar_search_engine_icon_padding)
 
@@ -80,13 +79,15 @@ class ToolbarView(
 
         binding.toolbarWrapper.increaseTapAreaVertically(TOOLBAR_WRAPPER_INCREASE_HEIGHT_DPS)
 
-        updateButtonVisibility()
+        updateButtonVisibility(browserState)
     }
 
     /**
      * Updates the visibility of the tab counter and menu buttons.
+     *
+     * @param browserState [BrowserState] is used to update tab counter's state.
      */
-    fun updateButtonVisibility() {
+    fun updateButtonVisibility(browserState: BrowserState) {
         val showTabCounterAndMenu = !context.shouldAddNavigationBar()
         binding.menuButton.isVisible = showTabCounterAndMenu
         binding.tabButton.isVisible = showTabCounterAndMenu
@@ -94,6 +95,7 @@ class ToolbarView(
         if (showTabCounterAndMenu) {
             homeMenuView = buildHomeMenu()
             tabCounterView = buildTabCounter()
+            tabCounterView?.update(browserState)
         } else {
             homeMenuView = null
             tabCounterView = null
@@ -102,15 +104,12 @@ class ToolbarView(
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun buildHomeMenu() = HomeMenuView(
-        view = homeFragment.requireView(),
         context = context,
         lifecycleOwner = homeFragment.viewLifecycleOwner,
         homeActivity = homeActivity,
         navController = homeFragment.findNavController(),
         homeFragment = homeFragment,
         menuButton = WeakReference(binding.menuButton),
-        onShowPinVerification = { intent -> onShowPinVerification(intent) },
-        onBiometricAuthenticationSuccessful = { onBiometricAuthenticationSuccessful() },
     ).also { it.build() }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)

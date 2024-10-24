@@ -968,43 +968,34 @@ void CodeGenerator::visitUDivOrModI64(LUDivOrModI64* lir) {
   masm.Pop(InstanceReg);
 }
 
-void CodeGeneratorX86::emitBigIntDiv(LBigIntDiv* ins, Register dividend,
-                                     Register divisor, Register output,
-                                     Label* fail) {
+void CodeGeneratorX86::emitBigIntPtrDiv(LBigIntPtrDiv* ins, Register dividend,
+                                        Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
-  MOZ_ASSERT(dividend == eax);
-  MOZ_ASSERT(output == edx);
+  MOZ_ASSERT(ToRegister(ins->temp0()) == edx);
+  MOZ_ASSERT(output == eax);
 
-  // Sign extend the lhs into rdx to make rdx:rax.
+  if (dividend != eax) {
+    masm.movePtr(dividend, eax);
+  }
+
+  // Sign extend the lhs into edx to make edx:eax.
   masm.cdq();
 
   masm.idiv(divisor);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
 }
 
-void CodeGeneratorX86::emitBigIntMod(LBigIntMod* ins, Register dividend,
-                                     Register divisor, Register output,
-                                     Label* fail) {
+void CodeGeneratorX86::emitBigIntPtrMod(LBigIntPtrMod* ins, Register dividend,
+                                        Register divisor, Register output) {
   // Callers handle division by zero and integer overflow.
 
   MOZ_ASSERT(dividend == eax);
   MOZ_ASSERT(output == edx);
 
-  // Sign extend the lhs into rdx to make edx:eax.
+  // Sign extend the lhs into edx to make edx:eax.
   masm.cdq();
 
   masm.idiv(divisor);
-
-  // Move the remainder from edx.
-  masm.movl(output, dividend);
-
-  // Create and return the result.
-  masm.newGCBigInt(output, divisor, initialBigIntHeap(), fail);
-  masm.initializeBigInt(output, dividend);
 }
 
 void CodeGenerator::visitWasmSelectI64(LWasmSelectI64* lir) {
@@ -1145,23 +1136,6 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
   // Generates no code on this platform because we just return the low part of
   // the input register pair.
   MOZ_ASSERT(ToRegister(lir->input()) == ToRegister(lir->output()));
-}
-
-void CodeGenerator::visitNotI64(LNotI64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
-  Register output = ToRegister(lir->output());
-
-  if (input.high == output) {
-    masm.orl(input.low, output);
-  } else if (input.low == output) {
-    masm.orl(input.high, output);
-  } else {
-    masm.movl(input.high, output);
-    masm.orl(input.low, output);
-  }
-
-  masm.cmpl(Imm32(0), output);
-  masm.emitSet(Assembler::Equal, output);
 }
 
 void CodeGenerator::visitWasmTruncateToInt64(LWasmTruncateToInt64* lir) {

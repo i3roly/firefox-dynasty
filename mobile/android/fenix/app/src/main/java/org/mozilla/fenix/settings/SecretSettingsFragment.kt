@@ -77,6 +77,12 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 
+        requirePreference<SwitchPreference>(R.string.pref_key_use_new_bookmarks_ui).apply {
+            isVisible = true
+            isChecked = context.settings().useNewBookmarks
+            onPreferenceChangeListener = SharedPreferenceUpdater()
+        }
+
         requirePreference<SwitchPreference>(R.string.pref_key_enable_compose_homepage).apply {
             isVisible = Config.channel.isNightlyOrDebug
             isChecked = context.settings().enableComposeHomepage
@@ -156,7 +162,6 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 
-        // This is only available in Debug builds for verification.
         requirePreference<SwitchPreference>(
             R.string.pref_key_set_as_default_browser_prompt_enabled,
         ).apply {

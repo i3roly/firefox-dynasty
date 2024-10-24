@@ -95,9 +95,9 @@
 
     <!-- Total cookie protection "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the total cookie protection feature. -->
-    <string name="tcp_cfr_message">Наша найпотужніша функція приватності ізолює елементи стеження між сайтами.</string>
+    <string name="tcp_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Наша найпотужніша функція приватності ізолює елементи стеження між сайтами.</string>
     <!-- Text displayed that links to website containing documentation about the "Total cookie protection" feature. -->
-    <string name="tcp_cfr_learn_more">Докладніше про функцію Total Cookie Protection</string>
+    <string name="tcp_cfr_learn_more" moz:removedIn="132" tools:ignore="UnusedResources">Докладніше про функцію Total Cookie Protection</string>
 
     <!-- Private browsing erase action "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the erase private browsing feature. -->
@@ -213,8 +213,11 @@
     <string name="browser_menu_manage_extensions">Керувати розширеннями</string>
     <!-- Content description (not visible, for screen readers etc.): Section heading for recommended extensions.-->
     <string name="browser_menu_recommended_section_content_description">Рекомендовані розширення</string>
+    <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extension.
+      The first parameter is the name of the extension (for example: ClearURLs). -->
+    <string name="browser_menu_extension_plus_icon_content_description_2">Додати %1$s</string>
     <!-- Content description (not visible, for screen readers etc.): Label for plus icon used to add extensions. -->
-    <string name="browser_menu_extension_plus_icon_content_description">Додати розширення</string>
+    <string name="browser_menu_extension_plus_icon_content_description" moz:removedIn="124" tools:ignore="UnusedResources">Додати розширення</string>
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Знайти більше розширень</string>
     <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
@@ -909,6 +912,10 @@
     <string name="preferences_marketing_data">Маркетингові дані</string>
     <!-- Preference description for marketing data collection -->
     <string name="preferences_marketing_data_description2">Надсилати основні дані про використання до нашого постачальника мобільного маркетингу Adjust</string>
+    <!-- Preference switch title for automatically submitting crash reports -->
+    <string name="preferences_automatically_submit_crashes_title">Автоматично надсилати звіти про збої</string>
+    <!-- Preference switch description for automatically submitting crash reports -->
+    <string name="preferences_automatically_submit_crashes_description">Автоматично надсилати звіти про збої до Mozilla під час наступного запуску</string>
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">Дослідження</string>
     <!-- Summary for studies preferences -->
@@ -1204,6 +1211,8 @@
     <!-- Restore tab button text on the tab crash page -->
     <string name="tab_crash_restore">Відновити вкладку</string>
 
+    <!-- Unsubmitted crash dialog title, The first parameter is the name of the app (e.g. Firefox)  -->
+    <string name="unsubmitted_crash_dialog_title">%s довелося перезапустити</string>
     <!-- Unsubmitted crash dialog checkbox label for automatically sending reports in the future -->
     <string name="unsubmitted_crash_dialog_checkbox_label">Автоматично надсилати звіти про збої</string>
     <!-- Unsubmitted crash dialog negative button to dismiss the dialog -->
@@ -1299,6 +1308,17 @@
 
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
     <string name="bookmark_item_menu_button_content_description">Елемент меню для %s</string>
+
+    <!-- Title for the bookmark list empty state-->
+    <string name="bookmark_empty_list_title">Немає закладок</string>
+    <!-- Description for the bookmark list empty state when you're not signed into sync. -->
+    <string name="bookmark_empty_list_guest_description">Зберігайте сайти під час перегляду. Увійдіть, щоб отримати закладки з інших синхронізованих пристроїв.</string>
+    <!-- Text for the button to navigate to sync authentication -->
+    <string name="bookmark_empty_list_guest_cta">Увійти до синхронізації</string>
+    <!-- Description for the bookmark list empty state when you're signed into sync. -->
+    <string name="bookmark_empty_list_authenticated_description">Зберігайте сайти під час перегляду. Ви також побачите закладки з інших синхронізованих пристроїв.</string>
+    <!-- Description for the bookmark list empty state when you're in an empty folder. -->
+    <string name="bookmark_empty_list_folder_description">Додавайте закладки для сайтів під час перегляду, щоб потім легко їх знайти.</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -2471,14 +2491,14 @@
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">Не зараз</string>
     <!-- Text for the first CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_first_cfr_message">Дізнайтеся, чи можна довіряти відгукам про цей товар перед його купівлею.</string>
+    <string name="review_quality_check_first_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Дізнайтеся, чи можна довіряти відгукам про цей товар перед його купівлею.</string>
 
     <!-- Text displayed in the first CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_first_cfr_action" tools:ignore="UnusedResources">Спробуйте засіб перевірки відгуків</string>
+    <string name="review_quality_check_first_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">Спробуйте засіб перевірки відгуків</string>
     <!-- Text for the second CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_second_cfr_message">Чи надійні ці відгуки? Перевірте зараз, щоб переглянути скоригований рейтинг.</string>
+    <string name="review_quality_check_second_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Чи надійні ці відгуки? Перевірте зараз, щоб переглянути скоригований рейтинг.</string>
     <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_second_cfr_action" tools:ignore="UnusedResources">Відкрити засіб перевірки відгуків</string>
+    <string name="review_quality_check_second_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">Відкрити засіб перевірки відгуків</string>
     <!-- Flag showing that the review quality check feature is work in progress. -->
     <string name="review_quality_check_beta_flag" moz:removedIn="130" tools:ignore="UnusedResources">Beta</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
@@ -2849,6 +2869,8 @@
     <string name="microsurvey_homepage_title" tools:ignore="BrandUsage,UnusedResources">Як ви оцінюєте домівку Firefox?</string>
     <!-- Text shown in the survey title for search experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
     <string name="microsurvey_search_title" tools:ignore="BrandUsage,UnusedResources">Як ви оцінюєте взаємодію з пошуком у Firefox?</string>
+    <!-- Text shown in the survey title for sync experience microsurvey. Note: The word "Firefox" should NOT be translated. -->
+    <string name="microsurvey_sync_title" tools:ignore="BrandUsage,UnusedResources">Як ви оцінюєте роботу синхронізації у Firefox?</string>
     <!-- Accessibility -->
     <!-- Content description for the survey application icon. Note: The word "Firefox" should NOT be translated.  -->
     <string name="microsurvey_app_icon_content_description" tools:ignore="BrandUsage">Логотип Firefox</string>
@@ -2876,6 +2898,10 @@
     <string name="debug_drawer_cfr_tools_title">Інструменти CFR</string>
     <!-- The title of the reset CFR section in CFR Tools -->
     <string name="debug_drawer_cfr_tools_reset_cfr_title">Скинути CFR</string>
+
+    <!-- Glean debug tools -->
+    <!-- The title of the glean debugging feature -->
+    <string name="glean_debug_tools_title">Інструменти налагодження Glean</string>
 
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->

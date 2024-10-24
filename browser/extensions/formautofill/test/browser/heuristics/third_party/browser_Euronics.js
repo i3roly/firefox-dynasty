@@ -13,10 +13,9 @@ add_heuristic_tests(
           },
           fields: [
             { fieldName: "cc-number" },
-            //{ fieldName: "cc-cvc" },
+            { fieldName: "cc-csc", reason: "regex-heuristic" },
             { fieldName: "cc-exp-month" },
             { fieldName: "cc-exp-year" },
-            { fieldName: "cc-type", reason: "regex-heuristic" }, 
           ],
         },
         {

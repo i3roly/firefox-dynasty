@@ -31,7 +31,7 @@ internal fun FenixSnackbar.collectionMessage(
 internal fun FenixSnackbar.bookmarkMessage(
     tabSize: Int,
 ): FenixSnackbar {
-    val stringRes = when {
+    val displayResId = when {
         tabSize > 1 -> {
             R.string.snackbar_message_bookmarks_saved
         }
@@ -39,7 +39,7 @@ internal fun FenixSnackbar.bookmarkMessage(
             R.string.bookmark_saved_snackbar
         }
     }
-    setText(context.getString(stringRes))
+    setText(context.getString(displayResId))
     return this
 }
 

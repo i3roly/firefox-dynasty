@@ -68,6 +68,8 @@ support-files = [
   "html_sse-test-page.html",
   "html_ws-sse-test-page.html",
   "html_image-cache.html",
+  "html_script-cache.html",
+  "html_stylesheet-cache.html",
   "js_worker-test.js",
   "js_worker-test2.js",
   "js_websocket-worker-test.js",
@@ -87,9 +89,11 @@ support-files = [
   "sjs_sorting-test-server.sjs",
   "sjs_sse-test-server.sjs",
   "sjs_status-codes-test-server.sjs",
+  "sjs_test-script.sjs",
   "sjs_timings-test-server.sjs",
   "sjs_truncate-test-server.sjs",
   "test-image.png",
+  "test-stylesheet.css",
   "ostrich-regular.ttf",
   "ostrich-black.ttf",
   "service-workers/status-codes.html",
@@ -428,6 +432,8 @@ fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and
 
 ["browser_net_save_response_as.js"]
 
+["browser_net_script_cache.js"]
+
 ["browser_net_search-results.js"]
 skip-if = ["os == 'linux' && os_version == '18.04' && a11y_checks"]  # Bug 1721160
 
@@ -495,6 +501,8 @@ skip-if = ["true"] # Bug 1373558
 
 ["browser_net_streaming-response.js"]
 
+["browser_net_stylesheet_cache.js"]
+
 ["browser_net_tabbar_focus.js"]
 fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
 
@@ -511,6 +519,8 @@ fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and
 ["browser_net_telemetry_throttle_changed.js"]
 
 ["browser_net_throttle.js"]
+
+["browser_net_throttling_cached.js"]
 
 ["browser_net_throttling_profiles.js"]
 

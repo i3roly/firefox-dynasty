@@ -309,9 +309,12 @@ static StyleRect<T> StyleRectWithAllSides(const T& aSide) {
   return {aSide, aSide, aSide, aSide};
 }
 
+const StyleMargin nsStyleMargin::kZeroMargin =
+    StyleMargin::LengthPercentage(StyleLengthPercentage::Zero());
+
 nsStyleMargin::nsStyleMargin()
     : mMargin(StyleRectWithAllSides(
-          LengthPercentageOrAuto::LengthPercentage(LengthPercentage::Zero()))),
+          StyleMargin::LengthPercentage(LengthPercentage::Zero()))),
       mScrollMargin(StyleRectWithAllSides(StyleLength{0.})),
       mOverflowClipMargin(StyleLength::Zero()) {
   MOZ_COUNT_CTOR(nsStyleMargin);
@@ -328,7 +331,7 @@ nsChangeHint nsStyleMargin::CalcDifference(
     const nsStyleMargin& aNewData) const {
   nsChangeHint hint = nsChangeHint(0);
 
-  if (mMargin != aNewData.mMargin) {
+  if (!MarginEquals(aNewData)) {
     // Margin differences can't affect descendant intrinsic sizes and
     // don't need to force children to reflow.
     hint |= nsChangeHint_NeedReflow | nsChangeHint_ReflowChangesSizeOrPosition |
@@ -1039,7 +1042,7 @@ nsChangeHint nsStylePage::CalcDifference(const nsStylePage& aNewData) const {
 //
 nsStylePosition::nsStylePosition()
     : mObjectPosition(Position::FromPercentage(0.5f)),
-      mOffset(StyleRectWithAllSides(LengthPercentageOrAuto::Auto())),
+      mOffset(StyleRectWithAllSides(StyleInset::Auto())),
       mWidth(StyleSize::Auto()),
       mMinWidth(StyleSize::Auto()),
       mMaxWidth(StyleMaxSize::None()),
@@ -1137,10 +1140,10 @@ nsStylePosition::nsStylePosition(const nsStylePosition& aSource)
   MOZ_COUNT_CTOR(nsStylePosition);
 }
 
-static bool IsAutonessEqual(const StyleRect<LengthPercentageOrAuto>& aSides1,
-                            const StyleRect<LengthPercentageOrAuto>& aSides2) {
+static bool IsEqualInsetType(const StyleRect<StyleInset>& aSides1,
+                             const StyleRect<StyleInset>& aSides2) {
   for (const auto side : mozilla::AllPhysicalSides()) {
-    if (aSides1.Get(side).IsAuto() != aSides2.Get(side).IsAuto()) {
+    if (aSides1.Get(side).tag != aSides2.Get(side).tag) {
       return false;
     }
   }
@@ -1257,12 +1260,12 @@ nsChangeHint nsStylePosition::CalcDifference(
     hint |= nsChangeHint_NeedReflow;
   }
 
-  bool widthChanged = mWidth != aNewData.mWidth ||
-                      mMinWidth != aNewData.mMinWidth ||
-                      mMaxWidth != aNewData.mMaxWidth;
-  bool heightChanged = mHeight != aNewData.mHeight ||
-                       mMinHeight != aNewData.mMinHeight ||
-                       mMaxHeight != aNewData.mMaxHeight;
+  bool widthChanged = GetWidth() != aNewData.GetWidth() ||
+                      GetMinWidth() != aNewData.GetMinWidth() ||
+                      GetMaxWidth() != aNewData.GetMaxWidth();
+  bool heightChanged = GetHeight() != aNewData.GetHeight() ||
+                       GetMinHeight() != aNewData.GetMinHeight() ||
+                       GetMaxHeight() != aNewData.GetMaxHeight();
 
   if (widthChanged || heightChanged) {
     // It doesn't matter whether we're looking at the old or new visibility
@@ -1302,10 +1305,11 @@ nsChangeHint nsStylePosition::CalcDifference(
   // Note that it is possible that we'll need to reflow when processing
   // restyles, but we don't have enough information to make a good decision
   // right now.
-  // Don't try to handle changes between "auto" and non-auto efficiently;
-  // that's tricky to do and will hardly ever be able to avoid a reflow.
-  if (mOffset != aNewData.mOffset) {
-    if (IsAutonessEqual(mOffset, aNewData.mOffset)) {
+  // Don't try to handle changes between types efficiently; at least for
+  // changing into/out of `auto`, we will hardly ever be able to avoid a reflow.
+  // TODO(dshin, Bug 1917695): Re-evaulate this for `anchor()`.
+  if (!InsetEquals(aNewData)) {
+    if (IsEqualInsetType(mOffset, aNewData.mOffset)) {
       hint |=
           nsChangeHint_RecomputePosition | nsChangeHint_UpdateParentOverflow;
     } else {
@@ -1352,6 +1356,10 @@ StyleJustifySelf nsStylePosition::UsedJustifySelf(
   }
   return {StyleAlignFlags::NORMAL};
 }
+
+const StyleInset nsStylePosition::kAutoInset = StyleInset::Auto();
+const StyleSize nsStylePosition::kAutoSize = StyleSize::Auto();
+const StyleMaxSize nsStylePosition::kNoneMaxSize = StyleMaxSize::None();
 
 // --------------------
 // nsStyleTable
@@ -2817,6 +2825,7 @@ nsStyleText::nsStyleText(const Document& aDocument)
           StaticPrefs::layout_css_control_characters_visible()
               ? StyleMozControlCharacterVisibility::Visible
               : StyleMozControlCharacterVisibility::Hidden),
+      mTextEmphasisPosition(StyleTextEmphasisPosition::AUTO),
       mTextRendering(StyleTextRendering::Auto),
       mTextEmphasisColor(StyleColor::CurrentColor()),
       mWebkitTextFillColor(StyleColor::CurrentColor()),
@@ -2830,11 +2839,6 @@ nsStyleText::nsStyleText(const Document& aDocument)
       mWebkitTextStrokeWidth(0),
       mTextEmphasisStyle(StyleTextEmphasisStyle::None()) {
   MOZ_COUNT_CTOR(nsStyleText);
-  RefPtr<nsAtom> language = aDocument.GetContentLanguageAsAtomForStyle();
-  mTextEmphasisPosition =
-      language && nsStyleUtil::MatchesLanguagePrefix(language, u"zh")
-          ? StyleTextEmphasisPosition::UNDER
-          : StyleTextEmphasisPosition::OVER;
 }
 
 nsStyleText::nsStyleText(const nsStyleText& aSource)
@@ -2961,18 +2965,32 @@ nsChangeHint nsStyleText::CalcDifference(const nsStyleText& aNewData) const {
   return nsChangeHint(0);
 }
 
-LogicalSide nsStyleText::TextEmphasisSide(WritingMode aWM) const {
-  bool noLeftBit = !(mTextEmphasisPosition & StyleTextEmphasisPosition::LEFT);
-  DebugOnly<bool> noRightBit =
-      !(mTextEmphasisPosition & StyleTextEmphasisPosition::RIGHT);
-  bool noOverBit = !(mTextEmphasisPosition & StyleTextEmphasisPosition::OVER);
-  DebugOnly<bool> noUnderBit =
-      !(mTextEmphasisPosition & StyleTextEmphasisPosition::UNDER);
+LogicalSide nsStyleText::TextEmphasisSide(WritingMode aWM,
+                                          const nsAtom* aLanguage) const {
+  mozilla::Side side;
+  if (mTextEmphasisPosition & StyleTextEmphasisPosition::AUTO) {
+    // 'auto' resolves to 'under right' for Chinese, 'over right' otherwise.
+    if (aWM.IsVertical()) {
+      side = eSideRight;
+    } else {
+      if (nsStyleUtil::MatchesLanguagePrefix(aLanguage, u"zh")) {
+        side = eSideBottom;
+      } else {
+        side = eSideTop;
+      }
+    }
+  } else {
+    if (aWM.IsVertical()) {
+      side = mTextEmphasisPosition & StyleTextEmphasisPosition::LEFT
+                 ? eSideLeft
+                 : eSideRight;
+    } else {
+      side = mTextEmphasisPosition & StyleTextEmphasisPosition::OVER
+                 ? eSideTop
+                 : eSideBottom;
+    }
+  }
 
-  MOZ_ASSERT((noOverBit != noUnderBit) &&
-             ((noLeftBit != noRightBit) || noRightBit));
-  mozilla::Side side = aWM.IsVertical() ? (noLeftBit ? eSideRight : eSideLeft)
-                                        : (noOverBit ? eSideBottom : eSideTop);
   LogicalSide result = aWM.LogicalSideForPhysicalSide(side);
   MOZ_ASSERT(IsBlock(result));
   return result;

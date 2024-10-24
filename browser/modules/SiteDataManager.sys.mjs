@@ -528,39 +528,25 @@ export var SiteDataManager = {
 
     let promises = [];
     for (let domainOrHost of domainsOrHosts) {
-      const kFlags =
-        Ci.nsIClearDataService.CLEAR_COOKIES |
-        Ci.nsIClearDataService.CLEAR_DOM_STORAGES |
-        Ci.nsIClearDataService.CLEAR_EME |
-        Ci.nsIClearDataService.CLEAR_ALL_CACHES |
-        Ci.nsIClearDataService.CLEAR_COOKIE_BANNER_EXECUTED_RECORD |
-        Ci.nsIClearDataService.CLEAR_FINGERPRINTING_PROTECTION_STATE |
-        Ci.nsIClearDataService.CLEAR_BOUNCE_TRACKING_PROTECTION_STATE |
-        Ci.nsIClearDataService.CLEAR_STORAGE_PERMISSIONS;
       promises.push(
         new Promise(function (resolve) {
           const { clearData } = Services;
           if (domainOrHost) {
-            // First try to clear by base domain for aDomainOrHost. If we can't
-            // get a base domain, fall back to clearing by just host.
-            try {
-              clearData.deleteDataFromBaseDomain(
-                domainOrHost,
-                true,
-                kFlags,
-                resolve
-              );
-            } catch (e) {
-              if (
-                e.result != Cr.NS_ERROR_HOST_IS_IP_ADDRESS &&
-                e.result != Cr.NS_ERROR_INSUFFICIENT_DOMAIN_LEVELS
-              ) {
-                throw e;
-              }
-              clearData.deleteDataFromHost(domainOrHost, true, kFlags, resolve);
-            }
+            let schemelessSite =
+              Services.eTLD.getSchemelessSiteFromHost(domainOrHost);
+            clearData.deleteDataFromSite(
+              schemelessSite,
+              {},
+              true,
+              Ci.nsIClearDataService.CLEAR_COOKIES_AND_SITE_DATA,
+              resolve
+            );
           } else {
-            clearData.deleteDataFromLocalFiles(true, kFlags, resolve);
+            clearData.deleteDataFromLocalFiles(
+              true,
+              Ci.nsIClearDataService.CLEAR_COOKIES_AND_SITE_DATA,
+              resolve
+            );
           }
         })
       );

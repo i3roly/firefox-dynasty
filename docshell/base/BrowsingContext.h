@@ -240,6 +240,8 @@ struct EmbedderColorSchemes {
   FIELD(MediumOverride, nsString)                                             \
   /* DevTools override for prefers-color-scheme */                            \
   FIELD(PrefersColorSchemeOverride, dom::PrefersColorSchemeOverride)          \
+  /* DevTools override for forced-colors */                                   \
+  FIELD(ForcedColorsOverride, dom::ForcedColorsOverride)                      \
   /* prefers-color-scheme override based on the color-scheme style of our     \
    * <browser> embedder element. */                                           \
   FIELD(EmbedderColorSchemes, EmbedderColorSchemes)                           \
@@ -898,13 +900,13 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
 
   // Checks if we reached the rate limit for calls to Location and History API.
   // The rate limit is controlled by the
-  // "dom.navigation.locationChangeRateLimit" prefs.
+  // "dom.navigation.navigationRateLimit" prefs.
   // Rate limit applies per BrowsingContext.
   // Returns NS_OK if we are below the rate limit and increments the counter.
   // Returns NS_ERROR_DOM_SECURITY_ERR if limit is reached.
-  nsresult CheckLocationChangeRateLimit(CallerType aCallerType);
+  nsresult CheckNavigationRateLimit(CallerType aCallerType);
 
-  void ResetLocationChangeRateLimit();
+  void ResetNavigationRateLimit();
 
   mozilla::dom::DisplayMode DisplayMode() { return Top()->GetDisplayMode(); }
 
@@ -938,6 +940,10 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
 
   dom::PrefersColorSchemeOverride PrefersColorSchemeOverride() const {
     return GetPrefersColorSchemeOverride();
+  }
+
+  dom::ForcedColorsOverride ForcedColorsOverride() const {
+    return GetForcedColorsOverride();
   }
 
   bool IsInBFCache() const;
@@ -1099,6 +1105,11 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
     return IsTop();
   }
 
+  bool CanSet(FieldIndex<IDX_ForcedColorsOverride>, dom::ForcedColorsOverride,
+              ContentParent*) {
+    return IsTop();
+  }
+
   void DidSet(FieldIndex<IDX_InRDMPane>, bool aOldValue);
 
   void DidSet(FieldIndex<IDX_EmbedderColorSchemes>,
@@ -1106,6 +1117,9 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
 
   void DidSet(FieldIndex<IDX_PrefersColorSchemeOverride>,
               dom::PrefersColorSchemeOverride aOldValue);
+
+  void DidSet(FieldIndex<IDX_ForcedColorsOverride>,
+              dom::ForcedColorsOverride aOldValue);
 
   template <typename Callback>
   void WalkPresContexts(Callback&&);
@@ -1439,9 +1453,9 @@ class BrowsingContext : public nsILoadContext, public nsWrapperCache {
   nsTArray<std::function<void(uint64_t)>> mDiscardListeners;
 
   // Counter and time span for rate limiting Location and History API calls.
-  // Used by CheckLocationChangeRateLimit. Do not apply cross-process.
-  uint32_t mLocationChangeRateLimitCount;
-  mozilla::TimeStamp mLocationChangeRateLimitSpanStart;
+  // Used by CheckNavigationRateLimit. Do not apply cross-process.
+  uint32_t mNavigationRateLimitCount;
+  mozilla::TimeStamp mNavigationRateLimitSpanStart;
 
   mozilla::LinkedList<dom::Location> mLocations;
 };

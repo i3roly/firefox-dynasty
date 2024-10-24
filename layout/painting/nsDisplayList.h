@@ -37,7 +37,6 @@
 #include "mozilla/TemplateLib.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/UniquePtr.h"
-#include "mozilla/dom/EffectsInfo.h"
 #include "mozilla/gfx/UserData.h"
 #include "mozilla/layers/BSPTree.h"
 #include "mozilla/layers/ScrollableLayerGuid.h"
@@ -442,6 +441,13 @@ class nsDisplayListBuilder {
    * Get the scrollframe to ignore, if any.
    */
   nsIFrame* GetIgnoreScrollFrame() { return mIgnoreScrollFrame; }
+  /**
+   * Set for display lists built for hit-testing a point that is already
+   * relative to the layout viewport. Display lists with this flag set
+   * do not build an async zoom container (which would transform coordinates
+   * relative to the visual viewport into coordinates relative to the
+   * layout viewport during hit-testing).
+   */
   void SetIsRelativeToLayoutViewport();
   bool IsRelativeToLayoutViewport() const {
     return mIsRelativeToLayoutViewport;
@@ -879,14 +885,6 @@ class nsDisplayListBuilder {
 
   void RemoveModifiedWindowRegions();
   void ClearRetainedWindowRegions();
-
-  const nsTHashMap<nsPtrHashKey<dom::RemoteBrowser>, dom::EffectsInfo>&
-  GetEffectUpdates() const {
-    return mEffectsUpdates;
-  }
-
-  void AddEffectUpdate(dom::RemoteBrowser* aBrowser,
-                       const dom::EffectsInfo& aUpdate);
 
   /**
    * Invalidates the caret frames from previous paints, if they have changed.
@@ -1793,9 +1791,6 @@ class nsDisplayListBuilder {
   // and thus is in-budget.
   nsTHashMap<nsPtrHashKey<const nsIFrame>, FrameWillChangeBudget>
       mFrameWillChangeBudgets;
-
-  nsTHashMap<nsPtrHashKey<dom::RemoteBrowser>, dom::EffectsInfo>
-      mEffectsUpdates;
 
   nsTHashSet<nsCString> mDestinations;  // Destination names emitted.
 

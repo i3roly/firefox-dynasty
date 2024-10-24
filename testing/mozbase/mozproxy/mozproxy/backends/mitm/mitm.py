@@ -293,7 +293,7 @@ class Mitmproxy(Playback):
         else:
             # playback mode
             if len(self.playback_files) > 0:
-                if self.config["playback_version"] == "8.1.1":
+                if self.config["playback_version"] in ["8.1.1", "10.4.2"]:
                     command.extend(
                         [
                             "--set",
@@ -306,6 +306,8 @@ class Mitmproxy(Playback):
                             "alt_server_replay_kill_extra=true",
                             "--set",
                             "alt_server_replay_order_reversed=true",
+                            "--set",
+                            "tls_version_client_min=TLS1_2",
                             "--set",
                             "alt_server_replay={}".format(
                                 ",".join(

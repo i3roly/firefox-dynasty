@@ -56,6 +56,10 @@ export class KeyValueService {
  * SQLite for persistence.
  */
 export class SQLiteKeyValueService {
+  static Importer = {
+    RKV_SAFE_MODE: "rkv-safe-mode",
+  };
+
   static #service = Cc["@mozilla.org/sqlite-key-value-service;1"].getService(
     Ci.nsIKeyValueService
   );
@@ -64,6 +68,53 @@ export class SQLiteKeyValueService {
     return new KeyValueDatabase(
       await promisify(this.#service.getOrCreate, dir, name)
     );
+  }
+
+  static createImporter(type, dir) {
+    return new KeyValueImporter(this.#service.createImporter(type, dir));
+  }
+}
+
+export class KeyValueImporter {
+  static ConflictPolicy = {
+    ERROR: Ci.nsIKeyValueImporter.ERROR_ON_CONFLICT,
+    IGNORE: Ci.nsIKeyValueImporter.IGNORE_ON_CONFLICT,
+    REPLACE: Ci.nsIKeyValueImporter.REPLACE_ON_CONFLICT,
+  };
+
+  static CleanupPolicy = {
+    KEEP: Ci.nsIKeyValueImporter.KEEP_AFTER_IMPORT,
+    DELETE: Ci.nsIKeyValueImporter.DELETE_AFTER_IMPORT,
+  };
+
+  #importer;
+
+  constructor(importer) {
+    this.#importer = importer;
+  }
+
+  get type() {
+    return this.#importer.type;
+  }
+
+  get path() {
+    return this.#importer.path;
+  }
+
+  addPath(dir) {
+    return this.#importer.addPath(dir);
+  }
+
+  addDatabase(name) {
+    return this.#importer.addDatabase(name);
+  }
+
+  addAllDatabases() {
+    return this.#importer.addAllDatabases();
+  }
+
+  import() {
+    return promisify(this.#importer.import);
   }
 }
 
@@ -191,13 +242,17 @@ class KeyValueDatabase {
     return promisify(this.database.delete, key);
   }
 
+  deleteRange(fromKey, toKey) {
+    return promisify(this.database.deleteRange, fromKey, toKey);
+  }
+
   clear() {
     return promisify(this.database.clear);
   }
 
-  async enumerate(from_key, to_key) {
+  async enumerate(fromKey, toKey) {
     return new KeyValueEnumerator(
-      await promisify(this.database.enumerate, from_key, to_key)
+      await promisify(this.database.enumerate, fromKey, toKey)
     );
   }
 

@@ -45,7 +45,6 @@ let ignoreList = [
     errorMessage: /Property contained reference to invalid variable.*color/i,
     isFromDevTools: true,
   },
-  // PDF.js uses a property that is currently only supported in chrome.
   {
     sourceName: /web\/viewer\.css$/i,
     errorMessage:
@@ -74,24 +73,6 @@ if (!Services.prefs.getBoolPref("layout.css.scroll-anchoring.enabled")) {
     sourceName: /webconsole\.css$/i,
     errorMessage: /Unknown property .*\boverflow-anchor\b/i,
     isFromDevTools: true,
-  });
-}
-
-if (!Services.prefs.getBoolPref("layout.css.forced-colors.enabled")) {
-  ignoreList.push({
-    sourceName: /pdf\.js\/web\/viewer\.css$/,
-    errorMessage: /Expected media feature name but found ‘forced-colors’*/i,
-    isFromDevTools: false,
-  });
-}
-
-if (!Services.prefs.getBoolPref("layout.css.forced-color-adjust.enabled")) {
-  // PDF.js uses a property that is currently not enabled.
-  ignoreList.push({
-    sourceName: /web\/viewer\.css$/i,
-    errorMessage:
-      /Unknown property ‘forced-color-adjust’\. {2}Declaration dropped\./i,
-    isFromDevTools: false,
   });
 }
 
@@ -124,8 +105,6 @@ let propNameAllowlist = [
     isFromDevTools: false,
   },
   { propName: "--browser-stack-z-index-rdm-toolbar", isFromDevTools: false },
-  // about:profiling is in devtools even though it uses non-devtools styles.
-  { propName: "--in-content-border-hover", isFromDevTools: false },
 
   // These variables are specified from devtools but read from non-devtools
   // styles, which confuses the test.
@@ -135,6 +114,16 @@ let propNameAllowlist = [
   { propName: "--panel-border-color", isFromDevTools: true },
   { propName: "--panel-shadow", isFromDevTools: true },
   { propName: "--panel-shadow-margin", isFromDevTools: true },
+
+  // These variables are used in JS in viewer.mjs (PDF.js).
+  {
+    propName: "--scale-round-x",
+    isFromDevTools: false,
+  },
+  {
+    propName: "--scale-round-y",
+    isFromDevTools: false,
+  },
 ];
 
 // Add suffix to stylesheets' URI so that we always load them here and

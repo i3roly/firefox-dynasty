@@ -53,12 +53,33 @@ private fun reducer(state: MenuState, action: MenuAction): MenuState {
             )
         }
 
+        is MenuAction.UpdateWebExtensionMenuItems -> state.copyWithExtensionMenuState {
+            it.copy(
+                webExtensionMenuItems = action.webExtensionMenuItems,
+            )
+        }
+
         is MenuAction.UpdateBookmarkState -> state.copyWithBrowserMenuState {
             it.copy(bookmarkState = action.bookmarkState)
         }
 
         is MenuAction.UpdatePinnedState -> state.copyWithBrowserMenuState {
             it.copy(isPinned = action.isPinned)
+        }
+
+        is MenuAction.UpdateInstallAddonInProgress -> state.copyWithExtensionMenuState {
+            it.copy(addonInstallationInProgress = action.addon)
+        }
+
+        is MenuAction.InstallAddonFailed -> state.copyWithExtensionMenuState {
+            it.copy(addonInstallationInProgress = null)
+        }
+
+        is MenuAction.InstallAddonSuccess -> state.copyWithExtensionMenuState { extensionState ->
+            extensionState.copy(
+                recommendedAddons = state.extensionMenuState.recommendedAddons.filter { it != action.addon },
+                addonInstallationInProgress = null,
+            )
         }
     }
 }

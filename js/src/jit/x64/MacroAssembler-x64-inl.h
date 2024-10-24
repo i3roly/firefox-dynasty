@@ -333,6 +333,21 @@ void MacroAssembler::lshiftPtr(Register shift, Register srcDest) {
   shlq_cl(srcDest);
 }
 
+void MacroAssembler::flexibleLshiftPtr(Register shift, Register srcDest) {
+  if (HasBMI2()) {
+    shlxq(srcDest, shift, srcDest);
+    return;
+  }
+  if (shift == rcx) {
+    shlq_cl(srcDest);
+  } else {
+    // Shift amount must be in rcx.
+    xchg(shift, rcx);
+    shlq_cl(shift == srcDest ? rcx : srcDest == rcx ? shift : srcDest);
+    xchg(shift, rcx);
+  }
+}
+
 void MacroAssembler::lshift64(Imm32 imm, Register64 dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   lshiftPtr(imm, dest.reg);
@@ -361,6 +376,21 @@ void MacroAssembler::rshiftPtr(Register shift, Register srcDest) {
   shrq_cl(srcDest);
 }
 
+void MacroAssembler::flexibleRshiftPtr(Register shift, Register srcDest) {
+  if (HasBMI2()) {
+    shrxq(srcDest, shift, srcDest);
+    return;
+  }
+  if (shift == rcx) {
+    shrq_cl(srcDest);
+  } else {
+    // Shift amount must be in rcx.
+    xchg(shift, rcx);
+    shrq_cl(shift == srcDest ? rcx : srcDest == rcx ? shift : srcDest);
+    xchg(shift, rcx);
+  }
+}
+
 void MacroAssembler::rshift64(Imm32 imm, Register64 dest) {
   rshiftPtr(imm, dest.reg);
 }
@@ -377,6 +407,31 @@ void MacroAssembler::rshift64(Register shift, Register64 srcDest) {
 void MacroAssembler::rshiftPtrArithmetic(Imm32 imm, Register dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   sarq(imm, dest);
+}
+
+void MacroAssembler::rshiftPtrArithmetic(Register shift, Register srcDest) {
+  if (Assembler::HasBMI2()) {
+    sarxq(srcDest, shift, srcDest);
+    return;
+  }
+  MOZ_ASSERT(shift == rcx);
+  sarq_cl(srcDest);
+}
+
+void MacroAssembler::flexibleRshiftPtrArithmetic(Register shift,
+                                                 Register srcDest) {
+  if (HasBMI2()) {
+    sarxq(srcDest, shift, srcDest);
+    return;
+  }
+  if (shift == rcx) {
+    sarq_cl(srcDest);
+  } else {
+    // Shift amount must be in rcx.
+    xchg(shift, rcx);
+    sarq_cl(shift == srcDest ? rcx : srcDest == rcx ? shift : srcDest);
+    xchg(shift, rcx);
+  }
 }
 
 void MacroAssembler::rshift64Arithmetic(Imm32 imm, Register64 dest) {
@@ -763,6 +818,14 @@ void MacroAssembler::branchTruncateDoubleToInt32(FloatRegister src,
   movl(dest, dest);  // Zero upper 32-bits.
 }
 
+void MacroAssembler::branchInt64NotInPtrRange(Register64 src, Label* label) {
+  // No-op on 64-bit platforms.
+}
+
+void MacroAssembler::branchUInt64NotInPtrRange(Register64 src, Label* label) {
+  branchTest64(Assembler::Signed, src, src, label);
+}
+
 void MacroAssembler::branchTest32(Condition cond, const AbsoluteAddress& lhs,
                                   Imm32 rhs, Label* label) {
   if (X86Encoding::IsAddressImmediate(lhs.addr)) {
@@ -822,6 +885,12 @@ void MacroAssembler::branchToComputedAddress(const BaseIndex& address) {
   jmp(Operand(address));
 }
 
+void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Imm32 rhs,
+                                   Register src, Register dest) {
+  cmpPtr(lhs, rhs);
+  cmovCCq(cond, src, dest);
+}
+
 void MacroAssembler::cmpPtrMovePtr(Condition cond, Register lhs, Register rhs,
                                    Register src, Register dest) {
   cmpPtr(lhs, rhs);
@@ -852,6 +921,13 @@ void MacroAssembler::test32LoadPtr(Condition cond, const Address& addr,
                                    Register dest) {
   MOZ_ASSERT(cond == Assembler::Zero || cond == Assembler::NonZero);
   test32(addr, mask);
+  cmovCCq(cond, Operand(src), dest);
+}
+
+void MacroAssembler::test32MovePtr(Condition cond, Register operand, Imm32 mask,
+                                   Register src, Register dest) {
+  MOZ_ASSERT(cond == Assembler::Zero || cond == Assembler::NonZero);
+  test32(operand, mask);
   cmovCCq(cond, Operand(src), dest);
 }
 

@@ -855,6 +855,20 @@ sealed class ContentAction : BrowserAction() {
         val tabId: String,
         val isProductUrl: Boolean,
     ) : ContentAction()
+
+    /**
+     * Inform that the tab with [tabId] started rendering a pdf.
+     */
+    data class EnteredPdfViewer(
+        val tabId: String,
+    ) : ContentAction()
+
+    /**
+     * Inform that the tab with [tabId] stopped rendering a pdf.
+     */
+    data class ExitedPdfViewer(
+        val tabId: String,
+    ) : ContentAction()
 }
 
 /**
@@ -1868,6 +1882,11 @@ sealed class SearchAction : BrowserAction() {
      */
     object RestoreHiddenSearchEnginesAction : SearchAction()
 }
+
+/**
+ * [BrowserAction] implements setting and updating the distribution
+ */
+data class UpdateDistribution(val distributionId: String?) : BrowserAction()
 
 /**
  * [BrowserAction] implementations for updating state needed for debugging. These actions should

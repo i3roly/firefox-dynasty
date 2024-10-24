@@ -35,7 +35,8 @@ use crate::{
     },
     events::ConnectionEvent,
     server::ValidateAddress,
-    tparams::{TransportParameter, MIN_ACK_DELAY},
+    stats::FrameStats,
+    tparams::{self, TransportParameter, MIN_ACK_DELAY},
     tracking::DEFAULT_ACK_DELAY,
     CloseReason, ConnectionParameters, EmptyConnectionIdGenerator, Error, Pmtud, StreamType,
     Version,
@@ -797,13 +798,13 @@ fn anti_amplification() {
     client.process_input(&s_init1, now);
     client.process_input(&s_init2, now);
     let ack_count = client.stats().frame_tx.ack;
-    let frame_count = client.stats().frame_tx.all;
+    let frame_count = client.stats().frame_tx.all();
     let ack = client.process(Some(&s_init3), now).dgram().unwrap();
     assert!(!maybe_authenticate(&mut client)); // No need yet.
 
     // The client sends a padded datagram, with just ACK for Handshake.
     assert_eq!(client.stats().frame_tx.ack, ack_count + 1);
-    assert_eq!(client.stats().frame_tx.all, frame_count + 1);
+    assert_eq!(client.stats().frame_tx.all(), frame_count + 1);
     assert_ne!(ack.len(), client.plpmtu()); // Not padded (it includes Handshake).
 
     now += DEFAULT_RTT / 2;
@@ -1193,4 +1194,85 @@ fn emit_authentication_needed_once() {
     // `ConnectionEvent::AuthenticationNeeded`.
     _ = client.process(server2.as_dgram_ref(), now());
     assert_eq!(0, authentication_needed_count(&mut client));
+}
+
+#[test]
+fn client_initial_retransmits_identical() {
+    let mut now = now();
+    let mut client = default_client();
+
+    // Force the client to retransmit its Initial packet a number of times and make sure the
+    // retranmissions are identical to the original. Also, verify the PTO durations.
+    for i in 1..=5 {
+        let ci = client.process(None, now).dgram().unwrap();
+        assert_eq!(ci.len(), client.plpmtu());
+        assert_eq!(
+            client.stats().frame_tx,
+            FrameStats {
+                crypto: i,
+                ..Default::default()
+            }
+        );
+        let pto = client.process(None, now).callback();
+        assert_eq!(pto, DEFAULT_RTT * 3 * (1 << (i - 1)));
+        now += pto;
+    }
+}
+
+#[test]
+fn server_initial_retransmits_identical() {
+    let mut now = now();
+    let mut client = default_client();
+    let mut ci = client.process(None, now).dgram();
+
+    // Force the server to retransmit its Initial packet a number of times and make sure the
+    // retranmissions are identical to the original. Also, verify the PTO durations.
+    let mut server = default_server();
+    let mut total_ptos: Duration = Duration::from_secs(0);
+    for i in 1..=3 {
+        let si = server.process(ci.take().as_ref(), now).dgram().unwrap();
+        assert_eq!(si.len(), server.plpmtu());
+        assert_eq!(
+            server.stats().frame_tx,
+            FrameStats {
+                crypto: i * 2,
+                ack: i,
+                ..Default::default()
+            }
+        );
+
+        let pto = server.process(None, now).callback();
+        if i < 3 {
+            assert_eq!(pto, DEFAULT_RTT * 3 * (1 << (i - 1)));
+        } else {
+            // Server is amplification-limited after three (re)transmissions.
+            assert_eq!(pto, server.conn_params.get_idle_timeout() - total_ptos);
+        }
+        now += pto;
+        total_ptos += pto;
+    }
+}
+
+#[test]
+fn grease_quic_bit_transport_parameter() {
+    fn get_remote_tp(conn: &Connection) -> bool {
+        conn.tps
+            .borrow()
+            .remote
+            .as_ref()
+            .unwrap()
+            .get_empty(tparams::GREASE_QUIC_BIT)
+    }
+
+    for client_grease in [true, false] {
+        for server_grease in [true, false] {
+            let mut client = new_client(ConnectionParameters::default().grease(client_grease));
+            let mut server = new_server(ConnectionParameters::default().grease(server_grease));
+
+            connect(&mut client, &mut server);
+
+            assert_eq!(client_grease, get_remote_tp(&server));
+            assert_eq!(server_grease, get_remote_tp(&client));
+        }
+    }
 }

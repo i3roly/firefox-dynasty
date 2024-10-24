@@ -16,7 +16,9 @@ import mozilla.components.browser.state.state.ColorSchemeParams
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.feature.customtabs.addCustomMenuItems
 import mozilla.components.feature.customtabs.getConfiguredColorSchemeParams
+import mozilla.components.feature.customtabs.getToolbarBackgroundColor
 import mozilla.components.feature.customtabs.getToolbarContrastColor
+import mozilla.components.feature.customtabs.getToolbarContrastColorDisabled
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.toolbar.BrowserToolbarView
 import org.mozilla.fenix.ext.components
@@ -73,13 +75,23 @@ internal class CustomTabsNavigationBarIntegration(
 
     @get:ColorInt
     val backgroundColor: Int? by lazy(LazyThreadSafetyMode.NONE) {
-        colorSchemeParams?.toolbarColor
+        colorSchemeParams?.getToolbarBackgroundColor(
+            isNormalMode = customTab?.content?.private?.not() ?: true,
+        )
     }
 
     @get:ColorInt
     val buttonTint: Int? by lazy(LazyThreadSafetyMode.NONE) {
         colorSchemeParams.getToolbarContrastColor(
             context = context,
+            shouldUpdateTheme = customTab?.content?.private?.not() ?: true,
+            fallbackColor = toolbar.view.display.colors.menu,
+        )
+    }
+
+    @get:ColorInt
+    val buttonDisabledTint: Int? by lazy(LazyThreadSafetyMode.NONE) {
+        colorSchemeParams.getToolbarContrastColorDisabled(
             shouldUpdateTheme = customTab?.content?.private?.not() ?: true,
             fallbackColor = toolbar.view.display.colors.menu,
         )

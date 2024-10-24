@@ -166,8 +166,9 @@
 #include "js/StructuredClone.h"
 #include "js/SweepingAPI.h"
 #include "js/Transcoding.h"  // JS::TranscodeBuffer, JS::TranscodeRange, JS::IsTranscodeFailureResult
-#include "js/Warnings.h"    // JS::SetWarningReporter
-#include "js/WasmModule.h"  // JS::WasmModule
+#include "js/Warnings.h"      // JS::SetWarningReporter
+#include "js/WasmFeatures.h"  // JS_FOR_WASM_FEATURES
+#include "js/WasmModule.h"    // JS::WasmModule
 #include "js/Wrapper.h"
 #include "proxy/DeadObjectProxy.h"  // js::IsDeadProxyObject
 #include "shell/jsoptparse.h"
@@ -408,7 +409,8 @@ void ParseLoggerOptions() {
   // Done this way rather than just using strcasestr because Windows doesn't
   // have strcasestr as part of its base C library.
   size_t len = strlen(mixedCaseOpts);
-  mozilla::UniqueFreePtr<char[]> logOpts(static_cast<char*>(calloc(len, 1)));
+  mozilla::UniqueFreePtr<char[]> logOpts(
+      static_cast<char*>(calloc(len + 1, 1)));
   if (!logOpts) {
     return;
   }
@@ -421,7 +423,7 @@ void ParseLoggerOptions() {
       // Lowercase the logger name for strstr
       size_t len = strlen(logger->name);
       mozilla::UniqueFreePtr<char[]> lowerName(
-          static_cast<char*>(calloc(len, 1)));
+          static_cast<char*>(calloc(len + 1, 1)));
       ToLower(logger->name, lowerName.get(), len);
 
       if (char* needle = strstr(logOpts.get(), lowerName.get())) {
@@ -839,7 +841,6 @@ bool shell::enableAsyncStacks = false;
 bool shell::enableAsyncStackCaptureDebuggeeOnly = false;
 bool shell::enableToSource = false;
 bool shell::enableImportAttributes = false;
-bool shell::enableImportAttributesAssertSyntax = false;
 #ifdef JS_GC_ZEAL
 uint32_t shell::gZealBits = 0;
 uint32_t shell::gZealFrequency = 0;
@@ -5794,7 +5795,6 @@ static bool DumpAST(JSContext* cx, const JS::ReadOnlyCompileOptions& options,
 
   AutoReportFrontendContext fc(cx);
   Parser<FullParseHandler, Unit> parser(&fc, options, units, length,
-                                        /* foldConstants = */ false,
                                         compilationState,
                                         /* syntaxParser = */ nullptr);
   if (!parser.checkOptions()) {
@@ -6170,8 +6170,7 @@ static bool SyntaxParse(JSContext* cx, unsigned argc, Value* vp) {
   }
 
   Parser<frontend::SyntaxParseHandler, char16_t> parser(
-      &fc, options, chars, length,
-      /* foldConstants = */ false, compilationState,
+      &fc, options, chars, length, compilationState,
       /* syntaxParser = */ nullptr);
   if (!parser.checkOptions()) {
     return false;
@@ -11907,10 +11906,27 @@ static bool SetJSPrefToValue(const char* name, size_t nameLen,
   return false;
 }
 
+static bool IsJSPrefAvailable(const char* pref) {
+  if (!fuzzingSafe) {
+    // All prefs in fuzzing unsafe mode are enabled.
+    return true;
+  }
+#define WASM_FEATURE(NAME, LOWER_NAME, COMPILE_PRED, COMPILER_PRED, FLAG_PRED, \
+                     FLAG_FORCE_ON, FLAG_FUZZ_ON, PREF)                        \
+  if constexpr (!FLAG_FUZZ_ON) {                                               \
+    if (strcmp("wasm_" #PREF, pref) == 0) {                                    \
+      return false;                                                            \
+    }                                                                          \
+  }
+  JS_FOR_WASM_FEATURES(WASM_FEATURE)
+#undef WASM_FEATURE
+  return true;
+}
+
 static bool SetJSPref(const char* pref) {
   const char* assign = strchr(pref, '=');
   if (!assign) {
-    if (!SetJSPrefToTrueForBool(pref)) {
+    if (IsJSPrefAvailable(pref) && !SetJSPrefToTrueForBool(pref)) {
       return false;
     }
     return true;
@@ -11919,7 +11935,7 @@ static bool SetJSPref(const char* pref) {
   size_t nameLen = assign - pref;
   const char* valStart = assign + 1;  // Skip '='.
 
-  if (!SetJSPrefToValue(pref, nameLen, valStart)) {
+  if (IsJSPrefAvailable(pref) && !SetJSPrefToValue(pref, nameLen, valStart)) {
     return false;
   }
   return true;
@@ -11927,6 +11943,9 @@ static bool SetJSPref(const char* pref) {
 
 static void ListJSPrefs() {
   auto printPref = [](const char* name, auto defaultVal) {
+    if (!IsJSPrefAvailable(name)) {
+      return;
+    }
     using T = decltype(defaultVal);
     if constexpr (std::is_same_v<T, bool>) {
       fprintf(stderr, "%s=%s\n", name, defaultVal ? "true" : "false");
@@ -12336,8 +12355,6 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "enable-regexp-escape", "Enable RegExp.escape") ||
       !op.addBoolOption('\0', "enable-top-level-await",
                         "Enable top-level await") ||
-      !op.addBoolOption('\0', "enable-import-assertions",
-                        "Enable import attributes with old assert syntax") ||
       !op.addBoolOption('\0', "enable-import-attributes",
                         "Enable import attributes") ||
       !op.addBoolOption('\0', "disable-destructuring-fuse",
@@ -12661,7 +12678,8 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "wasm-tail-calls",
                         "Enable WebAssembly tail-calls proposal.") ||
       !op.addBoolOption('\0', "wasm-js-string-builtins",
-                        "Enable WebAssembly js-string-builtins proposal.")) {
+                        "Enable WebAssembly js-string-builtins proposal.") ||
+      !op.addBoolOption('\0', "enable-promise-try", "Enable Promise.try")) {
     return false;
   }
 
@@ -12718,12 +12736,15 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_iterator_helpers(true);
   }
+  if (op.getBoolOption("enable-new-set-methods")) {
+    JS::Prefs::setAtStartup_experimental_new_set_methods(true);
+  }
+  if (op.getBoolOption("enable-regexp-modifiers")) {
+    JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
+  }
 #ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-async-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_async_iterator_helpers(true);
-  }
-  if (op.getBoolOption("enable-new-set-methods")) {
-    JS::Prefs::setAtStartup_experimental_new_set_methods(true);
   }
   if (op.getBoolOption("enable-symbols-as-weakmap-keys")) {
     JS::Prefs::setAtStartup_experimental_symbols_as_weakmap_keys(true);
@@ -12731,22 +12752,16 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-uint8array-base64")) {
     JS::Prefs::setAtStartup_experimental_uint8array_base64(true);
   }
-  if (op.getBoolOption("enable-regexp-modifiers")) {
-    JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
-  }
   if (op.getBoolOption("enable-regexp-escape")) {
     JS::Prefs::setAtStartup_experimental_regexp_escape(true);
   }
+  if (op.getBoolOption("enable-promise-try")) {
+    JS::Prefs::setAtStartup_experimental_promise_try(true);
+  }
 #endif
-#ifdef ENABLE_JSON_PARSE_WITH_SOURCE
   if (op.getBoolOption("enable-json-parse-with-source")) {
     JS::Prefs::set_experimental_json_parse_with_source(true);
   }
-#else
-  if (op.getBoolOption("enable-json-parse-with-source")) {
-    fprintf(stderr, "JSON.parse with source is not enabled on this build.\n");
-  }
-#endif
 
   if (op.getBoolOption("disable-weak-refs")) {
     JS::Prefs::setAtStartup_weakrefs(false);
@@ -12966,16 +12981,12 @@ bool SetContextOptions(JSContext* cx, const OptionParser& op) {
   enableAsyncStackCaptureDebuggeeOnly =
       op.getBoolOption("async-stacks-capture-debuggee-only");
   enableToSource = !op.getBoolOption("disable-tosource");
-  enableImportAttributesAssertSyntax =
-      op.getBoolOption("enable-import-assertions");
-  enableImportAttributes = op.getBoolOption("enable-import-attributes") ||
-                           enableImportAttributesAssertSyntax;
+  enableImportAttributes = op.getBoolOption("enable-import-attributes");
   JS::ContextOptionsRef(cx)
       .setSourcePragmas(enableSourcePragmas)
       .setAsyncStack(enableAsyncStacks)
       .setAsyncStackCaptureDebuggeeOnly(enableAsyncStackCaptureDebuggeeOnly)
-      .setImportAttributes(enableImportAttributes)
-      .setImportAttributesAssertSyntax(enableImportAttributesAssertSyntax);
+      .setImportAttributes(enableImportAttributes);
 
   if (const char* str = op.getStringOption("shared-memory")) {
     if (strcmp(str, "off") == 0) {
@@ -13554,11 +13565,9 @@ bool SetContextJITOptions(JSContext* cx, const OptionParser& op) {
     jit::JitOptions.js_regexp_duplicate_named_groups = true;
   }
 
-#ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-regexp-modifiers")) {
     jit::JitOptions.js_regexp_modifiers = true;
   }
-#endif
 
   return true;
 }

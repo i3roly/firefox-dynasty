@@ -42,15 +42,6 @@ let CONFIG_V2 = [
       },
     ],
   },
-  {
-    recordType: "defaultEngines",
-    globalDefault: "engine-purpose",
-    specificDefaults: [],
-  },
-  {
-    recordType: "engineOrders",
-    orders: [],
-  },
 ];
 
 let defaultEngine;
@@ -89,11 +80,11 @@ add_task(async function test_searchTermFromResult() {
   let engineEscapedIDN = Services.search.getEngineByName("idn_addParam");
 
   // Setup server for french engine.
-  await useHttpServer();
+  await useHttpServer("");
 
   // For ISO-8859-1 encoding testing.
   let engineISOCharset = await SearchTestUtils.installOpenSearchEngine({
-    url: `${gDataUrl}engine-fr.xml`,
+    url: `${gHttpURL}/opensearch/fr-domain-iso8859-1.xml`,
   });
 
   // For Windows-1252 encoding testing.

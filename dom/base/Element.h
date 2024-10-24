@@ -139,6 +139,7 @@ class PopoverData;
 class Promise;
 class Sanitizer;
 class ShadowRoot;
+class TrustedHTMLOrString;
 class UnrestrictedDoubleOrKeyframeAnimationOptions;
 template <typename T>
 class Optional;
@@ -213,6 +214,13 @@ class EventChainPreVisitor;
 class EventChainVisitor;
 class EventListenerManager;
 class EventStateManager;
+
+enum class ContentEditableState {
+  Inherit,
+  False,
+  True,
+  PlainTextOnly,
+};
 
 namespace dom {
 
@@ -311,6 +319,11 @@ class Element : public FragmentOrElement {
     return State().HasAtLeastOneOfStates(ElementState::DISABLED |
                                          ElementState::READONLY);
   }
+
+  /**
+   * Return true if this element has contenteditable="plaintext-only".
+   */
+  [[nodiscard]] inline bool IsContentEditablePlainTextOnly() const;
 
   virtual int32_t TabIndexDefault() { return -1; }
 
@@ -1573,7 +1586,8 @@ class Element : public FragmentOrElement {
                             ErrorResult& aError);
   void GetOuterHTML(nsAString& aOuterHTML);
   void SetOuterHTML(const nsAString& aOuterHTML, ErrorResult& aError);
-  void InsertAdjacentHTML(const nsAString& aPosition, const nsAString& aText,
+  void InsertAdjacentHTML(const nsAString& aPosition,
+                          const TrustedHTMLOrString& aTrustedHTMLOrString,
                           ErrorResult& aError);
 
   void SetHTML(const nsAString& aInnerHTML, const SetHTMLOptions& aOptions,

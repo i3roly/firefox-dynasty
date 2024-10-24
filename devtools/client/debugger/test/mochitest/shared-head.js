@@ -65,6 +65,10 @@ const DEBUGGER_L10N = new LocalizationHelper(
   "devtools/client/locales/debugger.properties"
 );
 
+const isCm6Enabled = Services.prefs.getBoolPref(
+  "devtools.debugger.features.codemirror-next"
+);
+
 /**
  * Waits for `predicate()` to be true. `state` is the redux app state.
  *
@@ -264,7 +268,7 @@ function waitForSelectedSource(dbg, sourceOrUrl) {
       }
 
       // Also ensure that CodeMirror updated its content
-      return getCM(dbg).getValue() !== DEBUGGER_L10N.getStr("loadingText");
+      return getEditorContent(dbg) !== DEBUGGER_L10N.getStr("loadingText");
     },
     "selected source"
   );
@@ -419,6 +423,20 @@ function _assertDebugLine(dbg, line, column) {
   }
   info(`Paused on line ${line}`);
 }
+/**
+ * Asserts the log point set
+ */
+async function assertEditorLogpoint(dbg, line, { hasLog = false } = {}) {
+  const el = await getEditorLineGutter(dbg, line);
+  const hasLogClass = isCm6Enabled
+    ? !!el.querySelector(".has-log")
+    : el.classList.contains("has-log");
+  Assert.strictEqual(
+    hasLogClass,
+    hasLog,
+    `Breakpoint log ${hasLog ? "exists" : "does not exist"} on line ${line}`
+  );
+}
 
 /**
  * Make sure the debugger is paused at a certain source ID and line.
@@ -459,7 +477,7 @@ function assertPausedAtSourceAndLine(
   }
   _assertDebugLine(dbg, pauseLine, pauseColumn);
 
-  ok(isVisibleInEditor(dbg, getCM(dbg).display.gutters), "gutter is visible");
+  ok(isVisibleInEditor(dbg, findElement(dbg, "gutters")), "gutter is visible");
 
   const frames = dbg.selectors.getCurrentThreadFrames();
   const selectedSource = dbg.selectors.getSelectedSource();
@@ -821,7 +839,7 @@ async function selectSourceFromSourceTree(
   await clickElement(dbg, "sourceNode", sourcePosition);
   await waitForSelectedSource(dbg, fileName);
   await waitFor(
-    () => getCM(dbg).getValue() !== `Loading…`,
+    () => getEditorContent(dbg) !== `Loading…`,
     "Wait for source to completely load"
   );
 }
@@ -1494,12 +1512,13 @@ function isVisible(outerEl, innerEl) {
   return visible;
 }
 
+/**
+ * Get the element in the editor gutter at the specified line
+ * @param {Object} dbg
+ * @param {Number} line
+ * @returns
+ */
 async function getEditorLineGutter(dbg, line) {
-  const lineEl = await getEditorLineEl(dbg, line);
-  return lineEl.firstChild;
-}
-
-async function getEditorLineEl(dbg, line) {
   let el = await codeMirrorGutterElement(dbg, line);
   while (el && !el.matches(".CodeMirror-code > div")) {
     el = el.parentElement;
@@ -1615,7 +1634,7 @@ function assertTextContentOnLine(dbg, line, expectedTextContent) {
  * @static
  */
 async function assertNoBreakpoint(dbg, line) {
-  const el = await getEditorLineEl(dbg, line);
+  const el = await getEditorLineGutter(dbg, line);
 
   const exists = !!el.querySelector(".new-breakpoint");
   ok(!exists, `Breakpoint doesn't exists on line ${line}`);
@@ -1631,7 +1650,7 @@ async function assertNoBreakpoint(dbg, line) {
  * @static
  */
 async function assertBreakpoint(dbg, line) {
-  const el = await getEditorLineEl(dbg, line);
+  const el = await getEditorLineGutter(dbg, line);
 
   const exists = !!el.querySelector(".new-breakpoint");
   ok(exists, `Breakpoint exists on line ${line}`);
@@ -1657,7 +1676,7 @@ async function assertBreakpoint(dbg, line) {
  * @static
  */
 async function assertConditionBreakpoint(dbg, line) {
-  const el = await getEditorLineEl(dbg, line);
+  const el = await getEditorLineGutter(dbg, line);
 
   const exists = !!el.querySelector(".new-breakpoint");
   ok(exists, `Breakpoint exists on line ${line}`);
@@ -1683,7 +1702,7 @@ async function assertConditionBreakpoint(dbg, line) {
  * @static
  */
 async function assertLogBreakpoint(dbg, line) {
-  const el = await getEditorLineEl(dbg, line);
+  const el = await getEditorLineGutter(dbg, line);
 
   const exists = !!el.querySelector(".new-breakpoint");
   ok(exists, `Breakpoint exists on line ${line}`);
@@ -1706,7 +1725,6 @@ function assertBreakpointSnippet(dbg, index, expectedSnippet) {
 }
 
 const selectors = {
-  callStackHeader: ".call-stack-pane ._header .header-label",
   callStackBody: ".call-stack-pane .pane",
   domMutationItem: ".dom-mutation-list li",
   expressionNode: i =>
@@ -1714,8 +1732,6 @@ const selectors = {
   expressionValue: i =>
     // eslint-disable-next-line max-len
     `.expressions-list .expression-container:nth-child(${i}) .object-delimiter + *`,
-  expressionClose: i =>
-    `.expressions-list .expression-container:nth-child(${i}) .close`,
   expressionInput: ".watch-expressions-pane input.input-expression",
   expressionNodes: ".expressions-list .tree-node",
   expressionPlus: ".watch-expressions-pane button.plus",
@@ -1750,7 +1766,12 @@ const selectors = {
   mapScopesCheckbox: ".map-scopes-header input",
   frame: i => `.frames [role="list"] [role="listitem"]:nth-child(${i})`,
   frames: '.frames [role="list"] [role="listitem"]',
-  gutter: i => `.CodeMirror-code *:nth-child(${i}) .CodeMirror-linenumber`,
+  // This is used to trigger events (click etc) on the gutter
+  gutterElement: i =>
+    isCm6Enabled
+      ? `.cm-gutter.cm-lineNumbers .cm-gutterElement:nth-child(${i + 1})`
+      : `.CodeMirror-code *:nth-child(${i}) .CodeMirror-linenumber`,
+  gutters: isCm6Enabled ? `.cm-gutters` : `.CodeMirror-gutters`,
   line: i => `.CodeMirror-code div:nth-child(${i}) .CodeMirror-line`,
   addConditionItem:
     "#node-menu-add-condition, #node-menu-add-conditional-breakpoint",
@@ -1759,8 +1780,6 @@ const selectors = {
   addLogItem: "#node-menu-add-log-point",
   editLogItem: "#node-menu-edit-log-point",
   disableItem: "#node-menu-disable-breakpoint",
-  menuitem: i => `menupopup menuitem:nth-child(${i})`,
-  pauseOnExceptions: ".pause-exceptions",
   breakpoint: ".CodeMirror-code > .new-breakpoint",
   highlightLine: ".CodeMirror-code > .highlight-line",
   debugLine: ".new-debug-line",
@@ -1775,18 +1794,12 @@ const selectors = {
   stepIn: ".stepIn.active",
   prettyPrintButton: ".source-footer .prettyPrint",
   mappedSourceLink: ".source-footer .mapped-source",
-  sourcesFooter: ".sources-panel .source-footer",
   sourceMapFooterButton: ".debugger-source-map-button",
-  editorFooter: ".editor-pane .source-footer",
   sourceNode: i => `.sources-list .tree-node:nth-child(${i}) .node`,
   sourceNodes: ".sources-list .tree-node",
   sourceTreeThreads: '.sources-list .tree-node[aria-level="1"]',
-  sourceTreeThreadsNodes:
-    '.sources-list .tree-node[aria-level="1"] > .node > span:nth-child(1)',
   sourceTreeFiles: ".sources-list .tree-node[data-expandable=false]",
   threadSourceTree: i => `.threads-list .sources-pane:nth-child(${i})`,
-  threadSourceTreeSourceNode: (i, j) =>
-    `${selectors.threadSourceTree(i)} .tree-node:nth-child(${j}) .node`,
   sourceDirectoryLabel: i => `.sources-list .tree-node:nth-child(${i}) .label`,
   resultItems: ".result-list .result-item",
   resultItemName: (name, i) =>
@@ -1826,8 +1839,6 @@ const selectors = {
   inlinePreviewOpenInspector: ".inline-preview-value button.open-inspector",
   watchpointsSubmenu: "#node-menu-watchpoints",
   addGetWatchpoint: "#node-menu-add-get-watchpoint",
-  addSetWatchpoint: "#node-menu-add-set-watchpoint",
-  removeWatchpoint: "#node-menu-remove-watchpoint",
   logEventsCheckbox: ".events-header input",
   previewPopupInvokeGetterButton: ".preview-popup .invoke-getter",
   previewPopupObjectNumber: ".preview-popup .objectBox-number",
@@ -2123,9 +2134,55 @@ function rightClickObjectInspectorNode(dbg, node) {
   );
 }
 
+/*******************************************
+ * Utilities for handling codemirror
+ ******************************************/
+
+// Gets the current source editor for CM6 tests
+function getCMEditor(dbg) {
+  return dbg.win.codemirrorEditor;
+}
+
+// Gets the number of lines in the editor
+function getLineCount(dbg) {
+  return getCMEditor(dbg).getLineCount();
+}
+
+/**
+ * Wait for CodeMirror to start searching
+ */
+function waitForSearchState(dbg) {
+  return waitFor(() => getCMEditor(dbg).isSearchStateReady());
+}
+
+/**
+ * Gets the content for the editor as a string. it uses the
+ * newline character to separate lines.
+ */
+function getEditorContent(dbg) {
+  return getCMEditor(dbg).getEditorContent();
+}
+
+/**
+ * Set the cursor  at a specific location in the editor
+ * @param {*} dbg
+ * @param {Number} line
+ * @param {Number} column
+ * @returns
+ */
+function setEditorCursorAt(dbg, line, column) {
+  return getCMEditor(dbg).setCursorAt(line, column);
+}
+
+// Gets the current codeMirror instance for CM5 tests
 function getCM(dbg) {
   const el = dbg.win.document.querySelector(".CodeMirror");
   return el.CodeMirror;
+}
+
+// Gets the mode used for the file
+function getEditorFileMode(dbg) {
+  return getCMEditor(dbg).getEditorFileMode();
 }
 
 function getCoordsFromPosition(cm, { line, ch }) {
@@ -2753,11 +2810,11 @@ async function assertDebuggerIsHighlightedAndPaused(toolbox) {
 async function addExpression(dbg, input) {
   info("Adding an expression");
 
-  const plusIcon = findElementWithSelector(dbg, selectors.expressionPlus);
+  const plusIcon = findElement(dbg, "expressionPlus");
   if (plusIcon) {
     plusIcon.click();
   }
-  findElementWithSelector(dbg, selectors.expressionInput).focus();
+  findElement(dbg, "expressionInput").focus();
   type(dbg, input);
   const evaluated = waitForDispatch(dbg.store, "EVALUATE_EXPRESSION");
   const clearAutocomplete = waitForDispatch(dbg.store, "CLEAR_AUTOCOMPLETE");
@@ -2981,14 +3038,14 @@ async function clickOnSourceMapMenuItem(dbg, className) {
 }
 
 async function setLogPoint(dbg, index, value) {
-  rightClickElement(dbg, "gutter", index);
+  rightClickElement(dbg, "gutterElement", index);
   await waitForContextMenu(dbg);
   selectContextMenuItem(
     dbg,
     `${selectors.addLogItem},${selectors.editLogItem}`
   );
   const onBreakpointSet = waitForDispatch(dbg.store, "SET_BREAKPOINT");
-  await typeInPanel(dbg, value);
+  await typeInPanel(dbg, value, true);
   await onBreakpointSet;
 }
 /**

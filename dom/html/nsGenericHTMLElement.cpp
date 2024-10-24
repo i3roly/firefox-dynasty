@@ -20,6 +20,8 @@
 #include "mozilla/TextEditor.h"
 #include "mozilla/TextEvents.h"
 #include "mozilla/StaticPrefs_accessibility.h"
+#include "mozilla/StaticPrefs_dom.h"
+#include "mozilla/dom/AncestorIterator.h"
 #include "mozilla/dom/FetchPriority.h"
 #include "mozilla/dom/FormData.h"
 #include "nscore.h"
@@ -104,7 +106,7 @@ static const uint8_t NS_INPUTMODE_NUMERIC = 6;
 static const uint8_t NS_INPUTMODE_DECIMAL = 7;
 static const uint8_t NS_INPUTMODE_SEARCH = 8;
 
-static const nsAttrValue::EnumTable kInputmodeTable[] = {
+static constexpr nsAttrValue::EnumTable kInputmodeTable[] = {
     {"none", NS_INPUTMODE_NONE},
     {"text", NS_INPUTMODE_TEXT},
     {"tel", NS_INPUTMODE_TEL},
@@ -123,7 +125,7 @@ static const uint8_t NS_ENTERKEYHINT_PREVIOUS = 5;
 static const uint8_t NS_ENTERKEYHINT_SEARCH = 6;
 static const uint8_t NS_ENTERKEYHINT_SEND = 7;
 
-static const nsAttrValue::EnumTable kEnterKeyHintTable[] = {
+static constexpr nsAttrValue::EnumTable kEnterKeyHintTable[] = {
     {"enter", NS_ENTERKEYHINT_ENTER},
     {"done", NS_ENTERKEYHINT_DONE},
     {"go", NS_ENTERKEYHINT_GO},
@@ -138,7 +140,7 @@ static const uint8_t NS_AUTOCAPITALIZE_SENTENCES = 2;
 static const uint8_t NS_AUTOCAPITALIZE_WORDS = 3;
 static const uint8_t NS_AUTOCAPITALIZE_CHARACTERS = 4;
 
-static const nsAttrValue::EnumTable kAutocapitalizeTable[] = {
+static constexpr nsAttrValue::EnumTable kAutocapitalizeTable[] = {
     {"none", NS_AUTOCAPITALIZE_NONE},
     {"sentences", NS_AUTOCAPITALIZE_SENTENCES},
     {"words", NS_AUTOCAPITALIZE_WORDS},
@@ -168,7 +170,7 @@ nsresult nsGenericHTMLElement::CopyInnerTo(Element* aDst) {
   return NS_OK;
 }
 
-static const nsAttrValue::EnumTable kDirTable[] = {
+static constexpr nsAttrValue::EnumTable kDirTable[] = {
     {"ltr", Directionality::Ltr},
     {"rtl", Directionality::Rtl},
     {"auto", Directionality::Auto},
@@ -179,11 +181,11 @@ namespace {
 // See <https://html.spec.whatwg.org/#the-popover-attribute>.
 enum class PopoverAttributeKeyword : uint8_t { Auto, EmptyString, Manual };
 
-static const char* kPopoverAttributeValueAuto = "auto";
-static const char* kPopoverAttributeValueEmptyString = "";
-static const char* kPopoverAttributeValueManual = "manual";
+static constexpr const char kPopoverAttributeValueAuto[] = "auto";
+static constexpr const char kPopoverAttributeValueEmptyString[] = "";
+static constexpr const char kPopoverAttributeValueManual[] = "manual";
 
-static const nsAttrValue::EnumTable kPopoverTable[] = {
+static constexpr nsAttrValue::EnumTable kPopoverTable[] = {
     {kPopoverAttributeValueAuto, PopoverAttributeKeyword::Auto},
     {kPopoverAttributeValueEmptyString, PopoverAttributeKeyword::EmptyString},
     {kPopoverAttributeValueManual, PopoverAttributeKeyword::Manual},
@@ -210,7 +212,7 @@ FetchPriority nsGenericHTMLElement::ToFetchPriority(const nsAString& aValue) {
 
 namespace {
 // <https://html.spec.whatwg.org/multipage/urls-and-fetching.html#fetch-priority-attributes>.
-static const nsAttrValue::EnumTable kFetchPriorityEnumTable[] = {
+static constexpr nsAttrValue::EnumTable kFetchPriorityEnumTable[] = {
     {kFetchPriorityAttributeValueHigh, FetchPriority::High},
     {kFetchPriorityAttributeValueLow, FetchPriority::Low},
     {kFetchPriorityAttributeValueAuto, FetchPriority::Auto},
@@ -477,9 +479,9 @@ bool nsGenericHTMLElement::InNavQuirksMode(Document* aDoc) {
 
 void nsGenericHTMLElement::UpdateEditableState(bool aNotify) {
   // XXX Should we do this only when in a document?
-  ContentEditableTristate value = GetContentEditableValue();
-  if (value != eInherit) {
-    SetEditableFlag(!!value);
+  ContentEditableState state = GetContentEditableState();
+  if (state != ContentEditableState::Inherit) {
+    SetEditableFlag(IsEditableState(state));
     UpdateReadOnlyState(aNotify);
     return;
   }
@@ -502,7 +504,7 @@ nsresult nsGenericHTMLElement::BindToTree(BindContext& aContext,
     }
   }
 
-  if (HasFlag(NODE_IS_EDITABLE) && GetContentEditableValue() == eTrue &&
+  if (HasFlag(NODE_IS_EDITABLE) && IsEditableState(GetContentEditableState()) &&
       IsInComposedDoc()) {
     aContext.OwnerDoc().ChangeContentEditableCount(this, +1);
   }
@@ -546,7 +548,7 @@ void nsGenericHTMLElement::UnbindFromTree(UnbindContext& aContext) {
 
   RemoveFromNameTable();
 
-  if (GetContentEditableValue() == eTrue) {
+  if (IsEditableState(GetContentEditableState())) {
     if (Document* doc = GetComposedDoc()) {
       doc->ChangeContentEditableCount(this, -1);
     }
@@ -827,13 +829,21 @@ void nsGenericHTMLElement::AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
       }
       SetDirectionalityOnDescendants(this, dir, aNotify);
     } else if (aName == nsGkAtoms::contenteditable) {
+      auto IsEditableExceptInherit = [](const nsAttrValue* aValue) {
+        if (!aValue) {
+          return false;
+        }
+        return aValue->Equals(EmptyString(), eCaseMatters) ||
+               aValue->Equals(u"true"_ns, eIgnoreCase) ||
+               (StaticPrefs::
+                    dom_element_contenteditable_plaintext_only_enabled() &&
+                aValue->Equals(u"plaintext-only"_ns, eIgnoreCase));
+      };
       int32_t editableCountDelta = 0;
-      if (aOldValue && (aOldValue->Equals(u"true"_ns, eIgnoreCase) ||
-                        aOldValue->Equals(u""_ns, eIgnoreCase))) {
+      if (IsEditableExceptInherit(aOldValue)) {
         editableCountDelta = -1;
       }
-      if (aValue && (aValue->Equals(u"true"_ns, eIgnoreCase) ||
-                     aValue->Equals(u""_ns, eIgnoreCase))) {
+      if (IsEditableExceptInherit(aValue)) {
         ++editableCountDelta;
       }
       ChangeEditableState(editableCountDelta);
@@ -1109,7 +1119,7 @@ nsMapRuleToAttributesFunc nsGenericHTMLElement::GetAttributeMappingFunction()
   return &MapCommonAttributesInto;
 }
 
-static const nsAttrValue::EnumTable kDivAlignTable[] = {
+static constexpr nsAttrValue::EnumTable kDivAlignTable[] = {
     {"left", StyleTextAlign::MozLeft},
     {"right", StyleTextAlign::MozRight},
     {"center", StyleTextAlign::MozCenter},
@@ -1117,7 +1127,7 @@ static const nsAttrValue::EnumTable kDivAlignTable[] = {
     {"justify", StyleTextAlign::Justify},
     {nullptr, 0}};
 
-static const nsAttrValue::EnumTable kFrameborderTable[] = {
+static constexpr nsAttrValue::EnumTable kFrameborderTable[] = {
     {"yes", FrameBorderProperty::Yes},
     {"no", FrameBorderProperty::No},
     {"1", FrameBorderProperty::One},
@@ -1125,7 +1135,7 @@ static const nsAttrValue::EnumTable kFrameborderTable[] = {
     {nullptr, 0}};
 
 // TODO(emilio): Nobody uses the parsed attribute here.
-static const nsAttrValue::EnumTable kScrollingTable[] = {
+static constexpr nsAttrValue::EnumTable kScrollingTable[] = {
     {"yes", ScrollingAttribute::Yes},
     {"no", ScrollingAttribute::No},
     {"on", ScrollingAttribute::On},
@@ -1135,7 +1145,7 @@ static const nsAttrValue::EnumTable kScrollingTable[] = {
     {"auto", ScrollingAttribute::Auto},
     {nullptr, 0}};
 
-static const nsAttrValue::EnumTable kTableVAlignTable[] = {
+static constexpr nsAttrValue::EnumTable kTableVAlignTable[] = {
     {"top", StyleVerticalAlignKeyword::Top},
     {"middle", StyleVerticalAlignKeyword::Middle},
     {"bottom", StyleVerticalAlignKeyword::Bottom},
@@ -1144,7 +1154,7 @@ static const nsAttrValue::EnumTable kTableVAlignTable[] = {
 
 bool nsGenericHTMLElement::ParseAlignValue(const nsAString& aString,
                                            nsAttrValue& aResult) {
-  static const nsAttrValue::EnumTable kAlignTable[] = {
+  static constexpr nsAttrValue::EnumTable kAlignTable[] = {
       {"left", StyleTextAlign::Left},
       {"right", StyleTextAlign::Right},
 
@@ -1194,7 +1204,7 @@ bool nsGenericHTMLElement::ParseAlignValue(const nsAString& aString,
 
 //----------------------------------------
 
-static const nsAttrValue::EnumTable kTableHAlignTable[] = {
+static constexpr nsAttrValue::EnumTable kTableHAlignTable[] = {
     {"left", StyleTextAlign::Left},
     {"right", StyleTextAlign::Right},
     {"center", StyleTextAlign::Center},
@@ -1209,7 +1219,7 @@ bool nsGenericHTMLElement::ParseTableHAlignValue(const nsAString& aString,
 //----------------------------------------
 
 // This table is used for td, th, tr, col, thead, tbody and tfoot.
-static const nsAttrValue::EnumTable kTableCellHAlignTable[] = {
+static constexpr nsAttrValue::EnumTable kTableCellHAlignTable[] = {
     {"left", StyleTextAlign::MozLeft},
     {"right", StyleTextAlign::MozRight},
     {"center", StyleTextAlign::MozCenter},
@@ -1251,9 +1261,7 @@ bool nsGenericHTMLElement::ParseImageAttribute(nsAtom* aAttribute,
 bool nsGenericHTMLElement::ParseReferrerAttribute(const nsAString& aString,
                                                   nsAttrValue& aResult) {
   using mozilla::dom::ReferrerInfo;
-  // This is a bit sketchy, we assume GetEnumString(…).get() points to a static
-  // buffer, relying on the fact that GetEnumString(…) returns a literal string.
-  static const nsAttrValue::EnumTable kReferrerPolicyTable[] = {
+  static constexpr nsAttrValue::EnumTable kReferrerPolicyTable[] = {
       {GetEnumString(ReferrerPolicy::No_referrer).get(),
        static_cast<int16_t>(ReferrerPolicy::No_referrer)},
       {GetEnumString(ReferrerPolicy::Origin).get(),
@@ -1315,8 +1323,11 @@ void nsGenericHTMLElement::MapCommonAttributesIntoExceptHidden(
   if (!aBuilder.PropertyIsSet(eCSSProperty__moz_user_modify)) {
     const nsAttrValue* value = aBuilder.GetAttr(nsGkAtoms::contenteditable);
     if (value) {
+      // FIXME: plaintext-only should be mapped to read-write-plaintext-only
       if (value->Equals(nsGkAtoms::_empty, eCaseMatters) ||
-          value->Equals(nsGkAtoms::_true, eIgnoreCase)) {
+          value->Equals(nsGkAtoms::_true, eIgnoreCase) ||
+          (StaticPrefs::dom_element_contenteditable_plaintext_only_enabled() &&
+           value->Equals(nsGkAtoms::plaintextOnly, eIgnoreCase))) {
         aBuilder.SetKeywordValue(eCSSProperty__moz_user_modify,
                                  StyleUserModify::ReadWrite);
       } else if (value->Equals(nsGkAtoms::_false, eIgnoreCase)) {
@@ -1705,6 +1716,16 @@ const nsAttrValue* nsGenericHTMLElement::GetURIAttr(nsAtom* aAttr,
   nsContentUtils::NewURIWithDocumentCharset(aURI, attr->GetStringValue(),
                                             OwnerDoc(), baseURI);
   return attr;
+}
+
+bool nsGenericHTMLElement::IsContentEditable() const {
+  for (const auto* element : InclusiveAncestorsOfType<nsGenericHTMLElement>()) {
+    const ContentEditableState state = element->GetContentEditableState();
+    if (state != ContentEditableState::Inherit) {
+      return IsEditableState(state);
+    }
+  }
+  return false;
 }
 
 bool nsGenericHTMLElement::IsLabelable() const {
@@ -2770,7 +2791,7 @@ void nsGenericHTMLFormControlElement::SetFormAutofillState(
 
 //----------------------------------------------------------------------
 
-static const nsAttrValue::EnumTable kPopoverTargetActionTable[] = {
+static constexpr nsAttrValue::EnumTable kPopoverTargetActionTable[] = {
     {"toggle", PopoverTargetAction::Toggle},
     {"show", PopoverTargetAction::Show},
     {"hide", PopoverTargetAction::Hide},
@@ -3498,6 +3519,10 @@ void nsGenericHTMLElement::ShowPopoverInternal(Element* aInvoker,
             document->GetUnretargetedFocusedContent()) {
       originallyFocusedElement =
           do_GetWeakReference(unretargetedFocus->AsElement());
+    }
+
+    if (StaticPrefs::dom_closewatcher_enabled()) {
+      GetPopoverData()->EnsureCloseWatcher(this);
     }
   }
 

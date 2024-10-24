@@ -62,7 +62,7 @@ a11y-checks:
 aab:
     description: "{description} with aab test_runner"
     component: "GeckoView::General"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     when: &gv_e10s_filter
         $eval: '"android" in task["test-platform"]'
     suffix: "aab"
@@ -83,8 +83,8 @@ aab:
 
 geckoview-no-fission:
     description: "{description} without fission enabled"
-    component: "GeckoView::Sandboxing"
-    expiration: "2024-09-01"
+    component: "GeckoView::General"
+    expiration: "2025-03-01"
     when:
         <<: *gv_e10s_filter
     suffix: "nofis"
@@ -96,8 +96,8 @@ geckoview-no-fission:
 
 geckoview-fission:
     description: "{description} with fission enabled and default isolation strategy"
-    component: "GeckoView::Sandboxing"
-    expiration: "2024-09-01"
+    component: "GeckoView::General"
+    expiration: "2025-03-01"
     when:
         <<: *gv_e10s_filter
     suffix: "fis"
@@ -105,8 +105,8 @@ geckoview-fission:
 
 geckoview-fission-isolate-high-value:
     description: "{description} with fission enabled and isolation strategy isolateHighValue"
-    component: "GeckoView::Sandboxing"
-    expiration: "2024-09-01"
+    component: "GeckoView::General"
+    expiration: "2025-03-01"
     when:
         <<: *gv_e10s_filter
     suffix: "fis-hv"
@@ -119,7 +119,7 @@ geckoview-fission-isolate-high-value:
 no-fission:
     description: "{description} without fission enabled"
     component: "Core::DOM: Content Processes"
-    expiration: "2024-09-01"
+    expiration: "2025-03-01"
     suffix: "nofis"
     mozinfo: "fission"
     when:
@@ -134,8 +134,8 @@ no-fission:
 
 geckoview-no-fission-ship:
     description: "{description} with fission disabled and ship enabled"
-    component: "GeckoView::Sandboxing"
-    expiration: "2024-09-01"
+    component: "GeckoView::General"
+    expiration: "2025-03-01"
     suffix: "nofis-ship"
     when:
         <<: *gv_e10s_filter
@@ -193,6 +193,21 @@ conditioned_profile:
                 - "--conditioned-profile"
     replace:
         chunks: 8
+
+cm6:
+    description: "{description} with codemirror 6 enabled"
+    component: "DevTools::Framework"
+    expiration: "2025-03-01"
+    suffix: "cm6"
+    mozinfo: "cm6"
+    replace:
+        tier: 3
+    when:
+        $eval: '"mochitest-devtools-chrome" == task["try-name"]'
+    merge:
+        mozharness:
+            extra-options:
+                - "--setpref=devtools.debugger.features.codemirror-next=true"
 
 socketprocess:
     description: "{description} with socket process enabled"
@@ -311,17 +326,6 @@ webrender-sw:
             extra-options:
                 - "--setpref=gfx.webrender.software=true"
 
-webgl-ipc:
-    description: "{description} with WebGL IPC process enabled"
-    component: "Core::Graphics: CanvasWebGL"
-    expiration: "2024-09-01"
-    suffix: "gli"
-    merge:
-        mozharness:
-            extra-options:
-                - "--setpref=webgl.out-of-process=true"
-                - "--setpref=security.sandbox.content.headless=true"
-
 wmf-media-engine:
     description: "{description} with Windows Media Foundation media engine enabled"
     component: "Core::Audio/Video: Playback"
@@ -377,7 +381,10 @@ media-gpu:
     mozinfo: "mda_gpu"
     when:
         $eval: '
-                    "windows" in task["test-platform"]
+                    (
+                        "windows" in task["test-platform"]
+                        && "hw" in task["test-platform"]
+                    )
                     || "macosx" in task["test-platform"]
                 '
     merge:
@@ -471,3 +478,18 @@ draw-snapshot:
         mozharness:
             extra-options:
                 - "--setpref=reftest.use-draw-snapshot=true"
+
+os-integration:
+    description: >-
+        {description} limited to tests identified as good candidates for validating the test environment.
+    component: Release Engineering::Firefox-CI Administration
+    expiration: never
+    suffix: osint
+    when:
+        $eval: >-
+            "debug" in task["test-platform"]
+            && !("macosx" in task["test-platform"])
+    merge:
+        worker:
+            env:
+                MOZHARNESS_TEST_TAG: ["os_integration"]

@@ -111,7 +111,12 @@ export function NarrateControls(win, languagePromise) {
   narrateControl.appendChild(narrateSkipNext);
 
   win.document.addEventListener("keydown", function (event) {
-    if (win.document.hasFocus() && event.key === "n") {
+    if (
+      win.document.hasFocus() &&
+      event.key === "n" &&
+      !event.metaKey &&
+      !event.shiftKey
+    ) {
       narrateStartStop.click();
     }
     //Arrow key direction also hardcoded for RTL in order to be
@@ -230,7 +235,7 @@ NarrateControls.prototype = {
         this._onButtonClick(evt);
         break;
       case "keydown":
-        if (evt.key === "Tab" && !evt.shiftKey) {
+        if (evt.key === "Tab") {
           this._handleFocus(evt);
         }
         break;
@@ -431,19 +436,25 @@ NarrateControls.prototype = {
 
   _handleFocus(e) {
     let classList = e.target.classList;
-    if (classList.contains("option") || classList.contains("select-toggle")) {
-      e.preventDefault();
-    } else {
-      return;
-    }
-
     let narrateDropdown = this._doc.querySelector(".narrate-dropdown");
-    if (narrateDropdown.classList.contains("speaking")) {
-      let skipPrevious = this._doc.querySelector(".narrate-skip-previous");
-      skipPrevious.focus();
-    } else {
-      let startStop = this._doc.querySelector(".narrate-start-stop");
-      startStop.focus();
+    if (!e.shiftKey) {
+      if (classList.contains("option") || classList.contains("select-toggle")) {
+        e.preventDefault();
+      } else {
+        return;
+      }
+      if (narrateDropdown.classList.contains("speaking")) {
+        let skipPrevious = this._doc.querySelector(".narrate-skip-previous");
+        skipPrevious.focus();
+      } else {
+        let startStop = this._doc.querySelector(".narrate-start-stop");
+        startStop.focus();
+      }
+    }
+    let firstFocusableButton = narrateDropdown.querySelector("button:enabled");
+    if (e.target === firstFocusableButton) {
+      e.preventDefault();
+      narrateDropdown.querySelector(".select-toggle").focus();
     }
   },
 };
