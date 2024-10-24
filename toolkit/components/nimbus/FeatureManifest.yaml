@@ -2161,6 +2161,19 @@ networking:
         branch: default
         pref: "network.cookie.chips.partitionLimitByteCapacity"
 
+disableHttp3:
+  description: "Whether HTTP/3 is disabled"
+  owner: kershaw@mozilla.com
+  hasExposure: false
+  variables:
+    withThirdPartyRoots:
+      description: If third party roots are detected, disable HTTP/3
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.http.http3.disable_when_third_party_roots_found"
+
+
 networkPrioritization:
   description: "Network request prioritization"
   owner: vgosu@mozilla.com
@@ -3834,3 +3847,15 @@ fxms_bmb_button:
     uri: chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json
     path: browser/components/asrouter/content-src/schemas/MessagingExperiment.schema.json
   variables: {}
+
+contentProcessSandbox:
+  description: Prefs that control the content process sandbox.
+  owner: bowen@mozilla.com
+  hasExposure: false
+  variables:
+    Level:
+      description: Content process sandbox level
+      type: int
+      setPref:
+        branch: user
+        pref: security.sandbox.content.level

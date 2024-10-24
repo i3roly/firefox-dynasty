@@ -2769,6 +2769,7 @@ void net_EnsurePSMInit() {
 
   DebugOnly<bool> rv = EnsureNSSInitializedChromeOrContent();
   MOZ_ASSERT(rv);
+  nsHttpHandler::CheckThirdPartyRoots();
 }
 
 bool NS_IsAboutBlank(nsIURI* uri) {
@@ -3047,6 +3048,14 @@ nsresult NS_ShouldSecureUpgrade(
   }
   // If no loadInfo exist there is nothing to upgrade here.
   if (!aLoadInfo) {
+    aShouldUpgrade = false;
+    return NS_OK;
+  }
+  // The loadInfo indicates no HTTPS upgrade.
+  bool skipHTTPSUpgrade = false;
+  Unused << aLoadInfo->GetSkipHTTPSUpgrade(&skipHTTPSUpgrade);
+  if (skipHTTPSUpgrade) {
+    aLoadInfo->SetHttpsUpgradeTelemetry(nsILoadInfo::SKIP_HTTPS_UPGRADE);
     aShouldUpgrade = false;
     return NS_OK;
   }
