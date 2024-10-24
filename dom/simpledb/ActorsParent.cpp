@@ -35,6 +35,7 @@
 #include "mozilla/dom/PBackgroundSDBRequestParent.h"
 #include "mozilla/dom/ipc/IdType.h"
 #include "mozilla/dom/quota/Client.h"
+#include "mozilla/dom/quota/ClientDirectoryLock.h"
 #include "mozilla/dom/quota/ClientImpl.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
@@ -116,7 +117,7 @@ class StreamHelper final : public Runnable {
 };
 
 class Connection final : public PBackgroundSDBConnectionParent {
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
   nsCOMPtr<nsIFileRandomAccessStream> mFileRandomAccessStream;
   const PrincipalInfo mPrincipalInfo;
   nsCString mOrigin;
@@ -134,7 +135,7 @@ class Connection final : public PBackgroundSDBConnectionParent {
 
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(mozilla::dom::Connection, override)
 
-  Maybe<DirectoryLock&> MaybeDirectoryLockRef() const {
+  Maybe<ClientDirectoryLock&> MaybeDirectoryLockRef() const {
     AssertIsOnBackgroundThread();
 
     return ToMaybeRef(mDirectoryLock.get());
@@ -174,7 +175,7 @@ class Connection final : public PBackgroundSDBConnectionParent {
 
   void OnOpen(
       const nsACString& aOrigin, const nsAString& aName,
-      already_AddRefed<DirectoryLock> aDirectoryLock,
+      already_AddRefed<ClientDirectoryLock> aDirectoryLock,
       already_AddRefed<nsIFileRandomAccessStream> aFileRandomAccessStream);
 
   void OnClose();
@@ -335,7 +336,7 @@ class OpenOp final : public ConnectionOperationBase {
   };
 
   const SDBRequestOpenParams mParams;
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
   nsCOMPtr<nsIFileRandomAccessStream> mFileRandomAccessStream;
   // XXX Consider changing this to ClientMetadata.
   quota::OriginMetadata mOriginMetadata;
@@ -373,7 +374,7 @@ class OpenOp final : public ConnectionOperationBase {
   NS_IMETHOD
   Run() override;
 
-  void DirectoryLockAcquired(DirectoryLock* aLock);
+  void DirectoryLockAcquired(ClientDirectoryLock* aLock);
 
   void DirectoryLockFailed();
 };
@@ -688,7 +689,7 @@ void Connection::OnRequestFinished() {
 
 void Connection::OnOpen(
     const nsACString& aOrigin, const nsAString& aName,
-    already_AddRefed<DirectoryLock> aDirectoryLock,
+    already_AddRefed<ClientDirectoryLock> aDirectoryLock,
     already_AddRefed<nsIFileRandomAccessStream> aFileRandomAccessStream) {
   AssertIsOnBackgroundThread();
   MOZ_ASSERT(!aOrigin.IsEmpty());
@@ -1301,7 +1302,7 @@ void OpenOp::OnSuccess() {
   MOZ_ASSERT(mFileRandomAccessStream);
   MOZ_ASSERT(mFileRandomAccessStreamOpen);
 
-  RefPtr<DirectoryLock> directoryLock;
+  RefPtr<ClientDirectoryLock> directoryLock;
   nsCOMPtr<nsIFileRandomAccessStream> fileRandomAccessStream;
 
   mDirectoryLock.swap(directoryLock);
@@ -1385,7 +1386,7 @@ OpenOp::Run() {
   return NS_OK;
 }
 
-void OpenOp::DirectoryLockAcquired(DirectoryLock* aLock) {
+void OpenOp::DirectoryLockAcquired(ClientDirectoryLock* aLock) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(mState == State::DirectoryOpenPending);
   MOZ_ASSERT(!mDirectoryLock);

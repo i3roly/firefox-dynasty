@@ -40,11 +40,15 @@ class MenuTelemetryMiddleware(
         next(action)
 
         when (action) {
-            MenuAction.AddBookmark,
-            MenuAction.Navigate.EditBookmark,
-            -> Events.browserMenuAction.record(
+            MenuAction.AddBookmark -> Events.browserMenuAction.record(
                 Events.BrowserMenuActionExtra(
-                    item = "bookmark",
+                    item = "add_bookmark",
+                ),
+            )
+
+            MenuAction.Navigate.EditBookmark -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "edit_bookmark",
                 ),
             )
 
@@ -57,6 +61,18 @@ class MenuTelemetryMiddleware(
             MenuAction.RemoveShortcut -> Events.browserMenuAction.record(
                 Events.BrowserMenuActionExtra(
                     item = "remove_from_top_sites",
+                ),
+            )
+
+            MenuAction.SaveMenuClicked -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "save_submenu",
+                ),
+            )
+
+            MenuAction.ToolsMenuClicked -> Events.browserMenuAction.record(
+                Events.BrowserMenuActionExtra(
+                    item = "tools_submenu",
                 ),
             )
 

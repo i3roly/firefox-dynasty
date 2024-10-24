@@ -110,6 +110,14 @@ class SelectableProfileServiceClass {
   #groupToolkitProfile = null;
   #currentProfile = null;
   #everyWindowCallbackId = "SelectableProfileService";
+  #defaultAvatars = [
+    "book",
+    "briefcase",
+    "flower",
+    "heart",
+    "shopping",
+    "star",
+  ];
 
   constructor() {
     if (Cu.isInAutomation) {
@@ -450,7 +458,10 @@ class SelectableProfileServiceClass {
    * as the path of the nsToolkitProfile for the group.
    */
   async setDefaultProfileForGroup() {
-    if (this.#groupToolkitProfile.rootDir.path === this.currentProfile.path) {
+    if (
+      !this.currentProfile ||
+      this.#groupToolkitProfile.rootDir.path === this.currentProfile.path
+    ) {
       return;
     }
     this.#groupToolkitProfile.rootDir = await this.currentProfile.rootDir;
@@ -488,7 +499,7 @@ class SelectableProfileServiceClass {
    * directory is salt + "." + profileName. (Ex. c7IZaLu7.testProfile)
    *
    * @param {string} aProfileName The name of the profile to be created
-   * @returns {string} The relative path for the given profile
+   * @returns {string} The path for the given profile
    */
   async createProfileDirs(aProfileName) {
     const salt = btoa(
@@ -601,47 +612,110 @@ class SelectableProfileServiceClass {
     return relativePath;
   }
 
-  async createNewProfile() {
-    // Create the profiles db and set the storeID on the toolkit profile if it
-    // doesn't exist so we can init the service
-    await this.maybeCreateProfilesStorePath();
-    await this.init();
+  /**
+   * Create a Selectable Profile and add to the datastore.
+   *
+   * If path is not included, new profile directories will be created.
+   *
+   * @param {nsIFile} existingProfilePath Optional. The path of an existing profile.
+   *
+   * @returns {SelectableProfile} The newly created profile object.
+   */
+  async #createProfile(existingProfilePath) {
     let nextProfileNumber =
       1 + Math.max(0, ...(await this.getAllProfiles()).map(p => p.id));
     let [defaultName] = lazy.profilesLocalization.formatMessagesSync([
       { id: "default-profile-name", args: { number: nextProfileNumber } },
     ]);
-    let newProfile = {
+    let randomIndex = Math.floor(Math.random() * this.#defaultAvatars.length);
+    let profileData = {
       name: defaultName.value,
-      avatar: "default",
+      avatar: this.#defaultAvatars[randomIndex],
       themeL10nId: "default",
       themeFg: "var(--text-color)",
       themeBg: "var(--background-color-box)",
     };
 
-    let profile = await this.createProfile(newProfile);
+    let path =
+      existingProfilePath || (await this.createProfileDirs(profileData.name));
+    if (!existingProfilePath) {
+      await this.createProfileInitialFiles(path);
+    }
+    profileData.path = this.getRelativeProfilePath(path);
+
+    let profile = await this.insertProfile(profileData);
+    return profile;
+  }
+
+  /**
+   * If the user has never created a SelectableProfile before, the group
+   * datastore will be created and the currently running toolkit profile will
+   * be added to the datastore.
+   */
+  async maybeSetupDataStore() {
+    // Create the profiles db and set the storeID on the toolkit profile if it
+    // doesn't exist so we can init the service.
+    await this.maybeCreateProfilesStorePath();
+    await this.init();
+
+    // If this is the first time the user has created a selectable profile,
+    // add the current toolkit profile to the datastore.
+    let profiles = await this.getAllProfiles();
+    if (!profiles.length) {
+      let path = Services.dirsvc.get("ProfD", Ci.nsIFile);
+      let originalProfile = await this.#createProfile(path);
+      this.#currentProfile = originalProfile;
+    }
+  }
+
+  /**
+   * Create and launch a new SelectableProfile and add it to the group datastore.
+   * This is an unmanaged profile from the nsToolkitProfile perspective.
+   *
+   * If the user has never created a SelectableProfile before, the group
+   * datastore will be lazily created and the currently running toolkit profile
+   * will be added to the datastore along with the newly created profile.
+   *
+   * Launches the new SelectableProfile in a new instance after creating it.
+   */
+  async createNewProfile() {
+    await this.maybeSetupDataStore();
+
+    let profile = await this.#createProfile();
     this.launchInstance(profile);
   }
 
   /**
-   * Create an empty SelectableProfile and add it to the group DB.
-   * This is an unmanaged profile from the nsToolkitProfile perspective.
+   * Add a profile to the profile group datastore.
    *
-   * @param {object} profile An object that contains a path, name, themeL10nId,
-   *                 themeFg, and themeBg for creating a new profile.
-   * @returns {SelectableProfile}
-   *   The newly created profile object.
+   * This function assumes the service is initialized and the datastore has
+   * been created.
+   *
+   * @param {object} profileData A plain object that contains a name, avatar,
+   *                 themeL10nId, themeFg, themeBg, and relative path as string.
+   *
+   * @returns {SelectableProfile} The newly created profile object.
    */
-  async createProfile(profile) {
-    let profilePath = await this.createProfileDirs(profile.name);
-    await this.createProfileInitialFiles(profilePath);
-    let relativePath = this.getRelativeProfilePath(profilePath);
-    profile.path = relativePath;
+  async insertProfile(profileData) {
+    // Verify all fields are present.
+    let keys = ["avatar", "name", "path", "themeBg", "themeFg", "themeL10nId"];
+    let missing = [];
+    keys.forEach(key => {
+      if (!(key in profileData)) {
+        missing.push(key);
+      }
+    });
+    if (missing.length) {
+      throw new Error(
+        "Unable to insertProfile due to missing keys: ",
+        missing.join(",")
+      );
+    }
     await this.#connection.execute(
       `INSERT INTO Profiles VALUES (NULL, :path, :name, :avatar, :themeL10nId, :themeFg, :themeBg);`,
-      profile
+      profileData
     );
-    return this.getProfileByPath(profilePath);
+    return this.getProfileByName(profileData.name);
   }
 
   /**

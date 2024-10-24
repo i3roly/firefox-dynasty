@@ -71,15 +71,11 @@ class TrustedTypePolicyFactory : public nsWrapperCache {
   // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-getattributetype
   void GetAttributeType(const nsAString& aTagName, const nsAString& aAttribute,
                         const nsAString& aElementNs, const nsAString& aAttrNs,
-                        DOMString& aResult) {
-    // TODO: impl.
-  }
+                        DOMString& aResult);
 
   // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-getpropertytype
   void GetPropertyType(const nsAString& aTagName, const nsAString& aProperty,
-                       const nsAString& aElementNs, DOMString& aResult) {
-    // TODO: impl
-  }
+                       const nsAString& aElementNs, DOMString& aResult);
 
   // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-defaultpolicy
   TrustedTypePolicy* GetDefaultPolicy() const { return mDefaultPolicy; }

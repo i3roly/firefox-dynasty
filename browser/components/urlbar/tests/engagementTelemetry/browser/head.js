@@ -108,10 +108,7 @@ async function ensureQuickSuggestInit({ ...args } = {}) {
           }),
         ],
       },
-      {
-        type: "weather",
-        weather: MerinoTestUtils.WEATHER_RS_DATA,
-      },
+      lazy.QuickSuggestTestUtils.weatherRecord(),
       {
         type: "exposure-suggestions",
         suggestion_type: "aaa",
@@ -400,6 +397,7 @@ async function setup() {
       ["browser.urlbar.searchEngagementTelemetry.enabled", true],
       ["browser.urlbar.quickactions.enabled", true],
       ["browser.urlbar.secondaryActions.featureGate", true],
+      ["browser.urlbar.scotchBonnet.enableOverride", false],
     ],
   });
 

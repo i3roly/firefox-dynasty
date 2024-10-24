@@ -121,6 +121,9 @@ treeherder:
         'M-msix': 'Mochitests from MSIX builds'
         'M-msix-cf': 'Mochitests confirm failure from MSIX builds'
         'M-osint': 'Mochitests tagged with os-integration'
+        'Mn': 'Marionette tests'
+        'Mn-swr': 'Marionette tests with software webrender enabled'
+        'Mn-headless': 'Marionette tests running in headless mode'
         'MSI': 'Repack installers into MSIs'
         'MSIs': 'Signing of Repacked installers of MSIs'
         'MSIX': 'Repack into MSIX package'
@@ -1064,7 +1067,6 @@ mac-signing:
                       - "/Contents/Library/LaunchServices/org.mozilla.updater"
                       - "/Contents/MacOS/XUL"
                       - "/Contents/MacOS/pingsender"
-                      - "/Contents/MacOS/minidump-analyzer"
                       - "/Contents/MacOS/nmhproxy"
                       - "/Contents/MacOS/*.dylib"
                       - "/Contents/Resources/gmp-clearkey/*/*.dylib"
@@ -1108,7 +1110,6 @@ mac-signing:
                       - "/Contents/MacOS/updater.app"
                       - "/Contents/Library/LaunchServices/org.mozilla.updater"
                       - "/Contents/MacOS/pingsender"
-                      - "/Contents/MacOS/minidump-analyzer"
                       - "/Contents/MacOS/nmhproxy"
                       - "/Contents/Frameworks/ChannelPrefs.framework"
 

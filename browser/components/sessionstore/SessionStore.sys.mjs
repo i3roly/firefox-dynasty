@@ -4520,7 +4520,7 @@ var SessionStoreInternal = {
       homePages = homePages.concat(lazy.HomePage.get(aWindow).split("|"));
     }
 
-    for (let i = tabbrowser._numPinnedTabs; i < tabbrowser.tabs.length; i++) {
+    for (let i = tabbrowser.pinnedTabCount; i < tabbrowser.tabs.length; i++) {
       let tab = tabbrowser.tabs[i];
       if (homePages.includes(tab.linkedBrowser.currentURI.spec)) {
         removableTabs.push(tab);
@@ -5668,6 +5668,7 @@ var SessionStoreInternal = {
       ) {
         aWindow.SidebarController.showInitially(aSidebar.command);
       }
+      aWindow.SidebarController.uiStateInitialized = true;
     }
     if (aWindow.SidebarController.sidebarRevampEnabled) {
       const { SidebarController } = aWindow;

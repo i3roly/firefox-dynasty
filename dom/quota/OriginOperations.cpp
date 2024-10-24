@@ -28,6 +28,7 @@
 #include "mozilla/dom/quota/Constants.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
+#include "mozilla/dom/quota/OriginDirectoryLock.h"
 #include "mozilla/dom/quota/PersistenceType.h"
 #include "mozilla/dom/quota/PrincipalUtils.h"
 #include "mozilla/dom/quota/PQuota.h"
@@ -40,6 +41,7 @@
 #include "mozilla/dom/quota/QuotaManagerImpl.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
 #include "mozilla/dom/quota/StreamUtils.h"
+#include "mozilla/dom/quota/UniversalDirectoryLock.h"
 #include "mozilla/dom/quota/UsageInfo.h"
 #include "mozilla/fallible.h"
 #include "mozilla/ipc/BackgroundParent.h"
@@ -482,7 +484,9 @@ class InitializePersistentStorageOp final
   void CloseDirectory() override;
 };
 
-class InitTemporaryStorageOp final : public ResolvableNormalOriginOp<bool> {
+class InitTemporaryStorageOp final
+    : public ResolvableNormalOriginOp<MaybePrincipalMetadataArray, true> {
+  MaybePrincipalMetadataArray mAllTemporaryGroups;
   RefPtr<UniversalDirectoryLock> mDirectoryLock;
 
  public:
@@ -496,7 +500,7 @@ class InitTemporaryStorageOp final : public ResolvableNormalOriginOp<bool> {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  MaybePrincipalMetadataArray GetResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -1076,9 +1080,9 @@ RefPtr<ResolvableNormalOriginOp<bool>> CreateInitializePersistentStorageOp(
                                                    std::move(aDirectoryLock));
 }
 
-RefPtr<ResolvableNormalOriginOp<bool>> CreateInitTemporaryStorageOp(
-    MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
-    RefPtr<UniversalDirectoryLock> aDirectoryLock) {
+RefPtr<ResolvableNormalOriginOp<MaybePrincipalMetadataArray, true>>
+CreateInitTemporaryStorageOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager,
+                             RefPtr<UniversalDirectoryLock> aDirectoryLock) {
   return MakeRefPtr<InitTemporaryStorageOp>(std::move(aQuotaManager),
                                             std::move(aDirectoryLock));
 }
@@ -2115,16 +2119,23 @@ nsresult InitTemporaryStorageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   QM_TRY(OkIf(aQuotaManager.IsStorageInitializedInternal()),
          NS_ERROR_NOT_INITIALIZED);
 
-  QM_TRY(MOZ_TO_RESULT(
-      aQuotaManager.EnsureTemporaryStorageIsInitializedInternal()));
+  const bool wasInitialized =
+      aQuotaManager.IsTemporaryStorageInitializedInternal();
+
+  if (!wasInitialized) {
+    QM_TRY(MOZ_TO_RESULT(
+        aQuotaManager.EnsureTemporaryStorageIsInitializedInternal()));
+
+    mAllTemporaryGroups = Some(aQuotaManager.GetAllTemporaryGroups());
+  }
 
   return NS_OK;
 }
 
-bool InitTemporaryStorageOp::GetResolveValue() {
+MaybePrincipalMetadataArray InitTemporaryStorageOp::GetResolveValue() {
   AssertIsOnOwningThread();
 
-  return true;
+  return std::move(mAllTemporaryGroups);
 }
 
 void InitTemporaryStorageOp::CloseDirectory() {

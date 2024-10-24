@@ -93,6 +93,13 @@ int nsNSSComponent::mInstanceCount = 0;
 // Forward declaration.
 nsresult CommonInit();
 
+template <const glean::impl::TimespanMetric* metric>
+class MOZ_RAII AutoGleanTimer {
+ public:
+  explicit AutoGleanTimer() { metric->Start(); }
+  ~AutoGleanTimer() { metric->Stop(); }
+};
+
 // Take an nsIFile and get a UTF-8-encoded c-string representation of the
 // location of that file (encapsulated in an nsACString).
 // This operation is generally to be avoided, except when interacting with
@@ -504,8 +511,7 @@ nsresult LoadLoadableCertsTask::Dispatch() {
 
 NS_IMETHODIMP
 LoadLoadableCertsTask::Run() {
-  Telemetry::AutoScalarTimer<Telemetry::ScalarID::NETWORKING_LOADING_CERTS_TASK>
-      timer;
+  AutoGleanTimer<&glean::networking::loading_certs_task> timer;
 
   nsresult loadLoadableRootsResult = LoadLoadableRoots();
   if (NS_WARN_IF(NS_FAILED(loadLoadableRootsResult))) {
@@ -1292,25 +1298,20 @@ static nsresult GetNSSProfilePath(nsAutoCString& aProfilePath) {
 // logic of the calling code.
 // |profilePath| is encoded in UTF-8.
 static nsresult AttemptToRenamePKCS11ModuleDB(const nsACString& profilePath) {
-  nsCOMPtr<nsIFile> profileDir = do_CreateInstance("@mozilla.org/file/local;1");
-  if (!profileDir) {
-    return NS_ERROR_FAILURE;
-  }
-#  ifdef XP_WIN
+  nsCOMPtr<nsIFile> profileDir;
+#ifdef XP_WIN
   // |profilePath| is encoded in UTF-8 because SQLite always takes UTF-8 file
   // paths regardless of the current system code page.
-  nsresult rv = profileDir->InitWithPath(NS_ConvertUTF8toUTF16(profilePath));
-#  else
-  nsresult rv = profileDir->InitWithNativePath(profilePath);
-#  endif
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
+  MOZ_TRY(NS_NewLocalFile(u""_ns, getter_AddRefs(profileDir)));
+  MOZ_TRY(profileDir->InitWithPath(NS_ConvertUTF8toUTF16(profilePath)));
+#else
+  MOZ_TRY(NS_NewNativeLocalFile(profilePath, getter_AddRefs(profileDir)));
+#endif
   const char* moduleDBFilename = "pkcs11.txt";
   nsAutoCString destModuleDBFilename(moduleDBFilename);
   destModuleDBFilename.Append(".fips");
   nsCOMPtr<nsIFile> dbFile;
-  rv = profileDir->Clone(getter_AddRefs(dbFile));
+  nsresult rv = profileDir->Clone(getter_AddRefs(dbFile));
   if (NS_FAILED(rv) || !dbFile) {
     return NS_ERROR_FAILURE;
   }
@@ -1687,8 +1688,7 @@ nsresult nsNSSComponent::Init() {
     return NS_ERROR_NOT_AVAILABLE;
   }
 
-  Telemetry::AutoScalarTimer<Telemetry::ScalarID::NETWORKING_NSS_INITIALIZATION>
-      timer;
+  AutoGleanTimer<&glean::networking::nss_initialization> timer;
 
   MOZ_LOG(gPIPNSSLog, LogLevel::Debug, ("Beginning NSS initialization\n"));
 

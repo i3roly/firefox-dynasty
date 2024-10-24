@@ -46,17 +46,17 @@ class MenuTelemetryMiddlewareTest {
 
         store.dispatch(MenuAction.AddBookmark).joinBlocking()
 
-        assertTelemetryRecorded(Events.browserMenuAction, item = "bookmark")
+        assertTelemetryRecorded(Events.browserMenuAction, item = "add_bookmark")
     }
 
     @Test
-    fun `WHEN navigating to edit a bookmark THEN record the bookmark browser menu telemetry`() {
+    fun `WHEN navigating to edit a bookmark THEN record the edit bookmark browser menu telemetry`() {
         val store = createStore()
         assertNull(Events.browserMenuAction.testGetValue())
 
         store.dispatch(MenuAction.Navigate.EditBookmark).joinBlocking()
 
-        assertTelemetryRecorded(Events.browserMenuAction, item = "bookmark")
+        assertTelemetryRecorded(Events.browserMenuAction, item = "edit_bookmark")
     }
 
     @Test
@@ -87,6 +87,26 @@ class MenuTelemetryMiddlewareTest {
         store.dispatch(MenuAction.RemoveShortcut).joinBlocking()
 
         assertTelemetryRecorded(Events.browserMenuAction, item = "remove_from_top_sites")
+    }
+
+    @Test
+    fun `WHEN navigating to the save submenu THEN record the save submenu browser menu telemetry`() {
+        val store = createStore()
+        assertNull(Events.browserMenuAction.testGetValue())
+
+        store.dispatch(MenuAction.SaveMenuClicked).joinBlocking()
+
+        assertTelemetryRecorded(Events.browserMenuAction, item = "save_submenu")
+    }
+
+    @Test
+    fun `WHEN navigating to the tools submenu THEN record the tools submenu browser menu telemetry`() {
+        val store = createStore()
+        assertNull(Events.browserMenuAction.testGetValue())
+
+        store.dispatch(MenuAction.ToolsMenuClicked).joinBlocking()
+
+        assertTelemetryRecorded(Events.browserMenuAction, item = "tools_submenu")
     }
 
     fun `WHEN navigating to add site to home screen THEN record the add_to_homescreen browser menu telemetry`() {

@@ -15,6 +15,7 @@
 #include "mozilla/dom/cache/Manager.h"
 #include "mozilla/dom/cache/ManagerId.h"
 #include "mozilla/dom/quota/Assertions.h"
+#include "mozilla/dom/quota/ClientDirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/PrincipalUtils.h"
@@ -55,7 +56,7 @@ class NullAction final : public Action {
 namespace mozilla::dom::cache {
 
 using mozilla::dom::quota::AssertIsOnIOThread;
-using mozilla::dom::quota::DirectoryLock;
+using mozilla::dom::quota::ClientDirectoryLock;
 using mozilla::dom::quota::PERSISTENCE_TYPE_DEFAULT;
 using mozilla::dom::quota::PersistenceType;
 using mozilla::dom::quota::QuotaManager;
@@ -122,7 +123,7 @@ class Context::QuotaInitRunnable final : public nsIRunnable {
     MOZ_DIAGNOSTIC_ASSERT(mInitAction);
   }
 
-  Maybe<DirectoryLock&> MaybeDirectoryLockRef() const {
+  Maybe<ClientDirectoryLock&> MaybeDirectoryLockRef() const {
     NS_ASSERT_OWNINGTHREAD(QuotaInitRunnable);
 
     return ToMaybeRef(mDirectoryLock.get());
@@ -148,7 +149,7 @@ class Context::QuotaInitRunnable final : public nsIRunnable {
     mInitAction->CancelOnInitiatingThread();
   }
 
-  void DirectoryLockAcquired(DirectoryLock* aLock);
+  void DirectoryLockAcquired(ClientDirectoryLock* aLock);
 
   void DirectoryLockFailed();
 
@@ -223,7 +224,7 @@ class Context::QuotaInitRunnable final : public nsIRunnable {
   nsresult mResult;
   Maybe<mozilla::ipc::PrincipalInfo> mPrincipalInfo;
   Maybe<CacheDirectoryMetadata> mDirectoryMetadata;
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
   RefPtr<CipherKeyManager> mCipherKeyManager;
   State mState;
   Atomic<bool> mCanceled;
@@ -233,7 +234,8 @@ class Context::QuotaInitRunnable final : public nsIRunnable {
   NS_DECL_NSIRUNNABLE
 };
 
-void Context::QuotaInitRunnable::DirectoryLockAcquired(DirectoryLock* aLock) {
+void Context::QuotaInitRunnable::DirectoryLockAcquired(
+    ClientDirectoryLock* aLock) {
   NS_ASSERT_OWNINGTHREAD(QuotaInitRunnable);
   MOZ_DIAGNOSTIC_ASSERT(aLock);
   MOZ_DIAGNOSTIC_ASSERT(mState == STATE_WAIT_FOR_DIRECTORY_LOCK);
@@ -859,7 +861,7 @@ void Context::Dispatch(SafeRefPtr<Action> aAction) {
   DispatchAction(std::move(aAction));
 }
 
-Maybe<DirectoryLock&> Context::MaybeDirectoryLockRef() const {
+Maybe<ClientDirectoryLock&> Context::MaybeDirectoryLockRef() const {
   NS_ASSERT_OWNINGTHREAD(Context);
 
   if (mState == STATE_CONTEXT_PREINIT) {
@@ -1041,7 +1043,7 @@ void Context::DispatchAction(SafeRefPtr<Action> aAction, bool aDoomData) {
 
 void Context::OnQuotaInit(
     nsresult aRv, const Maybe<CacheDirectoryMetadata>& aDirectoryMetadata,
-    RefPtr<DirectoryLock> aDirectoryLock,
+    RefPtr<ClientDirectoryLock> aDirectoryLock,
     RefPtr<CipherKeyManager> aCipherKeyManager) {
   NS_ASSERT_OWNINGTHREAD(Context);
 

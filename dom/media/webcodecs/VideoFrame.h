@@ -103,6 +103,8 @@ class VideoFrame final : public nsISupports, public nsWrapperCache {
   JSObject* WrapObject(JSContext* aCx,
                        JS::Handle<JSObject*> aGivenProto) override;
 
+  static bool PrefEnabled(JSContext* aCx = nullptr, JSObject* aObj = nullptr);
+
   static already_AddRefed<VideoFrame> Constructor(
       const GlobalObject& aGlobal, HTMLImageElement& aImageElement,
       const VideoFrameInit& aInit, ErrorResult& aRv);

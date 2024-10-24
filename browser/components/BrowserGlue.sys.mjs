@@ -669,6 +669,7 @@ let JSWINDOWACTORS = {
       "chrome://browser/content/places/bookmarksSidebar.xhtml",
       "about:firefoxview",
       "about:editprofile",
+      "about:deleteprofile",
     ],
   },
 
@@ -1363,11 +1364,6 @@ BrowserGlue.prototype = {
           // likely sees the profile selector on launch.
           if (Services.prefs.getBoolPref(launchOnLoginPref)) {
             Glean.launchOnLogin.lastProfileDisableStartup.record();
-            Services.telemetry.recordEvent(
-              "launch_on_login",
-              "last_profile_disable",
-              "startup"
-            );
             // Disable launch on login messaging if we are disabling the
             // feature.
             Services.prefs.setBoolPref(
@@ -1903,11 +1899,8 @@ BrowserGlue.prototype = {
         Services.startup.secondsSinceLastOSRestart;
       let isColdStartup =
         nowSeconds - secondsSinceLastOSRestart > lastCheckSeconds;
-      Services.telemetry.scalarSet("startup.is_cold", isColdStartup);
-      Services.telemetry.scalarSet(
-        "startup.seconds_since_last_os_restart",
-        secondsSinceLastOSRestart
-      );
+      Glean.startup.isCold.set(isColdStartup);
+      Glean.startup.secondsSinceLastOsRestart.set(secondsSinceLastOSRestart);
     } catch (ex) {
       console.error(ex);
     }
@@ -2627,8 +2620,7 @@ BrowserGlue.prototype = {
           );
 
           try {
-            Services.telemetry.scalarSet(
-              "os.environment.is_taskbar_pinned",
+            Glean.osEnvironment.isTaskbarPinned.set(
               await shellService.isCurrentAppPinnedToTaskbarAsync(
                 winTaskbar.defaultGroupId
               )
@@ -2640,8 +2632,7 @@ BrowserGlue.prototype = {
               AppConstants.platform === "win" &&
               !Services.sysinfo.getProperty("hasWinPackageId")
             ) {
-              Services.telemetry.scalarSet(
-                "os.environment.is_taskbar_pinned_private",
+              Glean.osEnvironment.isTaskbarPinnedPrivate.set(
                 await shellService.isCurrentAppPinnedToTaskbarAsync(
                   winTaskbar.defaultPrivateGroupId
                 )
@@ -2674,10 +2665,7 @@ BrowserGlue.prototype = {
           if (gThisInstanceIsTaskbarTab) {
             classification = "TaskbarTab";
           }
-          Services.telemetry.scalarSet(
-            "os.environment.launch_method",
-            classification
-          );
+          Glean.osEnvironment.launchMethod.set(classification);
         },
       },
 
@@ -2811,9 +2799,7 @@ BrowserGlue.prototype = {
         condition: AppConstants.platform == "win",
         task: () => {
           [".pdf", "mailto"].every(x => {
-            Services.telemetry.keyedScalarSet(
-              "os.environment.is_default_handler",
-              x,
+            Glean.osEnvironment.isDefaultHandler[x].set(
               lazy.ShellService.isDefaultHandlerFor(x)
             );
             return true;
@@ -2854,8 +2840,7 @@ BrowserGlue.prototype = {
         condition: AppConstants.platform == "macosx",
         task: () => {
           try {
-            Services.telemetry.scalarSet(
-              "os.environment.is_kept_in_dock",
+            Glean.osEnvironment.isKeptInDock.set(
               Cc["@mozilla.org/widget/macdocksupport;1"].getService(
                 Ci.nsIMacDockSupport
               ).isAppInDock
@@ -3407,7 +3392,7 @@ BrowserGlue.prototype = {
       windowcount++;
       let tabbrowser = win.gBrowser;
       if (tabbrowser) {
-        pagecount += tabbrowser.visibleTabs.length - tabbrowser._numPinnedTabs;
+        pagecount += tabbrowser.visibleTabs.length - tabbrowser.pinnedTabCount;
       }
     }
 
@@ -5171,7 +5156,7 @@ BrowserGlue.prototype = {
 
     const observe = (subject, topic) => {
       const enabled = Services.prefs.getBoolPref(TOGGLE_ENABLED_PREF, false);
-      Services.telemetry.scalarSet("pictureinpicture.toggle_enabled", enabled);
+      Glean.pictureinpicture.toggleEnabled.set(enabled);
 
       // Record events when preferences change
       if (topic === "nsPref:changed") {

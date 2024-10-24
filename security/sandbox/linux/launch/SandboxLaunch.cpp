@@ -45,6 +45,8 @@
 #include "sandbox/linux/system_headers/linux_syscalls.h"
 #include "sandbox/linux/services/syscall_wrappers.h"
 
+#include "mozilla/pthread_atfork.h"
+
 #ifdef MOZ_X11
 #  ifndef MOZ_WIDGET_GTK
 #    error "Unknown toolkit"
@@ -251,9 +253,9 @@ static int GetEffectiveSandboxLevel(GeckoProcessType aType,
   auto info = SandboxInfo::Get();
   switch (aType) {
 #ifdef MOZ_ENABLE_FORKSERVER
-      // With this env MOZ_SANDBOXED will be set, and mozsandbox will
-      // be preloaded for the fork server.  Sandboxed child processes
-      // rely on wrappers defined by mozsandbox to work properly.
+      // With this mozsandbox will be preloaded for the fork server.  Sandboxed
+      // child processes rely on wrappers defined by mozsandbox to work
+      // properly.
     case GeckoProcessType_ForkServer:
       return 1;
       break;
@@ -302,9 +304,7 @@ bool SandboxLaunch::Configure(GeckoProcessType aType, SandboxingKind aKind,
   }
 
   // At this point, we know we'll be using sandboxing; generic
-  // sandboxing support goes here.  The MOZ_SANDBOXED env var tells
-  // the child process whether this is the case.
-  aOptions->env_map["MOZ_SANDBOXED"] = "1";
+  // sandboxing support goes here.
   PreloadSandboxLib(&aOptions->env_map);
   if (!AttachSandboxReporter(aExtraOpts)) {
     return false;
@@ -623,11 +623,24 @@ pid_t SandboxLaunch::Fork() {
   // can't run atfork hooks.)
   sigset_t oldSigs;
   BlockAllSignals(&oldSigs);
+
+#if defined(MOZ_ENABLE_FORKSERVER)
+  run_moz_pthread_atfork_handlers_prefork();
+#endif
+
   pid_t pid = ForkWithFlags(mFlags);
   if (pid != 0) {
+#if defined(MOZ_ENABLE_FORKSERVER)
+    run_moz_pthread_atfork_handlers_postfork_parent();
+#endif
+
     RestoreSignals(&oldSigs);
     return pid;
   }
+
+#if defined(MOZ_ENABLE_FORKSERVER)
+  run_moz_pthread_atfork_handlers_postfork_child();
+#endif
 
   // WARNING: all code from this point on (and in StartChrootServer)
   // must be async signal safe.  In particular, it cannot do anything

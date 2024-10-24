@@ -122,6 +122,7 @@
 #include "mozilla/dom/quota/CachingDatabaseConnection.h"
 #include "mozilla/dom/quota/CheckedUnsafePtr.h"
 #include "mozilla/dom/quota/Client.h"
+#include "mozilla/dom/quota/ClientDirectoryLock.h"
 #include "mozilla/dom/quota/ClientImpl.h"
 #include "mozilla/dom/quota/DebugOnlyMacro.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
@@ -139,6 +140,7 @@
 #include "mozilla/dom/quota/QuotaObject.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
 #include "mozilla/dom/quota/ThreadUtils.h"
+#include "mozilla/dom/quota/UniversalDirectoryLock.h"
 #include "mozilla/dom/quota/UsageInfo.h"
 #include "mozilla/fallible.h"
 #include "mozilla/ipc/BackgroundParent.h"
@@ -2135,7 +2137,7 @@ class Database final
   SafeRefPtr<Factory> mFactory;
   SafeRefPtr<FullDatabaseMetadata> mMetadata;
   SafeRefPtr<DatabaseFileManager> mFileManager;
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
   nsTHashSet<TransactionBase*> mTransactions;
   nsTHashMap<nsIDHashKey, SafeRefPtr<DatabaseFileInfo>> mMappedBlobs;
   RefPtr<DatabaseConnection> mConnection;
@@ -2166,7 +2168,7 @@ class Database final
            const quota::OriginMetadata& aOriginMetadata, uint32_t aTelemetryId,
            SafeRefPtr<FullDatabaseMetadata> aMetadata,
            SafeRefPtr<DatabaseFileManager> aFileManager,
-           RefPtr<DirectoryLock> aDirectoryLock, bool aInPrivateBrowsing,
+           RefPtr<ClientDirectoryLock> aDirectoryLock, bool aInPrivateBrowsing,
            const Maybe<const CipherKey>& aMaybeKey);
 
   void AssertIsOnConnectionThread() const {
@@ -2204,7 +2206,7 @@ class Database final
 
   const nsCString& Id() const { return mId; }
 
-  Maybe<DirectoryLock&> MaybeDirectoryLockRef() const {
+  Maybe<ClientDirectoryLock&> MaybeDirectoryLockRef() const {
     AssertIsOnBackgroundThread();
 
     return ToMaybeRef(mDirectoryLock.get());
@@ -3027,7 +3029,7 @@ class FactoryOp
   Maybe<ContentParentId> mContentParentId;
 
   // Must be released on the main thread!
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
 
   nsTArray<NotNull<RefPtr<FactoryOp>>> mBlocking;
   nsTArray<NotNull<RefPtr<FactoryOp>>> mBlockedOn;
@@ -3143,7 +3145,7 @@ class FactoryOp
   NS_IMETHOD
   Run() final;
 
-  void DirectoryLockAcquired(DirectoryLock* aLock);
+  void DirectoryLockAcquired(ClientDirectoryLock* aLock);
 
   void DirectoryLockFailed();
 
@@ -4933,7 +4935,7 @@ class QuotaClient final : public mozilla::dom::quota::Client {
 };
 
 class DeleteFilesRunnable final : public Runnable {
-  using DirectoryLock = mozilla::dom::quota::DirectoryLock;
+  using ClientDirectoryLock = mozilla::dom::quota::ClientDirectoryLock;
 
   enum State {
     // Just created on the PBackground thread. Next step is
@@ -4958,7 +4960,7 @@ class DeleteFilesRunnable final : public Runnable {
 
   nsCOMPtr<nsIEventTarget> mOwningEventTarget;
   SafeRefPtr<DatabaseFileManager> mFileManager;
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
   nsTArray<int64_t> mFileIds;
   State mState;
   DEBUGONLY(bool mDEBUGCountsAsPending = false);
@@ -4990,7 +4992,7 @@ class DeleteFilesRunnable final : public Runnable {
 
   NS_DECL_NSIRUNNABLE
 
-  void DirectoryLockAcquired(DirectoryLock* aLock);
+  void DirectoryLockAcquired(ClientDirectoryLock* aLock);
 
   void DirectoryLockFailed();
 };
@@ -5167,7 +5169,7 @@ class Maintenance final : public Runnable {
 
   NS_DECL_NSIRUNNABLE
 
-  void DirectoryLockAcquired(DirectoryLock* aLock);
+  void DirectoryLockAcquired(UniversalDirectoryLock* aLock);
 
   void DirectoryLockFailed();
 };
@@ -5218,7 +5220,7 @@ class DatabaseMaintenance final : public Runnable {
   RefPtr<Maintenance> mMaintenance;
   // The directory lock is dropped in RunOnOwningThread which serves as a
   // cleanup method and is always called.
-  RefPtr<DirectoryLock> mDirectoryLock;
+  RefPtr<ClientDirectoryLock> mDirectoryLock;
   const OriginMetadata mOriginMetadata;
   const nsString mDatabasePath;
   int64_t mDirectoryLockId;
@@ -5230,7 +5232,7 @@ class DatabaseMaintenance final : public Runnable {
 
  public:
   DatabaseMaintenance(Maintenance* aMaintenance,
-                      RefPtr<DirectoryLock> aDirectoryLock,
+                      RefPtr<ClientDirectoryLock> aDirectoryLock,
                       PersistenceType aPersistenceType,
                       const OriginMetadata& aOriginMetadata,
                       const nsAString& aDatabasePath,
@@ -9231,7 +9233,7 @@ Database::Database(SafeRefPtr<Factory> aFactory,
                    uint32_t aTelemetryId,
                    SafeRefPtr<FullDatabaseMetadata> aMetadata,
                    SafeRefPtr<DatabaseFileManager> aFileManager,
-                   RefPtr<DirectoryLock> aDirectoryLock,
+                   RefPtr<ClientDirectoryLock> aDirectoryLock,
                    bool aInPrivateBrowsing,
                    const Maybe<const CipherKey>& aMaybeKey)
     : mFactory(std::move(aFactory)),
@@ -12936,7 +12938,7 @@ DeleteFilesRunnable::Run() {
   return NS_OK;
 }
 
-void DeleteFilesRunnable::DirectoryLockAcquired(DirectoryLock* aLock) {
+void DeleteFilesRunnable::DirectoryLockAcquired(ClientDirectoryLock* aLock) {
   AssertIsOnBackgroundThread();
   MOZ_ASSERT(mState == State_DirectoryOpenPending);
   MOZ_ASSERT(!mDirectoryLock);
@@ -13449,7 +13451,7 @@ nsresult Maintenance::BeginDatabaseMaintenance() {
   for (DirectoryInfo& directoryInfo : mDirectoryInfos) {
     for (const nsAString& databasePath : *directoryInfo.mDatabasePaths) {
       if (Helper::IsSafeToRunMaintenance(databasePath)) {
-        RefPtr<DirectoryLock> directoryLock =
+        RefPtr<ClientDirectoryLock> directoryLock =
             mDirectoryLock->SpecializeForClient(directoryInfo.mPersistenceType,
                                                 *directoryInfo.mOriginMetadata,
                                                 Client::IDB);
@@ -13576,7 +13578,7 @@ Maintenance::Run() {
   return NS_OK;
 }
 
-void Maintenance::DirectoryLockAcquired(DirectoryLock* aLock) {
+void Maintenance::DirectoryLockAcquired(UniversalDirectoryLock* aLock) {
   AssertIsOnBackgroundThread();
   MOZ_ASSERT(mState == State::DirectoryOpenPending);
   MOZ_ASSERT(!mDirectoryLock);
@@ -15129,7 +15131,7 @@ FactoryOp::Run() {
   return NS_OK;
 }
 
-void FactoryOp::DirectoryLockAcquired(DirectoryLock* aLock) {
+void FactoryOp::DirectoryLockAcquired(ClientDirectoryLock* aLock) {
   AssertIsOnOwningThread();
   MOZ_ASSERT(aLock);
   MOZ_ASSERT(mState == State::DirectoryOpenPending);

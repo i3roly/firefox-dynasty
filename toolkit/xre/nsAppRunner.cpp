@@ -1382,12 +1382,6 @@ nsXULAppInfo::GetFissionDecisionStatusString(nsACString& aResult) {
 
   EnsureFissionAutostartInitialized();
   switch (gFissionDecisionStatus) {
-    case eFissionExperimentControl:
-      aResult = "experimentControl";
-      break;
-    case eFissionExperimentTreatment:
-      aResult = "experimentTreatment";
-      break;
     case eFissionDisabledByE10sEnv:
       aResult = "disabledByE10sEnv";
       break;
@@ -1411,9 +1405,6 @@ nsXULAppInfo::GetFissionDecisionStatusString(nsACString& aResult) {
       break;
     case eFissionDisabledByE10sOther:
       aResult = "disabledByE10sOther";
-      break;
-    case eFissionEnabledByRollout:
-      aResult = "enabledByRollout";
       break;
     default:
       MOZ_ASSERT_UNREACHABLE("Unexpected enum value");
@@ -1748,14 +1739,16 @@ nsXULAppInfo::SetServerURL(nsIURL* aServerURL) {
 
 NS_IMETHODIMP
 nsXULAppInfo::GetMinidumpPath(nsIFile** aMinidumpPath) {
-  if (!CrashReporter::GetEnabled()) return NS_ERROR_NOT_INITIALIZED;
+  if (!CrashReporter::GetEnabled()) {
+    return NS_ERROR_NOT_INITIALIZED;
+  }
 
   nsAutoString path;
-  if (!CrashReporter::GetMinidumpPath(path)) return NS_ERROR_FAILURE;
+  if (!CrashReporter::GetMinidumpPath(path)) {
+    return NS_ERROR_FAILURE;
+  }
 
-  nsresult rv = NS_NewLocalFile(path, false, aMinidumpPath);
-  NS_ENSURE_SUCCESS(rv, rv);
-  return NS_OK;
+  return NS_NewLocalFile(path, aMinidumpPath);
 }
 
 NS_IMETHODIMP
@@ -3447,7 +3440,7 @@ static bool CheckCompatibility(nsIFile* aProfileDir, const nsCString& aVersion,
   if (NS_FAILED(rv)) return false;
 
   nsCOMPtr<nsIFile> lf;
-  rv = NS_NewNativeLocalFile(""_ns, false, getter_AddRefs(lf));
+  rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(lf));
   if (NS_FAILED(rv)) return false;
 
   rv = lf->SetPersistentDescriptor(buf);
@@ -3461,7 +3454,7 @@ static bool CheckCompatibility(nsIFile* aProfileDir, const nsCString& aVersion,
     rv = parser.GetString("Compatibility", "LastAppDir", buf);
     if (NS_FAILED(rv)) return false;
 
-    rv = NS_NewNativeLocalFile(""_ns, false, getter_AddRefs(lf));
+    rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(lf));
     if (NS_FAILED(rv)) return false;
 
     rv = lf->SetPersistentDescriptor(buf);
@@ -5756,8 +5749,7 @@ nsresult XREMain::XRE_mainRun() {
 #if defined(XP_WIN)
     LauncherResult<bool> isAdminWithoutUac = IsAdminWithoutUac();
     if (isAdminWithoutUac.isOk()) {
-      Telemetry::ScalarSet(
-          Telemetry::ScalarID::OS_ENVIRONMENT_IS_ADMIN_WITHOUT_UAC,
+      glean::os_environment::is_admin_without_uac.Set(
           isAdminWithoutUac.unwrap());
     }
 #endif /* XP_WIN */

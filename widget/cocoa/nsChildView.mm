@@ -239,14 +239,7 @@ nsChildView::nsChildView()
       mIsDispatchPaint(false) {}
 
 nsChildView::~nsChildView() {
-  // Notify the children that we're gone.  childView->ResetParent() can change
-  // our list of children while it's being iterated, so the way we iterate the
-  // list must allow for this.
-  for (nsIWidget* kid = mLastChild; kid;) {
-    nsChildView* childView = static_cast<nsChildView*>(kid);
-    kid = kid->GetPrevSibling();
-    childView->ResetParent();
-  }
+  RemoveAllChildren();
 
   NS_WARNING_ASSERTION(
       mOnDestroyCalled,
@@ -546,61 +539,27 @@ void nsChildView::Show(bool aState) {
 }
 
 // Change the parent of this widget
-void nsChildView::SetParent(nsIWidget* aNewParent) {
+void nsChildView::DidChangeParent(nsIWidget*) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
-  if (mOnDestroyCalled) return;
+  if (mOnDestroyCalled) {
+    return;
+  }
 
   nsCOMPtr<nsIWidget> kungFuDeathGrip(this);
 
-  if (mParentWidget) {
-    mParentWidget->RemoveChild(this);
-  }
-
-  if (aNewParent) {
-    ReparentNativeWidget(aNewParent);
-  } else {
-    [mView removeFromSuperview];
-    mParentView = nil;
-  }
-
-  mParentWidget = aNewParent;
-
-  if (mParentWidget) {
-    mParentWidget->AddChild(this);
-  }
-
-  NS_OBJC_END_TRY_IGNORE_BLOCK;
-}
-
-void nsChildView::ReparentNativeWidget(nsIWidget* aNewParent) {
-  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
-
-  MOZ_ASSERT(aNewParent, "null widget");
-
-  if (mOnDestroyCalled) return;
-
-  NSView<mozView>* newParentView =
-      (NSView<mozView>*)aNewParent->GetNativeData(NS_NATIVE_WIDGET);
-  NS_ENSURE_TRUE_VOID(newParentView);
-
   // we hold a ref to mView, so this is safe
   [mView removeFromSuperview];
-  mParentView = newParentView;
-  [mParentView addSubview:mView];
+  mParentView = mParent
+                    ? (NSView<mozView>*)mParent->GetNativeData(NS_NATIVE_WIDGET)
+                    : nullptr;
+  if (mParentView) {
+    [mParentView addSubview:mView];
+  }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
-}
 
-void nsChildView::ResetParent() {
-  if (!mOnDestroyCalled) {
-    if (mParentWidget) mParentWidget->RemoveChild(this);
-    if (mView) [mView removeFromSuperview];
-  }
-  mParentWidget = nullptr;
 }
-
-nsIWidget* nsChildView::GetParent() { return mParentWidget; }
 
 float nsChildView::GetDPI() {
   float dpi = 96.0;
@@ -4822,7 +4781,7 @@ static CFTypeRefPtr<CFURLRef> GetPasteLocation(NSPasteboard* aPasteboard) {
                              stringFromPboardType:
                                  (NSString*)kPasteboardTypeFileURLPromise]]) {
         nsCOMPtr<nsIFile> targFile;
-        NS_NewLocalFile(u""_ns, true, getter_AddRefs(targFile));
+        NS_NewLocalFile(u""_ns, getter_AddRefs(targFile));
         nsCOMPtr<nsILocalFileMac> macLocalFile = do_QueryInterface(targFile);
         if (!macLocalFile) {
           NS_ERROR("No Mac local file");

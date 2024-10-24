@@ -90,6 +90,11 @@ internal fun BookmarksState.isGuidMarkedForDeletion(guid: String): Boolean = whe
     else -> false
 }
 
+internal fun BookmarksState.isGuidBeingMoved(guid: String): Boolean {
+    return bookmarksMultiselectMoveState?.guidsToMove?.contains(guid) ?: false ||
+        bookmarksEditFolderState?.folder?.guid == guid
+}
+
 internal data class MultiselectMoveState(
     val guidsToMove: List<String>,
     val destination: String,
@@ -127,6 +132,20 @@ internal sealed class BookmarksSnackbarState {
     data object None : BookmarksSnackbarState()
     data object CantEditDesktopFolders : BookmarksSnackbarState()
     data class UndoDeletion(val guidsToDelete: List<String>) : BookmarksSnackbarState()
+}
+
+internal fun BookmarksSnackbarState.addGuidToDelete(guid: String) = when (this) {
+    is BookmarksSnackbarState.UndoDeletion -> BookmarksSnackbarState.UndoDeletion(
+        guidsToDelete = this.guidsToDelete + listOf(guid),
+    )
+    else -> BookmarksSnackbarState.UndoDeletion(guidsToDelete = listOf(guid))
+}
+
+internal fun BookmarksSnackbarState.addGuidsToDelete(guids: List<String>) = when (this) {
+    is BookmarksSnackbarState.UndoDeletion -> BookmarksSnackbarState.UndoDeletion(
+        guidsToDelete = this.guidsToDelete + guids,
+    )
+    else -> BookmarksSnackbarState.UndoDeletion(guidsToDelete = guids)
 }
 
 internal data class BookmarksEditBookmarkState(

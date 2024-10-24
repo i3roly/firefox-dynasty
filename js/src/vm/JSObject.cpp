@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "jsapi.h"
+#include "jsdate.h"
 #include "jsexn.h"
 #include "jsfriendapi.h"
 #include "jsnum.h"
@@ -2318,6 +2319,14 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
   // It's gently surprising that this is JSProto_Function, but the trick
   // to realize is that this is a -constructor function-, not a function
   // on the prototype; and the proto of the constructor is JSProto_Function.
+  if (key == JSProto_Function && !JS::Prefs::experimental_error_iserror() &&
+      id == NameToId(cx->names().isError)) {
+    return true;
+  }
+
+  // It's gently surprising that this is JSProto_Function, but the trick
+  // to realize is that this is a -constructor function-, not a function
+  // on the prototype; and the proto of the constructor is JSProto_Function.
   if (key == JSProto_Function && !JS::Prefs::experimental_iterator_range() &&
       (id == NameToId(cx->names().range))) {
     return true;
@@ -2498,6 +2507,12 @@ bool JS::OrdinaryToPrimitive(JSContext* cx, HandleObject obj, JSType hint,
       NumberObject* nobj = &obj->as<NumberObject>();
       if (HasNativeMethodPure(nobj, cx->names().valueOf, num_valueOf, cx)) {
         vp.setNumber(nobj->unbox());
+        return true;
+      }
+    } else if (clasp == &DateObject::class_) {
+      DateObject* dateObj = &obj->as<DateObject>();
+      if (HasNativeMethodPure(dateObj, cx->names().valueOf, date_valueOf, cx)) {
+        vp.set(dateObj->UTCTime());
         return true;
       }
     }

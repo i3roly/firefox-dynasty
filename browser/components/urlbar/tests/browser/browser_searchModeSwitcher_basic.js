@@ -87,6 +87,22 @@ add_task(async function basic() {
   await UrlbarTestUtils.assertSearchMode(window, null);
 });
 
+add_task(async function privileged_chicklet() {
+  let tab = await BrowserTestUtils.openNewForegroundTab(
+    window.gBrowser,
+    "about:config"
+  );
+
+  Assert.ok(
+    BrowserTestUtils.isVisible(
+      tab.ownerGlobal.document.querySelector("#identity-box")
+    ),
+    "Chicklet is visible on privileged pages."
+  );
+
+  BrowserTestUtils.removeTab(tab);
+});
+
 function updateEngine(fun) {
   let updated = SearchTestUtils.promiseSearchNotification(
     SearchUtils.MODIFIED_TYPE.CHANGED,
@@ -603,11 +619,11 @@ add_task(async function test_urlbar_text_after_previewed_search_mode() {
   info("Open urlbar with a query that shows DuckDuckGo search engine");
   await UrlbarTestUtils.promiseAutocompleteResultPopup({
     window,
-    value: "duck",
+    value: "@duck",
   });
 
   // Sanity check.
-  const target = await UrlbarTestUtils.getDetailsOfResultAt(window, 1);
+  const target = await UrlbarTestUtils.getDetailsOfResultAt(window, 0);
   Assert.equal(target.result.payload.engine, "DuckDuckGo");
   Assert.ok(target.result.payload.providesSearchMode);
 
@@ -615,7 +631,7 @@ add_task(async function test_urlbar_text_after_previewed_search_mode() {
   EventUtils.synthesizeKey("KEY_Tab", {});
   await UrlbarTestUtils.assertSearchMode(window, {
     engineName: "DuckDuckGo",
-    entry: "tabtosearch_onboard",
+    entry: "keywordoffer",
     source: 3,
     isPreview: true,
   });
@@ -674,9 +690,11 @@ add_task(async function test_open_state() {
 
 add_task(async function nimbusScotchBonnetEnableOverride() {
   info("Setup initial local pref");
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
-  });
+  let defaultBranch = Services.prefs.getDefaultBranch("browser.urlbar.");
+  let initialValue = defaultBranch.getBoolPref("scotchBonnet.enableOverride");
+  defaultBranch.setBoolPref("scotchBonnet.enableOverride", false);
+  UrlbarPrefs.clear("scotchBonnet.enableOverride");
+
   await TestUtils.waitForCondition(() => {
     return BrowserTestUtils.isHidden(
       gURLBar.querySelector("#urlbar-searchmode-switcher")
@@ -697,7 +715,10 @@ add_task(async function nimbusScotchBonnetEnableOverride() {
   Assert.ok(true, "Search mode switcher should be visible");
 
   await cleanUpNimbusEnable();
-  await SpecialPowers.popPrefEnv();
+  defaultBranch.setBoolPref("scotchBonnet.enableOverride", initialValue);
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.urlbar.scotchBonnet.enableOverride", true]],
+  });
 });
 
 add_task(async function nimbusLogEnabled() {

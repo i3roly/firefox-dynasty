@@ -201,7 +201,7 @@ import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
 import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.isKeyboardVisible
-import org.mozilla.fenix.ext.isTablet
+import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.isToolbarAtBottom
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.navigateWithBreadcrumb
@@ -1528,6 +1528,8 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
+                        } else if (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value) {
+                            Divider()
                         }
 
                         NavigationButtonsCFR(context = context, activity = activity)
@@ -1588,10 +1590,10 @@ abstract class BaseBrowserFragment :
             ),
             onCFRShown = {
                 NavigationBar.navigationButtonsCfrShown.record(NoExtras())
-            },
-            onDismiss = {
                 context.settings().shouldShowNavigationButtonsCFR = false
                 context.settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
+            },
+            onDismiss = {
                 NavigationBar.navigationButtonsCfrDismissed.record(NoExtras())
             },
             text = {
@@ -1791,7 +1793,7 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
-                        } else {
+                        } else if (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value) {
                             Divider()
                         }
                     }
@@ -2415,7 +2417,7 @@ abstract class BaseBrowserFragment :
 
         // If the navbar feature could be visible, we should update it's state.
         val shouldUpdateNavBarState =
-            requireContext().settings().navigationToolbarEnabled && !isTablet() && webAppToolbarShouldBeVisible
+            requireContext().settings().navigationToolbarEnabled && !isLargeWindow() && webAppToolbarShouldBeVisible
         if (shouldUpdateNavBarState) {
             updateNavBarForConfigurationChange(
                 context = requireContext(),

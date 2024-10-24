@@ -318,8 +318,6 @@ class nsChildView final : public nsBaseWidget {
   virtual void Show(bool aState) override;
   virtual bool IsVisible() const override;
 
-  virtual void SetParent(nsIWidget* aNewParent) override;
-  virtual nsIWidget* GetParent(void) override;
   virtual float GetDPI() override;
 
   virtual void Move(double aX, double aY) override;
@@ -492,7 +490,7 @@ class nsChildView final : public nsBaseWidget {
 
   nsCocoaWindow* GetAppWindowWidget() const;
 
-  virtual void ReparentNativeWidget(nsIWidget* aNewParent) override;
+  void DidChangeParent(nsIWidget*) override;
 
   mozilla::widget::TextInputHandler* GetTextInputHandler() {
     return mTextInputHandler;

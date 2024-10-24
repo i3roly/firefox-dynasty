@@ -53,6 +53,7 @@ gecko_metrics = [
     "toolkit/components/antitracking/metrics.yaml",
     "toolkit/components/cookiebanners/metrics.yaml",
     "toolkit/components/downloads/metrics.yaml",
+    "toolkit/components/enterprisepolicies/metrics.yaml",
     "toolkit/components/extensions/metrics.yaml",
     "toolkit/components/formautofill/metrics.yaml",
     "toolkit/components/glean/metrics.yaml",
@@ -70,9 +71,8 @@ gecko_metrics = [
     "toolkit/mozapps/extensions/metrics.yaml",
     "toolkit/mozapps/extensions/metrics_legacy.yaml",
     "toolkit/mozapps/handling/metrics.yaml",
+    "toolkit/profile/metrics.yaml",
     "toolkit/xre/metrics.yaml",
-    "widget/gtk/metrics.yaml",
-    "widget/metrics.yaml",
     "xpcom/metrics.yaml",
 ]
 
@@ -113,6 +113,8 @@ firefox_desktop_metrics = [
     "toolkit/components/telemetry/metrics.yaml",
     "toolkit/modules/metrics.yaml",
     "widget/cocoa/metrics.yaml",
+    "widget/gtk/metrics.yaml",
+    "widget/metrics.yaml",
     "widget/windows/metrics.yaml",
 ]
 

@@ -538,21 +538,7 @@ urlbar:
       fallbackPref: browser.urlbar.weather.featureGate
       description: >-
         Feature gate that controls whether all aspects of the weather suggestion
-        feature are exposed to the user. See also `weatherKeywords` and
-        `weatherKeywordsMinimumLength`. In summary: To enable the weather
-        suggestion, set `weatherFeatureGate` to true, `weatherKeywords` to an
-        array of full keyword strings, and `weatherKeywordsMinimumLength` to a
-        non-zero integer. To disable the weather suggestion, leave out all
-        weather-related variables.
-    weatherKeywords:
-      type: json
-      description: >-
-        An array of full keyword strings that will trigger the weather
-        suggestion when the user types them in the address bar. If absent or
-        null, Firefox will fall back to the weather keywords defined in remote
-        settings. If neither Nimbus nor remote settings defines any keywords,
-        the weather suggestion will be disabled. See also
-        `weatherKeywordsMinimumLength`.
+        feature are exposed to the user.
     weatherKeywordsMinimumLength:
       type: int
       description: >-
@@ -561,8 +547,7 @@ urlbar:
         `weatherKeywordsMinimumLength` characters long. If this variable is
         absent or zero, Firefox will fall back to the minimum length defined in
         remote settings. If neither Nimbus nor remote settings defines a minimum
-        length, only full keywords will trigger the suggestion. See also
-        `weatherKeywords`.
+        length, only full keywords will trigger the suggestion.
     weatherKeywordsMinimumLengthCap:
       type: int
       description: >-
@@ -2164,6 +2149,19 @@ networking:
         branch: default
         pref: "network.cookie.chips.partitionLimitByteCapacity"
 
+disableHttp3:
+  description: "Whether HTTP/3 is disabled"
+  owner: kershaw@mozilla.com
+  hasExposure: false
+  variables:
+    withThirdPartyRoots:
+      description: If third party roots are detected, disable HTTP/3
+      type: boolean
+      setPref:
+        branch: default
+        pref: "network.http.http3.disable_when_third_party_roots_found"
+
+
 networkPrioritization:
   description: "Network request prioritization"
   owner: vgosu@mozilla.com
@@ -2662,6 +2660,46 @@ fxaClientAssociation:
       setPref:
         branch: user
         pref: identity.fxaccounts.telemetry.clientAssociationPing.enabled
+
+fxaAppMenuItem:
+  description: >-
+    Prefs to control the appearance and copy of the FxA sign-in button in the
+    AppMenu when signed out.
+  owner: mconley@mozilla.com
+  hasExposure: true
+  exposureDescription: >-
+    Exposure is recorded when the user is enrolled in an experiment using this
+    feature and the AppMenu on Firefox Desktop is opened.
+  variables:
+    ctaCopyVariant:
+      description: >-
+        One of the following values:
+          - control
+          - sync-devices
+          - backup-data
+          - backup-sync
+          - mobile
+      type: string
+
+fxaAvatarMenuItem:
+  description: >-
+    Prefs to control the appearance and copy of the FxA sign-in button in the
+    FxA avatar menu when signed out.
+  owner: mconley@mozilla.com
+  hasExposure: true
+  exposureDescription: >-
+    Exposure is recorded when the user is enrolled in an experiment using this
+    feature and the FxA avatar menu on Firefox Desktop is opened.
+  variables:
+    ctaCopyVariant:
+      description: >-
+        One of the following values:
+          - control
+          - sync-devices
+          - backup-data
+          - backup-sync
+          - mobile
+      type: string
 
 legacyHeartbeat:
   description: Normandy Heartbeat exposed to Nimbus
@@ -3792,6 +3830,13 @@ crlite:
         pref: security.pki.crlite_mode
       description: >-
         How CRLite results will be interpreted.
+    timestamps_for_coverage:
+      type: int
+      setPref:
+        branch: default
+        pref: security.pki.crlite_timestamps_for_coverage
+      description: >-
+        How many covered timestamps do we need to see before we enforce a CRLite result.
 
 chatbot:
   description: AI chatbot feature configuration
@@ -3837,3 +3882,15 @@ fxms_bmb_button:
     uri: chrome://browser/content/asrouter/schemas/MessagingExperiment.schema.json
     path: browser/components/asrouter/content-src/schemas/MessagingExperiment.schema.json
   variables: {}
+
+contentProcessSandbox:
+  description: Prefs that control the content process sandbox.
+  owner: bowen@mozilla.com
+  hasExposure: false
+  variables:
+    Level:
+      description: Content process sandbox level
+      type: int
+      setPref:
+        branch: user
+        pref: security.sandbox.content.level

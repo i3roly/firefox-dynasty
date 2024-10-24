@@ -653,6 +653,111 @@ class _QuickSuggestTestUtils {
   }
 
   /**
+   * Returns a remote settings weather record.
+   *
+   * @returns {object}
+   *   A weather record for storing in remote settings.
+   */
+  weatherRecord({
+    keywords = ["weather"],
+    min_keyword_length = undefined,
+    score = 0.29,
+  } = {}) {
+    let [maxLen, maxWordCount] = keywords.reduce(
+      ([len, wordCount], kw) => [
+        Math.max(len, kw.length),
+        Math.max(wordCount, kw.split(/\s+/).filter(s => !!s).length),
+      ],
+      [0, 0]
+    );
+    return {
+      type: "weather",
+      attachment: {
+        keywords,
+        min_keyword_length,
+        score,
+        max_keyword_length: maxLen,
+        max_keyword_word_count: maxWordCount,
+      },
+    };
+  }
+
+  /**
+   * Returns a remote settings geonames record populated with some cities.
+   *
+   * @returns {object}
+   *   A geonames record for storing in remote settings.
+   */
+  geonamesRecord() {
+    let geonames = [
+      // Waterloo, AL
+      {
+        id: 1,
+        name: "Waterloo",
+        feature_class: "P",
+        feature_code: "PPL",
+        country_code: "US",
+        admin1_code: "AL",
+        population: 200,
+        alternate_names: ["waterloo"],
+      },
+      // AL
+      {
+        id: 2,
+        name: "Alabama",
+        feature_class: "A",
+        feature_code: "ADM1",
+        country_code: "US",
+        admin1_code: "AL",
+        population: 4530315,
+        alternate_names: ["al", "alabama"],
+      },
+      // Waterloo, IA
+      {
+        id: 3,
+        name: "Waterloo",
+        feature_class: "P",
+        feature_code: "PPLA2",
+        country_code: "US",
+        admin1_code: "IA",
+        population: 68460,
+        alternate_names: ["waterloo"],
+      },
+      // IA
+      {
+        id: 4,
+        name: "Iowa",
+        feature_class: "A",
+        feature_code: "ADM1",
+        country_code: "US",
+        admin1_code: "IA",
+        population: 2955010,
+        alternate_names: ["ia", "iowa"],
+      },
+    ];
+    let [maxLen, maxWordCount] = geonames.reduce(
+      ([len, wordCount], geoname) => [
+        Math.max(len, ...geoname.alternate_names.map(n => n.length)),
+        Math.max(
+          wordCount,
+          ...geoname.alternate_names.map(
+            n => n.split(/\s+/).filter(s => !!s).length
+          )
+        ),
+      ],
+      [0, 0]
+    );
+    return {
+      type: "geonames",
+      attachment: {
+        geonames,
+        max_alternate_name_length: maxLen,
+        max_alternate_name_word_count: maxWordCount,
+      },
+    };
+  }
+
+  /**
    * Returns an expected AMO (addons) result that can be passed to
    * `check_results()` in xpcshell tests regardless of whether the Rust backend
    * is enabled.
@@ -767,6 +872,7 @@ class _QuickSuggestTestUtils {
   weatherResult({
     source,
     provider,
+    city = null,
     telemetryType = undefined,
     temperatureUnit = undefined,
   } = {}) {
@@ -788,7 +894,7 @@ class _QuickSuggestTestUtils {
         source: "merino",
         provider: "accuweather",
         dynamicType: "weather",
-        city: lazy.MerinoTestUtils.WEATHER_SUGGESTION.city_name,
+        city: city || lazy.MerinoTestUtils.WEATHER_SUGGESTION.city_name,
         temperature:
           lazy.MerinoTestUtils.WEATHER_SUGGESTION.current_conditions
             .temperature[temperatureUnit],
@@ -811,8 +917,7 @@ class _QuickSuggestTestUtils {
         result.payload.telemetryType = telemetryType || "weather";
       }
     } else {
-      result.payload.source = source || "merino";
-      result.payload.provider = provider || "accuweather";
+      throw new Error("Weather result not supported when Rust disabled");
     }
 
     return result;

@@ -11,9 +11,10 @@
 #include "mozilla/Attributes.h"
 #include "mozilla/ErrorResult.h"
 #include "mozilla/NotNull.h"
-#include "mozilla/WeakPtr.h"
+#include "mozilla/UniquePtr.h"
 #include "mozilla/dom/ImageDecoderBinding.h"
 #include "mozilla/dom/WebCodecsUtils.h"
+#include "mozilla/gfx/Point.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsWrapperCache.h"
 
@@ -32,13 +33,16 @@ struct DecodeFrameCountResult;
 struct DecodeMetadataResult;
 }  // namespace image
 
+namespace media {
+class ShutdownBlockingTicket;
+}  // namespace media
+
 namespace dom {
 class Promise;
+class WeakWorkerRef;
 struct ImageDecoderReadRequest;
 
-class ImageDecoder final : public nsISupports,
-                           public nsWrapperCache,
-                           public SupportsWeakPtr {
+class ImageDecoder final : public nsISupports, public nsWrapperCache {
  public:
   NS_DECL_CYCLE_COLLECTING_ISUPPORTS
   NS_DECL_CYCLE_COLLECTION_WRAPPERCACHE_CLASS(ImageDecoder)
@@ -51,8 +55,6 @@ class ImageDecoder final : public nsISupports,
 
   JSObject* WrapObject(JSContext* aCx,
                        JS::Handle<JSObject*> aGivenProto) override;
-
-  static bool PrefEnabled(JSContext* aCx, JSObject* aObj);
 
   static already_AddRefed<ImageDecoder> Constructor(
       const GlobalObject& aGlobal, const ImageDecoderInit& aInit,
@@ -110,7 +112,8 @@ class ImageDecoder final : public nsISupports,
   void Reset(const MediaResult& aResult);
   void Close(const MediaResult& aResult);
 
-  void QueueConfigureMessage(ColorSpaceConversion aColorSpaceConversion);
+  void QueueConfigureMessage(const Maybe<gfx::IntSize>& aOutputSize,
+                             ColorSpaceConversion aColorSpaceConversion);
   void QueueDecodeMetadataMessage();
   void QueueDecodeFrameMessage();
 
@@ -138,6 +141,8 @@ class ImageDecoder final : public nsISupports,
   void OnDecodeFramesFailed(const nsresult& aErr);
 
   nsCOMPtr<nsIGlobalObject> mParent;
+  UniquePtr<media::ShutdownBlockingTicket> mShutdownBlocker;
+  RefPtr<WeakWorkerRef> mWorkerRef;
   RefPtr<ImageTrackList> mTracks;
   RefPtr<ImageDecoderReadRequest> mReadRequest;
   RefPtr<Promise> mCompletePromise;

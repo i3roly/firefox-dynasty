@@ -96,10 +96,7 @@
 
     <hbox class="titlebar-spacer" type="post-tabs"/>
 
-    <hbox id="private-browsing-indicator-with-label">
-      <image class="private-browsing-indicator-icon"/>
-      <label data-l10n-id="private-browsing-indicator-label"></label>
-    </hbox>
+#include private-browsing-indicator.inc.xhtml
     <toolbarbutton id="content-analysis-indicator"
                    class="toolbarbutton-1 content-analysis-indicator-icon"/>
 
@@ -163,7 +160,8 @@
                    removable="false"
                    overflows="false">
         <toolbartabstop/>
-        <hbox id="urlbar" flex="1"
+        <html:div id="urlbar"
+              popover="manual"
               context=""
               focused="true"
               pageproxystate="invalid">
@@ -182,7 +180,6 @@
                  code fires onmousedown, and hence eats our favicon drag events. -->
             <box id="tracking-protection-icon-container" align="center"
                  role="button"
-                 onmouseover="gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();"
                  tooltip="tracking-protection-icon-tooltip">
               <box id="tracking-protection-icon-box">
                 <image id="tracking-protection-icon"/>
@@ -416,7 +413,7 @@
               </hbox>
             </hbox>
           </hbox>
-        </hbox>
+        </html:div>
         <toolbartabstop/>
       </toolbaritem>
 
@@ -490,6 +487,8 @@
                      data-l10n-id="appmenu-menu-button-closed2"/>
     </toolbaritem>
     <hbox class="titlebar-spacer" type="post-tabs"/>
+#include private-browsing-indicator.inc.xhtml
+
 #include titlebar-items.inc.xhtml
   </toolbar>
 
@@ -524,7 +523,6 @@
       <hbox flex="1"
             id="PlacesToolbar"
             context="placesContext"
-            onmouseup="BookmarksEventHandler.onMouseUp(event);"
             tooltip="bhTooltip"
             popupsinherittooltip="true">
         <hbox id="PlacesToolbarDropIndicatorHolder" align="center" collapsed="true">
@@ -585,7 +583,6 @@
                  context="placesContext"
                  openInTabs="children"
                  side="top"
-                 onmouseup="BookmarksEventHandler.onMouseUp(event);"
                  tooltip="bhTooltip" popupsinherittooltip="true">
         <menuitem id="BMB_viewBookmarksSidebar"
                   data-l10n-id="bookmarks-tools-sidebar-visibility"

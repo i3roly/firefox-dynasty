@@ -70,6 +70,7 @@ document.addEventListener(
           break;
 
         case "PlacesToolbar":
+        case "BMB_bookmarksPopup":
           BookmarksEventHandler.onCommand(event);
           break;
 
@@ -81,10 +82,6 @@ document.addEventListener(
 
         case "bookmarks-menu-button":
           BookmarkingUI.onCommand(event);
-          break;
-
-        case "BMB_bookmarksPopup":
-          BookmarksEventHandler.onCommand(event);
           break;
 
         case "BMB_viewBookmarksSidebar":
@@ -155,6 +152,28 @@ document.addEventListener(
     }
     navigatorToolbox.addEventListener("mousedown", onMouseDown);
     widgetOverflow.addEventListener("mousedown", onMouseDown);
+
+    function onMouseUp(event) {
+      let element = event.target.closest(`
+        #PlacesToolbar,
+        #BMB_bookmarksPopup
+        `);
+      if (!element) {
+        return;
+      }
+
+      switch (element.id) {
+        case "PlacesToolbar":
+        case "BMB_bookmarksPopup":
+          BookmarksEventHandler.onMouseUp(event);
+          break;
+
+        default:
+          throw new Error(`Missing case for #${element.id}`);
+      }
+    }
+    navigatorToolbox.addEventListener("mouseup", onMouseUp);
+    widgetOverflow.addEventListener("mouseup", onMouseUp);
 
     function onClick(event) {
       const isLeftClick = event.button === 0;
@@ -482,11 +501,15 @@ document.addEventListener(
         gIdentityHandler.onDragStart(event);
       });
 
-    document
-      .getElementById("tracking-protection-icon-container")
-      .addEventListener("focus", () => {
-        gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();
-      });
+    let trackingProtectionIconContainer = document.getElementById(
+      "tracking-protection-icon-container"
+    );
+    trackingProtectionIconContainer.addEventListener("focus", () => {
+      gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();
+    });
+    trackingProtectionIconContainer.addEventListener("mouseover", () => {
+      gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();
+    });
   },
   { once: true }
 );

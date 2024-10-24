@@ -7,13 +7,16 @@
 
 #include "Image.h"
 #include "ImageFactory.h"
+#include "imgITools.h"
 #include "mozilla/Base64.h"
 #include "mozilla/Encoding.h"
+#include "mozilla/gtest/MozAssertions.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/SpinEventLoopUntil.h"
 #include "mozilla/SystemPrincipal.h"
 #include "mozilla/UniquePtr.h"
 #include "nsIChannel.h"
+#include "nsIInputStream.h"
 #include "nsILoadInfo.h"
 #include "nsISVGPaintContext.h"
 #include "nsMimeTypes.h"
@@ -119,12 +122,12 @@ class ImageLoadListener : public IProgressObserver {
 void LoadImage(const char* aData, imgIContainer** aImage) {
   nsCString svgUri;
   nsresult rv = Base64Encode(aData, strlen(aData), svgUri);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
   svgUri.Insert("data:" IMAGE_SVG_XML ";base64,", 0);
 
   nsCOMPtr<nsIURI> uri;
   rv = NS_NewURI(getter_AddRefs(uri), svgUri, UTF_8_ENCODING, nullptr);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
 
   nsCOMPtr<nsIPrincipal> principal = SystemPrincipal::Get();
   nsCOMPtr<nsIChannel> channel;
@@ -141,25 +144,55 @@ void LoadImage(const char* aData, imgIContainer** aImage) {
 
   nsCOMPtr<nsIInputStream> stream;
   rv = channel->Open(getter_AddRefs(stream));
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
 
   uint64_t size;
   rv = stream->Available(&size);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
   ASSERT_EQ(size, strlen(aData));
 
   rv = image->OnImageDataAvailable(channel, stream, 0, size);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
 
   // Let the Image know we've sent all the data.
   rv = image->OnImageDataComplete(channel, NS_OK, true);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
 
   // The final load event from the SVG document is dispatched asynchronously so
   // wait for that to happen.
   MOZ_ALWAYS_TRUE(
       SpinEventLoopUntil("windows:widget:TEST(TestWindowGfx, CreateIcon)"_ns,
                          [&listener]() { return listener->mIsLoaded; }));
+
+  image.forget(aImage);
+}
+
+void ConvertToRaster(imgIContainer* vectorImage, imgIContainer** aImage) {
+  // First we encode it as a png image.
+  nsCOMPtr<imgITools> imgTools =
+      do_CreateInstance("@mozilla.org/image/tools;1");
+
+  nsCOMPtr<nsIInputStream> stream;
+  nsresult rv = imgTools->EncodeImage(vectorImage, "image/png"_ns, u""_ns,
+                                      getter_AddRefs(stream));
+  ASSERT_NS_SUCCEEDED(rv);
+
+  uint64_t size;
+  rv = stream->Available(&size);
+
+  // And then we load the image again as a raster imgIContainer
+  RefPtr<image::Image> image =
+      ImageFactory::CreateAnonymousImage("image/png"_ns, size);
+  RefPtr<ProgressTracker> tracker = image->GetProgressTracker();
+  ASSERT_FALSE(image->HasError());
+
+  rv = image->OnImageDataAvailable(nullptr, stream, 0, size);
+  ASSERT_NS_SUCCEEDED(rv);
+
+  // Let the Image know we've sent all the data.
+  rv = image->OnImageDataComplete(nullptr, NS_OK, true);
+  tracker->SyncNotifyProgress(FLAG_LOAD_COMPLETE);
+  ASSERT_NS_SUCCEEDED(rv);
 
   image.forget(aImage);
 }
@@ -212,123 +245,150 @@ void CountPixels(ICONINFO& ii, BITMAP& bm, double* redCount, double* greenCount,
   }
 }
 
-// Tests that we can scale down an SVG
-TEST(TestWindowGfx, CreateIcon_SVG_ScaledDown)
+// Tests that we can scale down an image
+TEST(TestWindowGfx, CreateIcon_ScaledDown)
 {
-  nsCOMPtr<imgIContainer> image;
-  LoadImage(SVG_GREEN_CIRCLE, getter_AddRefs(image));
+  auto Test = [](imgIContainer* image) {
+    HICON icon;
+    nsresult rv =
+        nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
+                                LayoutDeviceIntSize(50, 50), &icon);
+    ASSERT_NS_SUCCEEDED(rv);
 
-  HICON icon;
-  nsresult rv =
-      nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
-                              LayoutDeviceIntSize(50, 50), &icon);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+    ICONINFO ii;
+    BOOL fResult = ::GetIconInfo(icon, &ii);
+    ASSERT_TRUE(fResult);
 
-  ICONINFO ii;
-  BOOL fResult = ::GetIconInfo(icon, &ii);
-  ASSERT_TRUE(fResult);
+    BITMAP bm;
+    fResult = ::GetObject(ii.hbmColor, sizeof(bm), &bm) == sizeof(bm);
+    ASSERT_TRUE(fResult);
 
-  BITMAP bm;
-  fResult = ::GetObject(ii.hbmColor, sizeof(bm), &bm) == sizeof(bm);
-  ASSERT_TRUE(fResult);
+    ASSERT_EQ(bm.bmWidth, 50);
+    ASSERT_EQ(bm.bmHeight, 50);
 
-  ASSERT_EQ(bm.bmWidth, 50);
-  ASSERT_EQ(bm.bmHeight, 50);
+    double redCount, greenCount, blueCount;
+    CountPixels(ii, bm, &redCount, &greenCount, &blueCount);
 
-  double redCount, greenCount, blueCount;
-  CountPixels(ii, bm, &redCount, &greenCount, &blueCount);
+    // We've scaled the image down to a quarter of its size.
+    double fillArea = CIRCLE_FILL_AREA / 4;
+    double strokeArea = CIRCLE_STROKE_AREA / 4;
 
-  // We've scaled the image down to a quarter of its size.
-  double fillArea = CIRCLE_FILL_AREA / 4;
-  double strokeArea = CIRCLE_STROKE_AREA / 4;
+    ASSERT_NEARLY(redCount, strokeArea);
+    ASSERT_NEARLY(greenCount, fillArea);
+    ASSERT_EQ(blueCount, 0.0);
 
-  ASSERT_NEARLY(redCount, strokeArea);
-  ASSERT_NEARLY(greenCount, fillArea);
-  ASSERT_EQ(blueCount, 0.0);
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
 
-  if (ii.hbmMask) DeleteObject(ii.hbmMask);
-  if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    ::DestroyIcon(icon);
+  };
 
-  ::DestroyIcon(icon);
+  nsCOMPtr<imgIContainer> vectorImage;
+  LoadImage(SVG_GREEN_CIRCLE, getter_AddRefs(vectorImage));
+
+  Test(vectorImage);
+
+  nsCOMPtr<imgIContainer> rasterImage;
+  ConvertToRaster(vectorImage, getter_AddRefs(rasterImage));
+
+  Test(rasterImage);
 }
 
-// Tests that we can scale up an SVG
-TEST(TestWindowGfx, CreateIcon_SVG_ScaledUp)
+// Tests that we can scale up an image
+TEST(TestWindowGfx, CreateIcon_ScaledUp)
 {
-  nsCOMPtr<imgIContainer> image;
-  LoadImage(SVG_GREEN_CIRCLE, getter_AddRefs(image));
+  auto Test = [](imgIContainer* image) {
+    HICON icon;
+    nsresult rv =
+        nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
+                                LayoutDeviceIntSize(200, 200), &icon);
+    ASSERT_NS_SUCCEEDED(rv);
 
-  HICON icon;
-  nsresult rv =
-      nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
-                              LayoutDeviceIntSize(200, 200), &icon);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+    ICONINFO ii;
+    BOOL fResult = ::GetIconInfo(icon, &ii);
+    ASSERT_TRUE(fResult);
 
-  ICONINFO ii;
-  BOOL fResult = ::GetIconInfo(icon, &ii);
-  ASSERT_TRUE(fResult);
+    BITMAP bm;
+    fResult = ::GetObject(ii.hbmColor, sizeof(bm), &bm) == sizeof(bm);
+    ASSERT_TRUE(fResult);
 
-  BITMAP bm;
-  fResult = ::GetObject(ii.hbmColor, sizeof(bm), &bm) == sizeof(bm);
-  ASSERT_TRUE(fResult);
+    ASSERT_EQ(bm.bmWidth, 200);
+    ASSERT_EQ(bm.bmHeight, 200);
 
-  ASSERT_EQ(bm.bmWidth, 200);
-  ASSERT_EQ(bm.bmHeight, 200);
+    double redCount, greenCount, blueCount;
+    CountPixels(ii, bm, &redCount, &greenCount, &blueCount);
 
-  double redCount, greenCount, blueCount;
-  CountPixels(ii, bm, &redCount, &greenCount, &blueCount);
+    // We've scaled the image up to four times its size.
+    double fillArea = CIRCLE_FILL_AREA * 4;
+    double strokeArea = CIRCLE_STROKE_AREA * 4;
 
-  // We've scaled the image up to four times its size.
-  double fillArea = CIRCLE_FILL_AREA * 4;
-  double strokeArea = CIRCLE_STROKE_AREA * 4;
+    ASSERT_NEARLY(redCount, strokeArea);
+    ASSERT_NEARLY(greenCount, fillArea);
+    ASSERT_EQ(blueCount, 0.0);
 
-  ASSERT_NEARLY(redCount, strokeArea);
-  ASSERT_NEARLY(greenCount, fillArea);
-  ASSERT_EQ(blueCount, 0.0);
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
 
-  if (ii.hbmMask) DeleteObject(ii.hbmMask);
-  if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    ::DestroyIcon(icon);
+  };
 
-  ::DestroyIcon(icon);
+  nsCOMPtr<imgIContainer> vectorImage;
+  LoadImage(SVG_GREEN_CIRCLE, getter_AddRefs(vectorImage));
+
+  Test(vectorImage);
+
+  nsCOMPtr<imgIContainer> rasterImage;
+  ConvertToRaster(vectorImage, getter_AddRefs(rasterImage));
+
+  Test(rasterImage);
 }
 
-// Tests that we can redner an SVG at its intrinsic size
-TEST(TestWindowGfx, CreateIcon_SVG_Intrinsic)
+// Tests that we can render an image at its intrinsic size
+TEST(TestWindowGfx, CreateIcon_Intrinsic)
 {
-  nsCOMPtr<imgIContainer> image;
-  LoadImage(SVG_GREEN_CIRCLE, getter_AddRefs(image));
+  auto Test = [](imgIContainer* image) {
+    HICON icon;
+    nsresult rv =
+        nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
+                                LayoutDeviceIntSize(), &icon);
+    ASSERT_NS_SUCCEEDED(rv);
 
-  HICON icon;
-  nsresult rv =
-      nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
-                              LayoutDeviceIntSize(), &icon);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+    ICONINFO ii;
+    BOOL fResult = ::GetIconInfo(icon, &ii);
+    ASSERT_TRUE(fResult);
 
-  ICONINFO ii;
-  BOOL fResult = ::GetIconInfo(icon, &ii);
-  ASSERT_TRUE(fResult);
+    BITMAP bm;
+    fResult = ::GetObject(ii.hbmColor, sizeof(bm), &bm) == sizeof(bm);
+    ASSERT_TRUE(fResult);
 
-  BITMAP bm;
-  fResult = ::GetObject(ii.hbmColor, sizeof(bm), &bm) == sizeof(bm);
-  ASSERT_TRUE(fResult);
+    ASSERT_EQ(bm.bmWidth, 100);
+    ASSERT_EQ(bm.bmHeight, 100);
 
-  ASSERT_EQ(bm.bmWidth, 100);
-  ASSERT_EQ(bm.bmHeight, 100);
+    double redCount, greenCount, blueCount;
+    CountPixels(ii, bm, &redCount, &greenCount, &blueCount);
 
-  double redCount, greenCount, blueCount;
-  CountPixels(ii, bm, &redCount, &greenCount, &blueCount);
+    ASSERT_NEARLY(redCount, CIRCLE_STROKE_AREA);
+    ASSERT_NEARLY(greenCount, CIRCLE_FILL_AREA);
+    ASSERT_EQ(blueCount, 0.0);
 
-  ASSERT_NEARLY(redCount, CIRCLE_STROKE_AREA);
-  ASSERT_NEARLY(greenCount, CIRCLE_FILL_AREA);
-  ASSERT_EQ(blueCount, 0.0);
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
 
-  if (ii.hbmMask) DeleteObject(ii.hbmMask);
-  if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    ::DestroyIcon(icon);
+  };
 
-  ::DestroyIcon(icon);
+  nsCOMPtr<imgIContainer> vectorImage;
+  LoadImage(SVG_GREEN_CIRCLE, getter_AddRefs(vectorImage));
+
+  Test(vectorImage);
+
+  nsCOMPtr<imgIContainer> rasterImage;
+  ConvertToRaster(vectorImage, getter_AddRefs(rasterImage));
+
+  Test(rasterImage);
 }
 
-// If the SVG has no intrinsic size and we don't provide one we fail.
+// If an SVG has no intrinsic size and we don't provide one we fail.
 TEST(TestWindowGfx, CreateIcon_SVG_NoSize)
 {
   nsCOMPtr<imgIContainer> image;
@@ -352,7 +412,7 @@ TEST(TestWindowGfx, CreateIcon_SVG_NoIntrinsic)
   nsresult rv =
       nsWindowGfx::CreateIcon(image, nullptr, false, LayoutDeviceIntPoint(),
                               LayoutDeviceIntSize(200, 200), &icon);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
 
   ICONINFO ii;
   BOOL fResult = ::GetIconInfo(icon, &ii);
@@ -402,7 +462,7 @@ TEST(TestWindowGfx, CreateIcon_SVG_Context)
   nsresult rv = nsWindowGfx::CreateIcon(image, paintContext, false,
                                         LayoutDeviceIntPoint(),
                                         LayoutDeviceIntSize(200, 200), &icon);
-  ASSERT_TRUE(NS_SUCCEEDED(rv));
+  ASSERT_NS_SUCCEEDED(rv);
 
   ICONINFO ii;
   BOOL fResult = ::GetIconInfo(icon, &ii);

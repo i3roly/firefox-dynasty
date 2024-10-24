@@ -8,6 +8,7 @@ import android.app.AlertDialog
 import android.app.Dialog
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -15,6 +16,8 @@ import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +45,7 @@ import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.ktx.android.util.dpToPx
 import mozilla.components.support.ktx.android.view.setNavigationBarColorCompat
+import mozilla.components.support.utils.ext.isLandscape
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.BrowserDirection
 import org.mozilla.fenix.GleanMetrics.Events
@@ -67,6 +71,10 @@ import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.settings.deletebrowsingdata.deleteAndQuit
 import org.mozilla.fenix.theme.FirefoxTheme
+import org.mozilla.fenix.utils.DELAY_MS_MAIN_MENU
+import org.mozilla.fenix.utils.DELAY_MS_SUB_MENU
+import org.mozilla.fenix.utils.DURATION_MS_MAIN_MENU
+import org.mozilla.fenix.utils.DURATION_MS_SUB_MENU
 import org.mozilla.fenix.utils.contentGrowth
 import org.mozilla.fenix.utils.enterMenu
 import org.mozilla.fenix.utils.enterSubmenu
@@ -90,6 +98,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
     private val args by navArgs<MenuDialogFragmentArgs>()
     private val browsingModeManager get() = (activity as HomeActivity).browsingModeManager
     private val webExtensionsMenuBinding = ViewBoundFeatureWrapper<WebExtensionsMenuBinding>()
+    private lateinit var bottomSheetBehavior: BottomSheetBehavior<View>
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         Events.toolbarMenuVisible.record(NoExtras())
@@ -106,7 +115,10 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
                 val bottomSheet = findViewById<View?>(R.id.design_bottom_sheet)
                 bottomSheet?.setBackgroundResource(android.R.color.transparent)
-                BottomSheetBehavior.from(bottomSheet).apply {
+
+                bottomSheetBehavior = BottomSheetBehavior.from(bottomSheet)
+                bottomSheetBehavior.apply {
+                    maxWidth = calculateMenuSheetWidth()
                     isFitToContents = true
                     peekHeight = PEEK_HEIGHT.dpToPx(resources.displayMetrics)
                     halfExpandedRatio = EXPANDED_MIN_RATIO
@@ -116,6 +128,11 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                 }
             }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        bottomSheetBehavior.maxWidth = calculateMenuSheetWidth()
     }
 
     @Suppress("LongMethod", "CyclomaticComplexMethod")
@@ -337,16 +354,33 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         targetState = contentState,
                         transitionSpec = {
                             if (contentState == Route.MainMenu) {
-                                (enterMenu()).togetherWith(
-                                    exitSubmenu(),
+                                (
+                                    enterMenu(
+                                        duration = DURATION_MS_MAIN_MENU,
+                                        delay = DELAY_MS_MAIN_MENU,
+                                        easing = LinearOutSlowInEasing,
+                                    )
+                                    ).togetherWith(
+                                    exitSubmenu(DURATION_MS_MAIN_MENU, FastOutLinearInEasing),
                                 ) using SizeTransform { initialSize, targetSize ->
-                                    contentGrowth(initialSize, targetSize)
+                                    contentGrowth(initialSize, targetSize, DURATION_MS_MAIN_MENU)
                                 }
                             } else {
-                                enterSubmenu().togetherWith(
-                                    exitMenu(),
+                                enterSubmenu(
+                                    duration = DURATION_MS_SUB_MENU,
+                                    delay = DELAY_MS_SUB_MENU,
+                                    easing = LinearOutSlowInEasing,
+                                ).togetherWith(
+                                    exitMenu(
+                                        duration = DURATION_MS_SUB_MENU,
+                                        easing = FastOutLinearInEasing,
+                                    ),
                                 ) using SizeTransform { initialSize, targetSize ->
-                                    contentGrowth(initialSize, targetSize)
+                                    contentGrowth(
+                                        initialSize = initialSize,
+                                        targetSize = targetSize,
+                                        duration = DURATION_MS_SUB_MENU,
+                                    )
                                 }
                             }
                         },
@@ -615,6 +649,23 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                 0,
                 Intent(null, url.toUri()),
             )
+        }
+    }
+
+    private fun calculateMenuSheetWidth(): Int {
+        val isLandscape = requireContext().isLandscape()
+        val screenWidthPx = requireContext().resources.configuration.screenWidthDp.dpToPx(resources.displayMetrics)
+        val totalHorizontalPadding = 2 * requireContext().resources.getDimensionPixelSize(R.dimen.browser_menu_padding)
+        val minScreenWidth = requireContext().resources.getDimensionPixelSize(R.dimen.browser_menu_max_width) +
+            totalHorizontalPadding
+
+        // We only want to restrict the width of the menu if the device is in landscape mode AND the
+        // device's screen width is smaller than the menu's max width and total horizontal padding combined.
+        // Otherwise, the menu being at max width would still leave sufficient padding on each side in landscape mode.
+        return if (isLandscape && screenWidthPx < minScreenWidth) {
+            screenWidthPx - totalHorizontalPadding
+        } else {
+            requireContext().resources.getDimensionPixelSize(R.dimen.browser_menu_max_width)
         }
     }
 }

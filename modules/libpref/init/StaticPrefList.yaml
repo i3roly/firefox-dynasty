@@ -2985,7 +2985,7 @@
 #if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN) || defined(MOZ_PROFILE_GENERATE)
   value: false
 #else
-  value: false
+  value: @IS_NIGHTLY_BUILD@
 #endif
   mirror: once
 #endif
@@ -3241,7 +3241,7 @@
 # WebCodecs API - Image decoder
 - name: dom.media.webcodecs.image-decoder.enabled
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Number of seconds of very quiet or silent audio before considering the audio
@@ -3552,6 +3552,29 @@
   value: -1
   mirror: always
 
+# Should we do lazy initialization of origins ?
+# When enabled, origins for temporary storage are not initialized during
+# temporary storage initialization, they are initialized lazily instead.
+# If there are other origins in the group, they are initialized all together.
+# This feature is currently still in development and experimental, not
+# recommended for normal use yet.
+- name: dom.quotaManager.temporaryStorage.lazyOriginInitialization
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Should we trigger initialization of all temporary origins in the background?
+# When enabled, temporary origins collected during temporary storage
+# initialization are initialized in the background. The background
+# initialization of temporary origins is always done for entire groups of
+# origins to preserve consistency of quota checks related to the group limit.
+# This feature is currently still in development and experimental, not
+# recommended for normal use yet.
+- name: dom.quotaManager.temporaryStorage.triggerOriginInitializationInBackground
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # A pref that is used to slow down origin operations for testing purposes.
 - name: dom.quotaManager.originOperations.pauseOnIOThreadMs
   type: RelaxedAtomicUint32
@@ -3560,6 +3583,12 @@
 
 # A pref that is used to slow down storage initialization for testing purposes.
 - name: dom.quotaManager.storageInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A pref that is used to slow down origin initialization for testing purposes.
+- name: dom.quotaManager.originInitialization.pauseOnIOThreadMs
   type: RelaxedAtomicUint32
   value: 0
   mirror: always
@@ -3957,7 +3986,7 @@
 # downgraded again if the request failed.
 - name: dom.security.https_first
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # If true, HTTPS-First will upgrade non-default ports
@@ -3987,6 +4016,11 @@
 - name: dom.security.https_first_add_exception_on_failiure
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+- name: dom.security.https_first_exception_lifetime
+  type: uint32_t
+  value: 7*24*60*60*1000 # 7 days in milliseconds
   mirror: always
 
 - name: dom.security.unexpected_system_load_telemetry_enabled
@@ -4306,6 +4340,12 @@
   value: false
   mirror: always
   do_not_use_directly: true
+
+# Whether the migration from unsupported legacy implementation is enabled.
+- name: dom.storage.enable_migration_from_unsupported_legacy_implementation
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
 
 # The amount of snapshot peak usage which is attempted to be pre-incremented
 # during snapshot creation.
@@ -8173,7 +8213,7 @@
 
 -   name: javascript.options.experimental.json_parse_with_source
     type: bool
-    value: true
+    value: false
     mirror: always
     set_spidermonkey_pref: always
 
@@ -8392,12 +8432,6 @@
     mirror: always
     set_spidermonkey_pref: always
 
-- name: javascript.options.wasm_inline_call_ref_threshold
-  type: uint32_t
-  value: 1
-  mirror: always
-  set_spidermonkey_pref: always
-
 # Aggressiveness of lazy tiering, allowable: 1 .. 9
 # 1 = min (almost never, set tiering threshold to max possible, == 2^31-1)
 # 9 = max (request tier up at first call, set tiering threshold to zero)
@@ -8433,6 +8467,17 @@
 - name: javascript.options.wasm_call_ref_inlining
   type: bool
   value: true
+  mirror: always
+  set_spidermonkey_pref: always
+
+# When selecting a call_ref target for speculative inlining, this is the minimum
+# percentage of the total number of calls from the call site that a candidate
+# must have in order to be elegible for inlining.  Allowable: 10 .. 100 (%).
+# Setting it (eg) 75 means the hottest target must be 75% of all observed calls
+# to be considered for inlining.  Probably unwise to let this be much below 50.
+- name: javascript.options.wasm_call_ref_inlining_percent
+  type: uint32_t
+  value: 50
   mirror: always
   set_spidermonkey_pref: always
 
@@ -8627,7 +8672,7 @@
 
 - name: layers.force-synchronous-resize
   type: RelaxedAtomicBool
-#if defined(MOZ_WAYLAND) || defined(XP_WIN)
+#ifdef MOZ_WAYLAND
   # We want to control it by nsWindow::SynchronouslyRepaintOnResize() on Linux/Wayland.
   value: false
 #else
@@ -8648,6 +8693,8 @@
   type: bool
 #if defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(MOZ_X11)
+  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
@@ -9007,14 +9054,26 @@
   value: 3
   mirror: always
 
-# The minimum contrast ratio between the accent color foreground and background
-# colors.
+# The minimum contrast ratio between the accent color background and white.
 #
 # We don't use this for text, so we need a contrast of at least AA (for user
-# interface components and graphical objects), which per WCAG is 3:1
+# interface components and graphical objects), which per WCAG is 3:1.
+#
+# However that causes some colors that are realistically fine to get darkened,
+# so we lower it a little bit. Eventually we should maybe use something like
+# APCA or so perhaps, see:
+#
+#  * https://ruitina.com/apca-accessible-colour-contrast/
+#  * https://github.com/w3c/csswg-drafts/issues/7937
+#
+# See also:
+#
+#  * https://accent-color.glitch.me/
+#
+# For testing this.
 - name: layout.css.accent-color.min-contrast-ratio
   type: AtomicFloat
-  value: 3.0
+  value: 2.4
   mirror: always
 
 # The target contrast ratio between the accent color foreground and background
@@ -14008,6 +14067,23 @@
   mirror: always
   rust: true
 
+# When true, HTTP/3 will be disabled when third party roots are found.
+- name: network.http.http3.disable_when_third_party_roots_found
+  type: RelaxedAtomicBool
+#if defined(ANDROID)
+  value: false
+#else
+  value: true
+#endif
+  mirror: always
+
+# Only used for testing purposes. In automation, this value is used to override
+# the result of third party roots check.
+- name: network.http.http3.has_third_party_roots_found_in_automation
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # When true, a http request will be upgraded to https when HTTPS RR is
 # available.
 - name: network.dns.upgrade_with_https_rr
@@ -14943,12 +15019,12 @@
 
 - name: privacy.window.maxInnerWidth
   type: int32_t
-  value: 1000
+  value: 1400
   mirror: always
 
 - name: privacy.window.maxInnerHeight
   type: int32_t
-  value: 1000
+  value: 900
   mirror: always
 
 - name: privacy.sanitize.useOldClearHistoryDialog
@@ -15701,6 +15777,14 @@
 #endif
   mirror: never
 
+# The number of SCTs that must be "covered" by a CRLite filter before
+# we will enforce a result from that filter.
+- name: security.pki.crlite_timestamps_for_coverage
+  type: RelaxedAtomicUint32
+  value: 1
+  mirror: always
+  rust: true
+
 - name: security.pki.use_modern_crypto_with_pkcs12
   type: RelaxedAtomicBool
   value: true
@@ -15722,6 +15806,14 @@
 - name: security.pki.sct_signature_cache_size
   type: RelaxedAtomicUint32
   value: 256
+  mirror: always
+
+# The number of entries in the certificate trust cache.
+# A higher number increases memory usage, but should increase the cache hit rate.
+# Each entry is approximately 65 bytes, and the maximum number of entries is 65535.
+- name: security.pki.cert_trust_cache_size
+  type: RelaxedAtomicUint32
+  value: 128
   mirror: always
 
 - name: security.tls.version.min

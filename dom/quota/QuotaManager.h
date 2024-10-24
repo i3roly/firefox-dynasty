@@ -95,6 +95,7 @@ class QuotaManager final : public BackgroundThreadObject {
   friend class OriginInfo;
   friend class PersistOp;
   friend class ShutdownStorageOp;
+  friend class UniversalDirectoryLock;
 
   friend Result<PrincipalMetadata, nsresult> GetInfoFromValidatedPrincipalInfo(
       QuotaManager& aQuotaManager,
@@ -494,6 +495,8 @@ class QuotaManager final : public BackgroundThreadObject {
   nsresult EnsureTemporaryStorageIsInitializedInternal();
 
  public:
+  RefPtr<BoolPromise> InitializeAllTemporaryOrigins();
+
   RefPtr<OriginUsageMetadataArrayPromise> GetUsage(
       bool aGetAll, RefPtr<BoolPromise> aOnCancelPromise = nullptr);
 
@@ -744,7 +747,7 @@ class QuotaManager final : public BackgroundThreadObject {
   nsresult InitializeOrigin(PersistenceType aPersistenceType,
                             const OriginMetadata& aOriginMetadata,
                             int64_t aAccessTime, bool aPersisted,
-                            nsIFile* aDirectory);
+                            nsIFile* aDirectory, bool aForGroup = false);
 
   using OriginInfosFlatTraversable =
       nsTArray<NotNull<RefPtr<const OriginInfo>>>;
@@ -786,6 +789,8 @@ class QuotaManager final : public BackgroundThreadObject {
   void RemoveTemporaryOrigins(PersistenceType aPersistenceType);
 
   void RemoveTemporaryOrigins();
+
+  PrincipalMetadataArray GetAllTemporaryGroups() const;
 
   void NoteInitializedOrigin(PersistenceType aPersistenceType,
                              const nsACString& aOrigin);
@@ -885,6 +890,7 @@ class QuotaManager final : public BackgroundThreadObject {
 
   // Things touched on the owning (PBackground) thread only.
   struct BackgroundThreadAccessible {
+    PrincipalMetadataArray mUninitializedGroups;
     nsTHashSet<nsCString> mInitializedGroups;
   };
   ThreadBound<BackgroundThreadAccessible> mBackgroundThreadAccessible;
@@ -937,6 +943,8 @@ class QuotaManager final : public BackgroundThreadObject {
   LazyInitializedOnce<const nsString> mPrivateStoragePath;
   LazyInitializedOnce<const nsString> mToBeRemovedStoragePath;
 
+  MozPromiseHolder<BoolPromise> mInitializeAllTemporaryOriginsPromiseHolder;
+
   uint64_t mTemporaryStorageLimit;
   uint64_t mTemporaryStorageUsage;
   int64_t mNextDirectoryLockId;
@@ -945,6 +953,8 @@ class QuotaManager final : public BackgroundThreadObject {
   bool mPersistentStorageInitializedInternal;
   bool mTemporaryStorageInitialized;
   bool mTemporaryStorageInitializedInternal;
+  bool mInitializingAllTemporaryOrigins;
+  bool mAllTemporaryOriginsInitialized;
   bool mCacheUsable;
 };
 

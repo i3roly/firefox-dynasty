@@ -720,11 +720,11 @@ nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
     return NS_ERROR_NULL_POINTER;
   }
 
-  int32_t scrollFlags = Selection::SCROLL_FOR_CARET_MOVE;
+  auto scrollFlags = ScrollFlags::None;
   if (sel->IsEditorSelection()) {
     // If caret moves in editor, it should cause scrolling even if it's in
     // overflow: hidden;.
-    scrollFlags |= Selection::SCROLL_OVERFLOW_HIDDEN;
+    scrollFlags |= ScrollFlags::ScrollOverflowHidden;
   }
 
   const bool doCollapse = [&] {
@@ -1628,9 +1628,13 @@ nsresult nsFrameSelection::ScrollSelectionIntoView(SelectionType aSelectionType,
                                                    SelectionRegion aRegion,
                                                    int16_t aFlags) const {
   int8_t index = GetIndexFromSelectionType(aSelectionType);
-  if (index < 0) return NS_ERROR_INVALID_ARG;
+  if (index < 0) {
+    return NS_ERROR_INVALID_ARG;
+  }
 
-  if (!mDomSelections[index]) return NS_ERROR_NULL_POINTER;
+  if (!mDomSelections[index]) {
+    return NS_ERROR_NULL_POINTER;
+  }
 
   const auto vScroll = [&]() -> WhereToScroll {
     if (aFlags & nsISelectionController::SCROLL_VERTICAL_START) {
@@ -1644,23 +1648,21 @@ nsresult nsFrameSelection::ScrollSelectionIntoView(SelectionType aSelectionType,
     }
     return WhereToScroll::Nearest;
   }();
-  int32_t flags = Selection::SCROLL_DO_FLUSH;
-  if (aFlags & nsISelectionController::SCROLL_SYNCHRONOUS) {
-    flags |= Selection::SCROLL_SYNCHRONOUS;
-  } else if (aFlags & nsISelectionController::SCROLL_FIRST_ANCESTOR_ONLY) {
-    flags |= Selection::SCROLL_FIRST_ANCESTOR_ONLY;
-  }
+
+  auto mode = aFlags & nsISelectionController::SCROLL_SYNCHRONOUS
+                  ? SelectionScrollMode::SyncFlush
+                  : SelectionScrollMode::Async;
+
+  auto scrollFlags = ScrollFlags::None;
   if (aFlags & nsISelectionController::SCROLL_OVERFLOW_HIDDEN) {
-    flags |= Selection::SCROLL_OVERFLOW_HIDDEN;
-  }
-  if (aFlags & nsISelectionController::SCROLL_FOR_CARET_MOVE) {
-    flags |= Selection::SCROLL_FOR_CARET_MOVE;
+    scrollFlags |= ScrollFlags::ScrollOverflowHidden;
   }
 
   // After ScrollSelectionIntoView(), the pending notifications might be
   // flushed and PresShell/PresContext/Frames may be dead. See bug 418470.
   RefPtr<Selection> sel = mDomSelections[index];
-  return sel->ScrollIntoView(aRegion, ScrollAxis(vScroll), ScrollAxis(), flags);
+  return sel->ScrollIntoView(aRegion, ScrollAxis(vScroll), ScrollAxis(),
+                             scrollFlags, mode);
 }
 
 nsresult nsFrameSelection::RepaintSelection(SelectionType aSelectionType) {
@@ -1858,10 +1860,9 @@ nsresult nsFrameSelection::PageMove(bool aForward, bool aExtend,
   if (!doScrollSelectionIntoView) {
     return NS_OK;
   }
-  return ScrollSelectionIntoView(
-      SelectionType::eNormal, nsISelectionController::SELECTION_FOCUS_REGION,
-      nsISelectionController::SCROLL_SYNCHRONOUS |
-          nsISelectionController::SCROLL_FOR_CARET_MOVE);
+  return ScrollSelectionIntoView(SelectionType::eNormal,
+                                 nsISelectionController::SELECTION_FOCUS_REGION,
+                                 nsISelectionController::SCROLL_SYNCHRONOUS);
 }
 
 nsresult nsFrameSelection::PhysicalMove(int16_t aDirection, int16_t aAmount,

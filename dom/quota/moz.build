@@ -37,6 +37,7 @@ EXPORTS.mozilla.dom.quota += [
     "CipherKeyManager.h",
     "CipherStrategy.h",
     "Client.h",
+    "ClientDirectoryLock.h",
     "ClientImpl.h",
     "CommonMetadata.h",
     "CommonMetadataArray.h",
@@ -48,6 +49,7 @@ EXPORTS.mozilla.dom.quota += [
     "DecryptingInputStream_impl.h",
     "DirectoryLock.h",
     "DirectoryLockCategory.h",
+    "DirectoryLockImpl.h",
     "DirectoryLockInlines.h",
     "DummyCipherStrategy.h",
     "EncryptedBlock.h",
@@ -66,6 +68,7 @@ EXPORTS.mozilla.dom.quota += [
     "NotifyUtils.h",
     "NotifyUtilsCommon.h",
     "NSSCipherStrategy.h",
+    "OriginDirectoryLock.h",
     "OriginOperationCallbacks.h",
     "OriginScope.h",
     "PersistenceScope.h",
@@ -91,6 +94,7 @@ EXPORTS.mozilla.dom.quota += [
     "StreamUtils.h",
     "StringifyUtils.h",
     "ThreadUtils.h",
+    "UniversalDirectoryLock.h",
     "UsageInfo.h",
 ]
 
@@ -106,6 +110,7 @@ UNIFIED_SOURCES += [
     "CachingDatabaseConnection.cpp",
     "CanonicalQuotaObject.cpp",
     "Client.cpp",
+    "ClientDirectoryLock.cpp",
     "ClientUsageArray.cpp",
     "DecryptingInputStream.cpp",
     "DirectoryLockImpl.cpp",
@@ -120,6 +125,7 @@ UNIFIED_SOURCES += [
     "NotifyUtilsCommon.cpp",
     "nsIndexedDBProtocolHandler.cpp",
     "NSSCipherStrategy.cpp",
+    "OriginDirectoryLock.cpp",
     "OriginInfo.cpp",
     "OriginOperationBase.cpp",
     "OriginOperations.cpp",
@@ -149,6 +155,7 @@ UNIFIED_SOURCES += [
     "StreamUtils.cpp",
     "StringifyUtils.cpp",
     "ThreadUtils.cpp",
+    "UniversalDirectoryLock.cpp",
 ]
 
 IPDL_SOURCES += [

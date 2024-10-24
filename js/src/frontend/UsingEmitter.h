@@ -17,6 +17,18 @@ namespace js::frontend {
 struct BytecodeEmitter;
 class EmitterScope;
 
+// This enum simply refers to the kind of block we are operating in. The present
+// use case of this is for disposal related code to special case the handling of
+// disposals in different blocks.
+enum class BlockKind : uint8_t {
+  Switch,
+  ForOf,
+
+  // Other here refers to any generic block which doesnt require any
+  // special handling.
+  Other
+};
+
 // Class for emitting bytecode for disposal loops.
 // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-disposeresources
 //
@@ -74,16 +86,60 @@ class MOZ_STACK_CLASS DisposalEmitter {
   [[nodiscard]] bool emitEnd(EmitterScope& es);
 };
 
+// Class for emitting bytecode for using declarations.
+//
+// Usage: (check for the return value is omitted for simplicity)
+//
+//  at the point of scope start
+//    UsingEmitter ue(bce);
+//    ue.prepareForDisposableScopeBody();
+//
+//  at the point of using decl assignment, e.g. `using x = y;`
+//    ue.prepareForAssignment(UsingHint::Normal);
+//    emit_Assignment();
+//
+//  at points requiring non-local jumps, like break, continue
+//    ue.emitNonLocalJump(&currentScope);
+//
+//  at the point of scope end
+//    ue.emitEnd();
 class MOZ_STACK_CLASS UsingEmitter {
  private:
   mozilla::Maybe<TryEmitter> tryEmitter_;
 
-  // TODO: add state transition graph and state
-  // management for this emitter. (Bug 1904346)
-
   bool hasAwaitUsing_ = false;
 
-  [[nodiscard]] bool emitThrowIfException();
+#ifdef DEBUG
+  // The state of this emitter.
+  //
+  // +-------+  prepareForDisposableScopeBody
+  // | Start |---------------------------------+
+  // +-------+                                 |
+  //                                           |
+  //   +---------------------------------------+
+  //   |
+  //   |       +---------------------+     emitEnd   +-----+
+  //   +-->+-->| DisposableScopeBody |--+----------->| End |
+  //       ^   +---------------------+  |            +-----+
+  //       |                            |
+  //       |    prepareForAssignment    |
+  //       +<---------------------------+
+  //       ^                            |
+  //       |    emitNonLocalJump        |
+  //       +----------------------------+
+  //
+  enum class State {
+    // The initial state.
+    Start,
+
+    // After calling prepareForDisposableScopeBody.
+    DisposableScopeBody,
+
+    // After calling emitEnd.
+    End
+  };
+  State state_ = State::Start;
+#endif
 
   [[nodiscard]] bool emitGetDisposeMethod(UsingHint hint);
 
@@ -93,6 +149,8 @@ class MOZ_STACK_CLASS UsingEmitter {
 
  protected:
   BytecodeEmitter* bce_;
+
+  [[nodiscard]] bool emitThrowIfException();
 
   [[nodiscard]] bool emitDisposeResourcesForEnvironment(
       EmitterScope& es,
@@ -105,15 +163,62 @@ class MOZ_STACK_CLASS UsingEmitter {
 
   void setHasAwaitUsing(bool hasAwaitUsing) { hasAwaitUsing_ = hasAwaitUsing; }
 
-  [[nodiscard]] bool prepareForDisposableScopeBody();
+  [[nodiscard]] bool prepareForDisposableScopeBody(BlockKind blockKind);
 
   [[nodiscard]] bool prepareForAssignment(UsingHint hint);
 
-  [[nodiscard]] bool prepareForForOfLoopIteration();
-
-  [[nodiscard]] bool prepareForForOfIteratorCloseOnThrow();
-
   [[nodiscard]] bool emitNonLocalJump(EmitterScope* present);
+
+  [[nodiscard]] bool emitEnd();
+};
+
+// This is a version of UsingEmitter specialized to help emit code for
+// using declarations in for-of loop heads e.g.: `for (using x of y) {}`.
+//
+// Usage: (check for the return value is omitted for simplicity)
+//
+//   at the point of the for-of loop head
+//     ForOfDisposalEmitter disposeBeforeIter(bce, hasAwaitUsing);
+//     disposeBeforeIter.prepareForForOfLoopIteration();
+//     emit_Loop();
+//
+//   at the point of loop end
+//     prepare_IteratorClose();
+//     disposeBeforeIter.emitEnd();
+//
+class MOZ_STACK_CLASS ForOfDisposalEmitter : protected UsingEmitter {
+ private:
+#ifdef DEBUG
+  // The state of this emitter.
+  //
+  // +-------+  prepareForForOfLoopIteration   +-----------+
+  // | Start |-------------------------------->| Iteration |--+
+  // +-------+                                 +-----------+  |
+  //                                                          |
+  //   +------------------------------------------------------+
+  //   |
+  //   |  emitEnd  +-----+
+  //   +---------->| End |
+  //               +-----+
+  enum class State {
+    // The initial state.
+    Start,
+
+    // After calling prepareForForOfLoopIteration.
+    Iteration,
+
+    // After calling emitEnd.
+    End
+  };
+  State state_ = State::Start;
+#endif
+ public:
+  explicit ForOfDisposalEmitter(BytecodeEmitter* bce, bool hasAwaitUsing)
+      : UsingEmitter(bce) {
+    setHasAwaitUsing(hasAwaitUsing);
+  }
+
+  [[nodiscard]] bool prepareForForOfLoopIteration();
 
   [[nodiscard]] bool emitEnd();
 };

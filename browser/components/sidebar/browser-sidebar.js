@@ -94,7 +94,7 @@ var SidebarController = {
           keyId: "key_gotoHistory",
           menuL10nId: "menu-view-history-button",
           revampL10nId: "sidebar-menu-history-label",
-          iconUrl: "chrome://browser/content/firefoxview/view-history.svg",
+          iconUrl: "chrome://browser/skin/history.svg",
           contextMenuId: this.sidebarRevampEnabled
             ? "sidebar-history-context-menu"
             : undefined,
@@ -112,7 +112,7 @@ var SidebarController = {
           classAttribute: "sync-ui-item",
           menuL10nId: "menu-view-synced-tabs-sidebar",
           revampL10nId: "sidebar-menu-synced-tabs-label",
-          iconUrl: "chrome://browser/content/firefoxview/view-syncedtabs.svg",
+          iconUrl: "chrome://browser/skin/synced-tabs.svg",
           contextMenuId: this.sidebarRevampEnabled
             ? "sidebar-synced-tabs-context-menu"
             : undefined,
@@ -144,7 +144,7 @@ var SidebarController = {
         menuL10nId: "menu-view-genai-chat",
         // Bug 1900915 to expose as conditional tool
         revampL10nId: "sidebar-menu-genai-chat-label",
-        iconUrl: "chrome://mozapps/skin/extensions/category-discover.svg",
+        iconUrl: "chrome://global/skin/icons/highlights.svg",
       }
     );
 
@@ -179,7 +179,7 @@ var SidebarController = {
       this._sidebars.set("viewCustomizeSidebar", {
         url: "chrome://browser/content/sidebar/sidebar-customize.html",
         revampL10nId: "sidebar-menu-customize-label",
-        iconUrl: "chrome://browser/skin/preferences/category-general.svg",
+        iconUrl: "chrome://global/skin/icons/settings.svg",
         gleanEvent: Glean.sidebarCustomize.panelToggle,
       });
     }
@@ -400,6 +400,14 @@ var SidebarController = {
       this._tabstripOrientationObserverAdded = true;
     }
 
+    requestIdleCallback(() => {
+      if (!this.uiStateInitialized) {
+        // UI state has not been set by SessionStore. Use backup state for now.
+        const backupState = this.SidebarManager.getBackupState();
+        this.setUIState(backupState);
+      }
+    });
+
     this._initDeferred.resolve();
   },
 
@@ -412,8 +420,10 @@ var SidebarController = {
     let enumerator = Services.wm.getEnumerator("navigator:browser");
     if (!enumerator.hasMoreElements()) {
       let xulStore = Services.xulStore;
-
       xulStore.persist(this._title, "value");
+
+      const currentState = this.getUIState();
+      this.SidebarManager.setBackupState(currentState);
     }
 
     Services.obs.removeObserver(this, "intl:app-locales-changed");
@@ -436,6 +446,50 @@ var SidebarController = {
       this.sidebarMain.remove();
     }
     this._splitter.removeEventListener("command", this._browserResizeObserver);
+  },
+
+  getUIState() {
+    const state = { width: this._box.style.width, command: this.currentID };
+    if (this.sidebarRevampEnabled) {
+      state.expanded = this.sidebarMain.expanded;
+      state.hidden = this.sidebarContainer.hidden;
+    }
+    return state;
+  },
+
+  /**
+   * Update and store the UI state of the sidebar for this window.
+   *
+   * @param {object} state
+   * @param {string} state.width
+   *   Panel width of the sidebar.
+   * @param {string} state.command
+   *   Panel ID that is currently open.
+   * @param {boolean} state.expanded
+   *   Whether the sidebar launcher is expanded. (Revamp only)
+   * @param {boolean} state.hidden
+   *   Whether the sidebar is hidden. (Revamp only)
+   */
+  async setUIState(state) {
+    if (!state) {
+      return;
+    }
+    if (state.width) {
+      this._box.style.width = state.width;
+    }
+    if (state.command && this.currentID != state.command && !this.isOpen) {
+      await this.showInitially(state.command);
+    }
+    if (this.sidebarRevampEnabled) {
+      // The `sidebar-main` component is lazy-loaded in the `init()` method.
+      // Wait this out to ensure that it is connected to the DOM before making
+      // any changes.
+      await this.promiseInitialized;
+      this.toggleExpanded(state.expanded);
+      this.sidebarContainer.hidden = state.hidden;
+      this.updateToolbarButton();
+    }
+    this.uiStateInitialized = true;
   },
 
   /**
@@ -735,6 +789,7 @@ var SidebarController = {
       }
       // Try to adopt the sidebar state from the source window
       if (this.adoptFromWindow(sourceWindow)) {
+        this.uiStateInitialized = true;
         return;
       }
     }
@@ -764,6 +819,7 @@ var SidebarController = {
       // profile.
       this.lastOpenedId = commandID;
     }
+    this.uiStateInitialized = true;
   },
 
   /**

@@ -748,10 +748,24 @@ bool UsingEmitter::emitDisposeResourcesForEnvironment(
   return true;
 }
 
-bool UsingEmitter::prepareForDisposableScopeBody() {
-  tryEmitter_.emplace(bce_, TryEmitter::Kind::TryFinally,
-                      TryEmitter::ControlKind::NonSyntactic);
-  return tryEmitter_->emitTry();
+bool UsingEmitter::prepareForDisposableScopeBody(BlockKind blockKind) {
+  MOZ_ASSERT(state_ == State::Start);
+
+  // For-of loops are already wrapped in try-catch and have special case
+  // handling for the same.
+  // See ForOfLoopControl::emitEndCodeNeedingIteratorClose.
+  if (blockKind != BlockKind::ForOf) {
+    tryEmitter_.emplace(bce_, TryEmitter::Kind::TryFinally,
+                        TryEmitter::ControlKind::NonSyntactic);
+    if (!tryEmitter_->emitTry()) {
+      return false;
+    }
+  }
+
+#ifdef DEBUG
+  state_ = State::DisposableScopeBody;
+#endif
+  return true;
 }
 
 // Explicit Resource Management Proposal
@@ -981,6 +995,7 @@ bool UsingEmitter::emitCreateDisposableResource(UsingHint hint) {
 // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-adddisposableresource
 // Steps 1, 3-4.
 bool UsingEmitter::prepareForAssignment(UsingHint hint) {
+  MOZ_ASSERT(state_ == State::DisposableScopeBody);
   MOZ_ASSERT(bce_->innermostEmitterScope()->hasDisposables());
 
   if (hint == UsingHint::Async) {
@@ -1040,7 +1055,8 @@ bool UsingEmitter::prepareForAssignment(UsingHint hint) {
   return true;
 }
 
-bool UsingEmitter::prepareForForOfLoopIteration() {
+bool ForOfDisposalEmitter::prepareForForOfLoopIteration() {
+  MOZ_ASSERT(state_ == State::Start);
   EmitterScope* es = bce_->innermostEmitterScopeNoCheck();
   MOZ_ASSERT(es->hasDisposables());
 
@@ -1049,10 +1065,19 @@ bool UsingEmitter::prepareForForOfLoopIteration() {
     return false;
   }
 
-  return emitThrowIfException();
+  if (!emitThrowIfException()) {
+    // [stack]
+    return false;
+  }
+
+#ifdef DEBUG
+  state_ = State::Iteration;
+#endif
+  return true;
 }
 
-bool UsingEmitter::prepareForForOfIteratorCloseOnThrow() {
+bool ForOfDisposalEmitter::emitEnd() {
+  MOZ_ASSERT(state_ == State::Iteration);
   EmitterScope* es = bce_->innermostEmitterScopeNoCheck();
   MOZ_ASSERT(es->hasDisposables());
 
@@ -1073,11 +1098,19 @@ bool UsingEmitter::prepareForForOfIteratorCloseOnThrow() {
     return false;
   }
 
-  return bce_->emit1(JSOp::Swap);
-  // [stack] EXC STACK
+  if (!bce_->emit1(JSOp::Swap)) {
+    // [stack] EXC STACK
+    return false;
+  }
+
+#ifdef DEBUG
+  state_ = State::End;
+#endif
+  return true;
 }
 
 bool UsingEmitter::emitNonLocalJump(EmitterScope* present) {
+  MOZ_ASSERT(state_ == State::DisposableScopeBody);
   MOZ_ASSERT(present->hasDisposables());
 
   if (!emitDisposeResourcesForEnvironment(*present)) {
@@ -1089,6 +1122,7 @@ bool UsingEmitter::emitNonLocalJump(EmitterScope* present) {
 }
 
 bool UsingEmitter::emitEnd() {
+  MOZ_ASSERT(state_ == State::DisposableScopeBody);
   EmitterScope* es = bce_->innermostEmitterScopeNoCheck();
   MOZ_ASSERT(es->hasDisposables());
   MOZ_ASSERT(tryEmitter_.isSome());
@@ -1143,6 +1177,9 @@ bool UsingEmitter::emitEnd() {
     return false;
   }
 
+#ifdef DEBUG
+  state_ = State::End;
+#endif
   return true;
 }
 
