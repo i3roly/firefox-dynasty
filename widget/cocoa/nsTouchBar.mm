@@ -94,8 +94,9 @@ static const uint32_t kInputIconSize = 16;
           // Add new input to dictionary for lookup of properties in delegate.
           [self.mappedLayoutItems setObject:convertedInput forKey:[convertedInput nativeIdentifier]]; 
         }
-
-        [orderedIdentifiers replaceObjectAtIndex:i withObject:[convertedInput nativeIdentifier]];
+        if([convertedInput nativeIdentifier]) {
+          [orderedIdentifiers insertObject:[convertedInput nativeIdentifier] atIndex:i];
+        }
       }
       [orderedIdentifiers addObject:@"NSTouchBarItemIdentifierFlexibleSpace"];
       self.customizationAllowedItemIdentifiers = [orderedIdentifiers copy];
