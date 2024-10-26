@@ -42,10 +42,13 @@ static int readVersion() {
     int version = atoi(info.release);
     return version;
 }
+
 static int darwinVersion() {
     static int darwin_version = readVersion();
     return darwin_version;
 }
+
+static int macOSXVer = 0;
 #endif
 
 #if defined(XP_WIN)
@@ -129,8 +132,8 @@ namespace mozilla {
 MFBT_API bool GenerateRandomBytesFromOS(void* aBuffer, size_t aLength) {
   MOZ_ASSERT(aBuffer);
   MOZ_ASSERT(aLength > 0);
-
-  int macOSXVer = darwinVersion();
+  if(!macOSXVer)
+    macOSXVer = darwinVersion();
 #if defined(XP_WIN)
   return !!RtlGenRandom(aBuffer, aLength);
 
