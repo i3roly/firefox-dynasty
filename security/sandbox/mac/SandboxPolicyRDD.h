@@ -25,12 +25,12 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (deny feature)
       (deny feature (with no-log))))
 
+  
+  (moz-deny default)
   ;;; older macs need this to let the VT decoder get through
   ;;; i have no idea what service it is on sub 1013 systems
   (if (<= macosVersion 1012) 
    (allow default))
-  
-  (moz-deny default)
   ; These are not included in (deny default)
   (if (>= macosVersion 1009) 
   (moz-deny process-info*))
