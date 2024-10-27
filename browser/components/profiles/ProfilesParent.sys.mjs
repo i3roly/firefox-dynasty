@@ -152,6 +152,8 @@ export class ProfilesParent extends JSWindowActorParent {
         gBrowser.removeTab(gBrowser.selectedTab);
         break;
       }
+      // Intentional fallthrough
+      case "Profiles:GetNewProfileContent":
       case "Profiles:GetEditProfileContent": {
         // Make sure SelectableProfileService is initialized
         await SelectableProfileService.init();
@@ -221,7 +223,20 @@ export class ProfilesParent extends JSWindowActorParent {
       }
       case "Profiles:UpdateProfileTheme": {
         let themeId = message.data;
-        this.enableTheme(themeId);
+        await this.enableTheme(themeId);
+        // The enable theme promise resolves after the
+        // "lightweight-theme-styling-update" observer so we know the profile
+        // theme is up to date at this point.
+        return SelectableProfileService.currentProfile.theme;
+      }
+      case "Profiles:DeleteNewProfile": {
+        // TODO: Bug 1925096 actually delete the newly created profile.
+        Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit);
+        break;
+      }
+      case "Profiles:CloseNewProfileTab": {
+        let gBrowser = this.browsingContext.topChromeWindow.gBrowser;
+        gBrowser.removeTab(gBrowser.selectedTab);
         break;
       }
     }

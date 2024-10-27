@@ -150,6 +150,7 @@ static void RollUpPopups(nsIRollupListener::AllowAnimations aAllowAnimations =
 
 nsCocoaWindow::nsCocoaWindow()
     : mWindow(nil),
+      mClosedRetainedWindow(nil),
       mDelegate(nil),
       mPopupContentView(nil),
       mFullscreenTransitionAnimation(nil),
@@ -200,12 +201,12 @@ void nsCocoaWindow::DestroyNativeWindow() {
   // sent to it after this object has been destroyed.
   mWindow.delegate = nil;
 
-  // We might be in an embedded run loop which is still using mWindow.
-  // Hold an extra reference as an autorelease to cover these cases.
-  [[mWindow retain] autorelease];
-
-  // Closing the window will also release it, though our extra retain
-  // above will keep it alive through the event loop.
+  // Closing the window will also release it. Our second reference will
+  // keep it alive through our destructor. Release any reference we might
+  // have from an earlier call to DestroyNativeWindow, then create a new
+  // one.
+  [mClosedRetainedWindow autorelease];
+  mClosedRetainedWindow = [mWindow retain];
   MOZ_ASSERT(mWindow.releasedWhenClosed);
   [mWindow close];
 
@@ -223,6 +224,8 @@ nsCocoaWindow::~nsCocoaWindow() {
     CancelAllTransitions();
     DestroyNativeWindow();
   }
+
+  [mClosedRetainedWindow release];
 
   NS_IF_RELEASE(mPopupContentView);
   NS_OBJC_END_TRY_IGNORE_BLOCK;
@@ -1304,10 +1307,11 @@ void nsCocoaWindow::HideWindowChrome(bool aShouldHide) {
 
   // Recreate the window with the right border style.
   NSRect frameRect = mWindow.frame;
+  BOOL restorable = mWindow.restorable;
   DestroyNativeWindow();
   nsresult rv = CreateNativeWindow(
       frameRect, aShouldHide ? BorderStyle::None : mBorderStyle, true,
-      mWindow.restorable);
+      restorable);
   NS_ENSURE_SUCCESS_VOID(rv);
 
   // Re-import state.
@@ -3870,14 +3874,9 @@ static bool ShouldShiftByMenubarHeightInFullscreen(nsCocoaWindow* aWindow) {
     default:
       break;
   }
-  // TODO: On notch-less macbooks, this creates extra space when the
-  // "automatically show and hide the menubar on fullscreen" option is unchecked
-  // (default checked). We tried to detect that in bug 1737831 but it wasn't
-  // reliable enough, see the regressions from that bug. For now, stick to the
-  // good behavior for default configurations (that is, shift by menubar height
-  // on notch-less macbooks, and don't for devices that have a notch). This will
-  // need refinement in the future.
-  return !ScreenHasNotch(aWindow);
+  return !ScreenHasNotch(aWindow) &&
+         ![NSUserDefaults.standardUserDefaults
+             integerForKey:@"AppleMenuBarVisibleInFullscreen"];
 }
 
 - (void)updateTitlebarShownAmount:(CGFloat)aShownAmount {

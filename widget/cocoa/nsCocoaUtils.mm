@@ -340,7 +340,7 @@ void nsCocoaUtils::PrepareForNativeAppModalDialog() {
       "Main menu does not have any items, something is terribly wrong!");
 
   // Create new menu bar for use with modal dialog
-  NSMenu* newMenuBar = [[GeckoNSMenu alloc] initWithTitle:@""];
+  NSMenu* newMenuBar = [[NSMenu alloc] initWithTitle:@""];
 
   // Swap in our app menu. Note that the event target is whatever window is up
   // when the app modal dialog goes up.
@@ -702,8 +702,7 @@ NSEvent* nsCocoaUtils::MakeNewCococaEventFromWidgetEvent(
       {MODIFIER_ALTGRAPH, NSEventModifierFlagOption},
       {MODIFIER_META, NSEventModifierFlagCommand},
       {MODIFIER_CAPSLOCK, NSEventModifierFlagCapsLock},
-      {MODIFIER_NUMLOCK, NSEventModifierFlagNumericPad},
-      {MODIFIER_FN, NSEventModifierFlagFunction}};
+      {MODIFIER_NUMLOCK, NSEventModifierFlagNumericPad}};
 
   NSUInteger modifierFlags = 0;
   for (uint32_t i = 0; i < ArrayLength(sModifierFlagMap); ++i) {
@@ -788,18 +787,9 @@ Modifiers nsCocoaUtils::ModifiersForEvent(NSEvent* aNativeEvent) {
     result |= MODIFIER_NUMLOCK;
   }
 
-  // Be aware, NSEventModifierFlagFunction is also set on the native event when
-  // arrow keys, the home key or some other keys are pressed. We cannot check
-  // whether the 'fn' key is pressed or not by the flag alone. We need to check
-  // that the event's keyCode falls outside the range of keys that will also set
-  // the function modifier.
-  if (!!(modifiers & NSEventModifierFlagFunction) &&
-      (aNativeEvent.type == NSKeyDown || aNativeEvent.type == NSKeyUp ||
-       aNativeEvent.type == NSFlagsChanged) &&
-      !(NSUpArrowFunctionKey <= aNativeEvent.keyCode &&
-        aNativeEvent.keyCode <= NSModeSwitchFunctionKey)) {
-    result |= MODIFIER_FN;
-  }
+  // Be aware, NSEventModifierFlagFunction is included when arrow keys, home key
+  // or some other keys are pressed. We cannot check whether 'fn' key is pressed
+  // or not by the flag.
 
   return result;
 }

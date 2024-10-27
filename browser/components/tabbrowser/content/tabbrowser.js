@@ -128,6 +128,12 @@
         "browser.tabs.groups.enabled",
         false
       );
+      XPCOMUtils.defineLazyPreferenceGetter(
+        this,
+        "showPidAndActiveness",
+        "browser.tabs.tooltipsShowPidAndActiveness",
+        false
+      );
 
       if (AppConstants.MOZ_CRASHREPORTER) {
         ChromeUtils.defineESModuleGetters(this, {
@@ -6176,12 +6182,7 @@
       if (includeLabel) {
         labelArray.push(tab._fullLabel || tab.getAttribute("label"));
       }
-      if (
-        Services.prefs.getBoolPref(
-          "browser.tabs.tooltipsShowPidAndActiveness",
-          false
-        )
-      ) {
+      if (this.showPidAndActiveness) {
         const pids = this.getTabPids(tab);
         if (pids.length) {
           let pidLabel = pids.length > 1 ? "pids" : "pid";
@@ -7909,7 +7910,7 @@ var TabBarVisibility = {
       TabsInTitlebar.allowedBy("tabs-visible", !hideTabstrip);
     }
 
-    navbar.toggleAttribute("tabs-hidden", hideTabstrip);
+    gNavToolbox.toggleAttribute("tabs-hidden", hideTabstrip);
     // Should the nav-bar look and function like a titlebar?
     navbar.classList.toggle(
       "browser-titlebar",

@@ -402,6 +402,9 @@ pref("browser.urlbar.autoFill.adaptiveHistory.enabled", false);
 // autofill.
 pref("browser.urlbar.autoFill.adaptiveHistory.minCharsThreshold", 0);
 
+// Set default NER threshold value of 0.5
+pref("browser.urlbar.nerThreshold", "0.5");
+
 // Whether to warm up network connections for autofill or search results.
 pref("browser.urlbar.speculativeConnect.enabled", true);
 
@@ -550,6 +553,9 @@ pref("browser.urlbar.quicksuggest.ampTopPickCharThreshold", 0);
 // Comma-separated list of Suggest exposure suggestion types to enable.
 pref("browser.urlbar.quicksuggest.exposureSuggestionTypes", "");
 
+// Whether Suggest will use the ML backend in addition to Rust.
+pref("browser.urlbar.quicksuggest.mlEnabled", false);
+
 // Whether unit conversion is enabled.
 #ifdef NIGHTLY_BUILD
 pref("browser.urlbar.unitConversion.enabled", true);
@@ -673,6 +679,10 @@ pref("browser.urlbar.yelp.minKeywordLength", 4);
 
 // Whether Yelp suggestions should be shown as top picks.
 pref("browser.urlbar.yelp.priority", false);
+
+// Whether Yelp suggestions will be served from the Suggest ML backend instead
+// of Rust.
+pref("browser.urlbar.yelp.mlEnabled", false);
 
 // If `browser.urlbar.yelp.featureGate` is true, this controls whether
 // Yelp suggestions are turned on.
@@ -1782,6 +1792,10 @@ pref("browser.newtabpage.activity-stream.newNewtabExperience.colors", "#0090ED,#
 pref("browser.newtabpage.activity-stream.newtabLayouts.variant-a", false);
 pref("browser.newtabpage.activity-stream.newtabLayouts.variant-b", false);
 
+// Discovery stream ad size experiment
+pref("browser.newtabpage.activity-stream.newtabAdSize.variant-a", false);
+pref("browser.newtabpage.activity-stream.newtabAdSize.variant-b", false);
+
 // Activity Stream prefs that control to which page to redirect
 #ifndef RELEASE_OR_BETA
   pref("browser.newtabpage.activity-stream.debug", false);
@@ -2651,6 +2665,7 @@ pref("browser.toolbars.bookmarks.showOtherBookmarks", true);
 
 // Felt Privacy pref to control simplified private browsing UI
 pref("browser.privatebrowsing.felt-privacy-v1", false);
+pref("security.certerrors.felt-privacy-v1", false);
 
 // Prefs to control the Firefox Account toolbar menu.
 // This pref will surface existing Firefox Account information
@@ -3220,6 +3235,7 @@ pref("browser.backup.template.fallback-download.esr", "https://www.mozilla.org/f
 
 // Pref to enable the new profiles
 pref("browser.profiles.enabled", false);
+pref("browser.profiles.profile-name.updated", false);
 
 pref("startup.homepage_override_url_nimbus", "");
 // These prefs are referring to the Fx update version

@@ -43,6 +43,12 @@ internal fun bookmarksReducer(state: BookmarksState, action: BookmarksAction) = 
     } else {
         state
     }
+    is AddFolderAction.FolderCreated -> state.copy(
+        bookmarksSelectFolderState = null,
+        bookmarksEditBookmarkState = state.bookmarksEditBookmarkState?.copy(
+            folder = action.folder,
+        ),
+    )
     is AddFolderAction.TitleChanged -> state.copy(
         bookmarksAddFolderState = state.bookmarksAddFolderState?.copy(
             folderBeingAddedTitle = action.updatedText,
@@ -139,6 +145,7 @@ internal fun bookmarksReducer(state: BookmarksState, action: BookmarksAction) = 
     is ReceivedSyncSignInUpdate -> {
         state.copy(isSignedIntoSync = action.isSignedIn)
     }
+    CloseClicked,
     OpenTabsConfirmationDialogAction.CancelTapped,
     OpenTabsConfirmationDialogAction.ConfirmTapped,
     -> state.copy(openTabsConfirmationDialog = OpenTabsConfirmationDialog.None)

@@ -326,6 +326,9 @@ private fun BookmarksListTopBar(
 ) {
     val selectedItems by store.observeAsState(store.state.selectedItems) { it.selectedItems }
     val recursiveCount by store.observeAsState(store.state.recursiveSelectedCount) { it.recursiveSelectedCount }
+    val isCurrentFolderMobileRoot by store.observeAsState(store.state.currentFolder.isMobileRoot) {
+        store.state.currentFolder.isMobileRoot
+    }
     val isCurrentFolderDesktopRoot by store.observeAsState(store.state.currentFolder.isDesktopRoot) {
         store.state.currentFolder.isDesktopRoot
     }
@@ -384,9 +387,21 @@ private fun BookmarksListTopBar(
                                 Icon(
                                     painter = painterResource(R.drawable.mozac_ic_folder_add_24),
                                     contentDescription = stringResource(
-                                        R.string.bookmark_add_folder,
+                                        R.string.bookmark_select_folder_new_folder_button_title,
                                     ),
                                     tint = iconColor,
+                                )
+                            }
+                        }
+
+                        if (!isCurrentFolderMobileRoot) {
+                            IconButton(onClick = { store.dispatch(CloseClicked) }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.mozac_ic_cross_24),
+                                    contentDescription = stringResource(
+                                        R.string.content_description_close_button,
+                                    ),
+                                    tint = FirefoxTheme.colors.iconPrimary,
                                 )
                             }
                         }
@@ -505,11 +520,10 @@ private fun AlertDialogDeletionWarning(
     onCancelTapped: () -> Unit,
     onDeleteTapped: () -> Unit,
 ) {
-    val appName = stringResource(R.string.app_name)
     AlertDialog(
         title = {
             Text(
-                text = stringResource(R.string.bookmark_delete_multiple_folders_confirmation_dialog, appName),
+                text = stringResource(R.string.bookmark_delete_folders_confirmation_dialog),
                 color = FirefoxTheme.colors.textPrimary,
             )
         },
@@ -519,8 +533,8 @@ private fun AlertDialogDeletionWarning(
                 onClick = onDeleteTapped,
             ) {
                 Text(
-                    text = stringResource(R.string.bookmark_menu_delete_button),
-                    color = FirefoxTheme.colors.actionPrimary,
+                    text = stringResource(R.string.bookmark_menu_delete_button).uppercase(),
+                    color = FirefoxTheme.colors.textAccent,
                 )
             }
         },
@@ -529,8 +543,8 @@ private fun AlertDialogDeletionWarning(
                 onClick = onCancelTapped,
             ) {
                 Text(
-                    text = stringResource(R.string.bookmark_delete_negative),
-                    color = FirefoxTheme.colors.actionPrimary,
+                    text = stringResource(R.string.bookmark_delete_negative).uppercase(),
+                    color = FirefoxTheme.colors.textAccent,
                 )
             }
         },
@@ -595,7 +609,7 @@ private fun SelectFolderScreen(
             if (showNewFolderButton) {
                 item {
                     IconListItem(
-                        label = stringResource(R.string.bookmark_add_folder),
+                        label = stringResource(R.string.bookmark_select_folder_new_folder_button_title),
                         labelTextColor = FirefoxTheme.colors.textAccent,
                         beforeIconPainter = painterResource(R.drawable.mozac_ic_folder_add_24),
                         beforeIconTint = FirefoxTheme.colors.textAccent,

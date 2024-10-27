@@ -202,21 +202,21 @@
     display: block;
   }
 
-  #tabbrowser-tabs[movingtab] > #tabbrowser-arrowscrollbox > &:is([selected], [multiselected]) {
+  #tabbrowser-tabs[movingtab] &:is([selected], [multiselected]) {
     position: relative;
     z-index: 2;
     pointer-events: none; /* avoid blocking dragover events on scroll buttons */
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    #tabbrowser-tabs[movingtab] > #tabbrowser-arrowscrollbox > &[fadein]:not([selected]):not([multiselected]),
-    &[tab-grouping],
+    #tabbrowser-tabs[movingtab] &[fadein]:not([selected]):not([multiselected]),
+    &[multiselected-move-together],
     &[tabdrop-samewindow] {
       transition: transform 200ms var(--animation-easing-function);
     }
   }
 
-  &[tab-grouping][multiselected]:not([selected]) {
+  &[multiselected-move-together][multiselected]:not([selected]) {
     z-index: 2;
   }
 
@@ -857,19 +857,24 @@ tab-group {
     opacity: 0;
     margin: 0;
     position: absolute;
-
-    &:checked + .tab-group-editor-swatch {
-      outline: var(--focus-outline);
-      outline-offset: var(--focus-outline-offset);
-    }
   }
 
   .tab-group-editor-swatch {
-    display: block;
     width: 16px;
     height: 16px;
-    border-radius: 20%;
+    border-radius: var(--border-radius-small);
     background-color: light-dark(var(--tabgroup-swatch-color), var(--tabgroup-swatch-color-invert));
+
+    input:checked + & {
+      outline: var(--focus-outline);
+      outline-color: currentColor;
+      outline-offset: var(--focus-outline-offset);
+    }
+
+    input:focus-visible + & {
+      outline-color: var(--focus-outline-color);
+      box-shadow: 0 0 0 calc(var(--focus-outline-width) * 3) color-mix(in srgb, var(--focus-outline-color) 50%, transparent);
+    }
   }
 
   .tab-group-edit-actions,
@@ -899,34 +904,59 @@ tab-group {
     &::part(scrollbox) {
       contain: inline-size;
     }
+
+    &:not([scrolledtostart])::part(overflow-start-indicator),
+    &:not([scrolledtoend])::part(overflow-end-indicator) {
+      width: 7px; /* The width is the sum of the inline margins */
+      background-image: radial-gradient(ellipse at bottom,
+                                        rgba(0,0,0,0.1) 0%,
+                                        rgba(0,0,0,0.1) 7.6%,
+                                        rgba(0,0,0,0) 87.5%);
+      background-repeat: no-repeat;
+      background-position: -3px;
+      border-left: .5px solid rgba(255,255,255,.2);
+      pointer-events: none;
+      position: relative;
+      border-bottom: .5px solid transparent;
+    }
+
+    &:not([scrolledtostart])::part(overflow-start-indicator) {
+      margin-inline: -.5px -6.5px;
+    }
+
+    &:not([scrolledtoend])::part(overflow-end-indicator) {
+      margin-inline: -6.5px -.5px;
+    }
+
+    &:-moz-locale-dir(rtl)::part(overflow-start-indicator),
+    &:-moz-locale-dir(ltr)::part(overflow-end-indicator) {
+      transform: scaleX(-1);
+    }
   }
 
-  &:not([scrolledtostart])::part(overflow-start-indicator),
-  &:not([scrolledtoend])::part(overflow-end-indicator) {
-    width: 7px; /* The width is the sum of the inline margins */
-    background-image: radial-gradient(ellipse at bottom,
-                                      rgba(0,0,0,0.1) 0%,
-                                      rgba(0,0,0,0.1) 7.6%,
-                                      rgba(0,0,0,0) 87.5%);
-    background-repeat: no-repeat;
-    background-position: -3px;
-    border-left: .5px solid rgba(255,255,255,.2);
-    pointer-events: none;
-    position: relative;
-    border-bottom: .5px solid transparent;
-  }
 
-  &:not([scrolledtostart])::part(overflow-start-indicator) {
-    margin-inline: -.5px -6.5px;
-  }
+  &[orient="vertical"] {
+    &::part(overflow-start-indicator),
+    &::part(overflow-end-indicator) {
+      background-image: linear-gradient(
+        to top,
+        transparent 0%,
+        var(--toolbar-bgcolor));
+      background-repeat: no-repeat;
+      pointer-events: none;
 
-  &:not([scrolledtoend])::part(overflow-end-indicator) {
-    margin-inline: -6.5px -.5px;
-  }
+      position: relative;
+      height: 16px;
+      z-index: 1;
 
-  &:-moz-locale-dir(rtl)::part(overflow-start-indicator),
-  &:-moz-locale-dir(ltr)::part(overflow-end-indicator) {
-    transform: scaleX(-1);
+      margin-block: 0 -16px;
+    }
+
+    /* Flip the fade at the bottom */
+    &::part(overflow-end-indicator) {
+      transform: scaleY(-1);
+      margin-block: -16px 0;
+    }
   }
 
   &[scrolledtostart]::part(overflow-start-indicator),

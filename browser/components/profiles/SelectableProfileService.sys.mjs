@@ -2,11 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// TDOD: Remove eslint-disable lines once methods are updated. See bug 1896727
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-unused-private-class-members */
-
-import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 import { SelectableProfile } from "./SelectableProfile.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
@@ -22,13 +17,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
 ChromeUtils.defineLazyGetter(lazy, "profilesLocalization", () => {
   return new Localization(["preview/profiles.ftl"], true);
 });
-
-XPCOMUtils.defineLazyServiceGetter(
-  lazy,
-  "ProfileService",
-  "@mozilla.org/toolkit/profile-service;1",
-  "nsIToolkitProfileService"
-);
 
 const PROFILES_CRYPTO_SALT_LENGTH_BYTES = 16;
 
@@ -64,6 +52,8 @@ function loadImage(url) {
   });
 }
 
+// This is waiting to be used by bug 1926507.
+// eslint-disable-next-line no-unused-vars
 async function updateTaskbar(iconUrl, profileName, strokeColor, fillColor) {
   try {
     let image = await loadImage(iconUrl);
@@ -92,18 +82,11 @@ async function updateTaskbar(iconUrl, profileName, strokeColor, fillColor) {
   }
 }
 
-async function attemptFlush() {
-  try {
-    await lazy.ProfileService.asyncFlush();
-  } catch (e) {
-    await lazy.ProfileService.asyncFlushCurrentProfile();
-  }
-}
-
 /**
  * The service that manages selectable profiles
  */
 class SelectableProfileServiceClass {
+  #profileService = null;
   #connection = null;
   #asyncShutdownBlocker = null;
   #initialized = false;
@@ -118,32 +101,74 @@ class SelectableProfileServiceClass {
     "shopping",
     "star",
   ];
+  static #dirSvc = null;
 
   constructor() {
-    if (Cu.isInAutomation) {
-      this.#groupToolkitProfile = {
-        storeID: "12345678",
-        rootDir: Services.dirsvc.get("ProfD", Ci.nsIFile),
-      };
-    } else {
-      this.#groupToolkitProfile =
-        lazy.ProfileService.currentProfile ?? lazy.ProfileService.groupProfile;
-    }
+    this.themeObserver = this.themeObserver.bind(this);
+    this.#profileService = Cc[
+      "@mozilla.org/toolkit/profile-service;1"
+    ].getService(Ci.nsIToolkitProfileService);
+
+    this.#groupToolkitProfile =
+      this.#profileService.currentProfile ?? this.#profileService.groupProfile;
   }
 
-  // Do not use. Only for testing.
-  set groupToolkitProfile(mockToolkitProfile) {
-    if (Cu.isInAutomation) {
-      this.#groupToolkitProfile = mockToolkitProfile;
+  /**
+   * For use in testing only, override the profile service with a mock version
+   * and reset state accordingly.
+   *
+   * @param {Ci.nsIToolkitProfileService} profileService The mock profile service
+   */
+  async resetProfileService(profileService) {
+    if (!Cu.isInAutomation) {
+      return;
+    }
+
+    await this.uninit();
+    this.#profileService =
+      profileService ??
+      Cc["@mozilla.org/toolkit/profile-service;1"].getService(
+        Ci.nsIToolkitProfileService
+      );
+    this.#groupToolkitProfile =
+      this.#profileService.currentProfile ?? this.#profileService.groupProfile;
+    await this.init();
+  }
+
+  overrideDirectoryService(dirSvc) {
+    if (!Cu.isInAutomation) {
+      return;
+    }
+
+    SelectableProfileServiceClass.#dirSvc = dirSvc;
+  }
+
+  static getDirectory(id) {
+    if (this.#dirSvc) {
+      if (id in this.#dirSvc) {
+        return this.#dirSvc[id];
+      }
+    }
+
+    return Services.dirsvc.get(id, Ci.nsIFile);
+  }
+
+  async #attemptFlushProfileService() {
+    try {
+      await this.#profileService.asyncFlush();
+    } catch (e) {
+      try {
+        await this.#profileService.asyncFlushCurrentProfile();
+      } catch (ex) {
+        console.error(
+          `Failed to flush changes to the profiles database: ${ex}`
+        );
+      }
     }
   }
 
   get groupToolkitProfile() {
     return this.#groupToolkitProfile;
-  }
-
-  get toolkitProfileRootDir() {
-    return this.#groupToolkitProfile.rootDir;
   }
 
   get currentProfile() {
@@ -155,14 +180,15 @@ class SelectableProfileServiceClass {
   }
 
   static get PROFILE_GROUPS_DIR() {
-    return PathUtils.join(
-      Services.dirsvc.get("UAppData", Ci.nsIFile).path,
-      "Profile Groups"
-    );
+    if (this.#dirSvc && "ProfileGroups" in this.#dirSvc) {
+      return this.#dirSvc.ProfileGroups;
+    }
+
+    return PathUtils.join(this.getDirectory("UAppData").path, "Profile Groups");
   }
 
   async maybeCreateProfilesStorePath() {
-    if (this.#groupToolkitProfile.storeID) {
+    if (!this.#groupToolkitProfile || this.#groupToolkitProfile.storeID) {
       return;
     }
 
@@ -176,7 +202,7 @@ class SelectableProfileServiceClass {
       .replace("{", "")
       .split("-")[0];
     this.#groupToolkitProfile.storeID = storageID;
-    await attemptFlush();
+    await this.#attemptFlushProfileService();
   }
 
   async getProfilesStorePath() {
@@ -205,21 +231,24 @@ class SelectableProfileServiceClass {
 
     await this.initConnection();
 
-    // When we launch into the startup window, the `ProfD` is not defined so
-    // Services.dirsvc.get("ProfD", Ci.nsIFile) will throw. Leaving the
-    // `currentProfile` as null is fine for the startup window.
-    try {
-      // Get the SelectableProfile by the profile directory
+    // Get the SelectableProfile by the profile directory
+    let currentProfile = this.#profileService.currentProfile;
+    if (currentProfile) {
       this.#currentProfile = await this.getProfileByPath(
-        Services.dirsvc.get("ProfD", Ci.nsIFile)
+        currentProfile.rootDir
       );
-    } catch {}
+    }
 
     this.setSharedPrefs();
 
     // The 'activate' event listeners use #currentProfile, so this line has
     // to come after #currentProfile has been set.
     this.initWindowTracker();
+
+    Services.obs.addObserver(
+      this.themeObserver,
+      "lightweight-theme-styling-update"
+    );
 
     this.#initialized = true;
   }
@@ -230,6 +259,11 @@ class SelectableProfileServiceClass {
     }
 
     lazy.EveryWindow.unregisterCallback(this.#everyWindowCallbackId);
+
+    Services.obs.removeObserver(
+      this.themeObserver,
+      "lightweight-theme-styling-update"
+    );
 
     await this.closeConnection();
 
@@ -393,7 +427,7 @@ class SelectableProfileServiceClass {
     }
 
     this.#groupToolkitProfile.storeID = null;
-    await attemptFlush();
+    await this.#attemptFlushProfileService();
     await this.vacuumAndCloseGroupDB();
   }
 
@@ -407,7 +441,7 @@ class SelectableProfileServiceClass {
     let process = Cc["@mozilla.org/process/util;1"].createInstance(
       Ci.nsIProcess
     );
-    let executable = Services.dirsvc.get("XREExeF", Ci.nsIFile);
+    let executable = SelectableProfileServiceClass.getDirectory("XREExeF");
     process.init(executable);
     return process;
   }
@@ -444,6 +478,28 @@ class SelectableProfileServiceClass {
   observe() {}
 
   /**
+   * The observer function that watches for theme changes and updates the
+   * current profile of a theme change.
+   *
+   * @param {object} aSubject The theme data
+   * @param {*} aTopic Should be "lightweight-theme-styling-update"
+   */
+  themeObserver(aSubject, aTopic) {
+    if (aTopic !== "lightweight-theme-styling-update") {
+      return;
+    }
+
+    let data = aSubject.wrappedJSObject;
+
+    let theme = data.theme;
+    this.currentProfile.theme = {
+      themeL10nId: theme.id,
+      themeFg: theme.textcolor,
+      themeBg: theme.accentcolor,
+    };
+  }
+
+  /**
    * Init or update the current SelectableProfiles from the DB.
    */
   refreshProfiles() {}
@@ -465,7 +521,7 @@ class SelectableProfileServiceClass {
       return;
     }
     this.#groupToolkitProfile.rootDir = await this.currentProfile.rootDir;
-    await attemptFlush();
+    await this.#attemptFlushProfileService();
   }
 
   /**
@@ -480,16 +536,8 @@ class SelectableProfileServiceClass {
     }
 
     this.groupToolkitProfile.showProfileSelector = shouldShow;
-    await attemptFlush();
+    await this.#attemptFlushProfileService();
   }
-
-  /**
-   * Update the path to the group DB. Set on the nsToolkitProfile instance
-   * for the group.
-   *
-   * @param {string} aPath The path to the group DB
-   */
-  setGroupDBPath(aPath) {}
 
   // SelectableProfile lifecycle
 
@@ -518,13 +566,13 @@ class SelectableProfileServiceClass {
     await Promise.all([
       IOUtils.makeDirectory(
         PathUtils.join(
-          Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfRt").path,
           profileDir
         )
       ),
       IOUtils.makeDirectory(
         PathUtils.join(
-          Services.dirsvc.get("DefProfLRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfLRt").path,
           profileDir
         )
       ),
@@ -532,7 +580,7 @@ class SelectableProfileServiceClass {
 
     return IOUtils.getDirectory(
       PathUtils.join(
-        Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+        SelectableProfileServiceClass.getDirectory("DefProfRt").path,
         profileDir
       )
     );
@@ -588,7 +636,10 @@ class SelectableProfileServiceClass {
         });`
     );
 
-    const prefsJs = prefsJsHeader.concat(prefsJsContent);
+    const prefsJs = prefsJsHeader.concat(
+      prefsJsContent,
+      'user_pref("browser.profiles.profile-name.updated", false);'
+    );
 
     await IOUtils.writeUTF8(prefsJsFilePath, prefsJs.join(LINEBREAK));
   }
@@ -602,7 +653,7 @@ class SelectableProfileServiceClass {
    */
   getRelativeProfilePath(aProfilePath) {
     let relativePath = aProfilePath.getRelativePath(
-      Services.dirsvc.get("UAppData", Ci.nsIFile)
+      SelectableProfileServiceClass.getDirectory("UAppData")
     );
 
     if (AppConstants.platform === "win") {
@@ -662,9 +713,8 @@ class SelectableProfileServiceClass {
     // add the current toolkit profile to the datastore.
     let profiles = await this.getAllProfiles();
     if (!profiles.length) {
-      let path = Services.dirsvc.get("ProfD", Ci.nsIFile);
-      let originalProfile = await this.#createProfile(path);
-      this.#currentProfile = originalProfile;
+      let path = this.#profileService.currentProfile.rootDir;
+      this.#currentProfile = await this.#createProfile(path);
     }
   }
 
@@ -730,7 +780,7 @@ class SelectableProfileServiceClass {
     await Promise.all([
       IOUtils.remove(
         PathUtils.join(
-          Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfRt").path,
           profileDir
         ),
         {
@@ -739,7 +789,7 @@ class SelectableProfileServiceClass {
       ),
       IOUtils.remove(
         PathUtils.join(
-          Services.dirsvc.get("DefProfLRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfLRt").path,
           profileDir
         ),
         {
@@ -808,6 +858,10 @@ class SelectableProfileServiceClass {
    *   An array of profiles in the group.
    */
   async getAllProfiles() {
+    if (!this.#connection) {
+      return [];
+    }
+
     return (
       await this.#connection.executeCached("SELECT * FROM Profiles;")
     ).map(row => {
@@ -823,6 +877,10 @@ class SelectableProfileServiceClass {
    *   The specific profile.
    */
   async getProfile(aProfileID) {
+    if (!this.#connection) {
+      return null;
+    }
+
     let row = (
       await this.#connection.execute("SELECT * FROM Profiles WHERE id = :id;", {
         id: aProfileID,
@@ -840,6 +898,10 @@ class SelectableProfileServiceClass {
    *   The specific profile.
    */
   async getProfileByName(aProfileNanme) {
+    if (!this.#connection) {
+      return null;
+    }
+
     let row = (
       await this.#connection.execute(
         "SELECT * FROM Profiles WHERE name = :name;",
@@ -859,6 +921,10 @@ class SelectableProfileServiceClass {
    * @returns {SelectableProfile|null}
    */
   async getProfileByPath(aProfilePath) {
+    if (!this.#connection) {
+      return null;
+    }
+
     let relativePath = this.getRelativeProfilePath(aProfilePath);
     let row = (
       await this.#connection.execute(

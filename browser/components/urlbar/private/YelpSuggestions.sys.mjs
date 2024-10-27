@@ -8,7 +8,6 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
-  MerinoClient: "resource:///modules/MerinoClient.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
@@ -42,6 +41,10 @@ export class YelpSuggestions extends BaseFeature {
     return ["Yelp"];
   }
 
+  get mlIntent() {
+    return "yelp_intent";
+  }
+
   get showLessFrequentlyCount() {
     const count = lazy.UrlbarPrefs.get("yelp.showLessFrequentlyCount") || 0;
     return Math.max(count, 0);
@@ -55,17 +58,28 @@ export class YelpSuggestions extends BaseFeature {
     return !cap || this.showLessFrequentlyCount < cap;
   }
 
+  isSuggestionSponsored(_suggestion) {
+    return true;
+  }
+
   getSuggestionTelemetryType() {
     return "yelp";
   }
 
   enable(enabled) {
     if (!enabled) {
-      this.#merino = null;
+      this.#metadataCache = null;
     }
   }
 
   async makeResult(queryContext, suggestion, searchString) {
+    if (suggestion.source == "ml") {
+      suggestion = this.#convertMlSuggestion(suggestion);
+      if (!suggestion) {
+        return null;
+      }
+    }
+
     // If the user clicked "Show less frequently" at least once or if the
     // subject wasn't typed in full, then apply the min length threshold and
     // return null if the entire search string is too short.
@@ -119,10 +133,36 @@ export class YelpSuggestions extends BaseFeature {
           originalUrl: suggestion.url,
           title: [title, lazy.UrlbarUtils.HIGHLIGHT.TYPED],
           bottomTextL10n: { id: "firefox-suggest-yelp-bottom-text" },
+          iconBlob: suggestion.icon_blob,
         })
       ),
       resultProperties
     );
+  }
+
+  async filterSuggestions(suggestions) {
+    // Return only Rust suggestions if ML is enabled and vice versa. That will
+    // make it easier to understand which suggestions are being served as we're
+    // developing this new ML feature. As long as the ML backend is enabled, we
+    // can't control which intents it matches, so it might match Yelp even when
+    // Yelp ML is disabled.
+    if (!lazy.UrlbarPrefs.get("yelpMlEnabled")) {
+      return suggestions.filter(s => s.source != "ml");
+    }
+
+    let mlSuggestions = suggestions.filter(s => s.source == "ml");
+    if (mlSuggestions.length) {
+      // Suggestions must have their intended scores after this method returns
+      // because they're sorted after this, so set the score now. We defer
+      // setting other properties until `makeResult()`.
+      if (!this.#metadataCache) {
+        this.#metadataCache = await this.#makeMetadataCache();
+      }
+      for (let s of mlSuggestions) {
+        s.score = this.#metadataCache.score;
+      }
+    }
+    return mlSuggestions;
   }
 
   getResultCommands() {
@@ -241,22 +281,104 @@ export class YelpSuggestions extends BaseFeature {
   }
 
   async #fetchCity() {
-    if (!this.#merino) {
-      this.#merino = new lazy.MerinoClient(this.constructor.name);
-    }
-
-    let results = await this.#merino.fetch({
-      providers: ["geolocation"],
-      query: "",
-    });
-
-    if (!results.length) {
+    let geo = await lazy.QuickSuggest.geolocation();
+    if (!geo) {
       return null;
     }
-
-    let { city, region } = results[0].custom_details.geolocation;
+    let { city, region } = geo;
     return [city, region].filter(loc => !!loc).join(", ");
   }
 
-  #merino = null;
+  #convertMlSuggestion(ml) {
+    if (!ml.location?.city && !ml.location?.state && !ml.subject) {
+      return null;
+    }
+
+    let loc = [ml.location?.city, ml.location?.state]
+      .filter(s => !!s)
+      .join(", ");
+    let title = [ml.subject, loc].filter(s => !!s).join(" in ");
+
+    let url = new URL(this.#metadataCache.urlOrigin);
+    url.pathname = this.#metadataCache.urlPathname;
+    if (ml.subject) {
+      url.searchParams.set(this.#metadataCache.findDesc, ml.subject);
+    }
+    if (loc) {
+      url.searchParams.set(this.#metadataCache.findLoc, loc);
+    }
+
+    return {
+      title,
+      url: url.toString(),
+      subjectExactMatch: false,
+      locationParam: this.#metadataCache.findLoc,
+      hasLocationSign: false,
+      icon_blob: this.#metadataCache.iconBlob,
+      source: ml.source,
+      provider: ml.provider,
+    };
+  }
+
+  /**
+   * TODO Bug 1926782: ML suggestions don't include an icon, score, or URL, so
+   * for now we directly query the Rust backend with a known Yelp keyword and
+   * location to get all of that information and then cache it in
+   * `#metadataCache`. If the known Yelp suggestion is absent for some reason,
+   * we fall back to hardcoded values. This is a tad hacky and we should come up
+   * with something better.
+   *
+   * @returns {object}
+   *   The metadata cache.
+   */
+  async #makeMetadataCache() {
+    let cache;
+
+    this.logger.debug("Querying Rust backend to populate metadata cache");
+    let rs = await lazy.QuickSuggest.rustBackend.query("coffee in atlanta", [
+      "Yelp",
+    ]);
+    if (!rs.length) {
+      this.logger.debug("Rust didn't return any Yelp suggestions!");
+      cache = {};
+    } else {
+      let suggestion = rs[0];
+      let url = new URL(suggestion.url);
+      let findParamWithValue = value => {
+        let tuple = [...url.searchParams.entries()].find(
+          ([_, v]) => v == value
+        );
+        return tuple?.[0];
+      };
+      cache = {
+        iconBlob: suggestion.icon_blob,
+        score: suggestion.score,
+        urlOrigin: url.origin,
+        urlPathname: url.pathname,
+        findDesc: findParamWithValue("coffee"),
+        findLoc: findParamWithValue("atlanta"),
+      };
+    }
+
+    let defaults = {
+      urlOrigin: "https://www.yelp.com",
+      urlPathname: "/search",
+      findDesc: "find_desc",
+      findLoc: "find_loc",
+      score: 0.25,
+    };
+    for (let [key, value] of Object.entries(defaults)) {
+      if (cache[key] === undefined) {
+        cache[key] = value;
+      }
+    }
+
+    return cache;
+  }
+
+  _test_invalidateMetadataCache() {
+    this.#metadataCache = null;
+  }
+
+  #metadataCache = null;
 }

@@ -77,7 +77,7 @@ internal fun BookmarksState.undoSnackbarText(): Pair<Int, String> = bookmarksSna
             stringId to (title ?: "error")
         }
         state is BookmarksSnackbarState.UndoDeletion -> {
-            val stringId = R.string.bookmark_deletion_multiple_snackbar_message_2
+            val stringId = R.string.bookmark_delete_multiple_items
             val numberOfBookmarks = "${state.guidsToDelete.size}"
             stringId to numberOfBookmarks
         }
@@ -205,6 +205,9 @@ internal val BookmarkItem.Folder.isDesktopFolder: Boolean
         -> true
         else -> false
     }
+
+internal val BookmarkItem.Folder.isMobileRoot: Boolean
+    get() = guid == BookmarkRoot.Mobile.id
 
 internal val BookmarkItem.Folder.isDesktopRoot: Boolean
     get() = guid == BookmarkRoot.Root.id

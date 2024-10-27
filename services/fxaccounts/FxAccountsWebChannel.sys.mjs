@@ -524,6 +524,11 @@ FxAccountsWebChannelHelpers.prototype = {
     );
 
     if (lazy.oauthEnabled) {
+      // XXX - work around a server issue - we should never be handed these items in oauth flows.
+      // Fixed in https://github.com/mozilla/fxa/pull/17892, so this can probably be made more
+      // aggressive (eg, refuse to connect if they are present or similar)
+      delete accountData.keyFetchToken;
+      delete accountData.unwrapBKey;
       await this._fxAccounts._internal.setSignedInUser(accountData);
     } else {
       const xps = await this._initializeSync();
@@ -556,8 +561,11 @@ FxAccountsWebChannelHelpers.prototype = {
   async oauthLogin(oauthData) {
     log.debug("Webchannel is completing the oauth flow");
     const xps = await this._initializeSync();
-    const { sessionToken } =
-      await this._fxAccounts._internal.getUserAccountData(["sessionToken"]);
+    const { sessionToken, email } =
+      await this._fxAccounts._internal.getUserAccountData([
+        "sessionToken",
+        "email",
+      ]);
     // First we finish the ongoing oauth flow
     const { scopedKeys, refreshToken } =
       await this._fxAccounts._internal.completeOAuthFlow(
@@ -568,6 +576,9 @@ FxAccountsWebChannelHelpers.prototype = {
 
     // We don't currently use the refresh token in Firefox Desktop, lets be good citizens and revoke it.
     await this._fxAccounts._internal.destroyOAuthToken({ token: refreshToken });
+
+    // Remember the account for future merge warnings etc.
+    this.setPreviousAccountNameHashPref(email);
 
     // Then, we persist the sync keys
     await this._fxAccounts._internal.setScopedKeys(scopedKeys);

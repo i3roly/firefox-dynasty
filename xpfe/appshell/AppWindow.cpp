@@ -1844,6 +1844,8 @@ nsresult AppWindow::MaybeSaveEarlyWindowPersistentValues(
     }
   }
 
+  settings.verticalTabs = Preferences::GetBool("sidebar.verticalTabs", false);
+
   Unused << PersistPreXULSkeletonUIValues(settings);
 #endif
 

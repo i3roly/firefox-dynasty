@@ -1685,6 +1685,15 @@ mozilla::dom::StorageManager* nsGlobalWindowInner::GetStorageManager() {
 // * a Window object whose associated Document is fully active
 bool nsGlobalWindowInner::IsEligibleForMessaging() { return IsFullyActive(); }
 
+void nsGlobalWindowInner::ReportToConsole(
+    uint32_t aErrorFlags, const nsCString& aCategory,
+    nsContentUtils::PropertiesFile aFile, const nsCString& aMessageName,
+    const nsTArray<nsString>& aParams,
+    const mozilla::SourceLocation& aLocation) {
+  nsContentUtils::ReportToConsole(aErrorFlags, aCategory, mDoc, aFile,
+                                  aMessageName.get(), aParams, aLocation);
+}
+
 nsresult nsGlobalWindowInner::EnsureScriptEnvironment() {
   // NOTE: We can't use FORWARD_TO_OUTER here because we don't want to fail if
   // we're called on an inactive inner window.
@@ -5771,6 +5780,8 @@ CallState nsGlobalWindowInner::CallOnInProcessDescendantsInternal(
   return state;
 }
 
+nsIURI* nsGlobalWindowInner::GetBaseURI() const { return GetDocBaseURI(); }
+
 Maybe<ClientInfo> nsGlobalWindowInner::GetClientInfo() const {
   MOZ_ASSERT(NS_IsMainThread());
   if (mDoc && mDoc->IsStaticDocument()) {
@@ -5862,6 +5873,11 @@ nsIContentSecurityPolicy* nsGlobalWindowInner::GetCsp() {
   return nullptr;
 }
 
+already_AddRefed<ServiceWorkerContainer>
+nsGlobalWindowInner::GetServiceWorkerContainer() {
+  return Navigator()->ServiceWorker();
+}
+
 RefPtr<ServiceWorker> nsGlobalWindowInner::GetOrCreateServiceWorker(
     const ServiceWorkerDescriptor& aDescriptor) {
   MOZ_ASSERT(NS_IsMainThread());
@@ -5917,6 +5933,14 @@ nsGlobalWindowInner::GetOrCreateServiceWorkerRegistration(
 
 StorageAccess nsGlobalWindowInner::GetStorageAccess() {
   return StorageAllowedForWindow(this);
+}
+
+nsICookieJarSettings* nsGlobalWindowInner::GetCookieJarSettings() {
+  MOZ_ASSERT(NS_IsMainThread());
+  if (mDoc) {
+    return mDoc->CookieJarSettings();
+  }
+  return nullptr;
 }
 
 nsresult nsGlobalWindowInner::FireDelayedDOMEvents(bool aIncludeSubWindows) {

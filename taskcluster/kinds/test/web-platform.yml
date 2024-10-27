@@ -179,11 +179,7 @@ web-platform-tests-webcodecs:
     chunks: 1
     max-run-time: 1800
     variants: []  # We don't need sw or nofis testing.
-    run-on-projects:
-        by-test-platform:
-            android.*: []
-            .*wayland.*: []
-            default: built-projects
+    run-on-projects: built-projects
     mozharness:
         chunked: true
         extra-options:
@@ -316,7 +312,6 @@ web-platform-tests-webgpu:
     run-on-projects:
         by-test-platform:
             android.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1836811
-            .*-wayland/debug.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1864700
             default: ['trunk']
     mozharness:
         chunked: true
@@ -347,7 +342,6 @@ web-platform-tests-webgpu-long:
     run-on-projects:
         by-test-platform:
             android.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1836811
-            .*-wayland/debug.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1864700
             default: ['trunk']
     mozharness:
         chunked: true
@@ -385,7 +379,6 @@ web-platform-tests-webgpu-backlog:
     run-on-projects:
         by-test-platform:
             android.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1836811
-            .*-wayland/debug.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1864700
             default: ['mozilla-central']
     mozharness:
         chunked: true
@@ -420,7 +413,6 @@ web-platform-tests-webgpu-backlog-long:
     run-on-projects:
         by-test-platform:
             android.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1836811
-            .*-wayland/debug.*: []  # https://bugzilla.mozilla.org/show_bug.cgi?id=1864700
             default: ['mozilla-central']
     mozharness:
         chunked: true

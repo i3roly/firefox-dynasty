@@ -1559,7 +1559,7 @@
 
 - name: browser.navigation.requireUserInteraction
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Indicates if about:newtab shows content (enabled) or just blank.
@@ -5297,7 +5297,7 @@
 # is not controlled by this pref, only the extension code ability to use
 # navigator.serviceWorker.register is locked behind this pref.
 - name: extensions.serviceWorkerRegister.allowed
-  type: bool
+  type: RelaxedAtomicBool
   value: false
   mirror: always
 
@@ -13762,18 +13762,18 @@
 # Whether to use the rust implemented DefaultURI for unknown scheme types
 - name: network.url.useDefaultURI
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 # Allows use of a protocol exception list that will bypass defaultURI parser
-- name: network.url.some_schemes_bypass_defaultURI_fallback
+- name: network.url.simple_uri_unknown_schemes_enabled
   type: RelaxedAtomicBool
   value: true
   mirror: always
 
 # A list of schemes to allow for bypassing defaultURI as default
-# This is only used when network.url.some_schemes_bypass_defaultURI_fallback is true
-- name: network.url.simple_uri_schemes
+# This is only used when network.url.simple_uri_unknown_schemes_enabled is true
+- name: network.url.simple_uri_unknown_schemes
   type: String
   value: ""
   mirror: never

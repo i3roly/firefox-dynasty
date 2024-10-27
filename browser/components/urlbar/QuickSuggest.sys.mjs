@@ -6,6 +6,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  MerinoClient: "resource:///modules/MerinoClient.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   rawSuggestionUrlMatches: "resource://gre/modules/RustSuggest.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
@@ -30,6 +31,8 @@ const FEATURES = {
     "resource:///modules/urlbar/private/PocketSuggestions.sys.mjs",
   SuggestBackendJs:
     "resource:///modules/urlbar/private/SuggestBackendJs.sys.mjs",
+  SuggestBackendMl:
+    "resource:///modules/urlbar/private/SuggestBackendMl.sys.mjs",
   SuggestBackendRust:
     "resource:///modules/urlbar/private/SuggestBackendRust.sys.mjs",
   Weather: "resource:///modules/urlbar/private/Weather.sys.mjs",
@@ -186,6 +189,9 @@ class _QuickSuggest {
       if (feature.rustSuggestionTypes.length) {
         this.#rustFeatures.add(feature);
       }
+      if (feature.mlIntent) {
+        this.#featuresByMlIntent.set(feature.mlIntent, feature);
+      }
 
       // Update the map from enabling preferences to features.
       let prefs = feature.enablingPreferences;
@@ -246,6 +252,63 @@ class _QuickSuggest {
    */
   getFeatureByRustSuggestionType(type) {
     return this.#featuresByRustSuggestionType.get(type);
+  }
+
+  /**
+   * Returns a Suggest feature by the ML intent name (as defined by
+   * `feature.mlIntent` and `MLSuggest`). Not all features support ML.
+   *
+   * @param {string} intent
+   *   The name of an ML intent.
+   * @returns {BaseFeature}
+   *   The feature object, an instance of a subclass of `BaseFeature`, or null
+   *   if no feature corresponds to the intent.
+   */
+  getFeatureByMlIntent(intent) {
+    return this.#featuresByMlIntent.get(intent);
+  }
+
+  /**
+   * Fetches the client's geolocation from Merino. Merino gets the geolocation
+   * by looking up the client's IP address in its MaxMind database.
+   *
+   * @returns {object}
+   *   An object with the following properties (see Merino docs for latest):
+   *
+   *   {string} country
+   *     The full country name.
+   *   {string} country_code
+   *     The country ISO code.
+   *   {string} region
+   *     The full region name, e.g., the full name of a U.S. state.
+   *   {string} region_code
+   *     The region ISO code, e.g., the two-letter abbreviation for U.S. states.
+   *   {string} city
+   *     The city name.
+   *   {object} location
+   *     This object has the following properties:
+   *     {number} longitude
+   *       WGS 84 longitude.
+   *     {number} latitude
+   *       WGS 84 latitude.
+   *     {number} radius
+   *       Accuracy radius in meters.
+   */
+  async geolocation() {
+    if (!this.#merino) {
+      this.#merino = new lazy.MerinoClient("QuickSuggest");
+    }
+
+    this.logger.debug("Fetching geolocation from Merino");
+    let results = await this.#merino.fetch({
+      providers: ["geolocation"],
+      query: "",
+    });
+
+    this.logger.debug(
+      "Got geolocation from Merino: " + JSON.stringify(results)
+    );
+    return results.length ? results[0].custom_details.geolocation : null;
   }
 
   /**
@@ -496,11 +559,17 @@ class _QuickSuggest {
   // Maps from Rust suggestion types to Suggest feature instances.
   #featuresByRustSuggestionType = new Map();
 
+  // Maps from ML intent strings to Suggest feature instances.
+  #featuresByMlIntent = new Map();
+
   // Set of feature instances that manage Rust suggestion types.
   #rustFeatures = new Set();
 
   // Maps from preference names to the `Set` of feature instances they enable.
   #featuresByEnablingPrefs = new Map();
+
+  // `MerinoClient`
+  #merino;
 }
 
 export const QuickSuggest = new _QuickSuggest();

@@ -546,11 +546,9 @@ bool TISInputSourceWrapper::IsDeadKey(NSEvent* aNativeKeyEvent) {
     return false;
   }
 
-  // Assume that if the control key, command key or Fn key is pressed, it's not
-  // a dead key.
+  // Assmue that if control key or command key is pressed, it's not a dead key.
   NSUInteger cocoaState = [aNativeKeyEvent modifierFlags];
-  if (cocoaState & (NSEventModifierFlagControl | NSEventModifierFlagCommand |
-                    NSEventModifierFlagFunction)) {
+  if (cocoaState & (NSEventModifierFlagControl | NSEventModifierFlagCommand)) {
     return false;
   }
 
@@ -1850,14 +1848,6 @@ bool TextInputHandler::HandleKeyDownEvent(NSEvent* aNativeEvent,
                         "something and canceling the composition",
                         this));
     return false;
-  }
-
-  // macOS supports shortcut keys using the `Fn` key. Check first if this key
-  // event is such a shortcut key.
-  if (nsCocoaUtils::ModifiersForEvent(aNativeEvent) & MODIFIER_FN) {
-    if (mWidget->SendEventToNativeMenuSystem(aNativeEvent)) {
-      return true;
-    }
   }
 
   // Let Cocoa interpret the key events, caching IsIMEComposing first.

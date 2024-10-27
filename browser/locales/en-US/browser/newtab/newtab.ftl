@@ -116,6 +116,7 @@ newtab-menu-save-to-pocket = Save to { -pocket-brand-name }
 newtab-menu-delete-pocket = Delete from { -pocket-brand-name }
 newtab-menu-archive-pocket = Archive in { -pocket-brand-name }
 newtab-menu-show-privacy-info = Our sponsors & your privacy
+newtab-menu-about-fakespot = About { -fakespot-brand-name }
 
 ## Message displayed in a modal window to explain privacy and provide context for sponsored content.
 
@@ -311,6 +312,8 @@ newtab-wallpaper-dark-panda = Red panda hidden in forest
 newtab-wallpaper-dark-sky = City landscape with a night sky
 newtab-wallpaper-dark-mountain = Landscape mountain
 newtab-wallpaper-dark-city = Purple city landscape
+newtab-wallpaper-dark-fox-anniversary =  A fox on the pavement near a forest
+newtab-wallpaper-light-fox-anniversary = A fox in a grassy field with a misty mountain landscape
 
 ## Solid Colors
 
