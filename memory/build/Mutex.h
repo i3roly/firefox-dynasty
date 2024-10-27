@@ -102,30 +102,30 @@ struct MOZ_CAPABILITY("mutex") Mutex {
        OSSpinLockLock(&mMutex.mSpinLock);
       } else {
 #  if defined(__x86_64__)
-        // On older versions of macOS (10.14 and older) the
-        // `OS_UNFAIR_LOCK_ADAPTIVE_SPIN` flag is not supported by the kernel,
-        // we spin in user-space instead like `OSSpinLock` does:
-        // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L183-L198
-        // Note that `OSSpinLock` uses 1000 iterations on x86-64:
-        // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L93
-        // ...but we only use 100 like it does on ARM:
-        // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L90
-        // We choose this value because it yields the same results in our
-        // benchmarks but is less likely to have detrimental effects caused by
-        // excessive spinning.
-        uint32_t retries = 100; 
- 
-        do { 
-          if (os_unfair_lock_trylock(&mMutex.mUnfairLock)) { 
-            return; 
-          } 
-          __asm__ __volatile__("pause");
-        } while (retries--);
-
         if(__builtin_available(macOS 10.15, *)) {
           os_unfair_lock_lock_with_options(&mMutex.mUnfairLock,
                                          OS_UNFAIR_LOCK_ADAPTIVE_SPIN | OS_UNFAIR_LOCK_DATA_SYNCHRONIZATION);
         } else {
+          // On older versions of macOS (10.14 and older) the
+          // `OS_UNFAIR_LOCK_ADAPTIVE_SPIN` flag is not supported by the kernel,
+          // we spin in user-space instead like `OSSpinLock` does:
+          // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L183-L198
+          // Note that `OSSpinLock` uses 1000 iterations on x86-64:
+          // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L93
+          // ...but we only use 100 like it does on ARM:
+          // https://github.com/apple/darwin-libplatform/blob/215b09856ab5765b7462a91be7076183076600df/src/os/lock.c#L90
+          // We choose this value because it yields the same results in our
+          // benchmarks but is less likely to have detrimental effects caused by
+          // excessive spinning.
+          uint32_t retries = 100;
+
+          do {
+            if (os_unfair_lock_trylock(&mMutex.mUnfairLock)) {
+              return;
+            }
+            __asm__ __volatile__("pause");
+          } while (retries--);
+
           os_unfair_lock_lock_with_options(&mMutex.mUnfairLock,
                                          OS_UNFAIR_LOCK_DATA_SYNCHRONIZATION);
         }
