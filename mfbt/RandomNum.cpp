@@ -132,13 +132,13 @@ namespace mozilla {
 MFBT_API bool GenerateRandomBytesFromOS(void* aBuffer, size_t aLength) {
   MOZ_ASSERT(aBuffer);
   MOZ_ASSERT(aLength > 0);
-  if(!macOSXVer)
-    macOSXVer = darwinVersion();
 #if defined(XP_WIN)
   return !!RtlGenRandom(aBuffer, aLength);
 
 #elif defined(USE_ARC4RANDOM)  // defined(XP_WIN)
 #  if defined(XP_DARWIN)
+  if(!macOSXVer)
+    macOSXVer = darwinVersion();
   if(macOSXVer >= 16) // it's higher quality anyways. LEFT ME NO CHOICE
     return !getentropy(aBuffer, aLength);
   else {
