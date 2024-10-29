@@ -52,6 +52,7 @@
 #include "mozilla/dom/HTMLImageElement.h"
 #include "mozilla/dom/ImageTextBinding.h"
 #include "mozilla/dom/ImageTracker.h"
+#include "mozilla/dom/PageLoadEventUtils.h"
 #include "mozilla/dom/ReferrerInfo.h"
 #include "mozilla/dom/ScriptSettings.h"
 #include "mozilla/intl/LocaleService.h"
@@ -192,9 +193,7 @@ void nsImageLoadingContent::Notify(imgIRequest* aRequest, int32_t aType,
         doc->AddBlockedNodeByClassifier(AsContent());
       }
     }
-    nsresult status =
-        reqStatus & imgIRequest::STATUS_ERROR ? NS_ERROR_FAILURE : NS_OK;
-    return OnLoadComplete(aRequest, status);
+    return OnLoadComplete(aRequest, reqStatus);
   }
 
   if ((aType == imgINotificationObserver::FRAME_COMPLETE ||
@@ -214,10 +213,7 @@ void nsImageLoadingContent::Notify(imgIRequest* aRequest, int32_t aType,
 }
 
 void nsImageLoadingContent::OnLoadComplete(imgIRequest* aRequest,
-                                           nsresult aStatus) {
-  uint32_t oldStatus;
-  aRequest->GetImageStatus(&oldStatus);
-
+                                           uint32_t aImageStatus) {
   // XXXjdm This occurs when we have a pending request created, then another
   //       pending request replaces it before the first one is finished.
   //       This begs the question of what the correct behaviour is; we used
@@ -225,7 +221,7 @@ void nsImageLoadingContent::OnLoadComplete(imgIRequest* aRequest,
   //       wasn't called when the first request was cancelled. For now, I choose
   //       to punt when the given request doesn't appear to have terminated in
   //       an expected state.
-  if (!(oldStatus &
+  if (!(aImageStatus &
         (imgIRequest::STATUS_ERROR | imgIRequest::STATUS_LOAD_COMPLETE))) {
     return;
   }
@@ -238,7 +234,7 @@ void nsImageLoadingContent::OnLoadComplete(imgIRequest* aRequest,
              "One way or another, we should be current by now");
 
   // Fire the appropriate DOM event.
-  if (NS_SUCCEEDED(aStatus)) {
+  if (!(aImageStatus & imgIRequest::STATUS_ERROR)) {
     FireEvent(u"load"_ns);
   } else {
     FireEvent(u"error"_ns);
@@ -1107,11 +1103,17 @@ nsresult nsImageLoadingContent::LoadImage(nsIURI* aNewURI, bool aForce,
              : PolicyTypeForLoad(aImageLoadType);
 
   auto referrerInfo = MakeRefPtr<ReferrerInfo>(*element);
+  auto fetchPriority = GetFetchPriorityForImage();
   nsresult rv = nsContentUtils::LoadImage(
       aNewURI, element, aDocument, triggeringPrincipal, 0, referrerInfo, this,
       loadFlags, element->LocalName(), getter_AddRefs(req), policyType,
       mUseUrgentStartForChannel, /* aLinkPreload */ false,
-      /* aEarlyHintPreloaderId */ 0, GetFetchPriorityForImage());
+      /* aEarlyHintPreloaderId */ 0, fetchPriority);
+
+  if (fetchPriority != FetchPriority::Auto) {
+    aDocument->SetPageloadEventFeature(
+        pageload_event::FeatureBits::FETCH_PRIORITY_IMAGES);
+  }
 
   // Reset the flag to avoid loading from XPCOM or somewhere again else without
   // initiated by user interaction.
@@ -1148,7 +1150,7 @@ nsresult nsImageLoadingContent::LoadImage(nsIURI* aNewURI, bool aForce,
                    "How could we not have a current request here?");
 
         if (nsImageFrame* f = do_QueryFrame(GetOurPrimaryImageFrame())) {
-          f->NotifyNewCurrentRequest(mCurrentRequest, NS_OK);
+          f->NotifyNewCurrentRequest(mCurrentRequest);
         }
       }
     }

@@ -153,6 +153,7 @@ const MESSAGE_TYPE_LIST = [
   "INFOBAR_TELEMETRY",
   "SPOTLIGHT_TELEMETRY",
   "TOAST_NOTIFICATION_TELEMETRY",
+  "MENU_MESSAGE_TELEMETRY",
   "AS_ROUTER_TELEMETRY_USER_EVENT",
 
   // Admin types
@@ -1295,22 +1296,16 @@ class ASRouterAdminInner extends (react__WEBPACK_IMPORTED_MODULE_1___default().P
     }, this.state.copiedToClipboard ? "Parameters copied!" : "Copy parameters"))), this.state.stringTargetingParameters && Object.keys(this.state.stringTargetingParameters).map((param, i) => {
       const value = this.state.stringTargetingParameters[param];
       const errorState = this.state.targetingParametersError && this.state.targetingParametersError.id === param;
-      const className = `monospace no-margins${errorState ? " errorState" : ""}`;
-      const inputComp = (value && value.length) > 30 ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement("textarea", {
+      const largeEditor = value?.length > 30 || value?.match(/[\nR]/);
+      const className = `monospace no-margins targeting-editor${errorState ? " errorState" : ""}${largeEditor ? " large" : " small"}`;
+      const inputComp = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement("textarea", {
         name: param,
         className: className,
         value: value,
-        rows: "10",
-        cols: "60",
+        rows: largeEditor ? "10" : "1",
+        cols: largeEditor ? "60" : "28",
         onChange: this.onChangeTargetingParameters,
         spellCheck: "false"
-      }) : /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement("input", {
-        type: "text",
-        size: "30",
-        name: param,
-        className: className,
-        value: value,
-        onChange: this.onChangeTargetingParameters
       });
       return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement("tr", {
         key: i

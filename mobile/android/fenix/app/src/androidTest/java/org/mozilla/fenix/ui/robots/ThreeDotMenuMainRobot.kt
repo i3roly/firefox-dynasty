@@ -14,7 +14,6 @@ import androidx.test.espresso.action.ViewActions.swipeUp
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.contrib.RecyclerViewActions
 import androidx.test.espresso.matcher.RootMatchers
-import androidx.test.espresso.matcher.ViewMatchers
 import androidx.test.espresso.matcher.ViewMatchers.Visibility
 import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
@@ -198,7 +197,7 @@ class ThreeDotMenuMainRobot {
         )
     }
 
-    fun verifyHomeThreeDotMainMenuItems(isRequestDesktopSiteEnabled: Boolean) {
+    fun verifyHomeThreeDotMainMenuItems() {
         assertUIObjectExists(
             bookmarksButton(),
             historyButton(),
@@ -207,12 +206,10 @@ class ThreeDotMenuMainRobot {
             addOnsButton(),
             // Disabled step due to https://github.com/mozilla-mobile/fenix/issues/26788
             // syncAndSaveDataButton,
-            desktopSiteButton(),
             whatsNewButton(),
             helpButton(),
             customizeHomeButton(),
             settingsButton(),
-            desktopSiteToggle(isRequestDesktopSiteEnabled),
         )
     }
 
@@ -448,6 +445,13 @@ class ThreeDotMenuMainRobot {
         }
 
         fun refreshPage(interact: BrowserRobot.() -> Unit): BrowserRobot.Transition {
+            if (stopLoadingButton().exists()) {
+                Log.i(TAG, "refreshPage: Trying to click the \"Stop\" button")
+                stopLoadingButton().click()
+                Log.i(TAG, "refreshPage: Clicked the \"Stop\" button")
+                browserScreen {
+                }.openThreeDotMenu {}
+            }
             refreshButton().also {
                 Log.i(TAG, "refreshPage: Waiting for $waitingTime ms for the \"Refresh\" button to exist")
                 it.waitForExists(waitingTime)
@@ -697,7 +701,7 @@ private fun threeDotMenuRecyclerView() =
 
 private fun editBookmarkButton() = onView(withText("Edit"))
 
-private fun stopLoadingButton() = onView(ViewMatchers.withContentDescription("Stop"))
+private fun stopLoadingButton() = itemWithDescription("Stop")
 
 private fun closeAllTabsButton() = onView(allOf(withText("Close all tabs"))).inRoot(RootMatchers.isPlatformPopup())
 

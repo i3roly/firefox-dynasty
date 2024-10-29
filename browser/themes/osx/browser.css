@@ -9,7 +9,7 @@
 }
 
 /* stylelint-disable-next-line media-query-no-invalid */
-@media (-moz-bool-pref: "browser.theme.macos.native-theme") {
+@media (-moz-bool-pref: "browser.theme.native-theme") {
   @media not (prefers-contrast) {
     :root:not([lwtheme]) {
       @media (prefers-color-scheme: light) {
@@ -40,16 +40,9 @@
   }
 }
 
-#browser,
-#navigator-toolbox {
-  /* #browser and #navigator-toolbox must have relative positions so that the
-     latter can slide over the former in fullscreen mode. */
-  position: relative;
-}
-
 /** Begin titlebar **/
 
-#titlebar {
+.browser-titlebar {
   /* Centrally align content items vertically */
   justify-content: center;
 }

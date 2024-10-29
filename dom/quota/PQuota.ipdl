@@ -80,11 +80,6 @@ struct ClearResetOriginParams
   bool clientTypeIsExplicit;
 };
 
-struct ResetOriginParams
-{
-  ClearResetOriginParams commonParams;
-};
-
 struct PersistedParams
 {
   PrincipalInfo principalInfo;
@@ -108,7 +103,6 @@ union RequestParams
 {
   StorageNameParams;
   GetFullOriginMetadataParams;
-  ResetOriginParams;
   PersistedParams;
   PersistParams;
   EstimateParams;
@@ -131,17 +125,37 @@ parent:
   async StorageInitialized()
       returns(BoolResponse response);
 
+  async PersistentStorageInitialized()
+      returns(BoolResponse response);
+
   async TemporaryStorageInitialized()
       returns(BoolResponse response);
 
+  async TemporaryGroupInitialized(PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
+  async PersistentOriginInitialized(PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
+  async TemporaryOriginInitialized(PersistenceType persistenceType,
+                                   PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
   async InitializeStorage()
+      returns(BoolResponse response);
+
+  async InitializePersistentStorage()
+      returns(BoolResponse response);
+
+  async InitializeTemporaryGroup(PrincipalInfo principalInfo)
       returns(BoolResponse response);
 
   async InitializePersistentOrigin(PrincipalInfo principalInfo)
       returns(BoolResponse response);
 
   async InitializeTemporaryOrigin(PersistenceType persistenceType,
-                                  PrincipalInfo principalInfo)
+                                  PrincipalInfo principalInfo,
+                                  bool createIfNonExistent)
       returns(BoolResponse response);
 
   async InitializePersistentClient(PrincipalInfo principalInfo,
@@ -168,8 +182,12 @@ parent:
       returns(UInt64Response response);
 
   async ClearStoragesForOrigin(PersistenceType? persistenceType,
+                               PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
+  async ClearStoragesForClient(PersistenceType? persistenceType,
                                PrincipalInfo principalInfo,
-                               Type? clientType)
+                               Type clientType)
       returns(BoolResponse response);
 
   async ClearStoragesForOriginPrefix(PersistenceType? persistenceType,
@@ -184,6 +202,15 @@ parent:
       returns(BoolResponse response);
 
   async ClearStorage()
+      returns(BoolResponse response);
+
+  async ShutdownStoragesForOrigin(PersistenceType? persistenceType,
+                                  PrincipalInfo principalInfo)
+      returns(BoolResponse response);
+
+  async ShutdownStoragesForClient(PersistenceType? persistenceType,
+                                  PrincipalInfo principalInfo,
+                                  Type clientType)
       returns(BoolResponse response);
 
   async ShutdownStorage()

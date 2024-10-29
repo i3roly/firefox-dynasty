@@ -5904,69 +5904,6 @@
     "n_buckets": 10,
     "description": "PLACES: Time to convert and write bookmarks.html"
   },
-  "PLACES_FAVICON_ICO_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of the ICO favicon files loaded from the web (Bytes)"
-  },
-  "PLACES_FAVICON_PNG_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of the PNG favicon files loaded from the web (Bytes)"
-  },
-  "PLACES_FAVICON_GIF_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of the GIF favicon files loaded from the web (Bytes)"
-  },
-  "PLACES_FAVICON_JPEG_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of the JPEG favicon files loaded from the web (Bytes)"
-  },
-  "PLACES_FAVICON_BMP_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of the BMP favicon files loaded from the web (Bytes)"
-  },
-  "PLACES_FAVICON_SVG_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of the SVG favicon files loaded from the web (Bytes)"
-  },
-  "PLACES_FAVICON_OTHER_SIZES": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 524288,
-    "n_buckets": 100,
-    "description": "PLACES: Size of favicon files without a specific file type probe, loaded from the web (Bytes)"
-  },
   "LINK_ICON_SIZES_ATTR_USAGE": {
     "record_in_processes": ["main", "content"],
     "products": ["firefox", "fennec"],
@@ -7245,21 +7182,6 @@
     "n_buckets": 50,
     "bug_numbers": [1221674],
     "description": "Delay in ms between the target and the actual handling time of the frame at refresh driver in the content process."
-  },
-  "FX_REFRESH_DRIVER_SYNC_SCROLL_FRAME_DELAY_MS": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "alert_emails": [
-      "perf-telemetry-alerts@mozilla.com",
-      "gfx-telemetry-alerts@mozilla.com",
-      "rhunt@mozilla.com"
-    ],
-    "expires_in_version": "never",
-    "kind": "exponential",
-    "high": 10000,
-    "n_buckets": 50,
-    "bug_numbers": [1228147],
-    "description": "Delay in ms between the target and the actual handling time of the frame at refresh driver while scrolling synchronously."
   },
   "FX_TAB_SWITCH_UPDATE_MS": {
     "record_in_processes": ["main"],
@@ -13343,36 +13265,6 @@
     "n_buckets": 100,
     "bug_numbers": [1862939],
     "description": "The time between responseStart and the largest contentful paint of a foreground http or https root content document, in milliseconds. The contentful paint timestamp is taken during display list building and does not include rasterization or compositing of that paint."
-  },
-  "PERF_REQUEST_ANIMATION_CALLBACK_NON_PAGELOAD_MS": {
-    "record_in_processes": ["content"],
-    "products": ["firefox"],
-    "alert_emails": [
-      "dpalmeiro@mozilla.com",
-      "perf-telemetry-alerts@mozilla.com"
-    ],
-    "expires_in_version": "never",
-    "releaseChannelCollection": "opt-out",
-    "kind": "exponential",
-    "high": 5000,
-    "n_buckets": 100,
-    "bug_numbers": [1671729],
-    "description": "Time spent in milliseconds calling all request animation frame callbacks for a document after it has reached readystate complete."
-  },
-  "PERF_REQUEST_ANIMATION_CALLBACK_PAGELOAD_MS": {
-    "record_in_processes": ["content"],
-    "products": ["firefox"],
-    "alert_emails": [
-      "dpalmeiro@mozilla.com",
-      "perf-telemetry-alerts@mozilla.com"
-    ],
-    "expires_in_version": "never",
-    "releaseChannelCollection": "opt-out",
-    "kind": "exponential",
-    "high": 5000,
-    "n_buckets": 100,
-    "bug_numbers": [1671729],
-    "description": "Time spent in milliseconds calling all request animation frame callbacks for a document before it has reached readystate complete."
   },
   "WEBEXT_BACKGROUND_PAGE_LOAD_MS": {
     "record_in_processes": ["main"],

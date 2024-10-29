@@ -42,7 +42,6 @@
 #include "mozilla/StaticPrefsAll.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/SyncRunnable.h"
-#include "mozilla/Telemetry.h"
 #include "mozilla/Try.h"
 #include "mozilla/UniquePtrExtensions.h"
 #include "mozilla/URLPreloader.h"
@@ -160,8 +159,6 @@ static void ShutdownAlwaysPrefs();
 //===========================================================================
 // Low-level types and operations
 //===========================================================================
-
-Atomic<bool, mozilla::Relaxed> sPrefTelemetryEventEnabled(false);
 
 typedef nsTArray<nsCString> PrefSaveData;
 
@@ -663,10 +660,6 @@ class Pref {
 
 #define CHECK_SANITIZATION()                                                \
   if (IsPreferenceSanitized(this)) {                                        \
-    if (!sPrefTelemetryEventEnabled.exchange(true)) {                       \
-      sPrefTelemetryEventEnabled = true;                                    \
-      Telemetry::SetEventRecordingEnabled("security"_ns, true);             \
-    }                                                                       \
     glean::security::pref_usage_content_process.Record(                     \
         Some(glean::security::PrefUsageContentProcessExtra{Some(Name())})); \
     if (sCrashOnBlocklistedPref) {                                          \
@@ -1176,11 +1169,6 @@ class MOZ_STACK_CLASS PrefWrapper : public PrefWrapperBase {
         // This check will be performed in the above functions; but for NoneType
         // we need to do it explicitly, then fall-through.
         if (IsPreferenceSanitized(Name())) {
-          if (!sPrefTelemetryEventEnabled.exchange(true)) {
-            sPrefTelemetryEventEnabled = true;
-            Telemetry::SetEventRecordingEnabled("security"_ns, true);
-          }
-
           glean::security::pref_usage_content_process.Record(Some(
               glean::security::PrefUsageContentProcessExtra{Some(Name())}));
 
@@ -1203,11 +1191,6 @@ class MOZ_STACK_CLASS PrefWrapper : public PrefWrapperBase {
     // WantValueKind may short-circuit GetValue functions and cause them to
     // return early, before this check occurs in GetFooValue()
     if (this->is<Pref*>() && IsPreferenceSanitized(this->as<Pref*>())) {
-      if (!sPrefTelemetryEventEnabled.exchange(true)) {
-        sPrefTelemetryEventEnabled = true;
-        Telemetry::SetEventRecordingEnabled("security"_ns, true);
-      }
-
       glean::security::pref_usage_content_process.Record(
           Some(glean::security::PrefUsageContentProcessExtra{Some(Name())}));
 
@@ -2585,7 +2568,7 @@ nsPrefBranch::GetComplexValue(const char* aPrefName, const nsIID& aType,
     }
 
     nsCOMPtr<nsIFile> theFile;
-    rv = NS_NewNativeLocalFile(""_ns, true, getter_AddRefs(theFile));
+    rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(theFile));
     if (NS_FAILED(rv)) {
       return rv;
     }
@@ -3850,7 +3833,7 @@ void Preferences::DeserializePreferences(char* aStr, size_t aPrefsLen) {
 }
 
 /* static */
-FileDescriptor Preferences::EnsureSnapshot(size_t* aSize) {
+mozilla::ipc::SharedMemoryHandle Preferences::EnsureSnapshot(size_t* aSize) {
   MOZ_ASSERT(XRE_IsParentProcess());
   MOZ_ASSERT(NS_IsMainThread());
 
@@ -3900,11 +3883,12 @@ FileDescriptor Preferences::EnsureSnapshot(size_t* aSize) {
   }
 
   *aSize = gSharedMap->MapSize();
-  return gSharedMap->CloneFileDescriptor();
+  return gSharedMap->CloneHandle();
 }
 
 /* static */
-void Preferences::InitSnapshot(const FileDescriptor& aHandle, size_t aSize) {
+void Preferences::InitSnapshot(const mozilla::ipc::SharedMemoryHandle& aHandle,
+                               size_t aSize) {
   MOZ_ASSERT(!XRE_IsParentProcess());
   MOZ_ASSERT(!gSharedMap);
 
@@ -4392,8 +4376,7 @@ already_AddRefed<nsIFile> Preferences::ReadSavedPrefs() {
       // Save a backup copy of the current (invalid) prefs file, since all prefs
       // from the error line to the end of the file will be lost (bug 361102).
       // TODO we should notify the user about it (bug 523725).
-      Telemetry::ScalarSet(
-          Telemetry::ScalarID::PREFERENCES_PREFS_FILE_WAS_INVALID, true);
+      glean::preferences::prefs_file_was_invalid.Set(true);
       MakeBackupPrefFile(file);
     }
   }
@@ -5417,11 +5400,6 @@ int32_t Preferences::GetType(const char* aPrefName) {
 
     case PrefType::None:
       if (IsPreferenceSanitized(aPrefName)) {
-        if (!sPrefTelemetryEventEnabled.exchange(true)) {
-          sPrefTelemetryEventEnabled = true;
-          Telemetry::SetEventRecordingEnabled("security"_ns, true);
-        }
-
         glean::security::pref_usage_content_process.Record(Some(
             glean::security::PrefUsageContentProcessExtra{Some(aPrefName)}));
 
@@ -6180,7 +6158,6 @@ static const PrefListEntry sDynamicPrefOverrideList[]{
     PREF_LIST_ENTRY("accessibility.tabfocus"),
     PREF_LIST_ENTRY("app.update.channel"),
     PREF_LIST_ENTRY("apz.subtest"),
-    PREF_LIST_ENTRY("autoadmin.global_config_url"),  // Bug 1780575
     PREF_LIST_ENTRY("browser.contentblocking.category"),
     PREF_LIST_ENTRY("browser.dom.window.dump.file"),
     PREF_LIST_ENTRY("browser.search.region"),

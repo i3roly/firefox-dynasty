@@ -3842,7 +3842,6 @@ interface nsIHttpsOnlyModePermission extends nsISupports {
   readonly LOAD_INSECURE_BLOCK: 2;
   readonly LOAD_INSECURE_ALLOW_SESSION: 9;
   readonly HTTPSFIRST_LOAD_INSECURE_ALLOW: 10;
-  readonly HTTPSFIRST_LOAD_INSECURE_ALLOW_SESSION: 11;
 }
 
 // https://searchfox.org/mozilla-central/source/dom/serializers/nsIDocumentEncoder.idl
@@ -10484,7 +10483,6 @@ interface nsITelemetry extends nsISupports {
   readonly canRecordReleaseData: boolean;
   readonly canRecordPrereleaseData: boolean;
   readonly isOfficialTelemetry: boolean;
-  setHistogramRecordingEnabled(id: string, enabled: boolean): void;
   asyncFetchTelemetryData(aCallback: nsIFetchTelemetryDataCallback): void;
   readonly fileIOReports: any;
   msSinceProcessStart(): double;
@@ -10500,7 +10498,6 @@ interface nsITelemetry extends nsISupports {
   clearScalars(): void;
   flushBatchedChildTelemetry(): void;
   recordEvent(aCategory: string, aMethod: string, aObject: string, aValue?: any, extra?: any): void;
-  setEventRecordingEnabled(aCategory: string, aEnabled: boolean): void;
   snapshotEvents(aDataset: u32, aClear?: boolean, aEventLimit?: u32): any;
   registerEvents(aCategory: string, aEventData: any): void;
   registerBuiltinEvents(aCategory: string, aEventData: any): void;
@@ -14546,8 +14543,6 @@ enum ContentWin32kLockdownState {
 
 enum FissionDecisionStatus {
   eFissionStatusUnknown = 0,
-  eFissionExperimentControl = 1,
-  eFissionExperimentTreatment = 2,
   eFissionDisabledByE10sEnv = 3,
   eFissionEnabledByEnv = 4,
   eFissionDisabledByEnv = 5,
@@ -14556,7 +14551,6 @@ enum FissionDecisionStatus {
   eFissionEnabledByUserPref = 9,
   eFissionDisabledByUserPref = 10,
   eFissionDisabledByE10sOther = 11,
-  eFissionEnabledByRollout = 12,
 }
 
 }
@@ -14572,7 +14566,6 @@ interface nsIXULRuntime extends nsISupports, Enums<typeof nsIXULRuntime.Experime
   readonly PROCESS_TYPE_VR: 6;
   readonly PROCESS_TYPE_RDD: 7;
   readonly PROCESS_TYPE_SOCKET: 8;
-  readonly PROCESS_TYPE_REMOTESANDBOXBROKER: 9;
   readonly PROCESS_TYPE_FORKSERVER: 10;
   readonly PROCESS_TYPE_UTILITY: 11;
   readonly E10S_MULTI_EXPERIMENT: 1;

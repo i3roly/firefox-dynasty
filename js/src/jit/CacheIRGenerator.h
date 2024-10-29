@@ -637,6 +637,16 @@ class MOZ_RAII InlinableNativeIRGenerator {
 
   AtomicsReadWriteModifyOperands emitAtomicsReadWriteModifyOperands();
 
+  enum class DateComponent {
+    FullYear,
+    Month,
+    Date,
+    Day,
+    Hours,
+    Minutes,
+    Seconds,
+  };
+
   AttachDecision tryAttachArrayPush();
   AttachDecision tryAttachArrayPopShift(InlinableNative native);
   AttachDecision tryAttachArrayJoin();
@@ -762,6 +772,8 @@ class MOZ_RAII InlinableNativeIRGenerator {
   AttachDecision tryAttachSetSize();
   AttachDecision tryAttachMapHas();
   AttachDecision tryAttachMapGet();
+  AttachDecision tryAttachDateGetTime(InlinableNative native);
+  AttachDecision tryAttachDateGet(DateComponent component);
 #ifdef FUZZING_JS_FUZZILLI
   AttachDecision tryAttachFuzzilliHash();
 #endif
@@ -909,6 +921,7 @@ class MOZ_RAII BinaryArithIRGenerator : public IRGenerator {
   AttachDecision tryAttachBigIntPtr();
   AttachDecision tryAttachStringInt32Arith();
   AttachDecision tryAttachStringNumberArith();
+  AttachDecision tryAttachDateArith();
 
  public:
   BinaryArithIRGenerator(JSContext* cx, HandleScript, jsbytecode* pc,
@@ -961,7 +974,8 @@ inline bool BytecodeCallOpCanHaveInlinableNative(JSOp op) {
 
 inline bool BytecodeOpCanHaveAllocSite(JSOp op) {
   return BytecodeCallOpCanHaveInlinableNative(op) || op == JSOp::NewArray ||
-         op == JSOp::NewObject || op == JSOp::NewInit;
+         op == JSOp::NewObject || op == JSOp::NewInit || op == JSOp::CallIter ||
+         op == JSOp::CallContentIter;
 }
 
 class MOZ_RAII CloseIterIRGenerator : public IRGenerator {

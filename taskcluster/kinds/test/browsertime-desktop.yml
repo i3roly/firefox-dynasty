@@ -362,6 +362,12 @@ browsertime-benchmark:
                         safari-tp: []
                         default:
                             - [speedometer3, sp3]
+                windows11-64-.*-hw-ref.*:
+                    by-app:
+                        safari: []
+                        safari-tp: []
+                        default:
+                            - [speedometer3, sp3]
                 default:
                     by-app:
                         firefox:
@@ -447,11 +453,13 @@ browsertime-benchmark:
                             # Bug 1909894, windows 10 + sp3 temporarily
                             windows10-64.*shippable.*-qr.*: [mozilla-central]
                             (linux|windows11-64|macosx1015|macosx1400).*shippable-qr.*: [trunk]
+                            windows11-64-.*-hw-ref-shippable.*: [mozilla-central]
                             .*nightlyasrelease.*: [autoland, mozilla-central]
                             default: []
                     custom-car:
                         by-test-platform:
                             (linux|windows).*shippable-qr.*: [mozilla-central]
+                            windows11-64-.*-hw-ref-shippable.*: [mozilla-central]
                             default: []
                     safari-tp:
                         by-test-platform:
@@ -841,8 +849,30 @@ browsertime-network-bench:
         subtests:
             - [h3-upload, h3-up]
             - [h3-download, h3-down]
+        network-conditions:
+            by-subtest:
+                h3-upload:
+                    - [slow3G, "0"]
+                    - [slow3G, "0.01"]
+                    - [slow3G, "0.1"]
+                    - [slow3G, "0.5"]
+                    - [fast5G, "0"]
+                    - [fast5G, "0.01"]
+                    - [fast5G, "0.1"]
+                    - [fast5G, "0.5"]
+                    - [fast5G, "1"]
+                    - [busy5G, "0"]
+                    - [busy5G, "0.01"]
+                    - [busy5G, "0.1"]
+                    - [busy5G, "0.5"]
+                    - [busy5G, "1"]
+                h3-download:
+                    - [slow3G, "0"]
+                    - [fast5G, "0"]
+                    - [busy5G, "0"]
+                default: []
     description: Raptor (browsertime) networking download/upload performance test
-    max-run-time: 2700
+    max-run-time: 4500
     run-on-projects: []
     tier: 3
     treeherder-symbol: Btime(network-bench)
@@ -884,9 +914,14 @@ browsertime-video-playback-latency:
     description: Raptor (browsertime) Video playback latency test
     mozharness:
         extra-options:
-            - --chimera
-            - --browsertime-no-ffwindowrecorder
-            - --extra-profiler-run
+            by-test-platform:
+                windows.*-64.*shippable.*-qr.*:
+                    - --chimera
+                    - --browsertime-no-ffwindowrecorder
+                    - --extra-profiler-run
+                default:
+                    - --chimera
+                    - --extra-profiler-run
     run-on-projects:
         by-app:
             firefox:

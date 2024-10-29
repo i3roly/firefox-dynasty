@@ -56,6 +56,7 @@
 class nsIArray;
 class nsIBaseWindow;
 class nsIContent;
+class nsICookieJarSettings;
 class nsICSSDeclaration;
 class nsIDocShellTreeOwner;
 class nsIDOMWindowUtils;
@@ -257,6 +258,12 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
 
   bool IsEligibleForMessaging() override;
 
+  void ReportToConsole(uint32_t aErrorFlags, const nsCString& aCategory,
+                       nsContentUtils::PropertiesFile aFile,
+                       const nsCString& aMessageName,
+                       const nsTArray<nsString>& aParams,
+                       const mozilla::SourceLocation& aLocation) override;
+
   void TraceGlobalJSObject(JSTracer* aTrc);
 
   virtual nsresult EnsureScriptEnvironment() override;
@@ -342,14 +349,19 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
   mozilla::dom::DebuggerNotificationManager*
   GetExistingDebuggerNotificationManager() override;
 
+  nsIURI* GetBaseURI() const final;
+
   mozilla::Maybe<mozilla::dom::ClientInfo> GetClientInfo() const override;
-  mozilla::Maybe<mozilla::dom::ClientState> GetClientState() const;
+  mozilla::Maybe<mozilla::dom::ClientState> GetClientState() const final;
   mozilla::Maybe<mozilla::dom::ServiceWorkerDescriptor> GetController()
       const override;
 
   void SetCsp(nsIContentSecurityPolicy* aCsp);
   void SetPreloadCsp(nsIContentSecurityPolicy* aPreloadCsp);
   nsIContentSecurityPolicy* GetCsp();
+
+  virtual already_AddRefed<mozilla::dom::ServiceWorkerContainer>
+  GetServiceWorkerContainer() override;
 
   virtual RefPtr<mozilla::dom::ServiceWorker> GetOrCreateServiceWorker(
       const mozilla::dom::ServiceWorkerDescriptor& aDescriptor) override;
@@ -364,6 +376,8 @@ class nsGlobalWindowInner final : public mozilla::dom::EventTarget,
       override;
 
   mozilla::StorageAccess GetStorageAccess() final;
+
+  nsICookieJarSettings* GetCookieJarSettings() final;
 
   void NoteCalledRegisterForServiceWorkerScope(const nsACString& aScope);
 

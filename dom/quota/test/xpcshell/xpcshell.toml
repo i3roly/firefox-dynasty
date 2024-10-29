@@ -3,6 +3,8 @@ head = "head.js"
 tags = "condprof"
 support-files = [
   "basics_profile.zip",
+  "clearStoragesForClient_profile.json",
+  "clearStoragesForClient_profile.zip",
   "clearStoragesForOriginPrefix_profile.json",
   "clearStoragesForOriginPrefix_profile.zip",
   "clearStoragesForPrincipal_profile.zip",
@@ -45,6 +47,8 @@ skip-if = ["true"] # Only used for recreating unsetLastAccessTime_profile.zip
 
 ["test_basics.js"]
 
+["test_clearStoragesForClient.js"]
+
 ["test_clearStoragesForOriginAttributesPattern.js"]
 
 ["test_clearStoragesForOriginPrefix.js"]
@@ -75,7 +79,13 @@ skip-if = ["condprof"] # frequent perma fail, then goes away.
 
 ["test_initializePersistentClient.js"]
 
+["test_initializePersistentOrigin.js"]
+
+["test_initializePersistentStorage.js"]
+
 ["test_initializeTemporaryClient.js"]
+
+["test_initializeTemporaryOrigin.js"]
 
 ["test_listOrigins.js"]
 
@@ -94,6 +104,8 @@ skip-if = ["condprof"] # frequent perma fail, then goes away.
 ["test_persist_globalLimit.js"]
 
 ["test_persist_groupLimit.js"]
+
+["test_quotaClientInteractions.js"]
 
 ["test_removeLocalStorage.js"]
 

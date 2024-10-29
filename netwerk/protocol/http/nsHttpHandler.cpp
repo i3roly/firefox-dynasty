@@ -70,6 +70,7 @@
 #include "mozilla/net/SocketProcessParent.h"
 #include "mozilla/net/SocketProcessChild.h"
 #include "mozilla/ipc/URIUtils.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Telemetry.h"
 #include "mozilla/Unused.h"
 #include "mozilla/AntiTrackingRedirectHeuristic.h"
@@ -388,16 +389,22 @@ nsresult nsHttpHandler::Init() {
 
   InitUserAgentComponents();
 
-  // This perference is only used in parent process.
+  // This preference is only used in parent process.
   if (!IsNeckoChild()) {
     mActiveTabPriority =
         Preferences::GetBool(HTTP_PREF("active_tab_priority"), true);
-    std::bitset<3> usageOfHTTPSRRPrefs;
-    usageOfHTTPSRRPrefs[0] = StaticPrefs::network_dns_upgrade_with_https_rr();
-    usageOfHTTPSRRPrefs[1] = StaticPrefs::network_dns_use_https_rr_as_altsvc();
-    usageOfHTTPSRRPrefs[2] = StaticPrefs::network_dns_echconfig_enabled();
-    Telemetry::ScalarSet(Telemetry::ScalarID::NETWORKING_HTTPS_RR_PREFS_USAGE,
-                         static_cast<uint32_t>(usageOfHTTPSRRPrefs.to_ulong()));
+    if (XRE_IsParentProcess()) {
+      std::bitset<3> usageOfHTTPSRRPrefs;
+      usageOfHTTPSRRPrefs[0] = StaticPrefs::network_dns_upgrade_with_https_rr();
+      usageOfHTTPSRRPrefs[1] =
+          StaticPrefs::network_dns_use_https_rr_as_altsvc();
+      usageOfHTTPSRRPrefs[2] = StaticPrefs::network_dns_echconfig_enabled();
+      glean::networking::https_rr_prefs_usage.Set(
+          static_cast<uint32_t>(usageOfHTTPSRRPrefs.to_ulong()));
+      glean::networking::http3_enabled.Set(
+          StaticPrefs::network_http_http3_enable());
+    }
+
     mActivityDistributor = components::HttpActivityDistributor::Service();
 
     auto initQLogDir = [&]() {
@@ -446,9 +453,6 @@ nsresult nsHttpHandler::Init() {
   Preferences::RegisterPrefixCallbacks(nsHttpHandler::PrefsChanged,
                                        gCallbackPrefs, this);
   PrefsChanged(nullptr);
-
-  Telemetry::ScalarSet(Telemetry::ScalarID::NETWORKING_HTTP3_ENABLED,
-                       StaticPrefs::network_http_http3_enable());
 
   mCompatFirefox.AssignLiteral("Firefox/" MOZILLA_UAVERSION);
 
@@ -1940,8 +1944,8 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
     nsCOMPtr<nsIFile> qlogDir;
     if (Preferences::GetBool(HTTP_PREF("http3.enable_qlog")) &&
         !mHttp3QlogDir.IsEmpty() &&
-        NS_SUCCEEDED(NS_NewNativeLocalFile(mHttp3QlogDir, false,
-                                           getter_AddRefs(qlogDir)))) {
+        NS_SUCCEEDED(
+            NS_NewNativeLocalFile(mHttp3QlogDir, getter_AddRefs(qlogDir)))) {
       // Here we do main thread IO, but since this only happens
       // when enabling a developer feature it's not a problem for users.
       rv = qlogDir->Create(nsIFile::DIRECTORY_TYPE, 0755);

@@ -54,6 +54,18 @@ class DocGroup;
 
 namespace mozilla {
 
+enum class SelectionScrollMode : uint8_t {
+  // Don't scroll synchronously. We'll flush when the scroll event fires so we
+  // make sure to scroll to the right place.
+  Async,
+  // Scroll synchronously, without flushing layout.
+  SyncNoFlush,
+  // Scroll synchronously, flushing layout. You MUST hold a strong ref on
+  // 'this' for the duration of this call.  This might destroy arbitrary
+  // layout objects.
+  SyncFlush,
+};
+
 namespace dom {
 
 /**
@@ -220,25 +232,14 @@ class Selection final : public nsSupportsWeakReference,
                                          nsRect* aRect);
 
   nsresult PostScrollSelectionIntoViewEvent(SelectionRegion aRegion,
-                                            int32_t aFlags,
+                                            ScrollFlags aFlags,
                                             ScrollAxis aVertical,
                                             ScrollAxis aHorizontal);
-  enum {
-    SCROLL_SYNCHRONOUS = 1 << 1,
-    SCROLL_FIRST_ANCESTOR_ONLY = 1 << 2,
-    SCROLL_DO_FLUSH =
-        1 << 3,  // only matters if SCROLL_SYNCHRONOUS is passed too
-    SCROLL_OVERFLOW_HIDDEN = 1 << 5,
-    SCROLL_FOR_CARET_MOVE = 1 << 6
-  };
-  // If aFlags doesn't contain SCROLL_SYNCHRONOUS, then we'll flush when
-  // the scroll event fires so we make sure to scroll to the right place.
-  // Otherwise, if SCROLL_DO_FLUSH is also in aFlags, then this method will
-  // flush layout and you MUST hold a strong ref on 'this' for the duration
-  // of this call.  This might destroy arbitrary layout objects.
-  MOZ_CAN_RUN_SCRIPT nsresult
-  ScrollIntoView(SelectionRegion aRegion, ScrollAxis aVertical = ScrollAxis(),
-                 ScrollAxis aHorizontal = ScrollAxis(), int32_t aFlags = 0);
+
+  MOZ_CAN_RUN_SCRIPT nsresult ScrollIntoView(
+      SelectionRegion, ScrollAxis aVertical = ScrollAxis(),
+      ScrollAxis aHorizontal = ScrollAxis(), ScrollFlags = ScrollFlags::None,
+      SelectionScrollMode = SelectionScrollMode::Async);
 
  private:
   static bool IsUserSelectionCollapsed(
@@ -904,7 +905,7 @@ class Selection final : public nsSupportsWeakReference,
 
     ScrollSelectionIntoViewEvent(Selection* aSelection, SelectionRegion aRegion,
                                  ScrollAxis aVertical, ScrollAxis aHorizontal,
-                                 int32_t aFlags)
+                                 ScrollFlags aFlags)
         : Runnable("dom::Selection::ScrollSelectionIntoViewEvent"),
           mSelection(aSelection),
           mRegion(aRegion),
@@ -920,7 +921,7 @@ class Selection final : public nsSupportsWeakReference,
     SelectionRegion mRegion;
     ScrollAxis mVerticalScroll;
     ScrollAxis mHorizontalScroll;
-    int32_t mFlags;
+    ScrollFlags mFlags;
   };
 
   /**
@@ -1228,28 +1229,28 @@ class MOZ_RAII AutoHideSelectionChanges final {
 
 }  // namespace dom
 
-inline bool IsValidRawSelectionType(RawSelectionType aRawSelectionType) {
+constexpr bool IsValidRawSelectionType(RawSelectionType aRawSelectionType) {
   return aRawSelectionType >= nsISelectionController::SELECTION_NONE &&
          aRawSelectionType <= nsISelectionController::SELECTION_URLSTRIKEOUT;
 }
 
-inline SelectionType ToSelectionType(RawSelectionType aRawSelectionType) {
+constexpr SelectionType ToSelectionType(RawSelectionType aRawSelectionType) {
   if (!IsValidRawSelectionType(aRawSelectionType)) {
     return SelectionType::eInvalid;
   }
   return static_cast<SelectionType>(aRawSelectionType);
 }
 
-inline RawSelectionType ToRawSelectionType(SelectionType aSelectionType) {
+constexpr RawSelectionType ToRawSelectionType(SelectionType aSelectionType) {
   MOZ_ASSERT(aSelectionType != SelectionType::eInvalid);
   return static_cast<RawSelectionType>(aSelectionType);
 }
 
-inline RawSelectionType ToRawSelectionType(TextRangeType aTextRangeType) {
+constexpr RawSelectionType ToRawSelectionType(TextRangeType aTextRangeType) {
   return ToRawSelectionType(ToSelectionType(aTextRangeType));
 }
 
-inline SelectionTypeMask ToSelectionTypeMask(SelectionType aSelectionType) {
+constexpr SelectionTypeMask ToSelectionTypeMask(SelectionType aSelectionType) {
   MOZ_ASSERT(aSelectionType != SelectionType::eInvalid);
   return aSelectionType == SelectionType::eNone
              ? 0
@@ -1274,5 +1275,27 @@ inline std::ostream& operator<<(
 }
 
 }  // namespace mozilla
+
+inline nsresult nsISelectionController::ScrollSelectionIntoView(
+    mozilla::SelectionType aType, SelectionRegion aRegion,
+    const mozilla::ScrollAxis& aVertical = mozilla::ScrollAxis(),
+    const mozilla::ScrollAxis& aHorizontal = mozilla::ScrollAxis(),
+    mozilla::ScrollFlags aScrollFlags = mozilla::ScrollFlags::None,
+    mozilla::SelectionScrollMode aMode = mozilla::SelectionScrollMode::Async) {
+  RefPtr selection = GetSelection(mozilla::RawSelectionType(aType));
+  if (!selection) {
+    return NS_ERROR_FAILURE;
+  }
+  return selection->ScrollIntoView(aRegion, aVertical, aHorizontal,
+                                   aScrollFlags, aMode);
+}
+
+inline nsresult nsISelectionController::ScrollSelectionIntoView(
+    mozilla::SelectionType aType, SelectionRegion aRegion,
+    mozilla::SelectionScrollMode aMode) {
+  return ScrollSelectionIntoView(aType, aRegion, mozilla::ScrollAxis(),
+                                 mozilla::ScrollAxis(),
+                                 mozilla::ScrollFlags::None, aMode);
+}
 
 #endif  // mozilla_Selection_h__

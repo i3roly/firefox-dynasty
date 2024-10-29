@@ -154,6 +154,20 @@ class ArrayBufferDataStream {
       return value;
     }
 
+    readBytes() {
+      const size = this.readInt32();
+      const bytes = new Uint8Array(this.dataView.buffer, this.pos, size);
+      this.pos += size;
+      return bytes
+    }
+
+    writeBytes(uint8Array) {
+      this.writeUint32(uint8Array.length);
+      value.forEach((elt) => {
+        dataStream.writeUint8(elt);
+      })
+    }
+
     // Reads a RemoteSettings pointer from the data stream
     // UniFFI Pointers are **always** 8 bytes long. That is enforced
     // by the C++ and Rust Scaffolding code.
@@ -355,7 +369,7 @@ export class RemoteSettings {
                 throw e;
             }
             return UniFFIScaffolding.callSync(
-                9, // remote_settings:uniffi_remote_settings_fn_constructor_remotesettings_new
+                12, // remote_settings:uniffi_remote_settings_fn_constructor_remotesettings_new
                 FfiConverterTypeRemoteSettingsConfig.lower(remoteSettingsConfig),
             )
         }
@@ -382,7 +396,7 @@ export class RemoteSettings {
                 throw e;
             }
             return UniFFIScaffolding.callAsync(
-                6, // remote_settings:uniffi_remote_settings_fn_method_remotesettings_download_attachment_to_path
+                9, // remote_settings:uniffi_remote_settings_fn_method_remotesettings_download_attachment_to_path
                 FfiConverterTypeRemoteSettings.lower(this),
                 FfiConverterString.lower(attachmentId),
                 FfiConverterString.lower(path),
@@ -400,7 +414,7 @@ export class RemoteSettings {
         const liftError = (data) => FfiConverterTypeRemoteSettingsError.lift(data);
         const functionCall = () => {
             return UniFFIScaffolding.callAsync(
-                7, // remote_settings:uniffi_remote_settings_fn_method_remotesettings_get_records
+                10, // remote_settings:uniffi_remote_settings_fn_method_remotesettings_get_records
                 FfiConverterTypeRemoteSettings.lower(this),
             )
         }
@@ -424,7 +438,7 @@ export class RemoteSettings {
                 throw e;
             }
             return UniFFIScaffolding.callAsync(
-                8, // remote_settings:uniffi_remote_settings_fn_method_remotesettings_get_records_since
+                11, // remote_settings:uniffi_remote_settings_fn_method_remotesettings_get_records_since
                 FfiConverterTypeRemoteSettings.lower(this),
                 FfiConverterU64.lower(timestamp),
             )
@@ -933,91 +947,48 @@ export class FfiConverterTypeRemoteSettingsResponse extends FfiConverterArrayBuf
 export class RemoteSettingsError extends Error {}
 
 
-export class JsonError extends RemoteSettingsError {
+export class Network extends RemoteSettingsError {
 
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
+    constructor(
+        reason,
+        ...params
+    ) {
+        const message = `reason: ${ reason }`;
+        super(message, ...params);
+        this.reason = reason;
     }
     toString() {
-        return `JsonError: ${super.toString()}`
+        return `Network: ${super.toString()}`
     }
 }
 
-export class FileError extends RemoteSettingsError {
+export class Backoff extends RemoteSettingsError {
 
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
+    constructor(
+        seconds,
+        ...params
+    ) {
+        const message = `seconds: ${ seconds }`;
+        super(message, ...params);
+        this.seconds = seconds;
     }
     toString() {
-        return `FileError: ${super.toString()}`
+        return `Backoff: ${super.toString()}`
     }
 }
 
-export class RequestError extends RemoteSettingsError {
+export class Other extends RemoteSettingsError {
 
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
+    constructor(
+        reason,
+        ...params
+    ) {
+        const message = `reason: ${ reason }`;
+        super(message, ...params);
+        this.reason = reason;
     }
     toString() {
-        return `RequestError: ${super.toString()}`
-    }
-}
-
-export class UrlParsingError extends RemoteSettingsError {
-
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
-    }
-    toString() {
-        return `UrlParsingError: ${super.toString()}`
-    }
-}
-
-export class BackoffError extends RemoteSettingsError {
-
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
-    }
-    toString() {
-        return `BackoffError: ${super.toString()}`
-    }
-}
-
-export class ResponseError extends RemoteSettingsError {
-
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
-    }
-    toString() {
-        return `ResponseError: ${super.toString()}`
-    }
-}
-
-export class AttachmentsUnsupportedError extends RemoteSettingsError {
-
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
-    }
-    toString() {
-        return `AttachmentsUnsupportedError: ${super.toString()}`
-    }
-}
-
-export class ConfigError extends RemoteSettingsError {
-
-    constructor(message, ...params) {
-        super(...params);
-        this.message = message;
-    }
-    toString() {
-        return `ConfigError: ${super.toString()}`
+        return `Other: ${super.toString()}`
     }
 }
 
@@ -1026,21 +997,17 @@ export class FfiConverterTypeRemoteSettingsError extends FfiConverterArrayBuffer
     static read(dataStream) {
         switch (dataStream.readInt32()) {
             case 1:
-                return new JsonError(FfiConverterString.read(dataStream));
+                return new Network(
+                    FfiConverterString.read(dataStream)
+                    );
             case 2:
-                return new FileError(FfiConverterString.read(dataStream));
+                return new Backoff(
+                    FfiConverterU64.read(dataStream)
+                    );
             case 3:
-                return new RequestError(FfiConverterString.read(dataStream));
-            case 4:
-                return new UrlParsingError(FfiConverterString.read(dataStream));
-            case 5:
-                return new BackoffError(FfiConverterString.read(dataStream));
-            case 6:
-                return new ResponseError(FfiConverterString.read(dataStream));
-            case 7:
-                return new AttachmentsUnsupportedError(FfiConverterString.read(dataStream));
-            case 8:
-                return new ConfigError(FfiConverterString.read(dataStream));
+                return new Other(
+                    FfiConverterString.read(dataStream)
+                    );
             default:
                 throw new UniFFITypeError("Unknown RemoteSettingsError variant");
         }
@@ -1048,63 +1015,34 @@ export class FfiConverterTypeRemoteSettingsError extends FfiConverterArrayBuffer
     static computeSize(value) {
         // Size of the Int indicating the variant
         let totalSize = 4;
-        if (value instanceof JsonError) {
+        if (value instanceof Network) {
+            totalSize += FfiConverterString.computeSize(value.reason);
             return totalSize;
         }
-        if (value instanceof FileError) {
+        if (value instanceof Backoff) {
+            totalSize += FfiConverterU64.computeSize(value.seconds);
             return totalSize;
         }
-        if (value instanceof RequestError) {
-            return totalSize;
-        }
-        if (value instanceof UrlParsingError) {
-            return totalSize;
-        }
-        if (value instanceof BackoffError) {
-            return totalSize;
-        }
-        if (value instanceof ResponseError) {
-            return totalSize;
-        }
-        if (value instanceof AttachmentsUnsupportedError) {
-            return totalSize;
-        }
-        if (value instanceof ConfigError) {
+        if (value instanceof Other) {
+            totalSize += FfiConverterString.computeSize(value.reason);
             return totalSize;
         }
         throw new UniFFITypeError("Unknown RemoteSettingsError variant");
     }
     static write(dataStream, value) {
-        if (value instanceof JsonError) {
+        if (value instanceof Network) {
             dataStream.writeInt32(1);
+            FfiConverterString.write(dataStream, value.reason);
             return;
         }
-        if (value instanceof FileError) {
+        if (value instanceof Backoff) {
             dataStream.writeInt32(2);
+            FfiConverterU64.write(dataStream, value.seconds);
             return;
         }
-        if (value instanceof RequestError) {
+        if (value instanceof Other) {
             dataStream.writeInt32(3);
-            return;
-        }
-        if (value instanceof UrlParsingError) {
-            dataStream.writeInt32(4);
-            return;
-        }
-        if (value instanceof BackoffError) {
-            dataStream.writeInt32(5);
-            return;
-        }
-        if (value instanceof ResponseError) {
-            dataStream.writeInt32(6);
-            return;
-        }
-        if (value instanceof AttachmentsUnsupportedError) {
-            dataStream.writeInt32(7);
-            return;
-        }
-        if (value instanceof ConfigError) {
-            dataStream.writeInt32(8);
+            FfiConverterString.write(dataStream, value.reason);
             return;
         }
         throw new UniFFITypeError("Unknown RemoteSettingsError variant");

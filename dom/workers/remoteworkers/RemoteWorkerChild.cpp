@@ -323,14 +323,18 @@ nsresult RemoteWorkerChild::ExecWorkerOnMainThread(RemoteWorkerData&& aData) {
 
   nsresult rv = NS_OK;
 
-  if (clientInfo.isSome()) {
-    Maybe<mozilla::ipc::CSPInfo> cspInfo = clientInfo.ref().GetCspInfo();
-    if (cspInfo.isSome()) {
-      info.mCSP = CSPInfoToCSP(cspInfo.ref(), nullptr);
-      info.mCSPInfo = MakeUnique<CSPInfo>();
-      rv = CSPToCSPInfo(info.mCSP, info.mCSPInfo.get());
-      if (NS_WARN_IF(NS_FAILED(rv))) {
-        return rv;
+  if (mIsServiceWorker) {
+    info.mSourceInfo = clientInfo;
+  } else {
+    if (clientInfo.isSome()) {
+      Maybe<mozilla::ipc::CSPInfo> cspInfo = clientInfo.ref().GetCspInfo();
+      if (cspInfo.isSome()) {
+        info.mCSP = CSPInfoToCSP(cspInfo.ref(), nullptr);
+        info.mCSPInfo = MakeUnique<CSPInfo>();
+        rv = CSPToCSPInfo(info.mCSP, info.mCSPInfo.get());
+        if (NS_WARN_IF(NS_FAILED(rv))) {
+          return rv;
+        }
       }
     }
   }
@@ -359,7 +363,8 @@ nsresult RemoteWorkerChild::ExecWorkerOnMainThread(RemoteWorkerData&& aData) {
     // uri encoding.
     rv = ChannelFromScriptURLMainThread(
         info.mLoadingPrincipal, nullptr /* parent document */, info.mLoadGroup,
-        info.mResolvedScriptURI, aData.type(), aData.credentials(), clientInfo,
+        info.mResolvedScriptURI, aData.workerOptions().mType,
+        aData.workerOptions().mCredentials, clientInfo,
         nsIContentPolicy::TYPE_INTERNAL_SHARED_WORKER, info.mCookieJarSettings,
         info.mReferrerInfo, getter_AddRefs(info.mChannel));
     if (NS_WARN_IF(NS_FAILED(rv))) {
@@ -385,8 +390,9 @@ nsresult RemoteWorkerChild::ExecWorkerOnMainThread(RemoteWorkerData&& aData) {
   RefPtr<WorkerPrivate> workerPrivate = WorkerPrivate::Constructor(
       jsapi.cx(), aData.originalScriptURL(), false,
       mIsServiceWorker ? WorkerKindService : WorkerKindShared,
-      aData.credentials(), aData.type(), aData.name(), VoidCString(), &info,
-      error, std::move(workerPrivateId),
+      aData.workerOptions().mCredentials, aData.workerOptions().mType,
+      aData.workerOptions().mName, VoidCString(), &info, error,
+      std::move(workerPrivateId),
       [self](bool aEverRan) {
         self->OnWorkerCancellationTransitionStateFromPendingOrRunningToCanceled();
       },

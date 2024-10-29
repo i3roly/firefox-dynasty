@@ -10,6 +10,10 @@
       <toolbarbutton id="appMenu-update-banner" class="panel-banner-item subviewbutton"
                      wrap="true"
                      hidden="true"/>
+
+      <toolbaritem id="appMenu-fxa-menu-message"
+                   closemenu="none">
+      </toolbaritem>
       <toolbaritem id="appMenu-fxa-status2"
                    closemenu="none"
                    class="subviewbutton toolbaritem-combined-buttons">
@@ -25,12 +29,12 @@
           </vbox>
         </toolbarbutton>
       </toolbaritem>
+#ifdef MOZ_SELECTABLE_PROFILES
       <toolbarbutton id="appMenu-profiles-button"
-                     class="subviewbutton subviewbutton-nav"
-                     data-l10n-id="appmenuitem-profiles"
-                     data-l10n-args='{ "profilename": "" }'
+                     class="subviewbutton subviewbutton-nav subviewbutton-iconic"
                      closemenu="none"
                      hidden="true"/>
+#endif
       <toolbarseparator id="appMenu-fxa-separator" class="proton-zap"/>
       <toolbarbutton id="appMenu-new-tab-button2"
                      class="subviewbutton"
@@ -197,38 +201,45 @@
                    />
   </panelview>
 
-  <panelview id="PanelUI-profiles" flex="1">
+#ifdef MOZ_SELECTABLE_PROFILES
+  <panelview id="PanelUI-profiles"
+             flex="1"
+             has-custom-header="true">
+    <box id="PanelUI-profiles-header" class="panel-header">
+      <toolbarbutton class="subviewbutton subviewbutton-iconic subviewbutton-back"
+                     id="profiles-appmenu-back-button"
+                     tabindex="0"
+                     closemenu="none"
+                     />
+      <html:h1 id="profiles-header-title">
+        <html:span id="profiles-header-content"></html:span>
+      </html:h1>
+      <toolbarbutton id="profiles-edit-this-profile-button"
+                     class="subviewbutton subviewbutton-iconic toolbarbutton-1"
+                     data-l10n-id="appmenu-edit-profile"
+                     />
+    </box>
     <vbox class="panel-subview-body">
       <vbox id="current-profile">
+        <box id="half-height-profile"></box>
         <image id="profile-icon-image"></image>
-        <h2 id="profile-name"></h2>
-        <hbox id="this-profile-buttons">
-          <toolbarbutton id="profiles-edit-this-delete-button"
-                         class="subviewbutton toolbarbutton-1"
-                         />
-          <toolbarbutton id="profiles-delete-this-profile-button"
-                         class="subviewbutton toolbarbutton-1"
-                         />
-        </hbox>
       </vbox>
-      <toolbarseparator/>
+      <html:h2 id="profiles-subtitle"
+               class="subview-subheader"
+               data-l10n-id="appmenu-other-profiles" />
       <vbox id="profiles-list"></vbox>
-      <toolbarseparator/>
-      <toolbarbutton id="profiles-close-profile-button"
-                     class="subviewbutton"
-                     data-l10n-id="appmenu-close-profile"
-                     data-l10n-args='{ "profilename": "" }'
-                     />
       <toolbarbutton id="profiles-create-profile-button"
-                     class="subviewbutton"
+                     class="subviewbutton subviewbutton-iconic"
                      data-l10n-id="appmenu-create-profile"
                      />
+      <toolbarseparator/>
       <toolbarbutton id="profiles-manage-profiles-button"
                      class="subviewbutton"
                      data-l10n-id="appmenu-manage-profiles"
                      />
     </vbox>
   </panelview>
+#endif
 
   <panelview id="appMenu-library-recentlyClosedTabs"/>
   <panelview id="appMenu-library-recentlyClosedWindows"/>
@@ -568,6 +579,9 @@
 
   <panelview id="PanelUI-fxa" class="PanelUI-subView">
     <vbox id="PanelUI-fxa-menu" class="panel-subview-body">
+      <toolbaritem id="PanelUI-fxa-menu-message"
+                   closemenu="none">
+      </toolbaritem>
       <toolbarbutton id="fxa-manage-account-button"
                      align="center"
                      class="subviewbutton"

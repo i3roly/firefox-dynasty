@@ -635,10 +635,7 @@ class MigrationUtils {
       // Record that the uninstaller requested a profile refresh
       if (Services.env.get("MOZ_UNINSTALLER_PROFILE_REFRESH")) {
         Services.env.set("MOZ_UNINSTALLER_PROFILE_REFRESH", "");
-        Services.telemetry.scalarSet(
-          "migration.uninstaller_profile_refresh",
-          true
-        );
+        Glean.migration.uninstallerProfileRefresh.set(true);
       }
 
       openStandaloneWindow(true /* blocking */);
@@ -886,8 +883,6 @@ class MigrationUtils {
     );
 
     for (let faviconDataItem of favicons) {
-      let dataURL;
-
       try {
         // getMIMETypeFromContent throws error if could not get the mime type
         // from the data.
@@ -897,7 +892,7 @@ class MigrationUtils {
           faviconDataItem.faviconData.length
         );
 
-        dataURL = await new Promise((resolve, reject) => {
+        let dataURL = await new Promise((resolve, reject) => {
           let buffer = new Uint8ClampedArray(faviconDataItem.faviconData);
           let blob = new Blob([buffer], { type: mimeType });
           let reader = new FileReader();
@@ -909,15 +904,16 @@ class MigrationUtils {
         let fakeFaviconURI = Services.io.newURI(
           "fake-favicon-uri:" + faviconDataItem.uri.spec
         );
-        lazy.PlacesUtils.favicons.setFaviconForPage(
-          faviconDataItem.uri,
-          fakeFaviconURI,
-          Services.io.newURI(dataURL)
-        );
+        lazy.PlacesUtils.favicons
+          .setFaviconForPage(
+            faviconDataItem.uri,
+            fakeFaviconURI,
+            Services.io.newURI(dataURL)
+          )
+          .catch(console.warn);
       } catch (e) {
         // Even if error happens for favicon, continue the process.
         console.warn(e);
-        continue;
       }
     }
   }

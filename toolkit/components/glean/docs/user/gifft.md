@@ -156,15 +156,6 @@ Assert.equal(true, snapshot["telemetry.test.mirror_for_labeled_bool"]["1".repeat
 ### Telemetry Events
 
 A Glean event can be mirrored to a Telemetry Event.
-Telemetry Events must be enabled before they can be recorded to via the API
-`Telemetry.setEventRecordingEnabled(category, enable);`.
-If the Telemetry Event isn't enabled,
-recording to the Glean event will still work,
-and the event will be Summarized in Telemetry as all disabled events are.
-
-See
-[the Telemetry Event docs](/toolkit/components/telemetry/collection/events.rst)
-for details on how disabled Telemetry Events behave.
 
 In order to make use of the `value` field in Telemetry Events, you must
 first define an event extra in the metrics.yaml file with the name "value".
@@ -230,6 +221,11 @@ samples might end up looking more different than you'd expect.
 This shouldn't affect analysis, but it can affect testing, so please
 [bear this difference in mind](./instrumentation_tests.md#general-things-to-bear-in-mind)
 in testing.
+
+#### `timing_distribution` mirrors: sample-based APIs are not recorded
+
+Values stored with `accumulate_samples` and `accumulate_single_sample` are not
+passed to the Telemetry mirror histogram with GIFFT.
 
 ### App Shutdown
 

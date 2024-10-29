@@ -15,10 +15,10 @@ import telnetlib
 import time
 from collections import namedtuple
 from enum import Enum
+from urllib.request import urlopen
 
 import six
 from mozdevice import ADBDeviceFactory, ADBHost
-from six.moves import input, urllib
 
 MOZBUILD_PATH = os.environ.get(
     "MOZBUILD_STATE_PATH", os.path.expanduser(os.path.join("~", ".mozbuild"))
@@ -289,7 +289,11 @@ def metadata_for_app(app, aab=False):
     activity_name = None
     subcommand = None
 
-    if "fennec" in app or "firefox" in app:
+    if app == "org.mozilla.fenix.release" or app == "org.mozilla.firefox":
+        package_name = "org.mozilla.firefox"
+        activity_name = "org.mozilla.firefox.App"
+        subcommand = "installFenixRelease"
+    elif "fennec" in app or "firefox" in app:
         activity_name = "org.mozilla.gecko.BrowserApp"
     elif app == "org.mozilla.geckoview.test":
         subcommand = "install-geckoview-test"
@@ -418,7 +422,7 @@ def verify_android_device(
         if metadata.subcommand and installed:
             device.uninstall_app(metadata.package_name)
 
-        if "fennec" in metadata.package_name or "firefox" in metadata.package_name:
+        if metadata.activity_name == "org.mozilla.gecko.BrowserApp":
             if installed:
                 device.uninstall_app(metadata.package_name)
             _log_info("Installing Firefox...")
@@ -1009,7 +1013,7 @@ def _log_info(text):
 
 def _download_file(url, filename, path):
     _log_debug("Download %s to %s/%s..." % (url, path, filename))
-    f = urllib.request.urlopen(url)
+    f = urlopen(url)
     if not os.path.isdir(path):
         try:
             os.makedirs(path)

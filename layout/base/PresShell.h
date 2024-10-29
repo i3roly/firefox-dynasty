@@ -1259,7 +1259,8 @@ class PresShell final : public nsStubDocumentObserver,
   NS_IMETHOD GetDisplaySelection(int16_t* aToggle) override;
   NS_IMETHOD ScrollSelectionIntoView(RawSelectionType aRawSelectionType,
                                      SelectionRegion aRegion,
-                                     int16_t aFlags) override;
+                                     ControllerScrollFlags aFlags) override;
+  using nsISelectionController::ScrollSelectionIntoView;
   NS_IMETHOD RepaintSelection(RawSelectionType aRawSelectionType) override;
   void SelectionWillTakeFocus() override;
   void SelectionWillLoseFocus() override;
@@ -1474,6 +1475,12 @@ class PresShell final : public nsStubDocumentObserver,
    * Calls FrameNeedsReflow on all fixed position children of the root frame.
    */
   void MarkFixedFramesForReflow(IntrinsicDirty aIntrinsicDirty);
+
+  /**
+   * Similar to above MarkFixedFramesForReflow, but for sticky position children
+   * stuck to the root frame.
+   */
+  void MarkStickyFramesForReflow();
 
   void MaybeReflowForInflationScreenSizeChange();
 

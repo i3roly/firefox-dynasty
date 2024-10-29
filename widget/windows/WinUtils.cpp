@@ -18,6 +18,7 @@
 #include "mozilla/ArrayUtils.h"
 #include "mozilla/BackgroundHangMonitor.h"
 #include "mozilla/ClearOnShutdown.h"
+#include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/DataSurfaceHelpers.h"
@@ -899,26 +900,17 @@ NS_IMETHODIMP AsyncEncodeAndWriteIcon::Run() {
   FILE* file = _wfopen(mIconPath.get(), L"wb");
   if (!file) {
     // Maybe the directory doesn't exist; try creating it, then fopen again.
-    nsresult rv = NS_ERROR_FAILURE;
-    nsCOMPtr<nsIFile> comFile = do_CreateInstance("@mozilla.org/file/local;1");
-    if (comFile) {
-      rv = comFile->InitWithPath(mIconPath);
-      if (NS_SUCCEEDED(rv)) {
-        nsCOMPtr<nsIFile> dirPath;
-        comFile->GetParent(getter_AddRefs(dirPath));
-        if (dirPath) {
-          rv = dirPath->Create(nsIFile::DIRECTORY_TYPE, 0777);
-          if (NS_SUCCEEDED(rv) || rv == NS_ERROR_FILE_ALREADY_EXISTS) {
-            file = _wfopen(mIconPath.get(), L"wb");
-            if (!file) {
-              rv = NS_ERROR_FAILURE;
-            }
-          }
-        }
-      }
-    }
-    if (!file) {
+    nsCOMPtr<nsIFile> comFile;
+    MOZ_TRY(NS_NewLocalFile(mIconPath, getter_AddRefs(comFile)));
+    nsCOMPtr<nsIFile> dirPath;
+    MOZ_TRY(comFile->GetParent(getter_AddRefs(dirPath)));
+    nsresult rv = dirPath->Create(nsIFile::DIRECTORY_TYPE, 0777);
+    if (NS_FAILED(rv) && rv != NS_ERROR_FILE_ALREADY_EXISTS) {
       return rv;
+    }
+    file = _wfopen(mIconPath.get(), L"wb");
+    if (!file) {
+      return NS_ERROR_FAILURE;
     }
   }
   nsresult rv = gfxUtils::EncodeSourceSurface(surface, ImageType::ICO, u""_ns,
@@ -1311,7 +1303,7 @@ LayoutDeviceIntRegion WinUtils::ConvertHRGNToRegion(HRGN aRgn) {
 }
 
 /* static */
-HRGN WinUtils::RegionToHRGN(const LayoutDeviceIntRegion& aRegion) {
+nsAutoRegion WinUtils::RegionToHRGN(const LayoutDeviceIntRegion& aRegion) {
   const uint32_t count = aRegion.GetNumRects();
   const size_t regionBytes = count * sizeof(RECT);
   const size_t regionDataBytes = sizeof(RGNDATAHEADER) + regionBytes;
@@ -1329,7 +1321,7 @@ HRGN WinUtils::RegionToHRGN(const LayoutDeviceIntRegion& aRegion) {
   for (auto iter = aRegion.RectIter(); !iter.Done(); iter.Next()) {
     *buf++ = ToWinRect(iter.Get());
   }
-  return ::ExtCreateRegion(nullptr, regionDataBytes, data);
+  return nsAutoRegion(::ExtCreateRegion(nullptr, regionDataBytes, data));
 }
 
 LayoutDeviceIntRect WinUtils::ToIntRect(const RECT& aRect) {
@@ -2067,6 +2059,12 @@ bool WinUtils::GetTimezoneName(wchar_t* aBuffer) {
   wcscpy_s(aBuffer, 128, tzInfo.TimeZoneKeyName);
 
   return true;
+}
+
+bool WinUtils::MicaEnabled() {
+  static bool sEnabled =
+      IsWin1122H2OrLater() && StaticPrefs::widget_windows_mica_AtStartup();
+  return sEnabled;
 }
 
 // There are undocumented APIs to query/change the system DPI settings found by

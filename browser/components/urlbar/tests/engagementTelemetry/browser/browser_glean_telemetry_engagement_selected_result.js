@@ -101,6 +101,9 @@ add_task(async function selected_result_autofill_url() {
 
 add_task(async function selected_result_bookmark() {
   await doTest(async () => {
+    await SpecialPowers.pushPrefEnv({
+      set: [["browser.urlbar.secondaryActions.featureGate", false]],
+    });
     await PlacesUtils.bookmarks.insert({
       parentGuid: PlacesUtils.bookmarks.unfiledGuid,
       url: "https://example.com/bookmark",
@@ -257,10 +260,6 @@ add_task(async function selected_result_url() {
 });
 
 add_task(async function selected_result_tab() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.secondaryActions.featureGate", false]],
-  });
-
   const tab = BrowserTestUtils.addTab(gBrowser, "https://example.com/");
 
   await doTest(async () => {
@@ -535,11 +534,9 @@ add_task(async function selected_result_weather() {
   const cleanupQuickSuggest = await ensureQuickSuggestInit();
   await MerinoTestUtils.initWeather();
 
-  let provider = UrlbarPrefs.get("quickSuggestRustEnabled")
-    ? "UrlbarProviderQuickSuggest"
-    : "Weather";
+  let provider = "UrlbarProviderQuickSuggest";
   await doTest(async () => {
-    await openPopup(MerinoTestUtils.WEATHER_KEYWORD);
+    await openPopup("weather");
     await selectRowByProvider(provider);
     await doEnter();
 
@@ -942,11 +939,11 @@ add_task(async function selected_result_action() {
 
     assertEngagementTelemetry([
       {
-        selected_result: "action_settings",
-        selected_position: 1,
-        provider: "HeuristicFallback",
-        results: "search_engine",
-        actions: "settings",
+        selected_result: "action",
+        selected_position: 2,
+        provider: "UrlbarProviderGlobalActions",
+        results: "search_engine,action",
+        actions: "none",
       },
     ]);
   });

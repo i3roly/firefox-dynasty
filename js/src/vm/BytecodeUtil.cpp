@@ -406,21 +406,12 @@ class BytecodeParser {
   // Dedicated mode for stack dump.
   // Capture stack after each opcode, and also enable special handling for
   // some opcodes to make stack transition clearer.
-  bool isStackDump;
+  bool isStackDump = false;
 #endif
 
  public:
   BytecodeParser(JSContext* cx, LifoAlloc& alloc, JSScript* script)
-      : cx_(cx),
-        alloc_(alloc),
-        script_(cx, script),
-        codeArray_(nullptr)
-#ifdef DEBUG
-        ,
-        isStackDump(false)
-#endif
-  {
-  }
+      : cx_(cx), alloc_(alloc), script_(cx, script), codeArray_(nullptr) {}
 
   bool parse();
 
@@ -1934,7 +1925,7 @@ bool ExpressionDecompiler::decompilePC(jsbytecode* pc, uint8_t defIndex) {
 #if defined(DEBUG) || defined(JS_JITSPEW)
       // BigInt::dumpLiteral() only available in this configuration.
       script->getBigInt(pc)->dumpLiteral(sprinter);
-      return !sprinter.hadOutOfMemory();
+      return true;
 #else
       return write("[bigint]");
 #endif
@@ -2852,11 +2843,6 @@ static bool GetPCCountJSON(JSContext* cx, const ScriptAndCounts& sac,
   }
 
   json.endObject();
-
-  if (sp.hadOutOfMemory()) {
-    sp.reportOutOfMemory();
-    return false;
-  }
 
   return true;
 }

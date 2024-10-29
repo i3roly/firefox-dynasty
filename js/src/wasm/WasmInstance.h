@@ -218,6 +218,10 @@ class alignas(16) Instance {
   // wasm function that calls it.
   void* requestTierUpStub_ = nullptr;
 
+  // Pointer to a per-module builtin stub that does the OOL component of a
+  // call-ref metrics update.
+  void* updateCallRefMetricsStub_ = nullptr;
+
   // The data must be the last field.  Globals for the module start here
   // and are inline in this structure.  16-byte alignment is required for SIMD
   // data.
@@ -232,21 +236,6 @@ class alignas(16) Instance {
   MemoryInstanceData& memoryInstanceData(uint32_t memoryIndex) const;
   TableInstanceData& tableInstanceData(uint32_t tableIndex) const;
   TagInstanceData& tagInstanceData(uint32_t tagIndex) const;
-
-#ifdef ENABLE_WASM_JSPI
- public:
-  struct WasmJSPICallImportData {
-    Instance* instance;
-    int32_t funcImportIndex;
-    int32_t argc;
-    uint64_t* argv;
-    static bool Call(WasmJSPICallImportData* data);
-  };
-
- private:
-  bool isImportAllowedOnSuspendableStack(JSContext* cx,
-                                         int32_t funcImportIndex);
-#endif
 
   // Only WasmInstanceObject can call the private trace function.
   friend class js::WasmInstanceObject;
@@ -301,6 +290,9 @@ class alignas(16) Instance {
   }
   static constexpr size_t offsetOfRequestTierUpStub() {
     return offsetof(Instance, requestTierUpStub_);
+  }
+  static constexpr size_t offsetOfUpdateCallRefMetricsStub() {
+    return offsetof(Instance, updateCallRefMetricsStub_);
   }
 
   static constexpr size_t offsetOfRealm() { return offsetof(Instance, realm_); }
@@ -367,6 +359,9 @@ class alignas(16) Instance {
   void* debugStub() const { return debugStub_; }
   void setDebugStub(void* newStub) { debugStub_ = newStub; }
   void setRequestTierUpStub(void* newStub) { requestTierUpStub_ = newStub; }
+  void setUpdateCallRefMetricsStub(void* newStub) {
+    updateCallRefMetricsStub_ = newStub;
+  }
   JS::Realm* realm() const { return realm_; }
   bool debugEnabled() const { return !!maybeDebug_; }
   DebugState& debug() { return *maybeDebug_; }
@@ -628,6 +623,7 @@ class alignas(16) Instance {
   static int32_t intrI8VecMul(Instance* instance, uint32_t dest, uint32_t src1,
                               uint32_t src2, uint32_t len, uint8_t* memBase);
 
+#ifdef ENABLE_WASM_JS_STRING_BUILTINS
   static int32_t stringTest(Instance* instance, void* stringArg);
   static void* stringCast(Instance* instance, void* stringArg);
   static void* stringFromCharCodeArray(Instance* instance, void* arrayArg,
@@ -644,11 +640,12 @@ class alignas(16) Instance {
   static void* stringConcat(Instance* instance, void* firstStringArg,
                             void* secondStringArg);
   static void* stringSubstring(Instance* instance, void* stringArg,
-                               int32_t startIndex, int32_t endIndex);
+                               uint32_t startIndex, uint32_t endIndex);
   static int32_t stringEquals(Instance* instance, void* firstStringArg,
                               void* secondStringArg);
   static int32_t stringCompare(Instance* instance, void* firstStringArg,
                                void* secondStringArg);
+#endif  // ENABLE_WASM_JS_STRING_BUILTINS
 };
 
 bool ResultsToJSValue(JSContext* cx, ResultType type, void* registerResultLoc,

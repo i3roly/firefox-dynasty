@@ -210,9 +210,10 @@ LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
 
   // Increment width with cols * letter-spacing.
   {
-    const StyleLength& letterSpacing = StyleText()->mLetterSpacing;
-    if (!letterSpacing.IsZero()) {
-      intrinsicSize.ISize(aWM) += cols * letterSpacing.ToAppUnits();
+    const auto& letterSpacing = StyleText()->mLetterSpacing;
+    if (!letterSpacing.IsDefinitelyZero()) {
+      intrinsicSize.ISize(aWM) +=
+          cols * letterSpacing.Resolve(fontMet->EmHeight());
     }
   }
 
@@ -822,19 +823,18 @@ nsresult nsTextControlFrame::SetSelectionInternal(
 
 void nsTextControlFrame::ScrollSelectionIntoViewAsync(
     ScrollAncestors aScrollAncestors) {
-  nsISelectionController* selCon = GetSelectionController();
+  nsCOMPtr<nsISelectionController> selCon = GetSelectionController();
   if (!selCon) {
     return;
   }
 
-  int16_t flags = aScrollAncestors == ScrollAncestors::Yes
-                      ? 0
-                      : nsISelectionController::SCROLL_FIRST_ANCESTOR_ONLY;
-
   // Scroll the selection into view (see bug 231389).
+  const auto flags = aScrollAncestors == ScrollAncestors::Yes
+                         ? ScrollFlags::None
+                         : ScrollFlags::ScrollFirstAncestorOnly;
   selCon->ScrollSelectionIntoView(
-      nsISelectionController::SELECTION_NORMAL,
-      nsISelectionController::SELECTION_FOCUS_REGION, flags);
+      SelectionType::eNormal, nsISelectionController::SELECTION_FOCUS_REGION,
+      ScrollAxis(), ScrollAxis(), flags);
 }
 
 nsresult nsTextControlFrame::SelectAll() {

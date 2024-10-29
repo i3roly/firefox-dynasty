@@ -70,6 +70,8 @@ export class SelectableProfile {
     this.#name = aName;
 
     this.saveUpdatesToDB();
+
+    Services.prefs.setBoolPref("browser.profiles.profile-name.updated", true);
   }
 
   /**
@@ -79,7 +81,7 @@ export class SelectableProfile {
    */
   get path() {
     return PathUtils.joinRelative(
-      Services.dirsvc.get("UAppData", Ci.nsIFile).path,
+      this.#selectableProfileService.constructor.getDirectory("UAppData").path,
       this.#path
     );
   }
@@ -110,7 +112,7 @@ export class SelectableProfile {
    * @param {string} aAvatar Name of the avatar
    */
   set avatar(aAvatar) {
-    this.avatar = aAvatar;
+    this.#avatar = aAvatar;
 
     this.saveUpdatesToDB();
   }
@@ -154,12 +156,14 @@ export class SelectableProfile {
   }
 
   toObject() {
-    return {
+    let profileObj = {
       id: this.id,
       path: this.#path,
       name: this.name,
       avatar: this.avatar,
       ...this.theme,
     };
+
+    return profileObj;
   }
 }

@@ -2,11 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// TDOD: Remove eslint-disable lines once methods are updated. See bug 1896727
-/* eslint-disable no-unused-vars */
-/* eslint-disable no-unused-private-class-members */
-
-import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 import { SelectableProfile } from "./SelectableProfile.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
@@ -23,51 +18,157 @@ ChromeUtils.defineLazyGetter(lazy, "profilesLocalization", () => {
   return new Localization(["preview/profiles.ftl"], true);
 });
 
-XPCOMUtils.defineLazyServiceGetter(
-  lazy,
-  "ProfileService",
-  "@mozilla.org/toolkit/profile-service;1",
-  "nsIToolkitProfileService"
-);
-
 const PROFILES_CRYPTO_SALT_LENGTH_BYTES = 16;
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    let imageTools = Cc["@mozilla.org/image/tools;1"].getService(Ci.imgITools);
+    let imageContainer;
+    let observer = imageTools.createScriptedObserver({
+      sizeAvailable() {
+        resolve(imageContainer);
+      },
+    });
+
+    imageTools.decodeImageFromChannelAsync(
+      url,
+      Services.io.newChannelFromURI(
+        url,
+        null,
+        Services.scriptSecurityManager.getSystemPrincipal(),
+        null, // aTriggeringPrincipal
+        Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
+        Ci.nsIContentPolicy.TYPE_IMAGE
+      ),
+      (image, status) => {
+        if (!Components.isSuccessCode(status)) {
+          reject(new Components.Exception("Image loading failed", status));
+        } else {
+          imageContainer = image;
+        }
+      },
+      observer
+    );
+  });
+}
+
+// This is waiting to be used by bug 1926507.
+// eslint-disable-next-line no-unused-vars
+async function updateTaskbar(iconUrl, profileName, strokeColor, fillColor) {
+  try {
+    let image = await loadImage(iconUrl);
+
+    if ("nsIMacDockSupport" in Ci) {
+      Cc["@mozilla.org/widget/macdocksupport;1"]
+        .getService(Ci.nsIMacDockSupport)
+        .setBadgeImage(image, { fillColor, strokeColor });
+    } else if ("nsIWinTaskbar" in Ci) {
+      lazy.EveryWindow.registerCallback(
+        "profiles",
+        win => {
+          let iconController = Cc["@mozilla.org/windows-taskbar;1"]
+            .getService(Ci.nsIWinTaskbar)
+            .getOverlayIconController(win.docShell);
+          iconController.setOverlayIcon(image, profileName, {
+            fillColor,
+            strokeColor,
+          });
+        },
+        () => {}
+      );
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 /**
  * The service that manages selectable profiles
  */
 class SelectableProfileServiceClass {
+  #profileService = null;
   #connection = null;
   #asyncShutdownBlocker = null;
   #initialized = false;
   #groupToolkitProfile = null;
   #currentProfile = null;
   #everyWindowCallbackId = "SelectableProfileService";
+  #defaultAvatars = [
+    "book",
+    "briefcase",
+    "flower",
+    "heart",
+    "shopping",
+    "star",
+  ];
+  static #dirSvc = null;
 
   constructor() {
-    if (Cu.isInAutomation) {
-      this.#groupToolkitProfile = {
-        storeID: "12345678",
-        rootDir: Services.dirsvc.get("ProfD", Ci.nsIFile),
-      };
-    } else {
-      this.#groupToolkitProfile =
-        lazy.ProfileService.currentProfile ?? lazy.ProfileService.groupProfile;
-    }
+    this.themeObserver = this.themeObserver.bind(this);
+    this.#profileService = Cc[
+      "@mozilla.org/toolkit/profile-service;1"
+    ].getService(Ci.nsIToolkitProfileService);
+
+    this.#groupToolkitProfile =
+      this.#profileService.currentProfile ?? this.#profileService.groupProfile;
   }
 
-  // Do not use. Only for testing.
-  set groupToolkitProfile(mockToolkitProfile) {
-    if (Cu.isInAutomation) {
-      this.#groupToolkitProfile = mockToolkitProfile;
+  /**
+   * For use in testing only, override the profile service with a mock version
+   * and reset state accordingly.
+   *
+   * @param {Ci.nsIToolkitProfileService} profileService The mock profile service
+   */
+  async resetProfileService(profileService) {
+    if (!Cu.isInAutomation) {
+      return;
+    }
+
+    await this.uninit();
+    this.#profileService =
+      profileService ??
+      Cc["@mozilla.org/toolkit/profile-service;1"].getService(
+        Ci.nsIToolkitProfileService
+      );
+    this.#groupToolkitProfile =
+      this.#profileService.currentProfile ?? this.#profileService.groupProfile;
+    await this.init();
+  }
+
+  overrideDirectoryService(dirSvc) {
+    if (!Cu.isInAutomation) {
+      return;
+    }
+
+    SelectableProfileServiceClass.#dirSvc = dirSvc;
+  }
+
+  static getDirectory(id) {
+    if (this.#dirSvc) {
+      if (id in this.#dirSvc) {
+        return this.#dirSvc[id];
+      }
+    }
+
+    return Services.dirsvc.get(id, Ci.nsIFile);
+  }
+
+  async #attemptFlushProfileService() {
+    try {
+      await this.#profileService.asyncFlush();
+    } catch (e) {
+      try {
+        await this.#profileService.asyncFlushCurrentProfile();
+      } catch (ex) {
+        console.error(
+          `Failed to flush changes to the profiles database: ${ex}`
+        );
+      }
     }
   }
 
   get groupToolkitProfile() {
     return this.#groupToolkitProfile;
-  }
-
-  get toolkitProfileRootDir() {
-    return this.#groupToolkitProfile.rootDir;
   }
 
   get currentProfile() {
@@ -79,13 +180,18 @@ class SelectableProfileServiceClass {
   }
 
   static get PROFILE_GROUPS_DIR() {
-    return PathUtils.join(
-      Services.dirsvc.get("UAppData", Ci.nsIFile).path,
-      "Profile Groups"
-    );
+    if (this.#dirSvc && "ProfileGroups" in this.#dirSvc) {
+      return this.#dirSvc.ProfileGroups;
+    }
+
+    return PathUtils.join(this.getDirectory("UAppData").path, "Profile Groups");
   }
 
-  async createProfilesStorePath() {
+  async maybeCreateProfilesStorePath() {
+    if (!this.#groupToolkitProfile || this.#groupToolkitProfile.storeID) {
+      return;
+    }
+
     await IOUtils.makeDirectory(
       SelectableProfileServiceClass.PROFILE_GROUPS_DIR
     );
@@ -96,13 +202,11 @@ class SelectableProfileServiceClass {
       .replace("{", "")
       .split("-")[0];
     this.#groupToolkitProfile.storeID = storageID;
-    lazy.ProfileService.flush();
+    await this.#attemptFlushProfileService();
   }
 
   async getProfilesStorePath() {
-    if (!this.#groupToolkitProfile.storeID) {
-      await this.createProfilesStorePath();
-    }
+    await this.maybeCreateProfilesStorePath();
 
     return PathUtils.join(
       SelectableProfileServiceClass.PROFILE_GROUPS_DIR,
@@ -115,31 +219,36 @@ class SelectableProfileServiceClass {
    * Get the groupDBPath from the nsToolkitProfile, and connect to it.
    */
   async init() {
-    if (this.#initialized) {
+    if (this.#initialized || !this.groupToolkitProfile) {
       return;
     }
 
-    let shouldSetSharedPrefs = !this.groupToolkitProfile.storeID;
+    // If the storeID doesn't exist, we don't want to create the db until we
+    // need to so we early return.
+    if (!this.groupToolkitProfile.storeID) {
+      return;
+    }
 
     await this.initConnection();
 
-    // When we launch into the startup window, the `ProfD` is not defined so
-    // Services.dirsvc.get("ProfD", Ci.nsIFile) will throw. Leaving the
-    // `currentProfile` as null is fine for the startup window.
-    try {
-      // Get the SelectableProfile by the profile directory
+    // Get the SelectableProfile by the profile directory
+    let currentProfile = this.#profileService.currentProfile;
+    if (currentProfile) {
       this.#currentProfile = await this.getProfileByPath(
-        Services.dirsvc.get("ProfD", Ci.nsIFile)
+        currentProfile.rootDir
       );
-    } catch {}
-
-    if (shouldSetSharedPrefs) {
-      this.setSharedPrefs();
     }
+
+    this.setSharedPrefs();
 
     // The 'activate' event listeners use #currentProfile, so this line has
     // to come after #currentProfile has been set.
     this.initWindowTracker();
+
+    Services.obs.addObserver(
+      this.themeObserver,
+      "lightweight-theme-styling-update"
+    );
 
     this.#initialized = true;
   }
@@ -150,6 +259,11 @@ class SelectableProfileServiceClass {
     }
 
     lazy.EveryWindow.unregisterCallback(this.#everyWindowCallbackId);
+
+    Services.obs.removeObserver(
+      this.themeObserver,
+      "lightweight-theme-styling-update"
+    );
 
     await this.closeConnection();
 
@@ -313,7 +427,7 @@ class SelectableProfileServiceClass {
     }
 
     this.#groupToolkitProfile.storeID = null;
-    lazy.ProfileService.flush();
+    await this.#attemptFlushProfileService();
     await this.vacuumAndCloseGroupDB();
   }
 
@@ -327,7 +441,7 @@ class SelectableProfileServiceClass {
     let process = Cc["@mozilla.org/process/util;1"].createInstance(
       Ci.nsIProcess
     );
-    let executable = Services.dirsvc.get("XREExeF", Ci.nsIFile);
+    let executable = SelectableProfileServiceClass.getDirectory("XREExeF");
     process.init(executable);
     return process;
   }
@@ -364,6 +478,28 @@ class SelectableProfileServiceClass {
   observe() {}
 
   /**
+   * The observer function that watches for theme changes and updates the
+   * current profile of a theme change.
+   *
+   * @param {object} aSubject The theme data
+   * @param {*} aTopic Should be "lightweight-theme-styling-update"
+   */
+  themeObserver(aSubject, aTopic) {
+    if (aTopic !== "lightweight-theme-styling-update") {
+      return;
+    }
+
+    let data = aSubject.wrappedJSObject;
+
+    let theme = data.theme;
+    this.currentProfile.theme = {
+      themeL10nId: theme.id,
+      themeFg: theme.textcolor,
+      themeBg: theme.accentcolor,
+    };
+  }
+
+  /**
    * Init or update the current SelectableProfiles from the DB.
    */
   refreshProfiles() {}
@@ -378,11 +514,14 @@ class SelectableProfileServiceClass {
    * as the path of the nsToolkitProfile for the group.
    */
   async setDefaultProfileForGroup() {
-    if (this.#groupToolkitProfile.rootDir.path === this.currentProfile.path) {
+    if (
+      !this.currentProfile ||
+      this.#groupToolkitProfile.rootDir.path === this.currentProfile.path
+    ) {
       return;
     }
     this.#groupToolkitProfile.rootDir = await this.currentProfile.rootDir;
-    lazy.ProfileService.flush();
+    await this.#attemptFlushProfileService();
   }
 
   /**
@@ -391,22 +530,14 @@ class SelectableProfileServiceClass {
    *
    * @param {boolean} shouldShow Whether or not we should show the profile selector
    */
-  showProfileSelectorWindow(shouldShow) {
+  async showProfileSelectorWindow(shouldShow) {
     if (shouldShow === this.groupToolkitProfile.showProfileSelector) {
       return;
     }
 
     this.groupToolkitProfile.showProfileSelector = shouldShow;
-    lazy.ProfileService.flush();
+    await this.#attemptFlushProfileService();
   }
-
-  /**
-   * Update the path to the group DB. Set on the nsToolkitProfile instance
-   * for the group.
-   *
-   * @param {string} aPath The path to the group DB
-   */
-  setGroupDBPath(aPath) {}
 
   // SelectableProfile lifecycle
 
@@ -416,7 +547,7 @@ class SelectableProfileServiceClass {
    * directory is salt + "." + profileName. (Ex. c7IZaLu7.testProfile)
    *
    * @param {string} aProfileName The name of the profile to be created
-   * @returns {string} The relative path for the given profile
+   * @returns {string} The path for the given profile
    */
   async createProfileDirs(aProfileName) {
     const salt = btoa(
@@ -435,13 +566,13 @@ class SelectableProfileServiceClass {
     await Promise.all([
       IOUtils.makeDirectory(
         PathUtils.join(
-          Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfRt").path,
           profileDir
         )
       ),
       IOUtils.makeDirectory(
         PathUtils.join(
-          Services.dirsvc.get("DefProfLRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfLRt").path,
           profileDir
         )
       ),
@@ -449,7 +580,7 @@ class SelectableProfileServiceClass {
 
     return IOUtils.getDirectory(
       PathUtils.join(
-        Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+        SelectableProfileServiceClass.getDirectory("DefProfRt").path,
         profileDir
       )
     );
@@ -505,7 +636,10 @@ class SelectableProfileServiceClass {
         });`
     );
 
-    const prefsJs = prefsJsHeader.concat(prefsJsContent);
+    const prefsJs = prefsJsHeader.concat(
+      prefsJsContent,
+      'user_pref("browser.profiles.profile-name.updated", false);'
+    );
 
     await IOUtils.writeUTF8(prefsJsFilePath, prefsJs.join(LINEBREAK));
   }
@@ -519,7 +653,7 @@ class SelectableProfileServiceClass {
    */
   getRelativeProfilePath(aProfilePath) {
     let relativePath = aProfilePath.getRelativePath(
-      Services.dirsvc.get("UAppData", Ci.nsIFile)
+      SelectableProfileServiceClass.getDirectory("UAppData")
     );
 
     if (AppConstants.platform === "win") {
@@ -529,43 +663,109 @@ class SelectableProfileServiceClass {
     return relativePath;
   }
 
-  async createNewProfile() {
+  /**
+   * Create a Selectable Profile and add to the datastore.
+   *
+   * If path is not included, new profile directories will be created.
+   *
+   * @param {nsIFile} existingProfilePath Optional. The path of an existing profile.
+   *
+   * @returns {SelectableProfile} The newly created profile object.
+   */
+  async #createProfile(existingProfilePath) {
     let nextProfileNumber =
       1 + Math.max(0, ...(await this.getAllProfiles()).map(p => p.id));
     let [defaultName] = lazy.profilesLocalization.formatMessagesSync([
       { id: "default-profile-name", args: { number: nextProfileNumber } },
     ]);
-    let newProfile = {
+    let randomIndex = Math.floor(Math.random() * this.#defaultAvatars.length);
+    let profileData = {
       name: defaultName.value,
-      avatar: "default",
+      avatar: this.#defaultAvatars[randomIndex],
       themeL10nId: "default",
       themeFg: "var(--text-color)",
       themeBg: "var(--background-color-box)",
     };
 
-    let profile = await this.createProfile(newProfile);
+    let path =
+      existingProfilePath || (await this.createProfileDirs(profileData.name));
+    if (!existingProfilePath) {
+      await this.createProfileInitialFiles(path);
+    }
+    profileData.path = this.getRelativeProfilePath(path);
+
+    let profile = await this.insertProfile(profileData);
+    return profile;
+  }
+
+  /**
+   * If the user has never created a SelectableProfile before, the group
+   * datastore will be created and the currently running toolkit profile will
+   * be added to the datastore.
+   */
+  async maybeSetupDataStore() {
+    // Create the profiles db and set the storeID on the toolkit profile if it
+    // doesn't exist so we can init the service.
+    await this.maybeCreateProfilesStorePath();
+    await this.init();
+
+    // If this is the first time the user has created a selectable profile,
+    // add the current toolkit profile to the datastore.
+    let profiles = await this.getAllProfiles();
+    if (!profiles.length) {
+      let path = this.#profileService.currentProfile.rootDir;
+      this.#currentProfile = await this.#createProfile(path);
+    }
+  }
+
+  /**
+   * Create and launch a new SelectableProfile and add it to the group datastore.
+   * This is an unmanaged profile from the nsToolkitProfile perspective.
+   *
+   * If the user has never created a SelectableProfile before, the group
+   * datastore will be lazily created and the currently running toolkit profile
+   * will be added to the datastore along with the newly created profile.
+   *
+   * Launches the new SelectableProfile in a new instance after creating it.
+   */
+  async createNewProfile() {
+    await this.maybeSetupDataStore();
+
+    let profile = await this.#createProfile();
     this.launchInstance(profile);
   }
 
   /**
-   * Create an empty SelectableProfile and add it to the group DB.
-   * This is an unmanaged profile from the nsToolkitProfile perspective.
+   * Add a profile to the profile group datastore.
    *
-   * @param {object} profile An object that contains a path, name, themeL10nId,
-   *                 themeFg, and themeBg for creating a new profile.
-   * @returns {SelectableProfile}
-   *   The newly created profile object.
+   * This function assumes the service is initialized and the datastore has
+   * been created.
+   *
+   * @param {object} profileData A plain object that contains a name, avatar,
+   *                 themeL10nId, themeFg, themeBg, and relative path as string.
+   *
+   * @returns {SelectableProfile} The newly created profile object.
    */
-  async createProfile(profile) {
-    let profilePath = await this.createProfileDirs(profile.name);
-    await this.createProfileInitialFiles(profilePath);
-    let relativePath = this.getRelativeProfilePath(profilePath);
-    profile.path = relativePath;
+  async insertProfile(profileData) {
+    // Verify all fields are present.
+    let keys = ["avatar", "name", "path", "themeBg", "themeFg", "themeL10nId"];
+    let missing = [];
+    keys.forEach(key => {
+      if (!(key in profileData)) {
+        missing.push(key);
+      }
+    });
+    if (missing.length) {
+      throw new Error(
+        "Unable to insertProfile due to missing keys: ",
+        missing.join(",")
+      );
+    }
     await this.#connection.execute(
       `INSERT INTO Profiles VALUES (NULL, :path, :name, :avatar, :themeL10nId, :themeFg, :themeBg);`,
-      profile
+      profileData
     );
-    return this.getProfileByPath(profilePath);
+    return this.getProfileByName(profileData.name);
   }
 
   /**
@@ -580,7 +780,7 @@ class SelectableProfileServiceClass {
     await Promise.all([
       IOUtils.remove(
         PathUtils.join(
-          Services.dirsvc.get("DefProfRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfRt").path,
           profileDir
         ),
         {
@@ -589,7 +789,7 @@ class SelectableProfileServiceClass {
       ),
       IOUtils.remove(
         PathUtils.join(
-          Services.dirsvc.get("DefProfLRt", Ci.nsIFile).path,
+          SelectableProfileServiceClass.getDirectory("DefProfLRt").path,
           profileDir
         ),
         {
@@ -658,6 +858,10 @@ class SelectableProfileServiceClass {
    *   An array of profiles in the group.
    */
   async getAllProfiles() {
+    if (!this.#connection) {
+      return [];
+    }
+
     return (
       await this.#connection.executeCached("SELECT * FROM Profiles;")
     ).map(row => {
@@ -673,6 +877,10 @@ class SelectableProfileServiceClass {
    *   The specific profile.
    */
   async getProfile(aProfileID) {
+    if (!this.#connection) {
+      return null;
+    }
+
     let row = (
       await this.#connection.execute("SELECT * FROM Profiles WHERE id = :id;", {
         id: aProfileID,
@@ -690,6 +898,10 @@ class SelectableProfileServiceClass {
    *   The specific profile.
    */
   async getProfileByName(aProfileNanme) {
+    if (!this.#connection) {
+      return null;
+    }
+
     let row = (
       await this.#connection.execute(
         "SELECT * FROM Profiles WHERE name = :name;",
@@ -709,6 +921,10 @@ class SelectableProfileServiceClass {
    * @returns {SelectableProfile|null}
    */
   async getProfileByPath(aProfilePath) {
+    if (!this.#connection) {
+      return null;
+    }
+
     let relativePath = this.getRelativeProfilePath(aProfilePath);
     let row = (
       await this.#connection.execute(

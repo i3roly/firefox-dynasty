@@ -37,7 +37,6 @@ add_task(async function () {
     createDebuggerContext,
     isWasmBinarySource,
     DEBUGGER_L10N,
-    getCM,
     waitForState,
     waitForSelectedSource,
     createLocation,
@@ -46,6 +45,8 @@ add_task(async function () {
     selectSource,
     assertTextContentOnLine,
     getEditorContent,
+    isCm6Enabled,
+    getCMEditor,
   });
 
   await addTab(`${EXAMPLE_URL}doc-all-workers.html`);

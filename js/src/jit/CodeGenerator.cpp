@@ -5285,21 +5285,6 @@ void CodeGenerator::emitCreateBigInt(LInstruction* lir, Scalar::Type type,
   masm.bind(ool->rejoin());
 }
 
-void CodeGenerator::visitInt32ToBigInt(LInt32ToBigInt* lir) {
-  Register input = ToRegister(lir->input());
-  Register temp = ToRegister(lir->temp0());
-  Register output = ToRegister(lir->output());
-
-  using Fn = BigInt* (*)(JSContext*, int32_t);
-  auto* ool = oolCallVM<Fn, jit::CreateBigIntFromInt32>(
-      lir, ArgList(input), StoreRegisterTo(output));
-
-  masm.newGCBigInt(output, temp, initialBigIntHeap(), ool->entry());
-  masm.move32SignExtendToPtr(input, temp);
-  masm.initializeBigIntPtr(output, temp);
-  masm.bind(ool->rejoin());
-}
-
 void CodeGenerator::visitInt64ToBigInt(LInt64ToBigInt* lir) {
   Register64 input = ToRegister64(lir->input());
   Register64 temp = ToRegister64(lir->temp());
@@ -5326,7 +5311,7 @@ void CodeGenerator::visitInt64ToIntPtr(LInt64ToIntPtr* lir) {
 #endif
 
   Label bail;
-  if (lir->mir()->elementType() == Scalar::BigInt64) {
+  if (lir->mir()->isSigned()) {
     masm.branchInt64NotInPtrRange(input, &bail);
   } else {
     masm.branchUInt64NotInPtrRange(input, &bail);
@@ -6142,8 +6127,16 @@ void CodeGenerator::visitCallDOMNative(LCallDOMNative* call) {
     masm.switchToObjectRealm(argJSContext, argJSContext);
   }
 
+  bool preTenureWrapperAllocation =
+      call->mir()->to<MCallDOMNative>()->initialHeap() == gc::Heap::Tenured;
+  if (preTenureWrapperAllocation) {
+    auto ptr = ImmPtr(mirGen().realm->zone()->tenuringAllocSite());
+    masm.storeLocalAllocSite(ptr, argJSContext);
+  }
+
   // Construct native exit frame.
   uint32_t safepointOffset = masm.buildFakeExitFrame(argJSContext);
+
   masm.loadJSContext(argJSContext);
   masm.enterFakeExitFrame(argJSContext, argJSContext,
                           ExitFrameType::IonDOMMethod);
@@ -6176,12 +6169,19 @@ void CodeGenerator::visitCallDOMNative(LCallDOMNative* call) {
                    JSReturnOperand);
   }
 
+  static_assert(!JSReturnOperand.aliases(ReturnReg),
+                "Clobbering ReturnReg should not affect the return value");
+
   // Switch back to the current realm if needed. Note: if the DOM method threw
   // an exception, the exception handler will do this.
   if (call->mir()->maybeCrossRealm()) {
-    static_assert(!JSReturnOperand.aliases(ReturnReg),
-                  "Clobbering ReturnReg should not affect the return value");
     masm.switchToRealm(gen->realm->realmPtr(), ReturnReg);
+  }
+
+  // Wipe out the preTenuring bit from the local alloc site
+  // On exception we handle this in C++
+  if (preTenureWrapperAllocation) {
+    masm.storeLocalAllocSite(ImmPtr(nullptr), ReturnReg);
   }
 
   // Until C++ code is instrumented against Spectre, prevent speculative
@@ -9871,6 +9871,9 @@ void CodeGenerator::visitWasmStackSwitchToSuspendable(
   const Register ScratchReg1 = ScratchReg;
 #  elif defined(JS_CODEGEN_ARM)
   const Register ScratchReg1 = ABINonArgReturnVolatileReg;
+#  elif defined(JS_CODEGEN_LOONG64)
+  SecondScratchRegisterScope scratch2(masm);
+  const Register ScratchReg1 = scratch2;
 #  else
 #    error "NYI: scratch register"
 #  endif
@@ -9951,7 +9954,11 @@ void CodeGenerator::visitWasmStackSwitchToSuspendable(
 
   // Call wasm function fast.
 #  ifdef JS_USE_LINK_REGISTER
+#    if defined(JS_CODEGEN_LOONG64)
+  masm.mov(ReturnAddressReg, ra);
+#    else
   masm.mov(ReturnAddressReg, lr);
+#    endif
 #  else
   masm.Push(ReturnAddressReg);
 #  endif
@@ -10013,6 +10020,9 @@ void CodeGenerator::visitWasmStackSwitchToMain(LWasmStackSwitchToMain* lir) {
   const Register ScratchReg1 = ScratchReg;
 #  elif defined(JS_CODEGEN_ARM)
   const Register ScratchReg1 = ABINonArgReturnVolatileReg;
+#  elif defined(JS_CODEGEN_LOONG64)
+  SecondScratchRegisterScope scratch2(masm);
+  const Register ScratchReg1 = scratch2;
 #  else
 #    error "NYI: scratch register"
 #  endif
@@ -10122,7 +10132,11 @@ void CodeGenerator::visitWasmStackSwitchToMain(LWasmStackSwitchToMain* lir) {
 
   // Call wasm function fast.
 #  ifdef JS_USE_LINK_REGISTER
+#    if defined(JS_CODEGEN_LOONG64)
+  masm.mov(ReturnAddressReg, ra);
+#    else
   masm.mov(ReturnAddressReg, lr);
+#    endif
 #  else
   masm.Push(ReturnAddressReg);
 #  endif
@@ -10183,6 +10197,9 @@ void CodeGenerator::visitWasmStackContinueOnSuspendable(
   const Register ScratchReg1 = ScratchReg;
 #  elif defined(JS_CODEGEN_ARM)
   const Register ScratchReg1 = ABINonArgReturnVolatileReg;
+#  elif defined(JS_CODEGEN_LOONG64)
+  SecondScratchRegisterScope scratch2(masm);
+  const Register ScratchReg1 = scratch2;
 #  else
 #    error "NYI: scratch register"
 #  endif
@@ -16528,6 +16545,15 @@ bool CodeGenerator::generate() {
     return false;
   }
 
+  size_t maxSafepointIndices =
+      graph.numSafepoints() + graph.extraSafepointUses();
+  if (!safepointIndices_.reserve(maxSafepointIndices)) {
+    return false;
+  }
+  if (!osiIndices_.reserve(graph.numSafepoints())) {
+    return false;
+  }
+
   perfSpewer_.recordOffset(masm, "Prologue");
   if (!generatePrologue()) {
     return false;
@@ -16580,6 +16606,34 @@ bool CodeGenerator::generate() {
     return false;
   }
 
+  // If this assertion trips, then you have multiple things to do:
+  //
+  // This assertion will report if a safepoint is used multiple times for the
+  // same instruction. To fix this assertion make sure to call
+  // `lirGraph_.addExtraSafepointUses(..);` in the Lowering phase.
+  //
+  // However, this non-worrying issue might hide a more dramatic security issue,
+  // which is that having multiple encoding of a safepoint in a single LIR
+  // instruction is not safe, unless:
+  //
+  //   - The multiple uses of the safepoints are in different code path. i-e
+  //     there should be not single execution trace making use of multiple
+  //     calls within a single instruction.
+  //
+  //   - There is enough space to encode data in-place of the call instruction.
+  //     Such that a patched-call site does not corrupt the code path on another
+  //     execution trace.
+  //
+  // This issue is caused by the way invalidation works, to keep the code alive
+  // when invalidated code is only referenced by the stack. This works by
+  // storing data in-place of the calling code, which thus becomes unsafe to
+  // execute.
+  MOZ_ASSERT(safepointIndices_.length() <= maxSafepointIndices);
+
+  // For each instruction with a safepoint, we have an OSI point inserted after
+  // which handles bailouts in case of invalidation of the code.
+  MOZ_ASSERT(osiIndices_.length() == graph.numSafepoints());
+
   return !masm.oom();
 }
 
@@ -16619,33 +16673,33 @@ static bool AddInlinedCompilations(JSContext* cx, HandleScript script,
 }
 
 struct EmulatesUndefinedDependency final : public CompilationDependency {
-  CompileRuntime* runtime;
-  explicit EmulatesUndefinedDependency(CompileRuntime* runtime)
-      : CompilationDependency(CompilationDependency::Type::EmulatesUndefined),
-        runtime(runtime) {};
+  explicit EmulatesUndefinedDependency()
+      : CompilationDependency(CompilationDependency::Type::EmulatesUndefined) {
+        };
 
   virtual bool operator==(CompilationDependency& dep) {
     // Since the emulates undefined fuse is runtime wide, they are all equal
     return dep.type == type;
   }
 
-  virtual bool checkDependency() {
-    return runtime->hasSeenObjectEmulateUndefinedFuseIntact();
+  virtual bool checkDependency(JSContext* cx) {
+    return cx->runtime()->hasSeenObjectEmulateUndefinedFuse.ref().intact();
   }
 
   virtual bool registerDependency(JSContext* cx, HandleScript script) {
+    MOZ_ASSERT(checkDependency(cx));
     return cx->runtime()
         ->hasSeenObjectEmulateUndefinedFuse.ref()
         .addFuseDependency(cx, script);
   }
 
   virtual UniquePtr<CompilationDependency> clone() {
-    return MakeUnique<EmulatesUndefinedDependency>(runtime);
+    return MakeUnique<EmulatesUndefinedDependency>();
   }
 };
 
 bool CodeGenerator::addHasSeenObjectEmulateUndefinedFuseDependency() {
-  EmulatesUndefinedDependency dep(gen->runtime);
+  EmulatesUndefinedDependency dep;
   return mirGen().tracker.addDependency(dep);
 }
 
@@ -16694,7 +16748,9 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
   }
 
   CompilationDependencyTracker& tracker = mirGen().tracker;
-  if (!tracker.checkDependencies()) {
+  // Make sure we're using the same realm as this context.
+  MOZ_ASSERT(mirGen().realm->realmPtr() == cx->realm());
+  if (!tracker.checkDependencies(cx)) {
     return true;
   }
 
@@ -20311,10 +20367,22 @@ void CodeGenerator::visitWasmRefIsSubtypeOfConcreteAndBranch(
   masm.jump(onFail);
 }
 
-void CodeGenerator::callWasmStructAllocFun(LInstruction* lir,
-                                           wasm::SymbolicAddress fun,
-                                           Register typeDefData,
-                                           Register output) {
+void CodeGenerator::callWasmStructAllocFun(
+    LInstruction* lir, wasm::SymbolicAddress fun, Register typeDefData,
+    Register output, wasm::BytecodeOffset bytecodeOffset) {
+  MOZ_ASSERT(fun == wasm::SymbolicAddress::StructNewIL_true ||
+             fun == wasm::SymbolicAddress::StructNewIL_false ||
+             fun == wasm::SymbolicAddress::StructNewOOL_true ||
+             fun == wasm::SymbolicAddress::StructNewOOL_false);
+  MOZ_ASSERT(wasm::SASigStructNewIL_true.failureMode ==
+             wasm::FailureMode::FailOnNullPtr);
+  MOZ_ASSERT(wasm::SASigStructNewIL_false.failureMode ==
+             wasm::FailureMode::FailOnNullPtr);
+  MOZ_ASSERT(wasm::SASigStructNewOOL_true.failureMode ==
+             wasm::FailureMode::FailOnNullPtr);
+  MOZ_ASSERT(wasm::SASigStructNewOOL_false.failureMode ==
+             wasm::FailureMode::FailOnNullPtr);
+
   masm.Push(InstanceReg);
   int32_t framePushedAfterInstance = masm.framePushed();
   saveLive(lir);
@@ -20323,9 +20391,8 @@ void CodeGenerator::callWasmStructAllocFun(LInstruction* lir,
   masm.passABIArg(InstanceReg);
   masm.passABIArg(typeDefData);
   int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
-  CodeOffset offset =
-      masm.callWithABI(wasm::BytecodeOffset(0), fun,
-                       mozilla::Some(instanceOffset), ABIType::General);
+  CodeOffset offset = masm.callWithABI(
+      bytecodeOffset, fun, mozilla::Some(instanceOffset), ABIType::General);
   masm.storeCallPointerResult(output);
 
   markSafepointAt(offset.offset(), lir);
@@ -20337,6 +20404,9 @@ void CodeGenerator::callWasmStructAllocFun(LInstruction* lir,
 #if JS_CODEGEN_ARM64
   masm.syncStackPtr();
 #endif
+
+  masm.wasmTrapOnFailedInstanceCall(output, wasm::FailureMode::FailOnNullPtr,
+                                    bytecodeOffset);
 }
 
 // Out-of-line path to allocate wasm GC structs
@@ -20345,11 +20415,17 @@ class OutOfLineWasmNewStruct : public OutOfLineCodeBase<CodeGenerator> {
   wasm::SymbolicAddress fun_;
   Register typeDefData_;
   Register output_;
+  wasm::BytecodeOffset bytecodeOffset_;
 
  public:
   OutOfLineWasmNewStruct(LInstruction* lir, wasm::SymbolicAddress fun,
-                         Register typeDefData, Register output)
-      : lir_(lir), fun_(fun), typeDefData_(typeDefData), output_(output) {}
+                         Register typeDefData, Register output,
+                         wasm::BytecodeOffset bytecodeOffset)
+      : lir_(lir),
+        fun_(fun),
+        typeDefData_(typeDefData),
+        output_(output),
+        bytecodeOffset_(bytecodeOffset) {}
 
   void accept(CodeGenerator* codegen) override {
     codegen->visitOutOfLineWasmNewStruct(this);
@@ -20359,11 +20435,12 @@ class OutOfLineWasmNewStruct : public OutOfLineCodeBase<CodeGenerator> {
   wasm::SymbolicAddress fun() const { return fun_; }
   Register typeDefData() const { return typeDefData_; }
   Register output() const { return output_; }
+  wasm::BytecodeOffset bytecodeOffset() const { return bytecodeOffset_; }
 };
 
 void CodeGenerator::visitOutOfLineWasmNewStruct(OutOfLineWasmNewStruct* ool) {
   callWasmStructAllocFun(ool->lir(), ool->fun(), ool->typeDefData(),
-                         ool->output());
+                         ool->output(), ool->bytecodeOffset());
   masm.jump(ool->rejoin());
 }
 
@@ -20379,7 +20456,8 @@ void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
     wasm::SymbolicAddress fun = mir->zeroFields()
                                     ? wasm::SymbolicAddress::StructNewOOL_true
                                     : wasm::SymbolicAddress::StructNewOOL_false;
-    callWasmStructAllocFun(lir, fun, typeDefData, output);
+    callWasmStructAllocFun(lir, fun, typeDefData, output,
+                           mir->bytecodeOffset());
   } else {
     wasm::SymbolicAddress fun = mir->zeroFields()
                                     ? wasm::SymbolicAddress::StructNewIL_true
@@ -20388,8 +20466,8 @@ void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
     Register instance = ToRegister(lir->instance());
     MOZ_ASSERT(instance == InstanceReg);
 
-    auto ool =
-        new (alloc()) OutOfLineWasmNewStruct(lir, fun, typeDefData, output);
+    auto* ool = new (alloc()) OutOfLineWasmNewStruct(
+        lir, fun, typeDefData, output, mir->bytecodeOffset());
     addOutOfLineCode(ool, lir->mir());
 
     Register temp1 = ToRegister(lir->temp0());
@@ -20406,6 +20484,13 @@ void CodeGenerator::callWasmArrayAllocFun(LInstruction* lir,
                                           Register numElements,
                                           Register typeDefData, Register output,
                                           wasm::BytecodeOffset bytecodeOffset) {
+  MOZ_ASSERT(fun == wasm::SymbolicAddress::ArrayNew_true ||
+             fun == wasm::SymbolicAddress::ArrayNew_false);
+  MOZ_ASSERT(wasm::SASigArrayNew_true.failureMode ==
+             wasm::FailureMode::FailOnNullPtr);
+  MOZ_ASSERT(wasm::SASigArrayNew_false.failureMode ==
+             wasm::FailureMode::FailOnNullPtr);
+
   masm.Push(InstanceReg);
   int32_t framePushedAfterInstance = masm.framePushed();
   saveLive(lir);
@@ -20429,10 +20514,8 @@ void CodeGenerator::callWasmArrayAllocFun(LInstruction* lir,
   masm.syncStackPtr();
 #endif
 
-  Label ok;
-  masm.branchPtr(Assembler::NonZero, output, ImmWord(0), &ok);
-  masm.wasmTrap(wasm::Trap::ThrowReported, bytecodeOffset);
-  masm.bind(&ok);
+  masm.wasmTrapOnFailedInstanceCall(output, wasm::FailureMode::FailOnNullPtr,
+                                    bytecodeOffset);
 }
 
 // Out-of-line path to allocate wasm GC arrays
@@ -20955,12 +21038,29 @@ void CodeGenerator::visitSignExtendInt32(LSignExtendInt32* ins) {
   Register input = ToRegister(ins->input());
   Register output = ToRegister(ins->output());
 
-  switch (ins->mode()) {
+  switch (ins->mir()->mode()) {
     case MSignExtendInt32::Byte:
       masm.move8SignExtend(input, output);
       break;
     case MSignExtendInt32::Half:
       masm.move16SignExtend(input, output);
+      break;
+  }
+}
+
+void CodeGenerator::visitSignExtendIntPtr(LSignExtendIntPtr* ins) {
+  Register input = ToRegister(ins->input());
+  Register output = ToRegister(ins->output());
+
+  switch (ins->mir()->mode()) {
+    case MSignExtendIntPtr::Byte:
+      masm.move8SignExtendToPtr(input, output);
+      break;
+    case MSignExtendIntPtr::Half:
+      masm.move16SignExtendToPtr(input, output);
+      break;
+    case MSignExtendIntPtr::Word:
+      masm.move32SignExtendToPtr(input, output);
       break;
   }
 }
@@ -21404,72 +21504,6 @@ void CodeGenerator::visitBigIntAsIntN(LBigIntAsIntN* ins) {
   callVM<Fn, jit::BigIntAsIntN>(ins);
 }
 
-void CodeGenerator::visitBigIntAsIntN64(LBigIntAsIntN64* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp = ToRegister(ins->temp());
-  Register64 temp64 = ToRegister64(ins->temp64());
-  Register output = ToRegister(ins->output());
-
-  Label done, create;
-
-  masm.movePtr(input, output);
-
-  // Load the BigInt value as an int64.
-  masm.loadBigInt64(input, temp64);
-
-  // Create a new BigInt when the input exceeds the int64 range.
-  masm.branch32(Assembler::Above, Address(input, BigInt::offsetOfLength()),
-                Imm32(64 / BigInt::DigitBits), &create);
-
-  // And create a new BigInt when the value and the BigInt have different signs.
-  Label nonNegative;
-  masm.branchIfBigIntIsNonNegative(input, &nonNegative);
-  masm.branchTest64(Assembler::NotSigned, temp64, temp64, temp, &create);
-  masm.jump(&done);
-
-  masm.bind(&nonNegative);
-  masm.branchTest64(Assembler::NotSigned, temp64, temp64, temp, &done);
-
-  masm.bind(&create);
-  emitCreateBigInt(ins, Scalar::BigInt64, temp64, output, temp);
-
-  masm.bind(&done);
-}
-
-void CodeGenerator::visitBigIntAsIntN32(LBigIntAsIntN32* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp = ToRegister(ins->temp());
-  Register64 temp64 = ToRegister64(ins->temp64());
-  Register output = ToRegister(ins->output());
-
-  Label done, create;
-
-  masm.movePtr(input, output);
-
-  // Load the absolute value of the first digit.
-  masm.loadBigIntDigit(input, temp);
-
-  // If the absolute value exceeds the int32 range, create a new BigInt.
-  masm.branchPtr(Assembler::Above, temp, Imm32(INT32_MAX), &create);
-
-  // Also create a new BigInt if we have more than one digit.
-  masm.branch32(Assembler::BelowOrEqual,
-                Address(input, BigInt::offsetOfLength()), Imm32(1), &done);
-
-  masm.bind(&create);
-
-  // |temp| stores the absolute value, negate it when the sign flag is set.
-  Label nonNegative;
-  masm.branchIfBigIntIsNonNegative(input, &nonNegative);
-  masm.negPtr(temp);
-  masm.bind(&nonNegative);
-
-  masm.move32To64SignExtend(temp, temp64);
-  emitCreateBigInt(ins, Scalar::BigInt64, temp64, output, temp);
-
-  masm.bind(&done);
-}
-
 void CodeGenerator::visitBigIntAsUintN(LBigIntAsUintN* ins) {
   Register bits = ToRegister(ins->bits());
   Register input = ToRegister(ins->input());
@@ -21479,71 +21513,6 @@ void CodeGenerator::visitBigIntAsUintN(LBigIntAsUintN* ins) {
 
   using Fn = BigInt* (*)(JSContext*, HandleBigInt, int32_t);
   callVM<Fn, jit::BigIntAsUintN>(ins);
-}
-
-void CodeGenerator::visitBigIntAsUintN64(LBigIntAsUintN64* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp = ToRegister(ins->temp());
-  Register64 temp64 = ToRegister64(ins->temp64());
-  Register output = ToRegister(ins->output());
-
-  Label done, create;
-
-  masm.movePtr(input, output);
-
-  // Load the BigInt value as an uint64.
-  masm.loadBigInt64(input, temp64);
-
-  // Create a new BigInt when the input exceeds the uint64 range.
-  masm.branch32(Assembler::Above, Address(input, BigInt::offsetOfLength()),
-                Imm32(64 / BigInt::DigitBits), &create);
-
-  // And create a new BigInt when the input has the sign flag set.
-  masm.branchIfBigIntIsNonNegative(input, &done);
-
-  masm.bind(&create);
-  emitCreateBigInt(ins, Scalar::BigUint64, temp64, output, temp);
-
-  masm.bind(&done);
-}
-
-void CodeGenerator::visitBigIntAsUintN32(LBigIntAsUintN32* ins) {
-  Register input = ToRegister(ins->input());
-  Register temp = ToRegister(ins->temp());
-  Register64 temp64 = ToRegister64(ins->temp64());
-  Register output = ToRegister(ins->output());
-
-  Label done, create;
-
-  masm.movePtr(input, output);
-
-  // Load the absolute value of the first digit.
-  masm.loadBigIntDigit(input, temp);
-
-  // If the absolute value exceeds the uint32 range, create a new BigInt.
-#if JS_PUNBOX64
-  masm.branchPtr(Assembler::Above, temp, ImmWord(UINT32_MAX), &create);
-#endif
-
-  // Also create a new BigInt if we have more than one digit.
-  masm.branch32(Assembler::Above, Address(input, BigInt::offsetOfLength()),
-                Imm32(1), &create);
-
-  // And create a new BigInt when the input has the sign flag set.
-  masm.branchIfBigIntIsNonNegative(input, &done);
-
-  masm.bind(&create);
-
-  // |temp| stores the absolute value, negate it when the sign flag is set.
-  Label nonNegative;
-  masm.branchIfBigIntIsNonNegative(input, &nonNegative);
-  masm.negPtr(temp);
-  masm.bind(&nonNegative);
-
-  masm.move32To64ZeroExtend(temp, temp64);
-  emitCreateBigInt(ins, Scalar::BigUint64, temp64, output, temp);
-
-  masm.bind(&done);
 }
 
 void CodeGenerator::visitGuardNonGCThing(LGuardNonGCThing* ins) {
@@ -21811,6 +21780,46 @@ void CodeGenerator::visitMapObjectSize(LMapObjectSize* ins) {
   Register output = ToRegister(ins->output());
 
   masm.loadMapObjectSize(mapObj, output);
+}
+
+void CodeGenerator::visitDateFillLocalTimeSlots(LDateFillLocalTimeSlots* ins) {
+  Register date = ToRegister(ins->date());
+  Register temp = ToRegister(ins->temp0());
+
+  masm.dateFillLocalTimeSlots(date, temp, liveVolatileRegs(ins));
+}
+
+void CodeGenerator::visitDateHoursFromSecondsIntoYear(
+    LDateHoursFromSecondsIntoYear* ins) {
+  auto secondsIntoYear =
+      ToValue(ins, LDateHoursFromSecondsIntoYear::SecondsIntoYearIndex);
+  auto output = ToOutValue(ins);
+  Register temp0 = ToRegister(ins->temp0());
+  Register temp1 = ToRegister(ins->temp1());
+
+  masm.dateHoursFromSecondsIntoYear(secondsIntoYear, output, temp0, temp1);
+}
+
+void CodeGenerator::visitDateMinutesFromSecondsIntoYear(
+    LDateMinutesFromSecondsIntoYear* ins) {
+  auto secondsIntoYear =
+      ToValue(ins, LDateMinutesFromSecondsIntoYear::SecondsIntoYearIndex);
+  auto output = ToOutValue(ins);
+  Register temp0 = ToRegister(ins->temp0());
+  Register temp1 = ToRegister(ins->temp1());
+
+  masm.dateMinutesFromSecondsIntoYear(secondsIntoYear, output, temp0, temp1);
+}
+
+void CodeGenerator::visitDateSecondsFromSecondsIntoYear(
+    LDateSecondsFromSecondsIntoYear* ins) {
+  auto secondsIntoYear =
+      ToValue(ins, LDateSecondsFromSecondsIntoYear::SecondsIntoYearIndex);
+  auto output = ToOutValue(ins);
+  Register temp0 = ToRegister(ins->temp0());
+  Register temp1 = ToRegister(ins->temp1());
+
+  masm.dateSecondsFromSecondsIntoYear(secondsIntoYear, output, temp0, temp1);
 }
 
 template <size_t NumDefs>

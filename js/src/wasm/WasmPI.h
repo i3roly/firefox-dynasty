@@ -113,12 +113,6 @@ class SuspenderObject;
 
 static const uint32_t SuspenderObjectDataSlot = 0;
 
-enum SuspenderArgPosition {
-  None = -1,
-  First = 0,
-  Last = 1,
-};
-
 enum SuspenderState {
   Initial,
   Moribund,
@@ -221,25 +215,19 @@ class SuspenderObjectData
 
 #ifdef ENABLE_WASM_JSPI
 
-bool ParseSuspendingPromisingString(JSContext* cx, JS::HandleValue val,
-                                    SuspenderArgPosition& result);
-
-bool CallImportOnMainThread(JSContext* cx, Instance* instance,
-                            int32_t funcImportIndex, int32_t argc,
-                            uint64_t* argv);
+using CallOnMainStackFn = bool (*)(void* data);
+bool CallOnMainStack(JSContext* cx, CallOnMainStackFn fn, void* data);
 
 JSFunction* WasmSuspendingFunctionCreate(JSContext* cx, HandleObject func,
                                          wasm::ValTypeVector&& params,
-                                         wasm::ValTypeVector&& results,
-                                         SuspenderArgPosition argPosition);
+                                         wasm::ValTypeVector&& results);
 
 JSFunction* WasmSuspendingFunctionCreate(JSContext* cx, HandleObject func,
                                          const FuncType& type);
 
 JSFunction* WasmPromisingFunctionCreate(JSContext* cx, HandleObject func,
                                         wasm::ValTypeVector&& params,
-                                        wasm::ValTypeVector&& results,
-                                        SuspenderArgPosition argPosition);
+                                        wasm::ValTypeVector&& results);
 
 SuspenderObject* CurrentSuspender(Instance* instance, int reserved);
 
@@ -247,8 +235,6 @@ SuspenderObject* CreateSuspender(Instance* instance, int reserved);
 
 PromiseObject* CreatePromisingPromise(Instance* instance,
                                       SuspenderObject* suspender);
-
-SuspenderObject* CheckSuspender(Instance* instance, JSObject* maybeSuspender);
 
 JSObject* GetSuspendingPromiseResult(Instance* instance,
                                      SuspenderObject* suspender);

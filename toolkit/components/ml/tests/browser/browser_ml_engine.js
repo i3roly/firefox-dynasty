@@ -7,9 +7,10 @@
 
 requestLongerTimeout(2);
 
-async function setup({ disabled = false, prefs = [] } = {}) {
+async function setup({ disabled = false, prefs = [], records = null } = {}) {
   const { removeMocks, remoteClients } = await createAndMockMLRemoteSettings({
     autoDownloadFromRemoteSettings: false,
+    records,
   });
 
   await SpecialPowers.pushPrefEnv({
@@ -18,6 +19,9 @@ async function setup({ disabled = false, prefs = [] } = {}) {
       ["browser.ml.enable", !disabled],
       ["browser.ml.logLevel", "All"],
       ["browser.ml.modelCacheTimeout", 1000],
+      ["browser.ml.checkForMemory", true],
+      ["browser.ml.defaultModelMemoryUsage", 0.0000001], // 100 bytes
+      ["browser.ml.queueWaitTimeout", 2],
       ...prefs,
     ],
   });
@@ -72,6 +76,73 @@ add_task(async function test_ml_engine_basics() {
   );
 
   Assert.equal(res.output.dtype, "q8", "The config was enriched by RS");
+  ok(
+    !EngineProcess.areAllEnginesTerminated(),
+    "The engine process is still active."
+  );
+
+  await EngineProcess.destroyMLEngine();
+
+  await cleanup();
+});
+
+add_task(async function test_ml_engine_pick_feature_id() {
+  // one record sent back from RS contains featureId
+  const records = [
+    {
+      taskName: "moz-echo",
+      modelId: "mozilla/distilvit",
+      processorId: "mozilla/distilvit",
+      tokenizerId: "mozilla/distilvit",
+      modelRevision: "main",
+      processorRevision: "main",
+      tokenizerRevision: "main",
+      dtype: "q8",
+      id: "74a71cfd-1734-44e6-85c0-69cf3e874138",
+    },
+    {
+      featureId: "myCoolFeature",
+      taskName: "moz-echo",
+      modelId: "mozilla/distilvit",
+      processorId: "mozilla/distilvit",
+      tokenizerId: "mozilla/distilvit",
+      modelRevision: "v1.0",
+      processorRevision: "v1.0",
+      tokenizerRevision: "v1.0",
+      dtype: "fp16",
+      id: "74a71cfd-1734-44e6-85c0-69cf3e874138",
+    },
+  ];
+
+  const { cleanup, remoteClients } = await setup({ records });
+
+  info("Get the engine");
+  const engineInstance = await createEngine({
+    featureId: "myCoolFeature",
+    taskName: "moz-echo",
+  });
+
+  info("Check the inference process is running");
+  Assert.equal(await checkForRemoteType("inference"), true);
+
+  info("Run the inference");
+  const inferencePromise = engineInstance.run({ data: "This gets echoed." });
+
+  info("Wait for the pending downloads.");
+  await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+
+  const res = await inferencePromise;
+  Assert.equal(
+    res.output.echo,
+    "This gets echoed.",
+    "The text get echoed exercising the whole flow."
+  );
+
+  Assert.equal(
+    res.output.dtype,
+    "fp16",
+    "The config was enriched by RS - using a feature Id"
+  );
   ok(
     !EngineProcess.areAllEnginesTerminated(),
     "The engine process is still active."
@@ -595,6 +666,97 @@ add_task(async function test_ml_threading_support() {
   let res = await inferencePromise;
 
   ok(res.multiThreadSupported, "Multi-thread should be supported");
+  await EngineProcess.destroyMLEngine();
+  await cleanup();
+});
+
+add_task(async function test_ml_engine_get_status() {
+  const { cleanup, remoteClients } = await setup();
+
+  info("Get the engine");
+  const engineInstance = await createEngine(RAW_PIPELINE_OPTIONS);
+
+  info("Check the inference process is running");
+  Assert.equal(await checkForRemoteType("inference"), true);
+
+  info("Run the inference");
+  const inferencePromise = engineInstance.run({ data: "This gets echoed." });
+
+  info("Wait for the pending downloads.");
+  await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+
+  const res = await inferencePromise;
+  Assert.equal(
+    res.output.echo,
+    "This gets echoed.",
+    "The text get echoed exercising the whole flow."
+  );
+
+  const expected = {
+    "default-engine": {
+      status: "IDLING",
+      options: {
+        engineId: "default-engine",
+        featureId: null,
+        taskName: "moz-echo",
+        timeoutMS: 1000,
+        modelHubRootUrl:
+          "chrome://mochitests/content/browser/toolkit/components/ml/tests/browser/data",
+        modelHubUrlTemplate: "{model}/{revision}",
+        modelId: "mozilla/distilvit",
+        modelRevision: "main",
+        tokenizerId: "mozilla/distilvit",
+        tokenizerRevision: "main",
+        processorId: "mozilla/distilvit",
+        processorRevision: "main",
+        logLevel: "All",
+        runtimeFilename: "ort-wasm-simd-threaded.jsep.wasm",
+        device: null,
+        dtype: "q8",
+        numThreads: null,
+        executionPriority: "NORMAL",
+      },
+      engineId: "default-engine",
+    },
+  };
+
+  let status = await engineInstance.mlEngineParent.getStatus();
+  status = JSON.parse(JSON.stringify(Object.fromEntries(status)));
+  Assert.deepEqual(status, expected);
+
+  await ok(
+    !EngineProcess.areAllEnginesTerminated(),
+    "The engine process is still active."
+  );
+
+  await EngineProcess.destroyMLEngine();
+
+  await cleanup();
+});
+
+add_task(async function test_ml_engine_not_enough_memory() {
+  const { cleanup, remoteClients } = await setup();
+
+  info("Get the greedy engine");
+  const engineInstance = await createEngine({
+    modelId: "testing/greedy",
+    taskName: "summarization",
+    dtype: "q8",
+    numThreads: 1,
+    device: "wasm",
+  });
+  info("Run the inference");
+  const inferencePromise = engineInstance.run({ data: "This gets echoed." });
+
+  info("Wait for the pending downloads.");
+  await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+
+  await Assert.rejects(
+    inferencePromise,
+    /Timeout reached while waiting for enough memory/,
+    "The call should be rejected because of a lack of memory"
+  );
+
   await EngineProcess.destroyMLEngine();
   await cleanup();
 });

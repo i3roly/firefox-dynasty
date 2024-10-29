@@ -17,7 +17,7 @@
 namespace mozilla::webgpu {
 
 GPU_IMPL_CYCLE_COLLECTION(RenderBundleEncoder, mParent, mUsedBindGroups,
-                          mUsedBuffers, mUsedPipelines, mUsedTextureViews)
+                          mUsedBuffers, mUsedPipelines)
 GPU_IMPL_JS_WRAP(RenderBundleEncoder)
 
 void ffiWGPURenderBundleEncoderDeleter::operator()(
@@ -78,20 +78,25 @@ RenderBundleEncoder::RenderBundleEncoder(
 RenderBundleEncoder::~RenderBundleEncoder() { Cleanup(); }
 
 void RenderBundleEncoder::Cleanup() {
-  if (mValid) {
-    mValid = false;
-    mEncoder.release();
-  }
+  mValid = false;
+  mEncoder.release();
+  mUsedBindGroups.Clear();
+  mUsedBuffers.Clear();
+  mUsedPipelines.Clear();
 }
 
 void RenderBundleEncoder::SetBindGroup(
-    uint32_t aSlot, const BindGroup& aBindGroup,
+    uint32_t aSlot, BindGroup* const aBindGroup,
     const dom::Sequence<uint32_t>& aDynamicOffsets) {
   if (!mValid) {
     return;
   }
-  mUsedBindGroups.AppendElement(&aBindGroup);
-  ffi::wgpu_render_bundle_set_bind_group(mEncoder.get(), aSlot, aBindGroup.mId,
+  RawId bindGroup = 0;
+  if (aBindGroup) {
+    mUsedBindGroups.AppendElement(aBindGroup);
+    bindGroup = aBindGroup->mId;
+  }
+  ffi::wgpu_render_bundle_set_bind_group(mEncoder.get(), aSlot, bindGroup,
                                          aDynamicOffsets.Elements(),
                                          aDynamicOffsets.Length());
 }

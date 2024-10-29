@@ -17,6 +17,7 @@ Consuming XPCOM functionality
    collections
    hashtables
    hashtables_detailed
+   mozpromise
    sorting.md
    xpcomutils
 
@@ -37,3 +38,4 @@ Writing new XPCOM interfaces/classes
    xpidl
    writing-xpcom-interface
    cc-macros
+   fmt-in-gecko.md

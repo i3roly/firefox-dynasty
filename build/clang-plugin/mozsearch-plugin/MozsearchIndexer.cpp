@@ -154,6 +154,38 @@ struct RAIITracer {
 
 #define TRACEFUNC RAIITracer tracer(__FUNCTION__);
 
+// Sets variable to value on creation then resets variable to its original
+// value on destruction
+template<typename T>
+class ValueRollback {
+public:
+  template<typename U = T>
+  ValueRollback(T &variable, U &&value)
+    : mVariable{&variable}
+    , mSavedValue{std::exchange(variable, std::forward<U>(value))}
+  {
+  }
+
+  ValueRollback(ValueRollback &&other) noexcept
+    : mVariable{std::exchange(other.mVariable, nullptr)}
+    , mSavedValue{std::move(other.mSavedValue)}
+  {
+  }
+
+  ValueRollback(const ValueRollback &) = delete;
+  ValueRollback &operator=(ValueRollback &&) = delete;
+  ValueRollback &operator=(const ValueRollback &) = delete;
+
+  ~ValueRollback() {
+    if (mVariable)
+      *mVariable = std::move(mSavedValue);
+  }
+
+private:
+  T *mVariable;
+  T mSavedValue;
+};
+
 class IndexConsumer;
 
 bool isPure(FunctionDecl* D) {
@@ -847,6 +879,7 @@ public:
     // the definition inside the scope of the template or else we won't properly
     // handle member access on the templated type.
     if (TemplateStack && D->isDefined(Def) && Def && D != Def) {
+      const auto _ = ValueRollback(CurDeclContext, nullptr);
       TraverseFunctionDecl(const_cast<FunctionDecl *>(Def));
     }
     return Super::TraverseFunctionDecl(D);
@@ -856,6 +889,7 @@ public:
     const FunctionDecl *Def;
     // See TraverseFunctionDecl.
     if (TemplateStack && D->isDefined(Def) && Def && D != Def) {
+      const auto _ = ValueRollback(CurDeclContext, nullptr);
       TraverseFunctionDecl(const_cast<FunctionDecl *>(Def));
     }
     return Super::TraverseCXXMethodDecl(D);
@@ -865,6 +899,7 @@ public:
     const FunctionDecl *Def;
     // See TraverseFunctionDecl.
     if (TemplateStack && D->isDefined(Def) && Def && D != Def) {
+      const auto _ = ValueRollback(CurDeclContext, nullptr);
       TraverseFunctionDecl(const_cast<FunctionDecl *>(Def));
     }
     return Super::TraverseCXXConstructorDecl(D);
@@ -874,6 +909,7 @@ public:
     const FunctionDecl *Def;
     // See TraverseFunctionDecl.
     if (TemplateStack && D->isDefined(Def) && Def && D != Def) {
+      const auto _ = ValueRollback(CurDeclContext, nullptr);
       TraverseFunctionDecl(const_cast<FunctionDecl *>(Def));
     }
     return Super::TraverseCXXConversionDecl(D);
@@ -883,9 +919,15 @@ public:
     const FunctionDecl *Def;
     // See TraverseFunctionDecl.
     if (TemplateStack && D->isDefined(Def) && Def && D != Def) {
+      const auto _ = ValueRollback(CurDeclContext, nullptr);
       TraverseFunctionDecl(const_cast<FunctionDecl *>(Def));
     }
     return Super::TraverseCXXDestructorDecl(D);
+  }
+
+  bool TraverseLambdaExpr(LambdaExpr *E) {
+    AutoSetContext Asc(this, nullptr, true);
+    return Super::TraverseLambdaExpr(E);
   }
 
   // Used to keep track of the context in which a token appears.
@@ -917,8 +959,12 @@ public:
       return Context();
     }
 
-    if (CurDeclContext) {
-      return translateContext(CurDeclContext->Decl);
+    AutoSetContext *Ctxt = CurDeclContext;
+    while (Ctxt) {
+      if (Ctxt->Decl) {
+        return translateContext(Ctxt->Decl);
+      }
+      Ctxt = Ctxt->Prev;
     }
     return Context();
   }
@@ -935,7 +981,7 @@ public:
 
     AutoSetContext *Ctxt = CurDeclContext;
     while (Ctxt) {
-      if (Ctxt->Decl != D) {
+      if (Ctxt->Decl && Ctxt->Decl != D) {
         return translateContext(Ctxt->Decl);
       }
       Ctxt = Ctxt->Prev;
@@ -2534,17 +2580,37 @@ public:
   }
 
   void endMacroExpansion() {
-    const auto replacements = clang::format::reformat(
-      clang::format::getMozillaStyle(),
-      MacroExpansionState->Expansion,
-      {tooling::Range(0, MacroExpansionState->Expansion.length())}
-    );
-    auto formatted = clang::tooling::applyAllReplacements(MacroExpansionState->Expansion, replacements);
-    if (formatted) {
-      for (auto &[k, v] : MacroExpansionState->TokenLocations) {
-        v = replacements.getShiftedCodePosition(v);
+    // large macros are too slow to reformat, don't reformat macros larger than those arbitrary thresholds
+    static constexpr auto includedFileExpansionReformatThreshold = 20'000;
+    static constexpr auto mainFileExpansionReformatThreshold = 200'000;
+
+    const auto expansionLocation = SM.getExpansionLoc(MacroExpansionState->MacroNameToken.getLocation());
+    const auto expansionFilename = SM.getFilename(expansionLocation);
+    const auto includedExtensions = std::array{".h", ".hpp", ".hxx", ".inc", ".def"};
+    const auto isIncludedFile = std::any_of(includedExtensions.begin(), includedExtensions.end(), [&](const auto *extension) {
+      return expansionFilename.ends_with_insensitive(extension);
+    });
+    const auto expansionReformatThreshold = isIncludedFile ? includedFileExpansionReformatThreshold : mainFileExpansionReformatThreshold;
+
+    if (MacroExpansionState->Expansion.length() < expansionReformatThreshold) {
+      // large macros are too memory-hungry to reformat with ColumnLimit != 0
+      // see https://github.com/llvm/llvm-project/issues/107434
+      auto style = clang::format::getMozillaStyle();
+      if (MacroExpansionState->Expansion.length() > includedFileExpansionReformatThreshold)
+        style.ColumnLimit = 0;
+
+      const auto replacements = clang::format::reformat(
+        style,
+        MacroExpansionState->Expansion,
+        {tooling::Range(0, MacroExpansionState->Expansion.length())}
+      );
+      auto formatted = clang::tooling::applyAllReplacements(MacroExpansionState->Expansion, replacements);
+      if (formatted) {
+        for (auto &[k, v] : MacroExpansionState->TokenLocations) {
+          v = replacements.getShiftedCodePosition(v);
+        }
+        MacroExpansionState->Expansion = std::move(formatted.get());
       }
-      MacroExpansionState->Expansion = std::move(formatted.get());
     }
 
     IdentifierInfo *Ident = MacroExpansionState->MacroNameToken.getIdentifierInfo();

@@ -188,6 +188,8 @@ let interfaceNamesInGlobalScope = [
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "Event",
   // IMPORTANT: Do not change this list without review from a DOM peer!
+  "EventSource",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
   "EventTarget",
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "ExtendableEvent",
@@ -290,6 +292,10 @@ let interfaceNamesInGlobalScope = [
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "PerformanceServerTiming",
   // IMPORTANT: Do not change this list without review from a DOM peer!
+  "Permissions",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "PermissionStatus",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
   "ProgressEvent",
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "PromiseRejectionEvent",
@@ -323,6 +329,8 @@ let interfaceNamesInGlobalScope = [
   { name: "Scheduler", nightly: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "ServiceWorker",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "ServiceWorkerContainer",
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "ServiceWorkerGlobalScope",
   // IMPORTANT: Do not change this list without review from a DOM peer!

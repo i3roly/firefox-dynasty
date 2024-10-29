@@ -19,8 +19,6 @@ import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.Theme
 
-internal const val CUSTOM_TAB_MENU_ROUTE = "custom_tab_menu"
-
 /**
  * Wrapper column containing the main menu items.
  *
@@ -31,6 +29,7 @@ internal const val CUSTOM_TAB_MENU_ROUTE = "custom_tab_menu"
  * menu toggle.
  * @param onFindInPageMenuClick Invoked when the user clicks on the find in page menu item.
  * @param onOpenInFirefoxMenuClick Invoked when the user clicks on the open in browser menu item.
+ * @param onShareMenuClick Invoked when the user clicks on the share menu item.
  */
 @Suppress("LongParameterList")
 @Composable
@@ -41,6 +40,7 @@ internal fun CustomTabMenu(
     onSwitchToDesktopSiteMenuClick: () -> Unit,
     onFindInPageMenuClick: () -> Unit,
     onOpenInFirefoxMenuClick: () -> Unit,
+    onShareMenuClick: () -> Unit,
 ) {
     MenuScaffold(
         header = {},
@@ -85,6 +85,14 @@ internal fun CustomTabMenu(
                 beforeIconPainter = painterResource(id = R.drawable.mozac_ic_open_in),
                 onClick = onOpenInFirefoxMenuClick,
             )
+
+            Divider(color = FirefoxTheme.colors.borderSecondary)
+
+            MenuItem(
+                label = stringResource(id = R.string.browser_menu_share_2),
+                beforeIconPainter = painterResource(id = R.drawable.mozac_ic_share_android_24),
+                onClick = onShareMenuClick,
+            )
         }
 
         if (!customTabMenuItems.isNullOrEmpty()) {
@@ -119,6 +127,7 @@ private fun CustomTabMenuPreview() {
                 onSwitchToDesktopSiteMenuClick = {},
                 onFindInPageMenuClick = {},
                 onOpenInFirefoxMenuClick = {},
+                onShareMenuClick = {},
             )
         }
     }
@@ -139,6 +148,7 @@ private fun CustomTabMenuPrivatePreview() {
                 onSwitchToDesktopSiteMenuClick = {},
                 onFindInPageMenuClick = {},
                 onOpenInFirefoxMenuClick = {},
+                onShareMenuClick = {},
             )
         }
     }

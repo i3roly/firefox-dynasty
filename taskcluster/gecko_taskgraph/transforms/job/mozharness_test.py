@@ -156,10 +156,6 @@ def mozharness_test_on_docker(config, job, taskdesc):
 
     env["PYTHON"] = "python3"
 
-    # Legacy linux64 tests rely on compiz.
-    if test.get("docker-image", {}).get("in-tree") == "desktop1604-test":
-        env.update({"NEED_COMPIZ": "true"})
-
     # Bug 1602701/1601828 - use compiz on ubuntu1804 due to GTK asynchiness
     # when manipulating windows.
     if test.get("docker-image", {}).get("in-tree") == "ubuntu1804-test":
@@ -447,8 +443,10 @@ def mozharness_test_on_generic_worker(config, job, taskdesc):
 
     test_tags = get_test_tags(config, env)
     if test_tags:
-        env["MOZHARNESS_TEST_TAG"] = json.dumps(test_tags)
-        mh_command.extend(["--tag={}".format(x) for x in test_tags])
+        # do not add --tag for perf tests
+        if test["suite"] not in ["talos", "raptor"]:
+            env["MOZHARNESS_TEST_TAG"] = json.dumps(test_tags)
+            mh_command.extend(["--tag={}".format(x) for x in test_tags])
 
     # TODO: remove the need for run['chunked']
     elif mozharness.get("chunked") or test["chunks"] > 1:

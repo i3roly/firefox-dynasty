@@ -39,6 +39,7 @@ import mozilla.components.browser.thumbnails.storage.ThumbnailStorage
 import mozilla.components.concept.base.crash.CrashReporting
 import mozilla.components.concept.engine.DefaultSettings
 import mozilla.components.concept.engine.Engine
+import mozilla.components.concept.engine.fission.WebContentIsolationStrategy
 import mozilla.components.concept.engine.mediaquery.PreferredColorScheme
 import mozilla.components.concept.fetch.Client
 import mozilla.components.feature.awesomebar.provider.SessionAutocompleteProvider
@@ -96,6 +97,8 @@ import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.Config
 import org.mozilla.fenix.IntentReceiverActivity
 import org.mozilla.fenix.R
+import org.mozilla.fenix.browser.desktopmode.DefaultDesktopModeRepository
+import org.mozilla.fenix.browser.desktopmode.DesktopModeMiddleware
 import org.mozilla.fenix.components.search.SearchMigration
 import org.mozilla.fenix.downloads.DownloadService
 import org.mozilla.fenix.ext.components
@@ -171,12 +174,26 @@ class Core(
             cookieBannerHandlingGlobalRulesSubFrames = context.settings().shouldEnableCookieBannerGlobalRulesSubFrame,
             emailTrackerBlockingPrivateBrowsing = true,
             userCharacteristicPingCurrentVersion = FxNimbus.features.userCharacteristics.value().currentVersion,
+            getDesktopMode = {
+                store.state.desktopMode
+            },
+            webContentIsolationStrategy = WebContentIsolationStrategy.ISOLATE_HIGH_VALUE,
+            fetchPriorityEnabled = FxNimbus.features.networking.value().fetchPriorityEnabled,
         )
 
         // Apply fingerprinting protection overrides if the feature is enabled in Nimbus
         if (FxNimbus.features.fingerprintingProtection.value().enabled) {
             defaultSettings.fingerprintingProtectionOverrides =
                 FxNimbus.features.fingerprintingProtection.value().overrides
+        }
+
+        // Apply third-party cookie blocking settings if the Nimbus feature is
+        // enabled.
+        if (FxNimbus.features.thirdPartyCookieBlocking.value().enabled) {
+            defaultSettings.cookieBehaviorOptInPartitioning =
+                FxNimbus.features.thirdPartyCookieBlocking.value().enabledNormal
+            defaultSettings.cookieBehaviorOptInPartitioningPBM =
+                FxNimbus.features.thirdPartyCookieBlocking.value().enabledPrivate
         }
 
         GeckoEngine(
@@ -319,6 +336,12 @@ class Core(
                 SaveToPDFMiddleware(context),
                 FxSuggestFactsMiddleware(),
                 FileUploadsDirCleanerMiddleware(fileUploadsDirCleaner),
+                DesktopModeMiddleware(
+                    repository = DefaultDesktopModeRepository(
+                        context = context,
+                    ),
+                    engine = engine,
+                ),
             )
 
         BrowserStore(

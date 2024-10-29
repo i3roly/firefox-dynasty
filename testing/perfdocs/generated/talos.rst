@@ -1152,48 +1152,6 @@ For the sample commands found below, note that the capitalization used is import
         - ❌
 
 
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
    .. list-table:: **test-windows11-64-qr/opt**
       :widths: 30 15 15 15 15
       :header-rows: 1
@@ -2328,48 +2286,6 @@ For the sample commands found below, note that the capitalization used is import
         - ❌
 
 
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
    .. list-table:: **test-windows11-64-qr/opt**
       :widths: 30 15 15 15 15
       :header-rows: 1
@@ -2532,48 +2448,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -3002,48 +2876,6 @@ For the sample commands found below, note that the capitalization used is import
         - ❌
 
 
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
    .. list-table:: **test-windows11-64-qr/opt**
       :widths: 30 15 15 15 15
       :header-rows: 1
@@ -3126,7 +2958,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -3207,48 +3038,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -3335,7 +3124,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -3416,48 +3204,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -3544,7 +3290,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -3625,48 +3370,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -3753,7 +3456,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -3834,48 +3536,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -3962,7 +3622,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -4043,48 +3702,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -4171,7 +3788,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -4252,48 +3868,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -4380,7 +3954,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -4461,48 +4034,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -4589,7 +4120,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -4670,48 +4200,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -4798,7 +4286,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -4879,48 +4366,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -5007,7 +4452,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -5088,48 +4532,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -5216,7 +4618,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -5297,48 +4698,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 
@@ -5425,7 +4784,6 @@ For the sample commands found below, note that the capitalization used is import
    * gecko_profile_interval: 2
    * linux_counters: None
    * mac_counters: None
-   * preferences: {'dom.media.webcodecs.enabled': True, 'dom.media.webcodecs.force-osx-h264-enabled': True}
    * timeout: 600
    * tpchrome: False
    * tpcycles: 1
@@ -5506,48 +4864,6 @@ For the sample commands found below, note that the capitalization used is import
       * - **talos-webgl-swr**
         - ✅
         - ✅
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref-shippable/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-
-
-   .. list-table:: **test-windows11-64-2009-hw-ref/opt**
-      :widths: 30 15 15 15 15
-      :header-rows: 1
-
-      * - **Test Name**
-        - mozilla-central
-        - autoland
-        - mozilla-release
-        - mozilla-beta
-      * - **talos-webgl**
-        - ❌
-        - ❌
-        - ❌
-        - ❌
-      * - **talos-webgl-swr**
-        - ❌
-        - ❌
         - ❌
         - ❌
 

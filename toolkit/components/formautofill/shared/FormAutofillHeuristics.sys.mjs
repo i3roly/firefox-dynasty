@@ -9,6 +9,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   CreditCard: "resource://gre/modules/CreditCard.sys.mjs",
   CreditCardRulesets: "resource://gre/modules/shared/CreditCardRuleset.sys.mjs",
+  FieldDetail: "resource://gre/modules/shared/FieldScanner.sys.mjs",
   FieldScanner: "resource://gre/modules/shared/FieldScanner.sys.mjs",
   FormAutofillUtils: "resource://gre/modules/shared/FormAutofillUtils.sys.mjs",
   LabelUtils: "resource://gre/modules/shared/LabelUtils.sys.mjs",
@@ -118,6 +119,67 @@ export const FormAutofillHeuristics = {
         desiredValues
       )
     );
+  },
+
+  /**
+   * In some languages such French (nom) and German (Name), name can mean either family name or
+   * full name in a form, depending on the context. We want to be sure that if "name" is
+   * detected in the context of "family-name" or "given-name", it is updated accordingly.
+   *
+   * Look for "given-name", "family-name", and "name" fields. If any two of those fields are detected
+   * and one of them is "name", then replace "name" with "family-name" if "name" is accompanied by
+   * "given-name" or vise-versa.
+   *
+   * @param {FieldScanner} scanner
+   *        The current parsing status for all elements
+   * @returns {boolean}
+   *        Return true if any field is recognized and updated, otherwise false.
+   */
+  _parseNameFields(scanner, fieldDetail) {
+    const TARGET_FIELDS = ["name", "given-name", "family-name"];
+
+    if (!TARGET_FIELDS.includes(fieldDetail.fieldName)) {
+      return false;
+    }
+
+    const fields = [];
+    let nameIndex = -1;
+
+    for (let idx = scanner.parsingIndex; ; idx++) {
+      const detail = scanner.getFieldDetailByIndex(idx);
+      if (!TARGET_FIELDS.includes(detail?.fieldName)) {
+        break;
+      }
+      if (detail.fieldName === "name") {
+        nameIndex = idx;
+      }
+      fields.push(detail);
+    }
+
+    if (nameIndex != -1 && fields.length == 2) {
+      //if name is detected and the other of the two fields detected is 'given-name'
+      //then update name to 'name' to 'family-name'
+      if (
+        fields[0].fieldName == "given-name" ||
+        fields[1].fieldName == "given-name"
+      ) {
+        scanner.updateFieldName(nameIndex, "family-name");
+        //if name is detected and the other of the two fields detected is 'family-name'
+        //then update name to 'name' to 'given-name'
+      } else if (
+        fields[0].fieldName == "family-name" ||
+        fields[1].fieldName == "family-name"
+      ) {
+        scanner.updateFieldName(nameIndex, "given-name");
+      } else {
+        return false;
+      }
+
+      scanner.parsingIndex += fields.length;
+      return true;
+    }
+
+    return false;
   },
 
   /**
@@ -234,13 +296,28 @@ export const FormAutofillHeuristics = {
       "address-line3",
     ];
 
+    let houseNumberFields = 0;
+
+    // We need to build a list of the address fields. A list of the indicies
+    // is also needed as the fields with a given name can change positions
+    // during the update.
     const fields = [];
+    const fieldIndicies = [];
     for (let idx = scanner.parsingIndex; !scanner.parsingFinished; idx++) {
       const detail = scanner.getFieldDetailByIndex(idx);
+
+      // Skip over any house number fields. There should only be zero or one,
+      // but we'll skip over them all anyway.
+      if (detail?.fieldName == "address-housenumber") {
+        houseNumberFields++;
+        continue;
+      }
+
       if (!INTERESTED_FIELDS.includes(detail?.fieldName)) {
         break;
       }
       fields.push(detail);
+      fieldIndicies.push(idx);
     }
 
     if (!fields.length) {
@@ -253,7 +330,7 @@ export const FormAutofillHeuristics = {
           fields[0].reason != "autocomplete" &&
           ["address-line2", "address-line3"].includes(fields[0].fieldName)
         ) {
-          scanner.updateFieldName(scanner.parsingIndex, "address-line1");
+          scanner.updateFieldName(fieldIndicies[0], "address-line1");
         }
         break;
       case 2:
@@ -263,27 +340,22 @@ export const FormAutofillHeuristics = {
             (fields[1].fieldName == "address-line2" ||
               fields[1].reason != "autocomplete")
           ) {
-            scanner.updateFieldName(
-              scanner.parsingIndex,
-              "address-line1",
-              true
-            );
+            scanner.updateFieldName(fieldIndicies[0], "address-line1", true);
           }
         } else {
-          scanner.updateFieldName(scanner.parsingIndex, "address-line1");
+          scanner.updateFieldName(fieldIndicies[0], "address-line1");
         }
-
-        scanner.updateFieldName(scanner.parsingIndex + 1, "address-line2");
+        scanner.updateFieldName(fieldIndicies[1], "address-line2");
         break;
       case 3:
       default:
-        scanner.updateFieldName(scanner.parsingIndex, "address-line1");
-        scanner.updateFieldName(scanner.parsingIndex + 1, "address-line2");
-        scanner.updateFieldName(scanner.parsingIndex + 2, "address-line3");
+        scanner.updateFieldName(fieldIndicies[0], "address-line1");
+        scanner.updateFieldName(fieldIndicies[1], "address-line2");
+        scanner.updateFieldName(fieldIndicies[2], "address-line3");
         break;
     }
 
-    scanner.parsingIndex += fields.length;
+    scanner.parsingIndex += fields.length + houseNumberFields;
     return true;
   },
 
@@ -311,21 +383,13 @@ export const FormAutofillHeuristics = {
     if (fields.length == 1) {
       if (fields[0].fieldName == "address-level2") {
         const prev = scanner.getFieldDetailByIndex(scanner.parsingIndex - 1);
-        if (
-          prev &&
-          !prev.fieldName &&
-          HTMLSelectElement.isInstance(prev.element)
-        ) {
+        if (prev && !prev.fieldName && prev.localName == "select") {
           scanner.updateFieldName(scanner.parsingIndex - 1, "address-level1");
           scanner.parsingIndex += 1;
           return true;
         }
         const next = scanner.getFieldDetailByIndex(scanner.parsingIndex + 1);
-        if (
-          next &&
-          !next.fieldName &&
-          HTMLSelectElement.isInstance(next.element)
-        ) {
+        if (next && !next.fieldName && next.localName == "select") {
           scanner.updateFieldName(scanner.parsingIndex + 1, "address-level1");
           scanner.parsingIndex += 2;
           return true;
@@ -439,9 +503,9 @@ export const FormAutofillHeuristics = {
     // instead of one 16-digit `cc-number` field.
     const N = MULTI_N_FIELD_NAMES["cc-number"];
     if (fieldDetails.length == N) {
-      fieldDetails.forEach((fieldDetail, index) => {
+      fieldDetails.forEach((fd, index) => {
         // part starts with 1
-        fieldDetail.part = index + 1;
+        fd.part = index + 1;
       });
       scanner.parsingIndex += fieldDetails.length;
       return true;
@@ -561,7 +625,54 @@ export const FormAutofillHeuristics = {
    *        all sections within its field details in the form.
    */
   getFormInfo(form) {
-    const scanner = new lazy.FieldScanner(form, this.inferFieldInfo.bind(this));
+    const elements = Array.from(form.elements).filter(element =>
+      lazy.FormAutofillUtils.isCreditCardOrAddressFieldType(element)
+    );
+
+    const fieldDetails = [];
+    for (const element of elements) {
+      // Ignore invisible <input>, we still keep invisible <select> since
+      // some websites implements their custom dropdown and use invisible <select>
+      // to store the value.
+      const isVisible = lazy.FormAutofillUtils.isFieldVisible(element);
+      if (!HTMLSelectElement.isInstance(element) && !isVisible) {
+        continue;
+      }
+
+      const [fieldName, autocompleteInfo, confidence] = this.inferFieldInfo(
+        element,
+        elements
+      );
+      fieldDetails.push(
+        lazy.FieldDetail.create(element, form, fieldName, {
+          autocompleteInfo,
+          confidence,
+          isVisible,
+        })
+      );
+    }
+
+    this.parseAndUpdateFieldNamesContent(fieldDetails);
+
+    lazy.LabelUtils.clearLabelMap();
+
+    return fieldDetails;
+  },
+
+  /**
+   * Similar to `parseAndUpdateFieldNamesParent`. The difference is that
+   * the parsing heuristics used in this function are based on information
+   * not currently passed to the parent process. For example,
+   * text strings from associated labels.
+   *
+   * Note that the heuristics run in this function will not be able
+   * to reference field information across frames.
+   *
+   * @param {Array<FieldDetail>} fieldDetails
+   *        An array of the identified fields.
+   */
+  parseAndUpdateFieldNamesContent(fieldDetails) {
+    const scanner = new lazy.FieldScanner(fieldDetails);
 
     while (!scanner.parsingFinished) {
       const savedIndex = scanner.parsingIndex;
@@ -569,10 +680,36 @@ export const FormAutofillHeuristics = {
       // First, we get the inferred field info
       const fieldDetail = scanner.getFieldDetailByIndex(scanner.parsingIndex);
 
+      if (this._parsePhoneFields(scanner, fieldDetail)) {
+        continue;
+      }
+
+      if (savedIndex == scanner.parsingIndex) {
+        scanner.parsingIndex++;
+      }
+    }
+  },
+
+  /**
+   * Iterates through the field details and updates the field names
+   * based on surrounding field information, using various parsing functions.
+   *
+   * @param {Array<FieldDetail>} fieldDetails
+   *        An array of the identified fields.
+   */
+  parseAndUpdateFieldNamesParent(fieldDetails) {
+    const scanner = new lazy.FieldScanner(fieldDetails);
+
+    while (!scanner.parsingFinished) {
+      const savedIndex = scanner.parsingIndex;
+
+      const fieldDetail = scanner.getFieldDetailByIndex(scanner.parsingIndex);
+
       this._checkForAlternateField(scanner, fieldDetail);
 
+      // Attempt to parse the field using different parsers.
       if (
-        this._parsePhoneFields(scanner, fieldDetail) ||
+        this._parseNameFields(scanner, fieldDetail) ||
         this._parseStreetAddressFields(scanner, fieldDetail) ||
         this._parseAddressFields(scanner, fieldDetail) ||
         this._parseCreditCardExpiryFields(scanner, fieldDetail) ||
@@ -582,16 +719,11 @@ export const FormAutofillHeuristics = {
         continue;
       }
 
-      // If there is no field parsed, the parsing cursor can be moved
-      // forward to the next one.
+      // Move the parsing cursor forward if no parser was applied.
       if (savedIndex == scanner.parsingIndex) {
         scanner.parsingIndex++;
       }
     }
-
-    lazy.LabelUtils.clearLabelMap();
-
-    return scanner.fieldDetails;
   },
 
   _getPossibleFieldNames(element) {

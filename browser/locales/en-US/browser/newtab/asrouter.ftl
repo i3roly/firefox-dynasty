@@ -218,6 +218,10 @@ device-migration-fxa-spotlight-getting-new-device-header-2 = New device in your 
 device-migration-fxa-spotlight-getting-new-device-body-2 = Follow a few simple steps to bring your bookmarks, history, and passwords with you when you get started on a new device.
 device-migration-fxa-spotlight-getting-new-device-primary-button = How to back up my data
 
+device-migration-fxa-spotlight-sync-header = Browse without missing a beat
+device-migration-fxa-spotlight-sync-body = Sync all your important info with encryption — like bookmarks and passwords. You can pull everything up anywhere you use { -brand-product-name }.
+device-migration-fxa-spotlight-sync-primary-button = Get started
+
 ## Set as Default PDF Reader Infobar
 
 # The question portion of the following message should have the <strong> and </strong> tags surrounding it.
@@ -265,3 +269,27 @@ root-certificate-succession-infobar-primary-button =
 root-certificate-succession-infobar-secondary-button =
   .label = Later
   .accesskey = L
+
+## FxA Menu Message variants
+
+fxa-menu-message-close-button =
+    .title = Close
+    .aria-label = Close
+
+fxa-menu-message-sign-up-button = Sign up
+
+fxa-menu-message-sync-devices-primary-text = Sync all your devices
+fxa-menu-message-sync-devices-secondary-text = Instantly get your info — like bookmarks and passwords — everywhere you use { -brand-short-name }.
+fxa-menu-message-sync-devices-collapsed-text = Sync all your devices
+
+fxa-menu-message-backup-data-primary-text = Back up your browser data
+fxa-menu-message-backup-data-secondary-text = Automatically protect bookmarks, passwords, and other info on all your devices.
+fxa-menu-message-backup-data-collapsed-text = Back up browser data
+
+fxa-menu-message-backup-sync-primary-text = Keep your data safe and synced
+fxa-menu-message-backup-sync-secondary-text = Sync backs up most of your data so you can access it everywhere you use { -brand-short-name }.
+fxa-menu-message-backup-sync-collapsed-text = Sync and back up data
+
+fxa-menu-message-mobile-primary-text = Send tabs to your phone
+fxa-menu-message-mobile-secondary-text = Pick up where you left off instantly when you sync your tabs with a mobile device.
+fxa-menu-message-mobile-collapsed-text = Sync with your phone

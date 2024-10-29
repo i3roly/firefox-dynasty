@@ -668,6 +668,9 @@ let JSWINDOWACTORS = {
       "chrome://browser/content/places/historySidebar.xhtml",
       "chrome://browser/content/places/bookmarksSidebar.xhtml",
       "about:firefoxview",
+      "about:editprofile",
+      "about:deleteprofile",
+      "about:newprofile",
     ],
   },
 
@@ -765,7 +768,7 @@ let JSWINDOWACTORS = {
         DOMDocElementInserted: { wantUntrusted: true },
       },
     },
-    matches: ["about:editprofile", "about:deleteprofile"],
+    matches: ["about:editprofile", "about:deleteprofile", "about:newprofile"],
     enablePreference: "browser.profiles.enabled",
   },
 
@@ -1361,13 +1364,14 @@ BrowserGlue.prototype = {
           // If we don't start with last profile, the user
           // likely sees the profile selector on launch.
           if (Services.prefs.getBoolPref(launchOnLoginPref)) {
-            Services.telemetry.setEventRecordingEnabled(
-              "launch_on_login",
+            Glean.launchOnLogin.lastProfileDisableStartup.record();
+            // Disable launch on login messaging if we are disabling the
+            // feature.
+            Services.prefs.setBoolPref(
+              "browser.startup.windowsLaunchOnLogin.disableLaunchOnLoginPrompt",
               true
             );
-            Glean.launchOnLogin.lastProfileDisableStartup.record();
           }
-          Services.prefs.setBoolPref(launchOnLoginPref, false);
           // To reduce confusion when running multiple Gecko profiles,
           // delete launch on login shortcuts and registry keys so that
           // users are not presented with the outdated profile selector
@@ -1896,11 +1900,8 @@ BrowserGlue.prototype = {
         Services.startup.secondsSinceLastOSRestart;
       let isColdStartup =
         nowSeconds - secondsSinceLastOSRestart > lastCheckSeconds;
-      Services.telemetry.scalarSet("startup.is_cold", isColdStartup);
-      Services.telemetry.scalarSet(
-        "startup.seconds_since_last_os_restart",
-        secondsSinceLastOSRestart
-      );
+      Glean.startup.isCold.set(isColdStartup);
+      Glean.startup.secondsSinceLastOsRestart.set(secondsSinceLastOSRestart);
     } catch (ex) {
       console.error(ex);
     }
@@ -1949,13 +1950,6 @@ BrowserGlue.prototype = {
     lazy.PageThumbs.init();
 
     lazy.NewTabUtils.init();
-
-    Services.telemetry.setEventRecordingEnabled(
-      "security.ui.protections",
-      true
-    );
-
-    Services.telemetry.setEventRecordingEnabled("security.doh.neterror", true);
 
     lazy.PageActions.init();
 
@@ -2099,13 +2093,6 @@ BrowserGlue.prototype = {
   },
 
   _recordContentBlockingTelemetry() {
-    Services.telemetry.setEventRecordingEnabled(
-      "security.ui.protectionspopup",
-      Services.prefs.getBoolPref(
-        "security.protectionspopup.recordEventTelemetry"
-      )
-    );
-
     let tpEnabled = Services.prefs.getBoolPref(
       "privacy.trackingprotection.enabled"
     );
@@ -2150,56 +2137,40 @@ BrowserGlue.prototype = {
         break;
     }
 
-    Services.telemetry.scalarSet(
-      "contentblocking.fingerprinting_blocking_enabled",
-      fpEnabled
-    );
-    Services.telemetry.scalarSet(
-      "contentblocking.cryptomining_blocking_enabled",
-      cmEnabled
-    );
-    Services.telemetry.scalarSet("contentblocking.category", categoryPref);
+    Glean.contentblocking.fingerprintingBlockingEnabled.set(fpEnabled);
+    Glean.contentblocking.cryptominingBlockingEnabled.set(cmEnabled);
+    Glean.contentblocking.category.set(categoryPref);
   },
 
   _recordDataSanitizationPrefs() {
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_sanitize_sanitizeOnShutdown",
+    Glean.datasanitization.privacySanitizeSanitizeOnShutdown.set(
       Services.prefs.getBoolPref("privacy.sanitize.sanitizeOnShutdown")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_cookies",
+    Glean.datasanitization.privacyClearOnShutdownCookies.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.cookies")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_history",
+    Glean.datasanitization.privacyClearOnShutdownHistory.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.history")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_formdata",
+    Glean.datasanitization.privacyClearOnShutdownFormdata.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.formdata")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_downloads",
+    Glean.datasanitization.privacyClearOnShutdownDownloads.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.downloads")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_cache",
+    Glean.datasanitization.privacyClearOnShutdownCache.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.cache")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_sessions",
+    Glean.datasanitization.privacyClearOnShutdownSessions.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.sessions")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_offlineApps",
+    Glean.datasanitization.privacyClearOnShutdownOfflineApps.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.offlineApps")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_siteSettings",
+    Glean.datasanitization.privacyClearOnShutdownSiteSettings.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.siteSettings")
     );
-    Services.telemetry.scalarSet(
-      "datasanitization.privacy_clearOnShutdown_openWindows",
+    Glean.datasanitization.privacyClearOnShutdownOpenWindows.set(
       Services.prefs.getBoolPref("privacy.clearOnShutdown.openWindows")
     );
 
@@ -2216,10 +2187,7 @@ BrowserGlue.prototype = {
         exceptions++;
       }
     }
-    Services.telemetry.scalarSet(
-      "datasanitization.session_permission_exceptions",
-      exceptions
-    );
+    Glean.datasanitization.sessionPermissionExceptions.set(exceptions);
   },
 
   /**
@@ -2375,7 +2343,7 @@ BrowserGlue.prototype = {
       } else if (was_enabled) {
         value = 2;
       }
-      Services.telemetry.scalarSet("security.https_only_mode_enabled", value);
+      Glean.security.httpsOnlyModeEnabled.set(value);
     };
 
     Services.prefs.addObserver(PREF_ENABLED, _checkHTTPSOnlyPref);
@@ -2398,10 +2366,7 @@ BrowserGlue.prototype = {
       } else if (was_enabledPBM) {
         valuePBM = 2;
       }
-      Services.telemetry.scalarSet(
-        "security.https_only_mode_enabled_pbm",
-        valuePBM
-      );
+      Glean.security.httpsOnlyModeEnabledPbm.set(valuePBM);
     };
 
     Services.prefs.addObserver(PREF_PBM_ENABLED, _checkHTTPSOnlyPBMPref);
@@ -2430,10 +2395,7 @@ BrowserGlue.prototype = {
       } else if (was_enabled) {
         value = 2;
       }
-      Services.telemetry.scalarSet(
-        "security.global_privacy_control_enabled",
-        value
-      );
+      Glean.security.globalPrivacyControlEnabled.set(value);
     };
 
     Services.prefs.addObserver(FEATURE_PREF_ENABLED, _checkGPCPref);
@@ -2616,24 +2578,6 @@ BrowserGlue.prototype = {
         },
       },
 
-      {
-        name: "enableCertErrorUITelemetry",
-        task: () => {
-          let enableCertErrorUITelemetry = Services.prefs.getBoolPref(
-            "security.certerrors.recordEventTelemetry",
-            true
-          );
-          Services.telemetry.setEventRecordingEnabled(
-            "security.ui.certerror",
-            enableCertErrorUITelemetry
-          );
-          Services.telemetry.setEventRecordingEnabled(
-            "security.ui.tlserror",
-            enableCertErrorUITelemetry
-          );
-        },
-      },
-
       // Load the Login Manager data from disk off the main thread, some time
       // after startup.  If the data is required before this runs, for example
       // because a restored page contains a password field, it will be loaded on
@@ -2671,8 +2615,7 @@ BrowserGlue.prototype = {
           );
 
           try {
-            Services.telemetry.scalarSet(
-              "os.environment.is_taskbar_pinned",
+            Glean.osEnvironment.isTaskbarPinned.set(
               await shellService.isCurrentAppPinnedToTaskbarAsync(
                 winTaskbar.defaultGroupId
               )
@@ -2684,8 +2627,7 @@ BrowserGlue.prototype = {
               AppConstants.platform === "win" &&
               !Services.sysinfo.getProperty("hasWinPackageId")
             ) {
-              Services.telemetry.scalarSet(
-                "os.environment.is_taskbar_pinned_private",
+              Glean.osEnvironment.isTaskbarPinnedPrivate.set(
                 await shellService.isCurrentAppPinnedToTaskbarAsync(
                   winTaskbar.defaultPrivateGroupId
                 )
@@ -2718,10 +2660,7 @@ BrowserGlue.prototype = {
           if (gThisInstanceIsTaskbarTab) {
             classification = "TaskbarTab";
           }
-          Services.telemetry.scalarSet(
-            "os.environment.launch_method",
-            classification
-          );
+          Glean.osEnvironment.launchMethod.set(classification);
         },
       },
 
@@ -2855,9 +2794,7 @@ BrowserGlue.prototype = {
         condition: AppConstants.platform == "win",
         task: () => {
           [".pdf", "mailto"].every(x => {
-            Services.telemetry.keyedScalarSet(
-              "os.environment.is_default_handler",
-              x,
+            Glean.osEnvironment.isDefaultHandler[x].set(
               lazy.ShellService.isDefaultHandlerFor(x)
             );
             return true;
@@ -2898,8 +2835,7 @@ BrowserGlue.prototype = {
         condition: AppConstants.platform == "macosx",
         task: () => {
           try {
-            Services.telemetry.scalarSet(
-              "os.environment.is_kept_in_dock",
+            Glean.osEnvironment.isKeptInDock.set(
               Cc["@mozilla.org/widget/macdocksupport;1"].getService(
                 Ci.nsIMacDockSupport
               ).isAppInDock
@@ -3451,7 +3387,7 @@ BrowserGlue.prototype = {
       windowcount++;
       let tabbrowser = win.gBrowser;
       if (tabbrowser) {
-        pagecount += tabbrowser.visibleTabs.length - tabbrowser._numPinnedTabs;
+        pagecount += tabbrowser.visibleTabs.length - tabbrowser.pinnedTabCount;
       }
     }
 
@@ -4747,7 +4683,6 @@ BrowserGlue.prototype = {
     })();
 
     // Record why the dialog is showing or not.
-    Services.telemetry.setEventRecordingEnabled("upgrade_dialog", true);
     Glean.upgradeDialog.triggerReason.record({
       value: dialogReason || "satisfied",
     });
@@ -5211,18 +5146,12 @@ BrowserGlue.prototype = {
   },
 
   _collectTelemetryPiPEnabled() {
-    Services.telemetry.setEventRecordingEnabled(
-      "pictureinpicture.settings",
-      true
-    );
-    Services.telemetry.setEventRecordingEnabled("pictureinpicture", true);
-
     const TOGGLE_ENABLED_PREF =
       "media.videocontrols.picture-in-picture.video-toggle.enabled";
 
     const observe = (subject, topic) => {
       const enabled = Services.prefs.getBoolPref(TOGGLE_ENABLED_PREF, false);
-      Services.telemetry.scalarSet("pictureinpicture.toggle_enabled", enabled);
+      Glean.pictureinpicture.toggleEnabled.set(enabled);
 
       // Record events when preferences change
       if (topic === "nsPref:changed") {
@@ -5274,6 +5203,7 @@ var ContentBlockingCategoriesPrefs = {
         "privacy.fingerprintingProtection": null,
         "privacy.fingerprintingProtection.pbmode": null,
         "network.cookie.cookieBehavior.optInPartitioning": null,
+        "privacy.bounceTrackingProtection.mode": null,
       },
       standard: {
         "network.cookie.cookieBehavior": null,
@@ -5295,6 +5225,7 @@ var ContentBlockingCategoriesPrefs = {
         "privacy.fingerprintingProtection": null,
         "privacy.fingerprintingProtection.pbmode": null,
         "network.cookie.cookieBehavior.optInPartitioning": null,
+        "privacy.bounceTrackingProtection.mode": null,
       },
     };
     let type = "strict";
@@ -5502,6 +5433,16 @@ var ContentBlockingCategoriesPrefs = {
           this.CATEGORY_PREFS[type][
             "network.cookie.cookieBehavior.optInPartitioning"
           ] = false;
+          break;
+        case "btp":
+          this.CATEGORY_PREFS[type]["privacy.bounceTrackingProtection.mode"] =
+            Ci.nsIBounceTrackingProtection.MODE_ENABLED;
+          break;
+        case "-btp":
+          // We currently consider MODE_ENABLED_DRY_RUN the "off" state. See
+          // nsIBounceTrackingProtection.idl for details.
+          this.CATEGORY_PREFS[type]["privacy.bounceTrackingProtection.mode"] =
+            Ci.nsIBounceTrackingProtection.MODE_ENABLED_DRY_RUN;
           break;
         default:
           console.error(`Error: Unknown rule observed ${item}`);
@@ -6002,7 +5943,8 @@ export var AboutHomeStartupCache = {
 
   // The following values are as possible values for the
   // browser.startup.abouthome_cache_result scalar. Keep these in sync with the
-  // scalar definition in Scalars.yaml. See setDeferredResult for more
+  // scalar definition in Scalars.yaml and the matching Glean metric in
+  // browser/components/metrics.yaml. See setDeferredResult for more
   // information.
   CACHE_RESULT_SCALARS: {
     UNSET: 0,
@@ -6215,8 +6157,7 @@ export var AboutHomeStartupCache = {
       this._cacheTask.arm();
     }
 
-    Services.telemetry.scalarSet(
-      "browser.startup.abouthome_cache_shutdownwrite",
+    Glean.browserStartup.abouthomeCacheShutdownwrite.set(
       this._cacheTask.isArmed
     );
 
@@ -6718,10 +6659,7 @@ export var AboutHomeStartupCache = {
   recordResult(result) {
     // Note: this can be called very early on in the lifetime of
     // AboutHomeStartupCache, so things like this.log might not exist yet.
-    Services.telemetry.scalarSet(
-      "browser.startup.abouthome_cache_result",
-      result
-    );
+    Glean.browserStartup.abouthomeCacheResult.set(result);
   },
 
   /**

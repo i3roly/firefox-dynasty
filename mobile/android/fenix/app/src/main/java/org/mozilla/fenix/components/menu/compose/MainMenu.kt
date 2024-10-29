@@ -34,8 +34,6 @@ import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.Theme
 
-internal const val MAIN_MENU_ROUTE = "main_menu"
-
 private const val ARROW_VERTICAL_OFFSET = 10
 private const val INDICATOR_START_OFFSET = 46
 
@@ -48,8 +46,12 @@ private const val INDICATOR_START_OFFSET = 46
  * @param showQuitMenu Whether or not to show the [QuitMenuGroup].
  * @param isPrivate Whether or not the browsing mode is in private mode.
  * @param isDesktopMode Whether or not the current site is in desktop mode.
+ * @param isPdf Whether or not the current tab is a PDF.
  * @param isTranslationSupported Whether or not Translations are supported.
  * @param isExtensionsProcessDisabled Whether or not the extensions process is disabled due to extension errors.
+ * @param onExtensionsMenuClick Invoked when the user clicks on extensions menu button.
+ * @param onToolsMenuClick Invoked when the user clicks on tools menu button.
+ * @param onSaveMenuClick Invoked when the user clicks on save menu button.
  */
 @Suppress("LongParameterList")
 @Composable
@@ -60,8 +62,12 @@ internal fun MainMenuWithCFR(
     showQuitMenu: Boolean,
     isPrivate: Boolean,
     isDesktopMode: Boolean,
+    isPdf: Boolean,
     isTranslationSupported: Boolean,
     isExtensionsProcessDisabled: Boolean,
+    onExtensionsMenuClick: () -> Unit,
+    onToolsMenuClick: () -> Unit,
+    onSaveMenuClick: () -> Unit,
 ) {
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp
@@ -111,8 +117,12 @@ internal fun MainMenuWithCFR(
             showQuitMenu = showQuitMenu,
             isPrivate = isPrivate,
             isDesktopMode = isDesktopMode,
+            isPdf = isPdf,
             isTranslationSupported = isTranslationSupported,
             isExtensionsProcessDisabled = isExtensionsProcessDisabled,
+            onExtensionsMenuClick = { onExtensionsMenuClick() },
+            onToolsMenuClick = { onToolsMenuClick() },
+            onSaveMenuClick = { onSaveMenuClick() },
         )
     }
 }
@@ -126,8 +136,12 @@ internal fun MainMenuWithCFR(
  * @param showQuitMenu Whether or not to show the [QuitMenuGroup].
  * @param isPrivate Whether or not the browsing mode is in private mode.
  * @param isDesktopMode Whether or not the current site is in desktop mode.
+ * @param isPdf Whether or not the current tab is a PDF.
  * @param isTranslationSupported Whether or not Translations are supported.
  * @param isExtensionsProcessDisabled Whether or not the extensions process is disabled due to extension errors.
+ * @param onExtensionsMenuClick Invoked when the user clicks on extensions menu button.
+ * @param onToolsMenuClick Invoked when the user clicks on tools menu button.
+ * @param onSaveMenuClick Invoked when the user clicks on save menu button.
  */
 @Suppress("LongMethod", "LongParameterList")
 @Composable
@@ -138,8 +152,12 @@ internal fun MainMenu(
     showQuitMenu: Boolean,
     isPrivate: Boolean,
     isDesktopMode: Boolean,
+    isPdf: Boolean,
     isTranslationSupported: Boolean,
     isExtensionsProcessDisabled: Boolean,
+    onExtensionsMenuClick: () -> Unit,
+    onToolsMenuClick: () -> Unit,
+    onSaveMenuClick: () -> Unit,
 ) {
     val account by syncStore.observeAsState(initialValue = null) { state -> state.account }
     val accountState by syncStore.observeAsState(initialValue = NotAuthenticated) { state ->
@@ -152,6 +170,7 @@ internal fun MainMenu(
         accountState = accountState,
         isPrivate = isPrivate,
         isDesktopMode = isDesktopMode,
+        isPdf = isPdf,
         isTranslationSupported = isTranslationSupported,
         showQuitMenu = showQuitMenu,
         isExtensionsProcessDisabled = isExtensionsProcessDisabled,
@@ -186,13 +205,19 @@ internal fun MainMenu(
             store.dispatch(MenuAction.FindInPage)
         },
         onToolsMenuClick = {
-            store.dispatch(MenuAction.Navigate.Tools)
+            store.dispatch(MenuAction.ToolsMenuClicked)
+            onToolsMenuClick()
         },
         onSaveMenuClick = {
-            store.dispatch(MenuAction.Navigate.Save)
+            store.dispatch(MenuAction.SaveMenuClicked)
+            onSaveMenuClick()
         },
         onExtensionsMenuClick = {
-            store.dispatch(MenuAction.Navigate.Extensions)
+            if (accessPoint == MenuAccessPoint.Home) {
+                store.dispatch(MenuAction.Navigate.ManageExtensions)
+            } else {
+                onExtensionsMenuClick()
+            }
         },
         onBookmarksMenuClick = {
             store.dispatch(MenuAction.Navigate.Bookmarks)
@@ -226,6 +251,7 @@ internal fun MainMenu(
  * @param accountState The [AccountState] of a Mozilla account.
  * @param isPrivate Whether or not the browsing mode is in private mode.
  * @param isDesktopMode Whether or not the desktop mode is enabled.
+ * @param isPdf Whether or not the current tab is a PDF.
  * @param isTranslationSupported Whether or not translation is supported.
  * @param showQuitMenu Whether or not the button to delete browsing data and quit
  * should be visible.
@@ -258,6 +284,7 @@ internal fun MainMenu(
     accountState: AccountState,
     isPrivate: Boolean,
     isDesktopMode: Boolean,
+    isPdf: Boolean,
     isTranslationSupported: Boolean,
     showQuitMenu: Boolean,
     isExtensionsProcessDisabled: Boolean,
@@ -300,6 +327,7 @@ internal fun MainMenu(
         ToolsAndActionsMenuGroup(
             accessPoint = accessPoint,
             isDesktopMode = isDesktopMode,
+            isPdf = isPdf,
             isTranslationSupported = isTranslationSupported,
             isExtensionsProcessDisabled = isExtensionsProcessDisabled,
             onSwitchToDesktopSiteMenuClick = onSwitchToDesktopSiteMenuClick,
@@ -396,6 +424,7 @@ private fun NewTabsMenuGroup(
 private fun ToolsAndActionsMenuGroup(
     accessPoint: MenuAccessPoint,
     isDesktopMode: Boolean,
+    isPdf: Boolean,
     isTranslationSupported: Boolean,
     isExtensionsProcessDisabled: Boolean,
     onSwitchToDesktopSiteMenuClick: () -> Unit,
@@ -417,7 +446,7 @@ private fun ToolsAndActionsMenuGroup(
             } else {
                 labelId = R.string.browser_menu_switch_to_desktop_site
                 iconId = R.drawable.mozac_ic_device_desktop_24
-                menuItemState = MenuItemState.ENABLED
+                menuItemState = if (isPdf) MenuItemState.DISABLED else MenuItemState.ENABLED
             }
 
             MenuItem(
@@ -562,6 +591,7 @@ private fun MenuDialogPreview() {
                 accountState = NotAuthenticated,
                 isPrivate = false,
                 isDesktopMode = false,
+                isPdf = false,
                 isTranslationSupported = true,
                 showQuitMenu = true,
                 isExtensionsProcessDisabled = true,
@@ -601,6 +631,7 @@ private fun MenuDialogPrivatePreview() {
                 accountState = NotAuthenticated,
                 isPrivate = false,
                 isDesktopMode = false,
+                isPdf = false,
                 isTranslationSupported = true,
                 showQuitMenu = true,
                 isExtensionsProcessDisabled = false,

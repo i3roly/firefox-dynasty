@@ -854,6 +854,18 @@ void ScriptLoader::PrepareRequestPriorityAndRequestDependencies(
   }
 }
 
+inline nsLiteralString GetInitiatorType(ScriptLoadRequest* aRequest) {
+  if (aRequest->mEarlyHintPreloaderId) {
+    return u"early-hints"_ns;
+  }
+
+  if (aRequest->GetScriptLoadContext()->IsLinkPreloadScript()) {
+    return u"link"_ns;
+  }
+
+  return u"script"_ns;
+}
+
 // static
 nsresult ScriptLoader::PrepareHttpRequestAndInitiatorType(
     nsIChannel* aChannel, ScriptLoadRequest* aRequest,
@@ -895,13 +907,7 @@ nsresult ScriptLoader::PrepareHttpRequestAndInitiatorType(
   // Set the initiator type
   nsCOMPtr<nsITimedChannel> timedChannel(do_QueryInterface(httpChannel));
   if (timedChannel) {
-    if (aRequest->mEarlyHintPreloaderId) {
-      timedChannel->SetInitiatorType(u"early-hints"_ns);
-    } else if (aRequest->GetScriptLoadContext()->IsLinkPreloadScript()) {
-      timedChannel->SetInitiatorType(u"link"_ns);
-    } else {
-      timedChannel->SetInitiatorType(u"script"_ns);
-    }
+    timedChannel->SetInitiatorType(GetInitiatorType(aRequest));
   }
 
   return rv;
@@ -1047,7 +1053,8 @@ RequestPriority FetchPriorityToRequestPriority(
 
 void ScriptLoader::NotifyObserversForCachedScript(
     nsIURI* aURI, nsINode* aContext, nsIPrincipal* aTriggeringPrincipal,
-    nsSecurityFlags aSecurityFlags, nsContentPolicyType aContentPolicyType) {
+    nsSecurityFlags aSecurityFlags, nsContentPolicyType aContentPolicyType,
+    SubResourceNetworkMetadataHolder* aNetworkMetadata) {
   nsCOMPtr<nsIObserverService> obsService = services::GetObserverService();
 
   if (!obsService->HasObservers("http-on-resource-cache-response")) {
@@ -1064,7 +1071,11 @@ void ScriptLoader::NotifyObserversForCachedScript(
 
   RefPtr<net::HttpBaseChannel> httpBaseChannel = do_QueryObject(channel);
   if (httpBaseChannel) {
-    httpBaseChannel->SetDummyChannelForCachedResource();
+    const net::nsHttpResponseHead* responseHead = nullptr;
+    if (aNetworkMetadata) {
+      responseHead = aNetworkMetadata->GetResponseHead();
+    }
+    httpBaseChannel->SetDummyChannelForCachedResource(responseHead);
   }
 
   // TODO: Populate fields.
@@ -1112,7 +1123,21 @@ already_AddRefed<ScriptLoadRequest> ScriptLoader::CreateLoadRequest(
 
         NotifyObserversForCachedScript(aURI, context, aTriggeringPrincipal,
                                        CORSModeToSecurityFlags(aCORSMode),
-                                       nsIContentPolicy::TYPE_INTERNAL_SCRIPT);
+                                       nsIContentPolicy::TYPE_INTERNAL_SCRIPT,
+                                       cacheResult.mNetworkMetadata);
+
+        {
+          nsAutoCString name;
+          nsString entryName;
+          aURI->GetSpec(name);
+          CopyUTF8toUTF16(name, entryName);
+
+          auto now = TimeStamp::Now();
+
+          SharedSubResourceCacheUtils::AddPerformanceEntryForCache(
+              entryName, GetInitiatorType(aRequest),
+              cacheResult.mNetworkMetadata, now, now, mDocument);
+        }
 
         aRequest->CacheEntryFound(cacheResult.mCompleteValue);
         return aRequest.forget();
@@ -2929,10 +2954,13 @@ nsresult ScriptLoader::EvaluateScript(nsIGlobalObject* aGlobalObject,
 
   if (aRequest->IsStencil()) {
 #ifdef DEBUG
-    bool equals;
-    (void)aRequest->mLoadedScript->BaseURL()->Equals(aRequest->mBaseURL,
-                                                     &equals);
-    MOZ_ASSERT(equals);
+    // A request with cache might not have mBaseURL.
+    if (aRequest->mBaseURL) {
+      bool equals;
+      (void)aRequest->mLoadedScript->BaseURL()->Equals(aRequest->mBaseURL,
+                                                       &equals);
+      MOZ_ASSERT(equals);
+    }
 #endif
   } else {
     aRequest->mLoadedScript->SetBaseURL(aRequest->mBaseURL);

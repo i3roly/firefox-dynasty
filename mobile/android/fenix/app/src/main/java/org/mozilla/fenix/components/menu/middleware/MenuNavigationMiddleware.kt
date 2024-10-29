@@ -5,13 +5,13 @@
 package org.mozilla.fenix.components.menu.middleware
 
 import androidx.navigation.NavController
-import androidx.navigation.NavHostController
 import androidx.navigation.NavOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import mozilla.appservices.places.BookmarkRoot
 import mozilla.components.browser.state.ext.getUrl
+import mozilla.components.browser.state.state.CustomTabSessionState
 import mozilla.components.concept.engine.prompt.ShareData
 import mozilla.components.feature.pwa.WebAppUseCases
 import mozilla.components.lib.state.Middleware
@@ -27,9 +27,6 @@ import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.collections.SaveCollectionStep
 import org.mozilla.fenix.components.menu.BrowserNavigationParams
 import org.mozilla.fenix.components.menu.MenuDialogFragmentDirections
-import org.mozilla.fenix.components.menu.compose.EXTENSIONS_MENU_ROUTE
-import org.mozilla.fenix.components.menu.compose.SAVE_MENU_ROUTE
-import org.mozilla.fenix.components.menu.compose.TOOLS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.store.MenuAction
 import org.mozilla.fenix.components.menu.store.MenuState
 import org.mozilla.fenix.components.menu.store.MenuStore
@@ -45,7 +42,6 @@ import org.mozilla.fenix.utils.Settings
  * dispatched to the [MenuStore].
  *
  * @param navController [NavController] used for navigation.
- * @param navHostController [NavHostController] used for Compose navigation.
  * @param browsingModeManager [BrowsingModeManager] used for setting the browsing mode.
  * @param openToBrowser Callback to open the provided [BrowserNavigationParams]
  * in a new browser tab.
@@ -53,17 +49,18 @@ import org.mozilla.fenix.utils.Settings
  * @param settings Used to check [Settings] when adding items to the home screen.
  * @param onDismiss Callback invoked to dismiss the menu dialog.
  * @param scope [CoroutineScope] used to launch coroutines.
+ * @param customTab [CustomTabSessionState] used for sharing custom tab.
  */
 @Suppress("LongParameterList")
 class MenuNavigationMiddleware(
     private val navController: NavController,
-    private val navHostController: NavHostController,
     private val browsingModeManager: BrowsingModeManager,
     private val openToBrowser: (params: BrowserNavigationParams) -> Unit,
     private val webAppUseCases: WebAppUseCases,
     private val settings: Settings,
     private val onDismiss: suspend () -> Unit,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main),
+    private val customTab: CustomTabSessionState?,
 ) : Middleware<MenuState, MenuAction> {
 
     @Suppress("CyclomaticComplexMethod", "LongMethod")
@@ -143,14 +140,6 @@ class MenuNavigationMiddleware(
                     BrowserNavigationParams(url = SupportUtils.WHATS_NEW_URL),
                 )
 
-                is MenuAction.Navigate.Tools -> navHostController.navigate(route = TOOLS_MENU_ROUTE)
-
-                is MenuAction.Navigate.Save -> navHostController.navigate(route = SAVE_MENU_ROUTE)
-
-                is MenuAction.Navigate.Extensions -> navHostController.navigate(route = EXTENSIONS_MENU_ROUTE)
-
-                is MenuAction.Navigate.Back -> navHostController.popBackStack()
-
                 is MenuAction.Navigate.EditBookmark -> {
                     currentState.browserMenuState?.bookmarkState?.guid?.let { guidToEdit ->
                         navController.nav(
@@ -208,21 +197,28 @@ class MenuNavigationMiddleware(
                 )
 
                 is MenuAction.Navigate.Share -> {
-                    currentState.browserMenuState?.selectedTab?.let { selectedTab ->
+                    val session = customTab ?: currentState.browserMenuState?.selectedTab
+                    val url = customTab?.content?.url ?: currentState.browserMenuState?.selectedTab?.getUrl()
+
+                    session?.let {
+                        val shareData = ShareData(title = it.content.title, url = url)
+                        val direction = MenuDialogFragmentDirections.actionGlobalShareFragment(
+                            sessionId = it.id,
+                            data = arrayOf(shareData),
+                            showPage = true,
+                        )
+
+                        val popUpToId = if (customTab != null) {
+                            R.id.externalAppBrowserFragment
+                        } else {
+                            R.id.browserFragment
+                        }
+
                         navController.nav(
                             R.id.menuDialogFragment,
-                            MenuDialogFragmentDirections.actionGlobalShareFragment(
-                                sessionId = selectedTab.id,
-                                data = arrayOf(
-                                    ShareData(
-                                        url = selectedTab.getUrl(),
-                                        title = selectedTab.content.title,
-                                    ),
-                                ),
-                                showPage = true,
-                            ),
+                            direction,
                             navOptions = NavOptions.Builder()
-                                .setPopUpTo(R.id.browserFragment, false)
+                                .setPopUpTo(popUpToId, false)
                                 .build(),
                         )
                     }

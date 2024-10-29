@@ -115,8 +115,6 @@ export const GenAI = {
   // will allow for additional UI shown such as populating dropdown with a name,
   // showing links, and other special behaviors needed for individual providers.
   chatProviders: new Map([
-    // Until bug 1903900 to better handle max length issues, track in comments
-    // ~14k max length uri before 431
     [
       "https://claude.ai/new",
       {
@@ -136,10 +134,10 @@ export const GenAI = {
           "https://www.anthropic.com/legal/archive/628feec9-7df9-4d38-bc69-fbf104df47b0",
         linksId: "genai-settings-chat-claude-links",
         name: "Anthropic Claude",
+        maxLength: 15020,
         tooltipId: "genai-onboarding-claude-tooltip",
       },
     ],
-    // ~14k max length uri before 431
     [
       "https://chatgpt.com",
       {
@@ -155,22 +153,29 @@ export const GenAI = {
         link2: "https://openai.com/privacy",
         linksId: "genai-settings-chat-chatgpt-links",
         name: "ChatGPT",
+        maxLength: 14140,
         tooltipId: "genai-onboarding-chatgpt-tooltip",
       },
     ],
-    // ~4k max length uri before 400
     [
-      "https://www.bing.com/chat?sendquery=1",
+      "https://copilot.microsoft.com",
       {
+        choiceIds: [
+          "genai-onboarding-copilot-generate",
+          "genai-onboarding-copilot-analyze",
+          "genai-onboarding-copilot-price",
+        ],
         id: "copilot",
+        learnId: "genai-onboarding-copilot-learn",
+        learnLink: "https://www.microsoft.com/microsoft-copilot/learn/",
         link1: "https://www.bing.com/new/termsofuse",
         link2: "https://go.microsoft.com/fwlink/?LinkId=521839",
         linksId: "genai-settings-chat-copilot-links",
         name: "Copilot",
+        maxLength: 3260,
+        tooltipId: "genai-onboarding-copilot-tooltip",
       },
     ],
-    // ~20k max length uri before 400
-    // ~55k max header (no ?q=) before 413
     [
       "https://gemini.google.com",
       {
@@ -188,17 +193,19 @@ export const GenAI = {
         link3: "https://support.google.com/gemini?p=privacy_notice",
         linksId: "genai-settings-chat-gemini-links",
         name: "Google Gemini",
+        // Max header length is around 55000, but spaces are encoded with %20
+        // for header instead of + for query parameter
+        maxLength: 45000,
         tooltipId: "genai-onboarding-gemini-tooltip",
       },
     ],
-    // ~8k max length uri before 413
     [
       "https://huggingface.co/chat",
       {
         choiceIds: [
           "genai-onboarding-huggingchat-generate",
           "genai-onboarding-huggingchat-switch",
-          "genai-onboarding-huggingchat-price",
+          "genai-onboarding-huggingchat-price-2",
         ],
         id: "huggingchat",
         learnId: "genai-onboarding-huggingchat-learn",
@@ -207,10 +214,10 @@ export const GenAI = {
         link2: "https://huggingface.co/privacy",
         linksId: "genai-settings-chat-huggingchat-links",
         name: "HuggingChat",
+        maxLength: 8192,
         tooltipId: "genai-onboarding-huggingchat-tooltip",
       },
     ],
-    // ~4k max length uri before 502
     [
       "https://chat.mistral.ai/chat",
       {
@@ -225,10 +232,10 @@ export const GenAI = {
         link2: "https://mistral.ai/terms/#privacy-policy",
         linksId: "genai-settings-chat-lechat-links",
         name: "Le Chat Mistral",
+        maxLength: 3680,
         tooltipId: "genai-onboarding-lechat-tooltip",
       },
     ],
-    // 8k max length uri before 414
     [
       "http://localhost:8080",
       {
@@ -236,6 +243,7 @@ export const GenAI = {
         link1: "https://llamafile.ai",
         linksId: "genai-settings-chat-localhost-links",
         name: "localhost",
+        maxLength: 8192,
       },
     ],
   ]),
@@ -452,7 +460,9 @@ export const GenAI = {
 
               // Add custom input box if configured
               if (lazy.chatShortcutsCustom) {
-                const input = vbox.appendChild(document.createElement("input"));
+                const input = vbox.appendChild(
+                  document.createElement("textarea")
+                );
                 const provider = this.chatProviders.get(
                   lazy.chatProvider
                 )?.name;
@@ -464,10 +474,21 @@ export const GenAI = {
                   { provider }
                 );
                 input.style.margin = "var(--arrowpanel-menuitem-margin)";
+                input.style.marginTop = "5px";
                 input.addEventListener("mouseover", () => input.focus());
-                input.addEventListener("change", () => {
-                  this.handleAskChat({ value: input.value }, context);
-                  hide();
+                input.addEventListener("keydown", event => {
+                  if (event.key == "Enter" && !event.shiftKey) {
+                    this.handleAskChat({ value: input.value }, context);
+                    hide();
+                  }
+                });
+                const updateHeight = () => {
+                  input.style.height = "auto";
+                  input.style.height = input.scrollHeight + "px";
+                };
+                input.addEventListener("input", updateHeight);
+                popup.addEventListener("popupshown", updateHeight, {
+                  once: true,
                 });
               }
 
@@ -475,9 +496,12 @@ export const GenAI = {
               vbox.appendChild(document.createXULElement("toolbarseparator"));
               const hider = addItem();
               document.l10n.setAttributes(hider, "genai-shortcuts-hide");
-              hider.addEventListener("command", () =>
-                Services.prefs.setBoolPref("browser.ml.chat.shortcuts", false)
-              );
+              hider.addEventListener("command", () => {
+                Services.prefs.setBoolPref("browser.ml.chat.shortcuts", false);
+                Glean.genaiChatbot.shortcutsHideClick.record({
+                  selection: shortcuts.data.selection.length,
+                });
+              });
 
               popup.openPopup(shortcuts);
               popup.addEventListener(
@@ -596,6 +620,20 @@ export const GenAI = {
   },
 
   /**
+   * Approximately adjust query limit for encoding and other text in prompt,
+   * e.g., page title, per-prompt instructions. Generally more conservative as
+   * going over the limit results in server errors.
+   *
+   * @param {number} maxLength optional of the provider request URI
+   * @returns {number} adjusted length estimate
+   */
+  estimateSelectionLimit(maxLength = 8000) {
+    // Could try to be smarter including the selected text with URI encoding,
+    // base URI length, other parts of the prompt (especially for custom)
+    return Math.round(maxLength * 0.85) - 500;
+  },
+
+  /**
    * Updates chat prompt prefix.
    */
   async prepareChatPromptPrefix() {
@@ -610,7 +648,12 @@ export const GenAI = {
           await lazy.l10n.formatMessages([
             {
               id: prefixObj.l10nId,
-              args: { tabTitle: "%tabTitle%", selection: "%selection|12000%" },
+              args: {
+                tabTitle: "%tabTitle%",
+                selection: `%selection|${this.estimateSelectionLimit(
+                  this.chatProviders.get(lazy.chatProvider)?.maxLength
+                )}%`,
+              },
             },
           ])
         )[0].value;
@@ -851,6 +894,9 @@ function onChatProviderChange(value) {
       .getMostRecentWindow("navigator:browser")
       ?.SidebarController.show("viewGenaiChatSidebar");
   }
+
+  // Recalculate query limit on provider change
+  GenAI.chatLastPrefix = null;
 }
 
 /**

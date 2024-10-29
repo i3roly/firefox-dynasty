@@ -31,9 +31,12 @@
 #include "jstypes.h"
 
 #include "builtin/RegExp.h"  // js::RegExpSearcherLastLimitSentinel
-#include "debugger/ExecutionTracer.h"
+#ifdef MOZ_EXECUTION_TRACING
+#  include "debugger/ExecutionTracer.h"
+#endif
 #include "frontend/FrontendContext.h"
 #include "gc/GC.h"
+#include "gc/PublicIterators.h"  // js::RealmsIter
 #include "irregexp/RegExpAPI.h"
 #include "jit/Simulator.h"
 #include "js/CallAndConstruct.h"  // JS::Call
@@ -1013,6 +1016,7 @@ JSContext::JSContext(JSRuntime* runtime, const JS::ContextOptions& options)
       unwrappedExceptionStack_(this),
 #ifdef DEBUG
       hadResourceExhaustion_(this, false),
+      hadUncatchableException_(this, false),
 #endif
       reportGranularity(this, JS_DEFAULT_JITREPORT_GRANULARITY),
       resolvingList(this, nullptr),
@@ -1365,9 +1369,21 @@ void ExternalValueArray::trace(JSTracer* trc) {
   }
 }
 
-bool JSContext::addExecutionTracingConsumer(const js::Debugger* dbg) {
+#ifdef MOZ_EXECUTION_TRACING
+
+bool JSContext::enableExecutionTracing() {
   if (!executionTracer_) {
+    for (RealmsIter realm(runtime()); !realm.done(); realm.next()) {
+      if (realm->debuggerObservesCoverage()) {
+        JS_ReportErrorNumberASCII(
+            this, GetErrorMessage, nullptr,
+            JSMSG_DEBUG_EXCLUSIVE_EXECUTION_TRACE_COVERAGE);
+        return false;
+      }
+    }
+
     executionTracer_ = js::MakeUnique<ExecutionTracer>();
+
     if (!executionTracer_) {
       return false;
     }
@@ -1377,24 +1393,32 @@ bool JSContext::addExecutionTracingConsumer(const js::Debugger* dbg) {
       return false;
     }
 
-    if (!executionTracingConsumers_.put(dbg)) {
-      executionTracer_ = nullptr;
-      return false;
+    for (RealmsIter realm(runtime()); !realm.done(); realm.next()) {
+      if (realm->isSystem()) {
+        continue;
+      }
+      realm->enableExecutionTracing();
     }
-
-    return true;
   }
 
-  return executionTracingConsumers_.put(dbg);
+  return true;
 }
 
-void JSContext::removeExecutionTracingConsumer(const js::Debugger* dbg) {
-  executionTracingConsumers_.remove(dbg);
-  if (executionTracingConsumers_.empty()) {
+void JSContext::disableExecutionTracing() {
+  if (executionTracer_) {
+    for (RealmsIter realm(runtime()); !realm.done(); realm.next()) {
+      if (realm->isSystem()) {
+        continue;
+      }
+      realm->disableExecutionTracing();
+    }
+
     caches().tracingCaches.clearAll();
     executionTracer_ = nullptr;
   }
 }
+
+#endif
 
 #ifdef JS_CHECK_UNSAFE_CALL_WITH_ABI
 

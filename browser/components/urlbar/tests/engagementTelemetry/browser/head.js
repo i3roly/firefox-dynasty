@@ -108,10 +108,7 @@ async function ensureQuickSuggestInit({ ...args } = {}) {
           }),
         ],
       },
-      {
-        type: "weather",
-        weather: MerinoTestUtils.WEATHER_RS_DATA,
-      },
+      lazy.QuickSuggestTestUtils.weatherRecord(),
       {
         type: "exposure-suggestions",
         suggestion_type: "aaa",
@@ -301,7 +298,6 @@ async function loadRemoteTab(url) {
       ["browser.urlbar.maxHistoricalSearchSuggestions", 0],
       ["browser.urlbar.autoFill", false],
       ["services.sync.username", "fake"],
-      ["services.sync.syncedTabs.showRemoteTabs", true],
     ],
   });
 
@@ -401,6 +397,7 @@ async function setup() {
       ["browser.urlbar.searchEngagementTelemetry.enabled", true],
       ["browser.urlbar.quickactions.enabled", true],
       ["browser.urlbar.secondaryActions.featureGate", true],
+      ["browser.urlbar.scotchBonnet.enableOverride", false],
     ],
   });
 

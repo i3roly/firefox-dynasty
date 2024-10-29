@@ -894,7 +894,8 @@ Toolbox.prototype = {
       this._updateFrames({
         frames: [
           {
-            id: targetFront.actorID,
+            // The Target Front may already be destroyed and `actorID` be null.
+            id: targetFront.persistedActorID,
             destroy: true,
           },
         ],
@@ -3112,6 +3113,9 @@ Toolbox.prototype = {
     }
 
     return this.loadTool("webconsole").then(() => {
+      if (!this.component) {
+        return;
+      }
       this.component.setIsSplitConsoleActive(true);
       this.telemetry.recordEvent("activate", "split_console", null, {
         host: this._getTelemetryHostString(),
@@ -3330,8 +3334,8 @@ Toolbox.prototype = {
         throw new Error("Unsupported scope: " + scope);
       }
     } else if (this.target.name && this.target.name != this.target.url) {
-      const url = this.target.isWebExtension
-        ? this.target.getExtensionPathName(this.target.url)
+      const url = this._descriptorFront.isWebExtensionDescriptor
+        ? this.getExtensionPathName(this.target.url)
         : getUnicodeUrl(this.target.url);
       title = L10N.getFormatStr(
         "toolbox.titleTemplate2",
@@ -3348,6 +3352,26 @@ Toolbox.prototype = {
       name: "set-host-title",
       title,
     });
+  },
+
+  /**
+   * For a given URL, return its pathname.
+   * This is handy for Web Extension as it should be the addon ID.
+   *
+   * @param {String} url
+   * @return {String} pathname
+   */
+  getExtensionPathName(url) {
+    if (!URL.canParse(url)) {
+      // Return the url if unable to resolve the pathname.
+      return url;
+    }
+    const parsedURL = new URL(url);
+    // Only moz-extension URL should be shortened into the URL pathname.
+    if (parsedURL.protocol !== "moz-extension:") {
+      return url;
+    }
+    return parsedURL.pathname;
   },
 
   /**

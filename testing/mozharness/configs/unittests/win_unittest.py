@@ -48,7 +48,7 @@ config = {
     "installer_path": INSTALLER_PATH,
     "binary_path": BINARY_PATH,
     "xpcshell_name": XPCSHELL_NAME,
-    "virtualenv_modules": [PYWIN32, "six==1.13.0", "vcversioner==2.16.0.0"],
+    "virtualenv_modules": [PYWIN32, "six==1.16.0", "vcversioner==2.16.0.0"],
     "virtualenv_path": "venv",
     "exe_suffix": EXE_SUFFIX,
     "run_file_names": {
@@ -171,6 +171,10 @@ config = {
         ],
         "mochitest-browser-a11y": ["--flavor=browser", "--subsuite=a11y"],
         "mochitest-browser-media": ["--flavor=browser", "--subsuite=media-bc"],
+        "mochitest-browser-translations": [
+            "--flavor=browser",
+            "--subsuite=translations",
+        ],
         "mochitest-a11y": ["--flavor=a11y", "--disable-e10s"],
         "mochitest-remote": ["--flavor=browser", "--subsuite=remote"],
     },

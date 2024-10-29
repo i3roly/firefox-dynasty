@@ -1929,22 +1929,19 @@ void js::AssertDenseElementsNotIterated(NativeObject* obj) {
 }
 #endif
 
-static const JSFunctionSpec iterator_methods[] = {
-    JS_SELF_HOSTED_SYM_FN(iterator, "IteratorIdentity", 0, 0),
-#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
-    JS_SELF_HOSTED_SYM_FN(dispose, "IteratorDispose", 0, 0),
-#endif
-    JS_FS_END,
-};
-
 static const JSFunctionSpec iterator_static_methods[] = {
     JS_SELF_HOSTED_FN("from", "IteratorFrom", 1, 0),
+#ifdef NIGHTLY_BUILD
+    JS_SELF_HOSTED_FN("range", "IteratorRange", 1, 0),
+    JS_SELF_HOSTED_FN("zip", "IteratorZip", 1, 0),
+    JS_SELF_HOSTED_FN("zipKeyed", "IteratorZipKeyed", 1, 0),
+#endif
     JS_FS_END,
 };
 
 // These methods are only attached to Iterator.prototype when the
 // Iterator Helpers feature is enabled.
-static const JSFunctionSpec iterator_methods_with_helpers[] = {
+static const JSFunctionSpec iterator_methods[] = {
     JS_SELF_HOSTED_FN("map", "IteratorMap", 1, 0),
     JS_SELF_HOSTED_FN("filter", "IteratorFilter", 1, 0),
     JS_SELF_HOSTED_FN("take", "IteratorTake", 1, 0),
@@ -2074,34 +2071,6 @@ static const JSPropertySpec iterator_properties[] = {
 };
 
 /* static */
-bool GlobalObject::initIteratorProto(JSContext* cx,
-                                     Handle<GlobalObject*> global) {
-  if (global->hasBuiltinProto(ProtoKind::IteratorProto)) {
-    return true;
-  }
-
-  RootedObject proto(
-      cx, GlobalObject::createBlankPrototype<PlainObject>(cx, global));
-  if (!proto) {
-    return false;
-  }
-
-  // %IteratorPrototype%.map.[[Prototype]] is %Generator% and
-  // %Generator%.prototype.[[Prototype]] is %IteratorPrototype%.
-  // Populate the slot early, to prevent runaway mutual recursion.
-  global->initBuiltinProto(ProtoKind::IteratorProto, proto);
-
-  if (!DefinePropertiesAndFunctions(cx, proto, nullptr, iterator_methods)) {
-    // In this case, we leave a partially initialized object in the
-    // slot. There's no obvious way to do better, since this object may already
-    // be in the prototype chain of %GeneratorPrototype%.
-    return false;
-  }
-
-  return true;
-}
-
-/* static */
 template <GlobalObject::ProtoKind Kind, const JSClass* ProtoClass,
           const JSFunctionSpec* Methods, const bool needsFuseProperty>
 bool GlobalObject::initObjectIteratorProto(JSContext* cx,
@@ -2205,7 +2174,7 @@ static const ClassSpec IteratorObjectClassSpec = {
     GenericCreatePrototype<IteratorObject>,
     iterator_static_methods,
     nullptr,
-    iterator_methods_with_helpers,
+    iterator_methods,
     iterator_properties,
     IteratorObject::finishInit,
 };

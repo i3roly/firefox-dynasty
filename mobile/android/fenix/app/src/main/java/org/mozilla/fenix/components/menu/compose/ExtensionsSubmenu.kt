@@ -40,14 +40,14 @@ import org.mozilla.fenix.compose.list.TextListItem
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.Theme
 
-internal const val EXTENSIONS_MENU_ROUTE = "extensions_menu"
-
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "LongMethod")
 @Composable
 internal fun ExtensionsSubmenu(
     recommendedAddons: List<Addon>,
-    webExtensionMenuItems: List<WebExtensionMenuItem>,
+    webExtensionMenuItems: List<WebExtensionMenuItem.WebExtensionBrowserMenuItem>,
     showExtensionsOnboarding: Boolean,
+    showDisabledExtensionsOnboarding: Boolean,
+    showManageExtensions: Boolean,
     addonInstallationInProgress: Addon?,
     onBackButtonClick: () -> Unit,
     onExtensionsLearnMoreClick: () -> Unit,
@@ -55,6 +55,7 @@ internal fun ExtensionsSubmenu(
     onAddonClick: (Addon) -> Unit,
     onInstallAddonClick: (Addon) -> Unit,
     onDiscoverMoreExtensionsMenuClick: () -> Unit,
+    webExtensionMenuItemClick: () -> Unit,
 ) {
     MenuScaffold(
         header = {
@@ -65,16 +66,27 @@ internal fun ExtensionsSubmenu(
             )
         },
     ) {
-        if (showExtensionsOnboarding) {
+        if (showExtensionsOnboarding || showDisabledExtensionsOnboarding) {
             ExtensionsSubmenuBanner(
-                title = stringResource(
-                    R.string.browser_menu_extensions_banner_onboarding_header,
-                    stringResource(R.string.app_name),
-                ),
-                description = stringResource(
-                    R.string.browser_menu_extensions_banner_onboarding_body,
-                    stringResource(R.string.app_name),
-                ),
+                title = if (showExtensionsOnboarding) {
+                    stringResource(
+                        R.string.browser_menu_extensions_banner_onboarding_header,
+                        stringResource(R.string.app_name),
+                    )
+                } else {
+                    stringResource(R.string.browser_menu_disabled_extensions_banner_onboarding_header)
+                },
+                description = if (showExtensionsOnboarding) {
+                    stringResource(
+                        R.string.browser_menu_extensions_banner_onboarding_body,
+                        stringResource(R.string.app_name),
+                    )
+                } else {
+                    stringResource(
+                        R.string.browser_menu_disabled_extensions_banner_onboarding_body,
+                        stringResource(R.string.browser_menu_manage_extensions),
+                    )
+                },
                 linkText = stringResource(R.string.browser_menu_extensions_banner_learn_more),
                 onClick = onExtensionsLearnMoreClick,
             )
@@ -83,29 +95,36 @@ internal fun ExtensionsSubmenu(
         if (webExtensionMenuItems.isNotEmpty()) {
             MenuGroup {
                 for (webExtensionMenuItem in webExtensionMenuItems) {
+                    if (webExtensionMenuItem != webExtensionMenuItems[0]) {
+                        Divider(color = FirefoxTheme.colors.borderSecondary)
+                    }
+
                     WebExtensionMenuItem(
                         label = webExtensionMenuItem.label,
-                        iconPainter = if (webExtensionMenuItem.icon != null) {
-                            BitmapPainter(image = webExtensionMenuItem.icon.asImageBitmap())
-                        } else {
-                            painterResource(R.drawable.mozac_ic_web_extension_default_icon)
-                        },
+                        iconPainter = webExtensionMenuItem.icon?.let { icon ->
+                            BitmapPainter(image = icon.asImageBitmap())
+                        } ?: painterResource(R.drawable.mozac_ic_web_extension_default_icon),
                         enabled = webExtensionMenuItem.enabled,
                         badgeText = webExtensionMenuItem.badgeText,
                         badgeTextColor = webExtensionMenuItem.badgeTextColor,
                         badgeBackgroundColor = webExtensionMenuItem.badgeBackgroundColor,
-                        onClick = webExtensionMenuItem.onClick,
+                        onClick = {
+                            webExtensionMenuItemClick()
+                            webExtensionMenuItem.onClick()
+                        },
                     )
                 }
             }
         }
 
-        MenuGroup {
-            MenuItem(
-                label = stringResource(id = R.string.browser_menu_manage_extensions),
-                beforeIconPainter = painterResource(id = R.drawable.mozac_ic_extension_cog_24),
-                onClick = onManageExtensionsMenuClick,
-            )
+        if (showManageExtensions) {
+            MenuGroup {
+                MenuItem(
+                    label = stringResource(id = R.string.browser_menu_manage_extensions),
+                    beforeIconPainter = painterResource(id = R.drawable.mozac_ic_extension_cog_24),
+                    onClick = onManageExtensionsMenuClick,
+                )
+            }
         }
 
         RecommendedAddons(
@@ -127,28 +146,30 @@ private fun RecommendedAddons(
     onDiscoverMoreExtensionsMenuClick: () -> Unit,
 ) {
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val recommendedSectionContentDescription =
-                stringResource(id = R.string.browser_menu_recommended_section_content_description)
-            Text(
-                text = stringResource(id = R.string.mozac_feature_addons_recommended_section),
+        if (recommendedAddons.isNotEmpty()) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .semantics {
-                        heading()
-                        this.contentDescription = recommendedSectionContentDescription
-                    },
-                color = FirefoxTheme.colors.textSecondary,
-                style = FirefoxTheme.typography.subtitle2,
-            )
-        }
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val recommendedSectionContentDescription =
+                    stringResource(id = R.string.browser_menu_recommended_section_content_description)
+                Text(
+                    text = stringResource(id = R.string.mozac_feature_addons_recommended_section),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics {
+                            heading()
+                            this.contentDescription = recommendedSectionContentDescription
+                        },
+                    color = FirefoxTheme.colors.textSecondary,
+                    style = FirefoxTheme.typography.subtitle2,
+                )
+            }
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+        }
 
         MenuGroup {
             for (addon in recommendedAddons) {
@@ -198,6 +219,8 @@ private fun ExtensionsSubmenuPreview() {
                     ),
                 ),
                 showExtensionsOnboarding = true,
+                showDisabledExtensionsOnboarding = true,
+                showManageExtensions = true,
                 addonInstallationInProgress = Addon(
                     id = "id",
                     translatableName = mapOf(Addon.DEFAULT_LOCALE to "name"),
@@ -205,7 +228,7 @@ private fun ExtensionsSubmenuPreview() {
                     translatableSummary = mapOf(Addon.DEFAULT_LOCALE to "summary"),
                 ),
                 webExtensionMenuItems = listOf(
-                    WebExtensionMenuItem(
+                    WebExtensionMenuItem.WebExtensionBrowserMenuItem(
                         label = "label",
                         enabled = true,
                         icon = BitmapFactory.decodeResource(
@@ -225,6 +248,7 @@ private fun ExtensionsSubmenuPreview() {
                 onAddonClick = {},
                 onInstallAddonClick = {},
                 onDiscoverMoreExtensionsMenuClick = {},
+                webExtensionMenuItemClick = {},
             )
         }
     }
@@ -253,7 +277,7 @@ private fun ExtensionsSubmenuPrivatePreview() {
                     ),
                 ),
                 webExtensionMenuItems = listOf(
-                    WebExtensionMenuItem(
+                    WebExtensionMenuItem.WebExtensionBrowserMenuItem(
                         label = "label",
                         enabled = true,
                         icon = BitmapFactory.decodeResource(
@@ -268,6 +292,8 @@ private fun ExtensionsSubmenuPrivatePreview() {
                     ),
                 ),
                 showExtensionsOnboarding = true,
+                showDisabledExtensionsOnboarding = false,
+                showManageExtensions = false,
                 addonInstallationInProgress = null,
                 onBackButtonClick = {},
                 onExtensionsLearnMoreClick = {},
@@ -275,6 +301,7 @@ private fun ExtensionsSubmenuPrivatePreview() {
                 onAddonClick = {},
                 onInstallAddonClick = {},
                 onDiscoverMoreExtensionsMenuClick = {},
+                webExtensionMenuItemClick = {},
             )
         }
     }

@@ -5,7 +5,6 @@
 package org.mozilla.fenix.components.menu
 
 import androidx.navigation.NavController
-import androidx.navigation.NavHostController
 import androidx.navigation.NavOptions
 import io.mockk.coVerify
 import io.mockk.every
@@ -13,6 +12,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import mozilla.appservices.places.BookmarkRoot
+import mozilla.components.browser.state.state.ContentState
+import mozilla.components.browser.state.state.CustomTabConfig
+import mozilla.components.browser.state.state.CustomTabSessionState
 import mozilla.components.browser.state.state.ReaderState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.concept.engine.prompt.ShareData
@@ -32,9 +34,6 @@ import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.browser.browsingmode.SimpleBrowsingModeManager
 import org.mozilla.fenix.collections.SaveCollectionStep
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
-import org.mozilla.fenix.components.menu.compose.EXTENSIONS_MENU_ROUTE
-import org.mozilla.fenix.components.menu.compose.SAVE_MENU_ROUTE
-import org.mozilla.fenix.components.menu.compose.TOOLS_MENU_ROUTE
 import org.mozilla.fenix.components.menu.middleware.MenuNavigationMiddleware
 import org.mozilla.fenix.components.menu.store.BookmarkState
 import org.mozilla.fenix.components.menu.store.BrowserMenuState
@@ -54,7 +53,6 @@ class MenuNavigationMiddlewareTest {
     private val scope = coroutinesTestRule.scope
 
     private val navController: NavController = mockk(relaxed = true)
-    private val navHostController: NavHostController = mockk(relaxed = true)
     private val webAppUseCases: WebAppUseCases = mockk(relaxed = true)
     private val settings: Settings = mockk(relaxed = true)
 
@@ -229,44 +227,6 @@ class MenuNavigationMiddlewareTest {
         store.dispatch(MenuAction.Navigate.ReleaseNotes).join()
 
         assertEquals(SupportUtils.WHATS_NEW_URL, params?.url)
-    }
-
-    @Test
-    fun `WHEN navigate to tools action is dispatched THEN navigate to tools submenu route`() = runTest {
-        val store = createStore()
-        store.dispatch(MenuAction.Navigate.Tools).join()
-
-        verify {
-            navHostController.navigate(route = TOOLS_MENU_ROUTE)
-        }
-    }
-
-    @Test
-    fun `WHEN navigate to save action is dispatched THEN navigate to save submenu route`() = runTest {
-        val store = createStore()
-        store.dispatch(MenuAction.Navigate.Save).join()
-
-        verify {
-            navHostController.navigate(route = SAVE_MENU_ROUTE)
-        }
-    }
-
-    @Test
-    fun `WHEN navigate to extensions action is dispatched THEN navigate to extensions submenu route`() = runTest {
-        val store = createStore()
-        store.dispatch(MenuAction.Navigate.Extensions).join()
-
-        verify {
-            navHostController.navigate(route = EXTENSIONS_MENU_ROUTE)
-        }
-    }
-
-    @Test
-    fun `WHEN navigate back action is dispatched THEN pop back stack`() = runTest {
-        val store = createStore()
-        store.dispatch(MenuAction.Navigate.Back).join()
-
-        verify { navHostController.popBackStack() }
     }
 
     @Test
@@ -500,6 +460,44 @@ class MenuNavigationMiddlewareTest {
     }
 
     @Test
+    fun `GIVEN the current tab is a custom tab WHEN navigate to share action is dispatched THEN navigate to share sheet`() = runTest {
+        val url = "https://www.mozilla.org"
+        val title = "Mozilla"
+        val customTab = CustomTabSessionState(
+            content = ContentState(
+                url = url,
+                title = title,
+            ),
+            config = CustomTabConfig(),
+        )
+        val store = createStore(
+            customTab = customTab,
+            menuState = MenuState(),
+        )
+
+        store.dispatch(MenuAction.Navigate.Share).join()
+
+        verify {
+            navController.nav(
+                R.id.menuDialogFragment,
+                MenuDialogFragmentDirections.actionGlobalShareFragment(
+                    sessionId = customTab.id,
+                    data = arrayOf(
+                        ShareData(
+                            url = url,
+                            title = title,
+                        ),
+                    ),
+                    showPage = true,
+                ),
+                navOptions = NavOptions.Builder()
+                    .setPopUpTo(R.id.externalAppBrowserFragment, false)
+                    .build(),
+            )
+        }
+    }
+
+    @Test
     fun `WHEN navigate to manage extensions action is dispatched THEN navigate to the extensions management`() = runTest {
         val store = createStore()
         store.dispatch(MenuAction.Navigate.ManageExtensions).join()
@@ -591,6 +589,7 @@ class MenuNavigationMiddlewareTest {
     }
 
     private fun createStore(
+        customTab: CustomTabSessionState = mockk(relaxed = true),
         menuState: MenuState = MenuState(),
         browsingModeManager: BrowsingModeManager = mockk(relaxed = true),
         openToBrowser: (params: BrowserNavigationParams) -> Unit = {},
@@ -600,13 +599,13 @@ class MenuNavigationMiddlewareTest {
         middleware = listOf(
             MenuNavigationMiddleware(
                 navController = navController,
-                navHostController = navHostController,
                 browsingModeManager = browsingModeManager,
                 openToBrowser = openToBrowser,
                 webAppUseCases = webAppUseCases,
                 settings = settings,
                 onDismiss = onDismiss,
                 scope = scope,
+                customTab = customTab,
             ),
         ),
     )

@@ -19,8 +19,6 @@ const { TelemetryEnvironment } = ChromeUtils.importESModule(
 );
 const WeakMapMap = require("resource://devtools/client/shared/WeakMapMap.js");
 
-const CATEGORY = "devtools.main";
-
 // Object to be shared among all instances.
 const PENDING_EVENT_PROPERTIES = new WeakMapMap();
 const PENDING_EVENTS = new WeakMapMap();
@@ -50,7 +48,6 @@ class Telemetry {
     this.keyedScalarAdd = this.keyedScalarAdd.bind(this);
     this.keyedScalarSet = this.keyedScalarSet.bind(this);
     this.recordEvent = this.recordEvent.bind(this);
-    this.setEventRecordingEnabled = this.setEventRecordingEnabled.bind(this);
     this.preparePendingEvent = this.preparePendingEvent.bind(this);
     this.addEventProperty = this.addEventProperty.bind(this);
     this.addEventProperties = this.addEventProperties.bind(this);
@@ -390,17 +387,6 @@ class Telemetry {
   }
 
   /**
-   * Event telemetry is disabled by default. Use this method to enable or
-   * disable it.
-   *
-   * @param {Boolean} enabled
-   *        Enabled: true or false.
-   */
-  setEventRecordingEnabled(enabled) {
-    return Services.telemetry.setEventRecordingEnabled(CATEGORY, enabled);
-  }
-
-  /**
    * Telemetry events often need to make use of a number of properties from
    * completely different codepaths. To make this possible we create a
    * "pending event" along with an array of property names that we need to wait
@@ -633,8 +619,16 @@ class Telemetry {
       extra = {};
     }
     extra.session_id = this.sessionId;
+    if (value !== null) {
+      extra.value = value;
+    }
 
-    Services.telemetry.recordEvent(CATEGORY, method, object, value, extra);
+    // Using the Glean API directly insteade of doing string manipulations
+    // would be better. See bug 1921793.
+    const eventName = `${method}_${object}`.replace(/(_[a-z])/g, c =>
+      c[1].toUpperCase()
+    );
+    Glean.devtoolsMain[eventName]?.record(extra);
   }
 
   /**

@@ -2,24 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-html,
-body {
-  width: 100%;
-  height: 100%;
-}
-
-body {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-}
-
-edit-profile-card {
-  display: block;
-  max-width: 80%;
-  margin-top: calc(2 * var(--space-xxlarge));
-}
+@import url("chrome://browser/content/profiles/profiles-pages.css");
 
 #edit-profile-card {
   display: flex;
@@ -34,6 +17,14 @@ edit-profile-card {
   gap: var(--space-medium);
 }
 
+#header-avatar {
+  -moz-context-properties: fill, stroke;
+
+  width: var(--header-avatar-size);
+  height: var(--header-avatar-size);
+  border-radius: var(--border-radius-circle);
+}
+
 #profile-name-area {
   display: flex;
   flex-direction: column;
@@ -43,50 +34,45 @@ edit-profile-card {
   width: fit-content;
 
   &:invalid {
-    border-color: var(--button-background-color-destructive);
+    border-color: var(--outline-color-error);
   }
 }
 
-#error {
+.message-parent {
+  position: relative;
+}
+
+.message {
   display: inline-flex;
   gap: var(--space-xsmall);
   padding: var(--space-xsmall);
-  color: var(--button-background-color-destructive);
+
+  position: absolute;
+  inset-inline-start: 0;
 
   &[hidden] {
-    display: none;
+    visibility: hidden;
   }
 
-  > #error-icon {
+  > .message-icon {
     -moz-context-properties: fill, stroke;
     fill: currentColor;
     stroke: currentColor;
   }
 }
 
-#themes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xlarge);
-
-  /* TODO: bug 1886005 will implement the theme cards */
-  > moz-card {
-    flex: 1 0 18%;
-    width: 120px;
-    height: 78px;
-  }
+#error-icon,
+#error-message {
+  color: var(--icon-color-critical);
 }
 
+#saved-icon {
+  color: var(--icon-color-success);
+}
+
+#themes,
 #avatars {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-xlarge);
-
-  /* TODO: bug 1886007 will implement the avatars */
-  > .avatar {
-    width: 40px;
-    height: 40px;
-    border: 1px solid;
-    border-radius: 20px;
-  }
 }

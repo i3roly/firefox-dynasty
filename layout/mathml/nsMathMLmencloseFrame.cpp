@@ -270,8 +270,9 @@ nsresult nsMathMLmencloseFrame::Place(DrawTarget* aDrawTarget,
   // Measure the size of our content using the base class to format like an
   // inferred mrow, without border/padding.
   ReflowOutput baseSize(aDesiredSize.GetWritingMode());
-  PlaceFlags flags =
-      aFlags + PlaceFlag::MeasureOnly + PlaceFlag::IgnoreBorderPadding;
+  PlaceFlags flags = aFlags + PlaceFlag::MeasureOnly +
+                     PlaceFlag::IgnoreBorderPadding +
+                     PlaceFlag::DoNotAdjustForWidthAndHeight;
   nsresult rv = nsMathMLContainerFrame::Place(aDrawTarget, flags, baseSize);
 
   if (NS_FAILED(rv)) {
@@ -527,6 +528,11 @@ nsresult nsMathMLmencloseFrame::Place(DrawTarget* aDrawTarget,
 
   aDesiredSize.mBoundingMetrics = mBoundingMetrics;
 
+  // Apply width/height to math content box.
+  auto sizes = GetWidthAndHeightForPlaceAdjustment(aFlags);
+  dx_left += ApplyAdjustmentForWidthAndHeight(aFlags, sizes, aDesiredSize,
+                                              mBoundingMetrics);
+
   // Add padding+border.
   auto borderPadding = GetBorderPaddingForPlace(aFlags);
   InflateReflowAndBoundingMetrics(borderPadding, aDesiredSize,
@@ -609,7 +615,7 @@ class nsDisplayNotation final : public nsPaintedDisplayItem {
   }
   MOZ_COUNTED_DTOR_OVERRIDE(nsDisplayNotation)
 
-  virtual void Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) override;
+  void Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) override;
   NS_DISPLAY_DECL_NAME("MathMLMencloseNotation", TYPE_MATHML_MENCLOSE_NOTATION)
 
  private:

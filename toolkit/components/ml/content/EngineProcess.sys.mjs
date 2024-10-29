@@ -17,6 +17,29 @@ ChromeUtils.defineESModuleGetters(
  */
 
 /**
+ * Enum for execution priority.
+ *
+ * Defines the priority of the task:
+ *
+ * - "High" is absolutely needed for Firefox.
+ * - "Normal" is the default priority.
+ * - "Low" is for 3rd party calls.
+ *
+ * @readonly
+ * @enum {string}
+ */
+export const ExecutionPriority = {
+  /** High priority, needed for Firefox */
+  HIGH: "HIGH",
+
+  /** Normal priority, default */
+  NORMAL: "NORMAL",
+
+  /** Low priority, used for 3rd party calls */
+  LOW: "LOW",
+};
+
+/**
  * @typedef {import("../../translations/actors/TranslationsEngineParent.sys.mjs").TranslationsEngineParent} TranslationsEngineParent
  */
 
@@ -30,6 +53,16 @@ export class PipelineOptions {
    * @type {?string}
    */
   engineId = "default-engine";
+
+  /**
+   * The name of the feature to be used by the pipeline.
+   *
+   * This field can be used to uniquely identify an inference and
+   * overwrite taskName when doing lookups in Remote Settings.
+   *
+   * @type {?string}
+   */
+  featureId = null;
 
   /**
    * The name of the task the pipeline is configured for.
@@ -148,6 +181,15 @@ export class PipelineOptions {
   numThreads = null;
 
   /**
+   * Execution priority
+   *
+   * Defines the priority of the task
+   *
+   * @type {ExecutionPriority}
+   */
+  executionPriority = ExecutionPriority.NORMAL;
+
+  /**
    * Create a PipelineOptions instance.
    *
    * @param {object} options - The options for the pipeline. Must include mandatory fields.
@@ -165,6 +207,7 @@ export class PipelineOptions {
   updateOptions(options) {
     const allowedKeys = [
       "engineId",
+      "featureId",
       "taskName",
       "modelHubRootUrl",
       "modelHubUrlTemplate",
@@ -180,6 +223,7 @@ export class PipelineOptions {
       "device",
       "dtype",
       "numThreads",
+      "executionPriority",
     ];
 
     if (options instanceof PipelineOptions) {
@@ -206,6 +250,7 @@ export class PipelineOptions {
   getOptions() {
     return {
       engineId: this.engineId,
+      featureId: this.featureId,
       taskName: this.taskName,
       modelHubRootUrl: this.modelHubRootUrl,
       modelHubUrlTemplate: this.modelHubUrlTemplate,
@@ -221,6 +266,7 @@ export class PipelineOptions {
       device: this.device,
       dtype: this.dtype,
       numThreads: this.numThreads,
+      executionPriority: this.executionPriority,
     };
   }
 
@@ -348,7 +394,7 @@ export class EngineProcess {
    * @param {string} config.url
    * @param {string} config.id
    * @param {string} config.resolverName
-   * @returns {Promise<TranslationsEngineParent>}
+   * @returns {Promise<TranslationsEngineParent|MLEngineParent>}
    */
   static async #attachBrowser({ url, id, resolverName }) {
     const hiddenFrame = await this.#getHiddenFrame();

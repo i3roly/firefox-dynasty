@@ -260,11 +260,11 @@ let interfaceNamesInGlobalScope = [
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "ImageData", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
-  { name: "ImageDecoder", nightly: true },
+  { name: "ImageDecoder" },
   // IMPORTANT: Do not change this list without review from a DOM peer!
-  { name: "ImageTrack", nightly: true },
+  { name: "ImageTrack" },
   // IMPORTANT: Do not change this list without review from a DOM peer!
-  { name: "ImageTrackList", nightly: true },
+  { name: "ImageTrackList" },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   "Lock",
   // IMPORTANT: Do not change this list without review from a DOM peer!
@@ -275,6 +275,8 @@ let interfaceNamesInGlobalScope = [
   { name: "MessageEvent", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "MessagePort", insecureContext: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "NavigationPreloadManager",
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "NetworkInformation", insecureContext: true, disabled: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
@@ -302,10 +304,19 @@ let interfaceNamesInGlobalScope = [
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "PerformanceServerTiming", insecureContext: false },
   // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "Permissions", insecureContext: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  { name: "PermissionStatus", insecureContext: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "ProgressEvent", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "PromiseRejectionEvent", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
+  "PushManager",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "PushSubscription",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "PushSubscriptionOptions",
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "ReadableByteStreamController", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
@@ -332,6 +343,12 @@ let interfaceNamesInGlobalScope = [
   { name: "RTCTransformEvent", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "Scheduler", insecureContext: true, nightly: true },
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "ServiceWorker",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "ServiceWorkerContainer",
+  // IMPORTANT: Do not change this list without review from a DOM peer!
+  "ServiceWorkerRegistration",
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "StorageManager", fennec: false },
   // IMPORTANT: Do not change this list without review from a DOM peer!
@@ -370,13 +387,13 @@ let interfaceNamesInGlobalScope = [
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "URLSearchParams", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
-  { name: "VideoColorSpace", insecureContext: true, nightlyAndroid: true },
+  { name: "VideoColorSpace", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "VideoDecoder", nightlyAndroid: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "VideoEncoder", nightlyAndroid: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
-  { name: "VideoFrame", insecureContext: true, nightlyAndroid: true },
+  { name: "VideoFrame", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!
   { name: "WebGL2RenderingContext", insecureContext: true },
   // IMPORTANT: Do not change this list without review from a DOM peer!

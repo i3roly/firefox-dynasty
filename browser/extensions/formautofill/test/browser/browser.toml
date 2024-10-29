@@ -22,6 +22,8 @@ skip-if = [
   "os == 'mac'",
 ]
 
+["browser_autofill_address_housenumber.js"]
+
 ["browser_autofill_address_select.js"]
 
 ["browser_autofill_address_select_inexact.js"]
@@ -34,6 +36,8 @@ skip-if = [
 
 ["browser_autofill_invisible_fields.js"]
 
+["browser_autofill_invisible_iframe_fields.js"]
+
 ["browser_autofill_sandboxed_iframe.js"]
 
 ["browser_cancel_attribute_change_task.js"]
@@ -41,6 +45,8 @@ skip-if = [
 ["browser_check_installed.js"]
 
 ["browser_clearPopulatedForm.js"]
+
+["browser_collectFormFields.js"]
 
 ["browser_dropdown_layout.js"]
 
@@ -68,6 +74,8 @@ skip-if = [
 ["browser_iframe_layout_telemetry.js"]
 
 ["browser_iframe_same_origin_field_detection.js"]
+
+["browser_iframe_update_fields.js"]
 
 ["browser_manageAddressesDialog.js"]
 

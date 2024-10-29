@@ -247,6 +247,14 @@
   value: @IS_NIGHTLY_BUILD@
   mirror: always
 
+# Whether to enable all accessibility cache domains on startup.
+#  * false: enable domains as needed
+#  * true:  enable all domains regardless of need (cache everything)
+- name: accessibility.enable_all_cache_domains
+  type: bool
+  value: false
+  mirror: once
+
 # Whether form controls and images should be focusable with mouse, in content
 # documents.
 #
@@ -1551,7 +1559,7 @@
 
 - name: browser.navigation.requireUserInteraction
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Indicates if about:newtab shows content (enabled) or just blank.
@@ -2284,13 +2292,13 @@
 # limit.
 - name: dom.popup_maximum
   type: int32_t
-  value: 20
+  value: -1
   mirror: always
 
 # Enable experimental popup blocker changes.
 - name: dom.popup.experimental
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
   # Enable CacheAPI in private browsing mode with encryption
@@ -2304,6 +2312,12 @@
 - name: dom.caches.testing.enabled
   type: RelaxedAtomicBool
   value: false
+  mirror: always
+
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.cache.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
   mirror: always
 
 # Disable capture attribute for input elements; only supported on GeckoView.
@@ -2428,21 +2442,20 @@
 # Enable/disable contenteditable="plaintext-only".
 - name: dom.element.contenteditable.plaintext-only.enabled
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
+# Whether Dialog elements emit beforetoggle and toggle events during opening and closing.
+# See https://github.com/whatwg/html/pull/10091
+- name: dom.element.dialog.toggle_events.enabled
+  type: bool
+  value: true
   mirror: always
 
 - name: dom.element.transform-getters.enabled
   type: bool
   value: false
   mirror: always
-
-# Whether the popover attribute implementation is enabled,
-# see https://html.spec.whatwg.org/#the-popover-attribute
-- name: dom.element.popover.enabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-  rust: true
 
 # Whether the blocking attribute implementation is enabled,
 # see https://html.spec.whatwg.org/#blocking-attributes
@@ -2701,19 +2714,19 @@
 
 - name: dom.fetchKeepalive.enabled
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # The maximum number of pending fetch keepalive requests per browser instance
 - name: dom.fetchKeepalive.total_request_limit
   type: RelaxedAtomicUint32
-  value: 100
+  value: 500
   mirror: always
 
 # The maximum number of pending fetch keepalive requests per origin
 - name: dom.fetchKeepalive.request_limit_per_origin
   type: RelaxedAtomicUint32
-  value: 30
+  value: 250
   mirror: always
 
 - name: dom.fetchObserver.enabled
@@ -2881,6 +2894,12 @@
   value: false
   mirror: always
 
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.indexedDB.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
 # How innerWidth / innerHeight return rounded or fractional sizes.
 #
 #   0 or others: Do not round at all.
@@ -2941,7 +2960,7 @@
   mirror: always
 
 - name: dom.interactive_widget_default_resizes_visual
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -2958,7 +2977,7 @@
 #if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN) || defined(MOZ_PROFILE_GENERATE)
   value: false
 #else
-  value: false
+  value: @IS_NIGHTLY_BUILD@
 #endif
   mirror: once
 #endif
@@ -3214,7 +3233,7 @@
 # WebCodecs API - Image decoder
 - name: dom.media.webcodecs.image-decoder.enabled
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Number of seconds of very quiet or silent audio before considering the audio
@@ -3525,6 +3544,29 @@
   value: -1
   mirror: always
 
+# Should we do lazy initialization of origins ?
+# When enabled, origins for temporary storage are not initialized during
+# temporary storage initialization, they are initialized lazily instead.
+# If there are other origins in the group, they are initialized all together.
+# This feature is currently still in development and experimental, not
+# recommended for normal use yet.
+- name: dom.quotaManager.temporaryStorage.lazyOriginInitialization
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Should we trigger initialization of all temporary origins in the background?
+# When enabled, temporary origins collected during temporary storage
+# initialization are initialized in the background. The background
+# initialization of temporary origins is always done for entire groups of
+# origins to preserve consistency of quota checks related to the group limit.
+# This feature is currently still in development and experimental, not
+# recommended for normal use yet.
+- name: dom.quotaManager.temporaryStorage.triggerOriginInitializationInBackground
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # A pref that is used to slow down origin operations for testing purposes.
 - name: dom.quotaManager.originOperations.pauseOnIOThreadMs
   type: RelaxedAtomicUint32
@@ -3533,6 +3575,12 @@
 
 # A pref that is used to slow down storage initialization for testing purposes.
 - name: dom.quotaManager.storageInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A pref that is used to slow down origin initialization for testing purposes.
+- name: dom.quotaManager.originInitialization.pauseOnIOThreadMs
   type: RelaxedAtomicUint32
   value: 0
   mirror: always
@@ -3604,6 +3652,12 @@
 - name: dom.checkedUnsafePtr.dumpStacks.enabled
   type: RelaxedAtomicBool
   value: false
+  mirror: always
+
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.simpledb.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
   mirror: always
 
 # Determines within what distance of a tick mark, in pixels, dragging an input
@@ -3924,7 +3978,13 @@
 # downgraded again if the request failed.
 - name: dom.security.https_first
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
+# If true, HTTPS-First will upgrade non-default ports
+- name: dom.security.https_first_for_custom_ports
+  type: RelaxedAtomicBool
+  value: true
   mirror: always
 
 # If true, top-level requests in Private Browsing Mode will get
@@ -3948,6 +4008,11 @@
 - name: dom.security.https_first_add_exception_on_failiure
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+- name: dom.security.https_first_exception_lifetime
+  type: uint32_t
+  value: 7*24*60*60*1000 # 7 days in milliseconds
   mirror: always
 
 - name: dom.security.unexpected_system_load_telemetry_enabled
@@ -4158,6 +4223,13 @@
   value: @IS_NOT_ANDROID@
   mirror: always
 
+# Server-Sent Events
+# Equal to the DEFAULT_RECONNECTION_TIME_VALUE value in nsEventSource.cpp
+- name: dom.serverEvents.defaultReconnectionTime
+  type: RelaxedAtomicUint32
+  value: 5000 # in milliseconds
+  mirror: always
+
 # Whether automatic storage access granting heuristics should be turned on.
 - name: dom.storage_access.auto_grants
   type: bool
@@ -4219,6 +4291,18 @@
   value: true
   mirror: always
 
+# A pref that is used to enable testing features.
+- name: dom.fs.testing
+  type: SequentiallyConsistentAtomicBool
+  value: false
+  mirror: always
+
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.fs.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
 # LocalStorage data limit as determined by summing up the lengths of all string
 # keys and values. This is consistent with the legacy implementation and other
 # browser engines. This value should really only ever change in unit testing
@@ -4248,6 +4332,12 @@
   value: false
   mirror: always
   do_not_use_directly: true
+
+# Whether the migration from unsupported legacy implementation is enabled.
+- name: dom.storage.enable_migration_from_unsupported_legacy_implementation
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
 
 # The amount of snapshot peak usage which is attempted to be pre-incremented
 # during snapshot creation.
@@ -4291,8 +4381,20 @@
 
 # Is support for Storage test APIs enabled?
 - name: dom.storage.testing
-  type: bool
+  type: SequentiallyConsistentAtomicBool
   value: false
+  mirror: always
+
+# A pref that is used to slow down database initialization for testing purposes.
+- name: dom.storage.databaseInitialization.pauseOnIOThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A pref that is used to slow down request finalization for testing purposes.
+- name: dom.storage.requestFinalization.pauseOnDOMFileThreadMs
+  type: RelaxedAtomicUint32
+  value: 0
   mirror: always
 
 # For area and anchor elements with target=_blank and no rel set to
@@ -4347,39 +4449,39 @@
 
 # Time (in ms) that it takes to regenerate 1ms.
 - name: dom.timeout.background_budget_regeneration_rate
-  type: int32_t
+  type: RelaxedAtomicInt32
   value: 100
   mirror: always
 
 # Time (in ms) that it takes to regenerate 1ms.
 - name: dom.timeout.foreground_budget_regeneration_rate
-  type: int32_t
+  type: RelaxedAtomicInt32
   value: 1
   mirror: always
 
 # Maximum value (in ms) for the background budget. Only valid for
 # values greater than 0.
 - name: dom.timeout.background_throttling_max_budget
-  type: int32_t
+  type: RelaxedAtomicInt32
   value: 50
   mirror: always
 
 # Maximum value (in ms) for the foreground budget. Only valid for
 # values greater than 0.
 - name: dom.timeout.foreground_throttling_max_budget
-  type: int32_t
+  type: RelaxedAtomicInt32
   value: -1
   mirror: always
 
 # The maximum amount a timeout can be delayed by budget throttling.
 - name: dom.timeout.budget_throttling_max_delay
-  type: int32_t
+  type: RelaxedAtomicInt32
   value: 15000
   mirror: always
 
 # Turn on budget throttling by default.
 - name: dom.timeout.enable_budget_timer_throttling
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -4393,7 +4495,7 @@
 # Maximum amount of time in milliseconds consecutive setTimeout()/setInterval()
 # callback are allowed to run before yielding the event loop.
 - name: dom.timeout.max_consecutive_callbacks_ms
-  type: uint32_t
+  type: RelaxedAtomicUint32
   value: 4
   mirror: always
 
@@ -4405,7 +4507,7 @@
 
 # Delay in ms from document load until we start throttling background timeouts.
 - name: dom.timeout.throttling_delay
-  type: int32_t
+  type: RelaxedAtomicInt32
   value: 30000
   mirror: always
 
@@ -5048,13 +5150,6 @@
   value: "#FFFFFF"
   mirror: never
 
-# Whether HTMLEditor consides block or inline element with computed style or
-# only with the default style of HTML definition.
-- name: editor.block_inline_check.use_computed_style
-  type: bool
-  value: true
-  mirror: always
-
 # Delay to mask last input character in password fields.
 # If negative value, to use platform's default behavior.
 # If 0, no delay to mask password.
@@ -5194,16 +5289,7 @@
 # is not controlled by this pref, only the extension code ability to use
 # navigator.serviceWorker.register is locked behind this pref.
 - name: extensions.serviceWorkerRegister.allowed
-  type: bool
-  value: false
-  mirror: always
-
-# Temporary pref to allow reverting the fix to bug 1853409.
-# TODO bug 1856071: Remove this pref.
-# When true, extensions can run content scripts in about:blank documents that
-# have a null principal. When false, extensions require permissions to all URLs.
-- name: extensions.script_about_blank_without_permission
-  type: bool
+  type: RelaxedAtomicBool
   value: false
   mirror: always
 
@@ -5839,6 +5925,8 @@
   value: true
 #elif defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(XP_WIN)
+  value: true
 #else
   value: false
 #endif
@@ -6203,7 +6291,7 @@
 # Whether to disable the automatic detection and use of direct2d.
 - name: gfx.direct2d.disabled
   type: bool
-  value: false
+  value: true
   mirror: once
 
 # Whether to attempt to enable Direct2D regardless of automatic detection or
@@ -7927,6 +8015,13 @@
 #endif
   mirror: always
 
+# Use the realm local dom alloc site.
+- name: javascript.options.dom_alloc_site
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: always
+
 # Use better error message when accessing property of null or undefined.
 - name: javascript.options.property_error_message_fix
   type: bool
@@ -8014,20 +8109,19 @@
   mirror: always
   set_spidermonkey_pref: startup
 
-
-# Experimental support for Iterator Helpers in JavaScript.
-- name: javascript.options.experimental.iterator_helpers
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
 # Experimental support for Pattern Modifiers in JavaScript.
 - name: javascript.options.experimental.regexp_modifiers
   type: bool
   value: true
   mirror: always
   set_spidermonkey_pref: startup
+
+# Experimental support for Uint8Array base64/hex in JavaScript.
+-   name: javascript.options.experimental.uint8array_base64
+    type: bool
+    value: true
+    mirror: always
+    set_spidermonkey_pref: startup
 
 #ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
@@ -8039,13 +8133,6 @@
 
   # Experimental support for Symbols as WeakMap keys in JavaScript.
 -   name: javascript.options.experimental.symbols_as_weakmap_keys
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Uint8Array base64/hex in JavaScript.
--   name: javascript.options.experimental.uint8array_base64
     type: bool
     value: false
     mirror: always
@@ -8070,6 +8157,49 @@
     value: false
     mirror: always
     set_spidermonkey_pref: startup
+
+  # Experimental support for Error.isError in JavaScript.
+-   name: javascript.options.experimental.error_iserror
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Math.sumPrecise in JavaScript.
+-   name: javascript.options.experimental.math_sumprecise
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Iterator.range in JavaScript.
+-   name: javascript.options.experimental.iterator_range
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Joint Iteration in JavaScript.
+-   name: javascript.options.experimental.joint_iteration
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Atomics.pause in JavaScript.
+-   name: javascript.options.experimental.atomics_pause
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for Iterator Sequencing in JavaScript.
+-   name: javascript.options.experimental.iterator_sequencing
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
 
 #endif  // NIGHTLY_BUILD
 
@@ -8278,45 +8408,68 @@
     mirror: always
     set_spidermonkey_pref: always
 
--   name: javascript.options.wasm_experimental_compile_pipeline
+# Enables lazy tiering for wasm modules that have a GC type defined in them.
+# Use wasm_lazy_tiering to enable it for any module.
+-   name: javascript.options.wasm_lazy_tiering_for_gc
     type: bool
     value: false
     mirror: always
-    set_spidermonkey_pref: startup
+    set_spidermonkey_pref: always
 
-- name: javascript.options.wasm_experimental_inline_call_ref_threshold
-  type: uint32_t
-  value: 1
-  mirror: always
-  set_spidermonkey_pref: always
+# Enables lazy tiering for all modules. Use wasm_lazy_tiering_for_gc to only
+# enable this for GC modules.
+-   name: javascript.options.wasm_lazy_tiering
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: always
 
 # Aggressiveness of lazy tiering, allowable: 1 .. 9
 # 1 = min (almost never, set tiering threshold to max possible, == 2^31-1)
 # 9 = max (request tier up at first call, set tiering threshold to zero)
-- name: javascript.options.wasm_experimental_tiering_level
+- name: javascript.options.wasm_lazy_tiering_level
   type: uint32_t
   value: 5
   mirror: always
   set_spidermonkey_pref: always
 
+# Forces lazy tiering to synchronously compile instead of using a background
+# thread.
+- name: javascript.options.wasm_lazy_tiering_synchronous
+  type: bool
+  value: false
+  mirror: always
+  set_spidermonkey_pref: always
+
 # Aggressiveness of inlining (regardless of call kind), allowable: 1 .. 9
-- name: javascript.options.wasm_experimental_inlining_level
+- name: javascript.options.wasm_inlining_level
   type: uint32_t
   value: 5
   mirror: always
   set_spidermonkey_pref: always
 
 # Are wasm direct calls (within same Instance) candidates for inlining?
-- name: javascript.options.wasm_experimental_direct_inlining
+- name: javascript.options.wasm_direct_inlining
   type: bool
   value: true
   mirror: always
   set_spidermonkey_pref: always
 
-# Are wasm callRef calls (within same Instance) candidates for inlining?
-- name: javascript.options.wasm_experimental_callRef_inlining
+# Are wasm call_ref calls (within same Instance) candidates for inlining?
+- name: javascript.options.wasm_call_ref_inlining
   type: bool
   value: true
+  mirror: always
+  set_spidermonkey_pref: always
+
+# When selecting a call_ref target for speculative inlining, this is the minimum
+# percentage of the total number of calls from the call site that a candidate
+# must have in order to be elegible for inlining.  Allowable: 10 .. 100 (%).
+# Setting it (eg) 75 means the hottest target must be 75% of all observed calls
+# to be considered for inlining.  Probably unwise to let this be much below 50.
+- name: javascript.options.wasm_call_ref_inlining_percent
+  type: uint32_t
+  value: 50
   mirror: always
   set_spidermonkey_pref: always
 
@@ -8532,6 +8685,8 @@
   type: bool
 #if defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
   value: true
+#elif defined(MOZ_X11)
+  value: @IS_NIGHTLY_BUILD@
 #else
   value: false
 #endif
@@ -8545,6 +8700,11 @@
 - name: layers.gpu-process.ipc_reply_timeout_ms
   type: int32_t
   value: 10000
+  mirror: once
+
+- name: layers.gpu-process.extend_ipc_reply_timeout_ms
+  type: int32_t
+  value: 20000
   mirror: once
 
 # How many unstable GPU process restarts we allow for a given configuration.
@@ -8886,14 +9046,26 @@
   value: 3
   mirror: always
 
-# The minimum contrast ratio between the accent color foreground and background
-# colors.
+# The minimum contrast ratio between the accent color background and white.
 #
 # We don't use this for text, so we need a contrast of at least AA (for user
-# interface components and graphical objects), which per WCAG is 3:1
+# interface components and graphical objects), which per WCAG is 3:1.
+#
+# However that causes some colors that are realistically fine to get darkened,
+# so we lower it a little bit. Eventually we should maybe use something like
+# APCA or so perhaps, see:
+#
+#  * https://ruitina.com/apca-accessible-colour-contrast/
+#  * https://github.com/w3c/csswg-drafts/issues/7937
+#
+# See also:
+#
+#  * https://accent-color.glitch.me/
+#
+# For testing this.
 - name: layout.css.accent-color.min-contrast-ratio
   type: AtomicFloat
-  value: 3.0
+  value: 2.4
   mirror: always
 
 # The target contrast ratio between the accent color foreground and background
@@ -9128,6 +9300,13 @@
   mirror: always
   rust: true
 
+# Whether the `:has-slotted` pseudo class is enabled
+- name: layout.css.has-slotted-selector.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  rust: true
+
 # Is support for CSS initial-letter property enabled?
 - name: layout.css.initial-letter.enabled
   type: bool
@@ -9283,7 +9462,7 @@
 # Is support for -moz-prefixed transform properties enabled?
 - name: layout.css.prefixes.transforms
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Is support for -moz-prefixed transition properties enabled?
@@ -10278,9 +10457,8 @@
 # video frames would be out of sync with audio, and VideoPlaybackQuality
 # metrics would provide no indication of the poor playback. [1]
 # For normal playback, this is false, which does not restore A/V sync in this
-# situation, but the out-of-date frames are dropped and the video playback
-# stalls.  The dropped frame count is reported to content in
-# VideoPlaybackQuality metrics.
+# situation, but some out-of-date frames are dropped.  The dropped frame count
+# is reported to content in VideoPlaybackQuality metrics.
 # [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1258870#c6
 - name: media.ruin-av-sync.enabled
   type: RelaxedAtomicBool
@@ -10991,6 +11169,12 @@
   type: RelaxedAtomicBool
   value: true
   mirror: always
+
+# The delay time (ms) before releasing an audio wakelock.
+-   name: media.wakelock.audio.delay-releasing.ms
+    type: RelaxedAtomicUint32
+    value: 10000
+    mirror: always
 
 # When video continues later than the current media time for this period of
 # time, then it will trigger skip-to-next-keyframe mechanism. As this aims to
@@ -12136,7 +12320,7 @@
 # but still checks for capacity overflow and reports telemetry
 - name: network.cookie.chips.partitionLimitDryRun
   type: bool
-  value: true
+  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # The actual CHIPS parition limit in bytes
@@ -12171,7 +12355,7 @@
 
 - name: network.cookie.sameSite.schemeful
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 - name: network.cookie.sameSite.crossSiteIframeSetCheck
@@ -12211,7 +12395,7 @@
 # Use sever time (Date header) to adjust the expire cookie attribute
 - name: network.cookie.useServerTime
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # If we should attempt to race the cache and network.
@@ -13073,6 +13257,14 @@
   value: true
   mirror: always
 
+# When true, DNS resolutions will downgrade DNS
+# from AF_UNSPEC to AF_INET when no non-local IPv6 addresses are
+# available.
+- name: network.dns.skip_ipv6_when_no_addresses
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # The proxy type. See nsIProtocolProxyService.idl
 #     PROXYCONFIG_DIRECT   = 0
 #     PROXYCONFIG_MANUAL   = 1
@@ -13562,18 +13754,18 @@
 # Whether to use the rust implemented DefaultURI for unknown scheme types
 - name: network.url.useDefaultURI
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 # Allows use of a protocol exception list that will bypass defaultURI parser
-- name: network.url.some_schemes_bypass_defaultURI_fallback
+- name: network.url.simple_uri_unknown_schemes_enabled
   type: RelaxedAtomicBool
   value: true
   mirror: always
 
 # A list of schemes to allow for bypassing defaultURI as default
-# This is only used when network.url.some_schemes_bypass_defaultURI_fallback is true
-- name: network.url.simple_uri_schemes
+# This is only used when network.url.simple_uri_unknown_schemes_enabled is true
+- name: network.url.simple_uri_unknown_schemes
   type: String
   value: ""
   mirror: never
@@ -13870,7 +14062,11 @@
 # When true, HTTP/3 will be disabled when third party roots are found.
 - name: network.http.http3.disable_when_third_party_roots_found
   type: RelaxedAtomicBool
+#if defined(ANDROID)
   value: false
+#else
+  value: true
+#endif
   mirror: always
 
 # Only used for testing purposes. In automation, this value is used to override
@@ -13952,12 +14148,19 @@
 # Whether to use port prefixed QNAME for HTTPS RR
 - name: network.dns.port_prefixed_qname_https_rr
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 # Whether to use HTTPS RR and ignore NS_HTTP_DISALLOW_HTTPS_RR
 # This pref is only set when running tests
 - name: network.dns.force_use_https_rr
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# When true, we check if the cname is the same as the target name of the record.
+# If not, the record will not be used.
+- name: network.dns.https_rr.check_record_with_cname
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -14262,7 +14465,7 @@
 
 # Is support for Permissions.query enabled for camera and microphone?
 - name: permissions.media.query.enabled
-  type: bool
+  type: RelaxedAtomicBool
   value: true
   mirror: always
 
@@ -14808,12 +15011,12 @@
 
 - name: privacy.window.maxInnerWidth
   type: int32_t
-  value: 1000
+  value: 1400
   mirror: always
 
 - name: privacy.window.maxInnerHeight
   type: int32_t
-  value: 1000
+  value: 900
   mirror: always
 
 - name: privacy.sanitize.useOldClearHistoryDialog
@@ -15533,9 +15736,12 @@
 # Configures Certificate Transparency support mode:
 # 0: Fully disabled.
 # 1: Only collect telemetry. CT qualification checks are not performed.
+# 2: Enforce CT.
 - name: security.pki.certificate_transparency.mode
   type: RelaxedAtomicUint32
-#ifdef EARLY_BETA_OR_EARLIER
+#if defined(NIGHTLY_BUILD)
+  value: 2
+#elif defined(EARLY_BETA_OR_EARLIER)
   value: 1
 #else
   value: 0
@@ -15552,13 +15758,24 @@
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.
-# - "all" => filters that contain all revocations,
-# - "specified" => filters that contain revocations with specified reason codes,
-# - "priority" => filters that contain high priority revocations.
+# - "all" => bloom-filter cascades that contain all revocations,
+# - "experimental" => clubcards that contain all revocations.
 - name: security.pki.crlite_channel
   type: String
-  value: "specified"
+#ifdef NIGHTLY_BUILD
+  value: "experimental"
+#else
+  value: "all"
+#endif
   mirror: never
+
+# The number of SCTs that must be "covered" by a CRLite filter before
+# we will enforce a result from that filter.
+- name: security.pki.crlite_timestamps_for_coverage
+  type: RelaxedAtomicUint32
+  value: 1
+  mirror: always
+  rust: true
 
 - name: security.pki.use_modern_crypto_with_pkcs12
   type: RelaxedAtomicBool
@@ -15581,6 +15798,14 @@
 - name: security.pki.sct_signature_cache_size
   type: RelaxedAtomicUint32
   value: 256
+  mirror: always
+
+# The number of entries in the certificate trust cache.
+# A higher number increases memory usage, but should increase the cache hit rate.
+# Each entry is approximately 65 bytes, and the maximum number of entries is 65535.
+- name: security.pki.cert_trust_cache_size
+  type: RelaxedAtomicUint32
+  value: 128
   mirror: always
 
 - name: security.tls.version.min
@@ -17398,6 +17623,12 @@
   type: RelaxedAtomicInt32
   value: 2
   mirror: always
+
+# Whether we use the mica backdrop. Off by default for now.
+- name: widget.windows.mica
+  type: bool
+  value: false
+  mirror: once
 #endif
 
 # Whether to disable SwipeTracker (e.g. swipe-to-nav).

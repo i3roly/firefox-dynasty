@@ -323,7 +323,10 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
             true
         }
         R.id.history_search -> {
-            historyStore.dispatch(HistoryFragmentAction.SearchClicked)
+            findNavController().nav(
+                R.id.historyFragment,
+                HistoryFragmentDirections.actionGlobalSearchDialog(null),
+            )
             true
         }
         R.id.history_delete -> {
@@ -368,8 +371,12 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
 
     override fun onBackPressed(): Boolean {
         // The state needs to be updated accordingly if Edit mode is active
-        historyStore.dispatch(HistoryFragmentAction.BackPressed)
-        return true
+        return if (historyStore.state.mode is HistoryFragmentState.Mode.Editing) {
+            historyStore.dispatch(HistoryFragmentAction.BackPressed)
+            true
+        } else {
+            false
+        }
     }
 
     override fun onDestroyView() {

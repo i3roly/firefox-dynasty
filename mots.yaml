@@ -8,7 +8,7 @@
 # documentation and how to modify this file.
 repo: mozilla-central
 created_at: '2021-10-14T12:50:40.073465'
-updated_at: '2024-09-06T16:55:45.997727'
+updated_at: '2024-10-25T15:36:41.074557+00:00'
 export:
   path: ./docs/mots/index.rst
   format: rst
@@ -55,8 +55,7 @@ people:
     bmo_id: 517691
     name: Alastor Wu
     nick: alwu
-  - &amejia
-    bmo_id: 623634
+  - bmo_id: 623634
     name: Arturo Mejia
     nick: amejia
   - &aminomancer
@@ -87,6 +86,10 @@ people:
     bmo_id: 310076
     name: Tooru Fujisawa
     nick: arai
+  - &aryx
+    bmo_id: 258347
+    name: Sebastian Hengst
+    nick: aryx
   - &asuth
     bmo_id: 151407
     name: Andrew Sutherland
@@ -251,6 +254,10 @@ people:
     bmo_id: 637163
     name: Deian Stefan
     nick: deian
+  - &denschub
+    bmo_id: 421268
+    name: Dennis Schubert
+    nick: denschub
   - &Dexter
     bmo_id: 248036
     name: Alessio Placitelli
@@ -373,10 +380,6 @@ people:
     bmo_id: 697145
     name: Gabriel Bustamante
     nick: gabriel
-  - &gbrown
-    bmo_id: 411471
-    name: Geoff Brown
-    nick: gbrown
   - &gcp
     bmo_id: 151147
     name: Gian-Carlo Pascutto
@@ -576,6 +579,10 @@ people:
     bmo_id: 713253
     name: Jonathan Sudiaman
     nick: jsudiaman
+  - &jswinarton
+    bmo_id: 699603
+    name: Jeremy Swinarton
+    nick: jswinarton
   - &jteow
     bmo_id: 701257
     name: James Teow
@@ -643,6 +650,10 @@ people:
     bmo_id: 698141
     name: Kash Shampur
     nick: kshampur
+  - &ksy36
+    bmo_id: 638886
+    name: Ksenia Berezina
+    nick: ksy36
   - &kvark
     bmo_id: 582393
     name: Dzmitry Malyshau
@@ -895,6 +906,10 @@ people:
     bmo_id: 381992
     name: Ryan Sleevi
     nick: ryan.sleevi
+  - &ryanvm
+    bmo_id: 75935
+    name: Ryan VanderMeulen
+    nick: ryanvm
   - &saschanaz
     bmo_id: 473060
     name: Kagami
@@ -911,6 +926,10 @@ people:
     bmo_id: 603840
     name: Sarah Clements
     nick: sclements
+  - &scunnane
+    bmo_id: 703413
+    name: Stephanie Cunnane
+    nick: scunnane
   - &sefeng
     bmo_id: 625922
     name: Sean Feng
@@ -1021,6 +1040,10 @@ people:
     bmo_id: 703078
     name: Tom Schuster
     nick: tschuster
+  - &twisniewski
+    bmo_id: 583576
+    name: Thomas Wisniewski
+    nick: twisniewski
   - &TYLin
     bmo_id: 503090
     name: Ting-Yu Lin
@@ -1104,11 +1127,10 @@ modules:
       - mobile/android/android-components/**/*
     excludes: []
     owners:
-      - *amejia
+      - *jonalmeida
       - *matttighe
     peers:
       - *kaya
-      - *jonalmeida
     meta:
   - machine_name: code_coverage
     name: Code Coverage
@@ -1322,8 +1344,6 @@ modules:
     description: Tools for debugging Mozilla code or for analyzing speed, memory use,
       and other characteristics of it.
     includes:
-      - tools/jprof/**/*
-      - tools/leak-gauge/**/*
       - tools/performance/**/*
       - tools/rb/**/*
     meta:
@@ -3437,11 +3457,12 @@ modules:
           owners_emeritus:
             - Paolo Amadini
             - Shawn Wilsher
+          peers_emeritus:
+            - *micah
         owners:
           - *mak
         peers:
           - *Gijs
-          - *micah
         machine_name: download_manager
 
       - name: Enterprise Policies
@@ -3667,8 +3688,9 @@ modules:
           - *standard8
         peers:
           - *daleharvey
-          - *mcheang
           - *jteow
+          - *mcheang
+          - *scunnane
         machine_name: search
 
       - name: Security and Privacy UI
@@ -3753,6 +3775,7 @@ modules:
           - *mconley
           - *dwalker
           - *niklas
+          - *jswinarton
         machine_name: tabbed_browser
 
       - name: Windows Installer
@@ -3889,12 +3912,13 @@ modules:
       - testing/mozharness/**/*
     excludes: []
     owners:
-      - *gbrown
+      - *ahal
     peers:
       - *jmaher
     meta:
       owners_emeritus:
         - Aki Sasaki
+        - Geoff Brown
       peers_emeritus:
         - Justin Wood
         - Tom Prince
@@ -4258,11 +4282,11 @@ modules:
           - toolkit/profile/**/*
           - toolkit/components/remote/**/*
           - toolkit/xre/**/*
-        meta: {}
         owners:
           - *mossop
-        peers:
-          - *froydnj
+        meta:
+          peers_emeritus:
+            - *froydnj
         machine_name: application_startup
 
       - name: Telemetry
@@ -4309,6 +4333,31 @@ modules:
           - *hjones
         machine_name: ui_widgets
 
+      - name: WebCompat Addons
+        description: Compatibility interventions (webcompat system addon) and bug
+          reporting capabilities (Report Site Issue addon).
+        includes:
+          - browser/extensions/report-site-issue
+          - browser/extensions/webcompat
+          - mobile/android/android-components/components/feature/webcompat
+          - mobile/android/android-components/components/feature/webcompat-reporter
+          - toolkit/components/reportbrokensite
+          - https://github.com/mozilla-extensions/webcompat-addon
+        meta:
+          url: https://wiki.mozilla.org/Compatibility/System_Addon
+          group: compatibility
+          peers_emeritus:
+            - Mike Taylor
+          components:
+            - Web Compatibility::Interventions
+            - Web Compatibility::Tooling & Investigations
+        owners:
+          - *denschub
+          - *twisniewski
+        peers:
+          - *ksy36
+        machine_name: webcompat_addons
+
       - name: Webextensions
         description: Webextension APIs and integration.
         includes:
@@ -4349,6 +4398,29 @@ modules:
       components:
         - Firefox::Translation
       review_group: translations-reviewers
+  - machine_name: tree_sheriffs
+    name: Tree Sheriffs
+    description: Tree Sheriffs aid developers to easily, quickly, and seamlessly land
+      their code in the proper location(s) and ensure that code does not break our
+      automated tests. In the service of this objective, the Sheriffs work closely
+      with the larger engineering organization to create and enforce landing policies
+      that increase productivity while maintaining an efficient and robust automated
+      testing system. Beyond the policy role, they have also become shepherds of automation
+      quality by monitoring intermittent failures, performing uplifts and merges,
+      and identifying poorly performing automation machines.
+    meta:
+      group: sheriffs
+      url: https://wiki.mozilla.org/Sheriffing
+      owner_emeritus:
+        - *ryanvm
+        - Ed Morley
+      peers_emeritus:
+        - Carsten Book
+        - Wes Kocher
+    owners:
+      - *aryx
+    peers:
+      - *ryanvm
   - machine_name: url_classifier
     name: URL Classifier
     description: Database and list-based classification of URL resources, such as
@@ -4373,5 +4445,5 @@ modules:
         - Ryan Tilder
       group: dev-platform
 hashes:
-  config: b0a2d988ddc8781d3d99f49a0a301240973d6840
-  export: 68143dfe5fd186c06cbca8f40852df22f235c259
+  config: 14b07792fd8653d3dfb05054faecd197997745ad
+  export: 433ee75b293301604103a00cde46efd0a5bf2a50

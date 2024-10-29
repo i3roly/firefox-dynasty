@@ -106,8 +106,9 @@ interface mixin NavigatorStorageUtils {
   //undefined yieldForStorageUpdates();
 };
 
+// https://w3c.github.io/permissions/#webidl-2112232240
 partial interface Navigator {
-  [Throws]
+  [Throws, SameObject]
   readonly attribute Permissions permissions;
 };
 
@@ -279,6 +280,7 @@ partial interface Navigator {
 };
 
 // Service Workers/Navigation Controllers
+// https://w3c.github.io/ServiceWorker/#navigator-serviceworker
 partial interface Navigator {
   [Func="ServiceWorkersEnabled", SameObject, BinaryName="serviceWorkerJS"]
   readonly attribute ServiceWorkerContainer serviceWorker;

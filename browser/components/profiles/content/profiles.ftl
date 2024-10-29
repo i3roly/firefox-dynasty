@@ -25,6 +25,17 @@ edit-profile-page-delete-button =
 edit-profile-page-no-name = Name this profile to help you find it later. Rename it any time.
 edit-profile-page-duplicate-name = Profile name already in use. Try a new name.
 
+edit-profile-page-profile-saved = Saved
+
+new-profile-page-title = New profile
+new-profile-page-header = Customize your new profile
+new-profile-page-header-description = Each profile keeps its unique browsing history and settings separate from your other profiles. Plus, { -brand-short-name }’s strong privacy protections are on by default.
+new-profile-page-learn-more = Learn more
+new-profile-page-input-placeholder =
+    .placeholder = Pick a name like “Work” or “Personal”
+new-profile-page-done-button =
+    .label = Done editing
+
 # Variables
 #   $profilename (String) - The name of the profile.
 delete-profile-page-title = Delete { $profilename } profile
@@ -44,15 +55,12 @@ delete-profile-logins = Passwords
 delete-profile-cancel = Cancel
 delete-profile-confirm = Delete
 
+appmenu-other-profiles = Other profiles
 appmenu-manage-profiles =
     .label = Manage profiles
 appmenu-create-profile =
-    .label = Create a new profile
+    .label = New profile
+appmenu-edit-profile =
+    .aria-label = Edit profile
 
-## Variables
-##   $profilename (String) - The name of the profile.
-
-appmenuitem-profiles =
-    .label = Profiles | { $profilename }
-appmenu-close-profile =
-    .label = Close { $profilename } profile
+appmenu-profiles = Profiles

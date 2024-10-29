@@ -595,9 +595,6 @@ var AddonManagerInternal = {
 
       this.recordTimestamp("AMI_startup_begin");
 
-      // Enable the addonsManager telemetry event category.
-      AMTelemetry.init();
-
       // Enable the AMRemoteSettings client.
       AMRemoteSettings.init();
 
@@ -2177,7 +2174,9 @@ var AddonManagerInternal = {
     // we won't get any further events, detect those cases now.
     if (
       install.state == AddonManager.STATE_DOWNLOADED &&
-      install.addon.appDisabled
+      (install.addon.appDisabled ||
+        install.addon.blocklistState !=
+          Ci.nsIBlocklistService.STATE_NOT_BLOCKED)
     ) {
       install.cancel();
       this.installNotifyObservers(
@@ -2206,8 +2205,11 @@ var AddonManagerInternal = {
       },
 
       onDownloadEnded() {
-        if (install.addon.appDisabled) {
-          // App disabled items are not compatible and so fail to install.
+        if (
+          install.addon.appDisabled ||
+          install.addon.blocklistState !=
+            Ci.nsIBlocklistService.STATE_NOT_BLOCKED
+        ) {
           install.removeListener(listener);
           install.cancel();
           self.installNotifyObservers(
@@ -3459,8 +3461,11 @@ var AddonManagerInternal = {
               ) {
                 reject({ message: "install cancelled" });
               } else if (event == "onDownloadEnded") {
-                if (install.addon.appDisabled) {
-                  // App disabled items are not compatible and so fail to install
+                if (
+                  install.addon.appDisabled ||
+                  install.addon.blocklistState !=
+                    Ci.nsIBlocklistService.STATE_NOT_BLOCKED
+                ) {
                   install.cancel();
                   AddonManagerInternal.installNotifyObservers(
                     "addon-install-failed",
@@ -4008,6 +4013,8 @@ export var AddonManager = {
     ["ERROR_UNSUPPORTED_ADDON_TYPE", -12],
     // The add-on can only be installed via enterprise policy.
     ["ERROR_ADMIN_INSTALL_ONLY", -13],
+    // The add-on is soft-blocked (and so new installation are expected to fail).
+    ["ERROR_SOFT_BLOCKED", -14],
   ]),
   // The update check timed out
   ERROR_TIMEOUT: -1,
@@ -4669,13 +4676,6 @@ AMRemoteSettings = {
 AMTelemetry = {
   telemetrySetupDone: false,
 
-  init() {
-    // Enable the addonsManager telemetry event category before the AddonManager
-    // has completed its startup, otherwise telemetry events recorded during the
-    // AddonManager/XPIProvider startup will not be recorded.
-    Services.telemetry.setEventRecordingEnabled("addonsManager", true);
-  },
-
   // This method is called by the AddonManager, once it has been started, so that we can
   // init the telemetry event category and start listening for the events related to the
   // addons installation and management.
@@ -4802,7 +4802,7 @@ AMTelemetry = {
 
     const length = str.length;
 
-    // Trim the string to prevent a flood of warnings messages logged internally by recordEvent,
+    // Trim the string to prevent a flood of warnings messages logged internally by recordLegacyEvent,
     // the trimmed version is going to be composed by the first 40 chars and the last 37 and 3 dots
     // that joins the two parts, to visually indicate that the string has been trimmed.
     return `${str.slice(0, 40)}...${str.slice(length - 37, length)}`;
@@ -5010,7 +5010,12 @@ AMTelemetry = {
       };
     }
 
-    this.recordEvent({ method, object, value: install.hashedAddonId, extra });
+    this.recordLegacyEvent({
+      method,
+      object,
+      value: install.hashedAddonId,
+      extra,
+    });
     Glean.addonsManager.installStats.record(
       this.formatExtraVars({
         addon_id: extra.addon_id,
@@ -5114,7 +5119,12 @@ AMTelemetry = {
     // All the extra vars in a telemetry event have to be strings.
     extra = this.formatExtraVars({ ...extraVars, ...extra });
 
-    this.recordEvent({ method: eventMethod, object, value: installId, extra });
+    this.recordLegacyEvent({
+      method: eventMethod,
+      object,
+      value: installId,
+      extra,
+    });
     Glean.addonsManager[eventMethod]?.record(
       this.formatExtraVars({
         addon_id: extra.addon_id,
@@ -5163,6 +5173,8 @@ AMTelemetry = {
       }
     }
 
+    extra.blocklist_state = `${addon.blocklistState}`;
+
     if (extra.source === "internal") {
       // Do not record the telemetry event for installation sources
       // that are marked as "internal".
@@ -5177,7 +5189,7 @@ AMTelemetry = {
     let hasExtraVars = !!Object.keys(extra).length;
     extra = this.formatExtraVars(extra);
 
-    this.recordEvent({
+    this.recordLegacyEvent({
       method,
       object,
       value,
@@ -5191,6 +5203,7 @@ AMTelemetry = {
         source: extra.source,
         source_method: extra.method,
         num_strings: extra.num_strings,
+        blocklist_state: extra.blocklist_state,
       })
     );
   },
@@ -5201,36 +5214,22 @@ AMTelemetry = {
    */
   recordSuspiciousSiteEvent({ displayURI }) {
     let site = displayURI?.displayHost ?? "(unknown)";
-    this.recordEvent({
-      method: "reportSuspiciousSite",
-      object: "suspiciousSite",
-      value: site,
-      extra: {},
-    });
     Glean.addonsManager.reportSuspiciousSite.record(
       this.formatExtraVars({ suspicious_site: site })
     );
   },
 
-  recordEvent({ method, object, value, extra }) {
-    if (typeof value != "string") {
-      // The value must be a string or null, make sure it's valid so sending
-      // the event doesn't fail.
-      value = null;
+  recordLegacyEvent({ method, object, value, extra }) {
+    if (typeof value == "string") {
+      if (!extra) {
+        extra = {};
+      }
+      extra.value = value;
     }
-    try {
-      Services.telemetry.recordEvent(
-        "addonsManager",
-        method,
-        object,
-        value,
-        extra
-      );
-    } catch (err) {
-      // If the telemetry throws just log the error so it doesn't break any
-      // functionality.
-      Cu.reportError(err);
-    }
+    const eventName = `${method}_${object}`.replace(/(_[a-z])/g, c =>
+      c[1].toUpperCase()
+    );
+    Glean.addonsManager[eventName].record(extra);
   },
 };
 

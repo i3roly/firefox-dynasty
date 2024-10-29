@@ -2589,6 +2589,7 @@ class NavigationDelegateTest : BaseSessionTest() {
 
         sessionRule.delegateUntilTestEnd(object : WebExtensionController.PromptDelegate {
             @AssertCalled
+            @Deprecated("Update to the new API when addressing https://bugzilla.mozilla.org/show_bug.cgi?id=1919374")
             override fun onInstallPrompt(
                 extension: WebExtension,
                 permissions: Array<String>,
@@ -2781,9 +2782,6 @@ class NavigationDelegateTest : BaseSessionTest() {
     }
 
     @Test fun purgeHistory() {
-        // TODO: Bug 1837551
-        assumeThat(sessionRule.env.isFission, equalTo(false))
-
         mainSession.loadUri("$TEST_ENDPOINT$HELLO_HTML_PATH")
         sessionRule.waitUntilCalled(object : HistoryDelegate, NavigationDelegate {
             @AssertCalled(count = 1)
@@ -3161,9 +3159,6 @@ class NavigationDelegateTest : BaseSessionTest() {
     }
 
     @Test fun goBackFromHistory() {
-        // TODO: Bug 1837551
-        assumeThat(sessionRule.env.isFission, equalTo(false))
-
         mainSession.loadTestPath(HELLO_HTML_PATH)
 
         mainSession.waitUntilCalled(object : HistoryDelegate, ContentDelegate {

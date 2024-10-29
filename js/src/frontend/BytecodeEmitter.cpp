@@ -5248,7 +5248,21 @@ MOZ_NEVER_INLINE bool BytecodeEmitter::emitLexicalScope(
     kind = lexicalScope->kind();
   }
 
-  if (!lse.emitScope(kind, lexicalScope->scopeBindings())) {
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+  BlockKind blockKind = BlockKind::Other;
+  if (body->isKind(ParseNodeKind::ForStmt) &&
+      body->as<ForNode>().head()->isKind(ParseNodeKind::ForOf)) {
+    MOZ_ASSERT(kind == ScopeKind::Lexical);
+    blockKind = BlockKind::ForOf;
+  }
+#endif
+
+  if (!lse.emitScope(kind, lexicalScope->scopeBindings()
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+                               ,
+                     blockKind
+#endif
+                     )) {
     return false;
   }
 
@@ -5844,14 +5858,20 @@ bool BytecodeEmitter::emitForOf(ForNode* forOfLoop,
   // Certain builtins (e.g. Array.from) are implemented in self-hosting
   // as for-of loops.
   auto selfHostedIter = getSelfHostedIterFor(forHeadExpr);
-  ForOfEmitter forOf(
-      this, headLexicalEmitterScope, selfHostedIter, iterKind
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
-      ,
-      forOfHead->kid1()->isKind(ParseNodeKind::UsingDecl) ||
-              forOfHead->kid1()->isKind(ParseNodeKind::AwaitUsingDecl)
-          ? ForOfEmitter::HasUsingDeclarationInHead::Yes
-          : ForOfEmitter::HasUsingDeclarationInHead::No
+  ForOfEmitter::HeadUsingDeclarationKind headUsingDeclKind =
+      ForOfEmitter::HeadUsingDeclarationKind::None;
+  if (forOfHead->kid1()->isKind(ParseNodeKind::UsingDecl)) {
+    headUsingDeclKind = ForOfEmitter::HeadUsingDeclarationKind::Sync;
+  } else if (forOfHead->kid1()->isKind(ParseNodeKind::AwaitUsingDecl)) {
+    headUsingDeclKind = ForOfEmitter::HeadUsingDeclarationKind::Async;
+  }
+#endif
+
+  ForOfEmitter forOf(this, headLexicalEmitterScope, selfHostedIter, iterKind
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+                     ,
+                     headUsingDeclKind
 #endif
   );
 
@@ -8382,6 +8402,75 @@ bool BytecodeEmitter::emitOptionalCall(CallNode* callNode, OptionalEmitter& oe,
   return true;
 }
 
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+bool BytecodeEmitter::emitSelfHostedDisposeResources(CallNode* callNode,
+                                                     DisposalKind kind) {
+  ListNode* argsList = callNode->args();
+  MOZ_ASSERT(argsList->count() == 2);
+
+  ParseNode* resourcesNode = argsList->head();
+  ParseNode* countNode = resourcesNode->pn_next;
+
+  DisposalEmitter de(this, bool(kind), CompletionKind::Normal);
+
+  if (!de.prepareForDisposeCapability()) {
+    // [stack] RVAL? NEEDS-AWAIT? HAS-AWAITED? THROWING UNDEF
+    return false;
+  }
+
+  if (!emitTree(resourcesNode)) {
+    // [stack] RVAL? NEEDS-AWAIT? HAS-AWAITED? THROWING UNDEF RESOURCES
+    return false;
+  }
+
+  if (!emitTree(countNode)) {
+    // [stack] RVAL? NEEDS-AWAIT? HAS-AWAITED? THROWING UNDEF RESOURCES COUNT
+    return false;
+  }
+
+  if (!de.emitEnd(*innermostEmitterScope())) {
+    // [stack] EXC THROWING
+    return false;
+  }
+
+  // [stack] EXC THROWING
+
+  InternalIfEmitter ifThrow(this);
+
+  if (!ifThrow.emitThenElse()) {
+    // [stack] EXC
+    return false;
+  }
+
+  if (!emit1(JSOp::Throw)) {
+    // [stack]
+    return false;
+  }
+
+  if (!ifThrow.emitElse()) {
+    // [stack] EXC
+    return false;
+  }
+
+  if (!emit1(JSOp::Pop)) {
+    // [stack]
+    return false;
+  }
+
+  if (!ifThrow.emitEnd()) {
+    // [stack]
+    return false;
+  }
+
+  if (!emit1(JSOp::Undefined)) {
+    // [stack] RVAL
+    return false;
+  }
+
+  return true;
+}
+#endif
+
 bool BytecodeEmitter::emitCallOrNew(CallNode* callNode, ValueUsage valueUsage) {
   /*
    * Emit callable invocation or operator new (constructor call) code.
@@ -8480,6 +8569,16 @@ bool BytecodeEmitter::emitCallOrNew(CallNode* callNode, ValueUsage valueUsage) {
     if (calleeName == TaggedParserAtomIndex::WellKnown::IteratorClose()) {
       return emitSelfHostedIteratorClose(callNode);
     }
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+    if (calleeName ==
+        TaggedParserAtomIndex::WellKnown::DisposeResourcesAsync()) {
+      return emitSelfHostedDisposeResources(callNode, DisposalKind::Async);
+    }
+    if (calleeName ==
+        TaggedParserAtomIndex::WellKnown::DisposeResourcesSync()) {
+      return emitSelfHostedDisposeResources(callNode, DisposalKind::Sync);
+    }
+#endif
 #ifdef DEBUG
     if (calleeName ==
             TaggedParserAtomIndex::WellKnown::UnsafeGetReservedSlot() ||
@@ -12179,6 +12278,7 @@ bool BytecodeEmitter::emitClass(
   }
   if (!emitUnpickN(2)) {
     //              [stack] ADDINIT? UNDEFINED CTOR HOMEOBJ
+    return false;
   }
 #endif
 

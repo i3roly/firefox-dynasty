@@ -2059,11 +2059,10 @@ static bool TransformGfxPointFromAncestor(RelativeTo aFrame,
     auto matrix = nsLayoutUtils::GetTransformToAncestor(
         RelativeTo{text ? text : aFrame.mFrame, aFrame.mViewportType},
         aAncestor);
-    if (matrix.IsSingular()) {
+    aMatrixCache = matrix.MaybeInverse();
+    if (aMatrixCache.isNothing()) {
       return false;
     }
-    matrix.Invert();
-    aMatrixCache.emplace(matrix);
   }
 
   const Matrix4x4Flagged& ctm = *aMatrixCache;
@@ -2211,10 +2210,10 @@ nsLayoutUtils::TransformResult nsLayoutUtils::TransformRect(
   }
   Matrix4x4Flagged downToDest = GetTransformToAncestor(
       RelativeTo{aToFrame}, RelativeTo{nearestCommonAncestor});
-  if (downToDest.IsSingular()) {
+  // invert downToDest in place
+  if (!downToDest.Invert()) {
     return NONINVERTIBLE_TRANSFORM;
   }
-  downToDest.Invert();
   aRect = TransformFrameRectToAncestor(aFromFrame, aRect,
                                        RelativeTo{nearestCommonAncestor});
 
@@ -6216,21 +6215,13 @@ void nsLayoutUtils::ComputeSizeForDrawing(
     /* outparam */ bool& aGotHeight) {
   aGotWidth = NS_SUCCEEDED(aImage->GetWidth(&aImageSize.width));
   aGotHeight = NS_SUCCEEDED(aImage->GetHeight(&aImageSize.height));
-  Maybe<AspectRatio> intrinsicRatio = aImage->GetIntrinsicRatio();
-  aIntrinsicRatio = intrinsicRatio.valueOr(AspectRatio());
+  aIntrinsicRatio = aImage->GetIntrinsicRatio();
 
   if (aGotWidth) {
     aResolution.ApplyXTo(aImageSize.width);
   }
   if (aGotHeight) {
     aResolution.ApplyYTo(aImageSize.height);
-  }
-
-  if (!(aGotWidth && aGotHeight) && intrinsicRatio.isNothing()) {
-    // We hit an error (say, because the image failed to load or couldn't be
-    // decoded) and should return zero size.
-    aGotWidth = aGotHeight = true;
-    aImageSize = CSSIntSize(0, 0);
   }
 }
 
@@ -9702,8 +9693,9 @@ enum class FramePosition : uint8_t {
 // NOTE: Returns a pair of Nothing() and `FramePosition::Unknown` if |aFrame|
 // is not in out-of-process or if we haven't received enough information from
 // APZ.
-static std::pair<Maybe<ScreenRect>, FramePosition> GetFrameVisibleRectOnScreen(
-    const nsIFrame* aFrame) {
+static std::pair<Maybe<ScreenRect>, FramePosition>
+GetFrameRectVisibleRectOnScreen(const nsIFrame* aFrame,
+                                const nsRect& aFrameRect) {
   // We actually want the in-process top prescontext here.
   nsPresContext* topContextInProcess =
       aFrame->PresContext()->GetInProcessRootContentDocumentPresContext();
@@ -9739,7 +9731,7 @@ static std::pair<Maybe<ScreenRect>, FramePosition> GetFrameVisibleRectOnScreen(
 
   nsIFrame* rootFrame = topContextInProcess->PresShell()->GetRootFrame();
   nsRect transformedToIFrame = nsLayoutUtils::TransformFrameRectToAncestor(
-      aFrame, aFrame->InkOverflowRectRelativeToSelf(), rootFrame);
+      aFrame, aFrameRect, rootFrame);
 
   LayoutDeviceRect rectInLayoutDevicePixel = LayoutDeviceRect::FromAppUnits(
       transformedToIFrame, topContextInProcess->AppUnitsPerDevPixel());
@@ -9770,9 +9762,10 @@ static std::pair<Maybe<ScreenRect>, FramePosition> GetFrameVisibleRectOnScreen(
 }
 
 // static
-bool nsLayoutUtils::FrameIsScrolledOutOfViewInCrossProcess(
-    const nsIFrame* aFrame) {
-  auto [visibleRect, framePosition] = GetFrameVisibleRectOnScreen(aFrame);
+bool nsLayoutUtils::FrameRectIsScrolledOutOfViewInCrossProcess(
+    const nsIFrame* aFrame, const nsRect& aFrameRect) {
+  auto [visibleRect, framePosition] =
+      GetFrameRectVisibleRectOnScreen(aFrame, aFrameRect);
   if (visibleRect.isNothing()) {
     return false;
   }
@@ -9783,7 +9776,8 @@ bool nsLayoutUtils::FrameIsScrolledOutOfViewInCrossProcess(
 // static
 bool nsLayoutUtils::FrameIsMostlyScrolledOutOfViewInCrossProcess(
     const nsIFrame* aFrame, nscoord aMargin) {
-  auto [visibleRect, framePosition] = GetFrameVisibleRectOnScreen(aFrame);
+  auto [visibleRect, framePosition] = GetFrameRectVisibleRectOnScreen(
+      aFrame, aFrame->InkOverflowRectRelativeToSelf());
   (void)framePosition;
   if (visibleRect.isNothing()) {
     return false;

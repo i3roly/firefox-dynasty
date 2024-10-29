@@ -23,6 +23,7 @@
 #include "mozilla/dom/WindowContext.h"
 #include "mozilla/dom/InputType.h"
 #include "mozilla/dom/UserActivation.h"
+#include "mozilla/dom/MouseEvent.h"
 #include "mozilla/dom/MutationEventBinding.h"
 #include "mozilla/dom/WheelEventBinding.h"
 #include "mozilla/dom/WindowGlobalChild.h"
@@ -396,7 +397,7 @@ static already_AddRefed<nsIFile> LastUsedDirectory(
     }
 
     nsCOMPtr<nsIFile> localFile;
-    nsresult rv = NS_NewLocalFile(path, true, getter_AddRefs(localFile));
+    nsresult rv = NS_NewLocalFile(path, getter_AddRefs(localFile));
     if (NS_WARN_IF(NS_FAILED(rv))) {
       return nullptr;
     }
@@ -2163,7 +2164,7 @@ void HTMLInputElement::MozSetFileNameArray(const Sequence<nsString>& aFileNames,
 
     if (!file) {
       // this is no "file://", try as local file
-      NS_NewLocalFile(aFileNames[i], false, getter_AddRefs(file));
+      NS_NewLocalFile(aFileNames[i], getter_AddRefs(file));
     }
 
     if (!file) {
@@ -2196,7 +2197,7 @@ void HTMLInputElement::MozSetDirectory(const nsAString& aDirectoryPath,
   }
 
   nsCOMPtr<nsIFile> file;
-  aRv = NS_NewLocalFile(aDirectoryPath, true, getter_AddRefs(file));
+  aRv = NS_NewLocalFile(aDirectoryPath, getter_AddRefs(file));
   if (NS_WARN_IF(aRv.Failed())) {
     return;
   }
@@ -3353,6 +3354,18 @@ void HTMLInputElement::LegacyPreActivationBehavior(
     // latest one will be deferred until after the exit point of the
     // handler.
     mForm->OnSubmitClickBegin(this);
+
+    if (aVisitor.mDOMEvent) {
+      if (auto* mouseEvent = aVisitor.mDOMEvent->AsMouseEvent()) {
+        CSSIntPoint pt = mouseEvent->OffsetPoint();
+        if (auto* imageClickedPoint = static_cast<CSSIntPoint*>(
+                GetProperty(nsGkAtoms::imageClickedPoint))) {
+          // Ensures that a dispatched event's clicked point is not the default
+          // value.
+          *imageClickedPoint = pt;
+        }
+      }
+    }
   }
 }
 
@@ -4093,7 +4106,9 @@ void HTMLInputElement::ActivationBehavior(EventChainPostVisitor& aVisitor) {
     return;
   }
 
-  if (mCheckedIsToggled) {
+  // https://html.spec.whatwg.org/#checkbox-state-(type=checkbox):input-activation-behavior
+  // If element is connected, fire input and change event
+  if (mCheckedIsToggled && IsInComposedDoc()) {
     SetUserInteracted(true);
 
     // Fire input event and then change event.
@@ -4840,10 +4855,7 @@ void HTMLInputElement::SanitizeValue(nsAString& aValue,
           // For the <input type=number> value getter, we return the unlocalized
           // value if it doesn't parse as StringToDecimal, for compat with other
           // browsers.
-          char buf[32];
-          DebugOnly<bool> ok = result.mResult.toString(buf, ArrayLength(buf));
-          aValue.AssignASCII(buf);
-          MOZ_ASSERT(ok, "buf not big enough");
+          aValue.AssignASCII(result.mResult.toString().c_str());
           break;
         }
         case SanitizationKind::ForDisplay:
@@ -4924,10 +4936,7 @@ void HTMLInputElement::SanitizeValue(nsAString& aValue,
       }
 
       if (needSanitization) {
-        char buf[32];
-        DebugOnly<bool> ok = value.toString(buf, ArrayLength(buf));
-        aValue.AssignASCII(buf);
-        MOZ_ASSERT(ok, "buf not big enough");
+        aValue.AssignASCII(value.toString().c_str());
       }
     } break;
     case FormControlType::InputDate: {
@@ -6272,8 +6281,7 @@ static nsTArray<OwningFileOrDirectory> RestoreFileContentData(
     } else {
       MOZ_ASSERT(it.type() == FileContentData::TnsString);
       nsCOMPtr<nsIFile> file;
-      nsresult rv =
-          NS_NewLocalFile(it.get_nsString(), true, getter_AddRefs(file));
+      nsresult rv = NS_NewLocalFile(it.get_nsString(), getter_AddRefs(file));
       if (NS_WARN_IF(NS_FAILED(rv))) {
         continue;
       }

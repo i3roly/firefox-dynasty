@@ -31,9 +31,24 @@ double AwakeTimeDuration::ToMicroseconds() const {
   return static_cast<double>(mValueUs);
 }
 
+AwakeTimeDuration AwakeTimeDuration::FromSeconds(uint64_t aSeconds) {
+  return AwakeTimeDuration(aSeconds * 1000000);
+}
+AwakeTimeDuration AwakeTimeDuration::FromMilliseconds(uint64_t aMilliseconds) {
+  return AwakeTimeDuration(aMilliseconds * 1000);
+}
+AwakeTimeDuration AwakeTimeDuration::FromMicroseconds(uint64_t aMicroseconds) {
+  return AwakeTimeDuration(aMicroseconds);
+}
+
 AwakeTimeDuration AwakeTimeStamp::operator-(
     AwakeTimeStamp const& aOther) const {
   return AwakeTimeDuration(mValueUs - aOther.mValueUs);
+}
+
+AwakeTimeStamp AwakeTimeStamp::operator-(
+    AwakeTimeDuration const& aOther) const {
+  return AwakeTimeStamp(mValueUs - aOther.mValueUs);
 }
 
 AwakeTimeStamp AwakeTimeStamp::operator+(
@@ -97,15 +112,18 @@ void AwakeTimeStamp::operator-=(const AwakeTimeDuration& aOther) {
 
 #endif
 
-AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
+AwakeTimeStamp AwakeTimeStamp::Now() {
 #if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
     struct timespec tv;
     return AwakeTimeStamp(clock_gettime_missing(CLOCK_UPTIME_RAW, &tv)/ kNSperUS);
 #else
     return AwakeTimeStamp(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / kNSperUS);
-#endif 
+#endif
 
 }
+
+AwakeTimeStamp AwakeTimeStamp::NowLoRes() { return Now(); }
+
 #elif defined(XP_WIN)
 
 // Number of hundreds of nanoseconds in a microsecond

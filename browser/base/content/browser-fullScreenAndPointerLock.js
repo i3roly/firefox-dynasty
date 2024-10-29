@@ -420,10 +420,9 @@ var FullScreen = {
     // shiftSize is sent from Cocoa widget code as a very precise double. We
     // don't need that kind of precision in our CSS.
     shiftSize = shiftSize.toFixed(2);
-    let toolbox = gNavToolbox;
+    gNavToolbox.classList.toggle("fullscreen-with-menubar", shiftSize > 0);
     if (shiftSize > 0) {
-      toolbox.style.setProperty("transform", `translateY(${shiftSize}px)`);
-      toolbox.style.setProperty("z-index", "2");
+      gNavToolbox.style.setProperty("transform", `translateY(${shiftSize}px)`);
 
       // If the mouse tracking missed our fullScreenToggler, then the toolbox
       // might not have been shown before the menubar is animated down. Make
@@ -432,8 +431,7 @@ var FullScreen = {
         this.showNavToolbox();
       }
     } else {
-      toolbox.style.removeProperty("transform");
-      toolbox.style.removeProperty("z-index");
+      gNavToolbox.style.removeProperty("transform");
     }
   },
 

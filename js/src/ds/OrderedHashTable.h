@@ -37,12 +37,14 @@
  *     void makeEmpty(Key*);
  */
 
+#include "mozilla/CheckedInt.h"
 #include "mozilla/HashFunctions.h"
 #include "mozilla/Likely.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/TemplateLib.h"
 
+#include <memory>
 #include <tuple>
 #include <utility>
 
@@ -79,108 +81,160 @@ class OrderedHashTable {
   friend class Range;
 
  private:
-  Data** hashTable;       // hash table (has hashBuckets() elements)
-  Data* data;             // data vector, an array of Data objects
-                          // data[0:dataLength] are constructed
-  uint32_t dataLength;    // number of constructed elements in data
-  uint32_t dataCapacity;  // size of data, in elements
-  uint32_t liveCount;     // dataLength less empty (removed) entries
-  uint32_t hashShift;     // multiplicative hash shift
+  // Hash table. Has hashBuckets() elements.
+  // Note: a single malloc buffer is used for both the data_ and hashTable_
+  // arrays. data_ points to the start of this buffer.
+  Data** hashTable_ = nullptr;
+
+  // Array of Data objects. Elements data_[0:dataLength_] are constructed and
+  // the total capacity is dataCapacity_.
+  Data* data_ = nullptr;
+
+  // Number of constructed elements in data_.
+  uint32_t dataLength_ = 0;
+
+  // Size of data_, in elements.
+  uint32_t dataCapacity_ = 0;
+
+  // The number of elements in this table. This is different from dataLength_
+  // because |data_| can contain empty/removed elements.
+  uint32_t liveCount_ = 0;
+
+  // Multiplicative hash shift.
+  uint32_t hashShift_ = 0;
 
   // List of all live Ranges on this table in malloc memory. Populated when
   // ranges are created.
-  Range* ranges;
+  Range* ranges_ = nullptr;
 
   // List of all live Ranges on this table in the GC nursery. Populated when
   // ranges are created. This is cleared at the start of minor GC and rebuilt
   // when ranges are moved.
-  Range* nurseryRanges;
+  Range* nurseryRanges_ = nullptr;
 
-  AllocPolicy alloc;
-  mozilla::HashCodeScrambler hcs;  // don't reveal pointer hash codes
+  // Allocation policy for this table's memory allocations.
+  AllocPolicy alloc_;
 
-  // TODO: This should be templated on a functor type and receive lambda
-  // arguments but this causes problems for the hazard analysis builds. See
-  // bug 1398213.
-  template <void (*f)(Range* range, uint32_t arg)>
-  void forEachRange(uint32_t arg = 0) {
+  // Scrambler to not reveal pointer hash codes.
+  mozilla::HashCodeScrambler hcs_;
+
+  // Logarithm base 2 of the number of buckets in the hash table initially.
+  static constexpr uint32_t InitialBucketsLog2 = 1;
+  static constexpr uint32_t InitialBuckets = 1 << InitialBucketsLog2;
+
+  // The maximum load factor (mean number of entries per bucket).
+  // It is an invariant that
+  //     dataCapacity_ == floor(hashBuckets() * FillFactor).
+  //
+  // The fill factor should be between 2 and 4, and it should be chosen so that
+  // the fill factor times sizeof(Data) is close to but <= a power of 2.
+  // This fixed fill factor was chosen to make the size of the data
+  // array, in bytes, close to a power of two when sizeof(T) is 16.
+  static constexpr double FillFactor = 8.0 / 3.0;
+
+  // The minimum permitted value of (liveCount_ / dataLength_).
+  // If that ratio drops below this value, we shrink the table.
+  static constexpr double MinDataFill = 0.25;
+
+  template <typename F>
+  void forEachRange(F&& f) {
     Range* next;
-    for (Range* r = ranges; r; r = next) {
+    for (Range* r = ranges_; r; r = next) {
       next = r->next;
-      f(r, arg);
+      f(r);
     }
-    for (Range* r = nurseryRanges; r; r = next) {
+    for (Range* r = nurseryRanges_; r; r = next) {
       next = r->next;
-      f(r, arg);
+      f(r);
     }
+  }
+
+  static MOZ_ALWAYS_INLINE bool calcAllocSize(uint32_t dataCapacity,
+                                              uint32_t buckets,
+                                              size_t* numBytes) {
+    using CheckedSize = mozilla::CheckedInt<size_t>;
+    auto res = CheckedSize(dataCapacity) * sizeof(Data) +
+               CheckedSize(buckets) * sizeof(Data*);
+    if (MOZ_UNLIKELY(!res.isValid())) {
+      return false;
+    }
+    *numBytes = res.value();
+    return true;
+  }
+
+  // Allocate a single buffer that stores the data array followed by the hash
+  // table entries.
+  std::pair<Data*, Data**> allocateDataAndHashTable(uint32_t dataCapacity,
+                                                    uint32_t buckets) {
+    size_t numBytes;
+    if (MOZ_UNLIKELY(!calcAllocSize(dataCapacity, buckets, &numBytes))) {
+      alloc_.reportAllocOverflow();
+      return {};
+    }
+
+    void* buf = alloc_.template pod_malloc<uint8_t>(numBytes);
+    if (!buf) {
+      return {};
+    }
+
+    static_assert(sizeof(Data) % sizeof(Data*) == 0,
+                  "Hash table entries must be aligned properly");
+
+    Data* data = static_cast<Data*>(buf);
+    Data** table = reinterpret_cast<Data**>(data + dataCapacity);
+    return {data, table};
   }
 
  public:
   OrderedHashTable(AllocPolicy ap, mozilla::HashCodeScrambler hcs)
-      : hashTable(nullptr),
-        data(nullptr),
-        dataLength(0),
-        dataCapacity(0),
-        liveCount(0),
-        hashShift(0),
-        ranges(nullptr),
-        nurseryRanges(nullptr),
-        alloc(std::move(ap)),
-        hcs(hcs) {}
+      : alloc_(std::move(ap)), hcs_(hcs) {}
 
   [[nodiscard]] bool init() {
-    MOZ_ASSERT(!hashTable, "init must be called at most once");
+    MOZ_ASSERT(!hashTable_, "init must be called at most once");
 
-    uint32_t buckets = initialBuckets();
-    Data** tableAlloc = alloc.template pod_malloc<Data*>(buckets);
-    if (!tableAlloc) {
-      return false;
-    }
-    for (uint32_t i = 0; i < buckets; i++) {
-      tableAlloc[i] = nullptr;
-    }
+    constexpr uint32_t buckets = InitialBuckets;
+    constexpr uint32_t capacity = uint32_t(buckets * FillFactor);
 
-    uint32_t capacity = uint32_t(buckets * fillFactor());
-    Data* dataAlloc = alloc.template pod_malloc<Data>(capacity);
+    auto [dataAlloc, tableAlloc] = allocateDataAndHashTable(capacity, buckets);
     if (!dataAlloc) {
-      alloc.free_(tableAlloc, buckets);
       return false;
     }
+
+    std::uninitialized_fill_n(tableAlloc, buckets, nullptr);
 
     // clear() requires that members are assigned only after all allocation
-    // has succeeded, and that this->ranges is left untouched.
-    hashTable = tableAlloc;
-    data = dataAlloc;
-    dataLength = 0;
-    dataCapacity = capacity;
-    liveCount = 0;
-    hashShift = js::kHashNumberBits - initialBucketsLog2();
+    // has succeeded, and that this->ranges_ is left untouched.
+    hashTable_ = tableAlloc;
+    data_ = dataAlloc;
+    dataLength_ = 0;
+    dataCapacity_ = capacity;
+    liveCount_ = 0;
+    hashShift_ = js::kHashNumberBits - InitialBucketsLog2;
     MOZ_ASSERT(hashBuckets() == buckets);
     return true;
   }
 
   ~OrderedHashTable() {
-    forEachRange<Range::onTableDestroyed>();
-    if (hashTable) {
-      // |hashBuckets()| isn't valid when |hashTable| hasn't been created.
-      alloc.free_(hashTable, hashBuckets());
+    forEachRange([](Range* range) { range->onTableDestroyed(); });
+
+    MOZ_ASSERT(!!data_ == !!hashTable_);
+
+    if (data_) {
+      freeData(data_, dataLength_, dataCapacity_, hashBuckets());
     }
-    freeData(data, dataLength, dataCapacity);
   }
 
   size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const {
     size_t size = 0;
-    if (hashTable) {
-      size += mallocSizeOf(hashTable);
-    }
-    if (data) {
-      size += mallocSizeOf(data);
+    if (data_) {
+      // Note: this also includes the hashTable_ array.
+      size += mallocSizeOf(data_);
     }
     return size;
   }
 
   /* Return the number of elements in the table. */
-  uint32_t count() const { return liveCount; }
+  uint32_t count() const { return liveCount_; }
 
   /* True if any element matches l. */
   bool has(const Lookup& l) const { return lookup(l) != nullptr; }
@@ -212,7 +266,7 @@ class OrderedHashTable {
       return true;
     }
 
-    if (dataLength == dataCapacity && !rehashOnFull()) {
+    if (dataLength_ == dataCapacity_ && !rehashOnFull()) {
       return false;
     }
 
@@ -232,7 +286,7 @@ class OrderedHashTable {
       return &e->element;
     }
 
-    if (dataLength == dataCapacity && !rehashOnFull()) {
+    if (dataLength_ == dataCapacity_ && !rehashOnFull()) {
       return nullptr;
     }
 
@@ -252,7 +306,7 @@ class OrderedHashTable {
    */
   bool remove(const Lookup& l, bool* foundp) {
     // Note: This could be optimized so that removing the last entry,
-    // data[dataLength - 1], decrements dataLength. LIFO use cases would
+    // data_[dataLength_ - 1], decrements dataLength_. LIFO use cases would
     // benefit.
 
     // If a matching entry exists, empty it.
@@ -267,19 +321,19 @@ class OrderedHashTable {
   }
 
   bool remove(Data* e) {
-    MOZ_ASSERT(uint32_t(e - data) < dataCapacity);
+    MOZ_ASSERT(uint32_t(e - data_) < dataCapacity_);
 
-    liveCount--;
+    liveCount_--;
     Ops::makeEmpty(&e->element);
 
     // Update active Ranges.
-    uint32_t pos = e - data;
-    forEachRange<&Range::onRemove>(pos);
+    uint32_t pos = e - data_;
+    forEachRange([pos](Range* range) { range->onRemove(pos); });
 
     // If many entries have been removed, try to shrink the table.
-    if (hashBuckets() > initialBuckets() &&
-        liveCount < dataLength * minDataFill()) {
-      if (!rehash(hashShift + 1)) {
+    if (hashBuckets() > InitialBuckets &&
+        liveCount_ < dataLength_ * MinDataFill) {
+      if (!rehash(hashShift_ + 1)) {
         return false;
       }
     }
@@ -298,29 +352,28 @@ class OrderedHashTable {
    * after a successful clear().
    */
   [[nodiscard]] bool clear() {
-    if (dataLength != 0) {
-      Data** oldHashTable = hashTable;
-      Data* oldData = data;
+    if (dataLength_ != 0) {
+      Data** oldHashTable = hashTable_;
+      Data* oldData = data_;
       uint32_t oldHashBuckets = hashBuckets();
-      uint32_t oldDataLength = dataLength;
-      uint32_t oldDataCapacity = dataCapacity;
+      uint32_t oldDataLength = dataLength_;
+      uint32_t oldDataCapacity = dataCapacity_;
 
-      hashTable = nullptr;
+      hashTable_ = nullptr;
       if (!init()) {
         // init() only mutates members on success; see comment above.
-        hashTable = oldHashTable;
+        hashTable_ = oldHashTable;
         return false;
       }
 
-      alloc.free_(oldHashTable, oldHashBuckets);
-      freeData(oldData, oldDataLength, oldDataCapacity);
-      forEachRange<&Range::onClear>();
+      freeData(oldData, oldDataLength, oldDataCapacity, oldHashBuckets);
+      forEachRange([](Range* range) { range->onClear(); });
     }
 
-    MOZ_ASSERT(hashTable);
-    MOZ_ASSERT(data);
-    MOZ_ASSERT(dataLength == 0);
-    MOZ_ASSERT(liveCount == 0);
+    MOZ_ASSERT(hashTable_);
+    MOZ_ASSERT(data_);
+    MOZ_ASSERT(dataLength_ == 0);
+    MOZ_ASSERT(liveCount_ == 0);
     return true;
   }
 
@@ -364,14 +417,14 @@ class OrderedHashTable {
     // |offsetof(Range, ht)|.
     OrderedHashTable* ht;
 
-    /* The index of front() within ht->data. */
-    uint32_t i;
+    /* The index of front() within ht->data_. */
+    uint32_t i = 0;
 
     /*
-     * The number of nonempty entries in ht->data to the left of front().
+     * The number of nonempty entries in ht->data_ to the left of front().
      * This is used when the table is resized or compacted.
      */
-    uint32_t count;
+    uint32_t count = 0;
 
     /*
      * Links in the doubly-linked list of active Ranges on ht.
@@ -391,7 +444,7 @@ class OrderedHashTable {
      * (This is private on purpose. End users must use ht->all().)
      */
     Range(OrderedHashTable* ht, Range** listp)
-        : ht(ht), i(0), count(0), prevp(listp), next(*listp) {
+        : ht(ht), prevp(listp), next(*listp) {
       *prevp = this;
       if (next) {
         next->prevp = &next;
@@ -405,7 +458,7 @@ class OrderedHashTable {
         : ht(other.ht),
           i(other.i),
           count(other.count),
-          prevp(inNursery ? &ht->nurseryRanges : &ht->ranges),
+          prevp(inNursery ? &ht->nurseryRanges_ : &ht->ranges_),
           next(*prevp) {
       *prevp = this;
       if (next) {
@@ -430,8 +483,8 @@ class OrderedHashTable {
     Range& operator=(const Range& other) = delete;
 
     void seek() {
-      while (i < ht->dataLength &&
-             Ops::isEmpty(Ops::getKey(ht->data[i].element))) {
+      while (i < ht->dataLength_ &&
+             Ops::isEmpty(Ops::getKey(ht->data_[i].element))) {
         i++;
       }
     }
@@ -481,7 +534,7 @@ class OrderedHashTable {
    public:
     bool empty() const {
       MOZ_ASSERT(valid());
-      return i >= ht->dataLength;
+      return i >= ht->dataLength_;
     }
 
     /*
@@ -495,7 +548,7 @@ class OrderedHashTable {
     const T& front() const {
       MOZ_ASSERT(valid());
       MOZ_ASSERT(!empty());
-      return ht->data[i].element;
+      return ht->data_[i].element;
     }
 
     /*
@@ -510,7 +563,7 @@ class OrderedHashTable {
     void popFront() {
       MOZ_ASSERT(valid());
       MOZ_ASSERT(!empty());
-      MOZ_ASSERT(!Ops::isEmpty(Ops::getKey(ht->data[i].element)));
+      MOZ_ASSERT(!Ops::isEmpty(Ops::getKey(ht->data_[i].element)));
       count++;
       i++;
       seek();
@@ -521,13 +574,6 @@ class OrderedHashTable {
     static size_t offsetOfCount() { return offsetof(Range, count); }
     static size_t offsetOfPrevP() { return offsetof(Range, prevp); }
     static size_t offsetOfNext() { return offsetof(Range, next); }
-
-    static void onTableDestroyed(Range* range, uint32_t arg) {
-      range->onTableDestroyed();
-    }
-    static void onRemove(Range* range, uint32_t arg) { range->onRemove(arg); }
-    static void onClear(Range* range, uint32_t arg) { range->onClear(); }
-    static void onCompact(Range* range, uint32_t arg) { range->onCompact(); }
   };
 
   class MutableRange : public Range {
@@ -538,12 +584,12 @@ class OrderedHashTable {
     T& front() {
       MOZ_ASSERT(this->valid());
       MOZ_ASSERT(!this->empty());
-      return this->ht->data[this->i].element;
+      return this->ht->data_[this->i].element;
     }
 
     void rekeyFront(const Key& k) {
       MOZ_ASSERT(this->valid());
-      this->ht->rekey(&this->ht->data[this->i], k);
+      this->ht->rekey(&this->ht->data_[this->i], k);
     }
   };
 
@@ -551,14 +597,14 @@ class OrderedHashTable {
     // Range operates on a mutable table but its interface does not permit
     // modification of the contents of the table.
     auto* self = const_cast<OrderedHashTable*>(this);
-    return Range(self, &self->ranges);
+    return Range(self, &self->ranges_);
   }
-  MutableRange mutableAll() { return MutableRange(this, &ranges); }
+  MutableRange mutableAll() { return MutableRange(this, &ranges_); }
 
   void trace(JSTracer* trc) {
-    for (uint32_t i = 0; i < dataLength; i++) {
-      if (!Ops::isEmpty(Ops::getKey(data[i].element))) {
-        Ops::trace(trc, this, i, data[i].element);
+    for (uint32_t i = 0; i < dataLength_; i++) {
+      if (!Ops::isEmpty(Ops::getKey(data_[i].element))) {
+        Ops::trace(trc, this, i, data_[i].element);
       }
     }
   }
@@ -566,13 +612,13 @@ class OrderedHashTable {
   // For use by the implementation of Ops::trace.
   template <typename Key>
   void traceKey(JSTracer* trc, uint32_t index, Key& key) {
-    MOZ_ASSERT(index < dataLength);
+    MOZ_ASSERT(index < dataLength_);
     using MutableKey = std::remove_const_t<Key>;
     using UnbarrieredKey = typename RemoveBarrier<MutableKey>::Type;
     UnbarrieredKey newKey = key;
     JS::GCPolicy<UnbarrieredKey>::trace(trc, &newKey, "OrderedHashMap key");
     if (newKey != key) {
-      rekey(&data[index], newKey);
+      rekey(&data_[index], newKey);
     }
   }
   template <typename Value>
@@ -586,20 +632,20 @@ class OrderedHashTable {
    */
   Range* createRange(void* buffer, bool inNursery) const {
     auto* self = const_cast<OrderedHashTable*>(this);
-    Range** listp = inNursery ? &self->nurseryRanges : &self->ranges;
+    Range** listp = inNursery ? &self->nurseryRanges_ : &self->ranges_;
     new (buffer) Range(self, listp);
     return static_cast<Range*>(buffer);
   }
 
   void destroyNurseryRanges() {
-    if (nurseryRanges) {
-      nurseryRanges->prevp = nullptr;
+    if (nurseryRanges_) {
+      nurseryRanges_->prevp = nullptr;
     }
-    nurseryRanges = nullptr;
+    nurseryRanges_ = nullptr;
   }
 
 #ifdef DEBUG
-  bool hasNurseryRanges() const { return nurseryRanges; }
+  bool hasNurseryRanges() const { return nurseryRanges_; }
 #endif
 
   /*
@@ -618,8 +664,8 @@ class OrderedHashTable {
     Data* entry = lookup(current, currentHash);
     MOZ_ASSERT(entry);
 
-    HashNumber oldHash = currentHash >> hashShift;
-    HashNumber newHash = prepareHash(newKey) >> hashShift;
+    HashNumber oldHash = currentHash >> hashShift_;
+    HashNumber newHash = prepareHash(newKey) >> hashShift_;
 
     entry->element = element;
 
@@ -628,7 +674,7 @@ class OrderedHashTable {
     // the hash chain where we expected it. That probably means the
     // key's hash code changed since it was inserted, breaking the
     // hash code invariant.)
-    Data** ep = &hashTable[oldHash];
+    Data** ep = &hashTable_[oldHash];
     while (*ep != entry) {
       ep = &(*ep)->chain;
     }
@@ -640,7 +686,7 @@ class OrderedHashTable {
     // insertion order (descending memory order). No code currently
     // depends on this invariant, so it's fine to kill it if
     // needed.
-    ep = &hashTable[newHash];
+    ep = &hashTable_[newHash];
     while (*ep && *ep > entry) {
       ep = &(*ep)->chain;
     }
@@ -649,17 +695,17 @@ class OrderedHashTable {
   }
 
   static size_t offsetOfDataLength() {
-    return offsetof(OrderedHashTable, dataLength);
+    return offsetof(OrderedHashTable, dataLength_);
   }
-  static size_t offsetOfData() { return offsetof(OrderedHashTable, data); }
+  static size_t offsetOfData() { return offsetof(OrderedHashTable, data_); }
   static constexpr size_t offsetOfHashTable() {
-    return offsetof(OrderedHashTable, hashTable);
+    return offsetof(OrderedHashTable, hashTable_);
   }
   static constexpr size_t offsetOfHashShift() {
-    return offsetof(OrderedHashTable, hashShift);
+    return offsetof(OrderedHashTable, hashShift_);
   }
   static constexpr size_t offsetOfLiveCount() {
-    return offsetof(OrderedHashTable, liveCount);
+    return offsetof(OrderedHashTable, liveCount_);
   }
   static constexpr size_t offsetOfDataElement() {
     static_assert(offsetof(Data, element) == 0,
@@ -671,61 +717,46 @@ class OrderedHashTable {
   static constexpr size_t sizeofData() { return sizeof(Data); }
 
   static constexpr size_t offsetOfHcsK0() {
-    return offsetof(OrderedHashTable, hcs) +
+    return offsetof(OrderedHashTable, hcs_) +
            mozilla::HashCodeScrambler::offsetOfMK0();
   }
   static constexpr size_t offsetOfHcsK1() {
-    return offsetof(OrderedHashTable, hcs) +
+    return offsetof(OrderedHashTable, hcs_) +
            mozilla::HashCodeScrambler::offsetOfMK1();
   }
 
- private:
-  /* Logarithm base 2 of the number of buckets in the hash table initially. */
-  static uint32_t initialBucketsLog2() { return 1; }
-  static uint32_t initialBuckets() { return 1 << initialBucketsLog2(); }
-
-  /*
-   * The maximum load factor (mean number of entries per bucket).
-   * It is an invariant that
-   *     dataCapacity == floor(hashBuckets() * fillFactor()).
-   *
-   * The fill factor should be between 2 and 4, and it should be chosen so that
-   * the fill factor times sizeof(Data) is close to but <= a power of 2.
-   * This fixed fill factor was chosen to make the size of the data
-   * array, in bytes, close to a power of two when sizeof(T) is 16.
-   */
-  static constexpr double fillFactor() { return 8.0 / 3.0; }
-
-  /*
-   * The minimum permitted value of (liveCount / dataLength).
-   * If that ratio drops below this value, we shrink the table.
-   */
-  static double minDataFill() { return 0.25; }
-
- public:
   HashNumber prepareHash(const Lookup& l) const {
-    return mozilla::ScrambleHashCode(Ops::hash(l, hcs));
+    return mozilla::ScrambleHashCode(Ops::hash(l, hcs_));
   }
 
  private:
   /* The size of hashTable, in elements. Always a power of two. */
   uint32_t hashBuckets() const {
-    return 1 << (js::kHashNumberBits - hashShift);
+    return 1 << (js::kHashNumberBits - hashShift_);
   }
 
   static void destroyData(Data* data, uint32_t length) {
-    for (Data* p = data + length; p != data;) {
-      (--p)->~Data();
+    Data* end = data + length;
+    for (Data* p = data; p != end; p++) {
+      p->~Data();
     }
   }
 
-  void freeData(Data* data, uint32_t length, uint32_t capacity) {
+  void freeData(Data* data, uint32_t length, uint32_t capacity,
+                uint32_t hashBuckets) {
+    MOZ_ASSERT(data);
+    MOZ_ASSERT(capacity > 0);
+
     destroyData(data, length);
-    alloc.free_(data, capacity);
+
+    size_t numBytes;
+    MOZ_ALWAYS_TRUE(calcAllocSize(capacity, hashBuckets, &numBytes));
+
+    alloc_.free_(reinterpret_cast<uint8_t*>(data), numBytes);
   }
 
   Data* lookup(const Lookup& l, HashNumber h) {
-    for (Data* e = hashTable[h >> hashShift]; e; e = e->chain) {
+    for (Data* e = hashTable_[h >> hashShift_]; e; e = e->chain) {
       if (Ops::match(Ops::getKey(e->element), l)) {
         return e;
       }
@@ -738,12 +769,12 @@ class OrderedHashTable {
   }
 
   std::tuple<Data*, Data*> addEntry(HashNumber hash) {
-    MOZ_ASSERT(dataLength < dataCapacity);
-    hash >>= hashShift;
-    liveCount++;
-    Data* entry = &data[dataLength++];
-    Data* chain = hashTable[hash];
-    hashTable[hash] = entry;
+    MOZ_ASSERT(dataLength_ < dataCapacity_);
+    hash >>= hashShift_;
+    liveCount_++;
+    Data* entry = &data_[dataLength_++];
+    Data* chain = hashTable_[hash];
+    hashTable_[hash] = entry;
     return std::make_tuple(entry, chain);
   }
 
@@ -751,93 +782,90 @@ class OrderedHashTable {
   void compacted() {
     // If we had any empty entries, compacting may have moved live entries
     // to the left within |data|. Notify all live Ranges of the change.
-    forEachRange<&Range::onCompact>();
+    forEachRange([](Range* range) { range->onCompact(); });
   }
 
   /* Compact the entries in |data| and rehash them. */
   void rehashInPlace() {
     for (uint32_t i = 0, N = hashBuckets(); i < N; i++) {
-      hashTable[i] = nullptr;
+      hashTable_[i] = nullptr;
     }
-    Data* wp = data;
-    Data* end = data + dataLength;
-    for (Data* rp = data; rp != end; rp++) {
+    Data* wp = data_;
+    Data* end = data_ + dataLength_;
+    for (Data* rp = data_; rp != end; rp++) {
       if (!Ops::isEmpty(Ops::getKey(rp->element))) {
-        HashNumber h = prepareHash(Ops::getKey(rp->element)) >> hashShift;
+        HashNumber h = prepareHash(Ops::getKey(rp->element)) >> hashShift_;
         if (rp != wp) {
           wp->element = std::move(rp->element);
         }
-        wp->chain = hashTable[h];
-        hashTable[h] = wp;
+        wp->chain = hashTable_[h];
+        hashTable_[h] = wp;
         wp++;
       }
     }
-    MOZ_ASSERT(wp == data + liveCount);
+    MOZ_ASSERT(wp == data_ + liveCount_);
 
     while (wp != end) {
-      (--end)->~Data();
+      wp->~Data();
+      wp++;
     }
-    dataLength = liveCount;
+    dataLength_ = liveCount_;
     compacted();
   }
 
   [[nodiscard]] bool rehashOnFull() {
-    MOZ_ASSERT(dataLength == dataCapacity);
+    MOZ_ASSERT(dataLength_ == dataCapacity_);
 
     // If the hashTable is more than 1/4 deleted data, simply rehash in
     // place to free up some space. Otherwise, grow the table.
     uint32_t newHashShift =
-        liveCount >= dataCapacity * 0.75 ? hashShift - 1 : hashShift;
+        liveCount_ >= dataCapacity_ * 0.75 ? hashShift_ - 1 : hashShift_;
     return rehash(newHashShift);
   }
 
   /*
    * Grow, shrink, or compact both |hashTable| and |data|.
    *
-   * On success, this returns true, dataLength == liveCount, and there are no
-   * empty elements in data[0:dataLength]. On allocation failure, this
+   * On success, this returns true, dataLength_ == liveCount_, and there are no
+   * empty elements in data_[0:dataLength_]. On allocation failure, this
    * leaves everything as it was and returns false.
    */
   [[nodiscard]] bool rehash(uint32_t newHashShift) {
     // If the size of the table is not changing, rehash in place to avoid
     // allocating memory.
-    if (newHashShift == hashShift) {
+    if (newHashShift == hashShift_) {
       rehashInPlace();
       return true;
     }
 
     // Ensure the new capacity fits into INT32_MAX.
     constexpr size_t maxCapacityLog2 =
-        mozilla::tl::FloorLog2<size_t(INT32_MAX / fillFactor())>::value;
+        mozilla::tl::FloorLog2<size_t(INT32_MAX / FillFactor)>::value;
     static_assert(maxCapacityLog2 < kHashNumberBits);
 
     // Fail if |(js::kHashNumberBits - newHashShift) > maxCapacityLog2|.
     //
     // Reorder |kHashNumberBits| so both constants are on the right-hand side.
     if (MOZ_UNLIKELY(newHashShift < (js::kHashNumberBits - maxCapacityLog2))) {
-      alloc.reportAllocOverflow();
+      alloc_.reportAllocOverflow();
       return false;
     }
 
-    size_t newHashBuckets = size_t(1) << (js::kHashNumberBits - newHashShift);
-    Data** newHashTable = alloc.template pod_malloc<Data*>(newHashBuckets);
-    if (!newHashTable) {
-      return false;
-    }
-    for (uint32_t i = 0; i < newHashBuckets; i++) {
-      newHashTable[i] = nullptr;
-    }
+    uint32_t newHashBuckets = uint32_t(1)
+                              << (js::kHashNumberBits - newHashShift);
+    uint32_t newCapacity = uint32_t(newHashBuckets * FillFactor);
 
-    uint32_t newCapacity = uint32_t(newHashBuckets * fillFactor());
-    Data* newData = alloc.template pod_malloc<Data>(newCapacity);
+    auto [newData, newHashTable] =
+        allocateDataAndHashTable(newCapacity, newHashBuckets);
     if (!newData) {
-      alloc.free_(newHashTable, newHashBuckets);
       return false;
     }
+
+    std::uninitialized_fill_n(newHashTable, newHashBuckets, nullptr);
 
     Data* wp = newData;
-    Data* end = data + dataLength;
-    for (Data* p = data; p != end; p++) {
+    Data* end = data_ + dataLength_;
+    for (Data* p = data_; p != end; p++) {
       if (!Ops::isEmpty(Ops::getKey(p->element))) {
         HashNumber h = prepareHash(Ops::getKey(p->element)) >> newHashShift;
         new (wp) Data(std::move(p->element), newHashTable[h]);
@@ -845,16 +873,15 @@ class OrderedHashTable {
         wp++;
       }
     }
-    MOZ_ASSERT(wp == newData + liveCount);
+    MOZ_ASSERT(wp == newData + liveCount_);
 
-    alloc.free_(hashTable, hashBuckets());
-    freeData(data, dataLength, dataCapacity);
+    freeData(data_, dataLength_, dataCapacity_, hashBuckets());
 
-    hashTable = newHashTable;
-    data = newData;
-    dataLength = liveCount;
-    dataCapacity = newCapacity;
-    hashShift = newHashShift;
+    hashTable_ = newHashTable;
+    data_ = newData;
+    dataLength_ = liveCount_;
+    dataCapacity_ = newCapacity;
+    hashShift_ = newHashShift;
     MOZ_ASSERT(hashBuckets() == newHashBuckets);
 
     compacted();
@@ -867,15 +894,15 @@ class OrderedHashTable {
   // the current key must return the same hash code as when the entry was added
   // to the table.
   void rekey(Data* entry, const Key& k) {
-    HashNumber oldHash = prepareHash(Ops::getKey(entry->element)) >> hashShift;
-    HashNumber newHash = prepareHash(k) >> hashShift;
+    HashNumber oldHash = prepareHash(Ops::getKey(entry->element)) >> hashShift_;
+    HashNumber newHash = prepareHash(k) >> hashShift_;
     Ops::setKey(entry->element, k);
     if (newHash != oldHash) {
       // Remove this entry from its old hash chain. (If this crashes reading
       // nullptr, it would mean we did not find this entry on the hash chain
       // where we expected it. That probably means the key's hash code changed
       // since it was inserted, breaking the hash code invariant.)
-      Data** ep = &hashTable[oldHash];
+      Data** ep = &hashTable_[oldHash];
       while (*ep != entry) {
         ep = &(*ep)->chain;
       }
@@ -886,7 +913,7 @@ class OrderedHashTable {
       // that hash chains always go in reverse insertion order (descending
       // memory order). No code currently depends on this invariant, so it's
       // fine to kill it if needed.
-      ep = &hashTable[newHash];
+      ep = &hashTable_[newHash];
       while (*ep && *ep > entry) {
         ep = &(*ep)->chain;
       }
@@ -920,14 +947,14 @@ class OrderedHashMap {
     }
 
    public:
-    Entry() : key(), value() {}
-    explicit Entry(const Key& k) : key(k), value() {}
+    Entry() = default;
+    explicit Entry(const Key& k) : key(k) {}
     template <typename V>
     Entry(const Key& k, V&& v) : key(k), value(std::forward<V>(v)) {}
     Entry(Entry&& rhs) : key(std::move(rhs.key)), value(std::move(rhs.value)) {}
 
-    const Key key;
-    Value value;
+    const Key key{};
+    Value value{};
 
     static size_t offsetOfKey() { return offsetof(Entry, key); }
     static size_t offsetOfValue() { return offsetof(Entry, value); }

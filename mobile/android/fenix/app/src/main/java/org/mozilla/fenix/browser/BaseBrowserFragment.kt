@@ -22,6 +22,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.CallSuper
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -84,7 +86,6 @@ import mozilla.components.concept.engine.permission.SitePermissions
 import mozilla.components.concept.engine.prompt.ShareData
 import mozilla.components.concept.storage.LoginEntry
 import mozilla.components.feature.accounts.push.SendTabUseCases
-import mozilla.components.feature.app.links.AppLinksFeature
 import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.contextmenu.ContextMenuFeature
 import mozilla.components.feature.downloads.DownloadsFeature
@@ -128,6 +129,7 @@ import mozilla.components.support.base.feature.ActivityResultHandler
 import mozilla.components.support.base.feature.PermissionsFeature
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
+import mozilla.components.support.ktx.android.view.ImeInsetsSynchronizer
 import mozilla.components.support.ktx.android.view.enterImmersiveMode
 import mozilla.components.support.ktx.android.view.exitImmersiveMode
 import mozilla.components.support.ktx.android.view.hideKeyboard
@@ -199,7 +201,7 @@ import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.getPreferenceKey
 import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.isKeyboardVisible
-import org.mozilla.fenix.ext.isTablet
+import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.isToolbarAtBottom
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.navigateWithBreadcrumb
@@ -273,9 +275,15 @@ abstract class BaseBrowserFragment :
     internal val browserToolbarView: BrowserToolbarView
         get() = _browserToolbarView!!
 
-    private var _bottomToolbarContainerView: BottomToolbarContainerView? = null
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    @Suppress("VariableNaming")
+    internal var _bottomToolbarContainerView: BottomToolbarContainerView? = null
     protected val bottomToolbarContainerView: BottomToolbarContainerView
         get() = _bottomToolbarContainerView!!
+
+    @Suppress("VariableNaming")
+    @VisibleForTesting
+    internal var _menuButtonView: MenuButton? = null
 
     protected val readerViewFeature = ViewBoundFeatureWrapper<ReaderViewFeature>()
     protected val thumbnailsFeature = ViewBoundFeatureWrapper<BrowserThumbnails>()
@@ -288,7 +296,6 @@ abstract class BaseBrowserFragment :
     private val downloadsFeature = ViewBoundFeatureWrapper<DownloadsFeature>()
     private val shareDownloadsFeature = ViewBoundFeatureWrapper<ShareDownloadFeature>()
     private val copyDownloadsFeature = ViewBoundFeatureWrapper<CopyDownloadFeature>()
-    private val appLinksFeature = ViewBoundFeatureWrapper<AppLinksFeature>()
     private val promptsFeature = ViewBoundFeatureWrapper<PromptFeature>()
 
     @VisibleForTesting
@@ -385,11 +392,6 @@ abstract class BaseBrowserFragment :
         _binding = FragmentBrowserBinding.inflate(inflater, container, false)
 
         val activity = activity as HomeActivity
-        // ExternalAppBrowserActivity exclusively handles it's own theming unless in private mode.
-        if (activity !is ExternalAppBrowserActivity || activity.browsingModeManager.mode.isPrivate) {
-            activity.themeManager.applyStatusBarTheme(activity)
-        }
-
         val originalContext = ActivityContextWrapper.getOriginalContext(activity)
         binding.engineView.setActivityContext(originalContext)
 
@@ -458,6 +460,7 @@ abstract class BaseBrowserFragment :
         val tab = getCurrentTab()
         browserInitialized = if (tab != null) {
             initializeUI(view, tab)
+            setupIMEInsetsHandling(view)
             true
         } else {
             false
@@ -584,6 +587,12 @@ abstract class BaseBrowserFragment :
                             showUndoSnackbar(context.tabClosedUndoMessage(isPrivate))
                             TabStripMetrics.closeTab.record()
                         },
+                        onPrivateModeToggleClick = { mode ->
+                            activity.browsingModeManager.mode = mode
+                            findNavController().navigate(
+                                BrowserFragmentDirections.actionGlobalHome(),
+                            )
+                        },
                     )
                 }
             },
@@ -616,14 +625,12 @@ abstract class BaseBrowserFragment :
                 sessionId = customTabSessionId,
                 view = binding.findInPageView,
                 engineView = binding.engineView,
-                toolbars = {
-                    listOf(
-                        _bottomToolbarContainerView?.toolbarContainerView,
-                        browserToolbarView.layout as? ViewGroup?,
-                    )
+                toolbarsHideCallback = {
+                    expandBrowserView()
                 },
                 toolbarsResetCallback = {
                     onUpdateToolbarForConfigurationChange(browserToolbarView)
+                    collapseBrowserView()
                 },
             ),
             owner = this,
@@ -880,29 +887,6 @@ abstract class BaseBrowserFragment :
             activity = requireActivity(),
             crashReporting = context.components.analytics.crashReporter,
             tabId = customTabSessionId,
-        )
-
-        appLinksFeature.set(
-            feature = AppLinksFeature(
-                context,
-                store = store,
-                sessionId = customTabSessionId,
-                fragmentManager = parentFragmentManager,
-                launchInApp = { context.settings().shouldOpenLinksInApp(customTabSessionId != null) },
-                loadUrlUseCase = context.components.useCases.sessionUseCases.loadUrl,
-                shouldPrompt = { context.settings().shouldPromptOpenLinksInApp() },
-                failedToLaunchAction = { fallbackUrl ->
-                    fallbackUrl?.let {
-                        val appLinksUseCases = activity.components.useCases.appLinksUseCases
-                        val getRedirect = appLinksUseCases.appLinkRedirect
-                        val redirect = getRedirect.invoke(fallbackUrl)
-                        redirect.appIntent?.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        appLinksUseCases.openAppLink.invoke(redirect.appIntent)
-                    }
-                },
-            ),
-            owner = this,
-            view = view,
         )
 
         biometricPromptFeature.set(
@@ -1437,7 +1421,7 @@ abstract class BaseBrowserFragment :
     ) {
         val context = requireContext()
 
-        if (isToolbarDynamic(context)) {
+        if (isToolbarDynamic(context) && webAppToolbarShouldBeVisible) {
             getEngineView().setDynamicToolbarMaxHeight(topToolbarHeight + bottomToolbarHeight)
 
             if (context.settings().navigationToolbarEnabled || shouldShowMicrosurveyPrompt(context)) {
@@ -1501,7 +1485,9 @@ abstract class BaseBrowserFragment :
             hideOnScroll = isToolbarDynamic(context),
             content = {
                 FirefoxTheme {
-                    Column {
+                    Column(
+                        modifier = Modifier.background(FirefoxTheme.colors.layer1),
+                    ) {
                         if (!activity.isMicrosurveyPromptDismissed.value) {
                             currentMicrosurvey?.let {
                                 if (isToolbarAtBottom) {
@@ -1542,6 +1528,8 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
+                        } else if (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value) {
+                            Divider()
                         }
 
                         NavigationButtonsCFR(context = context, activity = activity)
@@ -1585,6 +1573,8 @@ abstract class BaseBrowserFragment :
             )
             recordClickEvent = { NavigationBar.browserMenuTapped.record(NoExtras()) }
         }
+        menuButton.setHighlightStatus()
+        _menuButtonView = menuButton
 
         CFRPopupLayout(
             showCFR = showCFR && context.settings().shouldShowNavigationButtonsCFR,
@@ -1600,10 +1590,10 @@ abstract class BaseBrowserFragment :
             ),
             onCFRShown = {
                 NavigationBar.navigationButtonsCfrShown.record(NoExtras())
-            },
-            onDismiss = {
                 context.settings().shouldShowNavigationButtonsCFR = false
                 context.settings().lastCfrShownTimeInMillis = System.currentTimeMillis()
+            },
+            onDismiss = {
                 NavigationBar.navigationButtonsCfrDismissed.record(NoExtras())
             },
             text = {
@@ -1803,7 +1793,7 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
-                        } else {
+                        } else if (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value) {
                             Divider()
                         }
                     }
@@ -1982,6 +1972,9 @@ abstract class BaseBrowserFragment :
         }
         hideToolbar()
 
+        components.services.appLinksInterceptor.updateFragmentManger(
+            fragmentManager = parentFragmentManager,
+        )
         context?.settings()?.shouldOpenLinksInApp(customTabSessionId != null)
             ?.let { openLinksInExternalApp ->
                 components.services.appLinksInterceptor.updateLaunchInApp {
@@ -2001,6 +1994,10 @@ abstract class BaseBrowserFragment :
         if (findNavController().currentDestination?.id != R.id.searchDialogFragment) {
             view?.hideKeyboard()
         }
+
+        requireComponents.services.appLinksInterceptor.updateFragmentManger(
+            fragmentManager = null,
+        )
     }
 
     @CallSuper
@@ -2151,7 +2148,17 @@ abstract class BaseBrowserFragment :
         if (findInPageIntegration.get()?.isFeatureActive == true) return
         val toolbarHeights = view?.let { probeToolbarHeights(it) } ?: return
 
-        getEngineView().setDynamicToolbarMaxHeight(toolbarHeights.first + toolbarHeights.second)
+        context?.also {
+            if (isToolbarDynamic(it)) {
+                if (!requireComponents.core.geckoRuntime.isInteractiveWidgetDefaultResizesVisual) {
+                    getEngineView().setDynamicToolbarMaxHeight(toolbarHeights.first + toolbarHeights.second)
+                }
+            } else {
+                (getSwipeRefreshLayout().layoutParams as? CoordinatorLayout.LayoutParams)?.apply {
+                    bottomMargin = toolbarHeights.second
+                }
+            }
+        }
     }
 
     /**
@@ -2159,9 +2166,8 @@ abstract class BaseBrowserFragment :
      */
     private fun probeToolbarHeights(rootView: View): Pair<Int, Int> {
         val context = rootView.context
-        // Avoid any change for scenarios where the toolbar is not shown / not dynamic
+        // Avoid any change for scenarios where the toolbar is not shown
         if (fullScreenFeature.get()?.isFullScreen == true) return 0 to 0
-        if (!isToolbarDynamic(context)) return 0 to 0
 
         val topToolbarHeight = context.settings().getTopToolbarHeight(
             includeTabStrip = customTabSessionId == null && context.isTabStripEnabled(),
@@ -2355,20 +2361,7 @@ abstract class BaseBrowserFragment :
                 },
             )
             (view as? SwipeGestureLayout)?.isSwipeEnabled = false
-            browserToolbarView.collapse()
-            browserToolbarView.gone()
-            _bottomToolbarContainerView?.toolbarContainerView?.apply {
-                collapse()
-                isVisible = false
-            }
-            val browserEngine = binding.swipeRefresh.layoutParams as CoordinatorLayout.LayoutParams
-            browserEngine.bottomMargin = 0
-            browserEngine.topMargin = 0
-            binding.swipeRefresh.translationY = 0f
-
-            binding.engineView.setDynamicToolbarMaxHeight(0)
-            // Without this, fullscreen has a margin at the top.
-            binding.engineView.setVerticalClipping(0)
+            expandBrowserView()
 
             MediaState.fullscreen.record(NoExtras())
         } else {
@@ -2380,19 +2373,46 @@ abstract class BaseBrowserFragment :
             (activity as? HomeActivity)?.let { homeActivity ->
                 // ExternalAppBrowserActivity exclusively handles it's own theming unless in private mode.
                 if (homeActivity !is ExternalAppBrowserActivity || homeActivity.browsingModeManager.mode.isPrivate) {
-                    homeActivity.themeManager.applyStatusBarTheme(homeActivity)
+                    homeActivity.themeManager.applyStatusBarTheme(homeActivity, homeActivity.isTabStripEnabled())
                 }
             }
-            if (webAppToolbarShouldBeVisible) {
-                browserToolbarView.visible()
-                _bottomToolbarContainerView?.toolbarContainerView?.isVisible = true
-                reinitializeEngineView()
-                browserToolbarView.expand()
-                _bottomToolbarContainerView?.toolbarContainerView?.expand()
-            }
+            collapseBrowserView()
         }
 
         binding.swipeRefresh.isEnabled = shouldPullToRefreshBeEnabled(inFullScreen)
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    internal fun expandBrowserView() {
+        browserToolbarView.apply {
+            collapse()
+            gone()
+        }
+        _bottomToolbarContainerView?.toolbarContainerView?.apply {
+            collapse()
+            isVisible = false
+        }
+        val browserEngine = getSwipeRefreshLayout().layoutParams as CoordinatorLayout.LayoutParams
+        browserEngine.behavior = null
+        browserEngine.bottomMargin = 0
+        browserEngine.topMargin = 0
+        getSwipeRefreshLayout().translationY = 0f
+
+        getEngineView().apply {
+            setDynamicToolbarMaxHeight(0)
+            setVerticalClipping(0)
+        }
+    }
+
+    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
+    internal fun collapseBrowserView() {
+        if (webAppToolbarShouldBeVisible) {
+            browserToolbarView.visible()
+            _bottomToolbarContainerView?.toolbarContainerView?.isVisible = true
+            reinitializeEngineView()
+            browserToolbarView.expand()
+            _bottomToolbarContainerView?.toolbarContainerView?.expand()
+        }
     }
 
     @CallSuper
@@ -2401,7 +2421,7 @@ abstract class BaseBrowserFragment :
 
         // If the navbar feature could be visible, we should update it's state.
         val shouldUpdateNavBarState =
-            requireContext().settings().navigationToolbarEnabled && !isTablet() && webAppToolbarShouldBeVisible
+            requireContext().settings().navigationToolbarEnabled && !isLargeWindow() && webAppToolbarShouldBeVisible
         if (shouldUpdateNavBarState) {
             updateNavBarForConfigurationChange(
                 context = requireContext(),
@@ -2423,6 +2443,8 @@ abstract class BaseBrowserFragment :
                 reinitializeMicrosurveyPrompt = ::initializeMicrosurveyPrompt,
             )
         }
+
+        view?.let { setupIMEInsetsHandling(it) }
     }
 
     private fun reinitializeNavBar() {
@@ -2513,7 +2535,7 @@ abstract class BaseBrowserFragment :
 
         val onboardingLinksList: List<String> = listOf(
             SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.PRIVATE_NOTICE),
-            SupportUtils.getFirefoxAccountSumoUrl(),
+            SupportUtils.FXACCOUNT_SUMO_URL,
         )
     }
 
@@ -2526,7 +2548,9 @@ abstract class BaseBrowserFragment :
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
 
-        if (findInPageIntegration.get()?.isFeatureActive != true) {
+        if (findInPageIntegration.get()?.isFeatureActive != true &&
+            fullScreenFeature.get()?.isFullScreen != true
+        ) {
             _browserToolbarView?.let {
                 onUpdateToolbarForConfigurationChange(it)
             }
@@ -2543,6 +2567,7 @@ abstract class BaseBrowserFragment :
                 toolbarView.view.invalidateActions()
                 toolbarView.toolbarIntegration.invalidateMenu()
             }
+            _menuButtonView?.setHighlightStatus()
         }
     }
 
@@ -2620,6 +2645,63 @@ abstract class BaseBrowserFragment :
             Logins.openLogins.record(NoExtras())
             val directions = BrowserFragmentDirections.actionLoginsListFragment()
             navController.navigate(directions)
+        }
+    }
+
+    private fun setupIMEInsetsHandling(view: View) {
+        when (context?.settings()?.toolbarPosition) {
+            ToolbarPosition.BOTTOM -> {
+                val toolbar = listOf(
+                    _bottomToolbarContainerView?.toolbarContainerView,
+                    _browserToolbarView?.layout,
+                ).firstOrNull { it != null } ?: return
+
+                ImeInsetsSynchronizer.setup(
+                    targetView = toolbar,
+                    onIMEAnimationStarted = { isKeyboardShowingUp, keyboardHeight ->
+                        // If the keyboard is hiding have the engine view immediately expand to the entire height of the
+                        // screen and ensure the toolbar is shown above keyboard before both would be animated down.
+                        if (!isKeyboardShowingUp) {
+                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+                            (toolbar.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
+                            view.requestLayout()
+                        }
+                    },
+                    onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
+                        // If the keyboard is showing up keep the engine view covering the entire height
+                        // of the screen until the animation is finished to avoid reflowing the web content
+                        // together with the keyboard animation in a short burst of updates.
+                        if (isKeyboardShowingUp || keyboardHeight == 0) {
+                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
+                            (toolbar.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+                            view.requestLayout()
+                        }
+                    },
+                )
+            }
+
+            ToolbarPosition.TOP -> {
+                ImeInsetsSynchronizer.setup(
+                    targetView = view,
+                    synchronizeViewWithIME = false,
+                    onIMEAnimationStarted = { isKeyboardShowingUp, _ ->
+                        if (!isKeyboardShowingUp) {
+                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+                            view.requestLayout()
+                        }
+                    },
+                    onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
+                        if (isKeyboardShowingUp || keyboardHeight == 0) {
+                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
+                            view.requestLayout()
+                        }
+                    },
+                )
+            }
+
+            else -> {
+                // no-op
+            }
         }
     }
 }

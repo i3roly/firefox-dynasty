@@ -489,20 +489,13 @@ bool CanvasTranslator::TryDrawTargetWebglFallback(
     int64_t aTextureId, gfx::DrawTargetWebgl* aWebgl) {
   NotifyRequiresRefresh(aTextureId);
 
-  // An existing data snapshot is required for fallback, as we have to avoid
-  // trying to touch the WebGL context, which is assumed to be invalid and not
-  // suitable for readback.
-  if (!aWebgl->HasDataSnapshot()) {
-    return false;
-  }
-
   const auto& info = mTextureInfo[aTextureId];
   if (RefPtr<gfx::DrawTarget> dt = CreateFallbackDrawTarget(
           info.mRefPtr, aTextureId, info.mRemoteTextureOwnerId,
           aWebgl->GetSize(), aWebgl->GetFormat())) {
-    aWebgl->CopyToFallback(dt);
+    bool success = aWebgl->CopyToFallback(dt);
     AddDrawTarget(info.mRefPtr, dt);
-    return true;
+    return success;
   }
   return false;
 }
@@ -526,7 +519,7 @@ void CanvasTranslator::ForceDrawTargetWebglFallback() {
     }
   }
   if (!lost.empty()) {
-    mRemoteTextureOwner->NotifyContextLost(&lost);
+    NotifyDeviceReset(lost);
   }
 }
 
@@ -756,6 +749,9 @@ void CanvasTranslator::HandleCanvasTranslatorEvents() {
       case CanvasTranslatorEvent::Tag::ClearCachedResources:
         ClearCachedResources();
         break;
+      case CanvasTranslatorEvent::Tag::DropFreeBuffersWhenDormant:
+        DropFreeBuffersWhenDormant();
+        break;
     }
 
     event.reset(nullptr);
@@ -859,6 +855,8 @@ void CanvasTranslator::DeviceChangeAcknowledged() {
   }
 }
 
+void CanvasTranslator::DeviceResetAcknowledged() { DeviceChangeAcknowledged(); }
+
 bool CanvasTranslator::CreateReferenceTexture() {
   if (mReferenceTextureData) {
     mReferenceTextureData->Unlock();
@@ -957,6 +955,23 @@ void CanvasTranslator::NotifyDeviceChanged() {
                         &CanvasTranslator::SendNotifyDeviceChanged));
 }
 
+void CanvasTranslator::NotifyDeviceReset(const RemoteTextureOwnerIdSet& aIds) {
+  if (aIds.empty()) {
+    return;
+  }
+  if (mRemoteTextureOwner) {
+    mRemoteTextureOwner->NotifyContextLost(&aIds);
+  }
+  nsTArray<RemoteTextureOwnerId> idArray(aIds.size());
+  for (const auto& id : aIds) {
+    idArray.AppendElement(id);
+  }
+  gfx::CanvasRenderThread::Dispatch(
+      NewRunnableMethod<nsTArray<RemoteTextureOwnerId>&&>(
+          "CanvasTranslator::SendNotifyDeviceReset", this,
+          &CanvasTranslator::SendNotifyDeviceReset, std::move(idArray)));
+}
+
 gfx::DrawTargetWebgl* CanvasTranslator::GetDrawTargetWebgl(
     int64_t aTextureId, bool aCheckForFallback) const {
   auto result = mTextureInfo.find(aTextureId);
@@ -1029,23 +1044,30 @@ void CanvasTranslator::PrepareShmem(int64_t aTextureId) {
   }
 }
 
-void CanvasTranslator::ClearCachedResources() {
-  mUsedDataSurfaceForSurfaceDescriptor = nullptr;
-  mUsedWrapperForSurfaceDescriptor = nullptr;
-  mUsedSurfaceDescriptorForSurfaceDescriptor = Nothing();
-
+void CanvasTranslator::CacheDataSnapshots() {
   if (mSharedContext) {
     // If there are any DrawTargetWebgls, then try to cache their framebuffers
     // in software surfaces, just in case the GL context is lost. So long as
     // there is a software copy of the framebuffer, it can be copied into a
     // fallback TextureData later even if the GL context goes away.
-    mSharedContext->OnMemoryPressure();
     for (auto const& entry : mTextureInfo) {
       if (gfx::DrawTargetWebgl* webgl = entry.second.GetDrawTargetWebgl()) {
         webgl->EnsureDataSnapshot();
       }
     }
   }
+}
+
+void CanvasTranslator::ClearCachedResources() {
+  mUsedDataSurfaceForSurfaceDescriptor = nullptr;
+  mUsedWrapperForSurfaceDescriptor = nullptr;
+  mUsedSurfaceDescriptorForSurfaceDescriptor = Nothing();
+
+  if (mSharedContext) {
+    mSharedContext->OnMemoryPressure();
+  }
+
+  CacheDataSnapshots();
 }
 
 ipc::IPCResult CanvasTranslator::RecvClearCachedResources() {
@@ -1063,6 +1085,27 @@ ipc::IPCResult CanvasTranslator::RecvClearCachedResources() {
     DispatchToTaskQueue(
         NewRunnableMethod("CanvasTranslator::ClearCachedResources", this,
                           &CanvasTranslator::ClearCachedResources));
+  }
+  return IPC_OK();
+}
+
+void CanvasTranslator::DropFreeBuffersWhenDormant() { CacheDataSnapshots(); }
+
+ipc::IPCResult CanvasTranslator::RecvDropFreeBuffersWhenDormant() {
+  if (mDeactivated) {
+    // The other side might have sent a message before we deactivated.
+    return IPC_OK();
+  }
+
+  if (UsePendingCanvasTranslatorEvents()) {
+    MutexAutoLock lock(mCanvasTranslatorEventsLock);
+    mPendingCanvasTranslatorEvents.emplace_back(
+        CanvasTranslatorEvent::DropFreeBuffersWhenDormant());
+    PostCanvasTranslatorEvents(lock);
+  } else {
+    DispatchToTaskQueue(
+        NewRunnableMethod("CanvasTranslator::DropFreeBuffersWhenDormant", this,
+                          &CanvasTranslator::DropFreeBuffersWhenDormant));
   }
   return IPC_OK();
 }
@@ -1261,7 +1304,7 @@ bool CanvasTranslator::PresentTexture(int64_t aTextureId, RemoteTextureId aId) {
       webgl->EnsureDataSnapshot();
       if (!TryDrawTargetWebglFallback(aTextureId, webgl)) {
         RemoteTextureOwnerIdSet lost = {info.mRemoteTextureOwnerId};
-        mRemoteTextureOwner->NotifyContextLost(&lost);
+        NotifyDeviceReset(lost);
       }
     }
   }

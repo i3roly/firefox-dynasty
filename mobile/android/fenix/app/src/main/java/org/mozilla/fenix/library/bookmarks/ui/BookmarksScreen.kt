@@ -326,22 +326,39 @@ private fun BookmarksListTopBar(
 ) {
     val selectedItems by store.observeAsState(store.state.selectedItems) { it.selectedItems }
     val recursiveCount by store.observeAsState(store.state.recursiveSelectedCount) { it.recursiveSelectedCount }
+    val isCurrentFolderMobileRoot by store.observeAsState(store.state.currentFolder.isMobileRoot) {
+        store.state.currentFolder.isMobileRoot
+    }
     val isCurrentFolderDesktopRoot by store.observeAsState(store.state.currentFolder.isDesktopRoot) {
         store.state.currentFolder.isDesktopRoot
     }
     val folderTitle by store.observeAsState(store.state.currentFolder.title) { store.state.currentFolder.title }
     var showMenu by remember { mutableStateOf(false) }
+
+    val backgroundColor = if (selectedItems.isEmpty()) {
+        FirefoxTheme.colors.layer1
+    } else {
+        FirefoxTheme.colors.layerAccent
+    }
+
+    val textColor = if (selectedItems.isEmpty()) {
+        FirefoxTheme.colors.textPrimary
+    } else {
+        FirefoxTheme.colors.textOnColorPrimary
+    }
+
+    val iconColor = if (selectedItems.isEmpty()) {
+        FirefoxTheme.colors.textPrimary
+    } else {
+        FirefoxTheme.colors.iconOnColor
+    }
+
     Box {
-        BookmarkListOverflowMenu(
-            showMenu = showMenu,
-            onDismissRequest = { showMenu = false },
-            store = store,
-        )
         TopAppBar(
-            backgroundColor = FirefoxTheme.colors.layer1,
+            backgroundColor = backgroundColor,
             title = {
                 Text(
-                    color = FirefoxTheme.colors.textPrimary,
+                    color = textColor,
                     style = FirefoxTheme.typography.headline6,
                     text = if (selectedItems.isNotEmpty()) {
                         val total = selectedItems.size + (recursiveCount ?: 0)
@@ -356,7 +373,7 @@ private fun BookmarksListTopBar(
                     Icon(
                         painter = painterResource(R.drawable.mozac_ic_back_24),
                         contentDescription = stringResource(R.string.bookmark_navigate_back_button_content_description),
-                        tint = FirefoxTheme.colors.iconPrimary,
+                        tint = iconColor,
                     )
                 }
             },
@@ -370,7 +387,19 @@ private fun BookmarksListTopBar(
                                 Icon(
                                     painter = painterResource(R.drawable.mozac_ic_folder_add_24),
                                     contentDescription = stringResource(
-                                        R.string.bookmark_add_folder,
+                                        R.string.bookmark_select_folder_new_folder_button_title,
+                                    ),
+                                    tint = iconColor,
+                                )
+                            }
+                        }
+
+                        if (!isCurrentFolderMobileRoot) {
+                            IconButton(onClick = { store.dispatch(CloseClicked) }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.mozac_ic_cross_24),
+                                    contentDescription = stringResource(
+                                        R.string.content_description_close_button,
                                     ),
                                     tint = FirefoxTheme.colors.iconPrimary,
                                 )
@@ -382,7 +411,7 @@ private fun BookmarksListTopBar(
                             Icon(
                                 painter = painterResource(R.drawable.mozac_ic_move_24),
                                 contentDescription = stringResource(R.string.bookmark_menu_move_button),
-                                tint = FirefoxTheme.colors.iconPrimary,
+                                tint = iconColor,
                             )
                         }
 
@@ -392,7 +421,7 @@ private fun BookmarksListTopBar(
                             Icon(
                                 painter = painterResource(R.drawable.mozac_ic_delete_24),
                                 contentDescription = stringResource(R.string.bookmark_menu_delete_button),
-                                tint = FirefoxTheme.colors.iconPrimary,
+                                tint = iconColor,
                             )
                         }
                     }
@@ -402,7 +431,7 @@ private fun BookmarksListTopBar(
                                 Icon(
                                     painter = painterResource(R.drawable.mozac_ic_edit_24),
                                     contentDescription = stringResource(R.string.bookmark_menu_edit_button),
-                                    tint = FirefoxTheme.colors.iconPrimary,
+                                    tint = iconColor,
                                 )
                             }
                         }
@@ -410,17 +439,24 @@ private fun BookmarksListTopBar(
                             Icon(
                                 painter = painterResource(R.drawable.mozac_ic_move_24),
                                 contentDescription = stringResource(R.string.bookmark_menu_move_button),
-                                tint = FirefoxTheme.colors.iconPrimary,
+                                tint = iconColor,
                             )
                         }
+                        Box {
+                            IconButton(onClick = { showMenu = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.mozac_ic_ellipsis_vertical_24),
+                                    contentDescription = stringResource(
+                                        R.string.content_description_menu,
+                                    ),
+                                    tint = iconColor,
+                                )
+                            }
 
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(
-                                painter = painterResource(R.drawable.mozac_ic_ellipsis_vertical_24),
-                                contentDescription = stringResource(
-                                    R.string.content_description_menu,
-                                ),
-                                tint = FirefoxTheme.colors.iconPrimary,
+                            BookmarkListOverflowMenu(
+                                showMenu = showMenu,
+                                onDismissRequest = { showMenu = false },
+                                store = store,
                             )
                         }
                     }
@@ -484,11 +520,10 @@ private fun AlertDialogDeletionWarning(
     onCancelTapped: () -> Unit,
     onDeleteTapped: () -> Unit,
 ) {
-    val appName = stringResource(R.string.app_name)
     AlertDialog(
         title = {
             Text(
-                text = stringResource(R.string.bookmark_delete_multiple_folders_confirmation_dialog, appName),
+                text = stringResource(R.string.bookmark_delete_folders_confirmation_dialog),
                 color = FirefoxTheme.colors.textPrimary,
             )
         },
@@ -498,8 +533,8 @@ private fun AlertDialogDeletionWarning(
                 onClick = onDeleteTapped,
             ) {
                 Text(
-                    text = stringResource(R.string.bookmark_menu_delete_button),
-                    color = FirefoxTheme.colors.actionPrimary,
+                    text = stringResource(R.string.bookmark_menu_delete_button).uppercase(),
+                    color = FirefoxTheme.colors.textAccent,
                 )
             }
         },
@@ -508,8 +543,8 @@ private fun AlertDialogDeletionWarning(
                 onClick = onCancelTapped,
             ) {
                 Text(
-                    text = stringResource(R.string.bookmark_delete_negative),
-                    color = FirefoxTheme.colors.actionPrimary,
+                    text = stringResource(R.string.bookmark_delete_negative).uppercase(),
+                    color = FirefoxTheme.colors.textAccent,
                 )
             }
         },
@@ -547,6 +582,10 @@ private fun SelectFolderScreen(
                 .padding(vertical = 16.dp),
         ) {
             items(state?.folders ?: listOf()) { folder ->
+                if (store.state.isGuidBeingMoved(folder.guid)) {
+                    return@items
+                }
+
                 if (folder.isDesktopRoot) {
                     Row(modifier = Modifier.padding(start = (40 * folder.indentation).dp)) {
                         // We need to account for not having an icon
@@ -570,7 +609,7 @@ private fun SelectFolderScreen(
             if (showNewFolderButton) {
                 item {
                     IconListItem(
-                        label = stringResource(R.string.bookmark_add_folder),
+                        label = stringResource(R.string.bookmark_select_folder_new_folder_button_title),
                         labelTextColor = FirefoxTheme.colors.textAccent,
                         beforeIconPainter = painterResource(R.drawable.mozac_ic_folder_add_24),
                         beforeIconTint = FirefoxTheme.colors.textAccent,
@@ -681,6 +720,7 @@ private fun EmptyList(
                 text = stringResource(state.descriptionId()),
                 style = FirefoxTheme.typography.body2,
                 color = FirefoxTheme.colors.textPrimary,
+                textAlign = TextAlign.Center,
             )
             if (state is EmptyListState.NotAuthenticated) {
                 TextButton(
@@ -892,7 +932,7 @@ private fun EditFolderTopBar(
             IconButton(onClick = onDeleteClick) {
                 Icon(
                     painter = painterResource(R.drawable.mozac_ic_delete_24),
-                    contentDescription = stringResource(R.string.bookmark_add_new_folder_button_content_description),
+                    contentDescription = stringResource(R.string.bookmark_delete_folder_content_description),
                     tint = FirefoxTheme.colors.iconPrimary,
                 )
             }
@@ -1128,7 +1168,7 @@ private fun EditBookmarkTopBar(
             IconButton(onClick = onDeleteClicked) {
                 Icon(
                     painter = painterResource(R.drawable.mozac_ic_delete_24),
-                    contentDescription = stringResource(R.string.bookmark_add_new_folder_button_content_description),
+                    contentDescription = stringResource(R.string.bookmark_delete_bookmark_content_description),
                     tint = FirefoxTheme.colors.iconPrimary,
                 )
             }

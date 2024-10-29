@@ -559,6 +559,11 @@ nsresult nsMathMLmmultiscriptsFrame::PlaceMultiScript(
   aDesiredSize.Width() = boundingMetrics.width;
   aDesiredSize.mBoundingMetrics = boundingMetrics;
 
+  // Apply width/height to math content box.
+  auto sizes = aFrame->GetWidthAndHeightForPlaceAdjustment(aFlags);
+  aFrame->ApplyAdjustmentForWidthAndHeight(aFlags, sizes, aDesiredSize,
+                                           boundingMetrics);
+
   // Add padding+border.
   auto borderPadding = aFrame->GetBorderPaddingForPlace(aFlags);
   InflateReflowAndBoundingMetrics(borderPadding, aDesiredSize, boundingMetrics);
@@ -595,19 +600,31 @@ nsresult nsMathMLmmultiscriptsFrame::PlaceMultiScript(
         childFrame = baseFrame;
         dy = aDesiredSize.BlockStartAscent() - baseSize.BlockStartAscent();
         baseMargin = GetMarginForPlace(aFlags, baseFrame);
-        dx += isRTL ? baseMargin.right : baseMargin.left;
-        FinishReflowChild(
-            baseFrame, aPresContext, baseSize, nullptr,
-            aFrame->MirrorIfRTL(aDesiredSize.Width(), baseSize.Width(), dx), dy,
-            ReflowChildFlags::Default);
-        dx += bmBase.width;
-        dx += isRTL ? baseMargin.left : baseMargin.right;
-      } else if (prescriptsFrame == childFrame) {
-        // Clear reflow flags of prescripts frame.
-        // FIXME (bug 1909417): We should call FinishReflowChild at the same
-        // position as baseFrame.
-        prescriptsFrame->DidReflow(aPresContext, nullptr);
-      } else {
+        nscoord dx_base = dx + (isRTL ? baseMargin.right : baseMargin.left);
+        FinishReflowChild(baseFrame, aPresContext, baseSize, nullptr,
+                          aFrame->MirrorIfRTL(aDesiredSize.Width(),
+                                              baseSize.Width(), dx_base),
+                          dy, ReflowChildFlags::Default);
+        if (prescriptsFrame) {
+          // place the <mprescripts/>
+          ReflowOutput prescriptsSize(wm);
+          nsBoundingMetrics unusedBm;
+          GetReflowAndBoundingMetricsFor(prescriptsFrame, prescriptsSize,
+                                         unusedBm);
+          nsMargin prescriptsMargin =
+              GetMarginForPlace(aFlags, prescriptsFrame);
+          nscoord dx_prescripts =
+              dx + (isRTL ? prescriptsMargin.right : prescriptsMargin.left);
+          dy = aDesiredSize.BlockStartAscent() -
+               prescriptsSize.BlockStartAscent();
+          FinishReflowChild(
+              prescriptsFrame, aPresContext, prescriptsSize, nullptr,
+              aFrame->MirrorIfRTL(aDesiredSize.Width(), prescriptsSize.Width(),
+                                  dx_prescripts),
+              dy, ReflowChildFlags::Default);
+        }
+        dx += bmBase.width + baseMargin.LeftRight();
+      } else if (childFrame != prescriptsFrame) {
         // process each sup/sub pair
         if (0 == count) {
           subScriptFrame = childFrame;

@@ -1472,8 +1472,7 @@ void EventStateManager::LightDismissOpenPopovers(WidgetEvent* aEvent,
   MOZ_ASSERT(aEvent->mMessage == ePointerDown || aEvent->mMessage == ePointerUp,
              "Light dismiss must be called for pointer up/down only");
 
-  if (!StaticPrefs::dom_element_popover_enabled() || !aEvent->IsTrusted() ||
-      !aTargetContent) {
+  if (!aEvent->IsTrusted() || !aTargetContent) {
     return;
   }
 
@@ -3639,9 +3638,6 @@ void EventStateManager::DecideGestureEvent(WidgetGestureNotifyEvent* aEvent,
 
     // Special check for trees
     if (nsTreeBodyFrame* treeFrame = do_QueryFrame(current)) {
-      if (treeFrame->GetHorizontalOverflow()) {
-        panDirection = WidgetGestureNotifyEvent::ePanHorizontal;
-      }
       if (treeFrame->GetVerticalOverflow()) {
         panDirection = WidgetGestureNotifyEvent::ePanVertical;
       }

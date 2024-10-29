@@ -239,14 +239,7 @@ nsChildView::nsChildView()
       mIsDispatchPaint(false) {}
 
 nsChildView::~nsChildView() {
-  // Notify the children that we're gone.  childView->ResetParent() can change
-  // our list of children while it's being iterated, so the way we iterate the
-  // list must allow for this.
-  for (nsIWidget* kid = mLastChild; kid;) {
-    nsChildView* childView = static_cast<nsChildView*>(kid);
-    kid = kid->GetPrevSibling();
-    childView->ResetParent();
-  }
+  RemoveAllChildren();
 
   NS_WARNING_ASSERTION(
       mOnDestroyCalled,
@@ -271,7 +264,7 @@ nsChildView::~nsChildView() {
 }
 
 
-nsresult nsChildView::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
+nsresult nsChildView::Create(nsIWidget* aParent, 
                              const LayoutDeviceIntRect& aRect,
                              widget::InitData* aInitData) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
@@ -288,20 +281,8 @@ nsresult nsChildView::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
 
   BaseCreate(aParent, aInitData);
 
-  mParentView = nil;
-  if (aParent) {
-    // This is the popup window case. aParent is the nsCocoaWindow for the
-    // popup window, and mParentView will be its content view.
-    mParentView = (NSView*)aParent->GetNativeData(NS_NATIVE_WIDGET);
-    mParentWidget = aParent;
-  } else {
-    // This is the top-level window case.
-    // aNativeParent will be the contentView of our window, since that's what
-    // nsCocoaWindow returns when asked for an NS_NATIVE_VIEW.
-    // We do not have a direct "parent widget" association with the top level
-    // window's nsCocoaWindow object.
-    mParentView = reinterpret_cast<NSView*>(aNativeParent);
-  }
+  mParentView =
+      mParent ? (NSView*)mParent->GetNativeData(NS_NATIVE_WIDGET) : nullptr;
 
   // create our parallel NSView and hook it up to our parent. Recall
   // that NS_NATIVE_WIDGET is the NSView.
@@ -553,61 +534,25 @@ void nsChildView::Show(bool aState) {
 }
 
 // Change the parent of this widget
-void nsChildView::SetParent(nsIWidget* aNewParent) {
+void nsChildView::DidChangeParent(nsIWidget* aNewParent) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
   if (mOnDestroyCalled) return;
 
   nsCOMPtr<nsIWidget> kungFuDeathGrip(this);
 
-  if (mParentWidget) {
-    mParentWidget->RemoveChild(this);
-  }
-
-  if (aNewParent) {
-    ReparentNativeWidget(aNewParent);
-  } else {
-    [mView removeFromSuperview];
-    mParentView = nil;
-  }
-
-  mParentWidget = aNewParent;
-
-  if (mParentWidget) {
-    mParentWidget->AddChild(this);
-  }
-
-  NS_OBJC_END_TRY_IGNORE_BLOCK;
-}
-
-void nsChildView::ReparentNativeWidget(nsIWidget* aNewParent) {
-  NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
-
-  MOZ_ASSERT(aNewParent, "null widget");
-
-  if (mOnDestroyCalled) return;
-
-  NSView<mozView>* newParentView =
-      (NSView<mozView>*)aNewParent->GetNativeData(NS_NATIVE_WIDGET);
-  NS_ENSURE_TRUE_VOID(newParentView);
-
   // we hold a ref to mView, so this is safe
   [mView removeFromSuperview];
-  mParentView = newParentView;
-  [mParentView addSubview:mView];
+  mParentView = mParent
+                    ? (NSView<mozView>*)mParent->GetNativeData(NS_NATIVE_WIDGET)
+                    : nullptr;
+  if (mParentView) {
+    [mParentView addSubview:mView];
+
+  }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
-
-void nsChildView::ResetParent() {
-  if (!mOnDestroyCalled) {
-    if (mParentWidget) mParentWidget->RemoveChild(this);
-    if (mView) [mView removeFromSuperview];
-  }
-  mParentWidget = nullptr;
-}
-
-nsIWidget* nsChildView::GetParent() { return mParentWidget; }
 
 float nsChildView::GetDPI() {
   float dpi = 96.0;
@@ -4831,7 +4776,7 @@ static CFTypeRefPtr<CFURLRef> GetPasteLocation(NSPasteboard* aPasteboard) {
                              stringFromPboardType:
                                  (NSString*)kPasteboardTypeFileURLPromise]]) {
         nsCOMPtr<nsIFile> targFile;
-        NS_NewLocalFile(u""_ns, true, getter_AddRefs(targFile));
+        NS_NewLocalFile(u""_ns, getter_AddRefs(targFile));
         nsCOMPtr<nsILocalFileMac> macLocalFile = do_QueryInterface(targFile);
         if (!macLocalFile) {
           NS_ERROR("No Mac local file");

@@ -41,6 +41,7 @@
 #include "jit/JSJitFrameIter.h"         // for InlineFrameIterator
 #include "jit/RematerializedFrame.h"    // for RematerializedFrame
 #include "js/CallArgs.h"                // for CallArgs
+#include "js/EnvironmentChain.h"        // JS::EnvironmentChain
 #include "js/friend/ErrorMessages.h"    // for GetErrorMessage, JSMSG_*
 #include "js/GCVector.h"                // for JS::StackGCVector
 #include "js/Object.h"                  // for SetReservedSlot
@@ -212,6 +213,10 @@ bool DebuggerFrame::resume(const FrameIter& iter) {
   }
   setFrameIterData(data);
   return true;
+}
+
+void DebuggerFrame::suspendWasmFrame(JS::GCContext* gcx) {
+  freeFrameIterData(gcx);
 }
 
 bool DebuggerFrame::hasAnyHooks() const {
@@ -950,7 +955,7 @@ static WithEnvironmentObject* CreateBindingsEnv(
     }
   }
 
-  RootedObjectVector envChain(cx);
+  JS::EnvironmentChain envChain(cx, JS::SupportUnscopables::No);
   if (!envChain.append(bindingsObj)) {
     return nullptr;
   }
@@ -1224,9 +1229,16 @@ Result<Completion> DebuggerFrame::eval(JSContext* cx,
 }
 
 bool DebuggerFrame::isOnStack() const {
-  // Note: this is equivalent to checking frameIterData() != nullptr, but works
-  // also when called from the trace hook during a moving GC.
+  // Note: this is equivalent to checking frameIterData() != nullptr.
   return !getFixedSlot(FRAME_ITER_SLOT).isUndefined();
+}
+
+bool DebuggerFrame::isOnStackOrSuspendedWasmStack() const {
+  // Note: this is equivalent to checking `frameIterData() != nullptr &&
+  // !hasGeneratorInfo()`, but works also when called from the trace hook
+  // during a moving GC.
+  return !getFixedSlot(FRAME_ITER_SLOT).isUndefined() ||
+         getFixedSlot(GENERATOR_INFO_SLOT).isUndefined();
 }
 
 OnStepHandler* DebuggerFrame::onStepHandler() const {

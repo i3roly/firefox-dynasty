@@ -221,42 +221,58 @@ function isMultiThreadSupported() {
 }
 
 /**
+ * Copied over from ONNX see https://github.com/microsoft/onnxruntime
+ *
+ * This is the code used by the lib to detect GPU support.
+ *
+ */
+async function checkGPUSupport() {
+  if (!navigator?.gpu) return false;
+
+  const adapter = await navigator.gpu.requestAdapter({
+    powerPreference: "high-performance",
+    forceFallbackAdapter: false,
+  });
+
+  return !!adapter;
+}
+
+/**
  * Represents a pipeline for processing machine learning tasks.
  */
 export class Pipeline {
-  #modelCache = null;
+  #mlEngineWorker = null;
   #model = null;
   #tokenizer = null;
   #processor = null;
   #pipelineFunction = null;
   #genericPipelineFunction = null;
-  #initTime = 0;
   #isReady = false;
   #config = null;
+  #metrics = null;
 
   /**
    * Creates an instance of a Pipeline.
    *
-   * @param {object} modelCache - Implements the Cache interface and used to get models
+   * @param {object} mlEngineWorker - Implements the Cache interface and used to get models
    * @param {object} config - The configuration options
    */
-  constructor(modelCache, config) {
-    let start = Date.now();
-    this.#modelCache = modelCache;
-
+  constructor(mlEngineWorker, config) {
+    this.#mlEngineWorker = mlEngineWorker;
+    this.#metrics = [];
     // Setting up the Transformers.js environment
     // See https://huggingface.co/docs/transformers.js/api/env
 
     // Caching strategy.
     // Here we make sure that everytime transformers.js requires a file, it uses
-    // modelCache, which transfers the request to the main thread and uses the
+    // mlEngineWorker, which transfers the request to the main thread and uses the
     // ModelHub that caches files into IndexDB.
     transformers.env.useBrowserCache = false;
     transformers.env.allowLocalModels = false;
     transformers.env.remoteHost = config.modelHubRootUrl;
     transformers.env.remotePathTemplate = config.modelHubUrlTemplate;
     transformers.env.useCustomCache = true;
-    transformers.env.customCache = this.#modelCache;
+    transformers.env.customCache = this.#mlEngineWorker;
     // using `NO_LOCAL` so when the custom cache is used, we don't try to fetch it (see MLEngineWorker.match)
     transformers.env.localModelPath = "NO_LOCAL";
 
@@ -334,15 +350,32 @@ export class Pipeline {
       }
     } else {
       lazy.console.debug("Using generic pipeline function");
-      this.#genericPipelineFunction = transformers.pipeline(
-        config.taskName,
-        config.modelId,
-        { revision: config.modelRevision, device, dtype }
-      );
+      if (config.modelId != "test-echo") {
+        this.#genericPipelineFunction = transformers.pipeline(
+          config.taskName,
+          config.modelId,
+          { revision: config.modelRevision, device, dtype }
+        );
+      } else {
+        this.#genericPipelineFunction = async () => {};
+      }
     }
-    this.#initTime = Date.now() - start;
     this.#config = config;
-    lazy.console.debug("Pipeline initialized, took ", this.#initTime);
+    lazy.console.debug("Pipeline initialized");
+  }
+
+  async #metricsSnapShot({ name, snapshot, collectMemory = true }) {
+    if (!snapshot) {
+      if (collectMemory) {
+        snapshot = await this.#mlEngineWorker.getInferenceProcessInfo();
+      } else {
+        snapshot = {};
+      }
+    }
+    if (!("when" in snapshot)) {
+      snapshot.when = Date.now();
+    }
+    this.#metrics.push({ name, ...snapshot });
   }
 
   /**
@@ -350,12 +383,17 @@ export class Pipeline {
    *
    * @static
    * @async
-   * @param {object} modelCache - Implements the Cache interface and used to get models
+   * @param {object} mlEngineWorker - Implements the Cache interface and used to get models
    * @param {ArrayBuffer} runtime - The runtime wasm file.
    * @param {PipelineOptions} options - The options for initialization.
    * @returns {Promise<Pipeline>} The initialized pipeline instance.
    */
-  static async initialize(modelCache, runtime, options) {
+  static async initialize(mlEngineWorker, runtime, options) {
+    let snapShot = {
+      when: Date.now(),
+      ...(await mlEngineWorker.getInferenceProcessInfo()),
+    };
+
     if (options.logLevel) {
       _logLevel = options.logLevel;
     }
@@ -397,8 +435,14 @@ export class Pipeline {
     if (lazy.console.logLevel != config.logLevel) {
       lazy.console.logLevel = config.logLevel;
     }
-    const pipeline = new Pipeline(modelCache, config);
+    const pipeline = new Pipeline(mlEngineWorker, config);
     await pipeline.ensurePipelineIsReady();
+    await pipeline.#metricsSnapShot({
+      name: "initializationStart",
+      snapshot: snapShot,
+    });
+    await pipeline.#metricsSnapShot({ name: "initializationEnd" });
+
     return pipeline;
   }
 
@@ -407,17 +451,25 @@ export class Pipeline {
    */
   async ensurePipelineIsReady() {
     if (!this.#isReady) {
-      let start = Date.now();
-
+      if (this.#config.device === "gpu") {
+        if (!(await checkGPUSupport())) {
+          lazy.console.warn(
+            "GPU not supported. ONNX will fallback to CPU instead."
+          );
+        }
+      }
       // deactive console.warn, see https://bugzilla.mozilla.org/show_bug.cgi?id=1891003
       const originalWarn = console.warn;
+      await this.#metricsSnapShot({ name: "ensurePipelineIsReadyStart" });
+
       console.warn = () => {};
       try {
-        if (this.#genericPipelineFunction) {
+        if (
+          this.#genericPipelineFunction &&
+          this.#config.modelId != "test-echo"
+        ) {
           lazy.console.debug("Initializing pipeline");
-          if (this.#config.modelId != "test-echo") {
-            this.#genericPipelineFunction = await this.#genericPipelineFunction;
-          }
+          this.#genericPipelineFunction = await this.#genericPipelineFunction;
         } else {
           lazy.console.debug("Initializing model, tokenizer and processor");
 
@@ -434,12 +486,8 @@ export class Pipeline {
       } finally {
         console.warn = originalWarn;
       }
-
-      this.#initTime += Date.now() - start;
-      lazy.console.debug(
-        "Pipeline is fully initialized, took ",
-        this.#initTime
-      );
+      await this.#metricsSnapShot({ name: "ensurePipelineIsReadyEnd" });
+      lazy.console.debug("Pipeline is fully initialized");
     }
   }
 
@@ -458,6 +506,7 @@ export class Pipeline {
     lazy.console.debug("Running task: ", this.#config.taskName);
 
     let result;
+    await this.#metricsSnapShot({ name: "runStart" });
 
     if (this.#genericPipelineFunction) {
       if (this.#config.modelId === "test-echo") {
@@ -465,10 +514,8 @@ export class Pipeline {
           output: request.args,
           config: this.#config,
           multiThreadSupported: isMultiThreadSupported(),
-          metrics: {},
         };
       } else {
-        let start = Date.now();
         result = await this.#genericPipelineFunction(
           ...request.args,
           request.options || {}
@@ -477,9 +524,6 @@ export class Pipeline {
         // When the pipeline returns Tensors they are Proxy objects that cannot be cloned.
         // Workaround: convert to JSON and back to JS objects.
         result = JSON.parse(JSON.stringify(result));
-        result.metrics = {
-          inferenceTime: Date.now() - start,
-        };
       }
     } else {
       result = await this.#pipelineFunction(
@@ -490,7 +534,8 @@ export class Pipeline {
         this.#config
       );
     }
-    result.metrics.initTime = this.#initTime;
+    await this.#metricsSnapShot({ name: "runEnd" });
+    result.metrics = this.#metrics;
     return result;
   }
 }

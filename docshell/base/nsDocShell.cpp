@@ -2164,8 +2164,9 @@ nsresult nsDocShell::Now(DOMHighResTimeStamp* aWhen) {
 
 NS_IMETHODIMP
 nsDocShell::SetWindowDraggingAllowed(bool aValue) {
-  RefPtr<nsDocShell> parent = GetInProcessParentDocshell();
-  if (!aValue && mItemType == typeChrome && !parent) {
+  RefPtr<nsDocShell> parent;
+  if (!aValue && mItemType == typeChrome &&
+      !(parent = GetInProcessParentDocshell())) {
     // Window dragging is always allowed for top level
     // chrome docshells.
     return NS_ERROR_FAILURE;
@@ -2179,8 +2180,8 @@ nsDocShell::GetWindowDraggingAllowed(bool* aValue) {
   // window dragging regions in CSS (-moz-window-drag:drag)
   // can be slow. Default behavior is to only allow it for
   // chrome top level windows.
-  RefPtr<nsDocShell> parent = GetInProcessParentDocshell();
-  if (mItemType == typeChrome && !parent) {
+  RefPtr<nsDocShell> parent;
+  if (mItemType == typeChrome && !(parent = GetInProcessParentDocshell())) {
     // Top level chrome window
     *aValue = true;
   } else {
@@ -4321,13 +4322,11 @@ bool nsDocShell::FillLoadStateFromCurrentEntry(
 //*****************************************************************************
 
 NS_IMETHODIMP
-nsDocShell::InitWindow(nativeWindow aParentNativeWindow,
-                       nsIWidget* aParentWidget, int32_t aX, int32_t aY,
+nsDocShell::InitWindow(nsIWidget* aParentWidget, int32_t aX, int32_t aY,
                        int32_t aWidth, int32_t aHeight) {
   SetParentWidget(aParentWidget);
   SetPositionAndSize(aX, aY, aWidth, aHeight, 0);
   NS_ENSURE_TRUE(Initialize(), NS_ERROR_FAILURE);
-
   return NS_OK;
 }
 
@@ -4607,24 +4606,6 @@ nsDocShell::SetParentWidget(nsIWidget* aParentWidget) {
   mParentWidget = aParentWidget;
 
   return NS_OK;
-}
-
-NS_IMETHODIMP
-nsDocShell::GetParentNativeWindow(nativeWindow* aParentNativeWindow) {
-  NS_ENSURE_ARG_POINTER(aParentNativeWindow);
-
-  if (mParentWidget) {
-    *aParentNativeWindow = mParentWidget->GetNativeData(NS_NATIVE_WIDGET);
-  } else {
-    *aParentNativeWindow = nullptr;
-  }
-
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsDocShell::SetParentNativeWindow(nativeWindow aParentNativeWindow) {
-  return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
@@ -6416,7 +6397,7 @@ nsresult nsDocShell::CreateAboutBlankDocumentViewer(
   }
 
   if (!mBrowsingContext->AncestorsAreCurrent() ||
-      mBrowsingContext->IsInBFCache()) {
+      (mozilla::SessionHistoryInParent() && mBrowsingContext->IsInBFCache())) {
     mBrowsingContext->RemoveRootFromBFCacheSync();
     return NS_ERROR_NOT_AVAILABLE;
   }
@@ -9000,6 +8981,11 @@ nsresult nsDocShell::HandleSameDocumentNavigation(
   nsCOMPtr<nsPIDOMWindowInner> win =
       scriptGlobal ? scriptGlobal->GetCurrentInnerWindow() : nullptr;
 
+  // The check for uninvoked directives must come before ScrollToAnchor() is
+  // called.
+  const bool hasTextDirectives =
+      doc->FragmentDirective()->HasUninvokedDirectives();
+
   // ScrollToAnchor doesn't necessarily cause us to scroll the window;
   // the function decides whether a scroll is appropriate based on the
   // arguments it receives.  But even if we don't end up scrolling,
@@ -9034,9 +9020,11 @@ nsresult nsDocShell::HandleSameDocumentNavigation(
   // reference to avoid null derefs. See bug 914521.
   if (win) {
     // Fire a hashchange event URIs differ, and only in their hashes.
+    // If the fragment contains a directive, compare hasRef.
     bool doHashchange = aState.mSameExceptHashes &&
-                        (aState.mCurrentURIHasRef != aState.mNewURIHasRef ||
-                         !aState.mCurrentHash.Equals(aState.mNewHash));
+                        (!aState.mCurrentHash.Equals(aState.mNewHash) ||
+                         (hasTextDirectives &&
+                          aState.mCurrentURIHasRef != aState.mNewURIHasRef));
 
     if (aState.mHistoryNavBetweenSameDoc || doHashchange) {
       win->DispatchSyncPopState();

@@ -20,6 +20,56 @@ const isMSIX =
 
 const MESSAGES = () => [
   {
+    id: "NEW_PROFILE_SPOTLIGHT",
+    groups: [],
+    targeting: "canCreateSelectableProfiles && !hasSelectableProfiles",
+    trigger: {
+      id: "defaultBrowserCheck",
+    },
+    template: "spotlight",
+    content: {
+      template: "multistage",
+      modal: "tab",
+      screens: [
+        {
+          id: "SCREEN_1",
+          content: {
+            logo: {
+              imageURL:
+                "https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/ms-images/a3c640c8-7594-4bb2-bc18-8b4744f3aaf2.gif",
+            },
+            title: {
+              raw: "Say hello to Firefox profiles",
+              paddingBlock: "8px",
+            },
+            subtitle: {
+              raw: "Easily switch between browsing for work and fun. Profiles keep your browsing info, including search history and passwords, totally separate so you can stay organized.",
+            },
+            dismiss_button: {
+              action: {
+                dismiss: true,
+              },
+            },
+            primary_button: {
+              label: "Create a profile",
+              action: {
+                navigate: true,
+                type: "CREATE_NEW_SELECTABLE_PROFILE",
+              },
+            },
+            secondary_button: {
+              label: "Not now",
+              action: {
+                dismiss: true,
+              },
+            },
+          },
+        },
+      ],
+      transitions: true,
+    },
+  },
+  {
     id: "WNP_THANK_YOU",
     template: "update_action",
     content: {
@@ -808,6 +858,44 @@ const MESSAGES = () => [
         },
       ],
     },
+  },
+  {
+    id: "FXA_ACCOUNTS_APPMENU_PROTECT_BROWSING_DATA",
+    template: "menu_message",
+    content: {
+      messageType: "fxa_cta",
+      primaryText: "Bounce between devices",
+      secondaryText:
+        "Sync and encrypt your bookmarks, passwords, and more on all your devices.",
+      primaryActionText: "Sign up",
+      primaryAction: {
+        type: "FXA_SIGNIN_FLOW",
+        data: {
+          where: "tab",
+          extraParams: {
+            utm_source: "firefox-desktop",
+            utm_medium: "product",
+            utm_campaign: "some-campaign",
+            utm_content: "some-content",
+          },
+          autoClose: false,
+        },
+      },
+      closeAction: {
+        type: "BLOCK_MESSAGE",
+        data: {
+          id: "FXA_ACCOUNTS_APPMENU_PROTECT_BROWSING_DATA",
+        },
+      },
+      imageURL:
+        "chrome://browser/content/asrouter/assets/fox-with-box-on-cloud.svg",
+      imageVerticalOffset: -20,
+    },
+    skip_in_tests: "TODO",
+    trigger: {
+      id: "menuOpened",
+    },
+    testingTriggerContext: "app_menu",
   },
 ];
 

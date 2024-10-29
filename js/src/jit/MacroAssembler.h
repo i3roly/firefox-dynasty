@@ -1019,7 +1019,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
   inline void move16To64SignExtend(Register src, Register64 dest) PER_ARCH;
   inline void move32To64SignExtend(Register src, Register64 dest) PER_ARCH;
 
+  inline void move8SignExtendToPtr(Register src, Register dest) PER_ARCH;
+  inline void move16SignExtendToPtr(Register src, Register dest) PER_ARCH;
   inline void move32SignExtendToPtr(Register src, Register dest) PER_ARCH;
+
   inline void move32ZeroExtendToPtr(Register src, Register dest) PER_ARCH;
 
   // Copy a constant, typed-register, or a ValueOperand into a ValueOperand
@@ -4034,9 +4037,6 @@ class MacroAssembler : public MacroAssemblerSpecific {
                          const ReturnCallAdjustmentInfo& retCallInfo);
 #endif  // ENABLE_WASM_TAIL_CALLS
 
-  void updateCallRefMetrics(size_t callRefIndex, const Register funcRef,
-                            const Register scratch1, const Register scratch2);
-
   // WasmTableCallIndexReg must contain the index of the indirect call.
   // This is for asm.js calls only.
   CodeOffset asmCallIndirect(const wasm::CallSiteDesc& desc,
@@ -4049,6 +4049,14 @@ class MacroAssembler : public MacroAssemblerSpecific {
                                            const ABIArg& instanceArg,
                                            wasm::SymbolicAddress builtin,
                                            wasm::FailureMode failureMode);
+
+  // Performs the appropriate check based on the instance call's FailureMode,
+  // and traps if the check fails. The resultRegister should likely be
+  // ReturnReg, but this depends on whatever you do with registers immediately
+  // after the call.
+  void wasmTrapOnFailedInstanceCall(Register resultRegister,
+                                    wasm::FailureMode failureMode,
+                                    wasm::BytecodeOffset bytecodeOffset);
 
   // Performs a bounds check for ranged wasm operations like memory.fill or
   // array.fill. This handles the bizarre edge case in the wasm spec where a
@@ -5150,6 +5158,9 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void switchToWasmInstanceRealm(Register scratch1, Register scratch2);
   void debugAssertContextRealm(const void* realm, Register scratch);
 
+  template <typename ValueType>
+  void storeLocalAllocSite(ValueType value, Register scratch);
+
   void loadJitActivation(Register dest);
 
   void guardSpecificAtom(Register str, JSAtom* atom, Register scratch,
@@ -5831,6 +5842,33 @@ class MacroAssembler : public MacroAssemblerSpecific {
 
   void loadResizableTypedArrayByteOffsetMaybeOutOfBoundsIntPtr(
       Register obj, Register output, Register scratch);
+
+  void dateFillLocalTimeSlots(Register obj, Register scratch,
+                              const LiveRegisterSet& volatileRegs);
+
+ private:
+  void udiv32ByConstant(Register src, uint32_t divisor, Register dest);
+
+  void umod32ByConstant(Register src, uint32_t divisor, Register dest,
+                        Register scratch);
+
+  template <typename GetTimeFn>
+  void dateTimeFromSecondsIntoYear(ValueOperand secondsIntoYear,
+                                   ValueOperand output, Register scratch1,
+                                   Register scratch2, GetTimeFn getTimeFn);
+
+ public:
+  void dateHoursFromSecondsIntoYear(ValueOperand secondsIntoYear,
+                                    ValueOperand output, Register scratch1,
+                                    Register scratch2);
+
+  void dateMinutesFromSecondsIntoYear(ValueOperand secondsIntoYear,
+                                      ValueOperand output, Register scratch1,
+                                      Register scratch2);
+
+  void dateSecondsFromSecondsIntoYear(ValueOperand secondsIntoYear,
+                                      ValueOperand output, Register scratch1,
+                                      Register scratch2);
 
   void computeImplicitThis(Register env, ValueOperand output, Label* slowPath);
 

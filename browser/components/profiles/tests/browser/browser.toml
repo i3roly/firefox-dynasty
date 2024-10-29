@@ -7,7 +7,11 @@ prefs = [
   "browser.profiles.enabled=true",
 ]
 
+["browser_create_profile_page_test.js"]
+
 ["browser_edit_profile_test.js"]
+
+["browser_test_db_lazily_created.js"]
 
 ["browser_test_profile_selector.js"]
 

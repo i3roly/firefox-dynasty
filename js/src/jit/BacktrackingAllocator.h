@@ -10,10 +10,12 @@
 #include "mozilla/Array.h"
 #include "mozilla/Atomics.h"
 #include "mozilla/Attributes.h"
+#include "mozilla/Maybe.h"
 
 #include "ds/AvlTree.h"
 #include "ds/PriorityQueue.h"
 #include "jit/RegisterAllocator.h"
+#include "jit/SparseBitSet.h"
 #include "jit/StackSlotAllocator.h"
 
 // Gives better traces in Nightly/debug builds (could be EARLY_BETA_OR_EARLIER)
@@ -462,6 +464,32 @@ class LiveBundle : public TempObject {
 #endif
 };
 
+// Information about a control flow edge to resolve (by inserting a move from
+// predecessor range to successor range) in createMoveGroupsForControlFlowEdges.
+struct ControlFlowEdge {
+  // The predecessor and successor sides of this edge.
+  LBlock* predecessor;
+  LBlock* successor;
+
+  // Live range that covers the successor block.
+  LiveRange* successorRange;
+
+  // Exit position of the predecessor block. This is |exitOf(predecessor)| but
+  // cached here.
+  CodePosition predecessorExit;
+
+  ControlFlowEdge(LBlock* predecessor, LBlock* successor,
+                  LiveRange* successorRange, CodePosition predecessorExit)
+      : predecessor(predecessor),
+        successor(successor),
+        successorRange(successorRange),
+        predecessorExit(predecessorExit) {
+    MOZ_ASSERT(predecessor != successor);
+  }
+};
+using ControlFlowEdgeVector =
+    Vector<ControlFlowEdge, 8, BackgroundSystemAllocPolicy>;
+
 // Information about the allocation for a virtual register.
 class VirtualRegister {
  public:
@@ -500,12 +528,12 @@ class VirtualRegister {
   VirtualRegister(const VirtualRegister&) = delete;
 
 #ifdef DEBUG
-  void assertRangesSorted();
+  void assertRangesSorted() const;
 #else
-  void assertRangesSorted() {}
+  void assertRangesSorted() const {}
 #endif
 
-  RangeVector& sortedRanges() {
+  const RangeVector& sortedRanges() const {
     assertRangesSorted();
     return ranges_;
   }
@@ -539,15 +567,15 @@ class VirtualRegister {
   bool mustCopyInput() { return mustCopyInput_; }
 
   bool hasRanges() const { return !ranges_.empty(); }
-  LiveRange* firstRange() {
+  LiveRange* firstRange() const {
     assertRangesSorted();
     return ranges_.back();
   }
-  LiveRange* lastRange() {
+  LiveRange* lastRange() const {
     assertRangesSorted();
     return ranges_[0];
   }
-  LiveRange* rangeFor(CodePosition pos, bool preferRegister = false);
+  LiveRange* rangeFor(CodePosition pos, bool preferRegister = false) const;
   void sortRanges();
 
   void removeFirstRange(RangeIterator& iter);
@@ -560,7 +588,7 @@ class VirtualRegister {
 
   [[nodiscard]] bool addRange(LiveRange* range);
 
-  LiveBundle* firstBundle() { return firstRange()->bundle(); }
+  LiveBundle* firstBundle() const { return firstRange()->bundle(); }
 
   [[nodiscard]] bool addInitialRange(TempAllocator& alloc, CodePosition from,
                                      CodePosition to);
@@ -571,23 +599,23 @@ class VirtualRegister {
   // start position. Because the ranges are sorted in descending order, this
   // iterates over the vector from index |length - 1| to 0.
   class MOZ_RAII RangeIterator {
-    RangeVector& ranges_;
+    const RangeVector& ranges_;
 #ifdef DEBUG
-    VirtualRegister& reg_;
+    const VirtualRegister& reg_;
 #endif
     // if |pos_| is 0, the iterator is done. Else, |pos_ - 1| is the index of
     // the range that will be returned by |*iter|.
     size_t pos_;
 
    public:
-    explicit RangeIterator(VirtualRegister& reg)
+    explicit RangeIterator(const VirtualRegister& reg)
         : ranges_(reg.sortedRanges()),
 #ifdef DEBUG
           reg_(reg),
 #endif
           pos_(ranges_.length()) {
     }
-    RangeIterator(VirtualRegister& reg, size_t index)
+    RangeIterator(const VirtualRegister& reg, size_t index)
         : ranges_(reg.sortedRanges()),
 #ifdef DEBUG
           reg_(reg),
@@ -639,7 +667,8 @@ class BacktrackingAllocator : protected RegisterAllocator {
   // This flag is set when testing new allocator modifications.
   bool testbed;
 
-  BitSet* liveIn;
+  using VirtualRegBitSet = SparseBitSet<BackgroundSystemAllocPolicy>;
+  Vector<VirtualRegBitSet, 0, JitAllocPolicy> liveIn;
   Vector<VirtualRegister, 0, JitAllocPolicy> vregs;
 
   // Allocation state.
@@ -683,27 +712,10 @@ class BacktrackingAllocator : protected RegisterAllocator {
   // should be prioritized.
   LiveRangeSet hotcode;
 
-  struct CallRange : public TempObject, public InlineListNode<CallRange> {
-    LiveRange::Range range;
-
-    CallRange(CodePosition from, CodePosition to) : range(from, to) {}
-
-    // Comparator for use in AVL trees.
-    static int compare(CallRange* v0, CallRange* v1) {
-      if (v0->range.to <= v1->range.from) {
-        return -1;
-      }
-      if (v0->range.from >= v1->range.to) {
-        return 1;
-      }
-      return 0;
-    }
-  };
-
-  // Ranges where all registers must be spilled due to call instructions.
-  using CallRangeList = InlineList<CallRange>;
-  CallRangeList callRangesList;
-  AvlTree<CallRange*, CallRange> callRanges;
+  // Output positions of all call instructions (where all registers must be
+  // spilled). This vector is sorted in ascending order and doesn't contain
+  // duplicate values.
+  Vector<CodePosition, 16, BackgroundSystemAllocPolicy> callPositions;
 
   // Information about an allocated stack slot.
   struct SpillSlot : public TempObject,
@@ -809,6 +821,10 @@ class BacktrackingAllocator : protected RegisterAllocator {
                                           CodePosition to);
   [[nodiscard]] bool buildLivenessInfo();
 
+  // Call positions.
+  mozilla::Maybe<size_t> lookupFirstCallPositionInRange(CodePosition from,
+                                                        CodePosition to);
+
   // Merging and queueing of LiveRange groups
   [[nodiscard]] bool tryMergeBundles(LiveBundle* bundle0, LiveBundle* bundle1);
   void allocateStackDefinition(VirtualRegister& reg);
@@ -837,7 +853,7 @@ class BacktrackingAllocator : protected RegisterAllocator {
                                                     bool* success);
 
   // The top level driver for the splitting machinery
-  [[nodiscard]] bool chooseBundleSplit(LiveBundle* bundle, bool fixed,
+  [[nodiscard]] bool chooseBundleSplit(LiveBundle* bundle, bool hasCall,
                                        LiveBundle* conflict);
 
   // Bundle allocation
@@ -846,20 +862,20 @@ class BacktrackingAllocator : protected RegisterAllocator {
                                         Requirement* phint);
   [[nodiscard]] bool tryAllocateRegister(PhysicalRegister& r,
                                          LiveBundle* bundle, bool* success,
-                                         bool* pfixed,
+                                         bool* hasCall,
                                          LiveBundleVector& conflicting);
   [[nodiscard]] bool tryAllocateAnyRegister(LiveBundle* bundle, bool* success,
-                                            bool* pfixed,
+                                            bool* hasCall,
                                             LiveBundleVector& conflicting);
   [[nodiscard]] bool evictBundle(LiveBundle* bundle);
   [[nodiscard]] bool tryAllocateFixed(LiveBundle* bundle,
                                       Requirement requirement, bool* success,
-                                      bool* pfixed,
+                                      bool* hasCall,
                                       LiveBundleVector& conflicting);
   [[nodiscard]] bool tryAllocateNonFixed(LiveBundle* bundle,
                                          Requirement requirement,
                                          Requirement hint, bool* success,
-                                         bool* pfixed,
+                                         bool* hasCall,
                                          LiveBundleVector& conflicting);
   [[nodiscard]] bool processBundle(const MIRGenerator* mir, LiveBundle* bundle);
   [[nodiscard]] bool spill(LiveBundle* bundle);
@@ -875,6 +891,8 @@ class BacktrackingAllocator : protected RegisterAllocator {
                                 LiveRange* from, LiveRange* to,
                                 LDefinition::Type type);
   void removeDeadRanges(VirtualRegister& reg);
+  [[nodiscard]] bool createMoveGroupsForControlFlowEdges(
+      const VirtualRegister& reg, const ControlFlowEdgeVector& edges);
   [[nodiscard]] AVOID_INLINE_FOR_DEBUGGING bool
   createMoveGroupsFromLiveRangeTransitions();
   size_t findFirstNonCallSafepoint(CodePosition from);
@@ -898,9 +916,8 @@ class BacktrackingAllocator : protected RegisterAllocator {
                         bool testbed)
       : RegisterAllocator(mir, lir, graph),
         testbed(testbed),
-        liveIn(nullptr),
-        vregs(mir->alloc()),
-        callRanges(nullptr) {}
+        liveIn(mir->alloc()),
+        vregs(mir->alloc()) {}
 
   [[nodiscard]] bool go();
 };

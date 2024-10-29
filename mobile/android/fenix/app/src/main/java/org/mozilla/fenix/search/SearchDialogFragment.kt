@@ -66,8 +66,10 @@ import mozilla.components.support.ktx.android.content.hasCamera
 import mozilla.components.support.ktx.android.content.isPermissionGranted
 import mozilla.components.support.ktx.android.content.res.getSpanned
 import mozilla.components.support.ktx.android.net.isHttpOrHttps
+import mozilla.components.support.ktx.android.view.ImeInsetsSynchronizer
 import mozilla.components.support.ktx.android.view.findViewInHierarchy
 import mozilla.components.support.ktx.android.view.hideKeyboard
+import mozilla.components.support.ktx.android.view.setupPersistentInsets
 import mozilla.components.support.ktx.android.view.showKeyboard
 import mozilla.components.support.ktx.kotlin.toNormalizedUrl
 import mozilla.components.ui.autocomplete.InlineAutocompleteEditText
@@ -79,6 +81,7 @@ import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.VoiceSearch
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
+import org.mozilla.fenix.browser.tabstrip.isTabStripEnabled
 import org.mozilla.fenix.components.Core.Companion.BOOKMARKS_SEARCH_ENGINE_ID
 import org.mozilla.fenix.components.Core.Companion.HISTORY_SEARCH_ENGINE_ID
 import org.mozilla.fenix.components.Core.Companion.TABS_SEARCH_ENGINE_ID
@@ -161,7 +164,11 @@ class SearchDialogFragment : AppCompatDialogFragment(), UserInteractionHandler {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setStyle(STYLE_NO_TITLE, R.style.SearchDialogStyle)
+        if (context?.isTabStripEnabled() == true) {
+            setStyle(STYLE_NO_TITLE, R.style.SearchDialogStyleTabStrip)
+        } else {
+            setStyle(STYLE_NO_TITLE, R.style.SearchDialogStyle)
+        }
 
         startForResult = registerForActivityResult { result ->
             result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.first()?.also {
@@ -188,6 +195,7 @@ class SearchDialogFragment : AppCompatDialogFragment(), UserInteractionHandler {
             if ((requireActivity() as HomeActivity).browsingModeManager.mode.isPrivate) {
                 this.secure(requireActivity())
             }
+            window?.setupPersistentInsets()
         }
     }
 
@@ -451,6 +459,7 @@ class SearchDialogFragment : AppCompatDialogFragment(), UserInteractionHandler {
             updateAccessibilityTraversalOrder()
         }
 
+        ImeInsetsSynchronizer.setup(view)
         observeClipboardState()
         observeAwesomeBarState()
         observeSuggestionProvidersState()
@@ -851,7 +860,7 @@ class SearchDialogFragment : AppCompatDialogFragment(), UserInteractionHandler {
                     qrButtonAction = IncreasedTapAreaActionDecorator(
                         BrowserToolbar.Button(
                             AppCompatResources.getDrawable(requireContext(), R.drawable.ic_qr)!!,
-                            requireContext().getString(R.string.search_scan_button),
+                            requireContext().getString(R.string.search_scan_button_2),
                             autoHide = { true },
                             listener = ::launchQr,
                         ),

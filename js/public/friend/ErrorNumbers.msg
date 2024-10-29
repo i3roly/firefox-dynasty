@@ -496,7 +496,6 @@ MSG_DEF(JSMSG_WASM_BAD_EXN_TAG,        0, JSEXN_TYPEERR,     "exception's tag di
 MSG_DEF(JSMSG_WASM_BAD_EXN_OPTIONS,    0, JSEXN_TYPEERR,     "argument cannot be converted to an ExceptionOptions")
 MSG_DEF(JSMSG_WASM_BAD_FUNCTION_VALUE, 0, JSEXN_TYPEERR,     "second argument must be a function")
 MSG_DEF(JSMSG_WASM_BAD_COMPILE_OPTIONS, 0, JSEXN_TYPEERR,    "argument cannot be converted to a CompileOptions")
-MSG_DEF(JSMSG_WASM_UNKNOWN_BUILTIN,     0, JSEXN_TYPEERR,    "unknown builtin")
 MSG_DEF(JSMSG_WASM_DUPLICATE_BUILTIN,   0, JSEXN_TYPEERR,    "duplicate builtin")
 MSG_DEF(JSMSG_WASM_BAD_CODEPOINT,       0, JSEXN_WASMRUNTIMEERROR,     "bad codepoint")
 MSG_DEF(JSMSG_WASM_NO_TRANSFER,        0, JSEXN_TYPEERR,     "cannot transfer WebAssembly/asm.js ArrayBuffer")
@@ -611,8 +610,8 @@ MSG_DEF(JSMSG_DEBUG_PROMISE_NOT_FULFILLED, 0, JSEXN_TYPEERR, "Promise hasn't bee
 MSG_DEF(JSMSG_DEBUG_PROMISE_NOT_REJECTED, 0, JSEXN_TYPEERR, "Promise hasn't been rejected")
 MSG_DEF(JSMSG_DEBUG_NO_BINARY_SOURCE,  0, JSEXN_ERR, "WebAssembly binary source is not available")
 MSG_DEF(JSMSG_DEBUG_EXCLUSIVE_FRAME_COVERAGE, 0, JSEXN_ERR, "onEnterFrame and collectCoverageInfo cannot be active at the same time")
+MSG_DEF(JSMSG_DEBUG_EXCLUSIVE_EXECUTION_TRACE_COVERAGE, 0, JSEXN_ERR, "execution trace and collectCoverageInfo cannot be active at the same time")
 MSG_DEF(JSMSG_NATIVE_TRACING_BUFFER_MALFORMED, 0, JSEXN_ERR, "bad data encountered while reading the native tracing buffer")
-MSG_DEF(JSMSG_NATIVE_TRACING_MUST_BE_ENABLED, 0, JSEXN_ERR, "Cannot collect a native trace without setting nativeTracing to true")
 
 // Testing functions
 MSG_DEF(JSMSG_TESTING_SCRIPTS_ONLY, 0, JSEXN_TYPEERR, "only works on scripts")
@@ -969,6 +968,8 @@ MSG_DEF(JSMSG_TEMPORAL_PARSER_INVALID_UTC_DESIGNATOR_WITHOUT_NAME, 0, JSEXN_RANG
 MSG_DEF(JSMSG_TEMPORAL_PARSER_MONTH_DAY_CALENDAR_NOT_ISO8601, 0, JSEXN_RANGEERR, "Month-Day formats only support the \"iso8601\" calendar")
 MSG_DEF(JSMSG_TEMPORAL_PARSER_YEAR_MONTH_CALENDAR_NOT_ISO8601, 0, JSEXN_RANGEERR, "Year-Month formats only support the \"iso8601\" calendar")
 MSG_DEF(JSMSG_TEMPORAL_PARSER_INVALID_SUBMINUTE_TIMEZONE, 0, JSEXN_RANGEERR, "time zone offset must not contain seconds precision")
+MSG_DEF(JSMSG_TEMPORAL_PARSER_INCONSISTENT_DATE_SEPARATOR, 0, JSEXN_RANGEERR, "date separator '-' must be consistent")
+MSG_DEF(JSMSG_TEMPORAL_PARSER_INCONSISTENT_TIME_SEPARATOR, 0, JSEXN_RANGEERR, "time separator ':' must be consistent")
 
 // Explicit Resource Management
 

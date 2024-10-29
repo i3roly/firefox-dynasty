@@ -78,6 +78,11 @@ export class SidebarCustomize extends SidebarPage {
     e.preventDefault();
     this.getWindow().SidebarController.toggleTool(e.target.id);
     switch (e.target.id) {
+      case "viewGenaiChatSidebar":
+        Glean.sidebarCustomize.chatbotEnabled.record({
+          checked: e.target.checked,
+        });
+        break;
       case "viewTabsSidebar":
         Glean.sidebarCustomize.syncedTabsEnabled.record({
           checked: e.target.checked,
@@ -85,6 +90,11 @@ export class SidebarCustomize extends SidebarPage {
         break;
       case "viewHistorySidebar":
         Glean.sidebarCustomize.historyEnabled.record({
+          checked: e.target.checked,
+        });
+        break;
+      case "viewBookmarksSidebar":
+        Glean.sidebarCustomize.bookmarksEnabled.record({
           checked: e.target.checked,
         });
         break;
@@ -156,9 +166,12 @@ export class SidebarCustomize extends SidebarPage {
   reversePosition() {
     const { SidebarController } = this.getWindow();
     SidebarController.reversePosition();
-    const position = SidebarController._positionStart ? "left" : "right";
-    Glean.sidebarCustomize.sidebarPosition.record({ position });
-    Glean.sidebar.positionSettings.set(position);
+    Glean.sidebarCustomize.sidebarPosition.record({
+      position:
+        SidebarController._positionStart !== this.getWindow().RTL_UI
+          ? "left"
+          : "right",
+    });
   }
 
   extensionTemplate(extension, index) {
@@ -257,7 +270,7 @@ export class SidebarCustomize extends SidebarPage {
                   ? this.getWindow().SidebarController._positionStart
                   : !this.getWindow().SidebarController._positionStart
               }
-              iconsrc="chrome://browser/skin/sidebar-right.svg"
+              iconsrc="chrome://browser/skin/sidebar-expanded-right.svg"
               data-l10n-id="sidebar-position-right"
             ></moz-radio>
           </moz-radio-group>
@@ -307,17 +320,17 @@ export class SidebarCustomize extends SidebarPage {
   #handleVisibilityChange({ target: { value } }) {
     this.visibility = value;
     Services.prefs.setStringPref(VISIBILITY_SETTING_PREF, value);
-    const preference = value === "always-show" ? "always" : "hide";
-    Glean.sidebarCustomize.sidebarDisplay.record({ preference });
-    Glean.sidebar.displaySettings.set(preference);
+    Glean.sidebarCustomize.sidebarDisplay.record({
+      preference: value === "always-show" ? "always" : "hide",
+    });
   }
 
   #handleTabDirectionChange({ target: { value } }) {
     const verticalTabsEnabled = value === "true";
     Services.prefs.setBoolPref(TAB_DIRECTION_SETTING_PREF, verticalTabsEnabled);
-    const orientation = verticalTabsEnabled ? "vertical" : "horizontal";
-    Glean.sidebarCustomize.tabsLayout.record({ orientation });
-    Glean.sidebar.tabsLayout.set(orientation);
+    Glean.sidebarCustomize.tabsLayout.record({
+      orientation: verticalTabsEnabled ? "vertical" : "horizontal",
+    });
   }
 }
 

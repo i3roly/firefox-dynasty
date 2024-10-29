@@ -1619,19 +1619,6 @@ const nsTArray<GfxDriverInfo>& GfxInfo::GetGfxDriverInfo() {
         V(8, 17, 12, 5730), V(8, 17, 12, 6901), "FEATURE_FAILURE_BUG_1137716",
         "Nvidia driver > 8.17.12.6901");
 
-    /* Bug 1336710: Crash in rx::Blit9::initialize. */
-    APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::WindowsXP, DeviceFamily::IntelGMAX4500HD,
-        nsIGfxInfo::FEATURE_WEBGL_ANGLE, nsIGfxInfo::FEATURE_BLOCKED_DEVICE,
-        DRIVER_LESS_THAN, GfxDriverInfo::allDriverVersions,
-        "FEATURE_FAILURE_BUG_1336710");
-
-    APPEND_TO_DRIVER_BLOCKLIST2(
-        OperatingSystem::WindowsXP, DeviceFamily::IntelHDGraphicsToSandyBridge,
-        nsIGfxInfo::FEATURE_WEBGL_ANGLE, nsIGfxInfo::FEATURE_BLOCKED_DEVICE,
-        DRIVER_LESS_THAN, GfxDriverInfo::allDriverVersions,
-        "FEATURE_FAILURE_BUG_1336710");
-
     /* Bug 1304360: Graphical artifacts with D3D9 on Windows 7. */
     APPEND_TO_DRIVER_BLOCKLIST2(OperatingSystem::Windows7,
                                 DeviceFamily::IntelGMAX3000,
@@ -1885,6 +1872,12 @@ const nsTArray<GfxDriverInfo>& GfxInfo::GetGfxDriverInfo() {
                                 DRIVER_LESS_THAN_OR_EQUAL, V(8, 17, 10, 1129),
                                 "FEATURE_FAILURE_CHROME_BUG_800950");
 #endif
+
+    APPEND_TO_DRIVER_BLOCKLIST2(
+        OperatingSystem::Windows10, DeviceFamily::NvidiaPascal,
+        nsIGfxInfo::FEATURE_WEBRENDER_COMPOSITOR,
+        nsIGfxInfo::FEATURE_BLOCKED_DEVICE, DRIVER_COMPARISON_IGNORED,
+        V(0, 0, 0, 0), "FEATURE_FAILURE_BUG_1923697");
 
     // WebRender is unable to use scissored clears in some cases
     APPEND_TO_DRIVER_BLOCKLIST2(

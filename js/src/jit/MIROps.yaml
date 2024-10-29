@@ -195,6 +195,12 @@
 - name: LimitedTruncate
   gen_boilerplate: false
 
+- name: IntPtrLimitedTruncate
+  gen_boilerplate: false
+
+- name: Int64LimitedTruncate
+  gen_boilerplate: false
+
 - name: Constant
   gen_boilerplate: false
 
@@ -739,15 +745,6 @@
 - name: TruncateBigIntToInt64
   gen_boilerplate: false
 
-- name: Int32ToBigInt
-  operands:
-    input: Int32
-  result_type: BigInt
-  movable: true
-  congruent_to: if_operands_equal
-  alias_set: none
-  can_recover: true
-
 - name: Int64ToBigInt
   gen_boilerplate: false
 
@@ -812,6 +809,9 @@
   gen_boilerplate: false
 
 - name: SignExtendInt64
+  gen_boilerplate: false
+
+- name: SignExtendIntPtr
   gen_boilerplate: false
 
 - name: MinMax
@@ -3076,6 +3076,7 @@
   movable: true
   congruent_to: if_operands_equal
   possibly_calls: true
+  folds_to: custom
   alias_set: none
   can_recover: true
   clone: true
@@ -3088,6 +3089,7 @@
   movable: true
   congruent_to: if_operands_equal
   possibly_calls: true
+  folds_to: custom
   alias_set: none
   can_recover: true
   clone: true
@@ -3316,6 +3318,44 @@
   movable: true
   congruent_to: if_operands_equal
   alias_set: custom
+
+- name: DateFillLocalTimeSlots
+  operands:
+    date: Object
+  congruent_to: if_operands_equal
+  alias_set: custom
+  generate_lir: true
+  lir_temps: 1
+
+- name: DateHoursFromSecondsIntoYear
+  operands:
+    secondsIntoYear: Value
+  result_type: Value
+  movable: true
+  congruent_to: if_operands_equal
+  alias_set: none
+  generate_lir: true
+  lir_temps: 2
+
+- name: DateMinutesFromSecondsIntoYear
+  operands:
+    secondsIntoYear: Value
+  result_type: Value
+  movable: true
+  congruent_to: if_operands_equal
+  alias_set: none
+  generate_lir: true
+  lir_temps: 2
+
+- name: DateSecondsFromSecondsIntoYear
+  operands:
+    secondsIntoYear: Value
+  result_type: Value
+  movable: true
+  congruent_to: if_operands_equal
+  alias_set: none
+  generate_lir: true
+  lir_temps: 2
 
 - name: PostIntPtrConversion
   gen_boilerplate: false

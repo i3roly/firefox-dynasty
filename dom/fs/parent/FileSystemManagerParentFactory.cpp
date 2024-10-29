@@ -12,6 +12,7 @@
 #include "mozilla/dom/FileSystemLog.h"
 #include "mozilla/dom/FileSystemManagerParent.h"
 #include "mozilla/dom/FileSystemTypes.h"
+#include "mozilla/dom/quota/PrincipalUtils.h"
 #include "mozilla/dom/quota/QuotaCommon.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "mozilla/dom/quota/ResultExtensions.h"
@@ -34,8 +35,7 @@ mozilla::ipc::IPCResult CreateFileSystemManagerParent(
          [aResolver](const auto&) { aResolver(NS_ERROR_INVALID_ARG); });
 
   // This blocks Null and Expanded principals
-  QM_TRY(OkIf(quota::QuotaManager::IsPrincipalInfoValid(aPrincipalInfo)),
-         IPC_OK(),
+  QM_TRY(OkIf(quota::IsPrincipalInfoValid(aPrincipalInfo)), IPC_OK(),
          [aResolver](const auto&) { aResolver(NS_ERROR_DOM_SECURITY_ERR); });
 
   QM_TRY(quota::QuotaManager::EnsureCreated(), IPC_OK(),
@@ -44,9 +44,10 @@ mozilla::ipc::IPCResult CreateFileSystemManagerParent(
   auto* const quotaManager = quota::QuotaManager::Get();
   MOZ_ASSERT(quotaManager);
 
-  QM_TRY_UNWRAP(auto principalMetadata,
-                quotaManager->GetInfoFromValidatedPrincipalInfo(aPrincipalInfo),
-                IPC_OK(), [aResolver](const auto rv) { aResolver(rv); });
+  QM_TRY_UNWRAP(
+      auto principalMetadata,
+      quota::GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      IPC_OK(), [aResolver](const auto rv) { aResolver(rv); });
 
   quota::OriginMetadata originMetadata(std::move(principalMetadata),
                                        quota::PERSISTENCE_TYPE_DEFAULT);
@@ -92,16 +93,42 @@ mozilla::ipc::IPCResult CreateFileSystemManagerParent(
                                                               __func__);
                 })
                 ->Then(GetCurrentSerialEventTarget(), __func__,
-                       [dataManager = dataManager, aResolver](
+                       [dataManager = dataManager](
                            CreateActorPromise::ResolveOrRejectValue&& aValue) {
+                         if (aValue.IsReject()) {
+                           return BoolPromise::CreateAndReject(
+                               aValue.RejectValue(), __func__);
+                         }
+
+                         RefPtr<FileSystemManagerParent> parent =
+                             std::move(aValue.ResolveValue());
+
+                         dataManager->RegisterActor(WrapNotNull(parent));
+
+                         return BoolPromise::CreateAndResolve(true, __func__);
+                       })
+                ->Then(dataManager->MutableIOTaskQueuePtr(), __func__,
+                       [](const BoolPromise::ResolveOrRejectValue& aValue) {
+                         // Hopping to the I/O task queue is needed to avoid
+                         // a potential race triggered by
+                         // FileSystemManagerParent::SendCloseAll called by
+                         // FileSystemManagerParent::RequestAllowToClose called
+                         // by FileSystemDataManager::RegisterActor when the
+                         // directory lock has been invalidated in the
+                         // meantime. The race would cause that the child side
+                         // could sometimes use the child actor for sending
+                         // messages and sometimes not. This extra hop
+                         // guarantees that the created child actor will always
+                         // refuse to send messages.
+                         return BoolPromise::CreateAndResolveOrReject(aValue,
+                                                                      __func__);
+                       })
+                ->Then(GetCurrentSerialEventTarget(), __func__,
+                       [aResolver](
+                           const BoolPromise::ResolveOrRejectValue& aValue) {
                          if (aValue.IsReject()) {
                            aResolver(aValue.RejectValue());
                          } else {
-                           RefPtr<FileSystemManagerParent> parent =
-                               std::move(aValue.ResolveValue());
-
-                           dataManager->RegisterActor(WrapNotNull(parent));
-
                            aResolver(NS_OK);
                          }
                        });

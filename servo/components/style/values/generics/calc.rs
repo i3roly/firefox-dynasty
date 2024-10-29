@@ -158,6 +158,7 @@ pub enum SortKey {
     Vmax,
     Vmin,
     Vw,
+    ColorComponent,
     Other,
 }
 
@@ -664,7 +665,7 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
     }
 
     /// Tries to merge one node into another using the sum, that is, perform `x` + `y`.
-    fn try_sum_in_place(&mut self, other: &Self) -> Result<(), ()> {
+    pub fn try_sum_in_place(&mut self, other: &Self) -> Result<(), ()> {
         match (self, other) {
             (&mut CalcNode::Leaf(ref mut one), &CalcNode::Leaf(ref other)) => {
                 one.try_sum_in_place(other)
@@ -1429,14 +1430,14 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
 
                 if value_or_stop!(children[0].is_nan_leaf()) {
                     replace_self_with!(&mut children[0]);
-                    return
+                    return;
                 }
 
                 let mut result = 0;
                 for i in 1..children.len() {
                     if value_or_stop!(children[i].is_nan_leaf()) {
                         replace_self_with!(&mut children[i]);
-                        return
+                        return;
                     }
                     let o = match children[i]
                         .compare(&children[result], PositivePercentageBasis::Unknown)
@@ -1548,6 +1549,9 @@ impl<L: CalcNodeLeaf> CalcNode<L> {
                 }
 
                 debug_assert!(children.len() >= 2, "Should still have multiple kids!");
+
+                // Sort by spec order.
+                children.sort_unstable_by_key(|c| c.sort_key());
 
                 // NOTE: if the function returns true, by the docs of dedup_by,
                 // a is removed.

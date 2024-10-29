@@ -83,11 +83,8 @@ const WINDOW_OPEN_EVENT_COUNT_SCALAR_NAME =
   "browser.engagement.window_open_event_count";
 const UNIQUE_DOMAINS_COUNT_SCALAR_NAME =
   "browser.engagement.unique_domains_count";
-const TOTAL_URI_COUNT_SCALAR_NAME = "browser.engagement.total_uri_count";
 const UNFILTERED_URI_COUNT_SCALAR_NAME =
   "browser.engagement.unfiltered_uri_count";
-const TOTAL_URI_COUNT_NORMAL_AND_PRIVATE_MODE_SCALAR_NAME =
-  "browser.engagement.total_uri_count_normal_and_private_mode";
 
 export const MINIMUM_TAB_COUNT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes, in ms
 
@@ -394,10 +391,6 @@ export let URICountListener = {
     }
 
     // Update total URI count, including when in private mode.
-    Services.telemetry.scalarAdd(
-      TOTAL_URI_COUNT_NORMAL_AND_PRIVATE_MODE_SCALAR_NAME,
-      1
-    );
     Glean.browserEngagement.uriCount.add(1);
 
     if (!shouldCountURI) {
@@ -405,7 +398,7 @@ export let URICountListener = {
     }
 
     // Update the URI counts.
-    Services.telemetry.scalarAdd(TOTAL_URI_COUNT_SCALAR_NAME, 1);
+    Glean.browserEngagement.uriCountNormalMode.add(1);
 
     // Update tab count
     BrowserUsageTelemetry._recordTabCounts(getOpenTabsAndWinsCounts());
@@ -959,8 +952,10 @@ export let BrowserUsageTelemetry = {
 
     if (item && source) {
       this.recordInteractionEvent(item, source);
-      let scalar = `browser.ui.interaction.${source.replace(/-/g, "_")}`;
-      Services.telemetry.keyedScalarAdd(scalar, telemetryId(item), 1);
+      let name = source
+        .replace(/-/g, "_")
+        .replace(/_([a-z])/g, (m, p) => p.toUpperCase());
+      Glean.browserUiInteraction[name]?.[telemetryId(item)].add(1);
       if (SET_USAGECOUNT_PREF_BUTTONS.includes(item)) {
         let pref = `browser.engagement.${item}.used-count`;
         Services.prefs.setIntPref(pref, Services.prefs.getIntPref(pref, 0) + 1);
@@ -977,10 +972,10 @@ export let BrowserUsageTelemetry = {
       );
       if (triggerContainer) {
         this.recordInteractionEvent(item, contextMenu);
-        let scalar = `browser.ui.interaction.${contextMenu.replace(/-/g, "_")}`;
-        Services.telemetry.keyedScalarAdd(
-          scalar,
-          telemetryId(triggerContainer),
+        let name = contextMenu
+          .replace(/-/g, "_")
+          .replace(/_([a-z])/g, (m, p) => p.toUpperCase());
+        Glean.browserUiInteraction[name]?.[telemetryId(triggerContainer)].add(
           1
         );
       }
@@ -1111,7 +1106,7 @@ export let BrowserUsageTelemetry = {
     let key = `${telemetryId(widgetId, false)}_${action}_${oldPos ?? "na"}_${
       newPos ?? "na"
     }_${reason}`;
-    Services.telemetry.keyedScalarAdd("browser.ui.customized_widgets", key, 1);
+    Glean.browserUi.customizedWidgets[key].add(1);
 
     if (newPos) {
       this.widgetMap.set(widgetId, newPos);
@@ -1137,11 +1132,7 @@ export let BrowserUsageTelemetry = {
 
     for (let [widgetId, position] of this.widgetMap.entries()) {
       let key = `${telemetryId(widgetId, false)}_pinned_${position}`;
-      Services.telemetry.keyedScalarSet(
-        "browser.ui.toolbar_widgets",
-        key,
-        true
-      );
+      Glean.browserUi.mirrorForToolbarWidgets[key].set(true);
     }
   },
 
@@ -1392,11 +1383,6 @@ export let BrowserUsageTelemetry = {
       valueToReport = 0;
     }
 
-    Services.telemetry.scalarSet(
-      "browser.engagement.profile_count",
-      valueToReport
-    );
-    // Manually mirror to Glean
     Glean.browserEngagement.profileCount.set(valueToReport);
   },
 
@@ -1567,7 +1553,6 @@ export let BrowserUsageTelemetry = {
         let { installer_type, extra } = data;
 
         // Record the event (mirrored to legacy telemetry using GIFFT)
-        Services.telemetry.setEventRecordingEnabled("installation", true);
         if (installer_type == "full") {
           Glean.installation.firstSeenFull.record(extra);
         } else if (installer_type == "stub") {

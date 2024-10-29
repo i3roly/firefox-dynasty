@@ -394,7 +394,6 @@ const TEST_GLOBAL = {
       notifyObservers() {},
     },
     telemetry: {
-      setEventRecordingEnabled: () => {},
       recordEvent: _eventDetails => {},
       scalarSet: () => {},
       keyedScalarAdd: () => {},
@@ -426,6 +425,7 @@ const TEST_GLOBAL = {
             finalize: () => ({
               ref,
               spec,
+              schemeIs: scheme => spec.startsWith(scheme),
             }),
           }),
         }),

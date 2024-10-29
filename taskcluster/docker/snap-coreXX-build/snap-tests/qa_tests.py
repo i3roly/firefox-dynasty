@@ -23,8 +23,20 @@ class QATests(SnapTestsBase):
         self._dir = "qa_tests"
 
         super(QATests, self).__init__(
-            exp=os.path.join(self._dir, "qa_expectations.json")
+            exp=os.path.join(
+                self._dir, "qa_expectations_{}.json".format(self._distro_release())
+            )
         )
+
+    def _distro_release(self):
+        with open("/etc/lsb-release") as lsb_release:
+            f = list(
+                filter(
+                    lambda x: x.startswith("DISTRIB_RELEASE"),
+                    lsb_release.read().split(),
+                )
+            )
+            return f[0].split("=")[1].replace(".", "")
 
     def _test_audio_playback(
         self, url, iframe_selector=None, click_to_play=False, video_selector=None
@@ -792,7 +804,9 @@ class QATests(SnapTestsBase):
         )
         if not os.path.isabs(previous_folder):
             previous_folder = os.path.join(os.environ.get("HOME", ""), previous_folder)
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(
+            dir=os.environ.get("HOME"), prefix="snap-test-download"
+        ) as tmpdir:
             assert os.path.isdir(tmpdir), "tmpdir download should exists"
 
             download_1 = os.path.abspath(os.path.join(previous_folder, download_name))
@@ -820,7 +834,9 @@ class QATests(SnapTestsBase):
         download_site = self.open_lafibre()
         extra_small = self.get_lafibre_1M()
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(
+            dir=os.environ.get("HOME"), prefix="snap-test-download-rm"
+        ) as tmpdir:
             self.change_download_folder(None, tmpdir)
 
             self._driver.switch_to.window(download_site)

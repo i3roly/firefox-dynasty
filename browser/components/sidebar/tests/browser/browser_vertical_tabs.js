@@ -6,18 +6,26 @@
 const { TelemetryTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/TelemetryTestUtils.sys.mjs"
 );
+const { SessionStoreTestUtils } = ChromeUtils.importESModule(
+  "resource://testing-common/SessionStoreTestUtils.sys.mjs"
+);
+const { NonPrivateTabs } = ChromeUtils.importESModule(
+  "resource:///modules/OpenTabs.sys.mjs"
+);
 
 add_setup(async () => {
   await SpecialPowers.pushPrefEnv({
     set: [["sidebar.verticalTabs", false]],
   });
   Services.telemetry.clearScalars();
+  SessionStoreTestUtils.init(this, window);
 });
 registerCleanupFunction(async () => {
   await SpecialPowers.popPrefEnv();
   while (gBrowser.tabs.length > 1) {
     BrowserTestUtils.removeTab(gBrowser.tabs.at(-1));
   }
+  NonPrivateTabs.stop();
 });
 
 function getTelemetryScalars(names) {
@@ -31,7 +39,36 @@ function checkTelemetryScalar(name, value) {
   return TestUtils.waitForCondition(() => {
     const scalars = TelemetryTestUtils.getProcessScalars("parent");
     return scalars[name] == value;
-  }, `Scalar ${name} has the correct value.`);
+  }, `Scalar ${name} has value: ${value}`);
+}
+
+function getExpectedElements(win, tabstripOrientation = "horizontal") {
+  const sizeMode = win.document.documentElement.getAttribute("sizemode");
+  let selectors;
+
+  // NOTE: TabsInTitlebar behaviour isn't under test here. We just want to assert on
+  // the right stuff being visible whatever the case for the given window.
+
+  if (tabstripOrientation == "horizontal") {
+    selectors = ["#TabsToolbar"];
+
+    if (win.TabsInTitlebar.enabled) {
+      selectors.push("#TabsToolbar .titlebar-buttonbox-container");
+      if (sizeMode == "normal") {
+        selectors.push("#TabsToolbar .titlebar-spacer");
+      }
+    }
+    return selectors;
+  }
+
+  selectors = ["#vertical-tabs"];
+  if (win.TabsInTitlebar.enabled) {
+    selectors.push("#nav-bar .titlebar-buttonbox-container");
+    if (sizeMode == "normal") {
+      selectors.push("#nav-bar .titlebar-spacer");
+    }
+  }
+  return selectors;
 }
 
 add_task(async function test_toggle_vertical_tabs() {
@@ -43,10 +80,38 @@ add_task(async function test_toggle_vertical_tabs() {
     "TabsToolbar-customization-target"
   );
   let verticalTabs = document.querySelector("#vertical-tabs");
-  ok(
-    !BrowserTestUtils.isVisible(verticalTabs),
-    "Vertical tabs slot is not visible"
+  info(
+    `toolbars collapsed: \n${Array.from(
+      document.querySelectorAll("#navigator-toolbox > toolbar")
+    )
+      .map(t => `  ${t.id}: ${t.collapsed}`)
+      .join("\n")}`
   );
+  info(`sizemode: ${document.documentElement.getAttribute("sizemode")}`);
+  info(
+    `tabsintitlebar: ${document.documentElement.getAttribute("tabsintitlebar")}`
+  );
+
+  const expectedElementsWhenHorizontal = getExpectedElements(
+    window,
+    "horizontal"
+  );
+  const expectedElementsWhenVertical = getExpectedElements(window, "vertical");
+
+  for (let selector of expectedElementsWhenHorizontal) {
+    let elem = document.querySelector(selector);
+    ok(
+      elem && BrowserTestUtils.isVisible(elem),
+      `${selector} exists and is visible`
+    );
+  }
+  for (let selector of expectedElementsWhenVertical) {
+    let elem = document.querySelector(selector);
+    ok(
+      elem && BrowserTestUtils.isHidden(elem),
+      `${selector} exists and is hidden`
+    );
+  }
 
   is(
     tabStrip.parentNode,
@@ -61,7 +126,26 @@ add_task(async function test_toggle_vertical_tabs() {
 
   // flip the pref to move the tabstrip into the sidebar
   await SpecialPowers.pushPrefEnv({ set: [["sidebar.verticalTabs", true]] });
-  ok(BrowserTestUtils.isVisible(verticalTabs), "Vertical tabs slot is visible");
+
+  for (let selector of expectedElementsWhenVertical) {
+    let elem = document.querySelector(selector);
+    ok(
+      elem && BrowserTestUtils.isVisible(elem),
+      `${selector} exists and is visible: ${!!elem}, ${
+        elem && BrowserTestUtils.isVisible(elem)
+      }`
+    );
+  }
+  for (let selector of expectedElementsWhenHorizontal) {
+    let elem = document.querySelector(selector);
+    ok(
+      elem && BrowserTestUtils.isHidden(elem),
+      `${selector} exists and is hidden: ${!!elem}, ${
+        elem && BrowserTestUtils.isHidden(elem)
+      }`
+    );
+  }
+
   is(
     tabStrip.parentNode,
     verticalTabs,
@@ -82,7 +166,7 @@ add_task(async function test_toggle_vertical_tabs() {
     document.getElementById("context_openANewTab").click();
   });
 
-  const keyedScalars = TelemetryTestUtils.getProcessScalars("parent", true);
+  let keyedScalars = TelemetryTestUtils.getProcessScalars("parent", true);
   TelemetryTestUtils.assertKeyedScalar(
     keyedScalars,
     "browser.ui.interaction.tabs_context_entrypoint",
@@ -130,7 +214,7 @@ add_task(async function test_toggle_vertical_tabs() {
 
   Assert.greater(
     containerRect.bottom - tabRect.bottom,
-    500,
+    450,
     "Container should extend far beyond the last tab."
   );
 
@@ -200,9 +284,29 @@ add_task(async function test_toggle_vertical_tabs() {
     }
   );
 
+  let newTabButton = document.getElementById("tabs-newtab-button");
+  info("Open a new tab using the new tab button.");
+  EventUtils.synthesizeMouseAtCenter(newTabButton, {});
+  is(gBrowser.tabs.length, 5, "Tabstrip now has six tabs");
+
+  // Middle click on new tab button should also open a new tab.
+  info("Open a new tab middle clicking the new tab button.");
+  // Make sure there is something in the clipboard that can be opened.
+  SpecialPowers.clipboardCopyString("about:blank");
+  EventUtils.synthesizeMouseAtCenter(newTabButton, { button: 1 });
+  is(gBrowser.tabs.length, 6, "Tabstrip now has five tabs");
+
+  keyedScalars = TelemetryTestUtils.getProcessScalars("parent", true);
+  TelemetryTestUtils.assertKeyedScalar(
+    keyedScalars,
+    "browser.ui.interaction.vertical_tabs_container",
+    "tabs-newtab-button",
+    1
+  );
+
   await checkTelemetryScalar(
     "browser.engagement.max_concurrent_vertical_tab_count",
-    4
+    6
   );
 
   // flip the pref to move the tabstrip horizontally
@@ -230,7 +334,7 @@ add_task(async function test_toggle_vertical_tabs() {
   TelemetryTestUtils.assertScalar(
     scalars,
     "browser.engagement.max_concurrent_tab_count",
-    4
+    6
   );
   TelemetryTestUtils.assertScalar(
     scalars,
@@ -258,5 +362,49 @@ add_task(async function test_enabling_vertical_tabs_enables_sidebar_revamp() {
   ok(
     Services.prefs.getBoolPref("sidebar.revamp", false),
     "sidebar.revamp pref is also enabled after we've enabled vertical tabs."
+  );
+});
+
+add_task(async function test_vertical_tabs_overflow() {
+  const numTabs = 50;
+  const winData = {
+    tabs: Array.from({ length: numTabs }, (_, i) => ({
+      entries: [
+        {
+          url: `data:,Tab${i}`,
+          triggeringPrincipal_base64: E10SUtils.SERIALIZED_SYSTEMPRINCIPAL,
+        },
+      ],
+    })),
+    selected: numTabs,
+  };
+  const browserState = { windows: [winData] };
+
+  // use Session restore to batch-open tabs
+  info(`Restoring to browserState: ${JSON.stringify(browserState, null, 2)}`);
+  await SessionStoreTestUtils.promiseBrowserState(browserState);
+  info("Windows and tabs opened, waiting for readyWindowsPromise");
+  await NonPrivateTabs.readyWindowsPromise;
+  info("readyWindowsPromise resolved");
+
+  info("Open a new tab using the new tab button.");
+  const newTabButton = document.getElementById("vertical-tabs-newtab-button");
+  ok(
+    BrowserTestUtils.isVisible(newTabButton),
+    "New tab button is visible while tabs are overflowing."
+  );
+  EventUtils.synthesizeMouseAtCenter(newTabButton, {});
+
+  is(
+    gBrowser.tabs.length,
+    numTabs + 1,
+    `Tabstrip now has ${numTabs + 1} tabs.`
+  );
+  const keyedScalars = TelemetryTestUtils.getProcessScalars("parent", true);
+  TelemetryTestUtils.assertKeyedScalar(
+    keyedScalars,
+    "browser.ui.interaction.vertical_tabs_container",
+    "vertical-tabs-newtab-button",
+    1
   );
 });

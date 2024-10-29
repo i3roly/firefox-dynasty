@@ -43,6 +43,13 @@ extern bool wgpu_server_use_external_texture_for_swap_chain(
   return parent->UseExternalTextureForSwapChain(aSwapChainId);
 }
 
+extern void wgpu_server_disable_external_texture_for_swap_chain(
+    void* aParam, WGPUSwapChainId aSwapChainId) {
+  auto* parent = static_cast<WebGPUParent*>(aParam);
+
+  parent->DisableExternalTextureForSwapChain(aSwapChainId);
+}
+
 extern bool wgpu_server_ensure_external_texture_for_swap_chain(
     void* aParam, WGPUSwapChainId aSwapChainId, WGPUDeviceId aDeviceId,
     WGPUTextureId aTextureId, uint32_t aWidth, uint32_t aHeight,
@@ -221,7 +228,7 @@ class PresentationData {
 
  public:
   WeakPtr<WebGPUParent> mParent;
-  const bool mUseExternalTextureInSwapChain;
+  bool mUseExternalTextureInSwapChain;
   const RawId mDeviceId;
   const RawId mQueueId;
   const layers::RGBDescriptor mDesc;
@@ -268,6 +275,8 @@ WebGPUParent::WebGPUParent() : mContext(ffi::wgpu_server_new(this)) {
 WebGPUParent::~WebGPUParent() {
   // All devices should have been dropped, but maybe they weren't. To
   // ensure we don't leak memory, clear the mDeviceLostRequests.
+  MOZ_ASSERT(mDeviceLostRequests.empty(),
+             "All device lost callbacks should have been called by now.");
   mDeviceLostRequests.clear();
 }
 
@@ -284,11 +293,13 @@ void WebGPUParent::LoseDevice(const RawId aDeviceId, Maybe<uint8_t> aReason,
 
   // If the connection has been dropped, there is nobody to receive
   // the DeviceLost message anyway.
-  if (CanSend()) {
-    if (!SendDeviceLost(aDeviceId, aReason, aMessage)) {
-      NS_ERROR("SendDeviceLost failed");
-      return;
-    }
+  if (!CanSend()) {
+    return;
+  }
+
+  if (!SendDeviceLost(aDeviceId, aReason, aMessage)) {
+    NS_ERROR("SendDeviceLost failed");
+    return;
   }
 
   mLostDeviceIds.Insert(aDeviceId);
@@ -392,16 +403,19 @@ ipc::IPCResult WebGPUParent::RecvInstanceRequestAdapter(
 
   RawId deviceId = req->mDeviceId;
 
-  // If aReason is 0, that corresponds to the "unknown" reason, which
-  // we treat as a Nothing() value. Any other value (which is positive)
-  // is mapped to the GPUDeviceLostReason values by subtracting 1.
-  Maybe<uint8_t> reason;
-  if (aReason > 0) {
-    uint8_t mappedReasonValue = (aReason - 1u);
-    reason = Some(mappedReasonValue);
+  // If aReason is 0, that corresponds to the unknown reason, which we
+  // treat as a Nothing() value. aReason of 1 corresponds to destroyed.
+  // Any other value is an unreportable outcome that wgpu sends for us to
+  // keep our data straight for the lost callback. We don't report those
+  // values.
+  if (aReason <= 1) {
+    Maybe<uint8_t> reason;  // default to GPUDeviceLostReason::unknown
+    if (aReason == 1) {
+      reason = Some(uint8_t(0));  // this is GPUDeviceLostReason::destroyed
+    }
+    nsAutoCString message(aMessage);
+    req->mParent->LoseDevice(deviceId, reason, message);
   }
-  nsAutoCString message(aMessage);
-  req->mParent->LoseDevice(deviceId, reason, message);
 
   auto it = req->mParent->mDeviceFenceHandles.find(deviceId);
   if (it != req->mParent->mDeviceFenceHandles.end()) {
@@ -1521,12 +1535,31 @@ bool WebGPUParent::UseExternalTextureForSwapChain(
   const auto& lookup = mPresentationDataMap.find(ownerId);
   if (lookup == mPresentationDataMap.end()) {
     MOZ_ASSERT_UNREACHABLE("unexpected to be called");
-    return IPC_OK();
+    return false;
   }
 
   RefPtr<PresentationData> data = lookup->second.get();
 
   return data->mUseExternalTextureInSwapChain;
+}
+
+void WebGPUParent::DisableExternalTextureForSwapChain(
+    ffi::WGPUSwapChainId aSwapChainId) {
+  auto ownerId = layers::RemoteTextureOwnerId{aSwapChainId._0};
+  const auto& lookup = mPresentationDataMap.find(ownerId);
+  if (lookup == mPresentationDataMap.end()) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    return;
+  }
+
+  RefPtr<PresentationData> data = lookup->second.get();
+
+  if (data->mUseExternalTextureInSwapChain) {
+    gfxCriticalNote << "Disable ExternalTexture for SwapChain:  "
+                    << aSwapChainId._0;
+  }
+
+  data->mUseExternalTextureInSwapChain = false;
 }
 
 bool WebGPUParent::EnsureExternalTextureForSwapChain(

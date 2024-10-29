@@ -109,6 +109,8 @@ class CanvasTranslator final : public gfx::InlineTranslator,
 
   ipc::IPCResult RecvClearCachedResources();
 
+  ipc::IPCResult RecvDropFreeBuffersWhenDormant();
+
   void ActorDestroy(ActorDestroyReason why) final;
 
   void CheckAndSignalWriter();
@@ -144,6 +146,11 @@ class CanvasTranslator final : public gfx::InlineTranslator,
    * Marks that device change processing in the writing process has finished.
    */
   void DeviceChangeAcknowledged();
+
+  /**
+   * Marks that device reset processing in the writing process has finished.
+   */
+  void DeviceResetAcknowledged();
 
   /**
    * Used during playback of events to create DrawTargets. For the
@@ -295,6 +302,7 @@ class CanvasTranslator final : public gfx::InlineTranslator,
       AddBuffer,
       SetDataSurfaceBuffer,
       ClearCachedResources,
+      DropFreeBuffersWhenDormant,
     };
     const Tag mTag;
 
@@ -306,7 +314,8 @@ class CanvasTranslator final : public gfx::InlineTranslator,
     explicit CanvasTranslatorEvent(const Tag aTag)
         : mTag(aTag), mBufferSize(0) {
       MOZ_ASSERT(mTag == Tag::TranslateRecording ||
-                 mTag == Tag::ClearCachedResources);
+                 mTag == Tag::ClearCachedResources ||
+                 mTag == Tag::DropFreeBuffersWhenDormant);
     }
     CanvasTranslatorEvent(const Tag aTag,
                           ipc::SharedMemory::Handle&& aBufferHandle,
@@ -335,6 +344,10 @@ class CanvasTranslator final : public gfx::InlineTranslator,
 
     static UniquePtr<CanvasTranslatorEvent> ClearCachedResources() {
       return MakeUnique<CanvasTranslatorEvent>(Tag::ClearCachedResources);
+    }
+
+    static UniquePtr<CanvasTranslatorEvent> DropFreeBuffersWhenDormant() {
+      return MakeUnique<CanvasTranslatorEvent>(Tag::DropFreeBuffersWhenDormant);
     }
 
     ipc::SharedMemory::Handle TakeBufferHandle() {
@@ -405,13 +418,18 @@ class CanvasTranslator final : public gfx::InlineTranslator,
   bool CheckForFreshCanvasDevice(int aLineNumber);
   void NotifyDeviceChanged();
 
+  void NotifyDeviceReset(const RemoteTextureOwnerIdSet& aIds);
   bool EnsureSharedContextWebgl();
   gfx::DrawTargetWebgl* GetDrawTargetWebgl(int64_t aTextureId,
                                            bool aCheckForFallback = true) const;
   void NotifyRequiresRefresh(int64_t aTextureId, bool aDispatch = true);
   void CacheSnapshotShmem(int64_t aTextureId, bool aDispatch = true);
 
+  void CacheDataSnapshots();
+
   void ClearCachedResources();
+
+  void DropFreeBuffersWhenDormant();
 
   already_AddRefed<gfx::DataSourceSurface>
   MaybeRecycleDataSurfaceForSurfaceDescriptor(

@@ -6,7 +6,6 @@
 
 add_task(async function () {
   await pushPref("dom.element.invokers.enabled", true);
-  await pushPref("dom.element.popover.enabled", true);
   await pushPref("dom.events.textevent.enabled", true);
 
   const dbg = await initDebugger(
@@ -22,7 +21,7 @@ add_task(async function () {
 
   invokeInTab("clickHandler");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 12);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 12);
 
   const whyPaused = await waitFor(
     () => dbg.win.document.querySelector(".why-paused")?.innerText
@@ -37,24 +36,24 @@ add_task(async function () {
   await toggleEventBreakpoint(dbg, "XHR", "event.xhr.load");
   invokeInTab("xhrHandler");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 20);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 20);
   await resume(dbg);
 
   await toggleEventBreakpoint(dbg, "Timer", "timer.timeout.set");
   await toggleEventBreakpoint(dbg, "Timer", "timer.timeout.fire");
   invokeInTab("timerHandler");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 27);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 27);
   await resume(dbg);
 
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 28);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 28);
   await resume(dbg);
 
   await toggleEventBreakpoint(dbg, "Script", "script.source.firstStatement");
   invokeInTab("evalHandler");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, findSource(dbg, "eval-test.js").id, 2);
+  await assertPausedAtSourceAndLine(dbg, findSource(dbg, "eval-test.js").id, 2);
   await resume(dbg);
   await toggleEventBreakpoint(dbg, "Script", "script.source.firstStatement");
 
@@ -62,12 +61,12 @@ add_task(async function () {
   await toggleEventBreakpoint(dbg, "Control", "event.control.focusout");
   invokeOnElement("#focus-text", "focus");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 43);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 43);
   await resume(dbg);
 
   // wait for focus-out event to fire
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 48);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 48);
   await resume(dbg);
 
   info("Deselect focus events");
@@ -79,7 +78,7 @@ add_task(async function () {
   await toggleEventBreakpoint(dbg, "Control", "event.control.invoke");
   invokeOnElement("#invoker", "click");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 73);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 73);
   await resume(dbg);
 
   info("Enable beforetoggle and toggle events");
@@ -88,11 +87,11 @@ add_task(async function () {
   invokeOnElement("#popover-toggle", "click");
   info("Wait for pause in beforetoggle event listener");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 89);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 89);
   await resume(dbg);
   info("And wait for pause in toggle event listener after resuming");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 93);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 93);
   await resume(dbg);
 
   await toggleEventBreakpoint(
@@ -106,7 +105,7 @@ add_task(async function () {
   invokeComposition();
 
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 53);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 53);
   await resume(dbg);
 
   info("Deselect compositionstart and select compositionupdate");
@@ -127,7 +126,7 @@ add_task(async function () {
   invokeComposition();
 
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 58);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 58);
   await resume(dbg);
 
   info("Deselect compositionupdate and select compositionend");
@@ -149,7 +148,7 @@ add_task(async function () {
   });
 
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 63);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 63);
   await resume(dbg);
 
   info("Test textInput");
@@ -157,7 +156,7 @@ add_task(async function () {
   invokeOnElement("#focus-text", "focus");
   EventUtils.sendChar("N");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 98);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 98);
   await resume(dbg);
   await toggleEventBreakpoint(dbg, "Keyboard", "event.keyboard.textInput");
 
@@ -169,13 +168,13 @@ add_task(async function () {
   });
 
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 68);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 68);
   await resume(dbg);
 
   info("Check that the click event breakpoint is still enabled");
   invokeInTab("clickHandler");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 12);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 12);
   await resume(dbg);
 
   info("Check that disabling an event breakpoint works");
@@ -189,7 +188,7 @@ add_task(async function () {
   await toggleEventBreakpoint(dbg, "Mouse", "event.mouse.click");
   invokeInTab("clickHandler");
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 12);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 12);
   await resume(dbg);
 
   info(
@@ -221,7 +220,7 @@ add_task(async function () {
   await toggleEventBreakpoint(dbg, "Load", "event.load.beforeunload");
   let onReload = reload(dbg);
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 78);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 78);
   await resume(dbg);
   await onReload;
   await toggleEventBreakpoint(dbg, "Load", "event.load.beforeunload");
@@ -230,7 +229,7 @@ add_task(async function () {
   await toggleEventBreakpoint(dbg, "Load", "event.load.unload");
   onReload = reload(dbg);
   await waitForPaused(dbg);
-  assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 83);
+  await assertPausedAtSourceAndLine(dbg, eventBreakpointsSource.id, 83);
   await resume(dbg);
   await onReload;
   await toggleEventBreakpoint(dbg, "Load", "event.load.unload");

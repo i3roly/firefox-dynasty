@@ -2176,6 +2176,7 @@ static const JSClass* ClassFor(JSContext* cx, GuardClassKind kind) {
     case GuardClassKind::Set:
     case GuardClassKind::Map:
     case GuardClassKind::BoundFunction:
+    case GuardClassKind::Date:
       return ClassFor(kind);
     case GuardClassKind::WindowProxy:
       return cx->runtime()->maybeWindowProxyClass();
@@ -3775,18 +3776,66 @@ bool CacheIRCompiler::emitBigIntToIntPtr(BigIntOperandId inputId,
   return true;
 }
 
+static gc::Heap InitialBigIntHeap(JSContext* cx) {
+  JS::Zone* zone = cx->zone();
+  return zone->allocNurseryBigInts() ? gc::Heap::Default : gc::Heap::Tenured;
+}
+
+static void EmitAllocateBigInt(MacroAssembler& masm, Register result,
+                               Register temp, const LiveRegisterSet& liveSet,
+                               gc::Heap initialHeap, Label* fail) {
+  Label fallback, done;
+  masm.newGCBigInt(result, temp, initialHeap, &fallback);
+  masm.jump(&done);
+  {
+    masm.bind(&fallback);
+
+    // Request a minor collection at a later time if nursery allocation failed.
+    bool requestMinorGC = initialHeap == gc::Heap::Default;
+
+    masm.PushRegsInMask(liveSet);
+    using Fn = void* (*)(JSContext* cx, bool requestMinorGC);
+    masm.setupUnalignedABICall(temp);
+    masm.loadJSContext(temp);
+    masm.passABIArg(temp);
+    masm.move32(Imm32(requestMinorGC), result);
+    masm.passABIArg(result);
+    masm.callWithABI<Fn, jit::AllocateBigIntNoGC>();
+    masm.storeCallPointerResult(result);
+
+    masm.PopRegsInMask(liveSet);
+    masm.branchPtr(Assembler::Equal, result, ImmWord(0), fail);
+  }
+  masm.bind(&done);
+}
+
 bool CacheIRCompiler::emitIntPtrToBigIntResult(IntPtrOperandId inputId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
-  AutoCallVM callvm(masm, this, allocator);
+  AutoOutputRegister output(*this);
   Register input = allocator.useRegister(masm, inputId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
 
-  callvm.prepare();
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
 
-  masm.Push(input);
+  LiveRegisterSet save = liveVolatileRegs();
+  save.takeUnchecked(scratch1);
+  save.takeUnchecked(scratch2);
+  save.takeUnchecked(output);
 
-  using Fn = BigInt* (*)(JSContext*, intptr_t);
-  callvm.call<Fn, JS::BigInt::createFromIntPtr>();
+  // Allocate a new BigInt. The code after this must be infallible.
+  gc::Heap initialHeap = InitialBigIntHeap(cx_);
+  EmitAllocateBigInt(masm, scratch1, scratch2, save, initialHeap,
+                     failure->label());
+
+  masm.movePtr(input, scratch2);
+  masm.initializeBigIntPtr(scratch1, scratch2);
+
+  masm.tagValue(JSVAL_TYPE_BIGINT, scratch1, output.valueReg());
   return true;
 }
 
@@ -7067,39 +7116,6 @@ bool CacheIRCompiler::emitStoreTypedArrayElement(ObjOperandId objId,
   return true;
 }
 
-static gc::Heap InitialBigIntHeap(JSContext* cx) {
-  JS::Zone* zone = cx->zone();
-  return zone->allocNurseryBigInts() ? gc::Heap::Default : gc::Heap::Tenured;
-}
-
-static void EmitAllocateBigInt(MacroAssembler& masm, Register result,
-                               Register temp, const LiveRegisterSet& liveSet,
-                               gc::Heap initialHeap, Label* fail) {
-  Label fallback, done;
-  masm.newGCBigInt(result, temp, initialHeap, &fallback);
-  masm.jump(&done);
-  {
-    masm.bind(&fallback);
-
-    // Request a minor collection at a later time if nursery allocation failed.
-    bool requestMinorGC = initialHeap == gc::Heap::Default;
-
-    masm.PushRegsInMask(liveSet);
-    using Fn = void* (*)(JSContext* cx, bool requestMinorGC);
-    masm.setupUnalignedABICall(temp);
-    masm.loadJSContext(temp);
-    masm.passABIArg(temp);
-    masm.move32(Imm32(requestMinorGC), result);
-    masm.passABIArg(result);
-    masm.callWithABI<Fn, jit::AllocateBigIntNoGC>();
-    masm.storeCallPointerResult(result);
-
-    masm.PopRegsInMask(liveSet);
-    masm.branchPtr(Assembler::Equal, result, ImmWord(0), fail);
-  }
-  masm.bind(&done);
-}
-
 void CacheIRCompiler::emitTypedArrayBoundsCheck(ArrayBufferViewKind viewKind,
                                                 Register obj, Register index,
                                                 Register scratch,
@@ -10374,36 +10390,6 @@ bool CacheIRCompiler::emitAtomicsIsLockFreeResult(Int32OperandId valueId) {
   return true;
 }
 
-bool CacheIRCompiler::emitInt32ToBigIntResult(Int32OperandId inputId) {
-  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
-
-  AutoOutputRegister output(*this);
-  Register input = allocator.useRegister(masm, inputId);
-  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
-  AutoScratchRegister scratch2(allocator, masm);
-
-  FailurePath* failure;
-  if (!addFailurePath(&failure)) {
-    return false;
-  }
-
-  LiveRegisterSet save = liveVolatileRegs();
-  save.takeUnchecked(scratch1);
-  save.takeUnchecked(scratch2);
-  save.takeUnchecked(output);
-
-  // Allocate a new BigInt. The code after this must be infallible.
-  gc::Heap initialHeap = InitialBigIntHeap(cx_);
-  EmitAllocateBigInt(masm, scratch1, scratch2, save, initialHeap,
-                     failure->label());
-
-  masm.move32SignExtendToPtr(input, scratch2);
-  masm.initializeBigIntPtr(scratch1, scratch2);
-
-  masm.tagValue(JSVAL_TYPE_BIGINT, scratch1, output.valueReg());
-  return true;
-}
-
 bool CacheIRCompiler::emitBigIntAsIntNResult(Int32OperandId bitsId,
                                              BigIntOperandId bigIntId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
@@ -10821,6 +10807,61 @@ bool CacheIRCompiler::emitMapSizeResult(ObjOperandId mapId) {
 
   masm.loadMapObjectSize(map, scratch);
   masm.tagValue(JSVAL_TYPE_INT32, scratch, output.valueReg());
+  return true;
+}
+
+bool CacheIRCompiler::emitDateFillLocalTimeSlots(ObjOperandId dateId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register date = allocator.useRegister(masm, dateId);
+  AutoScratchRegister scratch(allocator, masm);
+
+  masm.dateFillLocalTimeSlots(date, scratch, liveVolatileRegs());
+  return true;
+}
+
+bool CacheIRCompiler::emitDateHoursFromSecondsIntoYearResult(
+    ValOperandId secondsIntoYearId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  ValueOperand secondsIntoYear =
+      allocator.useValueRegister(masm, secondsIntoYearId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  masm.dateHoursFromSecondsIntoYear(secondsIntoYear, output.valueReg(),
+                                    scratch1, scratch2);
+  return true;
+}
+
+bool CacheIRCompiler::emitDateMinutesFromSecondsIntoYearResult(
+    ValOperandId secondsIntoYearId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  ValueOperand secondsIntoYear =
+      allocator.useValueRegister(masm, secondsIntoYearId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  masm.dateMinutesFromSecondsIntoYear(secondsIntoYear, output.valueReg(),
+                                      scratch1, scratch2);
+  return true;
+}
+
+bool CacheIRCompiler::emitDateSecondsFromSecondsIntoYearResult(
+    ValOperandId secondsIntoYearId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  AutoOutputRegister output(*this);
+  ValueOperand secondsIntoYear =
+      allocator.useValueRegister(masm, secondsIntoYearId);
+  AutoScratchRegisterMaybeOutput scratch1(allocator, masm, output);
+  AutoScratchRegister scratch2(allocator, masm);
+
+  masm.dateSecondsFromSecondsIntoYear(secondsIntoYear, output.valueReg(),
+                                      scratch1, scratch2);
   return true;
 }
 

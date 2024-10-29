@@ -52,9 +52,8 @@
   --urlbarView-labeled-row-label-top: calc(-1.27em - 2px);
   --urlbarView-labeled-tip-margin-top-extra: 8px;
 
-  --urlbarView-action-button-background-color: light-dark(white, var(--color-gray-90));
-  --urlbarView-action-button-hover-color: light-dark(var(--color-gray-70), var(--color-gray-05));
-  --urlbarView-action-button-selected-color: light-dark(var(--color-gray-90), var(--urlbarView-action-button-background-color));
+  --urlbarView-action-button-background-color: color-mix(in srgb, var(--urlbarView-hover-background) 50%, transparent);
+  --urlbarView-action-button-hover-background-color: var(--urlbarView-hover-background);
 
   &:-moz-locale-dir(rtl) {
     --urlbarView-action-slide-in-distance: -200px;
@@ -716,25 +715,57 @@
 /* Switch-to-tab and Clipboard action text is styled as a chiclet. */
 .urlbarView-row[has-action]:is([type=switchtab], [type=remotetab], [type=clipboard]) {
   > .urlbarView-row-inner > .urlbarView-no-wrap > .urlbarView-action {
-    color: var(--urlbar-box-text-color);
-    background-color: var(--urlbar-box-focus-bgcolor);
     border-radius: var(--toolbarbutton-border-radius);
     padding: 4px 8px;
     margin-block: -2px;
     margin-inline-start: 8px;
 
     :root[uidensity=compact] & {
-      padding: 3px 6px;
+      padding-block: 3px;
+
+      &.urlbarView-userContext {
+        border-block-start-width: 3px;
+      }
     }
 
-    &.urlbarView-userContext {
-      padding-top: 0;
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media not (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
+      color: var(--urlbar-box-text-color);
+      background-color: var(--urlbar-box-focus-bgcolor);
+
+      &.urlbarView-userContext {
+        padding-top: 0;
+      }
+    }
+
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
+      -moz-context-properties: fill, fill-opacity;
+      color: var(--toolbar-field-focus-color);
+      padding-inline-start: calc(var(--urlbarView-favicon-width) + 8px);
+      background-image: url("chrome://browser/content/firefoxview/view-opentabs.svg");
+      background-repeat: no-repeat;
+      background-position: 4px center;
+      background-size: var(--urlbarView-favicon-width);
+
+      border-inline: 1px solid var(--urlbarView-separator-color);
+      border-block-end: 1px solid var(--urlbarView-separator-color);
+      &:not(.urlbarView-userContext) {
+        border-block-start: 1px solid var(--urlbarView-separator-color);
+      }
+
+      &:-moz-locale-dir(rtl) {
+        background-position-x: right 4px;
+      }
     }
   }
 
-  &:is([selected], :hover) > .urlbarView-row-inner > .urlbarView-no-wrap > .urlbarView-action {
-    color: var(--urlbarView-result-button-selected-color);
-    background-color: var(--urlbarView-result-button-selected-background-color);
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media not (-moz-bool-pref: "browser.urlbar.scotchBonnet.enableOverride") {
+    &:is([selected], :hover) > .urlbarView-row-inner > .urlbarView-no-wrap > .urlbarView-action {
+      color: var(--urlbarView-result-button-selected-color);
+      background-color: var(--urlbarView-result-button-selected-background-color);
+    }
   }
 }
 
@@ -913,7 +944,7 @@
 .urlbarView-results[searchmodesource=actions] {
   white-space: wrap;
 
-  > .urlbarView-row {
+  > .urlbarView-row[dynamicType="actions"] {
     display: inline-flex;
   }
 }
@@ -930,14 +961,14 @@
 
 .urlbarView-action-btn {
   font-size: smaller;
-  color: var(--toolbar-field-focus-color);
+  font-weight: var(--font-weight-bold);
   border-radius: var(--toolbarbutton-border-radius);
   border: 1px solid transparent;
   padding: .4em .6em;
   display: inline-flex;
   align-items: center;
   background-color: var(--urlbarView-action-button-background-color);
-  box-shadow: 0 0px 4px rgba(0, 0, 0, 0.23);
+  margin-inline-end: var(--space-large);
 
   > img {
     width: 16px;
@@ -947,14 +978,12 @@
   }
 
   &:hover {
-    color: var(--urlbarView-result-button-hover-color);
-    background-color: var(--urlbarView-action-button-hover-color);
+    background-color: var(--urlbarView-action-button-hover-background-color);
   }
 
-  &[selected] {
-    color: light-dark(var(--urlbarView-result-button-hover-color), var(--toolbar-field-focus-color));
-    background-color: var(--urlbarView-action-button-selected-color);
-    border-color: light-dark(transparent, white);
+  &[selected],
+  &:hover:active {
+    outline: var(--focus-outline);
   }
 
   &.urlbarView-userContext {

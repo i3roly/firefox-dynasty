@@ -1,11 +1,46 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
 @import url("chrome://global/skin/in-content/common.css");
 
 html {
-  background-color: var(--in-content-page-background);
+  height: 100%;
+}
+
+.category .category-name {
+  pointer-events: none;
+}
+
+.category {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+body {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.main-content {
+  flex: 1;
+}
+
+.tab {
+  padding: 0.5em 0;
+}
+
+.fieldset-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.fieldset-container fieldset {
+  flex: 1 1 48%;
+  box-sizing: border-box;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
 button {
@@ -17,12 +52,6 @@ button {
 button:hover {
   background-color: var(--in-content-hover-background);
   cursor: pointer;
-}
-
-body {
-  padding: 0 2em;
-  min-width: 45em;
-  margin: auto;
 }
 
 caption {
@@ -48,20 +77,12 @@ td {
 }
 
 tr:nth-child(even) td {
-  background-color: var(--in-content-box-background);
+  background-color: var(--background-color-box);
 }
 
 tr:nth-child(odd) td {
   background-color: var(--in-content-box-background-odd);
 }
-
-#warning {
-  display: none;
-  border: 1px solid red;
-  padding: 10px;
-  color: red;
-}
-
 textarea {
   width: 100%;
   height: calc(1.2em * 20);
@@ -73,29 +94,6 @@ legend {
   font-weight: bold;
   padding: 5px;
 }
-
-.fieldset-container {
-  display: flex;
-  justify-content: space-between;
-}
-
-fieldset {
-  width: 49%;
-  padding: 10px;
-  box-sizing: border-box;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-fieldset.large {
-  width: 100%;
-}
-
-legend {
-  font-size: 1.5em;
-  font-weight: bold;
-  padding: 5px;
-}
-
 .form-container {
   margin: auto;
   padding-right: 10px;
@@ -201,4 +199,23 @@ legend {
   padding-left: 5px;
   line-height: 20px;
   border-radius: 5px;
+}
+
+
+#modelFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+#modelFiles table {
+  flex: 1 1 calc(33.333% - 10px);
+  box-sizing: border-box;
+}
+
+#modelFiles table caption {
+  caption-side: bottom;
+  text-align: center;
+  font-weight: bold;
+  margin-top: 1px;
 }

@@ -54,6 +54,14 @@ void MacroAssembler::move32To64SignExtend(Register src, Register64 dest) {
   movslq(src, dest.reg);
 }
 
+void MacroAssembler::move8SignExtendToPtr(Register src, Register dest) {
+  movsbq(Operand(src), dest);
+}
+
+void MacroAssembler::move16SignExtendToPtr(Register src, Register dest) {
+  movswq(Operand(src), dest);
+}
+
 void MacroAssembler::move32SignExtendToPtr(Register src, Register dest) {
   movslq(src, dest);
 }
@@ -528,8 +536,9 @@ void MacroAssembler::cmp64Set(Condition cond, Address lhs, Imm64 rhs,
 
 template <typename T1, typename T2>
 void MacroAssembler::cmpPtrSet(Condition cond, T1 lhs, T2 rhs, Register dest) {
+  bool destIsZero = maybeEmitSetZeroByteRegister(lhs, rhs, dest);
   cmpPtr(lhs, rhs);
-  emitSet(cond, dest);
+  emitSet(cond, dest, destIsZero);
 }
 
 // ===============================================================

@@ -362,15 +362,17 @@ static void FreeArgv(char** argv, int argc) {
 }
 
 extern "C" APKOPEN_EXPORT void MOZ_JNICALL
-Java_org_mozilla_gecko_mozglue_GeckoLoader_nativeRun(
-    JNIEnv* jenv, jclass jc, jobjectArray jargs, int prefsFd, int prefMapFd,
-    int ipcFd, int crashFd, bool xpcshell, jstring outFilePath) {
+Java_org_mozilla_gecko_mozglue_GeckoLoader_nativeRun(JNIEnv* jenv, jclass jc,
+                                                     jobjectArray jargs,
+                                                     jintArray jfds,
+                                                     bool xpcshell,
+                                                     jstring outFilePath) {
   EnsureBaseProfilerInitialized();
 
   int argc = 0;
   char** argv = CreateArgvFromObjectArray(jenv, jargs, &argc);
 
-  if (ipcFd < 0) {
+  if (!jfds) {
     if (gBootstrap == nullptr) {
       FreeArgv(argv, argc);
       return;
@@ -400,9 +402,14 @@ Java_org_mozilla_gecko_mozglue_GeckoLoader_nativeRun(
 
     SetGeckoProcessType(argv[--argc]);
     SetGeckoChildID(argv[--argc]);
+#if defined(MOZ_MEMORY)
+    // XRE_IsContentProcess is not accessible here
+    jemalloc_reset_small_alloc_randomization(
+        /* aRandomizeSmall */ GetGeckoProcessType() !=
+        GeckoProcessType_Content);
+#endif
 
-    gBootstrap->XRE_SetAndroidChildFds(jenv,
-                                       {prefsFd, prefMapFd, ipcFd, crashFd});
+    gBootstrap->XRE_SetAndroidChildFds(jenv, jfds);
 
     XREChildData childData;
     gBootstrap->XRE_InitChildProcess(argc, argv, &childData);
@@ -424,8 +431,14 @@ extern "C" APKOPEN_EXPORT mozglueresult ChildProcessInit(int argc,
   if (argc < 2) {
     return FAILURE;
   }
+
   SetGeckoProcessType(argv[--argc]);
   SetGeckoChildID(argv[--argc]);
+#if defined(MOZ_MEMORY)
+  // XRE_IsContentProcess is not accessible here
+  jemalloc_reset_small_alloc_randomization(
+      /* aRandomizeSmall */ GetGeckoProcessType() != GeckoProcessType_Content);
+#endif
 
   if (loadNSSLibs() != SUCCESS) {
     return FAILURE;

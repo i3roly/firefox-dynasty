@@ -762,11 +762,6 @@ public class GeckoAppShell {
   }
 
   @WrapForJNI(calledFrom = "gecko")
-  public static String getExtensionFromMimeType(final String aMimeType) {
-    return MimeTypeMap.getSingleton().getExtensionFromMimeType(aMimeType);
-  }
-
-  @WrapForJNI(calledFrom = "gecko")
   public static String getMimeTypeFromExtensions(final String aFileExt) {
     final StringTokenizer st = new StringTokenizer(aFileExt, ".,; ");
     String type = null;
@@ -1597,6 +1592,9 @@ public class GeckoAppShell {
 
   @WrapForJNI
   public static native boolean isGpuProcessEnabled();
+
+  @WrapForJNI
+  public static native boolean isInteractiveWidgetDefaultResizesVisual();
 
   @SuppressLint("NewApi")
   public static boolean isIsolatedProcess() {

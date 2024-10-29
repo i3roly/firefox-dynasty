@@ -1419,9 +1419,7 @@ services/common/kinto-http-client.sys.mjs
 services/common/kinto-offline-client.sys.mjs
 testing/gtest/gmock/
 testing/gtest/gtest/
-testing/mochitest/MochiKit/
 testing/mochitest/pywebsocket3/
-testing/mochitest/tests/MochiKit-1.4.2/
 testing/modules/sinon-7.2.7.js
 testing/mozbase/mozproxy/mozproxy/backends/mitm/scripts/catapult/
 testing/talos/talos/tests/devtools/addon/content/pages/
@@ -1503,14 +1501,17 @@ mobile/android/**/generated
 mobile/android/**\/local.properties
 mobile/android/**\/manifest.json
 mobile/android/android-components/components/feature/search/src/main/assets/search/search_telemetry_v2.json
+mobile/android/android-components/config/detekt-baseline.xml
 mobile/android/android-components/gradle/wrapper/
 mobile/android/android-components/samples/glean/src/main/res/raw/initial_experiments.json
 mobile/android/fenix/app/lint-baseline.xml
 mobile/android/fenix/app/src/debug/res/raw/initial_experiments.json
 mobile/android/fenix/app/src/main/res/raw/initial_experiments.json
+mobile/android/fenix/config/detekt-baseline.xml
 mobile/android/fenix/gradle/wrapper/
 mobile/android/focus-android/app/lint-baseline.xml
 mobile/android/focus-android/gradle/wrapper/
+mobile/android/focus-android/quality/detekt-baseline.xml
 mobile/locales/l10n-changesets.json
 mobile/locales/l10n-onchange-changesets.json
 node_modules/

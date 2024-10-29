@@ -6,6 +6,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  MerinoClient: "resource:///modules/MerinoClient.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   rawSuggestionUrlMatches: "resource://gre/modules/RustSuggest.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
@@ -30,6 +31,8 @@ const FEATURES = {
     "resource:///modules/urlbar/private/PocketSuggestions.sys.mjs",
   SuggestBackendJs:
     "resource:///modules/urlbar/private/SuggestBackendJs.sys.mjs",
+  SuggestBackendMl:
+    "resource:///modules/urlbar/private/SuggestBackendMl.sys.mjs",
   SuggestBackendRust:
     "resource:///modules/urlbar/private/SuggestBackendRust.sys.mjs",
   Weather: "resource:///modules/urlbar/private/Weather.sys.mjs",
@@ -39,8 +42,6 @@ const FEATURES = {
 const TIMESTAMP_TEMPLATE = "%YYYYMMDDHH%";
 const TIMESTAMP_LENGTH = 10;
 const TIMESTAMP_REGEXP = /^\d{10}$/;
-
-const TELEMETRY_EVENT_CATEGORY = "contextservices.quicksuggest";
 
 // Values returned by the onboarding dialog depending on the user's response.
 // These values are used in telemetry events, so be careful about changing them.
@@ -63,14 +64,6 @@ const ONBOARDING_URI =
  * related helpers.
  */
 class _QuickSuggest {
-  /**
-   * @returns {string}
-   *   The name of the quick suggest telemetry event category.
-   */
-  get TELEMETRY_EVENT_CATEGORY() {
-    return TELEMETRY_EVENT_CATEGORY;
-  }
-
   /**
    * @returns {string}
    *   The timestamp template string used in quick suggest URLs.
@@ -196,6 +189,9 @@ class _QuickSuggest {
       if (feature.rustSuggestionTypes.length) {
         this.#rustFeatures.add(feature);
       }
+      if (feature.mlIntent) {
+        this.#featuresByMlIntent.set(feature.mlIntent, feature);
+      }
 
       // Update the map from enabling preferences to features.
       let prefs = feature.enablingPreferences;
@@ -259,6 +255,63 @@ class _QuickSuggest {
   }
 
   /**
+   * Returns a Suggest feature by the ML intent name (as defined by
+   * `feature.mlIntent` and `MLSuggest`). Not all features support ML.
+   *
+   * @param {string} intent
+   *   The name of an ML intent.
+   * @returns {BaseFeature}
+   *   The feature object, an instance of a subclass of `BaseFeature`, or null
+   *   if no feature corresponds to the intent.
+   */
+  getFeatureByMlIntent(intent) {
+    return this.#featuresByMlIntent.get(intent);
+  }
+
+  /**
+   * Fetches the client's geolocation from Merino. Merino gets the geolocation
+   * by looking up the client's IP address in its MaxMind database.
+   *
+   * @returns {object}
+   *   An object with the following properties (see Merino docs for latest):
+   *
+   *   {string} country
+   *     The full country name.
+   *   {string} country_code
+   *     The country ISO code.
+   *   {string} region
+   *     The full region name, e.g., the full name of a U.S. state.
+   *   {string} region_code
+   *     The region ISO code, e.g., the two-letter abbreviation for U.S. states.
+   *   {string} city
+   *     The city name.
+   *   {object} location
+   *     This object has the following properties:
+   *     {number} longitude
+   *       WGS 84 longitude.
+   *     {number} latitude
+   *       WGS 84 latitude.
+   *     {number} radius
+   *       Accuracy radius in meters.
+   */
+  async geolocation() {
+    if (!this.#merino) {
+      this.#merino = new lazy.MerinoClient("QuickSuggest");
+    }
+
+    this.logger.debug("Fetching geolocation from Merino");
+    let results = await this.#merino.fetch({
+      providers: ["geolocation"],
+      query: "",
+    });
+
+    this.logger.debug(
+      "Got geolocation from Merino: " + JSON.stringify(results)
+    );
+    return results.length ? results[0].custom_details.geolocation : null;
+  }
+
+  /**
    * Called when a urlbar pref changes.
    *
    * @param {string} pref
@@ -271,36 +324,6 @@ class _QuickSuggest {
       for (let f of features) {
         f.update();
       }
-    }
-
-    switch (pref) {
-      case "quicksuggest.dataCollection.enabled":
-        if (!lazy.UrlbarPrefs.updatingFirefoxSuggestScenario) {
-          Services.telemetry.recordEvent(
-            TELEMETRY_EVENT_CATEGORY,
-            "data_collect_toggled",
-            lazy.UrlbarPrefs.get(pref) ? "enabled" : "disabled"
-          );
-        }
-        break;
-      case "suggest.quicksuggest.nonsponsored":
-        if (!lazy.UrlbarPrefs.updatingFirefoxSuggestScenario) {
-          Services.telemetry.recordEvent(
-            TELEMETRY_EVENT_CATEGORY,
-            "enable_toggled",
-            lazy.UrlbarPrefs.get(pref) ? "enabled" : "disabled"
-          );
-        }
-        break;
-      case "suggest.quicksuggest.sponsored":
-        if (!lazy.UrlbarPrefs.updatingFirefoxSuggestScenario) {
-          Services.telemetry.recordEvent(
-            TELEMETRY_EVENT_CATEGORY,
-            "sponsored_toggled",
-            lazy.UrlbarPrefs.get(pref) ? "enabled" : "disabled"
-          );
-        }
-        break;
     }
   }
 
@@ -510,12 +533,6 @@ class _QuickSuggest {
 
     lazy.UrlbarPrefs.set("quicksuggest.onboardingDialogChoice", params.choice);
 
-    Services.telemetry.recordEvent(
-      "contextservices.quicksuggest",
-      "opt_in_dialog",
-      params.choice
-    );
-
     return true;
   }
 
@@ -531,13 +548,6 @@ class _QuickSuggest {
     for (let feature of Object.values(this.#features)) {
       feature.update();
     }
-
-    // Update state related to quick suggest as a whole.
-    let enabled = lazy.UrlbarPrefs.get("quickSuggestEnabled");
-    Services.telemetry.setEventRecordingEnabled(
-      TELEMETRY_EVENT_CATEGORY,
-      enabled
-    );
   }
 
   // Maps from Suggest feature class names to feature instances.
@@ -549,11 +559,17 @@ class _QuickSuggest {
   // Maps from Rust suggestion types to Suggest feature instances.
   #featuresByRustSuggestionType = new Map();
 
+  // Maps from ML intent strings to Suggest feature instances.
+  #featuresByMlIntent = new Map();
+
   // Set of feature instances that manage Rust suggestion types.
   #rustFeatures = new Set();
 
   // Maps from preference names to the `Set` of feature instances they enable.
   #featuresByEnablingPrefs = new Map();
+
+  // `MerinoClient`
+  #merino;
 }
 
 export const QuickSuggest = new _QuickSuggest();

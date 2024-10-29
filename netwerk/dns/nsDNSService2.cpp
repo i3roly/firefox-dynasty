@@ -106,7 +106,7 @@ NS_IMPL_ISUPPORTS(nsDNSRecord, nsIDNSRecord, nsIDNSAddrRecord)
 NS_IMETHODIMP
 nsDNSRecord::GetCanonicalName(nsACString& result) {
   // this method should only be called if we have a CNAME
-  NS_ENSURE_TRUE(mHostRecord->flags & nsHostResolver::RES_CANON_NAME,
+  NS_ENSURE_TRUE(mHostRecord->flags & nsIDNSService::RESOLVE_CANONICAL_NAME,
                  NS_ERROR_NOT_AVAILABLE);
 
   MutexAutoLock lock(mHostRecord->addr_info_lock);
@@ -418,13 +418,24 @@ nsDNSByTypeRecord::GetServiceModeRecord(bool aNoHttp2, bool aNoHttp3,
 }
 
 NS_IMETHODIMP
+nsDNSByTypeRecord::GetServiceModeRecordWithCname(bool aNoHttp2, bool aNoHttp3,
+                                                 const nsACString& aCname,
+                                                 nsISVCBRecord** aRecord) {
+  return mHostRecord->GetServiceModeRecordWithCname(aNoHttp2, aNoHttp3, aCname,
+                                                    aRecord);
+}
+
+NS_IMETHODIMP
+nsDNSByTypeRecord::IsTRR(bool* aResult) { return mHostRecord->IsTRR(aResult); }
+
+NS_IMETHODIMP
 nsDNSByTypeRecord::GetAllRecordsWithEchConfig(
-    bool aNoHttp2, bool aNoHttp3, bool* aAllRecordsHaveEchConfig,
-    bool* aAllRecordsInH3ExcludedList,
+    bool aNoHttp2, bool aNoHttp3, const nsACString& aCname,
+    bool* aAllRecordsHaveEchConfig, bool* aAllRecordsInH3ExcludedList,
     nsTArray<RefPtr<nsISVCBRecord>>& aResult) {
   return mHostRecord->GetAllRecordsWithEchConfig(
-      aNoHttp2, aNoHttp3, aAllRecordsHaveEchConfig, aAllRecordsInH3ExcludedList,
-      aResult);
+      aNoHttp2, aNoHttp3, aCname, aAllRecordsHaveEchConfig,
+      aAllRecordsInH3ExcludedList, aResult);
 }
 
 NS_IMETHODIMP

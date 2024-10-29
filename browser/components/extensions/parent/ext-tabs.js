@@ -36,7 +36,10 @@ ChromeUtils.defineLazyGetter(this, "tabHidePopup", () => {
     descriptionMessageId: "tabHideControlled.message",
     getLocalizedDescription: (doc, message, addonDetails) => {
       let image = doc.createXULElement("image");
-      image.setAttribute("class", "extension-controlled-icon alltabs-icon");
+      image.classList.add("extension-controlled-icon", "alltabs-icon");
+      if (!doc.getElementById("alltabs-button")?.closest("#TabsToolbar")) {
+        image.classList.add("alltabs-icon-generic");
+      }
       return BrowserUIUtils.getLocalizedFragment(
         doc,
         message,
@@ -1150,7 +1153,7 @@ this.tabs = class extends ExtensionAPIPersistent {
             // the current set of pinned tabs. Unpinned tabs, likewise, can only
             // be moved to a position after the current set of pinned tabs.
             // Attempts to move a tab to an illegal position are ignored.
-            let numPinned = gBrowser._numPinnedTabs;
+            let numPinned = gBrowser.pinnedTabCount;
             let ok = nativeTab.pinned
               ? insertionPoint <= numPinned
               : insertionPoint >= numPinned;

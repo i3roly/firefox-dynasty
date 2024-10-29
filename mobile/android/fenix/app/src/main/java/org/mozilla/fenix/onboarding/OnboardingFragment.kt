@@ -31,7 +31,7 @@ import org.mozilla.fenix.compose.LinkTextState
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.hideToolbar
 import org.mozilla.fenix.ext.isDefaultBrowserPromptSupported
-import org.mozilla.fenix.ext.isTablet
+import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.openSetDefaultBrowserOption
 import org.mozilla.fenix.ext.requireComponents
@@ -73,7 +73,7 @@ class OnboardingFragment : Fragment() {
             onFinish(null)
         }
 
-        if (!isTablet()) {
+        if (!isLargeWindow()) {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
         val filter = IntentFilter(WidgetPinnedReceiver.ACTION)
@@ -111,7 +111,7 @@ class OnboardingFragment : Fragment() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (!isTablet()) {
+        if (!isLargeWindow()) {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(pinAppWidgetReceiver)
@@ -178,6 +178,12 @@ class OnboardingFragment : Fragment() {
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.ADD_SEARCH_WIDGET),
                 )
             },
+            onAddOnsButtonClick = {
+                telemetryRecorder.onAddOnsButtonClick(
+                    pagesToDisplay.telemetrySequenceId(),
+                    pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.ADD_ONS),
+                )
+            },
             onFinish = {
                 onFinish(it)
                 disableNavBarCFRForNewUser()
@@ -215,7 +221,8 @@ class OnboardingFragment : Fragment() {
         requireContext().settings().shouldShowNavigationBarCFR = false
     }
 
-    private fun isNotDefaultBrowser(context: Context) =
+    // Marked as internal since it is used in unit tests
+    internal fun isNotDefaultBrowser(context: Context) =
         !BrowsersCache.all(context.applicationContext).isDefaultBrowser
 
     private fun canShowNotificationPage(context: Context) =

@@ -91,20 +91,23 @@ XPCOMUtils.defineLazyPreferenceGetter(
 // These engines were added years after Sync had been introduced, they need
 // special handling since they are system add-ons and are un-available on
 // older versions of Firefox.
+// These are only used in the non-oauth flows.
 const EXTRA_ENGINES = ["addresses", "creditcards"];
 
 // These engines will be displayed to the user to pick which they would like to
-// use
-const CHOOSE_WHAT_TO_SYNC = [
+// use.
+const CHOOSE_WHAT_TO_SYNC_ALWAYS_AVAILABLE = [
   "addons",
-  "addresses",
   "bookmarks",
   "creditcards",
   "history",
   "passwords",
-  "preferences",
+  "prefs",
   "tabs",
 ];
+
+// Engines which we need to inspect a pref to see if they are available in the oauth flows.
+const CHOOSE_WHAT_TO_SYNC_OPTIONALLY_AVAILABLE = ["addresses"];
 
 /**
  * A helper function that extracts the message and stack from an error object.
@@ -186,6 +189,12 @@ FxAccountsWebChannel.prototype = {
   _webChannelOrigin: null,
 
   /**
+   * The promise which is handling the most recent webchannel message we received.
+   * Used to avoid us handling multiple messages concurrently.
+   */
+  _lastPromise: null,
+
+  /**
    * Release all resources that are in use.
    */
   tearDown() {
@@ -211,7 +220,7 @@ FxAccountsWebChannel.prototype = {
   },
 
   _receiveMessage(message, sendingContext) {
-    const { command, data } = message;
+    log.trace(`_receiveMessage for command ${message.command}`);
     let shouldCheckRemoteType =
       lazy.separatePrivilegedMozillaWebContentProcess &&
       lazy.separatedMozillaDomains.some(function (val) {
@@ -228,6 +237,26 @@ FxAccountsWebChannel.prototype = {
       return;
     }
 
+    // Here we do some promise dances to ensure we are never handling multiple messages
+    // concurrently, which can happen for async message handlers.
+    // Not all handlers are async, which is something we should clean up to make this simpler.
+    // Start with ensuring the last promise we saw is complete.
+    let lastPromise = this._lastPromise || Promise.resolve();
+    this._lastPromise = lastPromise
+      .then(() => {
+        return this._promiseMessage(message, sendingContext);
+      })
+      .catch(e => {
+        log.error("Handling webchannel message failed", e);
+        this._sendError(e, message, sendingContext);
+      })
+      .finally(() => {
+        this._lastPromise = null;
+      });
+  },
+
+  async _promiseMessage(message, sendingContext) {
+    const { command, data } = message;
     let browser = sendingContext.browsingContext.top.embedderElement;
     switch (command) {
       case COMMAND_PROFILE_CHANGE:
@@ -238,20 +267,14 @@ FxAccountsWebChannel.prototype = {
         );
         break;
       case COMMAND_LOGIN:
-        this._helpers
-          .login(data)
-          .catch(error => this._sendError(error, message, sendingContext));
+        await this._helpers.login(data);
         break;
       case COMMAND_OAUTH:
-        this._helpers
-          .oauthLogin(data)
-          .catch(error => this._sendError(error, message, sendingContext));
+        await this._helpers.oauthLogin(data);
         break;
       case COMMAND_LOGOUT:
       case COMMAND_DELETE:
-        this._helpers
-          .logout(data.uid)
-          .catch(error => this._sendError(error, message, sendingContext));
+        await this._helpers.logout(data.uid);
         break;
       case COMMAND_CAN_LINK_ACCOUNT:
         let canLinkAccount = this._helpers.shouldAllowRelink(data.email);
@@ -293,9 +316,7 @@ FxAccountsWebChannel.prototype = {
         this._helpers.openFirefoxView(browser, data.entryPoint);
         break;
       case COMMAND_CHANGE_PASSWORD:
-        this._helpers
-          .changePassword(data)
-          .catch(error => this._sendError(error, message, sendingContext));
+        await this._helpers.changePassword(data);
         break;
       case COMMAND_FXA_STATUS:
         log.debug("fxa_status received");
@@ -303,7 +324,7 @@ FxAccountsWebChannel.prototype = {
         const service = data && data.service;
         const isPairing = data && data.isPairing;
         const context = data && data.context;
-        this._helpers
+        await this._helpers
           .getFxaStatus(service, sendingContext, isPairing, context)
           .then(fxaStatus => {
             let response = {
@@ -312,8 +333,7 @@ FxAccountsWebChannel.prototype = {
               data: fxaStatus,
             };
             this._channel.send(response, sendingContext);
-          })
-          .catch(error => this._sendError(error, message, sendingContext));
+          });
         break;
       case COMMAND_PAIR_HEARTBEAT:
       case COMMAND_PAIR_SUPP_METADATA:
@@ -394,6 +414,10 @@ FxAccountsWebChannel.prototype = {
         try {
           this._receiveMessage(message, sendingContext);
         } catch (error) {
+          // this should be impossible - _receiveMessage will do this, but better safe than sorry.
+          log.error(
+            "Unexpected webchannel error escaped from promise error handlers"
+          );
           this._sendError(error, message, sendingContext);
         }
       }
@@ -500,6 +524,11 @@ FxAccountsWebChannelHelpers.prototype = {
     );
 
     if (lazy.oauthEnabled) {
+      // XXX - work around a server issue - we should never be handed these items in oauth flows.
+      // Fixed in https://github.com/mozilla/fxa/pull/17892, so this can probably be made more
+      // aggressive (eg, refuse to connect if they are present or similar)
+      delete accountData.keyFetchToken;
+      delete accountData.unwrapBKey;
       await this._fxAccounts._internal.setSignedInUser(accountData);
     } else {
       const xps = await this._initializeSync();
@@ -515,6 +544,7 @@ FxAccountsWebChannelHelpers.prototype = {
         }
       }
     }
+    log.debug("Webchannel finished logging a user in.");
   },
 
   /**
@@ -531,28 +561,50 @@ FxAccountsWebChannelHelpers.prototype = {
   async oauthLogin(oauthData) {
     log.debug("Webchannel is completing the oauth flow");
     const xps = await this._initializeSync();
-    const { code, state, declinedSyncEngines, offeredSyncEngines } = oauthData;
-    const { sessionToken } =
-      await this._fxAccounts._internal.getUserAccountData(["sessionToken"]);
+    const { sessionToken, email } =
+      await this._fxAccounts._internal.getUserAccountData([
+        "sessionToken",
+        "email",
+      ]);
     // First we finish the ongoing oauth flow
     const { scopedKeys, refreshToken } =
       await this._fxAccounts._internal.completeOAuthFlow(
         sessionToken,
-        code,
-        state
+        oauthData.code,
+        oauthData.state
       );
 
     // We don't currently use the refresh token in Firefox Desktop, lets be good citizens and revoke it.
     await this._fxAccounts._internal.destroyOAuthToken({ token: refreshToken });
+
+    // Remember the account for future merge warnings etc.
+    this.setPreviousAccountNameHashPref(email);
 
     // Then, we persist the sync keys
     await this._fxAccounts._internal.setScopedKeys(scopedKeys);
 
     // Now that we have the scoped keys, we set our status to verified
     await this._fxAccounts._internal.setUserVerified();
-    this._setEnabledEngines(offeredSyncEngines, declinedSyncEngines);
-    log.debug("Webchannel is enabling sync");
-    xps.Weave.Service.configure();
+    // And work out what should be enabled.
+    const services = oauthData.services;
+    log.trace("Webchannel is enabling services", services);
+    if (services) {
+      if (services.sync) {
+        // User has enabled Sync.
+        log.debug("Webchannel is enabling sync");
+        const { offeredEngines, declinedEngines } = services.sync;
+        this._setEnabledEngines(offeredEngines, declinedEngines);
+        xps.Weave.Service.configure();
+      }
+    } else {
+      // To support fxa before it knew to send `services`, we assume it missing means "enable sync" and that the top-level
+      // payload has `offeredSyncEngines` and `declinedSyncEngines`
+      // TODO: remove this branch as soon as the above branch starts working - only old FxA servers need this!
+      const { declinedSyncEngines, offeredSyncEngines } = oauthData;
+      log.debug("Webchannel is enabling sync (deprecated message format");
+      this._setEnabledEngines(offeredSyncEngines, declinedSyncEngines);
+      xps.Weave.Service.configure();
+    }
   },
 
   /**
@@ -653,11 +705,22 @@ FxAccountsWebChannelHelpers.prototype = {
   },
   _getCapabilities() {
     if (lazy.oauthEnabled) {
+      let engines = Array.from(CHOOSE_WHAT_TO_SYNC_ALWAYS_AVAILABLE);
+      for (let optionalEngine of CHOOSE_WHAT_TO_SYNC_OPTIONALLY_AVAILABLE) {
+        if (
+          Services.prefs.getBoolPref(
+            `services.sync.engine.${optionalEngine}.available`,
+            false
+          )
+        ) {
+          engines.push(optionalEngine);
+        }
+      }
       return {
         multiService: true,
         pairing: lazy.pairingEnabled,
         choose_what_to_sync: true,
-        engines: CHOOSE_WHAT_TO_SYNC,
+        engines,
       };
     }
     return {

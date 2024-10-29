@@ -6,10 +6,10 @@
 # in the file PATENTS.  All contributing project authors may
 # be found in the AUTHORS file in the root of the source tree.
 
-import("//build/config/ui.gni")
+import("//chromium/build/config/ui.gni")
 import("../webrtc.gni")
 if (is_android) {
-  import("//build/config/android/rules.gni")
+  import("//chromium/build/config/android/rules.gni")
 }
 
 if (!build_with_chromium) {
@@ -226,6 +226,7 @@ rtc_library("audio_test_common") {
   ]
   deps = [
     "../api/audio_codecs:audio_codecs_api",
+    "../api/environment",
     "../rtc_base:checks",
     "//third_party/abseil-cpp/absl/memory",
   ]
@@ -311,6 +312,7 @@ rtc_library("rtp_test_utils") {
     "../rtc_base:criticalsection",
     "../rtc_base:logging",
     "../rtc_base:macromagic",
+    "../rtc_base:timeutils",
     "../rtc_base/synchronization:mutex",
     "../rtc_base/system:arch",
     "//third_party/abseil-cpp/absl/strings:string_view",
@@ -431,7 +433,7 @@ if (is_ios) {
     testonly = true
     visibility = [ "*" ]
     sources = [ "ios/google_test_runner.mm" ]
-    configs += [ "//build/config/ios:xctest_config" ]
+    configs += [ "//chromium/build/config/ios:xctest_config" ]
     frameworks = [ "UIKit.framework" ]
     deps = [ ":google_test_runner_delegate" ]
   }
@@ -486,6 +488,12 @@ rtc_source_set("test_support") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+  if (build_with_mozilla) {
+    all_dependent_configs -= [
+      "//third_party/googletest:gmock_config",
+      "//third_party/googletest:gtest_config",
+    ]
+  }
 }
 
 rtc_library("fixed_fps_video_frame_writer_adapter") {
@@ -1364,7 +1372,6 @@ rtc_library("video_codec_tester") {
     "video_codec_tester.h",
   ]
   deps = [
-    ":scoped_key_value_config",
     ":video_frame_writer",
     ":video_test_support",
     "../api:array_view",
@@ -1401,8 +1408,6 @@ rtc_library("video_codec_tester") {
     "../rtc_base:timeutils",
     "../rtc_base/synchronization:mutex",
     "../system_wrappers",
-    "../system_wrappers:field_trial",
-    "../test:explicit_key_value_config",
     "../test:fileutils",
     "../video/config:streams_config",
     "//third_party/abseil-cpp/absl/strings",

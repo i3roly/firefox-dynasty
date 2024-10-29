@@ -18,6 +18,7 @@ import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.test.rule.MainCoroutineRule
 import mozilla.components.support.test.rule.runTestOnMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,12 +38,8 @@ class WebExtensionsMenuBindingTest {
     private lateinit var menuStore: MenuStore
 
     @Test
-    fun `WHEN web extension state get updated in the browserStore THEN invoke action update web extension menu items`() =
+    fun `WHEN browser web extension state get updated in the browserStore THEN invoke action update browser web extension menu items`() =
         runTestOnMain {
-            val defaultPageAction = createWebExtensionPageAction("default_page_action_title")
-
-            val overriddenPageAction = createWebExtensionPageAction("overridden_page_action_title")
-
             val defaultBrowserAction =
                 createWebExtensionBrowserAction("default_browser_action_title")
 
@@ -56,7 +53,6 @@ class WebExtensionsMenuBindingTest {
                     name = "name",
                     enabled = true,
                     browserAction = defaultBrowserAction,
-                    pageAction = defaultPageAction,
                 ),
             )
             val overriddenExtensions: Map<String, WebExtensionState> = mapOf(
@@ -66,6 +62,67 @@ class WebExtensionsMenuBindingTest {
                     name = "name",
                     enabled = true,
                     browserAction = overriddenBrowserAction,
+                ),
+            )
+
+            menuStore = spy(MenuStore(MenuState()))
+            browserStore = BrowserStore(
+                BrowserState(
+                    tabs = listOf(
+                        createTab(
+                            url = "https://www.example.org",
+                            id = "tab1",
+                            extensions = overriddenExtensions,
+                        ),
+                    ),
+                    selectedTabId = "tab1",
+                    extensions = extensions,
+                ),
+            )
+
+            val binding = WebExtensionsMenuBinding(
+                browserStore = browserStore,
+                menuStore = menuStore,
+                iconSize = 24.dpToPx(testContext.resources.displayMetrics),
+                onDismiss = {},
+            )
+            binding.start()
+
+            val browserItemsUpdateCaptor = argumentCaptor<MenuAction.UpdateWebExtensionBrowserMenuItems>()
+
+            verify(menuStore).dispatch(browserItemsUpdateCaptor.capture())
+            assertEquals(
+                browserItemsUpdateCaptor.value.webExtensionBrowserMenuItem[0].label,
+                "overridden_browser_action_title",
+            )
+            assertTrue(browserItemsUpdateCaptor.value.webExtensionBrowserMenuItem[0].enabled == true)
+            assertEquals(browserItemsUpdateCaptor.value.webExtensionBrowserMenuItem[0].badgeText, "")
+            assertEquals(browserItemsUpdateCaptor.value.webExtensionBrowserMenuItem[0].badgeTextColor, 0)
+            assertEquals(browserItemsUpdateCaptor.value.webExtensionBrowserMenuItem[0].badgeBackgroundColor, 0)
+        }
+
+    @Test
+    fun `WHEN page web extension state get updated in the browserStore THEN invoke action update page web extension menu items`() =
+        runTestOnMain {
+            val defaultPageAction = createWebExtensionPageAction("default_page_action_title")
+
+            val overriddenPageAction = createWebExtensionPageAction("overridden_page_action_title")
+
+            val extensions: Map<String, WebExtensionState> = mapOf(
+                "id" to WebExtensionState(
+                    id = "id",
+                    url = "url",
+                    name = "name",
+                    enabled = true,
+                    pageAction = defaultPageAction,
+                ),
+            )
+            val overriddenExtensions: Map<String, WebExtensionState> = mapOf(
+                "id" to WebExtensionState(
+                    id = "id",
+                    url = "url",
+                    name = "name",
+                    enabled = true,
                     pageAction = overriddenPageAction,
                 ),
             )
@@ -93,17 +150,163 @@ class WebExtensionsMenuBindingTest {
             )
             binding.start()
 
-            val itemsUpdateCaptor = argumentCaptor<MenuAction.UpdateWebExtensionMenuItems>()
+            val pageItemsUpdateCaptor = argumentCaptor<MenuAction.UpdateWebExtensionPageMenuItems>()
 
-            verify(menuStore).dispatch(itemsUpdateCaptor.capture())
+            verify(menuStore).dispatch(pageItemsUpdateCaptor.capture())
             assertEquals(
-                itemsUpdateCaptor.value.webExtensionMenuItems[0].label,
-                "overridden_browser_action_title",
+                pageItemsUpdateCaptor.value.webExtensionPageMenuItem[0].label,
+                "overridden_page_action_title",
             )
-            assertTrue(itemsUpdateCaptor.value.webExtensionMenuItems[0].enabled == true)
-            assertEquals(itemsUpdateCaptor.value.webExtensionMenuItems[0].badgeText, "")
-            assertEquals(itemsUpdateCaptor.value.webExtensionMenuItems[0].badgeTextColor, 0)
-            assertEquals(itemsUpdateCaptor.value.webExtensionMenuItems[0].badgeBackgroundColor, 0)
+            assertTrue(pageItemsUpdateCaptor.value.webExtensionPageMenuItem[0].enabled == true)
+            assertEquals(pageItemsUpdateCaptor.value.webExtensionPageMenuItem[0].badgeText, "")
+            assertEquals(pageItemsUpdateCaptor.value.webExtensionPageMenuItem[0].badgeTextColor, 0)
+            assertEquals(pageItemsUpdateCaptor.value.webExtensionPageMenuItem[0].badgeBackgroundColor, 0)
+        }
+
+    @Test
+    fun `WHEN web extension page state disabled gets updated in the browserStore THEN web extension page menu items list should be empty`() =
+        runTestOnMain {
+            val defaultPageAction = createWebExtensionPageAction("default_page_action_title")
+
+            val overriddenPageAction = createWebExtensionPageAction("overridden_page_action_title")
+
+            val extensions: Map<String, WebExtensionState> = mapOf(
+                "id" to WebExtensionState(
+                    id = "id",
+                    url = "url",
+                    name = "name",
+                    enabled = false,
+                    pageAction = defaultPageAction,
+                ),
+            )
+            val overriddenExtensions: Map<String, WebExtensionState> = mapOf(
+                "id" to WebExtensionState(
+                    id = "id",
+                    url = "url",
+                    name = "name",
+                    enabled = false,
+                    pageAction = overriddenPageAction,
+                ),
+            )
+
+            menuStore = spy(MenuStore(MenuState()))
+            browserStore = BrowserStore(
+                BrowserState(
+                    tabs = listOf(
+                        createTab(
+                            url = "https://www.example.org",
+                            id = "tab1",
+                            extensions = overriddenExtensions,
+                        ),
+                    ),
+                    selectedTabId = "tab1",
+                    extensions = extensions,
+                ),
+            )
+
+            val binding = WebExtensionsMenuBinding(
+                browserStore = browserStore,
+                menuStore = menuStore,
+                iconSize = 24.dpToPx(testContext.resources.displayMetrics),
+                onDismiss = {},
+            )
+            binding.start()
+
+            val pageItemsUpdateCaptor = argumentCaptor<MenuAction.UpdateWebExtensionPageMenuItems>()
+
+            verify(menuStore).dispatch(pageItemsUpdateCaptor.capture())
+
+            assertTrue(pageItemsUpdateCaptor.value.webExtensionPageMenuItem.isEmpty())
+        }
+
+    @Test
+    fun `WHEN all web extensions are disabled THEN show disabled extensions onboarding`() =
+        runTestOnMain {
+            val extensions: Map<String, WebExtensionState> = mapOf(
+                "id" to WebExtensionState(
+                    id = "id",
+                    url = "url",
+                    name = "name",
+                    enabled = false,
+                ),
+            )
+
+            menuStore = spy(MenuStore(MenuState()))
+            browserStore = BrowserStore(
+                BrowserState(
+                    tabs = listOf(
+                        createTab(
+                            url = "https://www.example.org",
+                            id = "tab1",
+                            extensions = extensions,
+                        ),
+                    ),
+                    selectedTabId = "tab1",
+                    extensions = extensions,
+                ),
+            )
+
+            val binding = WebExtensionsMenuBinding(
+                browserStore = browserStore,
+                menuStore = menuStore,
+                iconSize = 24.dpToPx(testContext.resources.displayMetrics),
+                onDismiss = {},
+            )
+            binding.start()
+
+            val showDisabledExtensionsOnboardingCaptor = argumentCaptor<MenuAction.UpdateShowDisabledExtensionsOnboarding>()
+
+            verify(menuStore).dispatch(showDisabledExtensionsOnboardingCaptor.capture())
+
+            assertTrue(showDisabledExtensionsOnboardingCaptor.value.showDisabledExtensionsOnboarding)
+        }
+
+    @Test
+    fun `WHEN only one web extension is disabled THEN not show disabled extensions onboarding`() =
+        runTestOnMain {
+            val extensions: Map<String, WebExtensionState> = mapOf(
+                "id" to WebExtensionState(
+                    id = "id",
+                    url = "url",
+                    name = "name",
+                    enabled = false,
+                ),
+                "id2" to WebExtensionState(
+                    id = "id2",
+                    url = "url2",
+                    name = "name2",
+                    enabled = true,
+                ),
+            )
+
+            menuStore = spy(MenuStore(MenuState()))
+            browserStore = BrowserStore(
+                BrowserState(
+                    tabs = listOf(
+                        createTab(
+                            url = "https://www.example.org",
+                            id = "tab1",
+                            extensions = extensions,
+                        ),
+                    ),
+                    selectedTabId = "tab1",
+                    extensions = extensions,
+                ),
+            )
+
+            val binding = WebExtensionsMenuBinding(
+                browserStore = browserStore,
+                menuStore = menuStore,
+                iconSize = 24.dpToPx(testContext.resources.displayMetrics),
+                onDismiss = {},
+            )
+            binding.start()
+
+            val showDisabledExtensionsOnboardingCaptor = argumentCaptor<MenuAction.UpdateShowDisabledExtensionsOnboarding>()
+
+            verify(menuStore).dispatch(showDisabledExtensionsOnboardingCaptor.capture())
+
+            assertFalse(showDisabledExtensionsOnboardingCaptor.value.showDisabledExtensionsOnboarding)
         }
 
     private fun createWebExtensionPageAction(title: String) = WebExtensionPageAction(

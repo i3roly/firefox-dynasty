@@ -32,6 +32,7 @@
 #include "mozilla/StaticPrefs_fission.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/StaticPrefs_security.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Telemetry.h"
 #include "mozilla/Tokenizer.h"
 #include "mozilla/browser/NimbusFeatures.h"
@@ -905,7 +906,7 @@ HttpBaseChannel::SetUploadStream(nsIInputStream* stream,
   // if stream is null, ExplicitSetUploadStream returns error.
   // So we need special case for GET method.
   StoreUploadStreamHasHeaders(false);
-  mRequestHead.SetMethod("GET"_ns);  // revert to GET request
+  SetRequestMethod("GET"_ns);  // revert to GET request
   mUploadStream = nullptr;
   return NS_OK;
 }
@@ -1860,6 +1861,8 @@ NS_IMETHODIMP
 HttpBaseChannel::SetRequestMethod(const nsACString& aMethod) {
   ENSURE_CALLED_BEFORE_CONNECT();
 
+  mLoadInfo->SetIsGETRequest(aMethod.Equals("GET"));
+
   const nsCString& flatMethod = PromiseFlatCString(aMethod);
 
   // Method names are restricted to valid HTTP tokens.
@@ -2300,8 +2303,8 @@ HttpBaseChannel::RedirectTo(nsIURI* targetURI) {
 }
 
 NS_IMETHODIMP
-HttpBaseChannel::InternalRedirectTo(nsIURI* targetURI) {
-  LOG(("HttpBaseChannel::InternalRedirectTo [this=%p]", this));
+HttpBaseChannel::TransparentRedirectTo(nsIURI* targetURI) {
+  LOG(("HttpBaseChannel::TransparentRedirectTo [this=%p]", this));
   RedirectTo(targetURI);
   MOZ_ASSERT(mAPIRedirectTo, "How did this happen?");
   mAPIRedirectTo->second() = true;
@@ -3371,10 +3374,7 @@ HttpBaseChannel::PerformOpaqueResponseSafelistCheckBeforeSniff() {
     mListener = new OpaqueResponseFilter(mListener);
   }
 
-  Telemetry::ScalarAdd(
-      Telemetry::ScalarID::
-          OPAQUE_RESPONSE_BLOCKING_CROSS_ORIGIN_OPAQUE_RESPONSE_COUNT,
-      1);
+  glean::opaque_response_blocking::cross_origin_opaque_response_count.Add(1);
 
   PROFILER_MARKER_TEXT("ORB safelist check", NETWORK, {}, "Before sniff"_ns);
 
@@ -5034,7 +5034,8 @@ nsresult HttpBaseChannel::SetupReplacementChannel(nsIURI* newURI,
   nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(newChannel);
 
   ReplacementReason redirectType =
-      (redirectFlags & nsIChannelEventSink::REDIRECT_INTERNAL)
+      redirectFlags & (nsIChannelEventSink::REDIRECT_INTERNAL |
+                       nsIChannelEventSink::REDIRECT_TRANSPARENT)
           ? ReplacementReason::InternalRedirect
           : ReplacementReason::Redirect;
   ReplacementChannelConfig config = CloneReplacementChannelConfig(
@@ -6184,7 +6185,7 @@ nsresult HttpBaseChannel::CheckRedirectLimit(nsIURI* aNewURI,
           mURI, aNewURI, mLoadInfo,
           {nsHTTPSOnlyUtils::UpgradeDowngradeEndlessLoopOptions::
                EnforceForHTTPSFirstMode})) {
-    nsHTTPSOnlyUtils::AddHTTPSFirstExceptionForSession(mURI, mLoadInfo);
+    nsHTTPSOnlyUtils::AddHTTPSFirstException(mURI, mLoadInfo);
   }
 
   return NS_OK;
@@ -6459,11 +6460,25 @@ bool HttpBaseChannel::Http3Allowed() const {
          LoadAllowHttp3();
 }
 
-void HttpBaseChannel::SetDummyChannelForCachedResource() {
+UniquePtr<nsHttpResponseHead>
+HttpBaseChannel::MaybeCloneResponseHeadForCachedResource() {
+  if (!mResponseHead) {
+    return nullptr;
+  }
+
+  return MakeUnique<nsHttpResponseHead>(*mResponseHead);
+}
+
+void HttpBaseChannel::SetDummyChannelForCachedResource(
+    const nsHttpResponseHead* aMaybeResponseHead /* = nullptr */) {
   mDummyChannelForCachedResource = true;
   MOZ_ASSERT(!mResponseHead,
              "SetDummyChannelForCachedResource should only be called once");
-  mResponseHead = MakeUnique<nsHttpResponseHead>();
+  if (aMaybeResponseHead) {
+    mResponseHead = MakeUnique<nsHttpResponseHead>(*aMaybeResponseHead);
+  } else {
+    mResponseHead = MakeUnique<nsHttpResponseHead>();
+  }
 }
 
 void HttpBaseChannel::SetEarlyHints(

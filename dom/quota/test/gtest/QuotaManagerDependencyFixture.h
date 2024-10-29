@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include "mozilla/MozPromise.h"
 #include "mozilla/SpinEventLoopUntil.h"
+#include "mozilla/dom/quota/ClientDirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLock.h"
 #include "mozilla/dom/quota/DirectoryLockInlines.h"
 #include "mozilla/dom/quota/ForwardDecls.h"
@@ -45,7 +46,14 @@ class QuotaManagerDependencyFixture : public testing::Test {
   static void AssertTemporaryStorageNotInitialized();
   static void ShutdownTemporaryStorage();
 
-  static void InitializeTemporaryOrigin(const OriginMetadata& aOriginMetadata);
+  static void InitializeTemporaryOrigin(const OriginMetadata& aOriginMetadata,
+                                        bool aCreateIfNonExistent = true);
+  static void TemporaryOriginInitialized(const OriginMetadata& aOriginMetadata,
+                                         bool* aResult);
+  static void AssertTemporaryOriginInitialized(
+      const OriginMetadata& aOriginMetadata);
+  static void AssertTemporaryOriginNotInitialized(
+      const OriginMetadata& aOriginMetadata);
   static void GetOriginUsage(const OriginMetadata& aOriginMetadata,
                              UsageInfo* aResult);
   static void GetCachedOriginUsage(const OriginMetadata& aOriginMetadata,
@@ -158,8 +166,7 @@ class QuotaManagerDependencyFixture : public testing::Test {
   static typename MozPromise<ResolveValueT, RejectValueT,
                              IsExclusive>::ResolveOrRejectValue
   Await(RefPtr<MozPromise<ResolveValueT, RejectValueT, IsExclusive>> aPromise) {
-    using PromiseType = MozPromise<ResolveValueT, RejectValueT,
-                                   /* IsExclusive */ false>;
+    using PromiseType = MozPromise<ResolveValueT, RejectValueT, IsExclusive>;
     using ResolveOrRejectValue = typename PromiseType::ResolveOrRejectValue;
 
     ResolveOrRejectValue value;
@@ -194,9 +201,11 @@ class QuotaManagerDependencyFixture : public testing::Test {
     return sBackgroundTarget;
   }
 
+  static PrincipalMetadata GetTestPrincipalMetadata();
   static OriginMetadata GetTestOriginMetadata();
   static ClientMetadata GetTestClientMetadata();
 
+  static PrincipalMetadata GetOtherTestPrincipalMetadata();
   static OriginMetadata GetOtherTestOriginMetadata();
   static ClientMetadata GetOtherTestClientMetadata();
 
