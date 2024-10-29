@@ -355,7 +355,7 @@ nsTArray<std::pair<const char**, uint32_t>>
 gfxMacPlatformFontList::GetFilteredPlatformFontLists() {
   nsTArray<std::pair<const char**, uint32_t>> fontLists;
 
-  fontLists.AppendElement(std::make_pair(kBaseFonts, ArrayLength(kBaseFonts)));
+  fontLists.AppendElement(std::make_pair(kBaseFonts, std::size(kBaseFonts)));
 
   return fontLists;
 }
@@ -577,7 +577,7 @@ void gfxMacPlatformFontList::InitSharedFontListForPlatform() {
     nsTArray<fontlist::Family::InitData> families;
     families.SetCapacity(CFArrayGetCount(familyNames)
 #if USE_DEPRECATED_FONT_FAMILY_NAMES
-                         + ArrayLength(kDeprecatedFontFamilies)
+                         + std::size(kDeprecatedFontFamilies)
 #endif
     );
     for (NSString* familyName in (NSArray*)(CFArrayRef)familyNames) {

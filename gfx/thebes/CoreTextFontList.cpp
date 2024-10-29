@@ -615,7 +615,7 @@ static inline int32_t CoreTextWeightToCSSWeight(CGFloat aCTWeight) {
       // clang-format on
   };
   const auto* begin = &kCoreTextToCSSWeights[0];
-  const auto* end = begin + ArrayLength(kCoreTextToCSSWeights);
+  const auto* end = begin + std::size(kCoreTextToCSSWeights);
   auto m = std::upper_bound(begin, end, aCTWeight,
                             [](CGFloat aValue, const Mapping& aMapping) {
                               return aValue <= aMapping.first;
