@@ -50,7 +50,10 @@ const NSControlStateValueOn: cocoa::NSControlStateValue = 1;
 /// Constant from NSLayoutConstraint.h
 const NSLayoutPriorityDefaultHigh: cocoa::NSLayoutPriority = 750.0;
 
+const MACOS_KERNEL_MAJOR_VERSION_LION: u32 = 11;
 const MACOS_KERNEL_MAJOR_VERSION_MAVERICKS: u32 = 13;
+const MACOS_KERNEL_MAJOR_VERSION_EL_CAPITAN: u32 = 15;
+const MACOS_KERNEL_MAJOR_VERSION_SIERRA: u32 = 16;
 
 #[derive(Debug, PartialOrd, PartialEq)]
 enum ParseMacOSKernelVersionError {
@@ -749,22 +752,23 @@ impl ViewRenderer {
             );
         }
 
-        // Set layout and writing direction based on RTL.
-        unsafe {
-            view.setUserInterfaceLayoutDirection_(if self.rtl {
-                cocoa::NSUserInterfaceLayoutDirectionRightToLeft
-            } else {
-                cocoa::NSUserInterfaceLayoutDirectionLeftToRight
-            });
-            if let Ok(control) = cocoa::NSControl::try_from(view) {
-                control.setBaseWritingDirection_(if self.rtl {
-                    cocoa::NSWritingDirectionRightToLeft
+        if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+            // Set layout and writing direction based on RTL.
+            unsafe {
+                view.setUserInterfaceLayoutDirection_(if self.rtl {
+                    cocoa::NSUserInterfaceLayoutDirectionRightToLeft
                 } else {
-                    cocoa::NSWritingDirectionLeftToRight
+                    cocoa::NSUserInterfaceLayoutDirectionLeftToRight
                 });
+                if let Ok(control) = cocoa::NSControl::try_from(view) {
+                    control.setBaseWritingDirection_(if self.rtl {
+                        cocoa::NSWritingDirectionRightToLeft
+                    } else {
+                        cocoa::NSWritingDirectionLeftToRight
+                    });
+                }
             }
         }
-
         // TODO: potentially use NSView layoutMarginsGuide when we no longer need to support macOS
         // 10.15.
         let outer = self.parent;
@@ -780,37 +784,40 @@ impl ViewRenderer {
         }
 
         if !self.ignore_horizontal {
-            unsafe {
-                let la = view.leadingAnchor();
-                let ta = view.trailingAnchor();
-                let pla = outer.leadingAnchor();
-                let pta = outer.trailingAnchor();
-                match style.horizontal_alignment {
-                    Alignment::Fill => {
-                        constraint_equal(la, pla, style.margin.start);
-                        constraint_equal(ta, pta, style.margin.end);
-                        // Without the autoresizing mask set, Text within Scroll doesn't display
-                        // properly (it shrinks to 0-width, likely due to some specific interaction
-                        // of NSScrollView with autolayout).
-                        view.setAutoresizingMask_(cocoa::NSViewWidthSizable);
-                    }
-                    Alignment::Start => {
-                        constraint_equal(la, pla, style.margin.start);
-                    }
-                    Alignment::Center => {
-                        let ca = view.centerXAnchor();
-                        let pca = outer.centerXAnchor();
-                        constraint_equal(ca, pca, 0);
-                    }
-                    Alignment::End => {
-                        constraint_equal(ta, pta, style.margin.end);
+            if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_EL_CAPITAN) {
+                unsafe {
+                    let la = view.leadingAnchor();
+                    let ta = view.trailingAnchor();
+                    let pla = outer.leadingAnchor();
+                    let pta = outer.trailingAnchor();
+                    match style.horizontal_alignment {
+                        Alignment::Fill => {
+                            constraint_equal(la, pla, style.margin.start);
+                            constraint_equal(ta, pta, style.margin.end);
+                            // Without the autoresizing mask set, Text within Scroll doesn't display
+                            // properly (it shrinks to 0-width, likely due to some specific interaction
+                            // of NSScrollView with autolayout).
+                            view.setAutoresizingMask_(cocoa::NSViewWidthSizable);
+                        }
+                        Alignment::Start => {
+                            constraint_equal(la, pla, style.margin.start);
+                        }
+                        Alignment::Center => {
+                            let ca = view.centerXAnchor();
+                            let pca = outer.centerXAnchor();
+                            constraint_equal(ca, pca, 0);
+                        }
+                        Alignment::End => {
+                            constraint_equal(ta, pta, style.margin.end);
+                        }
                     }
                 }
             }
         }
 
         if !matches!(style.vertical_alignment, Alignment::Fill) {
-            if let Some(size) = style.vertical_size_request {
+            if let Some(size) = style.vertical_size_request  &&
+                macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_EL_CAPITAN) {
                 unsafe {
                     view.heightAnchor()
                         .constraintGreaterThanOrEqualToConstant_(size as _)
@@ -821,28 +828,30 @@ impl ViewRenderer {
 
         if !self.ignore_vertical {
             unsafe {
-                let ta = view.topAnchor();
-                let ba = view.bottomAnchor();
-                let pta = outer.topAnchor();
-                let pba = outer.bottomAnchor();
-                match style.vertical_alignment {
-                    Alignment::Fill => {
-                        constraint_equal(ta, pta, style.margin.top);
-                        constraint_equal(ba, pba, style.margin.bottom);
-                        // Set the autoresizing mask to be consistent with the horizontal settings
-                        // (see the comment there as to why it's necessary).
-                        view.setAutoresizingMask_(cocoa::NSViewHeightSizable);
-                    }
-                    Alignment::Start => {
-                        constraint_equal(ta, pta, style.margin.top);
-                    }
-                    Alignment::Center => {
-                        let ca = view.centerYAnchor();
-                        let pca = outer.centerYAnchor();
-                        constraint_equal(ca, pca, 0);
-                    }
-                    Alignment::End => {
-                        constraint_equal(ba, pba, style.margin.bottom);
+                if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_EL_CAPITAN) {
+                    let ta = view.topAnchor();
+                    let ba = view.bottomAnchor();
+                    let pta = outer.topAnchor();
+                    let pba = outer.bottomAnchor();
+                    match style.vertical_alignment {
+                        Alignment::Fill => {
+                            constraint_equal(ta, pta, style.margin.top);
+                            constraint_equal(ba, pba, style.margin.bottom);
+                            // Set the autoresizing mask to be consistent with the horizontal settings
+                            // (see the comment there as to why it's necessary).
+                            view.setAutoresizingMask_(cocoa::NSViewHeightSizable);
+                        }
+                        Alignment::Start => {
+                            constraint_equal(ta, pta, style.margin.top);
+                        }
+                        Alignment::Center => {
+                            let ca = view.centerYAnchor();
+                            let pca = outer.centerYAnchor();
+                            constraint_equal(ca, pca, 0);
+                        }
+                        Alignment::End => {
+                            constraint_equal(ba, pba, style.margin.bottom);
+                        }
                     }
                 }
             }
@@ -926,18 +935,25 @@ fn render_element(
     use model::ElementType::*;
     Some(match element_type {
         VBox(model::VBox { items, spacing }) => {
-            let sv = unsafe { StrongRef::new(cocoa::NSStackView::alloc()) }.autorelease();
+            let sv: cocoa::NSView = if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+                 unsafe { StrongRef::new(cocoa::NSStackView::alloc()) }.autorelease().into()
+            } else {
+                let sv = unsafe{ StrongRef::new(cocoa::NSSplitView::alloc()) }.autorelease();
+                sv.into()
+            };
             unsafe {
                 sv.init();
-                sv.setOrientation_(cocoa::NSUserInterfaceLayoutOrientationVertical);
-                sv.setAlignment_(cocoa::NSLayoutAttributeLeading);
-                sv.setSpacing_(spacing as _);
-                if style.vertical_alignment != Alignment::Fill {
-                    // Make sure the vbox stays as small as its content.
-                    sv.setHuggingPriority_forOrientation_(
-                        NSLayoutPriorityDefaultHigh,
-                        cocoa::NSLayoutConstraintOrientationVertical,
-                    );
+                if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+                    std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setOrientation_(cocoa::NSUserInterfaceLayoutOrientationVertical);
+                    std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setAlignment_(cocoa::NSLayoutAttributeLeading);
+                    std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setSpacing_(spacing as _);
+                    if style.vertical_alignment != Alignment::Fill {
+                        // Make sure the vbox stays as small as its content.
+                        std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setHuggingPriority_forOrientation_(
+                            NSLayoutPriorityDefaultHigh,
+                            cocoa::NSLayoutConstraintOrientationVertical,
+                        );
+                    }
                 }
             }
             let renderer = ViewRenderer::new(rtl, sv, |parent, style, child| {
@@ -946,8 +962,18 @@ fn render_element(
                     Alignment::Center => 2,
                     Alignment::End => 3,
                 };
+             if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
                 let parent: cocoa::NSStackView = parent.try_into().unwrap();
                 unsafe { parent.addView_inGravity_(child, gravity) };
+             } else {
+                let parent: cocoa::NSSplitView = parent.try_into().unwrap();
+                unsafe {
+                    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+                        parent.layoutSubtreeIfNeeded();
+                    }
+                    parent.addSubview_(child)
+                };
+             };
             })
             .ignore_vertical(true);
             for item in items {
@@ -963,18 +989,25 @@ fn render_element(
             if affirmative_order {
                 items.reverse();
             }
-            let sv = unsafe { StrongRef::new(cocoa::NSStackView::alloc()) }.autorelease();
+            let sv: cocoa::NSView = if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+                 unsafe { StrongRef::new(cocoa::NSStackView::alloc()) }.autorelease().into()
+            } else {
+                 let sv = unsafe{ StrongRef::new(cocoa::NSSplitView::alloc()) }.autorelease();
+                 sv.into()
+            };
             unsafe {
                 sv.init();
-                sv.setOrientation_(cocoa::NSUserInterfaceLayoutOrientationHorizontal);
-                sv.setAlignment_(cocoa::NSLayoutAttributeTop);
-                sv.setSpacing_(spacing as _);
-                if style.horizontal_alignment != Alignment::Fill {
-                    // Make sure the hbox stays as small as its content.
-                    sv.setHuggingPriority_forOrientation_(
-                        NSLayoutPriorityDefaultHigh,
-                        cocoa::NSLayoutConstraintOrientationHorizontal,
-                    );
+                if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+                    std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setOrientation_(cocoa::NSUserInterfaceLayoutOrientationHorizontal);
+                    std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setAlignment_(cocoa::NSLayoutAttributeTop);
+                    std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setSpacing_(spacing as _);
+                    if style.vertical_alignment != Alignment::Fill {
+                        // Make sure the vbox stays as small as its content.
+                        std::mem::transmute::<cocoa::NSView, cocoa::NSStackView>(sv).setHuggingPriority_forOrientation_(
+                            NSLayoutPriorityDefaultHigh,
+                            cocoa::NSLayoutConstraintOrientationHorizontal,
+                        );
+                    }
                 }
             }
             let renderer = ViewRenderer::new(rtl, sv, |parent, style, child| {
@@ -983,9 +1016,19 @@ fn render_element(
                     Alignment::Center => 2,
                     Alignment::End => 3,
                 };
+             if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
                 let parent: cocoa::NSStackView = parent.try_into().unwrap();
                 unsafe { parent.addView_inGravity_(child, gravity) };
-            })
+             } else {
+                let parent: cocoa::NSSplitView = parent.try_into().unwrap();
+                unsafe {
+                    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+                        parent.layoutSubtreeIfNeeded();
+                    }
+                    parent.addSubview_(child)
+                };
+             };
+             })
             .ignore_horizontal(true);
             for item in items {
                 renderer.render(item);
@@ -1010,7 +1053,7 @@ fn render_element(
         }
         Label(model::Label { text, bold }) => {
 
-            let tf = if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_MAVERICKS) {
+            let tf = if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_SIERRA) {
               cocoa::NSTextField(unsafe {
                   cocoa::NSTextField::wrappingLabelWithString_(nsstring(""))
               })
@@ -1019,8 +1062,8 @@ fn render_element(
                 unsafe {
                   tf.init();
                   tf.setStringValue_(nsstring(""));
-              };
-                  tf
+                };
+                tf
             };
             unsafe { tf.setSelectable_(runtime::NO) };
             if bold {
