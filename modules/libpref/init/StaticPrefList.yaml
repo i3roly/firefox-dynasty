@@ -2298,7 +2298,7 @@
 # Enable experimental popup blocker changes.
 - name: dom.popup.experimental
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
   # Enable CacheAPI in private browsing mode with encryption
@@ -2752,6 +2752,12 @@
 - name: dom.forms.autocomplete.formautofill
   type: bool
   value: false
+  mirror: always
+
+# Is support for HTMLElement.autocorrect enabled?
+- name: dom.forms.autocorrect
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Only trusted submit event could trigger form submission.
@@ -3482,6 +3488,15 @@
 - name: dom.push.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# Indicate the deprecated aesgcm support in PushManager.supportedContentEncodings.
+#
+# This does not affect actual aesgcm support, any new and existing subscriptions
+# can still use aesgcm regardless of this pref.
+- name: dom.push.indicate_aesgcm_support.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 # Preference that is primarily used for testing of problematic file paths.
@@ -15758,12 +15773,13 @@
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.
-# - "all" => bloom-filter cascades that contain all revocations,
-# - "experimental" => clubcards that contain all revocations.
+# - "all" => bloom-filter cascades that contain all revocations. Stash based delta updates.
+# - "experimental" => clubcards that contain all revocations. Stash based delta updates.
+# - "experimental+deltas" => clubcards that contain all revocations. Clubcard based delta updates.
 - name: security.pki.crlite_channel
   type: String
 #ifdef NIGHTLY_BUILD
-  value: "experimental"
+  value: "experimental+deltas"
 #else
   value: "all"
 #endif
@@ -16674,18 +16690,6 @@
   type: bool
   value: false
   mirror: always
-
-#ifdef XP_MACOSX
-# This will automatically enable text substitution for editable elements in HTML.
-# This value is like layout.spellCheckDefault.
-# 0 ... Disabled
-# 1 ... textarea, contenteditable and design mode
-# 2 ... text, textarea, contenteditable and design mode
-- name: ui.autocorrectDefault
-  type: uint32_t
-  value: 1
-  mirror: always
-#endif
 
 #---------------------------------------------------------------------------
 # Prefs starting with "urlclassifier."
@@ -17692,7 +17696,7 @@
 # text replacement features.
 - name: widget.macos.automatic.text_replacement
   type: bool
-  value: false
+  value: true
   mirror: always
 
 # Whether the smart dash feature is enabled
