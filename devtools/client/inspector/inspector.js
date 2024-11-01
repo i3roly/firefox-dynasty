@@ -230,15 +230,26 @@ Inspector.prototype = {
       onDestroyed: this._onTargetDestroyed,
     });
 
-    await this.toolbox.resourceCommand.watchResources(
-      [
-        this.toolbox.resourceCommand.TYPES.ROOT_NODE,
-        // To observe CSS change before opening changes view.
-        this.toolbox.resourceCommand.TYPES.CSS_CHANGE,
-        this.toolbox.resourceCommand.TYPES.DOCUMENT_EVENT,
-      ],
-      { onAvailable: this.onResourceAvailable }
-    );
+    const { TYPES } = this.toolbox.resourceCommand;
+    this._watchedResources = [
+      // To observe CSS change before opening changes view.
+      TYPES.CSS_CHANGE,
+      TYPES.DOCUMENT_EVENT,
+    ];
+    // The root node is retrieved from onTargetSelected which is now called
+    // on startup as well as on any navigation (= new top level target).
+    //
+    // We only listen to new root node in the browser toolbox, which is the last
+    // configuration to use one target for multiple window global.
+    const isBrowserToolbox =
+      this.commands.descriptorFront.isBrowserProcessDescriptor;
+    if (isBrowserToolbox) {
+      this._watchedResources.push(TYPES.ROOT_NODE);
+    }
+
+    await this.toolbox.resourceCommand.watchResources(this._watchedResources, {
+      onAvailable: this.onResourceAvailable,
+    });
 
     // Store the URL of the target page prior to navigation in order to ensure
     // telemetry counts in the Grid Inspector are not double counted on reload.
@@ -274,20 +285,16 @@ Inspector.prototype = {
     return this;
   },
 
+  // The onTargetAvailable argument is mandatory for TargetCommand.watchTargets.
+  // The inspector ignore all targets but the currently selected one,
+  // so all the target work is done from onTargetSelected.
   async _onTargetAvailable({ targetFront }) {
-    // Ignore all targets but the top level one
     if (!targetFront.isTopLevel) {
       return;
     }
 
-    await this.initInspectorFront(targetFront);
-
-    // the target might have been destroyed when reloading quickly,
-    // while waiting for inspector front initialization
-    if (targetFront.isDestroyed()) {
-      return;
-    }
-
+    // Fetch data and fronts which aren't WindowGlobal specific
+    // and can be fetched once from the top level target.
     await Promise.all([
       this._getCssProperties(targetFront),
       this._getAccessibilityFront(targetFront),
@@ -314,9 +321,6 @@ Inspector.prototype = {
 
     const { walker } = await targetFront.getFront("inspector");
     const rootNodeFront = await walker.getRootNode();
-    // When a given target is focused, don't try to reset the selection
-    this.selectionCssSelectors = [];
-    this._defaultNode = null;
 
     // onRootNodeAvailable will take care of populating the markup view
     await this.onRootNodeAvailable(rootNodeFront);
@@ -339,6 +343,7 @@ Inspector.prototype = {
     for (const resource of resources) {
       const isTopLevelTarget = !!resource.targetFront?.isTopLevel;
       const isTopLevelDocument = !!resource.isTopLevelDocument;
+
       if (
         resource.resourceType ===
           this.toolbox.resourceCommand.TYPES.ROOT_NODE &&
@@ -643,7 +648,7 @@ Inspector.prototype = {
    * Top level target front getter.
    */
   get currentTarget() {
-    return this.commands.targetCommand.targetFront;
+    return this.commands.targetCommand.selectedTargetFront;
   },
 
   /**
@@ -1748,14 +1753,9 @@ Inspector.prototype = {
       onDestroyed: this._onTargetDestroyed,
     });
     const { resourceCommand } = this.toolbox;
-    resourceCommand.unwatchResources(
-      [
-        resourceCommand.TYPES.ROOT_NODE,
-        resourceCommand.TYPES.CSS_CHANGE,
-        resourceCommand.TYPES.DOCUMENT_EVENT,
-      ],
-      { onAvailable: this.onResourceAvailable }
-    );
+    resourceCommand.unwatchResources(this._watchedResources, {
+      onAvailable: this.onResourceAvailable,
+    });
     this.untrackReflowsInSelection();
 
     this._InspectorTabPanel = null;

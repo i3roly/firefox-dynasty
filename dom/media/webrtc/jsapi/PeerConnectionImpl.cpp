@@ -3426,6 +3426,10 @@ bool PeerConnectionImpl::UpdateIceConnectionState() {
                static_cast<int>(mIceConnectionState),
                static_cast<int>(newState), this);
     mIceConnectionState = newState;
+    // Start call telemtry logging on connected.
+    if (mIceConnectionState == RTCIceConnectionState::Connected) {
+      StartCallTelem();
+    }
     if (mIceConnectionState != RTCIceConnectionState::Closed) {
       return true;
     }
@@ -4846,6 +4850,6 @@ std::unique_ptr<NrSocketProxyConfig> PeerConnectionImpl::GetProxyConfig()
       net::WebrtcProxyConfig(id, alpn, loadInfoArgs, mForceProxy)));
 }
 
-std::map<uint64_t, PeerConnectionAutoTimer>
+MOZ_RUNINIT std::map<uint64_t, PeerConnectionAutoTimer>
     PeerConnectionImpl::sCallDurationTimers;
 }  // namespace mozilla

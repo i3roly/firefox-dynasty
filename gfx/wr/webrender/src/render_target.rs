@@ -166,12 +166,7 @@ pub struct RenderTarget {
     pub svg_nodes: FrameVec<(BatchTextures, FrameVec<SVGFEFilterInstance>)>,
     pub blits: FrameVec<BlitJob>,
     alpha_tasks: FrameVec<RenderTaskId>,
-    // Track the used rect of the render target, so that
-    // we can set a scissor rect and only clear to the
-    // used portion of the target as an optimization.
-    pub used_rect: Option<DeviceIntRect>,
     pub resolve_ops: FrameVec<ResolveOp>,
-    pub clear_color: Option<ColorF>,
 
     pub prim_instances: [FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>; NUM_PATTERNS],
     pub prim_instances_with_scissor: FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>>,
@@ -187,20 +182,34 @@ pub struct RenderTarget {
     pub conic_gradients: FrameVec<ConicGradientInstance>,
 
     pub clip_batcher: ClipBatcher,
-    // TODO: Clearing a render target is very ad-hoc and error-prone. Previously,
-    // alpha, color and cached render targets were entirely separate implementations
-    // with a fair amount of overlap but also divergent approaches to tackle common
-    // functionality. The unified code retains this quirk for the clearing logic.
-    // In a nutshell:
-    //  - Non-cached color targets expect to be globally cleared in draw_render_target.
-    //  - Cached targets obviously can't since some of their content is cached from
-    //    previous frames, so clearing specific parts is done as needed via `clears`.
-    //  - Alpha targets also have special clearing needs that are specified before the
-    //    render tasks rects are allocated, so they are provided as render task ids instead.
-    // See also the clearing code in `Renderer::draw_render_target`.
-    pub clears: FrameVec<DeviceIntRect>,
-    pub zero_clears: FrameVec<RenderTaskId>,
-    pub one_clears: FrameVec<RenderTaskId>,
+
+    // Clearing render targets has a fair amount of special cases.
+    // The general rules are:
+    // - Depth (for at least the used potion of the target) is always cleared if it
+    //   is used by the target. The rest of this explaination focuses on clearing
+    //   color/alpha textures.
+    // - For non-cached targets we either clear the entire target or the used portion
+    //   (unless clear_color is None).
+    // - Cached render targets require precise partial clears which are specified
+    //   via the vectors below (if clearing is needed at all).
+    //
+    // See also: Renderer::clear_render_target
+
+    // Areas that *must* be cleared.
+    // Even if a global target clear is done, we try to honor clearing the rects that
+    // have a different color than the global clear color.
+    pub clears: FrameVec<(DeviceIntRect, ColorF)>,
+
+    // Optionally track the used rect of the render target, to give the renderer
+    // an opportunity to only clear the used portion of the target as an optimization.
+    // Note: We make the simplifying assumption that if clear vectors AND used_rect
+    // are specified, then the rects from the clear vectors are contained in
+    // used_rect.
+    pub used_rect: Option<DeviceIntRect>,
+    // The global clear color is Some(TRANSPARENT) by default. If we are drawing
+    // a single render task in this target, it can be set to something else.
+    // If clear_color is None, only the clears/zero_clears/one_clears are done.
+    pub clear_color: Option<ColorF>,
 }
 
 impl RenderTarget {
@@ -233,8 +242,6 @@ impl RenderTarget {
             prim_instances_with_scissor: FastHashMap::default(),
             clip_masks: ClipMaskInstanceList::new(memory),
             clip_batcher: ClipBatcher::new(gpu_supports_fast_clears, memory),
-            zero_clears: memory.new_vec(),
-            one_clears: memory.new_vec(),
             border_segments_complex: memory.new_vec(),
             border_segments_solid: memory.new_vec(),
             clears: memory.new_vec(),
@@ -277,6 +284,9 @@ impl RenderTarget {
 
                     if !pic_task.can_use_shared_surface {
                         self.clear_color = pic_task.clear_color;
+                    }
+                    if let Some(clear_color) = pic_task.clear_color {
+                        self.clears.push((target_rect, clear_color));
                     }
 
                     // TODO(gw): The type names of AlphaBatchBuilder and BatchBuilder
@@ -388,7 +398,7 @@ impl RenderTarget {
             }
             RenderTaskKind::VerticalBlur(ref info) => {
                 if self.target_kind == RenderTargetKind::Alpha {
-                    self.zero_clears.push(task_id);
+                    self.clears.push((target_rect, ColorF::TRANSPARENT));
                 }
                 add_blur_instances(
                     &mut self.vertical_blurs,
@@ -403,7 +413,7 @@ impl RenderTarget {
             }
             RenderTaskKind::HorizontalBlur(ref info) => {
                 if self.target_kind == RenderTargetKind::Alpha {
-                    self.zero_clears.push(task_id);
+                    self.clears.push((target_rect, ColorF::TRANSPARENT));
                 }
                 add_blur_instances(
                     &mut self.horizontal_blurs,
@@ -450,7 +460,7 @@ impl RenderTarget {
                 // TODO(gw): Could likely be more efficient by choosing to clear to 0 or 1
                 //           based on the clip chain, or even skipping clear and masking the
                 //           prim region with blend disabled.
-                self.one_clears.push(task_id);
+                self.clears.push((target_rect, ColorF::WHITE));
             }
             RenderTaskKind::CacheMask(ref task_info) => {
                 let clear_to_one = self.clip_batcher.add(
@@ -467,12 +477,12 @@ impl RenderTarget {
                     ctx,
                 );
                 if task_info.clear_to_one || clear_to_one {
-                    self.one_clears.push(task_id);
+                    self.clears.push((target_rect, ColorF::WHITE));
                 }
             }
             RenderTaskKind::ClipRegion(ref region_task) => {
                 if region_task.clear_to_one {
-                    self.one_clears.push(task_id);
+                    self.clears.push((target_rect, ColorF::WHITE));
                 }
                 let device_rect = DeviceRect::from_size(
                     target_rect.size().to_f32(),
@@ -504,7 +514,7 @@ impl RenderTarget {
                 });
             }
             RenderTaskKind::LineDecoration(ref info) => {
-                self.clears.push(target_rect);
+                self.clears.push((target_rect, ColorF::TRANSPARENT));
 
                 self.line_decorations.push(LineDecorationJob {
                     task_rect: target_rect.to_f32(),
@@ -518,7 +528,7 @@ impl RenderTarget {
                 });
             }
             RenderTaskKind::Border(ref task_info) => {
-                self.clears.push(target_rect);
+                self.clears.push((target_rect, ColorF::TRANSPARENT));
 
                 let task_origin = target_rect.min.to_f32();
                 // TODO(gw): Clone here instead of a move of this vec, since the frame

@@ -153,7 +153,8 @@ extern nsIArray* gDraggedTransferables;
 ChildView* ChildViewMouseTracker::sLastMouseEventView = nil;
 NSEvent* ChildViewMouseTracker::sLastMouseMoveEvent = nil;
 NSWindow* ChildViewMouseTracker::sWindowUnderMouse = nil;
-NSPoint ChildViewMouseTracker::sLastScrollEventScreenLocation = NSZeroPoint;
+MOZ_RUNINIT NSPoint ChildViewMouseTracker::sLastScrollEventScreenLocation =
+    NSZeroPoint;
 
 #ifdef INVALIDATE_DEBUGGING
 static void blinkRect(Rect* r);
@@ -5194,7 +5195,7 @@ nsresult nsChildView::RestoreHiDPIMode() {
 
 + (NSMutableDictionary*)sNativeKeyEventsMap {
   // This dictionary is "leaked".
-  static NSMutableDictionary* sNativeKeyEventsMap =
+  MOZ_RUNINIT static NSMutableDictionary* sNativeKeyEventsMap =
       [[NSMutableDictionary alloc] init];
   return sNativeKeyEventsMap;
 }

@@ -2802,7 +2802,7 @@ using PrivateDatastoreHashtable =
 // event of an (unlikely) race where the private browsing windows are still
 // being torn down, will cause the Datastore to be discarded when the last
 // window actually goes away.
-UniquePtr<PrivateDatastoreHashtable> gPrivateDatastores;
+MOZ_RUNINIT UniquePtr<PrivateDatastoreHashtable> gPrivateDatastores;
 
 using DatabaseArray = nsTArray<Database*>;
 
@@ -4443,7 +4443,7 @@ Datastore::~Datastore() {
 
 void Datastore::Close() {
   AssertIsOnBackgroundThread();
-  MOZ_ASSERT(!mClosed);
+  MOZ_DIAGNOSTIC_ASSERT(!mClosed);
   MOZ_ASSERT(!mPrepareDatastoreOps.Count());
   MOZ_ASSERT(!mPreparedDatastores.Count());
   MOZ_ASSERT(!mDatabases.Count());

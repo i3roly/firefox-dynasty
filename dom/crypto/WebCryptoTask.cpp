@@ -26,7 +26,7 @@
 // Template taken from security/nss/lib/util/templates.c
 // This (or SGN_EncodeDigestInfo) would ideally be exported
 // by NSS and until that happens we have to keep our own copy.
-const SEC_ASN1Template SGN_DigestInfoTemplate[] = {
+MOZ_GLOBINIT const SEC_ASN1Template SGN_DigestInfoTemplate[] = {
     {SEC_ASN1_SEQUENCE, 0, NULL, sizeof(SGNDigestInfo)},
     {SEC_ASN1_INLINE, offsetof(SGNDigestInfo, digestAlgorithm),
      SEC_ASN1_GET(SECOID_AlgorithmIDTemplate)},
@@ -2503,10 +2503,9 @@ class DeriveX25519BitsTask : public ReturnArrayBufferViewTask {
       return;
     }
 
-    // If specified, length must be a multiple of 8 bigger than zero
-    // (otherwise, the full output of the key derivation is used).
+    // If specified, length must be a multiple of 8.
     if (!mLength.IsNull()) {
-      if (mLength.Value() == 0 || mLength.Value() % 8) {
+      if (mLength.Value() % 8) {
         mEarlyRv = NS_ERROR_DOM_DATA_ERR;
         return;
       }
@@ -3134,15 +3133,6 @@ class DeriveEcdhBitsTask : public ReturnArrayBufferViewTask {
     if (!mPrivKey) {
       mEarlyRv = NS_ERROR_DOM_INVALID_ACCESS_ERR;
       return;
-    }
-
-    // If specified, length must be bigger than zero
-    // (otherwise, the full output of the key derivation is used).
-    if (!mLengthInBits.IsNull()) {
-      if (mLengthInBits.Value() == 0) {
-        mEarlyRv = NS_ERROR_DOM_DATA_ERR;
-        return;
-      }
     }
 
     // Retrieve the peer's public key.

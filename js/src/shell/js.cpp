@@ -464,8 +464,8 @@ static const double MAX_TIMEOUT_SECONDS = 1800.0;
 // Fuzzing support for JS runtime fuzzing
 #ifdef FUZZING_INTERFACES
 #  include "shell/jsrtfuzzing/jsrtfuzzing.h"
-static bool fuzzDoDebug = !!getenv("MOZ_FUZZ_DEBUG");
-static bool fuzzHaveModule = !!getenv("FUZZER");
+MOZ_RUNINIT static bool fuzzDoDebug = !!getenv("MOZ_FUZZ_DEBUG");
+MOZ_RUNINIT static bool fuzzHaveModule = !!getenv("FUZZER");
 #endif  // FUZZING_INTERFACES
 
 // Code to support GCOV code coverage measurements on standalone shell
@@ -860,7 +860,7 @@ bool shell::dumpEntrainedVariables = false;
 bool shell::OOM_printAllocationCount = false;
 #endif
 
-UniqueChars shell::processWideModuleLoadPath;
+MOZ_RUNINIT UniqueChars shell::processWideModuleLoadPath;
 
 static bool SetTimeoutValue(JSContext* cx, double t);
 
@@ -959,7 +959,7 @@ JSSecurityCallbacks ShellPrincipals::securityCallbacks = {
     subsumes};
 
 // The fully-trusted principal subsumes all other principals.
-ShellPrincipals ShellPrincipals::fullyTrusted(-1, 1);
+MOZ_RUNINIT ShellPrincipals ShellPrincipals::fullyTrusted(-1, 1);
 
 #ifdef EDITLINE
 extern "C" {
@@ -1581,7 +1581,8 @@ class MOZ_RAII AutoLockTelemetry : public LockGuard<Mutex> {
 
 using TelemetryData = uint32_t;
 using TelemetryVec = Vector<TelemetryData, 0, SystemAllocPolicy>;
-static mozilla::Array<TelemetryVec, size_t(JSMetric::Count)> telemetryResults;
+MOZ_RUNINIT static mozilla::Array<TelemetryVec, size_t(JSMetric::Count)>
+    telemetryResults;
 static void AccumulateTelemetryDataCallback(JSMetric id, uint32_t sample) {
   AutoLockTelemetry alt;
   // We ignore OOMs while writting teleemtry data.
@@ -1621,7 +1622,7 @@ static void WriteTelemetryDataToDisk(const char* dir) {
 #undef MAP_TELEMETRY
 
 // Use Counter introspection
-static Mutex useCounterLock(mutexid::ShellUseCounters);
+MOZ_RUNINIT static Mutex useCounterLock(mutexid::ShellUseCounters);
 class MOZ_RAII AutoLockUseCounters : public LockGuard<Mutex> {
   using Base = LockGuard<Mutex>;
 
@@ -4580,7 +4581,8 @@ static void WorkerMain(UniquePtr<WorkerInput> input) {
 
 // Workers can spawn other workers, so we need a lock to access workerThreads.
 static Mutex* workerThreadsLock = nullptr;
-static Vector<UniquePtr<js::Thread>, 0, SystemAllocPolicy> workerThreads;
+MOZ_RUNINIT static Vector<UniquePtr<js::Thread>, 0, SystemAllocPolicy>
+    workerThreads;
 
 class MOZ_RAII AutoLockWorkerThreads : public LockGuard<Mutex> {
   using Base = LockGuard<Mutex>;
@@ -5036,6 +5038,198 @@ static bool CheckRegExpSyntax(JSContext* cx, unsigned argc, Value* vp) {
 
   args.rval().set(error);
   return true;
+}
+
+static bool IsPrefAvailable(const char* pref) {
+  if (!fuzzingSafe) {
+    // All prefs in fuzzing unsafe mode are enabled.
+    return true;
+  }
+#define WASM_FEATURE(NAME, LOWER_NAME, COMPILE_PRED, COMPILER_PRED, FLAG_PRED, \
+                     FLAG_FORCE_ON, FLAG_FUZZ_ON, PREF)                        \
+  if constexpr (!FLAG_FUZZ_ON) {                                               \
+    if (strcmp("wasm_" #PREF, pref) == 0) {                                    \
+      return false;                                                            \
+    }                                                                          \
+  }
+  JS_FOR_WASM_FEATURES(WASM_FEATURE)
+#undef WASM_FEATURE
+  return true;
+}
+
+template <typename T>
+static bool ParsePrefValue(const char* name, const char* val, T* result) {
+  if constexpr (std::is_same_v<T, bool>) {
+    if (strcmp(val, "true") == 0) {
+      *result = true;
+      return true;
+    }
+    if (strcmp(val, "false") == 0) {
+      *result = false;
+      return true;
+    }
+    fprintf(stderr, "Invalid value for boolean pref %s: %s\n", name, val);
+    return false;
+  } else {
+    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>);
+    char* end;
+    long v = strtol(val, &end, 10);
+    if (end != val + strlen(val) || static_cast<long>(static_cast<T>(v)) != v) {
+      fprintf(stderr, "Invalid value for integer pref %s: %s\n", name, val);
+      return false;
+    }
+    *result = static_cast<T>(v);
+    return true;
+  }
+}
+
+static bool SetPrefToTrueForBool(const char* name) {
+  // Search for a matching pref and try to set it to a default value for the
+  // type.
+#define CHECK_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF)      \
+  if (strcmp(name, NAME) == 0) {                                       \
+    if constexpr (std::is_same_v<TYPE, bool>) {                        \
+      JS::Prefs::SETTER(true);                                         \
+      return true;                                                     \
+    } else {                                                           \
+      fprintf(stderr, "Pref %s must have a value specified.\n", name); \
+      return false;                                                    \
+    }                                                                  \
+  }
+  FOR_EACH_JS_PREF(CHECK_PREF)
+#undef CHECK_PREF
+
+  // Nothing matched. If --fuzzing-safe is used, return true after printing a
+  // message, to continue execution without breaking fuzzing when a pref is
+  // removed.
+  if (fuzzingSafe) {
+    fprintf(stderr, "Warning: Ignoring unknown pref name: %s\n", name);
+    return true;
+  }
+  fprintf(stderr, "Invalid pref name: %s\n", name);
+  return false;
+}
+
+template <typename T>
+static bool ConvertPrefValue(JSContext* cx, HandleValue val, T* result) {
+  if constexpr (std::is_same_v<T, bool>) {
+    *result = ToBoolean(val);
+    return true;
+  } else if constexpr (std::is_same_v<T, int32_t>) {
+    return ToInt32(cx, val, result);
+  } else {
+    static_assert(std::is_same_v<T, uint32_t>);
+    return ToUint32(cx, val, result);
+  }
+}
+
+static bool SetPrefValue(JSContext* cx, unsigned argc, Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  if (!args.requireAtLeast(cx, "setPrefValue", 2)) {
+    return false;
+  }
+
+  if (!args[0].isString()) {
+    JS_ReportErrorASCII(cx, "expected string argument");
+    return false;
+  }
+
+  Rooted<JSLinearString*> name(cx, args[0].toString()->ensureLinear(cx));
+  if (!name) {
+    return false;
+  }
+
+  // Search for a matching pref and try to set it to the provided value.
+#define CHECK_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF)             \
+  if (IsPrefAvailable(NAME) && StringEqualsAscii(name, NAME)) {               \
+    if (IS_STARTUP_PREF) {                                                    \
+      JS_ReportErrorASCII(cx, "%s is a startup pref and can't be set", NAME); \
+      return false;                                                           \
+    }                                                                         \
+    TYPE v;                                                                   \
+    if (!ConvertPrefValue<TYPE>(cx, args[1], &v)) {                           \
+      return false;                                                           \
+    }                                                                         \
+    JS::Prefs::SETTER(v);                                                     \
+    args.rval().setUndefined();                                               \
+    return true;                                                              \
+  }
+  FOR_EACH_JS_PREF(CHECK_PREF)
+#undef CHECK_PREF
+
+  // Fuzzing ignores missing prefs so it doesn't break if we remove a pref
+  if (fuzzingSafe) {
+    args.rval().setUndefined();
+    return true;
+  }
+  JS_ReportErrorASCII(cx, "invalid pref name");
+  return false;
+}
+
+static bool SetPrefToValue(const char* name, size_t nameLen,
+                           const char* value) {
+  // Search for a matching pref and try to set it to the provided value.
+#define CHECK_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF)         \
+  if (nameLen == strlen(NAME) && memcmp(name, NAME, strlen(NAME)) == 0) { \
+    TYPE v;                                                               \
+    if (!ParsePrefValue<TYPE>(NAME, value, &v)) {                         \
+      return false;                                                       \
+    }                                                                     \
+    JS::Prefs::SETTER(v);                                                 \
+    return true;                                                          \
+  }
+  FOR_EACH_JS_PREF(CHECK_PREF)
+#undef CHECK_PREF
+
+  // Nothing matched. If --fuzzing-safe is used, return true after printing a
+  // message, to continue execution without breaking fuzzing when a pref is
+  // removed.
+  if (fuzzingSafe) {
+    fprintf(stderr, "Warning: Ignoring unknown pref name: %s\n", name);
+    return true;
+  }
+  fprintf(stderr, "Invalid pref name: %s\n", name);
+  return false;
+}
+
+static bool SetPref(const char* pref) {
+  const char* assign = strchr(pref, '=');
+  if (!assign) {
+    if (IsPrefAvailable(pref) && !SetPrefToTrueForBool(pref)) {
+      return false;
+    }
+    return true;
+  }
+
+  size_t nameLen = assign - pref;
+  const char* valStart = assign + 1;  // Skip '='.
+
+  if (IsPrefAvailable(pref) && !SetPrefToValue(pref, nameLen, valStart)) {
+    return false;
+  }
+  return true;
+}
+
+static void ListPrefs() {
+  auto printPref = [](const char* name, auto defaultVal) {
+    if (!IsPrefAvailable(name)) {
+      return;
+    }
+    using T = decltype(defaultVal);
+    if constexpr (std::is_same_v<T, bool>) {
+      fprintf(stderr, "%s=%s\n", name, defaultVal ? "true" : "false");
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+      fprintf(stderr, "%s=%d\n", name, defaultVal);
+    } else {
+      static_assert(std::is_same_v<T, uint32_t>);
+      fprintf(stderr, "%s=%u\n", name, defaultVal);
+    }
+  };
+
+#define PRINT_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF) \
+  printPref(NAME, JS::Prefs::CPP_NAME());
+  FOR_EACH_JS_PREF(PRINT_PREF)
+#undef PRINT_PREF
 }
 
 static bool SetJitCompilerOption(JSContext* cx, unsigned argc, Value* vp) {
@@ -6695,7 +6889,8 @@ char** shell::sArgv;
 #ifndef __wasi__
 static const char sWasmCompileAndSerializeFlag[] =
     "--wasm-compile-and-serialize";
-static Vector<const char*, 5, js::SystemAllocPolicy> sCompilerProcessFlags;
+MOZ_RUNINIT static Vector<const char*, 5, js::SystemAllocPolicy>
+    sCompilerProcessFlags;
 
 static bool CompileAndSerializeInSeparateProcess(JSContext* cx,
                                                  const uint8_t* bytecode,
@@ -8548,230 +8743,6 @@ static bool GetMarks(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
-namespace js {
-namespace shell {
-
-class ShellAutoEntryMonitor : JS::dbg::AutoEntryMonitor {
-  Vector<UniqueChars, 1, js::SystemAllocPolicy> log;
-  bool oom;
-  bool enteredWithoutExit;
-
- public:
-  explicit ShellAutoEntryMonitor(JSContext* cx)
-      : AutoEntryMonitor(cx), oom(false), enteredWithoutExit(false) {}
-
-  ~ShellAutoEntryMonitor() { MOZ_ASSERT(!enteredWithoutExit); }
-
-  void Entry(JSContext* cx, JSFunction* function, JS::HandleValue asyncStack,
-             const char* asyncCause) override {
-    MOZ_ASSERT(!enteredWithoutExit);
-    enteredWithoutExit = true;
-
-    RootedString displayId(cx, JS_GetMaybePartialFunctionDisplayId(function));
-    if (displayId) {
-      UniqueChars displayIdStr = JS_EncodeStringToUTF8(cx, displayId);
-      if (!displayIdStr) {
-        // We report OOM in buildResult.
-        cx->recoverFromOutOfMemory();
-        oom = true;
-        return;
-      }
-      oom = !log.append(std::move(displayIdStr));
-      return;
-    }
-
-    oom = !log.append(DuplicateString("anonymous"));
-  }
-
-  void Entry(JSContext* cx, JSScript* script, JS::HandleValue asyncStack,
-             const char* asyncCause) override {
-    MOZ_ASSERT(!enteredWithoutExit);
-    enteredWithoutExit = true;
-
-    UniqueChars label(JS_smprintf("eval:%s", JS_GetScriptFilename(script)));
-    oom = !label || !log.append(std::move(label));
-  }
-
-  void Exit(JSContext* cx) override {
-    MOZ_ASSERT(enteredWithoutExit);
-    enteredWithoutExit = false;
-  }
-
-  bool buildResult(JSContext* cx, MutableHandleValue resultValue) {
-    if (oom) {
-      JS_ReportOutOfMemory(cx);
-      return false;
-    }
-
-    RootedObject result(cx, JS::NewArrayObject(cx, log.length()));
-    if (!result) {
-      return false;
-    }
-
-    for (size_t i = 0; i < log.length(); i++) {
-      char* name = log[i].get();
-      RootedString string(cx, AtomizeUTF8Chars(cx, name, strlen(name)));
-      if (!string) {
-        return false;
-      }
-      RootedValue value(cx, StringValue(string));
-      if (!JS_SetElement(cx, result, i, value)) {
-        return false;
-      }
-    }
-
-    resultValue.setObject(*result.get());
-    return true;
-  }
-};
-
-}  // namespace shell
-}  // namespace js
-
-static bool EntryPoints(JSContext* cx, unsigned argc, Value* vp) {
-  CallArgs args = CallArgsFromVp(argc, vp);
-
-  if (args.length() != 1) {
-    JS_ReportErrorASCII(cx, "Wrong number of arguments");
-    return false;
-  }
-
-  RootedObject opts(cx, ToObject(cx, args[0]));
-  if (!opts) {
-    return false;
-  }
-
-  // { function: f } --- Call f.
-  {
-    RootedValue fun(cx), dummy(cx);
-
-    if (!JS_GetProperty(cx, opts, "function", &fun)) {
-      return false;
-    }
-    if (!fun.isUndefined()) {
-      js::shell::ShellAutoEntryMonitor sarep(cx);
-      if (!Call(cx, UndefinedHandleValue, fun, JS::HandleValueArray::empty(),
-                &dummy)) {
-        return false;
-      }
-      return sarep.buildResult(cx, args.rval());
-    }
-  }
-
-  // { object: o, property: p, value: v } --- Fetch o[p], or if
-  // v is present, assign o[p] = v.
-  {
-    RootedValue objectv(cx), propv(cx), valuev(cx);
-
-    if (!JS_GetProperty(cx, opts, "object", &objectv) ||
-        !JS_GetProperty(cx, opts, "property", &propv))
-      return false;
-    if (!objectv.isUndefined() && !propv.isUndefined()) {
-      RootedObject object(cx, ToObject(cx, objectv));
-      if (!object) {
-        return false;
-      }
-
-      RootedString string(cx, ToString(cx, propv));
-      if (!string) {
-        return false;
-      }
-      RootedId id(cx);
-      if (!JS_StringToId(cx, string, &id)) {
-        return false;
-      }
-
-      if (!JS_GetProperty(cx, opts, "value", &valuev)) {
-        return false;
-      }
-
-      js::shell::ShellAutoEntryMonitor sarep(cx);
-
-      if (!valuev.isUndefined()) {
-        if (!JS_SetPropertyById(cx, object, id, valuev)) {
-          return false;
-        }
-      } else {
-        if (!JS_GetPropertyById(cx, object, id, &valuev)) {
-          return false;
-        }
-      }
-
-      return sarep.buildResult(cx, args.rval());
-    }
-  }
-
-  // { ToString: v } --- Apply JS::ToString to v.
-  {
-    RootedValue v(cx);
-
-    if (!JS_GetProperty(cx, opts, "ToString", &v)) {
-      return false;
-    }
-    if (!v.isUndefined()) {
-      js::shell::ShellAutoEntryMonitor sarep(cx);
-      if (!JS::ToString(cx, v)) {
-        return false;
-      }
-      return sarep.buildResult(cx, args.rval());
-    }
-  }
-
-  // { ToNumber: v } --- Apply JS::ToNumber to v.
-  {
-    RootedValue v(cx);
-    double dummy;
-
-    if (!JS_GetProperty(cx, opts, "ToNumber", &v)) {
-      return false;
-    }
-    if (!v.isUndefined()) {
-      js::shell::ShellAutoEntryMonitor sarep(cx);
-      if (!JS::ToNumber(cx, v, &dummy)) {
-        return false;
-      }
-      return sarep.buildResult(cx, args.rval());
-    }
-  }
-
-  // { eval: code } --- Apply ToString and then Evaluate to code.
-  {
-    RootedValue code(cx), dummy(cx);
-
-    if (!JS_GetProperty(cx, opts, "eval", &code)) {
-      return false;
-    }
-    if (!code.isUndefined()) {
-      RootedString codeString(cx, ToString(cx, code));
-      if (!codeString) {
-        return false;
-      }
-
-      AutoStableStringChars linearChars(cx);
-      if (!linearChars.initTwoByte(cx, codeString)) {
-        return false;
-      }
-      JS::SourceText<char16_t> srcBuf;
-      if (!srcBuf.initMaybeBorrowed(cx, linearChars)) {
-        return false;
-      }
-
-      CompileOptions options(cx);
-      options.setIntroductionType("entryPoint eval")
-          .setFileAndLine("entryPoint eval", 1);
-
-      js::shell::ShellAutoEntryMonitor sarep(cx);
-      if (!JS::Evaluate(cx, options, srcBuf, &dummy)) {
-        return false;
-      }
-      return sarep.buildResult(cx, args.rval());
-    }
-  }
-
-  JS_ReportErrorASCII(cx, "bad 'params' object");
-  return false;
-}
-
 #ifndef __wasi__
 static bool WasmTextToBinary(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -9532,6 +9503,12 @@ static bool GetExecutionTrace(JSContext* cx, unsigned argc, JS::Value* vp) {
   JS::Rooted<JS::PropertyKey> scriptId(cx, NameToId(cx->names().script));
   JS::Rooted<JS::PropertyKey> nameId(cx, NameToId(cx->names().name));
   JS::Rooted<JS::PropertyKey> labelId(cx, NameToId(cx->names().label));
+  JS::Rooted<JSString*> realmIDStr(cx, JS_AtomizeString(cx, "realmID"));
+  if (!realmIDStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> realmIDId(
+      cx, JS::PropertyKey::NonIntAtom(realmIDStr));
 
   JS::Rooted<JSObject*> contextObj(cx);
   JS::Rooted<ArrayObject*> eventsArray(cx);
@@ -9637,6 +9614,16 @@ static bool GetExecutionTrace(JSContext* cx, unsigned argc, JS::Value* vp) {
                                      JSPROP_ENUMERATE)) {
             return false;
           }
+        }
+
+        if (!JS_DefinePropertyById(
+                cx, eventObj, realmIDId,
+                // We are converting a uint64_t into double which is lossy. But
+                // this is okay because Firefox makes sure to only use 53 bits
+                // so it can be converted to and from a JS value without loss of
+                // precision. Additionally we don't set the realmID in JS shell.
+                double(event.functionEvent.realmID), JSPROP_ENUMERATE)) {
+          return false;
         }
 
         if (auto p = context.atoms.lookup(event.functionEvent.functionNameId)) {
@@ -10046,9 +10033,14 @@ static const JSFunctionSpecWithHelp shell_functions[] = {
 "  Calling this function will replace any callback set by |timeout|.\n"
 "  If the callback returns a falsy value, the script is aborted.\n"),
 
+    JS_FN_HELP("setPrefValue", SetPrefValue, 2, 0,
+"setPrefValue(name, value)",
+"  Set the value of the JS pref with the given name."),
+
     JS_FN_HELP("setJitCompilerOption", SetJitCompilerOption, 2, 0,
 "setJitCompilerOption(<option>, <number>)",
 "  Set a compiler option indexed in JSCompileOption enum to a number.\n"),
+
 #ifdef DEBUG
     JS_FN_HELP("interruptRegexp", InterruptRegexp, 2, 0,
 "interruptRegexp(<regexp>, <string>)",
@@ -10233,30 +10225,6 @@ JS_FN_HELP("createUserArrayBuffer", CreateUserArrayBuffer, 1, 0,
 "stackPointerInfo()",
 "  Return an int32 value which corresponds to the offset of the latest stack\n"
 "  pointer, such that one can take the differences of 2 to estimate a frame-size."),
-
-    JS_FN_HELP("entryPoints", EntryPoints, 1, 0,
-"entryPoints(params)",
-"Carry out some JSAPI operation as directed by |params|, and return an array of\n"
-"objects describing which JavaScript entry points were invoked as a result.\n"
-"|params| is an object whose properties indicate what operation to perform. Here\n"
-"are the recognized groups of properties:\n"
-"\n"
-"{ function }: Call the object |params.function| with no arguments.\n"
-"\n"
-"{ object, property }: Fetch the property named |params.property| of\n"
-"|params.object|.\n"
-"\n"
-"{ ToString }: Apply JS::ToString to |params.toString|.\n"
-"\n"
-"{ ToNumber }: Apply JS::ToNumber to |params.toNumber|.\n"
-"\n"
-"{ eval }: Apply JS::Evaluate to |params.eval|.\n"
-"\n"
-"The return value is an array of strings, with one element for each\n"
-"JavaScript invocation that occurred as a result of the given\n"
-"operation. Each element is the name of the function invoked, or the\n"
-"string 'eval:FILENAME' if the code was invoked by 'eval' or something\n"
-"similar.\n"),
 
     JS_FN_HELP("enqueueJob", EnqueueJob, 1, 0,
 "enqueueJob(fn)",
@@ -12215,142 +12183,6 @@ static bool WriteSelfHostedXDRFile(JSContext* cx, JS::SelfHostedCache buffer) {
   return true;
 }
 
-template <typename T>
-static bool ParsePrefValue(const char* name, const char* val, T* result) {
-  if constexpr (std::is_same_v<T, bool>) {
-    if (strcmp(val, "true") == 0) {
-      *result = true;
-      return true;
-    }
-    if (strcmp(val, "false") == 0) {
-      *result = false;
-      return true;
-    }
-    fprintf(stderr, "Invalid value for boolean pref %s: %s\n", name, val);
-    return false;
-  } else {
-    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>);
-    char* end;
-    long v = strtol(val, &end, 10);
-    if (end != val + strlen(val) || static_cast<long>(static_cast<T>(v)) != v) {
-      fprintf(stderr, "Invalid value for integer pref %s: %s\n", name, val);
-      return false;
-    }
-    *result = static_cast<T>(v);
-    return true;
-  }
-}
-
-static bool SetJSPrefToTrueForBool(const char* name) {
-  // Search for a matching pref and try to set it to a default value for the
-  // type.
-#define CHECK_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF)      \
-  if (strcmp(name, NAME) == 0) {                                       \
-    if constexpr (std::is_same_v<TYPE, bool>) {                        \
-      JS::Prefs::SETTER(true);                                         \
-      return true;                                                     \
-    } else {                                                           \
-      fprintf(stderr, "Pref %s must have a value specified.\n", name); \
-      return false;                                                    \
-    }                                                                  \
-  }
-  FOR_EACH_JS_PREF(CHECK_PREF)
-#undef CHECK_PREF
-
-  // Nothing matched. If --fuzzing-safe is used, return true after printing a
-  // message, to continue execution without breaking fuzzing when a pref is
-  // removed.
-  if (fuzzingSafe) {
-    fprintf(stderr, "Warning: Ignoring unknown pref name: %s\n", name);
-    return true;
-  }
-  fprintf(stderr, "Invalid pref name: %s\n", name);
-  return false;
-}
-
-static bool SetJSPrefToValue(const char* name, size_t nameLen,
-                             const char* value) {
-  // Search for a matching pref and try to set it to the provided value.
-#define CHECK_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF)         \
-  if (nameLen == strlen(NAME) && memcmp(name, NAME, strlen(NAME)) == 0) { \
-    TYPE v;                                                               \
-    if (!ParsePrefValue<TYPE>(NAME, value, &v)) {                         \
-      return false;                                                       \
-    }                                                                     \
-    JS::Prefs::SETTER(v);                                                 \
-    return true;                                                          \
-  }
-  FOR_EACH_JS_PREF(CHECK_PREF)
-#undef CHECK_PREF
-
-  // Nothing matched. If --fuzzing-safe is used, return true after printing a
-  // message, to continue execution without breaking fuzzing when a pref is
-  // removed.
-  if (fuzzingSafe) {
-    fprintf(stderr, "Warning: Ignoring unknown pref name: %s\n", name);
-    return true;
-  }
-  fprintf(stderr, "Invalid pref name: %s\n", name);
-  return false;
-}
-
-static bool IsJSPrefAvailable(const char* pref) {
-  if (!fuzzingSafe) {
-    // All prefs in fuzzing unsafe mode are enabled.
-    return true;
-  }
-#define WASM_FEATURE(NAME, LOWER_NAME, COMPILE_PRED, COMPILER_PRED, FLAG_PRED, \
-                     FLAG_FORCE_ON, FLAG_FUZZ_ON, PREF)                        \
-  if constexpr (!FLAG_FUZZ_ON) {                                               \
-    if (strcmp("wasm_" #PREF, pref) == 0) {                                    \
-      return false;                                                            \
-    }                                                                          \
-  }
-  JS_FOR_WASM_FEATURES(WASM_FEATURE)
-#undef WASM_FEATURE
-  return true;
-}
-
-static bool SetJSPref(const char* pref) {
-  const char* assign = strchr(pref, '=');
-  if (!assign) {
-    if (IsJSPrefAvailable(pref) && !SetJSPrefToTrueForBool(pref)) {
-      return false;
-    }
-    return true;
-  }
-
-  size_t nameLen = assign - pref;
-  const char* valStart = assign + 1;  // Skip '='.
-
-  if (IsJSPrefAvailable(pref) && !SetJSPrefToValue(pref, nameLen, valStart)) {
-    return false;
-  }
-  return true;
-}
-
-static void ListJSPrefs() {
-  auto printPref = [](const char* name, auto defaultVal) {
-    if (!IsJSPrefAvailable(name)) {
-      return;
-    }
-    using T = decltype(defaultVal);
-    if constexpr (std::is_same_v<T, bool>) {
-      fprintf(stderr, "%s=%s\n", name, defaultVal ? "true" : "false");
-    } else if constexpr (std::is_same_v<T, int32_t>) {
-      fprintf(stderr, "%s=%d\n", name, defaultVal);
-    } else {
-      static_assert(std::is_same_v<T, uint32_t>);
-      fprintf(stderr, "%s=%u\n", name, defaultVal);
-    }
-  };
-
-#define PRINT_PREF(NAME, CPP_NAME, TYPE, SETTER, IS_STARTUP_PREF) \
-  printPref(NAME, JS::Prefs::CPP_NAME());
-  FOR_EACH_JS_PREF(PRINT_PREF)
-#undef PRINT_PREF
-}
-
 static bool SetGCParameterFromArg(JSContext* cx, char* arg) {
   char* c = strchr(arg, '=');
   if (!c) {
@@ -13101,7 +12933,7 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
 
   for (MultiStringRange args = op.getMultiStringOption("setpref");
        !args.empty(); args.popFront()) {
-    if (!SetJSPref(args.front())) {
+    if (!SetPref(args.front())) {
       return false;
     }
   }
@@ -13204,7 +13036,7 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
 
   if (op.getBoolOption("list-prefs")) {
-    ListJSPrefs();
+    ListPrefs();
     return false;
   }
 

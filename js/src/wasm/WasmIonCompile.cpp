@@ -331,7 +331,12 @@ class FunctionCompiler {
               inlinedCallRefFunctions) == 0;
     }
   };
-  InliningStats stats;
+  InliningStats stats_;
+
+  // The remaining inlining budget for the top-level function, in terms of
+  // bytecode bytes.  Must be signed.  Is only valid for the top-level
+  // function; for inline callees meaningless and must be zero.
+  int64_t inliningBudget_ = 0;
 
   const CompilerEnvironment& compilerEnv_;
   const CodeMetadata& codeMeta_;
@@ -394,7 +399,7 @@ class FunctionCompiler {
       : toplevelCompiler_(nullptr),
         callerCompiler_(nullptr),
         inliningDepth_(0),
-        stats(),
+        stats_(),
         compilerEnv_(compilerEnv),
         codeMeta_(codeMeta),
         iter_(codeMeta, decoder),
@@ -416,7 +421,7 @@ class FunctionCompiler {
         stackResultPointer_(nullptr),
         tryNotes_(tryNotes),
         compileInfos_(compileInfos) {
-    stats.topLevelBytecodeSize = func.end - func.begin;
+    stats_.topLevelBytecodeSize = func.end - func.begin;
   }
 
   // Construct a FunctionCompiler for an inlined callee of a compilation
@@ -451,26 +456,6 @@ class FunctionCompiler {
     MOZ_ASSERT(toplevelCompiler && callerCompiler);
   }
 
-  ~FunctionCompiler() {
-    MOZ_ASSERT((toplevelCompiler_ == nullptr) == (callerCompiler_ == nullptr));
-    if (toplevelCompiler_) {
-      // This FunctionCompiler was for an inlined callee.
-      MOZ_ASSERT(stats.allZero());
-    } else {
-      // This FunctionCompiler was for the top level function.  Transfer the
-      // accumulated stats into the CodeMeta object (bypassing the
-      // WasmGenerator).
-      MOZ_ASSERT(stats.topLevelBytecodeSize > 0);
-      auto guard = codeMeta().stats.writeLock();
-      guard->partialNumFuncs += 1;
-      guard->partialBCSize += stats.topLevelBytecodeSize;
-      guard->partialNumFuncsInlinedDirect += stats.inlinedDirectFunctions;
-      guard->partialBCInlinedSizeDirect += stats.inlinedDirectBytecodeSize;
-      guard->partialNumFuncsInlinedCallRef += stats.inlinedCallRefFunctions;
-      guard->partialBCInlinedSizeCallRef += stats.inlinedCallRefBytecodeSize;
-    }
-  }
-
   const CodeMetadata& codeMeta() const { return codeMeta_; }
 
   IonOpIter& iter() { return iter_; }
@@ -491,14 +476,26 @@ class FunctionCompiler {
   void updateInliningStats(size_t inlineeBytecodeSize,
                            InliningHeuristics::CallKind callKind) {
     MOZ_ASSERT(!toplevelCompiler_ && !callerCompiler_);
-    MOZ_ASSERT(stats.topLevelBytecodeSize > 0);
+    MOZ_ASSERT(stats_.topLevelBytecodeSize > 0);
     if (callKind == InliningHeuristics::CallKind::Direct) {
-      stats.inlinedDirectBytecodeSize += inlineeBytecodeSize;
-      stats.inlinedDirectFunctions += 1;
+      stats_.inlinedDirectBytecodeSize += inlineeBytecodeSize;
+      stats_.inlinedDirectFunctions += 1;
     } else {
       MOZ_ASSERT(callKind == InliningHeuristics::CallKind::CallRef);
-      stats.inlinedCallRefBytecodeSize += inlineeBytecodeSize;
-      stats.inlinedCallRefFunctions += 1;
+      stats_.inlinedCallRefBytecodeSize += inlineeBytecodeSize;
+      stats_.inlinedCallRefFunctions += 1;
+    }
+    // Update the inlining budget accordingly.  If it is already negative, no
+    // more inlining for this (top-level) function can happen, so there's no
+    // point in updating it further.
+    if (inliningBudget_ >= 0) {
+      inliningBudget_ -= int64_t(inlineeBytecodeSize);
+      if (inliningBudget_ <= 0) {
+        JS_LOG(wasmPerf, mozilla::LogLevel::Info,
+               "CM=..%06lx  FC::updateILStats     "
+               "Inlining budget for fI=%u exceeded",
+               0xFFFFFF & (unsigned long)uintptr_t(&codeMeta_), funcIndex());
+      }
     }
   }
   FunctionCompiler* toplevelCompiler() { return toplevelCompiler_; }
@@ -529,6 +526,9 @@ class FunctionCompiler {
   }
 
   [[nodiscard]] bool initTopLevel() {
+    // "This is a top-level FunctionCompiler"
+    MOZ_ASSERT(!toplevelCompiler_);
+
     // Prepare the entry block for MIR generation:
 
     const ArgTypeVector args(funcType());
@@ -578,10 +578,28 @@ class FunctionCompiler {
       }
     }
 
+    // Figure out what the inlining budget for this function is.  If we've
+    // already exceeded the module-level limit, the budget is zero.  See
+    // "[SMDOC] Per-function and per-module inlining limits" (WasmHeuristics.h)
+    MOZ_ASSERT(inliningBudget_ == 0);
+    auto guard = codeMeta_.stats.readLock();
+    if (guard->inliningBudget > 0) {
+      inliningBudget_ =
+          int64_t(stats_.topLevelBytecodeSize) * PerFunctionMaxInliningRatio;
+      inliningBudget_ =
+          std::min<int64_t>(inliningBudget_, guard->inliningBudget);
+    } else {
+      inliningBudget_ = 0;
+    }
+    MOZ_ASSERT(inliningBudget_ >= 0);
+
     return true;
   }
 
   [[nodiscard]] bool initInline(const DefVector& argValues) {
+    // "This is an inlined-callee FunctionCompiler"
+    MOZ_ASSERT(toplevelCompiler_);
+
     // Prepare the entry block for MIR generation:
     if (!mirGen_.ensureBallast()) {
       return false;
@@ -654,6 +672,44 @@ class FunctionCompiler {
     MOZ_ASSERT_IF(!isInlined(),
                   pendingInlineReturns_.empty() && !pendingInlineCatchBlock_);
     MOZ_ASSERT(bodyRethrowPadPatches_.empty());
+
+    // Updates to do with inlining budget and compilation statistics.
+    MOZ_ASSERT((toplevelCompiler_ == nullptr) == (callerCompiler_ == nullptr));
+    if (toplevelCompiler_) {
+      // This FunctionCompiler was for an inlined callee.
+      MOZ_ASSERT(stats_.allZero());
+      MOZ_ASSERT(inliningBudget_ == 0);
+    } else {
+      // This FunctionCompiler was for the top level function.  Transfer the
+      // accumulated stats into the CodeMeta object (bypassing the
+      // WasmGenerator).
+      MOZ_ASSERT(stats_.topLevelBytecodeSize > 0);
+      auto guard = codeMeta().stats.writeLock();
+      guard->partialNumFuncs += 1;
+      guard->partialBCSize += stats_.topLevelBytecodeSize;
+      guard->partialNumFuncsInlinedDirect += stats_.inlinedDirectFunctions;
+      guard->partialBCInlinedSizeDirect += stats_.inlinedDirectBytecodeSize;
+      guard->partialNumFuncsInlinedCallRef += stats_.inlinedCallRefFunctions;
+      guard->partialBCInlinedSizeCallRef += stats_.inlinedCallRefBytecodeSize;
+      // Update the module's inlining budget accordingly.  If it is already
+      // negative, no more inlining for the module can happen, so there's no
+      // point in updating it further.
+      if (guard->inliningBudget >= 0) {
+        guard->inliningBudget -= int64_t(stats_.inlinedDirectBytecodeSize);
+        guard->inliningBudget -= int64_t(stats_.inlinedCallRefBytecodeSize);
+        if (guard->inliningBudget <= 0) {
+          JS_LOG(wasmPerf, mozilla::LogLevel::Info,
+                 "CM=..%06lx  FC::finish            "
+                 "Inlining budget for entire module exceeded",
+                 0xFFFFFF & (unsigned long)uintptr_t(&codeMeta_));
+        }
+      }
+      // If this particular top-level function overran the function-level
+      // limit, note that in the module too.
+      if (inliningBudget_ <= 0) {
+        guard->partialInlineBudgetOverruns++;
+      }
+    }
   }
 
   /************************* Read-only interface (after local scope setup) */
@@ -1164,7 +1220,6 @@ class FunctionCompiler {
     return true;
   }
 
-#ifdef ENABLE_WASM_GC
   [[nodiscard]] bool brOnNull(uint32_t relativeDepth, const DefVector& values,
                               const ResultType& type, MDefinition* condition) {
     if (inDeadCode()) {
@@ -1227,9 +1282,6 @@ class FunctionCompiler {
     return true;
   }
 
-#endif  // ENABLE_WASM_GC
-
-#ifdef ENABLE_WASM_GC
   MDefinition* refI31(MDefinition* input) {
     auto* ins = MWasmNewI31Ref::New(alloc(), input);
     curBlock_->add(ins);
@@ -1241,7 +1293,6 @@ class FunctionCompiler {
     curBlock_->add(ins);
     return ins;
   }
-#endif  // ENABLE_WASM_GC
 
 #ifdef ENABLE_WASM_SIMD
   // About Wasm SIMD as supported by Ion:
@@ -2568,6 +2619,22 @@ class FunctionCompiler {
       return false;
     }
 
+    // We can't inline if we've exceeded our per-top-level-function inlining
+    // budget.
+    //
+    // This logic will cause `availableBudget` to be driven slightly negative
+    // (or zero) if a budget overshoot happens, so we will have performed
+    // slightly more inlining than allowed by the initial setting of
+    // `availableBudget`.  The size of this overshoot is however very limited
+    // -- it can't exceed the size of one function body that is inlined.  And
+    // that is limited by InliningHeuristics::isSmallEnoughToInline.
+    const int64_t availableBudget = toplevelCompiler_
+                                        ? toplevelCompiler_->inliningBudget_
+                                        : inliningBudget_;
+    if (availableBudget <= 0) {
+      return false;
+    }
+
     // Ask the heuristics system if we're allowed to inline a function of this
     // size and kind at the current inlining depth.
     uint32_t inlineeBodySize = codeMeta().funcDefRange(funcIndex).bodyLength;
@@ -3110,7 +3177,6 @@ class FunctionCompiler {
     return ins;
   }
 
-#ifdef ENABLE_WASM_GC
   [[nodiscard]]
   bool callRef(const FuncType& funcType, MDefinition* ref,
                uint32_t lineOrBytecode, const DefVector& args,
@@ -3128,7 +3194,6 @@ class FunctionCompiler {
            collectCallResults(resultType, callState.stackResultArea, results);
   }
 
-#  ifdef ENABLE_WASM_TAIL_CALLS
   [[nodiscard]]
   bool returnCallRef(const FuncType& funcType, MDefinition* ref,
                      uint32_t lineOrBytecode, const DefVector& args,
@@ -3154,10 +3219,6 @@ class FunctionCompiler {
     curBlock_ = nullptr;
     return true;
   }
-
-#  endif  // ENABLE_WASM_TAIL_CALLS
-
-#endif  // ENABLE_WASM_GC
 
   [[nodiscard]] MDefinition* stringCast(MDefinition* string) {
     auto* ins = MWasmTrapIfAnyRefIsNotJSString::New(
@@ -3500,6 +3561,9 @@ class FunctionCompiler {
     if (!iter().getResults(paramCount, &loopParams)) {
       return false;
     }
+
+    // Eagerly create a phi for all loop params. setLoopBackedge will remove
+    // any that were not necessary.
     for (size_t i = 0; i < paramCount; i++) {
       MPhi* phi = MPhi::New(alloc(), loopParams[i]->type());
       if (!phi) {
@@ -3539,7 +3603,16 @@ class FunctionCompiler {
       return false;
     }
 
-    // Flag all redundant phis as unused.
+    // Entering a loop will eagerly create a phi node for all locals and loop
+    // params. Now that we've closed the loop we can check which phi nodes
+    // were actually needed by checking if the SSA definition flowing into the
+    // loop header (operand 0) is different than the SSA definition coming from
+    // the loop backedge (operand 1). If they are the same definition, the phi
+    // is redundant and can be removed.
+    //
+    // To do this we mark all redundant phis as 'unused', then remove the phi's
+    // from places in ourself the phis may have flowed into, then replace all
+    // uses of the phi's in the MIR graph with the original SSA definition.
     for (MPhiIterator phi = loopEntry->phisBegin(); phi != loopEntry->phisEnd();
          phi++) {
       MOZ_ASSERT(phi->numOperands() == 2);
@@ -3587,6 +3660,19 @@ class FunctionCompiler {
       MBasicBlock* block = patch->block();
       if (block->loopDepth() >= loopEntry->loopDepth()) {
         fixupRedundantPhis(block);
+      }
+    }
+
+    // If we're inlined into another function we are accumulating return values
+    // in a vector, search through the results to see if any refer to a
+    // redundant phi.
+    for (PendingInlineReturn& pendingReturn : pendingInlineReturns_) {
+      for (uint32_t resultIndex = 0;
+           resultIndex < pendingReturn.results.length(); resultIndex++) {
+        MDefinition** pendingResult = &pendingReturn.results[resultIndex];
+        if ((*pendingResult)->isUnused()) {
+          *pendingResult = (*pendingResult)->toPhi()->getOperand(0);
+        }
       }
     }
 
@@ -6154,7 +6240,6 @@ static bool EmitStackSwitch(FunctionCompiler& f) {
 }
 #endif
 
-#ifdef ENABLE_WASM_TAIL_CALLS
 static bool EmitReturnCall(FunctionCompiler& f) {
   uint32_t lineOrBytecode = f.readCallSiteLineOrBytecode();
 
@@ -6207,9 +6292,7 @@ static bool EmitReturnCallIndirect(FunctionCompiler& f) {
   return f.returnCallIndirect(funcTypeIndex, tableIndex, callee, lineOrBytecode,
                               args, &results);
 }
-#endif
 
-#if defined(ENABLE_WASM_TAIL_CALLS) && defined(ENABLE_WASM_GC)
 static bool EmitReturnCallRef(FunctionCompiler& f) {
   uint32_t lineOrBytecode = f.readCallSiteLineOrBytecode();
 
@@ -6228,7 +6311,6 @@ static bool EmitReturnCallRef(FunctionCompiler& f) {
   DefVector results;
   return f.returnCallRef(*funcType, callee, lineOrBytecode, args, &results);
 }
-#endif
 
 static bool EmitGetLocal(FunctionCompiler& f) {
   uint32_t id;
@@ -8002,7 +8084,6 @@ static bool EmitStoreLaneSimd128(FunctionCompiler& f, uint32_t laneSize) {
 
 #endif  // ENABLE_WASM_SIMD
 
-#ifdef ENABLE_WASM_GC
 static bool EmitRefAsNonNull(FunctionCompiler& f) {
   MDefinition* ref;
   if (!f.iter().readRefAsNonNull(&ref)) {
@@ -8157,10 +8238,6 @@ static bool EmitCallRef(FunctionCompiler& f) {
   f.iter().setResults(results.length(), results);
   return true;
 }
-
-#endif  // ENABLE_WASM_GC
-
-#ifdef ENABLE_WASM_GC
 
 static bool EmitStructNew(FunctionCompiler& f) {
   uint32_t lineOrBytecode = f.readCallSiteLineOrBytecode();
@@ -8832,8 +8909,6 @@ static bool EmitExternConvertAny(FunctionCompiler& f) {
   return true;
 }
 
-#endif  // ENABLE_WASM_GC
-
 static bool EmitCallBuiltinModuleFunc(FunctionCompiler& f) {
   const BuiltinModuleFunc* builtinModuleFunc;
 
@@ -9306,14 +9381,9 @@ bool EmitBodyExprs(FunctionCompiler& f) {
       case uint16_t(Op::F64ReinterpretI64):
         CHECK(EmitReinterpret(f, ValType::F64, ValType::I64, MIRType::Double));
 
-#ifdef ENABLE_WASM_GC
       case uint16_t(Op::RefEq):
-        if (!f.codeMeta().gcEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitComparison(f, RefType::eq(), JSOp::Eq,
                              MCompare::Compare_WasmAnyRef));
-#endif
       case uint16_t(Op::RefFunc):
         CHECK(EmitRefFunc(f));
       case uint16_t(Op::RefNull):
@@ -9333,62 +9403,31 @@ bool EmitBodyExprs(FunctionCompiler& f) {
       case uint16_t(Op::I64Extend32S):
         CHECK(EmitSignExtend(f, 4, 8));
 
-#ifdef ENABLE_WASM_TAIL_CALLS
       case uint16_t(Op::ReturnCall): {
-        if (!f.codeMeta().tailCallsEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitReturnCall(f));
       }
       case uint16_t(Op::ReturnCallIndirect): {
-        if (!f.codeMeta().tailCallsEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitReturnCallIndirect(f));
       }
-#endif
 
-#ifdef ENABLE_WASM_GC
       case uint16_t(Op::RefAsNonNull):
-        if (!f.codeMeta().gcEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitRefAsNonNull(f));
       case uint16_t(Op::BrOnNull): {
-        if (!f.codeMeta().gcEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitBrOnNull(f));
       }
       case uint16_t(Op::BrOnNonNull): {
-        if (!f.codeMeta().gcEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitBrOnNonNull(f));
       }
       case uint16_t(Op::CallRef): {
-        if (!f.codeMeta().gcEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitCallRef(f));
       }
-#endif
 
-#if defined(ENABLE_WASM_TAIL_CALLS) && defined(ENABLE_WASM_GC)
       case uint16_t(Op::ReturnCallRef): {
-        if (!f.codeMeta().gcEnabled() || !f.codeMeta().tailCallsEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         CHECK(EmitReturnCallRef(f));
       }
-#endif
 
       // Gc operations
-#ifdef ENABLE_WASM_GC
       case uint16_t(Op::GcPrefix): {
-        if (!f.codeMeta().gcEnabled()) {
-          return f.iter().unrecognizedOpcode(&op);
-        }
         switch (op.b1) {
           case uint32_t(GcOp::StructNew):
             CHECK(EmitStructNew(f));
@@ -9457,7 +9496,6 @@ bool EmitBodyExprs(FunctionCompiler& f) {
         }  // switch (op.b1)
         break;
       }
-#endif
 
       // SIMD operations
 #ifdef ENABLE_WASM_SIMD

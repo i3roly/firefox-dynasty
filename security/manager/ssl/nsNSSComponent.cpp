@@ -93,11 +93,20 @@ int nsNSSComponent::mInstanceCount = 0;
 // Forward declaration.
 nsresult CommonInit();
 
-template <const glean::impl::TimespanMetric* metric>
+template <const glean::impl::QuantityMetric* metric>
 class MOZ_RAII AutoGleanTimer {
  public:
-  explicit AutoGleanTimer() { metric->Start(); }
-  ~AutoGleanTimer() { metric->Stop(); }
+  explicit AutoGleanTimer(TimeStamp aStart = TimeStamp::Now())
+      : mStart(aStart) {}
+
+  ~AutoGleanTimer() {
+    TimeStamp end = TimeStamp::Now();
+    uint32_t delta = static_cast<uint32_t>((end - mStart).ToMilliseconds());
+    metric->Set(delta);
+  }
+
+ private:
+  const TimeStamp mStart;
 };
 
 // Take an nsIFile and get a UTF-8-encoded c-string representation of the
@@ -636,7 +645,7 @@ nsresult nsNSSComponent::BlockUntilLoadableCertsLoaded() {
 
 #ifndef MOZ_NO_SMART_CARDS
 static StaticMutex sCheckForSmartCardChangesMutex MOZ_UNANNOTATED;
-static TimeStamp sLastCheckedForSmartCardChanges = TimeStamp::Now();
+MOZ_RUNINIT static TimeStamp sLastCheckedForSmartCardChanges = TimeStamp::Now();
 #endif
 
 nsresult nsNSSComponent::CheckForSmartCardChanges() {
@@ -1299,14 +1308,14 @@ static nsresult GetNSSProfilePath(nsAutoCString& aProfilePath) {
 // |profilePath| is encoded in UTF-8.
 static nsresult AttemptToRenamePKCS11ModuleDB(const nsACString& profilePath) {
   nsCOMPtr<nsIFile> profileDir;
-#ifdef XP_WIN
+#  ifdef XP_WIN
   // |profilePath| is encoded in UTF-8 because SQLite always takes UTF-8 file
   // paths regardless of the current system code page.
   MOZ_TRY(NS_NewLocalFile(u""_ns, getter_AddRefs(profileDir)));
   MOZ_TRY(profileDir->InitWithPath(NS_ConvertUTF8toUTF16(profilePath)));
-#else
+#  else
   MOZ_TRY(NS_NewNativeLocalFile(profilePath, getter_AddRefs(profileDir)));
-#endif
+#  endif
   const char* moduleDBFilename = "pkcs11.txt";
   nsAutoCString destModuleDBFilename(moduleDBFilename);
   destModuleDBFilename.Append(".fips");

@@ -525,7 +525,7 @@ HWND WinUtils::GetTopLevelHWND(HWND aWnd, bool aStopIfNotChild,
 
 // Map from native window handles to nsWindow structures. Does not AddRef.
 // Inherently unsafe to access outside the main thread.
-static nsTHashMap<HWND, nsWindow*> sExtantNSWindows;
+MOZ_RUNINIT static nsTHashMap<HWND, nsWindow*> sExtantNSWindows;
 
 /* static */
 void WinUtils::SetNSWindowPtr(HWND aWnd, nsWindow* aWindow) {
@@ -1615,7 +1615,7 @@ static bool IsTabletDevice() {
   return false;
 }
 
-static bool SystemHasMouse() {
+bool WinUtils::SystemHasMouse() {
   // As per MSDN, this value is rarely false because of virtual mice, and
   // some machines report the existance of a mouse port as a mouse.
   //
@@ -1642,13 +1642,13 @@ PointerCapabilities WinUtils::GetPrimaryPointerCapabilities() {
   return PointerCapabilities::None;
 }
 
-static bool SystemHasTouchscreen() {
+bool WinUtils::SystemHasTouch() {
   int digitizerMetrics = ::GetSystemMetrics(SM_DIGITIZER);
   return (digitizerMetrics & NID_INTEGRATED_TOUCH) ||
          (digitizerMetrics & NID_EXTERNAL_TOUCH);
 }
 
-static bool SystemHasPenDigitizer() {
+bool WinUtils::SystemHasPen() {
   int digitizerMetrics = ::GetSystemMetrics(SM_DIGITIZER);
   return (digitizerMetrics & NID_INTEGRATED_PEN) ||
          (digitizerMetrics & NID_EXTERNAL_PEN);
@@ -1658,45 +1658,16 @@ static bool SystemHasPenDigitizer() {
 PointerCapabilities WinUtils::GetAllPointerCapabilities() {
   PointerCapabilities pointerCapabilities = PointerCapabilities::None;
 
-  if (SystemHasTouchscreen()) {
+  if (SystemHasTouch()) {
     pointerCapabilities |= PointerCapabilities::Coarse;
   }
 
-  if (SystemHasPenDigitizer() || SystemHasMouse()) {
+  if (SystemHasPen() || SystemHasMouse()) {
     pointerCapabilities |=
         PointerCapabilities::Fine | PointerCapabilities::Hover;
   }
 
   return pointerCapabilities;
-}
-
-void WinUtils::GetPointerExplanation(nsAString* aExplanation) {
-  // To support localization, we will return a comma-separated list of
-  // Fluent IDs
-  *aExplanation = u"pointing-device-none";
-
-  bool first = true;
-  auto append = [&](const char16_t* str) {
-    if (first) {
-      aExplanation->Truncate();
-      first = false;
-    } else {
-      aExplanation->Append(u",");
-    }
-    aExplanation->Append(str);
-  };
-
-  if (SystemHasTouchscreen()) {
-    append(u"pointing-device-touchscreen");
-  }
-
-  if (SystemHasPenDigitizer()) {
-    append(u"pointing-device-pen-digitizer");
-  }
-
-  if (SystemHasMouse()) {
-    append(u"pointing-device-mouse");
-  }
 }
 
 /* static */

@@ -19,16 +19,16 @@ ChromeUtils.defineESModuleGetters(lazy, {
  */
 const INTENT_OPTIONS = {
   taskName: "text-classification",
-  modelId: "mozilla/mobilebert-uncased-finetuned-LoRA-intent-classifier",
-  modelRevision: "v0.1.0",
-  dtype: "q8",
+  featureId: "suggest-intent-classification",
+  engineId: "ml-suggest-intent",
+  timeoutMS: -1,
 };
 
 const NER_OPTIONS = {
   taskName: "token-classification",
-  modelId: "mozilla/distilbert-uncased-NER-LoRA",
-  modelRevision: "v0.1.1",
-  dtype: "q8",
+  featureId: "suggest-NER",
+  engineId: "ml-suggest-ner",
+  timeoutMS: -1,
 };
 
 // List of prepositions used in subject cleaning.
@@ -41,6 +41,11 @@ const PREPOSITIONS = ["in", "at", "on", "for", "to", "near"];
  */
 class _MLSuggest {
   #modelEngines = {};
+
+  // Helper to wrap createEngine for testing purpose
+  createEngine(args) {
+    return lazy.createEngine(args);
+  }
 
   /**
    * Initializes the intent and NER models.
@@ -115,27 +120,15 @@ class _MLSuggest {
     }
   }
 
-  /**
-   * Helper method to generate a unique key for model engines.
-   *
-   * @param {object} options
-   *   The options object containing taskName and modelId.
-   * @returns {string}
-   *   The key for the model engine.
-   */
-  #getmodelEnginesKey(options) {
-    return `${options.taskName}-${options.modelId}`;
-  }
-
   async #initializeModelEngine(options) {
-    const engineId = this.#getmodelEnginesKey(options);
+    const engineId = options.engineId;
 
     // uses cache if engine was used
     if (this.#modelEngines[engineId]) {
       return this.#modelEngines[engineId];
     }
 
-    const engine = await lazy.createEngine({ ...options, engineId });
+    const engine = await this.createEngine({ ...options, engineId });
     // Cache the engine
     this.#modelEngines[engineId] = engine;
     return engine;
@@ -153,17 +146,24 @@ class _MLSuggest {
    *   The predicted intent label or null if the model is not initialized.
    */
   async _findIntent(query, options = {}) {
-    const engineIntentClassifier =
-      this.#modelEngines[this.#getmodelEnginesKey(INTENT_OPTIONS)];
-
+    const engineIntentClassifier = this.#modelEngines[INTENT_OPTIONS.engineId];
     if (!engineIntentClassifier) {
       return null;
     }
 
-    const res = await engineIntentClassifier.run({
-      args: [query],
-      options,
-    });
+    let res;
+    try {
+      res = await engineIntentClassifier.run({
+        args: [query],
+        options,
+      });
+    } catch (error) {
+      // engine could timeout or fail, so remove that from cache
+      // and reinitialize
+      this.#modelEngines[INTENT_OPTIONS.engineId] = null;
+      this.#initializeModelEngine(INTENT_OPTIONS);
+      return null;
+    }
     // Return the first label from the result
     return res[0].label;
   }
@@ -180,8 +180,16 @@ class _MLSuggest {
    *   The NER results or null if the model is not initialized.
    */
   async _findNER(query, options = {}) {
-    const engineNER = this.#modelEngines[this.#getmodelEnginesKey(NER_OPTIONS)];
-    return engineNER?.run({ args: [query], options });
+    const engineNER = this.#modelEngines[NER_OPTIONS.engineId];
+    try {
+      return engineNER?.run({ args: [query], options });
+    } catch (error) {
+      // engine could timeout or fail, so remove that from cache
+      // and reinitialize
+      this.#modelEngines[NER_OPTIONS.engineId] = null;
+      this.#initializeModelEngine(NER_OPTIONS);
+      return null;
+    }
   }
 
   /**

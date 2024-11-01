@@ -255,7 +255,7 @@ static const wchar_t kUser32LibName[] = L"user32.dll";
 
 uint32_t nsWindow::sInstanceCount = 0;
 bool nsWindow::sIsOleInitialized = false;
-nsIWidget::Cursor nsWindow::sCurrentCursor = {};
+MOZ_RUNINIT nsIWidget::Cursor nsWindow::sCurrentCursor = {};
 nsWindow* nsWindow::sCurrentWindow = nullptr;
 bool nsWindow::sJustGotDeactivate = false;
 bool nsWindow::sJustGotActivate = false;
@@ -418,7 +418,7 @@ extern mozilla::LazyLogModule gWindowsLog;
 static NS_DEFINE_CID(kCClipboardCID, NS_CLIPBOARD_CID);
 
 // General purpose user32.dll hook object
-static WindowsDllInterceptor sUser32Intercept;
+MOZ_RUNINIT static WindowsDllInterceptor sUser32Intercept;
 
 // When the client area is extended out into the default window frame area,
 // this is the minimum amount of space along the edge of resizable windows
@@ -4788,6 +4788,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
         result = true;
         break;
       }
+
       // According to WM_ENDSESSION lParam documentation:
       //   0 -> OS shutdown or restart (no way to distinguish)
       //   ENDSESSION_LOGOFF -> User is logging off
@@ -4805,14 +4806,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
                               "Received WM_ENDSESSION with unknown flags.");
         shutdownReason = AppShutdownReason::OSForceClose;
       }
-    }
-      [[fallthrough]];
-    case MOZ_WM_APP_QUIT: {
-      if (shutdownReason == AppShutdownReason::Unknown) {
-        // TODO: We do not expect that these days anybody sends us
-        // MOZ_WM_APP_QUIT, see bug 1827807.
-        shutdownReason = AppShutdownReason::WinUnexpectedMozQuit;
-      }
+
       // Let's fake a shutdown sequence without actually closing windows etc.
       // to avoid Windows killing us in the middle. A proper shutdown would
       // require having a chance to pump some messages. Unfortunately

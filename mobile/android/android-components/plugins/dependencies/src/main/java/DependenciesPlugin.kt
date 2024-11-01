@@ -50,7 +50,7 @@ object Versions {
 
     object AndroidX {
         const val activity = "1.9.3"
-        const val annotation = "1.9.0"
+        const val annotation = "1.9.1"
         const val appcompat = "1.7.0"
         const val arch = "2.2.0"
         const val autofill = "1.1.0"
@@ -58,17 +58,18 @@ object Versions {
         const val biometric = "1.1.0"
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
-        const val collection = "1.4.4"
-        const val compose_bom = "2024.10.00"
-        const val constraintlayout = "2.1.4"
-        const val constraintlayout_compose = "1.0.1"
+        const val collection = "1.4.5"
+        const val compose_bom = "2024.10.01"
+        const val concurrent = "1.2.0"
+        const val constraintlayout = "2.2.0"
+        const val constraintlayout_compose = "1.1.0"
         const val coordinatorlayout = "1.2.0"
         const val core = "1.13.1"
         const val core_splashscreen = "1.0.1"
         const val datastore="1.1.1"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.8.4"
-        const val lifecycle = "2.8.6"
+        const val fragment = "1.8.5"
+        const val lifecycle = "2.8.7"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
         const val navigation = "2.8.2"
@@ -83,7 +84,7 @@ object Versions {
         const val tracing = "1.2.0"
         const val transition = "1.5.1"
         const val viewpager2 = "1.1.0"
-        const val work = "2.9.1"
+        const val work = "2.10.0"
     }
 
     // Gradle can't deal with this being nested below.
@@ -172,6 +173,7 @@ object ComponentsDependencies {
     const val androidx_compose_ui_tooling = "androidx.compose.ui:ui-tooling"
     const val androidx_compose_ui_tooling_preview = "androidx.compose.ui:ui-tooling-preview"
 
+    const val androidx_concurrent = "androidx.concurrent:concurrent-futures-ktx:${Versions.AndroidX.concurrent}"
     const val androidx_constraintlayout = "androidx.constraintlayout:constraintlayout:${Versions.AndroidX.constraintlayout}"
     const val androidx_constraintlayout_compose = "androidx.constraintlayout:constraintlayout-compose:${Versions.AndroidX.constraintlayout_compose}"
     const val androidx_coordinatorlayout = "androidx.coordinatorlayout:coordinatorlayout:${Versions.AndroidX.coordinatorlayout}"

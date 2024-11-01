@@ -29,6 +29,7 @@
   --tab-icon-end-margin: 5.5px;
   --tab-icon-overlay-fill: light-dark(black, white);
   --tab-icon-overlay-stroke: light-dark(white, black);
+  --tab-label-line-height: 1.7;
   --tab-loading-fill: #0A84FF;
   --tab-hover-background-color: color-mix(in srgb, currentColor 11%, transparent);
   --tab-selected-textcolor: var(--toolbar-color);
@@ -102,7 +103,7 @@
 /* stylelint-disable-next-line media-query-no-invalid */
 @media (-moz-bool-pref: "sidebar.verticalTabs") {
   :root {
-    --tab-min-height: 32px;
+    --tab-min-height: max(32px, calc(var(--tab-label-line-height) * 1em));
     --tab-block-margin: 2px;
   }
 }
@@ -547,7 +548,7 @@
 .tab-label-container {
   overflow: hidden;
 
-  #tabbrowser-tabs:not([secondarytext-unsupported]) & {
+  #tabbrowser-tabs:not([secondarytext-unsupported], [orient=vertical]) & {
     height: 2.7em;
   }
 
@@ -572,7 +573,7 @@
 
 .tab-label {
   margin-inline: 0;
-  line-height: 1.7;  /* override 'normal' in case of fallback math fonts with huge metrics */
+  line-height: var(--tab-label-line-height);  /* override 'normal' in case of fallback math fonts with huge metrics */
   white-space: nowrap;
 }
 
@@ -1024,6 +1025,7 @@ tab-group {
 #vertical-tabs-newtab-button {
   appearance: none;
   min-height: var(--tab-min-height);
+  line-height: var(--tab-label-line-height);
   border-radius: var(--border-radius-medium);
   padding: 0 calc(var(--tab-inline-padding) - var(--tab-inner-inline-margin));
   width: var(--tab-collapsed-background-width);
@@ -1047,6 +1049,15 @@ tab-group {
     text-align: start;
     padding-inline-start: var(--tab-icon-end-margin);
   }
+}
+
+/* For #vertical-tabs-newtab-button, shown when tabs are overflowing, the gap
+ * with the other items comes from the grid-gap on tabbrowser-tabs which is a
+ * flex container. #tabs-newtab-button is a child of the arrowscrollbox where
+ * we don't want a gap (between tabs), so we have to add some margin.
+ */
+#tabbrowser-arrowscrollbox[orient="vertical"] > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button {
+  margin-block: var(--tab-block-margin);
 }
 
 #tabbrowser-tabs[expanded] {
@@ -1148,7 +1159,6 @@ tab-group {
   .tab-background {
     border-radius: var(--border-radius-medium);
     margin-inline: var(--tab-inner-inline-margin);
-    height: var(--tab-min-height);
   }
 
   .tab-close-button {

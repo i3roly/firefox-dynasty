@@ -381,7 +381,7 @@ struct nsGridContainerFrame::TrackSize {
     eSkipGrowUnlimited2 =       0x400,
     eSkipGrowUnlimited = eSkipGrowUnlimited1 | eSkipGrowUnlimited2,
     eBreakBefore =              0x800,
-    eFitContent =              0x1000,
+    eApplyFitContentClamping = 0x1000,
     eInfinitelyGrowable =      0x2000,
 
     // These are only used in the masonry axis.  They share the same value
@@ -449,7 +449,9 @@ TrackSize::StateBits nsGridContainerFrame::TrackSize::Initialize(
   if (aSize.IsFitContent()) {
     // In layout, fit-content(size) behaves as minmax(auto, max-content), with
     // 'size' as an additional upper-bound.
-    mState = eFitContent;
+    if (!::IsPercentOfIndefiniteSize(aSize.AsFitContent(), aPercentageBasis)) {
+      mState = eApplyFitContentClamping;
+    }
     minSizeTag = Tag::Auto;
     maxSizeTag = Tag::MaxContent;
   }
@@ -2519,7 +2521,7 @@ struct nsGridContainerFrame::Tracks {
         }
         nscoord newBase = sz.mBase + spacePerTrack;
         nscoord limit = sz.mLimit;
-        if (MOZ_UNLIKELY((sz.mState & TrackSize::eFitContent) &&
+        if (MOZ_UNLIKELY((sz.mState & TrackSize::eApplyFitContentClamping) &&
                          aFitContentClamper)) {
           // Clamp the limit to the fit-content() size, for §12.5.2 step 5/6.
           aFitContentClamper(track, sz.mBase, &limit);
@@ -2645,7 +2647,7 @@ struct nsGridContainerFrame::Tracks {
         }
         nscoord delta = spacePerTrack;
         nscoord newBase = sz.mBase + delta;
-        if (MOZ_UNLIKELY((sz.mState & TrackSize::eFitContent) &&
+        if (MOZ_UNLIKELY((sz.mState & TrackSize::eApplyFitContentClamping) &&
                          aFitContentClamper)) {
           // Clamp newBase to the fit-content() size, for §12.5.2 step 5/6.
           if (aFitContentClamper(track, sz.mBase, &newBase)) {
@@ -3098,12 +3100,6 @@ struct MOZ_STACK_CLASS nsGridContainerFrame::GridReflowInput {
   void CalculateTrackSizesForAxis(LogicalAxis aAxis, const Grid& aGrid,
                                   nscoord aCBSize,
                                   SizingConstraint aConstraint);
-
-  /**
-   * Calculate our track sizes.
-   */
-  void CalculateTrackSizes(const Grid& aGrid, const LogicalSize& aContentBox,
-                           SizingConstraint aConstraint);
 
   /**
    * Return the percentage basis for a grid item in its writing-mode.
@@ -4122,15 +4118,6 @@ void nsGridContainerFrame::GridReflowInput::CalculateTrackSizesForAxis(
 
   // positions and sizes are now final
   tracks.mCanResolveLineRangeSize = true;
-}
-
-void nsGridContainerFrame::GridReflowInput::CalculateTrackSizes(
-    const Grid& aGrid, const LogicalSize& aContentBox,
-    SizingConstraint aConstraint) {
-  CalculateTrackSizesForAxis(LogicalAxis::Inline, aGrid, aContentBox.ISize(mWM),
-                             aConstraint);
-  CalculateTrackSizesForAxis(LogicalAxis::Block, aGrid, aContentBox.BSize(mWM),
-                             aConstraint);
 }
 
 // Align an item's margin box in its aAxis inside aCBSize.
@@ -5974,7 +5961,7 @@ static void AddSubgridContribution(TrackSize& aSize,
   // XXX maybe eFlexMaxSizing too?
   // (once we implement https://github.com/w3c/csswg-drafts/issues/2177)
   if (aSize.mState &
-      (TrackSize::eIntrinsicMaxSizing | TrackSize::eFitContent)) {
+      (TrackSize::eIntrinsicMaxSizing | TrackSize::eApplyFitContentClamping)) {
     aSize.mLimit = std::max(aSize.mLimit, aMarginBorderPadding);
   }
 }
@@ -6034,7 +6021,7 @@ bool nsGridContainerFrame::Tracks::ResolveIntrinsicSizeForNonSpanningItems(
     } else {
       sz.mLimit = std::max(sz.mLimit, s);
     }
-    if (MOZ_UNLIKELY(sz.mState & TrackSize::eFitContent)) {
+    if (MOZ_UNLIKELY(sz.mState & TrackSize::eApplyFitContentClamping)) {
       // Clamp mLimit to the fit-content() size, for §12.5.1.
       nscoord fitContentClamp = aFunctions.SizingFor(aRange.mStart)
                                     .AsFitContent()
@@ -6293,7 +6280,8 @@ void nsGridContainerFrame::Tracks::InitializeItemBaselines(
               std::find_if(range.begin(), range.end(), [&](auto track) {
                 constexpr auto intrinsicSizeFlags =
                     TrackSize::eIntrinsicMinSizing |
-                    TrackSize::eIntrinsicMaxSizing | TrackSize::eFitContent |
+                    TrackSize::eIntrinsicMaxSizing |
+                    TrackSize::eApplyFitContentClamping |
                     TrackSize::eFlexMaxSizing;
                 return (mSizes[track].mState & intrinsicSizeFlags) != 0;
               }) != range.end();
@@ -8951,9 +8939,13 @@ void nsGridContainerFrame::Reflow(nsPresContext* aPresContext,
       }
       return computedBSize;
     }();
-    const LogicalSize containLogicalSize(wm, computedISize, trackSizingBSize);
-    gridReflowInput.CalculateTrackSizes(grid, containLogicalSize,
-                                        SizingConstraint::NoConstraint);
+    const LogicalSize containSize(wm, computedISize, trackSizingBSize);
+    gridReflowInput.CalculateTrackSizesForAxis(LogicalAxis::Inline, grid,
+                                               containSize.ISize(wm),
+                                               SizingConstraint::NoConstraint);
+    gridReflowInput.CalculateTrackSizesForAxis(LogicalAxis::Block, grid,
+                                               containSize.BSize(wm),
+                                               SizingConstraint::NoConstraint);
     if (containBSize) {
       bSize = *containBSize;
     } else {

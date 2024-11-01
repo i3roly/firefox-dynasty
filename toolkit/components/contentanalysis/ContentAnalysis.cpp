@@ -1883,6 +1883,11 @@ RefPtr<ContentAnalysis::PrintAllowedPromise>
 ContentAnalysis::PrintToPDFToDetermineIfPrintAllowed(
     dom::CanonicalBrowsingContext* aBrowsingContext,
     nsIPrintSettings* aPrintSettings) {
+  if (!mozilla::StaticPrefs::
+          browser_contentanalysis_interception_point_print_enabled()) {
+    return PrintAllowedPromise::CreateAndResolve(PrintAllowedResult(true),
+                                                 __func__);
+  }
   // Note that the IsChrome() check here excludes a few
   // common about pages like about:config, about:preferences,
   // and about:support, but other about: pages may still
@@ -2154,10 +2159,7 @@ class AggregatedClipboardCACallback final : public nsIContentAnalysisCallback {
       return;
     }
 
-    // Note that on Windows, kNativeHTMLMime will return the text in the native
-    // Windows clipboard CF_HTML format - see
-    // https://learn.microsoft.com/en-us/windows/win32/dataxchg/html-clipboard-format
-    auto textFormats = {kTextMime, kHTMLMime, kNativeHTMLMime};
+    auto textFormats = {kTextMime, kHTMLMime};
     for (const auto& textFormat : textFormats) {
       auto textResult = CheckClipboardCAAsText(aInnerWindowId, contentAnalysis,
                                                aTransferable, textFormat);
@@ -2409,7 +2411,9 @@ void ContentAnalysis::CheckClipboardContentAnalysis(
   //  - the window is being rendered in the parent process (for example,
   //  about:support and the like)
   if (!aWindow || aWindow->GetBrowsingContext()->IsChrome() ||
-      aWindow->IsInProcess()) {
+      aWindow->IsInProcess() ||
+      !mozilla::StaticPrefs::
+          browser_contentanalysis_interception_point_clipboard_enabled()) {
     aResolver->Callback(ContentAnalysisResult::FromNoResult(
         NoContentAnalysisResult::
             ALLOW_DUE_TO_CONTEXT_EXEMPT_FROM_CONTENT_ANALYSIS));

@@ -444,11 +444,12 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN(nsFrameSelection)
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
 bool nsFrameSelection::Caret::IsVisualMovement(
-    bool aContinueSelection, CaretMovementStyle aMovementStyle) const {
+    ExtendSelection aExtendSelection, CaretMovementStyle aMovementStyle) const {
   int32_t movementFlag = StaticPrefs::bidi_edit_caret_movement_style();
   return aMovementStyle == eVisual ||
          (aMovementStyle == eUsePrefStyle &&
-          (movementFlag == 1 || (movementFlag == 2 && !aContinueSelection)));
+          (movementFlag == 1 ||
+           (movementFlag == 2 && aExtendSelection == ExtendSelection::No)));
 }
 
 // Get the x (or y, in vertical writing mode) position requested
@@ -696,7 +697,7 @@ static nsDirection GetCaretDirection(const nsIFrame& aFrame,
 }
 
 nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
-                                     bool aContinueSelection,
+                                     ExtendSelection aExtendSelection,
                                      const nsSelectionAmount aAmount,
                                      CaretMovementStyle aMovementStyle) {
   NS_ENSURE_STATE(mPresShell);
@@ -728,7 +729,7 @@ nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
   }
 
   const bool doCollapse = [&] {
-    if (sel->IsCollapsed() || aContinueSelection) {
+    if (sel->IsCollapsed() || aExtendSelection == ExtendSelection::Yes) {
       return false;
     }
     if (aAmount > eSelectLine) {
@@ -766,7 +767,7 @@ nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
   }
 
   bool visualMovement =
-      mCaret.IsVisualMovement(aContinueSelection, aMovementStyle);
+      mCaret.IsVisualMovement(aExtendSelection, aMovementStyle);
   const PrimaryFrameData frameForFocus =
       sel->GetPrimaryFrameForCaretAtFocusNode(visualMovement);
   if (!frameForFocus.mFrame) {
@@ -819,8 +820,24 @@ nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
       mCaret.mHint);  // temporary variable so we dont set
                       // mCaret.mHint until it is necessary
 
-  Result<PeekOffsetStruct, nsresult> result = PeekOffsetForCaretMove(
-      direction, aContinueSelection, aAmount, aMovementStyle, desiredPos);
+  Result<PeekOffsetOptions, nsresult> options =
+      CreatePeekOffsetOptionsForCaretMove(sel, aExtendSelection,
+                                          aMovementStyle);
+  if (options.isErr()) {
+    return options.propagateErr();
+  }
+  Result<const dom::Element*, nsresult> ancestorLimiter =
+      GetAncestorLimiterForCaretMove(sel);
+  if (ancestorLimiter.isErr()) {
+    return ancestorLimiter.propagateErr();
+  }
+  nsIContent* content = nsIContent::FromNodeOrNull(sel->GetFocusNode());
+
+  Result<PeekOffsetStruct, nsresult> result =
+      SelectionMovementUtils::PeekOffsetForCaretMove(
+          content, sel->FocusOffset(), direction, GetHint(),
+          GetCaretBidiLevel(), aAmount, desiredPos, options.unwrap(),
+          ancestorLimiter.unwrap());
   nsresult rv;
   if (result.isOk() && result.inspect().mResultContent) {
     const PeekOffsetStruct& pos = result.inspect();
@@ -881,13 +898,13 @@ nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
     }
     // "pos" is on the stack, so pos.mResultContent has stack lifetime, so using
     // MOZ_KnownLive is ok.
-    const FocusMode focusMode = aContinueSelection
+    const FocusMode focusMode = aExtendSelection == ExtendSelection::Yes
                                     ? FocusMode::kExtendSelection
                                     : FocusMode::kCollapseToNewPoint;
     rv = TakeFocus(MOZ_KnownLive(*pos.mResultContent), pos.mContentOffset,
                    pos.mContentOffset, tHint, focusMode);
   } else if (aAmount <= eSelectWordNoSpace && direction == eDirNext &&
-             !aContinueSelection) {
+             aExtendSelection == ExtendSelection::No) {
     // Collapse selection if PeekOffset failed, we either
     //  1. bumped into the BRFrame, bug 207623
     //  2. had select-all in a text input (DIV range), bug 352759.
@@ -910,30 +927,10 @@ nsresult nsFrameSelection::MoveCaret(nsDirection aDirection,
 
   return rv;
 }
-
-Result<PeekOffsetStruct, nsresult> nsFrameSelection::PeekOffsetForCaretMove(
-    nsDirection aDirection, bool aContinueSelection,
-    const nsSelectionAmount aAmount, CaretMovementStyle aMovementStyle,
-    const nsPoint& aDesiredCaretPos) const {
-  if (!mPresShell) {
-    return Err(NS_ERROR_NULL_POINTER);
-  }
-
-  Selection* selection =
-      mDomSelections[GetIndexFromSelectionType(SelectionType::eNormal)];
-  if (!selection) {
-    return Err(NS_ERROR_NULL_POINTER);
-  }
-
-  nsIContent* content = nsIContent::FromNodeOrNull(selection->GetFocusNode());
-  if (!content) {
-    return Err(NS_ERROR_FAILURE);
-  }
-  MOZ_ASSERT(mPresShell->GetDocument() == content->GetComposedDoc());
-
-  const bool visualMovement =
-      mCaret.IsVisualMovement(aContinueSelection, aMovementStyle);
-
+Result<PeekOffsetOptions, nsresult>
+nsFrameSelection::CreatePeekOffsetOptionsForCaretMove(
+    dom::Selection* aSelection, ExtendSelection aExtendSelection,
+    CaretMovementStyle aMovementStyle) const {
   PeekOffsetOptions options;
   // set data using mLimiters.mLimiter to stop on scroll views.  If we have a
   // limiter then we stop peeking when we hit scrollable views.  If no limiter
@@ -941,16 +938,38 @@ Result<PeekOffsetStruct, nsresult> nsFrameSelection::PeekOffsetForCaretMove(
   if (mLimiters.mLimiter) {
     options += PeekOffsetOption::StopAtScroller;
   }
+  const bool visualMovement =
+      mCaret.IsVisualMovement(aExtendSelection, aMovementStyle);
   if (visualMovement) {
     options += PeekOffsetOption::Visual;
   }
-  if (aContinueSelection) {
+  if (aExtendSelection == ExtendSelection::Yes) {
     options += PeekOffsetOption::Extend;
   }
-  const Element* ancestorLimiter =
-      Element::FromNodeOrNull(GetAncestorLimiter());
-  if (selection->IsEditorSelection()) {
+
+  MOZ_ASSERT(aSelection);
+  if (aSelection->IsEditorSelection()) {
     options += PeekOffsetOption::ForceEditableRegion;
+  }
+  return options;
+}
+
+Result<Element*, nsresult> nsFrameSelection::GetAncestorLimiterForCaretMove(
+    dom::Selection* aSelection) const {
+  if (!mPresShell) {
+    return Err(NS_ERROR_NULL_POINTER);
+  }
+
+  MOZ_ASSERT(aSelection);
+  nsIContent* content = nsIContent::FromNodeOrNull(aSelection->GetFocusNode());
+  if (!content) {
+    return Err(NS_ERROR_FAILURE);
+  }
+
+  MOZ_ASSERT(mPresShell->GetDocument() == content->GetComposedDoc());
+
+  Element* ancestorLimiter = Element::FromNodeOrNull(GetAncestorLimiter());
+  if (aSelection->IsEditorSelection()) {
     // If the editor has not receive `focus` event, it may have not set ancestor
     // limiter.  Then, we need to compute it here for the caret move.
     if (!ancestorLimiter) {
@@ -960,15 +979,14 @@ Result<PeekOffsetStruct, nsresult> nsFrameSelection::PeekOffsetForCaretMove(
       // host of selection range container.  On the other hand, selection ranges
       // may be outside of focused editing host.  In such case, we should use
       // the closest editing host as the ancestor limiter instead.
-      PresShell* const presShell = selection->GetPresShell();
+      PresShell* const presShell = aSelection->GetPresShell();
       const Document* const doc =
           presShell ? presShell->GetDocument() : nullptr;
       if (const nsPIDOMWindowInner* const win =
               doc ? doc->GetInnerWindow() : nullptr) {
-        const Element* const focusedElement = win->GetFocusedElement();
-        const Element* closestEditingHost = nullptr;
-        for (const Element* element :
-             content->InclusiveAncestorsOfType<Element>()) {
+        Element* const focusedElement = win->GetFocusedElement();
+        Element* closestEditingHost = nullptr;
+        for (Element* element : content->InclusiveAncestorsOfType<Element>()) {
           if (element->IsEditingHost()) {
             if (!closestEditingHost) {
               closestEditingHost = element;
@@ -990,10 +1008,7 @@ Result<PeekOffsetStruct, nsresult> nsFrameSelection::PeekOffsetForCaretMove(
       }
     }
   }
-
-  return SelectionMovementUtils::PeekOffsetForCaretMove(
-      content, selection->FocusOffset(), aDirection, GetHint(),
-      GetCaretBidiLevel(), aAmount, aDesiredCaretPos, options, ancestorLimiter);
+  return ancestorLimiter;
 }
 
 nsPrevNextBidiLevels nsFrameSelection::GetPrevNextBidiLevels(
@@ -1455,7 +1470,7 @@ nsresult nsFrameSelection::TakeFocus(nsIContent& aNewFocus,
 
         // XXXX We need to REALLY get the current key shift state
         //  (we'd need to add event listener -- let's not bother for now)
-        event.mModifiers &= ~MODIFIER_SHIFT;  // aContinueSelection;
+        event.mModifiers &= ~MODIFIER_SHIFT;  // aExtendSelection;
         if (parentAndOffset.mParent) {
           mTableSelection.mClosestInclusiveTableCellAncestor =
               inclusiveTableCellAncestor;
@@ -1950,21 +1965,22 @@ nsresult nsFrameSelection::PhysicalMove(int16_t aDirection, int16_t aAmount,
           ? wm.IsVerticalLR() ? verticalLR[aDirection] : verticalRL[aDirection]
           : horizontal[aDirection];
 
-  nsresult rv =
-      MoveCaret(mapping.direction, aExtend, mapping.amounts[aAmount], eVisual);
+  nsresult rv = MoveCaret(mapping.direction, ExtendSelection(aExtend),
+                          mapping.amounts[aAmount], eVisual);
   if (NS_FAILED(rv)) {
     // If we tried to do a line move, but couldn't move in the given direction,
     // then we'll "promote" this to a line-edge move instead.
     if (mapping.amounts[aAmount] == eSelectLine) {
-      rv = MoveCaret(mapping.direction, aExtend, mapping.amounts[aAmount + 1],
-                     eVisual);
+      rv = MoveCaret(mapping.direction, ExtendSelection(aExtend),
+                     mapping.amounts[aAmount + 1], eVisual);
     }
     // And if it was a next-word move that failed (which can happen when
     // eat_space_to_next_word is true, see bug 1153237), then just move forward
     // to the line-edge.
     else if (mapping.amounts[aAmount] == eSelectWord &&
              mapping.direction == eDirNext) {
-      rv = MoveCaret(eDirNext, aExtend, eSelectEndLine, eVisual);
+      rv = MoveCaret(eDirNext, ExtendSelection(aExtend), eSelectEndLine,
+                     eVisual);
     }
   }
 
@@ -1972,26 +1988,27 @@ nsresult nsFrameSelection::PhysicalMove(int16_t aDirection, int16_t aAmount,
 }
 
 nsresult nsFrameSelection::CharacterMove(bool aForward, bool aExtend) {
-  return MoveCaret(aForward ? eDirNext : eDirPrevious, aExtend, eSelectCluster,
-                   eUsePrefStyle);
+  return MoveCaret(aForward ? eDirNext : eDirPrevious, ExtendSelection(aExtend),
+                   eSelectCluster, eUsePrefStyle);
 }
 
 nsresult nsFrameSelection::WordMove(bool aForward, bool aExtend) {
-  return MoveCaret(aForward ? eDirNext : eDirPrevious, aExtend, eSelectWord,
-                   eUsePrefStyle);
+  return MoveCaret(aForward ? eDirNext : eDirPrevious, ExtendSelection(aExtend),
+                   eSelectWord, eUsePrefStyle);
 }
 
 nsresult nsFrameSelection::LineMove(bool aForward, bool aExtend) {
-  return MoveCaret(aForward ? eDirNext : eDirPrevious, aExtend, eSelectLine,
-                   eUsePrefStyle);
+  return MoveCaret(aForward ? eDirNext : eDirPrevious, ExtendSelection(aExtend),
+                   eSelectLine, eUsePrefStyle);
 }
 
 nsresult nsFrameSelection::IntraLineMove(bool aForward, bool aExtend) {
   if (aForward) {
-    return MoveCaret(eDirNext, aExtend, eSelectEndLine, eLogical);
-  } else {
-    return MoveCaret(eDirPrevious, aExtend, eSelectBeginLine, eLogical);
+    return MoveCaret(eDirNext, ExtendSelection(aExtend), eSelectEndLine,
+                     eLogical);
   }
+  return MoveCaret(eDirPrevious, ExtendSelection(aExtend), eSelectBeginLine,
+                   eLogical);
 }
 
 template <typename RangeType>
@@ -2023,25 +2040,36 @@ nsFrameSelection::CreateRangeExtendedToSomewhere(
   if (!firstRange || !firstRange->IsPositioned()) {
     return Err(NS_ERROR_FAILURE);
   }
-  Result<PeekOffsetStruct, nsresult> result = PeekOffsetForCaretMove(
-      aDirection, true, aAmount, aMovementStyle, nsPoint(0, 0));
-  if (result.isErr()) {
-    return Err(NS_ERROR_FAILURE);
+  Result<PeekOffsetOptions, nsresult> options =
+      CreatePeekOffsetOptionsForCaretMove(selection, ExtendSelection::Yes,
+                                          aMovementStyle);
+  if (options.isErr()) {
+    return options.propagateErr();
   }
-  const PeekOffsetStruct& pos = result.inspect();
+  Result<const Element*, nsresult> ancestorLimiter =
+      GetAncestorLimiterForCaretMove(selection);
+  if (ancestorLimiter.isErr()) {
+    return ancestorLimiter.propagateErr();
+  }
+  Result<RawRangeBoundary, nsresult> result =
+      SelectionMovementUtils::MoveRangeBoundaryToSomewhere(
+          selection->FocusRef().AsRaw(), aDirection, GetHint(),
+          GetCaretBidiLevel(), aAmount, options.unwrap(),
+          ancestorLimiter.unwrap());
+  if (result.isErr()) {
+    return result.propagateErr();
+  }
   RefPtr<RangeType> range;
-  if (NS_WARN_IF(!pos.mResultContent)) {
+  RawRangeBoundary rangeBoundary = result.unwrap();
+  if (!rangeBoundary.IsSetAndValid()) {
     return range;
   }
   if (aDirection == eDirPrevious) {
-    range = RangeType::Create(
-        RawRangeBoundary(pos.mResultContent, pos.mContentOffset),
-        firstRange->EndRef(), IgnoreErrors());
+    range =
+        RangeType::Create(rangeBoundary, firstRange->EndRef(), IgnoreErrors());
   } else {
-    range = RangeType::Create(
-        firstRange->StartRef(),
-        RawRangeBoundary(pos.mResultContent, pos.mContentOffset),
-        IgnoreErrors());
+    range = RangeType::Create(firstRange->StartRef(), rangeBoundary,
+                              IgnoreErrors());
   }
   return range;
 }

@@ -100,15 +100,43 @@ bool FeatureOptions::init(JSContext* cx, HandleValue val) {
     return true;
   }
 
+  bool jsStringBuiltinsAvailable = false;
 #ifdef ENABLE_WASM_JS_STRING_BUILTINS
-  if (JSStringBuiltinsAvailable(cx)) {
-    if (!val.isObject()) {
-      JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                               JSMSG_WASM_BAD_COMPILE_OPTIONS);
+  jsStringBuiltinsAvailable = JSStringBuiltinsAvailable(cx);
+#endif  // ENABLE_WASM_JS_STRING_BUILTINS
+  bool isPrivilegedContext = IsPrivilegedContext(cx);
+
+  if (!jsStringBuiltinsAvailable && !isPrivilegedContext) {
+    // Skip checking for a compile options object if we don't have a feature
+    // enabled yet that requires it. Once js-string-builtins is standardized
+    // and shipped we will always need to check for it.
+    MOZ_ASSERT(!this->disableOptimizingCompiler);
+    MOZ_ASSERT(!this->jsStringConstants);
+    MOZ_ASSERT(!this->jsStringBuiltins);
+    return true;
+  }
+
+  if (!val.isObject()) {
+    JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
+                             JSMSG_WASM_BAD_COMPILE_OPTIONS);
+    return false;
+  }
+  RootedObject obj(cx, &val.toObject());
+
+  if (isPrivilegedContext) {
+    RootedValue disableOptimizingCompiler(cx);
+    if (!JS_GetProperty(cx, obj, "disableOptimizingCompiler",
+                        &disableOptimizingCompiler)) {
       return false;
     }
-    RootedObject obj(cx, &val.toObject());
 
+    this->disableOptimizingCompiler = JS::ToBoolean(disableOptimizingCompiler);
+  } else {
+    MOZ_ASSERT(!this->disableOptimizingCompiler);
+  }
+
+#ifdef ENABLE_WASM_JS_STRING_BUILTINS
+  if (jsStringBuiltinsAvailable) {
     // Check the 'importedStringConstants' option
     RootedValue importedStringConstants(cx);
     if (!JS_GetProperty(cx, obj, "importedStringConstants",
@@ -209,16 +237,6 @@ FeatureArgs FeatureArgs::build(JSContext* cx, const FeatureOptions& options) {
     features.builtinModules.jsStringConstantsNamespace =
         options.jsStringConstantsNamespace;
   }
-#ifdef ENABLE_WASM_GC
-  if (options.requireGC) {
-    features.gc = true;
-  }
-#endif
-#ifdef ENABLE_WASM_TAIL_CALLS
-  if (options.requireTailCalls) {
-    features.tailCalls = true;
-  }
-#endif
   if (options.requireExnref) {
     features.exnref = true;
   }
@@ -232,6 +250,12 @@ SharedCompileArgs CompileArgs::build(JSContext* cx,
                                      CompileArgsError* error) {
   bool baseline = BaselineAvailable(cx);
   bool ion = IonAvailable(cx);
+
+  // If the user requested to disable ion and we're able to, fallback to
+  // baseline.
+  if (baseline && options.disableOptimizingCompiler) {
+    ion = false;
+  }
 
   // Debug information such as source view or debug traps will require
   // additional memory and permanently stay in baseline code, so we try to
@@ -929,14 +953,15 @@ bool wasm::CompileCompleteTier2(const Bytes& bytecode, const Module& module,
 }
 
 bool wasm::CompilePartialTier2(const Code& code, uint32_t funcIndex,
-                               UniqueChars* error) {
+                               UniqueChars* error, UniqueCharsVector* warnings,
+                               mozilla::Atomic<bool>* cancelled) {
   CompilerEnvironment compilerEnv(CompileMode::LazyTiering, Tier::Optimized,
                                   DebugEnabled::False);
   compilerEnv.computeParameters();
 
   const CodeMetadata& codeMeta = code.codeMeta();
-  ModuleGenerator mg(codeMeta, compilerEnv, CompileState::LazyTier2, nullptr,
-                     error, nullptr);
+  ModuleGenerator mg(codeMeta, compilerEnv, CompileState::LazyTier2, cancelled,
+                     error, warnings);
   if (!mg.initializePartialTier(code, funcIndex)) {
     // The module is already validated, so this can only be an OOM.
     MOZ_ASSERT(!*error);

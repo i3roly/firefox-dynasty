@@ -325,6 +325,10 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         state.extensionMenuState.showDisabledExtensionsOnboarding
                     }
 
+                    val installedAddons by store.observeAsState(initialValue = emptyList()) { state ->
+                        state.extensionMenuState.installedAddons
+                    }
+
                     val initRoute = when (args.accesspoint) {
                         MenuAccessPoint.Browser,
                         MenuAccessPoint.Home,
@@ -396,6 +400,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         accessPoint = args.accesspoint,
                                         store = store,
                                         syncStore = syncStore,
+                                        installedAddons = installedAddons,
                                         showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                         isPrivate = browsingModeManager.mode.isPrivate,
                                         isDesktopMode = isDesktopMode,
@@ -403,12 +408,16 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         isTranslationSupported = isTranslationSupported,
                                         isExtensionsProcessDisabled = isExtensionsProcessDisabled,
                                         onExtensionsMenuClick = {
-                                            contentState = Route.ExtensionsMenu
-                                            Events.browserMenuAction.record(
-                                                Events.BrowserMenuActionExtra(
-                                                    item = "extensions_submenu",
-                                                ),
-                                            )
+                                            if (!isExtensionsProcessDisabled) {
+                                                contentState = Route.ExtensionsMenu
+                                                Events.browserMenuAction.record(
+                                                    Events.BrowserMenuActionExtra(
+                                                        item = "extensions_submenu",
+                                                    ),
+                                                )
+                                            } else {
+                                                store.dispatch(MenuAction.Navigate.ManageExtensions)
+                                            }
                                         },
                                         onSaveMenuClick = {
                                             contentState = Route.SaveMenu
@@ -422,6 +431,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         accessPoint = args.accesspoint,
                                         store = store,
                                         syncStore = syncStore,
+                                        installedAddons = installedAddons,
                                         showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                         isPrivate = browsingModeManager.mode.isPrivate,
                                         isDesktopMode = isDesktopMode,
@@ -429,12 +439,16 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         isTranslationSupported = isTranslationSupported,
                                         isExtensionsProcessDisabled = isExtensionsProcessDisabled,
                                         onExtensionsMenuClick = {
-                                            contentState = Route.ExtensionsMenu
-                                            Events.browserMenuAction.record(
-                                                Events.BrowserMenuActionExtra(
-                                                    item = "extensions_submenu",
-                                                ),
-                                            )
+                                            if (!isExtensionsProcessDisabled) {
+                                                contentState = Route.ExtensionsMenu
+                                                Events.browserMenuAction.record(
+                                                    Events.BrowserMenuActionExtra(
+                                                        item = "extensions_submenu",
+                                                    ),
+                                                )
+                                            } else {
+                                                store.dispatch(MenuAction.Navigate.ManageExtensions)
+                                            }
                                         },
                                         onSaveMenuClick = {
                                             contentState = Route.SaveMenu

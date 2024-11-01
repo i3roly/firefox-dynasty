@@ -26,6 +26,7 @@
 #include "WindowDestroyedEvent.h"
 #include "WindowNamedPropertiesHandler.h"
 #include "js/ComparisonOperators.h"
+#include "js/CompilationAndEvaluation.h"
 #include "js/CompileOptions.h"
 #include "js/friend/PerformanceHint.h"
 #include "js/Id.h"
@@ -137,7 +138,7 @@
 #include "mozilla/dom/ImageBitmapSource.h"
 #include "mozilla/dom/InstallTriggerBinding.h"
 #include "mozilla/dom/IntlUtils.h"
-#include "mozilla/dom/JSExecutionContext.h"
+#include "mozilla/dom/JSExecutionUtils.h"  // mozilla::dom::Compile, mozilla::dom::EvaluationExceptionToNSResult
 #include "mozilla/dom/LSObject.h"
 #include "mozilla/dom/LocalStorage.h"
 #include "mozilla/dom/LocalStorageCommon.h"
@@ -6092,19 +6093,40 @@ bool WindowScriptTimeoutHandler::Call(const char* aExecutionReason) {
   options.setIntroductionType("domTimer");
   JS::Rooted<JSObject*> global(aes.cx(), mGlobal->GetGlobalJSObject());
   {
-    JSExecutionContext exec(aes.cx(), global, options);
-    nsresult rv = exec.Compile(mExpr);
+    if (MOZ_UNLIKELY(!xpc::Scriptability::Get(global).Allowed())) {
+      return true;
+    }
 
-    JS::Rooted<JSScript*> script(aes.cx(), exec.MaybeGetScript());
+    IgnoredErrorResult erv;
+    mozilla::AutoProfilerLabel autoProfilerLabel("JSExecutionContext",
+                                                 /* dynamicStr */ nullptr,
+                                                 JS::ProfilingCategoryPair::JS);
+    JSAutoRealm autoRealm(aes.cx(), global);
+    RefPtr<JS::Stencil> stencil;
+    JS::Rooted<JSScript*> script(aes.cx());
+    Compile(aes.cx(), options, mExpr, stencil, erv);
+    if (stencil) {
+      JS::InstantiateOptions instantiateOptions(options);
+      MOZ_ASSERT(!instantiateOptions.deferDebugMetadata);
+      script.set(JS::InstantiateGlobalStencil(aes.cx(), instantiateOptions,
+                                              stencil, /* storage */ nullptr));
+      if (!script) {
+        erv.NoteJSContextException(aes.cx());
+      }
+    }
+
     if (script) {
+      MOZ_ASSERT(!erv.Failed());
       if (mInitiatingScript) {
         mInitiatingScript->AssociateWithScript(script);
       }
 
-      rv = exec.ExecScript();
+      if (!JS_ExecuteScript(aes.cx(), script)) {
+        erv.NoteJSContextException(aes.cx());
+      }
     }
 
-    if (rv == NS_SUCCESS_DOM_SCRIPT_EVALUATION_THREW_UNCATCHABLE) {
+    if (erv.IsUncatchableException()) {
       return false;
     }
   }
