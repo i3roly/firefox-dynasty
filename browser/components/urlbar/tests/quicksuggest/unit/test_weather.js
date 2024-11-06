@@ -3,6 +3,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // Tests the quick suggest weather feature.
+//
+// w/r/t weather queries with cities, note that the Suggest Rust component
+// handles city/region parsing and has extensive tests for that. Here we need to
+// test our geolocation logic, make sure Merino is called with the correct
+// city/region, and make sure the urlbar result has the correct city.
 
 "use strict";
 
@@ -14,7 +19,7 @@ const { WEATHER_SUGGESTION } = MerinoTestUtils;
 add_setup(async () => {
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
     prefs: [
-      ["suggest.quicksuggest.nonsponsored", true],
+      ["suggest.quicksuggest.sponsored", true],
       ["weather.featureGate", true],
     ],
     remoteSettingsRecords: [
@@ -26,18 +31,20 @@ add_setup(async () => {
   await MerinoTestUtils.initWeather();
 });
 
-// The feature should be properly uninitialized when it's disabled and then
-// re-initialized when it's re-enabled. This task disables the feature using the
-// feature gate pref.
+// The feature should be properly enabled according to `weather.featureGate`.
 add_task(async function disableAndEnable_featureGate() {
   await doBasicDisableAndEnableTest("weather.featureGate");
 });
 
-// The feature should be properly uninitialized when it's disabled and then
-// re-initialized when it's re-enabled. This task disables the feature using the
-// suggest pref.
+// The feature should be properly enabled according to `suggest.weather`.
 add_task(async function disableAndEnable_suggestPref() {
   await doBasicDisableAndEnableTest("suggest.weather");
+});
+
+// The feature should be properly enabled according to
+// `suggest.quicksuggest.sponsored`.
+add_task(async function disableAndEnable_sponsoredPref() {
+  await doBasicDisableAndEnableTest("suggest.quicksuggest.sponsored");
 });
 
 async function doBasicDisableAndEnableTest(pref) {
@@ -452,18 +459,11 @@ add_task(async function nimbusOverride() {
   });
 });
 
-// Tests queries that include a city but no region.
-//
-// Note that the Rust component handles city/region parsing and has extensive
-// tests for that. Here we only need to make sure that Merino is called with the
-// city/region parsed by Rust and that the urlbar result has the correct city.
-add_task(async function cityWithoutRegion() {
-  // "waterloo" matches both Waterloo, IA and Waterloo, AL. The Rust component
-  // will return an array containing suggestions for both, and the suggestions
-  // will have the same score.
-
+// Tests queries that include a city without a region and where Merino does not
+// return a geolocation.
+add_task(async function cityQueries_noGeo() {
   await doCityTest({
-    desc: "Should get geolocation but none returned; so match most populous Waterloo from Rust, Waterloo IA",
+    desc: "Should match most populous Waterloo (Waterloo IA)",
     query: "waterloo",
     geolocation: null,
     expected: {
@@ -476,9 +476,81 @@ add_task(async function cityWithoutRegion() {
       suggestionCity: "Waterloo",
     },
   });
+});
+
+// Tests queries that include a city without a region and where Merino returns a
+// geolocation with geographic coordinates.
+add_task(async function cityQueries_geoCoords() {
+  await doCityTest({
+    desc: "Coordinates closer to Waterloo IA, so should match it",
+    query: "waterloo",
+    geolocation: {
+      location: {
+        latitude: 41.0,
+        longitude: -93.0,
+      },
+    },
+    expected: {
+      geolocationCalled: true,
+      weatherParams: {
+        city: "Waterloo",
+        region: "IA",
+        country: "US",
+      },
+      suggestionCity: "Waterloo",
+    },
+  });
 
   await doCityTest({
-    desc: "Should get geolocation; IA returned; so match Waterloo IA",
+    desc: "Coordinates closer to Waterloo AL, so should match it",
+    query: "waterloo",
+    geolocation: {
+      location: {
+        latitude: 33.0,
+        longitude: -87.0,
+      },
+    },
+    expected: {
+      geolocationCalled: true,
+      weatherParams: {
+        city: "Waterloo",
+        region: "AL",
+        country: "US",
+      },
+      suggestionCity: "Waterloo",
+    },
+  });
+
+  // This assumes the mock GeoNames data includes "Twin City A" and
+  // "Twin City B" and they're <= 5 km apart.
+  await doCityTest({
+    desc: "When multiple cities are tied for nearest (within the accuracy radius), the most populous one should match",
+    query: "weather twin city",
+    geolocation: {
+      location: {
+        latitude: 0.0,
+        longitude: 0.0,
+        // 5 km radius
+        accuracy: 5,
+      },
+    },
+    expected: {
+      geolocationCalled: true,
+      weatherParams: {
+        city: "Twin City B",
+        region: "GA",
+        country: "US",
+      },
+      suggestionCity: "Twin City B",
+    },
+  });
+});
+
+// Tests queries that include a city without a region and where Merino returns a
+// geolocation with only region and country codes, no geographic coordinates.
+add_task(async function cityQueries_geoRegion() {
+  await doCityTest({
+    desc: "Should match Waterloo IA",
     query: "waterloo",
     geolocation: {
       region_code: "IA",
@@ -496,7 +568,7 @@ add_task(async function cityWithoutRegion() {
   });
 
   await doCityTest({
-    desc: "Should get geolocation; AL returned; so match Waterloo AL",
+    desc: "Should match Waterloo AL",
     query: "waterloo",
     geolocation: {
       region_code: "AL",
@@ -514,7 +586,7 @@ add_task(async function cityWithoutRegion() {
   });
 
   await doCityTest({
-    desc: "Should get geolocation; NY returned; but Rust didn't return Waterloo NY, so match most populous Waterloo from Rust, Waterloo IA",
+    desc: "Rust did not return Waterloo NY, so should match most populous Waterloo (Waterloo IA)",
     query: "waterloo",
     geolocation: {
       region_code: "NY",
@@ -532,7 +604,7 @@ add_task(async function cityWithoutRegion() {
   });
 
   await doCityTest({
-    desc: "Should get geolocation; Waterloo ON CA returned; but Rust didn't return Waterloo ON CA, so match most populous Waterloo from Rust, Waterloo IA",
+    desc: "Rust did not return Waterloo ON CA, so should match most populous Waterloo (Waterloo IA)",
     query: "waterloo",
     geolocation: {
       region_code: "08",
@@ -550,7 +622,7 @@ add_task(async function cityWithoutRegion() {
   });
 
   await doCityTest({
-    desc: "Query matches a US and CA city; should get geolocation; US returned; so match the US city",
+    desc: "Query matches a US and CA city, geolocation is US, so should match US city",
     query: "us ca city",
     geolocation: {
       region_code: "HI",
@@ -568,7 +640,7 @@ add_task(async function cityWithoutRegion() {
   });
 
   await doCityTest({
-    desc: "Query matches a US and CA city; should get geolocation; CA returned; so match the CA city",
+    desc: "Query matches a US and CA city, geolocation is CA, so should match CA city",
     query: "us ca city",
     geolocation: {
       region_code: "01",
@@ -587,7 +659,7 @@ add_task(async function cityWithoutRegion() {
 });
 
 // Tests queries that include both a city and a region.
-add_task(async function cityWithRegion() {
+add_task(async function cityRegionQueries() {
   await doCityTest({
     desc: "Waterloo IA directly queried",
     query: "waterloo ia",
@@ -627,7 +699,7 @@ add_task(async function cityWithRegion() {
 });
 
 // Tests weather queries that don't include a city.
-add_task(async function noCity() {
+add_task(async function noCityQuery() {
   await doCityTest({
     desc: "No city in query, so only one call to Merino should be made and Merino does the geolocation internally",
     query: "weather",
@@ -647,17 +719,115 @@ async function doCityTest({ desc, query, geolocation, expected }) {
     expected.weatherParams.q ??= "";
   }
 
-  let callCountsByProvider = {};
+  QuickSuggest._test_clearCachedGeolocation();
+  let callsByProvider = await doSearch({
+    query,
+    geolocation,
+    suggestionCity: expected?.suggestionCity,
+  });
 
+  // Check the Merino calls.
+  Assert.equal(
+    callsByProvider.geolocation?.length || 0,
+    expected?.geolocationCalled ? 1 : 0,
+    "geolocation provider should have been called the correct number of times"
+  );
+  Assert.equal(
+    callsByProvider.accuweather?.length || 0,
+    expected ? 1 : 0,
+    "accuweather provider should have been called the correct number of times"
+  );
+  if (expected) {
+    for (let [key, value] of Object.entries(expected.weatherParams)) {
+      Assert.strictEqual(
+        callsByProvider.accuweather[0].get(key),
+        value,
+        "Weather param should be correct: " + key
+      );
+    }
+  }
+}
+
+// We should cache the geolocation returned by Merino.
+add_task(async function cachedGeolocation() {
+  let query = "waterloo";
+  let geolocation = {
+    location: {
+      latitude: 41.0,
+      longitude: -93.0,
+    },
+  };
+
+  QuickSuggest._test_clearCachedGeolocation();
+
+  // Do a search. We should call Merino and cache the response.
+  info("Doing first search");
+  let callsByProvider = await doSearch({
+    query,
+    geolocation,
+    suggestionCity: "Waterloo",
+  });
+  info("First search callsByProvider: " + JSON.stringify(callsByProvider));
+  Assert.equal(
+    callsByProvider.geolocation.length,
+    1,
+    "geolocation provider should have been called on first search"
+  );
+
+  // Do a second search. We should use the cached geolocaton, so we shouldn't
+  // call Merino.
+  info("Doing second search");
+  callsByProvider = await doSearch({
+    query,
+    geolocation,
+    suggestionCity: "Waterloo",
+  });
+  info("Second search callsByProvider: " + JSON.stringify(callsByProvider));
+  Assert.ok(
+    !callsByProvider.geolocation,
+    "geolocation provider should not have been called on second search"
+  );
+
+  // Set the date forward 3 minutes, which is longer than the cache period.
+  let futureMs = Date.now() + 3 * 60 * 1000;
+  let sandbox = sinon.createSandbox();
+  let dateNowStub = sandbox.stub(
+    Cu.getGlobalForObject(QuickSuggest).Date,
+    "now"
+  );
+  dateNowStub.returns(futureMs);
+
+  // Do a third search. The previous response is cached but it's stale, so we
+  // should call Merino again.
+  info("Doing third search");
+  callsByProvider = await doSearch({
+    query,
+    geolocation,
+    suggestionCity: "Waterloo",
+  });
+  info("Third search callsByProvider: " + JSON.stringify(callsByProvider));
+  Assert.equal(
+    callsByProvider.geolocation.length,
+    1,
+    "geolocation provider should have been called on third search"
+  );
+
+  sandbox.restore();
+  QuickSuggest._test_clearCachedGeolocation();
+});
+
+async function doSearch({ query, geolocation, suggestionCity }) {
+  let callsByProvider = {};
+
+  // Set up the Merino request handler.
   MerinoTestUtils.server.requestHandler = req => {
     let params = new URLSearchParams(req.queryString);
     let provider = params.get("providers");
+    callsByProvider[provider] ||= [];
+    callsByProvider[provider].push(params);
 
-    callCountsByProvider[provider] ||= 0;
-    callCountsByProvider[provider]++;
-
+    // Handle geolocation requests.
     if (provider == "geolocation") {
-      // Return the geolocation response.
       return {
         body: {
           request_id: "request_id",
@@ -672,41 +842,20 @@ async function doCityTest({ desc, query, geolocation, expected }) {
       };
     }
 
-    // Return the accuweather response.
-
+    // Handle accuweather requests.
     Assert.equal(
       provider,
       "accuweather",
-      "Firefox should have called the 'accuweather' Merino provider"
+      "Sanity check: If the request isn't geolocation, it should be accuweather"
     );
-
-    // If this fails, the Rust component returned multiple suggestions, which is
-    // fine and expected when a query matches multiple cities, but then we went
-    // on to make urlbar results for more than one of them, which is not fine.
-    // We should only ever make a result for one suggestion.
-    Assert.equal(
-      callCountsByProvider.accuweather,
-      1,
-      "accuweather provider should be called at most once"
-    );
-
-    for (let [key, value] of Object.entries(expected.weatherParams)) {
-      Assert.strictEqual(
-        params.get(key),
-        value,
-        "Weather param should be correct: " + key
-      );
-    }
-
     let suggestion = { ...WEATHER_SUGGESTION };
-    if (expected.suggestionCity) {
+    if (suggestionCity) {
       suggestion = {
         ...suggestion,
-        title: "Weather for " + expected.suggestionCity,
-        city_name: expected.suggestionCity,
+        title: "Weather for " + suggestionCity,
+        city_name: suggestionCity,
       };
     }
-
     return {
       body: {
         request_id: "request_id",
@@ -716,34 +865,22 @@ async function doCityTest({ desc, query, geolocation, expected }) {
   };
 
   // Do a search.
-  let context = createContext(query, {
-    providers: [UrlbarProviderQuickSuggest.name],
-    isPrivate: false,
-  });
   await check_results({
-    context,
-    matches: !expected
+    context: createContext(query, {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: !suggestionCity
       ? []
       : [
           QuickSuggestTestUtils.weatherResult({
-            city: expected.suggestionCity,
+            city: suggestionCity,
           }),
         ],
   });
 
-  // Check Merino call counts.
-  Assert.equal(
-    callCountsByProvider.geolocation || 0,
-    expected?.geolocationCalled ? 1 : 0,
-    "geolocation provider should have beeen called the correct number of times"
-  );
-  Assert.equal(
-    callCountsByProvider.accuweather || 0,
-    expected ? 1 : 0,
-    "accuweather provider should have beeen called the correct number of times"
-  );
-
   MerinoTestUtils.server.requestHandler = null;
+  return callsByProvider;
 }
 
 function assertDisabled({ message }) {
