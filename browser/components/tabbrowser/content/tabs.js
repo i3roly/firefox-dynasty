@@ -11,6 +11,31 @@
 {
   const TAB_PREVIEW_PREF = "browser.tabs.hoverPreview.enabled";
 
+  const DIRECTION_BACKWARD = -1;
+  const DIRECTION_FORWARD = 1;
+
+  /**
+   * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
+   * @returns {boolean}
+   *   `true` if element is a `<tab>`
+   */
+  const isTab = element => element.tagName == "tab";
+
+  /**
+   * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
+   * @returns {boolean}
+   *   `true` if element is a `<tab-group>`
+   */
+  const isTabGroup = element => element.tagName == "tab-group";
+
+  /**
+   * @param {MozTabbrowserTab|MozTextLabel} element
+   * @returns {boolean}
+   *   `true` if element is the `<label>` in a `<tab-group>`
+   */
+  const isTabGroupLabel = element =>
+    element.classList.contains("tab-group-label");
+
   class MozTabbrowserTabs extends MozElements.TabsBase {
     static observedAttributes = ["orient"];
 
@@ -34,13 +59,14 @@
       this.addEventListener("dblclick", this);
       this.addEventListener("click", this);
       this.addEventListener("click", this, true);
-      this.addEventListener("keydown", this, { mozSystemGroup: true });
       this.addEventListener("dragstart", this);
       this.addEventListener("dragover", this);
       this.addEventListener("drop", this);
       this.addEventListener("dragend", this);
       this.addEventListener("dragleave", this);
       this.addEventListener("mouseleave", this);
+      this.addEventListener("focusin", this);
+      this.addEventListener("focusout", this);
     }
 
     init() {
@@ -61,18 +87,6 @@
       this.arrowScrollbox._canScrollToElement = tab => {
         return (!tab.pinned || !arePositioningPinnedTabs()) && tab.visible;
       };
-
-      // Override for performance reasons. This is the size of a single element
-      // that can be scrolled when using mouse wheel scrolling. If we don't do
-      // this then arrowscrollbox computes this value by calling
-      // _getScrollableElements and dividing the box size by that number.
-      // However in the tabstrip case we already know the answer to this as,
-      // when we're overflowing, it is always the same as the tab min width or
-      // height.
-      Object.defineProperty(this.arrowScrollbox, "lineScrollAmount", {
-        get: () =>
-          this.verticalMode ? this._tabMinHeight : this._tabMinWidthPref,
-      });
 
       this.baseConnect();
 
@@ -145,7 +159,6 @@
         }
       );
       this.#updateTabMinWidth(this._tabMinWidthPref);
-      this.#updateTabMinHeight();
 
       CustomizableUI.addListener(this);
       this._updateNewTabVisibility();
@@ -185,7 +198,6 @@
       this._positionPinnedTabs();
 
       this.#updateTabMinWidth();
-      this.#updateTabMinHeight();
 
       let indicatorTabs = gBrowser.visibleTabs.filter(tab => {
         return (
@@ -438,97 +450,156 @@
           ? [event.metaKey, event.ctrlKey]
           : [event.ctrlKey, event.metaKey];
 
+      let keyComboForFocusedElement =
+        !accel && !shiftKey && !altKey && !nonAccel;
       let keyComboForMove = accel && shiftKey && !altKey && !nonAccel;
       let keyComboForFocus = accel && !shiftKey && !altKey && !nonAccel;
 
-      if (!keyComboForMove && !keyComboForFocus) {
+      if (!keyComboForFocusedElement && !keyComboForMove && !keyComboForFocus) {
         return;
       }
 
-      // Don't check if the event was already consumed because tab navigation
-      // should work always for better user experience.
-      let { visibleTabs, selectedTab } = gBrowser;
-      let { arrowKeysShouldWrap } = this;
-      let focusedTabIndex = this.ariaFocusedIndex;
-      if (focusedTabIndex == -1) {
-        focusedTabIndex = visibleTabs.indexOf(selectedTab);
-      }
-      let lastFocusedTabIndex = focusedTabIndex;
-      switch (event.keyCode) {
-        case KeyEvent.DOM_VK_UP:
-          if (keyComboForMove) {
-            gBrowser.moveTabBackward();
-          } else {
-            focusedTabIndex--;
+      if (keyComboForFocusedElement) {
+        let ariaFocusedItem = this.ariaFocusedItem;
+        if (ariaFocusedItem && isTabGroupLabel(ariaFocusedItem)) {
+          switch (event.keyCode) {
+            case KeyEvent.DOM_VK_SPACE:
+            case KeyEvent.DOM_VK_RETURN: {
+              ariaFocusedItem.click();
+              event.preventDefault();
+              return;
+            }
           }
-          break;
-        case KeyEvent.DOM_VK_DOWN:
-          if (keyComboForMove) {
-            gBrowser.moveTabForward();
-          } else {
-            focusedTabIndex++;
-          }
-          break;
-        case KeyEvent.DOM_VK_RIGHT:
-        case KeyEvent.DOM_VK_LEFT:
-          if (keyComboForMove) {
-            gBrowser.moveTabOver(event);
-          } else if (
-            (!this.#rtlMode && event.keyCode == KeyEvent.DOM_VK_RIGHT) ||
-            (this.#rtlMode && event.keyCode == KeyEvent.DOM_VK_LEFT)
-          ) {
-            focusedTabIndex++;
-          } else {
-            focusedTabIndex--;
-          }
-          break;
-        case KeyEvent.DOM_VK_HOME:
-          if (keyComboForMove) {
-            gBrowser.moveTabToStart();
-          } else {
-            focusedTabIndex = 0;
-          }
-          break;
-        case KeyEvent.DOM_VK_END:
-          if (keyComboForMove) {
-            gBrowser.moveTabToEnd();
-          } else {
-            focusedTabIndex = visibleTabs.length - 1;
-          }
-          break;
-        case KeyEvent.DOM_VK_SPACE:
-          if (visibleTabs[lastFocusedTabIndex].multiselected) {
-            gBrowser.removeFromMultiSelectedTabs(
-              visibleTabs[lastFocusedTabIndex]
-            );
-          } else {
-            gBrowser.addToMultiSelectedTabs(visibleTabs[lastFocusedTabIndex]);
-          }
-          break;
-        default:
-          // Consume the keydown event for the above keyboard
-          // shortcuts only.
-          return;
-      }
-
-      if (arrowKeysShouldWrap) {
-        if (focusedTabIndex >= visibleTabs.length) {
-          focusedTabIndex = 0;
-        } else if (focusedTabIndex < 0) {
-          focusedTabIndex = visibleTabs.length - 1;
         }
-      } else {
-        focusedTabIndex = Math.min(
-          visibleTabs.length - 1,
-          Math.max(0, focusedTabIndex)
-        );
-      }
+        // defer to the parent `on_keydown` handler
+        MozElements.TabsBase.prototype.on_keydown.call(this, event);
+      } else if (keyComboForMove) {
+        switch (event.keyCode) {
+          case KeyEvent.DOM_VK_UP:
+            gBrowser.moveTabBackward();
+            break;
+          case KeyEvent.DOM_VK_DOWN:
+            gBrowser.moveTabForward();
+            break;
+          case KeyEvent.DOM_VK_RIGHT:
+            if (RTL_UI) {
+              gBrowser.moveTabBackward();
+            } else {
+              gBrowser.moveTabForward();
+            }
+            break;
+          case KeyEvent.DOM_VK_LEFT:
+            if (RTL_UI) {
+              gBrowser.moveTabForward();
+            } else {
+              gBrowser.moveTabBackward();
+            }
+            break;
+          case KeyEvent.DOM_VK_HOME:
+            gBrowser.moveTabToStart();
+            break;
+          case KeyEvent.DOM_VK_END:
+            gBrowser.moveTabToEnd();
+            break;
+          default:
+            // Consume the keydown event for the above keyboard
+            // shortcuts only.
+            return;
+        }
 
-      if (keyComboForFocus && focusedTabIndex != lastFocusedTabIndex) {
-        this.ariaFocusedItem = visibleTabs[focusedTabIndex];
-      }
+        event.preventDefault();
+      } else if (keyComboForFocus) {
+        switch (event.keyCode) {
+          case KeyEvent.DOM_VK_UP:
+            this.#advanceFocus(DIRECTION_BACKWARD);
+            break;
+          case KeyEvent.DOM_VK_DOWN:
+            this.#advanceFocus(DIRECTION_FORWARD);
+            break;
+          case KeyEvent.DOM_VK_RIGHT:
+            if (RTL_UI) {
+              this.#advanceFocus(DIRECTION_BACKWARD);
+            } else {
+              this.#advanceFocus(DIRECTION_FORWARD);
+            }
+            break;
+          case KeyEvent.DOM_VK_LEFT:
+            if (RTL_UI) {
+              this.#advanceFocus(DIRECTION_FORWARD);
+            } else {
+              this.#advanceFocus(DIRECTION_BACKWARD);
+            }
+            break;
+          case KeyEvent.DOM_VK_HOME:
+            this.ariaFocusedItem = this.ariaFocusableItems.at(0);
+            break;
+          case KeyEvent.DOM_VK_END:
+            this.ariaFocusedItem = this.ariaFocusableItems.at(-1);
+            break;
+          case KeyEvent.DOM_VK_SPACE: {
+            let ariaFocusedItem = this.ariaFocusedItem;
+            if (isTab(ariaFocusedItem)) {
+              if (ariaFocusedItem.multiselected) {
+                gBrowser.removeFromMultiSelectedTabs(ariaFocusedItem);
+              } else {
+                gBrowser.addToMultiSelectedTabs(ariaFocusedItem);
+              }
+            }
+            break;
+          }
+          default:
+            // Consume the keydown event for the above keyboard
+            // shortcuts only.
+            return;
+        }
 
-      event.preventDefault();
+        event.preventDefault();
+      }
+    }
+
+    /**
+     * @param {FocusEvent} event
+     */
+    on_focusin(event) {
+      if (event.target == this.selectedItem) {
+        this.tablistHasFocus = true;
+        if (!this.ariaFocusedItem) {
+          // If the active tab is receiving focus and there isn't a keyboard
+          // focus target yet, set the keyboard focus target to the active
+          // tab. Do not override the keyboard-focused item if the user
+          // already set a keyboard focus.
+          this.ariaFocusedItem = this.selectedItem;
+        }
+      }
+    }
+
+    /**
+     * @param {FocusEvent} event
+     */
+    on_focusout(event) {
+      if (event.target == this.selectedItem) {
+        this.tablistHasFocus = false;
+      }
+    }
+
+    /**
+     * Moves the focus in the tab strip left or right, as appropriate, to
+     * the next tab or tab group label.
+     *
+     * @param {-1|1} direction
+     */
+    #advanceFocus(direction) {
+      let currentIndex = this.ariaFocusableItems.indexOf(this.ariaFocusedItem);
+      let newIndex = currentIndex + direction;
+
+      // Clamp the index so that the focus stops at the edges of the tab strip
+      newIndex = Math.min(
+        this.ariaFocusableItems.length - 1,
+        Math.max(0, newIndex)
+      );
+
+      let itemToFocus = this.ariaFocusableItems[newIndex];
+      this.ariaFocusedItem = itemToFocus;
     }
 
     on_keypress(event) {
@@ -976,6 +1047,7 @@
           if (groupTab) {
             gBrowser.addTabGroup([groupTab, ...movingTabs], {
               insertBefore: draggedTab,
+              showCreateUI: true,
             });
           }
         }
@@ -1362,13 +1434,71 @@
       return this.#visibleTabs;
     }
 
+    /**
+     * @returns {boolean} true if the keyboard focus is on the active tab
+     */
+    get tablistHasFocus() {
+      return this.hasAttribute("tablist-has-focus");
+    }
+
+    /**
+     * @param {boolean} hasFocus true if the keyboard focus is on the active tab
+     */
+    set tablistHasFocus(hasFocus) {
+      this.toggleAttribute("tablist-has-focus", hasFocus);
+    }
+
+    /** @typedef {MozTabbrowserTab|MozTextLabel} FocusableItem */
+
+    /** @type {FocusableItem[]} */
+    #focusableItems;
+
+    /**
+     * @returns {FocusableItem[]}
+     * @override tabbox.js:TabsBase
+     */
+    get ariaFocusableItems() {
+      if (this.#focusableItems) {
+        return this.#focusableItems;
+      }
+
+      let verticalPinnedTabsContainer = document.getElementById(
+        "vertical-pinned-tabs-container"
+      );
+      let children = Array.from(this.arrowScrollbox.children);
+
+      let focusableItems = [];
+      for (let child of children) {
+        if (isTab(child) && child.visible) {
+          focusableItems.push(child);
+        } else if (isTabGroup(child)) {
+          focusableItems.push(child.labelElement);
+          if (!child.collapsed) {
+            let visibleTabsInGroup = child.tabs.filter(tab => tab.visible);
+            focusableItems.push(...visibleTabsInGroup);
+          }
+        }
+      }
+
+      this.#focusableItems = [
+        ...verticalPinnedTabsContainer.children,
+        ...focusableItems,
+      ];
+
+      return this.#focusableItems;
+    }
+
     _invalidateCachedTabs() {
       this.#allTabs = null;
-      this.#visibleTabs = null;
+      this._invalidateCachedVisibleTabs();
     }
 
     _invalidateCachedVisibleTabs() {
       this.#visibleTabs = null;
+      // Focusable items must also be visible, but they do not depend on
+      // this.#visibleTabs, so changes to visible tabs need to also invalidate
+      // the focusable items cache
+      this.#focusableItems = null;
     }
 
     #isContainerVerticalPinnedExpanded(tab) {
@@ -1406,16 +1536,6 @@
           (val ?? this._tabMinWidthPref) + "px"
         );
       }
-    }
-
-    #updateTabMinHeight() {
-      const minHeightVariable = "--tab-min-height";
-      const marginVariable = "--tab-block-margin";
-      let cstyle = window.getComputedStyle(document.documentElement);
-      let height = cstyle.getPropertyValue(minHeightVariable);
-      let margin = cstyle.getPropertyValue(marginVariable);
-      // Total height is the min-height plus twice the margin (top and bottom)
-      this._tabMinHeight = parseInt(height, 10) + 2 * parseInt(margin, 10);
     }
 
     get _isCustomizing() {
@@ -1665,7 +1785,6 @@
     uiDensityChanged() {
       this._positionPinnedTabs();
       this._updateCloseButtons();
-      this.#updateTabMinHeight();
       this._handleTabSelect(true);
     }
 
@@ -1974,7 +2093,7 @@
 
       let pinned = draggedTab.pinned;
       let numPinned = gBrowser.pinnedTabCount;
-      let tabs = this.allTabs.slice(
+      let tabs = this.visibleTabs.slice(
         pinned ? 0 : numPinned,
         pinned ? numPinned : undefined
       );

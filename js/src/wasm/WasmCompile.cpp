@@ -692,7 +692,12 @@ static const double spaceCutoffPct = 0.9;
 #endif
 
 // Figure out whether we should use tiered compilation or not.
-static bool TieringBeneficial(uint32_t codeSize) {
+static bool TieringBeneficial(bool lazyTiering, uint32_t codeSize) {
+  // Lazy tiering is assumed to always be beneficial when it is enabled.
+  if (lazyTiering) {
+    return true;
+  }
+
   uint32_t cpuCount = GetHelperThreadCPUCount();
   MOZ_ASSERT(cpuCount > 0);
 
@@ -760,8 +765,14 @@ static bool TieringBeneficial(uint32_t codeSize) {
 }
 
 // Ensure that we have the non-compiler requirements to tier safely.
-static bool PlatformCanTier() {
-  return CanUseExtraThreads() && jit::CanFlushExecutionContextForAllThreads();
+static bool PlatformCanTier(bool lazyTiering) {
+  // Tiering needs background threads if we're using eager tiering or we're
+  // using lazy tiering without the synchronous flag.
+  bool synchronousTiering =
+      lazyTiering && JS::Prefs::wasm_lazy_tiering_synchronous();
+
+  return (synchronousTiering || CanUseExtraThreads()) &&
+         jit::CanFlushExecutionContextForAllThreads();
 }
 
 CompilerEnvironment::CompilerEnvironment(const CompileArgs& args)
@@ -809,8 +820,8 @@ void CompilerEnvironment::computeParameters(const ModuleMetadata& moduleMeta) {
                      (JS::Prefs::wasm_lazy_tiering_for_gc() && isGcModule);
 
   if (baselineEnabled && hasSecondTier &&
-      (TieringBeneficial(codeSectionSize) || forceTiering || lazyTiering) &&
-      PlatformCanTier()) {
+      (TieringBeneficial(lazyTiering, codeSectionSize) || forceTiering) &&
+      PlatformCanTier(lazyTiering)) {
     mode_ = lazyTiering ? CompileMode::LazyTiering : CompileMode::EagerTiering;
     tier_ = Tier::Baseline;
   } else {
@@ -851,7 +862,7 @@ static bool DecodeFunctionBody(DecoderT& d, ModuleGeneratorT& mg,
 template <class DecoderT, class ModuleGeneratorT>
 static bool DecodeCodeSection(const CodeMetadata& codeMeta, DecoderT& d,
                               ModuleGeneratorT& mg) {
-  if (!codeMeta.codeSection) {
+  if (!codeMeta.codeSectionRange) {
     if (codeMeta.numFuncDefs() != 0) {
       return d.fail("expected code section");
     }
@@ -875,7 +886,7 @@ static bool DecodeCodeSection(const CodeMetadata& codeMeta, DecoderT& d,
     }
   }
 
-  if (!d.finishSection(*codeMeta.codeSection, "code")) {
+  if (!d.finishSection(*codeMeta.codeSectionRange, "code")) {
     return false;
   }
 
@@ -934,8 +945,8 @@ bool wasm::CompileCompleteTier2(const Bytes& bytecode, const Module& module,
     return false;
   }
 
-  if (codeMeta.codeSection) {
-    const SectionRange& codeSection = *codeMeta.codeSection;
+  if (codeMeta.codeSectionRange) {
+    const SectionRange& codeSection = *codeMeta.codeSectionRange;
     const uint8_t* codeSectionStart = bytecode.begin() + codeSection.start;
     const uint8_t* codeSectionEnd = codeSectionStart + codeSection.size;
     Decoder d(codeSectionStart, codeSectionEnd, codeSection.start, error);
@@ -968,11 +979,16 @@ bool wasm::CompilePartialTier2(const Code& code, uint32_t funcIndex,
     return false;
   }
 
-  const Bytes& bytecode = code.bytecode();
-  const FuncDefRange& funcRange = code.codeMeta().funcDefRange(funcIndex);
-  const uint8_t* bodyBegin = bytecode.begin() + funcRange.bytecodeOffset;
+  const FuncDefRange& funcRange = codeMeta.funcDefRange(funcIndex);
+  // Bytecode offset of the code section relative to the beginning of the module
+  uint32_t codeSectionOffset = codeMeta.codeSectionRange->start;
+  // Bytecode offset of the function body relative to the code section
+  uint32_t bodyOffsetInCodeSection =
+      funcRange.bytecodeOffset - codeSectionOffset;
+  // Pointer to the function body bytecode
+  const uint8_t* bodyBegin =
+      codeMeta.codeSectionBytecode->begin() + bodyOffsetInCodeSection;
   const uint8_t* bodyEnd = bodyBegin + funcRange.bodyLength;
-  Decoder d(bytecode.begin(), bytecode.end(), 0, error);
   // The following sequence will compile/finish this function, on this thread.
   // `error` (as stashed in `mg`) may get set to, for example, "stack frame too
   // large", or to "", denoting OOM.
@@ -991,7 +1007,7 @@ class StreamingDecoder {
                    const ExclusiveBytesPtr& codeBytesEnd,
                    const Atomic<bool>& cancelled, UniqueChars* error,
                    UniqueCharsVector* warnings)
-      : d_(begin, codeMeta.codeSection->start, error, warnings),
+      : d_(begin, codeMeta.codeSectionRange->start, error, warnings),
         codeBytesEnd_(codeBytesEnd),
         cancelled_(cancelled) {}
 
@@ -1077,12 +1093,12 @@ SharedModule wasm::CompileStreaming(
     }
     compilerEnv.computeParameters(*moduleMeta);
 
-    if (!codeMeta.codeSection) {
+    if (!codeMeta.codeSectionRange) {
       d.fail("unknown section before code section");
       return nullptr;
     }
 
-    MOZ_RELEASE_ASSERT(codeMeta.codeSection->size == codeBytes.length());
+    MOZ_RELEASE_ASSERT(codeMeta.codeSectionRange->size == codeBytes.length());
     MOZ_RELEASE_ASSERT(d.done());
   }
 
@@ -1121,7 +1137,7 @@ SharedModule wasm::CompileStreaming(
   const Bytes& tailBytes = *streamEnd.tailBytes;
 
   {
-    Decoder d(tailBytes, codeMeta.codeSection->end(), error, warnings);
+    Decoder d(tailBytes, codeMeta.codeSectionRange->end(), error, warnings);
 
     if (!DecodeModuleTail(d, &codeMeta, moduleMeta)) {
       return nullptr;

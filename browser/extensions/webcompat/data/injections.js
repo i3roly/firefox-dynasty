@@ -256,6 +256,9 @@ const AVAILABLE_INJECTIONS = [
     platform: "desktop",
     domain: "Sites using draft.js",
     bug: "1739489",
+    checkIfNeeded() {
+      return !window.TextEvent;
+    },
     contentScripts: {
       matches: [
         "*://draftjs.org/*", // Bug 1739489
@@ -264,7 +267,6 @@ const AVAILABLE_INJECTIONS = [
         "*://mobile.twitter.com/*", // Bug 1776229
         "*://x.com/*", // Bug 1776229
         "*://mobile.x.com/*", // Bug 1776229
-        "*://*.reddit.com/*", // Bug 1829755
       ],
       js: [
         {
@@ -525,7 +527,7 @@ const AVAILABLE_INJECTIONS = [
   },
   {
     id: "bug1827678-webc119017",
-    platform: "desktop",
+    platform: "all",
     domain: "nppes.cms.hhs.gov",
     bug: "1827678",
     contentScripts: {
@@ -831,20 +833,6 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
-    id: "bug1884842",
-    platform: "android",
-    domain: "foodora.cz",
-    bug: "1884842",
-    contentScripts: {
-      matches: ["*://*.foodora.cz/*"],
-      css: [
-        {
-          file: "injections/css/bug1884842-foodora.cz-height-fix.css",
-        },
-      ],
-    },
-  },
-  {
     id: "bug1897120",
     platform: "desktop",
     domain: "turn.js breakage",
@@ -1115,6 +1103,34 @@ const AVAILABLE_INJECTIONS = [
       js: [
         {
           file: "injections/js/bug1924500-www.tiktok.com-fix-captcha-slider.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1901000",
+    platform: "desktop",
+    domain: "eyebuydirect.ca",
+    bug: "1901000",
+    contentScripts: {
+      matches: ["*://*.eyebuydirect.ca/*"],
+      css: [
+        {
+          file: "injections/css/bug1901000-eyebuydirect.ca-fix-paypal-button.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "bug1889505",
+    platform: "android",
+    domain: "bankmandiri.co.id",
+    bug: "1889505",
+    contentScripts: {
+      matches: ["*://*.bankmandiri.co.id/*"],
+      js: [
+        {
+          file: "injections/js/bug1889505-bankmandiri.co.id-window.chrome.js",
         },
       ],
     },

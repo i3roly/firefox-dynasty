@@ -36,6 +36,7 @@
 #include "mozilla/widget/va_drmcommon.h"
 #include "YCbCrUtils.h"
 #include "mozilla/gfx/2D.h"
+#include "mozilla/gfx/FileHandleWrapper.h"
 #include "GLContextTypes.h"  // for GLContext, etc
 #include "GLContextEGL.h"
 #include "GLContextProvider.h"
@@ -231,7 +232,6 @@ DMABufSurface::DMABufSurface(SurfaceType aSurfaceType)
       mGbmBufferObject(),
       mMappedRegion(),
       mMappedRegionStride(),
-      mSyncFd(-1),
       mSync(nullptr),
       mGlobalRefCountFd(0),
       mUID(gNewSurfaceUID++),
@@ -274,9 +274,8 @@ already_AddRefed<DMABufSurface> DMABufSurface::CreateDMABufSurface(
 }
 
 void DMABufSurface::FenceDelete() {
-  if (mSyncFd > 0) {
-    close(mSyncFd);
-    mSyncFd = -1;
+  if (mSyncFd) {
+    mSyncFd = nullptr;
   }
 
   if (!mGL) {
@@ -306,7 +305,8 @@ void DMABufSurface::FenceSet() {
 
     mSync = egl->fCreateSync(LOCAL_EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
     if (mSync) {
-      mSyncFd = egl->fDupNativeFenceFDANDROID(mSync);
+      auto rawFd = egl->fDupNativeFenceFDANDROID(mSync);
+      mSyncFd = new gfx::FileHandleWrapper(UniqueFileHandle(rawFd));
       mGL->fFlush();
       return;
     }
@@ -318,7 +318,7 @@ void DMABufSurface::FenceSet() {
 }
 
 void DMABufSurface::FenceWait() {
-  if (!mGL || mSyncFd < 0) {
+  if (!mGL || !mSyncFd) {
     MOZ_DIAGNOSTIC_ASSERT(mGL,
                           "DMABufSurface::FenceWait() missing GL context!");
     return;
@@ -326,24 +326,67 @@ void DMABufSurface::FenceWait() {
 
   const auto& gle = gl::GLContextEGL::Cast(mGL);
   const auto& egl = gle->mEgl;
+  auto syncFd = mSyncFd->ClonePlatformHandle();
+  // No need to try mSyncFd twice.
+  mSyncFd = nullptr;
 
-  const EGLint attribs[] = {LOCAL_EGL_SYNC_NATIVE_FENCE_FD_ANDROID, mSyncFd,
-                            LOCAL_EGL_NONE};
+  const EGLint attribs[] = {LOCAL_EGL_SYNC_NATIVE_FENCE_FD_ANDROID,
+                            syncFd.get(), LOCAL_EGL_NONE};
   EGLSync sync = egl->fCreateSync(LOCAL_EGL_SYNC_NATIVE_FENCE_ANDROID, attribs);
   if (!sync) {
     MOZ_ASSERT(false, "DMABufSurface::FenceWait(): Failed to create GLFence!");
-    // We failed to create GLFence so clear mSyncFd to avoid another try.
-    close(mSyncFd);
-    mSyncFd = -1;
     return;
   }
 
-  // mSyncFd is owned by GLFence so clear local reference to avoid double close
-  // at DMABufSurface::FenceDelete().
-  mSyncFd = -1;
+  // syncFd is owned by GLFence so clear local reference to avoid double.
+  Unused << syncFd.release();
 
   egl->fClientWaitSync(sync, 0, LOCAL_EGL_FOREVER);
   egl->fDestroySync(sync);
+}
+
+void DMABufSurface::MaybeSemaphoreWait(GLuint aGlTexture) {
+  MOZ_ASSERT(aGlTexture);
+
+  if (!mSemaphoreFd) {
+    return;
+  }
+
+  if (!mGL) {
+    MOZ_DIAGNOSTIC_ASSERT(mGL,
+                          "DMABufSurface::SemaphoreWait() missing GL context!");
+    return;
+  }
+
+  if (!mGL->IsExtensionSupported(gl::GLContext::EXT_semaphore) ||
+      !mGL->IsExtensionSupported(gl::GLContext::EXT_semaphore_fd)) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    gfxCriticalNoteOnce << "EXT_semaphore_fd is not suppored";
+    return;
+  }
+
+  auto fd = mSemaphoreFd->ClonePlatformHandle();
+  // No need to try mSemaphoreFd twice.
+  mSemaphoreFd = nullptr;
+
+  GLuint semaphoreHandle = 0;
+  mGL->fGenSemaphoresEXT(1, &semaphoreHandle);
+  mGL->fImportSemaphoreFdEXT(semaphoreHandle,
+                             LOCAL_GL_HANDLE_TYPE_OPAQUE_FD_EXT, fd.release());
+  auto error = mGL->fGetError();
+  if (error != LOCAL_GL_NO_ERROR) {
+    gfxCriticalNoteOnce << "glImportSemaphoreFdEXT failed: " << error;
+    return;
+  }
+
+  GLenum srcLayout = LOCAL_GL_LAYOUT_COLOR_ATTACHMENT_EXT;
+  mGL->fWaitSemaphoreEXT(semaphoreHandle, 0, nullptr, 1, &aGlTexture,
+                         &srcLayout);
+  error = mGL->fGetError();
+  if (error != LOCAL_GL_NO_ERROR) {
+    gfxCriticalNoteOnce << "glWaitSemaphoreEXT failed: " << error;
+    return;
+  }
 }
 
 bool DMABufSurface::OpenFileDescriptors(const MutexAutoLock& aProofOfLock) {
@@ -601,12 +644,11 @@ bool DMABufSurfaceRGBA::ImportSurfaceDescriptor(
   }
 
   if (desc.fence().Length() > 0) {
-    mSyncFd = desc.fence()[0].ClonePlatformHandle().release();
-    if (mSyncFd < 0) {
-      LOGDMABUF(
-          ("    failed to get GL fence file descriptor: %s", strerror(errno)));
-      return false;
-    }
+    mSyncFd = desc.fence()[0];
+  }
+
+  if (desc.semaphoreFd()) {
+    mSemaphoreFd = desc.semaphoreFd();
   }
 
   if (desc.refCount().Length() > 0) {
@@ -632,7 +674,7 @@ bool DMABufSurfaceRGBA::Serialize(
   AutoTArray<uint32_t, DMABUF_BUFFER_PLANES> offsets;
   AutoTArray<uintptr_t, DMABUF_BUFFER_PLANES> images;
   AutoTArray<uint64_t, DMABUF_BUFFER_PLANES> modifiers;
-  AutoTArray<ipc::FileDescriptor, 1> fenceFDs;
+  AutoTArray<NotNull<RefPtr<gfx::FileHandleWrapper>>, 1> fenceFDs;
   AutoTArray<ipc::FileDescriptor, 1> refCountFDs;
 
   LOGDMABUF(("DMABufSurfaceRGBA::Serialize() UID %d\n", mUID));
@@ -654,8 +696,8 @@ bool DMABufSurfaceRGBA::Serialize(
 
   CloseFileDescriptors(lockFD);
 
-  if (mSync) {
-    fenceFDs.AppendElement(ipc::FileDescriptor(mSyncFd));
+  if (mSync && mSyncFd) {
+    fenceFDs.AppendElement(WrapNotNull(mSyncFd));
   }
 
   if (mGlobalRefCountFd) {
@@ -665,7 +707,7 @@ bool DMABufSurfaceRGBA::Serialize(
   aOutDescriptor = SurfaceDescriptorDMABuf(
       mSurfaceType, modifiers, mGbmBufferFlags, fds, width, height, width,
       height, format, strides, offsets, GetYUVColorSpace(), mColorRange,
-      fenceFDs, mUID, refCountFDs);
+      fenceFDs, mUID, refCountFDs, /* semaphoreFd */ nullptr);
   return true;
 }
 
@@ -1398,12 +1440,7 @@ bool DMABufSurfaceYUV::ImportSurfaceDescriptor(
   }
 
   if (aDesc.fence().Length() > 0) {
-    mSyncFd = aDesc.fence()[0].ClonePlatformHandle().release();
-    if (mSyncFd < 0) {
-      LOGDMABUF(
-          ("    failed to get GL fence file descriptor: %s", strerror(errno)));
-      return false;
-    }
+    mSyncFd = aDesc.fence()[0];
   }
 
   if (aDesc.refCount().Length() > 0) {
@@ -1424,7 +1461,7 @@ bool DMABufSurfaceYUV::Serialize(
   AutoTArray<uint32_t, DMABUF_BUFFER_PLANES> strides;
   AutoTArray<uint32_t, DMABUF_BUFFER_PLANES> offsets;
   AutoTArray<uint64_t, DMABUF_BUFFER_PLANES> modifiers;
-  AutoTArray<ipc::FileDescriptor, 1> fenceFDs;
+  AutoTArray<NotNull<RefPtr<gfx::FileHandleWrapper>>, 1> fenceFDs;
   AutoTArray<ipc::FileDescriptor, 1> refCountFDs;
 
   LOGDMABUF(("DMABufSurfaceYUV::Serialize() UID %d", mUID));
@@ -1448,8 +1485,8 @@ bool DMABufSurfaceYUV::Serialize(
 
   CloseFileDescriptors(lockFD);
 
-  if (mSync) {
-    fenceFDs.AppendElement(ipc::FileDescriptor(mSyncFd));
+  if (mSync && mSyncFd) {
+    fenceFDs.AppendElement(WrapNotNull(mSyncFd));
   }
 
   if (mGlobalRefCountFd) {
@@ -1459,7 +1496,7 @@ bool DMABufSurfaceYUV::Serialize(
   aOutDescriptor = SurfaceDescriptorDMABuf(
       mSurfaceType, modifiers, 0, fds, width, height, widthBytes, heightBytes,
       format, strides, offsets, GetYUVColorSpace(), mColorRange, fenceFDs, mUID,
-      refCountFDs);
+      refCountFDs, /* semaphoreFd */ nullptr);
   return true;
 }
 

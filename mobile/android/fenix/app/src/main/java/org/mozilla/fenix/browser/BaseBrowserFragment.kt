@@ -508,16 +508,7 @@ abstract class BaseBrowserFragment :
             customTabSessionId = customTabSessionId,
             browserAnimator = browserAnimator,
             onTabCounterClicked = {
-                thumbnailsFeature.get()?.requestScreenshot()
-                findNavController().nav(
-                    R.id.browserFragment,
-                    BrowserFragmentDirections.actionGlobalTabsTrayFragment(
-                        page = when (activity.browsingModeManager.mode) {
-                            BrowsingMode.Normal -> Page.NormalTabs
-                            BrowsingMode.Private -> Page.PrivateTabs
-                        },
-                    ),
-                )
+                onTabCounterClicked(activity.browsingModeManager.mode)
             },
             onCloseTab = { closedSession ->
                 val closedTab = store.state.findTab(closedSession.id) ?: return@DefaultBrowserToolbarController
@@ -593,6 +584,7 @@ abstract class BaseBrowserFragment :
                                 BrowserFragmentDirections.actionGlobalHome(),
                             )
                         },
+                        onTabCounterClick = { onTabCounterClicked(activity.browsingModeManager.mode) },
                     )
                 }
             },
@@ -1528,11 +1520,14 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
-                        } else if (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value) {
-                            Divider()
                         }
 
-                        NavigationButtonsCFR(context = context, activity = activity)
+                        NavigationButtonsCFR(
+                            context = context,
+                            activity = activity,
+                            showDivider = !isToolbarAtBottom &&
+                                (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value),
+                        )
                     }
                 }
             },
@@ -1557,6 +1552,7 @@ abstract class BaseBrowserFragment :
     internal fun NavigationButtonsCFR(
         context: Context,
         activity: HomeActivity,
+        showDivider: Boolean,
     ) {
         var showCFR by remember { mutableStateOf(false) }
         val lastTimeNavigationButtonsClicked = remember { mutableLongStateOf(0L) }
@@ -1625,6 +1621,7 @@ abstract class BaseBrowserFragment :
 
             BrowserNavBar(
                 isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                showDivider = showDivider,
                 browserStore = context.components.core.store,
                 menuButton = menuButton,
                 newTabMenu = NewTabMenu(
@@ -1688,16 +1685,7 @@ abstract class BaseBrowserFragment :
                 },
                 onTabsButtonClick = {
                     NavigationBar.browserTabTrayTapped.record(NoExtras())
-                    thumbnailsFeature.get()?.requestScreenshot()
-                    findNavController().nav(
-                        R.id.browserFragment,
-                        BrowserFragmentDirections.actionGlobalTabsTrayFragment(
-                            page = when (activity.browsingModeManager.mode) {
-                                BrowsingMode.Normal -> Page.NormalTabs
-                                BrowsingMode.Private -> Page.PrivateTabs
-                            },
-                        ),
-                    )
+                    onTabCounterClicked(activity.browsingModeManager.mode)
                 },
                 onTabsButtonLongPress = {
                     NavigationBar.browserTabTrayLongTapped.record(NoExtras())
@@ -1715,6 +1703,19 @@ abstract class BaseBrowserFragment :
                 },
             )
         }
+    }
+
+    private fun onTabCounterClicked(browsingMode: BrowsingMode) {
+        thumbnailsFeature.get()?.requestScreenshot()
+        findNavController().nav(
+            R.id.browserFragment,
+            BrowserFragmentDirections.actionGlobalTabsTrayFragment(
+                page = when (browsingMode) {
+                    BrowsingMode.Normal -> Page.NormalTabs
+                    BrowsingMode.Private -> Page.PrivateTabs
+                },
+            ),
+        )
     }
 
     @VisibleForTesting
@@ -1793,8 +1794,6 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
-                        } else if (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value) {
-                            Divider()
                         }
                     }
                 }
@@ -1835,12 +1834,14 @@ abstract class BaseBrowserFragment :
     }
 
     private fun restoreBrowserToolbarAfterMicrosurveyPrompt(browserToolbar: BrowserToolbar) {
-        val defaultBackground = ResourcesCompat.getDrawable(
-            resources,
-            R.drawable.toolbar_background,
-            context?.theme,
-        )
-        browserToolbar.background = defaultBackground
+        if (context?.isToolbarAtBottom() == true) {
+            val defaultBackground = ResourcesCompat.getDrawable(
+                resources,
+                R.drawable.toolbar_background,
+                context?.theme,
+            )
+            browserToolbar.background = defaultBackground
+        }
     }
 
     private var currentMicrosurvey: MicrosurveyUIData? = null

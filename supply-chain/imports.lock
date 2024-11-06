@@ -320,6 +320,13 @@ user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
+[[publisher.io-surface]]
+version = "0.15.1"
+when = "2020-06-30"
+user-id = 2396
+user-login = "jdm"
+user-name = "Josh Matthews"
+
 [[publisher.iovec]]
 version = "0.1.4"
 when = "2019-10-09"
@@ -557,8 +564,8 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.210"
-when = "2024-09-06"
+version = "1.0.214"
+when = "2024-10-28"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -571,8 +578,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.210"
-when = "2024-09-06"
+version = "1.0.214"
+when = "2024-10-28"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -606,8 +613,8 @@ user-login = "mbrubeck"
 user-name = "Matt Brubeck"
 
 [[publisher.syn]]
-version = "2.0.68"
-when = "2024-06-23"
+version = "2.0.86"
+when = "2024-10-31"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -620,15 +627,15 @@ user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
 [[publisher.thiserror]]
-version = "1.0.64"
-when = "2024-09-22"
+version = "1.0.66"
+when = "2024-10-31"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.64"
-when = "2024-09-22"
+version = "1.0.66"
+when = "2024-10-31"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"

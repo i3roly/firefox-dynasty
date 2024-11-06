@@ -81,6 +81,8 @@ let px = number => number.toFixed(2) + "px";
  * Implements the text input part of the address bar UI.
  */
 export class UrlbarInput {
+  #allowBreakout = false;
+
   /**
    * @param {object} options
    *   The initial options for UrlbarInput.
@@ -199,7 +201,6 @@ export class UrlbarInput {
       "#urlbar-search-mode-indicator-close"
     );
     this._searchModeLabel = this.querySelector("#urlbar-label-search-mode");
-    this._toolbar = this.textbox.closest("toolbar");
 
     ChromeUtils.defineLazyGetter(this, "valueFormatter", () => {
       return new lazy.UrlbarValueFormatter(this);
@@ -279,7 +280,9 @@ export class UrlbarInput {
       menubar.addEventListener("DOMMenuBarActive", this);
     }
 
-    if (this._toolbar) {
+    // Expanding requires a parent toolbar, and us not being read-only.
+    this.#allowBreakout = !!this.textbox.closest("toolbar");
+    if (this.#allowBreakout) {
       // TODO(emilio): This could use CSS anchor positioning rather than this
       // ResizeObserver, eventually.
       let observer = new this.window.ResizeObserver(([entry]) => {
@@ -472,10 +475,7 @@ export class UrlbarInput {
       state.persist.shouldPersist = shouldPersist;
       this.toggleAttribute("persistsearchterms", state.persist.shouldPersist);
       if (state.persist.shouldPersist && !isSameDocument) {
-        Services.telemetry.scalarAdd(
-          "urlbar.persistedsearchterms.view_count",
-          1
-        );
+        Glean.urlbarPersistedsearchterms.viewCount.add(1);
       }
     } else if (state.persist) {
       // Ensure the persist search state is unloaded for tabs that had state
@@ -956,10 +956,7 @@ export class UrlbarInput {
     let state = this.getBrowserState(this.window.gBrowser.selectedBrowser);
     if (anchorElement?.closest("#urlbar") && state.persist?.shouldPersist) {
       this.handleRevert();
-      Services.telemetry.scalarAdd(
-        "urlbar.persistedsearchterms.revert_by_popup_count",
-        1
-      );
+      Glean.urlbarPersistedsearchterms.revertByPopupCount.add(1);
     }
   }
 
@@ -1294,7 +1291,7 @@ export class UrlbarInput {
       }
       case lazy.UrlbarUtils.RESULT_TYPE.TIP: {
         let scalarName = `${result.payload.type}-picked`;
-        Services.telemetry.keyedScalarAdd("urlbar.tips", scalarName, 1);
+        Glean.urlbar.tips[scalarName].add(1);
         if (url) {
           break;
         }
@@ -1830,7 +1827,7 @@ export class UrlbarInput {
         "search-mode-switcher"
       ).uri.spec;
     } else {
-      url = searchEngine.wrappedJSObject.searchForm;
+      url = searchEngine.searchForm;
     }
 
     this._lastSearchString = "";
@@ -2108,8 +2105,7 @@ export class UrlbarInput {
   }
 
   async updateLayoutBreakout() {
-    if (!this._toolbar) {
-      // Expanding requires a parent toolbar.
+    if (!this.#allowBreakout) {
       return;
     }
     if (this.document.fullscreenElement) {
@@ -2326,22 +2322,6 @@ export class UrlbarInput {
     return "urlbar";
   }
 
-  /**
-   * Move the urlbar by a given amount of pixels vertically. Intended mostly as
-   * a stop-gap solution for the macOS full-screen animation until we can make
-   * it use anchor positioning.
-   *
-   * @param {number} delta
-   *   The amount of CSS pixels to shift by.
-   */
-  shiftTextboxBy(delta) {
-    if (!this.textbox.style.top) {
-      return;
-    }
-    let cur = parseFloat(this.textbox.style.top, 10);
-    this.textbox.style.top = px(cur + delta);
-  }
-
   // Private methods below.
 
   _addObservers() {
@@ -2406,14 +2386,15 @@ export class UrlbarInput {
   }
 
   #updateTextboxPosition() {
-    if (!this.hasAttribute("breakout")) {
+    if (!this.view.isOpen) {
       this.textbox.style.top = "";
       return;
     }
-    // We want to align to the urlbar border box if open, or content box if not.
-    let box = this.view.isOpen ? "border" : "content";
     this.textbox.style.top = px(
-      this.textbox.parentNode.getBoxQuads({ box, flush: false })[0].p1.y
+      this.textbox.parentNode.getBoxQuads({
+        ignoreTransforms: true,
+        flush: false,
+      })[0].p1.y
     );
   }
 
@@ -3139,7 +3120,7 @@ export class UrlbarInput {
 
     if (result.type == lazy.UrlbarUtils.RESULT_TYPE.TIP) {
       let scalarName = `${result.payload.type}-help`;
-      Services.telemetry.keyedScalarAdd("urlbar.tips", scalarName, 1);
+      Glean.urlbar.tips[scalarName].add(1);
     }
 
     this._loadURL(
@@ -3549,11 +3530,6 @@ export class UrlbarInput {
   _initStripOnShare() {
     let contextMenu = this.querySelector("moz-input-box").menupopup;
     let insertLocation = this.#findMenuItemLocation("cmd_copy");
-    // FIXME(bug 1927220): This check is wrong, !getAttribute() is a
-    // boolean.
-    if (!insertLocation.getAttribute("cmd") == "cmd_copy") {
-      return;
-    }
     // set up the menu item
     let stripOnShare = this.document.createXULElement("menuitem");
     this.document.l10n.setAttributes(
@@ -4114,7 +4090,7 @@ export class UrlbarInput {
         event.inputType === "deleteContentForward")
     ) {
       // Take a telemetry if user deleted whole autofilled value.
-      Services.telemetry.scalarAdd("urlbar.autofill_deletion", 1);
+      Glean.urlbar.autofillDeletion.add(1);
     }
 
     let value = this.value;

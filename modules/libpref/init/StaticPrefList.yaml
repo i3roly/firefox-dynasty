@@ -3013,7 +3013,7 @@
 #ifdef MOZ_ENABLE_FORKSERVER
 - name: dom.ipc.forkserver.enable
   type: bool
-#if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN) || defined(MOZ_PROFILE_GENERATE)
+#if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN)
   value: false
 #else
   value: @IS_NIGHTLY_BUILD@
@@ -3695,6 +3695,30 @@
 #endif
   mirror: never
 #endif
+
+# A pref that specifies one or more failure categories to trigger artificial
+# failures for testing purposes. Multiple categories can be combined using
+# bitwise OR to represent various failure points within the code.
+- name: dom.quotaManager.artificialFailure.categories
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A probability (0-100) used to determine the likelihood of triggering an
+# artificial failure for testing purposes. This value is applied when the
+# specified failure categories match to decide if the failure should occur.
+- name: dom.quotaManager.artificialFailure.probability
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# An error code used to trigger an artificial failure for testing purposes.
+# This code is returned when the specified failure categories match and the
+# failure is triggered based on the configured probability.
+- name: dom.quotaManager.artificialFailure.errorCode
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
 
 # Use to control to dump CheckedUnsafePtr creation stack and assignment stacks.
 - name: dom.checkedUnsafePtr.dumpStacks.enabled
@@ -8734,7 +8758,7 @@
 #if defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
   value: true
 #elif defined(MOZ_X11)
-  value: @IS_NIGHTLY_BUILD@
+  value: false  # we'd like this to be @IS_NIGHTLY_BUILD@, see Bug 1927058
 #else
   value: false
 #endif
@@ -12971,7 +12995,7 @@
   mirror: always
 - name: network.fetchpriority.adjustments.link-preload-font.high
   type: int32_t
-  value: 0
+  value: -10
   mirror: always
 - name: network.fetchpriority.adjustments.link-preload-font.auto
   type: int32_t
@@ -14103,23 +14127,30 @@
 # Has no effect unless security.tls.enable_kyber is true.
 - name: network.http.http3.enable_kyber
   type: RelaxedAtomicBool
+#ifdef EARLY_BETA_OR_EARLIER
+  value: @IS_NOT_ANDROID@
+#else
   value: false
+#endif
   mirror: always
   rust: true
 
 # When true, HTTP/3 will be disabled when third party roots are found.
 - name: network.http.http3.disable_when_third_party_roots_found
   type: RelaxedAtomicBool
-#if defined(ANDROID)
   value: false
-#else
-  value: true
-#endif
   mirror: always
 
 # Only used for testing purposes. In automation, this value is used to override
 # the result of third party roots check.
 - name: network.http.http3.has_third_party_roots_found_in_automation
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# When network.http.http3.alt-svc-mapping-for-testing is set, only use
+# HTTP/3 to connect.
+- name: network.http.http3.force-use-alt-svc-mapping-for-testing
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -15794,10 +15825,8 @@
 # 2: Enforce CT.
 - name: security.pki.certificate_transparency.mode
   type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
+#ifdef EARLY_BETA_OR_EARLIER
   value: 2
-#elif defined(EARLY_BETA_OR_EARLIER)
-  value: 1
 #else
   value: 0
 #endif
@@ -17474,9 +17503,9 @@
 
 # Use DMABuf backend for WebGL.
 - name: widget.dmabuf-webgl.enabled
-  type: RelaxedAtomicBool
+  type: bool
   value: true
-  mirror: always
+  mirror: once
 
 # Use gdk_window_move_to_rect to move Wayland popups when available.
 - name: widget.wayland.use-move-to-rect
@@ -17607,6 +17636,17 @@
 - name: widget.windows.window_occlusion_tracking_session_lock.enabled
   type: bool
   value: true
+  mirror: always
+
+# Whether this device is capable of entering tablet mode. (Win11+ only.)
+#
+# Valid values:
+#  * -1: assume this device is tablet-mode-incapable
+#  *  0: rely on heuristics
+#  *  1: assume this device is tablet-mode-capable
+- name: widget.windows.tablet_detection_override
+  type: RelaxedAtomicInt32
+  value: 0
   mirror: always
 
 # Whether to give explorer.exe a delated nudge to recalculate the fullscreenness

@@ -52,9 +52,6 @@ const coreRules = {
     // Functions must always return something or nothing
     "consistent-return": "error",
 
-    // Require braces around blocks that start a new line
-    curly: ["error", "all"],
-
     // Encourage the use of dot notation whenever possible.
     "dot-notation": "error",
 
@@ -62,7 +59,6 @@ const coreRules = {
     "max-nested-callbacks": ["error", 10],
 
     "mozilla/avoid-removeChild": "error",
-    "mozilla/consistent-if-bracing": "error",
     "mozilla/import-browser-window-globals": "error",
     "mozilla/import-globals": "error",
     "mozilla/no-compare-against-boolean-literals": "error",

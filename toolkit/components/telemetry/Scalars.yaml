@@ -373,6 +373,63 @@ installation.firstSeen:
       - 'new-profile'
 
 browser.backup:
+  enabled:
+    bug_numbers:
+      - 1908727
+    description: >
+      True if the BackupService is enabled by default.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+  scheduler_enabled:
+    bug_numbers:
+      - 1908727
+    description: >
+      True if the BackupService is configured to automatically create backups
+      in the background.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+  pswd_encrypted:
+    bug_numbers:
+      - 1908727
+    description: >
+      True if the BackupService is configured to encrypt backups.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+  location_on_device:
+    bug_numbers:
+      - 1908727
+    description: >
+      1 = the default location, 2 = a non-default location
+    expires: never
+    kind: uint
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
   prof_d_disk_space:
     bug_numbers:
       - 1884407
@@ -2955,10 +3012,11 @@ dom.contentprocess:
       - 1777404
       - 1817104
       - 1866197
+      - 1928259
     description: >
       The number of times a process crashed early but we could verify it was not
       because of buildID mismatch between the parent and the content processes.
-    expires: "135"
+    expires: "150"
     kind: uint
     notification_emails:
       - alissy@mozilla.com

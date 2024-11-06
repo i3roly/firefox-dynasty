@@ -574,6 +574,7 @@ export class _DSCard extends React.PureComponent {
       saveToPocketCard,
       isListCard,
       isFakespot,
+      mayHaveSectionsCards,
       format,
       alt_text,
     } = this.props;
@@ -637,10 +638,18 @@ export class _DSCard extends React.PureComponent {
       : ``;
     const listCardClassName = isListCard ? `list-feed-card` : ``;
     const fakespotClassName = isFakespot ? `fakespot` : ``;
+    const sectionsCardsClassName = mayHaveSectionsCards
+      ? `sections-card-ui`
+      : ``;
     const titleLinesName = `ds-card-title-lines-${titleLines}`;
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
-    const spocFormatClassName =
-      format === "rectangle" ? `ds-spoc-rectangle` : ``;
+    const isMediumRectangle = format === "rectangle";
+    const spocFormatClassName = isMediumRectangle ? `ds-spoc-rectangle` : ``;
+
+    let sizes = [];
+    if (!isMediumRectangle) {
+      sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
+    }
 
     let stpButton = () => {
       return (
@@ -669,7 +678,7 @@ export class _DSCard extends React.PureComponent {
     };
     return (
       <article
-        className={`ds-card ${listCardClassName} ${fakespotClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
+        className={`ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName}  ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
         ref={this.setContextMenuButtonHostRef}
       >
         {this.props.showTopics && this.props.topic && !isListCard && (
@@ -683,7 +692,7 @@ export class _DSCard extends React.PureComponent {
             extraClassNames="img"
             source={this.props.image_src}
             rawSource={this.props.raw_image_src}
-            sizes={isListCard ? this.listCardImageSizes : this.dsImageSizes}
+            sizes={sizes}
             url={this.props.url}
             title={this.props.title}
             isRecentSave={isRecentSave}
@@ -748,6 +757,7 @@ export class _DSCard extends React.PureComponent {
             ctaButtonVariant={ctaButtonVariant}
             dispatch={this.props.dispatch}
             spocMessageVariant={this.props.spocMessageVariant}
+            mayHaveSectionsCards={this.props.mayHaveSectionsCards}
             mayHaveThumbsUpDown={this.props.mayHaveThumbsUpDown}
             onThumbsUpClick={this.onThumbsUpClick}
             onThumbsDownClick={this.onThumbsDownClick}

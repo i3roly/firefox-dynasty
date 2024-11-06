@@ -89,6 +89,7 @@
 #include "mozilla/dom/indexedDB/ActorsParent.h"
 #include "mozilla/dom/ipc/IdType.h"
 #include "mozilla/dom/localstorage/ActorsParent.h"
+#include "mozilla/dom/quota/ArtificialFailure.h"
 #include "mozilla/dom/quota/AssertionsImpl.h"
 #include "mozilla/dom/quota/CheckedUnsafePtr.h"
 #include "mozilla/dom/quota/Client.h"
@@ -3863,6 +3864,9 @@ nsresult QuotaManager::InitializeOrigin(PersistenceType aPersistenceType,
 
   AssertIsOnIOThread();
 
+  QM_TRY(
+      ArtificialFailure(nsIQuotaArtificialFailure::CATEGORY_INITIALIZE_ORIGIN));
+
   // The ScopedLogExtraInfo is not set here on purpose, so the callers can
   // decide if they want to set it. The extra info can be set sooner this way
   // as well.
@@ -5453,6 +5457,16 @@ RefPtr<ClientDirectoryLockPromise> QuotaManager::OpenClientDirectory(
                      return ClientDirectoryLockPromise::CreateAndReject(
                          aValue.RejectValue(), __func__);
                    }
+
+                   QM_TRY(ArtificialFailure(nsIQuotaArtificialFailure::
+                                                CATEGORY_OPEN_CLIENT_DIRECTORY),
+                          [&clientDirectoryLock](nsresult rv) {
+                            DropDirectoryLockIfNotDropped(clientDirectoryLock);
+
+                            return ClientDirectoryLockPromise::CreateAndReject(
+                                rv, __func__);
+                          });
+
                    return ClientDirectoryLockPromise::CreateAndResolve(
                        std::move(clientDirectoryLock), __func__);
                  });

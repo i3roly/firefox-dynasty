@@ -134,6 +134,12 @@
         "browser.tabs.tooltipsShowPidAndActiveness",
         false
       );
+      XPCOMUtils.defineLazyPreferenceGetter(
+        this,
+        "_unloadTabInContextMenu",
+        "browser.tabs.unloadTabInContextMenu",
+        false
+      );
 
       if (AppConstants.MOZ_CRASHREPORTER) {
         ChromeUtils.defineESModuleGetters(this, {
@@ -2575,6 +2581,7 @@
             this.selectedTab = this.addTrustedTab(BROWSER_NEW_TAB_URL, {
               index: tab._tPos + 1,
               userContextId: tab.userContextId,
+              tabGroup: tab.group,
             });
             resolve(this.selectedBrowser);
           }),
@@ -2586,15 +2593,25 @@
     /**
      * Must only be used sparingly for content that came from Chrome context
      * If in doubt use addWebTab
+     * @param {string} aURI
+     * @param {object} [options]
+     * @see this.addTab options
+     * @returns {MozTabbrowserTab|null}
      */
-    addTrustedTab(aURI, params = {}) {
-      params.triggeringPrincipal =
+    addTrustedTab(aURI, options = {}) {
+      options.triggeringPrincipal =
         Services.scriptSecurityManager.getSystemPrincipal();
-      return this.addTab(aURI, params);
+      return this.addTab(aURI, options);
     },
 
     /**
-     * @returns {object}
+     * @param {string} uriString
+     * @param {object} options
+     * @param {MozTabbrowserTabGroup} [options.tabGroup]
+     *   A related tab group where this tab should be added, when applicable.
+     *   When present, the tab is expected to reside in this tab group. When
+     *   absent, the tab is expected to be a standalone tab.
+     * @returns {MozTabbrowserTab|null}
      *    The new tab. The return value will be null if the tab couldn't be
      *    created; this shouldn't normally happen, and an error will be logged
      *    to the console if it does.
@@ -2631,6 +2648,7 @@
         initialBrowsingContextGroupId,
         skipAnimation,
         skipBackgroundNotify,
+        tabGroup,
         triggeringPrincipal,
         userContextId,
         csp,
@@ -2728,6 +2746,7 @@
             openerTab,
             pinned,
             bulkOrderedOpen,
+            tabGroup: tabGroup ?? openerTab?.group,
           });
         }
 
@@ -2897,6 +2916,10 @@
      * @param {object[]} tabs
      *   The set of tabs to include in the group.
      * @param {object} [options]
+     * @param {string} [options.id]
+     *   Optionally assign an ID to the tab group. Useful when rebuilding an
+     *   existing group e.g. when restoring. A pseudorandom string will be
+     *   generated if not set.
      * @param {string} [options.color]
      *   Color for the group label. See tabgroup-menu.js for possible values.
      *   If no color specified, will attempt to assign an unused group color.
@@ -2906,10 +2929,18 @@
      *   An optional argument that accepts a single tab, which, if passed, will
      *   cause the group to be inserted just before this tab in the tab strip. By
      *   default, the group will be created at the end of the tab strip.
+     * @param {boolean} [options.showCreateUI]
+     *   Set this to true to show the post-creation group edtior.
      */
     addTabGroup(
       tabs,
-      { id = null, color = null, label = "", insertBefore = null } = {}
+      {
+        id = null,
+        color = null,
+        label = "",
+        insertBefore = null,
+        showCreateUI = false,
+      } = {}
     ) {
       if (!tabs?.length) {
         throw new Error("Cannot create tab group with zero tabs");
@@ -2928,8 +2959,13 @@
         insertBefore?.group ?? insertBefore
       );
       group.addTabs(tabs);
+      group.dispatchEvent(
+        new CustomEvent("TabGroupCreate", {
+          bubbles: true,
+          detail: { showCreateUI },
+        })
+      );
 
-      group.dispatchEvent(new CustomEvent("TabGroupCreate", { bubbles: true }));
       return group;
     },
 
@@ -3022,6 +3058,10 @@
       return { uri: aURIObject, uriIsAboutBlank, lazyBrowserURI, uriString };
     },
 
+    /**
+     * @param {object} options
+     * @returns {MozTabbrowserTab}
+     */
     _createTab({
       uriString,
       userContextId,
@@ -3654,10 +3694,16 @@
 
     /**
      * This determines where the tab should be inserted within the tabContainer
+     *
+     * @param {MozTabbrowserTab} tab
+     * @param {object} [options]
+     * @param {number} [options.index]
+     * @param {MozTabbrowserTabGroup} [options.tabGroup]
+     *   A related tab group where this tab should be added, when applicable.
      */
     _insertTabAtIndex(
       tab,
-      { index, ownerTab, openerTab, pinned, bulkOrderedOpen } = {}
+      { index, ownerTab, openerTab, pinned, bulkOrderedOpen, tabGroup } = {}
     ) {
       // If this new tab is owned by another, assert that relationship
       if (ownerTab) {
@@ -3696,8 +3742,13 @@
           }
         }
       }
+
+      // Prevent a flash of unstyled content by setting up the tab content
+      // and inherited attributes before appending it (see Bug 1592054):
+      tab.initialize();
+
       // Ensure index is within bounds.
-      if (pinned) {
+      if (tab.pinned) {
         index = Math.max(index, 0);
         index = Math.min(index, this.pinnedTabCount);
       } else {
@@ -3705,17 +3756,30 @@
         index = Math.min(index, this.tabs.length);
       }
 
-      let tabAfter = this.tabs[index] || null;
+      /** @type {MozTabbrowserTab|undefined} */
+      let tabAfter = this.tabs.at(index);
       this.tabContainer._invalidateCachedTabs();
-      // Prevent a flash of unstyled content by setting up the tab content
-      // and inherited attributes before appending it (see Bug 1592054):
-      tab.initialize();
-      this.tabContainer.insertBefore(tab, tabAfter);
-      if (tabAfter) {
-        this._updateTabsAfterInsert();
+
+      if (tabGroup) {
+        if (tabAfter && tabAfter.group == tabGroup) {
+          // Place at the front of, or between tabs in, the same tab group
+          this.tabContainer.insertBefore(tab, tabAfter);
+        } else {
+          // Place tab at the end of the contextual tab group because one of:
+          // 1) no `tabAfter` so `tab` should be the last tab in the tab strip
+          // 2) `tabAfter` is in a different tab group
+          this.moveTabToGroup(tab, tabGroup);
+        }
       } else {
-        tab._tPos = index;
+        // Place ungrouped tab before `tabAfter` or its group
+        // 1) Ungrouped tab between standalone tabs
+        // 2) Ungrouped tab at the end of the tab strip
+        // 3) Ungrouped tab right before the next tab group, if the
+        //    next tab is in a group
+        this.tabContainer.insertBefore(tab, tabAfter?.group ?? tabAfter);
       }
+
+      this._updateTabsAfterInsert();
 
       if (pinned) {
         this._updateTabBarForPinnedTabs();
@@ -4799,6 +4863,27 @@
       return closedCount;
     },
 
+    async explicitUnloadTabs(tabs) {
+      let unloadBlocked = await this.runBeforeUnloadForTabs(tabs);
+      if (unloadBlocked) {
+        return;
+      }
+      if (tabs.some(tab => tab.selected)) {
+        // Unloading the currently selected tab.
+        // Need to select a different one before unloading.
+        let newTab = this._findTabToBlurTo(this.selectedTab, tabs);
+        if (newTab) {
+          this.selectedTab = newTab;
+        } else if (FirefoxViewHandler.tab) {
+          // probably unloading all tabs - show Firefox View
+          FirefoxViewHandler.openTab("opentabs");
+        }
+      }
+      for (let tab of tabs) {
+        this.discardBrowser(tab, true);
+      }
+    },
+
     /**
      * Handles opening a new tab with mouse middleclick.
      * @param node
@@ -5667,17 +5752,6 @@
       }
     },
 
-    moveTabOver(aEvent) {
-      if (
-        (!RTL_UI && aEvent.keyCode == KeyEvent.DOM_VK_RIGHT) ||
-        (RTL_UI && aEvent.keyCode == KeyEvent.DOM_VK_LEFT)
-      ) {
-        this.moveTabForward();
-      } else {
-        this.moveTabBackward();
-      }
-    },
-
     /**
      * @param   aTab
      *          Can be from a different window as well
@@ -6334,7 +6408,9 @@
           }
           break;
         case "TabGroupCreate":
-          this.tabGroupMenu.openCreateModal(aEvent.target);
+          if (aEvent.detail.showCreateUI) {
+            this.tabGroupMenu.openCreateModal(aEvent.target);
+          }
           break;
         case "activate":
         // Intentional fallthrough
@@ -8137,6 +8213,24 @@ var TabContextMenu = {
     document.getElementById("context_reloadTab").hidden = multiselectionContext;
     document.getElementById("context_reloadSelectedTabs").hidden =
       !multiselectionContext;
+    let unloadTabItem = document.getElementById("context_unloadTab");
+    if (gBrowser._unloadTabInContextMenu) {
+      let tabs = this.contextTab.multiselected
+        ? gBrowser.selectedTabs
+        : [this.contextTab];
+      // linkedPanel is false if the tab is already unloaded
+      // Cannot unload about: pages, etc., so skip browsers that are not remote
+      let unloadableTabs = tabs.filter(
+        t => t.linkedPanel && t.linkedBrowser?.isRemoteBrowser
+      );
+      unloadTabItem.hidden = unloadableTabs.length === 0;
+      unloadTabItem.setAttribute(
+        "data-l10n-args",
+        JSON.stringify({ tabCount: unloadableTabs.length })
+      );
+    } else {
+      unloadTabItem.hidden = true;
+    }
 
     // Show Play Tab menu item if the tab has attribute activemedia-blocked
     document.getElementById("context_playTab").hidden = !(
@@ -8427,10 +8521,18 @@ var TabContextMenu = {
     }
   },
 
+  explicitUnloadTabs() {
+    if (this.contextTab.multiselected) {
+      gBrowser.explicitUnloadTabs(gBrowser.selectedTabs);
+    } else {
+      gBrowser.explicitUnloadTabs([this.contextTab]);
+    }
+  },
+
   moveTabsToNewGroup() {
     gBrowser.addTabGroup(
       this.contextTab.multiselected ? gBrowser.selectedTabs : [this.contextTab],
-      { insertBefore: this.contextTab }
+      { insertBefore: this.contextTab, showCreateUI: true }
     );
   },
 

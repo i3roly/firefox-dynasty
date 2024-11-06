@@ -2794,10 +2794,10 @@ static nscoord ClampAndAlignWithPixels(nscoord aDesired, nscoord aBoundLower,
                                        nscoord aCurrent) {
   // Intersect scroll range with allowed range, by clamping the ends
   // of aRange to be within bounds
-  nscoord destLower = clamped(aDestLower, aBoundLower, aBoundUpper);
-  nscoord destUpper = clamped(aDestUpper, aBoundLower, aBoundUpper);
+  nscoord destLower = std::clamp(aDestLower, aBoundLower, aBoundUpper);
+  nscoord destUpper = std::clamp(aDestUpper, aBoundLower, aBoundUpper);
 
-  nscoord desired = clamped(aDesired, destLower, destUpper);
+  nscoord desired = std::clamp(aDesired, destLower, destUpper);
   if (StaticPrefs::layout_scroll_disable_pixel_alignment()) {
     return desired;
   }
@@ -5024,6 +5024,13 @@ void ScrollContainerFrame::ScrollSnap(const nsPoint& aDestination,
   // site using `GetScrollPosition()` as |aStartPos|.
   if (auto snapDestination = GetSnapPointForDestination(
           ScrollUnit::DEVICE_PIXELS, snapFlags, pos, destination)) {
+    // Bail out if there's no scroll position change to do a workaround for bug
+    // 1665932 (even if the __layout__ scroll position is unchanged, the
+    // corresponding scroll offset update will change the __visual__ scroll
+    // offset in APZ).
+    if (snapDestination->mPosition == destination) {
+      return;
+    }
     destination = snapDestination->mPosition;
     ScrollToWithOrigin(
         destination, nullptr /* range */,
