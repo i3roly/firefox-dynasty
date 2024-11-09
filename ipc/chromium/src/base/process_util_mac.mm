@@ -10,6 +10,7 @@
 #include <os/availability.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include <string>
@@ -26,8 +27,15 @@
 extern "C" {
 // N.B. the syscalls are available back to 10.5, but the C wrappers
 // only in 10.12.  Fortunately, 10.15 is our current baseline.
-int pthread_chdir_np(const char* dir) API_AVAILABLE(macosx(10.12));
-int pthread_fchdir_np(int fd) API_AVAILABLE(macosx(10.12));
+int pthread_chdir_np(const char* dir)
+{
+    return syscall(SYS___pthread_chdir, dir);
+}
+
+int pthread_fchdir_np(int fd)
+{
+    return syscall(SYS___pthread_fchdir, fd);
+}
 
 int responsibility_spawnattrs_setdisclaim(posix_spawnattr_t attrs, int disclaim)
     API_AVAILABLE(macosx(10.14));
