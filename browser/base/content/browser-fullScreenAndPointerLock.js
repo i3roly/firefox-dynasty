@@ -405,6 +405,8 @@ var FullScreen = {
     }
   },
 
+  _currentToolbarShift: 0,
+
   /**
    * Shifts the browser toolbar down when it is moused over on macOS in
    * fullscreen.
@@ -421,18 +423,20 @@ var FullScreen = {
     // don't need that kind of precision in our CSS.
     shiftSize = shiftSize.toFixed(2);
     gNavToolbox.classList.toggle("fullscreen-with-menubar", shiftSize > 0);
-    if (shiftSize > 0) {
-      gNavToolbox.style.setProperty("transform", `translateY(${shiftSize}px)`);
 
+    let transform = shiftSize > 0 ? `translateY(${shiftSize}px)` : "";
+    gNavToolbox.style.transform = transform;
+    gURLBar.textbox.style.transform = transform;
+    if (shiftSize > 0) {
       // If the mouse tracking missed our fullScreenToggler, then the toolbox
       // might not have been shown before the menubar is animated down. Make
       // sure it is shown now.
       if (!this.fullScreenToggler.hidden) {
         this.showNavToolbox();
       }
-    } else {
-      gNavToolbox.style.removeProperty("transform");
     }
+
+    this._currentToolbarShift = shiftSize;
   },
 
   handleEvent(event) {

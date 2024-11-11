@@ -2335,9 +2335,12 @@ nsresult nsDocumentViewer::CreateDeviceContext(nsView* aContainerView) {
   if (!widget) {
     widget = mParentWidget;
   }
+
+#ifndef XP_MACOSX
   if (widget) {
     widget = widget->GetTopLevelWidget();
   }
+#endif
 
   mDeviceContext = new nsDeviceContext();
   mDeviceContext->Init(widget);
@@ -2635,6 +2638,15 @@ MOZ_CAN_RUN_SCRIPT_BOUNDARY NS_IMETHODIMP nsDocumentViewer::GetContentSize(
   NS_ENSURE_TRUE(shellArea.width != NS_UNCONSTRAINEDSIZE &&
                      shellArea.height != NS_UNCONSTRAINEDSIZE,
                  NS_ERROR_FAILURE);
+
+  // Leave our viewport in a consistent state.
+  {
+    auto newBounds = LayoutDeviceIntRect::FromAppUnitsToOutside(
+                         shellArea, presContext->AppUnitsPerDevPixel())
+                         .ToUnknownRect();
+    newBounds.MoveTo(mBounds.TopLeft());
+    SetBounds(newBounds);
+  }
 
   // Ceil instead of rounding here, so we can actually guarantee showing all the
   // content.

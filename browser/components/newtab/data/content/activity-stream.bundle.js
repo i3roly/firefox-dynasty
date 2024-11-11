@@ -3927,7 +3927,8 @@ function ListFeed({
       recommended_at: rec.recommended_at,
       received_rank: rec.received_rank,
       isListCard: true,
-      isFakespot: isFakespot
+      isFakespot: isFakespot,
+      category: rec.category
     });
   }), isFakespot && /*#__PURE__*/external_React_default().createElement("div", {
     className: "fakespot-footer"
@@ -4329,7 +4330,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
       const fakespotEnabled = prefs[PREF_FAKESPOT_ENABLED];
       if (!isFakespot || isFakespot && fakespotEnabled) {
         // Place the list feed as the 3rd element in the card grid
-        cards.splice(2, 0, this.renderListFeed(this.props.data.recommendations, listFeedSelectedFeed));
+        cards.splice(2, 1, this.renderListFeed(this.props.data.recommendations, listFeedSelectedFeed));
       }
     }
     let moreRecsHeader = "";

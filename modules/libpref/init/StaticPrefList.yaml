@@ -662,6 +662,11 @@
     type: RelaxedAtomicBool
     value: false
     mirror: always
+
+-   name: apz.gtk.touchpad_hold.enabled
+    type: RelaxedAtomicBool
+    value: true
+    mirror: always
 #endif
 
 - name: apz.keyboard.enabled
@@ -3647,6 +3652,30 @@
 #endif
   mirror: never
 #endif
+
+# A pref that specifies one or more failure categories to trigger artificial
+# failures for testing purposes. Multiple categories can be combined using
+# bitwise OR to represent various failure points within the code.
+- name: dom.quotaManager.artificialFailure.categories
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# A probability (0-100) used to determine the likelihood of triggering an
+# artificial failure for testing purposes. This value is applied when the
+# specified failure categories match to decide if the failure should occur.
+- name: dom.quotaManager.artificialFailure.probability
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# An error code used to trigger an artificial failure for testing purposes.
+# This code is returned when the specified failure categories match and the
+# failure is triggered based on the configured probability.
+- name: dom.quotaManager.artificialFailure.errorCode
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
 
 # Use to control to dump CheckedUnsafePtr creation stack and assignment stacks.
 - name: dom.checkedUnsafePtr.dumpStacks.enabled
@@ -13820,9 +13849,10 @@
 # This pref controls whether to send the
 # SETTINGS_NO_RFC7540_PRIORITIES when stream dependencies
 # are disabled, and extensible prioritization scheme is in use.
+# defaults to false as some servers panic when they see this (bug 1928600)
 - name: network.http.http2.send_NO_RFC7540_PRI
   type: RelaxedAtomicBool
-  value: true
+  value: false
   mirror: always
 
 # This pref controls whether to send PRIORITY_UPDATE
@@ -14062,11 +14092,7 @@
 # When true, HTTP/3 will be disabled when third party roots are found.
 - name: network.http.http3.disable_when_third_party_roots_found
   type: RelaxedAtomicBool
-#if defined(ANDROID)
   value: false
-#else
-  value: true
-#endif
   mirror: always
 
 # Only used for testing purposes. In automation, this value is used to override
@@ -15739,10 +15765,8 @@
 # 2: Enforce CT.
 - name: security.pki.certificate_transparency.mode
   type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
+#ifdef EARLY_BETA_OR_EARLIER
   value: 2
-#elif defined(EARLY_BETA_OR_EARLIER)
-  value: 1
 #else
   value: 0
 #endif
