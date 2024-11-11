@@ -378,13 +378,13 @@ gfxPlatformFontList::~gfxPlatformFontList() {
   NS_RELEASE(gFontListPrefObserver);
 }
 
-void gfxPlatformFontList::GetMissingFonts(nsCString& aMissingFonts) {
+void gfxPlatformFontList::GetMissingFonts(nsTArray<nsCString>& aMissingFonts) {
   AutoLock lock(mLock);
 
   auto fontLists = GetFilteredPlatformFontLists();
 
   if (!fontLists.Length()) {
-    aMissingFonts.Append("No font list available for this device.");
+    return;
   }
 
   for (unsigned int i = 0; i < fontLists.Length(); i++) {
@@ -395,8 +395,7 @@ void gfxPlatformFontList::GetMissingFonts(nsCString& aMissingFonts) {
       if (SharedFontList()) {
         fontlist::Family* family = SharedFontList()->FindFamily(key);
         if (!family) {
-          aMissingFonts.Append(fontLists[i].first[j]);
-          aMissingFonts.Append("|");
+          aMissingFonts.AppendElement(fontLists[i].first[j]);
         }
       } else {
         gfxFontFamily* familyEntry = mFontFamilies.GetWeak(key);
@@ -404,12 +403,24 @@ void gfxPlatformFontList::GetMissingFonts(nsCString& aMissingFonts) {
           familyEntry = mOtherFamilyNames.GetWeak(key);
         }
         if (!familyEntry) {
-          aMissingFonts.Append(fontLists[i].first[j]);
-          aMissingFonts.Append("|");
+          aMissingFonts.AppendElement(fontLists[i].first[j]);
         }
       }
     }
   }
+}
+
+void gfxPlatformFontList::GetMissingFonts(nsCString& aMissingFonts) {
+  nsTArray<nsCString> fontList;
+  GetMissingFonts(fontList);
+
+  if (fontList.IsEmpty()) {
+    aMissingFonts.Append("No font list available for this device.");
+    return;
+  }
+
+  fontList.Sort();
+  aMissingFonts.Append(StringJoin("|"_ns, fontList));
 }
 
 /* static */
@@ -928,6 +939,47 @@ gfxFontEntry* gfxPlatformFontList::LookupInSharedFaceNameList(
     fe->mStyleRange = aStyleForEntry;
   }
   return fe;
+}
+
+void gfxPlatformFontList::MaybeAddToLocalNameTable(
+    const nsACString& aName, const fontlist::LocalFaceRec::InitData& aData) {
+  // Compute a measure of the similarity between aName (which will be a PSName
+  // or FullName) and aReference (a font family name).
+  auto nameSimilarity = [](const nsACString& aName,
+                           const nsACString& aReference) -> uint32_t {
+    uint32_t nameIdx = 0, refIdx = 0, matchCount = 0;
+    while (nameIdx < aName.Length() && refIdx < aReference.Length()) {
+      // Ignore non-alphanumerics in the ASCII range, so that a PSname like
+      // "TimesNewRomanPSMT" is a good match for family "Times New Roman".
+      while (nameIdx < aName.Length() && IsAscii(aName[nameIdx]) &&
+             !IsAsciiAlphanumeric(aName[nameIdx])) {
+        ++nameIdx;
+      }
+      while (refIdx < aReference.Length() && IsAscii(aReference[refIdx]) &&
+             !IsAsciiAlphanumeric(aReference[refIdx])) {
+        ++refIdx;
+      }
+      if (nameIdx == aName.Length() || refIdx == aReference.Length() ||
+          aName[nameIdx] != aReference[refIdx]) {
+        break;
+      }
+      ++nameIdx;
+      ++refIdx;
+      ++matchCount;
+    }
+    return matchCount;
+  };
+
+  mLocalNameTable.WithEntryHandle(aName, [&](auto entry) -> void {
+    if (entry) {
+      if (nameSimilarity(aName, aData.mFamilyName) >
+          nameSimilarity(aName, entry.Data().mFamilyName)) {
+        entry.Update(aData);
+      }
+    } else {
+      entry.OrInsert(aData);
+    }
+  });
 }
 
 void gfxPlatformFontList::LoadBadUnderlineList() {

@@ -616,6 +616,10 @@ void Element::ClearStyleStateLocks() {
 /* virtual */
 nsINode* Element::GetScopeChainParent() const { return OwnerDoc(); }
 
+JSObject* Element::WrapNode(JSContext* aCx, JS::Handle<JSObject*> aGivenProto) {
+  return Element_Binding::Wrap(aCx, this, aGivenProto);
+}
+
 nsDOMTokenList* Element::ClassList() {
   nsDOMSlots* slots = DOMSlots();
   if (!slots->mClassList) {
@@ -2080,7 +2084,7 @@ void Element::UnbindFromTree(UnbindContext& aContext) {
   Document* document = GetComposedDoc();
 
   if (HasPointerLock()) {
-    PointerLockManager::Unlock();
+    PointerLockManager::Unlock("Element::UnbindFromTree");
   }
   if (mState.HasState(ElementState::FULLSCREEN)) {
     // The element being removed is an ancestor of the fullscreen element,

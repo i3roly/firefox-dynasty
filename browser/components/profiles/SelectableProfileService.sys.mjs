@@ -23,6 +23,9 @@ ChromeUtils.defineLazyGetter(lazy, "profilesLocalization", () => {
 const PROFILES_CRYPTO_SALT_LENGTH_BYTES = 16;
 const NOTIFY_TIMEOUT = 200;
 
+const COMMAND_LINE_UPDATE = "profiles-updated";
+const COMMAND_LINE_ACTIVATE = "profiles-activate";
+
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     let imageTools = Cc["@mozilla.org/image/tools;1"].getService(Ci.imgITools);
@@ -359,10 +362,12 @@ class SelectableProfileServiceClass {
 
     lazy.EveryWindow.unregisterCallback(this.#everyWindowCallbackId);
 
-    Services.obs.removeObserver(
-      this.themeObserver,
-      "lightweight-theme-styling-update"
-    );
+    try {
+      Services.obs.removeObserver(
+        this.themeObserver,
+        "lightweight-theme-styling-update"
+      );
+    } catch (e) {}
 
     // During shutdown we don't need to notify ourselves, just other instances
     // so rather than finalizing the task just disarm it and do the notification
@@ -497,7 +502,7 @@ class SelectableProfileServiceClass {
           path	TEXT NOT NULL UNIQUE,
           name	TEXT NOT NULL,
           avatar	TEXT NOT NULL,
-          themeL10nId	TEXT NOT NULL,
+          themeId	TEXT NOT NULL,
           themeFg	TEXT NOT NULL,
           themeBg	TEXT NOT NULL,
           PRIMARY KEY(id)
@@ -571,6 +576,8 @@ class SelectableProfileServiceClass {
     }
     if (url) {
       args.push("-url", url);
+    } else {
+      args.push(`--${COMMAND_LINE_ACTIVATE}`);
     }
     process.runw(false, args, args.length);
   }
@@ -595,7 +602,7 @@ class SelectableProfileServiceClass {
       try {
         remoteService.sendCommandLine(
           profile.path,
-          ["--profiles-updated"],
+          [`--${COMMAND_LINE_UPDATE}`],
           false
         );
       } catch (e) {
@@ -625,7 +632,7 @@ class SelectableProfileServiceClass {
    * current profile of a theme change.
    *
    * @param {object} aSubject The theme data
-   * @param {*} aTopic Should be "lightweight-theme-styling-update"
+   * @param {string} aTopic Should be "lightweight-theme-styling-update"
    */
   themeObserver(aSubject, aTopic) {
     if (aTopic !== "lightweight-theme-styling-update") {
@@ -634,11 +641,36 @@ class SelectableProfileServiceClass {
 
     let data = aSubject.wrappedJSObject;
 
-    let theme = data.theme;
+    if (!data.theme) {
+      // During startup the theme might be null so just return
+      return;
+    }
+
+    let isDark = Services.appinfo.chromeColorSchemeIsDark;
+
+    let theme = isDark && !!data.darkTheme ? data.darkTheme : data.theme;
+
+    let themeFg = theme.textcolor;
+    let themeBg = theme.toolbarColor;
+
+    if (!themeFg || !themeBg) {
+      // TODO Bug 1927193: The colors defined below are from the light and
+      // dark theme manifest files and they are not accurate for the default
+      // theme. We should read the color values from the document to get the
+      // correct colors.
+      const defaultDarkText = "rgb(255,255,255)"; // dark theme "tab_text"
+      const defaultLightText = "rgb(21,20,26)"; // light theme "tab_text"
+      const defaultDarkToolbar = "rgb(43,42,51)"; // dark theme "toolbar"
+      const defaultLightToolbar = "#f9f9fb"; // light theme "toolbar"
+
+      themeFg = isDark ? defaultDarkText : defaultLightText;
+      themeBg = isDark ? defaultDarkToolbar : defaultLightToolbar;
+    }
+
     this.currentProfile.theme = {
-      themeL10nId: theme.id,
-      themeFg: theme.textcolor,
-      themeBg: theme.accentcolor,
+      themeId: theme.id,
+      themeFg,
+      themeBg,
     };
   }
 
@@ -826,18 +858,28 @@ class SelectableProfileServiceClass {
    * @returns {SelectableProfile} The newly created profile object.
    */
   async #createProfile(existingProfilePath) {
-    let nextProfileNumber =
-      1 + Math.max(0, ...(await this.getAllProfiles()).map(p => p.id));
-    let [defaultName] = lazy.profilesLocalization.formatMessagesSync([
-      { id: "default-profile-name", args: { number: nextProfileNumber } },
-    ]);
+    let nextProfileNumber = Math.max(
+      0,
+      ...(await this.getAllProfiles()).map(p => p.id)
+    );
+    let [defaultName, originalName] =
+      lazy.profilesLocalization.formatMessagesSync([
+        { id: "default-profile-name", args: { number: nextProfileNumber } },
+        { id: "original-profile-name" },
+      ]);
+
+    let window = Services.wm.getMostRecentBrowserWindow();
+    let isDark = window?.matchMedia("(-moz-system-dark-theme)").matches;
+
     let randomIndex = Math.floor(Math.random() * this.#defaultAvatars.length);
     let profileData = {
-      name: defaultName.value,
+      // The original toolkit profile is added first and is assigned a
+      // different name.
+      name: nextProfileNumber == 0 ? originalName.value : defaultName.value,
       avatar: this.#defaultAvatars[randomIndex],
-      themeL10nId: "default",
-      themeFg: "var(--text-color)",
-      themeBg: "var(--background-color-box)",
+      themeId: "default-theme@mozilla.org",
+      themeFg: isDark ? "rgb(255,255,255)" : "rgb(21,20,26)",
+      themeBg: isDark ? "rgb(28, 27, 34)" : "rgb(240, 240, 244)",
     };
 
     let path =
@@ -885,7 +927,7 @@ class SelectableProfileServiceClass {
     await this.maybeSetupDataStore();
 
     let profile = await this.#createProfile();
-    this.launchInstance(profile);
+    this.launchInstance(profile, "about:newprofile");
   }
 
   /**
@@ -895,13 +937,13 @@ class SelectableProfileServiceClass {
    * been created.
    *
    * @param {object} profileData A plain object that contains a name, avatar,
-   *                 themeL10nId, themeFg, themeBg, and relative path as string.
+   *                 themeId, themeFg, themeBg, and relative path as string.
    *
    * @returns {SelectableProfile} The newly created profile object.
    */
   async insertProfile(profileData) {
     // Verify all fields are present.
-    let keys = ["avatar", "name", "path", "themeBg", "themeFg", "themeL10nId"];
+    let keys = ["avatar", "name", "path", "themeBg", "themeFg", "themeId"];
     let missing = [];
     keys.forEach(key => {
       if (!(key in profileData)) {
@@ -915,7 +957,7 @@ class SelectableProfileServiceClass {
       );
     }
     await this.#connection.execute(
-      `INSERT INTO Profiles VALUES (NULL, :path, :name, :avatar, :themeL10nId, :themeFg, :themeBg);`,
+      `INSERT INTO Profiles VALUES (NULL, :path, :name, :avatar, :themeId, :themeFg, :themeBg);`,
       profileData
     );
 
@@ -1001,7 +1043,7 @@ class SelectableProfileServiceClass {
 
     await this.#connection.execute(
       `UPDATE Profiles
-       SET path = :path, name = :name, avatar = :avatar, themeL10nId = :themeL10nId, themeFg = :themeFg, themeBg = :themeBg
+       SET path = :path, name = :name, avatar = :avatar, themeId = :themeId, themeFg = :themeFg, themeBg = :themeBg
        WHERE id = :id;`,
       profileObj
     );
@@ -1020,11 +1062,11 @@ class SelectableProfileServiceClass {
       return [];
     }
 
-    return (
-      await this.#connection.executeCached("SELECT * FROM Profiles;")
-    ).map(row => {
-      return new SelectableProfile(row, this);
-    });
+    return (await this.#connection.executeCached("SELECT * FROM Profiles;"))
+      .map(row => {
+        return new SelectableProfile(row, this);
+      })
+      .sort((p1, p2) => p1.name.localeCompare(p2.name));
   }
 
   /**
@@ -1298,13 +1340,26 @@ export class CommandLineHandler {
   QueryInterface = ChromeUtils.generateQI([Ci.nsICommandLineHandler]);
 
   handle(cmdLine) {
-    if (!AppConstants.MOZ_SELECTABLE_PROFILES) {
+    // This is only ever sent when the application is already running.
+    if (cmdLine.handleFlag(COMMAND_LINE_UPDATE, true)) {
+      SelectableProfileService.databaseChanged("remote").catch(console.error);
+      cmdLine.preventDefault = true;
       return;
     }
 
-    if (cmdLine.handleFlag("profiles-updated", true)) {
-      SelectableProfileService.databaseChanged("remote").catch(console.error);
-      cmdLine.preventDefault = true;
+    // Sent from the profiles UI to launch a profile if it doesn't exist or bring it to the front
+    // if it is already running. In the case where this instance is already running we want to block
+    // the normal action of opening a new empty window and instead raise the application to the
+    // front manually.
+    if (
+      cmdLine.handleFlag(COMMAND_LINE_ACTIVATE, true) &&
+      cmdLine.state != Ci.nsICommandLine.STATE_INITIAL_LAUNCH
+    ) {
+      let win = Services.wm.getMostRecentWindow(null);
+      if (win) {
+        win.focus();
+        cmdLine.preventDefault = true;
+      }
     }
   }
 }

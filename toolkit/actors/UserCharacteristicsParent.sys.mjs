@@ -59,4 +59,5 @@ class UserCharacteristicsParent extends JSWindowActorParent {
 export {
   UserCharacteristicsParent,
   UserCharacteristicsParent as UserCharacteristicsWindowInfoParent,
+  UserCharacteristicsParent as UserCharacteristicsCanvasRenderingParent,
 };

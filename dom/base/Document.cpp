@@ -993,7 +993,7 @@ nsresult ExternalResourceMap::AddExternalResource(nsIURI* aURI,
     // Make sure that hiding our viewer will tear down its presentation.
     aViewer->SetSticky(false);
 
-    rv = aViewer->Init(nullptr, nsIntRect(0, 0, 0, 0), nullptr);
+    rv = aViewer->Init(nullptr, LayoutDeviceIntRect(), nullptr);
     if (NS_SUCCEEDED(rv)) {
       rv = aViewer->Open(nullptr, nullptr);
     }
@@ -1406,6 +1406,7 @@ Document::Document(const char* aContentType)
       mUserHasInteracted(false),
       mHasUserInteractionTimerScheduled(false),
       mShouldResistFingerprinting(false),
+      mIsInPrivateBrowsing(false),
       mCloningForSVGUse(false),
       mAllowDeclarativeShadowRoots(false),
       mSuspendDOMNotifications(false),
@@ -3009,8 +3010,8 @@ void Document::ResetToURI(nsIURI* aURI, nsILoadGroup* aLoadGroup,
         // This is asserting that if we previously set mIsInPrivateBrowsing
         // to true from the channel in Document::Reset, that the loadContext
         // also believes it to be true.
-        // MOZ_ASSERT(!mIsInPrivateBrowsing ||
-        //           mIsInPrivateBrowsing == loadContext->UsePrivateBrowsing());
+        MOZ_ASSERT(!mIsInPrivateBrowsing ||
+                   mIsInPrivateBrowsing == loadContext->UsePrivateBrowsing());
         mIsInPrivateBrowsing = loadContext->UsePrivateBrowsing();
       }
     }
@@ -12244,7 +12245,7 @@ void Document::OnPageHide(bool aPersisted, EventTarget* aDispatchStartTarget,
     mVisible = false;
   }
 
-  ExitPointerLock();
+  PointerLockManager::Unlock("Document::OnPageHide", this);
 
   if (!mIsBeingUsedAsImage) {
     // Dispatch observer notification to notify observers page is hidden.
@@ -14975,7 +14976,7 @@ void Document::ExitFullscreenInDocTree(Document* aMaybeNotARootDoc) {
   MOZ_ASSERT(aMaybeNotARootDoc);
 
   // Unlock the pointer
-  PointerLockManager::Unlock();
+  PointerLockManager::Unlock("Document::ExitFullscreenInDocTree");
 
   // Resolve all promises which waiting for exit fullscreen.
   PendingFullscreenChangeList::Iterator<FullscreenExit> iter(
@@ -15081,7 +15082,7 @@ void Document::RestorePreviousFullscreenState(UniquePtr<FullscreenExit> aExit) {
   }
 
   // If fullscreen mode is updated the pointer should be unlocked
-  PointerLockManager::Unlock();
+  PointerLockManager::Unlock("Document::RestorePreviousFullscreenState");
   // All documents listed in the array except the last one are going to
   // completely exit from the fullscreen state.
   for (auto i : IntegerRange(exitElements.Length() - 1)) {
@@ -16015,7 +16016,7 @@ bool Document::ApplyFullscreen(UniquePtr<FullscreenRequest> aRequest) {
 
   // If a document is already in fullscreen, then unlock the mouse pointer
   // before setting a new document to fullscreen
-  PointerLockManager::Unlock();
+  PointerLockManager::Unlock("Document::ApplyFullscreen");
 
   // Set the fullscreen element. This sets the fullscreen style on the
   // element, and the fullscreen-ancestor styles on ancestors of the element
@@ -18563,8 +18564,7 @@ already_AddRefed<mozilla::dom::Promise> Document::RequestStorageAccessForOrigin(
                 }
                 if (AntiTrackingUtils::CheckStoragePermission(
                         self->NodePrincipal(), type,
-                        nsContentUtils::IsInPrivateBrowsing(self), nullptr,
-                        0)) {
+                        self->IsInPrivateBrowsing(), nullptr, 0)) {
                   return MozPromise<int, bool, true>::CreateAndResolve(
                       true, __func__);
                 }
@@ -18896,8 +18896,8 @@ already_AddRefed<Promise> Document::CompleteStorageAccessRequestFromSite(
                       false, __func__);
             }
             if (AntiTrackingUtils::CheckStoragePermission(
-                    self->NodePrincipal(), type,
-                    nsContentUtils::IsInPrivateBrowsing(self), nullptr, 0)) {
+                    self->NodePrincipal(), type, self->IsInPrivateBrowsing(),
+                    nullptr, 0)) {
               return StorageAccessAPIHelper::
                   StorageAccessPermissionGrantPromise::CreateAndResolve(
                       StorageAccessAPIHelper::eAllowAutoGrant, __func__);

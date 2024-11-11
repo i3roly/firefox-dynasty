@@ -7,7 +7,6 @@ project-repo-param-prefix: ''
 product-dir: 'browser'
 treeherder:
     group-names:
-        'cram': 'Cram tests'
         'js-bench-sm': 'JavaScript shell benchmarks with Spidermonkey'
         'js-bench-v8': 'JavaScript shell benchmarks with Google V8'
         'node': 'Node tests'
@@ -743,6 +742,11 @@ workers:
             implementation: generic-worker
             os: windows
             worker-type: '{alias}'
+        b-win-aarch64:
+            provisioner: '{trust-domain}-{level}'
+            implementation: generic-worker
+            os: windows
+            worker-type: 'win11-a64-24h2-builder'
         image:
             provisioner: '{trust-domain}-{level}'
             implementation: docker-worker

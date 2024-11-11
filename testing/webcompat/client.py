@@ -14,6 +14,7 @@ import webdriver
 from PIL import Image
 from webdriver.bidi.error import InvalidArgumentException, NoSuchFrameException
 from webdriver.bidi.modules.script import ContextTarget
+from webdriver.error import UnsupportedOperationException
 
 
 class Client:
@@ -54,8 +55,17 @@ class Client:
             if needs_change:
                 self.context = orig_context
 
-    async def apz_click(self, element, no_up=False):
-        pt = self.execute_script(
+    def set_screen_size(self, width, height):
+        try:
+            route = "window/size"
+            body = {"width": width, "height": height}
+            self.session.send_session_command("POST", route, body)
+            return True
+        except UnsupportedOperationException:
+            return False
+
+    def get_element_screen_position(self, element):
+        return self.execute_script(
             """
           const e = arguments[0];
           const b = e.getClientRects()[0];
@@ -67,6 +77,14 @@ class Client:
         """,
             element,
         )
+
+    async def apz_click(self, element=None, x=None, y=None, no_up=False):
+        if x is not None and y is not None:
+            pt = [x, y]
+        elif element is not None:
+            pt = self.get_element_screen_position(element)
+        else:
+            raise ValueError("need element or x and y")
         with self.using_context("chrome"):
             return self.execute_async_script(
                 """
@@ -100,6 +118,80 @@ class Client:
             """,
                 pt,
                 no_up,
+            )
+
+    async def apz_drag(self, element, x=0, y=0, no_up=False):
+        pt1 = self.get_element_screen_position(element)
+        pt2 = [pt1[0] + x, pt1[1] + y]
+        with self.using_context("chrome"):
+            return self.execute_async_script(
+                """
+              const [pt1, pt2, no_up, done] = arguments;
+              const utils = window.windowUtils;
+              const scale = window.devicePixelRatio;
+              const res = utils.getResolution();
+              const ele = window.document.documentElement;
+              window.windowUtils.sendNativeMouseEvent(
+                pt1[0] * scale * res,
+                pt1[1] * scale * res,
+                utils.NATIVE_MOUSE_MESSAGE_BUTTON_DOWN,
+                0,
+                0,
+                ele,
+                () => {
+                  utils.sendNativeMouseEvent(
+                    pt2[0] * scale * res,
+                    pt2[1] * scale * res,
+                    utils.NATIVE_MOUSE_MESSAGE_MOVE,
+                    0,
+                    0,
+                    ele,
+                    () => {
+                      if (no_up) {
+                        return done();
+                      }
+                      utils.sendNativeMouseEvent(
+                        pt2[0] * scale * res,
+                        pt2[1] * scale * res,
+                        utils.NATIVE_MOUSE_MESSAGE_BUTTON_UP,
+                        0,
+                        0,
+                        ele,
+                        done
+                      );
+                    }
+                  );
+                })
+            """,
+                pt1,
+                pt2,
+                no_up,
+            )
+
+    def apz_scroll(self, element, dx=0, dy=0, dz=0):
+        pt = self.get_element_screen_position(element)
+        with self.using_context("chrome"):
+            return self.execute_script(
+                """
+                const [pt, delta] = arguments;
+                const utils = window.windowUtils;
+                const scale = window.devicePixelRatio;
+                const res = utils.getResolution();
+                window.windowUtils.sendWheelEvent(
+                    pt[0] * scale * res,
+                    pt[1] * scale * res,
+                    delta[0],
+                    delta[1],
+                    delta[2],
+                    WheelEvent.DOM_DELTA_PIXEL,
+                    0,
+                    delta[0] > 0 ? 1 : -1,
+                    delta[1] > 0 ? 1 : -1,
+                    undefined,
+                );
+            """,
+                pt,
+                [dx, dy, dz],
             )
 
     def wait_for_content_blocker(self):
@@ -259,19 +351,34 @@ class Client:
 
         return self.wait_for_events("browsingContext.load", wait_for_url)
 
-    async def run_script_in_context(self, context, script):
+    async def run_script_in_context(self, script, context=None, sandbox=None):
+        if not context:
+            context = (await self.top_context())["context"]
+        target = ContextTarget(context, sandbox)
         return await self.session.bidi_session.script.evaluate(
             expression=script,
-            target=ContextTarget(context),
+            target=target,
             await_promise=False,
         )
 
-    async def await_script_in_context(self, context, script):
-        return await self.session.bidi_session.script.evaluate(
-            expression=script,
-            target=ContextTarget(context),
-            await_promise=True,
+    async def run_script(
+        self, script, *args, await_promise=False, context=None, sandbox=None
+    ):
+        if not context:
+            context = (await self.top_context())["context"]
+        target = ContextTarget(context, sandbox)
+        val = await self.session.bidi_session.script.call_function(
+            arguments=self.wrap_script_args(args),
+            await_promise=await_promise,
+            function_declaration=script,
+            target=target,
         )
+        if val and "value" in val:
+            return val["value"]
+        return val
+
+    def await_script(self, script, *args, **kwargs):
+        return self.run_script(script, *args, **kwargs, await_promise=True)
 
     async def navigate(self, url, timeout=90, no_skip=False, **kwargs):
         try:
@@ -553,12 +660,15 @@ class Client:
             if arg is None:
                 out.append({"type": "undefined"})
                 continue
+            elif isinstance(arg, webdriver.client.WebElement):
+                out.append({"sharedId": arg.id})
+                continue
             t = type(arg)
-            if t == int or t == float:
+            if t is int or t is float:
                 out.append({"type": "number", "value": arg})
-            elif t == bool:
+            elif t is bool:
                 out.append({"type": "boolean", "value": arg})
-            elif t == str:
+            elif t is str:
                 out.append({"type": "string", "value": arg})
             else:
                 if "type" in arg:
@@ -571,7 +681,7 @@ class Client:
         def __init__(self, client, script, target):
             self.client = client
             self.script = script
-            if type(target) == list:
+            if type(target) is list:
                 self.target = target[0]
             else:
                 self.target = target
@@ -1027,6 +1137,33 @@ class Client:
         yield
         fastclick_preload_script.stop()
 
+    async def test_nicochannel_like_site(self, url, shouldPass=True):
+        CONSENT = self.css("button.MuiButton-containedPrimary")
+        BLOCKED = self.text("このブラウザはサポートされていません。")
+        PLAY = self.css(".nfcp-overlay-play-lg")
+
+        await self.navigate(url)
+
+        while True:
+            consent, blocked, play = self.await_first_element_of(
+                [
+                    CONSENT,
+                    BLOCKED,
+                    PLAY,
+                ],
+                is_displayed=True,
+                timeout=30,
+            )
+            if not consent:
+                break
+            consent.click()
+            self.await_element_hidden(CONSENT)
+            continue
+        if shouldPass:
+            assert play
+        else:
+            assert blocked
+
     async def test_entrata_banner_hidden(self, url, iframe_css=None):
         # some sites take a while to load, but they always have the browser
         # warning popup, it just isn't shown until the page finishes loading.
@@ -1040,6 +1177,84 @@ class Client:
             return False
         except webdriver.error.NoSuchElementException:
             return True
+
+    def test_future_plc_trending_scrollbar(self, shouldFail=False):
+        trending_list = self.await_css(".trending__list")
+        if not trending_list:
+            raise ValueError("trending list is still where expected")
+
+        # First confirm that the scrollbar is the color the site specifies.
+        css_var_colors = self.execute_script(
+            """
+            // first, force a scrollbar, as the content on each site might
+            // not always be wide enough to force a scrollbar to appear.
+            const list = arguments[0];
+            list.style.overflow = "scroll hidden !important";
+
+            const computedStyle = getComputedStyle(list);
+            return [
+              computedStyle.getPropertyValue('--trending-scrollbar-color'),
+              computedStyle.getPropertyValue('--trending-scrollbar-background-color'),
+            ];
+        """,
+            trending_list,
+        )
+        if not css_var_colors[0] or not css_var_colors[1]:
+            raise ValueError("expected CSS vars are still used for scrollbar-color")
+
+        [expected, actual] = self.execute_script(
+            """
+            const [list, cssVarColors] = arguments;
+            const sbColor = getComputedStyle(list).scrollbarColor;
+            // scrollbar-color is a two-color value wth no easy way to separate
+            // them and no way to be sure the value will remain consistent in
+            // the format "rgb(x, y, z) rgb(x, y, z)". Likewise, the colors the
+            // site specified in the CSS might be in hex format or any CSS color
+            // value. So rather than trying to normalize the values ourselves, we
+            // set the border-color of an element, which is also a two-color CSS
+            // value, and then also read it back through the computed style, so
+            // Firefox normalizes both colors the same way for us and lets us
+            // compare their equivalence as simple strings.
+            list.style.borderColor = sbColor;
+            const actual = getComputedStyle(list).borderColor;
+            list.style.borderColor = cssVarColors.join(" ");
+            const expected = getComputedStyle(list).borderColor;
+            return [expected, actual];
+        """,
+            trending_list,
+            css_var_colors,
+        )
+        if shouldFail:
+            assert expected != actual, "scrollbar is not the correct color"
+        else:
+            assert expected == actual, "scrollbar is the correct color"
+
+        # Also check that the scrollbar does not cover any text (it may not
+        # actually cover any text even without the intervention, so we skip
+        # checking that case). To find out, we color the scrollbar the same as
+        # the trending list's background, and compare screenshots of the
+        # list with and without the scrollbar. This way if no text is covered,
+        # the screenshots will not differ.
+        if not shouldFail:
+            self.execute_script(
+                """
+                const list = arguments[0];
+                const bgc = getComputedStyle(list).backgroundColor;
+                list.style.scrollbarColor = `${bgc} ${bgc}`;
+            """,
+                trending_list,
+            )
+            with_scrollbar = trending_list.screenshot()
+            self.execute_script(
+                """
+                arguments[0].style.scrollbarWidth = "none";
+            """,
+                trending_list,
+            )
+            without_scrollbar = trending_list.screenshot()
+            assert (
+                with_scrollbar == without_scrollbar
+            ), "scrollbar does not cover any text"
 
     def test_for_fastclick(self, element):
         # FastClick cancels touchend, breaking default actions on Fenix.

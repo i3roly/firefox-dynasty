@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime
 
 import pytest
@@ -23,6 +24,7 @@ APS_PREF = "privacy.partition.always_partition_third_party_non_cookie_storage"
 CB_PBM_PREF = "network.cookie.cookieBehavior.pbmode"
 CB_PREF = "network.cookie.cookieBehavior"
 INJECTIONS_PREF = "extensions.webcompat.perform_injections"
+NOTIFICATIONS_PERMISSIONS_PREF = "permissions.default.desktop-notification"
 PBM_PREF = "browser.privatebrowsing.autostart"
 PIP_OVERRIDES_PREF = "extensions.webcompat.enable_picture_in_picture_overrides"
 SHIMS_PREF = "extensions.webcompat.enable_shims"
@@ -108,6 +110,10 @@ class FirefoxWebDriver(WebDriver):
         prefs[CB_PREF] = cookieBehavior
         prefs[CB_PBM_PREF] = cookieBehavior
 
+        # prevent "allow notifications for?" popups by setting the
+        # default permission for notificaitons to PERM_DENY_ACTION.
+        prefs[NOTIFICATIONS_PERMISSIONS_PREF] = 2
+
         fx_options = {"prefs": prefs}
 
         if self.browser_binary:
@@ -149,6 +155,11 @@ def bug_number(request):
 
 
 @pytest.fixture
+def in_headless_mode(request):
+    return request.config.getoption("headless")
+
+
+@pytest.fixture
 def credentials(bug_number, config_file):
     if not config_file:
         pytest.skip(f"login info required for bug #{bug_number}")
@@ -184,7 +195,11 @@ def pytest_runtest_makereport(item, call):
 @pytest.fixture(scope="function", autouse=True)
 async def test_failed_check(request):
     yield
-    if request.node.rep_setup.passed and request.node.rep_call.failed:
+    if (
+        not request.config.getoption("no_failure_screenshots")
+        and request.node.rep_setup.passed
+        and request.node.rep_call.failed
+    ):
         session = request.node.funcargs["session"]
         try:
             file_name = f'{request.node.nodeid}_failure_{datetime.today().strftime("%Y-%m-%d_%H:%M")}.png'.replace(
@@ -293,7 +308,10 @@ async def session(driver, test_config):
         except (ConnectionRefusedError, webdriver.error.TimeoutException):
             await asyncio.sleep(0.5)
 
-    await session.bidi_session.start()
+    try:
+        await session.bidi_session.start()
+    except AttributeError:
+        sys.exit("Could not start a WebDriver session; please try again")
 
     if driver.addon:
         install_addon(session, driver.addon)
@@ -307,6 +325,31 @@ async def session(driver, test_config):
 @pytest.fixture(autouse=True)
 def platform(session):
     return session.capabilities["platformName"]
+
+
+@pytest.fixture(autouse=True)
+def check_visible_scrollbars(session):
+    plat = session.capabilities["platformName"]
+    if plat == "android":
+        return "Android does not have visible scrollbars"
+    elif plat == "mac":
+        cmd = ["defaults", "read", "-g", "AppleShowScrollBars"]
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        p.wait()
+        if "Always" in str(p.stdout.readline()):
+            return None
+        return "scrollbars are not set to always be visible in MacOS system preferences"
+    return None
+
+
+@pytest.fixture(autouse=True)
+def need_visible_scrollbars(bug_number, check_visible_scrollbars, request, session):
+    if request.node.get_closest_marker("need_visible_scrollbars"):
+        if (
+            request.node.get_closest_marker("need_visible_scrollbars")
+            and check_visible_scrollbars
+        ):
+            pytest.skip(f"Bug #{bug_number} skipped: {check_visible_scrollbars}")
 
 
 @pytest.fixture(autouse=True)

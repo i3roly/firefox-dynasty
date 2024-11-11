@@ -27,6 +27,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UrlbarEventBufferer: "resource:///modules/UrlbarEventBufferer.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarQueryContext: "resource:///modules/UrlbarUtils.sys.mjs",
+  UrlbarProviderGlobalActions:
+    "resource:///modules/UrlbarProviderGlobalActions.sys.mjs",
   UrlbarProviderOpenTabs: "resource:///modules/UrlbarProviderOpenTabs.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
@@ -596,25 +598,24 @@ export class UrlbarInput {
     // search mode depends on it.
     this.setPageProxyState(valid ? "valid" : "invalid", dueToTabSwitch);
 
-    if (state.persist?.shouldPersist) {
+    if (
+      state.persist?.shouldPersist &&
+      !lazy.UrlbarSearchTermsPersistence.searchModeMatchesState(
+        this.searchMode,
+        state
+      )
+    ) {
       // When search terms persist, on non-default engine search result pages
       // the address bar should show the same search mode. For default engines,
       // search mode should not persist.
-      if (
-        !lazy.UrlbarSearchTermsPersistence.searchModeMatchesState(
-          this.searchMode,
-          state
-        )
-      ) {
-        if (state.persist.isDefaultEngine) {
-          this.searchMode = null;
-        } else {
-          this.searchMode = {
-            engineName: state.persist.originalEngineName,
-            source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
-            isPreview: false,
-          };
-        }
+      if (state.persist.isDefaultEngine) {
+        this.searchMode = null;
+      } else {
+        this.searchMode = {
+          engineName: state.persist.originalEngineName,
+          source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
+          isPreview: false,
+        };
       }
     } else if (dueToTabSwitch && !valid) {
       // If we're switching tabs, restore the tab's search mode.
@@ -1035,9 +1036,11 @@ export class UrlbarInput {
     // manner was agreed on as a compromise between consistent UX and
     // engineering effort. See review discussion at bug 1667766.
     if (
-      result.heuristic &&
-      this.searchMode?.isPreview &&
-      this.view.oneOffSearchButtons.selectedButton
+      (this.searchMode?.isPreview &&
+        result.providerName == lazy.UrlbarProviderGlobalActions.name) ||
+      (result.heuristic &&
+        this.searchMode?.isPreview &&
+        this.view.oneOffSearchButtons.selectedButton)
     ) {
       this.confirmSearchMode();
       this.search(this.value);
@@ -2523,7 +2526,11 @@ export class UrlbarInput {
       let engine = Services.search.getEngineByName(this.searchMode.engineName);
       // If the host we are navigating to matches the host of the current
       // searchModes engine host then persist searchMode.
-      return uri.host != engine.searchUrlDomain;
+      try {
+        return uri.host != engine.searchUrlDomain;
+      } catch (e) {
+        // Accessing .host will throw on about pages.
+      }
     }
     return true;
   }
@@ -4889,12 +4896,13 @@ function losslessDecodeURI(aURI) {
   // Encode all adjacent space chars (U+0020), to prevent spoofing attempts
   // where they would push part of the URL to overflow the location bar
   // (bug 1395508). A single space, or the last space if the are many, is
-  // preserved to maintain readability of certain urls. We only do this for the
-  // common space, because others may be eaten when copied to the clipboard, so
-  // it's safer to preserve them encoded.
+  // preserved to maintain readability of certain urls if it's not followed by a
+  // control or separator character. We only do this for the common space,
+  // because others may be eaten when copied to the clipboard,so it's safer to
+  // preserve them encoded.
   value = value.replace(
     // eslint-disable-next-line no-control-regex
-    /[\u0000-\u001f\u007f-\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u2800\u3000\ufffc]|[\r\n\t]|\u0020(?=\u0020)|\s$/g,
+    /[[\p{Separator}--\u0020]\p{Control}\u2800\ufffc]|\u0020(?=[\p{Other}\p{Separator}])|\s$/gv,
     encodeURIComponent
   );
 
@@ -4916,9 +4924,10 @@ function losslessDecodeURI(aURI) {
   //   U+1BCA0-1BCA3 (U+D82F + U+DCA0-DCA3)
   // Mimicking UI parts:
   //   U+1F50F-1F513 (U+D83D + U+DD0F-DD13), U+1F6E1 (U+D83D + U+DEE1)
+  // Unassigned codepoints, sometimes shown as empty glyphs.
   value = value.replace(
     // eslint-disable-next-line no-misleading-character-class
-    /[\u00ad\u034f\u061c\u06dd\u070f\u115f\u1160\u17b4\u17b5\u180b-\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u206f\u3164\u0600-\u0605\u08e2\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb]|\ud804[\udcbd\udccd]|\ud80d[\udc30-\udc38]|\ud82f[\udca0-\udca3]|\ud834[\udd73-\udd7a]|[\udb40-\udb43][\udc00-\udfff]|\ud83d[\udd0f-\udd13\udee1]/g,
+    /[\u00ad\u034f\u061c\u06dd\u070f\u115f\u1160\u17b4\u17b5\u180b-\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u206f\u3164\u0600-\u0605\u08e2\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb\p{Unassigned}\p{Private_Use}]|\ud804[\udcbd\udccd]|\ud80d[\udc30-\udc38]|\ud82f[\udca0-\udca3]|\ud834[\udd73-\udd7a]|[\udb40-\udb43][\udc00-\udfff]|\ud83d[\udd0f-\udd13\udee1]/gv,
     encodeURIComponent
   );
   return value;

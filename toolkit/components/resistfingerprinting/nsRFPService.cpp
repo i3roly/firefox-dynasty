@@ -1919,8 +1919,8 @@ bool nsRFPService::CheckSuspiciousFingerprintingActivity(
 }
 
 /* static */
-bool nsRFPService::IsSoftwareRenderingOptionExposed(JSContext* aCx,
-                                                    JSObject* aObj) {
+bool nsRFPService::IsSystemPrincipalOrAboutFingerprintingProtection(
+    JSContext* aCx, JSObject* aObj) {
   if (!NS_IsMainThread()) {
     return false;
   }
@@ -2389,4 +2389,14 @@ dom::OrientationType nsRFPService::GetDefaultOrientationType() {
 #else
   return dom::OrientationType::Landscape_primary;
 #endif
+}
+
+/* static */
+float nsRFPService::GetDefaultPixelDensity() { return 2.0f; }
+
+/* static */
+double nsRFPService::GetDevicePixelRatioAtZoom(float aZoom) {
+  return double(AppUnitsPerCSSPixel()) /
+         double(NSToIntRound(AppUnitsPerCSSPixel() / GetDefaultPixelDensity() /
+                             aZoom));
 }

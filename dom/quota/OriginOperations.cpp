@@ -677,6 +677,27 @@ class GetCachedOriginUsageOp
   void CloseDirectory() override;
 };
 
+class ListCachedOriginsOp final
+    : public OpenStorageDirectoryHelper<
+          ResolvableNormalOriginOp<CStringArray, /* IsExclusive */ true>> {
+  nsTArray<nsCString> mOrigins;
+
+ public:
+  explicit ListCachedOriginsOp(
+      MovingNotNull<RefPtr<QuotaManager>> aQuotaManager);
+
+ private:
+  ~ListCachedOriginsOp() = default;
+
+  RefPtr<BoolPromise> OpenDirectory() override;
+
+  nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
+
+  CStringArray UnwrapResolveValue() override;
+
+  void CloseDirectory() override;
+};
+
 class ClearStorageOp final
     : public OpenStorageDirectoryHelper<ResolvableNormalOriginOp<bool>> {
  public:
@@ -1139,6 +1160,11 @@ RefPtr<ResolvableNormalOriginOp<uint64_t>> CreateGetCachedOriginUsageOp(
     const mozilla::ipc::PrincipalInfo& aPrincipalInfo) {
   return MakeRefPtr<GetCachedOriginUsageOp>(std::move(aQuotaManager),
                                             aPrincipalInfo);
+}
+
+RefPtr<ResolvableNormalOriginOp<CStringArray, true>> CreateListCachedOriginsOp(
+    MovingNotNull<RefPtr<QuotaManager>> aQuotaManager) {
+  return MakeRefPtr<ListCachedOriginsOp>(std::move(aQuotaManager));
 }
 
 RefPtr<ResolvableNormalOriginOp<bool>> CreateClearStorageOp(
@@ -2557,6 +2583,58 @@ void GetCachedOriginUsageOp::CloseDirectory() {
   SafeDropDirectoryLock(mDirectoryLock);
 }
 
+ListCachedOriginsOp::ListCachedOriginsOp(
+    MovingNotNull<RefPtr<QuotaManager>> aQuotaManager)
+    : OpenStorageDirectoryHelper(std::move(aQuotaManager),
+                                 "dom::quota::ListCachedOriginsOp") {
+  AssertIsOnOwningThread();
+}
+
+RefPtr<BoolPromise> ListCachedOriginsOp::OpenDirectory() {
+  AssertIsOnOwningThread();
+
+  return OpenStorageDirectory(PersistenceScope::CreateFromNull(),
+                              OriginScope::FromNull(), Nullable<Client::Type>(),
+                              /* aExclusive */ false);
+}
+
+nsresult ListCachedOriginsOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
+  AssertIsOnIOThread();
+  MOZ_ASSERT(mOrigins.Length() == 0);
+
+  AUTO_PROFILER_LABEL("ListCachedOriginsOp::DoDirectoryWork", OTHER);
+
+  // If temporary storage hasn't been initialized yet, there are no cached
+  // origins to report.
+  if (!aQuotaManager.IsTemporaryStorageInitializedInternal()) {
+    return NS_OK;
+  }
+
+  // Get cached origins (the method doesn't have to stat any files).
+  OriginMetadataArray originMetadataArray =
+      aQuotaManager.GetAllTemporaryOrigins();
+
+  std::transform(originMetadataArray.cbegin(), originMetadataArray.cend(),
+                 MakeBackInserter(mOrigins), [](const auto& originMetadata) {
+                   return originMetadata.mOrigin;
+                 });
+
+  return NS_OK;
+}
+
+CStringArray ListCachedOriginsOp::UnwrapResolveValue() {
+  AssertIsOnOwningThread();
+  MOZ_ASSERT(!ResolveValueConsumed());
+
+  return std::move(mOrigins);
+}
+
+void ListCachedOriginsOp::CloseDirectory() {
+  AssertIsOnOwningThread();
+
+  SafeDropDirectoryLock(mDirectoryLock);
+}
+
 ClearStorageOp::ClearStorageOp(
     MovingNotNull<RefPtr<QuotaManager>> aQuotaManager)
     : OpenStorageDirectoryHelper(std::move(aQuotaManager),
@@ -3478,6 +3556,15 @@ nsresult PersistOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
       } else {
         timestamp = PR_Now();
       }
+
+      FullOriginMetadata fullOriginMetadata =
+          FullOriginMetadata{originMetadata, /* aPersisted */ true, timestamp};
+
+      // Usually, infallible operations are placed after fallible ones.
+      // However, since we lack atomic support for creating the origin
+      // directory along with its metadata, we need to add the origin to cached
+      // origins right after directory creation.
+      aQuotaManager.AddTemporaryOrigin(fullOriginMetadata);
     } else {
       timestamp = PR_Now();
     }
@@ -3488,11 +3575,6 @@ nsresult PersistOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
     // Update or create OriginInfo too if temporary storage was already
     // initialized.
     if (aQuotaManager.IsTemporaryStorageInitializedInternal()) {
-      FullOriginMetadata fullOriginMetadata =
-          FullOriginMetadata{originMetadata, /* aPersisted */ true, timestamp};
-
-      aQuotaManager.AddTemporaryOrigin(fullOriginMetadata);
-
       if (aQuotaManager.IsTemporaryOriginInitializedInternal(originMetadata)) {
         // In this case, we have a temporary origin which has been initialized
         // without ensuring respective origin directory. So OriginInfo already
@@ -3504,6 +3586,9 @@ nsresult PersistOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
         // In this case, we have a temporary origin which hasn't been
         // initialized yet. So OriginInfo needs to be created because the
         // origin directory has been just created.
+
+        FullOriginMetadata fullOriginMetadata = FullOriginMetadata{
+            originMetadata, /* aPersisted */ true, timestamp};
 
         aQuotaManager.InitQuotaForOrigin(fullOriginMetadata, ClientUsageArray(),
                                          /* aUsageBytes */ 0);

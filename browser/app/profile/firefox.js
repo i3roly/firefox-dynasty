@@ -460,7 +460,11 @@ pref("browser.urlbar.richSuggestions.featureGate", true);
 pref("browser.search.param.search_rich_suggestions", "fen");
 
 // Feature gate pref for weather suggestions in the urlbar.
+#ifdef NIGHTLY_BUILD
+pref("browser.urlbar.weather.featureGate", true);
+#else
 pref("browser.urlbar.weather.featureGate", false);
+#endif
 
 // Enable clipboard suggestions feature, the pref should be removed once stable.
 pref("browser.urlbar.clipboard.featureGate", false);
@@ -2441,7 +2445,11 @@ pref("browser.tabs.crashReporting.sendReport", true);
 pref("browser.tabs.crashReporting.includeURL", false);
 
 // Enables the "Unload Tab" context menu item
+#ifdef NIGHTLY_BUILD
+pref("browser.tabs.unloadTabInContextMenu", true);
+#else
 pref("browser.tabs.unloadTabInContextMenu", false);
+#endif
 
 // If true, unprivileged extensions may use experimental APIs on
 // nightly and developer edition.

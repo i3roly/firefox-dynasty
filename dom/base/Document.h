@@ -101,7 +101,6 @@
 #include "nsTObserverArray.h"
 #include "nsThreadUtils.h"
 #include "nsURIHashKey.h"
-#include "nsViewportInfo.h"
 #include "nsWeakReference.h"
 #include "nsWindowSizes.h"
 #include "nsXULElement.h"
@@ -181,6 +180,7 @@ class nsRange;
 class nsSimpleContentList;
 class nsTextNode;
 class nsViewManager;
+class nsViewportInfo;
 class nsXULPrototypeDocument;
 struct JSContext;
 struct nsFont;
@@ -3436,7 +3436,9 @@ class Document : public nsINode,
   Element* GetUnretargetedFullscreenElement() const;
   bool Fullscreen() const { return !!GetUnretargetedFullscreenElement(); }
   already_AddRefed<Promise> ExitFullscreen(ErrorResult&);
-  void ExitPointerLock() { PointerLockManager::Unlock(this); }
+  void ExitPointerLock() {
+    PointerLockManager::Unlock("Document::ExitPointerLock", this);
+  }
   void GetFgColor(nsAString& aFgColor);
   void SetFgColor(const nsAString& aFgColor);
   void GetLinkColor(nsAString& aLinkColor);

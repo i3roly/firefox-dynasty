@@ -654,7 +654,7 @@ void nsChildView::BackingScaleFactorChanged() {
 
   SuspendAsyncCATransactions();
   mBackingScaleFactor = newScale;
-  NSRect frame = [mView frame];
+  NSRect frame = mView.frame;
   mBounds = nsCocoaUtils::CocoaRectToGeckoRectDevPix(frame, newScale);
 
   mNativeLayerRoot->SetBackingScale(mBackingScaleFactor);

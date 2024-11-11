@@ -3943,34 +3943,11 @@ nsPresContext* nsContentUtils::GetContextForContent(
 }
 
 // static
-bool nsContentUtils::IsInPrivateBrowsing(const Document* aDoc) {
-  if (!aDoc) {
-    return false;
-  }
-
-  nsCOMPtr<nsILoadGroup> loadGroup = aDoc->GetDocumentLoadGroup();
-  // See duplicated code below in IsInPrivateBrowsing(nsILoadGroup*)
-  // and Document::Reset/ResetToURI
-  if (loadGroup) {
-    nsCOMPtr<nsIInterfaceRequestor> callbacks;
-    loadGroup->GetNotificationCallbacks(getter_AddRefs(callbacks));
-    if (callbacks) {
-      nsCOMPtr<nsILoadContext> loadContext = do_GetInterface(callbacks);
-      if (loadContext) {
-        return loadContext->UsePrivateBrowsing();
-      }
-    }
-  }
-
-  nsCOMPtr<nsIChannel> channel = aDoc->GetChannel();
-  return channel && NS_UsePrivateBrowsing(channel);
-}
-
-// static
 bool nsContentUtils::IsInPrivateBrowsing(nsILoadGroup* aLoadGroup) {
   if (!aLoadGroup) {
     return false;
   }
+  // See duplicated code in Document::Reset/ResetToURI
   bool isPrivate = false;
   nsCOMPtr<nsIInterfaceRequestor> callbacks;
   aLoadGroup->GetNotificationCallbacks(getter_AddRefs(callbacks));
@@ -4002,7 +3979,7 @@ imgLoader* nsContentUtils::GetImgLoaderForDocument(Document* aDoc) {
   if (!aDoc) {
     return imgLoader::NormalLoader();
   }
-  bool isPrivate = IsInPrivateBrowsing(aDoc);
+  const bool isPrivate = aDoc->IsInPrivateBrowsing();
   return isPrivate ? imgLoader::PrivateBrowsingLoader()
                    : imgLoader::NormalLoader();
 }
@@ -4364,13 +4341,17 @@ bool nsContentUtils::SpoofLocaleEnglish() {
   return StaticPrefs::privacy_spoof_english() == 2;
 }
 
+/* static */
+bool nsContentUtils::SpoofLocaleEnglish(const Document* aDocument) {
+  return SpoofLocaleEnglish() && (!aDocument || !aDocument->AllowsL10n());
+}
+
 static nsContentUtils::PropertiesFile GetMaybeSpoofedPropertiesFile(
     nsContentUtils::PropertiesFile aFile, const char* aKey,
     Document* aDocument) {
   // When we spoof English, use en-US properties in strings that are accessible
   // by content.
-  bool spoofLocale = nsContentUtils::SpoofLocaleEnglish() &&
-                     (!aDocument || !aDocument->AllowsL10n());
+  bool spoofLocale = nsContentUtils::SpoofLocaleEnglish(aDocument);
   if (spoofLocale) {
     switch (aFile) {
       case nsContentUtils::eFORMS_PROPERTIES:

@@ -56,7 +56,6 @@
 #include "nsSocketTransportService2.h"
 #include "nsIOService.h"
 #include "nsISupportsPrimitives.h"
-#include "nsIX509CertDB.h"
 #include "nsIXULRuntime.h"
 #include "nsCharSeparatedTokenizer.h"
 #include "nsRFPService.h"
@@ -86,10 +85,6 @@
 
 #include "nsNSSComponent.h"
 #include "TRRServiceChannel.h"
-
-#ifdef XP_MACOSX
-#  include "nsCocoaFeatures.h"
-#endif
 
 #include <bitset>
 
@@ -194,42 +189,6 @@ static bool IsRunningUnderUbuntuSnap() {
 
 StaticRefPtr<nsHttpHandler> gHttpHandler;
 
-// Assume we have third party roots. This will be updated after
-// CheckThirdPartyRoots() is called.
-static Atomic<bool, Relaxed> sHasThirdPartyRoots(true);
-static Atomic<bool, Relaxed> sHasThirdPartyRootsChecked(false);
-
-class HasThirdPartyRootsCallback : public nsIAsyncBoolCallback {
- public:
-  NS_DECL_THREADSAFE_ISUPPORTS
-  NS_DECL_NSIASYNCBOOLCALLBACK
-
-  HasThirdPartyRootsCallback() = default;
-
- private:
-  virtual ~HasThirdPartyRootsCallback() = default;
-};
-
-NS_IMPL_ISUPPORTS(HasThirdPartyRootsCallback, nsIAsyncBoolCallback)
-
-NS_IMETHODIMP
-HasThirdPartyRootsCallback::OnResult(bool aResult) {
-  sHasThirdPartyRoots =
-      (xpc::IsInAutomation() || PR_GetEnv("XPCSHELL_TEST_PROFILE_DIR"))
-          ? StaticPrefs::
-                network_http_http3_has_third_party_roots_found_in_automation()
-          : aResult;
-  LOG(("nsHttpHandler::sHasThirdPartyRoots:%d", (bool)sHasThirdPartyRoots));
-  if (nsIOService::UseSocketProcess() && XRE_IsParentProcess()) {
-    RefPtr<SocketProcessParent> socketParent =
-        SocketProcessParent::GetSingleton();
-    if (socketParent) {
-      Unused << socketParent->SendHasThirdPartyRoots(sHasThirdPartyRoots);
-    }
-  }
-  return NS_OK;
-}
-
 /* static */
 already_AddRefed<nsHttpHandler> nsHttpHandler::GetInstance() {
   if (!gHttpHandler) {
@@ -271,18 +230,22 @@ static nsCString DocumentAcceptHeader() {
   // https://fetch.spec.whatwg.org/#document-accept-header-value
   // The value specified by the fetch standard is
   // `text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8`
-  // but we also insert all of the image formats before */*
   nsCString mimeTypes("text/html,application/xhtml+xml,application/xml;q=0.9,");
 
-  if (mozilla::StaticPrefs::image_avif_enabled()) {
-    mimeTypes.Append("image/avif,");
+  // we also insert all of the image formats before */* when the pref is set
+  if (mozilla::StaticPrefs::network_http_accept_include_images()) {
+    if (mozilla::StaticPrefs::image_avif_enabled()) {
+      mimeTypes.Append("image/avif,");
+    }
+
+    if (mozilla::StaticPrefs::image_jxl_enabled()) {
+      mimeTypes.Append("image/jxl,");
+    }
+
+    mimeTypes.Append("image/webp,image/png,image/svg+xml,");
   }
 
-  if (mozilla::StaticPrefs::image_jxl_enabled()) {
-    mimeTypes.Append("image/jxl,");
-  }
-
-  mimeTypes.Append("image/webp,image/png,image/svg+xml,*/*;q=0.8");
+  mimeTypes.Append("*/*;q=0.8");
 
   return mimeTypes;
 }
@@ -486,7 +449,7 @@ nsresult nsHttpHandler::Init() {
 
   mRequestContextService = RequestContextService::GetOrCreate();
 
-#if defined(ANDROID)
+#if defined(ANDROID) || defined(XP_IOS)
   mProductSub.AssignLiteral(MOZILLA_UAVERSION);
 #else
   mProductSub.AssignLiteral(LEGACY_UA_GECKO_TRAIL);
@@ -593,29 +556,6 @@ void nsHttpHandler::UpdateParentalControlsEnabled(bool waitForCompletion) {
                                std::move(getParentalControlsTask)),
         mozilla::EventQueuePriority::Idle);
   }
-}
-
-// static
-void nsHttpHandler::CheckThirdPartyRoots() {
-  if (!StaticPrefs::network_http_http3_disable_when_third_party_roots_found() ||
-      sHasThirdPartyRootsChecked) {
-    return;
-  }
-
-  sHasThirdPartyRootsChecked = true;
-  nsCOMPtr<nsIX509CertDB> certDB = do_GetService(NS_X509CERTDB_CONTRACTID);
-  if (certDB) {
-    Unused << certDB->AsyncHasThirdPartyRoots(new HasThirdPartyRootsCallback());
-  }
-}
-
-// static
-void nsHttpHandler::SetHasThirdPartyRoots(bool aResult) {
-  LOG(("nsHttpHandler::SetHasThirdPartyRoots result=%d", aResult));
-  MOZ_ASSERT(XRE_IsSocketProcess());
-
-  sHasThirdPartyRootsChecked = true;
-  sHasThirdPartyRoots = aResult;
 }
 
 const nsCString& nsHttpHandler::Http3QlogDir() {
@@ -1025,6 +965,8 @@ void nsHttpHandler::InitUserAgentComponents() {
       "Windows"
 #elif defined(XP_MACOSX)
       "Macintosh"
+#elif defined(XP_IOS)
+      "iPhone"
 #elif defined(XP_UNIX)
       // We historically have always had X11 here,
       // and there seems little a webpage can sensibly do
@@ -1084,6 +1026,12 @@ void nsHttpHandler::InitUserAgentComponents() {
   }
 #endif  // ANDROID
 
+#if defined(XP_IOS)
+  // Freeze the iOS version to 18.0, use an underscore separator to avoid
+  // detection as macOS.
+  mCompatDevice.AssignLiteral("CPU iPhone OS 18_0 like Mac OS X");
+#endif
+
   // Gather OS/CPU.
 #if defined(XP_WIN)
 
@@ -1110,44 +1058,13 @@ void nsHttpHandler::InitUserAgentComponents() {
 #  endif
 
 #elif defined(XP_MACOSX)
-  SInt32 majorVersion = nsCocoaFeatures::macOSVersionMajor();
-  SInt32 minorVersion = nsCocoaFeatures::macOSVersionMinor();
-
-  // Cap the reported macOS version at 10.15 (like Safari) to avoid breaking
-  // sites that assume the UA's macOS version always begins with "10.".
-  int uaVersion = (majorVersion >= 11 || minorVersion > 15) ? 15 : minorVersion;
-
-  // Always return an "Intel" UA string, even on ARM64 macOS like Safari does.
-  mOscpu = nsPrintfCString("Intel Mac OS X 10.%d", uaVersion);
-#elif defined(XP_UNIX)
-  if (mozilla::StaticPrefs::network_http_useragent_freezeCpu()) {
-#  ifdef ANDROID
-    mOscpu.AssignLiteral("Linux armv81");
-#  else
-    mOscpu.AssignLiteral("Linux x86_64");
-#  endif
-  } else {
-    struct utsname name {};
-    int ret = uname(&name);
-    if (ret >= 0) {
-      nsAutoCString buf;
-      buf = (char*)name.sysname;
-      buf += ' ';
-
-#  ifdef AIX
-      // AIX uname returns machine specific info in the uname.machine
-      // field and does not return the cpu type like other platforms.
-      // We use the AIX version and release numbers instead.
-      buf += (char*)name.version;
-      buf += '.';
-      buf += (char*)name.release;
-#  else
-      buf += (char*)name.machine;
-#  endif
-
-      mOscpu.Assign(buf);
-    }
-  }
+  mOscpu.AssignLiteral("Intel Mac OS X 10.15");
+#elif defined(ANDROID)
+  mOscpu.AssignLiteral("Linux armv81");
+#elif defined(XP_IOS)
+  mOscpu.AssignLiteral("iPhone");
+#else
+  mOscpu.AssignLiteral("Linux x86_64");
 #endif
 
   mUserAgentIsDirty = true;
@@ -2393,10 +2310,6 @@ nsHttpHandler::Observe(nsISupports* subject, const char* topic,
     ShutdownConnectionManager();
     mConnMgr = nullptr;
     Unused << InitConnectionMgr();
-  } else if (!strcmp(topic, "network:reset_third_party_roots_check")) {
-    sHasThirdPartyRoots = true;
-    sHasThirdPartyRootsChecked = false;
-    CheckThirdPartyRoots();
   }
 
   return NS_OK;
@@ -2804,10 +2717,7 @@ bool nsHttpHandler::IsHttp3Enabled() {
   static const uint32_t TLS3_PREF_VALUE = 4;
 
   return StaticPrefs::network_http_http3_enable() &&
-         (StaticPrefs::security_tls_version_max() >= TLS3_PREF_VALUE) &&
-         (StaticPrefs::network_http_http3_disable_when_third_party_roots_found()
-              ? !sHasThirdPartyRoots
-              : true);
+         (StaticPrefs::security_tls_version_max() >= TLS3_PREF_VALUE);
 }
 
 bool nsHttpHandler::IsHttp3VersionSupported(const nsACString& version) {

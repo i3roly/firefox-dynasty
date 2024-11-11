@@ -662,6 +662,11 @@
     type: RelaxedAtomicBool
     value: false
     mirror: always
+
+-   name: apz.gtk.touchpad_hold.enabled
+    type: RelaxedAtomicBool
+    value: true
+    mirror: always
 #endif
 
 - name: apz.keyboard.enabled
@@ -816,6 +821,11 @@
   type: AtomicFloat
   value: 0.1f
   mirror: always
+
+- name: apz.touch_scroll.buffer_max_age
+  type: int32_t
+  value: 200  # milliseconds
+  mirror: once
 
 - name: apz.touch_start_tolerance
   type: AtomicFloat
@@ -1592,7 +1602,7 @@
 
 - name: browser.navigation.requireUserInteraction
   type: bool
-  value: true
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # Indicates if about:newtab shows content (enabled) or just blank.
@@ -4077,7 +4087,7 @@
 
 # If true, will add a special temporary HTTPS-First exception for a site when a
 # HTTPS-First upgrade fails.
-- name: dom.security.https_first_add_exception_on_failiure
+- name: dom.security.https_first_add_exception_on_failure
   type: RelaxedAtomicBool
   value: true
   mirror: always
@@ -8363,6 +8373,12 @@
 #endif
   mirror: always
 
+- name: javascript.options.wasm_disable_huge_memory
+  type: bool
+  value: false
+  mirror: always
+  set_spidermonkey_pref: startup
+
 - name: javascript.options.wasm_optimizingjit
   type: bool
   value: true
@@ -10278,11 +10294,7 @@
 # macos still has the deprecated STIXGeneral font pre-installed.
 - name: mathml.stixgeneral_operator_stretching.disabled
   type: bool
-#if defined(XP_MACOSX)
-  value: @IS_NIGHTLY_BUILD@
-#else
   value: true
-#endif
   mirror: always
 
 # Whether to disable fallback for mathvariant=italic/bold/bold-italic via
@@ -11189,11 +11201,7 @@
 # 2 : enable for media engine only
 -   name: media.wmf.hevc.enabled
     type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
     value: 1
-#else
-    value: 2
-#endif
     mirror: always
 
 # Enable Widevine experiment DRM for EME
@@ -13898,9 +13906,10 @@
 # This pref controls whether to send the
 # SETTINGS_NO_RFC7540_PRIORITIES when stream dependencies
 # are disabled, and extensible prioritization scheme is in use.
+# defaults to false as some servers panic when they see this (bug 1928600)
 - name: network.http.http2.send_NO_RFC7540_PRI
   type: RelaxedAtomicBool
-  value: true
+  value: false
   mirror: always
 
 # This pref controls whether to send PRIORITY_UPDATE
@@ -14138,7 +14147,7 @@
 # When true, HTTP/3 will be disabled when third party roots are found.
 - name: network.http.http3.disable_when_third_party_roots_found
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
 
 # Only used for testing purposes. In automation, this value is used to override
@@ -14955,13 +14964,6 @@
 - name: privacy.resistFingerprinting.block_mozAddonManager
   type: RelaxedAtomicBool
   value: false
-  mirror: always
-
-# Whether canvas extraction should result in random data. If false, canvas
-# extraction results in all-white, opaque pixel data.
-- name: privacy.resistFingerprinting.randomDataOnCanvasExtract
-  type: RelaxedAtomicBool
-  value: true
   mirror: always
 
 # The log level for browser console messages logged in RFPHelper.sys.mjs. Change to
@@ -17706,6 +17708,14 @@
 - name: widget.windows.apply-dwm-resize-hack
   type: RelaxedAtomicInt32
   value: 2
+  mirror: always
+
+# Whether to apply a very old hack (reposting and reprocessing scroll-wheel
+# messages under custom message IDs) originally intended to work around
+# plugin-process deadlocks. (See bug 658194.)
+- name: widget.windows.old-scrollwheel-message-hack
+  type: bool
+  value: false
   mirror: always
 
 # Whether we use the mica backdrop. Off by default for now.

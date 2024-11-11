@@ -16,7 +16,6 @@
 #include "gfxTypes.h"
 #include "gfxUtils.h"
 #include "LookAndFeel.h"
-#include "nsAlgorithm.h"
 #include "nsBidiPresUtils.h"
 #include "nsBlockFrame.h"
 #include "nsCaret.h"
@@ -2785,6 +2784,15 @@ void SVGTextFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   }
   DisplayOutline(aBuilder, aLists);
   aLists.Content()->AppendNewToTop<DisplaySVGText>(aBuilder, this);
+}
+
+void SVGTextFrame::DidSetComputedStyle(ComputedStyle* aOldComputedStyle) {
+  SVGDisplayContainerFrame::DidSetComputedStyle(aOldComputedStyle);
+  if (StyleSVGReset()->HasNonScalingStroke() &&
+      (!aOldComputedStyle ||
+       !aOldComputedStyle->StyleSVGReset()->HasNonScalingStroke())) {
+    SVGUtils::UpdateNonScalingStrokeStateBit(this);
+  }
 }
 
 nsresult SVGTextFrame::AttributeChanged(int32_t aNameSpaceID,

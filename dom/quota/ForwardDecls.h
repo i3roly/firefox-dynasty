@@ -46,26 +46,32 @@ class MozPromise;
 using BoolPromise = MozPromise<bool, nsresult, false>;
 using Int64Promise = MozPromise<int64_t, nsresult, false>;
 using UInt64Promise = MozPromise<uint64_t, nsresult, false>;
-
-using ExclusiveBoolPromise = MozPromise<bool, nsresult, true>;
+using CStringArrayPromise = MozPromise<CStringArray, nsresult, true>;
 
 using MaybeCStringArrayPromise = MozPromise<MaybeCStringArray, nsresult, true>;
+
+using ExclusiveBoolPromise = MozPromise<bool, nsresult, true>;
 
 namespace ipc {
 
 class BoolResponse;
 class UInt64Response;
+class CStringArrayResponse;
 enum class ResponseRejectReason;
 
 using BoolResponsePromise =
     MozPromise<BoolResponse, ResponseRejectReason, true>;
 using UInt64ResponsePromise =
     MozPromise<UInt64Response, ResponseRejectReason, true>;
+using CStringArrayResponsePromise =
+    MozPromise<CStringArrayResponse, ResponseRejectReason, true>;
 
 using NSResultResolver = std::function<void(const nsresult&)>;
 
 using BoolResponseResolver = std::function<void(const BoolResponse&)>;
 using UInt64ResponseResolver = std::function<void(const UInt64Response&)>;
+using CStringArrayResponseResolver =
+    std::function<void(const CStringArrayResponse&)>;
 
 }  // namespace ipc
 

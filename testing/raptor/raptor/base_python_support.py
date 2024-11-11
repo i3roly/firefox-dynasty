@@ -236,37 +236,46 @@ class BasePythonSupport:
         def __convert_from_pico_to_micro(vals):
             return [round(v * (1 * 10**-6), 2) for v in vals]
 
-        # Gather pageload measurements produced by browsertime
-        power_vals = raw_result.get("android").get("power", {})
-        if power_vals:
-            power_usage_measurements.setdefault(
-                "powerUsagePageload", {"unit": "uWh"}
-            ).setdefault("replicates", []).extend(
-                __convert_from_pico_to_micro(
-                    [vals["powerUsage"] for vals in power_vals]
-                )
-            )
-
         # Gather power usage measurements produced in SupportMeasurements
         # or as part of the profiling.js code (for Windows 11 power usage)
         for res in raw_result["extras"]:
+            power_usage_search_name = "powerUsagePageload"
+            if any("powerUsageSupport" in metric for metric in res):
+                power_usage_search_name = "powerUsageSupport"
+
             for metric, vals in res.items():
-                if "powerUsage" not in metric:
+                if power_usage_search_name not in metric:
                     continue
                 if any(isinstance(val, dict) for val in vals):
                     flat_power_data = flatten(vals, (), sep="_")
                     for powerMetric, powerVals in flat_power_data.items():
                         power_usage_measurements.setdefault(
-                            powerMetric, {"unit": "uWh"}
+                            powerMetric.replace(power_usage_search_name, "powerUsage"),
+                            {"unit": "uWh"},
                         ).setdefault("replicates", []).extend(
                             __convert_from_pico_to_micro(powerVals)
                         )
                 else:
                     power_usage_measurements.setdefault(
-                        metric, {"unit": "uWh"}
+                        metric.replace(power_usage_search_name, "powerUsage"),
+                        {"unit": "uWh"},
                     ).setdefault("replicates", []).extend(
                         __convert_from_pico_to_micro(vals)
                     )
+
+        # Gather pageload measurements produced by browsertime only if there
+        # is no power usage data gathered from above since that one is test
+        # specific
+        if not power_usage_measurements:
+            power_vals = raw_result.get("android").get("power", {})
+            if power_vals:
+                power_usage_measurements.setdefault(
+                    "powerUsage", {"unit": "uWh"}
+                ).setdefault("replicates", []).extend(
+                    __convert_from_pico_to_micro(
+                        [vals["powerUsage"] for vals in power_vals]
+                    )
+                )
 
         return power_usage_measurements
 
@@ -279,23 +288,23 @@ class BasePythonSupport:
         """
         cpuTime_measurements = {}
 
-        # Gather pageload cpuTime measurements
-        cpu_vals = []
-        for result in self.raw_result:
-            cpu_vals += result.get("cpu", [])
-        if cpu_vals and self.app in FIREFOX_APPS:
-            cpuTime_measurements.setdefault("cpuTimePageload", {"unit": "ms"})[
-                "replicates"
-            ] = cpu_vals
-
         # Gather support cpuTime measurements (e.g. benchmarks)
         for res in raw_result["extras"]:
             for metric, vals in res.items():
                 if metric != "cpuTime":
                     continue
-                cpuTime_measurements.setdefault(
-                    "cpuTimeSupport", {"unit": "ms"}
-                ).setdefault("replicates", []).extend(vals)
+                cpuTime_measurements.setdefault("cpuTime", {"unit": "ms"}).setdefault(
+                    "replicates", []
+                ).extend(vals)
+
+        # Gather pageload cpuTime measurements, but only if benchmark
+        # cpuTime wasn't gathered since they both use the same name
+        if "cpuTime" not in cpuTime_measurements:
+            cpu_vals = raw_result.get("cpu", [])
+            if cpu_vals and self.app in FIREFOX_APPS:
+                cpuTime_measurements.setdefault("cpuTime", {"unit": "ms"})[
+                    "replicates"
+                ] = cpu_vals
 
         return cpuTime_measurements
 
@@ -373,15 +382,22 @@ class BasePythonSupport:
         for measurement, measurement_info in all_measurements.items():
             if measurement in exclude:
                 continue
-            suite["subtests"].append(
-                self._build_standard_subtest(
-                    test,
-                    measurement_info["replicates"],
-                    measurement,
-                    unit=measurement_info["unit"],
-                    lower_is_better=True,
+
+            if kwargs.get("unit", None) is None:
+                kwargs["unit"] = measurement_info["unit"]
+            if kwargs.get("lower_is_better", None) is None:
+                kwargs["lower_is_better"] = True
+
+            if isinstance(suite["subtests"], dict):
+                suite["subtests"][measurement] = self._build_standard_subtest(
+                    test, measurement_info["replicates"], measurement, **kwargs
                 )
-            )
+            else:
+                suite["subtests"].append(
+                    self._build_standard_subtest(
+                        test, measurement_info["replicates"], measurement, **kwargs
+                    )
+                )
 
     def report_test_success(self):
         """Used to denote custom test failures.

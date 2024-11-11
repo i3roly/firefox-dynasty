@@ -9,6 +9,7 @@
 
 #include "mozilla/MemoryReporting.h"
 
+#include "builtin/OrderedHashTableObject.h"
 #include "builtin/SelfHostingDefines.h"
 #include "vm/JSObject.h"
 #include "vm/NativeObject.h"
@@ -100,19 +101,34 @@ struct HashableValueHasher {
   static void makeEmpty(Key* vp) { vp->set(HashableValue(JS_HASH_KEY_EMPTY)); }
 };
 
-using ValueMap = OrderedHashMap<PreBarriered<HashableValue>, HeapPtr<Value>,
-                                HashableValueHasher, CellAllocPolicy>;
-
-using ValueSet = OrderedHashSet<PreBarriered<HashableValue>,
-                                HashableValueHasher, CellAllocPolicy>;
-
 template <typename ObjectT>
 class OrderedHashTableRef;
 
 struct UnbarrieredHashPolicy;
 
-class MapObject : public NativeObject {
+class MapObject : public OrderedHashMapObject {
  public:
+  using Table = OrderedHashMapImpl<PreBarriered<HashableValue>, HeapPtr<Value>,
+                                   HashableValueHasher>;
+
+  // PreBarrieredTable has the same memory layout as Table but doesn't have
+  // wrappers that perform post barriers on the keys/values. Used when the
+  // MapObject is in the nursery.
+  using PreBarrieredTable =
+      OrderedHashMapImpl<PreBarriered<HashableValue>, PreBarriered<Value>,
+                         HashableValueHasher>;
+
+  // UnbarrieredTable has the same memory layout as Table but doesn't have any
+  // wrappers that perform barriers on the keys/values. Used to allocate and
+  // delete the table and when updating the nursery allocated keys map during
+  // minor GC.
+  using UnbarrieredTable =
+      OrderedHashMapImpl<Value, Value, UnbarrieredHashPolicy>;
+
+  friend class OrderedHashTableRef<MapObject>;
+
+  enum { NurseryKeysSlot = Table::SlotCount, HasNurseryMemorySlot, SlotCount };
+
   enum IteratorKind { Keys, Values, Entries };
   static_assert(
       Keys == ITEM_KIND_KEY,
@@ -127,8 +143,6 @@ class MapObject : public NativeObject {
 
   static const JSClass class_;
   static const JSClass protoClass_;
-
-  enum { DataSlot, NurseryKeysSlot, HasNurseryMemorySlot, SlotCount };
 
   [[nodiscard]] static bool getKeysAndValuesInterleaved(
       HandleObject obj, JS::MutableHandle<GCVector<JS::Value>> entries);
@@ -154,20 +168,6 @@ class MapObject : public NativeObject {
   [[nodiscard]] static bool iterator(JSContext* cx, IteratorKind kind,
                                      HandleObject obj, MutableHandleValue iter);
 
-  // OrderedHashMap with the same memory layout as ValueMap but without wrappers
-  // that perform post barriers. Used when the owning JS object is in the
-  // nursery.
-  using PreBarrieredTable =
-      OrderedHashMap<PreBarriered<HashableValue>, PreBarriered<Value>,
-                     HashableValueHasher, CellAllocPolicy>;
-
-  // OrderedHashMap with the same memory layout as ValueMap but without any
-  // wrappers that perform barriers. Used to allocate and delete the table and
-  // when updating the nursery allocated keys map during minor GC.
-  using UnbarrieredTable =
-      OrderedHashMap<Value, Value, UnbarrieredHashPolicy, CellAllocPolicy>;
-  friend class OrderedHashTableRef<MapObject>;
-
   void clearNurseryRangesBeforeMinorGC();
 
   // Sweeps a map that had nursery memory associated with it after a minor
@@ -179,12 +179,6 @@ class MapObject : public NativeObject {
 
   size_t sizeOfData(mozilla::MallocSizeOf mallocSizeOf);
 
-  static constexpr size_t getDataSlotOffset() {
-    return getFixedSlotOffset(DataSlot);
-  }
-
-  const ValueMap* getData() { return getTableUnchecked(); }
-
   [[nodiscard]] static bool get(JSContext* cx, unsigned argc, Value* vp);
   [[nodiscard]] static bool set(JSContext* cx, unsigned argc, Value* vp);
 
@@ -195,37 +189,22 @@ class MapObject : public NativeObject {
  private:
   static const ClassSpec classSpec_;
   static const JSClassOps classOps_;
+  static const ClassExtension classExtension_;
 
   static const JSPropertySpec properties[];
   static const JSFunctionSpec methods[];
   static const JSPropertySpec staticProperties[];
   static const JSFunctionSpec staticMethods[];
 
-  PreBarrieredTable* nurseryTable() {
-    MOZ_ASSERT(IsInsideNursery(this));
-    return reinterpret_cast<PreBarrieredTable*>(unbarrieredTable());
-  }
-  ValueMap* tenuredTable() {
-    MOZ_ASSERT(!IsInsideNursery(this));
-    return getTableUnchecked();
-  }
-  ValueMap* getTableUnchecked() {
-    return reinterpret_cast<ValueMap*>(unbarrieredTable());
-  }
-  UnbarrieredTable* unbarrieredTable() {
-    return maybePtrFromReservedSlot<UnbarrieredTable>(DataSlot);
-  }
-
-  static inline bool setWithHashableKey(JSContext* cx, MapObject* obj,
-                                        Handle<HashableValue> key,
-                                        Handle<Value> value);
+  [[nodiscard]] bool setWithHashableKey(JSContext* cx, const HashableValue& key,
+                                        const Value& value);
 
   static bool finishInit(JSContext* cx, HandleObject ctor, HandleObject proto);
 
-  static const ValueMap& extract(HandleObject o);
-  static const ValueMap& extract(const CallArgs& args);
   static void trace(JSTracer* trc, JSObject* obj);
   static void finalize(JS::GCContext* gcx, JSObject* obj);
+  static size_t objectMoved(JSObject* obj, JSObject* old);
+
   [[nodiscard]] static bool construct(JSContext* cx, unsigned argc, Value* vp);
 
   static bool is(HandleValue v);
@@ -268,7 +247,6 @@ class MapIteratorObject : public NativeObject {
 
   static const JSFunctionSpec methods[];
   static MapIteratorObject* create(JSContext* cx, HandleObject mapobj,
-                                   const ValueMap* data,
                                    MapObject::IteratorKind kind);
   static void finalize(JS::GCContext* gcx, JSObject* obj);
   static size_t objectMoved(JSObject* obj, JSObject* old);
@@ -284,13 +262,28 @@ class MapIteratorObject : public NativeObject {
 
   static JSObject* createResultPair(JSContext* cx);
 
+  static constexpr size_t offsetOfRange() {
+    return getFixedSlotOffset(RangeSlot);
+  }
+  static constexpr size_t offsetOfTarget() {
+    return getFixedSlotOffset(TargetSlot);
+  }
+
  private:
   inline MapObject::IteratorKind kind() const;
   MapObject* target() const;
 };
 
-class SetObject : public NativeObject {
+class SetObject : public OrderedHashSetObject {
  public:
+  using Table =
+      OrderedHashSetImpl<PreBarriered<HashableValue>, HashableValueHasher>;
+  using UnbarrieredTable = OrderedHashSetImpl<Value, UnbarrieredHashPolicy>;
+
+  friend class OrderedHashTableRef<SetObject>;
+
+  enum { NurseryKeysSlot = Table::SlotCount, HasNurseryMemorySlot, SlotCount };
+
   enum IteratorKind { Keys, Values, Entries };
 
   static_assert(
@@ -306,8 +299,6 @@ class SetObject : public NativeObject {
 
   static const JSClass class_;
   static const JSClass protoClass_;
-
-  enum { DataSlot, NurseryKeysSlot, HasNurseryMemorySlot, SlotCount };
 
   [[nodiscard]] static bool keys(JSContext* cx, HandleObject obj,
                                  JS::MutableHandle<GCVector<JS::Value>> keys);
@@ -333,10 +324,6 @@ class SetObject : public NativeObject {
 
   [[nodiscard]] static bool copy(JSContext* cx, unsigned argc, Value* vp);
 
-  using UnbarrieredTable =
-      OrderedHashSet<Value, UnbarrieredHashPolicy, CellAllocPolicy>;
-  friend class OrderedHashTableRef<SetObject>;
-
   void clearNurseryRangesBeforeMinorGC();
 
   // Sweeps a set that had nursery memory associated with it after a minor
@@ -348,12 +335,6 @@ class SetObject : public NativeObject {
 
   size_t sizeOfData(mozilla::MallocSizeOf mallocSizeOf);
 
-  static constexpr size_t getDataSlotOffset() {
-    return getFixedSlotOffset(DataSlot);
-  }
-
-  ValueSet* getData() { return getTableUnchecked(); }
-
   static bool isOriginalSizeGetter(Native native) {
     return native == static_cast<Native>(SetObject::size);
   }
@@ -361,24 +342,21 @@ class SetObject : public NativeObject {
  private:
   static const ClassSpec classSpec_;
   static const JSClassOps classOps_;
+  static const ClassExtension classExtension_;
 
   static const JSPropertySpec properties[];
   static const JSFunctionSpec methods[];
   static const JSPropertySpec staticProperties[];
 
-  ValueSet* getTableUnchecked() {
-    return reinterpret_cast<ValueSet*>(unbarrieredTable());
-  }
-  UnbarrieredTable* unbarrieredTable() {
-    return maybePtrFromReservedSlot<UnbarrieredTable>(DataSlot);
-  }
+  [[nodiscard]] bool addHashableValue(JSContext* cx,
+                                      const HashableValue& value);
 
   static bool finishInit(JSContext* cx, HandleObject ctor, HandleObject proto);
 
-  static ValueSet& extract(HandleObject o);
-  static ValueSet& extract(const CallArgs& args);
   static void trace(JSTracer* trc, JSObject* obj);
   static void finalize(JS::GCContext* gcx, JSObject* obj);
+  static size_t objectMoved(JSObject* obj, JSObject* old);
+
   static bool construct(JSContext* cx, unsigned argc, Value* vp);
 
   static bool is(HandleValue v);
@@ -417,7 +395,6 @@ class SetIteratorObject : public NativeObject {
 
   static const JSFunctionSpec methods[];
   static SetIteratorObject* create(JSContext* cx, HandleObject setobj,
-                                   ValueSet* data,
                                    SetObject::IteratorKind kind);
   static void finalize(JS::GCContext* gcx, JSObject* obj);
   static size_t objectMoved(JSObject* obj, JSObject* old);
@@ -432,6 +409,13 @@ class SetIteratorObject : public NativeObject {
                                  ArrayObject* resultObj);
 
   static JSObject* createResult(JSContext* cx);
+
+  static constexpr size_t offsetOfRange() {
+    return getFixedSlotOffset(RangeSlot);
+  }
+  static constexpr size_t offsetOfTarget() {
+    return getFixedSlotOffset(TargetSlot);
+  }
 
  private:
   inline SetObject::IteratorKind kind() const;

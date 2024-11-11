@@ -17,6 +17,10 @@
 gecko_metrics = [
     "accessible/metrics.yaml",
     "browser/base/content/metrics.yaml",
+    "devtools/client/accessibility/metrics.yaml",
+    "devtools/client/framework/metrics.yaml",
+    "devtools/client/inspector/metrics.yaml",
+    "devtools/client/responsive/metrics.yaml",
     "devtools/client/shared/metrics.yaml",
     "docshell/base/metrics.yaml",
     "dom/base/use_counter_metrics.yaml",
@@ -76,6 +80,7 @@ gecko_metrics = [
     "toolkit/mozapps/handling/metrics.yaml",
     "toolkit/profile/metrics.yaml",
     "toolkit/xre/metrics.yaml",
+    "widget/metrics.yaml",
     "xpcom/metrics.yaml",
 ]
 
@@ -119,7 +124,6 @@ firefox_desktop_metrics = [
     "toolkit/modules/metrics.yaml",
     "widget/cocoa/metrics.yaml",
     "widget/gtk/metrics.yaml",
-    "widget/metrics.yaml",
     "widget/windows/metrics.yaml",
 ]
 

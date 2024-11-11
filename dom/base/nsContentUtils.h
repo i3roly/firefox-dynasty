@@ -1199,11 +1199,6 @@ class nsContentUtils {
                                const char*** aArgNames);
 
   /**
-   * Returns true if this document is in a Private Browsing window.
-   */
-  static bool IsInPrivateBrowsing(const Document* aDoc);
-
-  /**
    * Returns true if this loadGroup uses Private Browsing.
    */
   static bool IsInPrivateBrowsing(nsILoadGroup* aLoadGroup);
@@ -1320,6 +1315,7 @@ class nsContentUtils {
   static void LogMessageToConsole(const char* aMsg);
 
   static bool SpoofLocaleEnglish();
+  static bool SpoofLocaleEnglish(const Document* aDocument);
 
   /**
    * Get the localized string named |aKey| in properties file |aFile|.

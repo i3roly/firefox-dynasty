@@ -76,6 +76,9 @@
       this.arrowScrollbox.addEventListener("wheel", this, true);
       this.arrowScrollbox.addEventListener("underflow", this);
       this.arrowScrollbox.addEventListener("overflow", this);
+      this.verticalPinnedTabsContainer = document.getElementById(
+        "vertical-pinned-tabs-container"
+      );
       // Override arrowscrollbox.js method, since our scrollbox's children are
       // inherited from the scrollbox binding parent (this).
       this.arrowScrollbox._getScrollableElements = () => {
@@ -778,6 +781,7 @@
           t => t.pinned == tab.pinned
         ),
         fromTabList,
+        tabGroupCreationColor: gBrowser.tabGroupMenu.nextUnusedColor,
       };
 
       event.stopPropagation();
@@ -1048,6 +1052,7 @@
             gBrowser.addTabGroup([groupTab, ...movingTabs], {
               insertBefore: draggedTab,
               showCreateUI: true,
+              color: draggedTab._dragData.tabGroupCreationColor,
             });
           }
         }
@@ -1398,9 +1403,6 @@
       if (this.#allTabs) {
         return this.#allTabs;
       }
-      let verticalPinnedTabsContainer = document.getElementById(
-        "vertical-pinned-tabs-container"
-      );
       let children = Array.from(this.arrowScrollbox.children);
       // remove arrowScrollbox periphery element
       children.pop();
@@ -1414,7 +1416,10 @@
         }
       }
 
-      this.#allTabs = [...verticalPinnedTabsContainer.children, ...children];
+      this.#allTabs = [
+        ...this.verticalPinnedTabsContainer.children,
+        ...children,
+      ];
       return this.#allTabs;
     }
 
@@ -1923,18 +1928,19 @@
       // Move the dragged tab based on the mouse position.
       let firstTabInRow;
       let lastTabInRow;
+      let lastTab = tabs.at(-1);
       if (RTL_UI) {
         firstTabInRow =
           tabs.length >= this.#maxTabsPerRow
             ? tabs[this.#maxTabsPerRow - 1]
-            : tabs.at(-1);
+            : lastTab;
         lastTabInRow = tabs[0];
       } else {
         firstTabInRow = tabs[0];
         lastTabInRow =
           tabs.length >= this.#maxTabsPerRow
             ? tabs[this.#maxTabsPerRow - 1]
-            : tabs.at(-1);
+            : lastTab;
       }
       let lastMovingTabScreenX = movingTabs.at(-1).screenX;
       let lastMovingTabScreenY = movingTabs.at(-1).screenY;
@@ -1942,6 +1948,8 @@
       let firstMovingTabScreenY = movingTabs[0].screenY;
       let translateX = screenX - dragData.screenX;
       let translateY = screenY - dragData.screenY;
+      translateY +=
+        this.verticalPinnedTabsContainer.scrollTop - dragData.scrollPos;
       let firstBoundX = firstTabInRow.screenX - firstMovingTabScreenX;
       let firstBoundY = firstTabInRow.screenY - firstMovingTabScreenY;
       let lastBoundX =
@@ -1949,8 +1957,8 @@
         lastTabInRow.getBoundingClientRect().width -
         (lastMovingTabScreenX + tabWidth);
       let lastBoundY =
-        tabs.at(-1).screenY +
-        lastTabInRow.getBoundingClientRect().height -
+        lastTab.screenY +
+        lastTab.getBoundingClientRect().height -
         (lastMovingTabScreenY + tabHeight);
       translateX = Math.min(Math.max(translateX, firstBoundX), lastBoundX);
       translateY = Math.min(Math.max(translateY, firstBoundY), lastBoundY);
@@ -1978,15 +1986,10 @@
       let firstTabCenterX = firstMovingTabScreenX + translateX + tabWidth / 2;
       let lastTabCenterX = lastMovingTabScreenX + translateX + tabWidth / 2;
       let tabCenterX = directionX ? lastTabCenterX : firstTabCenterX;
-      let firstTabCenterY = firstMovingTabScreenY + translateY + tabWidth / 2;
-      let lastTabCenterY = lastMovingTabScreenY + translateY + tabWidth / 2;
+      let firstTabCenterY = firstMovingTabScreenY + translateY + tabHeight / 2;
+      let lastTabCenterY = lastMovingTabScreenY + translateY + tabHeight / 2;
       let tabCenterY = directionY ? lastTabCenterY : firstTabCenterY;
 
-      let newIndex = -1;
-      let oldIndex = dragData.animDropIndex ?? movingTabs[0]._tPos;
-
-      let low = 0;
-      let high = tabs.length - 1;
       let shiftNumber = this.#maxTabsPerRow - movingTabs.length;
 
       let getTabShift = (tab, dropIndex) => {
@@ -2026,14 +2029,18 @@
         return [0, 0];
       };
 
+      let low = 0;
+      let high = tabs.length - 1;
+      let newIndex = -1;
+      let oldIndex = dragData.animDropIndex ?? movingTabs[0]._tPos;
       while (low <= high) {
         let mid = Math.floor((low + high) / 2);
         if (tabs[mid] == draggedTab && ++mid > high) {
           break;
         }
-        let shift = getTabShift(tabs[mid], oldIndex);
-        screenX = tabs[mid].screenX + shift[0];
-        screenY = tabs[mid].screenY + shift[1];
+        let [shiftX, shiftY] = getTabShift(tabs[mid], oldIndex);
+        screenX = tabs[mid].screenX + shiftX;
+        screenY = tabs[mid].screenY + shiftY;
 
         if (screenY + tabHeight < tabCenterY) {
           low = mid + 1;
@@ -2229,23 +2236,31 @@
           );
           delete dragData.groupDropIndex;
         }
-        if (groupDropIndex in this.allTabs) {
+        // If dragging over an ungrouped tab, present the UI for creating a
+        // new tab group on drop.
+        if (
+          groupDropIndex in this.allTabs &&
+          !this.allTabs[groupDropIndex].group
+        ) {
           dragData.groupDropIndex = groupDropIndex;
           this.toggleAttribute("movingtab-createGroup", true);
+          this.removeAttribute("movingtab-ungroup");
           this.allTabs[groupDropIndex].toggleAttribute(
             "dragover-createGroup",
             true
           );
-          this.#setDragOverGroupColor(gBrowser.tabGroupMenu.nextUnusedColor);
+          this.#setDragOverGroupColor(dragData.tabGroupCreationColor);
         } else {
           this.removeAttribute("movingtab-createGroup");
         }
       }
 
       if (gBrowser._tabGroupsEnabled && !("groupDropIndex" in dragData)) {
-        this.#setDragOverGroupColor(
-          this.allTabs[dragData.animDropIndex].group?.color
-        );
+        // Add tab group line to dragged tabs when dragging into a group, and
+        // remove it when dragging outside a group.
+        let colorCode = this.allTabs[dragData.animDropIndex]?.group?.color;
+        this.#setDragOverGroupColor(colorCode);
+        this.toggleAttribute("movingtab-ungroup", !colorCode);
       }
 
       if (newIndex == oldIndex) {
@@ -2296,6 +2311,7 @@
 
       this.removeAttribute("movingtab");
       this.removeAttribute("movingtab-createGroup");
+      this.removeAttribute("movingtab-ungroup");
       this.#setDragOverGroupColor(null);
       gNavToolbox.removeAttribute("movingtab");
 

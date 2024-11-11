@@ -8,7 +8,7 @@
 # ==============================================================
 option(
     env="HOST_CPPFLAGS",
-    help="Extra flags for Preprocessing host sources.",
+    help="Extra flags for Preprocessing host sources",
     nargs=1,
     default="",
 )
@@ -16,7 +16,7 @@ option(
 
 option(
     env="HOST_CFLAGS",
-    help="Extra flags for compiling host C sources.",
+    help="Extra flags for compiling host C sources",
     nargs=1,
     default="",
 )
@@ -24,7 +24,7 @@ option(
 
 option(
     env="HOST_CXXFLAGS",
-    help="Extra flags for compiling host C++ sources.",
+    help="Extra flags for compiling host C++ sources",
     nargs=1,
     default="",
 )
@@ -32,7 +32,7 @@ option(
 
 option(
     env="HOST_LDFLAGS",
-    help="Extra flags for linking host object files.",
+    help="Extra flags for linking host object files",
     nargs=1,
     default="",
 )
@@ -40,7 +40,7 @@ option(
 
 option(
     env="CPPFLAGS",
-    help="Extra flags for preprocessing sources.",
+    help="Extra flags for preprocessing sources",
     nargs=1,
     default="",
 )
@@ -48,7 +48,7 @@ option(
 
 option(
     env="CFLAGS",
-    help="Extra flags for compiling C sources.",
+    help="Extra flags for compiling C sources",
     nargs=1,
     default="",
 )
@@ -56,7 +56,7 @@ option(
 
 option(
     env="CXXFLAGS",
-    help="Extra flags for compiling C++ sources.",
+    help="Extra flags for compiling C++ sources",
     nargs=1,
     default="",
 )
@@ -64,7 +64,7 @@ option(
 
 option(
     env="ASFLAGS",
-    help="Extra flags for assembling sources.",
+    help="Extra flags for assembling sources",
     nargs=1,
     default="",
 )
@@ -72,7 +72,7 @@ option(
 
 option(
     env="LDFLAGS",
-    help="Extra flags for linking object files.",
+    help="Extra flags for linking object files",
     nargs=1,
     default="",
 )
@@ -80,7 +80,7 @@ option(
 
 option(
     env="MOZ_OPTIMIZE_FLAGS",
-    help="Extra optimization flags.",
+    help="Extra optimization flags",
     nargs=1,
 )
 
@@ -97,13 +97,30 @@ def forced_pgo_optimization_level(target):
         return "-O3"
 
 
+@imports(_from="__builtin__", _import="reversed")
+@imports(_from="mozbuild.shellutil", _import="quote")
+def check_optimize_flags(src, flags):
+    for flag in reversed(flags):
+        if flag.startswith(("-O", "/O")):
+            if flag[2:] == "0":
+                die(
+                    f"Optimization enabled through {src} but last optimization flag is {flag} which disables optimizations"
+                )
+            break
+    else:
+        die(
+            f"Optimization enabled through {src} but no optimization flag found in {quote(*flags)}"
+        )
+    return flags
+
+
 @depends("--enable-optimize", "MOZ_OPTIMIZE_FLAGS")
 @imports(_from="mozbuild.shellutil", _import="split")
 def configured_moz_optimize_flags(enable_optimize, env_flags):
     if len(enable_optimize):
-        return split(enable_optimize[0])
+        return check_optimize_flags("--enable-optimize", split(enable_optimize[0]))
     if len(env_flags):
-        return split(env_flags[0])
+        return check_optimize_flags("MOZ_OPTIMIZE_FLAGS", split(env_flags[0]))
 
 
 @depends("--enable-optimize", "MOZ_OPTIMIZE_FLAGS")
@@ -3734,7 +3751,7 @@ option(
     "--enable-path-remapping",
     nargs="*",
     choices=("c", "rust"),
-    help="Enable remapping source and object paths in compiled outputs.",
+    help="Enable remapping source and object paths in compiled outputs",
 )
 
 

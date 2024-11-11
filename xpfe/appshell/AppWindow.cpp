@@ -746,7 +746,9 @@ NS_IMETHODIMP AppWindow::Center(nsIAppWindow* aRelative, bool aScreen,
     return NS_OK;
   }
 
-  if (!aScreen && !aRelative) return NS_ERROR_INVALID_ARG;
+  if (!aScreen && !aRelative) {
+    return NS_ERROR_INVALID_ARG;
+  }
 
   nsCOMPtr<nsIScreenManager> screenmgr =
       do_GetService("@mozilla.org/gfx/screenmanager;1", &result);
@@ -1235,7 +1237,7 @@ static Maybe<int32_t> ReadSize(const Element& aElement, nsAtom* aAttr,
   int32_t max = ReadIntAttribute(aElement, aMaxAttr)
                     .valueOr(std::numeric_limits<int32_t>::max());
 
-  return Some(std::min(max, std::max(*attr, min)));
+  return Some(std::clamp(*attr, min, max));
 }
 
 bool AppWindow::LoadSizeFromXUL(int32_t& aSpecWidth, int32_t& aSpecHeight) {
