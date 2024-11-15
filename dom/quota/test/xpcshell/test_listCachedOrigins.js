@@ -55,10 +55,10 @@ async function testSteps() {
     await QuotaUtils.requestFinished(request);
   }
 
-  info("Listing origins");
+  info("Listing cached origins");
 
   const originsBeforeInit = await (async function () {
-    const request = Services.qms.listOrigins();
+    const request = Services.qms.listCachedOrigins();
     const result = await QuotaUtils.requestFinished(request);
     return result;
   })();
@@ -93,15 +93,16 @@ async function testSteps() {
   for (const origin of origins) {
     const request = Services.qms.initializeTemporaryOrigin(
       "default",
-      PrincipalUtils.createPrincipal(origin)
+      PrincipalUtils.createPrincipal(origin),
+      /* aCreateIfNonExistent */ true
     );
     await QuotaUtils.requestFinished(request);
   }
 
-  info("Listing origins");
+  info("Listing cached origins");
 
   const originsAfterInit = await (async function () {
-    const request = Services.qms.listOrigins();
+    const request = Services.qms.listCachedOrigins();
     const result = await QuotaUtils.requestFinished(request);
     return result;
   })();

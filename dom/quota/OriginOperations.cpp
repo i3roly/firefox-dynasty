@@ -159,7 +159,7 @@ class ClearPrivateRepositoryOp
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override { return true; }
+  bool UnwrapResolveValue() override { return true; }
 
   void CloseDirectory() override;
 };
@@ -185,7 +185,7 @@ class ShutdownStorageOp : public ResolvableNormalOriginOp<bool> {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override { return true; }
+  bool UnwrapResolveValue() override { return true; }
 
   void CloseDirectory() override;
 };
@@ -262,7 +262,7 @@ class GetUsageOp final
                          const bool aPersistent,
                          const PersistenceType aPersistenceType) override;
 
-  OriginUsageMetadataArray GetResolveValue() override;
+  OriginUsageMetadataArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -289,7 +289,7 @@ class GetOriginUsageOp final
 
   const Atomic<bool>& GetIsCanceledFlag() override;
 
-  UsageInfo GetResolveValue() override;
+  UsageInfo UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -337,7 +337,7 @@ class StorageInitializedOp final : public InitializedRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class PersistentStorageInitializedOp final : public InitializedRequestBase {
@@ -352,7 +352,7 @@ class PersistentStorageInitializedOp final : public InitializedRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class TemporaryStorageInitializedOp final : public InitializedRequestBase {
@@ -367,7 +367,7 @@ class TemporaryStorageInitializedOp final : public InitializedRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class TemporaryGroupInitializedOp final
@@ -390,7 +390,7 @@ class TemporaryGroupInitializedOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -425,7 +425,7 @@ class PersistentOriginInitializedOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class TemporaryOriginInitializedOp final : public InitializedOriginRequestBase {
@@ -441,7 +441,7 @@ class TemporaryOriginInitializedOp final : public InitializedOriginRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class InitOp final : public ResolvableNormalOriginOp<bool> {
@@ -458,7 +458,7 @@ class InitOp final : public ResolvableNormalOriginOp<bool> {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -479,7 +479,7 @@ class InitializePersistentStorageOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -500,7 +500,7 @@ class InitTemporaryStorageOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  MaybePrincipalMetadataArray GetResolveValue() override;
+  MaybePrincipalMetadataArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -524,7 +524,7 @@ class InitializeTemporaryGroupOp final : public ResolvableNormalOriginOp<bool> {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -561,7 +561,7 @@ class InitializePersistentOriginOp final : public InitializeOriginRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class InitializeTemporaryOriginOp final : public InitializeOriginRequestBase {
@@ -580,7 +580,7 @@ class InitializeTemporaryOriginOp final : public InitializeOriginRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class InitializeClientBase : public ResolvableNormalOriginOp<bool> {
@@ -614,7 +614,7 @@ class InitializePersistentClientOp : public InitializeClientBase {
  private:
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class InitializeTemporaryClientOp : public InitializeClientBase {
@@ -627,7 +627,7 @@ class InitializeTemporaryClientOp : public InitializeClientBase {
  private:
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 };
 
 class GetFullOriginMetadataOp
@@ -672,7 +672,28 @@ class GetCachedOriginUsageOp
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  uint64_t GetResolveValue() override;
+  uint64_t UnwrapResolveValue() override;
+
+  void CloseDirectory() override;
+};
+
+class ListCachedOriginsOp final
+    : public OpenStorageDirectoryHelper<
+          ResolvableNormalOriginOp<CStringArray, /* IsExclusive */ true>> {
+  nsTArray<nsCString> mOrigins;
+
+ public:
+  explicit ListCachedOriginsOp(
+      MovingNotNull<RefPtr<QuotaManager>> aQuotaManager);
+
+ private:
+  ~ListCachedOriginsOp() = default;
+
+  RefPtr<BoolPromise> OpenDirectory() override;
+
+  nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
+
+  CStringArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -693,7 +714,7 @@ class ClearStorageOp final
 
   virtual nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -758,7 +779,7 @@ class ClearOriginOp final : public ClearRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  OriginMetadataArray GetResolveValue() override;
+  OriginMetadataArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -787,7 +808,7 @@ class ClearClientOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -813,7 +834,7 @@ class ClearStoragesForOriginPrefixOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  OriginMetadataArray GetResolveValue() override;
+  OriginMetadataArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -832,7 +853,7 @@ class ClearDataOp final : public ClearRequestBase {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  OriginMetadataArray GetResolveValue() override;
+  OriginMetadataArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -861,7 +882,7 @@ class ShutdownOriginOp final
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  OriginMetadataArray GetResolveValue() override;
+  OriginMetadataArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -888,7 +909,7 @@ class ShutdownClientOp final : public ResolvableNormalOriginOp<bool> {
 
   nsresult DoDirectoryWork(QuotaManager& aQuotaManager) override;
 
-  bool GetResolveValue() override;
+  bool UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -1139,6 +1160,11 @@ RefPtr<ResolvableNormalOriginOp<uint64_t>> CreateGetCachedOriginUsageOp(
     const mozilla::ipc::PrincipalInfo& aPrincipalInfo) {
   return MakeRefPtr<GetCachedOriginUsageOp>(std::move(aQuotaManager),
                                             aPrincipalInfo);
+}
+
+RefPtr<ResolvableNormalOriginOp<CStringArray, true>> CreateListCachedOriginsOp(
+    MovingNotNull<RefPtr<QuotaManager>> aQuotaManager) {
+  return MakeRefPtr<ListCachedOriginsOp>(std::move(aQuotaManager));
 }
 
 RefPtr<ResolvableNormalOriginOp<bool>> CreateClearStorageOp(
@@ -1706,7 +1732,7 @@ nsresult GetUsageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-OriginUsageMetadataArray GetUsageOp::GetResolveValue() {
+OriginUsageMetadataArray GetUsageOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return std::move(mOriginUsages);
@@ -1777,7 +1803,7 @@ nsresult GetOriginUsageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-UsageInfo GetOriginUsageOp::GetResolveValue() {
+UsageInfo GetOriginUsageOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mUsageInfo;
@@ -1847,7 +1873,7 @@ nsresult StorageInitializedOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-bool StorageInitializedOp::GetResolveValue() {
+bool StorageInitializedOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mInitialized;
@@ -1864,7 +1890,7 @@ nsresult PersistentStorageInitializedOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool PersistentStorageInitializedOp::GetResolveValue() {
+bool PersistentStorageInitializedOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mInitialized;
@@ -1881,7 +1907,7 @@ nsresult TemporaryStorageInitializedOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool TemporaryStorageInitializedOp::GetResolveValue() {
+bool TemporaryStorageInitializedOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mInitialized;
@@ -1926,7 +1952,7 @@ nsresult TemporaryGroupInitializedOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool TemporaryGroupInitializedOp::GetResolveValue() {
+bool TemporaryGroupInitializedOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mInitialized;
@@ -1985,7 +2011,7 @@ nsresult PersistentOriginInitializedOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool PersistentOriginInitializedOp::GetResolveValue() {
+bool PersistentOriginInitializedOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mInitialized;
@@ -2013,7 +2039,7 @@ nsresult TemporaryOriginInitializedOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool TemporaryOriginInitializedOp::GetResolveValue() {
+bool TemporaryOriginInitializedOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mInitialized;
@@ -2044,7 +2070,7 @@ nsresult InitOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-bool InitOp::GetResolveValue() { return true; }
+bool InitOp::UnwrapResolveValue() { return true; }
 
 void InitOp::CloseDirectory() {
   AssertIsOnOwningThread();
@@ -2083,7 +2109,7 @@ nsresult InitializePersistentStorageOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool InitializePersistentStorageOp::GetResolveValue() {
+bool InitializePersistentStorageOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return true;
@@ -2132,7 +2158,7 @@ nsresult InitTemporaryStorageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-MaybePrincipalMetadataArray InitTemporaryStorageOp::GetResolveValue() {
+MaybePrincipalMetadataArray InitTemporaryStorageOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return std::move(mAllTemporaryGroups);
@@ -2191,7 +2217,7 @@ nsresult InitializeTemporaryGroupOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool InitializeTemporaryGroupOp::GetResolveValue() {
+bool InitializeTemporaryGroupOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return true;
@@ -2267,7 +2293,7 @@ nsresult InitializePersistentOriginOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool InitializePersistentOriginOp::GetResolveValue() {
+bool InitializePersistentOriginOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mCreated;
@@ -2307,7 +2333,7 @@ nsresult InitializeTemporaryOriginOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool InitializeTemporaryOriginOp::GetResolveValue() {
+bool InitializeTemporaryOriginOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mCreated;
@@ -2388,7 +2414,7 @@ nsresult InitializePersistentClientOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool InitializePersistentClientOp::GetResolveValue() {
+bool InitializePersistentClientOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mCreated;
@@ -2428,7 +2454,7 @@ nsresult InitializeTemporaryClientOp::DoDirectoryWork(
   return NS_OK;
 }
 
-bool InitializeTemporaryClientOp::GetResolveValue() {
+bool InitializeTemporaryClientOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mCreated;
@@ -2545,13 +2571,65 @@ nsresult GetCachedOriginUsageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-uint64_t GetCachedOriginUsageOp::GetResolveValue() {
+uint64_t GetCachedOriginUsageOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return mUsage;
 }
 
 void GetCachedOriginUsageOp::CloseDirectory() {
+  AssertIsOnOwningThread();
+
+  SafeDropDirectoryLock(mDirectoryLock);
+}
+
+ListCachedOriginsOp::ListCachedOriginsOp(
+    MovingNotNull<RefPtr<QuotaManager>> aQuotaManager)
+    : OpenStorageDirectoryHelper(std::move(aQuotaManager),
+                                 "dom::quota::ListCachedOriginsOp") {
+  AssertIsOnOwningThread();
+}
+
+RefPtr<BoolPromise> ListCachedOriginsOp::OpenDirectory() {
+  AssertIsOnOwningThread();
+
+  return OpenStorageDirectory(PersistenceScope::CreateFromNull(),
+                              OriginScope::FromNull(), Nullable<Client::Type>(),
+                              /* aExclusive */ false);
+}
+
+nsresult ListCachedOriginsOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
+  AssertIsOnIOThread();
+  MOZ_ASSERT(mOrigins.Length() == 0);
+
+  AUTO_PROFILER_LABEL("ListCachedOriginsOp::DoDirectoryWork", OTHER);
+
+  // If temporary storage hasn't been initialized yet, there are no cached
+  // origins to report.
+  if (!aQuotaManager.IsTemporaryStorageInitializedInternal()) {
+    return NS_OK;
+  }
+
+  // Get cached origins (the method doesn't have to stat any files).
+  OriginMetadataArray originMetadataArray =
+      aQuotaManager.GetAllTemporaryOrigins();
+
+  std::transform(originMetadataArray.cbegin(), originMetadataArray.cend(),
+                 MakeBackInserter(mOrigins), [](const auto& originMetadata) {
+                   return originMetadata.mOrigin;
+                 });
+
+  return NS_OK;
+}
+
+CStringArray ListCachedOriginsOp::UnwrapResolveValue() {
+  AssertIsOnOwningThread();
+  MOZ_ASSERT(!ResolveValueConsumed());
+
+  return std::move(mOrigins);
+}
+
+void ListCachedOriginsOp::CloseDirectory() {
   AssertIsOnOwningThread();
 
   SafeDropDirectoryLock(mDirectoryLock);
@@ -2640,7 +2718,7 @@ nsresult ClearStorageOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-bool ClearStorageOp::GetResolveValue() {
+bool ClearStorageOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return true;
@@ -2963,7 +3041,7 @@ nsresult ClearOriginOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-OriginMetadataArray ClearOriginOp::GetResolveValue() {
+OriginMetadataArray ClearOriginOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return std::move(mOriginMetadataArray);
@@ -3073,7 +3151,7 @@ nsresult ClearClientOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-bool ClearClientOp::GetResolveValue() {
+bool ClearClientOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return true;
@@ -3139,7 +3217,7 @@ nsresult ClearStoragesForOriginPrefixOp::DoDirectoryWork(
   return NS_OK;
 }
 
-OriginMetadataArray ClearStoragesForOriginPrefixOp::GetResolveValue() {
+OriginMetadataArray ClearStoragesForOriginPrefixOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return std::move(mOriginMetadataArray);
@@ -3177,7 +3255,7 @@ nsresult ClearDataOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-OriginMetadataArray ClearDataOp::GetResolveValue() {
+OriginMetadataArray ClearDataOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return std::move(mOriginMetadataArray);
@@ -3264,7 +3342,7 @@ nsresult ShutdownOriginOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-OriginMetadataArray ShutdownOriginOp::GetResolveValue() {
+OriginMetadataArray ShutdownOriginOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return std::move(mOriginMetadataArray);
@@ -3323,7 +3401,7 @@ nsresult ShutdownClientOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   return NS_OK;
 }
 
-bool ShutdownClientOp::GetResolveValue() {
+bool ShutdownClientOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
 
   return true;
@@ -3478,6 +3556,15 @@ nsresult PersistOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
       } else {
         timestamp = PR_Now();
       }
+
+      FullOriginMetadata fullOriginMetadata =
+          FullOriginMetadata{originMetadata, /* aPersisted */ true, timestamp};
+
+      // Usually, infallible operations are placed after fallible ones.
+      // However, since we lack atomic support for creating the origin
+      // directory along with its metadata, we need to add the origin to cached
+      // origins right after directory creation.
+      aQuotaManager.AddTemporaryOrigin(fullOriginMetadata);
     } else {
       timestamp = PR_Now();
     }
@@ -3488,11 +3575,6 @@ nsresult PersistOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
     // Update or create OriginInfo too if temporary storage was already
     // initialized.
     if (aQuotaManager.IsTemporaryStorageInitializedInternal()) {
-      FullOriginMetadata fullOriginMetadata =
-          FullOriginMetadata{originMetadata, /* aPersisted */ true, timestamp};
-
-      aQuotaManager.AddTemporaryOrigin(fullOriginMetadata);
-
       if (aQuotaManager.IsTemporaryOriginInitializedInternal(originMetadata)) {
         // In this case, we have a temporary origin which has been initialized
         // without ensuring respective origin directory. So OriginInfo already
@@ -3504,6 +3586,9 @@ nsresult PersistOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
         // In this case, we have a temporary origin which hasn't been
         // initialized yet. So OriginInfo needs to be created because the
         // origin directory has been just created.
+
+        FullOriginMetadata fullOriginMetadata = FullOriginMetadata{
+            originMetadata, /* aPersisted */ true, timestamp};
 
         aQuotaManager.InitQuotaForOrigin(fullOriginMetadata, ClientUsageArray(),
                                          /* aUsageBytes */ 0);

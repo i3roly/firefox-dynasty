@@ -5,6 +5,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include <queue>
+
 #include "WakeLockListener.h"
 #include "WidgetUtilsGtk.h"
 #include "mozilla/ScopeExit.h"
@@ -820,10 +822,12 @@ nsresult WakeLockTopic::ProcessNextRequest() {
 void WakeLockTopic::Shutdown() {
   WAKE_LOCK_LOG("WakeLockTopic::Shutdown() state %s",
                 GetInhibitStateName(mState));
+#if defined(MOZ_ENABLE_DBUS)
   if (mCancellable) {
     g_cancellable_cancel(mCancellable);
     mCancellable = nullptr;
   }
+#endif
 }
 
 bool WakeLockTopic::IsWakeLockTypeAvailable(int aWakeLockType) {
