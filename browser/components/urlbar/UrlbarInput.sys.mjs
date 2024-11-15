@@ -865,7 +865,9 @@ export class UrlbarInput {
     if (isValidUrl) {
       // Annotate if the untrimmed value contained a scheme, to later potentially
       // be upgraded by schemeless HTTPS-First.
-      openParams.wasSchemelessInput = this.#isSchemeless(this.untrimmedValue);
+      openParams.schemelessInput = this.#getSchemelessInput(
+        this.untrimmedValue
+      );
       this._loadURL(url, event, where, openParams);
       return;
     }
@@ -927,7 +929,7 @@ export class UrlbarInput {
               // `uri` is not a search engine url, so we annotate if the untrimmed
               // value contained a scheme, to potentially be later upgraded by
               // schemeless HTTPS-First.
-              openParams.wasSchemelessInput = this.#isSchemeless(
+              openParams.schemelessInput = this.#getSchemelessInput(
                 this.untrimmedValue
               );
             }
@@ -1143,7 +1145,7 @@ export class UrlbarInput {
           }
           // Annotate if the untrimmed value contained a scheme, to later potentially
           // be upgraded by schemeless HTTPS-First.
-          openParams.wasSchemelessInput = this.#isSchemeless(
+          openParams.schemelessInput = this.#getSchemelessInput(
             originalUntrimmedValue
           );
         }
@@ -1511,11 +1513,17 @@ export class UrlbarInput {
       let enteredSearchMode;
       // Only preview search mode if the result is selected.
       if (this.view.resultIsSelected(result)) {
-        // Not starting a query means we will only preview search mode.
+        // For ScotchBonnet, As Tab and Arrow Down/Up, Page Down/Up key are used
+        // for selection of the urlbar results, keep the search mode as preview
+        // mode if there are multiple results.
+        // If ScotchBonnet is disabled, not starting a query means we will only
+        // preview search mode.
         enteredSearchMode = this.maybeConfirmSearchModeFromResult({
           result,
           checkValue: false,
-          startQuery: false,
+          startQuery:
+            lazy.UrlbarPrefs.get("scotchBonnet.enableOverride") &&
+            this.view.visibleResults.length == 1,
         });
       }
       if (!enteredSearchMode) {
@@ -2597,7 +2605,8 @@ export class UrlbarInput {
       result.heuristic &&
       result.payload.url.startsWith("http://") &&
       this.window.gBrowser.userTypedValue &&
-      this.#isSchemeless(this.window.gBrowser.userTypedValue);
+      this.#getSchemelessInput(this.window.gBrowser.userTypedValue) ==
+        Ci.nsILoadInfo.SchemelessInputTypeSchemeless;
     if (!stripHttp) {
       return url;
     }
@@ -3164,7 +3173,7 @@ export class UrlbarInput {
    *   The POST data associated with a search submission.
    * @param {boolean} [params.allowInheritPrincipal]
    *   Whether the principal can be inherited.
-   * @param {boolean} [params.wasSchemelessInput]
+   * @param {SchemelessInputType} [params.schemelessInput]
    *   Whether the search/URL term was without an explicit scheme.
    * @param {object} [resultDetails]
    *   Details of the selected result, if any.
@@ -3733,9 +3742,6 @@ export class UrlbarInput {
     this._searchModeIndicatorTitle.removeAttribute("data-l10n-id");
     this._searchModeLabel.removeAttribute("data-l10n-id");
 
-    let results = this.querySelector(".urlbarView-results");
-    results.removeAttribute("searchmodesource");
-
     if (!engineName && !source) {
       try {
         // This will throw before DOMContentLoaded in
@@ -3767,7 +3773,6 @@ export class UrlbarInput {
         this.inputField,
         `urlbar-placeholder-search-mode-other-${sourceName}`
       );
-      results.setAttribute("searchmodesource", sourceName);
     }
 
     this.toggleAttribute("searchmode", true);
@@ -4703,14 +4708,19 @@ export class UrlbarInput {
 
   /**
    * @param {string} value A untrimmed address bar input.
-   * @returns {boolean}
-   *          `true` if the input doesn't start with a scheme relevant for
+   * @returns {SchemelessInputType}
+   *          Returns `Ci.nsILoadInfo.SchemelessInputTypeSchemeless` if the
+   *          input doesn't start with a scheme relevant for
    *          schemeless HTTPS-First (http://, https:// and file://).
+   *          Returns `Ci.nsILoadInfo.SchemelessInputTypeSchemeful` if it does
+   *          have a scheme.
    */
-  #isSchemeless(value) {
+  #getSchemelessInput(value) {
     return ["http://", "https://", "file://"].every(
       scheme => !value.trim().startsWith(scheme)
-    );
+    )
+      ? Ci.nsILoadInfo.SchemelessInputTypeSchemeless
+      : Ci.nsILoadInfo.SchemelessInputTypeSchemeful;
   }
 
   get #isOpenedPageInBlankTargetLoading() {

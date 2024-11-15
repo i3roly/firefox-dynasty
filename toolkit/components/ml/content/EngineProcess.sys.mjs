@@ -17,6 +17,44 @@ ChromeUtils.defineESModuleGetters(
  */
 
 /**
+ * @constant
+ * @type {string}
+ * @default
+ * @description The default engine identifier used when no specific engine ID is provided.
+ */
+export const DEFAULT_ENGINE_ID = "default-engine";
+
+/**
+ * @constant
+ * @type {{ [key: string]: string }}
+ * @description Supported tasks with their default model identifiers.
+ */
+export const DEFAULT_MODELS = Object.freeze({
+  "test-echo": "test-echo",
+  "text-classification":
+    "Xenova/distilbert-base-uncased-finetuned-sst-2-english",
+  "token-classification": "Xenova/bert-base-multilingual-cased-ner-hrl",
+  "question-answering": "Xenova/distilbert-base-cased-distilled-squad",
+  "fill-mask": "Xenova/bert-base-uncased",
+  summarization: "Xenova/distilbart-cnn-6-6",
+  translation: "Xenova/t5-small",
+  "text2text-generation": "Xenova/flan-t5-small",
+  "text-generation": "Xenova/gpt2",
+  "zero-shot-classification": "Xenova/distilbert-base-uncased-mnli",
+  "image-to-text": "Mozilla/distilvit",
+  "image-classification": "Xenova/vit-base-patch16-224",
+  "image-segmentation": "Xenova/detr-resnet-50-panoptic",
+  "zero-shot-image-classification": "Xenova/clip-vit-base-patch32",
+  "object-detection": "Xenova/detr-resnet-50",
+  "zero-shot-object-detection": "Xenova/owlvit-base-patch32",
+  "document-question-answering": "Xenova/donut-base-finetuned-docvqa",
+  "image-to-image": "Xenova/swin2SR-classical-sr-x2-64",
+  "depth-estimation": "Xenova/dpt-large",
+  "feature-extraction": "Xenova/all-MiniLM-L6-v2",
+  "image-feature-extraction": "Xenova/vit-base-patch16-224-in21k",
+});
+
+/**
  * Lists Firefox internal features
  */
 const FEATURES = [
@@ -164,7 +202,7 @@ export class PipelineOptions {
    *
    * @type {?string}
    */
-  engineId = "default-engine";
+  engineId = DEFAULT_ENGINE_ID;
 
   /**
    * The name of the feature to be used by the pipeline.

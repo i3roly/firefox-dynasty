@@ -130,8 +130,8 @@ static const size_t MinVirtualMemoryLimitForHugeMemory =
 
 static bool sHugeMemoryEnabled32 = false;
 
-bool wasm::IsHugeMemoryEnabled(wasm::IndexType t) {
-  if (t == IndexType::I64) {
+bool wasm::IsHugeMemoryEnabled(wasm::AddressType t) {
+  if (t == AddressType::I64) {
     // No support for huge memory with 64-bit memories
     return false;
   }
@@ -163,16 +163,7 @@ const TagType* wasm::sWrappedJSValueTagType = nullptr;
 
 static bool InitTagForJSValue() {
   MutableTagType type = js_new<TagType>();
-  if (!type) {
-    return false;
-  }
-
-  ValTypeVector args;
-  if (!args.append(ValType(RefType::extern_()))) {
-    return false;
-  }
-
-  if (!type->initialize(std::move(args))) {
+  if (!type || !type->initialize(StaticTypeDefs::jsTag)) {
     return false;
   }
   MOZ_ASSERT(WrappedJSValueTagType_ValueOffset == type->argOffsets()[0]);

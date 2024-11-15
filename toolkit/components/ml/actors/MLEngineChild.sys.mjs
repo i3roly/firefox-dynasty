@@ -23,6 +23,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
   PipelineOptions: "chrome://global/content/ml/EngineProcess.sys.mjs",
+  DEFAULT_ENGINE_ID: "chrome://global/content/ml/EngineProcess.sys.mjs",
+  DEFAULT_MODELS: "chrome://global/content/ml/EngineProcess.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "console", () => {
@@ -343,6 +345,20 @@ class EngineDispatcher {
     // Merge the RemoteSettings inference options with the pipeline options provided.
     let mergedOptions = new lazy.PipelineOptions(remoteSettingsOptions);
     mergedOptions.updateOptions(pipelineOptions);
+
+    // If the merged options don't have a modelId and we have a default modelId, we set it
+    if (!mergedOptions.modelId) {
+      const defaultModel = lazy.DEFAULT_MODELS[this.#taskName];
+      if (defaultModel) {
+        lazy.console.debug(
+          `Using default model ${defaultModel} for task ${this.#taskName}`
+        );
+        mergedOptions.modelId = defaultModel;
+      } else {
+        throw new Error(`No default model found for task ${this.#taskName}`);
+      }
+    }
+
     lazy.console.debug("Inference engine options:", mergedOptions);
 
     this.pipelineOptions = mergedOptions;
@@ -598,6 +614,7 @@ class EngineDispatcher {
  * Wrapper for a function that fetches a model file as an ArrayBuffer from a specified URL and task name.
  *
  * @param {object} config
+ * @param {string} config.engineId - The engine id - defaults to "default-engine".
  * @param {string} config.taskName - name of the inference task.
  * @param {string} config.url - The URL of the model file to fetch. Can be a path relative to
  * the model hub root or an absolute URL.
@@ -608,6 +625,7 @@ class EngineDispatcher {
  * and data as an ArrayBuffer. The data is marked for transfer to avoid cloning.
  */
 async function getModelFile({
+  engineId,
   taskName,
   url,
   getModelFileFn,
@@ -615,6 +633,7 @@ async function getModelFile({
   modelHubUrlTemplate,
 }) {
   const [data, headers] = await getModelFileFn({
+    engineId: engineId || lazy.DEFAULT_ENGINE_ID,
     taskName,
     url,
     rootUrl: modelHubRootUrl || lazy.MODEL_HUB_ROOT_URL,
@@ -763,6 +782,7 @@ class InferenceEngine {
       {
         getModelFile: async url =>
           getModelFile({
+            engineId: pipelineOptions.engineId,
             url,
             taskName: pipelineOptions.taskName,
             getModelFileFn,

@@ -2911,26 +2911,6 @@ media:
     record_in_processes:
       - main
 
-  decode_error_per_mime_type:
-    bug_numbers:
-      - 1688775
-      - 1804291
-    description: >
-      Count the number of times the media with a specific mime type (Eg. audio/vorbis, that would be used as the key) encounters a decode error during playback.
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - media-alerts@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'content'
-      - 'gpu'
-      - 'rdd'
-      - 'utility'
-
   video_hardware_decoding_support:
     bug_numbers:
       - 1733722
@@ -4060,42 +4040,6 @@ formautofill.creditCards:
     record_in_processes:
       - 'main'
 
-# This section is for notification bars testing
-notificationbar:
-  # Used only for testing
-  testone:
-    bug_numbers:
-      - 1676943
-    description: >
-      Used to test notificationbar telemetry
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - telemetry-client-dev@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-
-  # Used only for testing
-  testtwo:
-    bug_numbers:
-      - 1676943
-    description: >
-      Used to test notificationbar telemetry
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - telemetry-client-dev@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-
 # The following section contains scalars for the Screenshots extension.
 screenshots:
   download:
@@ -4691,34 +4635,6 @@ update:
       - 'thunderbird'
     record_in_processes:
       - main
-
-# The following section contains search counters.
-browser.search:
-  data_transferred:
-    bug_numbers:
-      - 1614777
-      - 1619954
-      - 1656135
-      - 1694852
-      - 1736658
-    description: >
-      Records bytes that have been transferred for search requests, including
-      top-level documents, sub-resources, iframes and search suggestions.
-      The key format could be one of:
-        <search-provider-name>
-        <search-provider-name>-pb
-        sggt-<search-engine-id>
-        sggt-<search-engine-id>-pb
-    expires: never
-    keyed: true
-    kind: uint
-    notification_emails:
-      - tihuang@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-    release_channel_collection: opt-out
 
 browser.search.content:
   urlbar:
@@ -7566,23 +7482,6 @@ urlbar.zeroprefix:
       - main
 
 quickaction:
-  impression:
-    bug_numbers:
-      - 1806024
-    description: >
-      Counts how many times quickaction results were shown. The key
-      is the in the form "actionkey-N" where N is the number of characters
-      the user typed to be shown the action.
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - fx-search-telemetry@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
   picked:
     bug_numbers:
       - 1783155

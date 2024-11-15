@@ -3147,8 +3147,13 @@ static bool ReadLine(JSContext* cx, unsigned argc, Value* vp) {
   size_t bufsize = BUFSIZE;
   char* buf = (char*)JS_malloc(cx, bufsize);
   if (!buf) {
+    JS_ReportOutOfMemory(cx);
     return false;
   }
+  auto freeBuf = mozilla::MakeScopeExit([&]() {
+    JS_free(cx, buf);
+    buf = nullptr;
+  });
 
   bool sawNewline = false;
   size_t gotlength;
@@ -3166,38 +3171,24 @@ static bool ReadLine(JSContext* cx, unsigned argc, Value* vp) {
     }
 
     /* Else, grow our buffer for another pass. */
-    char* tmp;
     bufsize *= 2;
-    if (bufsize > buflength) {
-      tmp = static_cast<char*>(JS_realloc(cx, buf, bufsize / 2, bufsize));
-    } else {
-      JS_ReportOutOfMemory(cx);
-      tmp = nullptr;
-    }
-
-    if (!tmp) {
-      JS_free(cx, buf);
+    if (bufsize <= buflength) {
+      JS_ReportAllocationOverflow(cx);
       return false;
     }
-
+    char* tmp = static_cast<char*>(JS_realloc(cx, buf, bufsize / 2, bufsize));
+    if (!tmp) {
+      JS_ReportOutOfMemory(cx);
+      return false;
+    }
     buf = tmp;
   }
 
   /* Treat the empty string specially. */
   if (buflength == 0) {
     args.rval().set(feof(from) ? NullValue() : JS_GetEmptyStringValue(cx));
-    JS_free(cx, buf);
     return true;
   }
-
-  /* Shrink the buffer to the real size. */
-  char* tmp = static_cast<char*>(JS_realloc(cx, buf, bufsize, buflength));
-  if (!tmp) {
-    JS_free(cx, buf);
-    return false;
-  }
-
-  buf = tmp;
 
   /*
    * Turn buf into a JSString. Note that buflength includes the trailing null
@@ -3205,7 +3196,6 @@ static bool ReadLine(JSContext* cx, unsigned argc, Value* vp) {
    */
   JSString* str =
       JS_NewStringCopyN(cx, buf, sawNewline ? buflength - 1 : buflength);
-  JS_free(cx, buf);
   if (!str) {
     return false;
   }
@@ -12909,7 +12899,11 @@ bool InitOptionParser(OptionParser& op) {
                         "Enable Iterator.range") ||
       !op.addBoolOption('\0', "enable-joint-iteration",
                         "Enable Joint Iteration") ||
-      !op.addBoolOption('\0', "enable-atomics-pause", "Enable Atomics pause")) {
+      !op.addBoolOption('\0', "enable-atomics-pause", "Enable Atomics pause") ||
+      !op.addBoolOption('\0', "enable-explicit-resource-management",
+                        "Enable Explicit Resource Management") ||
+      !op.addBoolOption('\0', "disable-explicit-resource-management",
+                        "Disable Explicit Resource Management")) {
     return false;
   }
 
@@ -13002,6 +12996,14 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-atomics-pause")) {
     JS::Prefs::setAtStartup_experimental_atomics_pause(true);
+  }
+#endif
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+  if (op.getBoolOption("enable-explicit-resource-management")) {
+    JS::Prefs::set_experimental_explicit_resource_management(true);
+  }
+  if (op.getBoolOption("disable-explicit-resource-management")) {
+    JS::Prefs::set_experimental_explicit_resource_management(false);
   }
 #endif
   if (op.getBoolOption("enable-json-parse-with-source")) {

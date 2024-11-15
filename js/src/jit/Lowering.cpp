@@ -3523,13 +3523,13 @@ void LIRGenerator::visitWasmWrapU32Index(MWasmWrapU32Index* ins) {
   defineReuseInput(lir, ins, 0);
 }
 
-void LIRGenerator::visitWasmClampTable64Index(MWasmClampTable64Index* ins) {
+void LIRGenerator::visitWasmClampTable64Address(MWasmClampTable64Address* ins) {
   MDefinition* input = ins->input();
   MOZ_ASSERT(input->type() == MIRType::Int64);
   MOZ_ASSERT(ins->type() == MIRType::Int32);
 
   auto* lir =
-      new (alloc()) LWasmClampTable64Index(useInt64RegisterAtStart(input));
+      new (alloc()) LWasmClampTable64Address(useInt64RegisterAtStart(input));
   define(lir, ins);
 }
 
@@ -3718,6 +3718,13 @@ void LIRGenerator::visitWasmTrapIfAnyRefIsNotJSString(
   LWasmTrapIfAnyRefIsNotJSString* lir = new (alloc())
       LWasmTrapIfAnyRefIsNotJSString(useRegisterAtStart(ins->input()), temp());
   add(lir, ins);
+}
+
+void LIRGenerator::visitWasmAnyRefJSStringLength(
+    MWasmAnyRefJSStringLength* ins) {
+  LWasmAnyRefJSStringLength* lir = new (alloc())
+      LWasmAnyRefJSStringLength(useRegisterAtStart(ins->input()), temp());
+  define(lir, ins);
 }
 
 void LIRGenerator::visitWasmNewI31Ref(MWasmNewI31Ref* ins) {
@@ -7120,6 +7127,10 @@ void LIRGenerator::visitDebugger(MDebugger* ins) {
 
 void LIRGenerator::visitAtomicIsLockFree(MAtomicIsLockFree* ins) {
   define(new (alloc()) LAtomicIsLockFree(useRegister(ins->input())), ins);
+}
+
+void LIRGenerator::visitAtomicPause(MAtomicPause* ins) {
+  add(new (alloc()) LAtomicPause());
 }
 
 void LIRGenerator::visitCheckReturn(MCheckReturn* ins) {

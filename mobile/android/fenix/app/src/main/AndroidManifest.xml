@@ -61,6 +61,7 @@
         android:supportsRtl="true"
         android:theme="@style/NormalTheme"
         android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="true"
         tools:ignore="UnusedAttribute">
 
         <profileable
@@ -167,6 +168,8 @@
                     android:host="settings_search_engine"/>
                 <data android:scheme="${deepLinkScheme}"
                     android:host="settings_tracking_protection"/>
+                <data android:scheme="${deepLinkScheme}"
+                    android:host="share_sheet"/>
                 <data android:scheme="${deepLinkScheme}"
                     android:host="turn_on_sync"/>
                 <data android:scheme="${deepLinkScheme}"

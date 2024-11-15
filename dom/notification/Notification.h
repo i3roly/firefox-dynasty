@@ -11,6 +11,7 @@
 #include "mozilla/GlobalFreezeObserver.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/dom/NotificationBinding.h"
+#include "mozilla/dom/notification/NotificationChild.h"
 #include "mozilla/dom/WorkerPrivate.h"
 #include "mozilla/dom/quota/QuotaCommon.h"
 
@@ -86,7 +87,7 @@ enum class PermissionCheckPurpose : uint8_t;
  * dispatch a control runnable instead.
  *
  */
-class Notification : public DOMEventTargetHelper, public GlobalFreezeObserver {
+class Notification : public DOMEventTargetHelper, public SupportsWeakPtr {
   friend class CloseNotificationRunnable;
   friend class NotificationTask;
   friend class NotificationPermissionRequest;
@@ -145,6 +146,8 @@ class Notification : public DOMEventTargetHelper, public GlobalFreezeObserver {
   void SetStoredState(bool val) { mIsStored = val; }
 
   bool IsStored() { return mIsStored; }
+
+  void MaybeNotifyClose();
 
   static bool RequestPermissionEnabledForScope(JSContext* aCx,
                                                JSObject* /* unused */);
@@ -225,9 +228,6 @@ class Notification : public DOMEventTargetHelper, public GlobalFreezeObserver {
 
   bool DispatchClickEvent();
 
-  static nsresult RemovePermission(nsIPrincipal* aPrincipal);
-  static nsresult OpenSettings(nsIPrincipal* aPrincipal);
-
   nsresult DispatchToMainThread(already_AddRefed<nsIRunnable>&& aRunnable);
 
  protected:
@@ -243,20 +243,15 @@ class Notification : public DOMEventTargetHelper, public GlobalFreezeObserver {
       nsIGlobalObject* aGlobal, const nsAString& aID, const nsAString& aTitle,
       const NotificationOptions& aOptions, ErrorResult& aRv);
 
-  // Triggers CloseInternal for non-persistent notifications if window freezes
-  nsresult MaybeObserveWindowFrozen();
   bool IsInPrivateBrowsing();
   void ShowInternal();
   void CloseInternal(bool aContextClosed = false);
 
-  void DisconnectFromOwner() override;
-  void FrozenCallback(nsIGlobalObject* aOwner) override;
+  void Deactivate();
 
   static NotificationPermission GetPermissionInternal(
       nsPIDOMWindowInner* aWindow,
       notification::PermissionCheckPurpose aPurpose, ErrorResult& rv);
-
-  static nsresult GetOrigin(nsIPrincipal* aPrincipal, nsString& aOrigin);
 
   void GetAlertName(nsAString& aRetval) {
     AssertIsOnMainThread();
@@ -272,6 +267,8 @@ class Notification : public DOMEventTargetHelper, public GlobalFreezeObserver {
     MOZ_ASSERT(mScope.IsEmpty());
     mScope = aScope;
   }
+
+  WeakPtr<notification::NotificationChild> mActor;
 
   const nsString mID;
   const nsString mTitle;
@@ -313,15 +310,19 @@ class Notification : public DOMEventTargetHelper, public GlobalFreezeObserver {
   //
   // Note that aCx may not be in the compartment of aGlobal, but aOptions will
   // have its JS things in the compartment of aCx.
-  static already_AddRefed<Notification> CreateAndShow(
+  static already_AddRefed<Notification> Create(
       JSContext* aCx, nsIGlobalObject* aGlobal, const nsAString& aTitle,
       const NotificationOptions& aOptions, const nsAString& aScope,
       ErrorResult& aRv);
+  void ShowOnMainThread(ErrorResult& aRv);
+
+  bool CreateActor();
+  bool SendShow(Promise* aPromise);
 
   nsIPrincipal* GetPrincipal();
 
-  nsresult PersistNotification();
-  void UnpersistNotification();
+  nsresult Persist();
+  void Unpersist();
 
   void SetAlertName();
 

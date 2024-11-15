@@ -196,6 +196,8 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     val translateLanguageCode = selectedTab?.translationsState?.translationEngineState
                         ?.requestedTranslationPair?.toLanguage
                     val isExtensionsProcessDisabled = browserStore.state.extensionsProcessDisabled
+                    val isReportSiteIssueSupported =
+                        FxNimbus.features.menuRedesign.value().reportSiteIssue
 
                     val customTab = args.customTabSessionId?.let {
                         browserStore.state.findCustomTab(it)
@@ -330,8 +332,8 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                         state.extensionMenuState.showDisabledExtensionsOnboarding
                     }
 
-                    val installedAddons by store.observeAsState(initialValue = emptyList()) { state ->
-                        state.extensionMenuState.installedAddons
+                    val availableAddons by store.observeAsState(initialValue = emptyList()) { state ->
+                        state.extensionMenuState.availableAddons
                     }
 
                     val initRoute = when (args.accesspoint) {
@@ -409,13 +411,20 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     accessPoint = args.accesspoint,
                                     account = account,
                                     accountState = accountState,
-                                    installedAddons = installedAddons,
+                                    availableAddons = availableAddons,
                                     isPrivate = browsingModeManager.mode.isPrivate,
                                     isDesktopMode = isDesktopMode,
                                     showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                     isPdf = isPdf,
                                     isTranslationSupported = isTranslationSupported,
                                     isExtensionsProcessDisabled = isExtensionsProcessDisabled,
+                                    reportSiteIssueLabel = if (
+                                        isReportSiteIssueSupported && pageWebExtensionMenuItems.isNotEmpty()
+                                    ) {
+                                        pageWebExtensionMenuItems[0].label.removeSuffix("…")
+                                    } else {
+                                        null
+                                    },
                                     onMozillaAccountButtonClick = {
                                         view?.slideDown {
                                             store.dispatch(
@@ -457,12 +466,16 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         contentState = Route.SaveMenu
                                     },
                                     onExtensionsMenuClick = {
-                                        contentState = Route.ExtensionsMenu
-                                        Events.browserMenuAction.record(
-                                            Events.BrowserMenuActionExtra(
-                                                item = "extensions_submenu",
-                                            ),
-                                        )
+                                        if (args.accesspoint == MenuAccessPoint.Home || isExtensionsProcessDisabled) {
+                                            store.dispatch(MenuAction.Navigate.ManageExtensions)
+                                        } else {
+                                            contentState = Route.ExtensionsMenu
+                                            Events.browserMenuAction.record(
+                                                Events.BrowserMenuActionExtra(
+                                                    item = "extensions_submenu",
+                                                ),
+                                            )
+                                        }
                                     },
                                     onBookmarksMenuClick = {
                                         view?.slideDown {
@@ -501,7 +514,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     context.getString(R.string.browser_custom_tab_menu_handlebar_content_description)
 
                                 CustomTabMenu(
+                                    isPdf = customTab?.content?.isPdf == true,
                                     isDesktopMode = isDesktopMode,
+                                    isSandboxCustomTab = args.isSandboxCustomTab,
                                     customTabMenuItems = customTab?.config?.menuItems,
                                     onCustomMenuItemClick = { intent: PendingIntent ->
                                         store.dispatch(
@@ -543,6 +558,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 ToolsSubmenu(
                                     isPdf = isPdf,
                                     webExtensionMenuItems = pageWebExtensionMenuItems,
+                                    isReportSiteIssueSupported = isReportSiteIssueSupported,
                                     isReaderable = isReaderable,
                                     isReaderViewActive = isReaderViewActive,
                                     hasExternalApp = appLinksRedirect?.hasExternalApp() ?: false,
@@ -597,6 +613,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                 SaveSubmenu(
                                     isBookmarked = isBookmarked,
                                     isPinned = isPinned,
+                                    isInstallable = webAppUseCases.isInstallable(),
                                     onBackButtonClick = {
                                         contentState = Route.MainMenu
                                     },

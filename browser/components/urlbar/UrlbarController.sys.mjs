@@ -348,6 +348,11 @@ export class UrlbarController {
         event.preventDefault();
         break;
       case KeyEvent.DOM_VK_TAB: {
+        if (!this.view.visibleRowCount) {
+          // Leave it to the default behaviour if there are not results.
+          break;
+        }
+
         // Change the tab behavior when urlbar view is open.
         if (
           lazy.UrlbarPrefs.get("scotchBonnet.enableOverride") &&
@@ -455,6 +460,7 @@ export class UrlbarController {
       case KeyEvent.DOM_VK_END:
         this.input.maybeConfirmSearchModeFromResult({
           entry: "typed",
+          startQuery: true,
         });
       // Fall through.
       case KeyEvent.DOM_VK_LEFT:

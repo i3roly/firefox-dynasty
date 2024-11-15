@@ -231,30 +231,131 @@ add_task(async function test_tabGroupCollapseCreatesNewTabIfAllTabsInGroup() {
   await BrowserTestUtils.closeWindow(fgWindow);
 });
 
+add_task(async function test_closingLastTabBeforeCollapsedTabGroup() {
+  // If there is one standalone tab that's active and there is a collapsed
+  // tab group, and the user closes the standalone tab, the first tab of
+  // the collapsed tab group should become the active tab (also expanding
+  // the tab group in the process)
+  let fgWindow = await BrowserTestUtils.openNewBrowserWindow();
+
+  Assert.equal(fgWindow.gBrowser.tabs.length, 1, "only one tab exists");
+  let [standaloneTab] = fgWindow.gBrowser.tabs;
+
+  let groupedTab1 = BrowserTestUtils.addTab(fgWindow.gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+  let groupedTab2 = BrowserTestUtils.addTab(fgWindow.gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+  let group = fgWindow.gBrowser.addTabGroup([groupedTab1, groupedTab2]);
+  group.collapsed = true;
+
+  fgWindow.gBrowser.selectedTab = standaloneTab;
+
+  let waitForClose = BrowserTestUtils.waitForTabClosing(standaloneTab);
+  BrowserTestUtils.removeTab(standaloneTab);
+  await waitForClose;
+
+  Assert.equal(
+    fgWindow.gBrowser.selectedTab,
+    groupedTab1,
+    "first tab in the group should be the active tab"
+  );
+  Assert.ok(!group.collapsed, "tab group should now be expanded");
+
+  await BrowserTestUtils.closeWindow(fgWindow);
+});
+
+add_task(async function test_closingLastTabAfterCollapsedTabGroup() {
+  // If there is a collapsed tab group followed by a single standalone tab,
+  // and the user closes the standalone tab, the last tab of the collapsed
+  // tab group should become the active tab (also expanding the tab group
+  // in the process)
+  let fgWindow = await BrowserTestUtils.openNewBrowserWindow();
+
+  Assert.equal(fgWindow.gBrowser.tabs.length, 1, "only one tab exists");
+  let [standaloneTab] = fgWindow.gBrowser.tabs;
+
+  let groupedTab1 = BrowserTestUtils.addTab(fgWindow.gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+  let groupedTab2 = BrowserTestUtils.addTab(fgWindow.gBrowser, "about:blank", {
+    skipAnimation: true,
+  });
+  let group = fgWindow.gBrowser.addTabGroup([groupedTab1, groupedTab2], {
+    insertBefore: standaloneTab,
+  });
+  group.collapsed = true;
+
+  fgWindow.gBrowser.selectedTab = standaloneTab;
+
+  let waitForClose = BrowserTestUtils.waitForTabClosing(standaloneTab);
+  BrowserTestUtils.removeTab(standaloneTab);
+  await waitForClose;
+
+  Assert.equal(
+    fgWindow.gBrowser.selectedTab,
+    groupedTab2,
+    "last tab in the group should be the active tab"
+  );
+  Assert.ok(!group.collapsed, "tab group should now be expanded");
+
+  await BrowserTestUtils.closeWindow(fgWindow);
+});
+
 add_task(async function test_tabUngroup() {
   let extraTab1 = BrowserTestUtils.addTab(gBrowser, "about:blank");
 
-  let groupedTab = BrowserTestUtils.addTab(gBrowser, "about:blank");
-  let group = gBrowser.addTabGroup([groupedTab]);
+  let groupedTab1 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+  let groupedTab2 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+  let group = gBrowser.addTabGroup([groupedTab1, groupedTab2]);
 
   let extraTab2 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+  let group2 = gBrowser.addTabGroup([extraTab2]);
 
-  Assert.equal(groupedTab._tPos, 2, "grouped tab starts in correct position");
-  Assert.equal(groupedTab.group, group, "tab belongs to group");
+  Assert.equal(
+    groupedTab1._tPos,
+    2,
+    "grouped tab 1 starts in correct position"
+  );
+  Assert.equal(
+    groupedTab2._tPos,
+    3,
+    "grouped tab 2 starts in correct position"
+  );
+  Assert.equal(groupedTab1.group, group, "tab 1 belongs to group");
+  Assert.equal(groupedTab2.group, group, "tab 2 belongs to group");
 
-  info("Calling ungroupTabs and waiting for TabGroupRemove event.");
-  let removePromise = BrowserTestUtils.waitForEvent(group, "TabGroupRemove");
+  info("Calling ungroupTabs and waiting for TabGroupRemoved event.");
+  let removePromise = BrowserTestUtils.waitForEvent(group, "TabGroupRemoved");
   group.ungroupTabs();
   await removePromise;
 
   Assert.equal(
-    groupedTab._tPos,
+    groupedTab1._tPos,
     2,
-    "tab is in the same position as before ungroup"
+    "tab 1 is in the same position as before ungroup"
   );
-  Assert.equal(groupedTab.group, null, "tab no longer belongs to group");
+  Assert.equal(
+    groupedTab2._tPos,
+    3,
+    "tab 2 is in the same position as before ungroup"
+  );
+  Assert.equal(groupedTab1.group, null, "tab 1 no longer belongs to group");
+  Assert.equal(groupedTab2.group, null, "tab 2 no longer belongs to group");
+  Assert.equal(
+    groupedTab1.nextElementSibling,
+    groupedTab2,
+    "tab 1 moved before tab 2"
+  );
+  Assert.equal(
+    groupedTab2.nextElementSibling,
+    group2,
+    "tab 2 moved before the next group"
+  );
 
-  BrowserTestUtils.removeTab(groupedTab);
+  BrowserTestUtils.removeTab(groupedTab1);
+  BrowserTestUtils.removeTab(groupedTab2);
   BrowserTestUtils.removeTab(extraTab1);
   BrowserTestUtils.removeTab(extraTab2);
 });
@@ -286,8 +387,8 @@ add_task(async function test_tabGroupMoveToNewWindow() {
     label: "test",
   });
 
-  info("Calling adoptTabGroup and waiting for TabGroupRemove event.");
-  let removePromise = BrowserTestUtils.waitForEvent(group, "TabGroupRemove");
+  info("Calling adoptTabGroup and waiting for TabGroupRemoved event.");
+  let removePromise = BrowserTestUtils.waitForEvent(group, "TabGroupRemoved");
 
   let fgWindow = await BrowserTestUtils.openNewBrowserWindow();
   fgWindow.gBrowser.adoptTabGroup(group, 0);
@@ -383,7 +484,7 @@ add_task(async function test_TabGroupEvents() {
     "TabUngrouped fired with correct group"
   );
 
-  let tabGroupRemoved = BrowserTestUtils.waitForEvent(group, "TabGroupRemove");
+  let tabGroupRemoved = BrowserTestUtils.waitForEvent(group, "TabGroupRemoved");
   await removeTabGroup(group);
   await tabGroupRemoved;
 
