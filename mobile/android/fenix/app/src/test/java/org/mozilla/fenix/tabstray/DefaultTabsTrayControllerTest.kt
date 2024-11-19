@@ -271,7 +271,7 @@ class DefaultTabsTrayControllerTest {
         every { browserStore.state } returns mockk()
         try {
             mockkStatic("mozilla.components.browser.state.selector.SelectorsKt")
-            every { browserStore.state.findTab(any()) } returns tab
+            every { browserStore.state.findTab("testTabId") } returns tab
             every { browserStore.state.getNormalOrPrivateTabs(any()) } returns listOf(tab)
 
             createController().handleTabDeletion("testTabId", "unknown")
@@ -303,7 +303,7 @@ class DefaultTabsTrayControllerTest {
         )
         try {
             mockkStatic("mozilla.components.browser.state.selector.SelectorsKt")
-            every { browserStore.state.findTab(any()) } returns tab
+            every { browserStore.state.findTab("testTabId") } returns tab
             every { browserStore.state.getNormalOrPrivateTabs(any()) } returns listOf(tab)
             every { browserStore.state.selectedTabId } returns "testTabId"
 
@@ -419,7 +419,7 @@ class DefaultTabsTrayControllerTest {
         every { browserStore.state } returns mockk()
         try {
             mockkStatic("mozilla.components.browser.state.selector.SelectorsKt")
-            every { browserStore.state.findTab(any()) } returns tab
+            every { browserStore.state.findTab("22") } returns tab
             every { browserStore.state.getNormalOrPrivateTabs(any()) } returns listOf(tab, mockk())
 
             var showUndoSnackbarForTabInvoked = false
@@ -449,7 +449,7 @@ class DefaultTabsTrayControllerTest {
         try {
             val testTabId = "33"
             mockkStatic("mozilla.components.browser.state.selector.SelectorsKt")
-            every { browserStore.state.findTab(any()) } returns tab
+            every { browserStore.state.findTab(testTabId) } returns tab
             every { browserStore.state.getNormalOrPrivateTabs(any()) } returns listOf(tab)
             every { browserStore.state.selectedTabId } returns testTabId
 
@@ -1039,7 +1039,7 @@ class DefaultTabsTrayControllerTest {
         )
         browsingModeManager = spyk(
             DefaultBrowsingModeManager(
-                _mode = BrowsingMode.Private,
+                initialMode = BrowsingMode.Private,
                 settings = settings,
                 modeDidChange = mockk(relaxed = true),
             ),
@@ -1186,7 +1186,7 @@ class DefaultTabsTrayControllerTest {
         every { trayStore.state.mode.selectedTabs } returns setOf(createTab(url = "https://mozilla.org"))
 
         createController(
-            showBookmarkSnackbar = { _ ->
+            showBookmarkSnackbar = { _, _ ->
                 showBookmarkSnackbarInvoked = true
             },
         ).handleBookmarkSelectedTabsClicked()
@@ -1211,7 +1211,7 @@ class DefaultTabsTrayControllerTest {
         every { trayStore.state.mode.selectedTabs } returns setOf(createTab(url = "https://mozilla.org"))
 
         createController(
-            showBookmarkSnackbar = { _ ->
+            showBookmarkSnackbar = { _, _ ->
                 showBookmarkSnackbarInvoked = true
             },
         ).handleBookmarkSelectedTabsClicked()
@@ -1234,7 +1234,7 @@ class DefaultTabsTrayControllerTest {
         every { trayStore.state.mode.selectedTabs } returns setOf(createTab(url = "https://mozilla.org"), createTab(url = "https://mozilla2.org"))
 
         createController(
-            showBookmarkSnackbar = { _ ->
+            showBookmarkSnackbar = { _, _ ->
                 showBookmarkSnackbarInvoked = true
             },
         ).handleBookmarkSelectedTabsClicked()
@@ -1259,7 +1259,7 @@ class DefaultTabsTrayControllerTest {
         every { trayStore.state.mode.selectedTabs } returns setOf(createTab(url = "https://mozilla.org"), createTab(url = "https://mozilla2.org"))
 
         createController(
-            showBookmarkSnackbar = { _ ->
+            showBookmarkSnackbar = { _, _ ->
                 showBookmarkSnackbarInvoked = true
             },
         ).handleBookmarkSelectedTabsClicked()
@@ -1348,7 +1348,7 @@ class DefaultTabsTrayControllerTest {
         showUndoSnackbarForSyncedTab: (CloseTabsUseCases.UndoableOperation) -> Unit = { _ -> },
         showCancelledDownloadWarning: (Int, String?, String?) -> Unit = { _, _, _ -> },
         showCollectionSnackbar: (Int, Boolean) -> Unit = { _, _ -> },
-        showBookmarkSnackbar: (Int) -> Unit = { _ -> },
+        showBookmarkSnackbar: (Int, String?) -> Unit = { _, _ -> },
     ): DefaultTabsTrayController {
         return DefaultTabsTrayController(
             activity = activity,

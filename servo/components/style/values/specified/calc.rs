@@ -72,6 +72,7 @@ pub enum MathFunction {
 
 /// A leaf node inside a `Calc` expression's AST.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+#[repr(u8)]
 pub enum Leaf {
     /// `<length>`
     Length(NoCalcLength),
@@ -231,7 +232,7 @@ impl generic::CalcNodeLeaf for Leaf {
 
     fn sort_key(&self) -> SortKey {
         match *self {
-            Self::Number(..) | Self::ColorComponent(..) => SortKey::Number,
+            Self::Number(..) => SortKey::Number,
             Self::Percentage(..) => SortKey::Percentage,
             Self::Time(..) => SortKey::Sec,
             Self::Resolution(..) => SortKey::Dppx,
@@ -284,6 +285,7 @@ impl generic::CalcNodeLeaf for Leaf {
                 },
                 NoCalcLength::ServoCharacterWidth(..) => unreachable!(),
             },
+            Self::ColorComponent(..) => SortKey::ColorComponent,
         }
     }
 
@@ -766,12 +768,17 @@ impl CalcNode {
                     }
                     match *input.next()? {
                         Token::Delim('+') => {
-                            sum.push(Self::parse_product(context, input, allowed_units)?);
+                            let rhs = Self::parse_product(context, input, allowed_units)?;
+                            if sum.last_mut().unwrap().try_sum_in_place(&rhs).is_err() {
+                                sum.push(rhs);
+                            }
                         },
                         Token::Delim('-') => {
                             let mut rhs = Self::parse_product(context, input, allowed_units)?;
                             rhs.negate();
-                            sum.push(rhs);
+                            if sum.last_mut().unwrap().try_sum_in_place(&rhs).is_err() {
+                                sum.push(rhs);
+                            }
                         },
                         _ => {
                             input.reset(&start);

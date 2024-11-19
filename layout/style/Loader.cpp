@@ -65,6 +65,7 @@
 #include "mozilla/SharedStyleSheetCache.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "mozilla/StaticPrefs_network.h"
+#include "mozilla/TimeStamp.h"
 #include "mozilla/Try.h"
 #include "ReferrerInfo.h"
 
@@ -275,7 +276,8 @@ SheetLoadData::SheetLoadData(
     IsAlternate aIsAlternate, MediaMatched aMediaMatches,
     StylePreloadKind aPreloadKind, nsICSSLoaderObserver* aObserver,
     nsIPrincipal* aTriggeringPrincipal, nsIReferrerInfo* aReferrerInfo,
-    const nsAString& aNonce, FetchPriority aFetchPriority)
+    const nsAString& aNonce, FetchPriority aFetchPriority,
+    already_AddRefed<SubResourceNetworkMetadataHolder>&& aNetworkMetadata)
     : mLoader(aLoader),
       mTitle(aTitle),
       mEncoding(nullptr),
@@ -308,18 +310,19 @@ SheetLoadData::SheetLoadData(
       mCompatMode(aLoader->CompatMode(aPreloadKind)),
       mRecordErrors(
           aLoader && aLoader->GetDocument() &&
-          css::ErrorReporter::ShouldReportErrors(*aLoader->GetDocument())) {
+          css::ErrorReporter::ShouldReportErrors(*aLoader->GetDocument())),
+      mNetworkMetadata(std::move(aNetworkMetadata)) {
   MOZ_ASSERT(!aOwningNode || dom::LinkStyle::FromNode(*aOwningNode),
              "Must implement LinkStyle");
   MOZ_ASSERT(mTriggeringPrincipal);
   MOZ_ASSERT(mLoader, "Must have a loader!");
 }
 
-SheetLoadData::SheetLoadData(css::Loader* aLoader, nsIURI* aURI,
-                             StyleSheet* aSheet, SheetLoadData* aParentData,
-                             nsICSSLoaderObserver* aObserver,
-                             nsIPrincipal* aTriggeringPrincipal,
-                             nsIReferrerInfo* aReferrerInfo)
+SheetLoadData::SheetLoadData(
+    css::Loader* aLoader, nsIURI* aURI, StyleSheet* aSheet,
+    SheetLoadData* aParentData, nsICSSLoaderObserver* aObserver,
+    nsIPrincipal* aTriggeringPrincipal, nsIReferrerInfo* aReferrerInfo,
+    already_AddRefed<SubResourceNetworkMetadataHolder>&& aNetworkMetadata)
     : mLoader(aLoader),
       mEncoding(nullptr),
       mURI(aURI),
@@ -353,7 +356,8 @@ SheetLoadData::SheetLoadData(css::Loader* aLoader, nsIURI* aURI,
       mCompatMode(aLoader->CompatMode(mPreloadKind)),
       mRecordErrors(
           aLoader && aLoader->GetDocument() &&
-          css::ErrorReporter::ShouldReportErrors(*aLoader->GetDocument())) {
+          css::ErrorReporter::ShouldReportErrors(*aLoader->GetDocument())),
+      mNetworkMetadata(std::move(aNetworkMetadata)) {
   MOZ_ASSERT(mLoader, "Must have a loader!");
   MOZ_ASSERT(mTriggeringPrincipal);
   MOZ_ASSERT(!mUseSystemPrincipal || mSyncLoad,
@@ -366,7 +370,8 @@ SheetLoadData::SheetLoadData(
     UseSystemPrincipal aUseSystemPrincipal, StylePreloadKind aPreloadKind,
     const Encoding* aPreloadEncoding, nsICSSLoaderObserver* aObserver,
     nsIPrincipal* aTriggeringPrincipal, nsIReferrerInfo* aReferrerInfo,
-    const nsAString& aNonce, FetchPriority aFetchPriority)
+    const nsAString& aNonce, FetchPriority aFetchPriority,
+    already_AddRefed<SubResourceNetworkMetadataHolder>&& aNetworkMetadata)
     : mLoader(aLoader),
       mEncoding(nullptr),
       mURI(aURI),
@@ -399,7 +404,8 @@ SheetLoadData::SheetLoadData(
       mCompatMode(aLoader->CompatMode(aPreloadKind)),
       mRecordErrors(
           aLoader && aLoader->GetDocument() &&
-          css::ErrorReporter::ShouldReportErrors(*aLoader->GetDocument())) {
+          css::ErrorReporter::ShouldReportErrors(*aLoader->GetDocument())),
+      mNetworkMetadata(std::move(aNetworkMetadata)) {
   MOZ_ASSERT(mTriggeringPrincipal);
   MOZ_ASSERT(mLoader, "Must have a loader!");
   MOZ_ASSERT(!mUseSystemPrincipal || mSyncLoad,
@@ -428,6 +434,13 @@ void SheetLoadData::SetLoadCompleted() {
     glean::performance_pageload::async_sheet_load.AccumulateRawDuration(
         TimeStamp::Now() - mLoadStart);
   }
+}
+
+void SheetLoadData::OnCoalescedTo(const SheetLoadData& aExistingLoad) {
+  if (&aExistingLoad.Loader() != &Loader()) {
+    mShouldEmulateNotificationsForCachedLoad = true;
+  }
+  mLoadStart = TimeStamp::Now();
 }
 
 RefPtr<StyleSheet> SheetLoadData::ValueForCache() const {
@@ -998,12 +1011,14 @@ bool Loader::MaybePutIntoLoadsPerformed(SheetLoadData& aLoadData) {
  * state of the sheet they are clones off; make sure to call PrepareSheet() on
  * the result of CreateSheet().
  */
-std::tuple<RefPtr<StyleSheet>, Loader::SheetState> Loader::CreateSheet(
-    nsIURI* aURI, nsIContent* aLinkingContent,
-    nsIPrincipal* aTriggeringPrincipal, css::SheetParsingMode aParsingMode,
-    CORSMode aCORSMode, const Encoding* aPreloadOrParentDataEncoding,
-    const nsAString& aIntegrity, bool aSyncLoad,
-    StylePreloadKind aPreloadKind) {
+std::tuple<RefPtr<StyleSheet>, Loader::SheetState,
+           RefPtr<SubResourceNetworkMetadataHolder>>
+Loader::CreateSheet(nsIURI* aURI, nsIContent* aLinkingContent,
+                    nsIPrincipal* aTriggeringPrincipal,
+                    css::SheetParsingMode aParsingMode, CORSMode aCORSMode,
+                    const Encoding* aPreloadOrParentDataEncoding,
+                    const nsAString& aIntegrity, bool aSyncLoad,
+                    StylePreloadKind aPreloadKind) {
   MOZ_ASSERT(aURI, "This path is not taken for inline stylesheets");
   LOG(("css::Loader::CreateSheet(%s)", aURI->GetSpecOrDefault().get()));
 
@@ -1030,8 +1045,10 @@ std::tuple<RefPtr<StyleSheet>, Loader::SheetState> Loader::CreateSheet(
     if (cacheResult.mState != CachedSubResourceState::Miss) {
       SheetState sheetState = SheetState::Complete;
       RefPtr<StyleSheet> sheet;
+      RefPtr<SubResourceNetworkMetadataHolder> networkMetadata;
       if (cacheResult.mCompleteValue) {
         sheet = cacheResult.mCompleteValue->Clone(nullptr, nullptr);
+        networkMetadata = cacheResult.mNetworkMetadata;
         mDocument->SetDidHitCompleteSheetCache();
       } else {
         MOZ_ASSERT(cacheResult.mLoadingOrPendingValue);
@@ -1041,7 +1058,7 @@ std::tuple<RefPtr<StyleSheet>, Loader::SheetState> Loader::CreateSheet(
                          : SheetState::Pending;
       }
       LOG(("  Hit cache with state: %s", gStateStrings[size_t(sheetState)]));
-      return {std::move(sheet), sheetState};
+      return {std::move(sheet), sheetState, std::move(networkMetadata)};
     }
   }
 
@@ -1055,7 +1072,7 @@ std::tuple<RefPtr<StyleSheet>, Loader::SheetState> Loader::CreateSheet(
       ReferrerInfo::CreateForExternalCSSResources(sheet);
   sheet->SetReferrerInfo(referrerInfo);
   LOG(("  Needs parser"));
-  return {std::move(sheet), SheetState::NeedsParser};
+  return {std::move(sheet), SheetState::NeedsParser, nullptr};
 }
 
 static Loader::MediaMatched MediaListMatches(const MediaList* aMediaList,
@@ -1540,9 +1557,9 @@ nsresult Loader::LoadSheetAsyncInternal(SheetLoadData& aLoadData,
     // Set the initiator type
     if (nsCOMPtr<nsITimedChannel> timedChannel =
             do_QueryInterface(httpChannel)) {
-      if (aLoadData.mParentData) {
-        timedChannel->SetInitiatorType(u"css"_ns);
+      timedChannel->SetInitiatorType(aLoadData.InitiatorTypeString());
 
+      if (aLoadData.mParentData) {
         // This is a child sheet load.
         //
         // The resource timing of the sub-resources that a document loads
@@ -1573,11 +1590,6 @@ nsresult Loader::LoadSheetAsyncInternal(SheetLoadData& aLoadData,
           // report the resource.
           timedChannel->SetReportResourceTiming(false);
         }
-
-      } else if (aEarlyHintPreloaderId) {
-        timedChannel->SetInitiatorType(u"early-hints"_ns);
-      } else {
-        timedChannel->SetInitiatorType(u"link"_ns);
       }
     }
   }
@@ -1688,11 +1700,37 @@ Loader::Completed Loader::ParseSheet(
   return Completed::No;
 }
 
+void Loader::AddPerformanceEntryForCachedSheet(SheetLoadData& aLoadData) {
+  MOZ_ASSERT(aLoadData.mURI);
+
+  if (!aLoadData.mNetworkMetadata) {
+    return;
+  }
+  if (!mDocument) {
+    return;
+  }
+
+  nsAutoCString name;
+  aLoadData.mURI->GetSpec(name);
+  NS_ConvertUTF8toUTF16 entryName(name);
+
+  auto end = TimeStamp::Now();
+  auto start = aLoadData.mLoadStart;
+  if (start.IsNull()) {
+    start = end;
+  }
+
+  SharedSubResourceCacheUtils::AddPerformanceEntryForCache(
+      entryName, aLoadData.InitiatorTypeString(), aLoadData.mNetworkMetadata,
+      start, end, mDocument);
+}
+
 void Loader::NotifyObservers(SheetLoadData& aData, nsresult aStatus) {
   RecordUseCountersIfNeeded(mDocument, *aData.mSheet);
   if (MaybePutIntoLoadsPerformed(aData) &&
       aData.mShouldEmulateNotificationsForCachedLoad) {
     NotifyObserversForCachedSheet(aData);
+    AddPerformanceEntryForCachedSheet(aData);
   }
 
   RefPtr loadDispatcher = aData.PrepareLoadEventIfNeeded();
@@ -1887,7 +1925,8 @@ Result<Loader::LoadSheetResult, nsresult> Loader::LoadInlineStyle(
   auto data = MakeRefPtr<SheetLoadData>(
       this, aInfo.mTitle, /* aURI = */ nullptr, sheet, SyncLoad::No,
       aInfo.mContent, isAlternate, matched, StylePreloadKind::None, aObserver,
-      principal, aInfo.mReferrerInfo, aInfo.mNonce, aInfo.mFetchPriority);
+      principal, aInfo.mReferrerInfo, aInfo.mNonce, aInfo.mFetchPriority,
+      nullptr);
   MOZ_ASSERT(data->GetRequestingNode() == aInfo.mContent);
   if (isSheetFromCache) {
     MOZ_ASSERT(sheet->IsComplete());
@@ -1914,6 +1953,22 @@ Result<Loader::LoadSheetResult, nsresult> Loader::LoadInlineStyle(
   }
 
   return LoadSheetResult{completed, isAlternate, matched};
+}
+
+nsLiteralString SheetLoadData::InitiatorTypeString() {
+  MOZ_ASSERT(mURI, "Inline sheet doesn't have the initiator type string");
+
+  if (mPreloadKind == StylePreloadKind::FromEarlyHintsHeader) {
+    return u"early-hints"_ns;
+  }
+
+  if (mParentData) {
+    // @import rule.
+    return u"css"_ns;
+  }
+
+  // <link>.
+  return u"link"_ns;
 }
 
 Result<Loader::LoadSheetResult, nsresult> Loader::LoadStyleLink(
@@ -1987,8 +2042,8 @@ Result<Loader::LoadSheetResult, nsresult> Loader::LoadStyleLink(
   // Check IsAlternateSheet now, since it can mutate our document and make
   // pending sheets go to the non-pending state.
   auto isAlternate = IsAlternateSheet(aInfo.mTitle, aInfo.mHasAlternateRel);
-  auto [sheet, state] = CreateSheet(aInfo, eAuthorSheetFeatures, syncLoad,
-                                    StylePreloadKind::None);
+  auto [sheet, state, networkMetadata] = CreateSheet(
+      aInfo, eAuthorSheetFeatures, syncLoad, StylePreloadKind::None);
 
   LOG(("  Sheet is alternate: %d", static_cast<int>(isAlternate)));
 
@@ -2006,7 +2061,8 @@ Result<Loader::LoadSheetResult, nsresult> Loader::LoadStyleLink(
   auto data = MakeRefPtr<SheetLoadData>(
       this, aInfo.mTitle, aInfo.mURI, sheet, SyncLoad(syncLoad), aInfo.mContent,
       isAlternate, matched, StylePreloadKind::None, aObserver, principal,
-      aInfo.mReferrerInfo, aInfo.mNonce, aInfo.mFetchPriority);
+      aInfo.mReferrerInfo, aInfo.mNonce, aInfo.mFetchPriority,
+      networkMetadata.forget());
 
   MOZ_ASSERT(data->GetRequestingNode() == requestingNode);
 
@@ -2124,6 +2180,7 @@ nsresult Loader::LoadChildSheet(StyleSheet& aParentSheet,
   // Now that we know it's safe to load this (passes security check and not a
   // loop) do so.
   RefPtr<StyleSheet> sheet;
+  RefPtr<SubResourceNetworkMetadataHolder> networkMetadata;
   SheetState state;
   bool isReusableSheet = false;
   if (aReusableSheets && aReusableSheets->FindReusableStyleSheet(aURL, sheet)) {
@@ -2131,7 +2188,7 @@ nsresult Loader::LoadChildSheet(StyleSheet& aParentSheet,
     isReusableSheet = true;
   } else {
     // For now, use CORS_NONE for child sheets
-    std::tie(sheet, state) = CreateSheet(
+    std::tie(sheet, state, networkMetadata) = CreateSheet(
         aURL, nullptr, principal, aParentSheet.ParsingMode(), CORS_NONE,
         aParentData ? aParentData->mEncoding : nullptr,
         u""_ns,  // integrity is only checked on main sheet
@@ -2143,9 +2200,9 @@ nsresult Loader::LoadChildSheet(StyleSheet& aParentSheet,
   MOZ_ASSERT(sheet);
   InsertChildSheet(*sheet, aParentSheet);
 
-  auto data =
-      MakeRefPtr<SheetLoadData>(this, aURL, sheet, aParentData, observer,
-                                principal, aParentSheet.GetReferrerInfo());
+  auto data = MakeRefPtr<SheetLoadData>(
+      this, aURL, sheet, aParentData, observer, principal,
+      aParentSheet.GetReferrerInfo(), networkMetadata.forget());
   MOZ_ASSERT(data->GetRequestingNode() == requestingNode);
 
   MaybeNotifyPreloadUsed(*data);
@@ -2161,6 +2218,7 @@ nsresult Loader::LoadChildSheet(StyleSheet& aParentSheet,
       RecordUseCountersIfNeeded(mDocument, *data->mSheet);
       if (MaybePutIntoLoadsPerformed(*data)) {
         NotifyObserversForCachedSheet(*data);
+        AddPerformanceEntryForCachedSheet(*data);
       }
     }
     data->mIntentionallyDropped = true;
@@ -2239,7 +2297,7 @@ Result<RefPtr<StyleSheet>, nsresult> Loader::InternalLoadNonDocumentSheet(
   }
 
   bool syncLoad = !aObserver;
-  auto [sheet, state] =
+  auto [sheet, state, networkMetadata] =
       CreateSheet(aURL, nullptr, triggeringPrincipal, aParsingMode, aCORSMode,
                   aPreloadEncoding, aIntegrity, syncLoad, aPreloadKind);
 
@@ -2249,7 +2307,7 @@ Result<RefPtr<StyleSheet>, nsresult> Loader::InternalLoadNonDocumentSheet(
   auto data = MakeRefPtr<SheetLoadData>(
       this, aURL, sheet, SyncLoad(syncLoad), aUseSystemPrincipal, aPreloadKind,
       aPreloadEncoding, aObserver, triggeringPrincipal, aReferrerInfo, aNonce,
-      aFetchPriority);
+      aFetchPriority, networkMetadata.forget());
   MOZ_ASSERT(data->GetRequestingNode() == mDocument);
   if (state == SheetState::Complete) {
     LOG(("  Sheet already complete"));
@@ -2294,7 +2352,7 @@ void Loader::NotifyOfCachedLoad(RefPtr<SheetLoadData> aLoadData) {
 void Loader::NotifyObserversForCachedSheet(SheetLoadData& aLoadData) {
   nsCOMPtr<nsIObserverService> obsService = services::GetObserverService();
 
-  if (!obsService->HasObservers("http-on-stylesheet-cache-response")) {
+  if (!obsService->HasObservers("http-on-resource-cache-response")) {
     return;
   }
 
@@ -2308,14 +2366,18 @@ void Loader::NotifyObserversForCachedSheet(SheetLoadData& aLoadData) {
 
   RefPtr<HttpBaseChannel> httpBaseChannel = do_QueryObject(channel);
   if (httpBaseChannel) {
-    httpBaseChannel->SetDummyChannelForCachedResource();
+    const net::nsHttpResponseHead* responseHead = nullptr;
+    if (aLoadData.GetNetworkMetadata()) {
+      responseHead = aLoadData.GetNetworkMetadata()->GetResponseHead();
+    }
+    httpBaseChannel->SetDummyChannelForCachedResource(responseHead);
   }
 
   channel->SetContentType("text/css"_ns);
 
   // TODO: Populate other fields (bug 1915626).
 
-  obsService->NotifyObservers(channel, "http-on-stylesheet-cache-response",
+  obsService->NotifyObservers(channel, "http-on-resource-cache-response",
                               nullptr);
 }
 

@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -79,10 +80,7 @@ fun Dropdown(
     if (dropdownMenuTextWidth != null) {
         contextMenuWidth += dropdownMenuTextWidth
     } else {
-        val longestDropdownItemSize: Dp
-        dropdownItems.sortedWith(compareBy { it.title.length }).last().let {
-            longestDropdownItemSize = measureTextWidth(it.title, FirefoxTheme.typography.subtitle1)
-        }
+        val longestDropdownItemSize = getLongestItemWidth(dropdownItems, FirefoxTheme.typography.subtitle1)
         contextMenuWidth += longestDropdownItemSize
     }
 
@@ -113,24 +111,26 @@ fun Dropdown(
 
         val placeholderText = dropdownItems.find { it.isChecked }?.title ?: placeholder
 
-        Row {
-            Text(
-                text = placeholderText,
-                modifier = Modifier.weight(1f),
-                color = FirefoxTheme.colors.textPrimary,
-                style = FirefoxTheme.typography.subtitle1,
-            )
+        Box {
+            Row {
+                Text(
+                    text = placeholderText,
+                    modifier = Modifier.weight(1f),
+                    color = FirefoxTheme.colors.textPrimary,
+                    style = FirefoxTheme.typography.subtitle1,
+                )
 
-            Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-            Box {
                 Icon(
                     painter = painterResource(id = R.drawable.mozac_ic_dropdown_arrow),
                     contentDescription = null,
                     tint = FirefoxTheme.colors.iconPrimary,
                 )
+            }
 
-                if (expanded) {
+            if (expanded) {
+                Box(modifier = Modifier.align(Alignment.TopEnd)) {
                     ContextualMenu(
                         showMenu = true,
                         onDismissRequest = {
@@ -151,7 +151,7 @@ fun Dropdown(
                         canShowCheckItems = true,
                         offset = if (isInLandscapeMode) {
                             DpOffset(
-                                -contextMenuWidthDp + ICON_SIZE,
+                                -contextMenuWidthDp,
                                 ICON_SIZE,
                             )
                         } else {
@@ -169,17 +169,22 @@ fun Dropdown(
     }
 }
 
-/**
- * Measure the amount of [Dp] the given text in the given style will take up.
- *
- * @param text The text to measure the [Dp] of.
- * @param style The style that the text will use.
- */
 @Composable
-fun measureTextWidth(text: String, style: TextStyle): Dp {
-    val textMeasurer = rememberTextMeasurer()
-    val widthInPixels = textMeasurer.measure(text, style).size.width
-    return with(LocalDensity.current) { widthInPixels.toDp() }
+private fun getLongestItemWidth(items: List<MenuItem>, style: TextStyle): Dp {
+    if (items.isEmpty()) {
+        return 0.dp
+    }
+
+    val textMeasurer = rememberTextMeasurer(cacheSize = items.size)
+    val longestDropdownItemSize = items.maxOf {
+        val width = textMeasurer.measure(
+            text = it.title,
+            style = style,
+        ).size.width
+
+        with(LocalDensity.current) { width.toDp() }
+    }
+    return longestDropdownItemSize
 }
 
 @Suppress("MagicNumber")

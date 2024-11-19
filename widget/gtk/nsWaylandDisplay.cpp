@@ -20,6 +20,7 @@
 #include "WidgetUtilsGtk.h"
 #include "nsGtkKeyUtils.h"
 #include "nsWindow.h"
+#include "wayland-proxy.h"
 
 namespace mozilla::widget {
 
@@ -51,6 +52,11 @@ nsWaylandDisplay* WaylandDisplayGet() {
     if (!waylandDisplay) {
       return nullptr;
     }
+    // We're setting Wayland client buffer size here (i.e. our write buffer).
+    // Server buffer size is set by compositor and we may use the same buffer
+    // sizes on both sides. Mutter uses 1024 * 1024 (1M) so let's use the same
+    // value.
+    wl_display_set_max_buffer_size(waylandDisplay, 1024 * 1024);
     gWaylandDisplay = new nsWaylandDisplay(waylandDisplay);
   }
   return gWaylandDisplay;
@@ -58,9 +64,8 @@ nsWaylandDisplay* WaylandDisplayGet() {
 
 void nsWaylandDisplay::SetShm(wl_shm* aShm) { mShm = aShm; }
 
-class TouchWindow {
+class WaylandPointerEvent {
  public:
-  already_AddRefed<nsWindow> GetAndClearWindow() { return mWindow.forget(); }
   RefPtr<nsWindow> TakeWindow(wl_surface* aSurface) {
     if (!aSurface) {
       mWindow = nullptr;
@@ -73,18 +78,70 @@ class TouchWindow {
     }
     return mWindow;
   }
+  already_AddRefed<nsWindow> GetAndClearWindow() { return mWindow.forget(); }
+  RefPtr<nsWindow> GetWindow() { return mWindow; }
+
+  void SetSource(int32_t aSource) { mSource = aSource; }
+
+  void SetDelta120(uint32_t aAxis, int32_t aDelta) {
+    switch (aAxis) {
+      case WL_POINTER_AXIS_VERTICAL_SCROLL:
+        mDeltaY = aDelta / 120.0f;
+        break;
+      case WL_POINTER_AXIS_HORIZONTAL_SCROLL:
+        mDeltaX = aDelta / 120.0f;
+        break;
+      default:
+        NS_WARNING("WaylandPointerEvent::SetDelta120(): wrong axis!");
+        break;
+    }
+  }
+
+  void SetTime(uint32_t aTime) { mTime = aTime; }
+
+  void SendScrollEvent() {
+    if (!mWindow) {
+      return;
+    }
+
+    // nsWindow::OnSmoothScrollEvent() may spin event loop so
+    // mWindow/mSource/delta may be replaced.
+    int32_t source = mSource;
+    float deltaX = mDeltaX;
+    float deltaY = mDeltaY;
+
+    mSource = -1;
+    mDeltaX = mDeltaY = 0.0f;
+
+    // We process wheel events only now.
+    if (source != WL_POINTER_AXIS_SOURCE_WHEEL) {
+      return;
+    }
+
+    RefPtr<nsWindow> win = mWindow;
+    uint32_t eventTime = mTime;
+    win->OnSmoothScrollEvent(eventTime, deltaX, deltaY);
+  }
+
+  void Clear() { mWindow = nullptr; }
+
+  WaylandPointerEvent() { Clear(); }
 
  private:
   StaticRefPtr<nsWindow> mWindow;
+  uint32_t mTime = 0;
+  int32_t mSource = 0;
+  float mDeltaX = 0;
+  float mDeltaY = 0;
 };
 
-static TouchWindow sTouchWindow;
+static WaylandPointerEvent sHoldGesture;
 
 static void gesture_hold_begin(void* data,
                                struct zwp_pointer_gesture_hold_v1* hold,
                                uint32_t serial, uint32_t time,
                                struct wl_surface* surface, uint32_t fingers) {
-  RefPtr<nsWindow> window = sTouchWindow.TakeWindow(surface);
+  RefPtr<nsWindow> window = sHoldGesture.TakeWindow(surface);
   if (!window) {
     return;
   }
@@ -95,7 +152,7 @@ static void gesture_hold_end(void* data,
                              struct zwp_pointer_gesture_hold_v1* hold,
                              uint32_t serial, uint32_t time,
                              int32_t cancelled) {
-  RefPtr<nsWindow> window = sTouchWindow.GetAndClearWindow();
+  RefPtr<nsWindow> window = sHoldGesture.GetAndClearWindow();
   if (!window) {
     return;
   }
@@ -107,12 +164,18 @@ static void gesture_hold_end(void* data,
 static const struct zwp_pointer_gesture_hold_v1_listener gesture_hold_listener =
     {gesture_hold_begin, gesture_hold_end};
 
+static WaylandPointerEvent sScrollEvent;
+
 static void pointer_handle_enter(void* data, struct wl_pointer* pointer,
                                  uint32_t serial, struct wl_surface* surface,
-                                 wl_fixed_t sx, wl_fixed_t sy) {}
+                                 wl_fixed_t sx, wl_fixed_t sy) {
+  sScrollEvent.TakeWindow(surface);
+}
 
 static void pointer_handle_leave(void* data, struct wl_pointer* pointer,
-                                 uint32_t serial, struct wl_surface* surface) {}
+                                 uint32_t serial, struct wl_surface* surface) {
+  sScrollEvent.Clear();
+}
 
 static void pointer_handle_motion(void* data, struct wl_pointer* pointer,
                                   uint32_t time, wl_fixed_t sx, wl_fixed_t sy) {
@@ -124,13 +187,19 @@ static void pointer_handle_button(void* data, struct wl_pointer* pointer,
 
 static void pointer_handle_axis(void* data, struct wl_pointer* pointer,
                                 uint32_t time, uint32_t axis,
-                                wl_fixed_t value) {}
+                                wl_fixed_t value) {
+  sScrollEvent.SetTime(time);
+}
 
-static void pointer_handle_frame(void* data, struct wl_pointer* pointer) {}
+static void pointer_handle_frame(void* data, struct wl_pointer* pointer) {
+  sScrollEvent.SendScrollEvent();
+}
 
 static void pointer_handle_axis_source(
     void* data, struct wl_pointer* pointer,
-    /*enum wl_pointer_axis_source */ uint32_t source) {}
+    /*enum wl_pointer_axis_source */ uint32_t source) {
+  sScrollEvent.SetSource(source);
+}
 
 static void pointer_handle_axis_stop(void* data, struct wl_pointer* pointer,
                                      uint32_t time, uint32_t axis) {}
@@ -139,7 +208,35 @@ static void pointer_handle_axis_discrete(void* data, struct wl_pointer* pointer,
                                          uint32_t axis, int32_t value) {}
 
 static void pointer_handle_axis_value120(void* data, struct wl_pointer* pointer,
-                                         uint32_t axis, int32_t value) {}
+                                         uint32_t axis, int32_t value) {
+  sScrollEvent.SetDelta120(axis, value);
+}
+
+/*
+ * Example of scroll events we get for various devices. Note that
+ * even three different devices has the same wl_pointer.
+ *
+ * Standard mouse wheel:
+ *
+ *  pointer_handle_axis_source pointer 0x7fd14fd4bac0 source 0
+ *  pointer_handle_axis_value120 pointer 0x7fd14fd4bac0 value 120
+ *  pointer_handle_axis pointer 0x7fd14fd4bac0 time 9470441 value 10.000000
+ *  pointer_handle_frame
+ *
+ * Hi-res mouse wheel:
+ *
+ * pointer_handle_axis_source pointer 0x7fd14fd4bac0 source 0
+ * pointer_handle_axis_value120 pointer 0x7fd14fd4bac0 value -24
+ * pointer_handle_axis pointer 0x7fd14fd4bac0 time 9593205 value -1.992188
+ * pointer_handle_frame
+ *
+ * Touchpad:
+ *
+ * pointer_handle_axis_source pointer 0x7fd14fd4bac0 source 1
+ * pointer_handle_axis pointer 0x7fd14fd4bac0 time 9431830 value 0.312500
+ * pointer_handle_axis pointer 0x7fd14fd4bac0 time 9431830 value -1.015625
+ * pointer_handle_frame
+ */
 
 static const struct moz_wl_pointer_listener pointer_listener = {
     pointer_handle_enter,         pointer_handle_leave,
@@ -150,20 +247,30 @@ static const struct moz_wl_pointer_listener pointer_listener = {
 };
 
 void nsWaylandDisplay::SetPointer(wl_pointer* aPointer) {
-  if (!mPointerGestures || wl_proxy_get_version((struct wl_proxy*)aPointer) <
-                               WL_POINTER_RELEASE_SINCE_VERSION) {
+  // Don't even try on such old interface
+  if (wl_proxy_get_version((struct wl_proxy*)aPointer) <
+      WL_POINTER_RELEASE_SINCE_VERSION) {
     return;
   }
+
   MOZ_DIAGNOSTIC_ASSERT(!mPointer);
   mPointer = aPointer;
-  wl_pointer_add_listener(mPointer,
-                          (const wl_pointer_listener*)&pointer_listener, this);
 
-  mPointerGestureHold =
-      zwp_pointer_gestures_v1_get_hold_gesture(mPointerGestures, mPointer);
-  zwp_pointer_gesture_hold_v1_set_user_data(mPointerGestureHold, this);
-  zwp_pointer_gesture_hold_v1_add_listener(mPointerGestureHold,
-                                           &gesture_hold_listener, this);
+  // We're interested in pointer_handle_axis_value120() only for now.
+  if (wl_proxy_get_version((struct wl_proxy*)aPointer) >=
+      WL_POINTER_AXIS_VALUE120_SINCE_VERSION) {
+    wl_pointer_add_listener(
+        mPointer, (const wl_pointer_listener*)&pointer_listener, this);
+  }
+
+  // mPointerGestures is set by zwp_pointer_gestures_v1 if we have it.
+  if (mPointerGestures) {
+    mPointerGestureHold =
+        zwp_pointer_gestures_v1_get_hold_gesture(mPointerGestures, mPointer);
+    zwp_pointer_gesture_hold_v1_set_user_data(mPointerGestureHold, this);
+    zwp_pointer_gesture_hold_v1_add_listener(mPointerGestureHold,
+                                             &gesture_hold_listener, this);
+  }
 }
 
 void nsWaylandDisplay::RemovePointer() {
@@ -365,8 +472,9 @@ static void global_registry_handler(void* data, wl_registry* registry,
     display->SetXdgDbusAnnotationManager(annotationManager);
   } else if (iface.EqualsLiteral("wl_seat") &&
              version >= WL_POINTER_RELEASE_SINCE_VERSION) {
-    auto* seat = WaylandRegistryBind<wl_seat>(registry, id, &wl_seat_interface,
-                                              WL_POINTER_RELEASE_SINCE_VERSION);
+    auto* seat = WaylandRegistryBind<wl_seat>(
+        registry, id, &wl_seat_interface,
+        MIN(version, WL_POINTER_AXIS_VALUE120_SINCE_VERSION));
     display->SetSeat(seat, id);
   } else if (iface.EqualsLiteral("wp_fractional_scale_manager_v1")) {
     auto* manager = WaylandRegistryBind<wp_fractional_scale_manager_v1>(
@@ -402,7 +510,8 @@ nsWaylandDisplay::~nsWaylandDisplay() = default;
 static void WlLogHandler(const char* format, va_list args) {
   char error[1000];
   VsprintfLiteral(error, format, args);
-  gfxCriticalNote << "Wayland protocol error: " << error;
+  gfxCriticalNote << "(" << GetDesktopEnvironmentIdentifier().get()
+                  << ") Wayland protocol error: " << error;
 
   // See Bug 1826583 and Bug 1844653 for reference.
   // "warning: queue %p destroyed while proxies still attached" and variants
@@ -413,7 +522,18 @@ static void WlLogHandler(const char* format, va_list args) {
     return;
   }
 
-  MOZ_CRASH_UNSAFE(error);
+  MOZ_CRASH_UNSAFE_PRINTF("(%s) %s Proxy: %s",
+                          GetDesktopEnvironmentIdentifier().get(), error,
+                          WaylandProxy::GetState());
+}
+
+void WlCompositorCrashHandler() {
+  gfxCriticalNote << "Wayland protocol error: Compositor ("
+                  << GetDesktopEnvironmentIdentifier().get()
+                  << ") crashed, proxy: " << WaylandProxy::GetState();
+  MOZ_CRASH_UNSAFE_PRINTF("Compositor crashed (%s) proxy: %s",
+                          GetDesktopEnvironmentIdentifier().get(),
+                          WaylandProxy::GetState());
 }
 
 nsWaylandDisplay::nsWaylandDisplay(wl_display* aDisplay)

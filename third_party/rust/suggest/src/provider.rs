@@ -24,7 +24,7 @@ pub(crate) const DEFAULT_INGEST_PROVIDERS: [SuggestionProvider; 6] = [
 ];
 
 /// A provider is a source of search suggestions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, uniffi::Enum)]
 #[repr(u8)]
 pub enum SuggestionProvider {
     Amp = 1,
@@ -99,18 +99,18 @@ impl SuggestionProvider {
         }
     }
 
-    pub(crate) fn record_type(&self) -> SuggestRecordType {
+    pub(crate) fn record_types(&self) -> Vec<SuggestRecordType> {
         match self {
-            Self::Amp => SuggestRecordType::AmpWikipedia,
-            Self::Wikipedia => SuggestRecordType::AmpWikipedia,
-            Self::Amo => SuggestRecordType::Amo,
-            Self::Pocket => SuggestRecordType::Pocket,
-            Self::Yelp => SuggestRecordType::Yelp,
-            Self::Mdn => SuggestRecordType::Mdn,
-            Self::Weather => SuggestRecordType::Weather,
-            Self::AmpMobile => SuggestRecordType::AmpMobile,
-            Self::Fakespot => SuggestRecordType::Fakespot,
-            Self::Exposure => SuggestRecordType::Exposure,
+            Self::Amp => vec![SuggestRecordType::AmpWikipedia],
+            Self::Wikipedia => vec![SuggestRecordType::AmpWikipedia],
+            Self::Amo => vec![SuggestRecordType::Amo],
+            Self::Pocket => vec![SuggestRecordType::Pocket],
+            Self::Yelp => vec![SuggestRecordType::Yelp],
+            Self::Mdn => vec![SuggestRecordType::Mdn],
+            Self::Weather => vec![SuggestRecordType::Weather, SuggestRecordType::Geonames],
+            Self::AmpMobile => vec![SuggestRecordType::AmpMobile],
+            Self::Fakespot => vec![SuggestRecordType::Fakespot],
+            Self::Exposure => vec![SuggestRecordType::Exposure],
         }
     }
 }
@@ -121,7 +121,13 @@ impl ToSql for SuggestionProvider {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+/// Some providers manage multiple suggestion subtypes. Queries, ingests, and
+/// other operations on those providers must be constrained to a desired subtype.
+#[derive(Clone, Default, Debug, uniffi::Record)]
 pub struct SuggestionProviderConstraints {
+    /// `Exposure` provider - For each desired exposure suggestion type, this
+    /// should contain the value of the `suggestion_type` field of its remote
+    /// settings record(s).
+    #[uniffi(default = None)]
     pub exposure_suggestion_types: Option<Vec<String>>,
 }

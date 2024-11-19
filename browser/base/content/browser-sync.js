@@ -18,11 +18,13 @@ const { UIState } = ChromeUtils.importESModule(
 );
 
 ChromeUtils.defineESModuleGetters(this, {
+  ASRouter: "resource:///modules/asrouter/ASRouter.sys.mjs",
   EnsureFxAccountsWebChannel:
     "resource://gre/modules/FxAccountsWebChannel.sys.mjs",
 
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   FxAccounts: "resource://gre/modules/FxAccounts.sys.mjs",
+  MenuMessage: "resource:///modules/asrouter/MenuMessage.sys.mjs",
   SyncedTabs: "resource://services-sync/SyncedTabs.sys.mjs",
   SyncedTabsManagement: "resource://services-sync/SyncedTabs.sys.mjs",
   Weave: "resource://services-sync/main.sys.mjs",
@@ -493,6 +495,7 @@ var gSync = {
         "browser/appmenu.ftl",
         "browser/sync.ftl",
         "browser/syncedTabs.ftl",
+        "browser/newtab/asrouter.ftl",
       ],
       true
     ));
@@ -583,6 +586,7 @@ var gSync = {
     }
 
     MozXULElement.insertFTLIfNeeded("browser/sync.ftl");
+    MozXULElement.insertFTLIfNeeded("browser/newtab/asrouter.ftl");
 
     // Label for the sync buttons.
     const appMenuLabel = PanelMultiView.getViewNode(
@@ -655,6 +659,8 @@ var gSync = {
       "PanelUI-fxa-menu-sendtab-connect-device-button"
     ).addEventListener("command", this);
 
+    PanelUI.mainView.addEventListener("ViewShowing", this);
+
     // If the experiment is enabled, we'll need to update the panels
     // to show some different text to the user
     if (this.FXA_CTA_MENU_ENABLED) {
@@ -687,7 +693,11 @@ var gSync = {
         break;
       }
       case "ViewShowing": {
-        this.onFxAPanelViewShowing(event.target);
+        if (event.target == PanelUI.mainView) {
+          this.onAppMenuShowing();
+        } else {
+          this.onFxAPanelViewShowing(event.target);
+        }
         break;
       }
       case "ViewHiding": {
@@ -696,7 +706,39 @@ var gSync = {
     }
   },
 
+  onAppMenuShowing() {
+    const appMenuHeaderText = PanelMultiView.getViewNode(
+      document,
+      "appMenu-fxa-text"
+    );
+
+    const ctaDefaultStringID = "appmenu-fxa-sync-and-save-data2";
+    const ctaStringID = this.getMenuCtaCopy(NimbusFeatures.fxaAppMenuItem);
+
+    document.l10n.setAttributes(
+      appMenuHeaderText,
+      ctaStringID || ctaDefaultStringID
+    );
+
+    if (NimbusFeatures.fxaAppMenuItem.getVariable("ctaCopyVariant")) {
+      NimbusFeatures.fxaAppMenuItem.recordExposureEvent();
+    }
+  },
+
   onFxAPanelViewShowing(panelview) {
+    let messageId = panelview.getAttribute(
+      MenuMessage.SHOWING_FXA_MENU_MESSAGE_ATTR
+    );
+    if (messageId) {
+      MenuMessage.recordMenuMessageTelemetry(
+        "IMPRESSION",
+        MenuMessage.SOURCES.PXI_MENU,
+        messageId
+      );
+      let message = ASRouter.getMessageById(messageId);
+      ASRouter.addImpression(message);
+    }
+
     let syncNowBtn = panelview.querySelector(".syncnow-label");
     let l10nId = syncNowBtn.getAttribute(
       this._isCurrentlySyncing
@@ -727,9 +769,18 @@ var gSync = {
       PanelMultiView.getViewNode(document, "PanelUI-fxa-remotetabs-tabslist"),
       PanelMultiView.getViewNode(document, "PanelUI-remote-tabs-separator")
     );
+
+    // Any variant on the CTA will have been applied inside of updateFxAPanel,
+    // but now that the panel is showing, we record exposure.
+    const ctaCopyVariant =
+      NimbusFeatures.fxaAvatarMenuItem.getVariable("ctaCopyVariant");
+    if (ctaCopyVariant) {
+      NimbusFeatures.fxaAvatarMenuItem.recordExposureEvent();
+    }
   },
 
   onFxAPanelViewHiding(panelview) {
+    MenuMessage.hidePxiMenuMessage(gBrowser.selectedBrowser);
     panelview.syncedTabsPanelList.destroy();
     panelview.syncedTabsPanelList = null;
   },
@@ -954,7 +1005,7 @@ var gSync = {
     }
   },
 
-  toggleAccountPanel(
+  async toggleAccountPanel(
     anchor = document.getElementById("fxa-toolbar-menu-button"),
     aEvent
   ) {
@@ -970,6 +1021,19 @@ var gSync = {
         aEvent.keyCode != KeyEvent.DOM_VK_RETURN)
     ) {
       return;
+    }
+
+    if (
+      anchor == document.getElementById("fxa-toolbar-menu-button") &&
+      anchor.getAttribute("open") != "true"
+    ) {
+      if (ASRouter.initialized) {
+        await ASRouter.sendTriggerMessage({
+          browser: gBrowser.selectedBrowser,
+          id: "menuOpened",
+          context: { source: MenuMessage.SOURCES.PXI_MENU },
+        });
+      }
     }
 
     // We read the state that's been set on the root node, since that makes
@@ -1091,6 +1155,14 @@ var gSync = {
         ? "fxa-menu-sync-description"
         : "appmenu-fxa-signed-in-label";
       headerDescription = this.fluentStrings.formatValueSync(headerDescString);
+
+      if (this.FXA_CTA_MENU_ENABLED) {
+        const ctaCopy = this.getMenuCtaCopy(NimbusFeatures.fxaAvatarMenuItem);
+        if (ctaCopy) {
+          headerTitleL10nId = ctaCopy.headerTitleL10nId;
+          headerDescription = ctaCopy.headerDescription;
+        }
+      }
     } else if (state.status === UIState.STATUS_LOGIN_FAILED) {
       stateValue = "login-failed";
       headerTitleL10nId = "account-disconnected2";
@@ -2319,6 +2391,91 @@ var gSync = {
 
     this.openLink(url);
     PanelUI.hide();
+  },
+
+  /**
+   * Returns any experimental copy that we want to try for FxA sign-in CTAs in
+   * the event that the user is enrolled in an experiment.
+   *
+   * The only ctaCopyVariant's that are expected are:
+   *
+   *  - control
+   *  - sync-devices
+   *  - backup-data
+   *  - backup-sync
+   *  - mobile
+   *
+   * If "control" is set, `null` is returned to indicate default strings,
+   * but impressions will still be recorded.
+   *
+   * @param {NimbusFeature} feature
+   *   One of either NimbusFeatures.fxaAppMenuItem or
+   *   NimbusFeatures.fxaAvatarMenuItem.
+   * @returns {object|string|null}
+   *   If feature is NimbusFeatures.fxaAppMenuItem, this will return the Fluent
+   *   string ID for the App Menu CTA to appear for users to sign in.
+   *
+   *   If feature is NimbusFeatures.fxaAvatarMenuItem, this will return an
+   *   object with two properties:
+   *
+   *   headerTitleL10nId (string):
+   *     The Fluent ID for the header string for the avatar menu CTA.
+   *   headerDescription (string):
+   *     The raw string for the description for the avatar menu CTA.
+   *
+   *   If there is no copy variant being tested, this will return null.
+   */
+  getMenuCtaCopy(feature) {
+    const ctaCopyVariant = feature.getVariable("ctaCopyVariant");
+    let headerTitleL10nId;
+    let headerDescription;
+    switch (ctaCopyVariant) {
+      case "sync-devices": {
+        if (feature === NimbusFeatures.fxaAppMenuItem) {
+          return "fxa-menu-message-sync-devices-collapsed-text";
+        }
+        headerTitleL10nId = "fxa-menu-message-sync-devices-primary-text";
+        headerDescription = this.fluentStrings.formatValueSync(
+          "fxa-menu-message-sync-devices-secondary-text"
+        );
+        break;
+      }
+      case "backup-data": {
+        if (feature === NimbusFeatures.fxaAppMenuItem) {
+          return "fxa-menu-message-backup-data-collapsed-text";
+        }
+        headerTitleL10nId = "fxa-menu-message-backup-data-primary-text";
+        headerDescription = this.fluentStrings.formatValueSync(
+          "fxa-menu-message-backup-data-secondary-text"
+        );
+        break;
+      }
+      case "backup-sync": {
+        if (feature === NimbusFeatures.fxaAppMenuItem) {
+          return "fxa-menu-message-backup-sync-collapsed-text";
+        }
+        headerTitleL10nId = "fxa-menu-message-backup-sync-primary-text";
+        headerDescription = this.fluentStrings.formatValueSync(
+          "fxa-menu-message-backup-sync-secondary-text"
+        );
+        break;
+      }
+      case "mobile": {
+        if (feature === NimbusFeatures.fxaAppMenuItem) {
+          return "fxa-menu-message-mobile-collapsed-text";
+        }
+        headerTitleL10nId = "fxa-menu-message-mobile-primary-text";
+        headerDescription = this.fluentStrings.formatValueSync(
+          "fxa-menu-message-mobile-secondary-text"
+        );
+        break;
+      }
+      default: {
+        return null;
+      }
+    }
+
+    return { headerTitleL10nId, headerDescription };
   },
 
   openLink(url) {

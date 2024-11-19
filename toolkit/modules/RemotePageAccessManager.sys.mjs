@@ -49,6 +49,7 @@ export let RemotePageAccessManager = {
         "security.enterprise_roots.auto-enabled",
         "security.certerror.hideAddException",
         "network.trr.display_fallback_warning",
+        "security.certerrors.felt-privacy-v1",
       ],
       RPMGetIntPref: [
         "security.dialog_enable_delay",
@@ -102,6 +103,7 @@ export let RemotePageAccessManager = {
         "security.xfocsp.errorReporting.enabled",
         "security.xfocsp.hideOpenInNewWindow",
         "network.trr.display_fallback_warning",
+        "security.certerrors.felt-privacy-v1",
       ],
       RPMSetPref: [
         "security.xfocsp.errorReporting.automatic",
@@ -174,11 +176,29 @@ export let RemotePageAccessManager = {
       RPMSendAsyncMessage: ["Profiles:CancelDelete", "Profiles:DeleteProfile"],
     },
     "about:editprofile": {
-      RPMSendQuery: ["Profiles:GetEditProfileContent"],
+      RPMSendQuery: [
+        "Profiles:GetEditProfileContent",
+        "Profiles:UpdateProfileTheme",
+      ],
       RPMSendAsyncMessage: [
         "Profiles:UpdateProfileName",
+        "Profiles:UpdateProfileAvatar",
         "Profiles:OpenDeletePage",
       ],
+    },
+    "about:newprofile": {
+      RPMSendQuery: [
+        "Profiles:GetNewProfileContent",
+        "Profiles:UpdateProfileTheme",
+      ],
+      RPMSendAsyncMessage: [
+        "Profiles:UpdateProfileName",
+        "Profiles:UpdateProfileAvatar",
+        "Profiles:DeleteNewProfile",
+        "Profiles:CloseNewProfileTab",
+      ],
+      RPMGetBoolPref: ["browser.profiles.profile-name.updated"],
+      RPMGetFormatURLPref: ["app.support.baseURL"],
     },
     "about:protections": {
       RPMSendAsyncMessage: [

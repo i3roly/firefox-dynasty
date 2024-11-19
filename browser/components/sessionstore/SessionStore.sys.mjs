@@ -117,6 +117,12 @@ const TAB_EVENTS = [
   "TabHide",
   "TabPinned",
   "TabUnpinned",
+  "TabGroupCreate",
+  "TabGroupRemove",
+  "TabGrouped",
+  "TabUngrouped",
+  "TabGroupCollapse",
+  "TabGroupExpand",
 ];
 
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
@@ -178,6 +184,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource://gre/modules/sessionstore/SessionStoreHelper.sys.mjs",
   TabAttributes: "resource:///modules/sessionstore/TabAttributes.sys.mjs",
   TabCrashHandler: "resource:///modules/ContentCrashHandlers.sys.mjs",
+  TabGroupState: "resource:///modules/sessionstore/TabGroupState.sys.mjs",
   TabState: "resource:///modules/sessionstore/TabState.sys.mjs",
   TabStateCache: "resource:///modules/sessionstore/TabStateCache.sys.mjs",
   TabStateFlusher: "resource:///modules/sessionstore/TabStateFlusher.sys.mjs",
@@ -758,6 +765,22 @@ export var SessionStore = {
   purgeDataForPrivateWindow(win) {
     return SessionStoreInternal.purgeDataForPrivateWindow(win);
   },
+
+  /**
+   * Add a tab group to the session's saved group list.
+   * @param {MozTabbrowserTabGroup} tabGroup - The group to save
+   */
+  addSavedTabGroup(tabGroup) {
+    return SessionStoreInternal.addSavedTabGroup(tabGroup);
+  },
+
+  /**
+   * Remove a tab group to the session's saved group list.
+   * @param {MozTabbrowserTabGroup} tabGroup - The group to remove
+   */
+  removeSavedTabGroup(tabGroup) {
+    return SessionStoreInternal.removeSavedTabGroup(tabGroup);
+  },
 };
 
 // Freeze the SessionStore object. We don't want anyone to modify it.
@@ -839,7 +862,10 @@ var SessionStoreInternal = {
   // defaults to now if no session was restored or timestamp doesn't exist
   _sessionStartTime: Date.now(),
 
-  // states for all currently opened windows
+  /**
+   * states for all currently opened windows
+   * @type {object.<WindowID, WindowStateData>}
+   */
   _windows: {},
 
   // counter for creating unique window IDs
@@ -847,6 +873,9 @@ var SessionStoreInternal = {
 
   // states for all recently closed windows
   _closedWindows: [],
+
+  // states for all closed tab groups
+  _savedGroups: [],
 
   // collection of session states yet to be restored
   _statesToRestore: {},
@@ -1687,6 +1716,14 @@ var SessionStoreInternal = {
       case "SwapDocShells":
         this.saveStateDelayed(win);
         break;
+      case "TabGroupCreate":
+      case "TabGroupRemove":
+      case "TabGrouped":
+      case "TabUngrouped":
+      case "TabGroupCollapse":
+      case "TabGroupExpand":
+        this.saveStateDelayed(win);
+        break;
       case "oop-browser-crashed":
       case "oop-browser-buildid-mismatch":
         if (aEvent.isTopFrame) {
@@ -1746,6 +1783,7 @@ var SessionStoreInternal = {
     // and create its data object
     this._windows[aWindow.__SSi] = {
       tabs: [],
+      groups: [],
       selected: 0,
       _closedTabs: [],
       _lastClosedTabGroupCount: -1,
@@ -4482,7 +4520,7 @@ var SessionStoreInternal = {
       homePages = homePages.concat(lazy.HomePage.get(aWindow).split("|"));
     }
 
-    for (let i = tabbrowser._numPinnedTabs; i < tabbrowser.tabs.length; i++) {
+    for (let i = tabbrowser.pinnedTabCount; i < tabbrowser.tabs.length; i++) {
       let tab = tabbrowser.tabs[i];
       if (homePages.includes(tab.linkedBrowser.currentURI.spec)) {
         removableTabs.push(tab);
@@ -4671,6 +4709,7 @@ var SessionStoreInternal = {
       windows: total,
       selectedWindow: ix + 1,
       _closedWindows: lastClosedWindowsCopy,
+      savedGroups: this._savedGroups,
       session,
       global: this._globalState.getState(),
     };
@@ -4731,6 +4770,7 @@ var SessionStoreInternal = {
 
     let tabbrowser = aWindow.gBrowser;
     let tabs = tabbrowser.tabs;
+    /** @type {WindowStateData} */
     let winData = this._windows[aWindow.__SSi];
     let tabsData = (winData.tabs = []);
 
@@ -4742,6 +4782,13 @@ var SessionStoreInternal = {
       let tabData = lazy.TabState.collect(tab, TAB_CUSTOM_VALUES.get(tab));
       tabMap.set(tab, tabData);
       tabsData.push(tabData);
+    }
+
+    // update tab group state for this window
+    winData.groups = [];
+    for (let tabGroup of aWindow.gBrowser.tabGroups) {
+      let tabGroupData = lazy.TabGroupState.collect(tabGroup);
+      winData.groups.push(tabGroupData);
     }
 
     let selectedIndex = tabbrowser.tabbox.selectedIndex + 1;
@@ -4894,13 +4941,16 @@ var SessionStoreInternal = {
       this._restore_on_demand;
 
     this._log.debug(
-      `restoreWindow, will restore ${winData.tabs.length} tabs, restoreTabsLazily: ${restoreTabsLazily}`
+      `restoreWindow, will restore ${winData.tabs.length} tabs and ${
+        winData.groups?.length ?? 0
+      } tab groups, restoreTabsLazily: ${restoreTabsLazily}`
     );
     if (winData.tabs.length) {
       var tabs = tabbrowser.createTabsForSessionRestore(
         restoreTabsLazily,
         selectTab,
-        winData.tabs
+        winData.tabs,
+        winData.groups ?? []
       );
       this._log.debug(
         `restoreWindow, createTabsForSessionRestore returned ${tabs.length} tabs`
@@ -5602,31 +5652,10 @@ var SessionStoreInternal = {
    *        Object containing command (sidebarcommand/category) and styles
    */
   restoreSidebar(aWindow, aSidebar, isPopup) {
-    if (!aSidebar) {
+    if (!aSidebar || isPopup) {
       return;
     }
-    if (!isPopup) {
-      let sidebarBox = aWindow.document.getElementById("sidebar-box");
-      // Always restore sidebar width
-      if (aSidebar.width) {
-        sidebarBox.style.width = aSidebar.width;
-      }
-      if (
-        aSidebar.command &&
-        (sidebarBox.getAttribute("sidebarcommand") != aSidebar.command ||
-          !sidebarBox.getAttribute("checked"))
-      ) {
-        aWindow.SidebarController.showInitially(aSidebar.command);
-      }
-    }
-    if (aWindow.SidebarController.sidebarRevampEnabled) {
-      const { SidebarController } = aWindow;
-      SidebarController.promiseInitialized.then(() => {
-        SidebarController.toggleExpanded(aSidebar.expanded);
-        SidebarController.sidebarContainer.hidden = aSidebar.hidden;
-        SidebarController.updateToolbarButton();
-      });
-    }
+    aWindow.SidebarController.setUIState(aSidebar);
   },
 
   /**
@@ -7147,6 +7176,17 @@ var SessionStoreInternal = {
     if (browser && browser.frameLoader) {
       browser.frameLoader.requestEpochUpdate(options.epoch);
     }
+  },
+
+  addSavedTabGroup(tabGroup) {
+    this.removeSavedTabGroup(tabGroup.id);
+    this._savedGroups.push(lazy.TabGroupState.clone(tabGroup));
+  },
+
+  removeSavedTabGroup(tabGroupId) {
+    this._savedGroups = this._savedGroups.filter(
+      group => group.id !== tabGroupId
+    );
   },
 };
 

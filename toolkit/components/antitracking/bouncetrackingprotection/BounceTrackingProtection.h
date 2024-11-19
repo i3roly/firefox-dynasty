@@ -44,6 +44,9 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection,
  public:
   static already_AddRefed<BounceTrackingProtection> GetSingleton();
 
+  // Record telemetry about which mode the feature is in.
+  static void RecordModePrefTelemetry();
+
   // This algorithm is called when detecting the end of an extended navigation.
   // This could happen if a user-initiated navigation is detected in process
   // navigation start for bounce tracking, or if the client bounce detection
@@ -92,9 +95,9 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection,
   // and then start a new timer.
   nsresult UpdateBounceTrackingPurgeTimer(bool aShouldEnable);
 
-  // Keeps track of whether the feature is enabled based on pref state.
-  // Initialized on first call of GetSingleton.
-  static Maybe<bool> sFeatureIsEnabled;
+  // Flag to ensure we only call into glean telemetry when the feature mode
+  // actually changed.
+  static Maybe<uint32_t> sLastRecordedModeTelemetry;
 
   // Timer which periodically runs PurgeBounceTrackers.
   nsCOMPtr<nsITimer> mBounceTrackingPurgeTimer;
@@ -131,6 +134,14 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection,
       BounceTrackingStateGlobal* aStateGlobal,
       BounceTrackingAllowList& aBounceTrackingAllowList,
       nsTArray<RefPtr<ClearDataMozPromise>>& aClearPromises);
+
+  // Helper which calls nsIClearDataService to clear data for given host and
+  // OriginAttributes.
+  // After a successful call aClearPromise will be populated.
+  [[nodiscard]] nsresult PurgeStateForHostAndOriginAttributes(
+      const nsACString& aHost, PRTime bounceTime,
+      const OriginAttributes& aOriginAttributes,
+      ClearDataMozPromise** aClearPromise);
 
   // Whether a purge operation is currently in progress. This avoids running
   // multiple purge operations at the same time.

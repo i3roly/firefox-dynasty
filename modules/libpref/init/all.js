@@ -1344,10 +1344,6 @@ pref("network.websocket.delay-failed-reconnects", true);
 
 // </ws>
 
-// Server-Sent Events
-// Equal to the DEFAULT_RECONNECTION_TIME_VALUE value in nsEventSource.cpp
-pref("dom.server-events.default-reconnection-time", 5000); // in milliseconds
-
 // This preference specifies a list of domains for which DNS lookups will be
 // IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
 // and/or allows the user to disable IPv6 on a per-domain basis. See bug 68796.
@@ -2308,6 +2304,11 @@ pref("font.size.monospace.x-math", 13);
   pref("gfx.font_rendering.cleartype_params.pixel_structure", -1);
   pref("gfx.font_rendering.cleartype_params.rendering_mode", -1);
 
+#if defined(EARLY_BETA_OR_EARLIER)
+  // We no longer force "GDI Classic" mode on any fonts by default.
+  pref("gfx.font_rendering.cleartype_params.force_gdi_classic_for_families", "");
+  pref("gfx.font_rendering.cleartype_params.force_gdi_classic_max_size", 0);
+#else
   // A comma-separated list of font family names. Fonts in these families will
   // be forced to use "GDI Classic" ClearType mode, provided the value
   // of gfx.font_rendering.cleartype_params.rendering_mode is -1
@@ -2318,6 +2319,7 @@ pref("font.size.monospace.x-math", 13);
   // The maximum size at which we will force GDI classic mode using
   // force_gdi_classic_for_families.
   pref("gfx.font_rendering.cleartype_params.force_gdi_classic_max_size", 15);
+#endif
 
   // Switch the keyboard layout per window
   pref("intl.keyboard.per_window_layout", false);
@@ -3604,6 +3606,10 @@ pref("reader.parse-on-load.enabled", true);
 // because it'd slow things down too much
 pref("reader.parse-node-limit", 3000);
 
+// Whether or not debug mode is enabled in reader mode. If enabled, reader mode
+// will log what it's doing.
+pref("reader.debug", false);
+
 // Whether we include full URLs in browser console errors. This is disabled
 // by default because some platforms will persist these, leading to privacy issues.
 pref("reader.errors.includeURLs", false);
@@ -3703,11 +3709,7 @@ pref("webextensions.storage.sync.serverURL", "https://webextensions.settings.ser
 pref("dom.input.fallbackUploadDir", "");
 
 // Turn rewriting of youtube embeds on/off
-#if defined(EARLY_BETA_OR_EARLIER)
-  pref("plugins.rewrite_youtube_embeds", false);
-#else
-  pref("plugins.rewrite_youtube_embeds", true);
-#endif
+pref("plugins.rewrite_youtube_embeds", true);
 
 // Default media volume
 pref("media.default_volume", "1.0");
@@ -3772,6 +3774,19 @@ pref("browser.ml.modelHubUrlTemplate", "{model}/{revision}");
 pref("browser.ml.modelCacheMaxSizeBytes", 1073741824);
 // Model cache timeout in ms
 pref("browser.ml.modelCacheTimeout", 120000);
+// Minimal Physical RAM required in GiB
+pref("browser.ml.minimumPhysicalMemory", 4);
+// Default memory usage for a model in GiB
+pref("browser.ml.defaultModelMemoryUsage", 2);
+// Check for memory before running
+pref("browser.ml.checkForMemory", false);
+// Maximum memory pressure (%)
+pref("browser.ml.maximumMemoryPressure", 80);
+// Queue wait timeout in seconds
+pref("browser.ml.queueWaitTimeout", 60);
+// Queue wait checks interval in seconds
+pref("browser.ml.queueWaitInterval", 1);
+
 
 // When a user cancels this number of authentication dialogs coming from
 // a single web page in a row, all following authentication dialogs will
@@ -3959,6 +3974,9 @@ pref("services.common.log.logger.tokenserverclient", "Debug");
   // 2: CDP (Chrome DevTools Protocol)
   // 3: WebDriver BiDi + CDP
   pref("remote.active-protocols", 1);
+
+  // Opt-in for async event processing (bug 1773393).
+  pref("remote.events.async.enabled", false);
 
   // Enable WebDriver BiDi experimental commands and events.
   #if defined(NIGHTLY_BUILD)

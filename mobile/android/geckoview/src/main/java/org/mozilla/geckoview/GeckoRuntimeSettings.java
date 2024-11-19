@@ -344,6 +344,18 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
     }
 
     /**
+     * Set whether Fission should be enabled or not. This must be set before startup. Note: Session
+     * History in Parent (SHIP) will be enabled as well if Fission is enabled.
+     *
+     * @param enabled A flag determining whether fission should be enabled.
+     * @return The builder instance.
+     */
+    public @NonNull Builder fissionEnabled(final boolean enabled) {
+      getSettings().mFissionEnabled.set(enabled);
+      return this;
+    }
+
+    /**
      * Set whether a candidate page should automatically offer a translation via a popup.
      *
      * @param enabled A flag determining whether the translations offer popup should be enabled.
@@ -614,6 +626,8 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
   /* package */ final Pref<Boolean> mDevToolsConsoleToLogcat =
       new Pref<>("devtools.console.stdout.chrome", true);
   /* package */ final Pref<Boolean> mAboutConfig = new Pref<>("general.aboutConfig.enable", false);
+  /* package */ final PrefWithoutDefault<Boolean> mFissionEnabled =
+      new PrefWithoutDefault<>("fission.autostart");
   /* package */ final Pref<Boolean> mForceUserScalable =
       new Pref<>("browser.ui.zoom.force-user-scalable", false);
   /* package */ final PrefWithoutDefault<Integer> mWebContentIsolationStrategy =
@@ -659,6 +673,12 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
       new Pref<>("toolkit.telemetry.user_characteristics_ping.current_version", 0);
   /* package */ PrefWithoutDefault<Boolean> mDisableShip =
       new PrefWithoutDefault<Boolean>("fission.disableSessionHistoryInParent");
+  /* package */ final Pref<Boolean> mFetchPriorityEnabled =
+      new Pref<Boolean>("network.fetchpriority.enabled", false);
+  /* package */ final Pref<Boolean> mCookieBehaviorOptInPartitioning =
+      new Pref<Boolean>("network.cookie.cookieBehavior.optInPartitioning", false);
+  /* package */ final Pref<Boolean> mCookieBehaviorOptInPartitioningPBM =
+      new Pref<Boolean>("network.cookie.cookieBehavior.optInPartitioning.pbmode", false);
 
   /* package */ int mPreferredColorScheme = COLOR_SCHEME_SYSTEM;
 
@@ -882,6 +902,47 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
   }
 
   /**
+   * Set the pref to control the cookie behavior opt-in partitioning.
+   *
+   * @param enabled Whether we set the pref to true or false
+   * @return This GeckoRuntimeSettings instance
+   */
+  public @NonNull GeckoRuntimeSettings setCookieBehaviorOptInPartitioning(final boolean enabled) {
+    mCookieBehaviorOptInPartitioning.commit(enabled);
+    return this;
+  }
+
+  /**
+   * Set the pref to control the cookie behavior opt-in partitioning in private browsing mode.
+   *
+   * @param enabled Whether we set the pref to true or false
+   * @return This GeckoRuntimeSettings instance
+   */
+  public @NonNull GeckoRuntimeSettings setCookieBehaviorOptInPartitioningPBM(
+      final boolean enabled) {
+    mCookieBehaviorOptInPartitioningPBM.commit(enabled);
+    return this;
+  }
+
+  /**
+   * Get whether the cookie behavior opt-in partitioning is enabled.
+   *
+   * @return Whether the cookie behavior opt-in partitioning is enabled.
+   */
+  public boolean getCookieBehaviorOptInPartitioning() {
+    return mCookieBehaviorOptInPartitioning.get();
+  }
+
+  /**
+   * Get whether the cookie behavior opt-in partitioning in private browsing mode is enabled.
+   *
+   * @return Whether the cookie behavior opt-in partitioning in private browsing mode is enabled.
+   */
+  public boolean getCookieBehaviorOptInPartitioningPBM() {
+    return mCookieBehaviorOptInPartitioningPBM.get();
+  }
+
+  /**
    * Get whether Extensions Process support is enabled.
    *
    * @return Whether Extensions Process support is enabled.
@@ -943,6 +1004,26 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
       final @NonNull Long timeframeMs) {
     mExtensionsProcessCrashTimeframe.commit(timeframeMs);
     return this;
+  }
+
+  /**
+   * Set the pref to control whether network.fetchpriority.enabled is enabled.
+   *
+   * @param enabled Whether to enable the Fetch Priority feature
+   * @return This GeckoRuntimeSettings instance
+   */
+  public @NonNull GeckoRuntimeSettings setFetchPriorityEnabled(final boolean enabled) {
+    mFetchPriorityEnabled.commit(enabled);
+    return this;
+  }
+
+  /**
+   * Get whether network.fetchpriority.enabled is enabled.
+   *
+   * @return Whether Fetch Priority is enabled
+   */
+  public boolean getFetchPriorityEnabled() {
+    return mFetchPriorityEnabled.get();
   }
 
   /**
@@ -1566,6 +1647,16 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
    */
   public boolean getLoginAutofillEnabled() {
     return mAutofillLogins.get();
+  }
+
+  /**
+   * Gets whether fission is enabled or not. Note: There is no setter after startup. See {@link
+   * Builder#fissionEnabled(boolean)} for setting.
+   *
+   * @return True if fission is enabled or false otherwise.
+   */
+  public @Nullable Boolean getFissionEnabled() {
+    return mFissionEnabled.get();
   }
 
   /**

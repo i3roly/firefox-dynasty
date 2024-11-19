@@ -77,7 +77,7 @@ internal fun BookmarksState.undoSnackbarText(): Pair<Int, String> = bookmarksSna
             stringId to (title ?: "error")
         }
         state is BookmarksSnackbarState.UndoDeletion -> {
-            val stringId = R.string.bookmark_deletion_multiple_snackbar_message_2
+            val stringId = R.string.bookmark_delete_multiple_items
             val numberOfBookmarks = "${state.guidsToDelete.size}"
             stringId to numberOfBookmarks
         }
@@ -88,6 +88,11 @@ internal fun BookmarksState.undoSnackbarText(): Pair<Int, String> = bookmarksSna
 internal fun BookmarksState.isGuidMarkedForDeletion(guid: String): Boolean = when (bookmarksSnackbarState) {
     is BookmarksSnackbarState.UndoDeletion -> bookmarksSnackbarState.guidsToDelete.contains(guid)
     else -> false
+}
+
+internal fun BookmarksState.isGuidBeingMoved(guid: String): Boolean {
+    return bookmarksMultiselectMoveState?.guidsToMove?.contains(guid) ?: false ||
+        bookmarksEditFolderState?.folder?.guid == guid
 }
 
 internal data class MultiselectMoveState(
@@ -127,6 +132,20 @@ internal sealed class BookmarksSnackbarState {
     data object None : BookmarksSnackbarState()
     data object CantEditDesktopFolders : BookmarksSnackbarState()
     data class UndoDeletion(val guidsToDelete: List<String>) : BookmarksSnackbarState()
+}
+
+internal fun BookmarksSnackbarState.addGuidToDelete(guid: String) = when (this) {
+    is BookmarksSnackbarState.UndoDeletion -> BookmarksSnackbarState.UndoDeletion(
+        guidsToDelete = this.guidsToDelete + listOf(guid),
+    )
+    else -> BookmarksSnackbarState.UndoDeletion(guidsToDelete = listOf(guid))
+}
+
+internal fun BookmarksSnackbarState.addGuidsToDelete(guids: List<String>) = when (this) {
+    is BookmarksSnackbarState.UndoDeletion -> BookmarksSnackbarState.UndoDeletion(
+        guidsToDelete = this.guidsToDelete + guids,
+    )
+    else -> BookmarksSnackbarState.UndoDeletion(guidsToDelete = guids)
 }
 
 internal data class BookmarksEditBookmarkState(
@@ -186,6 +205,9 @@ internal val BookmarkItem.Folder.isDesktopFolder: Boolean
         -> true
         else -> false
     }
+
+internal val BookmarkItem.Folder.isMobileRoot: Boolean
+    get() = guid == BookmarkRoot.Mobile.id
 
 internal val BookmarkItem.Folder.isDesktopRoot: Boolean
     get() = guid == BookmarkRoot.Root.id

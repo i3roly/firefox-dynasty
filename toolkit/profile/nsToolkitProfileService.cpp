@@ -5,6 +5,7 @@
 
 #include "mozilla/ArrayUtils.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/ErrorResult.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/UniquePtrExtensions.h"
@@ -53,12 +54,19 @@
 #include "mozilla/Attributes.h"
 #include "mozilla/Sprintf.h"
 #include "nsPrintfCString.h"
+#include "mozilla/dom/DOMMozPromiseRequestHolder.h"
+#include "mozilla/dom/Promise.h"
 #include "mozilla/UniquePtr.h"
 #include "nsIToolkitShellService.h"
-#include "mozilla/Telemetry.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "nsProxyRelease.h"
+#ifdef MOZ_HAS_REMOTE
+#  include "nsRemoteService.h"
+#endif
 #include "prinrval.h"
 #include "prthread.h"
+#include "xpcpublic.h"
+#include "nsProxyRelease.h"
 #ifdef MOZ_BACKGROUNDTASKS
 #  include "mozilla/BackgroundTasks.h"
 #  include "SpecialSystemDirectory.h"
@@ -636,7 +644,7 @@ nsToolkitProfileService::nsToolkitProfileService()
 #else
       mUseDedicatedProfile(false),
 #endif
-      mStartupReason(u"unknown"_ns),
+      mStartupReason("unknown"_ns),
       mStartupFileVersion("0"_ns),
       mMaybeLockProfile(false),
       mUpdateChannel(MOZ_STRINGIFY(MOZ_UPDATE_CHANNEL)),
@@ -658,12 +666,9 @@ void nsToolkitProfileService::CompleteStartup() {
     return;
   }
 
-  ScalarSet(mozilla::Telemetry::ScalarID::STARTUP_PROFILE_SELECTION_REASON,
-            mStartupReason);
-  ScalarSet(mozilla::Telemetry::ScalarID::STARTUP_PROFILE_DATABASE_VERSION,
-            NS_ConvertUTF8toUTF16(mStartupFileVersion));
-  ScalarSet(mozilla::Telemetry::ScalarID::STARTUP_PROFILE_COUNT,
-            static_cast<uint32_t>(mProfiles.length()));
+  glean::startup::profile_selection_reason.Set(mStartupReason);
+  glean::startup::profile_database_version.Set(mStartupFileVersion);
+  glean::startup::profile_count.Set(static_cast<uint32_t>(mProfiles.length()));
 
   // If we started into an unmanaged profile in a profile group, set the group
   // profile to be the managed profile belonging to the group.
@@ -748,7 +753,7 @@ bool nsToolkitProfileService::IsProfileForCurrentInstall(
   }
 
   nsCOMPtr<nsIFile> lastGreDir;
-  rv = NS_NewNativeLocalFile(""_ns, false, getter_AddRefs(lastGreDir));
+  rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(lastGreDir));
   NS_ENSURE_SUCCESS(rv, false);
 
   rv = lastGreDir->SetPersistentDescriptor(lastGreDirStr);
@@ -1112,7 +1117,7 @@ nsresult nsToolkitProfileService::Init() {
     }
 
     nsCOMPtr<nsIFile> rootDir;
-    rv = NS_NewNativeLocalFile(""_ns, true, getter_AddRefs(rootDir));
+    rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(rootDir));
     NS_ENSURE_SUCCESS(rv, rv);
 
     if (isRelative) {
@@ -1517,7 +1522,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
         rv = MaybeMakeDefaultDedicatedProfile(profile, &result);
         NS_ENSURE_SUCCESS(rv, rv);
         if (result) {
-          mStartupReason = u"restart-claimed-default"_ns;
+          mStartupReason = "restart-claimed-default"_ns;
 
           mCurrent = profile;
         } else {
@@ -1530,7 +1535,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
           rv = Flush();
           NS_ENSURE_SUCCESS(rv, rv);
 
-          mStartupReason = u"restart-skipped-default"_ns;
+          mStartupReason = "restart-skipped-default"_ns;
           *aDidCreate = true;
         }
 
@@ -1543,13 +1548,13 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
     }
 
     if (EnvHasValue("XRE_RESTARTED_BY_PROFILE_MANAGER")) {
-      mStartupReason = u"profile-manager"_ns;
+      mStartupReason = "profile-manager"_ns;
     } else if (EnvHasValue("XRE_RESTARTED_BY_PROFILE_SELECTOR")) {
-      mStartupReason = u"profile-selector"_ns;
+      mStartupReason = "profile-selector"_ns;
     } else if (aIsResetting) {
-      mStartupReason = u"profile-reset"_ns;
+      mStartupReason = "profile-reset"_ns;
     } else {
-      mStartupReason = u"restart"_ns;
+      mStartupReason = "restart"_ns;
     }
 
     mCurrent = profile;
@@ -1579,7 +1584,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
       return NS_ERROR_FAILURE;
     }
 
-    mStartupReason = u"argument-profile"_ns;
+    mStartupReason = "argument-profile"_ns;
 
     GetProfileByDir(lf, nullptr, getter_AddRefs(mCurrent));
     NS_ADDREF(*aRootDir = lf);
@@ -1610,7 +1615,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
     nsCOMPtr<nsIToolkitProfile> profile;
     if (delim) {
       nsCOMPtr<nsIFile> lf;
-      rv = NS_NewNativeLocalFile(nsDependentCString(delim + 1), true,
+      rv = NS_NewNativeLocalFile(nsDependentCString(delim + 1),
                                  getter_AddRefs(lf));
       if (NS_FAILED(rv)) {
         PR_fprintf(PR_STDERR, "Error: profile path not valid.\n");
@@ -1641,7 +1646,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
   if (ar) {
     mCurrent = GetProfileByName(nsDependentCString(arg));
     if (mCurrent) {
-      mStartupReason = u"argument-p"_ns;
+      mStartupReason = "argument-p"_ns;
 
       mCurrent->GetRootDir(aRootDir);
       mCurrent->GetLocalDir(aLocalDir);
@@ -1680,7 +1685,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
     if (BackgroundTasks::IsEphemeralProfileTaskName(taskName)) {
       // Background task mode does not enable legacy telemetry, so this is for
       // completeness and testing only.
-      mStartupReason = u"backgroundtask-ephemeral"_ns;
+      mStartupReason = "backgroundtask-ephemeral"_ns;
 
       nsCOMPtr<nsIFile> rootDir;
       rv = GetSpecialSystemDirectory(OS_TemporaryDirectory,
@@ -1698,7 +1703,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
     } else {
       // Background task mode does not enable legacy telemetry, so this is for
       // completeness and testing only.
-      mStartupReason = u"backgroundtask-not-ephemeral"_ns;
+      mStartupReason = "backgroundtask-not-ephemeral"_ns;
 
       // A non-ephemeral profile is required.
       nsCOMPtr<nsIFile> rootDir;
@@ -1851,7 +1856,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
           rv = MaybeMakeDefaultDedicatedProfile(profile, &result);
           NS_ENSURE_SUCCESS(rv, rv);
           if (result) {
-            mStartupReason = u"firstrun-claimed-default"_ns;
+            mStartupReason = "firstrun-claimed-default"_ns;
 
             mCurrent = profile;
             rootDir.forget(aRootDir);
@@ -1887,9 +1892,9 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
       NS_ENSURE_SUCCESS(rv, rv);
 
       if (skippedDefaultProfile) {
-        mStartupReason = u"firstrun-skipped-default"_ns;
+        mStartupReason = "firstrun-skipped-default"_ns;
       } else {
-        mStartupReason = u"firstrun-created-default"_ns;
+        mStartupReason = "firstrun-created-default"_ns;
       }
 
       // Use the new profile.
@@ -1912,7 +1917,7 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
 
   // Let the caller know that the profile was selected by default.
   *aWasDefaultSelection = true;
-  mStartupReason = u"default"_ns;
+  mStartupReason = "default"_ns;
 
   // Use the selected profile.
   mCurrent->GetRootDir(aRootDir);
@@ -2295,8 +2300,277 @@ nsToolkitProfileService::GetProfileCount(uint32_t* aResult) {
   return NS_OK;
 }
 
+// Attempts to merge the given profile data into the on-disk versions which may
+// have changed since rthey were loaded.
+nsresult WriteProfileInfo(nsIFile* profilesDBFile, nsIFile* installDBFile,
+                          const nsCString& installSection,
+                          const CurrentProfileData* profileInfo) {
+  nsINIParser profilesIni;
+  nsresult rv = profilesIni.Init(profilesDBFile);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // The INI data may have changed on disk so we cannot guarantee the section
+  // mapping remains the same. So we attempt to find the current profile's info
+  // by path or store ID.
+  nsCString iniSection;
+  profilesIni.GetSections(
+      [&profileInfo, &profilesIni, &iniSection](const char* section) {
+        nsCString value;
+        nsresult rv = profilesIni.GetString(section, "StoreID", value);
+
+        if (NS_SUCCEEDED(rv)) {
+          if (profileInfo->mStoreID.Equals(value)) {
+            iniSection = section;
+            // This is definitely the right one so no need to continue.
+            return false;
+          }
+        }
+
+        if (iniSection.IsEmpty()) {
+          rv = profilesIni.GetString(section, "Path", value);
+          if (NS_SUCCEEDED(rv) && profileInfo->mPath.Equals(value)) {
+            // This might be right but we would prefer to find by store ID.
+            iniSection = section;
+          }
+        }
+
+        return true;
+      });
+
+  if (iniSection.IsEmpty()) {
+    // No section found. Should we write a new one?
+    return NS_ERROR_UNEXPECTED;
+  }
+
+  bool changed = false;
+  nsCString oldValue;
+  rv = profilesIni.GetString(iniSection.get(), "StoreID", oldValue);
+  if (NS_FAILED(rv) || !oldValue.Equals(profileInfo->mStoreID)) {
+    rv = profilesIni.SetString(iniSection.get(), "StoreID",
+                               profileInfo->mStoreID.get());
+    NS_ENSURE_SUCCESS(rv, rv);
+    changed = true;
+  }
+
+  rv = profilesIni.GetString(iniSection.get(), "ShowSelector", oldValue);
+  if (NS_FAILED(rv) ||
+      !oldValue.Equals(profileInfo->mShowSelector ? "1" : "0")) {
+    rv = profilesIni.SetString(iniSection.get(), "ShowSelector",
+                               profileInfo->mShowSelector ? "1" : "0");
+    NS_ENSURE_SUCCESS(rv, rv);
+    changed = true;
+  }
+
+  profilesIni.GetString(iniSection.get(), "Path", oldValue);
+  if (NS_FAILED(rv) || !oldValue.Equals(profileInfo->mPath)) {
+    rv = profilesIni.SetString(iniSection.get(), "Path",
+                               profileInfo->mPath.get());
+    NS_ENSURE_SUCCESS(rv, rv);
+    changed = true;
+
+    // We must update the install default profile if it matches the old profile.
+
+    nsCString oldDefault;
+    rv = profilesIni.GetString(installSection.get(), "Default", oldDefault);
+    if (NS_SUCCEEDED(rv) && oldDefault.Equals(oldValue)) {
+      rv = profilesIni.SetString(installSection.get(), "Default",
+                                 profileInfo->mPath.get());
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      // We don't care so much if we fail to update the backup DB.
+      const nsDependentCSubstring& installHash =
+          Substring(installSection, INSTALL_PREFIX_LENGTH);
+
+      nsINIParser installsIni;
+      rv = installsIni.Init(installDBFile);
+      if (NS_SUCCEEDED(rv)) {
+        rv = installsIni.SetString(PromiseFlatCString(installHash).get(),
+                                   "Default", profileInfo->mPath.get());
+        if (NS_SUCCEEDED(rv)) {
+          installsIni.WriteToFile(installDBFile);
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    rv = profilesIni.WriteToFile(profilesDBFile);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+
+  return NS_OK;
+}
+
 NS_IMETHODIMP
-nsToolkitProfileService::Flush() {
+nsToolkitProfileService::AsyncFlushCurrentProfile(JSContext* aCx,
+                                                  dom::Promise** aPromise) {
+#ifndef MOZ_HAS_REMOTE
+  return NS_ERROR_FAILURE;
+#else
+  if (!mCurrent) {
+    return NS_ERROR_ILLEGAL_VALUE;
+  }
+
+  nsIGlobalObject* global = xpc::CurrentNativeGlobal(aCx);
+
+  if (!global) {
+    return NS_ERROR_DOM_INVALID_STATE_ERR;
+  }
+
+  ErrorResult result;
+  RefPtr<dom::Promise> promise = dom::Promise::Create(global, result);
+
+  if (MOZ_UNLIKELY(result.Failed())) {
+    return result.StealNSResult();
+  }
+
+  UniquePtr<CurrentProfileData> profileData = MakeUnique<CurrentProfileData>();
+  profileData->mStoreID = mCurrent->mStoreID;
+  profileData->mShowSelector = mCurrent->mShowProfileSelector;
+
+  bool isRelative;
+  GetProfileDescriptor(mCurrent, profileData->mPath, &isRelative);
+
+  if (!mAsyncQueue) {
+    MOZ_ALWAYS_SUCCEEDS(NS_CreateBackgroundTaskQueue(
+        "nsToolkitProfileService", getter_AddRefs(mAsyncQueue)));
+  }
+
+  nsCOMPtr<nsIRemoteService> rs = GetRemoteService();
+  RefPtr<nsRemoteService> remoteService =
+      static_cast<nsRemoteService*>(rs.get());
+
+  RefPtr<AsyncFlushPromise> p = remoteService->AsyncLockStartup(5000)->Then(
+      mAsyncQueue, __func__,
+      [self = RefPtr{this}, this, profileData = std::move(profileData)](
+          const nsRemoteService::StartupLockPromise::ResolveOrRejectValue&
+              aValue) {
+        if (aValue.IsReject()) {
+          // Locking failed.
+          return AsyncFlushPromise::CreateAndReject(aValue.RejectValue(),
+                                                    __func__);
+        }
+
+        nsresult rv = WriteProfileInfo(mProfileDBFile, mInstallDBFile,
+                                       mInstallSection, profileData.get());
+
+        if (NS_FAILED(rv)) {
+          return AsyncFlushPromise::CreateAndReject(rv, __func__);
+        }
+
+        return AsyncFlushPromise::CreateAndResolve(true, __func__);
+      });
+
+  // This is responsible for cancelling the MozPromise if the global goes
+  // away.
+  auto requestHolder =
+      MakeRefPtr<dom::DOMMozPromiseRequestHolder<AsyncFlushPromise>>(global);
+
+  // This keeps the promise alive after this method returns.
+  nsMainThreadPtrHandle<dom::Promise> promiseHolder(
+      new nsMainThreadPtrHolder<dom::Promise>(
+          "nsToolkitProfileService::AsyncFlushCurrentProfile", promise));
+
+  p->Then(GetCurrentSerialEventTarget(), __func__,
+          [requestHolder, promiseHolder](
+              const AsyncFlushPromise::ResolveOrRejectValue& result) {
+            requestHolder->Complete();
+
+            if (result.IsReject()) {
+              promiseHolder->MaybeReject(result.RejectValue());
+            } else {
+              promiseHolder->MaybeResolveWithUndefined();
+            }
+          })
+      ->Track(*requestHolder);
+
+  promise.forget(aPromise);
+
+  return NS_OK;
+#endif
+}
+
+NS_IMETHODIMP
+nsToolkitProfileService::AsyncFlush(JSContext* aCx, dom::Promise** aPromise) {
+#ifndef MOZ_HAS_REMOTE
+  return NS_ERROR_FAILURE;
+#else
+  nsIGlobalObject* global = xpc::CurrentNativeGlobal(aCx);
+
+  if (!global) {
+    return NS_ERROR_DOM_INVALID_STATE_ERR;
+  }
+
+  ErrorResult result;
+  RefPtr<dom::Promise> promise = dom::Promise::Create(global, result);
+
+  if (MOZ_UNLIKELY(result.Failed())) {
+    return result.StealNSResult();
+  }
+
+  UniquePtr<IniData> iniData = MakeUnique<IniData>();
+  BuildIniData(iniData->mProfiles, iniData->mInstalls);
+
+  if (!mAsyncQueue) {
+    MOZ_ALWAYS_SUCCEEDS(NS_CreateBackgroundTaskQueue(
+        "nsToolkitProfileService", getter_AddRefs(mAsyncQueue)));
+  }
+
+  nsCOMPtr<nsIRemoteService> rs = GetRemoteService();
+  RefPtr<nsRemoteService> remoteService =
+      static_cast<nsRemoteService*>(rs.get());
+
+  RefPtr<AsyncFlushPromise> p = remoteService->AsyncLockStartup(5000)->Then(
+      mAsyncQueue, __func__,
+      [self = RefPtr{this}, this, iniData = std::move(iniData)](
+          const nsRemoteService::StartupLockPromise::ResolveOrRejectValue&
+              aValue) {
+        if (aValue.IsReject()) {
+          // Locking failed.
+          return AsyncFlushPromise::CreateAndReject(aValue.RejectValue(),
+                                                    __func__);
+        }
+
+        nsresult rv = FlushData(iniData->mProfiles, iniData->mInstalls);
+
+        if (NS_FAILED(rv)) {
+          return AsyncFlushPromise::CreateAndReject(rv, __func__);
+        }
+
+        return AsyncFlushPromise::CreateAndResolve(true, __func__);
+      });
+
+  // This is responsible for cancelling the MozPromise if the global goes
+  // away.
+  auto requestHolder =
+      MakeRefPtr<dom::DOMMozPromiseRequestHolder<AsyncFlushPromise>>(global);
+
+  // This keeps the promise alive after this method returns.
+  nsMainThreadPtrHandle<dom::Promise> promiseHolder(
+      new nsMainThreadPtrHolder<dom::Promise>(
+          "nsToolkitProfileService::AsyncFlushCurrentProfile", promise));
+
+  p->Then(GetCurrentSerialEventTarget(), __func__,
+          [requestHolder, promiseHolder](
+              const AsyncFlushPromise::ResolveOrRejectValue& result) {
+            requestHolder->Complete();
+
+            if (result.IsReject()) {
+              promiseHolder->MaybeReject(result.RejectValue());
+            } else {
+              promiseHolder->MaybeResolveWithUndefined();
+            }
+          })
+      ->Track(*requestHolder);
+
+  promise.forget(aPromise);
+
+  return NS_OK;
+#endif
+}
+
+nsresult nsToolkitProfileService::FlushData(const nsCString& aProfilesIniData,
+                                            const nsCString& aInstallsIniData) {
   if (GetIsListOutdated()) {
     return NS_ERROR_DATABASE_CHANGED;
   }
@@ -2306,39 +2580,14 @@ nsToolkitProfileService::Flush() {
   // If we aren't using dedicated profiles then nothing about the list of
   // installs can have changed, so no need to update the backup.
   if (mUseDedicatedProfile) {
-    // Export the installs to the backup.
-    nsTArray<nsCString> installs = GetKnownInstalls();
-
-    if (!installs.IsEmpty()) {
-      nsCString data;
-      nsCString buffer;
-
-      for (uint32_t i = 0; i < installs.Length(); i++) {
-        nsTArray<UniquePtr<KeyValue>> strings =
-            GetSectionStrings(&mProfileDB, installs[i].get());
-        if (strings.IsEmpty()) {
-          continue;
-        }
-
-        // Strip "Install" from the start.
-        const nsDependentCSubstring& install =
-            Substring(installs[i], INSTALL_PREFIX_LENGTH);
-        data.AppendPrintf("[%s]\n", PromiseFlatCString(install).get());
-
-        for (uint32_t j = 0; j < strings.Length(); j++) {
-          data.AppendPrintf("%s=%s\n", strings[j]->key.get(),
-                            strings[j]->value.get());
-        }
-
-        data.Append("\n");
-      }
-
+    if (!aInstallsIniData.IsEmpty()) {
       FILE* writeFile;
       rv = mInstallDBFile->OpenANSIFileDesc("w", &writeFile);
       NS_ENSURE_SUCCESS(rv, rv);
 
-      uint32_t length = data.Length();
-      if (fwrite(data.get(), sizeof(char), length, writeFile) != length) {
+      uint32_t length = aInstallsIniData.Length();
+      if (fwrite(aInstallsIniData.get(), sizeof(char), length, writeFile) !=
+          length) {
         fclose(writeFile);
         return NS_ERROR_UNEXPECTED;
       }
@@ -2352,14 +2601,70 @@ nsToolkitProfileService::Flush() {
     }
   }
 
-  rv = mProfileDB.WriteToFile(mProfileDBFile);
+  FILE* writeFile;
+  rv = mProfileDBFile->OpenANSIFileDesc("w", &writeFile);
   NS_ENSURE_SUCCESS(rv, rv);
+
+  uint32_t length = aProfilesIniData.Length();
+  if (fwrite(aProfilesIniData.get(), sizeof(char), length, writeFile) !=
+      length) {
+    fclose(writeFile);
+    return NS_ERROR_UNEXPECTED;
+  }
+
+  fclose(writeFile);
 
   rv = UpdateFileStats(mProfileDBFile, &mProfileDBExists,
                        &mProfileDBModifiedTime, &mProfileDBFileSize);
   NS_ENSURE_SUCCESS(rv, rv);
 
   return NS_OK;
+}
+
+void nsToolkitProfileService::BuildIniData(nsCString& aProfilesIniData,
+                                           nsCString& aInstallsIniData) {
+  // If we aren't using dedicated profiles then nothing about the list of
+  // installs can have changed, so no need to update the backup.
+  if (mUseDedicatedProfile) {
+    // Export the installs to the backup.
+    nsTArray<nsCString> installs = GetKnownInstalls();
+
+    if (!installs.IsEmpty()) {
+      nsCString buffer;
+
+      for (uint32_t i = 0; i < installs.Length(); i++) {
+        nsTArray<UniquePtr<KeyValue>> strings =
+            GetSectionStrings(&mProfileDB, installs[i].get());
+        if (strings.IsEmpty()) {
+          continue;
+        }
+
+        // Strip "Install" from the start.
+        const nsDependentCSubstring& install =
+            Substring(installs[i], INSTALL_PREFIX_LENGTH);
+        aInstallsIniData.AppendPrintf("[%s]\n",
+                                      PromiseFlatCString(install).get());
+
+        for (uint32_t j = 0; j < strings.Length(); j++) {
+          aInstallsIniData.AppendPrintf("%s=%s\n", strings[j]->key.get(),
+                                        strings[j]->value.get());
+        }
+
+        aInstallsIniData.Append("\n");
+      }
+    }
+  }
+
+  mProfileDB.WriteToString(aProfilesIniData);
+}
+
+NS_IMETHODIMP
+nsToolkitProfileService::Flush() {
+  nsCString profilesIniData;
+  nsCString installsIniData;
+
+  BuildIniData(profilesIniData, installsIniData);
+  return FlushData(profilesIniData, installsIniData);
 }
 
 nsresult nsToolkitProfileService::GetLocalDirFromRootDir(nsIFile* aRootDir,
@@ -2373,7 +2678,7 @@ nsresult nsToolkitProfileService::GetLocalDirFromRootDir(nsIFile* aRootDir,
 
   nsCOMPtr<nsIFile> localDir;
   if (isRelative) {
-    rv = NS_NewNativeLocalFile(""_ns, true, getter_AddRefs(localDir));
+    rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(localDir));
     NS_ENSURE_SUCCESS(rv, rv);
 
     rv = localDir->SetRelativeDescriptor(
@@ -2412,7 +2717,7 @@ nsresult XRE_GetFileFromPath(const char* aPath, nsIFile** aResult) {
   if (!fullPath) return NS_ERROR_FAILURE;
 
   nsCOMPtr<nsIFile> lf;
-  nsresult rv = NS_NewNativeLocalFile(""_ns, true, getter_AddRefs(lf));
+  nsresult rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(lf));
   if (NS_SUCCEEDED(rv)) {
     nsCOMPtr<nsILocalFileMac> lfMac = do_QueryInterface(lf, &rv);
     if (NS_SUCCEEDED(rv)) {
@@ -2430,14 +2735,14 @@ nsresult XRE_GetFileFromPath(const char* aPath, nsIFile** aResult) {
 
   if (!realpath(aPath, fullPath)) return NS_ERROR_FAILURE;
 
-  return NS_NewNativeLocalFile(nsDependentCString(fullPath), true, aResult);
+  return NS_NewNativeLocalFile(nsDependentCString(fullPath), aResult);
 #elif defined(XP_WIN)
   WCHAR fullPath[MAXPATHLEN];
 
   if (!_wfullpath(fullPath, NS_ConvertUTF8toUTF16(aPath).get(), MAXPATHLEN))
     return NS_ERROR_FAILURE;
 
-  return NS_NewLocalFile(nsDependentString(fullPath), true, aResult);
+  return NS_NewLocalFile(nsDependentString(fullPath), aResult);
 
 #else
 #  error Platform-specific logic needed here.

@@ -115,6 +115,7 @@
 #include "mozilla/dom/Text.h"
 #include "mozilla/dom/TrustedHTML.h"
 #include "mozilla/dom/TrustedTypesConstants.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
 #include "mozilla/dom/UnbindContext.h"
 #include "mozilla/dom/WindowBinding.h"
 #include "mozilla/dom/XULCommandEvent.h"
@@ -3987,9 +3988,32 @@ void Element::GetInnerHTML(nsAString& aInnerHTML, OOMReporter& aError) {
   GetMarkup(false, aInnerHTML);
 }
 
-void Element::SetInnerHTML(const nsAString& aInnerHTML,
+void Element::GetInnerHTML(OwningTrustedHTMLOrNullIsEmptyString& aInnerHTML,
+                           OOMReporter& aError) {
+  GetInnerHTML(aInnerHTML.SetAsNullIsEmptyString(), aError);
+}
+
+void Element::SetInnerHTML(const TrustedHTMLOrNullIsEmptyString& aInnerHTML,
                            nsIPrincipal* aSubjectPrincipal,
                            ErrorResult& aError) {
+  constexpr nsLiteralString sink = u"Element innerHTML"_ns;
+
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aInnerHTML, sink, kTrustedTypesOnlySinkGroup, *this,
+          compliantStringHolder, aError);
+
+  if (aError.Failed()) {
+    return;
+  }
+
+  SetInnerHTMLTrusted(*compliantString, aSubjectPrincipal, aError);
+}
+
+void Element::SetInnerHTMLTrusted(const nsAString& aInnerHTML,
+                                  nsIPrincipal* aSubjectPrincipal,
+                                  ErrorResult& aError) {
   SetInnerHTMLInternal(aInnerHTML, aError);
 }
 
@@ -4053,188 +4077,16 @@ void Element::SetOuterHTML(const nsAString& aOuterHTML, ErrorResult& aError) {
 
 enum nsAdjacentPosition { eBeforeBegin, eAfterBegin, eBeforeEnd, eAfterEnd };
 
-// https://w3c.github.io/trusted-types/dist/spec/#abstract-opdef-does-sink-type-require-trusted-types
-static bool DoesSinkTypeRequireTrustedTypes(nsIContentSecurityPolicy* aCSP,
-                                            const nsAString& aSinkGroup) {
-  uint32_t numPolicies = 0;
-  if (aCSP) {
-    aCSP->GetPolicyCount(&numPolicies);
-  }
-  for (uint32_t i = 0; i < numPolicies; ++i) {
-    const nsCSPPolicy* policy = aCSP->GetPolicy(i);
-
-    if (policy->AreTrustedTypesForSinkGroupRequired(aSinkGroup)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-namespace SinkTypeMismatch {
-enum class Value { Blocked, Allowed };
-
-static constexpr size_t kTrimmedSourceLength = 40;
-static constexpr nsLiteralString kSampleSeparator = u"|"_ns;
-}  // namespace SinkTypeMismatch
-
-// https://w3c.github.io/trusted-types/dist/spec/#abstract-opdef-should-sink-type-mismatch-violation-be-blocked-by-content-security-policy
-static SinkTypeMismatch::Value ShouldSinkTypeMismatchViolationBeBlockedByCSP(
-    nsIContentSecurityPolicy* aCSP, const nsAString& aSink,
-    const nsAString& aSinkGroup, const nsAString& aSource) {
-  SinkTypeMismatch::Value result = SinkTypeMismatch::Value::Allowed;
-
-  uint32_t numPolicies = 0;
-  if (aCSP) {
-    aCSP->GetPolicyCount(&numPolicies);
-  }
-
-  for (uint32_t i = 0; i < numPolicies; ++i) {
-    const auto* policy = aCSP->GetPolicy(i);
-
-    if (!policy->AreTrustedTypesForSinkGroupRequired(aSinkGroup)) {
-      continue;
-    }
-
-    auto caller = JSCallingLocation::Get();
-
-    const nsDependentSubstring trimmedSource = Substring(
-        aSource, /* aStartPos */ 0, SinkTypeMismatch::kTrimmedSourceLength);
-    const nsString sample =
-        aSink + SinkTypeMismatch::kSampleSeparator + trimmedSource;
-
-    CSPViolationData cspViolationData{
-        i,
-        CSPViolationData::Resource{
-            CSPViolationData::BlockedContentSource::TrustedTypesSink},
-        nsIContentSecurityPolicy::REQUIRE_TRUSTED_TYPES_FOR_DIRECTIVE,
-        caller.FileName(),
-        caller.mLine,
-        caller.mColumn,
-        /* aElement */ nullptr,
-        sample};
-
-    // For Workers, a pointer to an object needs to be passed
-    // (https://bugzilla.mozilla.org/show_bug.cgi?id=1901492).
-    nsICSPEventListener* cspEventListener = nullptr;
-
-    aCSP->LogTrustedTypesViolationDetailsUnchecked(
-        std::move(cspViolationData),
-        NS_LITERAL_STRING_FROM_CSTRING(
-            REQUIRE_TRUSTED_TYPES_FOR_SCRIPT_OBSERVER_TOPIC),
-        cspEventListener);
-
-    if (policy->getDisposition() == nsCSPPolicy::Disposition::Enforce) {
-      result = SinkTypeMismatch::Value::Blocked;
-    }
-  }
-
-  return result;
-}
-
-// https://w3c.github.io/trusted-types/dist/spec/#abstract-opdef-process-value-with-a-default-policy
-// specialized for `TrustedHTML`.
-static void ProcessValueWithADefaultPolicy(RefPtr<TrustedHTML>& aResult,
-                                           ErrorResult& aError) {
-  // TODO: implement default-policy support,
-  // https://bugzilla.mozilla.org/show_bug.cgi?id=1903717.
-
-  aResult = nullptr;
-}
-
-// https://w3c.github.io/trusted-types/dist/spec/#get-trusted-type-compliant-string-algorithm
-// specialized for TrustedHTML.
-// @param aCSP May be null.
-static void GetTrustedTypesCompliantString(const TrustedHTMLOrString& aInput,
-                                           nsIContentSecurityPolicy* aCSP,
-                                           const nsAString& aSink,
-                                           const nsAString& aSinkGroup,
-                                           nsAString& aResult,
-                                           ErrorResult& aError) {
-  if (!StaticPrefs::dom_security_trusted_types_enabled()) {
-    // A `TrustedHTML` string might've been created before the pref was set to
-    //  `false`.
-    aResult = aInput.IsString() ? aInput.GetAsString()
-                                : aInput.GetAsTrustedHTML().mData;
-    return;
-  }
-
-  if (aInput.IsTrustedHTML()) {
-    aResult = aInput.GetAsTrustedHTML().mData;
-    return;
-  }
-
-  if (!DoesSinkTypeRequireTrustedTypes(aCSP, aSinkGroup)) {
-    aResult = aInput.GetAsString();
-    return;
-  }
-
-  RefPtr<TrustedHTML> convertedInput;
-  ProcessValueWithADefaultPolicy(convertedInput, aError);
-
-  if (aError.Failed()) {
-    return;
-  }
-
-  if (!convertedInput) {
-    if (ShouldSinkTypeMismatchViolationBeBlockedByCSP(aCSP, aSink, aSinkGroup,
-                                                      aInput.GetAsString()) ==
-        SinkTypeMismatch::Value::Allowed) {
-      aResult = aInput.GetAsString();
-      return;
-    }
-
-    aError.ThrowTypeError("Sink type mismatch violation blocked by CSP"_ns);
-    return;
-  }
-
-  aResult = convertedInput->mData;
-}
-
-// https://html.spec.whatwg.org/#the-insertadjacenthtml()-method
-struct InsertAdjacentHTMLConstants {
-  // https://github.com/w3c/trusted-types/issues/542
-  static constexpr nsLiteralString kSinkGroup =
-      kValidRequireTrustedTypesForDirectiveValue;
-
-  static constexpr nsLiteralString kSink = u"Element insertAdjacentHTML"_ns;
-};
-
-// The global object's CSP may differ from the owner-document's one.
-// E.g. when a document is created via
-// `document.implementation.createHTMLDocument("")` is not connected to a
-// browsing context.
-static nsIContentSecurityPolicy* GetCspFromScopeObjectsInnerWindow(
-    const Document& aOwnerDoc, ErrorResult& aError) {
-  nsIGlobalObject* globalObject = aOwnerDoc.GetScopeObject();
-  if (!globalObject) {
-    aError.ThrowTypeError("No global object");
-    return nullptr;
-  }
-
-  nsPIDOMWindowInner* piDOMWindowInner = globalObject->GetAsInnerWindow();
-  if (!piDOMWindowInner) {
-    aError.ThrowTypeError("No inner window");
-    return nullptr;
-  }
-
-  return piDOMWindowInner->GetCsp();
-}
-
 void Element::InsertAdjacentHTML(
     const nsAString& aPosition, const TrustedHTMLOrString& aTrustedHTMLOrString,
     ErrorResult& aError) {
-  nsIContentSecurityPolicy* csp =
-      GetCspFromScopeObjectsInnerWindow(*OwnerDoc(), aError);
-  if (aError.Failed()) {
-    return;
-  }
+  constexpr nsLiteralString kSink = u"Element insertAdjacentHTML"_ns;
 
-  nsAutoString compliantString;
-
-  GetTrustedTypesCompliantString(
-      aTrustedHTMLOrString, csp, InsertAdjacentHTMLConstants::kSink,
-      InsertAdjacentHTMLConstants::kSinkGroup, compliantString, aError);
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aTrustedHTMLOrString, kSink, kTrustedTypesOnlySinkGroup, *this,
+          compliantStringHolder, aError);
 
   if (aError.Failed()) {
     return;
@@ -4290,7 +4142,7 @@ void Element::InsertAdjacentHTML(
       contextLocal = nsGkAtoms::body;
     }
     aError = nsContentUtils::ParseFragmentHTML(
-        compliantString, destination, contextLocal, contextNs,
+        *compliantString, destination, contextLocal, contextNs,
         doc->GetCompatibilityMode() == eCompatibility_NavQuirks, true);
     // HTML5 parser has notified, but not fired mutation events.
     nsContentUtils::FireMutationEventsForDirectParsing(doc, destination,
@@ -4300,7 +4152,7 @@ void Element::InsertAdjacentHTML(
 
   // couldn't parse directly
   RefPtr<DocumentFragment> fragment = nsContentUtils::CreateContextualFragment(
-      destination, compliantString, true, aError);
+      destination, *compliantString, true, aError);
   if (aError.Failed()) {
     return;
   }
@@ -4459,6 +4311,29 @@ void Element::GetImplementedPseudoElement(nsAString& aPseudo) const {
   aPseudo.SetCapacity(pseudo.Length() + 1);
   aPseudo.Append(':');
   aPseudo.Append(pseudo);
+}
+
+const Element* Element::GetPseudoElement(
+    const PseudoStyleRequest& aRequest) const {
+  switch (aRequest.mType) {
+    case PseudoStyleType::NotPseudo:
+      return this;
+    case PseudoStyleType::before:
+      return nsLayoutUtils::GetBeforePseudo(this);
+    case PseudoStyleType::after:
+      return nsLayoutUtils::GetAfterPseudo(this);
+    case PseudoStyleType::marker:
+      return nsLayoutUtils::GetMarkerPseudo(this);
+    case PseudoStyleType::viewTransition:
+    case PseudoStyleType::viewTransitionGroup:
+    case PseudoStyleType::viewTransitionImagePair:
+    case PseudoStyleType::viewTransitionOld:
+    case PseudoStyleType::viewTransitionNew:
+      // FIXME: Bug 1919347: Support these when working on getComputedStyle(),
+      // or Web Animation APIs.
+    default:
+      return nullptr;
+  }
 }
 
 ReferrerPolicy Element::GetReferrerPolicyAsEnum() const {

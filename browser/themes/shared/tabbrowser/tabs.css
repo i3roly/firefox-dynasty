@@ -11,7 +11,9 @@
   &[uidensity=touch] {
     --tab-min-height: 41px;
   }
-  --tab-collapsed-background-width: 36px;
+  --tab-group-label-height: max(1.5em, var(--tab-min-height) - 14px);
+  /* Collapsed tabs should be square, so set width to match the min height */
+  --tab-collapsed-background-width: var(--tab-min-height);
   --tab-collapsed-width: calc(var(--tab-collapsed-background-width) + 2 * var(--tab-inner-inline-margin));
   --tab-inner-inline-margin: var(--space-medium);
   --tab-inline-padding: var(--space-medium);
@@ -21,11 +23,13 @@
   --tab-pinned-container-margin-inline-expanded: var(--space-small);
   --tab-border-radius: 4px;
   --tab-overflow-clip-margin: 2px;
+  --tab-close-button-padding: 6px;
   --tab-shadow-max-size: 6px;
   --tab-block-margin: 4px;
   --tab-icon-end-margin: 5.5px;
-  --tab-icon-overlay-fill: light-dark(black, white);
-  --tab-icon-overlay-stroke: light-dark(white, black);
+  --tab-icon-overlay-fill: light-dark(white, black);
+  --tab-icon-overlay-stroke: light-dark(black, white);
+  --tab-label-line-height: 1.7;
   --tab-loading-fill: #0A84FF;
   --tab-hover-background-color: color-mix(in srgb, currentColor 11%, transparent);
   --tab-selected-textcolor: var(--toolbar-color);
@@ -37,11 +41,13 @@
   &[lwt-tab-selected="dark"] {
     --tab-selected-color-scheme: dark;
   }
+  --tab-selected-shadow: 0 0 4px rgba(0,0,0,.4);
   --tab-outline: 1px solid var(--tab-outline-color);
   --tab-outline-color: transparent;
   --tab-selected-outline-color: transparent;
   --tab-hover-outline-color: transparent;
-  --tab-outline-offset: var(--toolbarbutton-outline-offset);
+  --tab-outline-offset: -1px;
+  --tabstrip-min-height: calc(var(--tab-min-height) + 2 * var(--tab-block-margin));
   @media (prefers-contrast) {
     --tab-selected-outline-color: currentColor;
     --tab-hover-outline-color: currentColor;
@@ -56,6 +62,51 @@
   &[lwtheme] {
     --tab-selected-outline-color: var(--lwt-tab-line-color, currentColor);
   }
+
+  --vertical-tabs-scrollbar-color: auto;
+  @media (-moz-platform: macos) {
+    --vertical-tabs-scrollbar-color: color-mix(in srgb, currentColor 26%, transparent) transparent;
+  }
+
+  /* TAB GROUP COLORS
+   * tab-group-color-* is used for expanded groups in light mode and collapsed groups in dark mode
+   * tab-group-color-*-invert is used for expanded groups in dark mode
+   * tab-group-color-*-pale is used for collapsed groups in light mode */
+  --tab-group-color-blue: #0069CC;
+  --tab-group-color-blue-invert: #52A9FE;
+  --tab-group-color-blue-pale: #F2F9FF;
+  --tab-group-color-purple: #8C39BC;
+  --tab-group-color-purple-invert: #C188EA;
+  --tab-group-color-purple-pale: #FBF6FF;
+  --tab-group-color-cyan: #007B7C;
+  --tab-group-color-cyan-invert: #4AB6C7;
+  --tab-group-color-cyan-pale: #EFFBFC;
+  --tab-group-color-orange: #B14200;
+  --tab-group-color-orange-invert: #EE8545;
+  --tab-group-color-orange-pale: #FFF6F1;
+  --tab-group-color-yellow: #955C00;
+  --tab-group-color-yellow-invert: #F5AE39;
+  --tab-group-color-yellow-pale: #FCF8EF;
+  --tab-group-color-pink: #BB1562;
+  --tab-group-color-pink-invert: #E17CC2;
+  --tab-group-color-pink-pale: #FFF5FB;
+  --tab-group-color-green: #477A00;
+  --tab-group-color-green-invert: #6EBB5D;
+  --tab-group-color-green-pale: #F4FBF2;
+  --tab-group-color-red: #C21725;
+  --tab-group-color-red-invert: #F47B74;
+  --tab-group-color-red-pale: #FFF5F5;
+  --tab-group-color-gray: #5E6A77;
+  --tab-group-color-gray-invert: #99A6B4;
+  --tab-group-color-gray-pale: #F2F9FF;
+}
+
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (-moz-bool-pref: "sidebar.verticalTabs") {
+  :root {
+    --tab-min-height: max(32px, calc(var(--tab-label-line-height) * 1em));
+    --tab-block-margin: 2px;
+  }
 }
 
 #tabbrowser-tabs {
@@ -66,6 +117,7 @@
   &[orient="horizontal"] {
     --tab-overflow-pinned-tabs-width: 0px;
     padding-inline: var(--tab-overflow-pinned-tabs-width) 0;
+    min-height: var(--tabstrip-min-height);
 
     --tab-min-width: 76px;
     :root[uidensity="touch"] & {
@@ -85,6 +137,10 @@
       padding-bottom: 15px;
       margin-bottom: -15px;
     }
+  }
+
+  &[noshadowfortests] {
+    --tab-selected-shadow: none;
   }
 }
 
@@ -149,22 +205,27 @@
     display: block;
   }
 
-  #tabbrowser-tabs[movingtab] > #tabbrowser-arrowscrollbox > &:is([selected], [multiselected]) {
+  #tabbrowser-tabs[movingtab] &:is([selected], [multiselected]) {
     position: relative;
     z-index: 2;
     pointer-events: none; /* avoid blocking dragover events on scroll buttons */
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    #tabbrowser-tabs[movingtab] > #tabbrowser-arrowscrollbox > &[fadein]:not([selected]):not([multiselected]),
-    &[tab-grouping],
+    #tabbrowser-tabs[movingtab] &[fadein]:not([selected]):not([multiselected]),
+    &[multiselected-move-together],
     &[tabdrop-samewindow] {
       transition: transform 200ms var(--animation-easing-function);
     }
   }
 
-  &[tab-grouping][multiselected]:not([selected]) {
+  &[multiselected-move-together][multiselected]:not([selected]) {
     z-index: 2;
+  }
+
+  &:is([visuallyselected], [multiselected]) {
+    color: var(--tab-selected-textcolor);
+    color-scheme: var(--tab-selected-color-scheme);
   }
 }
 
@@ -306,7 +367,8 @@
           background-repeat: no-repeat;
           width: 480px;
           height: 100%;
-          animation: tab-throbber-animation 1.05s steps(30) infinite;
+          /* this runs tab-throbber-animation 43 times (~45s) and delays swap-icon-animation by 45s  */
+          animation: tab-throbber-animation 1.05s steps(30) 43, swap-icon-animation 0s linear 45s 1 forwards;
           -moz-context-properties: fill;
 
           /* XXX: It would be nice to transition between the "connecting" color and the
@@ -330,7 +392,7 @@
       }
 
       #TabsToolbar[brighttext] &[progress]:not([selected])::before {
-        fill: var(--lwt-tab-loading-fill-inactive, #84c1ff);
+        fill: #84c1ff;
       }
     }
   }
@@ -344,6 +406,11 @@
 @keyframes tab-throbber-animation-rtl {
   0% { transform: translateX(0); }
   100% { transform: translateX(100%); }
+}
+
+@keyframes swap-icon-animation {
+  0% { background-image: url("chrome://browser/skin/tabbrowser/loading.svg"); transform: translateX(0); }
+  100% { background-image: url("chrome://browser/skin/tabbrowser/hourglass.svg"); transform: translateX(0); }
 }
 
 .tab-icon-pending:is(:not([pendingicon]), [busy], [pinned]) {
@@ -444,7 +511,6 @@
       background-color: var(--tab-icon-overlay-stroke);
       background-position: center;
       background-repeat: no-repeat;
-      border: 0.5px solid var(--tab-icon-overlay-fill);
       border-radius: 10px;
       -moz-context-properties: fill;
       fill: var(--tab-icon-overlay-fill);
@@ -474,6 +540,13 @@
     &:hover:active {
       background-color: color-mix(in srgb, currentColor 30%, transparent);
     }
+
+    &:is([soundplaying], [muted], [activemedia-blocked]) {
+      &:hover,
+      &:hover:active {
+        background-color: color-mix(in srgb, currentColor 50%, transparent);
+      }
+    }
   }
 
   :is(
@@ -489,7 +562,7 @@
 .tab-label-container {
   overflow: hidden;
 
-  #tabbrowser-tabs:not([secondarytext-unsupported]) & {
+  #tabbrowser-tabs:not([secondarytext-unsupported], [orient=vertical]) & {
     height: 2.7em;
   }
 
@@ -514,7 +587,7 @@
 
 .tab-label {
   margin-inline: 0;
-  line-height: 1.7;  /* override 'normal' in case of fallback math fonts with huge metrics */
+  line-height: var(--tab-label-line-height);  /* override 'normal' in case of fallback math fonts with huge metrics */
   white-space: nowrap;
 }
 
@@ -523,7 +596,7 @@
   margin-inline-end: calc(var(--tab-inline-padding) / -2);
   width: 24px;
   height: 24px;
-  padding: 6px;
+  padding: var(--tab-close-button-padding);
   border-radius: var(--tab-border-radius);
   list-style-image: url(chrome://global/skin/icons/close-12.svg);
 
@@ -591,43 +664,41 @@
   min-height: var(--tab-min-height);
   outline: var(--tab-outline);
   outline-offset: var(--tab-outline-offset);
-}
 
-/* Selected tab and tab hover */
-
-.tabbrowser-tab:hover > .tab-stack > .tab-background:not([selected], [multiselected]) {
-  background-color: var(--tab-hover-background-color);
-  outline-color: var(--tab-hover-outline-color);
-}
-
-#TabsToolbar #firefox-view-button[open] > .toolbarbutton-icon,
-.tab-background:is([selected], [multiselected]) {
-  background-color: var(--tab-selected-bgcolor);
-  background-origin: border-box;
-  background-repeat: repeat-x;
-  box-shadow: 0 0 4px rgba(0,0,0,.4);
-  outline-color: var(--tab-selected-outline-color);
-
-  #tabbrowser-tabs[noshadowfortests] & {
-    box-shadow: none;
+  .tabbrowser-tab:hover > .tab-stack > &:not([selected], [multiselected]) {
+    background-color: var(--tab-hover-background-color);
+    outline-color: var(--tab-hover-outline-color);
   }
-}
 
-#TabsToolbar #firefox-view-button[open] > .toolbarbutton-icon,
-.tabbrowser-tab:is([visuallyselected], [multiselected]) {
-  color: var(--tab-selected-textcolor);
-  color-scheme: var(--tab-selected-color-scheme);
-}
+  &:is([selected], [multiselected]) {
+    background-color: var(--tab-selected-bgcolor);
+    box-shadow: var(--tab-selected-shadow);
+    outline-color: var(--tab-selected-outline-color);
+  }
 
-/* Add a focus outline on top of the multiselected tabs, with the currently selected
-   tab getting a slightly thicker outline. */
-.tab-background[multiselected] {
-  outline: 1px solid var(--focus-outline-color);
-  outline-offset: -1px;
+  &[multiselected] {
+    outline-color: var(--focus-outline-color);
 
-  &[selected] {
-    outline-width: 2px;
-    outline-offset: -2px;
+    &[selected] {
+      outline-width: 2px;
+      outline-offset: -2px;
+    }
+  }
+
+  #tabbrowser-tabs[movingtab-createGroup] & {
+    transition: background-color 300ms ease, color 300ms ease, outline-color 300ms ease;
+
+    &[dragover-createGroup] {
+      background-color: light-dark(var(--dragover-tab-group-color-pale), var(--dragover-tab-group-color));
+      color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-pale));
+      outline-color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-pale));
+    }
+
+    &:is([selected], [multiselected]) {
+      outline-color: var(--dragover-tab-group-color);
+      outline-width: 2px;
+      outline-offset: -2px;
+    }
   }
 }
 
@@ -642,11 +713,16 @@
 /* Pinned tabs */
 
 .tabbrowser-tab:is([image], [pinned]) > .tab-stack > .tab-content[attention]:not([selected]),
-.tabbrowser-tab > .tab-stack > .tab-content[pinned][titlechanged]:not([selected]) {
+.tabbrowser-tab > .tab-stack > .tab-content[pinned][titlechanged]:not([selected]),
+#tabbrowser-tabs[orient="vertical"]:not([expanded]) .tabbrowser-tab > .tab-stack > .tab-content[titlechanged]:not([selected]) {
   background-image: radial-gradient(circle, var(--attention-dot-color), var(--attention-dot-color) 2px, transparent 2px);
   background-position: center bottom 6.5px;
   background-size: 4px 4px;
   background-repeat: no-repeat;
+
+  #tabbrowser-tabs[orient="vertical"] & {
+    background-position-y: bottom 4px;
+  }
 }
 
 .tabbrowser-tab[image] > .tab-stack > .tab-content[attention]:not([pinned], [selected]) {
@@ -654,6 +730,13 @@
 
   &:-moz-locale-dir(rtl) {
     background-position-x: right 14px;
+  }
+  #tabbrowser-tabs[orient="vertical"] & {
+    background-position-x: left 22.5px;
+
+    &:-moz-locale-dir(rtl) {
+      background-position-x: right 22.5px;
+    }
   }
 }
 
@@ -667,29 +750,35 @@
 
 /* Tab Groups */
 
+/*
+ * .tab-group-line needs to span the drop shadows + space between tabs in the
+ * same tab group so that the whole tab group appears to be underlined by an
+ * unbroken line. However, the last tab in a tab group should have its group
+ * underline stop at the right edge of the tab itself, otherwise it looks
+ * like the tab group extends too far past the right edge of the tab.
+ */
+.tab-group-line {
+  display: none;
+  background-color: var(--tab-group-color, var(--dragover-tab-group-color));
+  height: 2px;
+  margin: 0 calc(-1 * var(--tab-overflow-clip-margin)) calc(-1 * var(--tab-block-margin));
+
+  .tabbrowser-tab:last-of-type > .tab-stack > .tab-background > & {
+    margin-inline-end: 0;
+  }
+
+  tab-group &,
+  #tabbrowser-tabs[movingtab]:not([movingtab-createGroup]) &:is([selected],[multiselected]) {
+    display: flex;
+  }
+}
+
 tab-group {
   /*
    * Let the tab bar flexbox distribute space between all tabs evenly, regardless of
    * whether they are children of the tab bar directly or children of tab groups
    */
   display: contents;
-
-  /*
-   * .tab-group-line needs to span the drop shadows + space between tabs in the
-   * same tab group so that the whole tab group appears to be underlined by an
-   * unbroken line. However, the last tab in a tab group should have its group
-   * underline stop at the right edge of the tab itself, otherwise it looks
-   * like the tab group extends too far past the right edge of the tab.
-   */
-  .tab-group-line {
-    background-color: var(--tab-group-color);
-    height: 2px;
-    margin: 0 calc(-1 * var(--tab-overflow-clip-margin)) calc(-1 * var(--tab-block-margin));
-
-    .tabbrowser-tab:last-of-type > .tab-stack > .tab-background > & {
-      margin-inline-end: 0;
-    }
-  }
 
   &[collapsed] > .tabbrowser-tab {
     min-width: 0;
@@ -701,15 +790,14 @@ tab-group {
 
 .tab-group-label-container {
   /*
-   * Provide some empty space to either side of the tab group label
+   * Provide some empty space to either side of the tab group label.
    * Use margin on the left because the ::after underline should not extend
-   * to the left beyond the tab group label. Left margin should be larger in
-   * order to make the tab group look more separated from other tabs.
+   * to the left beyond the tab group label.
    * Use padding on the right because the ::after underline should extend
    * to the right to connect to the underline of the first tab in the group.
    */
-  margin-inline-start: calc(var(--tab-overflow-clip-margin) + var(--tab-block-margin));
-  padding-inline-end: var(--tab-overflow-clip-margin);
+  margin-inline-start: 3px;
+  padding-inline-end: 3px;
 
   position: relative;
 
@@ -723,32 +811,116 @@ tab-group {
 }
 
 .tab-group-label {
-  align-items: center;
-
+  text-align: center;
   font-weight: var(--font-weight-bold);
-
-  /* Copied .tab-label settings */
-  margin-inline: 0;
-  line-height: 1.7;  /* override 'normal' in case of fallback math fonts with huge metrics */
+  text-overflow: ellipsis;
   white-space: nowrap;
-
+  overflow: hidden;
   border-radius: var(--tab-border-radius);
-  min-height: 2em;
-  min-width: 2em;
+  line-height: calc(var(--tab-group-label-height) - 2px);
+  min-height: var(--tab-group-label-height);
+  min-width: var(--tab-group-label-height);
   max-width: 10em;
   padding-inline: 4px;
-
-  background-color: var(--tab-group-color);
-  /* TODO: pick the right text color depending on group color */
-  color: white;
+  color: light-dark(var(--tab-group-color-pale), ButtonText);
+  background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+  margin: auto 0;
 
   tab-group[collapsed] > .tab-group-label-container > & {
-    /* TODO: choose actual color values from the spec instead of generating on the fly */
-    background-color: color-mix(in srgb, var(--tab-group-color) 30%, white);
-    color: var(--tab-group-color);
-    border: 1px solid var(--tab-group-color);
+    background-color: light-dark(var(--tab-group-color-pale), var(--tab-group-color));
+    color: light-dark(var(--tab-group-color), var(--tab-group-color-pale));
+    border: 1px solid light-dark(var(--tab-group-color), var(--tab-group-color-pale));
   }
 }
+
+.tab-group-editor-panel {
+  --panel-width: 20em;
+  --panel-padding: var(--space-large);
+  --panel-separator-margin: var(--panel-separator-margin-vertical) 0;
+  font: menu;
+
+  .panel-header {
+    min-height: auto;
+    > h1 {
+      margin-top: 0;
+      margin-bottom: var(--space-small);
+    }
+  }
+
+  toolbarseparator {
+    margin-block: var(--space-medium);
+  }
+
+  .panel-body {
+    padding-block: var(--space-medium);
+  }
+
+  &.tab-group-editor-mode-create .tab-group-edit-mode-only,
+  &:not(.tab-group-editor-mode-create) .tab-group-create-mode-only {
+    display: none;
+  }
+
+  .tab-group-editor-name {
+    display: flex;
+    flex-direction: column;
+    > label {
+      margin-inline: 0;
+      margin-bottom: var(--space-small);
+    }
+    > input[type="text"] {
+      padding: var(--space-medium);
+    }
+  }
+
+  .tab-group-editor-swatches {
+    display: flex;
+    flex-flow: row nowrap;
+    justify-content: space-between;
+  }
+
+  input[name="tab-group-color"] {
+    width: 0;
+    height: 0;
+    opacity: 0;
+    margin: 0;
+    position: absolute;
+  }
+
+  .tab-group-editor-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: var(--border-radius-small);
+    background-color: light-dark(var(--tabgroup-swatch-color), var(--tabgroup-swatch-color-invert));
+
+    input:checked + & {
+      outline: var(--focus-outline);
+      outline-color: currentColor;
+      outline-offset: var(--focus-outline-offset);
+    }
+
+    input:focus-visible + & {
+      outline-color: var(--focus-outline-color);
+      box-shadow: 0 0 0 calc(var(--focus-outline-width) * 3) color-mix(in srgb, var(--focus-outline-color) 50%, transparent);
+    }
+  }
+
+  .tab-group-edit-actions,
+  .tab-group-delete {
+    padding-block: 0;
+    > toolbarbutton {
+     justify-content: flex-start;
+    }
+  }
+
+  toolbarbutton {
+    margin: 0;
+  }
+  .tab-group-delete label {
+    color: var(--text-color-error);
+  }
+}
+
+
 
 /* Tab Overflow */
 
@@ -759,34 +931,59 @@ tab-group {
     &::part(scrollbox) {
       contain: inline-size;
     }
+
+    &:not([scrolledtostart])::part(overflow-start-indicator),
+    &:not([scrolledtoend])::part(overflow-end-indicator) {
+      width: 7px; /* The width is the sum of the inline margins */
+      background-image: radial-gradient(ellipse at bottom,
+                                        rgba(0,0,0,0.1) 0%,
+                                        rgba(0,0,0,0.1) 7.6%,
+                                        rgba(0,0,0,0) 87.5%);
+      background-repeat: no-repeat;
+      background-position: -3px;
+      border-left: .5px solid rgba(255,255,255,.2);
+      pointer-events: none;
+      position: relative;
+      border-bottom: .5px solid transparent;
+    }
+
+    &:not([scrolledtostart])::part(overflow-start-indicator) {
+      margin-inline: -.5px -6.5px;
+    }
+
+    &:not([scrolledtoend])::part(overflow-end-indicator) {
+      margin-inline: -6.5px -.5px;
+    }
+
+    &:-moz-locale-dir(rtl)::part(overflow-start-indicator),
+    &:-moz-locale-dir(ltr)::part(overflow-end-indicator) {
+      transform: scaleX(-1);
+    }
   }
 
-  &:not([scrolledtostart])::part(overflow-start-indicator),
-  &:not([scrolledtoend])::part(overflow-end-indicator) {
-    width: 7px; /* The width is the sum of the inline margins */
-    background-image: radial-gradient(ellipse at bottom,
-                                      rgba(0,0,0,0.1) 0%,
-                                      rgba(0,0,0,0.1) 7.6%,
-                                      rgba(0,0,0,0) 87.5%);
-    background-repeat: no-repeat;
-    background-position: -3px;
-    border-left: .5px solid rgba(255,255,255,.2);
-    pointer-events: none;
-    position: relative;
-    border-bottom: .5px solid transparent;
-  }
 
-  &:not([scrolledtostart])::part(overflow-start-indicator) {
-    margin-inline: -.5px -6.5px;
-  }
+  &[orient="vertical"] {
+    &::part(overflow-start-indicator),
+    &::part(overflow-end-indicator) {
+      background-image: linear-gradient(
+        to top,
+        transparent 0%,
+        var(--toolbar-bgcolor));
+      background-repeat: no-repeat;
+      pointer-events: none;
 
-  &:not([scrolledtoend])::part(overflow-end-indicator) {
-    margin-inline: -6.5px -.5px;
-  }
+      position: relative;
+      height: 16px;
+      z-index: 1;
 
-  &:-moz-locale-dir(rtl)::part(overflow-start-indicator),
-  &:-moz-locale-dir(ltr)::part(overflow-end-indicator) {
-    transform: scaleX(-1);
+      margin-block: 0 -16px;
+    }
+
+    /* Flip the fade at the bottom */
+    &::part(overflow-end-indicator) {
+      transform: scaleY(-1);
+      margin-block: -16px 0;
+    }
   }
 
   &[scrolledtostart]::part(overflow-start-indicator),
@@ -845,11 +1042,8 @@ tab-group {
 
   &::part(scrollbox) {
     scrollbar-width: thin;
+    scrollbar-color: var(--vertical-tabs-scrollbar-color);
     overflow-y: auto;
-  }
-
-  &[overflowing]:not([scrolledtoend]) {
-    mask-image: linear-gradient(to bottom, black 98%, transparent 100%);
   }
 }
 
@@ -857,6 +1051,7 @@ tab-group {
 #vertical-tabs-newtab-button {
   appearance: none;
   min-height: var(--tab-min-height);
+  line-height: var(--tab-label-line-height);
   border-radius: var(--border-radius-medium);
   padding: 0 calc(var(--tab-inline-padding) - var(--tab-inner-inline-margin));
   width: var(--tab-collapsed-background-width);
@@ -880,6 +1075,15 @@ tab-group {
     text-align: start;
     padding-inline-start: var(--tab-icon-end-margin);
   }
+}
+
+/* For #vertical-tabs-newtab-button, shown when tabs are overflowing, the gap
+ * with the other items comes from the grid-gap on tabbrowser-tabs which is a
+ * flex container. #tabs-newtab-button is a child of the arrowscrollbox where
+ * we don't want a gap (between tabs), so we have to add some margin.
+ */
+#tabbrowser-arrowscrollbox[orient="vertical"] > #tabbrowser-arrowscrollbox-periphery > #tabs-newtab-button {
+  margin-block: var(--tab-block-margin);
 }
 
 #tabbrowser-tabs[expanded] {
@@ -908,8 +1112,9 @@ tab-group {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
+  scrollbar-color: var(--vertical-tabs-scrollbar-color);
   /* Fit slightly more than 5 tabs + padding before overflowing */
-  max-height: 244px;
+  max-height: calc(5 * var(--tabstrip-min-height) + var(--space-large));
 
   .tab-content {
     justify-content: center;
@@ -980,7 +1185,10 @@ tab-group {
   .tab-background {
     border-radius: var(--border-radius-medium);
     margin-inline: var(--tab-inner-inline-margin);
-    height: var(--tab-min-height);
+  }
+
+  .tab-close-button {
+    margin-inline-end: calc(-1 * var(--tab-close-button-padding));
   }
 
   &:not([expanded]) {
@@ -1007,6 +1215,10 @@ tab-group {
 
     .tabbrowser-tab {
       max-width: none;
+
+      .tab-close-button {
+        margin-inline-end: calc(-1 * var(--tab-close-button-padding));
+      }
 
       &:not(:hover) .tab-close-button:not([selected]) {
         display: none;
@@ -1046,6 +1258,14 @@ tab-group {
 }
 
 /* Firefox View button and menu item */
+
+#TabsToolbar #firefox-view-button[open] > .toolbarbutton-icon {
+  background-color: var(--tab-selected-bgcolor);
+  box-shadow: var(--tab-selected-shadow);
+  outline-color: var(--tab-selected-outline-color);
+  color: var(--tab-selected-textcolor);
+  color-scheme: var(--tab-selected-color-scheme);
+}
 
 :root:not([privatebrowsingmode], [firefoxviewhidden]) :is(toolbarbutton, toolbarpaletteitem) ~ #tabbrowser-tabs,
 :root[privatebrowsingmode]:not([firefoxviewhidden]) :is(
@@ -1099,7 +1319,22 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
 /* All tabs button and menupopup */
 
 #alltabs-button {
-  list-style-image: url(chrome://global/skin/icons/arrow-down.svg);
+  list-style-image: url("chrome://browser/content/firefoxview/view-opentabs.svg");
+
+  > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+    --panel-and-palette-icon-size: 20px;
+    width: 20px;
+    margin: -2px;
+  }
+
+  #TabsToolbar & {
+    list-style-image: url("chrome://global/skin/icons/arrow-down.svg");
+
+    > .toolbarbutton-badge-stack > .toolbarbutton-icon {
+      width: 16px;
+      margin: 0;
+    }
+  }
 
   #tabbrowser-tabs[hiddensoundplaying] ~ & > .toolbarbutton-badge-stack > .toolbarbutton-badge {
     background: transparent url(chrome://browser/skin/tabbrowser/tab-audio-playing-small.svg);
@@ -1219,40 +1454,21 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   height: 16px;
   width: 16px;
 
-  @media (prefers-reduced-motion: reduce) {
-    &[busy] {
-      list-style-image: url("chrome://global/skin/icons/loading.svg");
-      -moz-context-properties: fill;
-      fill: currentColor;
-      opacity: 0.4;
-    }
-
-    &[progress] {
-      opacity: 0.8;
-    }
+  &[busy] {
+    list-style-image: url("chrome://global/skin/icons/loading.svg");
+    -moz-context-properties: fill;
+    fill: currentColor;
+    opacity: 0.7;
   }
 
-  @media (prefers-reduced-motion: no-preference) {
-    &[busy] {
-      list-style-image: image-set(
-        url("chrome://browser/skin/tabbrowser/tab-connecting.png"),
-        url("chrome://browser/skin/tabbrowser/tab-connecting@2x.png") 2x
-      );
-    }
-
-    &[progress] {
-      list-style-image: image-set(
-        url("chrome://browser/skin/tabbrowser/tab-loading.png"),
-        url("chrome://browser/skin/tabbrowser/tab-loading@2x.png") 2x
-      );
-
-      /* FIXME: This should probably also apply in regular dark mode? */
-      :root[lwt-popup="dark"] &[progress]:not([selected]) {
-        list-style-image: image-set(
-          url("chrome://browser/skin/tabbrowser/tab-loading-inverted.png"),
-          url("chrome://browser/skin/tabbrowser/tab-loading-inverted@2x.png") 2x
-        );
-      }
-    }
+  &[progress] {
+    color: var(--tab-loading-fill);
+    opacity: 1;
   }
+}
+
+.tab-contextmenu-group-icon {
+  list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+  -moz-context-properties: fill;
+  fill: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
 }

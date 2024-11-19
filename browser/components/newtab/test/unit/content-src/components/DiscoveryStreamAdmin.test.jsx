@@ -60,11 +60,17 @@ describe("DiscoveryStreamAdmin", () => {
         feeds: {
           data: {},
         },
+        impressions: {
+          feed: {},
+        },
       };
       wrapper = shallow(
         <DiscoveryStreamAdminUI
           dispatch={dispatch}
-          otherPrefs={{}}
+          otherPrefs={{
+            "discoverystream.contextualContent.selectedFeed": "foo",
+            "discoverystream.contextualContent.feeds": "foo, bar",
+          }}
           state={{
             DiscoveryStream: state,
             Weather: {
@@ -81,7 +87,7 @@ describe("DiscoveryStreamAdmin", () => {
       state.spocs = {
         frequency_caps: [],
         data: {
-          spocs: {
+          newtab_spocs: {
             items: [
               {
                 id: 12345,
@@ -92,7 +98,10 @@ describe("DiscoveryStreamAdmin", () => {
       };
       wrapper = shallow(
         <DiscoveryStreamAdminUI
-          otherPrefs={{}}
+          otherPrefs={{
+            "discoverystream.contextualContent.selectedFeed": "foo",
+            "discoverystream.contextualContent.feeds": "foo, bar",
+          }}
           state={{
             DiscoveryStream: state,
             Weather: {

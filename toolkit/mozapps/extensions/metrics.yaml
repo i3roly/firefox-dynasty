@@ -81,7 +81,7 @@ addons_manager:
           install events with source "about:addons" may have
           "install-from-file" or "url" as method), one of: "amWebAPI",
           "drag-and-drop", "installTrigger", "install-from-file",
-          "link", "management-webext-api", "sideload",
+          "link", "management-webext-api", "sideload", "onboarding",
           "synthetic-install", "url", "product-updates".
         type: string
       num_strings:
@@ -182,9 +182,11 @@ addons_manager:
       - https://bugzilla.mozilla.org/1817100
       - https://bugzilla.mozilla.org/1820153
       - https://bugzilla.mozilla.org/1912166
+      - https://bugzilla.mozilla.org/1917859
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1433335#c8
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1820153#c3
+      - https://phabricator.services.mozilla.com/D224982
     data_sensitivity:
       - interaction
     notification_emails:
@@ -217,6 +219,11 @@ addons_manager:
           The number of permission description strings in the
           extension permission doorhanger.
         type: quantity
+      blocklist_state:
+        description: |
+          The add-on blocklistState (0 not-blocked, 1 soft-blocked, 2
+          hard-blocked) at the time the manage event was being collected.
+        type: string
     expires: 140
 
   report_suspicious_site:
@@ -273,7 +280,8 @@ blocklist:
       - addons-dev-internal@mozilla.com
       - rwu@mozilla.com
     expires: never
-  mlbf_source:
+
+  mlbf_source: &mlbf_source
     type: string
     description: >
       The source of the RemoteSettings attachment that
@@ -321,7 +329,15 @@ blocklist:
     no_lint:
       - GIFFT_NON_PING_LIFETIME
 
-  mlbf_generation_time:
+  mlbf_softblocks_source:
+    <<: *mlbf_source
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917859
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917859#c2
+    telemetry_mirror: BLOCKLIST_MLBF_SOFTBLOCKS_SOURCE
+
+  mlbf_generation_time: &mlbf_generation_time
     type: datetime
     description: >
       Keep track of the generation time of the addon
@@ -353,6 +369,14 @@ blocklist:
       - addons-dev-internal@mozilla.com
       - rwu@mozilla.com
     expires: never
+
+  mlbf_softblocks_generation_time:
+    <<: *mlbf_generation_time
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917859
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917859#c2
+
   mlbf_stash_time_oldest:
     type: datetime
     description: >
@@ -379,6 +403,7 @@ blocklist:
       - addons-dev-internal@mozilla.com
       - rwu@mozilla.com
     expires: never
+
   mlbf_stash_time_newest:
     type: datetime
     description: >
@@ -408,6 +433,7 @@ blocklist:
       - addons-dev-internal@mozilla.com
       - rwu@mozilla.com
     expires: never
+
   addon_block_change:
     type: event
     description: >
@@ -443,8 +469,7 @@ blocklist:
         type: string
         description: >
           The blocklistState of the add-on. 0 is unblocked,
-          2 is blocked. 1 is soft blocked (this state does not
-          exist in blocklist v3).
+          1 is soft blocked and 2 is hard blocked.
       addon_version:
         type: string
         description: >
@@ -490,6 +515,16 @@ blocklist:
           of the blocklist.mlbf_source. Possible values
           are "dump_match", "cache_match",  "remote_match",
           "dump_fallback", "cache_fallback", "unknown".
+      mlbf_softblocks_generation:
+        type: string
+        description: >
+          Same as mlbf_generation but for the separate
+          softblocks bloomfilter attachment.
+      mlbf_softblocks_source:
+        type: string
+        description: >
+          Same as mlbf_source but for the separate
+          softblocks bloomfilter attachment.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1662857
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1730037
@@ -498,10 +533,12 @@ blocklist:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1820155
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1861296
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1912167
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917859
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1662857#c11
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1861296#c5
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1912167#c4
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1917859#c2
     data_sensitivity:
       - technical
     metadata:

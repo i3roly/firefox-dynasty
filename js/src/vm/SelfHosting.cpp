@@ -8,6 +8,7 @@
 
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
 #  include "builtin/AsyncDisposableStackObject.h"
+#  include "builtin/DisposableStackObject.h"
 #endif
 #include "mozilla/BinarySearch.h"
 #include "mozilla/Casting.h"
@@ -1963,6 +1964,10 @@ static const JSFunctionSpec intrinsic_functions[] = {
 #endif
     JS_FN("CallAsyncIteratorHelperMethodIfWrapped",
           CallNonGenericSelfhostedMethod<Is<AsyncIteratorHelperObject>>, 2, 0),
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+    JS_FN("CallDisposableStackMethodIfWrapped",
+          CallNonGenericSelfhostedMethod<Is<DisposableStackObject>>, 2, 0),
+#endif
     JS_FN("CallGeneratorMethodIfWrapped",
           CallNonGenericSelfhostedMethod<Is<GeneratorObject>>, 2, 0),
     JS_FN("CallIteratorHelperMethodIfWrapped",
@@ -2035,6 +2040,11 @@ static const JSFunctionSpec intrinsic_functions[] = {
     JS_INLINABLE_FN("GuardToAsyncIteratorHelper",
                     intrinsic_GuardToBuiltin<AsyncIteratorHelperObject>, 1, 0,
                     IntrinsicGuardToAsyncIteratorHelper),
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+    JS_INLINABLE_FN("GuardToDisposableStackHelper",
+                    intrinsic_GuardToBuiltin<DisposableStackObject>, 1, 0,
+                    IntrinsicGuardToDisposableStack),
+#endif
     JS_INLINABLE_FN("GuardToIteratorHelper",
                     intrinsic_GuardToBuiltin<IteratorHelperObject>, 1, 0,
                     IntrinsicGuardToIteratorHelper),
@@ -2174,7 +2184,8 @@ static const JSFunctionSpec intrinsic_functions[] = {
                     IntrinsicSubstringKernel),
     JS_FN("ThisNumberValueForToLocaleString", ThisNumberValueForToLocaleString,
           0, 0),
-    JS_FN("ThisTimeValue", intrinsic_ThisTimeValue, 1, 0),
+    JS_INLINABLE_FN("ThisTimeValue", intrinsic_ThisTimeValue, 1, 0,
+                    IntrinsicThisTimeValue),
 #ifdef ENABLE_RECORD_TUPLE
     JS_FN("ThisTupleValue", intrinsic_ThisTupleValue, 1, 0),
 #endif

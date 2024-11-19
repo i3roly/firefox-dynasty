@@ -161,6 +161,7 @@ windows-launch-on-login =
     .label = Open { -brand-short-name } automatically when your computer starts up
     .accesskey = O
 windows-launch-on-login-disabled = This preference has been disabled in Windows. To change, visit <a data-l10n-name="startup-link">Startup Apps</a> in System settings.
+windows-launch-on-login-profile-disabled = Enable this preference by checking “{ profile-manager-use-selected.label }” in the “Choose User Profile” window.
 
 startup-restore-warn-on-quit =
     .label = Warn you when quitting the browser
@@ -768,10 +769,9 @@ search-show-suggestions-url-bar-option =
 
 
 # With this option enabled, on the search results page
-# the URL will be replaced by the search terms in the address bar
-# when using the current default search engine.
-search-show-search-term-option =
-    .label = Show search terms instead of URL on default search engine results page
+# the URL will be replaced by the search terms in the address bar.
+search-show-search-term-option-2 =
+    .label = Show search terms in the address bar on results pages
 
 
 # This string describes what the user will observe when the system

@@ -21,6 +21,9 @@ const MERINO_TIMEOUT_MS = 5000; // 5s
 const HISTOGRAM_LATENCY = "FX_URLBAR_MERINO_LATENCY_WEATHER_MS";
 const HISTOGRAM_RESPONSE = "FX_URLBAR_MERINO_RESPONSE_WEATHER";
 
+// The mean Earth radius used in distance calculations.
+const EARTH_RADIUS_KM = 6371.009;
+
 const RESULT_MENU_COMMAND = {
   INACCURATE_LOCATION: "inaccurate_location",
   MANAGE: "manage",
@@ -141,45 +144,27 @@ export class Weather extends BaseFeature {
   }
 
   get shouldEnable() {
-    // The feature itself is enabled by setting these prefs regardless of
-    // whether any config is defined. This is necessary to allow the feature to
-    // sync the config from remote settings and Nimbus. Suggestion fetches will
-    // not start until the config has been either synced from remote settings or
-    // set by Nimbus.
     return (
+      lazy.UrlbarPrefs.get("suggest.quicksuggest.sponsored") &&
       lazy.UrlbarPrefs.get("weatherFeatureGate") &&
       lazy.UrlbarPrefs.get("suggest.weather")
     );
   }
 
   get enablingPreferences() {
-    return ["suggest.weather"];
+    return ["suggest.quicksuggest.sponsored", "suggest.weather"];
   }
 
   get rustSuggestionTypes() {
     return ["Weather"];
   }
 
-  isRustSuggestionTypeEnabled() {
-    // When weather keywords are defined in Nimbus, weather suggestions are
-    // served by UrlbarProviderWeather. Return false here so the quick suggest
-    // provider doesn't try to serve them too.
-    return !lazy.UrlbarPrefs.get("weatherKeywords");
+  isSuggestionSponsored(_suggestion) {
+    return true;
   }
 
   getSuggestionTelemetryType() {
     return "weather";
-  }
-
-  /**
-   * @returns {Set}
-   *   The set of keywords that should trigger the weather suggestion. This will
-   *   be null when the Rust backend is enabled and keywords are not defined by
-   *   Nimbus because in that case Rust manages the keywords. Otherwise, it will
-   *   also be null when no config is defined.
-   */
-  get keywords() {
-    return this.#keywords;
   }
 
   /**
@@ -233,27 +218,9 @@ export class Weather extends BaseFeature {
     return !maxKeywordLength || this.minKeywordLength < maxKeywordLength;
   }
 
-  update() {
-    let wasEnabled = this.isEnabled;
-    super.update();
-
-    // This method is called by `QuickSuggest` in a
-    // `NimbusFeatures.urlbar.onUpdate()` callback, when a change occurs to a
-    // Nimbus variable or to a pref that's a fallback for a Nimbus variable. A
-    // config-related variable or pref may have changed, so update keywords, but
-    // only if the feature was already enabled because if it wasn't,
-    // `enable(true)` was just called, which calls `#init()`, which calls
-    // `#updateKeywords()`.
-    if (wasEnabled && this.isEnabled) {
-      this.#updateKeywords();
-    }
-  }
-
   enable(enabled) {
-    if (enabled) {
-      this.#init();
-    } else {
-      this.#uninit();
+    if (!enabled) {
+      this.#merino = null;
     }
   }
 
@@ -272,21 +239,128 @@ export class Weather extends BaseFeature {
     }
   }
 
-  async onRemoteSettingsSync(rs) {
-    this.logger.debug("Loading weather config from remote settings");
-    let records = await rs.get({ filters: { type: "weather" } });
-    if (!this.isEnabled) {
-      return;
+  async filterSuggestions(suggestions) {
+    // If the query didn't include a city, Rust will return at most one
+    // suggestion. If the query matched multiple cities, Rust will return one
+    // suggestion per city. All suggestions will have the same score, and
+    // they'll be ordered by population size from largest to smallest.
+    if (suggestions.length <= 1) {
+      return suggestions;
     }
-
-    this.logger.debug("Got weather records: " + JSON.stringify(records));
-    this.#rsConfig = lazy.UrlbarUtils.copySnakeKeysToCamel(
-      records?.[0]?.weather || {}
-    );
-    this.#updateKeywords();
+    let geo = await lazy.QuickSuggest.geolocation();
+    return [
+      this.#bestSuggestionByDistance(geo, suggestions) ||
+        this.#bestSuggestionByRegion(geo, suggestions) ||
+        suggestions[0],
+    ];
   }
 
-  async makeResult(queryContext, _suggestion, searchString) {
+  /**
+   * Returns the suggestion with the city nearest the client's geolocation based
+   * on the great-circle distance between the coordinates [1]. This isn't
+   * necessarily super accurate, but that's OK since it's stable and accurate
+   * enough to find a good matching suggestion.
+   *
+   * [1] https://en.wikipedia.org/wiki/Great-circle_distance
+   *
+   * @param {object} geo
+   *   The `geolocation` object returned by Merino's geolocation provider. It's
+   *   expected to look like the following, but we gracefully handle exceptions:
+   *
+   *     `{ location: { latitude, longitude, radius }}`
+   *
+   *   The coordinates are expected to be in decimal and the radius is expected
+   *   to be in km.
+   * @param {Array} suggestions
+   *   Array of candidate weather suggestions.
+   * @returns {object|null}
+   *   The nearest suggestion as described above. If there are multiple nearest
+   *   cities within the accuracy radius, the most populous one is returned. If
+   *   the `geo` does not include a location or coordinates, null is returned.
+   */
+  #bestSuggestionByDistance(geo, suggestions) {
+    let geoLat = geo?.location?.latitude;
+    let geoLong = geo?.location?.longitude;
+    if (isNaN(geoLat) || isNaN(geoLong)) {
+      return null;
+    }
+
+    // All distances are in km.
+    [geoLat, geoLong] = [geoLat, geoLong].map(toRadians);
+    let geoLatSin = Math.sin(geoLat);
+    let geoLatCos = Math.cos(geoLat);
+    let geoRadius = geo?.location?.radius || 5;
+
+    let best;
+    let dMin = Infinity;
+    for (let s of suggestions) {
+      let [sLat, sLong] = [s.latitude, s.longitude].map(toRadians);
+      let d =
+        EARTH_RADIUS_KM *
+        Math.acos(
+          geoLatSin * Math.sin(sLat) +
+            geoLatCos * Math.cos(sLat) * Math.cos(Math.abs(geoLong - sLong))
+        );
+      if (
+        !best ||
+        // `s` is closer to the client than `best`.
+        d + geoRadius < dMin ||
+        // `s` is the same distance from the client as `best`, i.e., the
+        // difference between `s` and `best` is within the accuracy radius.
+        // Choose `s` if it has a larger population.
+        (Math.abs(d - dMin) <= geoRadius && best.population < s.population)
+      ) {
+        dMin = d;
+        best = s;
+      }
+    }
+
+    return best;
+  }
+
+  /**
+   * Returns the first suggestion with a city located in the same region and
+   * country as the client's geolocation. If there is no such suggestion, the
+   * first suggestion in the same country is returned. If there is no suggestion
+   * in the same country, null is returned. Since `suggestions` is ordered by
+   * population, if multiple cities match any of these criteria, the one that's
+   * returned will be the most populous.
+   *
+   * @param {object} geo
+   *   The `geolocation` object returned by Merino's geolocation provider. It's
+   *   expected to look like the following, but we gracefully handle exceptions:
+   *
+   *     `{ region_code, country_code }`
+   * @param {Array} suggestions
+   *   Array of candidate weather suggestions.
+   * @returns {object|null}
+   *   The suggestion as described above or null.
+   */
+  #bestSuggestionByRegion(geo, suggestions) {
+    let region = geo?.region_code?.toLowerCase();
+    let country = geo?.country_code?.toLowerCase();
+    if (!region && !country) {
+      return null;
+    }
+
+    let sameCountrySuggestion = null;
+    for (let s of suggestions) {
+      let sameRegion = s.region.toLowerCase() == region;
+      let sameCountry = s.country.toLowerCase() == country;
+      if (sameRegion && sameCountry) {
+        // This is the most populous city (since suggestions are ordered by
+        // population) in the client's region. Can't get better than this.
+        return s;
+      }
+      if (sameCountry && !sameCountrySuggestion) {
+        sameCountrySuggestion = s;
+      }
+    }
+
+    return sameCountrySuggestion;
+  }
+
+  async makeResult(queryContext, suggestion, searchString) {
     // The Rust component doesn't enforce a minimum keyword length, so discard
     // the suggestion if the search string isn't long enough. This conditional
     // will always be false for the JS backend since in that case keywords are
@@ -299,10 +373,20 @@ export class Weather extends BaseFeature {
       this.#merino = new lazy.MerinoClient(this.constructor.name);
     }
 
+    // Set up location params to pass to Merino. We need to null-check each
+    // suggestion property because `MerinoClient` will stringify null values.
+    let otherParams = {};
+    for (let key of ["city", "region", "country"]) {
+      if (suggestion[key]) {
+        otherParams[key] = suggestion[key];
+      }
+    }
+
     let merino = this.#merino;
     let fetchInstance = (this.#fetchInstance = {});
     let suggestions = await merino.fetch({
       query: "",
+      otherParams,
       providers: [MERINO_PROVIDER],
       timeoutMs: this.#timeoutMs,
       extraLatencyHistogram: HISTOGRAM_LATENCY,
@@ -315,7 +399,7 @@ export class Weather extends BaseFeature {
     if (!suggestions.length) {
       return null;
     }
-    let suggestion = suggestions[0];
+    suggestion = suggestions[0];
 
     let unit = Services.locale.regionalPrefsLocales[0] == "en-US" ? "f" : "c";
     return Object.assign(
@@ -510,78 +594,8 @@ export class Weather extends BaseFeature {
     let { rustBackend } = lazy.QuickSuggest;
     let config = rustBackend.isEnabled
       ? rustBackend.getConfigForSuggestionType(this.rustSuggestionTypes[0])
-      : this.#rsConfig;
+      : null;
     return config || {};
-  }
-
-  #init() {
-    // On feature init, we only update keywords and listen for changes that
-    // affect keywords.
-    this.#updateKeywords();
-    lazy.UrlbarPrefs.addObserver(this);
-    lazy.QuickSuggest.jsBackend.register(this);
-  }
-
-  #uninit() {
-    lazy.QuickSuggest.jsBackend.unregister(this);
-    lazy.UrlbarPrefs.removeObserver(this);
-    this.#keywords = null;
-    this.#merino = null;
-  }
-
-  #updateKeywords() {
-    this.logger.debug("Starting keywords update");
-
-    let nimbusKeywords = lazy.UrlbarPrefs.get("weatherKeywords");
-
-    // If the Rust backend is enabled and weather keywords aren't defined in
-    // Nimbus, Rust will manage the keywords.
-    if (lazy.UrlbarPrefs.get("quickSuggestRustEnabled") && !nimbusKeywords) {
-      this.logger.debug(
-        "Rust enabled, no keywords in Nimbus, deferring to Rust"
-      );
-      this.#keywords = null;
-      return;
-    }
-
-    // If the JS backend is enabled but no keywords are defined, we can't
-    // possibly serve a weather suggestion.
-    if (
-      !lazy.UrlbarPrefs.get("quickSuggestRustEnabled") &&
-      !this.#config.keywords &&
-      !nimbusKeywords
-    ) {
-      this.logger.debug("Rust disabled, no keywords in RS or Nimbus");
-      this.#keywords = null;
-      return;
-    }
-
-    // At this point, keywords exist and this feature will manage them.
-    let fullKeywords = nimbusKeywords || this.#config.keywords;
-    let minLength = this.minKeywordLength;
-    this.logger.debug(
-      "Updating keywords: " + JSON.stringify({ fullKeywords, minLength })
-    );
-
-    if (!minLength) {
-      this.logger.debug("Min length is undefined or zero, using full keywords");
-      this.#keywords = new Set(fullKeywords);
-    } else {
-      // Create keywords that are prefixes of the full keywords starting at the
-      // specified minimum length.
-      this.#keywords = new Set();
-      for (let full of fullKeywords) {
-        for (let i = minLength; i <= full.length; i++) {
-          this.#keywords.add(full.substring(0, i));
-        }
-      }
-    }
-  }
-
-  onPrefChanged(pref) {
-    if (pref == "weather.minKeywordLength") {
-      this.#updateKeywords();
-    }
   }
 
   get _test_merino() {
@@ -593,8 +607,10 @@ export class Weather extends BaseFeature {
   }
 
   #fetchInstance = null;
-  #keywords = null;
   #merino = null;
-  #rsConfig = null;
   #timeoutMs = MERINO_TIMEOUT_MS;
+}
+
+function toRadians(deg) {
+  return (deg * Math.PI) / 180;
 }

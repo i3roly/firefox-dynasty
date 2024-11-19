@@ -152,10 +152,6 @@ struct CodeMetadata : public ShareableBase<CodeMetadata> {
   // available if we're debugging.
   ModuleHash debugHash;
 
-  // Heuristics for lazy tiering and inlining.
-  const LazyTieringHeuristics lazyTieringHeuristics;
-  const InliningHeuristics inliningHeuristics;
-
   // Statistics collection for lazy tiering and inlining.
   struct ProtectedOptimizationStats {
     // ---- Stats for the complete tier ----
@@ -347,6 +343,13 @@ struct CodeMetadata : public ShareableBase<CodeMetadata> {
   }
   void setCallRefHint(uint32_t callRefIndex, CallRefHint hint) const {
     callRefHints[callRefIndex] = hint.toRepr();
+  }
+
+  size_t codeSectionSize() const {
+    if (codeSection) {
+      return codeSection->size;
+    }
+    return 0;
   }
 
   // This gets names for wasm only.

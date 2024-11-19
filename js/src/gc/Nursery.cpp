@@ -343,6 +343,8 @@ bool js::Nursery::init(AutoLockGCBgAlloc& lock) {
 js::Nursery::~Nursery() { disable(); }
 
 void js::Nursery::enable() {
+  MOZ_ASSERT(TlsContext.get()->generationalDisabled == 0);
+
   if (isEnabled()) {
     return;
   }
@@ -2014,7 +2016,7 @@ void js::Nursery::sweep() {
 
 void gc::CellSweepSet::sweep() {
   if (head_) {
-    head_->sweepDependentStrings();
+    ArenaCellSet::sweepDependentStrings(head_);
     head_ = nullptr;
   }
   if (storage_) {
@@ -2113,13 +2115,13 @@ bool js::Nursery::allocateNextChunk(AutoLockGCBgAlloc& lock) {
     return false;
   }
 
-  ArenaChunk* toSpaceChunk = gc->getOrAllocChunk(lock);
+  ArenaChunk* toSpaceChunk = gc->takeOrAllocChunk(lock);
   if (!toSpaceChunk) {
     return false;
   }
 
   ArenaChunk* fromSpaceChunk = nullptr;
-  if (semispaceEnabled_ && !(fromSpaceChunk = gc->getOrAllocChunk(lock))) {
+  if (semispaceEnabled_ && !(fromSpaceChunk = gc->takeOrAllocChunk(lock))) {
     gc->recycleChunk(toSpaceChunk, lock);
     return false;
   }

@@ -1742,11 +1742,11 @@ public class ContentBlocking {
     return enabled ? SafeBrowsing.PHISHING : SafeBrowsing.NONE;
   }
 
-  /* package */ static boolean catToSbMalware(@CBAntiTracking final int cat) {
+  /* package */ static boolean catToSbMalware(@CBSafeBrowsing final int cat) {
     return (cat & (SafeBrowsing.MALWARE | SafeBrowsing.UNWANTED | SafeBrowsing.HARMFUL)) != 0;
   }
 
-  /* package */ static boolean catToSbPhishing(@CBAntiTracking final int cat) {
+  /* package */ static boolean catToSbPhishing(@CBSafeBrowsing final int cat) {
     return (cat & SafeBrowsing.PHISHING) != 0;
   }
 

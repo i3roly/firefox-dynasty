@@ -118,21 +118,6 @@ bool FeatureOptions::init(JSContext* cx, HandleValue val) {
 
     if (importedStringConstants.isNullOrUndefined()) {
       this->jsStringConstants = false;
-    } else if (importedStringConstants.isBoolean() &&
-               importedStringConstants.toBoolean()) {
-      // Temporary backwards compatibility hack to interpret 'true' as "'"
-      this->jsStringConstants = true;
-
-      UniqueChars jsStringConstantsNamespace = JS_smprintf("'");
-      if (!jsStringConstantsNamespace) {
-        return false;
-      }
-
-      this->jsStringConstantsNamespace =
-          js_new<ShareableChars>(std::move(jsStringConstantsNamespace));
-      if (!this->jsStringConstantsNamespace) {
-        return false;
-      }
     } else {
       this->jsStringConstants = true;
 
@@ -185,12 +170,12 @@ bool FeatureOptions::init(JSContext* cx, HandleValue val) {
           return false;
         }
 
+        // We ignore unknown builtins
         if (!jsStringBuiltins) {
-          JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                                   JSMSG_WASM_UNKNOWN_BUILTIN);
-          return false;
+          continue;
         }
 
+        // You cannot request the same builtin twice
         if (this->jsStringBuiltins && jsStringBuiltins) {
           JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                                    JSMSG_WASM_DUPLICATE_BUILTIN);
@@ -251,9 +236,8 @@ SharedCompileArgs CompileArgs::build(JSContext* cx,
   // is open.
   bool debug = cx->realm() && cx->realm()->debuggerObservesWasm();
 
-  bool forceTiering = cx->options().testWasmAwaitTier2() ||
-                      JitOptions.wasmDelayTier2 ||
-                      wasm::ExperimentalCompilePipelineAvailable(cx);
+  bool forceTiering =
+      cx->options().testWasmAwaitTier2() || JitOptions.wasmDelayTier2;
 
   // The <Compiler>Available() predicates should ensure no failure here, but
   // when we're fuzzing we allow inconsistent switches and the check may thus
@@ -769,7 +753,7 @@ void CompilerEnvironment::computeParameters() {
   state_ = Computed;
 }
 
-void CompilerEnvironment::computeParameters(Decoder& d) {
+void CompilerEnvironment::computeParameters(const ModuleMetadata& moduleMeta) {
   MOZ_ASSERT(!isComputed());
 
   if (state_ == InitialWithModeTierDebug) {
@@ -789,19 +773,18 @@ void CompilerEnvironment::computeParameters(Decoder& d) {
   // Various constraints in various places should prevent failure here.
   MOZ_RELEASE_ASSERT(baselineEnabled || ionEnabled);
 
-  uint32_t codeSectionSize = 0;
+  bool isGcModule = moduleMeta.codeMeta->types->hasGcType();
+  uint32_t codeSectionSize = moduleMeta.codeMeta->codeSectionSize();
 
-  SectionRange range;
-  if (StartsCodeSection(d.begin(), d.end(), &range)) {
-    codeSectionSize = range.size;
-  }
+  // We use lazy tiering if the 'for-all' pref is enabled, or the 'gc-only'
+  // pref is enabled and we're compiling a GC module.
+  bool lazyTiering = JS::Prefs::wasm_lazy_tiering() ||
+                     (JS::Prefs::wasm_lazy_tiering_for_gc() && isGcModule);
 
   if (baselineEnabled && hasSecondTier &&
-      (TieringBeneficial(codeSectionSize) || forceTiering) &&
+      (TieringBeneficial(codeSectionSize) || forceTiering || lazyTiering) &&
       PlatformCanTier()) {
-    mode_ = args_->features.experimentalCompilePipeline
-                ? CompileMode::LazyTiering
-                : CompileMode::EagerTiering;
+    mode_ = lazyTiering ? CompileMode::LazyTiering : CompileMode::EagerTiering;
     tier_ = Tier::Baseline;
   } else {
     mode_ = CompileMode::Once;
@@ -888,7 +871,7 @@ SharedModule wasm::CompileBuffer(const CompileArgs& args,
     return nullptr;
   }
   CompilerEnvironment compilerEnv(args);
-  compilerEnv.computeParameters(d);
+  compilerEnv.computeParameters(*moduleMeta);
   if (!moduleMeta->prepareForCompile(compilerEnv.mode())) {
     return nullptr;
   }
@@ -1064,7 +1047,7 @@ SharedModule wasm::CompileStreaming(
     if (!DecodeModuleEnvironment(d, &codeMeta, moduleMeta)) {
       return nullptr;
     }
-    compilerEnv.computeParameters(d);
+    compilerEnv.computeParameters(*moduleMeta);
 
     if (!codeMeta.codeSection) {
       d.fail("unknown section before code section");

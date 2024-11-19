@@ -22,22 +22,21 @@ object Versions {
     const val mozilla_glean = "61.2.0"
 
     const val robolectric = "4.13"
-    const val mockito = "5.13.0"
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.11"
     const val okhttp = "4.12.0"
     const val okio = "3.9.0"
     const val androidsvg = "1.4"
 
-    const val android_gradle_plugin = "8.6.1"
+    const val android_gradle_plugin = "8.7.1"
 
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
-    const val lint = "31.6.1"
-    const val detekt = "1.23.6"
+    const val lint = "31.7.1"
+    const val detekt = "1.23.7"
     const val ktlint = "0.49.1"
 
-    const val sentry = "7.14.0"
+    const val sentry = "7.15.0"
 
     const val zxing = "3.5.3"
 
@@ -52,17 +51,17 @@ object Versions {
     const val compose_compiler = "1.5.14"
 
     object AndroidX {
-        const val activity = "1.9.2"
-        const val annotation = "1.8.2"
+        const val activity = "1.9.3"
+        const val annotation = "1.9.0"
         const val appcompat = "1.7.0"
         const val arch = "2.2.0"
         const val autofill = "1.1.0"
-        const val benchmark = "1.3.1"
+        const val benchmark = "1.3.3"
         const val biometric = "1.1.0"
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
         const val collection = "1.4.4"
-        const val compose_bom = "2024.09.02"
+        const val compose_bom = "2024.10.00"
         const val constraintlayout = "2.1.4"
         const val constraintlayout_compose = "1.0.1"
         const val coordinatorlayout = "1.2.0"
@@ -70,11 +69,11 @@ object Versions {
         const val core_splashscreen = "1.0.1"
         const val datastore="1.1.1"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.8.3"
+        const val fragment = "1.8.4"
         const val lifecycle = "2.8.6"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
-        const val navigation = "2.8.1"
+        const val navigation = "2.8.2"
         const val paging = "3.3.2"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
@@ -93,24 +92,28 @@ object Versions {
     const val protobuf_plugin = "0.9.4"
     object Google {
         const val accompanist = "0.36.0"
-        const val firebase_messaging = "24.0.1"
+        const val firebase_messaging = "24.0.3"
         const val material = "1.12.0"
         const val osslicenses_plugin = "0.10.6"
         const val play_review = "2.0.1"
         const val play_services_ads_id = "16.0.0"
         const val play_services_base = "18.5.0"
         const val play_services_fido = "21.1.0"
-        const val protobuf = "3.21.10" // Keep Protobuf in sync with the version used by AppServices.
+        const val protobuf = "4.28.2" // Keep Protobuf in sync with the version used by AppServices.
     }
 
     object Testing {
         const val androidx_test = "1.6.1"
         const val androidx_test_espresso = "3.6.1"
         const val androidx_test_ext = "1.2.1"
-        const val androidx_test_orchestrator = "1.5.0"
+        const val androidx_test_orchestrator = "1.5.1"
         const val androidx_test_runner = "1.6.1"
         const val androidx_test_uiautomator = "2.3.0"
-        const val junit = "5.11.0"
+        const val falcon = "2.2.0"
+        const val fastlane = "2.1.1"
+        const val junit = "5.11.2"
+        const val mockito = "5.14.2"
+        const val mockk = "1.13.13"
     }
 }
 
@@ -127,7 +130,11 @@ object ComponentsDependencies {
     const val junit_vintage = "org.junit.vintage:junit-vintage-engine:${Versions.Testing.junit}"
 
     const val testing_robolectric = "org.robolectric:robolectric:${Versions.robolectric}"
-    const val testing_mockito = "org.mockito:mockito-core:${Versions.mockito}"
+    const val testing_falcon = "com.jraska:falcon:${Versions.Testing.falcon}"
+    const val testing_fastlane = "tools.fastlane:screengrab:${Versions.Testing.fastlane}"
+    const val testing_mockito = "org.mockito:mockito-core:${Versions.Testing.mockito}"
+    const val testing_mockk = "io.mockk:mockk:${Versions.Testing.mockk}"
+    const val testing_mockk_android = "io.mockk:mockk-android:${Versions.Testing.mockk}"
     const val testing_mockwebserver = "com.squareup.okhttp3:mockwebserver:${Versions.okhttp}"
     const val testing_coroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-test:${Versions.coroutines}"
     const val testing_maven_ant_tasks = "org.apache.maven:maven-ant-tasks:${Versions.maven_ant_tasks}"

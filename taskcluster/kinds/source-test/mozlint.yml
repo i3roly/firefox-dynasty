@@ -178,6 +178,8 @@ stylelint:
             # Run when stylelint policies change.
             - '**/.stylelintignore'
             - '**/*stylelintrc*'
+            # Run when installed packages change.
+            - 'package*.json'
             # The plugin implementing custom checks.
             - 'tools/lint/stylelint/stylelint-plugin-mozilla/**'
     fetches:
@@ -205,6 +207,7 @@ license:
             - '**/*.js'
             - '**/*.jsm'
             - '**/*.jsx'
+            - '**/*.kt'
             - '**/*.m'
             - '**/*.mjs'
             - '**/*.mm'

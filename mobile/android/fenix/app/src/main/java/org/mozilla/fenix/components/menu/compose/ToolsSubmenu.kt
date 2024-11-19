@@ -4,25 +4,32 @@
 
 package org.mozilla.fenix.components.menu.compose
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.menu.compose.header.SubmenuHeader
+import org.mozilla.fenix.components.menu.store.WebExtensionMenuItem
 import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.Theme
 
-internal const val TOOLS_MENU_ROUTE = "tools_menu"
-
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "LongMethod")
 @Composable
 internal fun ToolsSubmenu(
+    isPdf: Boolean,
+    webExtensionMenuItems: List<WebExtensionMenuItem.WebExtensionPageMenuItem>,
     isReaderable: Boolean,
     isReaderViewActive: Boolean,
     isTranslated: Boolean,
@@ -70,11 +77,31 @@ internal fun ToolsSubmenu(
                 Divider(color = FirefoxTheme.colors.borderSecondary)
 
                 TranslationMenuItem(
+                    isPdf = isPdf,
                     isTranslated = isTranslated,
                     isReaderViewActive = isReaderViewActive,
                     translatedLanguage = translatedLanguage,
                     onClick = onTranslatePageMenuClick,
                 )
+            }
+
+            if (webExtensionMenuItems.isNotEmpty()) {
+                Divider(color = FirefoxTheme.colors.borderSecondary)
+
+                for (webExtensionMenuItem in webExtensionMenuItems) {
+                    WebExtensionMenuItem(
+                        label = webExtensionMenuItem.label,
+                        iconPainter = webExtensionMenuItem.icon?.let { icon ->
+                            BitmapPainter(image = icon.asImageBitmap())
+                        } ?: painterResource(R.drawable.mozac_ic_web_extension_default_icon),
+                        iconTint = FirefoxTheme.colors.iconSecondary,
+                        enabled = webExtensionMenuItem.enabled,
+                        badgeText = webExtensionMenuItem.badgeText,
+                        badgeTextColor = webExtensionMenuItem.badgeTextColor,
+                        badgeBackgroundColor = webExtensionMenuItem.badgeBackgroundColor,
+                        onClick = webExtensionMenuItem.onClick,
+                    )
+                }
             }
         }
 
@@ -142,6 +169,7 @@ private fun ReaderViewMenuItem(
 
 @Composable
 private fun TranslationMenuItem(
+    isPdf: Boolean,
     isTranslated: Boolean,
     isReaderViewActive: Boolean,
     translatedLanguage: String,
@@ -154,14 +182,14 @@ private fun TranslationMenuItem(
                 translatedLanguage,
             ),
             beforeIconPainter = painterResource(id = R.drawable.mozac_ic_translate_active_24),
-            state = if (isReaderViewActive) MenuItemState.DISABLED else MenuItemState.ACTIVE,
+            state = if (isReaderViewActive || isPdf) MenuItemState.DISABLED else MenuItemState.ACTIVE,
             onClick = onClick,
         )
     } else {
         MenuItem(
             label = stringResource(id = R.string.browser_menu_translate_page),
             beforeIconPainter = painterResource(id = R.drawable.mozac_ic_translate_24),
-            state = if (isReaderViewActive) MenuItemState.DISABLED else MenuItemState.ENABLED,
+            state = if (isReaderViewActive || isPdf) MenuItemState.DISABLED else MenuItemState.ENABLED,
             onClick = onClick,
         )
     }
@@ -175,6 +203,22 @@ private fun ToolsSubmenuPreview() {
             modifier = Modifier.background(color = FirefoxTheme.colors.layer3),
         ) {
             ToolsSubmenu(
+                isPdf = false,
+                webExtensionMenuItems = listOf(
+                    WebExtensionMenuItem.WebExtensionPageMenuItem(
+                        label = "label",
+                        enabled = true,
+                        icon = BitmapFactory.decodeResource(
+                            LocalContext.current.resources,
+                            R.drawable.googleg_standard_color_18,
+                        ),
+                        badgeText = "1",
+                        badgeTextColor = Color.White.toArgb(),
+                        badgeBackgroundColor = Color.Gray.toArgb(),
+                        onClick = {
+                        },
+                    ),
+                ),
                 isReaderable = true,
                 isReaderViewActive = false,
                 isTranslated = false,
@@ -202,6 +246,22 @@ private fun ToolsSubmenuPrivatePreview() {
             modifier = Modifier.background(color = FirefoxTheme.colors.layer3),
         ) {
             ToolsSubmenu(
+                isPdf = false,
+                webExtensionMenuItems = listOf(
+                    WebExtensionMenuItem.WebExtensionPageMenuItem(
+                        label = "label",
+                        enabled = true,
+                        icon = BitmapFactory.decodeResource(
+                            LocalContext.current.resources,
+                            R.drawable.googleg_standard_color_18,
+                        ),
+                        badgeText = "1",
+                        badgeTextColor = Color.White.toArgb(),
+                        badgeBackgroundColor = Color.Gray.toArgb(),
+                        onClick = {
+                        },
+                    ),
+                ),
                 isReaderable = true,
                 isReaderViewActive = false,
                 isTranslated = false,

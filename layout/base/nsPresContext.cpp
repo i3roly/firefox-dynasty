@@ -3117,17 +3117,17 @@ void nsPresContext::UpdateDynamicToolbarOffset(ScreenIntCoord aOffset) {
     return;
   }
 
-  if (interactiveWidget == InteractiveWidget::ResizesContent ||
-      mKeyboardHeight == 0) {
-    // On resizes-content mode or the software keyboard is not visible, forcibly
-    // flush position:fixed elements in the case where the dynamic toolbar is
-    // going to be completely hidden or starts to be visible so that %-based
-    // style values will be recomputed with the visual viewport size which is
-    // including the area covered by the dynamic toolbar.
-    if (mDynamicToolbarHeight == 0 || aOffset == -mDynamicToolbarMaxHeight) {
-      mPresShell->MarkFixedFramesForReflow(IntrinsicDirty::None);
-      mPresShell->AddResizeEventFlushObserverIfNeeded();
-    }
+  // Forcibly flush position:fixed elements and position:sticky elements stuck
+  // to the root scroll container in the case where the dynamic toolbar is
+  // going to be completely hidden or starts to be visible so that %-based style
+  // values will be recomputed with the visual viewport size which is including
+  // the area covered by the dynamic toolbar, it also ensures that each
+  // position:fixed or position:sticky element is painted at the correct
+  // position on the main-thread.
+  if (mDynamicToolbarHeight == 0 || aOffset == -mDynamicToolbarMaxHeight) {
+    mPresShell->MarkFixedFramesForReflow(IntrinsicDirty::None);
+    mPresShell->MarkStickyFramesForReflow();
+    mPresShell->AddResizeEventFlushObserverIfNeeded();
   }
 
   mDynamicToolbarHeight = mDynamicToolbarMaxHeight + aOffset;

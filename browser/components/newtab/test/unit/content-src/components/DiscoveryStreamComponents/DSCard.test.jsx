@@ -13,6 +13,7 @@ import {
 import { DSThumbsUpDownButtons } from "content-src/components/DiscoveryStreamComponents/DSThumbsUpDownButtons/DSThumbsUpDownButtons";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 import { DSLinkMenu } from "content-src/components/DiscoveryStreamComponents/DSLinkMenu/DSLinkMenu";
+import { DSImage } from "content-src/components/DiscoveryStreamComponents/DSImage/DSImage";
 import React from "react";
 import { INITIAL_STATE } from "common/Reducers.sys.mjs";
 import { SafeAnchor } from "content-src/components/DiscoveryStreamComponents/SafeAnchor/SafeAnchor";
@@ -426,6 +427,33 @@ describe("<DSCard>", () => {
         })
       );
     });
+
+    it("fakespot onLinkClick should dispatch with the correct events", () => {
+      wrapper.setProps({
+        id: "fooidx",
+        pos: 1,
+        type: "foo",
+        isFakespot: true,
+        category: "fakespot",
+      });
+
+      sandbox
+        .stub(wrapper.instance(), "doesLinkTopicMatchSelectedTopic")
+        .returns(undefined);
+
+      wrapper.instance().onLinkClick();
+
+      assert.calledWith(
+        dispatch,
+        ac.DiscoveryStreamUserEvent({
+          event: "FAKESPOT_CLICK",
+          value: {
+            product_id: "fooidx",
+            category: "fakespot",
+          },
+        })
+      );
+    });
   });
 
   describe("DSCard with CTA", () => {
@@ -732,6 +760,14 @@ describe("<DSCard>", () => {
       assert.calledOnce(add);
     });
   });
+
+  describe("DSCard medium rectangle format", () => {
+    it("should pass an empty sizes array to the DSImage", async () => {
+      wrapper.setProps({ format: "rectangle" });
+      const image = wrapper.find(DSImage);
+      assert.deepEqual(image.props().sizes, []);
+    });
+  });
 });
 
 describe("<PlaceholderDSCard> component", () => {
@@ -804,6 +840,32 @@ describe("Listfeed <DSCard />", () => {
     const excerpt_element = wrapper.find(".excerpt");
 
     assert.ok(!excerpt_element.exists());
+  });
+});
+
+describe("ListFeed fakespot <DSCard />", () => {
+  let wrapper;
+  let sandbox;
+  let dispatch;
+
+  beforeEach(() => {
+    sandbox = sinon.createSandbox();
+    dispatch = sandbox.stub();
+    wrapper = shallow(
+      <DSCard
+        dispatch={dispatch}
+        {...DEFAULT_PROPS}
+        isListFeed={true}
+        isFakespot={true}
+      />
+    );
+    wrapper.setState({ isSeen: true });
+  });
+
+  it("should not render source element", () => {
+    const source_element = wrapper.find(".source");
+
+    assert.ok(!source_element.exists());
   });
 });
 

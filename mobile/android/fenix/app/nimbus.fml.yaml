@@ -251,7 +251,7 @@ features:
       enable-event-timestamps:
         description: "Enables precise event timestamps for Glean events"
         type: Boolean
-        default: false
+        default: true
       delay-ping-lifetime-io:
         description: "Glean will delay io for ping lifetime metrics"
         type: Boolean
@@ -263,7 +263,7 @@ features:
       ping-lifetime-max-time:
         description: "After what time to auto-flush"
         type: Int
-        default: 0
+        default: 2000
 
   splash-screen:
     description: "A feature that extends splash screen duration, allowing additional data fetching time for the app's initial run."
@@ -460,6 +460,16 @@ features:
         type: Boolean
         default: true
 
+  fission:
+    description: The feature that controls whether fission is enabled or not in Gecko.
+    variables:
+      enabled:
+        description: >
+          Whether or not to enable fission. Fission is enabled when set to true. Fission is disabled when
+          set to false.
+        type: Boolean
+        default: false
+
   suggest-shipped-domains:
     description: Feature that suggests domains from the shipped domain list.
     variables:
@@ -505,6 +515,24 @@ features:
           exposes less entropy
         type: Boolean
         default: false
+
+  third-party-cookie-blocking:
+    description: Control third-party cookie blocking.
+    variables:
+      enabled:
+        description: If true, the feature is active.
+        type: Boolean
+        default: false
+      enabled-normal:
+        description: >
+          Enables / disables third-party cookie blocking in normal browsing mode.
+        type: Boolean
+        default: false
+      enabled-private:
+        description: >
+          Enables / disables third-party cookie blocking in private browsing mode.
+        type: Boolean
+        default: true
 
   menu-redesign:
     description: Control the new menu redesign.
@@ -565,6 +593,15 @@ features:
         description: if true, enable new compose based UI
         type: Boolean
         default: false
+
+  networking:
+    description: Enables networking features
+    variables:
+      fetchPriorityEnabled:
+        description: >
+          Enables or disables network.fetchpriority.enabled preference.
+        type: Boolean
+        default: true
 
 types:
   objects: {}

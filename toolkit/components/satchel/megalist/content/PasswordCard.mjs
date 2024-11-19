@@ -14,19 +14,13 @@ const DIRECTIONS = {
   ArrowRight: 1,
 };
 
-const LOGIN_FIELDS_LENGTH = 3;
-
 export class PasswordCard extends MozLitElement {
   static properties = {
     origin: { type: Object },
     username: { type: Object },
     password: { type: Object },
     messageToViewModel: { type: Function },
-  };
-
-  static shadowRootOptions = {
-    ...MozLitElement.shadowRootOptions,
-    delegatesFocus: true,
+    reauthCommandHandler: { type: Function },
   };
 
   static get queries() {
@@ -47,21 +41,12 @@ export class PasswordCard extends MozLitElement {
    * and if the user is navigating up, then it should be the origin line.
    *
    * @param {string} keyCode - The code associated with a keypress event. Either 'ArrowUp' or 'ArrowDown'.
-   * @returns {HTMLDivElement | MozButton | null} The first focusable element of the next password-card.
+   * @returns {HTMLElement | null} The first focusable element of the next password-card.
    */
   #getNextFocusableElement(keyCode) {
-    const cardIndex = Math.floor(this.origin.lineIndex / LOGIN_FIELDS_LENGTH);
-    const passwordCards = this.parentNode.querySelectorAll("password-card");
-    const nextCardIndex = cardIndex + DIRECTIONS[keyCode];
-
-    if (nextCardIndex < 0 || nextCardIndex >= passwordCards.length) {
-      return null;
-    }
-
-    const nextPasswordCard = passwordCards[nextCardIndex];
     return keyCode === "ArrowDown"
-      ? nextPasswordCard.originLine.lineContainer
-      : nextPasswordCard.editBtn;
+      ? this.nextElementSibling?.originLine
+      : this.previousElementSibling?.editBtn;
   }
 
   async firstUpdated() {
@@ -69,12 +54,12 @@ export class PasswordCard extends MozLitElement {
 
     let index = 0;
     for (const el of this.shadowRoot.querySelectorAll(".line-item")) {
-      await el.updateComplete;
       if (el === this.passwordLine) {
-        this.#focusableElementsMap.set(el.loginLine.lineContainer, index++);
+        await el.updateComplete;
+        this.#focusableElementsMap.set(el.loginLine, index++);
         this.#focusableElementsMap.set(el.revealBtn.buttonEl, index++);
       } else {
-        this.#focusableElementsMap.set(el.lineContainer, index++);
+        this.#focusableElementsMap.set(el, index++);
       }
     }
 
@@ -82,11 +67,8 @@ export class PasswordCard extends MozLitElement {
     this.#focusableElementsList = Array.from(this.#focusableElementsMap.keys());
   }
 
-  #handleKeydown(element, e) {
-    const targetIsPasswordLine =
-      this.passwordLine.loginLine.lineContainer === element;
-    const targetIsRevealButton =
-      this.passwordLine.revealBtn.buttonEl === element;
+  #handleKeydown(e) {
+    const element = e.composedTarget;
 
     const focusInternal = offset => {
       const index = this.#focusableElementsMap.get(element);
@@ -95,54 +77,32 @@ export class PasswordCard extends MozLitElement {
 
     switch (e.code) {
       case "ArrowUp":
+        e.preventDefault();
         if (this.#focusableElementsMap.get(element) === 0) {
-          const nextFocusableElement = this.#getNextFocusableElement(e.code);
-          nextFocusableElement?.focus();
-        } else if (targetIsRevealButton) {
-          focusInternal(-2);
+          this.#getNextFocusableElement(e.code)?.focus();
         } else {
           focusInternal(DIRECTIONS[e.code]);
         }
         break;
       case "ArrowDown":
+        e.preventDefault();
         if (
           this.#focusableElementsMap.get(element) ===
           this.#focusableElementsList.length - 1
         ) {
-          const nextFocusableElement = this.#getNextFocusableElement(e.code);
-          nextFocusableElement?.focus();
-        } else if (targetIsPasswordLine) {
-          focusInternal(2);
+          this.#getNextFocusableElement(e.code)?.focus();
         } else {
           focusInternal(DIRECTIONS[e.code]);
         }
         break;
-      case "ArrowRight":
-        if (targetIsPasswordLine) {
-          focusInternal(DIRECTIONS[e.code]);
-        }
-        break;
-      case "ArrowLeft":
-        if (targetIsRevealButton) {
-          focusInternal(DIRECTIONS[e.code]);
-        }
-        break;
-      default:
-        return;
     }
-    e.stopPropagation();
   }
 
   connectedCallback() {
     super.connectedCallback();
-    this.addEventListener(
-      "keydown",
-      e => {
-        const element = e.composedTarget;
-        this.#handleKeydown(element, e);
-      },
-      { capture: true }
-    );
+    this.addEventListener("keydown", e => this.#handleKeydown(e), {
+      capture: true,
+    });
   }
 
   handleCommand(commandId, lineIndex) {
@@ -157,11 +117,11 @@ export class PasswordCard extends MozLitElement {
     this.handleCommand("OpenLink", lineIndex);
   }
 
-  onCopyButtonClick(lineIndex) {
+  #onCopyButtonClick(lineIndex) {
     this.handleCommand("Copy", lineIndex);
   }
 
-  onPasswordRevealClick(concealed, lineIndex) {
+  #onPasswordRevealClick(concealed, lineIndex) {
     if (concealed) {
       this.handleCommand("Reveal", lineIndex);
     } else {
@@ -172,8 +132,8 @@ export class PasswordCard extends MozLitElement {
   renderOriginField() {
     return html`
       <login-line
+        tabindex="-1"
         role="option"
-        tabIndex="0"
         class="line-item"
         data-l10n-id="origin-login-line"
         data-l10n-args="${JSON.stringify({ url: this.origin.value })}"
@@ -183,11 +143,9 @@ export class PasswordCard extends MozLitElement {
         .value=${this.origin.value}
         .favIcon=${this.origin.valueIcon}
         ?alert=${this.origin.breached}
-        @click=${() => this.#onOriginLineClick(this.origin.lineIndex)}
-        @keypress=${e => {
-          if (e.key === "Enter") {
-            this.#onOriginLineClick(this.origin.lineIndex);
-          }
+        .onLineClick=${() => {
+          this.#onOriginLineClick(this.origin.lineIndex);
+          return true;
         }}
       >
       </login-line>
@@ -197,7 +155,7 @@ export class PasswordCard extends MozLitElement {
   renderUsernameField() {
     return html`
       <login-line
-        tabIndex="0"
+        tabindex="-1"
         role="option"
         class="line-item"
         data-l10n-id="username-login-line"
@@ -206,13 +164,11 @@ export class PasswordCard extends MozLitElement {
         lineType="username"
         labelL10nId="passwords-username-label"
         .value=${this.username.value}
-        ?alert=${this.username.value.length === 0}
-        @click=${() => this.onCopyButtonClick(this.username.lineIndex)}
-        @keypress=${e => {
-          if (e.key === "Enter") {
-            this.onCopyButtonClick(this.username.lineIndex);
-          }
+        .onLineClick=${() => {
+          this.#onCopyButtonClick(this.username.lineIndex);
+          return true;
         }}
+        ?alert=${this.username.value.length === 0}
       >
       </login-line>
     `;
@@ -221,18 +177,21 @@ export class PasswordCard extends MozLitElement {
   renderPasswordField() {
     return html`
       <concealed-login-line
-        role="option"
         class="line-item"
         labelL10nId="passwords-password-label"
         .value=${this.password.value}
         .visible=${!this.password.concealed}
         ?alert=${this.password.vulnerable}
-        .onLineClick=${() => this.onCopyButtonClick(this.password.lineIndex)}
-        }}
+        .onLineClick=${() =>
+          this.reauthCommandHandler(() =>
+            this.#onCopyButtonClick(this.password.lineIndex)
+          )}
         .onButtonClick=${() =>
-          this.onPasswordRevealClick(
-            this.password.concealed,
-            this.password.lineIndex
+          this.reauthCommandHandler(() =>
+            this.#onPasswordRevealClick(
+              this.password.concealed,
+              this.password.lineIndex
+            )
           )}
       >
       </concealed-login-line>
@@ -244,7 +203,6 @@ export class PasswordCard extends MozLitElement {
       <moz-button
         data-l10n-id="edit-login-button"
         class="edit-button"
-        @mousedown=${e => e.preventDefault()}
         @click=${this.onEditButtonClick}
       ></moz-button>
     </div>`;

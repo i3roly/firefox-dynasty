@@ -163,6 +163,12 @@ class PersistenceScope {
   bool operator==(const PersistenceScope& aOther) = delete;
 };
 
+bool MatchesPersistentPersistenceScope(
+    const PersistenceScope& aPersistenceScope);
+
+bool MatchesBestEffortPersistenceScope(
+    const PersistenceScope& aPersistenceScope);
+
 }  // namespace mozilla::dom::quota
 
 #endif  // DOM_QUOTA_PERSISTENCESCOPE_H_

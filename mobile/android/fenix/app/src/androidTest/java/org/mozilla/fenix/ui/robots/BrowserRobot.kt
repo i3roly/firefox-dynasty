@@ -191,8 +191,19 @@ class BrowserRobot {
         )
 
         registerAndCleanupIdlingResources(sessionLoadedIdlingResource) {
-            assertUIObjectExists(itemContainingText(expectedText))
+            assertTrue(
+                itemWithResId("$packageName:id/engineView")
+                    .getChild(UiSelector().textContains(expectedText)).waitForExists(waitingTimeLong),
+            )
         }
+    }
+
+    fun verifyTabCrashReporterView() {
+        assertUIObjectExists(itemWithResId("$packageName:id/crash_tab_image"))
+        assertUIObjectExists(itemWithText(getStringResource(R.string.tab_crash_title_2)))
+        assertUIObjectExists(itemWithText(getStringResource(R.string.tab_crash_send_report)))
+        assertUIObjectExists(itemWithResId("$packageName:id/restoreTabButton"))
+        assertUIObjectExists(itemWithResId("$packageName:id/closeTabButton"))
     }
 
     fun verifyPocketPageContent() {
@@ -803,7 +814,7 @@ class BrowserRobot {
             try {
                 // Wait for the blocker to kick-in and make the cookie banner disappear
                 Log.i(TAG, "verifyCookieBannerExists: Waiting for $waitingTime ms for cookie banner to be gone")
-                itemWithResId("cookieConsentBanner").waitUntilGone(waitingTime)
+                itemWithResId("cookieConsentBanner").waitUntilGone(waitingTimeLong)
                 Log.i(TAG, "verifyCookieBannerExists: Waited for $waitingTime ms for cookie banner to be gone")
                 // Assert that the blocker properly dismissed the cookie banner
                 assertUIObjectExists(itemWithResId("cookieConsentBanner"), exists = exists)
@@ -822,6 +833,7 @@ class BrowserRobot {
         assertUIObjectExists(
             itemContainingText(getStringResource(R.string.cookie_banner_cfr_message)),
             exists = exists,
+            waitingTime = waitingTimeLong,
         )
 
     fun verifyOpenLinkInAnotherAppPrompt() {
@@ -884,7 +896,7 @@ class BrowserRobot {
 
     fun verifyNoInternetConnectionErrorMessage() =
         assertUIObjectExists(
-            itemContainingText(getStringResource(R.string.mozac_browser_errorpages_no_internet_title)),
+            itemContainingText(getStringResource(R.string.mozac_browser_errorpages_no_internet_title_2)),
             itemWithResId("errorTryAgain"),
         )
 

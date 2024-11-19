@@ -2,7 +2,7 @@
 # cargo-vet config file
 
 [cargo-vet]
-version = "0.9"
+version = "0.10"
 
 [imports.bytecode-alliance]
 url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
@@ -187,6 +187,14 @@ notes = "This is a first-party crate which is entirely unrelated to the crates.i
 [policy.tabs]
 audit-as-crates-io = false
 notes = "This is a first-party crate, maintained by the appservices team, which is entirely unrelated to the crates.io package of the same name."
+
+[policy.to_shmem]
+audit-as-crates-io = true
+notes = "This is a first-party crate which is also published to crates.io"
+
+[policy.to_shmem_derive]
+audit-as-crates-io = true
+notes = "This is a first-party crate which is also published to crates.io"
 
 [policy.unicode-bidi]
 audit-as-crates-io = true

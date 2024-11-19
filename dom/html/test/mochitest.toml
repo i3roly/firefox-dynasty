@@ -757,6 +757,11 @@ skip-if = [
 ["test_bug1146116.html"]
 
 ["test_bug1166138.html"]
+skip-if = [
+  "os == 'android' && processor == 'x86_64' && debug", # Bug 1912735
+  "os == 'win' && os_version == '11.2009' && opt", # Bug 1912735
+  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'", # Bug 1912735
+]
 
 ["test_bug1203668.html"]
 
@@ -785,6 +790,7 @@ skip-if = [
 ["test_bug1287321.html"]
 
 ["test_bug1292522_same_domain_with_different_port_number.html"]
+https_first_disabled = true
 skip-if = [
   "http3",
   "http2",

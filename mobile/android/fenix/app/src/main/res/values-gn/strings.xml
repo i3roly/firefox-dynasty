@@ -13,6 +13,8 @@
     <string name="content_description_private_browsing_button">Embojuruja kundahára ñemigua</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
     <string name="content_description_disable_private_browsing_button">Eipe’a kundaha ñemigua</string>
+    <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
+    <string name="content_description_private_browsing">Ñeikundaha ñemi</string>
     <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
     <string name="search_hint">Eheka térã ehai kundaharape</string>
 
@@ -212,6 +214,12 @@
     <string name="browser_menu_extensions_banner_onboarding_header">Eñemomba’e %s rehe</string>
     <!-- Browser menu banner header text for extensions onboarding when all installed extensions have been disabled. -->
     <string name="browser_menu_disabled_extensions_banner_onboarding_header">Ereko jepysokue mohendapyre, hákatu ndaijurujái</string>
+    <!-- Browser menu banner body text for extensions onboarding.
+        The first parameter is the name of the app defined in app_name (for example: Fenix). -->
+    <string name="browser_menu_extensions_banner_onboarding_body">Umi jepysokue omboha’eve ne ñeikundaha, omoambuévo ijehecha ha %s pya’ekue omombaretevévo tekoñemi ha tekorosã.</string>
+    <!-- Browser menu banner body text for extensions onboarding when all installed extensions have been disabled.
+     The first parameter is the name of the button that opens extension manager (for example "Manage extensions"). -->
+    <string name="browser_menu_disabled_extensions_banner_onboarding_body">Eiporúvo jepysokue, emyandy ñembohekópe térã eiporavóvo “%s” eku’e jeývo.</string>
     <!-- Browser menu banner link text for learning more about extensions -->
     <string name="browser_menu_extensions_banner_learn_more">Eikuaave</string>
     <!-- Browser menu button that opens the extensions manager -->
@@ -225,6 +233,8 @@
     <string name="browser_menu_discover_more_extensions">Ejuhuvéta jepysokue</string>
     <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
     <string name="browser_menu_extensions_disabled_description">Ndoikomo’ãi sapy’ami</string>
+    <!-- The description of the browser menu appears when the user hasn't installed any extensions. -->
+    <string name="browser_menu_no_extensions_installed_description">Ndaipóri jepysokue jurujapyre</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Mba’ete marandu</string>
     <!-- Browser menu button that sends a user to help articles -->
@@ -244,6 +254,8 @@
     <string name="browser_menu_add_to_homescreen">Embojuaju mba’erechaha ñepyrũgua</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Embojuaju mba’erechaha ñepyrũgua…</string>
+    <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
+    <string name="browser_menu_add_to_homescreen_xiaomi">Ikatu umi Xiaomi mba’e’oka oikotevẽ ñemoneĩve ombojuaju hag̃ua jeike pya’erã mba’erechaha ñepyrũguápe. Ehecha jey ne ñemboheko.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
     <string name="resync_button_content_description">Mbojuajujey</string>
     <!-- Browser menu button that opens the find in page menu -->
@@ -421,7 +433,11 @@
     <string name="search_header_menu_item_2">Ko’ág̃a eheka amo:</string>
 
     <!-- Content description (not visible, for screen readers etc.): Search engine icon. The first parameter is the search engine name (for example: DuckDuckGo). -->
-    <string name="search_engine_icon_content_description">%s rekaha mongu’eha</string>
+    <string name="search_engine_icon_content_description" tools:ignore="UnusedResources" moz:removedIn="133">%s rekaha mongu’eha</string>
+
+    <!-- Content description (not visible, for screen readers etc.): Search engine icon.
+    The parameter is the search engine name (for example: DuckDuckGo). -->
+    <string name="search_engine_icon_content_description_1">Hekaha mongu’eha: %s</string>
 
     <!-- Home onboarding -->
     <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
@@ -499,14 +515,19 @@
     <!-- Text for the button to dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_add_search_widget_negative_button" tools:ignore="UnusedResources">Ani ko’ág̃a</string>
 
+    <!-- Onboarding header for the add-ons card used by Nimbus experiments. Nimbus experiments do not support string placeholders.
+    Note: The word "Firefox" should NOT be translated -->
+    <string name="onboarding_add_on_header" tools:ignore="BrandUsage,UnusedResources">Emboavaite Firefox jepysokue ndive</string>
+    <!-- Onboarding sub header for the add-ons card, used by Nimbus experiments. -->
+    <string name="onboarding_add_on_sub_header" tools:ignore="UnusedResources">Embojuaju jepysokue mbohapyháva emombareteve hag̃ua ne rekorosã, mba’eapopy ha hetave.</string>
     <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
     <string name="onboarding_add_on_explore_more_extensions" tools:ignore="UnusedResources" moz:removedIn="133">Ejeporekave jepysokuére.</string>
     <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
     <string name="onboarding_add_on_start_browsing_button" tools:ignore="UnusedResources" moz:removedIn="133">Eñepyrũ eikundaha.</string>
     <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_explore_more_extensions_2" tools:ignore="UnusedResources">Ejeporekave jepysokuére</string>
+    <string name="onboarding_add_on_explore_more_extensions_2">Ejeporekave jepysokuére</string>
     <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_start_browsing_button_2" tools:ignore="UnusedResources">Eñepyrũ eikundaha</string>
+    <string name="onboarding_add_on_start_browsing_button_2">Eñepyrũ eikundaha</string>
 
     <!-- Ublock name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Ublock Origin" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_ublock_name" tools:ignore="UnusedResources">uBlock Origin</string>
@@ -514,12 +535,26 @@
     <string name="onboarding_add_on_ublock_description" tools:ignore="UnusedResources">Ojoko marandu ñemurã katuete.</string>
     <!-- Privacy Badger name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Privacy Badger" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_privacy_badger_name" tools:ignore="UnusedResources">Privacy Badger</string>
+    <!-- Privacy Badger description for the onboarding add-ons card, used by Nimbus experiments. -->
+    <string name="onboarding_add_on_privacy_badger_description" tools:ignore="UnusedResources">Iporãva tapykuehópe. Ejoko tapykueho jehecha’ỹva ha marandu ñemi ivaíva.</string>
     <!-- Search by Image name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Search by Image" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_search_by_image_name" tools:ignore="UnusedResources">Eheka ta’ãnga rupive</string>
     <!-- Search by Image description for the onboarding add-ons card, used by Nimbus experiments. -->
     <string name="onboarding_add_on_search_by_image_description" tools:ignore="UnusedResources">Ehecha ta’ãnga iporãva ha eikuaave hesegua.</string>
     <!-- Dark Reader name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Dark Reader" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_dark_reader_name" tools:ignore="UnusedResources">Dark Reader</string>
+
+    <!-- Privacy Badger description for the onboarding add-ons card, used by Nimbus experiments. -->
+    <string name="onboarding_add_on_dark_reader_description" tools:ignore="UnusedResources">Ypytũ reko mba’etéva pumbyrýpe g̃uarã.</string>
+    <!-- Label for the number of reviews for an add-on. The parameter is for the formatted number of reviews e.g. "1,234", "12,345", "123,456". -->
+    <string name="onboarding_add_on_reviews_label">Jehechajey: %1$s</string>
+    <!-- Content description for the add-on icon. -->
+    <string name="onboarding_add_on_icon_content_description">Moĩmbaha ra’ãnga’i</string>
+
+    <!-- Content description for the add add-on button. -->
+    <string name="onboarding_add_on_add_button_content_description">Votõ embojuaju hag̃ua moĩmbaha</string>
+    <!-- Content description for the star rating group. -->
+    <string name="onboarding_add_on_star_rating_content_description">Ñeha’ã %1$s 5-gui</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -1222,6 +1257,22 @@
     <string name="download_delete_item_1">Mboguete</string>
 
 
+    <!-- WebCompat Reporter -->
+
+    <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
+    <!-- Broken site reason text for site slow or not working -->
+    <string name="webcompat_reporter_reason_slow">Tenda imbegue térã ndoikói</string>
+    <!-- Broken site reason text for images or videos -->
+    <string name="webcompat_reporter_reason_media">Ta’ãnga térã ta’ãngamýi</string>
+    <!-- Broken site reason text for buttons, links, and other content -->
+    <string name="webcompat_reporter_reason_content">Votõnguéra, juajuha ha ambue tetepy</string>
+    <!-- Broken site reason text for sign in or sign out -->
+    <string name="webcompat_reporter_reason_account">Eike térã emboty tembiapo</string>
+    <!-- Broken site reason text for ad blocker -->
+    <string name="webcompat_reporter_reason_ad_blocker">Ñemurã jokoha</string>
+    <!-- Broken site reason text for something else -->
+    <string name="webcompat_reporter_reason_other">Ambue mba’e</string>
+
     <!-- Crashes -->
     <!-- Title text displayed on the tab crash page. This first parameter is the name of the application (For example: Fenix) -->
     <string name="tab_crash_title_2">Rombyasy. %1$s nomyanyhẽkuaái pe kuatiarogue.</string>
@@ -1251,7 +1302,7 @@
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">Embojuaju ñongatuha</string>
     <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar">¡Techaukaha ñongatupyre!</string>
+    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">¡Techaukaha ñongatupyre!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">Oñeñongatúva “%s”-pe</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1319,7 +1370,7 @@
     <!-- Bookmark snackbar message for deleting a single item. Parameter is the title of the item being deleted -->
     <string name="bookmark_delete_single_item">Mboguete %s</string>
     <!-- Bookmark snackbar message for deleting multiple items. Parameter is the number of items being deleted -->
-    <string name="bookmark_delete_multiple_items" tools:ignore="UnusedResources">Mba’eporu mboguepyre: %s</string>
+    <string name="bookmark_delete_multiple_items">Mba’eporu mboguepyre: %s</string>
     <!-- Text for the button to search all bookmarks -->
     <string name="bookmark_search">Emoinge ñe’ẽ ehekaséva</string>
 
@@ -1327,6 +1378,10 @@
     <string name="bookmark_navigate_back_button_content_description">Eikundaha tapykuévo</string>
     <!-- Content description for the bookmark list new folder navigation bar button -->
     <string name="bookmark_add_new_folder_button_content_description">Embojuaju ñongatuha pyahu</string>
+    <!-- Content description for the bookmark screen delete bookmark navigation bar button -->
+    <string name="bookmark_delete_bookmark_content_description">Embogue techaukaha</string>
+    <!-- Content description for the bookmark screen delete bookmark folder navigation bar button -->
+    <string name="bookmark_delete_folder_content_description">Embogue ñongatuha</string>
     <!-- Content description for bookmark search floating action button -->
     <string name="bookmark_search_button_content_description">Eheka techaukahápe</string>
     <!-- Content description for the overflow menu for a bookmark item. Paramter will a folder name or bookmark title. -->
@@ -1337,8 +1392,10 @@
     <!-- Text for the button to navigate to sync authentication -->
     <string name="bookmark_empty_list_guest_cta">Eike embojuehe hag̃ua</string>
 
+    <!-- Description for the bookmark list empty state when you're in an empty folder. -->
+    <string name="bookmark_empty_list_folder_description">Embojuaju techaukaha eikundaha aja ejuju hag̃ua erohoryvéva tenda ag̃ave.</string>
     <!-- Description for the add new folder button when selecting a folder. -->
-    <string name="bookmark_select_folder_new_folder_button_title" tools:ignore="UnusedResources">Ñongatuha pyahu</string>
+    <string name="bookmark_select_folder_new_folder_button_title">Ñongatuha pyahu</string>
 
     <!-- Site Permissions -->
     <!-- Button label that take the user to the Android App setting -->
@@ -1596,9 +1653,9 @@
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">Tendayke mbotypyre: %1$s</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved">¡Techaukaha ñongatupyre!</string>
+    <string name="snackbar_message_bookmarks_saved" moz:removedIn="132" tools:ignore="UnusedResources">¡Techaukaha ñongatupyre!</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs. Parameter will be replaced by the name of the folder the bookmark was saved into.-->
-    <string name="snackbar_message_bookmarks_saved_in" tools:ignore="UnusedResources">¡Techaukaha ñongatupyre “%s”-pe!</string>
+    <string name="snackbar_message_bookmarks_saved_in">¡Techaukaha ñongatupyre “%s”-pe!</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
     <string name="snackbar_added_to_shortcuts">¡Ojuajúva mbopya’eháre!</string>
     <!-- Text shown in snackbar when user closes a private tab -->

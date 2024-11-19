@@ -166,7 +166,7 @@
     /* capitalized name   */ JSPromiseIntegration,                      \
     /* lower case name    */ jsPromiseIntegration,                      \
     /* compile predicate  */ WASM_JSPI_ENABLED,                         \
-    /* compiler predicate */ IonAvailable(cx),                          \
+    /* compiler predicate */ IonPlatformSupport(),                      \
     /* flag predicate     */ true,                                      \
     /* flag force enable  */ false,                                     \
     /* flag fuzz enable   */ false,                                     \
@@ -189,15 +189,6 @@
     /* flag force enable  */ false,                                     \
     /* flag fuzz enable   */ false,                                     \
     /* preference name    */ test_serialization)                        \
-  FEATURE(                                                              \
-    /* capitalized name   */ ExperimentalCompilePipeline,               \
-    /* lower case name    */ experimentalCompilePipeline,               \
-    /* compile predicate  */ true,                                      \
-    /* compiler predicate */ true,                                      \
-    /* flag predicate     */ true,                                      \
-    /* flag force enable  */ false,                                     \
-    /* flag fuzz enable   */ false,                                     \
-    /* preference name    */ experimental_compile_pipeline)             \
   FEATURE(                                                              \
     /* capitalized name   */ BranchHinting,                             \
     /* lower case name    */ branchHinting,                             \

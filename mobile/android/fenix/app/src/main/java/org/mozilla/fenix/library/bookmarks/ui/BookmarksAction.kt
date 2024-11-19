@@ -68,6 +68,7 @@ internal data class BookmarkClicked(val item: BookmarkItem.Bookmark) : Bookmarks
 internal data class BookmarkLongClicked(val item: BookmarkItem.Bookmark) : BookmarksAction
 internal data object SearchClicked : BookmarksAction
 internal data object AddFolderClicked : BookmarksAction
+internal data object CloseClicked : BookmarksAction
 internal data object BackClicked : BookmarksAction
 internal data object SignIntoSyncClicked : BookmarksAction
 internal data class EditBookmarkClicked(val bookmark: BookmarkItem.Bookmark) : BookmarksAction
@@ -80,6 +81,7 @@ internal data object FirstSyncCompleted : BookmarksAction
 internal sealed class AddFolderAction {
     data class TitleChanged(val updatedText: String) : BookmarksAction
     data object ParentFolderClicked : BookmarksAction
+    data class FolderCreated(val folder: BookmarkItem.Folder) : BookmarksAction
 }
 
 /**

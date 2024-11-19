@@ -121,6 +121,7 @@ export const LinkMenuOptions = {
         ...(site.sponsored_tile_id ? { tile_id: site.sponsored_tile_id } : {}),
         is_pocket_card: site.type === "CardGrid",
         is_list_card: site.is_list_card,
+        ...(site.format ? { format: site.format } : {}),
       })),
     }),
     impression: ac.ImpressionStats({
@@ -379,6 +380,29 @@ export const LinkMenuOptions = {
     action: ac.OnlyToMain({
       type: at.OPEN_LINK,
       data: { url: site.url },
+    }),
+  }),
+  FakespotDismiss: () => ({
+    id: "newtab-menu-dismiss",
+    action: ac.OnlyToMain({
+      type: at.SET_PREF,
+      data: {
+        name: "discoverystream.contextualContent.fakespot.enabled",
+        value: false,
+      },
+    }),
+    impression: ac.OnlyToMain({
+      type: at.FAKESPOT_DISMISS,
+    }),
+  }),
+  AboutFakespot: site => ({
+    id: "newtab-menu-about-fakespot",
+    action: ac.OnlyToMain({
+      type: at.OPEN_LINK,
+      data: { url: site.url },
+    }),
+    impression: ac.OnlyToMain({
+      type: at.OPEN_ABOUT_FAKESPOT,
     }),
   }),
 };

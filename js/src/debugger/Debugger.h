@@ -656,9 +656,6 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
   // See JS::dbg::ShouldAvoidSideEffects.
   bool shouldAvoidSideEffects;
 
-  // Whether to enable native tracing on the Debuggee.
-  bool nativeTracing;
-
   template <typename T>
   struct DebuggerLinkAccess {
     static mozilla::DoublyLinkedListElement<T>& Get(T* aThis) {
@@ -746,6 +743,10 @@ class Debugger : private mozilla::LinkedListElement<Debugger> {
    * The keys are always live stack frames. We drop them from this map as
    * soon as they leave the stack (see slowPathOnLeaveFrame) and in
    * removeDebuggee.
+   *
+   * Wasm JS PI allows suspending/resuming a portion of the stack, only
+   * frame pointers and activations are changed. The stack frames are still
+   * live, and shall be present in the frames map if DebuggerFrame is created.
    *
    * We don't trace the keys of this map (the frames are on the stack and
    * thus necessarily live), but we do trace the values. It's like a WeakMap

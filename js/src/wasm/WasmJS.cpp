@@ -380,7 +380,7 @@ static bool DescribeScriptedCaller(JSContext* cx, ScriptedCaller* caller,
   // back to the more ordinary false-if-error form.
 
   JS::AutoFilename af;
-  if (JS::DescribeScriptedCaller(cx, &af, &caller->line)) {
+  if (JS::DescribeScriptedCaller(&af, cx, &caller->line)) {
     caller->filename =
         FormatIntroducedFilename(af.get(), caller->line, introducer);
     if (!caller->filename) {
@@ -619,13 +619,22 @@ static bool EnforceIndexValue(JSContext* cx, HandleValue v, IndexType indexType,
 // The IndexValue typedef, a union of number and bigint, is used in the JS API
 // spec for memory and table arguments, where number is used for memory32 and
 // bigint is used for memory64.
-static Value IndexValue(JSContext* cx, uint64_t value, IndexType indexType) {
+[[nodiscard]] static bool CreateIndexValue(JSContext* cx, uint64_t value,
+                                           IndexType indexType,
+                                           MutableHandleValue indexValue) {
   switch (indexType) {
     case IndexType::I32:
       MOZ_ASSERT(value <= UINT32_MAX);
-      return NumberValue(value);
-    case IndexType::I64:
-      return BigIntValue(BigInt::createFromUint64(cx, value));
+      indexValue.set(NumberValue(value));
+      return true;
+    case IndexType::I64: {
+      BigInt* bi = BigInt::createFromUint64(cx, value);
+      if (!bi) {
+        return false;
+      }
+      indexValue.set(BigIntValue(bi));
+      return true;
+    }
     default:
       MOZ_CRASH("unknown index type");
   }
@@ -937,7 +946,11 @@ static JSObject* TableTypeToObject(JSContext* cx, IndexType indexType,
 
   if (maximum.isSome()) {
     RootedId maximumId(cx, NameToId(cx->names().maximum));
-    Value maximumValue = IndexValue(cx, maximum.value(), indexType);
+    RootedValue maximumValue(cx);
+    if (!CreateIndexValue(cx, maximum.value(), indexType, &maximumValue)) {
+      ReportOutOfMemory(cx);
+      return nullptr;
+    }
     if (!props.append(IdValuePair(maximumId, maximumValue))) {
       ReportOutOfMemory(cx);
       return nullptr;
@@ -945,7 +958,11 @@ static JSObject* TableTypeToObject(JSContext* cx, IndexType indexType,
   }
 
   RootedId minimumId(cx, NameToId(cx->names().minimum));
-  Value minimumValue = IndexValue(cx, initial, indexType);
+  RootedValue minimumValue(cx);
+  if (!CreateIndexValue(cx, initial, indexType, &minimumValue)) {
+    ReportOutOfMemory(cx);
+    return nullptr;
+  }
   if (!props.append(IdValuePair(minimumId, minimumValue))) {
     ReportOutOfMemory(cx);
     return nullptr;
@@ -973,7 +990,12 @@ static JSObject* MemoryTypeToObject(JSContext* cx, bool shared,
   Rooted<IdValueVector> props(cx, IdValueVector(cx));
   if (maxPages) {
     RootedId maximumId(cx, NameToId(cx->names().maximum));
-    Value maximumValue = IndexValue(cx, maxPages.value().value(), indexType);
+    RootedValue maximumValue(cx);
+    if (!CreateIndexValue(cx, maxPages.value().value(), indexType,
+                          &maximumValue)) {
+      ReportOutOfMemory(cx);
+      return nullptr;
+    }
     if (!props.append(IdValuePair(maximumId, maximumValue))) {
       ReportOutOfMemory(cx);
       return nullptr;
@@ -981,7 +1003,11 @@ static JSObject* MemoryTypeToObject(JSContext* cx, bool shared,
   }
 
   RootedId minimumId(cx, NameToId(cx->names().minimum));
-  Value minimumValue = IndexValue(cx, minPages.value(), indexType);
+  RootedValue minimumValue(cx);
+  if (!CreateIndexValue(cx, minPages.value(), indexType, &minimumValue)) {
+    ReportOutOfMemory(cx);
+    return nullptr;
+  }
   if (!props.append(IdValuePair(minimumId, minimumValue))) {
     ReportOutOfMemory(cx);
     return nullptr;
@@ -2251,7 +2277,12 @@ bool WasmMemoryObject::growImpl(JSContext* cx, const CallArgs& args) {
     return false;
   }
 
-  args.rval().set(IndexValue(cx, ret, memory->indexType()));
+  RootedValue result(cx);
+  if (!CreateIndexValue(cx, ret, memory->indexType(), &result)) {
+    ReportOutOfMemory(cx);
+    return false;
+  }
+  args.rval().set(result);
   return true;
 }
 
@@ -2755,8 +2786,13 @@ static bool IsTable(HandleValue v) {
 bool WasmTableObject::lengthGetterImpl(JSContext* cx, const CallArgs& args) {
   const WasmTableObject& tableObj =
       args.thisv().toObject().as<WasmTableObject>();
-  args.rval().set(
-      IndexValue(cx, tableObj.table().length(), tableObj.table().indexType()));
+  RootedValue length(cx);
+  if (!CreateIndexValue(cx, tableObj.table().length(),
+                        tableObj.table().indexType(), &length)) {
+    ReportOutOfMemory(cx);
+    return false;
+  }
+  args.rval().set(length);
   return true;
 }
 
@@ -2922,7 +2958,12 @@ bool WasmTableObject::growImpl(JSContext* cx, const CallArgs& args) {
   }
 #endif
 
-  args.rval().set(IndexValue(cx, oldLength, table.indexType()));
+  RootedValue result(cx);
+  if (!CreateIndexValue(cx, oldLength, table.indexType(), &result)) {
+    ReportOutOfMemory(cx);
+    return false;
+  }
+  args.rval().set(result);
   return true;
 }
 
@@ -4037,66 +4078,6 @@ bool WasmFunctionConstruct(JSContext* cx, unsigned argc, Value* vp) {
   if (!ParseValTypes(cx, resultsVal, results)) {
     return false;
   }
-
-#  ifdef ENABLE_WASM_JSPI
-  // Check suspeding and promising
-  SuspenderArgPosition suspending = SuspenderArgPosition::None;
-  SuspenderArgPosition promising = SuspenderArgPosition::None;
-  if (wasm::JSPromiseIntegrationAvailable(cx) && args.length() > 2 &&
-      args[2].isObject()) {
-    RootedObject usageObj(cx, &args[2].toObject());
-    RootedValue val(cx);
-    if (!JS_GetProperty(cx, usageObj, "suspending", &val)) {
-      return false;
-    }
-    if (!ParseSuspendingPromisingString(cx, val, suspending)) {
-      return false;
-    }
-    if (!JS_GetProperty(cx, usageObj, "promising", &val)) {
-      return false;
-    }
-    if (!ParseSuspendingPromisingString(cx, val, promising)) {
-      return false;
-    }
-  }
-
-  if (suspending > SuspenderArgPosition::None) {
-    if (!IsCallableNonCCW(args[1])) {
-      JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                               JSMSG_WASM_BAD_FUNCTION_VALUE);
-      return false;
-    }
-
-    RootedObject func(cx, &args[1].toObject());
-    RootedFunction suspend(
-        cx, WasmSuspendingFunctionCreate(cx, func, std::move(params),
-                                         std::move(results), suspending));
-    if (!suspend) {
-      return false;
-    }
-    args.rval().setObject(*suspend);
-
-    return true;
-  }
-  if (promising > SuspenderArgPosition::None) {
-    if (!IsWasmFunction(args[1])) {
-      JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
-                               JSMSG_WASM_BAD_FUNCTION_VALUE);
-      return false;
-    }
-
-    RootedObject func(cx, &args[1].toObject());
-    RootedFunction promise(
-        cx, WasmPromisingFunctionCreate(cx, func, std::move(params),
-                                        std::move(results), promising));
-    if (!promise) {
-      return false;
-    }
-    args.rval().setObject(*promise);
-
-    return true;
-  }
-#  endif  // ENABLE_WASM_JSPI
 
   // Get the target function
 
@@ -5235,8 +5216,7 @@ static bool WebAssembly_promising(JSContext* cx, unsigned argc, Value* vp) {
   RootedObject func(cx, &args[0].toObject());
   RootedFunction promise(
       cx, WasmPromisingFunctionCreate(cx, func, wasm::ValTypeVector(),
-                                      wasm::ValTypeVector(),
-                                      SuspenderArgPosition::None));
+                                      wasm::ValTypeVector()));
   if (!promise) {
     return false;
   }

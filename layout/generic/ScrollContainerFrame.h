@@ -22,7 +22,6 @@
 #include "nsIReflowCallback.h"
 #include "nsIScrollbarMediator.h"
 #include "nsIStatefulFrame.h"
-#include "nsLayoutUtils.h"
 #include "nsQueryFrame.h"
 #include "nsThreadUtils.h"
 #include "ScrollVelocityQueue.h"
@@ -302,13 +301,14 @@ class ScrollContainerFrame : public nsContainerFrame,
     }
     return rect;
   }
-  nsRect GetScrollPortRectAccountingForMaxDynamicToolbar() const {
-    auto rect = mScrollPort;
-    if (mIsRoot && PresContext()->HasDynamicToolbar()) {
-      rect.SizeTo(nsLayoutUtils::ExpandHeightForDynamicToolbar(PresContext(),
-                                                               rect.Size()));
+  nsRect GetScrollPortRectAccountingForMaxDynamicToolbar() const;
+
+  nsSize GetScrolledFrameSizeAccountingForDynamicToolbar() const {
+    auto size = mScrolledFrame->GetContentRectRelativeToSelf().Size();
+    if (mIsRoot) {
+      size.height += PresContext()->GetBimodalDynamicToolbarHeightInAppUnits();
     }
-    return rect;
+    return size;
   }
 
   /**
@@ -859,7 +859,7 @@ class ScrollContainerFrame : public nsContainerFrame,
                                    ScrollSnapFlags::IntendedEndPosition);
 
   // nsIReflowCallback
-  bool ReflowFinished() final;
+  bool ReflowFinished() override;
   void ReflowCallbackCanceled() final;
 
   // nsIStatefulFrame

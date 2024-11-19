@@ -41,21 +41,26 @@ ComputePassEncoder::ComputePassEncoder(
 ComputePassEncoder::~ComputePassEncoder() { Cleanup(); }
 
 void ComputePassEncoder::Cleanup() {
-  if (mValid) {
-    End();
-  }
+  mValid = false;
+  mPass.release();
+  mUsedBindGroups.Clear();
+  mUsedPipelines.Clear();
 }
 
 void ComputePassEncoder::SetBindGroup(
-    uint32_t aSlot, const BindGroup& aBindGroup,
+    uint32_t aSlot, BindGroup* const aBindGroup,
     const dom::Sequence<uint32_t>& aDynamicOffsets) {
   if (!mValid) {
     return;
   }
-  mUsedBindGroups.AppendElement(&aBindGroup);
-  ffi::wgpu_recorded_compute_pass_set_bind_group(
-      mPass.get(), aSlot, aBindGroup.mId, aDynamicOffsets.Elements(),
-      aDynamicOffsets.Length());
+  RawId bindGroup = 0;
+  if (aBindGroup) {
+    mUsedBindGroups.AppendElement(aBindGroup);
+    bindGroup = aBindGroup->mId;
+  }
+  ffi::wgpu_recorded_compute_pass_set_bind_group(mPass.get(), aSlot, bindGroup,
+                                                 aDynamicOffsets.Elements(),
+                                                 aDynamicOffsets.Length());
 }
 
 void ComputePassEncoder::SetPipeline(const ComputePipeline& aPipeline) {
@@ -108,12 +113,12 @@ void ComputePassEncoder::InsertDebugMarker(const nsAString& aString) {
 }
 
 void ComputePassEncoder::End() {
-  if (mValid) {
-    mValid = false;
-    auto* pass = mPass.release();
-    MOZ_ASSERT(pass);
-    mParent->EndComputePass(*pass);
+  if (!mValid) {
+    return;
   }
+  MOZ_ASSERT(!!mPass);
+  mParent->EndComputePass(*mPass);
+  Cleanup();
 }
 
 }  // namespace mozilla::webgpu

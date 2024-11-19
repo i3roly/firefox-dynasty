@@ -85,6 +85,70 @@ network:
       - necko@mozilla.com
     expires: never
 
+  cache_read_time:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time from connection cache read start to cache read end.
+      Corresponds to Legacy histogram HTTP_PAGE_CACHE_READ_TIME_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_PAGE_CACHE_READ_TIME_V2
+    expires: never
+
+  complete_load:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time from connection open to complete load (cache read end/until the last byte received)
+      Corresponds to Legacy histogram HTTP_PAGE_COMPLETE_LOAD_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_PAGE_COMPLETE_LOAD_V2
+    expires: never
+
+  complete_load_cached:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time from connection open to cache read end.
+      Corresponds to Legacy histogram HTTP_PAGE_COMPLETE_LOAD_CACHED_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_PAGE_COMPLETE_LOAD_CACHED_V2
+    expires: never
+
+  complete_load_net:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time from connection open to the last byte received.
+      Corresponds to Legacy histogram HTTP_PAGE_COMPLETE_LOAD_NET_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_PAGE_COMPLETE_LOAD_NET_V2
+    expires: never
+
   cors_authorization_header:
     type: labeled_counter
     labels:
@@ -154,6 +218,7 @@ network:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1580077#c10
     notification_emails:
       - necko@mozilla.com
+    telemetry_mirror: HTTP_PAGE_OPEN_TO_FIRST_FROM_CACHE_V2
     expires: never
 
   tcp_connection:
@@ -173,6 +238,7 @@ network:
     notification_emails:
       - necko@mozilla.com
       - vgosu@mozilla.com
+    telemetry_mirror: HTTP_PAGE_TCP_CONNECTION_2
     expires: never
 
   dns_start:
@@ -191,6 +257,7 @@ network:
     notification_emails:
       - necko@mozilla.com
       - vgosu@mozilla.com
+    telemetry_mirror: HTTP_PAGE_DNS_ISSUE_TIME
     expires: never
 
   dns_end:
@@ -209,6 +276,291 @@ network:
     notification_emails:
       - necko@mozilla.com
       - vgosu@mozilla.com
+    telemetry_mirror: HTTP_PAGE_DNS_LOOKUP_TIME
+    expires: never
+
+  http_revalidation:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time for positive cache validation
+      Corresponds to Legacy histogram HTTP_PAGE_REVALIDATION in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_PAGE_REVALIDATION
+    expires: never
+
+  first_sent_to_last_received:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time from first byte of request sent to the last byte received.
+      Corresponds to Legacy histogram HTTP_PAGE_FIRST_SENT_TO_LAST_RECEIVED in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror:
+      HTTP_PAGE_FIRST_SENT_TO_LAST_RECEIVED
+    expires: never
+
+  open_to_first_sent:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP page channel, time from connection open to the first byte of requst sent.
+      Corresponds to Legacy histogram HTTP_PAGE_OPEN_TO_FIRST_SENT in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror:
+      HTTP_PAGE_OPEN_TO_FIRST_SENT
+    expires: never
+
+  open_to_first_received:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel,time from connection open to the first byte received.
+      Corresponds to Legacy histogram HTTP_PAGE_OPEN_TO_FIRST_RECEIVED in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror:
+      HTTP_PAGE_OPEN_TO_FIRST_RECEIVED
+    expires: never
+
+  sub_cache_read_time:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection cache read start to cache read end.
+      Corresponds to Legacy histogram HTTP_SUB_CACHE_READ_TIME_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_CACHE_READ_TIME_V2
+    expires: never
+
+  sub_complete_load:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to complete load (cache read end/until the last byte received)
+      Corresponds to Legacy histogram HTTP_SUB_COMPLETE_LOAD_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_COMPLETE_LOAD_V2
+    expires: never
+
+  sub_complete_load_cached:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to cache read end.
+      Corresponds to Legacy histogram HTTP_SUB_COMPLETE_LOAD_CACHED_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_COMPLETE_LOAD_CACHED_V2
+    expires: never
+
+  sub_complete_load_net:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to the last byte received.
+      Corresponds to Legacy histogram HTTP_SUB_COMPLETE_LOAD_NET_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_COMPLETE_LOAD_NET_V2
+    expires: never
+
+  sub_dns_start:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to the DNS request
+      being issued.
+      Corresponds to Legacy histogram HTTP_SUB_DNS_ISSUE_TIME in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_DNS_ISSUE_TIME
+    expires: never
+
+  sub_dns_end:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from the DNS request being issued to
+      the response.
+      Corresponds to Legacy histogram HTTP_SUB_DNS_LOOKUP_TIME in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_DNS_LOOKUP_TIME
+    expires: never
+
+  sub_first_from_cache:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to cache read start.
+      Corresponds to Legacy histogram HTTP_SUB_OPEN_TO_FIRST_FROM_CACHE_V2 in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_OPEN_TO_FIRST_FROM_CACHE_V2
+    expires: never
+
+  sub_first_sent_to_last_received:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from first byte of request sent to the last byte received.
+      Corresponds to Legacy histogram HTTP_SUB_FIRST_SENT_TO_LAST_RECEIVED in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror:
+      HTTP_SUB_FIRST_SENT_TO_LAST_RECEIVED
+    expires: never
+
+  sub_http_revalidation:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time for positive cache validation
+      Corresponds to Legacy histogram HTTP_SUB_REVALIDATION in
+      Desktop.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_REVALIDATION
+    expires: never
+
+  sub_open_to_first_sent:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to the first byte of requst sent.
+      Corresponds to Legacy histogram HTTP_SUB_OPEN_TO_FIRST_SENT in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror:
+      HTTP_SUB_OPEN_TO_FIRST_SENT
+    expires: never
+
+  sub_open_to_first_received:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from connection open to the first byte received.
+      Corresponds to Legacy histogram HTTP_SUB_OPEN_TO_FIRST_RECEIVED in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror:
+      HTTP_SUB_OPEN_TO_FIRST_RECEIVED
+    expires: never
+
+  sub_tls_handshake:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from after the TCP SYN packet is
+      received to the secure connection is established and ready for HTTP.
+      Corresponds to Legacy histogram HTTP_SUB_TLS_HANDSHAKE in Desktop.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=772589
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_TLS_HANDSHAKE
+    expires: never
+
+  sub_tcp_connection:
+    type: timing_distribution
+    time_unit: millisecond
+    description: >
+      In the HTTP subitem channel, time from the TCP SYN packet is received to
+      the connection is established and ready for HTTP.
+      Corresponds to Legacy histogram HTTP_SUB_TCP_CONNECTION_2 in Desktop
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=772589
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1898247
+    notification_emails:
+      - necko@mozilla.com
+    telemetry_mirror: HTTP_SUB_TCP_CONNECTION_2
     expires: never
 
   tls_early_data_negotiated:
@@ -289,6 +641,7 @@ network:
     notification_emails:
       - necko@mozilla.com
       - vgosu@mozilla.com
+    telemetry_mirror: HTTP_PAGE_TLS_HANDSHAKE
     expires: never
 
   http3_tls_handshake: &http3_tls_handshake
@@ -425,3 +778,156 @@ network:
     <<: *system_channel_success_or_failure
     description: >
      Counts the status of succeeded and failed requests to other mozilla.org domains
+
+networking:
+  http3_enabled:
+    type: boolean
+    description: >
+      True if HTTP3 is enabled at the start of a session.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar networking.http3_enabled.
+    bugs:
+      - https://bugzil.la/1652104
+    data_reviews:
+      - https://bugzil.la/1652104
+    notification_emails:
+      - necko@mozilla.com
+      - ddamjanovic@mozilla.com
+    expires: never
+    telemetry_mirror: NETWORKING_HTTP3_ENABLED
+
+  https_rr_prefs_usage:
+    type: quantity
+    description: >
+      A bitfield representation for the usage of HTTPS RR prefs.
+      bit 0: network.dns.upgrade_with_https_rr is enabled or not.
+      bit 1: network.dns.use_https_rr_as_altsvc is enabled or not.
+      bit 2: network.dns.echconfig.enabled is enabled or not.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar networking.https_rr_prefs_usage.
+    bugs:
+      - https://bugzil.la/1686421
+    data_reviews:
+      - https://bugzil.la/1686421
+    notification_emails:
+      - necko@mozilla.com
+      - kershaw@mozilla.com
+    expires: never
+    unit: bitfield
+    telemetry_mirror: NETWORKING_HTTPS_RR_PREFS_USAGE
+
+  trr_connection_cycle_count:
+    type: labeled_counter
+    description: >
+      Number of times we cycled the TRR connection during a subsession.
+      Keyed by TRR provider URL.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar networking.trr_connection_cycle_count.
+    bugs:
+      - https://bugzil.la/1737198
+    data_reviews:
+      - https://bugzil.la/1737198
+    notification_emails:
+      - necko@mozilla.com
+      - nhnt11@mozilla.com
+    expires: never
+    telemetry_mirror: NETWORKING_TRR_CONNECTION_CYCLE_COUNT
+
+  data_transferred_v3_kb:
+    type: labeled_counter
+    description: >
+      How many KB of HTTP data transferred by type, there are some categories
+      separated by keys based on 5 parameters:
+        1. normal browsing or private browsing
+        2. system principal or not
+        3. first party or third party
+        4. class of service (Leader/Background/Others)
+        5. tracking classification (Basic/Content/FingerprintingContent)
+
+      Available keys are:
+        "Y0_N1Sys",
+        "Y1_N1",
+        "Y2_N3Oth",
+        "Y3_N3BasicLead",
+        "Y4_N3BasicBg",
+        "Y5_N3BasicOth",
+        "Y6_N3ContentLead",
+        "Y7_N3ContentBg",
+        "Y8_N3ContentOth",
+        "Y9_N3FpLead",
+        "Y10_N3FpBg",
+        "Y11_N3FpOth",
+        "Y12_P1Sys",
+        "Y13_P1",
+        "Y14_P3Oth",
+        "Y15_P3BasicLead",
+        "Y16_P3BasicBg",
+        "Y17_P3BasicOth",
+        "Y18_P3ContentLead",
+        "Y19_P3ContentBg",
+        "Y20_P3ContentOth",
+        "Y21_P3FpLead",
+        "Y22_P3FpBg",
+        "Y23_P3FpOth"
+
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar networking.data_transferred_v3_kb.
+    bugs:
+      - https://bugzil.la/1533363
+      - https://bugzil.la/1546903
+      - https://bugzil.la/1546796
+      - https://bugzil.la/1546906
+      - https://bugzil.la/1550756
+      - https://bugzil.la/1572666
+      - https://bugzil.la/1590124
+      - https://bugzil.la/1621800
+      - https://bugzil.la/1668604
+      - https://bugzil.la/1706842
+    data_reviews:
+      - https://bugzil.la/1533363
+      - https://bugzil.la/1546903
+      - https://bugzil.la/1546796
+      - https://bugzil.la/1546906
+      - https://bugzil.la/1550756
+      - https://bugzil.la/1572666
+      - https://bugzil.la/1590124
+      - https://bugzil.la/1621800
+      - https://bugzil.la/1668604
+      - https://bugzil.la/1706842
+    notification_emails:
+      - arthur@mozilla.com
+      - tanvi@mozilla.com
+      - tihuang@mozilla.com
+    expires: never
+    telemetry_mirror: NETWORKING_DATA_TRANSFERRED_V3_KB
+
+opaque.response.blocking:
+  javascript_validation_count:
+    type: counter
+    description: >
+      The number of times we run the JS validator.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar opaque.response.blocking.javascript_validation_count.
+    bugs:
+      - https://bugzil.la/1804638
+    data_reviews:
+      - https://bugzil.la/1804638
+    notification_emails:
+      - farre@mozilla.com
+    expires: never
+    telemetry_mirror: OPAQUE_RESPONSE_BLOCKING_JAVASCRIPT_VALIDATION_COUNT
+
+  cross_origin_opaque_response_count:
+    type: counter
+    description: >
+      The number of loads of cross origin opaque resources.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar opaque.response.blocking.cross_origin_opaque_response_count.
+    bugs:
+      - https://bugzil.la/1804638
+    data_reviews:
+      - https://bugzil.la/1804638
+    notification_emails:
+      - farre@mozilla.com
+    expires: never
+    telemetry_mirror: OPAQUE_RESPONSE_BLOCKING_CROSS_ORIGIN_OPAQUE_RESPONSE_COUNT

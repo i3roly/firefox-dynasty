@@ -16,12 +16,11 @@ document.addEventListener(
         case "context_openANewTab":
           gBrowser.addAdjacentNewTab(TabContextMenu.contextTab);
           break;
-        case "context_addTabToNewGroup":
-          if (gBrowser.selectedTabs.includes(TabContextMenu.contextTab)) {
-            gBrowser.addTabGroup("red", "", gBrowser.selectedTabs);
-          } else {
-            gBrowser.addTabGroup("red", "", [TabContextMenu.contextTab]);
-          }
+        case "context_moveTabToNewGroup":
+          TabContextMenu.moveTabsToNewGroup();
+          break;
+        case "context_ungroupTab":
+          TabContextMenu.ungroupTabs();
           break;
         case "context_reloadTab":
           gBrowser.reloadTab(TabContextMenu.contextTab);
@@ -261,6 +260,47 @@ document.addEventListener(
         case "select-translations-panel-about-translations-menuitem":
           SelectTranslationsPanel.onAboutTranslations();
           break;
+
+        // == customizationPanelItemContextMenu ==
+        case "customizationPanelItemContextMenuManageExtension":
+          ToolbarContextMenu.openAboutAddonsForContextAction(
+            event.target.parentElement
+          );
+          break;
+
+        case "customizationPanelItemContextMenuRemoveExtension":
+          ToolbarContextMenu.removeExtensionForContextAction(
+            event.target.parentElement
+          );
+          break;
+
+        case "customizationPanelItemContextMenuReportExtension":
+          ToolbarContextMenu.reportExtensionForContextAction(
+            event.target.parentElement,
+            "toolbar_context_menu"
+          );
+          break;
+
+        case "customizationPanelItemContextMenuPin":
+          gCustomizeMode.addToPanel(
+            event.target.parentNode.triggerNode,
+            "panelitem-context"
+          );
+          break;
+
+        case "customizationPanelItemContextMenuUnpin":
+          gCustomizeMode.addToToolbar(
+            event.target.parentNode.triggerNode,
+            "panelitem-context"
+          );
+          break;
+
+        case "customizationPanelItemContextMenuRemove":
+          gCustomizeMode.removeFromArea(
+            event.target.parentNode.triggerNode,
+            "panelitem-context"
+          );
+          break;
       }
     });
 
@@ -269,6 +309,23 @@ document.addEventListener(
       .addEventListener("command", event => {
         // Handle commands on the descendant <menuitem>s with different containers.
         TabContextMenu.reopenInContainer(event);
+      });
+
+    document
+      .getElementById("context_moveTabToGroupPopupMenu")
+      .addEventListener("command", event => {
+        if (event.target.id == "context_moveTabToGroupNewGroup") {
+          TabContextMenu.moveTabsToNewGroup();
+          return;
+        }
+
+        const tabGroupId = event.target.getAttribute("tab-group-id");
+        const group = gBrowser.getTabGroupById(tabGroupId);
+        if (!group) {
+          return;
+        }
+
+        TabContextMenu.moveTabsToGroup(group);
       });
 
     document
@@ -329,6 +386,10 @@ document.addEventListener(
           break;
         case "unified-extensions-context-menu":
           gUnifiedExtensions.updateContextMenu(event.target, event);
+          break;
+        case "customizationPanelItemContextMenu":
+          gCustomizeMode.onPanelContextMenuShowing(event);
+          ToolbarContextMenu.updateExtension(event.target);
           break;
       }
     });

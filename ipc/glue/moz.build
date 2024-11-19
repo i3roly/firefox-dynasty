@@ -54,6 +54,7 @@ EXPORTS.mozilla.ipc += [
     "ProtocolUtils.h",
     "RandomAccessStreamUtils.h",
     "RawShmem.h",
+    "RustMessageUtils.h",
     "ScopedPort.h",
     "SerializedStructuredCloneBuffer.h",
     "SharedMemory.h",
@@ -78,14 +79,7 @@ EXPORTS.mozilla.ipc += [
 ]
 
 if CONFIG["OS_ARCH"] == "WINNT":
-    SOURCES += [
-        "SharedMemory_windows.cpp",
-        "WindowsMessageLoop.cpp",
-    ]
-else:
-    UNIFIED_SOURCES += [
-        "SharedMemory_posix.cpp",
-    ]
+    SOURCES += ["WindowsMessageLoop.cpp"]
 
 if CONFIG["OS_ARCH"] == "WINNT":
     SOURCES += [
@@ -114,11 +108,14 @@ else:
     ]
 
 if CONFIG["OS_ARCH"] == "Darwin":
-    EXPORTS.mozilla.ipc += ["SharedMemoryImpl_mach.h"]
-    SOURCES += ["SharedMemoryImpl_mach.cpp"]
+    SOURCES += ["SharedMemory_mach.cpp"]
+elif CONFIG["OS_ARCH"] == "WINNT":
+    SOURCES += ["SharedMemory_windows.cpp"]
+elif CONFIG["OS_TARGET"] == "Android":
+    SOURCES += ["SharedMemory_android.cpp"]
 else:
-    EXPORTS.mozilla.ipc += ["SharedMemoryImpl_chromium.h"]
-    SOURCES += ["SharedMemoryImpl_chromium.cpp"]
+    SOURCES += ["SharedMemory_posix.cpp"]
+
 
 if CONFIG["OS_ARCH"] == "Linux":
     UNIFIED_SOURCES += [
@@ -238,8 +235,8 @@ LOCAL_INCLUDES += [
     "/dom/indexedDB",
     "/dom/storage",
     "/netwerk/base",
+    "/third_party/abseil-cpp",
     "/third_party/libwebrtc",
-    "/third_party/libwebrtc/third_party/abseil-cpp",
     "/tools/fuzzing/ipc",
     "/xpcom/build",
 ]

@@ -130,9 +130,7 @@ add_task(async function select_non_default_engine_and_search() {
   EventUtils.synthesizeKey("KEY_Enter");
   await browserLoadedPromise;
 
-  assertSearchStringIsInUrlbar(SEARCH_STRING, {
-    userTypedValue: SEARCH_STRING,
-  });
+  assertSearchStringIsInUrlbar(SEARCH_STRING);
 
   BrowserTestUtils.removeTab(tab);
 });
@@ -155,7 +153,7 @@ add_task(async function select_non_default_engine_and_modify_search_and_blur() {
     engineName: "MochiSearch",
     isGeneralPurposeEngine: true,
     source: UrlbarUtils.RESULT_SOURCE.SEARCH,
-    entry: "other",
+    entry: "searchbutton",
   });
 
   info("Search terms should no longer be persisting.");
@@ -195,12 +193,12 @@ add_task(async function select_non_default_engine_and_blur() {
     engineName: "MochiSearch",
     isGeneralPurposeEngine: true,
     source: UrlbarUtils.RESULT_SOURCE.SEARCH,
-    entry: "other",
+    entry: "searchbutton",
   });
 
   Assert.ok(
-    gURLBar.hasAttribute("persistsearchterms"),
-    "Urlbar has persistsearchterms attribute."
+    !gURLBar.hasAttribute("persistsearchterms"),
+    "Urlbar does not have persistsearchterms attribute."
   );
   Assert.equal(
     gURLBar.getAttribute("pageproxystate"),
@@ -239,10 +237,10 @@ add_task(async function select_non_default_engine_and_blur_and_switch_tab() {
     engineName: "MochiSearch",
     isGeneralPurposeEngine: true,
     source: UrlbarUtils.RESULT_SOURCE.SEARCH,
-    entry: "other",
+    entry: "searchbutton",
   });
   Assert.ok(
-    gURLBar.hasAttribute("persistsearchterms"),
+    !gURLBar.hasAttribute("persistsearchterms"),
     "Urlbar does not has persistsearchterms attribute."
   );
   Assert.equal(

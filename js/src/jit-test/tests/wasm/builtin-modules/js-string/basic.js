@@ -194,6 +194,11 @@ function throwIfNotString(a) {
     throw new WebAssembly.RuntimeError();
   }
 }
+function throwIfNotStringOrNull(a) {
+  if (a !== null && typeof a !== "string") {
+    throw new WebAssembly.RuntimeError();
+  }
+}
 let polyFillImports = {
   test: (string) => {
     if (string === null ||
@@ -274,16 +279,18 @@ let polyFillImports = {
     startIndex >>>= 0;
     endIndex >>>= 0;
     throwIfNotString(string);
-    if (startIndex > string.length,
-        endIndex > string.length,
+    if (startIndex > string.length ||
         endIndex < startIndex) {
       return "";
+    }
+    if (endIndex > string.length) {
+      endIndex = string.length;
     }
     return string.substring(startIndex, endIndex);
   },
   equals: (stringA, stringB) => {
-    throwIfNotString(stringA);
-    throwIfNotString(stringB);
+    throwIfNotStringOrNull(stringA);
+    throwIfNotStringOrNull(stringB);
     return stringA === stringB;
   },
   compare: (stringA, stringB) => {
@@ -329,6 +336,7 @@ let builtinExports = wasmEvalText(testModule, {}, {builtins: ["js-string"]}).exp
 let polyfillExports = wasmEvalText(testModule, { 'wasm:js-string': polyFillImports }).exports;
 
 let testStrings = ["", "a", "1", "ab", "hello, world", "\n", "☺", "☺smiley", String.fromCodePoint(0x10000, 0x10001)];
+let testStringsAndNull = [...testStrings, null];
 let testCharCodes = [1, 2, 3, 10, 0x7f, 0xff, 0xfffe, 0xffff];
 let testCodePoints = [1, 2, 3, 10, 0x7f, 0xff, 0xfffe, 0xffff, 0x10000, 0x10001];
 
@@ -400,7 +408,10 @@ for (let a of testStrings) {
   );
 
   for (let i = 0; i < length; i++) {
-    for (let j = 0; j < length; j++) {
+    // The end parameter is interpreted as unsigned and is always clamped to
+    // the string length. This means that -1, and string.length + 1 are valid
+    // end indices.
+    for (let j = -1; j <= length + 1; j++) {
       assertSameBehavior(
         builtinExports['substring'],
         polyfillExports['substring'],
@@ -418,13 +429,18 @@ for (let a of testStrings) {
       a, b
     );
     assertSameBehavior(
-      builtinExports['equals'],
-      polyfillExports['equals'],
-      a, b
-    );
-    assertSameBehavior(
       builtinExports['compare'],
       polyfillExports['compare'],
+      a, b
+    );
+  }
+}
+
+for (let a of testStringsAndNull) {
+  for (let b of testStringsAndNull) {
+    assertSameBehavior(
+      builtinExports['equals'],
+      polyfillExports['equals'],
       a, b
     );
   }

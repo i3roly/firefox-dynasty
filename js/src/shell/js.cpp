@@ -124,10 +124,12 @@
 #include "js/CompilationAndEvaluation.h"
 #include "js/CompileOptions.h"  // JS::ReadOnlyCompileOptions, JS::CompileOptions, JS::OwningCompileOptions, JS::DecodeOptions, JS::InstantiateOptions
 #include "js/ContextOptions.h"  // JS::ContextOptions{,Ref}
-#include "js/Debug.h"           // JS::dbg::ShouldAvoidSideEffects
-#include "js/Equality.h"        // JS::SameValue
-#include "js/ErrorReport.h"     // JS::PrintError
-#include "js/Exception.h"       // JS::StealPendingExceptionStack
+#include "js/Debug.h"  // JS::dbg::ShouldAvoidSideEffects, JS::ExecutionTrace
+#include "js/EnvironmentChain.h"            // JS::EnvironmentChain
+#include "js/Equality.h"                    // JS::SameValue
+#include "js/ErrorReport.h"                 // JS::PrintError
+#include "js/Exception.h"                   // JS::StealPendingExceptionStack
+#include "js/experimental/BindingAllocs.h"  // JS_NewObjectWithGivenProtoAndUseAllocSite
 #include "js/experimental/CodeCoverage.h"   // js::EnableCodeCoverage
 #include "js/experimental/CompileScript.h"  // JS::NewFrontendContext, JS::DestroyFrontendContext, JS::HadFrontendErrors, JS::ConvertFrontendErrorsToRuntimeErrors, JS::CompileGlobalScriptToStencil, JS::CompileModuleScriptToStencil
 #include "js/experimental/CTypes.h"         // JS::InitCTypesClass
@@ -2692,7 +2694,7 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
   bool saveIncrementalBytecode = false;
   bool execute = true;
   bool assertEqBytecode = false;
-  JS::RootedObjectVector envChain(cx);
+  JS::EnvironmentChain envChain(cx, JS::SupportUnscopables::No);
   RootedObject callerGlobal(cx, cx->global());
 
   options.setIntroductionType("js shell evaluate")
@@ -2780,6 +2782,13 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
       }
     }
 
+    if (!JS_GetProperty(cx, opts, "supportUnscopables", &v)) {
+      return false;
+    }
+    if (!v.isUndefined()) {
+      envChain.setSupportUnscopables(JS::SupportUnscopables(ToBoolean(v)));
+    }
+
     // We cannot load or save the bytecode if we have no object where the
     // bytecode cache is stored.
     if (loadBytecode || saveIncrementalBytecode) {
@@ -2795,7 +2804,7 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
     // Wrap the envChainObject list into target realm.
     JSAutoRealm ar(cx, global);
     for (size_t i = 0; i < envChain.length(); ++i) {
-      if (!JS_WrapObject(cx, envChain[i])) {
+      if (!JS_WrapObject(cx, envChain.chain()[i])) {
         return false;
       }
     }
@@ -3381,6 +3390,7 @@ static bool Quit(JSContext* cx, unsigned argc, Value* vp) {
   }
 
   SetQuitting(cx, code);
+  JS::ReportUncatchableException(cx);
   return false;
 }
 
@@ -4430,7 +4440,7 @@ static bool EvalInContext(JSContext* cx, unsigned argc, Value* vp) {
   JS::AutoFilename filename;
   uint32_t lineno;
 
-  DescribeScriptedCaller(cx, &filename, &lineno);
+  DescribeScriptedCaller(&filename, cx, &lineno);
   {
     sobj = UncheckedUnwrap(sobj, true);
 
@@ -4700,8 +4710,14 @@ static bool Sleep_fn(JSContext* cx, unsigned argc, Value* vp) {
       duration = toWakeup - now;
     }
   }
+
+  if (sc->serviceInterrupt) {
+    JS::ReportUncatchableException(cx);
+    return false;
+  }
+
   args.rval().setUndefined();
-  return !sc->serviceInterrupt;
+  return true;
 }
 
 static void KillWatchdog(JSContext* cx) {
@@ -5237,11 +5253,14 @@ static bool StackDump(JSContext* cx, unsigned argc, Value* vp) {
 }
 #endif
 
-static bool StackPointerInfo(JSContext* cx, unsigned argc, Value* vp) {
+MOZ_ASAN_IGNORE static bool StackPointerInfo(JSContext* cx, unsigned argc,
+                                             Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
   // Copy the truncated stack pointer to the result.  This value is not used
   // as a pointer but as a way to measure frame-size from JS.
+  // The ASAN must be disabled for this function -- it may allocate `args`
+  // not on the stack.
   args.rval().setInt32(int32_t(reinterpret_cast<size_t>(&args) & 0xfffffff));
   return true;
 }
@@ -5284,6 +5303,7 @@ static bool ParseModule(JSContext* cx, unsigned argc, Value* vp) {
 
   UniqueChars filename;
   CompileOptions options(cx);
+  bool jsonModule = false;
   if (args.length() > 1) {
     if (!args[1].isString()) {
       const char* typeName = InformalValueTypeName(args[1]);
@@ -5298,10 +5318,30 @@ static bool ParseModule(JSContext* cx, unsigned argc, Value* vp) {
     }
 
     options.setFileAndLine(filename.get(), 1);
+
+    // The 2nd argument is the module type string. "js" or "json" is expected.
+    if (args.length() == 3) {
+      if (!args[2].isString()) {
+        const char* typeName = InformalValueTypeName(args[2]);
+        JS_ReportErrorASCII(cx, "expected moduleType string, got %s", typeName);
+        return false;
+      }
+
+      RootedString str(cx, args[2].toString());
+      JSLinearString* linearStr = JS_EnsureLinearString(cx, str);
+      if (!linearStr) {
+        return false;
+      }
+      if (JS_LinearStringEqualsLiteral(linearStr, "json")) {
+        jsonModule = true;
+      } else if (!JS_LinearStringEqualsLiteral(linearStr, "js")) {
+        JS_ReportErrorASCII(cx, "moduleType string ('js' or 'json') expected");
+        return false;
+      }
+    }
   } else {
     options.setFileAndLine("<string>", 1);
   }
-  options.setModule();
 
   AutoStableStringChars linearChars(cx);
   if (!linearChars.initTwoByte(cx, scriptContents)) {
@@ -5313,8 +5353,14 @@ static bool ParseModule(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  AutoReportFrontendContext fc(cx);
-  RootedObject module(cx, frontend::CompileModule(cx, &fc, options, srcBuf));
+  RootedObject module(cx);
+  if (jsonModule) {
+    module = JS::CompileJsonModule(cx, options, srcBuf);
+  } else {
+    AutoReportFrontendContext fc(cx);
+    options.setModule();
+    module = frontend::CompileModule(cx, &fc, options, srcBuf);
+  }
   if (!module) {
     return false;
   }
@@ -5594,9 +5640,13 @@ static bool RegisterModule(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  Rooted<ImportAttributeVector> attributes(cx);
+  JS::ModuleType moduleType = JS::ModuleType::JavaScript;
+  if (module->hasSyntheticModuleFields()) {
+    moduleType = JS::ModuleType::JSON;
+  }
+
   RootedObject moduleRequest(
-      cx, ModuleRequestObject::create(cx, specifier, attributes));
+      cx, ModuleRequestObject::create(cx, specifier, moduleType));
   if (!moduleRequest) {
     return false;
   }
@@ -6927,7 +6977,7 @@ static bool ThisFilename(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
   JS::AutoFilename filename;
-  if (!DescribeScriptedCaller(cx, &filename) || !filename.get()) {
+  if (!DescribeScriptedCaller(&filename, cx) || !filename.get()) {
     args.rval().setString(cx->runtime()->emptyString);
     return true;
   }
@@ -9335,6 +9385,7 @@ static bool SideEffectfulResolveObject_resolve(JSContext* cx, HandleObject obj,
                                                HandleId id, bool* resolvedp) {
   *resolvedp = false;
   if (JS::dbg::ShouldAvoidSideEffects(cx)) {
+    JS::ReportUncatchableException(cx);
     return false;
   }
 
@@ -9380,6 +9431,273 @@ static bool CreateSideEffectfulResolveObject(JSContext* cx, unsigned argc,
   args.rval().setObject(*obj);
   return true;
 }
+
+#ifdef MOZ_EXECUTION_TRACING
+
+static bool EnableExecutionTracing(JSContext* cx, unsigned argc,
+                                   JS::Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  if (!JS_TracerBeginTracing(cx)) {
+    return false;
+  }
+
+  args.rval().setUndefined();
+  return true;
+}
+
+static bool GetExecutionTrace(JSContext* cx, unsigned argc, JS::Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  JS::ExecutionTrace trace;
+  if (!JS_TracerSnapshotTrace(trace)) {
+    JS_ReportErrorASCII(cx, "Failed to get the execution trace");
+    return false;
+  }
+
+  JS::Rooted<JSString*> functionEnterStr(cx,
+                                         JS_AtomizeString(cx, "FunctionEnter"));
+  if (!functionEnterStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> functionLeaveStr(cx,
+                                         JS_AtomizeString(cx, "FunctionLeave"));
+  if (!functionLeaveStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> labelEnterStr(cx, JS_AtomizeString(cx, "LabelEnter"));
+  if (!labelEnterStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> labelLeaveStr(cx, JS_AtomizeString(cx, "LabelLeave"));
+  if (!labelLeaveStr) {
+    return false;
+  }
+
+  JS::Rooted<JSString*> interpreterStr(cx, JS_AtomizeString(cx, "interpreter"));
+  if (!interpreterStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> baselineStr(cx, JS_AtomizeString(cx, "baseline"));
+  if (!baselineStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> ionStr(cx, JS_AtomizeString(cx, "ion"));
+  if (!ionStr) {
+    return false;
+  }
+  JS::Rooted<JSString*> wasmStr(cx, JS_AtomizeString(cx, "wasm"));
+  if (!wasmStr) {
+    return false;
+  }
+
+  JS::Rooted<JSString*> kindStr(cx, JS_AtomizeString(cx, "kind"));
+  if (!kindStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> kindId(cx, JS::PropertyKey::NonIntAtom(kindStr));
+
+  JS::Rooted<JSString*> implementationStr(
+      cx, JS_AtomizeString(cx, "implementation"));
+  if (!implementationStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> implementationId(
+      cx, JS::PropertyKey::NonIntAtom(implementationStr));
+
+  JS::Rooted<JSString*> timeStr(cx, JS_AtomizeString(cx, "time"));
+  if (!timeStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> timeId(cx, JS::PropertyKey::NonIntAtom(timeStr));
+
+  JS::Rooted<JSString*> eventsStr(cx, JS_AtomizeString(cx, "events"));
+  if (!eventsStr) {
+    return false;
+  }
+  JS::Rooted<JS::PropertyKey> eventsId(cx,
+                                       JS::PropertyKey::NonIntAtom(eventsStr));
+
+  JS::Rooted<JS::PropertyKey> lineNumberId(cx,
+                                           NameToId(cx->names().lineNumber));
+  JS::Rooted<JS::PropertyKey> columnNumberId(
+      cx, NameToId(cx->names().columnNumber));
+  JS::Rooted<JS::PropertyKey> scriptId(cx, NameToId(cx->names().script));
+  JS::Rooted<JS::PropertyKey> nameId(cx, NameToId(cx->names().name));
+  JS::Rooted<JS::PropertyKey> labelId(cx, NameToId(cx->names().label));
+
+  JS::Rooted<JSObject*> contextObj(cx);
+  JS::Rooted<ArrayObject*> eventsArray(cx);
+  JS::Rooted<JSObject*> eventObj(cx);
+  JS::Rooted<JSString*> str(cx);
+
+  JS::Rooted<ArrayObject*> traceArray(cx, NewDenseEmptyArray(cx));
+  if (!traceArray) {
+    return false;
+  }
+
+  for (const auto& context : trace.contexts) {
+    contextObj = JS_NewPlainObject(cx);
+    if (!contextObj) {
+      return false;
+    }
+
+    eventsArray = NewDenseEmptyArray(cx);
+    if (!eventsArray) {
+      return false;
+    }
+
+    for (const auto& event : context.events) {
+      eventObj = JS_NewPlainObject(cx);
+      if (!eventObj) {
+        return false;
+      }
+
+      switch (event.kind) {
+        case JS::ExecutionTrace::EventKind::FunctionEnter:
+          str = functionEnterStr;
+          break;
+        case JS::ExecutionTrace::EventKind::FunctionLeave:
+          str = functionLeaveStr;
+          break;
+        case JS::ExecutionTrace::EventKind::LabelEnter:
+          str = labelEnterStr;
+          break;
+        case JS::ExecutionTrace::EventKind::LabelLeave:
+          str = labelLeaveStr;
+          break;
+        default:
+          MOZ_CRASH("Unexpected EventKind");
+          break;
+      }
+      if (!JS_DefinePropertyById(cx, eventObj, kindId, str, JSPROP_ENUMERATE)) {
+        return false;
+      }
+
+      if (event.kind == JS::ExecutionTrace::EventKind::FunctionEnter ||
+          event.kind == JS::ExecutionTrace::EventKind::FunctionLeave) {
+        switch (event.functionEvent.implementation) {
+          case JS::ExecutionTrace::ImplementationType::Interpreter:
+            str = interpreterStr;
+            break;
+          case JS::ExecutionTrace::ImplementationType::Baseline:
+            str = baselineStr;
+            break;
+          case JS::ExecutionTrace::ImplementationType::Ion:
+            str = ionStr;
+            break;
+          case JS::ExecutionTrace::ImplementationType::Wasm:
+            str = wasmStr;
+            break;
+          default:
+            MOZ_CRASH("Unexpected ImplementationType");
+            break;
+        }
+        if (!JS_DefinePropertyById(cx, eventObj, implementationId, str,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+
+        if (!JS_DefinePropertyById(cx, eventObj, lineNumberId,
+                                   event.functionEvent.lineNumber,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+
+        if (!JS_DefinePropertyById(cx, eventObj, columnNumberId,
+                                   event.functionEvent.column,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+
+        if (auto p = context.scriptUrls.lookup(event.functionEvent.scriptId)) {
+          str = JS_NewStringCopyUTF8Z(
+              cx, JS::ConstUTF8CharsZ(trace.stringBuffer.begin() + p->value()));
+          if (!str) {
+            return false;
+          }
+
+          if (!JS_DefinePropertyById(cx, eventObj, scriptId, str,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        } else {
+          if (!JS_DefinePropertyById(cx, eventObj, scriptId,
+                                     JS::UndefinedHandleValue,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        }
+
+        if (auto p = context.atoms.lookup(event.functionEvent.functionNameId)) {
+          str = JS_NewStringCopyUTF8Z(
+              cx, JS::ConstUTF8CharsZ(trace.stringBuffer.begin() + p->value()));
+          if (!str) {
+            return false;
+          }
+
+          if (!JS_DefinePropertyById(cx, eventObj, nameId, str,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        } else {
+          if (!JS_DefinePropertyById(cx, eventObj, nameId,
+                                     JS::UndefinedHandleValue,
+                                     JSPROP_ENUMERATE)) {
+            return false;
+          }
+        }
+      } else {
+        str = JS_NewStringCopyUTF8Z(
+            cx, JS::ConstUTF8CharsZ(trace.stringBuffer.begin() +
+                                    event.labelEvent.label));
+        if (!str) {
+          return false;
+        }
+
+        if (!JS_DefinePropertyById(cx, eventObj, labelId, str,
+                                   JSPROP_ENUMERATE)) {
+          return false;
+        }
+      }
+
+      if (!JS_DefinePropertyById(cx, eventObj, timeId, event.time,
+                                 JSPROP_ENUMERATE)) {
+        return false;
+      }
+
+      if (!NewbornArrayPush(cx, eventsArray, JS::ObjectValue(*eventObj))) {
+        return false;
+      }
+    }
+
+    if (!JS_DefinePropertyById(cx, contextObj, eventsId, eventsArray,
+                               JSPROP_ENUMERATE)) {
+      return false;
+    }
+
+    if (!NewbornArrayPush(cx, traceArray, JS::ObjectValue(*contextObj))) {
+      return false;
+    }
+  }
+
+  args.rval().setObject(*traceArray);
+  return true;
+}
+
+static bool DisableExecutionTracing(JSContext* cx, unsigned argc,
+                                    JS::Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+
+  if (!JS_TracerEndTracing(cx)) {
+    return false;
+  }
+
+  args.rval().setUndefined();
+  return true;
+}
+
+#endif  // MOZ_EXECUTION_TRACING
 
 // clang-format off
 static const JSFunctionSpecWithHelp shell_functions[] = {
@@ -9442,6 +9760,8 @@ static const JSFunctionSpecWithHelp shell_functions[] = {
 "      envChainObject: object to put on the scope chain, with its fields added\n"
 "         as var bindings, akin to how elements are added to the environment in\n"
 "         event handlers in Gecko.\n"
+"      supportUnscopables: if true, support Symbol.unscopables lookups for\n"
+"         envChainObject, similar to (syntactic) with-statements.\n"
 ),
 
     JS_FN_HELP("run", Run, 1, 0,
@@ -9585,9 +9905,10 @@ static const JSFunctionSpecWithHelp shell_functions[] = {
 "sleep(dt)",
 "  Sleep for dt seconds."),
 
-    JS_FN_HELP("parseModule", ParseModule, 1, 0,
-"parseModule(code)",
-"  Parses source text as a module and returns a ModuleObject wrapper object."),
+    JS_FN_HELP("parseModule", ParseModule, 3, 0,
+"parseModule(code, 'filename', 'js' | 'json')",
+"  Parses source text as a JS module ('js', this is the default) or a JSON"
+" module ('json') and returns a ModuleObject wrapper object."),
 
     JS_FN_HELP("instantiateModuleStencil", InstantiateModuleStencil, 1, 0,
 "instantiateModuleStencil(stencil, [options])",
@@ -10170,6 +10491,20 @@ TestAssertRecoveredOnBailout,
 "underneath you."),
 #endif // JS_HAS_INTL_API
 
+#ifdef MOZ_EXECUTION_TRACING
+    JS_FN_HELP("enableExecutionTracing", EnableExecutionTracing, 0, 0,
+"enableExecutionTracing()",
+"  Enable execution tracing for the current context."),
+
+    JS_FN_HELP("getExecutionTrace", GetExecutionTrace, 0, 0,
+"getExecutionTrace()",
+"  Get the execution trace."),
+
+    JS_FN_HELP("disableExecutionTracing", DisableExecutionTracing, 0, 0,
+"disableExecutionTracing()",
+"  Disable execution tracing for the current context."),
+#endif   // MOZ_EXECUTION_TRACING
+
     JS_FS_HELP_END
 };
 // clang-format on
@@ -10310,7 +10645,9 @@ static ExtraGlobalBindingWithHelp extraGlobalBindingsWithHelp[] = {
 "    FakeDOMObject.prototype.global\n"
 "      Getter/setter with JSJitInfo::AliasEverything\n"
 "    FakeDOMObject.prototype.doFoo()\n"
-"      Method with JSJitInfo"},
+"      Method with JSJitInfo\n"
+"    FakeDOMObject.prototype.getObject()\n"
+"      Method with JSJitInfo that returns an object."},
 };
 // clang-format on
 
@@ -10789,6 +11126,26 @@ static bool dom_doFoo(JSContext* cx, HandleObject obj, void* self,
   return true;
 }
 
+static bool dom_doBar(JSContext* cx, HandleObject obj, void* self,
+                      const JSJitMethodCallArgs& args) {
+  MOZ_ASSERT(JS::GetClass(obj) == GetDomClass());
+  MOZ_ASSERT(self == DOM_PRIVATE_VALUE);
+  MOZ_ASSERT(cx->realm() == args.callee().as<JSFunction>().realm());
+
+  static const JSClass barClass = {
+      "BarObj",
+  };
+
+  JSObject* retObj =
+      JS_NewObjectWithGivenProtoAndUseAllocSite(cx, &barClass, nullptr);
+  if (!retObj) {
+    return false;
+  }
+
+  args.rval().setObject(*retObj);
+  return true;
+}
+
 static const JSJitInfo dom_x_getterinfo = {
     {(JSJitGetterOp)dom_get_x},
     {0}, /* protoID */
@@ -10888,6 +11245,22 @@ static const JSJitInfo doFoo_methodinfo = {
     0                           /* slotIndex */
 };
 
+static const JSJitInfo doBar_methodinfo = {
+    {(JSJitGetterOp)dom_doBar},
+    {0}, /* protoID */
+    {0}, /* depth */
+    JSJitInfo::Method,
+    JSJitInfo::AliasEverything, /* aliasSet */
+    JSVAL_TYPE_OBJECT,          /* returnType */
+    false,                      /* isInfallible. False in setters. */
+    false,                      /* isMovable */
+    false,                      /* isEliminatable */
+    false,                      /* isAlwaysInSlot */
+    false,                      /* isLazilyCachedInSlot */
+    false,                      /* isTypedMethod */
+    0                           /* slotIndex */
+};
+
 static const JSPropertySpec dom_props[] = {
     JSPropertySpec::nativeAccessors("x", JSPROP_ENUMERATE, dom_genericGetter,
                                     &dom_x_getterinfo, dom_genericSetter,
@@ -10902,6 +11275,8 @@ static const JSPropertySpec dom_props[] = {
 
 static const JSFunctionSpec dom_methods[] = {
     JS_FNINFO("doFoo", dom_genericMethod, &doFoo_methodinfo, 3,
+              JSPROP_ENUMERATE),
+    JS_FNINFO("doBar", dom_genericMethod, &doBar_methodinfo, 3,
               JSPROP_ENUMERATE),
     JS_FS_END,
 };
@@ -12679,7 +13054,17 @@ bool InitOptionParser(OptionParser& op) {
                         "Enable WebAssembly tail-calls proposal.") ||
       !op.addBoolOption('\0', "wasm-js-string-builtins",
                         "Enable WebAssembly js-string-builtins proposal.") ||
-      !op.addBoolOption('\0', "enable-promise-try", "Enable Promise.try")) {
+      !op.addBoolOption('\0', "enable-promise-try", "Enable Promise.try") ||
+      !op.addBoolOption('\0', "enable-iterator-sequencing",
+                        "Enable Iterator Sequencing") ||
+      !op.addBoolOption('\0', "enable-math-sumprecise",
+                        "Enable Math.sumPrecise") ||
+      !op.addBoolOption('\0', "enable-error-iserror", "Enable Error.isError") ||
+      !op.addBoolOption('\0', "enable-iterator-range",
+                        "Enable Iterator.range") ||
+      !op.addBoolOption('\0', "enable-joint-iteration",
+                        "Enable Joint Iteration") ||
+      !op.addBoolOption('\0', "enable-atomics-pause", "Enable Atomics pause")) {
     return false;
   }
 
@@ -12733,14 +13118,14 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-float16array")) {
     JS::Prefs::setAtStartup_experimental_float16array(true);
   }
-  if (op.getBoolOption("enable-iterator-helpers")) {
-    JS::Prefs::setAtStartup_experimental_iterator_helpers(true);
-  }
   if (op.getBoolOption("enable-new-set-methods")) {
     JS::Prefs::setAtStartup_experimental_new_set_methods(true);
   }
   if (op.getBoolOption("enable-regexp-modifiers")) {
     JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
+  }
+  if (op.getBoolOption("enable-uint8array-base64")) {
+    JS::Prefs::setAtStartup_experimental_uint8array_base64(true);
   }
 #ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-async-iterator-helpers")) {
@@ -12749,14 +13134,29 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-symbols-as-weakmap-keys")) {
     JS::Prefs::setAtStartup_experimental_symbols_as_weakmap_keys(true);
   }
-  if (op.getBoolOption("enable-uint8array-base64")) {
-    JS::Prefs::setAtStartup_experimental_uint8array_base64(true);
-  }
   if (op.getBoolOption("enable-regexp-escape")) {
     JS::Prefs::setAtStartup_experimental_regexp_escape(true);
   }
   if (op.getBoolOption("enable-promise-try")) {
     JS::Prefs::setAtStartup_experimental_promise_try(true);
+  }
+  if (op.getBoolOption("enable-error-iserror")) {
+    JS::Prefs::setAtStartup_experimental_error_iserror(true);
+  }
+  if (op.getBoolOption("enable-iterator-sequencing")) {
+    JS::Prefs::setAtStartup_experimental_iterator_sequencing(true);
+  }
+  if (op.getBoolOption("enable-math-sumprecise")) {
+    JS::Prefs::setAtStartup_experimental_math_sumprecise(true);
+  }
+  if (op.getBoolOption("enable-iterator-range")) {
+    JS::Prefs::setAtStartup_experimental_iterator_range(true);
+  }
+  if (op.getBoolOption("enable-joint-iteration")) {
+    JS::Prefs::setAtStartup_experimental_joint_iteration(true);
+  }
+  if (op.getBoolOption("enable-atomics-pause")) {
+    JS::Prefs::setAtStartup_experimental_atomics_pause(true);
   }
 #endif
   if (op.getBoolOption("enable-json-parse-with-source")) {
@@ -12833,6 +13233,18 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
 #if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
   MOZ_ASSERT(!js::jit::CPUFlagsHaveBeenComputed());
 
+  if (op.getBoolOption("no-avx")) {
+    js::jit::CPUInfo::SetAVXDisabled();
+    if (!sCompilerProcessFlags.append("--no-avx")) {
+      return false;
+    }
+  }
+  if (op.getBoolOption("enable-avx")) {
+    js::jit::CPUInfo::SetAVXEnabled();
+    if (!sCompilerProcessFlags.append("--enable-avx")) {
+      return false;
+    }
+  }
   if (op.getBoolOption("no-sse3")) {
     js::jit::CPUInfo::SetSSE3Disabled();
     if (!sCompilerProcessFlags.append("--no-sse3")) {
@@ -12854,18 +13266,6 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("no-sse42")) {
     js::jit::CPUInfo::SetSSE42Disabled();
     if (!sCompilerProcessFlags.append("--no-sse42")) {
-      return false;
-    }
-  }
-  if (op.getBoolOption("no-avx")) {
-    js::jit::CPUInfo::SetAVXDisabled();
-    if (!sCompilerProcessFlags.append("--no-avx")) {
-      return false;
-    }
-  }
-  if (op.getBoolOption("enable-avx")) {
-    js::jit::CPUInfo::SetAVXEnabled();
-    if (!sCompilerProcessFlags.append("--enable-avx")) {
       return false;
     }
   }

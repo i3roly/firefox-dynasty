@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -261,7 +262,7 @@ fun CustomTabNavBar(
     onForwardButtonLongPress: () -> Unit,
     onOpenInBrowserButtonClick: () -> Unit,
     onMenuButtonClick: () -> Unit,
-    @ColorInt backgroundColor: Int? = null,
+    backgroundColor: Color,
     @ColorInt buttonTint: Int? = null,
     @ColorInt buttonDisabledTint: Int? = null,
     onVisibilityUpdated: (Boolean) -> Unit,
@@ -274,12 +275,11 @@ fun CustomTabNavBar(
     val canGoForward by browserStore.observeAsState(initialValue = false) {
         it.findCustomTab(customTabSessionId)?.content?.canGoForward ?: false
     }
-    val background = backgroundColor?.let { Color(it) } ?: FirefoxTheme.colors.layer1
     val iconTint = buttonTint?.let { Color(it) } ?: FirefoxTheme.colors.iconPrimary
     val disabledIconTint = buttonDisabledTint?.let { Color(it) } ?: FirefoxTheme.colors.iconDisabled
 
     NavBar(
-        background = background,
+        background = backgroundColor,
         onVisibilityUpdated = onVisibilityUpdated,
     ) {
         BackButton(
@@ -337,7 +337,8 @@ private fun NavBar(
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
-                ) {},
+                ) {}
+                .testTag(NavBarTestTags.navbar),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
             content = content,
@@ -359,7 +360,9 @@ private fun BackButton(
         onClick = onBackButtonClick,
         onLongClick = onBackButtonLongPress,
         enabled = enabled,
-        modifier = Modifier.size(48.dp),
+        modifier = Modifier
+            .size(48.dp)
+            .testTag(NavBarTestTags.backButton),
     ) {
         Icon(
             painter = painterResource(R.drawable.mozac_ic_back_24),
@@ -381,7 +384,9 @@ private fun ForwardButton(
         onClick = onForwardButtonClick,
         onLongClick = onForwardButtonLongPress,
         enabled = enabled,
-        modifier = Modifier.size(48.dp),
+        modifier = Modifier
+            .size(48.dp)
+            .testTag(NavBarTestTags.forwardButton),
     ) {
         Icon(
             painter = painterResource(R.drawable.mozac_ic_forward_24),
@@ -397,6 +402,8 @@ private fun SearchWebButton(
 ) {
     IconButton(
         onClick = onSearchButtonClick,
+        modifier = Modifier
+            .testTag(NavBarTestTags.searchButton),
     ) {
         Icon(
             painter = painterResource(R.drawable.mozac_ic_search_24),
@@ -416,17 +423,21 @@ private fun MenuButton(
     if (isMenuRedesignEnabled) {
         IconButton(
             onClick = onMenuButtonClick,
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier
+                .size(48.dp)
+                .testTag(NavBarTestTags.menuButton),
         ) {
             Icon(
                 painter = painterResource(R.drawable.mozac_ic_ellipsis_vertical_24),
-                contentDescription = stringResource(id = R.string.mozac_browser_menu_button),
+                contentDescription = stringResource(id = R.string.content_description_menu),
                 tint = tint,
             )
         }
     } else {
         AndroidView(
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier
+                .size(48.dp)
+                .testTag(NavBarTestTags.menuButton),
             factory = { _ -> menuButton },
         )
     }
@@ -439,6 +450,8 @@ private fun OpenInBrowserButton(
 ) {
     IconButton(
         onClick = onOpenInBrowserButtonClick,
+        modifier = Modifier
+            .testTag(NavBarTestTags.openInBrowserButton),
     ) {
         Icon(
             painter = painterResource(R.drawable.mozac_ic_open_in),
@@ -551,7 +564,7 @@ private fun CustomTabNavBarPreviewRoot(isPrivateMode: Boolean) {
         onOpenInBrowserButtonClick = {},
         onMenuButtonClick = {},
         isMenuRedesignEnabled = false,
-        backgroundColor = FirefoxTheme.colors.layer1.toArgb(),
+        backgroundColor = FirefoxTheme.colors.layer1,
         buttonTint = FirefoxTheme.colors.iconPrimary.toArgb(),
         onVisibilityUpdated = {},
     )

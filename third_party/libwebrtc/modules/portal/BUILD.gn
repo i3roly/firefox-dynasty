@@ -6,7 +6,7 @@
 # in the file PATENTS.  All contributing project authors may
 # be found in the AUTHORS file in the root of the source tree.
 
-import("//build/config/linux/pkg_config.gni")
+import("//chromium/build/config/linux/pkg_config.gni")
 import("//tools/generate_stubs/rules.gni")
 import("../../webrtc.gni")
 
@@ -137,10 +137,10 @@ if (!build_with_mozilla) {
       deps -= [ ":pipewire_stubs" ]
       defines -= [ "WEBRTC_DLOPEN_PIPEWIRE" ]
       public_deps = [
-        "//third_party/pipewire",
-        "//third_party/drm",
-        "//third_party/gbm",
-        "//third_party/libepoxy"
+        "../../third_party/pipewire",
+        "../../third_party/drm",
+        "../../third_party/gbm",
+        "../../third_party/libepoxy"
       ]
     }
   }

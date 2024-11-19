@@ -24,6 +24,7 @@
 #include "mozilla/dom/SafeRefPtr.h"
 #include "mozilla/dom/TrustedTypePolicyFactory.h"
 #include "mozilla/dom/WorkerPrivate.h"
+#include "mozilla/dom/TimeoutManager.h"
 #include "nsCOMPtr.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsIGlobalObject.h"
@@ -104,6 +105,10 @@ class WorkerGlobalScopeBase : public DOMEventTargetHelper,
   WorkerGlobalScopeBase(WorkerPrivate* aWorkerPrivate,
                         UniquePtr<ClientSource> aClientSource);
 
+  mozilla::dom::TimeoutManager* GetTimeoutManager() override final {
+    return mTimeoutManager.get();
+  }
+
   virtual bool WrapGlobalObject(JSContext* aCx,
                                 JS::MutableHandle<JSObject*> aReflector) = 0;
 
@@ -126,7 +131,12 @@ class WorkerGlobalScopeBase : public DOMEventTargetHelper,
 
   StorageAccess GetStorageAccess() final;
 
+  nsICookieJarSettings* GetCookieJarSettings() final;
+
+  nsIURI* GetBaseURI() const final;
+
   Maybe<ClientInfo> GetClientInfo() const final;
+  Maybe<ClientState> GetClientState() const final;
 
   Maybe<ServiceWorkerDescriptor> GetController() const final;
 
@@ -195,6 +205,7 @@ class WorkerGlobalScopeBase : public DOMEventTargetHelper,
 #ifdef DEBUG
   PRThread* mWorkerThreadUsedOnlyForAssert;
 #endif
+  mozilla::UniquePtr<mozilla::dom::TimeoutManager> mTimeoutManager;
 };
 
 namespace workerinternals {
@@ -227,6 +238,11 @@ class WorkerGlobalScope : public WorkerGlobalScopeBase {
   void NoteShuttingDown();
 
   // nsIGlobalObject implementation
+  already_AddRefed<ServiceWorkerContainer> GetServiceWorkerContainer() final;
+
+  RefPtr<ServiceWorker> GetOrCreateServiceWorker(
+      const ServiceWorkerDescriptor& aDescriptor) final;
+
   RefPtr<ServiceWorkerRegistration> GetServiceWorkerRegistration(
       const ServiceWorkerRegistrationDescriptor& aDescriptor) const final;
 
@@ -245,6 +261,12 @@ class WorkerGlobalScope : public WorkerGlobalScopeBase {
   void SetIsNotEligibleForMessaging() { mIsEligibleForMessaging = false; }
 
   bool IsEligibleForMessaging() final;
+
+  void ReportToConsole(uint32_t aErrorFlags, const nsCString& aCategory,
+                       nsContentUtils::PropertiesFile aFile,
+                       const nsCString& aMessageName,
+                       const nsTArray<nsString>& aParams,
+                       const mozilla::SourceLocation& aLocation) final;
 
   // WorkerGlobalScope WebIDL implementation
   WorkerGlobalScope* Self() { return this; }

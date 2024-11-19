@@ -307,6 +307,8 @@ class BookmarksMiddlewareTest {
     fun `GIVEN current screen is add folder and new folder title is nonempty WHEN back is clicked THEN navigate back, save the new folder, and load the updated tree`() = runTest {
         `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
         `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id)).thenReturn(generateBookmarkTree())
+        `when`(bookmarksStorage.addFolder(BookmarkRoot.Mobile.id, "test")).thenReturn("new-guid")
+
         val middleware = buildMiddleware()
         val store = middleware.makeStore()
         val newFolderTitle = "test"
@@ -343,10 +345,11 @@ class BookmarksMiddlewareTest {
     }
 
     @Test
-    fun `GIVEN current screen is add folder and previous screen is select folder WHEN back is clicked THEN reload folder tree`() = runTestOnMain {
+    fun `GIVEN current screen is add folder and previous screen is select folder WHEN back is clicked THEN navigate back to the edit bookmark screen`() = runTestOnMain {
         `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
         `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id, recursive = true)).thenReturn(generateBookmarkTree())
         `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id, recursive = false)).thenReturn(generateBookmarkTree())
+        `when`(bookmarksStorage.addFolder(BookmarkRoot.Mobile.id, "i'm a new folder")).thenReturn("new-guid")
         val middleware = buildMiddleware()
         val store = middleware.makeStore()
 
@@ -359,9 +362,29 @@ class BookmarksMiddlewareTest {
         store.dispatch(AddFolderClicked)
         store.dispatch(AddFolderAction.TitleChanged(newFolderTitle))
         store.dispatch(BackClicked)
+        store.waitUntilIdle()
 
-        assertNotNull(store.state.bookmarksSelectFolderState)
-        verify(bookmarksStorage, times(2)).getTree(BookmarkRoot.Mobile.id, recursive = true)
+        assertNull(store.state.bookmarksSelectFolderState)
+        verify(bookmarksStorage, times(1)).getTree(BookmarkRoot.Mobile.id, recursive = true)
+        verify(navController, times(1)).popBackStack(BookmarksDestinations.EDIT_BOOKMARK, inclusive = false)
+    }
+
+    @Test
+    fun `GIVEN current screen is add folder and previous screen is not select folder WHEN back is clicked THEN navigate back`() = runTestOnMain {
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id, recursive = false)).thenReturn(generateBookmarkTree())
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id, recursive = false)).thenReturn(generateBookmarkTree())
+        `when`(bookmarksStorage.addFolder(BookmarkRoot.Mobile.id, "i'm a new folder")).thenReturn("new-guid")
+        val middleware = buildMiddleware()
+        val store = middleware.makeStore()
+
+        store.dispatch(AddFolderClicked)
+        store.dispatch(AddFolderAction.TitleChanged("i'm a new folder"))
+        store.dispatch(BackClicked)
+        store.waitUntilIdle()
+
+        verify(bookmarksStorage, times(2)).getTree(BookmarkRoot.Mobile.id, recursive = false)
+        verify(navController, times(1)).popBackStack()
     }
 
     @Test
@@ -512,6 +535,20 @@ class BookmarksMiddlewareTest {
         val store = middleware.makeStore()
 
         store.dispatch(SignIntoSyncClicked)
+
+        assertTrue(navigated)
+    }
+
+    @Test
+    fun `GIVEN current screen is a subfolder WHEN close is clicked THEN exit bookmarks `() = runTestOnMain {
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id)).thenReturn(generateBookmarkTree())
+        var navigated = false
+        exitBookmarks = { navigated = true }
+        val middleware = buildMiddleware()
+        val store = middleware.makeStore()
+
+        store.dispatch(CloseClicked)
 
         assertTrue(navigated)
     }
@@ -943,11 +980,6 @@ class BookmarksMiddlewareTest {
     }
 
     @Test
-    fun `WHEN toolbar move clicked THEN navigate to the folder selection screen`() = runTestOnMain {
-        // TODO
-    }
-
-    @Test
     fun `GIVEN selected tabs WHEN multi-select open in normal tabs clicked THEN open selected in new tabs and show tabs tray`() = runTestOnMain {
         var shown = false
         var mode = true
@@ -1159,6 +1191,7 @@ class BookmarksMiddlewareTest {
         val newParent = tree.children?.last { it.type == BookmarkNodeType.FOLDER }!!
         val newParentItem = BookmarkItem.Folder(title = newParent.title!!, guid = newParent.guid)
         val newFolderTitle = "newFolder"
+        `when`(bookmarksStorage.addFolder(newParent.guid, newFolderTitle)).thenReturn("new-guid")
 
         val middleware = buildMiddleware()
         val store = middleware.makeStore()
@@ -1218,6 +1251,7 @@ class BookmarksMiddlewareTest {
         val tree = generateBookmarkTree()
         `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
         `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id)).thenReturn(tree)
+        `when`(bookmarksStorage.addFolder("folder guid 4", "newFolder")).thenReturn("new-guid")
         val bookmark = tree.children?.first { it.type == BookmarkNodeType.ITEM }!!
         val bookmarkItem = BookmarkItem.Bookmark(title = bookmark.title!!, guid = bookmark.guid, url = bookmark.url!!, previewImageUrl = bookmark.url!!)
         val newFolderTitle = "newFolder"
@@ -1270,7 +1304,7 @@ class BookmarksMiddlewareTest {
         bookmarksStorage = bookmarksStorage,
         clipboardManager = clipboardManager,
         addNewTabUseCase = addNewTabUseCase,
-        navController = navController,
+        getNavController = { navController },
         exitBookmarks = exitBookmarks,
         wasPreviousAppDestinationHome = wasPreviousAppDestinationHome,
         navigateToSearch = navigateToSearch,

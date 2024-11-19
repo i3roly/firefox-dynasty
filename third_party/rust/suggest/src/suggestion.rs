@@ -22,7 +22,7 @@ pub(crate) enum AmpSuggestionType {
     Desktop,
 }
 /// A suggestion from the database to show in the address bar.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, uniffi::Enum)]
 pub enum Suggestion {
     Amp {
         title: String,
@@ -79,6 +79,11 @@ pub enum Suggestion {
         score: f64,
     },
     Weather {
+        city: Option<String>,
+        region: Option<String>,
+        country: Option<String>,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
         score: f64,
     },
     Fakespot {
@@ -220,6 +225,7 @@ pub(crate) fn cook_raw_suggestion_url(raw_url: &str) -> String {
 /// Determines whether a "raw" sponsored suggestion URL is equivalent to a
 /// "cooked" URL. The two URLs are equivalent if they are identical except for
 /// their replaced template parameters, which can be different.
+#[uniffi::export]
 pub fn raw_suggestion_url_matches(raw_url: &str, cooked_url: &str) -> bool {
     let Some((raw_url_prefix, raw_url_suffix)) = raw_url.split_once(TIMESTAMP_TEMPLATE) else {
         return raw_url == cooked_url;

@@ -20,7 +20,7 @@ import org.mozilla.fenix.helpers.DataGenerationHelper.generateRandomString
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
 import org.mozilla.fenix.helpers.MatcherHelper
 import org.mozilla.fenix.helpers.TestAssetHelper
-import org.mozilla.fenix.helpers.TestHelper
+import org.mozilla.fenix.helpers.TestHelper.clickSnackbarButton
 import org.mozilla.fenix.helpers.TestHelper.mDevice
 import org.mozilla.fenix.helpers.TestSetup
 import org.mozilla.fenix.nimbus.FxNimbus
@@ -65,7 +65,7 @@ class MainMenuTest : TestSetup() {
     fun homeMainMenuItemsTest() {
         homeScreen {
         }.openThreeDotMenu {
-            verifyHomeThreeDotMainMenuItems(isRequestDesktopSiteEnabled = false)
+            verifyHomeThreeDotMainMenuItems()
         }.openBookmarks {
             verifyBookmarksMenuView()
         }.goBack {
@@ -74,7 +74,7 @@ class MainMenuTest : TestSetup() {
             verifyHistoryMenuView()
         }.goBack {
         }.openThreeDotMenu {
-        }.openDownloadsManager() {
+        }.openDownloadsManager {
             verifyEmptyDownloadsList(composeTestRule)
         }.goBack {
         }.openThreeDotMenu {
@@ -208,12 +208,10 @@ class MainMenuTest : TestSetup() {
     fun setDesktopSiteBeforePageLoadTest() {
         val webPage = TestAssetHelper.getGenericAsset(mockWebServer, 4)
 
-        homeScreen {
-        }.openThreeDotMenu {
-            verifyDesktopSiteModeEnabled(false)
-        }.switchDesktopSiteMode {
-        }.openNavigationToolbar {
+        navigationToolbar {
         }.enterURLAndEnterToBrowser(webPage.url) {
+        }.openThreeDotMenu {
+        }.switchDesktopSiteMode {
         }.openThreeDotMenu {
             verifyDesktopSiteModeEnabled(true)
         }.closeBrowserMenuToBrowser {
@@ -223,9 +221,12 @@ class MainMenuTest : TestSetup() {
         }.closeBrowserMenuToBrowser {
         }.openNavigationToolbar {
         }.enterURLAndEnterToBrowser(webPage.url) {
+        }.openThreeDotMenu {
+            verifyDesktopSiteModeEnabled(true)
+        }.closeBrowserMenuToBrowser {
             longClickPageObject(MatcherHelper.itemWithText("Link 2"))
             clickContextMenuItem("Open link in new tab")
-            TestHelper.clickSnackbarButton("SWITCH")
+            clickSnackbarButton("SWITCH")
         }.openThreeDotMenu {
             verifyDesktopSiteModeEnabled(false)
         }

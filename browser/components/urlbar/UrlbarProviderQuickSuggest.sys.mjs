@@ -10,6 +10,8 @@ import {
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  ContentRelevancyManager:
+    "resource://gre/modules/ContentRelevancyManager.sys.mjs",
   CONTEXTUAL_SERVICES_PING_TYPES:
     "resource:///modules/PartnerLinkAttribution.sys.mjs",
   MerinoClient: "resource:///modules/MerinoClient.sys.mjs",
@@ -35,29 +37,6 @@ ChromeUtils.defineLazyGetter(lazy, "contextId", () => {
 
 // Used for suggestions that don't otherwise have a score.
 const DEFAULT_SUGGESTION_SCORE = 0.2;
-
-const TELEMETRY_PREFIX = "contextual.services.quicksuggest";
-
-const TELEMETRY_SCALARS = {
-  BLOCK_DYNAMIC_WIKIPEDIA: `${TELEMETRY_PREFIX}.block_dynamic_wikipedia`,
-  BLOCK_NONSPONSORED: `${TELEMETRY_PREFIX}.block_nonsponsored`,
-  BLOCK_SPONSORED: `${TELEMETRY_PREFIX}.block_sponsored`,
-  CLICK_DYNAMIC_WIKIPEDIA: `${TELEMETRY_PREFIX}.click_dynamic_wikipedia`,
-  CLICK_NAV_NOTMATCHED: `${TELEMETRY_PREFIX}.click_nav_notmatched`,
-  CLICK_NAV_SHOWN_HEURISTIC: `${TELEMETRY_PREFIX}.click_nav_shown_heuristic`,
-  CLICK_NAV_SHOWN_NAV: `${TELEMETRY_PREFIX}.click_nav_shown_nav`,
-  CLICK_NAV_SUPERCEDED: `${TELEMETRY_PREFIX}.click_nav_superceded`,
-  CLICK_NONSPONSORED: `${TELEMETRY_PREFIX}.click_nonsponsored`,
-  CLICK_SPONSORED: `${TELEMETRY_PREFIX}.click_sponsored`,
-  HELP_NONSPONSORED: `${TELEMETRY_PREFIX}.help_nonsponsored`,
-  HELP_SPONSORED: `${TELEMETRY_PREFIX}.help_sponsored`,
-  IMPRESSION_DYNAMIC_WIKIPEDIA: `${TELEMETRY_PREFIX}.impression_dynamic_wikipedia`,
-  IMPRESSION_NAV_NOTMATCHED: `${TELEMETRY_PREFIX}.impression_nav_notmatched`,
-  IMPRESSION_NAV_SHOWN: `${TELEMETRY_PREFIX}.impression_nav_shown`,
-  IMPRESSION_NAV_SUPERCEDED: `${TELEMETRY_PREFIX}.impression_nav_superceded`,
-  IMPRESSION_NONSPONSORED: `${TELEMETRY_PREFIX}.impression_nonsponsored`,
-  IMPRESSION_SPONSORED: `${TELEMETRY_PREFIX}.impression_sponsored`,
-};
 
 /**
  * A provider that returns a suggested url to the user based on what
@@ -93,13 +72,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
   }
 
   /**
-   * @returns {object} An object mapping from mnemonics to scalar names.
-   */
-  get TELEMETRY_SCALARS() {
-    return { ...TELEMETRY_SCALARS };
-  }
-
-  /**
    * Whether this provider should be invoked for the given context.
    * If this method returns false, the providers manager won't start a query
    * with this provider, to save on resources.
@@ -108,8 +80,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
    * @returns {boolean} Whether this provider should be invoked for the search.
    */
   isActive(queryContext) {
-    this.#topPicksResultFromLastQuery = null;
-
     // If the sources don't include search or the user used a restriction
     // character other than search, don't allow any suggestions.
     if (
@@ -156,8 +126,7 @@ class ProviderQuickSuggest extends UrlbarProvider {
     let instance = this.queryInstance;
     let searchString = this._trimmedSearchString;
 
-    // There are two sources for quick suggest: the current remote settings
-    // backend (either JS or Rust) and Merino.
+    // Fetch suggestions from all enabled sources.
     let promises = [];
     let { backend } = lazy.QuickSuggest;
     if (backend?.isEnabled) {
@@ -169,39 +138,21 @@ class ProviderQuickSuggest extends UrlbarProvider {
     ) {
       promises.push(this._fetchMerinoSuggestions(queryContext, searchString));
     }
+    let mlBackend = lazy.QuickSuggest.getFeature("SuggestBackendMl");
+    if (mlBackend.isEnabled) {
+      promises.push(mlBackend.query(queryContext.trimmedLowerCaseSearchString));
+    }
 
-    // Wait for both sources to finish before adding a suggestion.
+    // Wait for both sources to finish.
     let values = await Promise.all(promises);
     if (instance != this.queryInstance) {
       return;
     }
 
-    let suggestions = values.flat();
-
-    // Ensure all suggestions have a `score` by falling back to the default
-    // score as necessary. If `quickSuggestScoreMap` is defined, override scores
-    // with the values it defines. It maps telemetry types to scores.
-    let scoreMap = lazy.UrlbarPrefs.get("quickSuggestScoreMap");
-    for (let suggestion of suggestions) {
-      if (isNaN(suggestion.score)) {
-        suggestion.score = DEFAULT_SUGGESTION_SCORE;
-      }
-      if (scoreMap) {
-        let telemetryType = this.#getSuggestionTelemetryType(suggestion);
-        if (scoreMap.hasOwnProperty(telemetryType)) {
-          let score = parseFloat(scoreMap[telemetryType]);
-          if (!isNaN(score)) {
-            suggestion.score = score;
-          }
-        }
-      }
+    let suggestions = await this.#filterAndSortSuggestions(values.flat());
+    if (instance != this.queryInstance) {
+      return;
     }
-
-    suggestions.sort((a, b) => b.score - a.score);
-
-    // All suggestions should have the following keys at this point. They are
-    // required for looking up the features that manage them.
-    let requiredKeys = ["source", "provider"];
 
     // Convert each suggestion into a result and add it. Don't add more than
     // `maxResults` visible results so we don't spam the muxer.
@@ -209,16 +160,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
     for (let suggestion of suggestions) {
       if (!remainingCount) {
         break;
-      }
-
-      for (let key of requiredKeys) {
-        if (!suggestion[key]) {
-          this.logger.error(
-            `Suggestion is missing required key '${key}': ` +
-              JSON.stringify(suggestion)
-          );
-          continue;
-        }
       }
 
       let canAdd = await this._canAddSuggestion(suggestion);
@@ -235,12 +176,81 @@ class ProviderQuickSuggest extends UrlbarProvider {
           if (!result.isHiddenExposure) {
             remainingCount--;
           }
-          if (result.payload.telemetryType == "top_picks") {
-            this.#topPicksResultFromLastQuery = result;
-          }
         }
       }
     }
+  }
+
+  async #filterAndSortSuggestions(suggestions) {
+    let requiredKeys = ["source", "provider"];
+    let scoreMap = lazy.UrlbarPrefs.get("quickSuggestScoreMap");
+    let suggestionsByFeature = new Map();
+    let indexesBySuggestion = new Map();
+
+    for (let i = 0; i < suggestions.length; i++) {
+      let suggestion = suggestions[i];
+
+      // Discard suggestions that don't have the required keys, which are used
+      // to look up their features. Normally this shouldn't ever happen.
+      if (!requiredKeys.every(key => suggestion[key])) {
+        this.logger.error(
+          "Suggestion is missing one or more required keys: " +
+            JSON.stringify({ requiredKeys, suggestion })
+        );
+        continue;
+      }
+
+      // Set `is_sponsored` before continuing because
+      // `#getSuggestionTelemetryType()` and other things depend on it.
+      let feature = this.#getFeature(suggestion);
+      suggestion.is_sponsored = !!feature?.isSuggestionSponsored(suggestion);
+
+      // Ensure all suggestions have scores. `quickSuggestScoreMap`, if defined,
+      // maps telemetry types to score overrides.
+      if (isNaN(suggestion.score)) {
+        suggestion.score = DEFAULT_SUGGESTION_SCORE;
+      }
+      if (scoreMap) {
+        let telemetryType = this.#getSuggestionTelemetryType(suggestion);
+        if (scoreMap.hasOwnProperty(telemetryType)) {
+          let score = parseFloat(scoreMap[telemetryType]);
+          if (!isNaN(score)) {
+            suggestion.score = score;
+          }
+        }
+      }
+
+      // Save some state used below to build the final list of suggestions.
+      let featureSuggestions = suggestionsByFeature.get(feature);
+      if (!featureSuggestions) {
+        featureSuggestions = [];
+        suggestionsByFeature.set(feature, featureSuggestions);
+      }
+      featureSuggestions.push(suggestion);
+      indexesBySuggestion.set(suggestion, i);
+    }
+
+    // Let each feature filter its suggestions.
+    suggestions = (
+      await Promise.all(
+        [...suggestionsByFeature].map(([feature, featureSuggestions]) =>
+          feature
+            ? feature.filterSuggestions(featureSuggestions)
+            : Promise.resolve(featureSuggestions)
+        )
+      )
+    ).flat();
+
+    // Sort the suggestions. When scores are equal, sort by original index to
+    // ensure a stable sort.
+    suggestions.sort((a, b) => {
+      return (
+        b.score - a.score ||
+        indexesBySuggestion.get(a) - indexesBySuggestion.get(b)
+      );
+    });
+
+    return suggestions;
   }
 
   onImpression(state, queryContext, controller, providerVisibleResults) {
@@ -283,7 +293,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
     this.#recordEngagement(queryContext, this.#sessionResult, details);
 
     this.#sessionResult = null;
-    this.#topPicksResultFromLastQuery = null;
   }
 
   /**
@@ -310,17 +319,19 @@ class ProviderQuickSuggest extends UrlbarProvider {
    * @param {object} options
    *   Options object.
    * @param {string} options.source
-   *   The suggestion source, one of: "remote-settings", "merino", "rust"
+   *   The suggestion source, one of: "merino", "ml", "remote-settings", "rust"
    * @param {string} options.provider
    *   This value depends on `source`. The possible values per source are:
    *
+   *   merino:
+   *     The name of the Merino provider that serves the suggestion type
+   *   ml:
+   *     The name of the intent as determined by `MLSuggest`
    *   remote-settings:
    *     The name of the `BaseFeature` instance (`feature.name`) that manages
    *     the suggestion type
-   *   merino:
-   *     The name of the Merino provider that serves the suggestion type
    *   rust:
-   *     The name of the suggestion type as defined in `suggest.udl`
+   *     The name of the suggestion type as defined in Rust
    * @returns {BaseFeature}
    *   The feature instance or null if no feature was found.
    */
@@ -332,6 +343,8 @@ class ProviderQuickSuggest extends UrlbarProvider {
         return lazy.QuickSuggest.getFeatureByMerinoProvider(provider);
       case "rust":
         return lazy.QuickSuggest.getFeatureByRustSuggestionType(provider);
+      case "ml":
+        return lazy.QuickSuggest.getFeatureByMlIntent(provider);
     }
     return null;
   }
@@ -365,6 +378,15 @@ class ProviderQuickSuggest extends UrlbarProvider {
     let result;
     let feature = this.#getFeature(suggestion);
     if (!feature) {
+      // We specifically allow Merino to serve suggestion types that Firefox
+      // doesn't know about so that we can experiment with new types without
+      // requiring changes in Firefox. No other source should return unknown
+      // suggestion types with the possible exception of the ML backend: Its
+      // models are stored in remote settings and it may return newer intents
+      // that aren't recognized by older Firefoxes.
+      if (suggestion.source != "merino") {
+        return null;
+      }
       result = this.#makeDefaultResult(queryContext, suggestion);
     } else {
       result = await feature.makeResult(
@@ -378,8 +400,7 @@ class ProviderQuickSuggest extends UrlbarProvider {
       }
     }
 
-    // `source` will be one of: "remote-settings", "merino", "rust".
-    // `provider` depends on `source`. See `#getFeature()` for possible values.
+    // See `#getFeature()` for possible values of `source` and `provider`.
     result.payload.source = suggestion.source;
     result.payload.provider = suggestion.provider;
     result.payload.telemetryType = this.#getSuggestionTelemetryType(suggestion);
@@ -510,171 +531,11 @@ class ProviderQuickSuggest extends UrlbarProvider {
         result.payload.isSponsored ? "sponsored" : "nonsponsored"
       );
 
-      // Record engagement scalars, event, and pings.
-      this.#recordEngagementScalars({ result, resultSelType, resultClicked });
-      this.#recordEngagementEvent({ result, resultSelType, resultClicked });
+      // Record engagement pings.
       if (!queryContext.isPrivate) {
         this.#recordEngagementPings({ result, resultSelType, resultClicked });
       }
     }
-
-    // Navigational suggestions telemetry requires special handling and does not
-    // depend on a result being visible.
-    if (
-      lazy.UrlbarPrefs.get("recordNavigationalSuggestionTelemetry") &&
-      queryContext.heuristicResult
-    ) {
-      this.#recordNavSuggestionTelemetry({
-        queryContext,
-        result,
-        resultSelType,
-        resultClicked,
-        details,
-      });
-    }
-  }
-
-  /**
-   * Helper for engagement telemetry that records engagement scalars.
-   *
-   * @param {object} options
-   *   Options object
-   * @param {UrlbarResult} options.result
-   *   The quick suggest result related to the engagement. Must not be null.
-   * @param {string} options.resultSelType
-   *   If an element in the result's row was clicked, this should be its
-   *   `selType`. Otherwise it should be an empty string.
-   * @param {boolean} options.resultClicked
-   *   True if the main part of the result's row was clicked; false if a button
-   *   like help or dismiss was clicked or if no part of the row was clicked.
-   */
-  #recordEngagementScalars({ result, resultSelType, resultClicked }) {
-    // Navigational suggestion scalars are handled separately.
-    if (result.payload.telemetryType == "top_picks") {
-      return;
-    }
-
-    // Indexes recorded in quick suggest telemetry are 1-based, so add 1 to the
-    // 0-based `result.rowIndex`.
-    let telemetryResultIndex = result.rowIndex + 1;
-
-    let scalars = [];
-    switch (result.payload.telemetryType) {
-      case "adm_nonsponsored":
-        scalars.push(TELEMETRY_SCALARS.IMPRESSION_NONSPONSORED);
-        if (resultClicked) {
-          scalars.push(TELEMETRY_SCALARS.CLICK_NONSPONSORED);
-        } else {
-          switch (resultSelType) {
-            case "help":
-              scalars.push(TELEMETRY_SCALARS.HELP_NONSPONSORED);
-              break;
-            case "dismiss":
-              scalars.push(TELEMETRY_SCALARS.BLOCK_NONSPONSORED);
-              break;
-          }
-        }
-        break;
-      case "adm_sponsored":
-        scalars.push(TELEMETRY_SCALARS.IMPRESSION_SPONSORED);
-        if (resultClicked) {
-          scalars.push(TELEMETRY_SCALARS.CLICK_SPONSORED);
-        } else {
-          switch (resultSelType) {
-            case "help":
-              scalars.push(TELEMETRY_SCALARS.HELP_SPONSORED);
-              break;
-            case "dismiss":
-              scalars.push(TELEMETRY_SCALARS.BLOCK_SPONSORED);
-              break;
-          }
-        }
-        break;
-      case "wikipedia":
-        scalars.push(TELEMETRY_SCALARS.IMPRESSION_DYNAMIC_WIKIPEDIA);
-        if (resultClicked) {
-          scalars.push(TELEMETRY_SCALARS.CLICK_DYNAMIC_WIKIPEDIA);
-        } else {
-          switch (resultSelType) {
-            case "dismiss":
-              scalars.push(TELEMETRY_SCALARS.BLOCK_DYNAMIC_WIKIPEDIA);
-              break;
-          }
-        }
-        break;
-    }
-
-    for (let scalar of scalars) {
-      Services.telemetry.keyedScalarAdd(scalar, telemetryResultIndex, 1);
-    }
-  }
-
-  /**
-   * Helper for engagement telemetry that records the legacy engagement event.
-   *
-   * @param {object} options
-   *   Options object
-   * @param {UrlbarResult} options.result
-   *   The quick suggest result related to the engagement. Must not be null.
-   * @param {string} options.resultSelType
-   *   If an element in the result's row was clicked, this should be its
-   *   `selType`. Otherwise it should be an empty string.
-   * @param {boolean} options.resultClicked
-   *   True if the main part of the result's row was clicked; false if a button
-   *   like help or dismiss was clicked or if no part of the row was clicked.
-   */
-  #recordEngagementEvent({ result, resultSelType, resultClicked }) {
-    let eventType;
-    if (resultClicked) {
-      eventType = "click";
-    } else if (!resultSelType) {
-      eventType = "impression_only";
-    } else {
-      switch (resultSelType) {
-        case "dismiss":
-          eventType = "block";
-          break;
-        case "help":
-          eventType = "help";
-          break;
-        default:
-          eventType = "other";
-          break;
-      }
-    }
-
-    let suggestion_type;
-    switch (result.payload.telemetryType) {
-      case "adm_nonsponsored":
-        suggestion_type = "nonsponsored";
-        break;
-      case "adm_sponsored":
-        suggestion_type = "sponsored";
-        break;
-      case "top_picks":
-        suggestion_type = "navigational";
-        break;
-      case "wikipedia":
-        suggestion_type = "dynamic-wikipedia";
-        break;
-      default:
-        suggestion_type = result.payload.telemetryType;
-        break;
-    }
-
-    Services.telemetry.recordEvent(
-      lazy.QuickSuggest.TELEMETRY_EVENT_CATEGORY,
-      "engagement",
-      eventType,
-      "",
-      {
-        suggestion_type,
-        match_type: result.isBestMatch ? "best-match" : "firefox-suggest",
-        // Quick suggest telemetry indexes are 1-based but `rowIndex` is 0-based
-        position: String(result.rowIndex + 1),
-        source: result.payload.source,
-      }
-    );
   }
 
   /**
@@ -768,64 +629,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
   }
 
   /**
-   * Helper for engagement telemetry that records telemetry specific to
-   * navigational suggestions.
-   *
-   * @param {object} options
-   *   Options object
-   * @param {UrlbarQueryContext} options.queryContext
-   *   The query context.
-   * @param {UrlbarResult} options.result
-   *   The quick suggest result related to the engagement, or null if no result
-   *   was present.
-   * @param {boolean} options.resultClicked
-   *   True if the main part of the result's row was clicked; false if a button
-   *   like help or dismiss was clicked or if no part of the row was clicked.
-   * @param {object} options.details
-   *   The `details` object that was passed to `onEngagement()` or
-   *   `onSearchSessionEnd()`.
-   */
-  #recordNavSuggestionTelemetry({
-    queryContext,
-    result,
-    resultClicked,
-    details,
-  }) {
-    let scalars = [];
-    let heuristicClicked =
-      details.selIndex == 0 && queryContext.heuristicResult;
-
-    if (result?.payload.telemetryType == "top_picks") {
-      // nav suggestion shown
-      scalars.push(TELEMETRY_SCALARS.IMPRESSION_NAV_SHOWN);
-      if (resultClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_SHOWN_NAV);
-      } else if (heuristicClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_SHOWN_HEURISTIC);
-      }
-    } else if (this.#topPicksResultFromLastQuery?.payload.dupedHeuristic) {
-      // nav suggestion duped heuristic
-      scalars.push(TELEMETRY_SCALARS.IMPRESSION_NAV_SUPERCEDED);
-      if (heuristicClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_SUPERCEDED);
-      }
-    } else {
-      // nav suggestion not matched or otherwise not shown
-      scalars.push(TELEMETRY_SCALARS.IMPRESSION_NAV_NOTMATCHED);
-      if (heuristicClicked) {
-        scalars.push(TELEMETRY_SCALARS.CLICK_NAV_NOTMATCHED);
-      }
-    }
-
-    let heuristicType = UrlbarUtils.searchEngagementTelemetryType(
-      queryContext.heuristicResult
-    );
-    for (let scalar of scalars) {
-      Services.telemetry.keyedScalarAdd(scalar, heuristicType, 1);
-    }
-  }
-
-  /**
    * Cancels the current query.
    */
   cancelQuery() {
@@ -875,7 +678,108 @@ class ProviderQuickSuggest extends UrlbarProvider {
       query: searchString,
     });
 
+    await this.#applyRanking(suggestions);
+
     return suggestions;
+  }
+
+  /**
+   * Apply ranking to suggestions by updating their scores.
+   *
+   * @param {Array} suggestions
+   *   The suggestions to be ranked.
+   */
+  async #applyRanking(suggestions) {
+    switch (lazy.UrlbarPrefs.get("quickSuggestRankingMode")) {
+      case "random":
+        this.#updateScoreRandomly(suggestions);
+        break;
+      case "interest":
+        await this.#updateScorebyRelevance(suggestions);
+        break;
+      case "default":
+      default:
+        // Do nothing.
+        break;
+    }
+  }
+
+  /**
+   * Only exposed for testing.
+   *
+   * @param {Array} suggestions
+   *   The suggestions to be ranked.
+   */
+  async _test_applyRanking(suggestions) {
+    await this.#applyRanking(suggestions);
+  }
+
+  /**
+   * Update score by randomly selecting a winner and boosting its score with
+   * the highest score among the candidates plus a small addition.
+   *
+   * @param {Array} suggestions
+   *   The suggestions to be ranked.
+   */
+  #updateScoreRandomly(suggestions) {
+    if (suggestions.length <= 1) {
+      return;
+    }
+
+    const winner = suggestions[Math.floor(Math.random() * suggestions.length)];
+    const oldScore = winner.score;
+    const highest = Math.max(
+      ...suggestions.map(suggestion => suggestion.score || 0)
+    );
+    winner.score = highest + 0.001;
+
+    this.logger.debug(
+      `Updated the suggestion score from '${oldScore}' to '${winner.score.toFixed(
+        3
+      )}'`
+    );
+  }
+
+  /**
+   * Update score by interest-based relevance scoring. The final score is a mean
+   * between the interest-based score and the default static score, which means
+   * if the former is 0 or less than the latter, the combined score will be less
+   * than the static score.
+   *
+   * @param {Array} suggestions
+   *   The suggestions to be ranked.
+   */
+  async #updateScorebyRelevance(suggestions) {
+    for (let suggestion of suggestions) {
+      if (suggestion.categories?.length) {
+        try {
+          let score = await lazy.ContentRelevancyManager.score(
+            suggestion.categories,
+            true // adjustment needed b/c Merino uses the original encoding
+          );
+          Glean.suggestRelevance.status.success.add(1);
+          let oldScore = suggestion.score;
+          if (isNaN(oldScore)) {
+            oldScore = DEFAULT_SUGGESTION_SCORE;
+          }
+          suggestion.score = (oldScore + score) / 2;
+          Glean.suggestRelevance.outcome[
+            suggestion.score >= oldScore ? "boosted" : "decreased"
+          ].add(1);
+          this.logger.debug(
+            `Updated the suggestion score from '${oldScore}' to '${suggestion.score.toFixed(
+              2
+            )}'`
+          );
+        } catch (error) {
+          Glean.suggestRelevance.status.failure.add(1);
+          this.logger.error(
+            `Failed to update the suggestion score: '${error}'`
+          );
+          continue;
+        }
+      }
+    }
   }
 
   /**
@@ -940,9 +844,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
   get _test_merino() {
     return this.#merino;
   }
-
-  // The "top_picks" result added during the most recent query, if any.
-  #topPicksResultFromLastQuery = null;
 
   // The result from this provider that was visible at the end of the current
   // search session, if the session ended in an engagement.

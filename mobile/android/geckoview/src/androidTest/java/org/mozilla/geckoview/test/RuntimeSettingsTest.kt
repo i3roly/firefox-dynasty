@@ -601,4 +601,85 @@ class RuntimeSettingsTest : BaseSessionTest() {
             equalTo(5),
         )
     }
+
+    @Test
+    fun fetchPriorityEnabling() {
+        val geckoRuntimeSettings = sessionRule.runtime.settings
+
+        geckoRuntimeSettings.setFetchPriorityEnabled(true)
+
+        assertThat(
+            "Fetch Priority settings should be set to the expected value",
+            geckoRuntimeSettings.fetchPriorityEnabled,
+            equalTo(true),
+        )
+
+        val enabled =
+            (sessionRule.getPrefs("network.fetchpriority.enabled").get(0)) as Boolean
+
+        assertThat(
+            "Fetch Priority pref should be set to the expected value",
+            enabled,
+            equalTo(true),
+        )
+    }
+
+    @Test
+    fun fetchPriorityDisabling() {
+        val geckoRuntimeSettings = sessionRule.runtime.settings
+
+        geckoRuntimeSettings.setFetchPriorityEnabled(false)
+
+        assertThat(
+            "Fetch Priority settings should be set to the expected value",
+            geckoRuntimeSettings.fetchPriorityEnabled,
+            equalTo(false),
+        )
+
+        val enabled =
+            (sessionRule.getPrefs("network.fetchpriority.enabled").get(0)) as Boolean
+
+        assertThat(
+            "Fetch Priority pref should be set to the expected value",
+            enabled,
+            equalTo(false),
+        )
+    }
+
+    @Test
+    fun cookieBehaviorOptInPartitioning() {
+        val geckoRuntimeSettings = sessionRule.runtime.settings
+
+        geckoRuntimeSettings.setCookieBehaviorOptInPartitioning(true)
+        geckoRuntimeSettings.setCookieBehaviorOptInPartitioningPBM(true)
+
+        assertThat(
+            "CookieBehaviorOptInPartitioning runtime settings should return expected value",
+            geckoRuntimeSettings.cookieBehaviorOptInPartitioning,
+            equalTo(true),
+        )
+
+        assertThat(
+            "CookieBehaviorOptInPartitioningPBM runtime settings should return expected value",
+            geckoRuntimeSettings.cookieBehaviorOptInPartitioningPBM,
+            equalTo(true),
+        )
+
+        val cookieBehaviorOptInPartitioning =
+            (sessionRule.getPrefs("network.cookie.cookieBehavior.optInPartitioning").get(0)) as Boolean
+        val cookieBehaviorOptInPartitioningPBM =
+            (sessionRule.getPrefs("network.cookie.cookieBehavior.optInPartitioning.pbmode").get(0)) as Boolean
+
+        assertThat(
+            "CookieBehaviorOptInPartitioning pref should return expected value",
+            cookieBehaviorOptInPartitioning,
+            equalTo(true),
+        )
+
+        assertThat(
+            "CookieBehaviorOptInPartitioningPBM pref should return expected value",
+            cookieBehaviorOptInPartitioningPBM,
+            equalTo(true),
+        )
+    }
 }

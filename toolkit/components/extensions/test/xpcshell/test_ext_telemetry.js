@@ -535,7 +535,6 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
 
   add_task(async function test_telemetry_record_event() {
     Services.telemetry.clearEvents();
-    Services.telemetry.setEventRecordingEnabled("telemetry.test", true);
 
     ExtensionTestUtils.failOnSchemaWarnings(false);
 
@@ -568,14 +567,12 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
 
     ExtensionTestUtils.failOnSchemaWarnings(true);
 
-    Services.telemetry.setEventRecordingEnabled("telemetry.test", false);
     Services.telemetry.clearEvents();
   });
 
   // Bug 1536877
   add_task(async function test_telemetry_record_event_value_must_be_string() {
     Services.telemetry.clearEvents();
-    Services.telemetry.setEventRecordingEnabled("telemetry.test", true);
 
     ExtensionTestUtils.failOnSchemaWarnings(false);
 
@@ -619,7 +616,6 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
 
     ExtensionTestUtils.failOnSchemaWarnings(true);
 
-    Services.telemetry.setEventRecordingEnabled("telemetry.test", false);
     Services.telemetry.clearEvents();
   });
 
@@ -773,9 +769,9 @@ if (AppConstants.MOZ_BUILD_APP === "browser") {
     });
 
     const expectedRegisterEventsMessage =
-      /`registerEvents` has been deprecated since Firefox 132 \(see bug 1894533\)/;
+      /`registerEvents` is a no-op since Firefox 132 \(see bug 1894533\)/;
     const expectedRecordEventMessage =
-      /`recordEvent` has been deprecated since Firefox 132 \(see bug 1894533\)/;
+      /`recordEvent` is a no-op since Firefox 132 \(see bug 1894533\)/;
 
     AddonTestUtils.checkMessages(messages, {
       expected: [

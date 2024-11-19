@@ -37,6 +37,8 @@ import org.mozilla.fenix.helpers.Constants.RETRY_COUNT
 import org.mozilla.fenix.helpers.Constants.TAG
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
 import org.mozilla.fenix.helpers.MatcherHelper.assertUIObjectExists
+import org.mozilla.fenix.helpers.MatcherHelper.assertUIObjectIsGone
+import org.mozilla.fenix.helpers.MatcherHelper.itemWithResId
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdContainingText
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithText
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTime
@@ -56,6 +58,10 @@ class SettingsSubMenuAddonsManagerRobot {
     fun verifyAddonsListIsDisplayed(shouldBeDisplayed: Boolean) =
         assertUIObjectExists(addonsList(), exists = shouldBeDisplayed)
 
+    fun waitForAddonsListProgressBarToBeGone() = assertUIObjectIsGone(itemWithResId("$packageName:id/add_ons_progress_bar"), waitingTime = waitingTimeLong)
+
+    fun waitForAddonsDownloadOverlayToBeGone() = assertUIObjectIsGone(itemWithResId("$packageName:id/addonProgressOverlay"), waitingTime = waitingTimeLong)
+
     fun verifyAddonDownloadOverlay() {
         Log.i(TAG, "verifyAddonDownloadOverlay: Trying to verify that the \"Downloading and verifying extension\" prompt is displayed")
         onView(withText(R.string.mozac_extension_install_progress_caption)).check(matches(isDisplayed()))
@@ -63,14 +69,24 @@ class SettingsSubMenuAddonsManagerRobot {
     }
 
     fun verifyAddonPermissionPrompt(addonName: String) {
+        waitForAddonsDownloadOverlayToBeGone()
         mDevice.waitNotNull(Until.findObject(By.text("Add $addonName?")), waitingTime)
         Log.i(TAG, "verifyAddonPermissionPrompt: Trying to verify that the add-ons permission prompt items are displayed")
         onView(
             allOf(
                 withText("Add $addonName?"),
                 hasSibling(withText(containsString("It requires your permission to:"))),
-                hasSibling(withText("Add")),
+            ),
+        )
+            .inRoot(isDialog())
+            .check(matches(isDisplayed()))
+        mDevice.waitNotNull(Until.findObject(By.text("Add")), waitingTime)
+        onView(
+            allOf(
+                withText("Add"),
                 hasSibling(withText("Cancel")),
+                hasSibling(withText("Learn more")),
+                hasSibling(withText("Allow in private browsing")),
             ),
         )
             .inRoot(isDialog())
@@ -126,6 +142,7 @@ class SettingsSubMenuAddonsManagerRobot {
                     homeScreen {
                     }.openThreeDotMenu {
                     }.openAddonsManagerMenu {
+                        waitForAddonsListProgressBarToBeGone()
                         scrollToAddon(addonName)
                         clickInstallAddon(addonName)
                         verifyAddonPermissionPrompt(addonName)
@@ -144,7 +161,6 @@ class SettingsSubMenuAddonsManagerRobot {
                 withParent(instanceOf(RelativeLayout::class.java)),
                 hasSibling(withText("$addonName has been added to $appName")),
                 hasSibling(withText("Access $addonName from the $appName menu.")),
-                hasSibling(withText("Allow in private browsing")),
             ),
         )
             .check(matches(withEffectiveVisibility(Visibility.VISIBLE)))
@@ -235,8 +251,22 @@ class SettingsSubMenuAddonsManagerRobot {
         homeScreen {
         }.openThreeDotMenu {
         }.openAddonsManagerMenu {
+            waitForAddonsListProgressBarToBeGone()
             clickInstallAddon(addonName)
             verifyAddonPermissionPrompt(addonName)
+            acceptPermissionToInstallAddon()
+            verifyAddonInstallCompleted(addonName, activityTestRule)
+        }
+    }
+
+    fun installAddonInPrivateMode(addonName: String, activityTestRule: HomeActivityIntentTestRule) {
+        homeScreen {
+        }.openThreeDotMenu {
+        }.openAddonsManagerMenu {
+            waitForAddonsListProgressBarToBeGone()
+            clickInstallAddon(addonName)
+            verifyAddonPermissionPrompt(addonName)
+            selectAllowInPrivateBrowsing()
             acceptPermissionToInstallAddon()
             verifyAddonInstallCompleted(addonName, activityTestRule)
         }

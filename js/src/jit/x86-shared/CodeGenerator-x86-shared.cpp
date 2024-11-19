@@ -110,6 +110,7 @@ void CodeGenerator::visitTestFAndBranch(LTestFAndBranch* test) {
 void CodeGenerator::visitCompareD(LCompareD* comp) {
   FloatRegister lhs = ToFloatRegister(comp->left());
   FloatRegister rhs = ToFloatRegister(comp->right());
+  Register output = ToRegister(comp->output());
 
   Assembler::DoubleCondition cond = JSOpToDoubleCondition(comp->mir()->jsop());
 
@@ -118,14 +119,16 @@ void CodeGenerator::visitCompareD(LCompareD* comp) {
     nanCond = Assembler::NaN_HandledByCond;
   }
 
+  bool destIsZero = masm.maybeEmitSetZeroByteRegister(output);
   masm.compareDouble(cond, lhs, rhs);
-  masm.emitSet(Assembler::ConditionFromDoubleCondition(cond),
-               ToRegister(comp->output()), nanCond);
+  masm.emitSet(Assembler::ConditionFromDoubleCondition(cond), output,
+               destIsZero, nanCond);
 }
 
 void CodeGenerator::visitCompareF(LCompareF* comp) {
   FloatRegister lhs = ToFloatRegister(comp->left());
   FloatRegister rhs = ToFloatRegister(comp->right());
+  Register output = ToRegister(comp->output());
 
   Assembler::DoubleCondition cond = JSOpToDoubleCondition(comp->mir()->jsop());
 
@@ -134,13 +137,15 @@ void CodeGenerator::visitCompareF(LCompareF* comp) {
     nanCond = Assembler::NaN_HandledByCond;
   }
 
+  bool destIsZero = masm.maybeEmitSetZeroByteRegister(output);
   masm.compareFloat(cond, lhs, rhs);
-  masm.emitSet(Assembler::ConditionFromDoubleCondition(cond),
-               ToRegister(comp->output()), nanCond);
+  masm.emitSet(Assembler::ConditionFromDoubleCondition(cond), output,
+               destIsZero, nanCond);
 }
 
 void CodeGenerator::visitNotD(LNotD* ins) {
   FloatRegister opd = ToFloatRegister(ins->input());
+  Register output = ToRegister(ins->output());
 
   // Not returns true if the input is a NaN. We don't have to worry about
   // it if we know the input is never NaN though.
@@ -149,14 +154,16 @@ void CodeGenerator::visitNotD(LNotD* ins) {
     nanCond = Assembler::NaN_HandledByCond;
   }
 
+  bool destIsZero = masm.maybeEmitSetZeroByteRegister(output);
   ScratchDoubleScope scratch(masm);
   masm.zeroDouble(scratch);
   masm.compareDouble(Assembler::DoubleEqualOrUnordered, opd, scratch);
-  masm.emitSet(Assembler::Equal, ToRegister(ins->output()), nanCond);
+  masm.emitSet(Assembler::Equal, output, destIsZero, nanCond);
 }
 
 void CodeGenerator::visitNotF(LNotF* ins) {
   FloatRegister opd = ToFloatRegister(ins->input());
+  Register output = ToRegister(ins->output());
 
   // Not returns true if the input is a NaN. We don't have to worry about
   // it if we know the input is never NaN though.
@@ -165,10 +172,11 @@ void CodeGenerator::visitNotF(LNotF* ins) {
     nanCond = Assembler::NaN_HandledByCond;
   }
 
+  bool destIsZero = masm.maybeEmitSetZeroByteRegister(output);
   ScratchFloat32Scope scratch(masm);
   masm.zeroFloat32(scratch);
   masm.compareFloat(Assembler::DoubleEqualOrUnordered, opd, scratch);
-  masm.emitSet(Assembler::Equal, ToRegister(ins->output()), nanCond);
+  masm.emitSet(Assembler::Equal, output, destIsZero, nanCond);
 }
 
 void CodeGenerator::visitCompareDAndBranch(LCompareDAndBranch* comp) {
@@ -2064,15 +2072,16 @@ void CodeGeneratorX86Shared::canonicalizeIfDeterministic(
 template <typename T>
 Operand CodeGeneratorX86Shared::toMemoryAccessOperand(T* lir, int32_t disp) {
   const LAllocation* ptr = lir->ptr();
-#ifdef JS_CODEGEN_X86
   const LAllocation* memoryBase = lir->memoryBase();
+#ifdef JS_CODEGEN_X86
   Operand destAddr = ptr->isBogus() ? Operand(ToRegister(memoryBase), disp)
                                     : Operand(ToRegister(memoryBase),
                                               ToRegister(ptr), TimesOne, disp);
 #else
+  auto baseReg = memoryBase->isBogus() ? HeapReg : ToRegister(memoryBase);
   Operand destAddr = ptr->isBogus()
-                         ? Operand(HeapReg, disp)
-                         : Operand(HeapReg, ToRegister(ptr), TimesOne, disp);
+                         ? Operand(baseReg, disp)
+                         : Operand(baseReg, ToRegister(ptr), TimesOne, disp);
 #endif
   return destAddr;
 }

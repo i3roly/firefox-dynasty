@@ -148,6 +148,7 @@ static const char sIntPrefs[][45] = {
     "ui.treeScrollLinesMax",
     "ui.chosenMenuItemsShouldBlink",
     "ui.windowsAccentColorInTitlebar",
+    "ui.windowsMica",
     "ui.macGraphiteTheme",
     "ui.macLionTheme",
     "ui.macYosemiteTheme",

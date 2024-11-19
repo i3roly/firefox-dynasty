@@ -98,6 +98,47 @@ const TEST_CASES = [
 
     expectedSubmit: null,
   },
+  {
+    description: `Test correct street-address to address-line1`,
+    document: `<form>
+                 <input id="email" autocomplete="email">
+                 <input id="tel" autocomplete="tel">
+                 <input id="street-address" >
+                 <input id="address-line2">
+                <form>`,
+    fillPayload: {
+      "street-address": "2 Harrison St\nline2",
+      email: "foo@mozilla.com",
+      tel: "1234567",
+    },
+
+    expectedFill: {
+      "#street-address": "2 Harrison St",
+      "#address-line2": "line2",
+      "#email": "foo@mozilla.com",
+      "#tel": "1234567",
+    },
+
+    expectedDetectedFields: {
+      email: "",
+      tel: "",
+      "address-line1": "",
+      "address-line2": "",
+    },
+
+    expectedSubmit: null,
+  },
+  {
+    description: `Test invalid address section`,
+    document: `<form>
+                 <input id="email">
+                <form>`,
+    fillPayload: {},
+    expectedFill: false,
+    expectedDetectedFields: {},
+
+    expectedSubmit: null,
+  },
 ];
 
 const recordFormInteractionEventStub = sinon.stub(
@@ -133,45 +174,53 @@ add_task(async function test_ios_api() {
 
     // Test `onFocusIn` API
     fac.onFocusIn({ target: doc.querySelector("input") });
-    Assert.ok(
-      autofillSpy.calledOnce,
-      "autofill callback should be called once"
-    );
-    Assert.ok(
-      autofillSpy.calledWithExactly(TEST.expectedDetectedFields),
-      "autofill callback should be called with correct payload"
-    );
-    Assert.ok(
-      recordFormInteractionEventStub.calledWithMatch("detected"),
-      "detect telemetry event should be recorded"
-    );
 
-    // Test `fillFormFields` API
-    fac.fillFormFields(TEST.fillPayload);
-    Object.entries(TEST.expectedFill).forEach(([selector, expectedValue]) => {
-      const element = doc.querySelector(selector);
-      Assert.equal(
-        element.value,
-        expectedValue,
-        `Should fill ${element.id} field correctly`
-      );
-    });
-    Assert.ok(
-      recordFormInteractionEventStub.calledWithMatch("filled"),
-      "filled telemetry event should be recorded"
-    );
-
-    // Test `onFilledModified` API
-    Object.entries(TEST.expectedFill).forEach(([selector, expectedValue]) => {
-      const element = doc.querySelector(selector);
-      // Simulate input change (e.g. adding a char)
-      FormAutofillHandler.fillFieldValue(element, expectedValue + "a");
+    if (TEST.expectedFill) {
       Assert.ok(
-        recordFormInteractionEventStub.calledWithMatch("filled_modified"),
-        "filled_modified telemetry event should be recorded"
+        autofillSpy.calledOnce,
+        "autofill callback should be called once"
       );
-      FormAutofillHandler.fillFieldValue(element, expectedValue);
-    });
+      Assert.ok(
+        autofillSpy.calledWithExactly(TEST.expectedDetectedFields),
+        "autofill callback should be called with correct payload"
+      );
+      Assert.ok(
+        recordFormInteractionEventStub.calledWithMatch("detected"),
+        "detect telemetry event should be recorded"
+      );
+
+      // Test `fillFormFields` API
+      fac.fillFormFields(TEST.fillPayload);
+      Object.entries(TEST.expectedFill).forEach(([selector, expectedValue]) => {
+        const element = doc.querySelector(selector);
+        Assert.equal(
+          element.value,
+          expectedValue,
+          `Should fill ${element.id} field correctly`
+        );
+      });
+      Assert.ok(
+        recordFormInteractionEventStub.calledWithMatch("filled"),
+        "filled telemetry event should be recorded"
+      );
+
+      // Test `onFilledModified` API
+      Object.entries(TEST.expectedFill).forEach(([selector, expectedValue]) => {
+        const element = doc.querySelector(selector);
+        // Simulate input change (e.g. adding a char)
+        FormAutofillHandler.fillFieldValue(element, expectedValue + "a");
+        Assert.ok(
+          recordFormInteractionEventStub.calledWithMatch("filled_modified"),
+          "filled_modified telemetry event should be recorded"
+        );
+        FormAutofillHandler.fillFieldValue(element, expectedValue);
+      });
+    } else {
+      Assert.ok(
+        autofillSpy.notCalled,
+        "autofill callback should not be called when section is invalid"
+      );
+    }
 
     // Test `onSubmit` API
     if (TEST.expectedSubmit) {

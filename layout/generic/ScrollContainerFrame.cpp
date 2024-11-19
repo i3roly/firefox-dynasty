@@ -11,7 +11,6 @@
 #include "ScrollPositionUpdate.h"
 #include "mozilla/layers/LayersTypes.h"
 #include "nsIXULRuntime.h"
-#include "base/compiler_specific.h"
 #include "DisplayItemClip.h"
 #include "nsCOMPtr.h"
 #include "nsIDocumentViewer.h"
@@ -64,7 +63,6 @@
 #include "mozilla/dom/BrowserChild.h"
 #include <stdint.h>
 #include "mozilla/MathAlgorithms.h"
-#include "mozilla/Telemetry.h"
 #include "nsSubDocumentFrame.h"
 #include "mozilla/Attributes.h"
 #include "ScrollbarActivity.h"
@@ -1926,10 +1924,7 @@ class ScrollContainerFrame::AsyncSmoothMSDScroll final
         mCallee(nullptr),
         mOneDevicePixelInAppUnits(aPresContext->DevPixelsToAppUnits(1)),
         mSnapTargetIds(std::move(aSnapTargetIds)),
-        mTriggeredByScript(aTriggeredByScript) {
-    Telemetry::SetHistogramRecordingEnabled(
-        Telemetry::FX_REFRESH_DRIVER_SYNC_SCROLL_FRAME_DELAY_MS, true);
-  }
+        mTriggeredByScript(aTriggeredByScript) {}
 
   NS_INLINE_DECL_REFCOUNTING(AsyncSmoothMSDScroll, override)
 
@@ -2034,11 +2029,7 @@ class ScrollContainerFrame::AsyncSmoothMSDScroll final
 
  private:
   // Private destructor, to discourage deletion outside of Release():
-  ~AsyncSmoothMSDScroll() {
-    RemoveObserver();
-    Telemetry::SetHistogramRecordingEnabled(
-        Telemetry::FX_REFRESH_DRIVER_SYNC_SCROLL_FRAME_DELAY_MS, false);
-  }
+  ~AsyncSmoothMSDScroll() { RemoveObserver(); }
 
   nsRefreshDriver* RefreshDriver(ScrollContainerFrame* aCallee) {
     return aCallee->PresContext()->RefreshDriver();
@@ -2065,18 +2056,11 @@ class ScrollContainerFrame::AsyncScroll final : public nsARefreshObserver {
       : mOrigin(ScrollOrigin::NotSpecified),
         mCallee(nullptr),
         mSnapTargetIds(std::move(aSnapTargetIds)),
-        mTriggeredByScript(aTriggeredByScript) {
-    Telemetry::SetHistogramRecordingEnabled(
-        Telemetry::FX_REFRESH_DRIVER_SYNC_SCROLL_FRAME_DELAY_MS, true);
-  }
+        mTriggeredByScript(aTriggeredByScript) {}
 
  private:
   // Private destructor, to discourage deletion outside of Release():
-  ~AsyncScroll() {
-    RemoveObserver();
-    Telemetry::SetHistogramRecordingEnabled(
-        Telemetry::FX_REFRESH_DRIVER_SYNC_SCROLL_FRAME_DELAY_MS, false);
-  }
+  ~AsyncScroll() { RemoveObserver(); }
 
  public:
   void InitSmoothScroll(TimeStamp aTime, nsPoint aInitialPosition,
@@ -6377,7 +6361,10 @@ bool ScrollContainerFrame::ComputeCustomOverflow(
   bool needReflow = false;
   nsPoint scrollPosition = GetScrollPosition();
   if (overflowChange.contains(ScrollDirection::eHorizontal)) {
-    if (ss.mHorizontal != StyleOverflow::Hidden || scrollPosition.x) {
+    if (ss.mHorizontal != StyleOverflow::Hidden || scrollPosition.x ||
+        // If we are in minimum-scale size mode, we need to do a reflow to
+        // re-compute the minimum-scale size.
+        mIsUsingMinimumScaleSize) {
       needReflow = true;
     }
   }
@@ -6898,6 +6885,16 @@ nsRect ScrollContainerFrame::GetScrolledRect() const {
   }
 
   return result;
+}
+
+nsRect ScrollContainerFrame::GetScrollPortRectAccountingForMaxDynamicToolbar()
+    const {
+  auto rect = mScrollPort;
+  if (mIsRoot && PresContext()->HasDynamicToolbar()) {
+    rect.SizeTo(nsLayoutUtils::ExpandHeightForDynamicToolbar(PresContext(),
+                                                             rect.Size()));
+  }
+  return rect;
 }
 
 StyleDirection ScrollContainerFrame::GetScrolledFrameDir() const {
@@ -7610,6 +7607,11 @@ ScrollSnapInfo ScrollContainerFrame::ComputeScrollSnapInfo() {
   result.InitializeScrollSnapStrictness(writingMode, disp);
 
   result.mSnapportSize = GetSnapportSize();
+  if (result.mSnapportSize.IsEmpty()) {
+    // Ignore any target snap points if the snapport is empty.
+    return result;
+  }
+
   CollectScrollPositionsForSnap(
       mScrolledFrame, mScrolledFrame, GetScrolledRect(), GetScrollPadding(),
       GetLayoutScrollRange(), writingMode, result, &mSnapTargets);

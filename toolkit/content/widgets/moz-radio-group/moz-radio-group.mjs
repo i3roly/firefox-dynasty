@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { html, ifDefined } from "../vendor/lit.all.mjs";
-import { MozLitElement } from "../lit-utils.mjs";
+import { MozLitElement, MozBaseInputElement } from "../lit-utils.mjs";
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/elements/moz-label.mjs";
 // eslint-disable-next-line import/no-unassigned-import
@@ -231,38 +231,17 @@ customElements.define("moz-radio-group", MozRadioGroup);
  * @property {string} supportPage - Name of the SUMO support page to link to.
  * @property {number} value - Value of the radio input.
  */
-export class MozRadio extends MozLitElement {
+export class MozRadio extends MozBaseInputElement {
   #controller;
 
   static properties = {
-    accessKey: { type: String, state: true },
-    accessKeyAttribute: {
-      type: String,
-      attribute: "accesskey",
-      reflect: true,
-    },
     checked: { type: Boolean, reflect: true },
-    description: { type: String, fluent: true },
-    disabled: { type: Boolean, reflect: true },
-    iconSrc: { type: String },
     inputTabIndex: { type: Number, state: true },
-    label: { type: String, fluent: true },
-    name: { type: String, attribute: false },
-    supportPage: { type: String, attribute: "support-page" },
-    value: { type: String },
-  };
-
-  static queries = {
-    radioButton: "#radio-button",
-    labelEl: "label",
-    icon: ".icon",
-    descriptionEl: "#description",
   };
 
   constructor() {
     super();
     this.checked = false;
-    this.disabled = false;
   }
 
   connectedCallback() {
@@ -277,6 +256,8 @@ export class MozRadio extends MozLitElement {
   }
 
   willUpdate(changedProperties) {
+    super.willUpdate(changedProperties);
+
     // Handle setting checked directly via JS.
     if (
       changedProperties.has("checked") &&
@@ -306,11 +287,6 @@ export class MozRadio extends MozLitElement {
         this.#controller.syncFocusState();
       }
     }
-
-    if (changedProperties.has("accessKeyAttribute")) {
-      this.accessKey = this.accessKeyAttribute;
-      this.accessKeyAttribute = null;
-    }
   }
 
   handleClick() {
@@ -323,28 +299,10 @@ export class MozRadio extends MozLitElement {
     this.dispatchEvent(new Event(e.type, e));
   }
 
-  // Delegate click to the input element.
-  click() {
-    this.radioButton.click();
-    this.focus();
-  }
-
-  // Delegate focus to the input element.
-  focus() {
-    this.radioButton.focus();
-  }
-
-  iconTemplate() {
-    if (this.iconSrc) {
-      return html`<img src=${this.iconSrc} role="presentation" class="icon" />`;
-    }
-    return "";
-  }
-
   inputTemplate() {
     return html`<input
       type="radio"
-      id="radio-button"
+      id="input"
       value=${this.value}
       name=${this.name}
       .checked=${this.checked}
@@ -356,49 +314,6 @@ export class MozRadio extends MozLitElement {
       @click=${this.handleClick}
       @change=${this.handleChange}
     />`;
-  }
-
-  labelTemplate() {
-    return html`<span class="label-content">
-      ${this.iconTemplate()}
-      <span class="text">${this.label}</span>
-      ${this.supportLinkTemplate()}
-    </span>`;
-  }
-
-  descriptionTemplate() {
-    return html`
-      <span id="description" class="description text-deemphasized">
-        ${this.description ?? html`<slot name="description"></slot>`}
-      </span>
-    `;
-  }
-
-  supportLinkTemplate() {
-    return this.supportPage
-      ? html`<a
-          is="moz-support-link"
-          support-page=${this.supportPage}
-          part="support-link"
-        ></a>`
-      : html`<slot name="support-link"></slot>`;
-  }
-
-  render() {
-    return html`
-      <link
-        rel="stylesheet"
-        href="chrome://global/content/elements/moz-radio.css"
-      />
-      <label
-        part="label"
-        is="moz-label"
-        shownaccesskey=${ifDefined(this.accessKey)}
-      >
-        ${this.inputTemplate()}${this.labelTemplate()}
-      </label>
-      ${this.descriptionTemplate()}
-    `;
   }
 }
 customElements.define("moz-radio", MozRadio);

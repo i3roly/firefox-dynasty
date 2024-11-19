@@ -196,6 +196,11 @@ void ResetDirtyPageModifier() {
 
   moz_set_max_dirty_page_modifier(0);
 
+  wr::RenderThread* renderThread = wr::RenderThread::Get();
+  if (renderThread) {
+    renderThread->NotifyIdle();
+  }
+
 #if defined(MOZ_MEMORY)
   jemalloc_free_excess_dirty_pages();
 #endif
@@ -2344,7 +2349,7 @@ void WebRenderBridgeParent::CompositeToTarget(VsyncId aId,
                          MarkerInnerWindowId(innerWindowId),
                          "Too many pending frames");
 
-    Telemetry::ScalarAdd(Telemetry::ScalarID::GFX_SKIPPED_COMPOSITES, 1);
+    glean::gfx::skipped_composites.Add(1);
 
     return;
   }

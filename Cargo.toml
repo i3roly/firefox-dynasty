@@ -17,7 +17,6 @@ members = [
   "testing/geckodriver",
   "toolkit/components/uniffi-bindgen-gecko-js",
   "toolkit/crashreporter/client/app",
-  "toolkit/crashreporter/minidump-analyzer",
   "toolkit/crashreporter/mozwer-rust",
   "toolkit/crashreporter/rust_minidump_writer_linux",
   "toolkit/library/gtest/rust",
@@ -41,10 +40,12 @@ exclude = [
   "media/mp4parse-rust/mp4parse",
   "media/mp4parse-rust/mp4parse_capi",
   "xpcom/rust/gkrust_utils",
+  "toolkit/crashreporter/minidump-analyzer",
   "tools/lint/test/files/clippy",
   "tools/fuzzing/rust",
   "dom/base/rust",
   "dom/origin-trials/ffi",
+  "ipc/rust/ipdl_utils",
 
   # Excluded because we don't want to vendor their dependencies.
   "intl/l10n/rust/l10nregistry-tests",
@@ -56,8 +57,8 @@ resolver = "2"
 
 [workspace.dependencies]
 # Shared across multiple UniFFI consumers.
-uniffi = "0.28.1"
-uniffi_bindgen = "0.28.1"
+uniffi = "0.28.2"
+uniffi_bindgen = "0.28.2"
 # Shared across multiple application-services consumers.
 rusqlite = "0.31.0"
 # Shared across multiple glean consumers.
@@ -214,13 +215,13 @@ midir = { git = "https://github.com/mozilla/midir.git", rev = "85156e360a37d8517
 malloc_size_of_derive = { path = "xpcom/rust/malloc_size_of_derive" }
 
 # application-services overrides to make updating them all simpler.
-interrupt-support = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-relevancy = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-sql-support = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-suggest = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-sync15 = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-tabs = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-viaduct = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
-webext-storage = { git = "https://github.com/mozilla/application-services", rev = "5af28e120fd636135d50894cf16a74e21dc63045" }
+interrupt-support = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+relevancy = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+sql-support = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+suggest = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+sync15 = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+tabs = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+viaduct = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
+webext-storage = { git = "https://github.com/mozilla/application-services", branch = "release-v133-desktop"}
 
 allocator-api2 = { path = "third_party/rust/allocator-api2" }

@@ -229,7 +229,7 @@ class HttpBaseChannel : public nsHashPropertyBag,
   NS_IMETHOD GetResponseStatusText(nsACString& aValue) override;
   NS_IMETHOD GetRequestSucceeded(bool* aValue) override;
   NS_IMETHOD RedirectTo(nsIURI* newURI) override;
-  NS_IMETHOD InternalRedirectTo(nsIURI* newURI) override;
+  NS_IMETHOD TransparentRedirectTo(nsIURI* newURI) override;
   NS_IMETHOD UpgradeToSecure() override;
   NS_IMETHOD GetRequestObserversCalled(bool* aCalled) override;
   NS_IMETHOD SetRequestObserversCalled(bool aCalled) override;
@@ -485,7 +485,17 @@ class HttpBaseChannel : public nsHashPropertyBag,
     return mResponseTrailers.get();
   }
 
-  void SetDummyChannelForCachedResource();
+  // Return the cloned HTTP Headers if available.
+  // The returned headers can be passed to SetDummyChannelForCachedResource
+  // to create a dummy channel with the same HTTP headers.
+  UniquePtr<nsHttpResponseHead> MaybeCloneResponseHeadForCachedResource();
+
+  // Set this channel as a dummy channel for cached resources.
+  //
+  // If aMaybeResponseHead is provided, this uses the given HTTP headers.
+  // Otherwise this uses an empty HTTP headers.
+  void SetDummyChannelForCachedResource(
+      const nsHttpResponseHead* aMaybeResponseHead = nullptr);
 
   const NetAddr& GetSelfAddr() { return mSelfAddr; }
   const NetAddr& GetPeerAddr() { return mPeerAddr; }
@@ -732,7 +742,7 @@ class HttpBaseChannel : public nsHashPropertyBag,
   nsCOMPtr<nsIProgressEventSink> mProgressSink;
   nsCOMPtr<nsIReferrerInfo> mReferrerInfo;
   // The first parameter is the URI we would like to redirect to
-  // The second parameter should be true if internal redirect otherwise false
+  // The second parameter should be true if trasparent redirect otherwise false
   // mAPIRedirectTo is Nothing if and only if the URI is null.
   mozilla::Maybe<mozilla::CompactPair<nsCOMPtr<nsIURI>, bool>> mAPIRedirectTo;
   nsCOMPtr<nsIURI> mProxyURI;

@@ -570,7 +570,13 @@ class GCRuntime {
   void verifyAllChunks();
 #endif
 
+  // Get a free chunk or allocate one if needed. The chunk is left in the empty
+  // chunks pool.
   ArenaChunk* getOrAllocChunk(AutoLockGCBgAlloc& lock);
+
+  // Get or allocate a free chunk, removing it from the empty chunks pool.
+  ArenaChunk* takeOrAllocChunk(AutoLockGCBgAlloc& lock);
+
   void recycleChunk(ArenaChunk* chunk, const AutoLockGC& lock);
 
 #ifdef JS_GC_ZEAL
@@ -674,10 +680,12 @@ class GCRuntime {
            !stringBuffersToReleaseAfterMinorGC.ref().empty();
   }
 
+  // Returns false on failure without raising an exception.
   [[nodiscard]] bool setParameter(JSGCParamKey key, uint32_t value,
                                   AutoLockGC& lock);
   void resetParameter(JSGCParamKey key, AutoLockGC& lock);
   uint32_t getParameter(JSGCParamKey key, const AutoLockGC& lock);
+  // Returns false on failure without raising an exception.
   bool setThreadParameter(JSGCParamKey key, uint32_t value, AutoLockGC& lock);
   void resetThreadParameter(JSGCParamKey key, AutoLockGC& lock);
   void updateThreadDataStructures(AutoLockGC& lock);

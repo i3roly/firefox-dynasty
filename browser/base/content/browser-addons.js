@@ -73,7 +73,10 @@ const ERROR_L10N_IDS = new Map([
     ["addon-install-error-not-signed", "addon-local-install-error-not-signed"],
   ],
   [-8, ["addon-install-error-invalid-domain"]],
-  [-10, ["addon-install-error-blocklisted", "addon-install-error-blocklisted"]],
+  [
+    -10,
+    ["addon-install-error-hard-blocked", "addon-install-error-hard-blocked"],
+  ],
   [
     -11,
     ["addon-install-error-incompatible", "addon-install-error-incompatible"],
@@ -85,7 +88,36 @@ const ERROR_L10N_IDS = new Map([
       "addon-install-error-admin-install-only",
     ],
   ],
+  [
+    -14,
+    ["addon-install-error-soft-blocked", "addon-install-error-soft-blocked"],
+  ],
 ]);
+
+customElements.define(
+  "addon-notification-blocklist-url",
+  class MozAddonNotificationBlocklistURL extends HTMLAnchorElement {
+    connectedCallback() {
+      this.addEventListener("click", this);
+    }
+
+    disconnectedCallback() {
+      this.removeEventListener("click", this);
+    }
+
+    handleEvent(e) {
+      if (e.type == "click") {
+        e.preventDefault();
+        window.openTrustedLinkIn(this.href, "tab", {
+          // Make sure the newly open tab is going to be focused, independently
+          // from general user prefs.
+          forceForeground: true,
+        });
+      }
+    }
+  },
+  { extends: "a" }
+);
 
 customElements.define(
   "addon-webext-permissions-notification",
@@ -130,6 +162,26 @@ customElements.define(
       );
     }
 
+    get domainsSet() {
+      if (!this.notification?.options?.customElementOptions) {
+        return undefined;
+      }
+      const { strings } = this.notification.options.customElementOptions;
+      return strings.fullDomainsList?.domainsSet;
+    }
+
+    get hasFullDomainsList() {
+      return this.domainsSet?.size;
+    }
+
+    #isFullDomainsListEntryIndex(idx) {
+      if (!this.hasFullDomainsList) {
+        return false;
+      }
+      const { strings } = this.notification.options.customElementOptions;
+      return strings.fullDomainsList.msgIdIndex === idx;
+    }
+
     render() {
       const { strings, showIncognitoCheckbox } =
         this.notification.options.customElementOptions;
@@ -167,10 +219,17 @@ customElements.define(
       // (and one for the private browsing checkbox, if it should
       // be shown) and return earlier.
       if (this.hasMultiplePermissionsEntries) {
-        for (let msg of strings.msgs) {
+        for (let [idx, msg] of strings.msgs.entries()) {
           let item = doc.createElementNS(HTML_NS, "li");
           item.classList.add("webext-perm-granted");
-          item.textContent = msg;
+          if (
+            this.hasFullDomainsList &&
+            this.#isFullDomainsListEntryIndex(idx)
+          ) {
+            item.append(this.#createFullDomainsListFragment(msg));
+          } else {
+            item.textContent = msg;
+          }
           permsListEl.appendChild(item);
         }
         if (showIncognitoCheckbox) {
@@ -199,8 +258,39 @@ customElements.define(
         return;
       }
 
-      permsSingleEl.textContent = strings.msgs[0];
+      const msg = strings.msgs[0];
+      if (this.hasFullDomainsList && this.#isFullDomainsListEntryIndex(0)) {
+        permsSingleEl.append(this.#createFullDomainsListFragment(msg));
+      } else {
+        permsSingleEl.textContent = msg;
+      }
       permsSingleEl.hidden = false;
+    }
+
+    #createFullDomainsListFragment(msg) {
+      const HTML_NS = "http://www.w3.org/1999/xhtml";
+      const doc = this.ownerDocument;
+      const label = doc.createXULElement("label");
+      label.value = msg;
+      const domainsList = doc.createElementNS(HTML_NS, "ul");
+      domainsList.classList.add("webext-perm-domains-list");
+
+      // Enforce max-height and ensure the domains list is
+      // scrollable when there are more than 5 domains.
+      if (this.domainsSet.size > 5) {
+        domainsList.classList.add("scrollable-domains-list");
+      }
+
+      for (const domain of this.domainsSet) {
+        let domainItem = doc.createElementNS(HTML_NS, "li");
+        domainItem.textContent = domain;
+        domainsList.appendChild(domainItem);
+      }
+      const { DocumentFragment } = this.ownerGlobal;
+      const fragment = new DocumentFragment();
+      fragment.append(label);
+      fragment.append(domainsList);
+      return fragment;
     }
 
     #clearChildElements() {
@@ -1057,9 +1147,43 @@ var gXPInstallObserver = {
               "unsigned-addons";
           }
 
+          let notificationId = aTopic;
+
+          const isBlocklistError = [
+            AddonManager.ERROR_BLOCKLISTED,
+            AddonManager.ERROR_SOFT_BLOCKED,
+          ].includes(install.error);
+
+          // On blocklist-related install failures:
+          // - use "addon-install-failed-blocklist" as the notificationId
+          //   (which will use the popupnotification with id
+          //   "addon-install-failed-blocklist-notification" defined
+          //   in popup-notification.inc)
+          // - add an eventCallback that will take care of filling in the
+          //   blocklistURL into the href attribute of the link element
+          //   with id "addon-install-failed-blocklist-info"
+          if (isBlocklistError) {
+            const blocklistURL = await install.addon?.getBlocklistURL();
+            notificationId = `${aTopic}-blocklist`;
+            options.eventCallback = topic => {
+              if (topic !== "showing") {
+                return;
+              }
+              let doc = browser.ownerDocument;
+              let blocklistURLEl = doc.getElementById(
+                "addon-install-failed-blocklist-info"
+              );
+              if (blocklistURL) {
+                blocklistURLEl.setAttribute("href", blocklistURL);
+              } else {
+                blocklistURLEl.removeAttribute("href");
+              }
+            };
+          }
+
           PopupNotifications.show(
             browser,
-            aTopic,
+            notificationId,
             messageString,
             gUnifiedExtensions.getPopupAnchorID(browser, window),
             null,
@@ -1688,7 +1812,9 @@ var gUnifiedExtensions = {
     // This is where we are going to re-insert the extension widgets (DOM
     // nodes) but we need to account for some hidden DOM nodes already present
     // in this container when determining where to put the nodes back.
-    const container = document.getElementById(area);
+    const container = CustomizableUI.getCustomizationTarget(
+      document.getElementById(area)
+    );
 
     let moved = false;
     let currentPosition = 0;

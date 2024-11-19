@@ -146,7 +146,6 @@ namespace jit {
   _(ObjectState)                  \
   _(ArrayState)                   \
   _(AtomicIsLockFree)             \
-  _(Int32ToBigInt)                \
   _(Int64ToBigInt)                \
   _(BigIntAsIntN)                 \
   _(BigIntAsUintN)                \
@@ -1027,16 +1026,8 @@ class RAtomicIsLockFree final : public RInstruction {
                              SnapshotIterator& iter) const override;
 };
 
-class RInt32ToBigInt final : public RInstruction {
- public:
-  RINSTRUCTION_HEADER_NUM_OP_(Int32ToBigInt, 1)
-
-  [[nodiscard]] bool recover(JSContext* cx,
-                             SnapshotIterator& iter) const override;
-};
-
 class RInt64ToBigInt final : public RInstruction {
-  bool isUnsigned_;
+  bool isSigned_;
 
  public:
   RINSTRUCTION_HEADER_NUM_OP_(Int64ToBigInt, 1)

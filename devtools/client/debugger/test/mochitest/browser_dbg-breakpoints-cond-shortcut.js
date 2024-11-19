@@ -12,14 +12,17 @@ add_task(async function () {
 
   await selectSource(dbg, "long.js");
   await waitForSelectedSource(dbg, "long.js");
-
+  // Wait a bit for CM6 to complete any updates so the conditional panel
+  // does not lose focus after the it has been opened
+  await waitForDocumentLoadComplete(dbg);
   info(
     "toggle conditional panel with shortcut: no breakpoints, default cursorPosition"
   );
-  pressKey(dbg, "toggleCondPanel");
+  await pressKey(dbg, "toggleCondPanel");
   await waitForConditionalPanelFocus(dbg);
+
   ok(
-    !!getConditionalPanel(dbg, 1),
+    !!(await getConditionalPanelAtLine(dbg, 1)),
     "conditional panel panel is open on line 1"
   );
   is(
@@ -38,7 +41,10 @@ add_task(async function () {
   pressKey(dbg, "toggleCondPanel");
 
   await waitForConditionalPanelFocus(dbg);
-  ok(!!getConditionalPanel(dbg, 32), "conditional panel is open on line 32");
+  ok(
+    !!(await getConditionalPanelAtLine(dbg, 32)),
+    "conditional panel is open on line 32"
+  );
   is(
     dbg.selectors.getConditionalPanelLocation().line,
     32,
@@ -53,7 +59,7 @@ add_task(async function () {
   info(
     "toggle conditional panel with shortcut and add condition to first breakpoint"
   );
-  setConditionalBreakpointWithKeyboardShortcut(dbg, "1");
+  await setConditionalBreakpointWithKeyboardShortcut(dbg, "1");
   await waitForCondition(dbg, 1);
   const firstBreakpoint = findColumnBreakpoint(dbg, "long.js", 32, 2);
   is(
@@ -69,7 +75,7 @@ add_task(async function () {
   info(
     "toggle conditional panel with shortcut and add condition to second breakpoint"
   );
-  setConditionalBreakpointWithKeyboardShortcut(dbg, "2");
+  await setConditionalBreakpointWithKeyboardShortcut(dbg, "2");
   await waitForCondition(dbg, 2);
   const secondBreakpoint = findColumnBreakpoint(dbg, "long.js", 32, 26);
   is(
@@ -83,7 +89,7 @@ add_task(async function () {
   );
   setEditorCursorAt(dbg, 31, 7);
   info("toggle conditional panel and edit condition using shortcut");
-  setConditionalBreakpointWithKeyboardShortcut(dbg, "2");
+  await setConditionalBreakpointWithKeyboardShortcut(dbg, "2");
   ok(
     !!waitForCondition(dbg, "12"),
     "breakpoint closest to cursor position has been edited"
@@ -97,7 +103,7 @@ add_task(async function () {
   );
   setEditorCursorAt(dbg, 31, 21);
   info("toggle conditional panel and edit condition using shortcut");
-  setConditionalBreakpointWithKeyboardShortcut(dbg, "3");
+  await setConditionalBreakpointWithKeyboardShortcut(dbg, "3");
   ok(
     !!waitForCondition(dbg, "13"),
     "breakpoint closest to cursor position has been edited"
@@ -109,7 +115,7 @@ add_task(async function () {
   info("toggle log panel with shortcut: cursor on line 33");
 
   setEditorCursorAt(dbg, 33, 1);
-  setLogBreakpointWithKeyboardShortcut(dbg, "3");
+  await setLogBreakpointWithKeyboardShortcut(dbg, "3");
   ok(
     !!waitForLog(dbg, "3"),
     "breakpoint closest to cursor position has been edited"
@@ -118,16 +124,6 @@ add_task(async function () {
   info("close conditional panel");
   pressKey(dbg, "Escape");
 });
-
-// from test/mochitest/browser_dbg-breakpoints-cond-source-maps.js
-function getConditionalPanel(dbg, line) {
-  return getCM(dbg).doc.getLineHandle(line - 1).widgets[0];
-}
-
-// from devtools browser_dbg-breakpoints-cond-source-maps.js
-async function waitForConditionalPanelFocus(dbg) {
-  await waitFor(() => dbg.win.document.activeElement.tagName === "TEXTAREA");
-}
 
 // from browser_dbg-breakpoints-columns.js
 async function enableFirstBreakpoint(dbg) {
@@ -151,14 +147,7 @@ async function enableSecondBreakpoint(dbg) {
   await waitForAllElements(dbg, "breakpointItems", 2);
 }
 
-// modified method from browser_dbg-breakpoints-columns.js
-// use shortcut to open conditional panel.
-function setConditionalBreakpointWithKeyboardShortcut(dbg, condition) {
-  pressKey(dbg, "toggleCondPanel");
-  typeInPanel(dbg, condition);
-}
-
 function setLogBreakpointWithKeyboardShortcut(dbg, condition) {
   pressKey(dbg, "toggleLogPanel");
-  typeInPanel(dbg, condition, true);
+  return typeInPanel(dbg, condition, true);
 }

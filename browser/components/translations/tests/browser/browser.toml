@@ -1,4 +1,5 @@
 [DEFAULT]
+subsuite = "translations"
 support-files = [
   "head.js",
   "!/toolkit/components/translations/tests/browser/shared-head.js",
@@ -20,6 +21,8 @@ support-files = [
 ["browser_translations_about_preferences_settings_never_translate_sites.js"]
 
 ["browser_translations_about_preferences_settings_ui.js"]
+
+["browser_translations_e2e_full_page_translate.js"]
 
 ["browser_translations_full_page_move_tab_to_new_window.js"]
 
@@ -91,6 +94,8 @@ skip-if = ["true"]
 ["browser_translations_full_page_panel_switch_languages.js"]
 
 ["browser_translations_full_page_panel_switch_tabs_before_engine_ready.js"]
+
+["browser_translations_full_page_panel_target_language_persists_on_reopen.js"]
 
 ["browser_translations_full_page_panel_unsupported_lang.js"]
 

@@ -160,26 +160,40 @@ ipc::IPCResult WebGPUChild::RecvDropAction(const ipc::ByteBuf& aByteBuf) {
   return IPC_OK();
 }
 
-ipc::IPCResult WebGPUChild::RecvDeviceLost(RawId aDeviceId,
-                                           Maybe<uint8_t> aReason,
-                                           const nsACString& aMessage) {
+bool WebGPUChild::ResolveLostForDeviceId(RawId aDeviceId,
+                                         Maybe<uint8_t> aReason,
+                                         const nsAString& aMessage) {
   RefPtr<Device> device;
   const auto itr = mDeviceMap.find(aDeviceId);
   if (itr != mDeviceMap.end()) {
     device = itr->second.get();
     MOZ_ASSERT(device);
   }
-
-  if (device) {
-    auto message = NS_ConvertUTF8toUTF16(aMessage);
-    if (aReason.isSome()) {
-      dom::GPUDeviceLostReason reason =
-          static_cast<dom::GPUDeviceLostReason>(*aReason);
-      device->ResolveLost(Some(reason), message);
-    } else {
-      device->ResolveLost(Nothing(), message);
-    }
+  if (!device) {
+    // We must have unregistered the device already.
+    return false;
   }
+
+  if (aReason.isSome()) {
+    dom::GPUDeviceLostReason reason =
+        static_cast<dom::GPUDeviceLostReason>(*aReason);
+    MOZ_ASSERT(reason == dom::GPUDeviceLostReason::Destroyed,
+               "There is only one valid GPUDeviceLostReason value.");
+    device->ResolveLost(Some(reason), aMessage);
+  } else {
+    device->ResolveLost(Nothing(), aMessage);
+  }
+
+  return true;
+}
+
+ipc::IPCResult WebGPUChild::RecvDeviceLost(RawId aDeviceId,
+                                           Maybe<uint8_t> aReason,
+                                           const nsACString& aMessage) {
+  auto message = NS_ConvertUTF8toUTF16(aMessage);
+  DebugOnly<bool> success = ResolveLostForDeviceId(aDeviceId, aReason, message);
+  MOZ_ASSERT(success,
+             "Shouldn't receive device lost on an unregistered device.");
   return IPC_OK();
 }
 
@@ -240,13 +254,8 @@ void WebGPUChild::ActorDestroy(ActorDestroyReason) {
 
   for (const auto& targetIter : deviceMap) {
     RefPtr<Device> device = targetIter.second.get();
-    if (!device) {
-      // The Device may have gotten freed when we resolved the Promise for
-      // another Device in the map.
-      continue;
-    }
-
-    device->ResolveLost(Nothing(), u"WebGPUChild destroyed"_ns);
+    MOZ_ASSERT(device);
+    ResolveLostForDeviceId(device->mId, Nothing(), u"WebGPUChild destroyed"_ns);
   }
 }
 

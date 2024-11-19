@@ -835,9 +835,30 @@ void nsWindow::DestroyDirectManipulation() {
   }
 }
 
+namespace mozilla::widget {
+
+// A mask specifying the window-styles associated with window-chrome.
+constexpr static const WindowStyles kChromeStylesMask{
+    .style = WS_CAPTION | WS_THICKFRAME,
+    .ex = WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE |
+          WS_EX_STATICEDGE,
+};
+
+WindowStyles WindowStyles::FromHWND(HWND aWnd) {
+  return {.style = ::GetWindowLongPtrW(aWnd, GWL_STYLE),
+          .ex = ::GetWindowLongPtrW(aWnd, GWL_EXSTYLE)};
+}
+
+void SetWindowStyles(HWND aWnd, const WindowStyles& aStyles) {
+  VERIFY_WINDOW_STYLE(aStyles.style);
+  ::SetWindowLongPtrW(aWnd, GWL_STYLE, aStyles.style);
+  ::SetWindowLongPtrW(aWnd, GWL_EXSTYLE, aStyles.ex);
+}
+
+}  // namespace mozilla::widget
+
 // Create the proper widget
-nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
-                          const LayoutDeviceIntRect& aRect,
+nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
                           widget::InitData* aInitData) {
   // Historical note: there was once some belief and/or intent that nsWindows
   // could be created on arbitrary threads, and this may still be reflected in
@@ -851,30 +872,17 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   widget::InitData defaultInitData;
   if (!aInitData) aInitData = &defaultInitData;
 
-  nsIWidget* baseParent =
-      aInitData->mWindowType == WindowType::Dialog ||
-              aInitData->mWindowType == WindowType::TopLevel ||
-              aInitData->mWindowType == WindowType::Invisible
-          ? nullptr
-          : aParent;
+  MOZ_DIAGNOSTIC_ASSERT(aInitData->mWindowType != WindowType::Invisible);
 
-  mIsTopWidgetWindow = (nullptr == baseParent);
   mBounds = aRect;
 
   // Ensure that the toolkit is created.
   nsToolkit::GetToolkit();
 
-  BaseCreate(baseParent, aInitData);
+  BaseCreate(aParent, aInitData);
 
-  HWND parent;
-  if (aParent) {  // has a nsIWidget parent
-    parent = aParent ? (HWND)aParent->GetNativeData(NS_NATIVE_WINDOW) : nullptr;
-    mParent = aParent;
-  } else {  // has a nsNative parent
-    parent = (HWND)aNativeParent;
-    mParent =
-        aNativeParent ? WinUtils::GetNSWindowPtr((HWND)aNativeParent) : nullptr;
-  }
+  HWND parent =
+      aParent ? (HWND)aParent->GetNativeData(NS_NATIVE_WINDOW) : nullptr;
 
   mIsRTL = aInitData->mRTL;
   mOpeningAnimationSuppressed = aInitData->mIsAnimationSuppressed;
@@ -882,25 +890,20 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   mIsAlert = aInitData->mIsAlert;
   mResizable = aInitData->mResizable;
 
-  DWORD style = WindowStyle();
-  DWORD extendedStyle = WindowExStyle();
+  Styles desiredStyles{
+      .style = static_cast<LONG_PTR>(WindowStyle()),
+      .ex = static_cast<LONG_PTR>(WindowExStyle()),
+  };
 
-  if (mWindowType == WindowType::Popup) {
-    if (!aParent) {
-      parent = nullptr;
-    }
-  } else if (mWindowType == WindowType::Invisible) {
-    // Make sure CreateWindowEx succeeds at creating a toplevel window
-    style &= ~0x40000000;  // WS_CHILDWINDOW
-  } else {
-    // See if the caller wants to explictly set clip children and clip siblings
+  if (mWindowType != WindowType::Popup) {
+    // See if the caller wants to explicitly set clip children and clip siblings
     if (aInitData->mClipChildren) {
-      style |= WS_CLIPCHILDREN;
+      desiredStyles.style |= WS_CLIPCHILDREN;
     } else {
-      style &= ~WS_CLIPCHILDREN;
+      desiredStyles.style &= ~WS_CLIPCHILDREN;
     }
     if (aInitData->mClipSiblings) {
-      style |= WS_CLIPSIBLINGS;
+      desiredStyles.style |= WS_CLIPSIBLINGS;
     }
   }
 
@@ -913,10 +916,10 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
     sFirstTopLevelWindowCreated = true;
     mWnd = ConsumePreXULSkeletonUIHandle();
     if (mWnd) {
-      MOZ_ASSERT(style == kPreXULSkeletonUIWindowStyle,
+      MOZ_ASSERT(desiredStyles.style == kPreXULSkeletonUIWindowStyle,
                  "The skeleton UI window style should match the expected "
                  "style for the first window created");
-      MOZ_ASSERT(extendedStyle == kPreXULSkeletonUIWindowStyleEx,
+      MOZ_ASSERT(desiredStyles.ex == kPreXULSkeletonUIWindowStyleEx,
                  "The skeleton UI window extended style should match the "
                  "expected extended style for the first window created");
       MOZ_ASSERT(
@@ -931,10 +934,19 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
       mIsCloaked = mozilla::IsCloaked(mWnd);
       mFrameState->ConsumePreXULSkeletonState(WasPreXULSkeletonUIMaximized());
 
+      MOZ_ASSERT(BoundsUseDesktopPixels());
+      auto scale = GetDesktopToDeviceScale();
+      mBounds = mLastPaintBounds = LayoutDeviceIntRect::FromUnknownRect(
+          DesktopIntRect::Round(LayoutDeviceRect(GetBounds()) / scale)
+              .ToUnknownRect());
+
       // These match the margins set in browser-tabsintitlebar.js with
       // default prefs on Windows. Bug 1673092 tracks lining this up with
       // that more correctly instead of hard-coding it.
       SetNonClientMargins(LayoutDeviceIntMargin(0, 2, 2, 2));
+      // The skeleton UI already painted over the NC area, so there's no need
+      // to do that again; the effective non-client margins haven't changed.
+      mNeedsNCAreaClear = false;
 
       // Reset the WNDPROC for this window and its whole class, as we had
       // to use our own WNDPROC when creating the the skeleton UI window.
@@ -948,15 +960,28 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
   }
 
   if (!mWnd) {
-    mWnd =
-        ::CreateWindowExW(extendedStyle, className, L"", style, aRect.X(),
-                          aRect.Y(), aRect.Width(), GetHeight(aRect.Height()),
-                          parent, nullptr, nsToolkit::mDllInstance, nullptr);
+    mWnd = ::CreateWindowExW(desiredStyles.ex, className, L"",
+                             desiredStyles.style, aRect.X(), aRect.Y(),
+                             aRect.Width(), GetHeight(aRect.Height()), parent,
+                             nullptr, nsToolkit::mDllInstance, nullptr);
+    if (!mWnd) {
+      NS_WARNING("nsWindow CreateWindowEx failed.");
+      return NS_ERROR_FAILURE;
+    }
   }
 
-  if (!mWnd) {
-    NS_WARNING("nsWindow CreateWindowEx failed.");
-    return NS_ERROR_FAILURE;
+  {
+    // Some of the chrome mask window styles can be added implicitly by
+    // CreateWindowEx, but we really don't want that.
+    // To be safe, only deal with those bits for now, instead of just
+    // overriding with extendedStyle or style.
+    // This can happen with non-native alert windows for example.
+    const auto actualStyles = Styles::FromHWND(mWnd);
+    auto newStyles = (actualStyles & ~kChromeStylesMask) |
+                     (desiredStyles & kChromeStylesMask);
+    if (newStyles != actualStyles) {
+      SetWindowStyles(mWnd, newStyles);
+    }
   }
 
   if (!sWinCloakEventHook) {
@@ -1045,7 +1070,15 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
                           sizeof dwAttribute);
   }
 
-  UpdateDarkModeToolbar();
+  // Default to the system color scheme unless getting told otherwise.
+  SetColorScheme(Nothing());
+
+  if (WinUtils::MicaEnabled() && !IsPopup()) {
+    // Enable Mica Alt Material if available.
+    const DWM_SYSTEMBACKDROP_TYPE tabbedWindow = DWMSBT_TABBEDWINDOW;
+    DwmSetWindowAttribute(mWnd, DWMWA_SYSTEMBACKDROP_TYPE, &tabbedWindow,
+                          sizeof tabbedWindow);
+  }
 
   if (mOpeningAnimationSuppressed) {
     SuppressAnimation(true);
@@ -1056,8 +1089,7 @@ nsresult nsWindow::Create(nsIWidget* aParent, nsNativeWidget aNativeParent,
                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
   }
 
-  if (mWindowType != WindowType::Invisible &&
-      MouseScrollHandler::Device::IsFakeScrollableWindowNeeded()) {
+  if (MouseScrollHandler::Device::IsFakeScrollableWindowNeeded()) {
     // Ugly Thinkpad Driver Hack (Bugs 507222 and 594977)
     //
     // We create two zero-sized windows as descendants of the top-level window,
@@ -1226,8 +1258,6 @@ static LPWSTR const gStockApplicationIcon = MAKEINTRESOURCEW(32512);
 static const wchar_t* ChooseWindowClass(WindowType aWindowType) {
   const wchar_t* className = [aWindowType] {
     switch (aWindowType) {
-      case WindowType::Invisible:
-        return kClassNameHidden;
       case WindowType::Dialog:
         return kClassNameDialog;
       case WindowType::Popup:
@@ -1311,7 +1341,6 @@ DWORD nsWindow::WindowStyle() {
       [[fallthrough]];
 
     case WindowType::TopLevel:
-    case WindowType::Invisible:
       style = WS_OVERLAPPED | WS_CLIPCHILDREN | WS_DLGFRAME | WS_BORDER |
               WS_THICKFRAME | kTitlebarItemsWindowStyles;
       break;
@@ -1418,60 +1447,14 @@ void nsWindow::DissociateFromNativeWindow() {
   mPrevWndProc.reset();
 }
 
-/**************************************************************
- *
- * SECTION: nsIWidget::SetParent, nsIWidget::GetParent
- *
- * Set or clear the parent widgets using window properties, and
- * handles calculating native parent handles.
- *
- **************************************************************/
-
-// Get and set parent widgets
-void nsWindow::SetParent(nsIWidget* aNewParent) {
-  nsCOMPtr<nsIWidget> kungFuDeathGrip(this);
-  nsIWidget* parent = GetParent();
-  if (parent) {
-    parent->RemoveChild(this);
-  }
-
-  mParent = aNewParent;
-
-  if (aNewParent) {
-    ReparentNativeWidget(aNewParent);
-    aNewParent->AddChild(this);
+void nsWindow::DidChangeParent(nsIWidget*) {
+  if (mWindowType == WindowType::Popup || !mWnd) {
     return;
   }
-  if (mWnd) {
-    // If we have no parent, SetParent should return the desktop.
-    VERIFY(::SetParent(mWnd, nullptr));
-    RecreateDirectManipulationIfNeeded();
-  }
-}
-
-void nsWindow::ReparentNativeWidget(nsIWidget* aNewParent) {
-  MOZ_ASSERT(aNewParent, "null widget");
-
-  mParent = aNewParent;
-  if (mWindowType == WindowType::Popup) {
-    return;
-  }
-  HWND newParent = (HWND)aNewParent->GetNativeData(NS_NATIVE_WINDOW);
-  NS_ASSERTION(newParent, "Parent widget has a null native window handle");
-  if (newParent && mWnd) {
-    ::SetParent(mWnd, newParent);
-    RecreateDirectManipulationIfNeeded();
-  }
-}
-
-nsIWidget* nsWindow::GetParent(void) {
-  if (mIsTopWidgetWindow) {
-    return nullptr;
-  }
-  if (mInDtor || mOnDestroyCalled) {
-    return nullptr;
-  }
-  return mParent;
+  HWND newParent =
+      mParent ? (HWND)mParent->GetNativeData(NS_NATIVE_WINDOW) : nullptr;
+  ::SetParent(mWnd, newParent);
+  RecreateDirectManipulationIfNeeded();
 }
 
 static int32_t RoundDown(double aDouble) {
@@ -1505,7 +1488,7 @@ nsWindow* nsWindow::GetParentWindow(bool aIncludeOwner) {
 }
 
 nsWindow* nsWindow::GetParentWindowBase(bool aIncludeOwner) {
-  if (mIsTopWidgetWindow) {
+  if (IsTopLevelWidget()) {
     // Must use a flag instead of mWindowType to tell if the window is the
     // owned by the topmost widget, because a child window can be embedded
     // inside a HWND which is not associated with a nsIWidget.
@@ -1556,7 +1539,17 @@ void nsWindow::Show(bool aState) {
     // The first time we decide to actually show the window is when we decide
     // that we've taken over the window from the skeleton UI, and we should
     // no longer treat resizes / moves specially.
+    //
+    // NOTE(emilio): mIsShowingPreXULSkeletonUI feels a bit odd, or at least
+    // misnamed. During regular startup we create the skeleton UI, then the
+    // early blank window consumes it, and at that point we set
+    // mIsShowingPreXULSkeletonUI to false, but in fact, we're still showing
+    // the skeleton UI (because the blank window is, well, blank). We should
+    // consider guarding this with !mIsEarlyBlankWindow...
     mIsShowingPreXULSkeletonUI = false;
+    // Concomitantly, this is also when we change the cursor away from the
+    // default "wait" cursor.
+    SetCursor(Cursor{eCursor_standard});
 #if defined(ACCESSIBILITY)
     // If our HWND has focus and the a11y engine hasn't started yet, fire a
     // focus win event. Windows already did this when the skeleton UI appeared,
@@ -1888,13 +1881,45 @@ void nsWindow::Move(double aX, double aY) {
     return;
   }
 
+  // Normally, when the skeleton UI is disabled, we resize+move the window
+  // before showing it in order to ensure that it restores to the correct
+  // position when the user un-maximizes it. However, when we are using the
+  // skeleton UI, this results in the skeleton UI window being moved around
+  // undesirably before being locked back into the maximized position. To
+  // avoid this, we simply set the placement to restore to via
+  // SetWindowPlacement. It's a little bit more of a dance, though, since we
+  // need to convert the workspace coords that SetWindowPlacement uses to the
+  // screen space coordinates we normally use with SetWindowPos.
+  if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
+    WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
+    VERIFY(::GetWindowPlacement(mWnd, &pl));
+
+    HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
+    if (NS_WARN_IF(!monitor)) {
+      return;
+    }
+    MONITORINFO mi = {sizeof(MONITORINFO)};
+    VERIFY(::GetMonitorInfo(monitor, &mi));
+
+    int32_t deltaX =
+        x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
+    int32_t deltaY =
+        y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
+    pl.rcNormalPosition.left += deltaX;
+    pl.rcNormalPosition.right += deltaX;
+    pl.rcNormalPosition.top += deltaY;
+    pl.rcNormalPosition.bottom += deltaY;
+    VERIFY(::SetWindowPlacement(mWnd, &pl));
+    return;
+  }
+
   mBounds.MoveTo(x, y);
 
   if (mWnd) {
 #ifdef DEBUG
     // complain if a window is moved offscreen (legal, but potentially
     // worrisome)
-    if (mIsTopWidgetWindow) {  // only a problem for top-level windows
+    if (IsTopLevelWidget()) {  // only a problem for top-level windows
       // Make sure this window is actually on the screen before we move it
       // XXX: Needs multiple monitor support
       HDC dc = ::GetDC(mWnd);
@@ -1912,45 +1937,13 @@ void nsWindow::Move(double aX, double aY) {
       }
     }
 #endif
-
-    // Normally, when the skeleton UI is disabled, we resize+move the window
-    // before showing it in order to ensure that it restores to the correct
-    // position when the user un-maximizes it. However, when we are using the
-    // skeleton UI, this results in the skeleton UI window being moved around
-    // undesirably before being locked back into the maximized position. To
-    // avoid this, we simply set the placement to restore to via
-    // SetWindowPlacement. It's a little bit more of a dance, though, since we
-    // need to convert the workspace coords that SetWindowPlacement uses to the
-    // screen space coordinates we normally use with SetWindowPos.
-    if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
-      WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
-      VERIFY(::GetWindowPlacement(mWnd, &pl));
-
-      HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
-      if (NS_WARN_IF(!monitor)) {
-        return;
-      }
-      MONITORINFO mi = {sizeof(MONITORINFO)};
-      VERIFY(::GetMonitorInfo(monitor, &mi));
-
-      int32_t deltaX =
-          x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
-      int32_t deltaY =
-          y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
-      pl.rcNormalPosition.left += deltaX;
-      pl.rcNormalPosition.right += deltaX;
-      pl.rcNormalPosition.top += deltaY;
-      pl.rcNormalPosition.bottom += deltaY;
-      VERIFY(::SetWindowPlacement(mWnd, &pl));
-    } else {
-      UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE;
-      double oldScale = mDefaultScale;
-      mResizeState = IN_SIZEMOVE;
-      VERIFY(::SetWindowPos(mWnd, nullptr, x, y, 0, 0, flags));
-      mResizeState = NOT_RESIZING;
-      if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
-        ChangedDPI();
-      }
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSIZE;
+    double oldScale = mDefaultScale;
+    mResizeState = IN_SIZEMOVE;
+    VERIFY(::SetWindowPos(mWnd, nullptr, x, y, 0, 0, flags));
+    mResizeState = NOT_RESIZING;
+    if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
+      ChangedDPI();
     }
 
     ResizeDirectManipulationViewport();
@@ -1983,6 +1976,18 @@ void nsWindow::Resize(double aWidth, double aHeight, bool aRepaint) {
     return;
   }
 
+  // Refer to the comment above a similar check in nsWindow::Move
+  if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
+    WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
+    VERIFY(::GetWindowPlacement(mWnd, &pl));
+    pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
+    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
+    mResizeState = RESIZING;
+    VERIFY(::SetWindowPlacement(mWnd, &pl));
+    mResizeState = NOT_RESIZING;
+    return;
+  }
+
   // Set cached value for lightweight and printing
   bool wasLocking = mAspectRatio != 0.0;
   mBounds.SizeTo(width, height);
@@ -1991,33 +1996,18 @@ void nsWindow::Resize(double aWidth, double aHeight, bool aRepaint) {
   }
 
   if (mWnd) {
-    // Refer to the comment above a similar check in nsWindow::Move
-    if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
-      WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
-      VERIFY(::GetWindowPlacement(mWnd, &pl));
-      pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
-      pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
-      mResizeState = RESIZING;
-      VERIFY(::SetWindowPlacement(mWnd, &pl));
-      mResizeState = NOT_RESIZING;
-    } else {
-      UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE;
-
-      if (!aRepaint) {
-        flags |= SWP_NOREDRAW;
-      }
-
-      double oldScale = mDefaultScale;
-      mResizeState = RESIZING;
-      VERIFY(
-          ::SetWindowPos(mWnd, nullptr, 0, 0, width, GetHeight(height), flags));
-
-      mResizeState = NOT_RESIZING;
-      if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
-        ChangedDPI();
-      }
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE;
+    if (!aRepaint) {
+      flags |= SWP_NOREDRAW;
     }
-
+    double oldScale = mDefaultScale;
+    mResizeState = RESIZING;
+    VERIFY(
+        ::SetWindowPos(mWnd, nullptr, 0, 0, width, GetHeight(height), flags));
+    mResizeState = NOT_RESIZING;
+    if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
+      ChangedDPI();
+    }
     ResizeDirectManipulationViewport();
   }
 
@@ -2054,53 +2044,54 @@ void nsWindow::Resize(double aX, double aY, double aWidth, double aHeight,
     return;
   }
 
+  // Refer to the comment above a similar check in nsWindow::Move
+  if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
+    WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
+    VERIFY(::GetWindowPlacement(mWnd, &pl));
+
+    HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
+    if (NS_WARN_IF(!monitor)) {
+      return;
+    }
+    MONITORINFO mi = {sizeof(MONITORINFO)};
+    VERIFY(::GetMonitorInfo(monitor, &mi));
+
+    int32_t deltaX =
+        x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
+    int32_t deltaY =
+        y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
+    pl.rcNormalPosition.left += deltaX;
+    pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
+    pl.rcNormalPosition.top += deltaY;
+    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
+    VERIFY(::SetWindowPlacement(mWnd, &pl));
+    return;
+  }
+
   // Set cached value for lightweight and printing
   mBounds.SetRect(x, y, width, height);
 
   if (mWnd) {
-    // Refer to the comment above a similar check in nsWindow::Move
-    if (mIsShowingPreXULSkeletonUI && WasPreXULSkeletonUIMaximized()) {
-      WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
-      VERIFY(::GetWindowPlacement(mWnd, &pl));
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    if (!aRepaint) {
+      flags |= SWP_NOREDRAW;
+    }
 
-      HMONITOR monitor = ::MonitorFromWindow(mWnd, MONITOR_DEFAULTTONULL);
-      if (NS_WARN_IF(!monitor)) {
-        return;
-      }
-      MONITORINFO mi = {sizeof(MONITORINFO)};
-      VERIFY(::GetMonitorInfo(monitor, &mi));
+    double oldScale = mDefaultScale;
+    mResizeState = RESIZING;
+    VERIFY(
+        ::SetWindowPos(mWnd, nullptr, x, y, width, GetHeight(height), flags));
+    mResizeState = NOT_RESIZING;
+    if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
+      ChangedDPI();
+    }
 
-      int32_t deltaX =
-          x + mi.rcWork.left - mi.rcMonitor.left - pl.rcNormalPosition.left;
-      int32_t deltaY =
-          y + mi.rcWork.top - mi.rcMonitor.top - pl.rcNormalPosition.top;
-      pl.rcNormalPosition.left += deltaX;
-      pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
-      pl.rcNormalPosition.top += deltaY;
-      pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
-      VERIFY(::SetWindowPlacement(mWnd, &pl));
-    } else {
-      UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
-      if (!aRepaint) {
-        flags |= SWP_NOREDRAW;
-      }
-
-      double oldScale = mDefaultScale;
-      mResizeState = RESIZING;
-      VERIFY(
-          ::SetWindowPos(mWnd, nullptr, x, y, width, GetHeight(height), flags));
-      mResizeState = NOT_RESIZING;
-      if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
-        ChangedDPI();
-      }
-
-      if (mTransitionWnd) {
-        // If we have a fullscreen transition window, we need to make
-        // it topmost again, otherwise the taskbar may be raised by
-        // the system unexpectedly when we leave fullscreen state.
-        ::SetWindowPos(mTransitionWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-      }
+    if (mTransitionWnd) {
+      // If we have a fullscreen transition window, we need to make
+      // it topmost again, otherwise the taskbar may be raised by
+      // the system unexpectedly when we leave fullscreen state.
+      ::SetWindowPos(mTransitionWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     ResizeDirectManipulationViewport();
@@ -2235,8 +2226,10 @@ void nsWindow::SuppressAnimation(bool aSuppress) {
 // Position (aX, aY) is specified in Windows screen (logical) pixels,
 // except when using per-monitor DPI, in which case it's device pixels.
 void nsWindow::ConstrainPosition(DesktopIntPoint& aPoint) {
-  if (!mIsTopWidgetWindow)  // only a problem for top-level windows
+  if (!IsTopLevelWidget()) {
+    // only a problem for top-level windows
     return;
+  }
 
   double dpiScale = GetDesktopToDeviceScale().scale;
 
@@ -2520,9 +2513,9 @@ void nsWindow::ResetLayout() {
 #define DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 19
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 
-void nsWindow::UpdateDarkModeToolbar() {
-  PreferenceSheet::EnsureInitialized();
-  BOOL dark = PreferenceSheet::ColorSchemeForChrome() == ColorScheme::Dark;
+void nsWindow::SetColorScheme(const Maybe<ColorScheme>& aScheme) {
+  BOOL dark =
+      aScheme.valueOrFrom(LookAndFeel::SystemColorScheme) == ColorScheme::Dark;
   DwmSetWindowAttribute(mWnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, &dark,
                         sizeof dark);
   DwmSetWindowAttribute(mWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
@@ -2687,8 +2680,7 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
     mNonClientOffset.left = 0;
     mNonClientOffset.right = 0;
 
-    mozilla::Maybe<UINT> maybeEdge = GetHiddenTaskbarEdge();
-    if (maybeEdge) {
+    if (mozilla::Maybe<UINT> maybeEdge = GetHiddenTaskbarEdge()) {
       auto edge = maybeEdge.value();
       if (ABE_LEFT == edge) {
         mNonClientOffset.left -= kHiddenTaskbarSize;
@@ -2697,19 +2689,15 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
       } else if (ABE_BOTTOM == edge || ABE_TOP == edge) {
         mNonClientOffset.bottom -= kHiddenTaskbarSize;
       }
-
-      // When we are drawing the non-client region, we need
-      // to clear the portion of the NC region that is exposed by the
-      // hidden taskbar.  As above, we clear the bottom of the NC region
-      // when the taskbar is at the top of the screen.
-      UINT clearEdge = (edge == ABE_TOP) ? ABE_BOTTOM : edge;
-      mClearNCEdge = Some(clearEdge);
     }
   } else {
     mNonClientOffset = NormalWindowNonClientOffset();
   }
 
   UpdateOpaqueRegionInternal();
+  // We probably shouldn't need to clear the NC-area if we're an opaque window,
+  // but we need to in order to work around bug 642851.
+  mNeedsNCAreaClear = true;
 
   if (aReflowWindow) {
     // Force a reflow of content based on the new client
@@ -2721,8 +2709,12 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
 }
 
 nsresult nsWindow::SetNonClientMargins(const LayoutDeviceIntMargin& margins) {
-  if (!mIsTopWidgetWindow || mBorderStyle == BorderStyle::None) {
+  if (!IsTopLevelWidget() || mBorderStyle == BorderStyle::None) {
     return NS_ERROR_INVALID_ARG;
+  }
+
+  if (mNonClientMargins == margins) {
+    return NS_OK;
   }
 
   if (mHideChrome) {
@@ -2730,29 +2722,18 @@ nsresult nsWindow::SetNonClientMargins(const LayoutDeviceIntMargin& margins) {
     mFutureMarginsToUse = true;
     return NS_OK;
   }
+
   mFutureMarginsToUse = false;
 
-  // Request for a reset
-  if (margins.top == -1 && margins.left == -1 && margins.right == -1 &&
-      margins.bottom == -1) {
-    mCustomNonClient = false;
-    mNonClientMargins = margins;
-    // Force a reflow of content based on the new client
-    // dimensions.
-    ResetLayout();
-    return NS_OK;
-  }
-
-  if (margins.top < -1 || margins.bottom < -1 || margins.left < -1 ||
-      margins.right < -1) {
-    return NS_ERROR_INVALID_ARG;
-  }
-
+  // -1 margins request a reset
+  mCustomNonClient = margins != LayoutDeviceIntMargin(-1, -1, -1, -1);
   mNonClientMargins = margins;
-  mCustomNonClient = true;
-  if (!UpdateNonClientMargins()) {
-    NS_WARNING("UpdateNonClientMargins failed!");
-    return NS_OK;
+
+  // Force a reflow of content based on the new client dimensions.
+  if (mCustomNonClient) {
+    UpdateNonClientMargins();
+  } else {
+    ResetLayout();
   }
 
   return NS_OK;
@@ -2765,7 +2746,7 @@ void nsWindow::SetResizeMargin(mozilla::LayoutDeviceIntCoord aResizeMargin) {
   UpdateNonClientMargins();
 }
 
-void nsWindow::InvalidateNonClientRegion() {
+nsAutoRegion nsWindow::ComputeNonClientHRGN() {
   // +-+-----------------------+-+
   // | | app non-client chrome | |
   // | +-----------------------+ |
@@ -2781,24 +2762,20 @@ void nsWindow::InvalidateNonClientRegion() {
   RECT rect;
   GetWindowRect(mWnd, &rect);
   MapWindowPoints(nullptr, mWnd, (LPPOINT)&rect, 2);
-  HRGN winRgn = CreateRectRgnIndirect(&rect);
+  nsAutoRegion winRgn(::CreateRectRgnIndirect(&rect));
 
   // Subtract app client chrome and app content leaving
   // windows non-client chrome and app non-client chrome
   // in winRgn.
-  GetWindowRect(mWnd, &rect);
+  ::GetWindowRect(mWnd, &rect);
   rect.top += mCaptionHeight;
   rect.right -= mHorResizeMargin;
   rect.bottom -= mVertResizeMargin;
   rect.left += mHorResizeMargin;
-  MapWindowPoints(nullptr, mWnd, (LPPOINT)&rect, 2);
-  HRGN clientRgn = CreateRectRgnIndirect(&rect);
-  CombineRgn(winRgn, winRgn, clientRgn, RGN_DIFF);
-  DeleteObject(clientRgn);
-
-  // triggers ncpaint and paint events for the two areas
-  RedrawWindow(mWnd, nullptr, winRgn, RDW_FRAME | RDW_INVALIDATE);
-  DeleteObject(winRgn);
+  ::MapWindowPoints(nullptr, mWnd, (LPPOINT)&rect, 2);
+  nsAutoRegion clientRgn(::CreateRectRgnIndirect(&rect));
+  ::CombineRgn(winRgn, winRgn, clientRgn, RGN_DIFF);
+  return nsAutoRegion(winRgn.out());
 }
 
 /**************************************************************
@@ -2934,8 +2911,8 @@ static HCURSOR CursorForImage(const nsIWidget::Cursor& aCursor,
   LayoutDeviceIntPoint hotspot =
       RoundedToInt(CSSIntPoint(aCursor.mHotspotX, aCursor.mHotspotY) * aScale);
   HCURSOR cursor;
-  nsresult rv = nsWindowGfx::CreateIcon(aCursor.mContainer, true, hotspot,
-                                        layoutSize, &cursor);
+  nsresult rv = nsWindowGfx::CreateIcon(aCursor.mContainer, nullptr, true,
+                                        hotspot, layoutSize, &cursor);
   if (NS_FAILED(rv)) {
     return nullptr;
   }
@@ -3040,87 +3017,34 @@ void nsWindow::HideWindowChrome(bool aShouldHide) {
     return;
   }
 
-  if (mHideChrome == aShouldHide) return;
-
-  // Data manipulation: styles + ex-styles, and bitmasking operations thereupon.
-  struct Styles {
-    LONG_PTR style, ex;
-    constexpr Styles operator|(Styles const& that) const {
-      return Styles{.style = style | that.style, .ex = ex | that.ex};
-    }
-    constexpr Styles operator&(Styles const& that) const {
-      return Styles{.style = style & that.style, .ex = ex & that.ex};
-    }
-    constexpr Styles operator~() const {
-      return Styles{.style = ~style, .ex = ~ex};
-    }
-
-    // Compute a style-set which matches `zero` where the bits of `this` are 0
-    // and `one` where the bits of `this` are 1.
-    constexpr Styles merge(Styles zero, Styles one) const {
-      Styles const& mask = *this;
-      return (~mask & zero) | (mask & one);
-    }
-
-    // The dual of `merge`, above: returns a pair [zero, one] satisfying
-    // `a.merge(a.split(b)...) == b`. (Or its equivalent in valid C++.)
-    constexpr std::tuple<Styles, Styles> split(Styles data) const {
-      Styles const& mask = *this;
-      return {~mask & data, mask & data};
-    }
-  };
-
-  // Get styles from an HWND.
-  constexpr auto const GetStyles = [](HWND hwnd) {
-    return Styles{.style = ::GetWindowLongPtrW(hwnd, GWL_STYLE),
-                  .ex = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE)};
-  };
-  constexpr auto const SetStyles = [](HWND hwnd, Styles styles) {
-    VERIFY_WINDOW_STYLE(styles.style);
-    ::SetWindowLongPtrW(hwnd, GWL_STYLE, styles.style);
-    ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, styles.ex);
-  };
-
-  // Get styles from *this.
-  auto const GetCachedStyles = [&]() {
-    return mOldStyles.map([](auto const& m) {
-      return Styles{.style = m.style, .ex = m.exStyle};
-    });
-  };
-  auto const SetCachedStyles = [&](Styles styles) {
-    using WStyles = nsWindow::WindowStyles;
-    mOldStyles = Some(WStyles{.style = styles.style, .exStyle = styles.ex});
-  };
-
-  // The mask describing the "chrome" which this function is supposed to remove
-  // (or restore, as the case may be). Other style-flags will be left untouched.
-  constexpr static const Styles kChromeMask{
-      .style = WS_CAPTION | WS_THICKFRAME,
-      .ex = WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE |
-            WS_EX_STATICEDGE};
+  if (mHideChrome == aShouldHide) {
+    return;
+  }
 
   // The desired style-flagset for fullscreen windows. (This happens to be all
   // zeroes, but we don't need to rely on that.)
-  constexpr static const Styles kFullscreenChrome{.style = 0, .ex = 0};
+  constexpr static const WindowStyles kFullscreenChromeStyles{.style = 0,
+                                                              .ex = 0};
 
-  auto const [chromeless, currentChrome] = kChromeMask.split(GetStyles(hwnd));
+  auto const [chromeless, currentChrome] =
+      kChromeStylesMask.split(Styles::FromHWND(hwnd));
   Styles newChrome{}, oldChrome{};
 
   mHideChrome = aShouldHide;
   if (aShouldHide) {
-    newChrome = kFullscreenChrome;
+    newChrome = kFullscreenChromeStyles;
     oldChrome = currentChrome;
   } else {
     // if there's nothing to "restore" it to, just use what's there now
-    oldChrome = GetCachedStyles().refOr(currentChrome);
+    oldChrome = mOldStyles.refOr(currentChrome);
     newChrome = oldChrome;
     if (mFutureMarginsToUse) {
       SetNonClientMargins(mFutureMarginsOnceChromeShows);
     }
   }
 
-  SetCachedStyles(oldChrome);
-  SetStyles(hwnd, kChromeMask.merge(chromeless, newChrome));
+  mOldStyles = Some(oldChrome);
+  SetWindowStyles(hwnd, kChromeStylesMask.merge(chromeless, newChrome));
 }
 
 /**************************************************************
@@ -3879,7 +3803,7 @@ WindowRenderer* nsWindow::GetWindowRenderer() {
     WinCompositorWidgetInitData initData(
         reinterpret_cast<uintptr_t>(mWnd),
         reinterpret_cast<uintptr_t>(static_cast<nsIWidget*>(this)),
-        mTransparencyMode, mFrameState->GetSizeMode());
+        mTransparencyMode);
     // If we're not using the compositor, the options don't actually matter.
     CompositorOptions options(false, false);
     mBasicLayersSurface =
@@ -4926,8 +4850,6 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       UpdateNonClientMargins();
       nsUXThemeData::UpdateNativeThemeInfo();
 
-      UpdateDarkModeToolbar();
-
       // Invalidate the window so that the repaint will
       // pick up the new theme.
       Invalidate(true, true, true);
@@ -4995,12 +4917,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       auto GeckoClientToWinScreenRect =
           [&origin](LayoutDeviceIntRect aRect) -> RECT {
         aRect.MoveBy(origin);
-        return {
-            .left = aRect.x,
-            .top = aRect.y,
-            .right = aRect.XMost(),
-            .bottom = aRect.YMost(),
-        };
+        return WinUtils::ToWinRect(aRect);
       };
       auto SetButton = [&](size_t aIndex, WindowButtonType aType) {
         info->rgrect[aIndex] =
@@ -5096,10 +5013,6 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       }
 
     case WM_NCACTIVATE: {
-      /*
-       * WM_NCACTIVATE paints nc areas. Avoid this and re-route painting
-       * through WM_NCPAINT via InvalidateNonClientRegion.
-       */
       if (!mCustomNonClient) {
         break;
       }
@@ -5110,26 +5023,17 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
             "nsWindow::ForcePresent", this, &nsWindow::ForcePresent));
       }
 
-      // let the dwm handle nc painting on glass
-      // Never allow native painting if we are on fullscreen
-      if (mFrameState->GetSizeMode() != nsSizeMode_Fullscreen) break;
-
-      if (wParam == TRUE) {
-        // going active
-        *aRetValue = FALSE;  // ignored
-        result = true;
-        // invalidate to trigger a paint
-        InvalidateNonClientRegion();
-        break;
-      } else {
-        // going inactive
-        *aRetValue = TRUE;  // go ahead and deactive
-        result = true;
-        // invalidate to trigger a paint
-        InvalidateNonClientRegion();
-        break;
-      }
-    }
+      // ::DefWindowProc would paint nc areas. Avoid this, since we just want
+      // dwm to take care of re-displaying the glass effect if any. Quoting the
+      // docs[1]:
+      //
+      //     If this parameter is set to -1, DefWindowProc does not repaint the
+      //     nonclient area to reflect the state change.
+      //
+      // [1]:
+      // https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-ncactivate
+      lParam = -1;
+    } break;
 
     case WM_NCPAINT: {
       /*
@@ -5137,6 +5041,13 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
        * do seem to always send a WM_NCPAINT message, so let's update on that.
        */
       gfxDWriteFont::UpdateSystemTextVars();
+      if (mCustomNonClient &&
+          mTransparencyMode == TransparencyMode::Transparent) {
+        // We rely on dwm for glass / semi-transparent window painting, so we
+        // just need to make sure to clear the non-client area next time we get
+        // around to doing a main-thread paint.
+        mNeedsNCAreaClear = true;
+      }
     } break;
 
     case WM_POWERBROADCAST:
@@ -5685,7 +5596,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
           } else {
             sJustGotDeactivate = true;
           }
-          if (mIsTopWidgetWindow) {
+          if (IsTopLevelWidget()) {
             mLastKeyboardLayout = KeyboardLayout::GetLayout();
           }
         } else {
@@ -5889,24 +5800,23 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       break;
 
     case WM_GESTURENOTIFY: {
-      if (mWindowType != WindowType::Invisible) {
-        // A GestureNotify event is dispatched to decide which single-finger
-        // panning direction should be active (including none) and if pan
-        // feedback should be displayed. Java and plugin windows can make their
-        // own calls.
+      // A GestureNotify event is dispatched to decide which single-finger
+      // panning direction should be active (including none) and if pan
+      // feedback should be displayed. Java and plugin windows can make their
+      // own calls.
 
-        GESTURENOTIFYSTRUCT* gestureinfo = (GESTURENOTIFYSTRUCT*)lParam;
-        nsPointWin touchPoint;
-        touchPoint = gestureinfo->ptsLocation;
-        touchPoint.ScreenToClient(mWnd);
-        WidgetGestureNotifyEvent gestureNotifyEvent(true, eGestureNotify, this);
-        gestureNotifyEvent.mRefPoint =
-            LayoutDeviceIntPoint::FromUnknownPoint(touchPoint);
-        nsEventStatus status;
-        DispatchEvent(&gestureNotifyEvent, status);
-        mDisplayPanFeedback = gestureNotifyEvent.mDisplayPanFeedback;
-        if (!mTouchWindow)
-          mGesture.SetWinGestureSupport(mWnd, gestureNotifyEvent.mPanDirection);
+      GESTURENOTIFYSTRUCT* gestureinfo = (GESTURENOTIFYSTRUCT*)lParam;
+      nsPointWin touchPoint;
+      touchPoint = gestureinfo->ptsLocation;
+      touchPoint.ScreenToClient(mWnd);
+      WidgetGestureNotifyEvent gestureNotifyEvent(true, eGestureNotify, this);
+      gestureNotifyEvent.mRefPoint =
+          LayoutDeviceIntPoint::FromUnknownPoint(touchPoint);
+      nsEventStatus status;
+      DispatchEvent(&gestureNotifyEvent, status);
+      mDisplayPanFeedback = gestureNotifyEvent.mDisplayPanFeedback;
+      if (!mTouchWindow) {
+        mGesture.SetWinGestureSupport(mWnd, gestureNotifyEvent.mPanDirection);
       }
       result = false;  // should always bubble to DefWindowProc
     } break;
@@ -6586,11 +6496,6 @@ void nsWindow::OnWindowPosChanging(WINDOWPOS* info) {
     }
   }
 
-  // prevent rude external programs from making hidden window visible
-  if (mWindowType == WindowType::Invisible) {
-    info->flags &= ~SWP_SHOWWINDOW;
-  }
-
   // When waking from sleep or switching out of tablet mode, Windows 10
   // Version 1809 will reopen popup windows that should be hidden. Detect
   // this case and refuse to show the window.
@@ -6951,13 +6856,6 @@ void nsWindow::OnDestroy() {
   // Release references to children, device context, toolkit, and app shell.
   nsBaseWidget::OnDestroy();
 
-  // Clear our native parent handle.
-  // XXX Windows will take care of this in the proper order, and
-  // SetParent(nullptr)'s remove child on the parent already took place in
-  // nsBaseWidget's Destroy call above.
-  // SetParent(nullptr);
-  mParent = nullptr;
-
   // We have to destroy the native drag target before we null out our window
   // pointer.
   EnableDragDrop(false);
@@ -7024,18 +6922,6 @@ void nsWindow::OnSizeModeChange() {
   if (NeedsToTrackWindowOcclusionState()) {
     WinWindowOcclusionTracker::Get()->OnWindowVisibilityChanged(
         this, mode != nsSizeMode_Minimized);
-
-    wr::DebugFlags flags{0};
-    flags._0 = gfx::gfxVars::WebRenderDebugFlags();
-    bool debugEnabled = bool(flags & wr::DebugFlags::WINDOW_VISIBILITY_DBG);
-    if (debugEnabled && mCompositorWidgetDelegate) {
-      mCompositorWidgetDelegate->NotifyVisibilityUpdated(mode,
-                                                         mIsFullyOccluded);
-    }
-  }
-
-  if (mCompositorWidgetDelegate) {
-    mCompositorWidgetDelegate->OnWindowModeChange(mode);
   }
 
   if (mWidgetListener) {
@@ -7235,7 +7121,7 @@ a11y::LocalAccessible* nsWindow::GetAccessible() {
   if (a11y::PlatformDisabledState() == a11y::ePlatformIsDisabled)
     return nullptr;
 
-  if (mInDtor || mOnDestroyCalled || mWindowType == WindowType::Invisible) {
+  if (mInDtor || mOnDestroyCalled) {
     return nullptr;
   }
 
@@ -7280,13 +7166,17 @@ void nsWindow::SetWindowTranslucencyInner(TransparencyMode aMode) {
   }
 
   MOZ_ASSERT(WinUtils::GetTopLevelHWND(mWnd, true) == mWnd);
-  LONG_PTR exStyle = ::GetWindowLongPtr(mWnd, GWL_EXSTYLE);
-  if (aMode == TransparencyMode::Transparent) {
-    exStyle |= WS_EX_LAYERED;
-  } else {
-    exStyle &= ~WS_EX_LAYERED;
+  if (IsPopup()) {
+    // This can probably go away if we make transparent popups report true in
+    // WidgetTypeSupportsAcceleration(). See there for context.
+    LONG_PTR exStyle = ::GetWindowLongPtr(mWnd, GWL_EXSTYLE);
+    if (aMode == TransparencyMode::Transparent) {
+      exStyle |= WS_EX_LAYERED;
+    } else {
+      exStyle &= ~WS_EX_LAYERED;
+    }
+    ::SetWindowLongPtrW(mWnd, GWL_EXSTYLE, exStyle);
   }
-  ::SetWindowLongPtrW(mWnd, GWL_EXSTYLE, exStyle);
 
   mTransparencyMode = aMode;
 
@@ -7329,6 +7219,10 @@ void nsWindow::UpdateOpaqueRegionInternal() {
     }
   }
   DwmExtendFrameIntoClientArea(mWnd, &margins);
+  if (mTransparencyMode == TransparencyMode::Transparent) {
+    mNeedsNCAreaClear = true;
+    Invalidate();
+  }
 }
 
 /**************************************************************
@@ -8060,35 +7954,14 @@ void nsWindow::PickerClosed() {
 }
 
 bool nsWindow::WidgetTypeSupportsAcceleration() {
-  // We don't currently support using an accelerated layer manager with
-  // transparent windows so don't even try. I'm also not sure if we even
-  // want to support this case. See bug 593471.
-  //
-  // Windows' support for transparent accelerated surfaces isn't great.
-  // Some possible approaches:
-  //  - Readback the data and update it using
-  //  UpdateLayeredWindow/UpdateLayeredWindowIndirect
-  //    This is what WPF does. See
-  //    CD3DDeviceLevel1::PresentWithGDI/CD3DSwapChainWithSwDC in WpfGfx. The
-  //    rationale for not using IDirect3DSurface9::GetDC is explained here:
-  //    https://web.archive.org/web/20160521191104/https://blogs.msdn.microsoft.com/dwayneneed/2008/09/08/transparent-windows-in-wpf/
-  //  - Use D3D11_RESOURCE_MISC_GDI_COMPATIBLE, IDXGISurface1::GetDC(),
-  //    and UpdateLayeredWindowIndirect.
-  //    This is suggested here:
-  //    https://docs.microsoft.com/en-us/archive/msdn-magazine/2009/december/windows-with-c-layered-windows-with-direct2d
-  //    but might have the same problem that IDirect3DSurface9::GetDC has.
-  //  - Creating the window with the WS_EX_NOREDIRECTIONBITMAP flag and use
-  //  DirectComposition.
-  //    Not supported on Win7.
-  //  - Using DwmExtendFrameIntoClientArea with negative margins and something
-  //  to turn off the glass effect.
-  //    This doesn't work when the DWM is not running (Win7)
-  //
-  // Also see bug 1150376, D3D11 composition can cause issues on some devices
-  // on Windows 7 where presentation fails randomly for windows with drop
-  // shadows.
-  return mTransparencyMode != TransparencyMode::Transparent &&
-         !(IsPopup() && DeviceManagerDx::Get()->IsWARP());
+  if (IsPopup()) {
+    // This transparency+popup checks go back to bug 1150376 and bug 943204,
+    // but removing it causes reproducible timeouts on automation, see bug
+    // 1891063 comment 11.
+    return mTransparencyMode != TransparencyMode::Transparent &&
+           !DeviceManagerDx::Get()->IsWARP();
+  }
+  return true;
 }
 
 bool nsWindow::DispatchTouchEventFromWMPointer(
@@ -8283,7 +8156,7 @@ void nsWindow::GetCompositorWidgetInitData(
   *aInitData = WinCompositorWidgetInitData(
       reinterpret_cast<uintptr_t>(mWnd),
       reinterpret_cast<uintptr_t>(static_cast<nsIWidget*>(this)),
-      mTransparencyMode, mFrameState->GetSizeMode());
+      mTransparencyMode);
 }
 
 bool nsWindow::SynchronouslyRepaintOnResize() { return false; }

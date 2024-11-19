@@ -26,8 +26,8 @@ use crate::prim_store::{DeferredResolve, PrimitiveInstance};
 use crate::profiler::{self, TransactionProfile};
 use crate::render_backend::{DataStores, ScratchBuffer};
 use crate::renderer::{GpuBufferF, GpuBufferBuilderF, GpuBufferI, GpuBufferBuilderI, GpuBufferBuilder};
-use crate::render_target::{RenderTarget, PictureCacheTarget, TextureCacheRenderTarget, PictureCacheTargetKind};
-use crate::render_target::{RenderTargetContext, RenderTargetKind, AlphaRenderTarget, ColorRenderTarget};
+use crate::render_target::{PictureCacheTarget, PictureCacheTargetKind};
+use crate::render_target::{RenderTargetContext, RenderTargetKind, RenderTarget};
 use crate::render_task_graph::{RenderTaskGraph, Pass, SubPassSurface};
 use crate::render_task_graph::{RenderPass, RenderTaskGraphBuilder};
 use crate::render_task::{RenderTaskKind, StaticRenderTaskSurface};
@@ -520,12 +520,12 @@ impl FrameBuilder {
         spatial_tree: &mut SpatialTree,
         dirty_rects_are_valid: bool,
         profile: &mut TransactionProfile,
-        minimap_data: FastHashMap<ExternalScrollId, MinimapData>
+        minimap_data: FastHashMap<ExternalScrollId, MinimapData>,
+        mut frame_memory: FrameMemory,
     ) -> Frame {
         profile_scope!("build");
         profile_marker!("BuildFrame");
 
-        let mut frame_memory = FrameMemory::new();
         frame_memory.begin_frame(stamp.frame_id());
 
         profile.set(profiler::PRIMITIVES, scene.prim_instances.len());
@@ -737,7 +737,7 @@ impl FrameBuilder {
         return
       }
 
-      // In our main walk over the spatial tree (below), for nodes inside a 
+      // In our main walk over the spatial tree (below), for nodes inside a
       // subtree rooted at a root-content node, we need some information from
       // that enclosing root-content node. To collect this information, do an
       // preliminary walk over the spatial tree now and collect the root-content
@@ -800,7 +800,7 @@ impl FrameBuilder {
             let world_transform = spatial_tree
                 .get_world_viewport_transform(index)
                 .into_transform();
-            let mut local_to_root_content = 
+            let mut local_to_root_content =
                 world_transform.with_destination::<LayoutPixel>();
             let mut root_content_to_world = LayoutToWorldTransform::default();
             let mut root_content_clip = None;
@@ -940,11 +940,13 @@ pub fn build_render_pass(
             SubPassSurface::Dynamic { target_kind, texture_id, used_rect } => {
                 match target_kind {
                     RenderTargetKind::Color => {
-                        let mut target = ColorRenderTarget::new(
+                        let mut target = RenderTarget::new(
+                            RenderTargetKind::Color,
+                            false,
                             texture_id,
                             screen_size,
                             gpu_supports_fast_clears,
-                            used_rect,
+                            Some(used_rect),
                             &ctx.frame_memory,
                         );
 
@@ -963,11 +965,13 @@ pub fn build_render_pass(
                         pass.color.targets.push(target);
                     }
                     RenderTargetKind::Alpha => {
-                        let mut target = AlphaRenderTarget::new(
+                        let mut target = RenderTarget::new(
+                            RenderTargetKind::Alpha,
+                            false,
                             texture_id,
                             screen_size,
                             gpu_supports_fast_clears,
-                            used_rect,
+                            Some(used_rect),
                             &ctx.frame_memory,
                         );
 
@@ -1079,10 +1083,26 @@ pub fn build_render_pass(
                 let texture = pass.texture_cache
                     .entry(texture)
                     .or_insert_with(||
-                        TextureCacheRenderTarget::new(target_kind, &ctx.frame_memory)
+                        RenderTarget::new(
+                            target_kind,
+                            true,
+                            texture,
+                            screen_size,
+                            gpu_supports_fast_clears,
+                            None,
+                            &ctx.frame_memory
+                        )
                     );
                 for task_id in &sub_pass.task_ids {
-                    texture.add_task(*task_id, render_tasks, &ctx.frame_memory);
+                    texture.add_task(
+                        *task_id,
+                        ctx,
+                        gpu_cache,
+                        gpu_buffer_builder,
+                        render_tasks,
+                        clip_store,
+                        transforms,
+                    );
                 }
             }
             SubPassSurface::Persistent { surface: StaticRenderTaskSurface::ReadOnly { .. } } => {
@@ -1113,6 +1133,20 @@ pub fn build_render_pass(
         cmd_buffers,
         gpu_buffer_builder,
     );
+
+    for target in &mut pass.texture_cache.values_mut() {
+        target.build(
+            ctx,
+            gpu_cache,
+            render_tasks,
+            prim_headers,
+            transforms,
+            z_generator,
+            prim_instances,
+            cmd_buffers,
+            gpu_buffer_builder,
+        );
+    }
 
     pass
 }

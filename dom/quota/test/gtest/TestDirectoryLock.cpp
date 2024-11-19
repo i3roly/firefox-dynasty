@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 #include "mozilla/SpinEventLoopUntil.h"
 #include "mozilla/dom/quota/OriginScope.h"
+#include "mozilla/dom/quota/UniversalDirectoryLock.h"
 
 namespace mozilla::dom::quota::test {
 
@@ -26,8 +27,7 @@ TEST_F(DOM_Quota_DirectoryLock, Drop_Timing) {
     ASSERT_TRUE(quotaManager);
 
     RefPtr<UniversalDirectoryLock> exclusiveDirectoryLock =
-        DirectoryLockImpl::CreateInternal(
-            WrapNotNullUnchecked(quotaManager),
+        quotaManager->CreateDirectoryLockInternal(
             PersistenceScope::CreateFromNull(), OriginScope::FromNull(),
             Nullable<Client::Type>(),
             /* aExclusive */ true, DirectoryLockCategory::None);
@@ -46,8 +46,7 @@ TEST_F(DOM_Quota_DirectoryLock, Drop_Timing) {
     exclusiveDirectoryLock = nullptr;
 
     RefPtr<UniversalDirectoryLock> sharedDirectoryLock =
-        DirectoryLockImpl::CreateInternal(
-            WrapNotNullUnchecked(quotaManager),
+        quotaManager->CreateDirectoryLockInternal(
             PersistenceScope::CreateFromNull(), OriginScope::FromNull(),
             Nullable<Client::Type>(),
             /* aExclusive */ false, DirectoryLockCategory::None);

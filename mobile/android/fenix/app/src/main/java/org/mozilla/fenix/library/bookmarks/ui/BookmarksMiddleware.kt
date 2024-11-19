@@ -31,7 +31,7 @@ private const val WARN_OPEN_ALL_SIZE = 15
  * @param bookmarksStorage Storage layer for reading and writing bookmarks.
  * @param clipboardManager For copying bookmark URLs.
  * @param addNewTabUseCase For opening tabs from menus.
- * @param navController NavController for navigating within the local Composable nav graph.
+ * @param getNavController Fetch the NavController for navigating within the local Composable nav graph.
  * @param exitBookmarks Invoked when back is clicked while the navController's backstack is empty.
  * @param wasPreviousAppDestinationHome Check whether the previous destination before entering bookmarks was home.
  * @param navigateToSearch Navigate to search.
@@ -49,7 +49,7 @@ internal class BookmarksMiddleware(
     private val bookmarksStorage: BookmarksStorage,
     private val clipboardManager: ClipboardManager?,
     private val addNewTabUseCase: TabsUseCases.AddNewTabUseCase,
-    private val navController: NavController,
+    private val getNavController: () -> NavController,
     private val exitBookmarks: () -> Unit,
     private val wasPreviousAppDestinationHome: () -> Boolean,
     private val navigateToSearch: () -> Unit,
@@ -123,35 +123,52 @@ internal class BookmarksMiddleware(
                 context.store.tryDispatchReceivedRecursiveCountUpdate()
             }
             SearchClicked -> navigateToSearch()
-            AddFolderClicked -> navController.navigate(BookmarksDestinations.ADD_FOLDER)
+            AddFolderClicked -> getNavController().navigate(BookmarksDestinations.ADD_FOLDER)
+            CloseClicked -> exitBookmarks()
             SignIntoSyncClicked -> navigateToSignIntoSync()
-            is EditBookmarkClicked -> navController.navigate(BookmarksDestinations.EDIT_BOOKMARK)
+            is EditBookmarkClicked -> getNavController().navigate(BookmarksDestinations.EDIT_BOOKMARK)
             BackClicked -> {
                 when {
                     // non-list screen cases need to come first, since we presume if all subscreen
                     // state is null then we are on the list screen
                     preReductionState.bookmarksAddFolderState != null &&
                         context.state.bookmarksAddFolderState == null -> {
-                        navController.popBackStack()
                         scope.launch(ioDispatcher) {
                             val newFolderTitle =
                                 preReductionState.bookmarksAddFolderState.folderBeingAddedTitle
                             if (newFolderTitle.isNotEmpty()) {
-                                bookmarksStorage.addFolder(
+                                val guid = bookmarksStorage.addFolder(
                                     parentGuid = preReductionState.bookmarksAddFolderState.parent.guid,
                                     title = newFolderTitle,
                                 )
+                                val folder = BookmarkItem.Folder(
+                                    guid = guid,
+                                    title = newFolderTitle,
+                                )
+
+                                context.store.dispatch(AddFolderAction.FolderCreated(folder))
+
+                                withContext(Dispatchers.Main) {
+                                    if (preReductionState.bookmarksSelectFolderState != null) {
+                                        getNavController().popBackStack(
+                                            BookmarksDestinations.EDIT_BOOKMARK,
+                                            inclusive = false,
+                                        )
+                                    } else {
+                                        getNavController().popBackStack()
+                                    }
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    getNavController().popBackStack()
+                                }
                             }
                             context.store.tryDispatchLoadFor(preReductionState.currentFolder.guid)
-                        }
-
-                        if (preReductionState.bookmarksSelectFolderState != null) {
-                            context.store.tryDispatchLoadFolders()
                         }
                     }
 
                     preReductionState.bookmarksSelectFolderState != null -> {
-                        navController.popBackStack()
+                        getNavController().popBackStack()
                         preReductionState.bookmarksMultiselectMoveState?.also {
                             if (it.destination == preReductionState.currentFolder.guid) {
                                 return@also
@@ -167,7 +184,7 @@ internal class BookmarksMiddleware(
 
                     preReductionState.bookmarksEditFolderState != null -> {
                         val editState = preReductionState.bookmarksEditFolderState
-                        navController.popBackStack()
+                        getNavController().popBackStack()
                         scope.launch(ioDispatcher) {
                             if (editState.folder.title.isNotEmpty()) {
                                 preReductionState.createBookmarkInfo()?.also {
@@ -179,7 +196,7 @@ internal class BookmarksMiddleware(
                     }
 
                     preReductionState.bookmarksEditBookmarkState != null -> {
-                        if (!navController.popBackStack()) {
+                        if (!getNavController().popBackStack()) {
                             exitBookmarks()
                         }
                         scope.launch(ioDispatcher) {
@@ -208,7 +225,7 @@ internal class BookmarksMiddleware(
                     }
 
                     else -> {
-                        if (!navController.popBackStack()) {
+                        if (!getNavController().popBackStack()) {
                             exitBookmarks()
                         }
                     }
@@ -216,13 +233,13 @@ internal class BookmarksMiddleware(
             }
 
             EditBookmarkAction.FolderClicked -> {
-                navController.navigate(BookmarksDestinations.SELECT_FOLDER)
+                getNavController().navigate(BookmarksDestinations.SELECT_FOLDER)
             }
 
             EditBookmarkAction.DeleteClicked -> {
                 // 💡When we're in the browser -> edit flow, we back out to the browser bypassing our
                 // snackbar logic. So we have to also do the delete here.
-                if (!navController.popBackStack()) {
+                if (!getNavController().popBackStack()) {
                     scope.launch {
                         preReductionState.bookmarksEditBookmarkState?.also {
                             bookmarksStorage.deleteNode(it.bookmark.guid)
@@ -237,7 +254,7 @@ internal class BookmarksMiddleware(
             EditFolderAction.ParentFolderClicked,
             AddFolderAction.ParentFolderClicked,
             -> {
-                navController.navigate(BookmarksDestinations.SELECT_FOLDER)
+                getNavController().navigate(BookmarksDestinations.SELECT_FOLDER)
             }
 
             SelectFolderAction.ViewAppeared -> context.store.tryDispatchLoadFolders()
@@ -258,7 +275,7 @@ internal class BookmarksMiddleware(
                 }
 
                 if (preReductionState.bookmarksEditFolderState != null) {
-                    navController.popBackStack()
+                    getNavController().popBackStack()
                 }
             }
             OpenTabsConfirmationDialogAction.ConfirmTapped -> scope.launch {
@@ -299,6 +316,7 @@ internal class BookmarksMiddleware(
             is EditBookmarkAction.URLChanged,
             is BookmarksLoaded,
             is EditFolderAction.TitleChanged,
+            is AddFolderAction.FolderCreated,
             is AddFolderAction.TitleChanged,
             is SelectFolderAction.FoldersLoaded,
             is SelectFolderAction.ItemClicked,
@@ -386,7 +404,7 @@ internal class BookmarksMiddleware(
                 when (node.type) {
                     BookmarkNodeType.ITEM -> BookmarkItem.Bookmark(
                         url = node.url!!,
-                        title = node.title!!,
+                        title = node.title ?: node.url ?: "",
                         previewImageUrl = node.url!!,
                         guid = node.guid,
                     )
@@ -433,7 +451,7 @@ internal class BookmarksMiddleware(
         when (this) {
             // bookmark menu actions
             is BookmarksListMenuAction.Bookmark.EditClicked -> {
-                navController.navigate(BookmarksDestinations.EDIT_BOOKMARK)
+                getNavController().navigate(BookmarksDestinations.EDIT_BOOKMARK)
             }
 
             is BookmarksListMenuAction.Bookmark.CopyClicked -> {
@@ -459,7 +477,7 @@ internal class BookmarksMiddleware(
 
             // folder menu actions
             is BookmarksListMenuAction.Folder.EditClicked -> {
-                navController.navigate(BookmarksDestinations.EDIT_FOLDER)
+                getNavController().navigate(BookmarksDestinations.EDIT_FOLDER)
             }
 
             is BookmarksListMenuAction.Folder.OpenAllInNormalTabClicked -> scope.launch {
@@ -496,11 +514,11 @@ internal class BookmarksMiddleware(
 
             // top bar menu actions
             BookmarksListMenuAction.MultiSelect.EditClicked -> {
-                navController.navigate(BookmarksDestinations.EDIT_BOOKMARK)
+                getNavController().navigate(BookmarksDestinations.EDIT_BOOKMARK)
             }
 
             BookmarksListMenuAction.MultiSelect.MoveClicked -> {
-                navController.navigate(BookmarksDestinations.SELECT_FOLDER)
+                getNavController().navigate(BookmarksDestinations.SELECT_FOLDER)
             }
 
             BookmarksListMenuAction.MultiSelect.OpenInNormalTabsClicked -> scope.launch {

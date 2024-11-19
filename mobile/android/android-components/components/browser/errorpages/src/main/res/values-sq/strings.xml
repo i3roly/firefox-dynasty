@@ -113,7 +113,7 @@
     <string name="mozac_browser_errorpages_offline_message"><![CDATA[<p>Shfletuesi po punon nën mënyrën jashtë linje dhe s’lidhet dot te objekti i kërkuar.</p>
       <ul>
         <li>A është pajisja e lidhur te një rrjet aktiv?</li>
-        <li>Shtypni “Riprovoni” që të kalohet nën mënyrën në linjë dhe të ringarkohet faqja.</li>
+        <li>Shtypni “Riprovoni” që të kalohet nën mënyrën “Në linjë” dhe të ringarkohet faqja.</li>
       </ul>]]></string>
 
     <!-- The document title and heading of the error page shown when the browser prevents loading a website on a restricted port. -->
@@ -177,9 +177,16 @@
       </ul>]]></string>
 
     <!-- The document title and heading of an error page. -->
-    <string name="mozac_browser_errorpages_no_internet_title">Pa lidhje internet</string>
+    <string name="mozac_browser_errorpages_no_internet_title" moz:removedIn="133" tools:ignore="UnusedResources">Pa lidhje internet</string>
+    <!-- The document title and heading of an error page. -->
+    <string name="mozac_browser_errorpages_no_internet_title_2">Duket se ka një problem me lidhjen tuaj në internet</string>
     <!-- The main body text of this error page. It will be shown beneath the title -->
-    <string name="mozac_browser_errorpages_no_internet_message">Kontrolloni lidhjen tuaj në rrjet, ose provoni të ringarkoni faqen pas pak çastesh.</string>
+    <string name="mozac_browser_errorpages_no_internet_message" moz:removedIn="133" tools:ignore="UnusedResources">Kontrolloni lidhjen tuaj në rrjet, ose provoni të ringarkoni faqen pas pak çastesh.</string>
+    <!-- The main body text of this error page. It will be shown beneath the title -->
+    <string name="mozac_browser_errorpages_no_internet_message_2">Provoni të lidheni që nga një pajisje tjetër. Shihni modemin ose rrugëzuesin tuaj. Shkëputuni dhe rilidhuni me Wi-Fi-n.</string>
+    <!-- The document title and heading of an error page. -->
+    <string name="mozac_browser_errorpages_no_internet_error_code">Kod Gabimi: NS_ERROR_OFFLINE</string>
+
     <!-- Text that will show up on the button at the bottom of the error page -->
     <string name="mozac_browser_errorpages_no_internet_refresh_button">Ringarkoje</string>
 
@@ -206,7 +213,7 @@
       <p>Adresa tregon një protokoll (p.sh., <q>wxyz://</q>) të cilin shfletuesi s’e njeh, kështu që s’mund të lidhet si duhet me këtë sajt.</p>
       <ul>
         <li>Mos po përpiqeni të hapni shërbime multimedia apo shërbim tjetër jo tekst? Shihni te sajti për domosdoshmëri ekstra.</li>
-        <li>Disa protokolle mund të lypin software ose shtojca prej palësh të treta, përpara se shfletuesi të mund t’i njohë.</li>
+        <li>Disa protokolle mund të lypin <em>software</em> ose shtojca prej palësh të treta, përpara se shfletuesi të mund t’i njohë.</li>
       </ul>
     ]]></string>
 
@@ -263,7 +270,7 @@
     <string name="mozac_browser_errorpages_safe_browsing_unwanted_uri_title">Problem sajti të padëshiruar</string>
     <!-- The %1$s will be replaced by the malicious website URL-->
     <string name="mozac_browser_errorpages_safe_browsing_unwanted_uri_message"><![CDATA[
-      <p>Sajti te %1$s është raportuar se shërben software të padëshiruar dhe është bllokuar bazuar në parapëlqimet tuaja për sigurinë.</p>
+      <p>Sajti te %1$s është raportuar se shërben <em>software</em> të padëshiruar dhe është bllokuar bazuar në parapëlqimet tuaja për sigurinë.</p>
     ]]></string>
 
     <!-- The document title and heading of an error page. -->

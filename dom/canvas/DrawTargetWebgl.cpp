@@ -47,11 +47,25 @@ BackingTexture::BackingTexture(const IntSize& aSize, SurfaceFormat aFormat,
                                const RefPtr<WebGLTexture>& aTexture)
     : mSize(aSize), mFormat(aFormat), mTexture(aTexture) {}
 
+#ifdef XP_WIN
+// Work around buggy ANGLE/D3D drivers that may copy blocks of pixels outside
+// the row length. Extra space is reserved at the end of each row up to stride
+// alignment. This does not affect standalone textures.
+static const Etagere::AllocatorOptions kR8AllocatorOptions = {16, 1, 1, 0};
+#endif
+
 SharedTexture::SharedTexture(const IntSize& aSize, SurfaceFormat aFormat,
                              const RefPtr<WebGLTexture>& aTexture)
     : BackingTexture(aSize, aFormat, aTexture),
       mAtlasAllocator(
-          Etagere::etagere_atlas_allocator_new(aSize.width, aSize.height)) {}
+#ifdef XP_WIN
+          aFormat == SurfaceFormat::A8
+              ? Etagere::etagere_atlas_allocator_with_options(
+                    aSize.width, aSize.height, &kR8AllocatorOptions)
+              :
+#endif
+              Etagere::etagere_atlas_allocator_new(aSize.width, aSize.height)) {
+}
 
 SharedTexture::~SharedTexture() {
   if (mAtlasAllocator) {
@@ -835,9 +849,9 @@ void SharedContextWebgl::SetTexFilter(WebGLTexture* aTex, bool aFilter) {
 
 void SharedContextWebgl::InitTexParameters(WebGLTexture* aTex, bool aFilter) {
   mWebgl->TexParameter_base(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_S,
-                            FloatOrInt(LOCAL_GL_CLAMP_TO_EDGE));
+                            FloatOrInt(LOCAL_GL_REPEAT));
   mWebgl->TexParameter_base(LOCAL_GL_TEXTURE_2D, LOCAL_GL_TEXTURE_WRAP_T,
-                            FloatOrInt(LOCAL_GL_CLAMP_TO_EDGE));
+                            FloatOrInt(LOCAL_GL_REPEAT));
   SetTexFilter(aTex, aFilter);
 }
 
@@ -1433,8 +1447,9 @@ inline Maybe<Rect> DrawTargetWebgl::RectClippedToViewport(
 // such that when transformed and clipped in the shader it will not round bits
 // from the mantissa in a way that will diverge in a noticeable way from path
 // geometry calculated by the path fallback.
-static inline bool RectInsidePrecisionLimits(const RectDouble& aRect) {
-  return RectDouble(-(1 << 20), -(1 << 20), 2 << 20, 2 << 20).Contains(aRect);
+template <typename R>
+static inline bool RectInsidePrecisionLimits(const R& aRect) {
+  return R(-(1 << 20), -(1 << 20), 2 << 20, 2 << 20).Contains(aRect);
 }
 
 void DrawTargetWebgl::ClearRect(const Rect& aRect) {
@@ -1620,10 +1635,7 @@ bool DrawTargetWebgl::RemoveAllClips() {
   return true;
 }
 
-void DrawTargetWebgl::CopyToFallback(DrawTarget* aDT) {
-  if (RefPtr<SourceSurface> snapshot = Snapshot()) {
-    aDT->CopySurface(snapshot, snapshot->GetRect(), gfx::IntPoint(0, 0));
-  }
+bool DrawTargetWebgl::CopyToFallback(DrawTarget* aDT) {
   aDT->RemoveAllClips();
   for (auto& clipStack : mClipStack) {
     aDT->SetTransform(clipStack.mTransform);
@@ -1634,6 +1646,17 @@ void DrawTargetWebgl::CopyToFallback(DrawTarget* aDT) {
     }
   }
   aDT->SetTransform(GetTransform());
+
+  // An existing data snapshot is required for fallback, as we have to avoid
+  // trying to touch the WebGL context, which is assumed to be invalid and not
+  // suitable for readback.
+  if (HasDataSnapshot()) {
+    if (RefPtr<SourceSurface> snapshot = Snapshot()) {
+      aDT->CopySurface(snapshot, snapshot->GetRect(), gfx::IntPoint(0, 0));
+      return true;
+    }
+  }
+  return false;
 }
 
 // Whether a given composition operator can be mapped to a WebGL blend mode.
@@ -1650,6 +1673,24 @@ static inline bool SupportsDrawOptions(const DrawOptions& aOptions) {
   }
 }
 
+static inline bool SupportsExtendMode(const SurfacePattern& aPattern) {
+  switch (aPattern.mExtendMode) {
+    case ExtendMode::CLAMP:
+      return true;
+    case ExtendMode::REPEAT:
+    case ExtendMode::REPEAT_X:
+    case ExtendMode::REPEAT_Y:
+      if ((!aPattern.mSurface ||
+           aPattern.mSurface->GetType() == SurfaceType::WEBGL) &&
+          !aPattern.mSamplingRect.IsEmpty()) {
+        return false;
+      }
+      return true;
+    default:
+      return false;
+  }
+}
+
 // Whether a pattern can be mapped to an available WebGL shader.
 bool SharedContextWebgl::SupportsPattern(const Pattern& aPattern) {
   switch (aPattern.GetType()) {
@@ -1657,7 +1698,7 @@ bool SharedContextWebgl::SupportsPattern(const Pattern& aPattern) {
       return true;
     case PatternType::SURFACE: {
       auto surfacePattern = static_cast<const SurfacePattern&>(aPattern);
-      if (surfacePattern.mExtendMode != ExtendMode::CLAMP) {
+      if (!SupportsExtendMode(surfacePattern)) {
         return false;
       }
       if (surfacePattern.mSurface) {
@@ -2273,7 +2314,9 @@ bool SharedContextWebgl::DrawRectAccel(
       if (handle && handle->IsValid() &&
           (surfacePattern.mSamplingRect.IsEmpty() ||
            handle->GetSamplingRect().IsEqualEdges(
-               surfacePattern.mSamplingRect))) {
+               surfacePattern.mSamplingRect)) &&
+          (surfacePattern.mExtendMode == ExtendMode::CLAMP ||
+           handle->GetType() == TextureHandle::STANDALONE)) {
         texSize = handle->GetSize();
         format = handle->GetFormat();
         offset = handle->GetSamplingOffset();
@@ -2343,7 +2386,9 @@ bool SharedContextWebgl::DrawRectAccel(
         // There is no existing handle. Try to allocate a new one. If the
         // surface size may change via a forced update, then don't allocate
         // from a shared texture page.
-        handle = AllocateTextureHandle(format, texSize, !aForceUpdate);
+        handle = AllocateTextureHandle(
+            format, texSize,
+            !aForceUpdate && surfacePattern.mExtendMode == ExtendMode::CLAMP);
         if (!handle) {
           MOZ_ASSERT(false);
           break;
@@ -2478,6 +2523,24 @@ bool SharedContextWebgl::DrawRectAccel(
           (bounds.XMost() - 0.5f) / backingSizeF.width,
           (bounds.YMost() - 0.5f) / backingSizeF.height,
       };
+      switch (surfacePattern.mExtendMode) {
+        case ExtendMode::REPEAT:
+          texBounds[0] = -1e16f;
+          texBounds[1] = -1e16f;
+          texBounds[2] = 1e16f;
+          texBounds[3] = 1e16f;
+          break;
+        case ExtendMode::REPEAT_X:
+          texBounds[0] = -1e16f;
+          texBounds[2] = 1e16f;
+          break;
+        case ExtendMode::REPEAT_Y:
+          texBounds[1] = -1e16f;
+          texBounds[3] = 1e16f;
+          break;
+        default:
+          break;
+      }
       MaybeUniformData(LOCAL_GL_FLOAT_VEC4, mImageProgramTexBounds, texBounds,
                        mImageProgramUniformState.mTexBounds);
 
@@ -3297,6 +3360,10 @@ bool SharedContextWebgl::DrawPathAccel(
   // If the path is empty, then there is nothing to draw.
   if (bounds.IsEmpty()) {
     return true;
+  }
+  // Avoid integer conversion errors with abnormally large paths.
+  if (!RectInsidePrecisionLimits(bounds)) {
+    return false;
   }
   IntRect viewport(IntPoint(), mViewportSize);
   if (aShadow) {

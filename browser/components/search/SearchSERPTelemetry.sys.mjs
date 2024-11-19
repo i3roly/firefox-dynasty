@@ -20,10 +20,6 @@ ChromeUtils.defineLazyGetter(lazy, "gCryptoHash", () => {
   return Cc["@mozilla.org/security/hash;1"].createInstance(Ci.nsICryptoHash);
 });
 
-// The various histograms and scalars that we report to.
-const SEARCH_CONTENT_SCALAR_BASE = "browser.search.content.";
-const SEARCH_WITH_ADS_SCALAR_BASE = "browser.search.withads.";
-const SEARCH_AD_CLICKS_SCALAR_BASE = "browser.search.adclicks.";
 const SEARCH_DATA_TRANSFERRED_SCALAR = "browser.search.data_transferred";
 const SEARCH_TELEMETRY_PRIVATE_BROWSING_KEY_SUFFIX = "pb";
 
@@ -936,6 +932,9 @@ class TelemetryHandler {
     }
 
     let queries = new URLSearchParams(url.split("#")[0].split("?")[1]);
+    queries.forEach((v, k) => {
+      queries.set(k.toLowerCase(), v);
+    });
 
     let isSPA = !!searchProviderInfo.isSPA;
     if (isSPA) {
@@ -971,7 +970,7 @@ class TelemetryHandler {
     let type = "organic";
     let code;
     if (searchProviderInfo.codeParamName) {
-      code = queries.get(searchProviderInfo.codeParamName);
+      code = queries.get(searchProviderInfo.codeParamName.toLowerCase());
       if (code) {
         // The code is only included if it matches one of the specific ones.
         if (searchProviderInfo.taggedCodes.includes(code)) {
@@ -993,7 +992,9 @@ class TelemetryHandler {
         // Especially Bing requires lots of extra work related to cookies.
         for (let followOnCookie of searchProviderInfo.followOnCookies) {
           if (followOnCookie.extraCodeParamName) {
-            let eCode = queries.get(followOnCookie.extraCodeParamName);
+            let eCode = queries.get(
+              followOnCookie.extraCodeParamName.toLowerCase()
+            );
             if (
               !eCode ||
               !followOnCookie.extraCodePrefixes.some(p => eCode.startsWith(p))
@@ -1052,11 +1053,8 @@ class TelemetryHandler {
    */
   _reportSerpPage(info, source, url) {
     let payload = `${info.provider}:${info.type}:${info.code || "none"}`;
-    Services.telemetry.keyedScalarAdd(
-      SEARCH_CONTENT_SCALAR_BASE + source,
-      payload,
-      1
-    );
+    let name = source.replace(/_([a-z])/g, (m, p) => p.toUpperCase());
+    Glean.browserSearchContent[name][payload].add(1);
     lazy.logConsole.debug("Impression:", payload, url);
   }
 
@@ -1362,11 +1360,10 @@ class ContentHandler {
       }
 
       try {
-        Services.telemetry.keyedScalarAdd(
-          SEARCH_AD_CLICKS_SCALAR_BASE + item.source,
-          `${info.telemetryId}:${item.info.type}`,
-          1
-        );
+        let name = item.source.replace(/_([a-z])/g, (m, p) => p.toUpperCase());
+        Glean.browserSearchAdclicks[name][
+          `${info.telemetryId}:${item.info.type}`
+        ].add(1);
         wrappedChannel._adClickRecorded = true;
         if (item.newtabSessionId) {
           Glean.newtabSearchAd.click.record({
@@ -1661,11 +1658,10 @@ class ContentHandler {
       item.source,
       info.url
     );
-    Services.telemetry.keyedScalarAdd(
-      SEARCH_WITH_ADS_SCALAR_BASE + item.source,
-      `${item.info.provider}:${item.info.type}`,
-      1
-    );
+    let name = item.source.replace(/_([a-z])/g, (m, p) => p.toUpperCase());
+    Glean.browserSearchWithads[name][
+      `${item.info.provider}:${item.info.type}`
+    ].add(1);
     Services.obs.notifyObservers(null, "reported-page-with-ads");
 
     telemetryState.adsReported = true;

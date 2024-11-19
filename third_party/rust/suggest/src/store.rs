@@ -34,6 +34,7 @@ use crate::{
 ///
 /// Using a builder is preferred to calling the constructor directly since it's harder to confuse
 /// the data_path and cache_path strings.
+#[derive(uniffi::Object)]
 pub struct SuggestStoreBuilder(Mutex<SuggestStoreBuilderInner>);
 
 #[derive(Default)]
@@ -50,7 +51,9 @@ impl Default for SuggestStoreBuilder {
     }
 }
 
+#[uniffi::export]
 impl SuggestStoreBuilder {
+    #[uniffi::constructor]
     pub fn new() -> SuggestStoreBuilder {
         Self(Mutex::new(SuggestStoreBuilderInner::default()))
     }
@@ -60,6 +63,7 @@ impl SuggestStoreBuilder {
         self
     }
 
+    /// Deprecated: this is no longer used by the suggest component.
     pub fn cache_path(self: Arc<Self>, _path: String) -> Arc<Self> {
         // We used to use this, but we're not using it anymore, just ignore the call
         self
@@ -75,6 +79,11 @@ impl SuggestStoreBuilder {
         self
     }
 
+    /// Add an sqlite3 extension to load
+    ///
+    /// library_name should be the name of the library without any extension, for example `libmozsqlite3`.
+    /// entrypoint should be the entry point, for example `sqlite3_fts5_init`.  If `null` (the default)
+    /// entry point will be used (see https://sqlite.org/loadext.html for details).
     pub fn load_extension(
         self: Arc<Self>,
         library: String,
@@ -109,7 +118,7 @@ impl SuggestStoreBuilder {
 }
 
 /// What should be interrupted when [SuggestStore::interrupt] is called?
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, uniffi::Enum)]
 pub enum InterruptKind {
     /// Interrupt read operations like [SuggestStore::query]
     Read,
@@ -148,13 +157,16 @@ pub enum InterruptKind {
 ///    to request a small subset of the Suggest data and download the rest
 ///    later, while a desktop on a fast link might download the entire dataset
 ///    on the first launch.
+#[derive(uniffi::Object)]
 pub struct SuggestStore {
     inner: SuggestStoreInner<RemoteSettingsClient>,
 }
 
+#[uniffi::export]
 impl SuggestStore {
     /// Creates a Suggest store.
     #[handle_error(Error)]
+    #[uniffi::constructor(default(settings_config = None))]
     pub fn new(
         path: &str,
         settings_config: Option<RemoteSettingsConfig>,
@@ -212,6 +224,7 @@ impl SuggestStore {
     /// This should be called when the user types new input into the address
     /// bar, to ensure that they see fresh suggestions as they type. This
     /// method does not interrupt any ongoing ingests.
+    #[uniffi::method(default(kind = None))]
     pub fn interrupt(&self, kind: Option<InterruptKind>) {
         self.inner.interrupt(kind)
     }
@@ -245,18 +258,29 @@ impl SuggestStore {
     ) -> SuggestApiResult<Option<SuggestProviderConfig>> {
         self.inner.fetch_provider_config(provider)
     }
+}
 
+impl SuggestStore {
     pub fn force_reingest(&self) {
         self.inner.force_reingest()
     }
 }
 
 /// Constraints limit which suggestions to ingest from Remote Settings.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, uniffi::Record)]
 pub struct SuggestIngestionConstraints {
+    #[uniffi(default = None)]
     pub providers: Option<Vec<SuggestionProvider>>,
+    #[uniffi(default = None)]
     pub provider_constraints: Option<SuggestionProviderConstraints>,
     /// Only run ingestion if the table `suggestions` is empty
+    ///
+    // This is indented to handle periodic updates.  Consumers can schedule an ingest with
+    // `empty_only=true` on startup and a regular ingest with `empty_only=false` to run on a long periodic schedule (maybe
+    // once a day). This allows ingestion to normally be run at a slow, periodic rate.  However, if
+    // there is a schema upgrade that causes the database to be thrown away, then the
+    // `empty_only=true` ingestion that runs on startup will repopulate it.
+    #[uniffi(default = false)]
     pub empty_only: bool,
 }
 
@@ -436,10 +460,12 @@ where
             .unwrap_or(&DEFAULT_INGEST_PROVIDERS.to_vec())
             .iter()
         {
-            record_types_by_collection
-                .entry(p.record_type().collection())
-                .or_default()
-                .insert(p.record_type());
+            for t in p.record_types() {
+                record_types_by_collection
+                    .entry(t.collection())
+                    .or_default()
+                    .insert(t);
+            }
         }
 
         // Always ingest these record types.
@@ -607,7 +633,7 @@ where
                     },
                 )?;
             }
-            SuggestRecord::Weather(data) => dao.insert_weather_data(&record.id, data)?,
+            SuggestRecord::Weather => self.process_weather_record(dao, record, download_timer)?,
             SuggestRecord::GlobalConfig(config) => {
                 dao.put_global_config(&SuggestGlobalConfig::from(config))?
             }
@@ -645,11 +671,12 @@ where
                     }
                 }
             }
+            SuggestRecord::Geonames => self.process_geoname_record(dao, record, download_timer)?,
         }
         Ok(())
     }
 
-    fn download_attachment<T>(
+    pub(crate) fn download_attachment<T>(
         &self,
         dao: &mut SuggestDao,
         record: &Record,
@@ -832,24 +859,20 @@ impl SuggestStoreDbs {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use parking_lot::Once;
-    use serde_json::json;
-    use sql_support::ConnExt;
-
     use crate::{testing::*, SuggestionProvider};
 
     /// In-memory Suggest store for testing
-    struct TestStore {
+    pub(crate) struct TestStore {
         pub inner: SuggestStoreInner<MockRemoteSettingsClient>,
     }
 
     impl TestStore {
-        fn new(client: MockRemoteSettingsClient) -> Self {
+        pub fn new(client: MockRemoteSettingsClient) -> Self {
             static COUNTER: AtomicUsize = AtomicUsize::new(0);
             let db_path = format!(
                 "file:test_store_data_{}?mode=memory&cache=shared",
@@ -860,25 +883,25 @@ mod tests {
             }
         }
 
-        fn client_mut(&mut self) -> &mut MockRemoteSettingsClient {
+        pub fn client_mut(&mut self) -> &mut MockRemoteSettingsClient {
             &mut self.inner.settings_client
         }
 
-        fn read<T>(&self, op: impl FnOnce(&SuggestDao) -> Result<T>) -> Result<T> {
+        pub fn read<T>(&self, op: impl FnOnce(&SuggestDao) -> Result<T>) -> Result<T> {
             self.inner.dbs().unwrap().reader.read(op)
         }
 
-        fn count_rows(&self, table_name: &str) -> u64 {
+        pub fn count_rows(&self, table_name: &str) -> u64 {
             let sql = format!("SELECT count(*) FROM {table_name}");
             self.read(|dao| Ok(dao.conn.query_one(&sql)?))
                 .unwrap_or_else(|e| panic!("SQL error in count: {e}"))
         }
 
-        fn ingest(&self, constraints: SuggestIngestionConstraints) {
+        pub fn ingest(&self, constraints: SuggestIngestionConstraints) {
             self.inner.ingest(constraints).unwrap();
         }
 
-        fn fetch_suggestions(&self, query: SuggestionQuery) -> Vec<Suggestion> {
+        pub fn fetch_suggestions(&self, query: SuggestionQuery) -> Vec<Suggestion> {
             self.inner.query(query).unwrap().suggestions
         }
 
@@ -896,15 +919,6 @@ mod tests {
                 .fetch_provider_config(provider)
                 .expect("Error fetching provider config")
         }
-    }
-
-    fn before_each() {
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace"))
-                .is_test(true)
-                .init();
-        });
     }
 
     /// Tests that `SuggestStore` is usable with UniFFI, which requires exposed
@@ -2020,112 +2034,6 @@ mod tests {
     }
 
     #[test]
-    fn weather() -> anyhow::Result<()> {
-        before_each();
-
-        let store = TestStore::new(MockRemoteSettingsClient::default().with_inline_record(
-            "weather",
-            "weather-1",
-            json!({
-                "weather": {
-                    "min_keyword_length": 3,
-                    "keywords": ["ab", "xyz", "weather"],
-                    "score": "0.24"
-                },
-            }),
-        ));
-        store.ingest(SuggestIngestionConstraints::all_providers());
-        // No match since the query doesn't match any keyword
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xab")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("abx")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xxyz")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xyzx")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("weatherx")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xweather")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xwea")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("x   weather")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("   weather x")),
-            vec![]
-        );
-        // No match since the query is too short
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xy")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("ab")),
-            vec![]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("we")),
-            vec![]
-        );
-        // Matches
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("xyz")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("wea")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("weat")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("weath")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("weathe")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("weather")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-        assert_eq!(
-            store.fetch_suggestions(SuggestionQuery::weather("  weather  ")),
-            vec![Suggestion::Weather { score: 0.24 },]
-        );
-
-        assert_eq!(
-            store.fetch_provider_config(SuggestionProvider::Weather),
-            Some(SuggestProviderConfig::Weather {
-                min_keyword_length: 3,
-            })
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn fetch_global_config() -> anyhow::Result<()> {
         before_each();
 
@@ -2184,20 +2092,31 @@ mod tests {
     fn fetch_provider_config_other() -> anyhow::Result<()> {
         before_each();
 
-        let store = TestStore::new(MockRemoteSettingsClient::default().with_inline_record(
+        let store = TestStore::new(MockRemoteSettingsClient::default().with_record(
             "weather",
             "weather-1",
             json!({
-                "weather": {
-                    "min_keyword_length": 3,
-                    "keywords": ["weather"],
-                    "score": "0.24"
-                },
+                "min_keyword_length": 3,
+                "score": 0.24,
+                "max_keyword_length": 1,
+                "max_keyword_word_count": 1,
+                "keywords": []
             }),
         ));
         store.ingest(SuggestIngestionConstraints::all_providers());
+
+        // Sanity-check that the weather config was ingested.
+        assert_eq!(
+            store.fetch_provider_config(SuggestionProvider::Weather),
+            Some(SuggestProviderConfig::Weather {
+                min_keyword_length: 3,
+                score: 0.24,
+            })
+        );
+
         // Getting the config for a different provider should return None.
         assert_eq!(store.fetch_provider_config(SuggestionProvider::Amp), None);
+
         Ok(())
     }
 

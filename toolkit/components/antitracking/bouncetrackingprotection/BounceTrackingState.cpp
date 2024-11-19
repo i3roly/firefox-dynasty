@@ -73,7 +73,16 @@ already_AddRefed<BounceTrackingState> BounceTrackingState::GetOrCreate(
     return nullptr;
   }
 
+  // Check if we should even apply BTP for this environment. This depends on the
+  // feature prefs and the web progress itself.
   if (!ShouldCreateBounceTrackingStateForWebProgress(aWebProgress)) {
+    // The call below ensures we record the disabled state in telemetry. In
+    // MODE_DISABLED we may never hit BounceTrackingProtection::GetSingleton and
+    // thus would skip on recording telemetry.
+    if (StaticPrefs::privacy_bounceTrackingProtection_mode() ==
+        nsIBounceTrackingProtection::MODE_DISABLED) {
+      BounceTrackingProtection::RecordModePrefTelemetry();
+    }
     return nullptr;
   }
 
@@ -209,6 +218,23 @@ nsresult BounceTrackingState::Init(
 
 void BounceTrackingState::ResetBounceTrackingRecord() {
   mBounceTrackingRecord = Nothing();
+}
+
+void BounceTrackingState::OnBrowsingContextDiscarded() {
+  MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Debug, ("%s", __FUNCTION__));
+  // We are about to be destroyed because the tab closed. This marks the end of
+  // the extended navigation (if any). Record stateful bounces.
+
+  // No ongoing extended navigation, nothing to record.
+  if (!mBounceTrackingRecord) {
+    return;
+  }
+
+  MOZ_ASSERT(mBounceTrackingProtection);
+  nsresult rv = mBounceTrackingProtection->RecordStatefulBounces(this);
+  if (NS_FAILED(rv)) {
+    NS_WARNING("Failed to record stateful bounces on BrowsingContext discard.");
+  }
 }
 
 const Maybe<BounceTrackingRecord>&

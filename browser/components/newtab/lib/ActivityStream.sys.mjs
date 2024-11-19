@@ -69,6 +69,20 @@ const REGION_CONTEXTUAL_CONTENT_CONFIG =
 const LOCALE_CONTEXTUAL_CONTENT_CONFIG =
   "browser.newtabpage.activity-stream.discoverystream.contextualContent.locale-content-config";
 
+export function csvPrefHasValue(stringPrefName, value) {
+  if (typeof stringPrefName !== "string") {
+    throw new Error(`The stringPrefName argument is not a string`);
+  }
+
+  const pref = Services.prefs.getStringPref(stringPrefName) || "";
+  const prefValues = pref
+    .split(",")
+    .map(s => s.trim())
+    .filter(item => item);
+
+  return prefValues.includes(value);
+}
+
 // Determine if spocs should be shown for a geo/locale
 function showSpocs({ geo }) {
   const spocsGeoString =
@@ -94,71 +108,30 @@ function showWeather({ geo, locale }) {
 }
 
 function showTopicsSelection({ geo, locale }) {
-  const topicsGeoString =
-    Services.prefs.getStringPref(REGION_TOPICS_CONFIG) || "";
-  const topicsLocaleString =
-    Services.prefs.getStringPref(LOCALE_TOPICS_CONFIG) || "";
-  const topicsGeo = topicsGeoString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  const topicsLocale = topicsLocaleString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  return topicsGeo.includes(geo) && topicsLocale.includes(locale);
+  return (
+    csvPrefHasValue(REGION_TOPICS_CONFIG, geo) &&
+    csvPrefHasValue(LOCALE_TOPICS_CONFIG, locale)
+  );
 }
 
 function showTopicLabels({ geo, locale }) {
-  const geoString =
-    Services.prefs.getStringPref(REGION_TOPIC_LABEL_CONFIG) || "";
-  const localeString =
-    Services.prefs.getStringPref(LOCALE_TOPIC_LABEL_CONFIG) || "";
-  const topicLabelGeo = geoString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  const topicLabelLocale = localeString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  return topicLabelGeo.includes(geo) && topicLabelLocale.includes(locale);
+  return (
+    csvPrefHasValue(REGION_TOPIC_LABEL_CONFIG, geo) &&
+    csvPrefHasValue(LOCALE_TOPIC_LABEL_CONFIG, locale)
+  );
 }
 
 function showThumbsUpDown({ geo, locale }) {
-  const thumbsUpDownGeoString =
-    Services.prefs.getStringPref(REGION_THUMBS_CONFIG) || "";
-  const thumbsUpDownLocaleString =
-    Services.prefs.getStringPref(LOCALE_THUMBS_CONFIG) || "";
-  const thumbsUpDownGeo = thumbsUpDownGeoString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  const thumbsUpDownLocale = thumbsUpDownLocaleString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  return thumbsUpDownGeo.includes(geo) && thumbsUpDownLocale.includes(locale);
+  return (
+    csvPrefHasValue(REGION_THUMBS_CONFIG, geo) &&
+    csvPrefHasValue(LOCALE_THUMBS_CONFIG, locale)
+  );
 }
 
 function showContextualContent({ geo, locale }) {
-  const contextualContentGeoString =
-    Services.prefs.getStringPref(REGION_CONTEXTUAL_CONTENT_CONFIG) || "";
-  const contextualContentLocaleString =
-    Services.prefs.getStringPref(LOCALE_CONTEXTUAL_CONTENT_CONFIG) || "";
-
-  const contextualContentGeo = contextualContentGeoString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  const contextualContentLocale = contextualContentLocaleString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-
   return (
-    contextualContentGeo.includes(geo) &&
-    contextualContentLocale.includes(locale)
+    csvPrefHasValue(REGION_CONTEXTUAL_CONTENT_CONFIG, geo) &&
+    csvPrefHasValue(LOCALE_CONTEXTUAL_CONTENT_CONFIG, locale)
   );
 }
 
@@ -424,6 +397,20 @@ export const PREFS_CONFIG = new Map([
     "newtabWallpapers.v2.enabled",
     {
       title: "Boolean flag to turn wallpaper v2 functionality on and off",
+      value: false,
+    },
+  ],
+  [
+    "newtabAdSize.variant-a",
+    {
+      title: "Boolean flag to turn ad size variant A on and off",
+      value: false,
+    },
+  ],
+  [
+    "newtabAdSize.variant-b",
+    {
+      title: "Boolean flag to turn ad size variant B on and off",
       value: false,
     },
   ],
@@ -794,7 +781,7 @@ export const PREFS_CONFIG = new Map([
     "discoverystream.spocs.startupCache.enabled",
     {
       title: "Controls if spocs should be included in startup cache.",
-      value: true,
+      value: false,
     },
   ],
   [
@@ -808,7 +795,7 @@ export const PREFS_CONFIG = new Map([
     "discoverystream.contextualContent.feeds",
     {
       title: "CSV list of possible topics for the contextual content feed",
-      value: "need_to_know",
+      value: "need_to_know, fakespot",
     },
   ],
   [
@@ -823,6 +810,41 @@ export const PREFS_CONFIG = new Map([
     "discoverystream.contextualContent.listFeedTitle",
     {
       title: "Title for currently selected feed",
+      value: "",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.fakespot.defaultCategoryTitle",
+    {
+      title: "Title default category from fakespot endpoint",
+      value: "",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.fakespot.footerCopy",
+    {
+      title: "footer copy for fakespot feed",
+      value: "",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.fakespot.enabled",
+    {
+      title: "User controlled pref that displays fakespot feed",
+      value: true,
+    },
+  ],
+  [
+    "discoverystream.contextualContent.fakespot.ctaCopy",
+    {
+      title: "cta copy for fakespot feed",
+      value: "",
+    },
+  ],
+  [
+    "discoverystream.contextualContent.fakespot.ctaUrl",
+    {
+      title: "cta link for fakespot feed",
       value: "",
     },
   ],

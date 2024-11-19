@@ -217,26 +217,10 @@ XPCOMUtils.defineLazyPreferenceGetter(
       CustomizableUI.AREA_NAVBAR
     );
     if (!navbarPlacements.includes("sidebar-button")) {
-      // Find a spot for the sidebar-button.
-      // If any of the home, reload or fwd button are in there, we'll place next that.
-      let position;
-      for (let widgetId of [
-        "home-button",
-        "stop-reload-button",
-        "forward-button",
-      ]) {
-        position = navbarPlacements.indexOf(widgetId);
-        if (position > -1) {
-          position += 1;
-          break;
-        }
-      }
-      // Its not currently possible to move the forward-button out of the navbar, but we'll
-      // ensure the insert position is at least 0 just in case
       CustomizableUI.addWidgetToArea(
         "sidebar-button",
         CustomizableUI.AREA_NAVBAR,
-        Math.max(0, position)
+        0
       );
     }
   }
@@ -313,13 +297,13 @@ var CustomizableUIInternal = {
     );
 
     let navbarPlacements = [
+      lazy.sidebarRevampEnabled ? "sidebar-button" : null,
       "back-button",
       "forward-button",
       "stop-reload-button",
       Services.policies.isAllowed("removeHomeButtonByDefault")
         ? null
         : "home-button",
-      lazy.sidebarRevampEnabled ? "sidebar-button" : null,
       "spring",
       "urlbar-container",
       "spring",
@@ -520,7 +504,7 @@ var CustomizableUIInternal = {
       }
 
       if (!newPlacements.includes("sidebar-button")) {
-        newPlacements.push("sidebar-button");
+        newPlacements.unshift("sidebar-button");
       }
 
       gSavedState.placements[CustomizableUI.AREA_NAVBAR] = newPlacements;
@@ -2425,6 +2409,14 @@ var CustomizableUIInternal = {
         continue;
       }
 
+      // Skip out of shadow roots
+      if (
+        target.nodeType == target.DOCUMENT_FRAGMENT_NODE &&
+        target.containingShadowRoot == target
+      ) {
+        continue;
+      }
+
       // Break out of the loop immediately for disabled items, as we need to
       // keep the menu open in that case.
       if (target.getAttribute("disabled") == "true") {
@@ -2673,6 +2665,16 @@ var CustomizableUIInternal = {
     this.saveState();
     gDirtyAreaCache.add(oldPlacement.area);
 
+    // If we're in vertical tabs, ensure we don't restore the widget when we toggle back
+    // to horizontal tabs.
+    if (
+      !gInBatchStack &&
+      CustomizableUI.verticalTabsEnabled &&
+      oldPlacement.area == CustomizableUI.AREA_TABSTRIP
+    ) {
+      this.deleteWidgetInSavedHorizontalTabStripState(aWidgetId);
+    }
+
     this.notifyListeners("onWidgetRemoved", aWidgetId, oldPlacement.area);
   },
 
@@ -2896,6 +2898,15 @@ var CustomizableUIInternal = {
     }
 
     this.endBatchUpdate();
+  },
+
+  deleteWidgetInSavedHorizontalTabStripState(aWidgetId) {
+    const savedPlacements = this.getSavedHorizontalSnapshotState();
+    let position = savedPlacements.indexOf(aWidgetId);
+    if (position != -1) {
+      savedPlacements.splice(position, 1);
+      this.saveHorizontalTabStripState(savedPlacements);
+    }
   },
 
   saveHorizontalTabStripState(placements = []) {
@@ -4266,13 +4277,16 @@ var CustomizableUIInternal = {
       isVertical: toVertical,
     });
 
-    lazy.log.debug("Reverting widgets to be non-removable");
-    changeWidgetRemovability("tabbrowser-tabs", false);
-
     this.setToolbarVisibility(
       CustomizableUI.AREA_VERTICAL_TABSTRIP,
       toVertical
     );
+    this.setToolbarVisibility(CustomizableUI.AREA_TABSTRIP, !toVertical);
+    changeWidgetRemovability("tabbrowser-tabs", false);
+
+    for (let [win] of gBuildWindows) {
+      win.TabBarVisibility.update(true);
+    }
   },
 };
 Object.freeze(CustomizableUIInternal);

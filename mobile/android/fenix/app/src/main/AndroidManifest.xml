@@ -165,6 +165,8 @@
                 <data android:scheme="${deepLinkScheme}"
                     android:host="settings_tracking_protection"/>
                 <data android:scheme="${deepLinkScheme}"
+                    android:host="share_sheet"/>
+                <data android:scheme="${deepLinkScheme}"
                     android:host="turn_on_sync"/>
                 <data android:scheme="${deepLinkScheme}"
                     android:host="urls_bookmarks"/>
@@ -312,14 +314,17 @@
             android:exported="false" />
 
         <activity android:name=".autofill.AutofillUnlockActivity"
+            tools:targetApi="o"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Translucent" />
 
         <activity android:name=".autofill.AutofillConfirmActivity"
+            tools:targetApi="o"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Translucent" />
 
         <activity android:name=".autofill.AutofillSearchActivity"
+            tools:targetApi="o"
             android:exported="false"
             android:theme="@style/DialogActivityTheme" />
 
@@ -327,8 +332,8 @@
             android:name=".messaging.NotificationClickedReceiverActivity"
             android:exported="false" />
 
-        <service
-            android:name=".autofill.AutofillService"
+        <service android:name=".autofill.AutofillService"
+            tools:targetApi="o"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_AUTOFILL_SERVICE">

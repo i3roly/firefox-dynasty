@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import {
+  classMap,
   html,
   ifDefined,
   nothing,
@@ -10,6 +11,8 @@ import {
   when,
 } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
+
+const TOOLS_OVERFLOW_LIMIT = 5;
 
 /**
  * Sidebar with expanded and collapsed states that provides entry points
@@ -90,14 +93,26 @@ export default class SidebarMain extends MozLitElement {
 
   onSidebarPopupShowing(event) {
     // Store the context menu target which holds the id required for managing sidebar items
-    this.contextMenuTarget =
-      event.explicitOriginalTarget.flattenedTreeParentNode;
+    let targetHost = event.explicitOriginalTarget.getRootNode().host;
+    let toolbarContextMenuTarget =
+      event.explicitOriginalTarget.flattenedTreeParentNode
+        .flattenedTreeParentNode;
+    let isToolbarTarget = false;
+    if (targetHost?.localName === "moz-button") {
+      this.contextMenuTarget = targetHost;
+    } else if (
+      document
+        .getElementById("vertical-tabs")
+        .contains(toolbarContextMenuTarget)
+    ) {
+      this.contextMenuTarget = toolbarContextMenuTarget;
+      isToolbarTarget = true;
+    }
+
     if (
       this.contextMenuTarget.getAttribute("extensionId") ||
       this.contextMenuTarget.className.includes("tab") ||
-      document
-        .getElementById("vertical-tabs")
-        .contains(this.contextMenuTarget.flattenedTreeParentNode)
+      isToolbarTarget
     ) {
       this.updateExtensionContextMenuItems();
       return;
@@ -199,7 +214,13 @@ export default class SidebarMain extends MozLitElement {
         }
         break;
       case "contextmenu":
-        this.onSidebarPopupShowing(e);
+        if (
+          !["tabs-newtab-button", "vertical-tabs-newtab-button"].includes(
+            e.target.id
+          )
+        ) {
+          this.onSidebarPopupShowing(e);
+        }
         break;
       case "popuphidden":
         this.contextMenuTarget = null;
@@ -220,10 +241,28 @@ export default class SidebarMain extends MozLitElement {
   }
 
   showView(view) {
+    window.SidebarController.recordIconClick(view, this.expanded);
     window.SidebarController.toggle(view);
     if (view === "viewCustomizeSidebar") {
       Glean.sidebarCustomize.iconClick.record();
     }
+  }
+
+  isToolsOverflowing() {
+    if (
+      !this.expanded ||
+      !window.SidebarController.sidebarVerticalTabsEnabled
+    ) {
+      return false;
+    }
+    let enabledToolsAndExtensionsCount = 0;
+    for (const tool of window.SidebarController.toolsAndExtensions.values()) {
+      if (!tool.disabled) {
+        enabledToolsAndExtensionsCount++;
+      }
+    }
+    // Add 1 to enabledToolsAndExtensionsCount to account for 'Customize sidebar'
+    return enabledToolsAndExtensionsCount + 1 > TOOLS_OVERFLOW_LIMIT;
   }
 
   entrypointTemplate(action) {
@@ -239,8 +278,12 @@ export default class SidebarMain extends MozLitElement {
       const attributes = messages?.[0]?.attributes;
       actionLabel = attributes?.find(attr => attr.name === "label")?.value;
     }
+    let toolsOverflowing = this.isToolsOverflowing();
     return html`<moz-button
-      class=${this.expanded ? "expanded-button" : ""}
+      class=${classMap({
+        "expanded-button": this.expanded,
+        "tools-overflow": toolsOverflowing,
+      })}
       type=${isActiveView ? "icon" : "icon ghost"}
       aria-pressed="${isActiveView}"
       view=${action.view}
@@ -250,7 +293,7 @@ export default class SidebarMain extends MozLitElement {
       ?extension=${action.view?.includes("-sidebar-action")}
       extensionId=${ifDefined(action.extensionId)}
     >
-      ${this.expanded ? actionLabel : nothing}
+      ${this.expanded && !toolsOverflowing ? actionLabel : nothing}
     </moz-button>`;
   }
 
@@ -268,7 +311,7 @@ export default class SidebarMain extends MozLitElement {
         <slot name="tabstrip"></slot>
         <button-group
           class="tools-and-extensions actions-list"
-          orientation="vertical"
+          orientation=${this.isToolsOverflowing() ? "horizontal" : "vertical"}
         >
           ${repeat(
             this.getToolsAndExtensions().values(),

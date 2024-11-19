@@ -38,6 +38,8 @@
 #include "vm/ArgumentsObject.h"
 #include "vm/ArrayBufferViewObject.h"
 #include "vm/BoundFunctionObject.h"
+#include "vm/DateObject.h"
+#include "vm/DateTime.h"
 #include "vm/Float16.h"
 #include "vm/FunctionFlags.h"  // js::FunctionFlags
 #include "vm/Iteration.h"
@@ -2650,6 +2652,16 @@ void MacroAssembler::switchToWasmInstanceRealm(Register scratch1,
   storePtr(scratch2, Address(scratch1, JSContext::offsetOfRealm()));
 }
 
+template <typename ValueType>
+void MacroAssembler::storeLocalAllocSite(ValueType value, Register scratch) {
+  loadPtr(AbsoluteAddress(ContextRealmPtr(runtime())), scratch);
+  storePtr(value, Address(scratch, JS::Realm::offsetOfLocalAllocSite()));
+}
+
+template void MacroAssembler::storeLocalAllocSite(Register, Register);
+template void MacroAssembler::storeLocalAllocSite(ImmWord, Register);
+template void MacroAssembler::storeLocalAllocSite(ImmPtr, Register);
+
 void MacroAssembler::debugAssertContextRealm(const void* realm,
                                              Register scratch) {
 #ifdef DEBUG
@@ -3416,6 +3428,158 @@ void MacroAssembler::loadResizableTypedArrayByteOffsetMaybeOutOfBoundsIntPtr(
   movePtr(ImmWord(0), output);
 
   bind(&done);
+}
+
+void MacroAssembler::dateFillLocalTimeSlots(
+    Register obj, Register scratch, const LiveRegisterSet& volatileRegs) {
+  // Inline implementation of the cache check from
+  // DateObject::fillLocalTimeSlots().
+
+  Label callVM, done;
+
+  // Check if the cache is already populated.
+  branchTestUndefined(Assembler::Equal,
+                      Address(obj, DateObject::offsetOfLocalTimeSlot()),
+                      &callVM);
+
+  unboxInt32(Address(obj, DateObject::offsetOfUTCTimeZoneOffsetSlot()),
+             scratch);
+
+  branch32(Assembler::Equal,
+           AbsoluteAddress(DateTimeInfo::addressOfUTCToLocalOffsetSeconds()),
+           scratch, &done);
+
+  bind(&callVM);
+  {
+    PushRegsInMask(volatileRegs);
+
+    using Fn = void (*)(DateObject*);
+    setupUnalignedABICall(scratch);
+    passABIArg(obj);
+    callWithABI<Fn, jit::DateFillLocalTimeSlots>();
+
+    PopRegsInMask(volatileRegs);
+  }
+
+  bind(&done);
+}
+
+void MacroAssembler::udiv32ByConstant(Register src, uint32_t divisor,
+                                      Register dest) {
+  auto rmc = ReciprocalMulConstants::computeUnsignedDivisionConstants(divisor);
+  MOZ_ASSERT(rmc.multiplier <= UINT32_MAX, "division needs scratch register");
+
+  // We first compute |q = (M * n) >> 32), where M = rmc.multiplier.
+  mulHighUnsigned32(Imm32(rmc.multiplier), src, dest);
+
+  // Finish the computation |q = floor(n / d)|.
+  rshift32(Imm32(rmc.shiftAmount), dest);
+}
+
+void MacroAssembler::umod32ByConstant(Register src, uint32_t divisor,
+                                      Register dest, Register scratch) {
+  MOZ_ASSERT(dest != scratch);
+
+  auto rmc = ReciprocalMulConstants::computeUnsignedDivisionConstants(divisor);
+  MOZ_ASSERT(rmc.multiplier <= UINT32_MAX, "division needs scratch register");
+
+  if (src != dest) {
+    move32(src, dest);
+  }
+
+  // We first compute |q = (M * n) >> 32), where M = rmc.multiplier.
+  mulHighUnsigned32(Imm32(rmc.multiplier), dest, scratch);
+
+  // Finish the computation |q = floor(n / d)|.
+  rshift32(Imm32(rmc.shiftAmount), scratch);
+
+  // Compute the remainder from |r = n - q * d|.
+  mul32(Imm32(divisor), scratch);
+  sub32(scratch, dest);
+}
+
+template <typename GetTimeFn>
+void MacroAssembler::dateTimeFromSecondsIntoYear(ValueOperand secondsIntoYear,
+                                                 ValueOperand output,
+                                                 Register scratch1,
+                                                 Register scratch2,
+                                                 GetTimeFn getTimeFn) {
+#ifdef DEBUG
+  Label okValue;
+  branchTestInt32(Assembler::Equal, secondsIntoYear, &okValue);
+  branchTestValue(Assembler::Equal, secondsIntoYear, JS::NaNValue(), &okValue);
+  assumeUnreachable("secondsIntoYear is an int32 or NaN");
+  bind(&okValue);
+#endif
+
+  moveValue(secondsIntoYear, output);
+
+  Label done;
+  fallibleUnboxInt32(secondsIntoYear, scratch1, &done);
+
+#ifdef DEBUG
+  Label okInt;
+  branchTest32(Assembler::NotSigned, scratch1, scratch1, &okInt);
+  assumeUnreachable("secondsIntoYear is an unsigned int32");
+  bind(&okInt);
+#endif
+
+  getTimeFn(scratch1, scratch1, scratch2);
+
+  tagValue(JSVAL_TYPE_INT32, scratch1, output);
+
+  bind(&done);
+}
+
+void MacroAssembler::dateHoursFromSecondsIntoYear(ValueOperand secondsIntoYear,
+                                                  ValueOperand output,
+                                                  Register scratch1,
+                                                  Register scratch2) {
+  // Inline implementation of seconds-into-year to local hours computation from
+  // date_getHours.
+
+  // Compute `(yearSeconds / SecondsPerHour) % HoursPerDay`.
+  auto hoursFromSecondsIntoYear = [this](Register src, Register dest,
+                                         Register scratch) {
+    udiv32ByConstant(src, SecondsPerHour, dest);
+    umod32ByConstant(dest, HoursPerDay, dest, scratch);
+  };
+
+  dateTimeFromSecondsIntoYear(secondsIntoYear, output, scratch1, scratch2,
+                              hoursFromSecondsIntoYear);
+}
+
+void MacroAssembler::dateMinutesFromSecondsIntoYear(
+    ValueOperand secondsIntoYear, ValueOperand output, Register scratch1,
+    Register scratch2) {
+  // Inline implementation of seconds-into-year to local minutes computation
+  // from date_getMinutes.
+
+  // Compute `(yearSeconds / SecondsPerMinute) % MinutesPerHour`.
+  auto minutesFromSecondsIntoYear = [this](Register src, Register dest,
+                                           Register scratch) {
+    udiv32ByConstant(src, SecondsPerMinute, dest);
+    umod32ByConstant(dest, MinutesPerHour, dest, scratch);
+  };
+
+  dateTimeFromSecondsIntoYear(secondsIntoYear, output, scratch1, scratch2,
+                              minutesFromSecondsIntoYear);
+}
+
+void MacroAssembler::dateSecondsFromSecondsIntoYear(
+    ValueOperand secondsIntoYear, ValueOperand output, Register scratch1,
+    Register scratch2) {
+  // Inline implementation of seconds-into-year to local seconds computation
+  // from date_getSeconds.
+
+  // Compute `yearSeconds % SecondsPerMinute`.
+  auto secondsFromSecondsIntoYear = [this](Register src, Register dest,
+                                           Register scratch) {
+    umod32ByConstant(src, SecondsPerMinute, dest, scratch);
+  };
+
+  dateTimeFromSecondsIntoYear(secondsIntoYear, output, scratch1, scratch2,
+                              secondsFromSecondsIntoYear);
 }
 
 void MacroAssembler::computeImplicitThis(Register env, ValueOperand output,
@@ -5991,34 +6155,39 @@ CodeOffset MacroAssembler::wasmCallBuiltinInstanceMethod(
   }
 
   CodeOffset ret = call(desc, builtin);
-
-  if (failureMode != wasm::FailureMode::Infallible) {
-    Label noTrap;
-    switch (failureMode) {
-      case wasm::FailureMode::Infallible:
-        MOZ_CRASH();
-      case wasm::FailureMode::FailOnNegI32:
-        branchTest32(Assembler::NotSigned, ReturnReg, ReturnReg, &noTrap);
-        break;
-      case wasm::FailureMode::FailOnMaxI32:
-        branchPtr(Assembler::NotEqual, ReturnReg, ImmWord(uintptr_t(INT32_MAX)),
-                  &noTrap);
-        break;
-      case wasm::FailureMode::FailOnNullPtr:
-        branchTestPtr(Assembler::NonZero, ReturnReg, ReturnReg, &noTrap);
-        break;
-      case wasm::FailureMode::FailOnInvalidRef:
-        branchPtr(Assembler::NotEqual, ReturnReg,
-                  ImmWord(uintptr_t(wasm::AnyRef::invalid().forCompiledCode())),
-                  &noTrap);
-        break;
-    }
-    wasmTrap(wasm::Trap::ThrowReported,
-             wasm::BytecodeOffset(desc.lineOrBytecode()));
-    bind(&noTrap);
-  }
+  wasmTrapOnFailedInstanceCall(ReturnReg, failureMode,
+                               wasm::BytecodeOffset(desc.lineOrBytecode()));
 
   return ret;
+}
+
+void MacroAssembler::wasmTrapOnFailedInstanceCall(
+    Register resultRegister, wasm::FailureMode failureMode,
+    wasm::BytecodeOffset bytecodeOffset) {
+  Label noTrap;
+  switch (failureMode) {
+    case wasm::FailureMode::Infallible:
+      return;
+    case wasm::FailureMode::FailOnNegI32:
+      branchTest32(Assembler::NotSigned, resultRegister, resultRegister,
+                   &noTrap);
+      break;
+    case wasm::FailureMode::FailOnMaxI32:
+      branchPtr(Assembler::NotEqual, resultRegister,
+                ImmWord(uintptr_t(INT32_MAX)), &noTrap);
+      break;
+    case wasm::FailureMode::FailOnNullPtr:
+      branchTestPtr(Assembler::NonZero, resultRegister, resultRegister,
+                    &noTrap);
+      break;
+    case wasm::FailureMode::FailOnInvalidRef:
+      branchPtr(Assembler::NotEqual, resultRegister,
+                ImmWord(uintptr_t(wasm::AnyRef::invalid().forCompiledCode())),
+                &noTrap);
+      break;
+  }
+  wasmTrap(wasm::Trap::ThrowReported, bytecodeOffset);
+  bind(&noTrap);
 }
 
 CodeOffset MacroAssembler::asmCallIndirect(const wasm::CallSiteDesc& desc,
@@ -6455,92 +6624,6 @@ void MacroAssembler::wasmReturnCallRef(
   append(wasm::CodeRangeUnwindInfo::Normal, currentOffset());
 }
 #endif
-
-void MacroAssembler::updateCallRefMetrics(size_t callRefIndex,
-                                          const Register funcRef,
-                                          const Register scratch1,
-                                          const Register scratch2) {
-  MOZ_ASSERT(funcRef != scratch1);
-  MOZ_ASSERT(funcRef != scratch2);
-
-  Label done;
-
-  // Null check, skip because this will just trap anyways
-  branchTestPtr(Assembler::Zero, funcRef, funcRef, &done);
-
-  // Emit a patchable mov32 which will load the offset of the
-  // `CallRefMetrics` stored inside the `Instance::callRefMetrics_` array
-  CodeOffset offsetOfCallRefOffset = move32WithPatch(scratch2);
-  callRefMetricsPatches()[callRefIndex].setOffset(
-      offsetOfCallRefOffset.offset());
-
-  // Get a pointer to the `CallRefMetrics` for this call_ref
-  loadPtr(Address(InstanceReg, wasm::Instance::offsetOfCallRefMetrics()),
-          scratch1);
-  addPtr(scratch2, scratch1);
-
-  Address addressOfState =
-      Address(scratch1, offsetof(wasm::CallRefMetrics, state));
-  Address addressOfCallCount =
-      Address(scratch1, offsetof(wasm::CallRefMetrics, callCount));
-  Address addressOfMonomorphicTarget =
-      Address(scratch1, offsetof(wasm::CallRefMetrics, monomorphicTarget));
-
-  Label becomeMonomorphic, becomePolymorphic;
-  Label stateUpdated;
-
-  // Check if this funcref is from a different instance. If so we cannot inline
-  // it, and tracking it would require GC barriers below. So just go straight
-  // to polymorphic.
-  size_t instanceSlotOffset = FunctionExtended::offsetOfExtendedSlot(
-      FunctionExtended::WASM_INSTANCE_SLOT);
-  loadPtr(Address(funcRef, instanceSlotOffset), scratch2);
-  branchPtr(Assembler::NotEqual, InstanceReg, scratch2, &becomePolymorphic);
-
-  // If we're unknown, then become monomorphic.
-  branch32(Assembler::Equal, addressOfState,
-           Imm32(wasm::CallRefMetrics::State::Unknown), &becomeMonomorphic);
-
-  // If we're polymorphic, then just update the use counter.
-  branch32(Assembler::Equal, addressOfState,
-           Imm32(wasm::CallRefMetrics::State::Polymorphic), &stateUpdated);
-
-  // This means we must be monomorphic. If we encounter a different funcref,
-  // then become polymorphic.
-  branchPtr(Assembler::NotEqual, addressOfMonomorphicTarget, funcRef,
-            &becomePolymorphic);
-
-  // We must be monomorphic with the same target, just update the use counter.
-  jump(&stateUpdated);
-
-  bind(&becomeMonomorphic);
-  store32(Imm32(wasm::CallRefMetrics::State::Monomorphic), addressOfState);
-  // This store of a funcref to the instance data does not require any GC
-  // barriers for two reasons.
-  // 1. The pre-write barrier protects against an unmarked object being stored
-  //  into a marked object during an incremental GC. However this funcref is
-  //  from the instance we're storing it into (see above) and so if the
-  //  instance has already been traced, this function will already have been
-  //  traced (all exported functions are kept alive by an instance cache).
-  // 2. The post-write barrier tracks edges from tenured objects to nursery
-  //  objects. However wasm exported functions are not nursery allocated and
-  // so no new edge can be created.
-  STATIC_ASSERT_WASM_FUNCTIONS_TENURED;
-  storePtr(funcRef, addressOfMonomorphicTarget);
-  jump(&stateUpdated);
-
-  bind(&becomePolymorphic);
-  store32(Imm32(wasm::CallRefMetrics::State::Polymorphic), addressOfState);
-  // This does not need GC barriers for the same reason as in the
-  // 'becomeMonomorphic' case.
-  storePtr(ImmWord(0), addressOfMonomorphicTarget);
-  jump(&stateUpdated);
-
-  bind(&stateUpdated);
-  add32(Imm32(1), addressOfCallCount);
-
-  bind(&done);
-}
 
 void MacroAssembler::wasmBoundsCheckRange32(
     Register index, Register length, Register limit, Register tmp,

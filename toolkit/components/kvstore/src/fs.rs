@@ -4,8 +4,6 @@
 
 use std::{borrow::Borrow, io, path::PathBuf};
 
-use nsstring::nsAString;
-
 //alex's shim from crashreporter
 // Shim until min rust version 1.74 which allows std::io::Error::other
 fn error_other<E>(error: E) -> std::io::Error

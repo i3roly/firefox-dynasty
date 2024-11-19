@@ -10,12 +10,13 @@
   class MozTabbrowserTabGroup extends MozXULElement {
     static markup = `
       <vbox class="tab-group-label-container" pack="center">
-        <label class="tab-group-label" crop="end"/>
+        <label class="tab-group-label"/>
       </vbox>
       <html:slot/>
       `;
 
     #labelElement;
+    #colorCode;
 
     constructor() {
       super();
@@ -23,7 +24,7 @@
 
     static get inheritedAttributes() {
       return {
-        ".tab-group-label": "value=label,tooltiptext=label",
+        ".tab-group-label": "text=label,tooltiptext=label",
       };
     }
 
@@ -40,6 +41,10 @@
 
       this.#labelElement = this.querySelector(".tab-group-label");
       this.#labelElement.addEventListener("click", this);
+
+      this.createdDate = Date.now();
+
+      this.addEventListener("TabSelect", this);
 
       this._tabsChangedObserver = new window.MutationObserver(mutationList => {
         for (let mutation of mutationList) {
@@ -71,7 +76,11 @@
       });
       this._tabsChangedObserver.observe(this, { childList: true });
 
-      this.dispatchEvent(new CustomEvent("TabGroupCreate", { bubbles: true }));
+      this.#labelElement.addEventListener("contextmenu", e => {
+        e.preventDefault();
+        gBrowser.tabGroupMenu.openEditModal(this);
+        return false;
+      });
     }
 
     disconnectedCallback() {
@@ -79,11 +88,23 @@
     }
 
     get color() {
-      return this.style.getPropertyValue("--tab-group-color");
+      return this.#colorCode;
     }
 
-    set color(val) {
-      this.style.setProperty("--tab-group-color", val);
+    set color(code) {
+      this.#colorCode = code;
+      this.style.setProperty(
+        "--tab-group-color",
+        `var(--tab-group-color-${code})`
+      );
+      this.style.setProperty(
+        "--tab-group-color-invert",
+        `var(--tab-group-color-${code}-invert)`
+      );
+      this.style.setProperty(
+        "--tab-group-color-pale",
+        `var(--tab-group-color-${code}-pale)`
+      );
     }
 
     get id() {
@@ -107,6 +128,9 @@
     }
 
     set collapsed(val) {
+      if (!!val == this.collapsed) {
+        return;
+      }
       this.toggleAttribute("collapsed", val);
       const eventName = val ? "TabGroupCollapse" : "TabGroupExpand";
       this.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
@@ -132,10 +156,8 @@
      *
      */
     ungroupTabs() {
-      let adjacentTab = gBrowser.tabContainer.findNextTab(this.tabs.at(-1));
-
       for (let tab of this.tabs) {
-        gBrowser.tabContainer.insertBefore(tab, adjacentTab);
+        gBrowser.ungroupTab(tab);
       }
     }
 
@@ -144,6 +166,10 @@
         event.preventDefault();
         this.collapsed = !this.collapsed;
       }
+    }
+
+    on_TabSelect() {
+      this.collapsed = false;
     }
   }
 

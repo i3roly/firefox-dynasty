@@ -62,7 +62,7 @@ browser {
   .onboardingContainer {
     height: unset;
     margin: var(--space-large);
-    margin-top: 40px;
+    margin-top: 80px;
   }
 
   .screen {
@@ -120,6 +120,8 @@ browser {
   }
 
   .icon {
+    background-position: center;
+    background-repeat: no-repeat;
     background-size: contain;
     border-radius: 0;
     margin-inline: var(--space-small);
@@ -133,6 +135,9 @@ browser {
       background-image: url(assets/brands/chatgpt.svg);
       -moz-context-properties: fill;
       fill: var(--in-content-page-color);
+    }
+    &.copilot {
+      background-image: url(assets/brands/copilot.svg);
     }
     &.gemini {
       background-image: url(assets/brands/gemini.svg);

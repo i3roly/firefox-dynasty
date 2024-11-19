@@ -15,7 +15,9 @@
 # (Firefox Desktop, Firefox for Android, Focus for Android, etc.).
 # Order is lexicographical, enforced by t/c/glean/tests/pytest/test_yaml_indices.py
 gecko_metrics = [
+    "accessible/metrics.yaml",
     "browser/base/content/metrics.yaml",
+    "devtools/client/shared/metrics.yaml",
     "docshell/base/metrics.yaml",
     "dom/base/use_counter_metrics.yaml",
     "dom/geolocation/metrics.yaml",
@@ -49,21 +51,29 @@ gecko_metrics = [
     "services/common/metrics.yaml",
     "services/sync/modules/metrics.yaml",
     "toolkit/components/antitracking/bouncetrackingprotection/metrics.yaml",
+    "toolkit/components/antitracking/metrics.yaml",
     "toolkit/components/cookiebanners/metrics.yaml",
     "toolkit/components/downloads/metrics.yaml",
+    "toolkit/components/enterprisepolicies/metrics.yaml",
     "toolkit/components/extensions/metrics.yaml",
     "toolkit/components/formautofill/metrics.yaml",
     "toolkit/components/glean/metrics.yaml",
+    "toolkit/components/messaging-system/metrics.yaml",
+    "toolkit/components/normandy/metrics.yaml",
     "toolkit/components/passwordmgr/metrics.yaml",
     "toolkit/components/pdfjs/metrics.yaml",
+    "toolkit/components/printing/metrics.yaml",
     "toolkit/components/processtools/metrics.yaml",
     "toolkit/components/reader/metrics.yaml",
     "toolkit/components/reportbrokensite/metrics.yaml",
     "toolkit/components/resistfingerprinting/metrics.yaml",
     "toolkit/components/translations/metrics.yaml",
     "toolkit/content/metrics.yaml",
+    "toolkit/content/widgets/metrics.yaml",
     "toolkit/mozapps/extensions/metrics.yaml",
+    "toolkit/mozapps/extensions/metrics_legacy.yaml",
     "toolkit/mozapps/handling/metrics.yaml",
+    "toolkit/profile/metrics.yaml",
     "toolkit/xre/metrics.yaml",
     "xpcom/metrics.yaml",
 ]
@@ -73,11 +83,13 @@ gecko_metrics = [
 firefox_desktop_metrics = [
     "browser/components/backup/metrics.yaml",
     "browser/components/doh/metrics.yaml",
+    "browser/components/downloads/metrics.yaml",
     "browser/components/firefoxview/metrics.yaml",
     "browser/components/genai/metrics.yaml",
     "browser/components/metrics.yaml",
     "browser/components/migration/metrics.yaml",
     "browser/components/newtab/metrics.yaml",
+    "browser/components/places/metrics.yaml",
     "browser/components/pocket/metrics.yaml",
     "browser/components/preferences/metrics.yaml",
     "browser/components/privatebrowsing/metrics.yaml",
@@ -88,6 +100,8 @@ firefox_desktop_metrics = [
     "browser/components/sessionstore/metrics.yaml",
     "browser/components/shopping/metrics.yaml",
     "browser/components/sidebar/metrics.yaml",
+    "browser/components/tabbrowser/metrics.yaml",
+    "browser/components/textrecognition/metrics.yaml",
     "browser/components/urlbar/metrics.yaml",
     "browser/extensions/search-detection/metrics.yaml",
     "browser/modules/metrics.yaml",
@@ -103,6 +117,8 @@ firefox_desktop_metrics = [
     "toolkit/components/telemetry/metrics.yaml",
     "toolkit/modules/metrics.yaml",
     "widget/cocoa/metrics.yaml",
+    "widget/gtk/metrics.yaml",
+    "widget/metrics.yaml",
     "widget/windows/metrics.yaml",
 ]
 
@@ -126,6 +142,7 @@ background_tasks_metrics = [
 # Order is lexicographical, enforced by t/c/glean/tests/pytest/test_yaml_indices.py
 test_metrics = [
     "toolkit/components/glean/tests/test_metrics.yaml",
+    "toolkit/components/telemetry/tests/test_metrics.yaml",
 ]
 
 # The list of all Glean metrics.yaml files, relative to the top src dir.

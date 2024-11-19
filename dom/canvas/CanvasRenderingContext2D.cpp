@@ -2885,12 +2885,17 @@ void CanvasRenderingContext2D::ParseSpacing(const nsACString& aSpacing,
     if (!GetPresShell()) {
       return;
     }
+    // This will parse aSpacing as a <length-percentage>...
     RefPtr<const ComputedStyle> style =
         ResolveStyleForProperty(eCSSProperty_letter_spacing, aSpacing);
     if (!style) {
       return;
     }
-    value = style->StyleText()->mLetterSpacing.ToCSSPixels();
+    // ...but only <length> is allowed according to the canvas spec.
+    if (!style->StyleText()->mLetterSpacing.IsLength()) {
+      return;
+    }
+    value = style->StyleText()->mLetterSpacing.AsLength().ToCSSPixels();
   }
   aNormalized = normalized;
   *aValue = value;
@@ -3869,7 +3874,7 @@ bool CanvasRenderingContext2D::EnsureWritablePath() {
   if (!mPath) {
     mPathBuilder = mTarget->CreatePathBuilder(fillRule);
   } else {
-    mPathBuilder = mPath->CopyToBuilder(fillRule);
+    mPathBuilder = Path::ToBuilder(mPath.forget(), fillRule);
   }
   return true;
 }
@@ -3901,9 +3906,7 @@ void CanvasRenderingContext2D::EnsureUserSpacePath(
   }
 
   if (mPath && mPath->GetFillRule() != fillRule) {
-    mPathBuilder = mPath->CopyToBuilder(fillRule);
-    mPath = mPathBuilder->Finish();
-    mPathBuilder = nullptr;
+    Path::SetFillRule(mPath, fillRule);
   }
 
   NS_ASSERTION(mPath, "mPath should exist");
@@ -3916,11 +3919,9 @@ void CanvasRenderingContext2D::TransformCurrentPath(const Matrix& aTransform) {
   }
 
   if (mPathBuilder) {
-    RefPtr<Path> path = mPathBuilder->Finish();
-    mPathBuilder = path->TransformedCopyToBuilder(aTransform);
+    mPathBuilder = Path::ToBuilder(mPathBuilder->Finish(), aTransform);
   } else if (mPath) {
-    mPathBuilder = mPath->TransformedCopyToBuilder(aTransform);
-    mPath = nullptr;
+    mPathBuilder = Path::ToBuilder(mPath.forget(), aTransform);
   }
 }
 
@@ -4483,7 +4484,6 @@ struct MOZ_STACK_CLASS CanvasBidiProcessor final
     mSetTextCount++;
     auto* pfl = gfxPlatformFontList::PlatformFontList();
     pfl->Lock();
-    mFontgrp->CheckForUpdatedPlatformList();
     mFontgrp->UpdateUserFonts();  // ensure user font generation is current
     // adjust flags for current direction run
     gfx::ShapedTextFlags flags = mTextRunFlags;
@@ -5117,9 +5117,6 @@ gfxFontGroup* CanvasRenderingContext2D::GetCurrentFontStyle() {
         NS_ERROR("Default canvas font is invalid");
       }
     }
-  } else {
-    // The fontgroup needs to check if its cached families/faces are valid.
-    fontGroup->CheckForUpdatedPlatformList();
   }
 
   return fontGroup;
@@ -6352,8 +6349,7 @@ void CanvasRenderingContext2D::EnsureErrorTarget() {
 
 void CanvasRenderingContext2D::FillRuleChanged() {
   if (mPath) {
-    mPathBuilder = mPath->CopyToBuilder(CurrentState().fillRule);
-    mPath = nullptr;
+    mPathBuilder = Path::ToBuilder(mPath.forget(), CurrentState().fillRule);
   }
 }
 
@@ -6997,9 +6993,7 @@ void CanvasPath::AddPath(CanvasPath& aCanvasPath, const DOMMatrix2DInit& aInit,
   }
 
   if (!transform.IsIdentity()) {
-    RefPtr<PathBuilder> tempBuilder =
-        tempPath->TransformedCopyToBuilder(transform, FillRule::FILL_WINDING);
-    tempPath = tempBuilder->Finish();
+    Path::TransformAndSetFillRule(tempPath, transform, FillRule::FILL_WINDING);
   }
 
   EnsurePathBuilder();  // in case a path is added to itself
@@ -7039,8 +7033,7 @@ already_AddRefed<gfx::Path> CanvasPath::GetPath(
     mPath->StreamToSink(tmpPathBuilder);
     mPath = tmpPathBuilder->Finish();
   } else if (mPath->GetFillRule() != fillRule) {
-    RefPtr<PathBuilder> tmpPathBuilder = mPath->CopyToBuilder(fillRule);
-    mPath = tmpPathBuilder->Finish();
+    Path::SetFillRule(mPath, fillRule);
   }
 
   RefPtr<gfx::Path> path(mPath);
@@ -7054,8 +7047,7 @@ void CanvasPath::EnsurePathBuilder() const {
 
   // if there is not pathbuilder, there must be a path
   MOZ_ASSERT(mPath);
-  mPathBuilder = mPath->CopyToBuilder();
-  mPath = nullptr;
+  mPathBuilder = Path::ToBuilder(mPath.forget());
 }
 
 size_t BindingJSObjectMallocBytes(CanvasRenderingContext2D* aContext) {

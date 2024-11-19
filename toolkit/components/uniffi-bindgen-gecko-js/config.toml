@@ -30,6 +30,7 @@ main = [
   "RelevancyStore",
   "RelevancyStore.close",
   "RelevancyStore.interrupt",
+  "score",
 ]
 
 [remote_settings.receiver_thread]
@@ -39,6 +40,9 @@ main = [
 ]
 
 [uniffi_fixture_refcounts.receiver_thread]
+default = "main"
+
+[uniffi_trait_interfaces.receiver_thread]
 default = "main"
 
 # Temporarily disabled until we can re-enable callback support

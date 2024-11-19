@@ -169,13 +169,13 @@ export class SyncedTabsController {
 
   actionMappings = {
     "sign-in": {
-      header: "firefoxview-syncedtabs-signin-header",
-      description: "firefoxview-syncedtabs-signin-description",
-      buttonLabel: "firefoxview-syncedtabs-signin-primarybutton",
+      header: "firefoxview-syncedtabs-signin-header-2",
+      description: "firefoxview-syncedtabs-signin-description-2",
+      buttonLabel: "firefoxview-syncedtabs-signin-primarybutton-2",
     },
     "add-device": {
-      header: "firefoxview-syncedtabs-adddevice-header",
-      description: "firefoxview-syncedtabs-adddevice-description",
+      header: "firefoxview-syncedtabs-adddevice-header-2",
+      description: "firefoxview-syncedtabs-adddevice-description-2",
       buttonLabel: "firefoxview-syncedtabs-adddevice-primarybutton",
       descriptionLink: {
         name: "url",
@@ -225,7 +225,7 @@ export class SyncedTabsController {
       buttonLabel = this.actionMappings[action].buttonLabel;
       descriptionLink = this.actionMappings[action].descriptionLink;
       mainImageUrl =
-        "chrome://browser/content/firefoxview/synced-tabs-error.svg";
+        "chrome://browser/content/firefoxview/synced-tabs-empty.svg";
       descriptionArray = [description];
     }
     return {
@@ -267,8 +267,8 @@ export class SyncedTabsController {
 
     for (let id in renderInfo) {
       renderInfo[id].tabItems = this.searchQuery
-        ? searchTabList(this.searchQuery, this.getTabItems(renderInfo[id].tabs))
-        : this.getTabItems(renderInfo[id].tabs);
+        ? searchTabList(this.searchQuery, this.getTabItems(renderInfo[id]))
+        : this.getTabItems(renderInfo[id]);
     }
     return renderInfo;
   }
@@ -304,22 +304,63 @@ export class SyncedTabsController {
     return null;
   }
 
-  getTabItems(tabs) {
-    return tabs?.map(tab => ({
-      icon: tab.icon,
-      title: tab.title,
-      time: tab.lastUsed * 1000,
-      url: tab.url,
-      fxaDeviceId: tab.fxaDeviceId,
-      primaryL10nId: "firefoxview-tabs-list-tab-button",
-      primaryL10nArgs: JSON.stringify({ targetURI: tab.url }),
-      secondaryL10nId: this.contextMenu
-        ? "fxviewtabrow-options-menu-button"
-        : undefined,
-      secondaryL10nArgs: this.contextMenu
-        ? JSON.stringify({ tabTitle: tab.title })
-        : undefined,
-    }));
+  /**
+   * Turn renderInfo into a list of tabs for syncedtabs-tab-list
+   *
+   * @param {object} renderInfo
+   * @param {Array<object>} [renderInfo.tabs]
+   *   tabs to display to the user
+   * @param {string} [renderInfo.name]
+   *   The name of the device for use when the user hovers over
+   *   the close button for context
+   * @param {boolean} [renderInfo.canClose]
+   *   Whether the list should support remotely closing tabs
+   */
+  getTabItems({ tabs, name, canClose }) {
+    return tabs
+      ?.map(tab => {
+        let tabItem = {
+          icon: tab.icon,
+          title: tab.title,
+          time: tab.lastUsed * 1000,
+          url: tab.url,
+          fxaDeviceId: tab.fxaDeviceId,
+          primaryL10nId: "firefoxview-tabs-list-tab-button",
+          primaryL10nArgs: JSON.stringify({ targetURI: tab.url }),
+          secondaryL10nId: this.contextMenu
+            ? "fxviewtabrow-options-menu-button"
+            : undefined,
+          secondaryL10nArgs: this.contextMenu
+            ? JSON.stringify({ tabTitle: tab.title })
+            : undefined,
+        };
+        // We don't want to show the option to close remotely if the
+        // device doesn't support it
+        if (!canClose) {
+          return tabItem;
+        }
+
+        // If this item has been requested to be closed, show
+        // the undo instead until removed from the list
+        if (tabItem.url === this.lastClosedURL) {
+          tabItem.tertiaryL10nId = "text-action-undo";
+          tabItem.tertiaryActionClass = "undo-button";
+          tabItem.tertiaryL10nArgs = null;
+          tabItem.closeRequested = true;
+        } else {
+          // Otherwise default to showing the close/dismiss button
+          tabItem.tertiaryL10nId = "synced-tabs-context-close-tab-title";
+          tabItem.tertiaryL10nArgs = JSON.stringify({ deviceName: name });
+          tabItem.tertiaryActionClass = "dismiss-button";
+          tabItem.closeRequested = false;
+        }
+        return tabItem;
+      })
+      .filter(
+        item =>
+          !this.isURLQueuedToClose(item.fxaDeviceId, item.url) ||
+          item.url === this.lastClosedURL
+      );
   }
 
   updateTabsList(syncedTabs) {

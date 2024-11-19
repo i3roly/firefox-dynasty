@@ -13,6 +13,9 @@
 
   class MozTabbrowserTabs extends MozElements.TabsBase {
     static observedAttributes = ["orient"];
+
+    #maxTabsPerRow;
+
     constructor() {
       super();
 
@@ -52,8 +55,11 @@
       this.arrowScrollbox._getScrollableElements = () => {
         return this.allTabs.filter(this.arrowScrollbox._canScrollToElement);
       };
+      let arePositioningPinnedTabs = () => {
+        return this.hasAttribute("positionpinnedtabs");
+      };
       this.arrowScrollbox._canScrollToElement = tab => {
-        return !tab._pinnedUnscrollable && tab.visible;
+        return (!tab.pinned || !arePositioningPinnedTabs()) && tab.visible;
       };
 
       this.baseConnect();
@@ -75,9 +81,7 @@
         "browser.tabs.tabClipWidth"
       );
       this._hiddenSoundPlayingTabs = new Set();
-      this._allTabs = null;
-      this._visibleTabs = null;
-      this._previewPanel = null;
+      this.previewPanel = null;
 
       this.allTabs[0].label = this.emptyTabTitle;
 
@@ -151,7 +155,6 @@
         false
       );
       this.tooltip = "tabbrowser-tab-tooltip";
-      this._previewPanel = null;
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
@@ -233,20 +236,20 @@
       if (!this._showCardPreviews) {
         return;
       }
-      if (!this._previewPanel) {
+      if (!this.previewPanel) {
         // load the tab preview component
         const TabHoverPreviewPanel = ChromeUtils.importESModule(
           "chrome://browser/content/tabbrowser/tab-hover-preview.mjs"
         ).default;
-        this._previewPanel = new TabHoverPreviewPanel(
+        this.previewPanel = new TabHoverPreviewPanel(
           document.getElementById("tab-preview-panel")
         );
       }
-      this._previewPanel.activate(event.target);
+      this.previewPanel.activate(event.target);
     }
 
     on_TabHoverEnd(event) {
-      this._previewPanel?.deactivate(event.target);
+      this.previewPanel?.deactivate(event.target);
     }
 
     on_TabGroupExpand() {
@@ -388,7 +391,7 @@
         ) {
           // Check whether the click
           // was dispatched on the open space of it.
-          let visibleTabs = this._getVisibleTabs();
+          let visibleTabs = this.visibleTabs;
           let lastTab = visibleTabs.at(-1);
           let winUtils = window.windowUtils;
           let endOfTab =
@@ -530,16 +533,42 @@
         return;
       }
 
-      this._previewPanel?.deactivate();
+      this.previewPanel?.deactivate();
       this.startTabDrag(event, tab);
     }
 
     startTabDrag(event, tab, { fromTabList = false } = {}) {
-      let selectedTabs = gBrowser.selectedTabs;
-      let otherSelectedTabs = selectedTabs.filter(
-        selectedTab => selectedTab != tab
-      );
-      let dataTransferOrderedTabs = [tab].concat(otherSelectedTabs);
+      if (this.#isContainerVerticalPinnedExpanded(tab)) {
+        // In expanded vertical mode, the max number of pinned tabs per row is dynamic
+        // Set this before adjusting dragged tab's position
+        let pinnedTabs = this.visibleTabs.slice(0, gBrowser.pinnedTabCount);
+        let tabsPerRow = 0;
+        let position = 0;
+        for (let pinnedTab of pinnedTabs) {
+          let tabPosition =
+            window.windowUtils.getBoundsWithoutFlushing(pinnedTab).left;
+          if (tabPosition < position) {
+            break;
+          }
+          tabsPerRow++;
+          position = tabPosition;
+        }
+        this.#maxTabsPerRow = tabsPerRow;
+      }
+
+      let dataTransferOrderedTabs;
+      if (!fromTabList) {
+        let selectedTabs = gBrowser.selectedTabs;
+        let otherSelectedTabs = selectedTabs.filter(
+          selectedTab => selectedTab != tab
+        );
+        dataTransferOrderedTabs = [tab].concat(otherSelectedTabs);
+      } else {
+        // Dragging an item in the tabs list doesn't change the currently
+        // selected tabs, and it's not possible to select multiple tabs from
+        // the list, thus handle only the dragged tab in this case.
+        dataTransferOrderedTabs = [tab];
+      }
 
       let dt = event.dataTransfer;
       for (let i = 0; i < dataTransferOrderedTabs.length; i++) {
@@ -566,7 +595,7 @@
       dt.addElement(tab);
 
       if (tab.multiselected) {
-        this._groupSelectedTabs(tab);
+        this.#moveTogetherSelectedTabs(tab);
       }
 
       // Create a canvas to which we capture the current tab.
@@ -669,10 +698,7 @@
       event.stopPropagation();
 
       if (fromTabList) {
-        Services.telemetry.scalarAdd(
-          "browser.ui.interaction.all_tabs_panel_dragstart_tab_event_count",
-          1
-        );
+        Glean.browserUiInteraction.allTabsPanelDragstartTabEventCount.add(1);
       }
     }
 
@@ -718,15 +744,15 @@
       ) {
         ind.hidden = true;
 
-        if (!this._isGroupTabsAnimationOver()) {
-          // Wait for grouping tabs animation to finish
+        if (this.#isAnimatingMoveTogetherSelectedTabs()) {
+          // Wait for moving selected tabs together animation to finish.
           return;
         }
-        this._finishGroupSelectedTabs(draggedTab);
+        this._finishMoveTogetherSelectedTabs(draggedTab);
 
         if (effects == "move") {
           // Pinned tabs in expanded vertical mode are on a grid format and require
-          // different logic to drag and drop
+          // different logic to drag and drop.
           if (this.#isContainerVerticalPinnedExpanded(draggedTab)) {
             this.#animateExpandedPinnedTabMove(event);
             return;
@@ -775,7 +801,7 @@
         let newIndex = this._getDropIndex(event);
         let children = this.allTabs;
         if (newIndex == children.length) {
-          let tabRect = this._getVisibleTabs().at(-1).getBoundingClientRect();
+          let tabRect = this.visibleTabs.at(-1).getBoundingClientRect();
           if (this.verticalMode) {
             newMargin = tabRect.bottom - rect.top;
           } else if (this.#rtlMode) {
@@ -818,7 +844,7 @@
           return;
         }
         movingTabs = draggedTab._dragData.movingTabs;
-        draggedTab.container._finishGroupSelectedTabs(draggedTab);
+        draggedTab.container._finishMoveTogetherSelectedTabs(draggedTab);
       }
 
       this._tabDropIndicator.hidden = true;
@@ -873,18 +899,16 @@
           incrementDropIndex = false;
         }
 
-        let shouldTranslate;
+        let shouldTranslate =
+          !gReduceMotion && !("groupDropIndex" in draggedTab._dragData);
         if (this.#isContainerVerticalPinnedExpanded(draggedTab)) {
-          shouldTranslate =
-            ((oldTranslateX && oldTranslateX != newTranslateX) ||
-              (oldTranslateY && oldTranslateY != newTranslateY)) &&
-            !gReduceMotion;
+          shouldTranslate &&=
+            (oldTranslateX && oldTranslateX != newTranslateX) ||
+            (oldTranslateY && oldTranslateY != newTranslateY);
         } else if (this.verticalMode) {
-          shouldTranslate =
-            oldTranslateY && oldTranslateY != newTranslateY && !gReduceMotion;
+          shouldTranslate &&= oldTranslateY && oldTranslateY != newTranslateY;
         } else {
-          shouldTranslate =
-            oldTranslateX && oldTranslateX != newTranslateX && !gReduceMotion;
+          shouldTranslate &&= oldTranslateX && oldTranslateX != newTranslateX;
         }
 
         if (shouldTranslate) {
@@ -922,6 +946,10 @@
             }
           }
         } else {
+          let groupTab =
+            "groupDropIndex" in draggedTab._dragData
+              ? this.allTabs[draggedTab._dragData.groupDropIndex]
+              : null;
           this._finishAnimateTabMove();
           if (dropIndex !== false) {
             for (let tab of movingTabs) {
@@ -930,6 +958,11 @@
                 dropIndex++;
               }
             }
+          }
+          if (groupTab) {
+            gBrowser.addTabGroup([groupTab, ...movingTabs], {
+              insertBefore: draggedTab,
+            });
           }
         }
       } else if (draggedTab) {
@@ -1038,7 +1071,7 @@
         return;
       }
 
-      this._finishGroupSelectedTabs(draggedTab);
+      this._finishMoveTogetherSelectedTabs(draggedTab);
       this._finishAnimateTabMove();
 
       if (
@@ -1262,11 +1295,22 @@
       return this.querySelector("#tabs-newtab-button");
     }
 
-    // Accessor for tabs.  arrowScrollbox has a container for non-tab elements
-    // at the end, everything else is <tab>s.
+    get verticalMode() {
+      return this.getAttribute("orient") == "vertical";
+    }
+
+    get #rtlMode() {
+      return !this.verticalMode && RTL_UI;
+    }
+
+    get overflowing() {
+      return this.hasAttribute("overflow");
+    }
+
+    #allTabs;
     get allTabs() {
-      if (this._allTabs) {
-        return this._allTabs;
+      if (this.#allTabs) {
+        return this.#allTabs;
       }
       let verticalPinnedTabsContainer = document.getElementById(
         "vertical-pinned-tabs-container"
@@ -1284,9 +1328,8 @@
         }
       }
 
-      let allChildren = [...verticalPinnedTabsContainer.children, ...children];
-      this._allTabs = allChildren;
-      return allChildren;
+      this.#allTabs = [...verticalPinnedTabsContainer.children, ...children];
+      return this.#allTabs;
     }
 
     get allGroups() {
@@ -1294,39 +1337,24 @@
       return children.filter(node => node.tagName == "tab-group");
     }
 
-    get previewPanel() {
-      return this._previewPanel;
-    }
-
-    get verticalMode() {
-      return this.getAttribute("orient") == "vertical";
-    }
-
-    get #rtlMode() {
-      return !this.verticalMode && RTL_UI;
-    }
-
-    get overflowing() {
-      return this.hasAttribute("overflow");
-    }
-
-    _getVisibleTabs() {
-      if (!this._visibleTabs) {
-        this._visibleTabs = Array.prototype.filter.call(
+    #visibleTabs;
+    get visibleTabs() {
+      if (!this.#visibleTabs) {
+        this.#visibleTabs = Array.prototype.filter.call(
           this.allTabs,
           tab => tab.visible
         );
       }
-      return this._visibleTabs;
+      return this.#visibleTabs;
     }
 
     _invalidateCachedTabs() {
-      this._allTabs = null;
-      this._visibleTabs = null;
+      this.#allTabs = null;
+      this.#visibleTabs = null;
     }
 
     _invalidateCachedVisibleTabs() {
-      this._visibleTabs = null;
+      this.#visibleTabs = null;
     }
 
     #isContainerVerticalPinnedExpanded(tab) {
@@ -1480,7 +1508,7 @@
           let rect = ele => {
             return window.windowUtils.getBoundsWithoutFlushing(ele);
           };
-          let tab = this._getVisibleTabs()[gBrowser._numPinnedTabs];
+          let tab = this.visibleTabs[gBrowser.pinnedTabCount];
           if (tab && rect(tab).width <= this._tabClipWidth) {
             this.setAttribute("closebuttons", "activetab");
           } else {
@@ -1488,13 +1516,6 @@
           }
         });
       });
-    }
-
-    _updateHiddenTabsStatus() {
-      this.toggleAttribute(
-        "hashiddentabs",
-        gBrowser.visibleTabs.length < gBrowser.tabs.length
-      );
     }
 
     _handleTabSelect(aInstant) {
@@ -1514,7 +1535,7 @@
         return;
       }
 
-      let tabs = this._getVisibleTabs();
+      let tabs = this.visibleTabs;
       if (!tabs.length) {
         return;
       }
@@ -1550,7 +1571,7 @@
         if (isEndTab && !this._hasTabTempMaxWidth) {
           return;
         }
-        let numPinned = gBrowser._numPinnedTabs;
+        let numPinned = gBrowser.pinnedTabCount;
         // Force tabs to stay the same width, unless we're closing the last tab,
         // which case we need to let them expand just enough so that the overall
         // tabbar width is the same.
@@ -1605,7 +1626,7 @@
 
       if (this._hasTabTempMaxWidth) {
         this._hasTabTempMaxWidth = false;
-        let tabs = this._getVisibleTabs();
+        let tabs = this.visibleTabs;
         for (let i = 0; i < tabs.length; i++) {
           tabs[i].style.maxWidth = "";
         }
@@ -1630,10 +1651,10 @@
       let verticalTabsContainer = document.getElementById(
         "vertical-pinned-tabs-container"
       );
-      let numPinned = gBrowser._numPinnedTabs;
+      let numPinned = gBrowser.pinnedTabCount;
 
-      if (gBrowser._numPinnedTabs !== verticalTabsContainer.children.length) {
-        let tabs = this._getVisibleTabs();
+      if (gBrowser.pinnedTabCount !== verticalTabsContainer.children.length) {
+        let tabs = this.visibleTabs;
         for (let i = 0; i < numPinned; i++) {
           tabs[i].style.marginInlineStart = "";
           verticalTabsContainer.appendChild(tabs[i]);
@@ -1659,8 +1680,8 @@
     }
 
     _positionPinnedTabs() {
-      let tabs = this._getVisibleTabs();
-      let numPinned = gBrowser._numPinnedTabs;
+      let tabs = this.visibleTabs;
+      let numPinned = gBrowser.pinnedTabCount;
       let absPositionHorizontalTabs =
         this.overflowing && tabs.length > numPinned && numPinned > 0;
 
@@ -1695,7 +1716,6 @@
             -(width + layoutData.scrollStartOffset) + "px",
             "important"
           );
-          tab._pinnedUnscrollable = true;
         }
         this.style.setProperty(
           "--tab-overflow-pinned-tabs-width",
@@ -1705,7 +1725,6 @@
         for (let i = 0; i < numPinned; i++) {
           let tab = tabs[i];
           tab.style.marginInlineStart = "";
-          tab._pinnedUnscrollable = false;
         }
 
         this.style.removeProperty("--tab-overflow-pinned-tabs-width");
@@ -1719,7 +1738,8 @@
 
     #animateExpandedPinnedTabMove(event) {
       let draggedTab = event.dataTransfer.mozGetDataAt(TAB_DROP_TYPE, 0);
-      let movingTabs = draggedTab._dragData.movingTabs;
+      let dragData = draggedTab._dragData;
+      let movingTabs = dragData.movingTabs;
 
       if (!this.hasAttribute("movingtab")) {
         this.toggleAttribute("movingtab", true);
@@ -1729,68 +1749,65 @@
         }
       }
 
-      if (!("animLastScreenX" in draggedTab._dragData)) {
-        draggedTab._dragData.animLastScreenX = draggedTab._dragData.screenX;
-      }
-      if (!("animLastScreenY" in draggedTab._dragData)) {
-        draggedTab._dragData.animLastScreenY = draggedTab._dragData.screenY;
-      }
+      dragData.animLastScreenX ??= dragData.screenX;
+      dragData.animLastScreenY ??= dragData.screenY;
 
       let screenX = event.screenX;
       let screenY = event.screenY;
 
       if (
-        screenY == draggedTab._dragData.animLastScreenY &&
-        screenX == draggedTab._dragData.animLastScreenX
+        screenY == dragData.animLastScreenY &&
+        screenX == dragData.animLastScreenX
       ) {
         return;
       }
 
-      let tabs = this._getVisibleTabs().slice(0, gBrowser._numPinnedTabs);
+      let tabs = this.visibleTabs.slice(0, gBrowser.pinnedTabCount);
 
-      let directionX = screenX > draggedTab._dragData.animLastScreenX;
-      let directionY = screenY > draggedTab._dragData.animLastScreenY;
-      draggedTab._dragData.animLastScreenY = screenY;
-      draggedTab._dragData.animLastScreenX = screenX;
+      let directionX = screenX > dragData.animLastScreenX;
+      let directionY = screenY > dragData.animLastScreenY;
+      dragData.animLastScreenY = screenY;
+      dragData.animLastScreenX = screenX;
 
-      let tabWidth = draggedTab.getBoundingClientRect().width;
-      let tabHeight = draggedTab.getBoundingClientRect().height;
+      let { width: tabWidth, height: tabHeight } =
+        draggedTab.getBoundingClientRect();
       let shiftSizeX = tabWidth * movingTabs.length;
       let shiftSizeY = tabHeight;
-      draggedTab._dragData.tabWidth = tabWidth;
-      draggedTab._dragData.tabHeight = tabHeight;
-
-      // In expanded vertical mode, 6 is the max number of pinned tabs per row
-      const maxTabsPerRow = 6;
+      dragData.tabWidth = tabWidth;
+      dragData.tabHeight = tabHeight;
 
       // Move the dragged tab based on the mouse position.
       let firstTabInRow;
       let lastTabInRow;
       if (RTL_UI) {
         firstTabInRow =
-          tabs.length >= maxTabsPerRow ? tabs[maxTabsPerRow - 1] : tabs.at(-1);
+          tabs.length >= this.#maxTabsPerRow
+            ? tabs[this.#maxTabsPerRow - 1]
+            : tabs.at(-1);
         lastTabInRow = tabs[0];
       } else {
         firstTabInRow = tabs[0];
         lastTabInRow =
-          tabs.length >= maxTabsPerRow ? tabs[maxTabsPerRow - 1] : tabs.at(-1);
+          tabs.length >= this.#maxTabsPerRow
+            ? tabs[this.#maxTabsPerRow - 1]
+            : tabs.at(-1);
       }
-      let firstMovingTabScreenX = movingTabs.at(-1).screenX;
-      let firstMovingTabScreenY = movingTabs.at(-1).screenY;
-      let lastMovingTabScreenX = movingTabs[0].screenX;
-      let lastMovingTabScreenY = movingTabs[0].screenY;
-      let translateX = screenX - draggedTab._dragData.screenX;
-      let translateY = screenY - draggedTab._dragData.screenY;
-      let firstBoundX = firstTabInRow.screenX - lastMovingTabScreenX;
-      let firstBoundY = firstTabInRow.screenY - lastMovingTabScreenY;
+      let lastMovingTabScreenX = movingTabs.at(-1).screenX;
+      let lastMovingTabScreenY = movingTabs.at(-1).screenY;
+      let firstMovingTabScreenX = movingTabs[0].screenX;
+      let firstMovingTabScreenY = movingTabs[0].screenY;
+      let translateX = screenX - dragData.screenX;
+      let translateY = screenY - dragData.screenY;
+      let firstBoundX = firstTabInRow.screenX - firstMovingTabScreenX;
+      let firstBoundY = firstTabInRow.screenY - firstMovingTabScreenY;
       let lastBoundX =
         lastTabInRow.screenX +
         lastTabInRow.getBoundingClientRect().width -
-        (firstMovingTabScreenX + tabWidth);
+        (lastMovingTabScreenX + tabWidth);
       let lastBoundY =
         tabs.at(-1).screenY +
         lastTabInRow.getBoundingClientRect().height -
-        (firstMovingTabScreenY + tabHeight);
+        (lastMovingTabScreenY + tabHeight);
       translateX = Math.min(Math.max(translateX, firstBoundX), lastBoundX);
       translateY = Math.min(Math.max(translateY, firstBoundY), lastBoundY);
 
@@ -1798,8 +1815,8 @@
         tab.style.transform = `translate(${translateX}px, ${translateY}px)`;
       }
 
-      draggedTab._dragData.translateX = translateX;
-      draggedTab._dragData.translateY = translateY;
+      dragData.translateX = translateX;
+      dragData.translateY = translateY;
 
       // Determine what tab we're dragging over.
       // * Single tab dragging: Point of reference is the center of the dragged tab. If that
@@ -1814,35 +1831,33 @@
       //   tabs we need to check.
 
       tabs = tabs.filter(t => !movingTabs.includes(t) || t == draggedTab);
-      let firstTabCenterX = lastMovingTabScreenX + translateX + tabWidth / 2;
-      let lastTabCenterX = firstMovingTabScreenX + translateX + tabWidth / 2;
+      let firstTabCenterX = firstMovingTabScreenX + translateX + tabWidth / 2;
+      let lastTabCenterX = lastMovingTabScreenX + translateX + tabWidth / 2;
       let tabCenterX = directionX ? lastTabCenterX : firstTabCenterX;
-      let firstTabCenterY = lastMovingTabScreenY + translateY + tabWidth / 2;
-      let lastTabCenterY = firstMovingTabScreenY + translateY + tabWidth / 2;
+      let firstTabCenterY = firstMovingTabScreenY + translateY + tabWidth / 2;
+      let lastTabCenterY = lastMovingTabScreenY + translateY + tabWidth / 2;
       let tabCenterY = directionY ? lastTabCenterY : firstTabCenterY;
 
       let newIndex = -1;
-      let oldIndex =
-        "animDropIndex" in draggedTab._dragData
-          ? draggedTab._dragData.animDropIndex
-          : movingTabs[0]._tPos;
+      let oldIndex = dragData.animDropIndex ?? movingTabs[0]._tPos;
 
       let low = 0;
       let high = tabs.length - 1;
-      let shiftNumber = maxTabsPerRow - movingTabs.length;
+      let shiftNumber = this.#maxTabsPerRow - movingTabs.length;
 
       let getTabShift = (tab, dropIndex) => {
+        const additionalShift = this.#maxTabsPerRow % 2 ? 0 : tabWidth / 2;
         if (tab._tPos < draggedTab._tPos && tab._tPos >= dropIndex) {
           // If tab is at the end of a row, shift back and down
-          let tabRow = Math.ceil((tab._tPos + 1) / maxTabsPerRow);
+          let tabRow = Math.ceil((tab._tPos + 1) / this.#maxTabsPerRow);
           let shiftedTabRow = Math.ceil(
-            (tab._tPos + 1 + movingTabs.length) / maxTabsPerRow
+            (tab._tPos + 1 + movingTabs.length) / this.#maxTabsPerRow
           );
           if (tab._tPos && tabRow != shiftedTabRow) {
             return [
               RTL_UI
-                ? tabWidth * shiftNumber + tabWidth / 2
-                : -tabWidth * shiftNumber - tabWidth / 2,
+                ? tabWidth * shiftNumber + additionalShift
+                : -tabWidth * shiftNumber - additionalShift,
               shiftSizeY,
             ];
           }
@@ -1850,15 +1865,15 @@
         }
         if (tab._tPos > draggedTab._tPos && tab._tPos < dropIndex) {
           // If tab is not index 0 and at the start of a row, shift across and up
-          let tabRow = Math.floor(tab._tPos / maxTabsPerRow);
+          let tabRow = Math.floor(tab._tPos / this.#maxTabsPerRow);
           let shiftedTabRow = Math.floor(
-            (tab._tPos - movingTabs.length) / maxTabsPerRow
+            (tab._tPos - movingTabs.length) / this.#maxTabsPerRow
           );
           if (tab._tPos && tabRow != shiftedTabRow) {
             return [
               RTL_UI
-                ? -tabWidth * shiftNumber - tabWidth / 2
-                : tabWidth * shiftNumber + tabWidth / 2,
+                ? -tabWidth * shiftNumber - additionalShift
+                : tabWidth * shiftNumber + additionalShift,
               -shiftSizeY,
             ];
           }
@@ -1897,7 +1912,7 @@
       if (newIndex < 0 || newIndex == oldIndex) {
         return;
       }
-      draggedTab._dragData.animDropIndex = newIndex;
+      dragData.animDropIndex = newIndex;
 
       // Shift background tabs to leave a gap where the dragged tab
       // would currently be dropped.
@@ -1912,7 +1927,8 @@
 
     _animateTabMove(event) {
       let draggedTab = event.dataTransfer.mozGetDataAt(TAB_DROP_TYPE, 0);
-      let movingTabs = draggedTab._dragData.movingTabs;
+      let dragData = draggedTab._dragData;
+      let movingTabs = dragData.movingTabs;
 
       if (!this.hasAttribute("movingtab")) {
         this.toggleAttribute("movingtab", true);
@@ -1922,20 +1938,18 @@
         }
       }
 
-      if (!("animLastScreenPos" in draggedTab._dragData)) {
-        draggedTab._dragData.animLastScreenPos = this.verticalMode
-          ? draggedTab._dragData.screenY
-          : draggedTab._dragData.screenX;
-      }
+      dragData.animLastScreenPos ??= this.verticalMode
+        ? dragData.screenY
+        : dragData.screenX;
 
       let screen = this.verticalMode ? event.screenY : event.screenX;
-      if (screen == draggedTab._dragData.animLastScreenPos) {
+      if (screen == dragData.animLastScreenPos) {
         return;
       }
 
       let pinned = draggedTab.pinned;
-      let numPinned = gBrowser._numPinnedTabs;
-      let tabs = this._getVisibleTabs().slice(
+      let numPinned = gBrowser.pinnedTabCount;
+      let tabs = this.visibleTabs.slice(
         pinned ? 0 : numPinned,
         pinned ? numPinned : undefined
       );
@@ -1946,48 +1960,47 @@
         movingTabs = [...movingTabs].reverse();
       }
 
-      let directionMove = screen > draggedTab._dragData.animLastScreenPos;
-      draggedTab._dragData.animLastScreenPos = screen;
+      let directionForward = screen > dragData.animLastScreenPos;
+      dragData.animLastScreenPos = screen;
 
       let screenAxis = this.verticalMode ? "screenY" : "screenX";
       let size = this.verticalMode ? "height" : "width";
       let translateAxis = this.verticalMode ? "translateY" : "translateX";
       let scrollDirection = this.verticalMode ? "scrollTop" : "scrollLeft";
-      let tabWidth = draggedTab.getBoundingClientRect().width;
-      let tabHeight = draggedTab.getBoundingClientRect().height;
-      let tabSize = this.verticalMode ? tabHeight : tabWidth;
-      let shiftSize = tabSize * movingTabs.length;
-      let translateX = event.screenX - draggedTab._dragData.screenX;
-      let translateY = event.screenY - draggedTab._dragData.screenY;
+      let { width: tabWidth, height: tabHeight } =
+        draggedTab.getBoundingClientRect();
+      let translateX = event.screenX - dragData.screenX;
+      let translateY = event.screenY - dragData.screenY;
 
-      draggedTab._dragData.tabWidth = tabWidth;
-      draggedTab._dragData.tabHeight = tabHeight;
-      draggedTab._dragData.translateX = translateX;
-      draggedTab._dragData.translateY = translateY;
+      dragData.tabWidth = tabWidth;
+      dragData.tabHeight = tabHeight;
+      dragData.translateX = translateX;
+      dragData.translateY = translateY;
 
       // Move the dragged tab based on the mouse position.
       let firstTab = tabs[0];
       let lastTab = tabs.at(-1);
-      let firstMovingTabScreen = movingTabs.at(-1)[screenAxis];
-      let lastMovingTabScreen = movingTabs[0][screenAxis];
-      let translate = screen - draggedTab._dragData[screenAxis];
+      let lastMovingTabScreen = movingTabs.at(-1)[screenAxis];
+      let firstMovingTabScreen = movingTabs[0][screenAxis];
+      let tabSize = this.verticalMode ? tabHeight : tabWidth;
+      let shiftSize = lastMovingTabScreen + tabSize - firstMovingTabScreen;
+      let translate = screen - dragData[screenAxis];
       if (!pinned) {
         translate +=
-          this.arrowScrollbox.scrollbox[scrollDirection] -
-          draggedTab._dragData.scrollPos;
+          this.arrowScrollbox.scrollbox[scrollDirection] - dragData.scrollPos;
       }
-      let firstBound = firstTab[screenAxis] - lastMovingTabScreen;
+      let firstBound = firstTab[screenAxis] - firstMovingTabScreen;
       let lastBound =
         lastTab[screenAxis] +
         lastTab.getBoundingClientRect()[size] -
-        (firstMovingTabScreen + tabSize);
+        (lastMovingTabScreen + tabSize);
       translate = Math.min(Math.max(translate, firstBound), lastBound);
 
       for (let tab of movingTabs) {
         tab.style.transform = `${translateAxis}(${translate}px)`;
       }
 
-      draggedTab._dragData.translatePos = translate;
+      dragData.translatePos = translate;
 
       // Determine what tab we're dragging over.
       // * Single tab dragging: Point of reference is the center of the dragged tab. If that
@@ -1998,20 +2011,11 @@
       //   mouse is moving from top to bottom, the bottom reference gets activated,
       //   otherwise the top reference will be used. Everything else works the same
       //   as single tab dragging.
-      // * We're doing a binary search in order to reduce the amount of
-      //   tabs we need to check.
 
       tabs = tabs.filter(t => !movingTabs.includes(t) || t == draggedTab);
-      let firstTabCenter = lastMovingTabScreen + translate + tabSize / 2;
-      let lastTabCenter = firstMovingTabScreen + translate + tabSize / 2;
-      let tabCenter = directionMove ? lastTabCenter : firstTabCenter;
-      let newIndex = -1;
-      let oldIndex =
-        "animDropIndex" in draggedTab._dragData
-          ? draggedTab._dragData.animDropIndex
-          : movingTabs[0]._tPos;
-      let low = 0;
-      let high = tabs.length - 1;
+      let firstTabCenter = firstMovingTabScreen + translate + tabSize / 2;
+      let lastTabCenter = lastMovingTabScreen + translate + tabSize / 2;
+      let tabCenter = directionForward ? lastTabCenter : firstTabCenter;
       let getTabShift = (tab, dropIndex) => {
         if (tab._tPos < draggedTab._tPos && tab._tPos >= dropIndex) {
           return this.#rtlMode ? -shiftSize : shiftSize;
@@ -2022,41 +2026,118 @@
         return 0;
       };
 
-      while (low <= high) {
-        let mid = Math.floor((low + high) / 2);
-        if (tabs[mid] == draggedTab && ++mid > high) {
-          break;
-        }
-        screen = tabs[mid][screenAxis] + getTabShift(tabs[mid], oldIndex);
+      // We're doing a binary search in order to reduce the amount of
+      // tabs we need to check.
+      let oldIndex = dragData.animDropIndex ?? movingTabs[0]._tPos;
+      let tabDropIndexFromPoint = point => {
+        let index = -1;
+        let low = 0;
+        let high = tabs.length - 1;
+        while (low <= high) {
+          let mid = Math.floor((low + high) / 2);
+          if (tabs[mid] == draggedTab && ++mid > high) {
+            break;
+          }
+          screen = tabs[mid][screenAxis] + getTabShift(tabs[mid], oldIndex);
 
-        if (screen > tabCenter) {
-          high = mid - 1;
-        } else if (
-          screen + tabs[mid].getBoundingClientRect()[size] <
-          tabCenter
+          if (screen > point) {
+            high = mid - 1;
+          } else if (screen + tabs[mid].getBoundingClientRect()[size] < point) {
+            low = mid + 1;
+          } else {
+            index = tabs[mid]._tPos;
+            break;
+          }
+        }
+        if (index >= oldIndex) {
+          index++;
+        }
+        return index;
+      };
+      let newIndex = tabDropIndexFromPoint(tabCenter);
+      if (newIndex < 0) {
+        newIndex = oldIndex;
+      }
+      dragData.animDropIndex = newIndex;
+
+      if (gBrowser._tabGroupsEnabled && !pinned) {
+        let dragOverGroupingThreshold =
+          Services.prefs.getIntPref(
+            "browser.tabs.groups.dragOverThresholdPercent"
+          ) / 100;
+        dragOverGroupingThreshold = Math.max(0, dragOverGroupingThreshold);
+        dragOverGroupingThreshold = Math.min(0.5, dragOverGroupingThreshold);
+        let groupPoint =
+          (directionForward
+            ? lastMovingTabScreen + tabSize * (1 - dragOverGroupingThreshold)
+            : firstMovingTabScreen + tabSize * dragOverGroupingThreshold) +
+          translate;
+        let groupDropIndex = tabDropIndexFromPoint(groupPoint);
+        if (directionForward) {
+          groupDropIndex--;
+        }
+        if (
+          "groupDropIndex" in dragData &&
+          dragData.groupDropIndex != groupDropIndex
         ) {
-          low = mid + 1;
+          this.allTabs[dragData.groupDropIndex]?.removeAttribute(
+            "dragover-createGroup"
+          );
+          delete dragData.groupDropIndex;
+        }
+        if (groupDropIndex in this.allTabs) {
+          dragData.groupDropIndex = groupDropIndex;
+          this.toggleAttribute("movingtab-createGroup", true);
+          this.allTabs[groupDropIndex].toggleAttribute(
+            "dragover-createGroup",
+            true
+          );
+          this.#setDragOverGroupColor(gBrowser.tabGroupMenu.nextUnusedColor);
         } else {
-          newIndex = tabs[mid]._tPos;
-          break;
+          this.removeAttribute("movingtab-createGroup");
         }
       }
-      if (newIndex >= oldIndex) {
-        newIndex++;
+
+      if (gBrowser._tabGroupsEnabled && !("groupDropIndex" in dragData)) {
+        this.#setDragOverGroupColor(
+          this.allTabs[dragData.animDropIndex].group?.color
+        );
       }
-      if (newIndex < 0 || newIndex == oldIndex) {
+
+      if (newIndex == oldIndex) {
         return;
       }
-      draggedTab._dragData.animDropIndex = newIndex;
 
       // Shift background tabs to leave a gap where the dragged tab
       // would currently be dropped.
       for (let tab of tabs) {
-        if (tab != draggedTab) {
-          let shift = getTabShift(tab, newIndex);
-          tab.style.transform = shift ? `${translateAxis}(${shift}px)` : "";
+        if (tab == draggedTab) {
+          continue;
         }
+        let shift = getTabShift(tab, newIndex);
+        tab.style.transform = shift ? `${translateAxis}(${shift}px)` : "";
       }
+    }
+
+    #setDragOverGroupColor(groupColorCode) {
+      if (!groupColorCode) {
+        this.style.removeProperty("--dragover-tab-group-color");
+        this.style.removeProperty("--dragover-tab-group-color-invert");
+        this.style.removeProperty("--dragover-tab-group-color-pale");
+        return;
+      }
+      this.style.setProperty(
+        "--dragover-tab-group-color",
+        `var(--tab-group-color-${groupColorCode})`
+      );
+      this.style.setProperty(
+        "--dragover-tab-group-color-invert",
+        `var(--tab-group-color-${groupColorCode}-invert)`
+      );
+      this.style.setProperty(
+        "--dragover-tab-group-color-pale",
+        `var(--tab-group-color-${groupColorCode}-pale)`
+      );
     }
 
     _finishAnimateTabMove() {
@@ -2064,26 +2145,28 @@
         return;
       }
 
-      for (let tab of this._getVisibleTabs()) {
+      for (let tab of this.visibleTabs) {
         tab.style.transform = "";
+        tab.removeAttribute("dragover-createGroup");
       }
 
       this.removeAttribute("movingtab");
+      this.removeAttribute("movingtab-createGroup");
+      this.#setDragOverGroupColor(null);
       gNavToolbox.removeAttribute("movingtab");
 
       this._handleTabSelect();
     }
 
     /**
-     * Regroup all selected tabs around the
-     * tab in param
+     * Move together all selected tabs around the tab in param.
      */
-    _groupSelectedTabs(tab) {
+    #moveTogetherSelectedTabs(tab) {
       let draggedTabPos = tab._tPos;
       let selectedTabs = gBrowser.selectedTabs;
       let animate = !gReduceMotion;
 
-      tab.groupingTabsData = {
+      tab._moveTogetherSelectedTabsData = {
         finished: !animate,
       };
 
@@ -2106,14 +2189,14 @@
           ];
         let shift = (movingTabNewIndex - movingTabOldIndex) * movingTabSize;
 
-        movingTab.groupingTabsData.animate = true;
-        movingTab.toggleAttribute("tab-grouping", true);
+        movingTab._moveTogetherSelectedTabsData.animate = true;
+        movingTab.toggleAttribute("multiselected-move-together", true);
 
-        movingTab.groupingTabsData.translatePos = shift;
+        movingTab._moveTogetherSelectedTabsData.translatePos = shift;
 
         let postTransitionCleanup = () => {
-          movingTab.groupingTabsData.newIndex = movingTabNewIndex;
-          movingTab.groupingTabsData.animate = false;
+          movingTab._moveTogetherSelectedTabsData.newIndex = movingTabNewIndex;
+          movingTab._moveTogetherSelectedTabsData.animate = false;
         };
         if (gReduceMotion) {
           postTransitionCleanup();
@@ -2154,19 +2237,18 @@
             continue;
           }
 
-          if (
-            !middleTab.groupingTabsData ||
-            !middleTab.groupingTabsData.translatePos
-          ) {
-            middleTab.groupingTabsData = { translatePos: 0 };
+          if (!middleTab._moveTogetherSelectedTabsData?.translatePos) {
+            middleTab._moveTogetherSelectedTabsData = { translatePos: 0 };
           }
           if (isBeforeSelectedTab) {
-            middleTab.groupingTabsData.translatePos -= movingTabSize;
+            middleTab._moveTogetherSelectedTabsData.translatePos -=
+              movingTabSize;
           } else {
-            middleTab.groupingTabsData.translatePos += movingTabSize;
+            middleTab._moveTogetherSelectedTabsData.translatePos +=
+              movingTabSize;
           }
 
-          middleTab.toggleAttribute("tab-grouping", true);
+          middleTab.toggleAttribute("multiselected-move-together", true);
         }
       };
 
@@ -2177,7 +2259,7 @@
         insertAtPos = newIndex(movingTab, insertAtPos);
 
         if (animate) {
-          movingTab.groupingTabsData = {};
+          movingTab._moveTogetherSelectedTabsData = {};
           addAnimationData(movingTab, insertAtPos, true);
         } else {
           gBrowser.moveTabTo(movingTab, insertAtPos);
@@ -2196,7 +2278,7 @@
         insertAtPos = newIndex(movingTab, insertAtPos);
 
         if (animate) {
-          movingTab.groupingTabsData = {};
+          movingTab._moveTogetherSelectedTabsData = {};
           addAnimationData(movingTab, insertAtPos, false);
         } else {
           gBrowser.moveTabTo(movingTab, insertAtPos);
@@ -2205,10 +2287,11 @@
       }
 
       // Slide the relevant tabs to their new position.
-      for (let t of this._getVisibleTabs()) {
-        if (t.groupingTabsData && t.groupingTabsData.translatePos) {
+      for (let t of this.visibleTabs) {
+        if (t._moveTogetherSelectedTabsData?.translatePos) {
           let translatePos =
-            (this.#rtlMode ? -1 : 1) * t.groupingTabsData.translatePos;
+            (this.#rtlMode ? -1 : 1) *
+            t._moveTogetherSelectedTabsData.translatePos;
           t.style.transform = `translate${
             this.verticalMode ? "Y" : "X"
           }(${translatePos}px)`;
@@ -2218,18 +2301,21 @@
       function newIndex(aTab, index) {
         // Don't allow mixing pinned and unpinned tabs.
         if (aTab.pinned) {
-          return Math.min(index, gBrowser._numPinnedTabs - 1);
+          return Math.min(index, gBrowser.pinnedTabCount - 1);
         }
-        return Math.max(index, gBrowser._numPinnedTabs);
+        return Math.max(index, gBrowser.pinnedTabCount);
       }
     }
 
-    _finishGroupSelectedTabs(tab) {
-      if (!tab.groupingTabsData || tab.groupingTabsData.finished) {
+    _finishMoveTogetherSelectedTabs(tab) {
+      if (
+        !tab._moveTogetherSelectedTabsData ||
+        tab._moveTogetherSelectedTabsData.finished
+      ) {
         return;
       }
 
-      tab.groupingTabsData.finished = true;
+      tab._moveTogetherSelectedTabsData.finished = true;
 
       let selectedTabs = gBrowser.selectedTabs;
       let tabIndex = selectedTabs.indexOf(tab);
@@ -2237,33 +2323,39 @@
       // Moving left or top tabs
       for (let i = tabIndex - 1; i > -1; i--) {
         let movingTab = selectedTabs[i];
-        if (movingTab.groupingTabsData.newIndex) {
-          gBrowser.moveTabTo(movingTab, movingTab.groupingTabsData.newIndex);
+        if (movingTab._moveTogetherSelectedTabsData.newIndex) {
+          gBrowser.moveTabTo(
+            movingTab,
+            movingTab._moveTogetherSelectedTabsData.newIndex
+          );
         }
       }
 
       // Moving right or bottom tabs
       for (let i = tabIndex + 1; i < selectedTabs.length; i++) {
         let movingTab = selectedTabs[i];
-        if (movingTab.groupingTabsData.newIndex) {
-          gBrowser.moveTabTo(movingTab, movingTab.groupingTabsData.newIndex);
+        if (movingTab._moveTogetherSelectedTabsData.newIndex) {
+          gBrowser.moveTabTo(
+            movingTab,
+            movingTab._moveTogetherSelectedTabsData.newIndex
+          );
         }
       }
 
-      for (let t of this._getVisibleTabs()) {
+      for (let t of this.visibleTabs) {
         t.style.transform = "";
-        t.removeAttribute("tab-grouping");
-        delete t.groupingTabsData;
+        t.removeAttribute("multiselected-move-together");
+        delete t._moveTogetherSelectedTabsData;
       }
     }
 
-    _isGroupTabsAnimationOver() {
+    #isAnimatingMoveTogetherSelectedTabs() {
       for (let tab of gBrowser.selectedTabs) {
-        if (tab.groupingTabsData && tab.groupingTabsData.animate) {
-          return false;
+        if (tab._moveTogetherSelectedTabsData?.animate) {
+          return true;
         }
       }
-      return true;
+      return false;
     }
 
     handleEvent(aEvent) {
@@ -2282,7 +2374,7 @@
           }
           break;
         case "mouseleave":
-          this._previewPanel?.deactivate();
+          this.previewPanel?.deactivate();
           break;
         default:
           let methodName = `on_${aEvent.type}`;

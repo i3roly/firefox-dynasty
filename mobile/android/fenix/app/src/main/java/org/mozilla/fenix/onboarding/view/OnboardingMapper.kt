@@ -4,6 +4,7 @@
 
 package org.mozilla.fenix.onboarding.view
 
+import org.mozilla.fenix.nimbus.AddOnData
 import org.mozilla.fenix.nimbus.OnboardingCardData
 import org.mozilla.fenix.nimbus.OnboardingCardType
 
@@ -47,6 +48,8 @@ private fun OnboardingCardData.isCardEnabled(
         OnboardingCardType.ADD_SEARCH_WIDGET -> {
             enabled && showAddWidgetPage
         }
+
+        OnboardingCardType.ADD_ONS -> addOnsData.isNotEmpty()
 
         else -> {
             enabled
@@ -108,6 +111,11 @@ private fun OnboardingCardData.toPageUiData(privacyCaption: Caption?) = Onboardi
     primaryButtonLabel = primaryButtonLabel,
     secondaryButtonLabel = secondaryButtonLabel,
     privacyCaption = privacyCaption,
+    addOns = if (addOnsData.isEmpty()) {
+        null
+    } else {
+        addOnsData.toOnboardingAddOns()
+    },
 )
 
 private fun OnboardingCardType.toPageUiDataType() = when (this) {
@@ -115,6 +123,19 @@ private fun OnboardingCardType.toPageUiDataType() = when (this) {
     OnboardingCardType.SYNC_SIGN_IN -> OnboardingPageUiData.Type.SYNC_SIGN_IN
     OnboardingCardType.NOTIFICATION_PERMISSION -> OnboardingPageUiData.Type.NOTIFICATION_PERMISSION
     OnboardingCardType.ADD_SEARCH_WIDGET -> OnboardingPageUiData.Type.ADD_SEARCH_WIDGET
+    OnboardingCardType.ADD_ONS -> OnboardingPageUiData.Type.ADD_ONS
+}
+
+private fun List<AddOnData>.toOnboardingAddOns() = map { it.toOnboardingAddOn() }
+
+private fun AddOnData.toOnboardingAddOn() = with(this) {
+    OnboardingAddOn(
+        iconRes = iconRes.resourceId,
+        name = name,
+        description = description,
+        averageRating = averageRating,
+        reviewCount = reviewCount,
+    )
 }
 
 /**
@@ -132,6 +153,7 @@ internal fun mapToOnboardingPageState(
     onNotificationPermissionSkipClick: () -> Unit,
     onAddFirefoxWidgetClick: () -> Unit,
     onAddFirefoxWidgetSkipClick: () -> Unit,
+    onAddOnsButtonClick: () -> Unit,
 ): OnboardingPageState = when (onboardingPageUiData.type) {
     OnboardingPageUiData.Type.DEFAULT_BROWSER -> createOnboardingPageState(
         onboardingPageUiData = onboardingPageUiData,
@@ -156,6 +178,12 @@ internal fun mapToOnboardingPageState(
         onPositiveButtonClick = onNotificationPermissionButtonClick,
         onNegativeButtonClick = onNotificationPermissionSkipClick,
     )
+
+    OnboardingPageUiData.Type.ADD_ONS -> createOnboardingPageState(
+        onboardingPageUiData = onboardingPageUiData,
+        onPositiveButtonClick = onAddOnsButtonClick,
+        onNegativeButtonClick = {}, // No negative button option for add-ons.
+    )
 }
 
 private fun createOnboardingPageState(
@@ -167,6 +195,9 @@ private fun createOnboardingPageState(
     title = onboardingPageUiData.title,
     description = onboardingPageUiData.description,
     primaryButton = Action(onboardingPageUiData.primaryButtonLabel, onPositiveButtonClick),
-    secondaryButton = Action(onboardingPageUiData.secondaryButtonLabel, onNegativeButtonClick),
+    secondaryButton = onboardingPageUiData.secondaryButtonLabel?.let {
+        Action(it, onNegativeButtonClick)
+    },
     privacyCaption = onboardingPageUiData.privacyCaption,
+    addOns = onboardingPageUiData.addOns,
 )

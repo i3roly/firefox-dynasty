@@ -7,17 +7,28 @@ import { LoginHelper } from "resource://gre/modules/LoginHelper.sys.mjs";
 import { DataSourceBase } from "resource://gre/modules/megalist/aggregator/datasources/DataSourceBase.sys.mjs";
 import { LoginCSVImport } from "resource://gre/modules/LoginCSVImport.sys.mjs";
 import { LoginExport } from "resource://gre/modules/LoginExport.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
+
+const AUTH_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   LoginBreaches: "resource:///modules/LoginBreaches.sys.mjs",
   MigrationUtils: "resource:///modules/MigrationUtils.sys.mjs",
+  UIState: "resource://services-sync/UIState.sys.mjs",
 });
 
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
   "BREACH_ALERTS_ENABLED",
   "signon.management.page.breach-alerts.enabled",
+  false
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "PASSWORD_SYNC_ENABLED",
+  "services.sync.engine.passwords",
   false
 );
 
@@ -61,32 +72,54 @@ export class LoginDataSource extends DataSourceBase {
     super(...args);
     // Wait for Fluent to provide strings before loading data
     this.localizeStrings({
-      headerLabel: "passwords-section-label",
-      expandSection: "passwords-expand-section-tooltip",
-      collapseSection: "passwords-collapse-section-tooltip",
-      originLabel: "passwords-origin-label",
-      usernameLabel: "passwords-username-label",
-      passwordLabel: "passwords-password-label",
-      passwordsDisabled: "passwords-disabled",
-      passwordOSAuthDialogCaption: "passwords-os-auth-dialog-caption",
-      passwordsImportFilePickerTitle: "passwords-import-file-picker-title",
-      passwordsImportFilePickerImportButton:
-        "passwords-import-file-picker-import-button",
-      passwordsImportFilePickerCsvFilterTitle:
-        "passwords-import-file-picker-csv-filter-title",
-      passwordsImportFilePickerTsvFilterTitle:
-        "passwords-import-file-picker-tsv-filter-title",
-      exportPasswordsOSReauthMessage: this.getPlatformFtl(
-        "passwords-export-os-auth-dialog-message"
-      ),
-      passwordsExportFilePickerTitle: "passwords-export-file-picker-title",
-      passwordsExportFilePickerDefaultFileName:
-        "passwords-export-file-picker-default-filename",
-      passwordsExportFilePickerExportButton:
-        "passwords-export-file-picker-export-button",
-      passwordsExportFilePickerCsvFilterTitle:
-        "passwords-export-file-picker-csv-filter-title",
-      dismissBreachCommandLabel: "passwords-dismiss-breach-alert-command",
+      headerLabel: { id: "passwords-section-label" },
+      expandSection: { id: "passwords-expand-section-tooltip" },
+      collapseSection: { id: "passwords-collapse-section-tooltip" },
+      originLabel: { id: "passwords-origin-label" },
+      usernameLabel: { id: "passwords-username-label" },
+      passwordLabel: { id: "passwords-password-label" },
+      passwordsDisabled: { id: "passwords-disabled" },
+      revealPasswordOSAuthDialogPrompt: {
+        id: this.getPlatformFtl(
+          "passwords-reveal-password-os-auth-dialog-message"
+        ),
+      },
+      copyPasswordOSAuthDialogPrompt: {
+        id: this.getPlatformFtl(
+          "passwords-copy-password-os-auth-dialog-message"
+        ),
+      },
+      passwordOSAuthDialogCaption: { id: "passwords-os-auth-dialog-caption" },
+      passwordsImportFilePickerTitle: {
+        id: "passwords-import-file-picker-title",
+      },
+      passwordsImportFilePickerImportButton: {
+        id: "passwords-import-file-picker-import-button",
+      },
+      passwordsImportFilePickerCsvFilterTitle: {
+        id: "passwords-import-file-picker-csv-filter-title",
+      },
+      passwordsImportFilePickerTsvFilterTitle: {
+        id: "passwords-import-file-picker-tsv-filter-title",
+      },
+      exportPasswordsOSReauthMessage: {
+        id: this.getPlatformFtl("passwords-export-os-auth-dialog-message"),
+      },
+      passwordsExportFilePickerTitle: {
+        id: "passwords-export-file-picker-title",
+      },
+      passwordsExportFilePickerDefaultFileName: {
+        id: "passwords-export-file-picker-default-filename",
+      },
+      passwordsExportFilePickerExportButton: {
+        id: "passwords-export-file-picker-export-button",
+      },
+      passwordsExportFilePickerCsvFilterTitle: {
+        id: "passwords-export-file-picker-csv-filter-title",
+      },
+      dismissBreachCommandLabel: {
+        id: "passwords-dismiss-breach-alert-command",
+      },
     }).then(strings => {
       const copyCommand = { id: "Copy", label: "command-copy" };
       const editCommand = { id: "Edit", label: "command-edit" };
@@ -131,7 +164,7 @@ export class LoginDataSource extends DataSourceBase {
         this.#openLink(IMPORT_FILE_REPORT_URL);
       this.#header.executeImportFromBrowser = () => this.#importFromBrowser();
       this.#header.executeRemoveAll = () => this.#removeAllPasswords();
-      this.#header.executeExport = async () => this.#confirmExportLogins();
+      this.#header.executeExport = async () => this.#exportLogins();
       this.#header.executeSettings = () => this.#openLink(PREFERENCES_URL);
       this.#header.executeHelp = () => this.#openLink(SUPPORT_URL);
 
@@ -257,11 +290,18 @@ export class LoginDataSource extends DataSourceBase {
         },
         commands: {
           value: [
-            { ...copyCommand, verify: true },
+            {
+              ...copyCommand,
+              verify: true,
+              OSAuthPromptMessage: strings.copyPasswordOSAuthDialogPrompt,
+              OSAuthCaptionMessage: strings.passwordOSAuthDialogCaption,
+            },
             {
               id: "Reveal",
               label: "command-reveal",
               verify: true,
+              OSAuthPromptMessage: strings.revealPasswordOSAuthDialogPrompt,
+              OSAuthCaptionMessage: strings.passwordOSAuthDialogCaption,
             },
             { id: "Conceal", label: "command-conceal" },
             editCommand,
@@ -271,6 +311,11 @@ export class LoginDataSource extends DataSourceBase {
         executeReveal: {
           value() {
             this.concealed = false;
+            clearTimeout(this.concealPasswordTimeout);
+            this.concealPasswordTimeout = setTimeout(
+              () => this.executeConceal(),
+              AUTH_TIMEOUT_MS
+            );
             this.refreshOnScreen();
           },
         },
@@ -410,9 +455,26 @@ export class LoginDataSource extends DataSourceBase {
     }
   }
 
-  #removeAllPasswords() {
-    Services.logins.removeAllLogins();
-    this.cancelDialog();
+  #isPasswordSyncEnabled() {
+    const state = lazy.UIState.get();
+    return state.syncEnabled && lazy.PASSWORD_SYNC_ENABLED;
+  }
+
+  async #removeAllPasswords() {
+    const { total } = this.#header.value;
+    const messageId = this.#isPasswordSyncEnabled()
+      ? "passwords-remove-all-message-sync"
+      : "passwords-remove-all-message";
+
+    const confirmed = await this.#showWindowPrompt(
+      { id: "passwords-remove-all-title", args: { total } },
+      { id: messageId, args: { total } },
+      { id: "passwords-remove-all-confirm-button", args: { total } }
+    );
+
+    if (confirmed) {
+      Services.logins.removeAllLogins();
+    }
   }
 
   confirmRemoveLogin([record]) {
@@ -425,7 +487,7 @@ export class LoginDataSource extends DataSourceBase {
     this.cancelDialog();
   }
 
-  async #confirmExportLogins() {
+  async #exportLogins() {
     const { BrowserWindowTracker } = ChromeUtils.importESModule(
       "resource:///modules/BrowserWindowTracker.sys.mjs"
     );
@@ -450,11 +512,18 @@ export class LoginDataSource extends DataSourceBase {
     Glean.pwmgr[name].record(extra);
 
     if (!isAuthorized) {
-      this.cancelDialog();
       return;
     }
-    this.exportFilePickerDialog(browsingContext);
-    this.cancelDialog();
+
+    const confirmed = await this.#showWindowPrompt(
+      { id: "export-passwords-dialog-title" },
+      { id: "export-passwords-dialog-message" },
+      { id: "export-passwords-dialog-confirm-button" }
+    );
+
+    if (confirmed) {
+      this.exportFilePickerDialog(browsingContext);
+    }
   }
 
   exportFilePickerDialog(browsingContext) {
@@ -491,6 +560,42 @@ export class LoginDataSource extends DataSourceBase {
     });
   }
 
+  async #showWindowPrompt(titleL10n, messageL10n, confirmButtonL10n) {
+    const { BrowserWindowTracker } = ChromeUtils.importESModule(
+      "resource:///modules/BrowserWindowTracker.sys.mjs"
+    );
+    const win = BrowserWindowTracker.getTopWindow();
+
+    const { title, message, confirmButton } = await this.localizeStrings({
+      title: titleL10n,
+      message: messageL10n,
+      confirmButton: confirmButtonL10n,
+    });
+
+    // For more context on what these flags mean:
+    // https://firefox-source-docs.mozilla.org/toolkit/components/prompts/prompts/nsIPromptService-reference.html#Prompter.confirmEx
+    const flags =
+      Services.prompt.BUTTON_TITLE_IS_STRING * Services.prompt.BUTTON_POS_0 +
+      Services.prompt.BUTTON_TITLE_CANCEL * Services.prompt.BUTTON_POS_1;
+
+    // buttonPressed will be:
+    //  - 0 for confirm
+    //  - 1 for cancelling/declining.
+    const buttonPressed = Services.prompt.confirmEx(
+      win,
+      title,
+      message,
+      flags,
+      confirmButton,
+      null,
+      null,
+      null,
+      {}
+    );
+
+    return buttonPressed == 0;
+  }
+
   /**
    * Enumerate all the lines provided by this data source.
    *
@@ -519,7 +624,7 @@ export class LoginDataSource extends DataSourceBase {
         login.password.toUpperCase().includes(searchText)
     );
 
-    this.#header.value.statsTotal = stats.total;
+    this.#header.value.count = stats.count;
   }
 
   /**
@@ -608,6 +713,10 @@ export class LoginDataSource extends DataSourceBase {
     this.#header.value.total = 0;
     this.#header.value.alerts = 0;
     this.refreshAllLinesOnScreen();
+  }
+
+  getAuthTimeoutMs() {
+    return AUTH_TIMEOUT_MS;
   }
 
   observe(_subj, topic, message) {

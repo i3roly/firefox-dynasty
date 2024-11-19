@@ -72,6 +72,7 @@
 #include "mozilla/PresShell.h"
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/ScrollContainerFrame.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_ui.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/HTMLLabelElement.h"
@@ -2553,6 +2554,11 @@ void LocalAccessible::DispatchClickEvent(nsIContent* aContent,
   // Simulate a touch interaction by dispatching touch events with mouse events.
   nsCoreUtils::DispatchTouchEvent(eTouchStart, x, y, aContent, frame, presShell,
                                   widget);
+
+  if (StaticPrefs::dom_popup_experimental()) {
+    // This isn't needed once bug 1924790 is fixed.
+    aContent->OwnerDoc()->NotifyUserGestureActivation();
+  }
   nsCoreUtils::DispatchMouseEvent(eMouseDown, x, y, aContent, frame, presShell,
                                   widget);
   nsCoreUtils::DispatchTouchEvent(eTouchEnd, x, y, aContent, frame, presShell,
@@ -3810,8 +3816,7 @@ already_AddRefed<AccAttributes> LocalAccessible::BundleFieldsForCache(
       // in the coordinate space of `frame`.
       gfx::Matrix4x4 mtx = nsDisplayTransform::GetResultingTransformMatrix(
           frame, nsPoint(0, 0), AppUnitsPerCSSPixel(),
-          nsDisplayTransform::INCLUDE_PERSPECTIVE |
-              nsDisplayTransform::OFFSET_BY_ORIGIN);
+          nsDisplayTransform::INCLUDE_PERSPECTIVE);
       // We might get back the identity matrix. This can happen if there is no
       // actual transform. For example, if an element has
       // will-change: transform, nsIFrame::IsTransformed will return true, but

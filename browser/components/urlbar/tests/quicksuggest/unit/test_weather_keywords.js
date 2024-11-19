@@ -6,21 +6,13 @@
 
 "use strict";
 
-ChromeUtils.defineESModuleGetters(this, {
-  UrlbarProviderWeather: "resource:///modules/UrlbarProviderWeather.sys.mjs",
-});
-
-const { WEATHER_RS_DATA } = MerinoTestUtils;
-
 add_setup(async () => {
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
-    remoteSettingsRecords: [
-      {
-        type: "weather",
-        weather: WEATHER_RS_DATA,
-      },
+    remoteSettingsRecords: [QuickSuggestTestUtils.weatherRecord()],
+    prefs: [
+      ["suggest.quicksuggest.sponsored", true],
+      ["weather.featureGate", true],
     ],
-    prefs: [["suggest.quicksuggest.nonsponsored", true]],
   });
   await MerinoTestUtils.initWeather();
 });
@@ -29,7 +21,7 @@ add_setup(async () => {
 // * Nimbus values: none
 // * Min keyword length pref: none
 // * Expected: no suggestion
-add_tasks_with_rust(async function () {
+add_task(async function () {
   await doKeywordsTest({
     desc: "No data",
     tests: {
@@ -41,135 +33,19 @@ add_tasks_with_rust(async function () {
       weath: false,
       weathe: false,
       weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: false,
-      forecas: false,
-      forecast: false,
     },
   });
 });
-
-// * Settings data: empty
-// * Nimbus values: none
-// * Min keyword length pref: none
-// * Expected: no suggestion
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Empty settings",
-    settingsData: {},
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: false,
-      forecas: false,
-      forecast: false,
-    },
-  });
-});
-
-// * Settings data: keywords only
-// * Nimbus values: none
-// * Min keyword length pref: none
-// * Expected: full keywords only
-//
-// JS backend only. The Rust component expects settings data to contain
-// min_keyword_length.
-add_tasks_with_rust(
-  {
-    skip_if_rust_enabled: true,
-  },
-  async function () {
-    await doKeywordsTest({
-      desc: "Settings only, keywords only",
-      settingsData: {
-        keywords: ["weather", "forecast"],
-      },
-      tests: {
-        "": false,
-        w: false,
-        we: false,
-        wea: false,
-        weat: false,
-        weath: false,
-        weathe: false,
-        weather: true,
-        f: false,
-        fo: false,
-        for: false,
-        fore: false,
-        forec: false,
-        foreca: false,
-        forecas: false,
-        forecast: true,
-      },
-    });
-  }
-);
-
-// * Settings data: keywords and min keyword length = 0
-// * Nimbus values: none
-// * Min keyword length pref: none
-// * Expected: full keywords only
-//
-// JS backend only. The Rust component doesn't treat minKeywordLength == 0 as a
-// special case.
-add_tasks_with_rust(
-  {
-    skip_if_rust_enabled: true,
-  },
-  async function () {
-    await doKeywordsTest({
-      desc: "Settings only, min keyword length = 0",
-      settingsData: {
-        keywords: ["weather", "forecast"],
-        min_keyword_length: 0,
-      },
-      tests: {
-        "": false,
-        w: false,
-        we: false,
-        wea: false,
-        weat: false,
-        weath: false,
-        weathe: false,
-        weather: true,
-        f: false,
-        fo: false,
-        for: false,
-        fore: false,
-        forec: false,
-        foreca: false,
-        forecas: false,
-        forecast: true,
-      },
-    });
-  }
-);
 
 // * Settings data: keywords and min keyword length > 0
 // * Nimbus values: none
 // * Min keyword length pref: none
 // * Expected: use settings data
-add_tasks_with_rust(async function () {
+add_task(async function () {
   await doKeywordsTest({
     desc: "Settings only, min keyword length > 0",
     settingsData: {
-      keywords: ["weather", "forecast"],
+      keywords: ["weather"],
       min_keyword_length: 3,
     },
     tests: {
@@ -181,14 +57,6 @@ add_tasks_with_rust(async function () {
       weath: true,
       weathe: true,
       weather: true,
-      f: false,
-      fo: false,
-      for: true,
-      fore: true,
-      forec: true,
-      foreca: true,
-      forecas: true,
-      forecast: true,
     },
   });
 });
@@ -196,12 +64,13 @@ add_tasks_with_rust(async function () {
 // * Settings data: keywords and min keyword length = 0
 // * Nimbus values: none
 // * Min keyword length pref: 6
-// * Expected: use settings keywords and min keyword length pref
-add_tasks_with_rust(async function () {
+// * Expected: no prefix matching because when min keyword length = 0, the Rust
+//   component requires full keywords to be typed
+add_task(async function () {
   await doKeywordsTest({
     desc: "Settings only, min keyword length = 0, pref exists",
     settingsData: {
-      keywords: ["weather", "forecast"],
+      keywords: ["weather"],
       min_keyword_length: 0,
     },
     minKeywordLength: 6,
@@ -212,16 +81,8 @@ add_tasks_with_rust(async function () {
       wea: false,
       weat: false,
       weath: false,
-      weathe: true,
+      weathe: false,
       weather: true,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: true,
-      forecas: true,
-      forecast: true,
     },
   });
 });
@@ -230,11 +91,11 @@ add_tasks_with_rust(async function () {
 // * Nimbus values: none
 // * Min keyword length pref: 6
 // * Expected: use settings keywords and min keyword length pref
-add_tasks_with_rust(async function () {
+add_task(async function () {
   await doKeywordsTest({
     desc: "Settings only, min keyword length > 0, pref exists",
     settingsData: {
-      keywords: ["weather", "forecast"],
+      keywords: ["weather"],
       min_keyword_length: 3,
     },
     minKeywordLength: 6,
@@ -247,424 +108,24 @@ add_tasks_with_rust(async function () {
       weath: false,
       weathe: true,
       weather: true,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: true,
-      forecas: true,
-      forecast: true,
-    },
-  });
-});
-
-// * Settings data: empty
-// * Nimbus values: empty
-// * Min keyword length pref: none
-// * Expected: no suggestion
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Settings: empty; Nimbus: empty",
-    settingsData: {},
-    nimbusValues: {},
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: false,
-      forecas: false,
-      forecast: false,
-    },
-  });
-});
-
-// * Settings data: keywords only
-// * Nimbus values: keywords only
-// * Min keyword length pref: none
-// * Expected: full keywords in Nimbus
-//
-// JS backend only. The Rust component expects settings data to contain
-// min_keyword_length.
-add_tasks_with_rust(
-  {
-    skip_if_rust_enabled: true,
-  },
-  async function () {
-    await doKeywordsTest({
-      desc: "Settings: keywords; Nimbus: keywords",
-      settingsData: {
-        keywords: ["weather"],
-      },
-      nimbusValues: {
-        weatherKeywords: ["forecast"],
-      },
-      tests: {
-        "": false,
-        w: false,
-        we: false,
-        wea: false,
-        weat: false,
-        weath: false,
-        weathe: false,
-        weather: false,
-        f: false,
-        fo: false,
-        for: false,
-        fore: false,
-        forec: false,
-        foreca: false,
-        forecas: false,
-        forecast: true,
-      },
-    });
-  }
-);
-
-// * Settings data: keywords and min keyword length = 0
-// * Nimbus values: keywords only
-// * Min keyword length pref: none
-// * Expected: full keywords in Nimbus
-//
-// JS backend only. The Rust component doesn't treat minKeywordLength == 0 as a
-// special case.
-add_tasks_with_rust(
-  {
-    skip_if_rust_enabled: true,
-  },
-  async function () {
-    await doKeywordsTest({
-      desc: "Settings: keywords, min keyword length = 0; Nimbus: keywords",
-      settingsData: {
-        keywords: ["weather"],
-        min_keyword_length: 0,
-      },
-      nimbusValues: {
-        weatherKeywords: ["forecast"],
-      },
-      tests: {
-        "": false,
-        w: false,
-        we: false,
-        wea: false,
-        weat: false,
-        weath: false,
-        weathe: false,
-        weather: false,
-        f: false,
-        fo: false,
-        for: false,
-        fore: false,
-        forec: false,
-        foreca: false,
-        forecas: false,
-        forecast: true,
-      },
-    });
-  }
-);
-
-// * Settings data: keywords and min keyword length > 0
-// * Nimbus values: keywords only
-// * Min keyword length pref: none
-// * Expected: Nimbus keywords with settings min keyword length.
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Settings: keywords, min keyword length > 0; Nimbus: keywords",
-    settingsData: {
-      keywords: ["weather"],
-      min_keyword_length: 3,
-    },
-    nimbusValues: {
-      weatherKeywords: ["forecast"],
-    },
-    alwaysExpectMerinoResult: true,
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: true,
-      fore: true,
-      forec: true,
-      foreca: true,
-      forecas: true,
-      forecast: true,
     },
   });
 });
 
 // * Settings data: keywords and min keyword length > 0
-// * Nimbus values: keywords and min keyword length = 0
+// * Nimbus values: min keyword length = 0
 // * Min keyword length pref: none
-// * Expected: Nimbus keywords with settings min keyword length.
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
+// * Expected: Settings min keyword length
+add_task(async function () {
   await doKeywordsTest({
-    desc: "Settings: keywords, min keyword length > 0; Nimbus: keywords, min keyword length = 0",
+    desc: "Settings: keywords, min keyword length > 0; Nimbus: min keyword length = 0",
     settingsData: {
       keywords: ["weather"],
       min_keyword_length: 3,
     },
     nimbusValues: {
-      weatherKeywords: ["forecast"],
       weatherKeywordsMinimumLength: 0,
     },
-    alwaysExpectMerinoResult: true,
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: true,
-      fore: true,
-      forec: true,
-      foreca: true,
-      forecas: true,
-      forecast: true,
-    },
-  });
-});
-
-// * Settings data: keywords and min keyword length > 0
-// * Nimbus values: keywords and min keyword length > 0
-// * Min keyword length pref: none
-// * Expected: use Nimbus values.
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Settings: keywords, min keyword length > 0; Nimbus: keywords, min keyword length > 0",
-    settingsData: {
-      keywords: ["weather"],
-      min_keyword_length: 3,
-    },
-    nimbusValues: {
-      weatherKeywords: ["forecast"],
-      weatherKeywordsMinimumLength: 4,
-    },
-    alwaysExpectMerinoResult: true,
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: true,
-      forec: true,
-      foreca: true,
-      forecas: true,
-      forecast: true,
-    },
-  });
-});
-
-// * Settings data: keywords and min keyword length > 0
-// * Nimbus values: keywords and min keyword length = 0
-// * Min keyword length pref: exists
-// * Expected: Nimbus keywords with min keyword length pref.
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Settings: keywords, min keyword length > 0; Nimbus: keywords, min keyword length = 0; pref exists",
-    settingsData: {
-      keywords: ["weather"],
-      min_keyword_length: 3,
-    },
-    nimbusValues: {
-      weatherKeywords: ["forecast"],
-      weatherKeywordsMinimumLength: 0,
-    },
-    minKeywordLength: 6,
-    alwaysExpectMerinoResult: true,
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: true,
-      forecas: true,
-      forecast: true,
-    },
-  });
-});
-
-// * Settings data: keywords and min keyword length > 0
-// * Nimbus values: keywords and min keyword length > 0
-// * Min keyword length pref: exists
-// * Expected: Nimbus keywords with min keyword length pref
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Settings: keywords, min keyword length > 0; Nimbus: keywords, min keyword length > 0; pref exists",
-    settingsData: {
-      keywords: ["weather", "forecast"],
-      min_keyword_length: 3,
-    },
-    nimbusValues: {
-      weatherKeywords: ["forecast"],
-      weatherKeywordsMinimumLength: 4,
-    },
-    minKeywordLength: 6,
-    alwaysExpectMerinoResult: true,
-    tests: {
-      "": false,
-      w: false,
-      we: false,
-      wea: false,
-      weat: false,
-      weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: true,
-      forecas: true,
-      forecast: true,
-    },
-  });
-});
-
-// * Settings data: none
-// * Nimbus values: keywords only
-// * Min keyword length pref: none
-// * Expected: full keywords
-//
-// TODO bug 1879209: This doesn't work with the Rust backend because if
-// min_keyword_length isn't specified on ingest, the Rust database will retain
-// the last known good min_keyword_length, which interferes with this task.
-add_tasks_with_rust(
-  {
-    skip_if_rust_enabled: true,
-  },
-  async function () {
-    await doKeywordsTest({
-      desc: "Settings: none; Nimbus: keywords",
-      nimbusValues: {
-        weatherKeywords: ["weather", "forecast"],
-      },
-      tests: {
-        "": false,
-        w: false,
-        we: false,
-        wea: false,
-        weat: false,
-        weath: false,
-        weathe: false,
-        weather: true,
-        f: false,
-        fo: false,
-        for: false,
-        fore: false,
-        forec: false,
-        foreca: false,
-        forecas: false,
-        forecast: true,
-      },
-    });
-  }
-);
-
-// * Settings data: none
-// * Nimbus values: keywords and min keyword length = 0
-// * Min keyword length pref: none
-// * Expected: full keywords
-//
-// TODO bug 1879209: This doesn't work with the Rust backend because if
-// min_keyword_length isn't specified on ingest, the Rust database will retain
-// the last known good min_keyword_length, which interferes with this task.
-add_tasks_with_rust(
-  {
-    skip_if_rust_enabled: true,
-  },
-  async function () {
-    await doKeywordsTest({
-      desc: "Settings: none; Nimbus: keywords, min keyword length = 0",
-      nimbusValues: {
-        weatherKeywords: ["weather", "forecast"],
-        weatherKeywordsMinimumLength: 0,
-      },
-      tests: {
-        "": false,
-        w: false,
-        we: false,
-        wea: false,
-        weat: false,
-        weath: false,
-        weathe: false,
-        weather: true,
-        f: false,
-        fo: false,
-        for: false,
-        fore: false,
-        forec: false,
-        foreca: false,
-        forecas: false,
-        forecast: true,
-      },
-    });
-  }
-);
-
-// * Settings data: none
-// * Nimbus values: keywords and min keyword length > 0
-// * Min keyword length pref: none
-// * Expected: use Nimbus values
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
-  await doKeywordsTest({
-    desc: "Settings: none; Nimbus: keywords, min keyword length > 0",
-    nimbusValues: {
-      weatherKeywords: ["weather", "forecast"],
-      weatherKeywordsMinimumLength: 3,
-    },
-    alwaysExpectMerinoResult: true,
     tests: {
       "": false,
       w: false,
@@ -674,33 +135,52 @@ add_tasks_with_rust(async function () {
       weath: true,
       weathe: true,
       weather: true,
-      f: false,
-      fo: false,
-      for: true,
-      fore: true,
-      forec: true,
-      foreca: true,
-      forecas: true,
-      forecast: true,
     },
   });
 });
 
-// * Settings data: none
-// * Nimbus values: keywords and min keyword length > 0
-// * Min keyword length pref: exists
-// * Expected: use Nimbus keywords and min keyword length pref
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function () {
+// * Settings data: keywords and min keyword length > 0
+// * Nimbus values: min keyword length > 0
+// * Min keyword length pref: none
+// * Expected: Nimbus min keyword length
+add_task(async function () {
   await doKeywordsTest({
-    desc: "Settings: none; Nimbus: keywords, min keyword length > 0; pref exists",
+    desc: "Settings: keywords, min keyword length > 0; Nimbus: min keyword length > 0",
+    settingsData: {
+      keywords: ["weather"],
+      min_keyword_length: 3,
+    },
     nimbusValues: {
-      weatherKeywords: ["weather", "forecast"],
-      weatherKeywordsMinimumLength: 3,
+      weatherKeywordsMinimumLength: 4,
+    },
+    tests: {
+      "": false,
+      w: false,
+      we: false,
+      wea: false,
+      weat: true,
+      weath: true,
+      weathe: true,
+      weather: true,
+    },
+  });
+});
+
+// * Settings data: keywords and min keyword length > 0
+// * Nimbus values: min keyword length = 0
+// * Min keyword length pref: exists
+// * Expected: Min keyword length pref
+add_task(async function () {
+  await doKeywordsTest({
+    desc: "Settings: keywords, min keyword length > 0; Nimbus: min keyword length = 0; pref exists",
+    settingsData: {
+      keywords: ["weather"],
+      min_keyword_length: 3,
+    },
+    nimbusValues: {
+      weatherKeywordsMinimumLength: 0,
     },
     minKeywordLength: 6,
-    alwaysExpectMerinoResult: true,
     tests: {
       "": false,
       w: false,
@@ -710,31 +190,25 @@ add_tasks_with_rust(async function () {
       weath: false,
       weathe: true,
       weather: true,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: true,
-      forecas: true,
-      forecast: true,
     },
   });
 });
 
-// When `weatherKeywords` is non-null and `weatherKeywordsMinimumLength` is
-// larger than the length of all keywords, the suggestion should not be
-// triggered.
-//     Even when Rust is enabled, UrlbarProviderWeather should serve the
-//     suggestion since the keywords come from Nimbus.
-add_tasks_with_rust(async function minLength_large() {
+// * Settings data: keywords and min keyword length > 0
+// * Nimbus values: min keyword length > 0
+// * Min keyword length pref: exists
+// * Expected: min keyword length pref
+add_task(async function () {
   await doKeywordsTest({
-    desc: "Large min length",
-    nimbusValues: {
-      weatherKeywords: ["weather", "forecast"],
-      weatherKeywordsMinimumLength: 999,
+    desc: "Settings: keywords, min keyword length > 0; Nimbus: min keyword length > 0; pref exists",
+    settingsData: {
+      keywords: ["weather"],
+      min_keyword_length: 3,
     },
-    alwaysExpectMerinoResult: true,
+    nimbusValues: {
+      weatherKeywordsMinimumLength: 4,
+    },
+    minKeywordLength: 6,
     tests: {
       "": false,
       w: false,
@@ -742,22 +216,14 @@ add_tasks_with_rust(async function minLength_large() {
       wea: false,
       weat: false,
       weath: false,
-      weathe: false,
-      weather: false,
-      f: false,
-      fo: false,
-      for: false,
-      fore: false,
-      forec: false,
-      foreca: false,
-      forecas: false,
-      forecast: false,
+      weathe: true,
+      weather: true,
     },
   });
 });
 
 // Leading and trailing spaces should be ignored.
-add_tasks_with_rust(async function leadingAndTrailingSpaces() {
+add_task(async function leadingAndTrailingSpaces() {
   await doKeywordsTest({
     settingsData: {
       keywords: ["weather"],
@@ -778,7 +244,7 @@ add_tasks_with_rust(async function leadingAndTrailingSpaces() {
   });
 });
 
-add_tasks_with_rust(async function caseInsensitive() {
+add_task(async function caseInsensitive() {
   await doKeywordsTest({
     desc: "Case insensitive",
     settingsData: {
@@ -803,7 +269,6 @@ async function doKeywordsTest({
   nimbusValues = null,
   settingsData = null,
   minKeywordLength = undefined,
-  alwaysExpectMerinoResult = false,
 }) {
   info("Doing keywords test: " + desc);
   info(JSON.stringify({ nimbusValues, settingsData, minKeywordLength }));
@@ -813,22 +278,17 @@ async function doKeywordsTest({
     nimbusCleanup = await UrlbarTestUtils.initNimbusFeature(nimbusValues);
   }
 
-  await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: settingsData,
-    },
-  ]);
+  let records = [];
+  if (settingsData) {
+    records.push(QuickSuggestTestUtils.weatherRecord(settingsData));
+  }
+  await QuickSuggestTestUtils.setRemoteSettingsRecords(records);
 
   if (minKeywordLength) {
     UrlbarPrefs.set("weather.minKeywordLength", minKeywordLength);
   }
 
-  let expectedResult = QuickSuggestTestUtils.weatherResult(
-    !alwaysExpectMerinoResult
-      ? undefined
-      : { source: "merino", provider: "accuweather", telemetryType: null }
-  );
+  let expectedResult = QuickSuggestTestUtils.weatherResult();
 
   for (let [searchString, expected] of Object.entries(tests)) {
     info(
@@ -841,10 +301,7 @@ async function doKeywordsTest({
 
     await check_results({
       context: createContext(searchString, {
-        providers: [
-          UrlbarProviderQuickSuggest.name,
-          UrlbarProviderWeather.name,
-        ],
+        providers: [UrlbarProviderQuickSuggest.name],
         isPrivate: false,
       }),
       matches: expected ? [expectedResult] : [],
@@ -854,100 +311,18 @@ async function doKeywordsTest({
   await nimbusCleanup?.();
 
   await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: MerinoTestUtils.WEATHER_RS_DATA,
-    },
+    QuickSuggestTestUtils.weatherRecord(),
   ]);
 
   UrlbarPrefs.clear("weather.minKeywordLength");
 }
 
-// When a sponsored quick suggest result matches the same keyword as the weather
-// result, the weather result should be shown and the quick suggest result
-// should not be shown.
-add_tasks_with_rust(async function matchingQuickSuggest_sponsored() {
-  await doMatchingQuickSuggestTest("suggest.quicksuggest.sponsored", true);
-});
-
-// When a non-sponsored quick suggest result matches the same keyword as the
-// weather result, the weather result should be shown and the quick suggest
-// result should not be shown.
-add_tasks_with_rust(async function matchingQuickSuggest_nonsponsored() {
-  await doMatchingQuickSuggestTest("suggest.quicksuggest.nonsponsored", false);
-});
-
-async function doMatchingQuickSuggestTest(pref, isSponsored) {
-  let keyword = "test";
-
-  let attachment = isSponsored
-    ? QuickSuggestTestUtils.ampRemoteSettings({ keywords: [keyword] })
-    : QuickSuggestTestUtils.wikipediaRemoteSettings({ keywords: [keyword] });
-
-  // Add a remote settings result to quick suggest.
-  let oldPrefValue = UrlbarPrefs.get(pref);
-  UrlbarPrefs.set(pref, true);
-  await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "data",
-      attachment: [attachment],
-    },
-    {
-      type: "weather",
-      weather: MerinoTestUtils.WEATHER_RS_DATA,
-    },
-  ]);
-
-  // First do a search to verify the quick suggest result matches the keyword.
-  info("Doing first search for quick suggest result");
-  await check_results({
-    context: createContext(keyword, {
-      providers: [UrlbarProviderQuickSuggest.name, UrlbarProviderWeather.name],
-      isPrivate: false,
-    }),
-    matches: [
-      isSponsored
-        ? QuickSuggestTestUtils.ampResult({ keyword })
-        : QuickSuggestTestUtils.wikipediaResult({ keyword }),
-    ],
-  });
-
-  // Set up the keyword for the weather suggestion and do a second search to
-  // verify only the weather result matches.
-  info("Doing second search for weather suggestion");
-  let cleanup = await UrlbarTestUtils.initNimbusFeature({
-    weatherKeywords: [keyword],
-    weatherKeywordsMinimumLength: 1,
-  });
-  await check_results({
-    context: createContext(keyword, {
-      providers: [UrlbarProviderQuickSuggest.name, UrlbarProviderWeather.name],
-      isPrivate: false,
-    }),
-    // The result should always come from Merino.
-    matches: [
-      QuickSuggestTestUtils.weatherResult({
-        source: "merino",
-        provider: "accuweather",
-        telemetryType: null,
-      }),
-    ],
-  });
-  await cleanup();
-
-  UrlbarPrefs.set(pref, oldPrefValue);
-}
-
-add_tasks_with_rust(async function () {
+add_task(async function () {
   await doIncrementTest({
     desc: "Settings only without cap",
-    setup: {
-      settingsData: {
-        weather: {
-          keywords: ["forecast", "wind"],
-          min_keyword_length: 3,
-        },
-      },
+    weather: {
+      keywords: ["forecast", "wind"],
+      min_keyword_length: 3,
     },
     tests: [
       {
@@ -993,19 +368,15 @@ add_tasks_with_rust(async function () {
   });
 });
 
-add_tasks_with_rust(async function () {
+add_task(async function () {
   await doIncrementTest({
     desc: "Settings only with cap",
-    setup: {
-      settingsData: {
-        weather: {
-          keywords: ["forecast", "wind"],
-          min_keyword_length: 3,
-        },
-        configuration: {
-          show_less_frequently_cap: 3,
-        },
-      },
+    weather: {
+      keywords: ["forecast", "wind"],
+      min_keyword_length: 3,
+    },
+    configuration: {
+      show_less_frequently_cap: 3,
     },
     tests: [
       {
@@ -1080,81 +451,6 @@ add_tasks_with_rust(async function () {
           forec: false,
           foreca: true,
           forecas: true,
-          wi: false,
-          win: false,
-          wind: false,
-          windy: false,
-        },
-      },
-    ],
-  });
-});
-
-add_tasks_with_rust(async function () {
-  await doIncrementTest({
-    desc: "Settings and Nimbus without cap",
-    setup: {
-      settingsData: {
-        weather: {
-          keywords: ["weather"],
-          min_keyword_length: 5,
-        },
-      },
-      nimbusValues: {
-        weatherKeywords: ["forecast", "wind"],
-        weatherKeywordsMinimumLength: 3,
-      },
-    },
-    // The suggestion should be served by UrlbarProviderWeather and therefore
-    // be from Merino.
-    alwaysExpectMerinoResult: true,
-    tests: [
-      {
-        minKeywordLength: 3,
-        canIncrement: true,
-        searches: {
-          we: false,
-          wea: false,
-          weat: false,
-          weath: false,
-          fo: false,
-          for: true,
-          fore: true,
-          forec: true,
-          wi: false,
-          win: true,
-          wind: true,
-        },
-      },
-      {
-        minKeywordLength: 4,
-        canIncrement: true,
-        searches: {
-          we: false,
-          wea: false,
-          weat: false,
-          weath: false,
-          fo: false,
-          for: false,
-          fore: true,
-          forec: true,
-          wi: false,
-          win: false,
-          wind: true,
-        },
-      },
-      {
-        minKeywordLength: 5,
-        canIncrement: true,
-        searches: {
-          we: false,
-          wea: false,
-          weat: false,
-          weath: false,
-          fo: false,
-          for: false,
-          fore: false,
-          forec: true,
           wi: false,
           win: false,
           wind: false,
@@ -1167,23 +463,16 @@ add_tasks_with_rust(async function () {
 
 add_task(async function () {
   await doIncrementTest({
-    desc: "Settings and Nimbus with cap in Nimbus",
-    setup: {
-      settingsData: {
-        weather: {
-          keywords: ["weather"],
-          min_keyword_length: 5,
-        },
-      },
-      nimbusValues: {
-        weatherKeywords: ["forecast", "wind"],
-        weatherKeywordsMinimumLength: 3,
-        weatherKeywordsMinimumLengthCap: 6,
-      },
+    desc: "Settings and Nimbus without cap",
+    weather: {
+      keywords: ["weather"],
+      min_keyword_length: 5,
     },
-    // The suggestion should be served by UrlbarProviderWeather and therefore
-    // be from Merino.
-    alwaysExpectMerinoResult: true,
+    nimbusValues: {
+      weatherKeywordsMinimumLength: 3,
+    },
+    // The Rust component will use the min keyword length in the RS config. The
+    // Nimbus value will be ignored.
     tests: [
       {
         minKeywordLength: 3,
@@ -1192,16 +481,8 @@ add_task(async function () {
           we: false,
           wea: false,
           weat: false,
-          weath: false,
-          fo: false,
-          for: true,
-          fore: true,
-          forec: true,
-          foreca: true,
-          forecas: true,
-          wi: false,
-          win: true,
-          wind: true,
+          weath: true,
+          weathe: true,
         },
       },
       {
@@ -1211,16 +492,8 @@ add_task(async function () {
           we: false,
           wea: false,
           weat: false,
-          weath: false,
-          fo: false,
-          for: false,
-          fore: true,
-          forec: true,
-          foreca: true,
-          forecas: true,
-          wi: false,
-          win: false,
-          wind: true,
+          weath: true,
+          weathe: true,
         },
       },
       {
@@ -1230,17 +503,70 @@ add_task(async function () {
           we: false,
           wea: false,
           weat: false,
+          weath: true,
+          weathe: true,
+        },
+      },
+      {
+        minKeywordLength: 6,
+        canIncrement: true,
+        searches: {
+          we: false,
+          wea: false,
+          weat: false,
           weath: false,
-          fo: false,
-          for: false,
-          fore: false,
-          forec: true,
-          foreca: true,
-          forecas: true,
-          wi: false,
-          win: false,
-          wind: false,
-          windy: false,
+          weathe: true,
+        },
+      },
+    ],
+  });
+});
+
+add_task(async function () {
+  await doIncrementTest({
+    desc: "Settings and Nimbus with cap in Nimbus",
+    weather: {
+      keywords: ["weather"],
+      min_keyword_length: 5,
+    },
+    nimbusValues: {
+      weatherKeywordsMinimumLength: 3,
+      weatherKeywordsMinimumLengthCap: 6,
+    },
+    // The Rust component will use the min keyword length in the RS config. The
+    // Nimbus value will be ignored.
+    tests: [
+      {
+        minKeywordLength: 3,
+        canIncrement: true,
+        searches: {
+          we: false,
+          wea: false,
+          weat: false,
+          weath: true,
+          weathe: true,
+        },
+      },
+      {
+        minKeywordLength: 4,
+        canIncrement: true,
+        searches: {
+          we: false,
+          wea: false,
+          weat: false,
+          weath: true,
+          weathe: true,
+        },
+      },
+      {
+        minKeywordLength: 5,
+        canIncrement: true,
+        searches: {
+          we: false,
+          wea: false,
+          weat: false,
+          weath: true,
+          weathe: true,
         },
       },
       {
@@ -1251,16 +577,7 @@ add_task(async function () {
           wea: false,
           weat: false,
           weath: false,
-          fo: false,
-          for: false,
-          fore: false,
-          forec: false,
-          foreca: true,
-          forecas: true,
-          wi: false,
-          win: false,
-          wind: false,
-          windy: false,
+          weathe: true,
         },
       },
       {
@@ -1271,16 +588,7 @@ add_task(async function () {
           wea: false,
           weat: false,
           weath: false,
-          fo: false,
-          for: false,
-          fore: false,
-          forec: false,
-          foreca: true,
-          forecas: true,
-          wi: false,
-          win: false,
-          wind: false,
-          windy: false,
+          weathe: true,
         },
       },
     ],
@@ -1289,36 +597,29 @@ add_task(async function () {
 
 async function doIncrementTest({
   desc,
-  setup,
   tests,
-  alwaysExpectMerinoResult = false,
+  weather,
+  configuration = null,
+  nimbusValues = null,
 }) {
   info("Doing increment test: " + desc);
-  info(JSON.stringify({ setup }));
-
-  let { nimbusValues, settingsData } = setup;
+  info(JSON.stringify({ weather, configuration, nimbusValues }));
 
   let nimbusCleanup;
   if (nimbusValues) {
     nimbusCleanup = await UrlbarTestUtils.initNimbusFeature(nimbusValues);
   }
 
-  await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: settingsData?.weather,
-    },
-    {
+  let records = [QuickSuggestTestUtils.weatherRecord(weather)];
+  if (configuration) {
+    records.push({
       type: "configuration",
-      configuration: settingsData?.configuration,
-    },
-  ]);
+      configuration,
+    });
+  }
+  await QuickSuggestTestUtils.setRemoteSettingsRecords(records);
 
-  let expectedResult = QuickSuggestTestUtils.weatherResult(
-    !alwaysExpectMerinoResult
-      ? undefined
-      : { source: "merino", provider: "accuweather", telemetryType: null }
-  );
+  let expectedResult = QuickSuggestTestUtils.weatherResult();
 
   for (let { minKeywordLength, canIncrement, searches } of tests) {
     info(
@@ -1343,10 +644,7 @@ async function doIncrementTest({
     for (let [searchString, expected] of Object.entries(searches)) {
       await check_results({
         context: createContext(searchString, {
-          providers: [
-            UrlbarProviderQuickSuggest.name,
-            UrlbarProviderWeather.name,
-          ],
+          providers: [UrlbarProviderQuickSuggest.name],
           isPrivate: false,
         }),
         matches: expected ? [expectedResult] : [],
@@ -1363,10 +661,7 @@ async function doIncrementTest({
   await nimbusCleanup?.();
 
   await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: MerinoTestUtils.WEATHER_RS_DATA,
-    },
+    QuickSuggestTestUtils.weatherRecord(),
   ]);
   UrlbarPrefs.clear("weather.minKeywordLength");
 }

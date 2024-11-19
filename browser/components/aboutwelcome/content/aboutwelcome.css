@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* stylelint-disable max-nesting-depth */
 #feature-callout {
-  --fc-background: var(--fc-background-light, #fff);
+  --fc-background: var(--fc-background-light, #FFF);
   --fc-color: var(--fc-color-light, rgb(21, 20, 26));
   --fc-border: var(--fc-border-light, #CFCFD8);
   --fc-accent-color: var(--fc-accent-color-light, rgb(0, 97, 224));
@@ -16,13 +16,13 @@
   --fc-button-background-active: var(--fc-button-background-active-light, #CFCFD8);
   --fc-button-color-active: var(--fc-button-color-active-light, rgb(21, 20, 26));
   --fc-button-border-active: var(--fc-button-border-active-light, transparent);
-  --fc-primary-button-background: var(--fc-primary-button-background-light, #0061e0);
+  --fc-primary-button-background: var(--fc-primary-button-background-light, #0061E0);
   --fc-primary-button-color: var(--fc-primary-button-color-light, rgb(251,251,254));
   --fc-primary-button-border: var(--fc-primary-button-border-light, transparent);
-  --fc-primary-button-background-hover: var(--fc-primary-button-background-hover-light, #0250bb);
+  --fc-primary-button-background-hover: var(--fc-primary-button-background-hover-light, #0250BB);
   --fc-primary-button-color-hover: var(--fc-primary-button-color-hover-light, rgb(251,251,254));
   --fc-primary-button-border-hover: var(--fc-primary-button-border-hover-light, transparent);
-  --fc-primary-button-background-active: var(--fc-primary-button-background-active-light, #053e94);
+  --fc-primary-button-background-active: var(--fc-primary-button-background-active-light, #053E94);
   --fc-primary-button-color-active: var(--fc-primary-button-color-active-light, rgb(251,251,254));
   --fc-primary-button-border-active: var(--fc-primary-button-border-active-light, transparent);
   --fc-step-color: color-mix(in srgb, currentColor 50%, transparent);
@@ -114,7 +114,7 @@
 }
 @media (-moz-content-prefers-color-scheme: light) {
   #feature-callout.simulateContent {
-    --fc-background: var(--fc-background-light, #fff);
+    --fc-background: var(--fc-background-light, #FFF);
     --fc-color: var(--fc-color-light, rgb(21, 20, 26));
     --fc-border: var(--fc-border-light, #CFCFD8);
     --fc-accent-color: var(--fc-accent-color-light, rgb(0, 97, 224));
@@ -127,13 +127,13 @@
     --fc-button-background-active: var(--fc-button-background-active-light, #CFCFD8);
     --fc-button-color-active: var(--fc-button-color-active-light, rgb(21, 20, 26));
     --fc-button-border-active: var(--fc-button-border-active-light, transparent);
-    --fc-primary-button-background: var(--fc-primary-button-background-light, #0061e0);
+    --fc-primary-button-background: var(--fc-primary-button-background-light, #0061E0);
     --fc-primary-button-color: var(--fc-primary-button-color-light, rgb(251,251,254));
     --fc-primary-button-border: var(--fc-primary-button-border-light, transparent);
-    --fc-primary-button-background-hover: var(--fc-primary-button-background-hover-light, #0250bb);
+    --fc-primary-button-background-hover: var(--fc-primary-button-background-hover-light, #0250BB);
     --fc-primary-button-color-hover: var(--fc-primary-button-color-hover-light, rgb(251,251,254));
     --fc-primary-button-border-hover: var(--fc-primary-button-border-hover-light, transparent);
-    --fc-primary-button-background-active: var(--fc-primary-button-background-active-light, #053e94);
+    --fc-primary-button-background-active: var(--fc-primary-button-background-active-light, #053E94);
     --fc-primary-button-color-active: var(--fc-primary-button-color-active-light, rgb(251,251,254));
     --fc-primary-button-border-active: var(--fc-primary-button-border-active-light, transparent);
     --fc-step-color: color-mix(in srgb, currentColor 50%, transparent);
@@ -1730,7 +1730,7 @@ html {
     background-color: var(--in-content-page-background);
   }
   .onboardingContainer .screen[pos=split] .section-main .main-content .steps.progress-bar .indicator {
-    background-color: var(--in-content-accent-color);
+    background-color: var(--color-accent-primary);
   }
 }
 .onboardingContainer .screen[pos=split] .section-secondary {
@@ -2533,18 +2533,14 @@ html {
   background-image: url("chrome://activity-stream/content/data/content/assets/long-zap.svg");
 }
 .onboardingContainer .language-loader {
-  filter: invert(1);
+  -moz-context-properties: fill;
+  fill: currentColor;
   margin-inline-end: 10px;
   position: relative;
   top: 3px;
   width: 16px;
   height: 16px;
   margin-top: -6px;
-}
-@media (prefers-color-scheme: dark) {
-  .onboardingContainer .language-loader {
-    filter: invert(0);
-  }
 }
 .onboardingContainer .tiles-single-select-container {
   display: flex;
@@ -2826,9 +2822,14 @@ html {
   flex-grow: 0;
   flex-shrink: 0;
 }
-@media (prefers-contrast: no-preference) and (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) {
   .onboardingContainer .multi-select-container {
     color: #CFCFD8;
+  }
+}
+@media (prefers-contrast) {
+  .onboardingContainer .multi-select-container {
+    color: var(--in-content-page-color);
   }
 }
 .onboardingContainer .mobile-downloads .qr-code-image {

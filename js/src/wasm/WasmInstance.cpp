@@ -366,7 +366,20 @@ Instance::callImport_general(Instance* instance, int32_t funcImportIndex,
   JSContext* cx = instance->cx();
 #ifdef ENABLE_WASM_JSPI
   if (IsSuspendableStackActive(cx)) {
-    return CallImportOnMainThread(cx, instance, funcImportIndex, argc, argv);
+    struct ImportCallData {
+      Instance* instance;
+      int32_t funcImportIndex;
+      int32_t argc;
+      uint64_t* argv;
+      static bool Call(ImportCallData* data) {
+        Instance* instance = data->instance;
+        JSContext* cx = instance->cx();
+        return instance->callImport(cx, data->funcImportIndex, data->argc,
+                                    data->argv);
+      }
+    } data = {instance, funcImportIndex, argc, argv};
+    return CallOnMainStack(
+        cx, reinterpret_cast<CallOnMainStackFn>(ImportCallData::Call), &data);
   }
 #endif
   return instance->callImport(cx, funcImportIndex, argc, argv);
@@ -1361,7 +1374,7 @@ static int32_t MemDiscardShared(Instance* instance, I byteOffset, I byteLen,
   RootedFunction exportedFunc(cx);
   if (!instance->getExportedFunction(cx, funcIndex, &exportedFunc)) {
     MOZ_ASSERT(cx->isThrowingOutOfMemory());
-    return nullptr;
+    return AnyRef::invalid().forCompiledCode();
   }
   return FuncRef::fromJSFunction(exportedFunc.get()).forCompiledCode();
 }
@@ -1945,10 +1958,7 @@ static bool ArrayCopyFromElem(JSContext* cx, Handle<WasmArrayObject*> arrayObj,
   return 0;
 }
 
-// TODO: this cast is irregular and not representable in wasm, as it does not
-// take into account the enclosing recursion group of the type. This is
-// temporary until builtin module functions can specify a precise array type
-// for params/results.
+#ifdef ENABLE_WASM_JS_STRING_BUILTINS
 template <bool isMutable>
 static WasmArrayObject* UncheckedCastToArrayI16(HandleAnyRef ref) {
   JSObject& object = ref.toJSObject();
@@ -1961,6 +1971,7 @@ static WasmArrayObject* UncheckedCastToArrayI16(HandleAnyRef ref) {
 
 /* static */
 int32_t Instance::stringTest(Instance* instance, void* stringArg) {
+  MOZ_ASSERT(SASigStringTest.failureMode == FailureMode::Infallible);
   AnyRef string = AnyRef::fromCompiledCode(stringArg);
   if (string.isNull() || !string.isJSString()) {
     return 0;
@@ -1970,6 +1981,7 @@ int32_t Instance::stringTest(Instance* instance, void* stringArg) {
 
 /* static */
 void* Instance::stringCast(Instance* instance, void* stringArg) {
+  MOZ_ASSERT(SASigStringCast.failureMode == FailureMode::FailOnNullPtr);
   AnyRef string = AnyRef::fromCompiledCode(stringArg);
   if (string.isNull() || !string.isJSString()) {
     ReportTrapError(instance->cx(), JSMSG_WASM_BAD_CAST);
@@ -1982,6 +1994,8 @@ void* Instance::stringCast(Instance* instance, void* stringArg) {
 void* Instance::stringFromCharCodeArray(Instance* instance, void* arrayArg,
                                         uint32_t arrayStart,
                                         uint32_t arrayEnd) {
+  MOZ_ASSERT(SASigStringFromCharCodeArray.failureMode ==
+             FailureMode::FailOnNullPtr);
   JSContext* cx = instance->cx();
   RootedAnyRef arrayRef(cx, AnyRef::fromCompiledCode(arrayArg));
   if (arrayRef.isNull()) {
@@ -2009,6 +2023,8 @@ void* Instance::stringFromCharCodeArray(Instance* instance, void* arrayArg,
 /* static */
 int32_t Instance::stringIntoCharCodeArray(Instance* instance, void* stringArg,
                                           void* arrayArg, uint32_t arrayStart) {
+  MOZ_ASSERT(SASigStringIntoCharCodeArray.failureMode ==
+             FailureMode::FailOnNegI32);
   JSContext* cx = instance->cx();
   AnyRef stringRef = AnyRef::fromCompiledCode(stringArg);
   if (!stringRef.isJSString()) {
@@ -2042,6 +2058,7 @@ int32_t Instance::stringIntoCharCodeArray(Instance* instance, void* stringArg,
 }
 
 void* Instance::stringFromCharCode(Instance* instance, uint32_t charCode) {
+  MOZ_ASSERT(SASigStringFromCharCode.failureMode == FailureMode::FailOnNullPtr);
   JSContext* cx = instance->cx();
 
   JSString* str = StringFromCharCode(cx, int32_t(charCode));
@@ -2054,6 +2071,8 @@ void* Instance::stringFromCharCode(Instance* instance, uint32_t charCode) {
 }
 
 void* Instance::stringFromCodePoint(Instance* instance, uint32_t codePoint) {
+  MOZ_ASSERT(SASigStringFromCodePoint.failureMode ==
+             FailureMode::FailOnNullPtr);
   JSContext* cx = instance->cx();
 
   // Check for any error conditions before calling fromCodePoint so we report
@@ -2074,6 +2093,7 @@ void* Instance::stringFromCodePoint(Instance* instance, uint32_t codePoint) {
 
 int32_t Instance::stringCharCodeAt(Instance* instance, void* stringArg,
                                    uint32_t index) {
+  MOZ_ASSERT(SASigStringCharCodeAt.failureMode == FailureMode::FailOnNegI32);
   JSContext* cx = instance->cx();
   AnyRef stringRef = AnyRef::fromCompiledCode(stringArg);
   if (!stringRef.isJSString()) {
@@ -2097,6 +2117,7 @@ int32_t Instance::stringCharCodeAt(Instance* instance, void* stringArg,
 
 int32_t Instance::stringCodePointAt(Instance* instance, void* stringArg,
                                     uint32_t index) {
+  MOZ_ASSERT(SASigStringCodePointAt.failureMode == FailureMode::FailOnNegI32);
   JSContext* cx = instance->cx();
   AnyRef stringRef = AnyRef::fromCompiledCode(stringArg);
   if (!stringRef.isJSString()) {
@@ -2119,6 +2140,7 @@ int32_t Instance::stringCodePointAt(Instance* instance, void* stringArg,
 }
 
 int32_t Instance::stringLength(Instance* instance, void* stringArg) {
+  MOZ_ASSERT(SASigStringLength.failureMode == FailureMode::FailOnNegI32);
   JSContext* cx = instance->cx();
   AnyRef stringRef = AnyRef::fromCompiledCode(stringArg);
   if (!stringRef.isJSString()) {
@@ -2132,6 +2154,7 @@ int32_t Instance::stringLength(Instance* instance, void* stringArg) {
 
 void* Instance::stringConcat(Instance* instance, void* firstStringArg,
                              void* secondStringArg) {
+  MOZ_ASSERT(SASigStringConcat.failureMode == FailureMode::FailOnNullPtr);
   JSContext* cx = instance->cx();
 
   AnyRef firstStringRef = AnyRef::fromCompiledCode(firstStringArg);
@@ -2152,7 +2175,8 @@ void* Instance::stringConcat(Instance* instance, void* firstStringArg,
 }
 
 void* Instance::stringSubstring(Instance* instance, void* stringArg,
-                                int32_t startIndex, int32_t endIndex) {
+                                uint32_t startIndex, uint32_t endIndex) {
+  MOZ_ASSERT(SASigStringSubstring.failureMode == FailureMode::FailOnNullPtr);
   JSContext* cx = instance->cx();
 
   AnyRef stringRef = AnyRef::fromCompiledCode(stringArg);
@@ -2161,11 +2185,15 @@ void* Instance::stringSubstring(Instance* instance, void* stringArg,
     return nullptr;
   }
 
-  RootedString string(cx, stringRef.toJSString());
   static_assert(JS::MaxStringLength <= INT32_MAX);
-  if ((uint32_t)startIndex > string->length() ||
-      (uint32_t)endIndex > string->length() || startIndex > endIndex) {
+  RootedString string(cx, stringRef.toJSString());
+  uint32_t stringLength = string->length();
+  if (startIndex > stringLength || startIndex > endIndex) {
     return AnyRef::fromJSString(cx->names().empty_).forCompiledCode();
+  }
+
+  if (endIndex > stringLength) {
+    endIndex = stringLength;
   }
 
   JSString* result =
@@ -2179,10 +2207,18 @@ void* Instance::stringSubstring(Instance* instance, void* stringArg,
 
 int32_t Instance::stringEquals(Instance* instance, void* firstStringArg,
                                void* secondStringArg) {
+  MOZ_ASSERT(SASigStringEquals.failureMode == FailureMode::FailOnNegI32);
   JSContext* cx = instance->cx();
 
   AnyRef firstStringRef = AnyRef::fromCompiledCode(firstStringArg);
   AnyRef secondStringRef = AnyRef::fromCompiledCode(secondStringArg);
+
+  // Null strings are considered equals
+  if (firstStringRef.isNull() || secondStringRef.isNull()) {
+    return firstStringRef.isNull() == secondStringRef.isNull();
+  }
+
+  // Otherwise, rule out any other kind of reference value
   if (!firstStringRef.isJSString() || !secondStringRef.isJSString()) {
     ReportTrapError(cx, JSMSG_WASM_BAD_CAST);
     return -1;
@@ -2199,6 +2235,7 @@ int32_t Instance::stringEquals(Instance* instance, void* firstStringArg,
 
 int32_t Instance::stringCompare(Instance* instance, void* firstStringArg,
                                 void* secondStringArg) {
+  MOZ_ASSERT(SASigStringCompare.failureMode == FailureMode::FailOnMaxI32);
   JSContext* cx = instance->cx();
 
   AnyRef firstStringRef = AnyRef::fromCompiledCode(firstStringArg);
@@ -2223,6 +2260,7 @@ int32_t Instance::stringCompare(Instance* instance, void* firstStringArg,
   }
   return result;
 }
+#endif  // ENABLE_WASM_JS_STRING_BUILTINS
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -2304,8 +2342,11 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
   if (code().mode() == CompileMode::LazyTiering) {
     setRequestTierUpStub(code().sharedStubs().segment->base() +
                          code().requestTierUpStubOffset());
+    setUpdateCallRefMetricsStub(code().sharedStubs().segment->base() +
+                                code().updateCallRefMetricsStubOffset());
   } else {
     setRequestTierUpStub(nullptr);
+    setUpdateCallRefMetricsStub(nullptr);
   }
 
   // Initialize the hotness counters, if relevant.
@@ -2598,6 +2639,10 @@ bool Instance::init(JSContext* cx, const JSObjectVector& funcImports,
       ReportOutOfMemory(cx);
       return false;
     }
+    // A zeroed-out CallRefMetrics should satisfy
+    // CallRefMetrics::checkInvariants.
+    MOZ_ASSERT_IF(codeMeta().numCallRefMetrics > 0,
+                  callRefMetrics_[0].checkInvariants());
   } else {
     MOZ_ASSERT(codeMeta().numCallRefMetrics == 0);
   }
@@ -2703,8 +2748,7 @@ int32_t Instance::computeInitialHotnessCounter(uint32_t funcIndex) {
       codeMeta()
           .funcDefRanges[funcIndex - codeMeta().numFuncImports]
           .bodyLength;
-  return codeMeta().lazyTieringHeuristics.estimateIonCompilationCost(
-      bodyLength);
+  return LazyTieringHeuristics::estimateIonCompilationCost(bodyLength);
 }
 
 void Instance::resetHotnessCounter(uint32_t funcIndex) {
@@ -2716,22 +2760,83 @@ int32_t Instance::readHotnessCounter(uint32_t funcIndex) const {
 }
 
 void Instance::submitCallRefHints(uint32_t funcIndex) {
-  uint32_t callCountThreshold =
-      JS::Prefs::wasm_experimental_inline_call_ref_threshold();
+#ifdef JS_JITSPEW
+  bool headerShown = false;
+#endif
+
+  float requiredHotnessFraction =
+      float(InliningHeuristics::rawCallRefPercent()) / 100.0;
+
+  // Limits as set by InliningHeuristics::InliningHeuristics().
+  const DebugOnly<float> epsilon = 0.000001;
+  MOZ_ASSERT(requiredHotnessFraction >= 0.1 - epsilon);
+  MOZ_ASSERT(requiredHotnessFraction <= 1.0 + epsilon);
+
   CallRefMetricsRange range = codeMeta().getFuncDefCallRefs(funcIndex);
   for (uint32_t callRefIndex = range.begin;
        callRefIndex < range.begin + range.length; callRefIndex++) {
     MOZ_RELEASE_ASSERT(callRefIndex < codeMeta().numCallRefMetrics);
+
     CallRefMetrics& metrics = callRefMetrics_[callRefIndex];
-    if (metrics.state == CallRefMetrics::State::Monomorphic &&
-        metrics.callCount >= callCountThreshold) {
-      uint32_t funcIndex =
-          wasm::ExportedFunctionToFuncIndex(metrics.monomorphicTarget);
-      codeMeta().setCallRefHint(callRefIndex,
-                                CallRefHint::inlineFunc(funcIndex));
+    MOZ_RELEASE_ASSERT(metrics.checkInvariants());
+
+    uint64_t totalCount = metrics.totalCount();
+    uint32_t targetFuncIndex = UINT32_MAX;
+    uint32_t targetBodySize = 0;
+    const char* skipReason = nullptr;
+
+    if (totalCount == 0) {
+      // See comments on definition of CallRefMetrics regarding overflow.
+      skipReason = "(callsite unused)";
+    } else if (metrics.targets[0] == nullptr) {
+      skipReason = "(all calls are cross-instance)";
     } else {
-      codeMeta().setCallRefHint(callRefIndex, CallRefHint::unknown());
+      targetFuncIndex = wasm::ExportedFunctionToFuncIndex(metrics.targets[0]);
+      if (codeMeta().funcIsImport(targetFuncIndex)) {
+        skipReason = "(target is an import)";
+      }
     }
+
+    MOZ_ASSERT_IF(!skipReason,
+                  targetFuncIndex != UINT32_MAX && targetFuncIndex < MaxFuncs);
+    if (!skipReason) {
+      // We assume slot 0 is the hottest of all the slots.  See comments on
+      // definition of CallRefMetrics for rationale.
+      targetBodySize = codeMeta().funcDefRange(targetFuncIndex).bodyLength;
+      if (2 * totalCount < targetBodySize) {
+        skipReason = "(callsite too cold)";
+      } else if ((float(metrics.counts[0]) / float(totalCount)) <
+                 requiredHotnessFraction) {
+        skipReason = "(no clear hottest)";
+      }
+    }
+
+    codeMeta().setCallRefHint(
+        callRefIndex, skipReason ? CallRefHint::unknown()
+                                 : CallRefHint::inlineFunc(targetFuncIndex));
+#ifdef JS_JITSPEW
+    if (!headerShown) {
+      JS_LOG(wasmCodeMetaStats, mozilla::LogLevel::Info,
+             "CM=..%06lx  CallRefMetrics for I=..%06lx fI=%-4u",
+             (unsigned long)(uintptr_t(&codeMeta()) & 0xFFFFFFL),
+             (unsigned long)(uintptr_t(this) & 0xFFFFFFL), funcIndex);
+      headerShown = true;
+    }
+
+    JS::UniqueChars countsStr;
+    for (size_t i = 0; i < CallRefMetrics::NUM_SLOTS; i++) {
+      countsStr =
+          JS_sprintf_append(std::move(countsStr), "%u ", metrics.counts[i]);
+    }
+    JS::UniqueChars targetStr = skipReason
+                                    ? JS_smprintf("%s", skipReason)
+                                    : JS_smprintf("fI %u", targetFuncIndex);
+
+    JS_LOG(wasmCodeMetaStats, mozilla::LogLevel::Info,
+           "CM=..%06lx    %sother:%u --> %s",
+           (unsigned long)(uintptr_t(&codeMeta()) & 0xFFFFFFL), countsStr.get(),
+           metrics.countOther, targetStr.get());
+#endif
   }
 }
 
@@ -2822,8 +2927,11 @@ void Instance::tracePrivate(JSTracer* trc) {
 
   if (callRefMetrics_) {
     for (uint32_t i = 0; i < codeMeta().numCallRefMetrics; i++) {
-      TraceNullableEdge(trc, &callRefMetrics_[i].monomorphicTarget,
-                        "indirect call target");
+      CallRefMetrics* metrics = &callRefMetrics_[i];
+      MOZ_ASSERT(metrics->checkInvariants());
+      for (size_t j = 0; j < CallRefMetrics::NUM_SLOTS; j++) {
+        TraceNullableEdge(trc, &metrics->targets[j], "indirect call target");
+      }
     }
   }
 

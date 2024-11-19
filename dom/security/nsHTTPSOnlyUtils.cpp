@@ -124,11 +124,13 @@ void nsHTTPSOnlyUtils::PotentiallyFireHttpRequestToShortenTimout(
     return;
   }
 
+  // Upgrades for custom ports may be disabled in that case
   // HTTPS-First only applies to standard ports but HTTPS-Only brute forces
   // all http connections to be https and overrules HTTPS-First. In case
   // HTTPS-First is enabled, but HTTPS-Only is not enabled, we might return
   // early if attempting to send a background request to a non standard port.
-  if ((IsHttpsFirstModeEnabled(isPrivateWin) ||
+  if (!mozilla::StaticPrefs::dom_security_https_first_for_custom_ports() &&
+      (IsHttpsFirstModeEnabled(isPrivateWin) ||
        (loadInfo->GetWasSchemelessInput() &&
         mozilla::StaticPrefs::dom_security_https_first_schemeless()))) {
     int32_t port = 0;
@@ -381,21 +383,23 @@ bool nsHTTPSOnlyUtils::ShouldUpgradeHttpsFirstRequest(nsIURI* aURI,
     return false;
   }
 
-  // 5. HTTPS-First Mode only upgrades default ports - do not upgrade the
-  // request to https if port is specified and not the default port of 80.
+  // 5. Make sure HTTPS-First does not upgrade custom ports when it is disabled
   MOZ_ASSERT(aURI->SchemeIs("http"), "how come the request is not 'http'?");
-  int defaultPortforScheme = NS_GetDefaultPort("http");
-  // If no port is specified, then the API returns -1 to indicate the default
-  // port.
-  int32_t port = 0;
-  nsresult rv = aURI->GetPort(&port);
-  NS_ENSURE_SUCCESS(rv, false);
-  if (port != defaultPortforScheme && port != -1) {
-    return false;
+
+  if (!mozilla::StaticPrefs::dom_security_https_first_for_custom_ports()) {
+    int defaultPortforScheme = NS_GetDefaultPort("http");
+    // If no port is specified, then the API returns -1 to indicate the default
+    // port.
+    int32_t port = 0;
+    nsresult rv = aURI->GetPort(&port);
+    NS_ENSURE_SUCCESS(rv, false);
+    if (port != defaultPortforScheme && port != -1) {
+      return false;
+    }
   }
-  // 6. Do not upgrade form submissions (for now), revisit within
-  // Bug 1720500: Revisit upgrading form submissions.
-  if (aLoadInfo->GetIsFormSubmission()) {
+
+  // 6. Do not upgrade requests other than GET
+  if (!aLoadInfo->GetIsGETRequest()) {
     return false;
   }
 
@@ -553,7 +557,7 @@ nsHTTPSOnlyUtils::PotentiallyDowngradeHttpsFirstRequest(
 
   if (mozilla::StaticPrefs::
           dom_security_https_first_add_exception_on_failiure()) {
-    AddHTTPSFirstExceptionForSession(uri, loadInfo);
+    AddHTTPSFirstException(uri, loadInfo);
   }
 
   return newURI.forget();
@@ -685,9 +689,7 @@ bool nsHTTPSOnlyUtils::TestIfPrincipalIsExempt(nsIPrincipal* aPrincipal,
   return perm == nsIHttpsOnlyModePermission::LOAD_INSECURE_ALLOW ||
          perm == nsIHttpsOnlyModePermission::LOAD_INSECURE_ALLOW_SESSION ||
          (aCheckForHTTPSFirst &&
-          (perm == nsIHttpsOnlyModePermission::HTTPSFIRST_LOAD_INSECURE_ALLOW ||
-           perm == nsIHttpsOnlyModePermission::
-                       HTTPSFIRST_LOAD_INSECURE_ALLOW_SESSION));
+          perm == nsIHttpsOnlyModePermission::HTTPSFIRST_LOAD_INSECURE_ALLOW);
 }
 
 /* static */
@@ -953,7 +955,7 @@ bool nsHTTPSOnlyUtils::IsHttpDowngrade(nsIURI* aFromURI, nsIURI* aToURI) {
 }
 
 /* static */
-nsresult nsHTTPSOnlyUtils::AddHTTPSFirstExceptionForSession(
+nsresult nsHTTPSOnlyUtils::AddHTTPSFirstException(
     nsCOMPtr<nsIURI> aURI, nsILoadInfo* const aLoadInfo) {
   // We need to reconstruct a principal instead of taking one from the loadinfo,
   // as the permission needs a http scheme, while the passed URL or principals
@@ -974,14 +976,16 @@ nsresult nsHTTPSOnlyUtils::AddHTTPSFirstExceptionForSession(
 
   nsCString host;
   aURI->GetHost(host);
-  LogLocalizedString("HTTPSFirstAddingSessionException",
-                     {NS_ConvertUTF8toUTF16(host)}, nsIScriptError::warningFlag,
-                     aLoadInfo, aURI, true);
+  LogLocalizedString("HTTPSFirstAddingException", {NS_ConvertUTF8toUTF16(host)},
+                     nsIScriptError::warningFlag, aLoadInfo, aURI, true);
 
+  uint32_t lifetime =
+      mozilla::StaticPrefs::dom_security_https_first_exception_lifetime();
+  int64_t expirationTime = (PR_Now() / PR_USEC_PER_MSEC) + lifetime;
   rv = permMgr->AddFromPrincipal(
       principal, "https-only-load-insecure"_ns,
-      nsIHttpsOnlyModePermission::HTTPSFIRST_LOAD_INSECURE_ALLOW_SESSION,
-      nsIPermissionManager::EXPIRE_SESSION, 0);
+      nsIHttpsOnlyModePermission::HTTPSFIRST_LOAD_INSECURE_ALLOW,
+      nsIPermissionManager::EXPIRE_TIME, expirationTime);
   NS_ENSURE_SUCCESS(rv, rv);
 
   return NS_OK;

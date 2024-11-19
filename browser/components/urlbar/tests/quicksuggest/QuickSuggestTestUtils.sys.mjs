@@ -118,8 +118,6 @@ class _QuickSuggestTestUtils {
     }
     // If you add other properties to `this`, null them in `uninit()`.
 
-    Services.telemetry.clearScalars();
-
     scope.registerCleanupFunction?.(() => this.uninit());
   }
 
@@ -134,7 +132,6 @@ class _QuickSuggestTestUtils {
     for (let p of TEST_SCOPE_PROPERTIES) {
       this[p] = null;
     }
-    Services.telemetry.clearScalars();
   }
 
   get DEFAULT_CONFIG() {
@@ -429,7 +426,7 @@ class _QuickSuggestTestUtils {
     url = "https://example.com/amp",
     originalUrl = url,
     icon = null,
-    iconBlob = new Blob([new Uint8Array([])]),
+    iconBlob = null,
     impressionUrl = "https://example.com/amp-impression",
     clickUrl = "https://example.com/amp-click",
     blockId = 1,
@@ -535,7 +532,7 @@ class _QuickSuggestTestUtils {
     url = "https://example.com/wikipedia",
     originalUrl = url,
     icon = null,
-    iconBlob = new Blob([new Uint8Array([])]),
+    iconBlob = null,
     impressionUrl = "https://example.com/wikipedia-impression",
     clickUrl = "https://example.com/wikipedia-click",
     blockId = 2,
@@ -587,6 +584,49 @@ class _QuickSuggestTestUtils {
   }
 
   /**
+   * Returns an expected dynamic Wikipedia (non-sponsored) result that can be
+   * passed to `check_results()` in xpcshell tests.
+   *
+   * @returns {object}
+   *   An object that can be passed to `check_results()`.
+   */
+  dynamicWikipediaResult({
+    source = "merino",
+    provider = "wikipedia",
+    keyword = "wikipedia",
+    fullKeyword = keyword,
+    title = "Wikipedia Suggestion",
+    url = "https://example.com/wikipedia",
+    icon = null,
+    suggestedIndex = -1,
+    isSuggestedIndexRelativeToGroup = true,
+  } = {}) {
+    return {
+      suggestedIndex,
+      isSuggestedIndexRelativeToGroup,
+      type: lazy.UrlbarUtils.RESULT_TYPE.URL,
+      source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
+      heuristic: false,
+      payload: {
+        title,
+        url,
+        source,
+        provider,
+        icon,
+        displayUrl: url.replace(/^https:\/\//, ""),
+        isSponsored: false,
+        qsSuggestion: fullKeyword ?? keyword,
+        isBlockable: true,
+        blockL10n: {
+          id: "urlbar-result-menu-dismiss-firefox-suggest",
+        },
+        isManageable: true,
+        telemetryType: "wikipedia",
+      },
+    };
+  }
+
+  /**
    * Returns an AMO (addons) suggestion suitable for storing in a remote
    * settings attachment.
    *
@@ -609,6 +649,184 @@ class _QuickSuggestTestUtils {
       rating: "4.7",
       description: "Addon with score",
       number_of_ratings: 1256,
+    };
+  }
+
+  /**
+   * Returns a remote settings weather record.
+   *
+   * @returns {object}
+   *   A weather record for storing in remote settings.
+   */
+  weatherRecord({
+    keywords = ["weather"],
+    min_keyword_length = undefined,
+    score = 0.29,
+  } = {}) {
+    let [maxLen, maxWordCount] = keywords.reduce(
+      ([len, wordCount], kw) => [
+        Math.max(len, kw.length),
+        Math.max(wordCount, kw.split(/\s+/).filter(s => !!s).length),
+      ],
+      [0, 0]
+    );
+    return {
+      type: "weather",
+      attachment: {
+        keywords,
+        min_keyword_length,
+        score,
+        max_keyword_length: maxLen,
+        max_keyword_word_count: maxWordCount,
+      },
+    };
+  }
+
+  /**
+   * Returns a remote settings geonames record populated with some cities.
+   *
+   * @returns {object}
+   *   A geonames record for storing in remote settings.
+   */
+  geonamesRecord() {
+    let geonames = [
+      // Waterloo, AL
+      {
+        id: 1,
+        name: "Waterloo",
+        latitude: "34.91814",
+        longitude: "-88.0642",
+        feature_class: "P",
+        feature_code: "PPL",
+        country_code: "US",
+        admin1_code: "AL",
+        population: 200,
+        alternate_names: ["waterloo"],
+        alternate_names_2: [{ name: "waterloo" }],
+      },
+      // AL
+      {
+        id: 2,
+        name: "Alabama",
+        latitude: "32.75041",
+        longitude: "-86.75026",
+        feature_class: "A",
+        feature_code: "ADM1",
+        country_code: "US",
+        admin1_code: "AL",
+        population: 4530315,
+        alternate_names: ["al", "alabama"],
+        alternate_names_2: [
+          { name: "alabama" },
+          { name: "al", iso_language: "abbr" },
+        ],
+      },
+      // Waterloo, IA
+      {
+        id: 3,
+        name: "Waterloo",
+        latitude: "42.49276",
+        longitude: "-92.34296",
+        feature_class: "P",
+        feature_code: "PPLA2",
+        country_code: "US",
+        admin1_code: "IA",
+        population: 68460,
+        alternate_names: ["waterloo"],
+        alternate_names_2: [{ name: "waterloo" }],
+      },
+      // IA
+      {
+        id: 4,
+        name: "Iowa",
+        latitude: "42.00027",
+        longitude: "-93.50049",
+        feature_class: "A",
+        feature_code: "ADM1",
+        country_code: "US",
+        admin1_code: "IA",
+        population: 2955010,
+        alternate_names: ["ia", "iowa"],
+        alternate_names_2: [
+          { name: "iowa" },
+          { name: "ia", iso_language: "abbr" },
+        ],
+      },
+      // Made-up cities with the same name in the US and CA. The CA city has a
+      // larger population.
+      {
+        id: 100,
+        name: "US CA City",
+        latitude: "38.06084",
+        longitude: "-97.92977",
+        feature_class: "P",
+        feature_code: "PPL",
+        country_code: "US",
+        admin1_code: "IA",
+        population: 1,
+        alternate_names: ["us ca city"],
+        alternate_names_2: [{ name: "us ca city" }],
+      },
+      {
+        id: 101,
+        name: "US CA City",
+        latitude: "45.50884",
+        longitude: "-73.58781",
+        feature_class: "P",
+        feature_code: "PPL",
+        country_code: "CA",
+        admin1_code: "08",
+        population: 2,
+        alternate_names: ["us ca city"],
+        alternate_names_2: [{ name: "us ca city" }],
+      },
+      // Made-up cities that are only ~1.5 km apart.
+      {
+        id: 102,
+        name: "Twin City A",
+        latitude: "33.748889",
+        longitude: "-84.39",
+        feature_class: "P",
+        feature_code: "PPL",
+        country_code: "US",
+        admin1_code: "GA",
+        population: 1,
+        alternate_names: ["twin city a"],
+        alternate_names_2: [{ name: "twin city a" }],
+      },
+      {
+        id: 103,
+        name: "Twin City B",
+        latitude: "33.76",
+        longitude: "-84.4",
+        feature_class: "P",
+        feature_code: "PPL",
+        country_code: "US",
+        admin1_code: "GA",
+        population: 2,
+        alternate_names: ["twin city b"],
+        alternate_names_2: [{ name: "twin city b" }],
+      },
+    ];
+    let [maxLen, maxWordCount] = geonames.reduce(
+      ([len, wordCount], geoname) => [
+        Math.max(len, ...geoname.alternate_names.map(n => n.length)),
+        Math.max(
+          wordCount,
+          ...geoname.alternate_names.map(
+            n => n.split(/\s+/).filter(s => !!s).length
+          )
+        ),
+      ],
+      [0, 0]
+    );
+    return {
+      type: "geonames",
+      attachment: {
+        geonames,
+        max_alternate_name_length: maxLen,
+        max_alternate_name_word_count: maxWordCount,
+      },
     };
   }
 
@@ -727,6 +945,7 @@ class _QuickSuggestTestUtils {
   weatherResult({
     source,
     provider,
+    city = null,
     telemetryType = undefined,
     temperatureUnit = undefined,
   } = {}) {
@@ -748,7 +967,7 @@ class _QuickSuggestTestUtils {
         source: "merino",
         provider: "accuweather",
         dynamicType: "weather",
-        city: lazy.MerinoTestUtils.WEATHER_SUGGESTION.city_name,
+        city: city || lazy.MerinoTestUtils.WEATHER_SUGGESTION.city_name,
         temperature:
           lazy.MerinoTestUtils.WEATHER_SUGGESTION.current_conditions
             .temperature[temperatureUnit],
@@ -771,8 +990,7 @@ class _QuickSuggestTestUtils {
         result.payload.telemetryType = telemetryType || "weather";
       }
     } else {
-      result.payload.source = source || "merino";
-      result.payload.provider = provider || "accuweather";
+      throw new Error("Weather result not supported when Rust disabled");
     }
 
     return result;
@@ -962,75 +1180,6 @@ class _QuickSuggestTestUtils {
     for (let i = 0; i < lazy.UrlbarTestUtils.getResultCount(window); i++) {
       await this.assertIsNotQuickSuggest(window, i);
     }
-  }
-
-  /**
-   * Checks the values of all the quick suggest telemetry keyed scalars and,
-   * if provided, other non-quick-suggest keyed scalars. Scalar values are all
-   * assumed to be 1.
-   *
-   * @param {object} expectedKeysByScalarName
-   *   Maps scalar names to keys that are expected to be recorded. The value for
-   *   each key is assumed to be 1. If you expect a scalar to be incremented,
-   *   include it in this object; otherwise, don't include it.
-   */
-  assertScalars(expectedKeysByScalarName) {
-    let scalars = lazy.TelemetryTestUtils.getProcessScalars(
-      "parent",
-      true,
-      true
-    );
-
-    // Check all quick suggest scalars.
-    expectedKeysByScalarName = { ...expectedKeysByScalarName };
-    for (let scalarName of Object.values(
-      lazy.UrlbarProviderQuickSuggest.TELEMETRY_SCALARS
-    )) {
-      if (scalarName in expectedKeysByScalarName) {
-        lazy.TelemetryTestUtils.assertKeyedScalar(
-          scalars,
-          scalarName,
-          expectedKeysByScalarName[scalarName],
-          1
-        );
-        delete expectedKeysByScalarName[scalarName];
-      } else {
-        this.Assert.ok(
-          !(scalarName in scalars),
-          "Scalar should not be present: " + scalarName
-        );
-      }
-    }
-
-    // Check any other remaining scalars that were passed in.
-    for (let [scalarName, key] of Object.entries(expectedKeysByScalarName)) {
-      lazy.TelemetryTestUtils.assertKeyedScalar(scalars, scalarName, key, 1);
-    }
-  }
-
-  /**
-   * Checks quick suggest telemetry events. This is the same as
-   * `TelemetryTestUtils.assertEvents()` except it filters in only quick suggest
-   * events by default. If you are expecting events that are not in the quick
-   * suggest category, use `TelemetryTestUtils.assertEvents()` directly or pass
-   * in a filter override for `category`.
-   *
-   * @param {Array} expectedEvents
-   *   List of expected telemetry events.
-   * @param {object} filterOverrides
-   *   Extra properties to set in the filter object.
-   * @param {object} options
-   *   The options object to pass to `TelemetryTestUtils.assertEvents()`.
-   */
-  assertEvents(expectedEvents, filterOverrides = {}, options = undefined) {
-    lazy.TelemetryTestUtils.assertEvents(
-      expectedEvents,
-      {
-        category: lazy.QuickSuggest.TELEMETRY_EVENT_CATEGORY,
-        ...filterOverrides,
-      },
-      options
-    );
   }
 
   /**

@@ -2698,7 +2698,7 @@ export class BackupService extends EventTarget {
       );
       await IOUtils.writeJSON(postRecoveryPath, postRecovery);
 
-      profileSvc.flush();
+      await profileSvc.asyncFlush();
 
       if (shouldLaunch) {
         Services.startup.createInstanceWithProfile(profile);
@@ -3274,8 +3274,6 @@ export class BackupService extends EventTarget {
       case "session-cookie-changed": {
         let notification = subject.QueryInterface(Ci.nsICookieNotification);
         if (
-          notification.action ==
-            Ci.nsICookieNotification.COOKIES_BATCH_DELETED ||
           notification.action == Ci.nsICookieNotification.COOKIE_DELETED ||
           notification.action == Ci.nsICookieNotification.ALL_COOKIES_CLEARED
         ) {

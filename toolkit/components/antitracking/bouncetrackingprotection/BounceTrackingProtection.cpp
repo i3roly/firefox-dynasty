@@ -55,9 +55,7 @@ LazyLogModule gBounceTrackingProtectionLog("BounceTrackingProtection");
 static StaticRefPtr<BounceTrackingProtection> sBounceTrackingProtection;
 static bool sInitFailed = false;
 
-// Keeps track of whether the feature is enabled based on pref state.
-// Initialized on first call of GetSingleton.
-Maybe<bool> BounceTrackingProtection::sFeatureIsEnabled;
+Maybe<uint32_t> BounceTrackingProtection::sLastRecordedModeTelemetry;
 
 static const char kBTPModePref[] = "privacy.bounceTrackingProtection.mode";
 
@@ -80,30 +78,11 @@ BounceTrackingProtection::GetSingleton() {
     return nullptr;
   }
 
-  // First call to GetSingleton, check main feature pref and record telemetry.
-  if (sFeatureIsEnabled.isNothing()) {
-    if (StaticPrefs::privacy_bounceTrackingProtection_mode() ==
-        nsIBounceTrackingProtection::MODE_DISABLED) {
-      sFeatureIsEnabled = Some(false);
-
-      glean::bounce_tracking_protection::enabled_at_startup.Set(false);
-      glean::bounce_tracking_protection::enabled_dry_run_mode_at_startup.Set(
-          false);
-
-      // Feature is disabled.
-      return nullptr;
-    }
-    sFeatureIsEnabled = Some(true);
-
-    glean::bounce_tracking_protection::enabled_at_startup.Set(true);
-    glean::bounce_tracking_protection::enabled_dry_run_mode_at_startup.Set(
-        StaticPrefs::privacy_bounceTrackingProtection_mode() ==
-        nsIBounceTrackingProtection::MODE_ENABLED_DRY_RUN);
-  }
-  MOZ_ASSERT(sFeatureIsEnabled.isSome());
+  RecordModePrefTelemetry();
 
   // Feature is disabled.
-  if (!sFeatureIsEnabled.value()) {
+  if (StaticPrefs::privacy_bounceTrackingProtection_mode() ==
+      nsIBounceTrackingProtection::MODE_DISABLED) {
     return nullptr;
   }
 
@@ -126,6 +105,18 @@ BounceTrackingProtection::GetSingleton() {
   }
 
   return do_AddRef(sBounceTrackingProtection);
+}
+
+// static
+void BounceTrackingProtection::RecordModePrefTelemetry() {
+  uint32_t featureMode = StaticPrefs::privacy_bounceTrackingProtection_mode();
+
+  // Record mode telemetry, but only if the mode changed.
+  if (sLastRecordedModeTelemetry.isNothing() ||
+      sLastRecordedModeTelemetry.value() != featureMode) {
+    glean::bounce_tracking_protection::mode.Set(featureMode);
+    sLastRecordedModeTelemetry = Some(featureMode);
+  }
 }
 
 nsresult BounceTrackingProtection::Init() {
@@ -225,6 +216,9 @@ nsresult BounceTrackingProtection::UpdateBounceTrackingPurgeTimer(
 void BounceTrackingProtection::OnPrefChange(const char* aPref, void* aData) {
   MOZ_ASSERT(sBounceTrackingProtection);
   MOZ_ASSERT(strcmp(kBTPModePref, aPref) == 0);
+
+  RecordModePrefTelemetry();
+
   sBounceTrackingProtection->OnModeChange(false);
 }
 
@@ -983,10 +977,6 @@ nsresult BounceTrackingProtection::PurgeBounceTrackersForStateGlobal(
   NS_ENSURE_SUCCESS(rv, rv);
 
   // 2. Go over bounce tracker candidate map and purge state.
-  rv = NS_OK;
-  nsCOMPtr<nsIClearDataService> clearDataService =
-      do_GetService("@mozilla.org/clear-data-service;1", &rv);
-  NS_ENSURE_SUCCESS(rv, rv);
 
   // Collect hosts to remove from the bounce trackers map. We can not remove
   // them while iterating over the map.
@@ -1059,48 +1049,92 @@ nsresult BounceTrackingProtection::PurgeBounceTrackersForStateGlobal(
     }
 
     // No exception above applies, clear state for the given host.
-    RefPtr<ClearDataMozPromise::Private> clearPromise =
-        new ClearDataMozPromise::Private(__func__);
-    RefPtr<ClearDataCallback> cb =
-        new ClearDataCallback(clearPromise, host, bounceTime);
-
     MOZ_LOG(gBounceTrackingProtectionLog, LogLevel::Info,
             ("%s: Purging bounce tracker. siteHost: %s, bounceTime: %" PRIu64
              " aStateGlobal: %s",
              __FUNCTION__, PromiseFlatCString(host).get(), bounceTime,
              aStateGlobal->Describe().get()));
 
-    if (StaticPrefs::privacy_bounceTrackingProtection_mode() ==
-        nsIBounceTrackingProtection::MODE_ENABLED_DRY_RUN) {
-      // In dry-run mode, we don't actually clear the data, but we still want to
-      // resolve the promise to indicate that the data would have been cleared.
-      cb->OnDataDeleted(0);
-    } else {
-      // TODO: Bug 1842067: Clear by site + OA.
-
-      // nsIClearDataService expects a schemeless site which for IPV6 addresses
-      // includes brackets. Add them if needed.
-      nsAutoCString hostToPurge(host);
-      nsContentUtils::MaybeFixIPv6Host(hostToPurge);
-
-      rv = clearDataService->DeleteDataFromSiteAndOriginAttributesPatternString(
-          hostToPurge, u""_ns, false, TRACKER_PURGE_FLAGS, cb);
-      if (NS_WARN_IF(NS_FAILED(rv))) {
-        clearPromise->Reject(0, __func__);
-      }
-    }
-
-    aClearPromises.AppendElement(clearPromise);
-
     // Remove it from the bounce trackers map, it's about to be purged. If the
     // clear call fails still remove it. We want to avoid an ever growing list
     // of hosts in case of repeated failures.
     bounceTrackerCandidatesToRemove.AppendElement(host);
+
+    RefPtr<ClearDataMozPromise> clearDataPromise;
+    rv = PurgeStateForHostAndOriginAttributes(
+        host, bounceTime, aStateGlobal->OriginAttributesRef(),
+        getter_AddRefs(clearDataPromise));
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      continue;
+    }
+    MOZ_ASSERT(clearDataPromise);
+
+    aClearPromises.AppendElement(clearDataPromise);
   }
 
   // Remove hosts from the bounce trackers map which we executed purge calls
   // for.
   return aStateGlobal->RemoveBounceTrackers(bounceTrackerCandidatesToRemove);
+}
+
+nsresult BounceTrackingProtection::PurgeStateForHostAndOriginAttributes(
+    const nsACString& aHost, PRTime bounceTime,
+    const OriginAttributes& aOriginAttributes,
+    ClearDataMozPromise** aClearPromise) {
+  MOZ_ASSERT(!aHost.IsEmpty());
+  MOZ_ASSERT(aClearPromise);
+
+  RefPtr<ClearDataMozPromise::Private> clearPromise =
+      new ClearDataMozPromise::Private(__func__);
+  RefPtr<ClearDataCallback> cb =
+      new ClearDataCallback(clearPromise, aHost, bounceTime);
+
+  if (StaticPrefs::privacy_bounceTrackingProtection_mode() ==
+      nsIBounceTrackingProtection::MODE_ENABLED_DRY_RUN) {
+    // In dry-run mode, we don't actually clear the data, but we still want to
+    // resolve the promise to indicate that the data would have been cleared.
+    cb->OnDataDeleted(0);
+
+    clearPromise.forget(aClearPromise);
+    return NS_OK;
+  }
+
+  nsresult rv = NS_OK;
+  nsCOMPtr<nsIClearDataService> clearDataService =
+      do_GetService("@mozilla.org/clear-data-service;1", &rv);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // nsIClearDataService expects a schemeless site which for IPV6 addresses
+  // includes brackets. Add them if needed.
+  nsAutoCString hostToPurge(aHost);
+  nsContentUtils::MaybeFixIPv6Host(hostToPurge);
+
+  // When clearing data for a specific site host we need to ensure that we
+  // only clear for matching OriginAttributes. For example if the current
+  // state global is private browsing only we must not clear normal browsing
+  // data. To restrict clearing we pass in a (stringified)
+  // OriginAttributesPattern which matches the state global's
+  // OriginAttributes.
+  nsAutoString oaPatternString;
+  OriginAttributesPattern pattern;
+
+  // partitionKey and firstPartyDomain are omitted making them wildcards. We
+  // want to clear across partitions since BTP should clear all data for a
+  // given top level.
+  pattern.mUserContextId.Construct(aOriginAttributes.mUserContextId);
+  pattern.mPrivateBrowsingId.Construct(aOriginAttributes.mPrivateBrowsingId);
+  pattern.mGeckoViewSessionContextId.Construct(
+      aOriginAttributes.mGeckoViewSessionContextId);
+
+  NS_ENSURE_TRUE(pattern.ToJSON(oaPatternString), NS_ERROR_FAILURE);
+
+  rv = clearDataService->DeleteDataFromSiteAndOriginAttributesPatternString(
+      hostToPurge, oaPatternString, false, TRACKER_PURGE_FLAGS, cb);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  clearPromise.forget(aClearPromise);
+
+  return NS_OK;
 }
 
 nsresult BounceTrackingProtection::ClearExpiredUserInteractions(

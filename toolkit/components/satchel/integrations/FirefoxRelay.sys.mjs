@@ -613,9 +613,9 @@ class RelayOffered {
         removeOnDismissal: true,
         learnMoreURL: gConfig.learnMoreURL,
         eventCallback: event => {
-          const document = notification.owner.panel.ownerDocument;
           switch (event) {
-            case "shown":
+            case "shown": {
+              const document = notification.owner.panel.ownerDocument;
               customizeNotificationHeader(notification);
               document.getElementById("firefox-relay-offer-tos-url").href =
                 gConfig.termsOfServiceUrl;
@@ -623,6 +623,7 @@ class RelayOffered {
                 gConfig.privacyPolicyUrl;
               Glean.relayIntegration.shownOptInPanel.record({ value: gFlowId });
               break;
+            }
           }
         },
       }
@@ -674,9 +675,9 @@ class RelayOffered {
         removeOnDismissal: true,
         learnMoreURL: gConfig.learnMoreURL,
         eventCallback: event => {
-          const document = notification.owner.panel.ownerDocument;
           switch (event) {
-            case "shown":
+            case "shown": {
+              const document = notification.owner.panel.ownerDocument;
               customizeNotificationHeader(notification);
               document.getElementById("firefox-relay-offer-tos-url").href =
                 gConfig.termsOfServiceUrl;
@@ -697,6 +698,7 @@ class RelayOffered {
               );
               Glean.relayIntegration.shownOptInPanel.record({ value: gFlowId });
               break;
+            }
           }
         },
       }
@@ -743,7 +745,6 @@ class RelayDisabled {}
 class RelayFeature extends OptInFeature {
   constructor() {
     super(RelayOffered, RelayEnabled, RelayDisabled, gConfig.relayFeaturePref);
-    Services.telemetry.setEventRecordingEnabled("relay_integration", true);
     // Update the config when the signon.firefoxRelay.base_url pref is changed.
     // This is added mainly for tests.
     Services.prefs.addObserver(

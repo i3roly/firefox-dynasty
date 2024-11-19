@@ -3,9 +3,8 @@ Implementations for `BlockContext` methods.
 */
 
 use super::{
-    helpers, index::BoundsCheckResult, make_local, selection::Selection, Block, BlockContext,
-    Dimension, Error, Instruction, LocalType, LookupType, LoopContext, ResultMember, Writer,
-    WriterFlags,
+    helpers, index::BoundsCheckResult, selection::Selection, Block, BlockContext, Dimension, Error,
+    Instruction, LocalType, LookupType, NumericType, ResultMember, Writer, WriterFlags,
 };
 use crate::{arena::Handle, proc::TypeResolution, Statement};
 use spirv::Word;
@@ -39,7 +38,7 @@ enum ExpressionPointer {
 }
 
 /// The termination statement to be added to the end of the block
-pub enum BlockExit {
+enum BlockExit {
     /// Generates an OpReturn (void return)
     Return,
     /// Generates an OpBranch to the specified block
@@ -60,6 +59,36 @@ pub enum BlockExit {
     },
 }
 
+/// What code generation did with a provided [`BlockExit`] value.
+///
+/// A function that accepts a [`BlockExit`] argument should return a value of
+/// this type, to indicate whether the code it generated ended up using the
+/// provided exit, or ignored it and did a non-local exit of some other kind
+/// (say, [`Break`] or [`Continue`]). Some callers must use this information to
+/// decide whether to generate the target block at all.
+///
+/// [`Break`]: Statement::Break
+/// [`Continue`]: Statement::Continue
+#[must_use]
+enum BlockExitDisposition {
+    /// The generated code used the provided `BlockExit` value. If it included a
+    /// block label, the caller should be sure to actually emit the block it
+    /// refers to.
+    Used,
+
+    /// The generated code did not use the provided `BlockExit` value. If it
+    /// included a block label, the caller should not bother to actually emit
+    /// the block it refers to, unless it knows the block is needed for
+    /// something else.
+    Discarded,
+}
+
+#[derive(Clone, Copy, Default)]
+struct LoopContext {
+    continuing_id: Option<Word>,
+    break_id: Option<Word>,
+}
+
 #[derive(Debug)]
 pub(crate) struct DebugInfoInner<'a> {
     pub source_code: &'a str,
@@ -76,10 +105,9 @@ impl Writer {
         position_id: Word,
         body: &mut Vec<Instruction>,
     ) -> Result<(), Error> {
-        let float_ptr_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-            vector_size: None,
-            scalar: crate::Scalar::F32,
-            pointer_space: Some(spirv::StorageClass::Output),
+        let float_ptr_type_id = self.get_type_id(LookupType::Local(LocalType::LocalPointer {
+            base: NumericType::Scalar(crate::Scalar::F32),
+            class: spirv::StorageClass::Output,
         }));
         let index_y_id = self.get_index_constant(1);
         let access_id = self.id_gen.next();
@@ -90,11 +118,9 @@ impl Writer {
             &[index_y_id],
         ));
 
-        let float_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-            vector_size: None,
-            scalar: crate::Scalar::F32,
-            pointer_space: None,
-        }));
+        let float_type_id = self.get_type_id(LookupType::Local(LocalType::Numeric(
+            NumericType::Scalar(crate::Scalar::F32),
+        )));
         let load_id = self.id_gen.next();
         body.push(Instruction::load(float_type_id, load_id, access_id, None));
 
@@ -116,11 +142,9 @@ impl Writer {
         frag_depth_id: Word,
         body: &mut Vec<Instruction>,
     ) -> Result<(), Error> {
-        let float_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-            vector_size: None,
-            scalar: crate::Scalar::F32,
-            pointer_space: None,
-        }));
+        let float_type_id = self.get_type_id(LookupType::Local(LocalType::Numeric(
+            NumericType::Scalar(crate::Scalar::F32),
+        )));
         let zero_scalar_id = self.get_constant_scalar(crate::Literal::F32(0.0));
         let one_scalar_id = self.get_constant_scalar(crate::Literal::F32(1.0));
 
@@ -188,35 +212,6 @@ impl Writer {
 }
 
 impl<'w> BlockContext<'w> {
-    /// Decide whether to put off emitting instructions for `expr_handle`.
-    ///
-    /// We would like to gather together chains of `Access` and `AccessIndex`
-    /// Naga expressions into a single `OpAccessChain` SPIR-V instruction. To do
-    /// this, we don't generate instructions for these exprs when we first
-    /// encounter them. Their ids in `self.writer.cached.ids` are left as zero. Then,
-    /// once we encounter a `Load` or `Store` expression that actually needs the
-    /// chain's value, we call `write_expression_pointer` to handle the whole
-    /// thing in one fell swoop.
-    fn is_intermediate(&self, expr_handle: Handle<crate::Expression>) -> bool {
-        match self.ir_function.expressions[expr_handle] {
-            crate::Expression::GlobalVariable(handle) => {
-                match self.ir_module.global_variables[handle].space {
-                    crate::AddressSpace::Handle => false,
-                    _ => true,
-                }
-            }
-            crate::Expression::LocalVariable(_) => true,
-            crate::Expression::FunctionArgument(index) => {
-                let arg = &self.ir_function.arguments[index as usize];
-                self.ir_module.types[arg.ty].inner.pointer_space().is_some()
-            }
-
-            // The chain rule: if this `Access...`'s `base` operand was
-            // previously omitted, then omit this one, too.
-            _ => self.cached.ids[expr_handle] == 0,
-        }
-    }
-
     /// Cache an expression for a value.
     pub(super) fn cache_expression_value(
         &mut self,
@@ -287,18 +282,22 @@ impl<'w> BlockContext<'w> {
                     id
                 }
             }
-            crate::Expression::Access { base, index: _ } if self.is_intermediate(base) => {
-                // See `is_intermediate`; we'll handle this later in
-                // `write_expression_pointer`.
-                0
-            }
             crate::Expression::Access { base, index } => {
                 let base_ty_inner = self.fun_info[base].ty.inner_with(&self.ir_module.types);
                 match *base_ty_inner {
+                    crate::TypeInner::Pointer { .. } | crate::TypeInner::ValuePointer { .. } => {
+                        // When we have a chain of `Access` and `AccessIndex` expressions
+                        // operating on pointers, we want to generate a single
+                        // `OpAccessChain` instruction for the whole chain. Put off
+                        // generating any code for this until we find the `Expression`
+                        // that actually dereferences the pointer.
+                        0
+                    }
                     crate::TypeInner::Vector { .. } => {
                         self.write_vector_access(expr_handle, base, index, block)?
                     }
-                    // Only binding arrays in the Handle address space will take this path (due to `is_intermediate`)
+                    // Only binding arrays in the `Handle` address space will take this
+                    // path, since we handled the `Pointer` case above.
                     crate::TypeInner::BindingArray {
                         base: binding_type, ..
                     } => {
@@ -346,6 +345,31 @@ impl<'w> BlockContext<'w> {
 
                         load_id
                     }
+                    crate::TypeInner::Array {
+                        base: ty_element, ..
+                    } => {
+                        let index_id = self.cached[index];
+                        let base_id = self.cached[base];
+                        let base_ty = match self.fun_info[base].ty {
+                            TypeResolution::Handle(handle) => handle,
+                            TypeResolution::Value(_) => {
+                                return Err(Error::Validation(
+                                    "Array types should always be in the arena",
+                                ))
+                            }
+                        };
+                        let (id, variable) = self.writer.promote_access_expression_to_variable(
+                            result_type_id,
+                            base_id,
+                            base_ty,
+                            index_id,
+                            ty_element,
+                            block,
+                        )?;
+                        self.function.internal_variables.push(variable);
+                        id
+                    }
+                    // wgpu#4337: Support `crate::TypeInner::Matrix`
                     ref other => {
                         log::error!(
                             "Unable to access base {:?} of type {:?}",
@@ -353,18 +377,21 @@ impl<'w> BlockContext<'w> {
                             other
                         );
                         return Err(Error::Validation(
-                            "only vectors may be dynamically indexed by value",
+                            "only vectors and arrays may be dynamically indexed by value",
                         ));
                     }
                 }
             }
-            crate::Expression::AccessIndex { base, index: _ } if self.is_intermediate(base) => {
-                // See `is_intermediate`; we'll handle this later in
-                // `write_expression_pointer`.
-                0
-            }
             crate::Expression::AccessIndex { base, index } => {
                 match *self.fun_info[base].ty.inner_with(&self.ir_module.types) {
+                    crate::TypeInner::Pointer { .. } | crate::TypeInner::ValuePointer { .. } => {
+                        // When we have a chain of `Access` and `AccessIndex` expressions
+                        // operating on pointers, we want to generate a single
+                        // `OpAccessChain` instruction for the whole chain. Put off
+                        // generating any code for this until we find the `Expression`
+                        // that actually dereferences the pointer.
+                        0
+                    }
                     crate::TypeInner::Vector { .. }
                     | crate::TypeInner::Matrix { .. }
                     | crate::TypeInner::Array { .. }
@@ -778,12 +805,8 @@ impl<'w> BlockContext<'w> {
                         let mut arg2_id = self.writer.get_constant_scalar_with(1, scalar)?;
 
                         if let Some(size) = maybe_size {
-                            let ty = LocalType::Value {
-                                vector_size: Some(size),
-                                scalar,
-                                pointer_space: None,
-                            }
-                            .into();
+                            let ty =
+                                LocalType::Numeric(NumericType::Vector { size, scalar }).into();
 
                             self.temp_list.clear();
                             self.temp_list.resize(size as _, arg1_id);
@@ -898,12 +921,9 @@ impl<'w> BlockContext<'w> {
                                 &crate::TypeInner::Vector { size, .. },
                                 &crate::TypeInner::Scalar(scalar),
                             ) => {
-                                let selector_type_id =
-                                    self.get_type_id(LookupType::Local(LocalType::Value {
-                                        vector_size: Some(size),
-                                        scalar,
-                                        pointer_space: None,
-                                    }));
+                                let selector_type_id = self.get_type_id(LookupType::Local(
+                                    LocalType::Numeric(NumericType::Vector { size, scalar }),
+                                ));
                                 self.temp_list.clear();
                                 self.temp_list.resize(size as usize, arg2_id);
 
@@ -946,12 +966,8 @@ impl<'w> BlockContext<'w> {
                     Mf::CountTrailingZeros => {
                         let uint_id = match *arg_ty {
                             crate::TypeInner::Vector { size, scalar } => {
-                                let ty = LocalType::Value {
-                                    vector_size: Some(size),
-                                    scalar,
-                                    pointer_space: None,
-                                }
-                                .into();
+                                let ty =
+                                    LocalType::Numeric(NumericType::Vector { size, scalar }).into();
 
                                 self.temp_list.clear();
                                 self.temp_list.resize(
@@ -988,12 +1004,8 @@ impl<'w> BlockContext<'w> {
                     Mf::CountLeadingZeros => {
                         let (int_type_id, int_id, width) = match *arg_ty {
                             crate::TypeInner::Vector { size, scalar } => {
-                                let ty = LocalType::Value {
-                                    vector_size: Some(size),
-                                    scalar,
-                                    pointer_space: None,
-                                }
-                                .into();
+                                let ty =
+                                    LocalType::Numeric(NumericType::Vector { size, scalar }).into();
 
                                 self.temp_list.clear();
                                 self.temp_list.resize(
@@ -1009,11 +1021,9 @@ impl<'w> BlockContext<'w> {
                                 )
                             }
                             crate::TypeInner::Scalar(scalar) => (
-                                self.get_type_id(LookupType::Local(LocalType::Value {
-                                    vector_size: None,
-                                    scalar,
-                                    pointer_space: None,
-                                })),
+                                self.get_type_id(LookupType::Local(LocalType::Numeric(
+                                    NumericType::Scalar(scalar),
+                                ))),
                                 self.writer
                                     .get_constant_scalar_with(scalar.width * 8 - 1, scalar)?,
                                 scalar.width,
@@ -1078,14 +1088,9 @@ impl<'w> BlockContext<'w> {
                             .writer
                             .get_constant_scalar(crate::Literal::U32(bit_width as u32));
 
-                        let u32_type = self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: None,
-                            scalar: crate::Scalar {
-                                kind: crate::ScalarKind::Uint,
-                                width: 4,
-                            },
-                            pointer_space: None,
-                        }));
+                        let u32_type = self.get_type_id(LookupType::Local(LocalType::Numeric(
+                            NumericType::Scalar(crate::Scalar::U32),
+                        )));
 
                         // o = min(offset, w)
                         let offset_id = self.gen_id();
@@ -1134,14 +1139,9 @@ impl<'w> BlockContext<'w> {
                             .writer
                             .get_constant_scalar(crate::Literal::U32(bit_width as u32));
 
-                        let u32_type = self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: None,
-                            scalar: crate::Scalar {
-                                kind: crate::ScalarKind::Uint,
-                                width: 4,
-                            },
-                            pointer_space: None,
-                        }));
+                        let u32_type = self.get_type_id(LookupType::Local(LocalType::Numeric(
+                            NumericType::Scalar(crate::Scalar::U32),
+                        )));
 
                         // o = min(offset, w)
                         let offset_id = self.gen_id();
@@ -1207,23 +1207,16 @@ impl<'w> BlockContext<'w> {
                             Mf::Pack4xU8 => (crate::ScalarKind::Uint, false),
                             _ => unreachable!(),
                         };
-                        let uint_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: None,
-                            scalar: crate::Scalar {
-                                kind: crate::ScalarKind::Uint,
-                                width: 4,
-                            },
-                            pointer_space: None,
-                        }));
+                        let uint_type_id = self.get_type_id(LookupType::Local(LocalType::Numeric(
+                            NumericType::Scalar(crate::Scalar::U32),
+                        )));
 
-                        let int_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: None,
-                            scalar: crate::Scalar {
+                        let int_type_id = self.get_type_id(LookupType::Local(LocalType::Numeric(
+                            NumericType::Scalar(crate::Scalar {
                                 kind: int_type,
                                 width: 4,
-                            },
-                            pointer_space: None,
-                        }));
+                            }),
+                        )));
 
                         let mut last_instruction = Instruction::new(spirv::Op::Nop);
 
@@ -1300,24 +1293,17 @@ impl<'w> BlockContext<'w> {
                             _ => unreachable!(),
                         };
 
-                        let sint_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: None,
-                            scalar: crate::Scalar {
-                                kind: crate::ScalarKind::Sint,
-                                width: 4,
-                            },
-                            pointer_space: None,
-                        }));
+                        let sint_type_id = self.get_type_id(LookupType::Local(LocalType::Numeric(
+                            NumericType::Scalar(crate::Scalar::I32),
+                        )));
 
                         let eight = self.writer.get_constant_scalar(crate::Literal::U32(8));
-                        let int_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: None,
-                            scalar: crate::Scalar {
+                        let int_type_id = self.get_type_id(LookupType::Local(LocalType::Numeric(
+                            NumericType::Scalar(crate::Scalar {
                                 kind: int_type,
                                 width: 4,
-                            },
-                            pointer_space: None,
-                        }));
+                            }),
+                        )));
                         block
                             .body
                             .reserve(usize::from(VEC_LENGTH) * 2 + usize::from(is_signed));
@@ -1481,11 +1467,10 @@ impl<'w> BlockContext<'w> {
                                 self.writer.get_constant_scalar_with(0, src_scalar)?;
                             let zero_id = match src_size {
                                 Some(size) => {
-                                    let ty = LocalType::Value {
-                                        vector_size: Some(size),
+                                    let ty = LocalType::Numeric(NumericType::Vector {
+                                        size,
                                         scalar: src_scalar,
-                                        pointer_space: None,
-                                    }
+                                    })
                                     .into();
 
                                     self.temp_list.clear();
@@ -1510,11 +1495,10 @@ impl<'w> BlockContext<'w> {
                                 self.writer.get_constant_scalar_with(1, dst_scalar)?;
                             let (accept_id, reject_id) = match src_size {
                                 Some(size) => {
-                                    let ty = LocalType::Value {
-                                        vector_size: Some(size),
+                                    let ty = LocalType::Numeric(NumericType::Vector {
+                                        size,
                                         scalar: dst_scalar,
-                                        pointer_space: None,
-                                    }
+                                    })
                                     .into();
 
                                     self.temp_list.clear();
@@ -1652,12 +1636,12 @@ impl<'w> BlockContext<'w> {
                     self.temp_list.clear();
                     self.temp_list.resize(size as usize, condition_id);
 
-                    let bool_vector_type_id =
-                        self.get_type_id(LookupType::Local(LocalType::Value {
-                            vector_size: Some(size),
+                    let bool_vector_type_id = self.get_type_id(LookupType::Local(
+                        LocalType::Numeric(NumericType::Vector {
+                            size,
                             scalar: condition_scalar,
-                            pointer_space: None,
-                        }));
+                        }),
+                    ));
 
                     let id = self.gen_id();
                     block.body.push(Instruction::composite_construct(
@@ -1757,18 +1741,17 @@ impl<'w> BlockContext<'w> {
                 Some(ty) => ty,
                 None => LookupType::Handle(ty_handle),
             },
-            TypeResolution::Value(ref inner) => LookupType::Local(make_local(inner).unwrap()),
+            TypeResolution::Value(ref inner) => {
+                LookupType::Local(LocalType::from_inner(inner).unwrap())
+            }
         };
         let result_type_id = self.get_type_id(result_lookup_ty);
 
-        // The id of the boolean `and` of all dynamic bounds checks up to this point. If
-        // `None`, then we haven't done any dynamic bounds checks yet.
+        // The id of the boolean `and` of all dynamic bounds checks up to this point.
         //
-        // When we have a chain of bounds checks, we combine them with `OpLogicalAnd`, not
-        // a short-circuit branch. This means we might do comparisons we don't need to,
-        // but we expect these checks to almost always succeed, and keeping branches to a
-        // minimum is essential.
+        // See `extend_bounds_check_condition_chain` for a full explanation.
         let mut accumulated_checks = None;
+
         // Is true if we are accessing into a binding array with a non-uniform index.
         let mut is_non_uniform_binding_array = false;
 
@@ -1776,57 +1759,41 @@ impl<'w> BlockContext<'w> {
         let root_id = loop {
             expr_handle = match self.ir_function.expressions[expr_handle] {
                 crate::Expression::Access { base, index } => {
-                    if let crate::Expression::GlobalVariable(var_handle) =
-                        self.ir_function.expressions[base]
-                    {
-                        // The access chain needs to be decorated as NonUniform
-                        // see VUID-RuntimeSpirv-NonUniform-06274
-                        let gvar = &self.ir_module.global_variables[var_handle];
-                        if let crate::TypeInner::BindingArray { .. } =
-                            self.ir_module.types[gvar.ty].inner
-                        {
-                            is_non_uniform_binding_array =
-                                self.fun_info[index].uniformity.non_uniform_result.is_some();
-                        }
-                    }
+                    is_non_uniform_binding_array |=
+                        self.is_nonuniform_binding_array_access(base, index);
 
-                    let index_id = match self.write_bounds_check(base, index, block)? {
-                        BoundsCheckResult::KnownInBounds(known_index) => {
-                            // Even if the index is known, `OpAccessIndex`
-                            // requires expression operands, not literals.
-                            let scalar = crate::Literal::U32(known_index);
-                            self.writer.get_constant_scalar(scalar)
-                        }
-                        BoundsCheckResult::Computed(computed_index_id) => computed_index_id,
-                        BoundsCheckResult::Conditional(comparison_id) => {
-                            match accumulated_checks {
-                                Some(prior_checks) => {
-                                    let combined = self.gen_id();
-                                    block.body.push(Instruction::binary(
-                                        spirv::Op::LogicalAnd,
-                                        self.writer.get_bool_type_id(),
-                                        combined,
-                                        prior_checks,
-                                        comparison_id,
-                                    ));
-                                    accumulated_checks = Some(combined);
-                                }
-                                None => {
-                                    // Start a fresh chain of checks.
-                                    accumulated_checks = Some(comparison_id);
-                                }
-                            }
-
-                            // Either way, the index to use is unchanged.
-                            self.cached[index]
-                        }
-                    };
+                    let index = crate::proc::index::GuardedIndex::Expression(index);
+                    let index_id =
+                        self.write_access_chain_index(base, index, &mut accumulated_checks, block)?;
                     self.temp_list.push(index_id);
+
                     base
                 }
                 crate::Expression::AccessIndex { base, index } => {
-                    let const_id = self.get_index_constant(index);
-                    self.temp_list.push(const_id);
+                    // Decide whether we're indexing a struct (bounds checks
+                    // forbidden) or anything else (bounds checks required).
+                    let mut base_ty = self.fun_info[base].ty.inner_with(&self.ir_module.types);
+                    if let crate::TypeInner::Pointer { base, .. } = *base_ty {
+                        base_ty = &self.ir_module.types[base].inner;
+                    }
+                    let index_id = if let crate::TypeInner::Struct { .. } = *base_ty {
+                        self.get_index_constant(index)
+                    } else {
+                        // `index` is constant, so this can't possibly require
+                        // setting `is_nonuniform_binding_array_access`.
+
+                        // Even though the index value is statically known, `base`
+                        // may be a runtime-sized array, so we still need to go
+                        // through the bounds check process.
+                        self.write_access_chain_index(
+                            base,
+                            crate::proc::index::GuardedIndex::Known(index),
+                            &mut accumulated_checks,
+                            block,
+                        )?
+                    };
+
+                    self.temp_list.push(index_id);
                     base
                 }
                 crate::Expression::GlobalVariable(handle) => {
@@ -1881,6 +1848,105 @@ impl<'w> BlockContext<'w> {
         Ok(expr_pointer)
     }
 
+    fn is_nonuniform_binding_array_access(
+        &mut self,
+        base: Handle<crate::Expression>,
+        index: Handle<crate::Expression>,
+    ) -> bool {
+        let crate::Expression::GlobalVariable(var_handle) = self.ir_function.expressions[base]
+        else {
+            return false;
+        };
+
+        // The access chain needs to be decorated as NonUniform
+        // see VUID-RuntimeSpirv-NonUniform-06274
+        let gvar = &self.ir_module.global_variables[var_handle];
+        let crate::TypeInner::BindingArray { .. } = self.ir_module.types[gvar.ty].inner else {
+            return false;
+        };
+
+        self.fun_info[index].uniformity.non_uniform_result.is_some()
+    }
+
+    /// Compute a single index operand to an `OpAccessChain` instruction.
+    ///
+    /// Given that we are indexing `base` with `index`, apply the appropriate
+    /// bounds check policies, emitting code to `block` to clamp `index` or
+    /// determine whether it's in bounds. Return the SPIR-V instruction id of
+    /// the index value we should actually use.
+    ///
+    /// Extend `accumulated_checks` to include the results of any needed bounds
+    /// checks. See [`BlockContext::extend_bounds_check_condition_chain`].
+    fn write_access_chain_index(
+        &mut self,
+        base: Handle<crate::Expression>,
+        index: crate::proc::index::GuardedIndex,
+        accumulated_checks: &mut Option<Word>,
+        block: &mut Block,
+    ) -> Result<Word, Error> {
+        match self.write_bounds_check(base, index, block)? {
+            BoundsCheckResult::KnownInBounds(known_index) => {
+                // Even if the index is known, `OpAccessChain`
+                // requires expression operands, not literals.
+                let scalar = crate::Literal::U32(known_index);
+                Ok(self.writer.get_constant_scalar(scalar))
+            }
+            BoundsCheckResult::Computed(computed_index_id) => Ok(computed_index_id),
+            BoundsCheckResult::Conditional {
+                condition_id: condition,
+                index_id: index,
+            } => {
+                self.extend_bounds_check_condition_chain(accumulated_checks, condition, block);
+
+                // Use the index from the `Access` expression unchanged.
+                Ok(index)
+            }
+        }
+    }
+
+    /// Add a condition to a chain of bounds checks.
+    ///
+    /// As we build an `OpAccessChain` instruction govered by
+    /// [`BoundsCheckPolicy::ReadZeroSkipWrite`], we accumulate a chain of
+    /// dynamic bounds checks, one for each index in the chain, which must all
+    /// be true for that `OpAccessChain`'s execution to be well-defined. This
+    /// function adds the boolean instruction id `comparison_id` to `chain`.
+    ///
+    /// If `chain` is `None`, that means there are no bounds checks in the chain
+    /// yet. If chain is `Some(id)`, then `id` is the conjunction of all the
+    /// bounds checks in the chain.
+    ///
+    /// When we have multiple bounds checks, we combine them with
+    /// `OpLogicalAnd`, not a short-circuit branch. This means we might do
+    /// comparisons we don't need to, but we expect these checks to almost
+    /// always succeed, and keeping branches to a minimum is essential.
+    ///
+    /// [`BoundsCheckPolicy::ReadZeroSkipWrite`]: crate::proc::BoundsCheckPolicy
+    fn extend_bounds_check_condition_chain(
+        &mut self,
+        chain: &mut Option<Word>,
+        comparison_id: Word,
+        block: &mut Block,
+    ) {
+        match *chain {
+            Some(ref mut prior_checks) => {
+                let combined = self.gen_id();
+                block.body.push(Instruction::binary(
+                    spirv::Op::LogicalAnd,
+                    self.writer.get_bool_type_id(),
+                    combined,
+                    *prior_checks,
+                    comparison_id,
+                ));
+                *prior_checks = combined;
+            }
+            None => {
+                // Start a fresh chain of checks.
+                *chain = Some(comparison_id);
+            }
+        }
+    }
+
     /// Build the instructions for matrix - matrix column operations
     #[allow(clippy::too_many_arguments)]
     fn write_matrix_matrix_column_op(
@@ -1897,11 +1963,11 @@ impl<'w> BlockContext<'w> {
     ) {
         self.temp_list.clear();
 
-        let vector_type_id = self.get_type_id(LookupType::Local(LocalType::Value {
-            vector_size: Some(rows),
-            scalar: crate::Scalar::float(width),
-            pointer_space: None,
-        }));
+        let vector_type_id =
+            self.get_type_id(LookupType::Local(LocalType::Numeric(NumericType::Vector {
+                size: rows,
+                scalar: crate::Scalar::float(width),
+            })));
 
         for index in 0..columns as u32 {
             let column_id_left = self.gen_id();
@@ -2037,14 +2103,30 @@ impl<'w> BlockContext<'w> {
         }
     }
 
-    pub(super) fn write_block(
+    /// Generate one or more SPIR-V blocks for `naga_block`.
+    ///
+    /// Use `label_id` as the label for the SPIR-V entry point block.
+    ///
+    /// If control reaches the end of the SPIR-V block, terminate it according
+    /// to `exit`. This function's return value indicates whether it acted on
+    /// this parameter or not; see [`BlockExitDisposition`].
+    ///
+    /// If the block contains [`Break`] or [`Continue`] statements,
+    /// `loop_context` supplies the labels of the SPIR-V blocks to jump to. If
+    /// either of these labels are `None`, then it should have been a Naga
+    /// validation error for the corresponding statement to occur in this
+    /// context.
+    ///
+    /// [`Break`]: Statement::Break
+    /// [`Continue`]: Statement::Continue
+    fn write_block(
         &mut self,
         label_id: Word,
         naga_block: &crate::Block,
         exit: BlockExit,
         loop_context: LoopContext,
         debug_info: Option<&DebugInfoInner>,
-    ) -> Result<(), Error> {
+    ) -> Result<BlockExitDisposition, Error> {
         let mut block = Block::new(label_id);
         for (statement, span) in naga_block.span_iter() {
             if let (Some(debug_info), false) = (
@@ -2080,7 +2162,7 @@ impl<'w> BlockContext<'w> {
                     self.function.consume(block, Instruction::branch(scope_id));
 
                     let merge_id = self.gen_id();
-                    self.write_block(
+                    let merge_used = self.write_block(
                         scope_id,
                         block_statements,
                         BlockExit::Branch { target: merge_id },
@@ -2088,7 +2170,14 @@ impl<'w> BlockContext<'w> {
                         debug_info,
                     )?;
 
-                    block = Block::new(merge_id);
+                    match merge_used {
+                        BlockExitDisposition::Used => {
+                            block = Block::new(merge_id);
+                        }
+                        BlockExitDisposition::Discarded => {
+                            return Ok(BlockExitDisposition::Discarded);
+                        }
+                    }
                 }
                 Statement::If {
                     condition,
@@ -2124,7 +2213,11 @@ impl<'w> BlockContext<'w> {
                     );
 
                     if let Some(block_id) = accept_id {
-                        self.write_block(
+                        // We can ignore the `BlockExitDisposition` returned here because,
+                        // even if `merge_id` is not actually reachable, it is always
+                        // referred to by the `OpSelectionMerge` instruction we emitted
+                        // earlier.
+                        let _ = self.write_block(
                             block_id,
                             accept,
                             BlockExit::Branch { target: merge_id },
@@ -2133,7 +2226,11 @@ impl<'w> BlockContext<'w> {
                         )?;
                     }
                     if let Some(block_id) = reject_id {
-                        self.write_block(
+                        // We can ignore the `BlockExitDisposition` returned here because,
+                        // even if `merge_id` is not actually reachable, it is always
+                        // referred to by the `OpSelectionMerge` instruction we emitted
+                        // earlier.
+                        let _ = self.write_block(
                             block_id,
                             reject,
                             BlockExit::Branch { target: merge_id },
@@ -2211,7 +2308,15 @@ impl<'w> BlockContext<'w> {
                         } else {
                             merge_id
                         };
-                        self.write_block(
+                        // We can ignore the `BlockExitDisposition` returned here because
+                        // `case_finish_id` is always referred to by either:
+                        //
+                        // - the `OpSwitch`, if it's the next case's label for a
+                        //   fall-through, or
+                        //
+                        // - the `OpSelectionMerge`, if it's the switch's overall merge
+                        //   block because there's no fall-through.
+                        let _ = self.write_block(
                             *label_id,
                             &case.body,
                             BlockExit::Branch {
@@ -2257,7 +2362,10 @@ impl<'w> BlockContext<'w> {
                     ));
                     self.function.consume(block, Instruction::branch(body_id));
 
-                    self.write_block(
+                    // We can ignore the `BlockExitDisposition` returned here because,
+                    // even if `continuing_id` is not actually reachable, it is always
+                    // referred to by the `OpLoopMerge` instruction we emitted earlier.
+                    let _ = self.write_block(
                         body_id,
                         body,
                         BlockExit::Branch {
@@ -2280,7 +2388,10 @@ impl<'w> BlockContext<'w> {
                         },
                     };
 
-                    self.write_block(
+                    // We can ignore the `BlockExitDisposition` returned here because,
+                    // even if `merge_id` is not actually reachable, it is always referred
+                    // to by the `OpLoopMerge` instruction we emitted earlier.
+                    let _ = self.write_block(
                         continuing_id,
                         continuing,
                         exit,
@@ -2296,14 +2407,14 @@ impl<'w> BlockContext<'w> {
                 Statement::Break => {
                     self.function
                         .consume(block, Instruction::branch(loop_context.break_id.unwrap()));
-                    return Ok(());
+                    return Ok(BlockExitDisposition::Discarded);
                 }
                 Statement::Continue => {
                     self.function.consume(
                         block,
                         Instruction::branch(loop_context.continuing_id.unwrap()),
                     );
-                    return Ok(());
+                    return Ok(BlockExitDisposition::Discarded);
                 }
                 Statement::Return { value: Some(value) } => {
                     let value_id = self.cached[value];
@@ -2322,15 +2433,15 @@ impl<'w> BlockContext<'w> {
                         None => Instruction::return_value(value_id),
                     };
                     self.function.consume(block, instruction);
-                    return Ok(());
+                    return Ok(BlockExitDisposition::Discarded);
                 }
                 Statement::Return { value: None } => {
                     self.function.consume(block, Instruction::return_void());
-                    return Ok(());
+                    return Ok(BlockExitDisposition::Discarded);
                 }
                 Statement::Kill => {
                     self.function.consume(block, Instruction::kill());
-                    return Ok(());
+                    return Ok(BlockExitDisposition::Discarded);
                 }
                 Statement::Barrier(flags) => {
                     self.writer.write_barrier(flags, &mut block);
@@ -2558,20 +2669,15 @@ impl<'w> BlockContext<'w> {
                         crate::AtomicFunction::Exchange { compare: Some(cmp) } => {
                             let scalar_type_id = match *value_inner {
                                 crate::TypeInner::Scalar(scalar) => {
-                                    self.get_type_id(LookupType::Local(LocalType::Value {
-                                        vector_size: None,
-                                        scalar,
-                                        pointer_space: None,
-                                    }))
+                                    self.get_type_id(LookupType::Local(LocalType::Numeric(
+                                        NumericType::Scalar(scalar),
+                                    )))
                                 }
                                 _ => unimplemented!(),
                             };
-                            let bool_type_id =
-                                self.get_type_id(LookupType::Local(LocalType::Value {
-                                    vector_size: None,
-                                    scalar: crate::Scalar::BOOL,
-                                    pointer_space: None,
-                                }));
+                            let bool_type_id = self.get_type_id(LookupType::Local(
+                                LocalType::Numeric(NumericType::Scalar(crate::Scalar::BOOL)),
+                            ));
 
                             let cas_result_id = self.gen_id();
                             let equality_result_id = self.gen_id();
@@ -2696,6 +2802,24 @@ impl<'w> BlockContext<'w> {
         };
 
         self.function.consume(block, termination);
+        Ok(BlockExitDisposition::Used)
+    }
+
+    pub(super) fn write_function_body(
+        &mut self,
+        entry_id: Word,
+        debug_info: Option<&DebugInfoInner>,
+    ) -> Result<(), Error> {
+        // We can ignore the `BlockExitDisposition` returned here because
+        // `BlockExit::Return` doesn't refer to a block.
+        let _ = self.write_block(
+            entry_id,
+            &self.ir_function.body,
+            super::block::BlockExit::Return,
+            LoopContext::default(),
+            debug_info,
+        )?;
+
         Ok(())
     }
 }

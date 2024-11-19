@@ -776,8 +776,7 @@ void nsGenericHTMLElement::AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
       SetEventHandler(GetEventNameForAttr(aName), aValue->GetStringValue());
     } else if (aNotify && aName == nsGkAtoms::spellcheck) {
       SyncEditorsOnSubtree(this);
-    } else if (aName == nsGkAtoms::popover &&
-               StaticPrefs::dom_element_popover_enabled()) {
+    } else if (aName == nsGkAtoms::popover) {
       nsContentUtils::AddScriptRunner(
           NewRunnableMethod("nsGenericHTMLElement::AfterSetPopoverAttr", this,
                             &nsGenericHTMLElement::AfterSetPopoverAttr));
@@ -1035,8 +1034,7 @@ bool nsGenericHTMLElement::ParseAttribute(int32_t aNamespaceID,
       return aResult.ParseEnumValue(aValue, kDirTable, false);
     }
 
-    if (aAttribute == nsGkAtoms::popover &&
-        StaticPrefs::dom_element_popover_enabled()) {
+    if (aAttribute == nsGkAtoms::popover) {
       return aResult.ParseEnumValue(aValue, kPopoverTable, false,
                                     kPopoverTableInvalidValueDefault);
     }
@@ -2815,15 +2813,13 @@ bool nsGenericHTMLFormControlElementWithState::ParseAttribute(
     int32_t aNamespaceID, nsAtom* aAttribute, const nsAString& aValue,
     nsIPrincipal* aMaybeScriptedPrincipal, nsAttrValue& aResult) {
   if (aNamespaceID == kNameSpaceID_None) {
-    if (StaticPrefs::dom_element_popover_enabled()) {
-      if (aAttribute == nsGkAtoms::popovertargetaction) {
-        return aResult.ParseEnumValue(aValue, kPopoverTargetActionTable, false,
-                                      kPopoverTargetActionDefault);
-      }
-      if (aAttribute == nsGkAtoms::popovertarget) {
-        aResult.ParseAtom(aValue);
-        return true;
-      }
+    if (aAttribute == nsGkAtoms::popovertargetaction) {
+      return aResult.ParseEnumValue(aValue, kPopoverTargetActionTable, false,
+                                    kPopoverTargetActionDefault);
+    }
+    if (aAttribute == nsGkAtoms::popovertarget) {
+      aResult.ParseAtom(aValue);
+      return true;
     }
 
     if (StaticPrefs::dom_element_invokers_enabled()) {
@@ -3408,18 +3404,13 @@ already_AddRefed<ToggleEvent> nsGenericHTMLElement::CreateToggleEvent(
   return event.forget();
 }
 
-bool nsGenericHTMLElement::FireToggleEvent(PopoverVisibilityState aOldState,
-                                           PopoverVisibilityState aNewState,
+bool nsGenericHTMLElement::FireToggleEvent(const nsAString& aOldState,
+                                           const nsAString& aNewState,
                                            const nsAString& aType) {
-  auto stringForState = [](PopoverVisibilityState state) {
-    return state == PopoverVisibilityState::Hidden ? u"closed"_ns : u"open"_ns;
-  };
-  const auto cancelable = aType == u"beforetoggle"_ns &&
-                                  aNewState == PopoverVisibilityState::Showing
+  const auto cancelable = aType == u"beforetoggle"_ns && aNewState == u"open"_ns
                               ? Cancelable::eYes
                               : Cancelable::eNo;
-  RefPtr event = CreateToggleEvent(aType, stringForState(aOldState),
-                                   stringForState(aNewState), cancelable);
+  RefPtr event = CreateToggleEvent(aType, aOldState, aNewState, cancelable);
   EventDispatcher::DispatchDOMEvent(this, nullptr, event, nullptr, nullptr);
   return event->DefaultPrevented();
 }
@@ -3454,7 +3445,12 @@ void nsGenericHTMLElement::RunPopoverToggleEventTask(
   data->ClearToggleEventTask();
   // Intentionally ignore the return value here as only on open event the
   // cancelable attribute is initialized to true for beforetoggle event.
-  FireToggleEvent(aOldState, data->GetPopoverVisibilityState(), u"toggle"_ns);
+  auto stringForState = [](PopoverVisibilityState state) {
+    return state == PopoverVisibilityState::Hidden ? u"closed"_ns : u"open"_ns;
+  };
+  FireToggleEvent(stringForState(aOldState),
+                  stringForState(data->GetPopoverVisibilityState()),
+                  u"toggle"_ns);
 }
 
 // https://html.spec.whatwg.org/#dom-showpopover
@@ -3480,8 +3476,7 @@ void nsGenericHTMLElement::ShowPopoverInternal(Element* aInvoker,
   });
 
   // Fire beforetoggle event and re-check popover validity.
-  if (FireToggleEvent(PopoverVisibilityState::Hidden,
-                      PopoverVisibilityState::Showing, u"beforetoggle"_ns)) {
+  if (FireToggleEvent(u"closed"_ns, u"open"_ns, u"beforetoggle"_ns)) {
     return;
   }
   if (!CheckPopoverValidity(PopoverVisibilityState::Hidden, document, aRv)) {

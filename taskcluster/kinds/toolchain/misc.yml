@@ -279,7 +279,7 @@ linux64-custom-car:
         symbol: TL(custom-car)
     worker:
         docker-image: {in-tree: custom-car-linux}
-        max-run-time: 16200
+        max-run-time: 18000
     use-python: default
     run-on-projects: []
     run:
@@ -311,7 +311,7 @@ win64-custom-car:
         symbol: TW64(custom-car)
     worker-type: b-win2022
     worker:
-        max-run-time: 16200
+        max-run-time: 18000
         env:
             MSYSTEM: "MINGW64"
     use-python: default
@@ -320,7 +320,6 @@ win64-custom-car:
         script: build-custom-car.sh
         arguments: [
             car_win64.tar.zst,
-            blink_symbol_level=0,
             chrome_pgo_phase=2,
             dcheck_always_on=false,
             enable_nacl=false,
@@ -330,15 +329,14 @@ win64-custom-car:
             is_component_build=false,
             is_debug=false,
             is_official_build=true,
-            symbol_level=0,
+            symbol_level=2,
             target_cpu=\"x64\",
             use_v8_context_snapshot=false,
-            v8_symbol_level=0
         ]
         toolchain-artifact: public/build/car_win64.tar.zst
     fetches:
         toolchain:
-            - win64-vs2022
+            - win64-vs2022-car
 
 browsertime:
     description: "npm install browsertime node_modules"
@@ -509,6 +507,23 @@ nsis:
         toolchain:
             - linux64-clang-toolchain
             - sysroot-x86_64-linux-gnu
+
+win64-vs2022-car:
+    description: "VS 2022 toolchain with SDK 10.0.26100.x, for CaR builds"
+    attributes:
+        local-toolchain: true
+    treeherder:
+        symbol: TW64(msvc2022-car)
+    worker:
+        env:
+            MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE: system
+    run:
+        script: get_vs.py
+        arguments:
+            - build/vs/vs2022-car.yaml
+        resources:
+            - build/vs/vs2022-car.yaml
+        toolchain-artifact: project/gecko/vs/vs.tar.zst
 
 win64-vs2022:
     description: "VS 2022"

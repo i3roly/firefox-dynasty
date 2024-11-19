@@ -31,9 +31,24 @@ double AwakeTimeDuration::ToMicroseconds() const {
   return static_cast<double>(mValueUs);
 }
 
+AwakeTimeDuration AwakeTimeDuration::FromSeconds(uint64_t aSeconds) {
+  return AwakeTimeDuration(aSeconds * 1000000);
+}
+AwakeTimeDuration AwakeTimeDuration::FromMilliseconds(uint64_t aMilliseconds) {
+  return AwakeTimeDuration(aMilliseconds * 1000);
+}
+AwakeTimeDuration AwakeTimeDuration::FromMicroseconds(uint64_t aMicroseconds) {
+  return AwakeTimeDuration(aMicroseconds);
+}
+
 AwakeTimeDuration AwakeTimeStamp::operator-(
     AwakeTimeStamp const& aOther) const {
   return AwakeTimeDuration(mValueUs - aOther.mValueUs);
+}
+
+AwakeTimeStamp AwakeTimeStamp::operator-(
+    AwakeTimeDuration const& aOther) const {
+  return AwakeTimeStamp(mValueUs - aOther.mValueUs);
 }
 
 AwakeTimeStamp AwakeTimeStamp::operator+(
@@ -97,7 +112,7 @@ void AwakeTimeStamp::operator-=(const AwakeTimeDuration& aOther) {
 
 #endif
 
-AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
+AwakeTimeStamp AwakeTimeStamp::Now() {
 #if !defined(MAC_OS_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_10_12
     struct timespec tv;
     return AwakeTimeStamp(clock_gettime_missing(CLOCK_UPTIME_RAW, &tv)/ kNSperUS);
@@ -106,6 +121,9 @@ AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
 #endif 
 
 }
+
+AwakeTimeStamp AwakeTimeStamp::NowLoRes() { return Now(); }
+
 #elif defined(XP_WIN)
 
 // Number of hundreds of nanoseconds in a microsecond
@@ -119,6 +137,13 @@ AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
   return AwakeTimeStamp(interrupt_time / kHNSperUS);
 }
 
+AwakeTimeStamp AwakeTimeStamp::Now() {
+  ULONGLONG interrupt_time;
+  QueryUnbiasedInterruptTimePrecise(&interrupt_time);
+
+  return AwakeTimeStamp(interrupt_time / kHNSperUS);
+}
+
 #else  // Linux and other POSIX but not macOS
 #  include <time.h>
 
@@ -126,12 +151,14 @@ uint64_t TimespecToMicroseconds(struct timespec aTs) {
   return aTs.tv_sec * kUSperS + aTs.tv_nsec / kNSperUS;
 }
 
-AwakeTimeStamp AwakeTimeStamp::NowLoRes() {
+AwakeTimeStamp AwakeTimeStamp::Now() {
   struct timespec ts = {0};
   DebugOnly<int> rv = clock_gettime(CLOCK_MONOTONIC, &ts);
   MOZ_ASSERT(!rv);
   return AwakeTimeStamp(TimespecToMicroseconds(ts));
 }
+
+AwakeTimeStamp AwakeTimeStamp::NowLoRes() { return Now(); }
 
 #endif
 

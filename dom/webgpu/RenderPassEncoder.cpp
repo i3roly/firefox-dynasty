@@ -174,21 +174,29 @@ RenderPassEncoder::RenderPassEncoder(CommandEncoder* const aParent,
 RenderPassEncoder::~RenderPassEncoder() { Cleanup(); }
 
 void RenderPassEncoder::Cleanup() {
-  if (mValid) {
-    End();
-  }
+  mValid = false;
+  mPass.release();
+  mUsedBindGroups.Clear();
+  mUsedBuffers.Clear();
+  mUsedPipelines.Clear();
+  mUsedTextureViews.Clear();
+  mUsedRenderBundles.Clear();
 }
 
 void RenderPassEncoder::SetBindGroup(
-    uint32_t aSlot, const BindGroup& aBindGroup,
+    uint32_t aSlot, BindGroup* const aBindGroup,
     const dom::Sequence<uint32_t>& aDynamicOffsets) {
   if (!mValid) {
     return;
   }
-  mUsedBindGroups.AppendElement(&aBindGroup);
-  ffi::wgpu_recorded_render_pass_set_bind_group(
-      mPass.get(), aSlot, aBindGroup.mId, aDynamicOffsets.Elements(),
-      aDynamicOffsets.Length());
+  RawId bindGroup = 0;
+  if (aBindGroup) {
+    mUsedBindGroups.AppendElement(aBindGroup);
+    bindGroup = aBindGroup->mId;
+  }
+  ffi::wgpu_recorded_render_pass_set_bind_group(mPass.get(), aSlot, bindGroup,
+                                                aDynamicOffsets.Elements(),
+                                                aDynamicOffsets.Length());
 }
 
 void RenderPassEncoder::SetPipeline(const RenderPipeline& aPipeline) {
@@ -333,12 +341,12 @@ void RenderPassEncoder::InsertDebugMarker(const nsAString& aString) {
 }
 
 void RenderPassEncoder::End() {
-  if (mValid) {
-    mValid = false;
-    auto* pass = mPass.release();
-    MOZ_ASSERT(pass);
-    mParent->EndRenderPass(*pass);
+  if (!mValid) {
+    return;
   }
+  MOZ_ASSERT(!!mPass);
+  mParent->EndRenderPass(*mPass);
+  Cleanup();
 }
 
 }  // namespace mozilla::webgpu

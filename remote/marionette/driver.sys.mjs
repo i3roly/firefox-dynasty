@@ -63,6 +63,10 @@ ChromeUtils.defineLazyGetter(lazy, "logger", () =>
   lazy.Log.get(lazy.Log.TYPES.MARIONETTE)
 );
 
+ChromeUtils.defineLazyGetter(lazy, "prefAsyncEventsEnabled", () =>
+  Services.prefs.getBoolPref("remote.events.async.enabled", false)
+);
+
 const XUL_NS = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
 ChromeUtils.defineLazyGetter(
@@ -1197,7 +1201,13 @@ GeckoDriver.prototype.setWindowRect = async function (cmd) {
     ) {
       return false;
     }
-    if (x !== null && y !== null && (win.screenX !== x || win.screenY !== y)) {
+    // Wayland doesn't support getting the window position.
+    if (
+      !lazy.AppInfo.isWayland &&
+      x !== null &&
+      y !== null &&
+      (win.screenX !== x || win.screenY !== y)
+    ) {
       return false;
     }
     lazy.logger.trace(`Requested window geometry matches`);
@@ -1214,7 +1224,8 @@ GeckoDriver.prototype.setWindowRect = async function (cmd) {
       promises.push(new lazy.EventPromise(win, "resize", options));
       win.resizeTo(width, height);
     }
-    if (x !== null && y !== null) {
+    // Wayland doesn't support setting the window position.
+    if (lazy.AppInfo.isWayland !== "wayland" && x !== null && y !== null) {
       promises.push(
         new lazy.EventPromise(win.windowRoot, "MozUpdateWindowPos", options)
       );
@@ -1483,7 +1494,7 @@ GeckoDriver.prototype.performActions = async function (cmd) {
   await this._handleUserPrompts();
 
   const actions = cmd.parameters.actions;
-  await this.getActor().performActions(actions);
+  await this.getActor().performActions(actions, lazy.prefAsyncEventsEnabled);
 };
 
 /**
@@ -1500,7 +1511,7 @@ GeckoDriver.prototype.releaseActions = async function () {
   lazy.assert.open(this.getBrowsingContext());
   await this._handleUserPrompts();
 
-  await this.getActor().releaseActions();
+  await this.getActor().releaseActions(lazy.prefAsyncEventsEnabled);
 };
 
 /**
@@ -2960,7 +2971,7 @@ GeckoDriver.prototype._handleUserPrompts = async function () {
 
   if (handlerConfig.notify) {
     throw new lazy.error.UnexpectedAlertOpenError(
-      `Unexpected ${promptType} dialog detected. Performed handler "${handlerConfig.handler}"`,
+      `Unexpected ${promptType} dialog detected. Performed handler "${handlerConfig.handler}". Dialog text: ${textContent}`,
       {
         text: textContent,
       }

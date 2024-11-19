@@ -185,7 +185,7 @@ windows11-64-2009-hw-ref-shippable/opt:
             msix: repackage-signing-msix-win64/opt
             default: build-signing-win64/opt
     test-sets:
-        - talos-ref-hw
+        - browsertime-ref-hw
         - windows-ref-hw-tests
 
 windows11-64-2009-hw-ref/opt:
@@ -195,7 +195,7 @@ windows11-64-2009-hw-ref/opt:
             msix: repackage-signing-msix-win64/opt
             default: build-signing-win64/opt
     test-sets:
-        - talos-ref-hw
+        - browsertime-ref-hw
         - windows-ref-hw-tests
 
 windows11-64-shippable-qr/opt:
@@ -472,13 +472,6 @@ android-hw-p6-13-0-android-aarch64-shippable-qr/opt:
     build-platform: android-aarch64-shippable/opt
     test-sets:
         - android-hw-speedometer-tests
-
-# Bug 1922362,1921607 - Fix up mobile naming convention soon
-android-hw-a55-14-0-android-aarch64-shippable-qr/opt:
-    build-platform: android-aarch64-shippable/opt
-    test-sets:
-        - android-hw-speedometer-tests
-        - android-hw-browsertime
 
 android-hw-a55-14-0-aarch64-shippable/opt:
     build-platform: android-aarch64-shippable/opt

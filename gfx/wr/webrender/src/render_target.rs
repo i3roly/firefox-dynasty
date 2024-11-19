@@ -67,69 +67,6 @@ pub struct RenderTargetContext<'a, 'rc> {
     pub frame_memory: &'a mut FrameMemory,
 }
 
-/// Represents a number of rendering operations on a surface.
-///
-/// In graphics parlance, a "render target" usually means "a surface (texture or
-/// framebuffer) bound to the output of a shader". This trait has a slightly
-/// different meaning, in that it represents the operations on that surface
-/// _before_ it's actually bound and rendered. So a `RenderTarget` is built by
-/// the `RenderBackend` by inserting tasks, and then shipped over to the
-/// `Renderer` where a device surface is resolved and the tasks are transformed
-/// into draw commands on that surface.
-///
-/// We express this as a trait to generalize over color and alpha surfaces.
-/// a given `RenderTask` will draw to one or the other, depending on its type
-/// and sometimes on its parameters. See `RenderTask::target_kind`.
-pub trait RenderTarget {
-    /// Creates a new RenderTarget of the given type.
-    fn new(
-        texture_id: CacheTextureId,
-        screen_size: DeviceIntSize,
-        gpu_supports_fast_clears: bool,
-        used_rect: DeviceIntRect,
-        memory: &FrameMemory,
-    ) -> Self;
-
-    /// Optional hook to provide additional processing for the target at the
-    /// end of the build phase.
-    fn build(
-        &mut self,
-        _ctx: &mut RenderTargetContext,
-        _gpu_cache: &mut GpuCache,
-        _render_tasks: &RenderTaskGraph,
-        _prim_headers: &mut PrimitiveHeaders,
-        _transforms: &mut TransformPalette,
-        _z_generator: &mut ZBufferIdGenerator,
-        _prim_instances: &[PrimitiveInstance],
-        _cmd_buffers: &CommandBufferList,
-        _gpu_buffer_builder: &mut GpuBufferBuilder,
-    ) {
-    }
-
-    /// Associates a `RenderTask` with this target. That task must be assigned
-    /// to a region returned by invoking `allocate()` on this target.
-    ///
-    /// TODO(gw): It's a bit odd that we need the deferred resolves and mutable
-    /// GPU cache here. They are typically used by the build step above. They
-    /// are used for the blit jobs to allow resolve_image to be called. It's a
-    /// bit of extra overhead to store the image key here and the resolve them
-    /// in the build step separately.  BUT: if/when we add more texture cache
-    /// target jobs, we might want to tidy this up.
-    fn add_task(
-        &mut self,
-        task_id: RenderTaskId,
-        ctx: &RenderTargetContext,
-        gpu_cache: &mut GpuCache,
-        gpu_buffer_builder: &mut GpuBufferBuilder,
-        render_tasks: &RenderTaskGraph,
-        clip_store: &ClipStore,
-        transforms: &mut TransformPalette,
-    );
-
-    fn needs_depth(&self) -> bool;
-    fn texture_id(&self) -> CacheTextureId;
-}
-
 /// A series of `RenderTarget` instances, serving as the high-level container
 /// into which `RenderTasks` are assigned.
 ///
@@ -157,11 +94,11 @@ pub trait RenderTarget {
 /// a pass earlier than the immediately-preceding pass.
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct RenderTargetList<T> {
-    pub targets: FrameVec<T>,
+pub struct RenderTargetList {
+    pub targets: FrameVec<RenderTarget>,
 }
 
-impl<T: RenderTarget> RenderTargetList<T> {
+impl RenderTargetList {
     pub fn new(allocator: FrameAllocator) -> Self {
         RenderTargetList {
             targets: allocator.new_vec(),
@@ -198,21 +135,28 @@ impl<T: RenderTarget> RenderTargetList<T> {
             );
         }
     }
-
-    pub fn needs_depth(&self) -> bool {
-        self.targets.iter().any(|target| target.needs_depth())
-    }
 }
 
 const NUM_PATTERNS: usize = crate::pattern::NUM_PATTERNS as usize;
 
 /// Contains the work (in the form of instance arrays) needed to fill a color
-/// color output surface (RGBA8).
+/// color (RGBA8) or alpha output surface.
 ///
-/// See `RenderTarget`.
+/// In graphics parlance, a "render target" usually means "a surface (texture or
+/// framebuffer) bound to the output of a shader". This struct has a slightly
+/// different meaning, in that it represents the operations on that surface
+/// _before_ it's actually bound and rendered. So a `RenderTarget` is built by
+/// the `RenderBackend` by inserting tasks, and then shipped over to the
+/// `Renderer` where a device surface is resolved and the tasks are transformed
+/// into draw commands on that surface.
 #[cfg_attr(feature = "capture", derive(Serialize))]
 #[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct ColorRenderTarget {
+pub struct RenderTarget {
+    pub target_kind: RenderTargetKind,
+    pub cached: bool,
+    screen_size: DeviceIntSize,
+    pub texture_id: CacheTextureId,
+
     pub alpha_batch_containers: FrameVec<AlphaBatchContainer>,
     // List of blur operations to apply for this render target.
     pub vertical_blurs: FastHashMap<TextureSource, FrameVec<BlurInstance>>,
@@ -222,12 +166,10 @@ pub struct ColorRenderTarget {
     pub svg_nodes: FrameVec<(BatchTextures, FrameVec<SVGFEFilterInstance>)>,
     pub blits: FrameVec<BlitJob>,
     alpha_tasks: FrameVec<RenderTaskId>,
-    screen_size: DeviceIntSize,
-    pub texture_id: CacheTextureId,
     // Track the used rect of the render target, so that
     // we can set a scissor rect and only clear to the
     // used portion of the target as an optimization.
-    pub used_rect: DeviceIntRect,
+    pub used_rect: Option<DeviceIntRect>,
     pub resolve_ops: FrameVec<ResolveOp>,
     pub clear_color: Option<ColorF>,
 
@@ -235,17 +177,47 @@ pub struct ColorRenderTarget {
     pub prim_instances_with_scissor: FastHashMap<(DeviceIntRect, PatternKind), FastHashMap<TextureSource, FrameVec<PrimitiveInstanceData>>>,
 
     pub clip_masks: ClipMaskInstanceList,
+
+    pub border_segments_complex: FrameVec<BorderInstance>,
+    pub border_segments_solid: FrameVec<BorderInstance>,
+    pub line_decorations: FrameVec<LineDecorationJob>,
+    pub fast_linear_gradients: FrameVec<FastLinearGradientInstance>,
+    pub linear_gradients: FrameVec<LinearGradientInstance>,
+    pub radial_gradients: FrameVec<RadialGradientInstance>,
+    pub conic_gradients: FrameVec<ConicGradientInstance>,
+
+    pub clip_batcher: ClipBatcher,
+    // TODO: Clearing a render target is very ad-hoc and error-prone. Previously,
+    // alpha, color and cached render targets were entirely separate implementations
+    // with a fair amount of overlap but also divergent approaches to tackle common
+    // functionality. The unified code retains this quirk for the clearing logic.
+    // In a nutshell:
+    //  - Non-cached color targets expect to be globally cleared in draw_render_target.
+    //  - Cached targets obviously can't since some of their content is cached from
+    //    previous frames, so clearing specific parts is done as needed via `clears`.
+    //  - Alpha targets also have special clearing needs that are specified before the
+    //    render tasks rects are allocated, so they are provided as render task ids instead.
+    // See also the clearing code in `Renderer::draw_render_target`.
+    pub clears: FrameVec<DeviceIntRect>,
+    pub zero_clears: FrameVec<RenderTaskId>,
+    pub one_clears: FrameVec<RenderTaskId>,
 }
 
-impl RenderTarget for ColorRenderTarget {
-    fn new(
+impl RenderTarget {
+    pub fn new(
+        target_kind: RenderTargetKind,
+        cached: bool,
         texture_id: CacheTextureId,
         screen_size: DeviceIntSize,
-        _: bool,
-        used_rect: DeviceIntRect,
+        gpu_supports_fast_clears: bool,
+        used_rect: Option<DeviceIntRect>,
         memory: &FrameMemory,
     ) -> Self {
-        ColorRenderTarget {
+        RenderTarget {
+            target_kind,
+            cached,
+            screen_size,
+            texture_id,
             alpha_batch_containers: memory.new_vec(),
             vertical_blurs: FastHashMap::default(),
             horizontal_blurs: FastHashMap::default(),
@@ -254,18 +226,27 @@ impl RenderTarget for ColorRenderTarget {
             svg_nodes: memory.new_vec(),
             blits: memory.new_vec(),
             alpha_tasks: memory.new_vec(),
-            screen_size,
-            texture_id,
             used_rect,
             resolve_ops: memory.new_vec(),
             clear_color: Some(ColorF::TRANSPARENT),
             prim_instances: [FastHashMap::default(), FastHashMap::default(), FastHashMap::default(), FastHashMap::default()],
             prim_instances_with_scissor: FastHashMap::default(),
             clip_masks: ClipMaskInstanceList::new(memory),
+            clip_batcher: ClipBatcher::new(gpu_supports_fast_clears, memory),
+            zero_clears: memory.new_vec(),
+            one_clears: memory.new_vec(),
+            border_segments_complex: memory.new_vec(),
+            border_segments_solid: memory.new_vec(),
+            clears: memory.new_vec(),
+            line_decorations: memory.new_vec(),
+            fast_linear_gradients: memory.new_vec(),
+            linear_gradients: memory.new_vec(),
+            radial_gradients: memory.new_vec(),
+            conic_gradients: memory.new_vec(),
         }
     }
 
-    fn build(
+    pub fn build(
         &mut self,
         ctx: &mut RenderTargetContext,
         gpu_cache: &mut GpuCache,
@@ -353,27 +334,27 @@ impl RenderTarget for ColorRenderTarget {
         }
     }
 
-    fn texture_id(&self) -> CacheTextureId {
+    pub fn texture_id(&self) -> CacheTextureId {
         self.texture_id
     }
 
-    fn add_task(
+    pub fn add_task(
         &mut self,
         task_id: RenderTaskId,
         ctx: &RenderTargetContext,
         gpu_cache: &mut GpuCache,
         gpu_buffer_builder: &mut GpuBufferBuilder,
         render_tasks: &RenderTaskGraph,
-        _: &ClipStore,
+        clip_store: &ClipStore,
         transforms: &mut TransformPalette,
     ) {
         profile_scope!("add_task");
         let task = &render_tasks[task_id];
+        let target_rect = task.get_target_rect();
 
         match task.kind {
             RenderTaskKind::Prim(ref info) => {
                 let render_task_address = task_id.into();
-                let target_rect = task.get_target_rect();
 
                 quad::add_to_batch(
                     info.pattern,
@@ -406,6 +387,9 @@ impl RenderTarget for ColorRenderTarget {
                 );
             }
             RenderTaskKind::VerticalBlur(ref info) => {
+                if self.target_kind == RenderTargetKind::Alpha {
+                    self.zero_clears.push(task_id);
+                }
                 add_blur_instances(
                     &mut self.vertical_blurs,
                     BlurDirection::Vertical,
@@ -418,6 +402,9 @@ impl RenderTarget for ColorRenderTarget {
                 );
             }
             RenderTaskKind::HorizontalBlur(ref info) => {
+                if self.target_kind == RenderTargetKind::Alpha {
+                    self.zero_clears.push(task_id);
+                }
                 add_blur_instances(
                     &mut self.horizontal_blurs,
                     BlurDirection::Horizontal,
@@ -459,165 +446,11 @@ impl RenderTarget for ColorRenderTarget {
                     &ctx.frame_memory,
                 )
             }
-            RenderTaskKind::Image(..) |
-            RenderTaskKind::Cached(..) |
-            RenderTaskKind::ClipRegion(..) |
-            RenderTaskKind::Border(..) |
-            RenderTaskKind::CacheMask(..) |
-            RenderTaskKind::FastLinearGradient(..) |
-            RenderTaskKind::LinearGradient(..) |
-            RenderTaskKind::RadialGradient(..) |
-            RenderTaskKind::ConicGradient(..) |
-            RenderTaskKind::TileComposite(..) |
-            RenderTaskKind::Empty(..) |
-            RenderTaskKind::LineDecoration(..) => {
-                panic!("Should not be added to color target!");
-            }
-            RenderTaskKind::Readback(..) => {}
-            RenderTaskKind::Scaling(ref info) => {
-                add_scaling_instances(
-                    info,
-                    &mut self.scalings,
-                    task,
-                    task.children.first().map(|&child| &render_tasks[child]),
-                    &ctx.frame_memory,
-                );
-            }
-            RenderTaskKind::Blit(ref task_info) => {
-                let target_rect = task.get_target_rect();
-                self.blits.push(BlitJob {
-                    source: task_info.source,
-                    source_rect: task_info.source_rect,
-                    target_rect,
-                });
-            }
-            #[cfg(test)]
-            RenderTaskKind::Test(..) => {}
-        }
-
-        build_sub_pass(
-            task_id,
-            task,
-            gpu_buffer_builder,
-            render_tasks,
-            transforms,
-            ctx,
-            &mut self.clip_masks,
-        );
-    }
-
-    fn needs_depth(&self) -> bool {
-        self.alpha_batch_containers.iter().any(|ab| {
-            !ab.opaque_batches.is_empty()
-        })
-    }
-}
-
-/// Contains the work (in the form of instance arrays) needed to fill an alpha
-/// output surface (R8).
-///
-/// See `RenderTarget`.
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct AlphaRenderTarget {
-    pub clip_batcher: ClipBatcher,
-    // List of blur operations to apply for this render target.
-    pub vertical_blurs: FastHashMap<TextureSource, FrameVec<BlurInstance>>,
-    pub horizontal_blurs: FastHashMap<TextureSource, FrameVec<BlurInstance>>,
-    pub scalings: FastHashMap<TextureSource, FrameVec<ScalingInstance>>,
-    pub zero_clears: FrameVec<RenderTaskId>,
-    pub one_clears: FrameVec<RenderTaskId>,
-    pub texture_id: CacheTextureId,
-    pub clip_masks: ClipMaskInstanceList,
-}
-
-impl RenderTarget for AlphaRenderTarget {
-    fn new(
-        texture_id: CacheTextureId,
-        _: DeviceIntSize,
-        gpu_supports_fast_clears: bool,
-        _: DeviceIntRect,
-        memory: &FrameMemory,
-    ) -> Self {
-        AlphaRenderTarget {
-            clip_batcher: ClipBatcher::new(gpu_supports_fast_clears, memory),
-            vertical_blurs: FastHashMap::default(),
-            horizontal_blurs: FastHashMap::default(),
-            scalings: FastHashMap::default(),
-            zero_clears: memory.new_vec(),
-            one_clears: memory.new_vec(),
-            texture_id,
-            clip_masks: ClipMaskInstanceList::new(memory),
-        }
-    }
-
-    fn texture_id(&self) -> CacheTextureId {
-        self.texture_id
-    }
-
-    fn add_task(
-        &mut self,
-        task_id: RenderTaskId,
-        ctx: &RenderTargetContext,
-        gpu_cache: &mut GpuCache,
-        gpu_buffer_builder: &mut GpuBufferBuilder,
-        render_tasks: &RenderTaskGraph,
-        clip_store: &ClipStore,
-        transforms: &mut TransformPalette,
-    ) {
-        profile_scope!("add_task");
-        let task = &render_tasks[task_id];
-        let target_rect = task.get_target_rect();
-
-        match task.kind {
-            RenderTaskKind::Image(..) |
-            RenderTaskKind::Cached(..) |
-            RenderTaskKind::Readback(..) |
-            RenderTaskKind::Picture(..) |
-            RenderTaskKind::Blit(..) |
-            RenderTaskKind::Border(..) |
-            RenderTaskKind::LineDecoration(..) |
-            RenderTaskKind::FastLinearGradient(..) |
-            RenderTaskKind::LinearGradient(..) |
-            RenderTaskKind::RadialGradient(..) |
-            RenderTaskKind::ConicGradient(..) |
-            RenderTaskKind::TileComposite(..) |
-            RenderTaskKind::Prim(..) |
-            RenderTaskKind::SvgFilter(..) |
-            RenderTaskKind::SVGFENode(..) => {
-                panic!("BUG: should not be added to alpha target!");
-            }
             RenderTaskKind::Empty(..) => {
                 // TODO(gw): Could likely be more efficient by choosing to clear to 0 or 1
                 //           based on the clip chain, or even skipping clear and masking the
                 //           prim region with blend disabled.
                 self.one_clears.push(task_id);
-            }
-            RenderTaskKind::VerticalBlur(ref info) => {
-                self.zero_clears.push(task_id);
-                add_blur_instances(
-                    &mut self.vertical_blurs,
-                    BlurDirection::Vertical,
-                    info.blur_std_deviation,
-                    info.blur_region,
-                    task_id.into(),
-                    task.children[0],
-                    render_tasks,
-                    &ctx.frame_memory
-                );
-            }
-            RenderTaskKind::HorizontalBlur(ref info) => {
-                self.zero_clears.push(task_id);
-                add_blur_instances(
-                    &mut self.horizontal_blurs,
-                    BlurDirection::Horizontal,
-                    info.blur_std_deviation,
-                    info.blur_region,
-                    task_id.into(),
-                    task.children[0],
-                    render_tasks,
-                    &ctx.frame_memory
-                );
             }
             RenderTaskKind::CacheMask(ref task_info) => {
                 let clear_to_one = self.clip_batcher.add(
@@ -662,102 +495,14 @@ impl RenderTarget for AlphaRenderTarget {
                     &ctx.frame_memory,
                 );
             }
-            #[cfg(test)]
-            RenderTaskKind::Test(..) => {}
-        }
-
-        build_sub_pass(
-            task_id,
-            task,
-            gpu_buffer_builder,
-            render_tasks,
-            transforms,
-            ctx,
-            &mut self.clip_masks,
-        );
-    }
-
-    fn needs_depth(&self) -> bool {
-        false
-    }
-}
-
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-#[derive(Debug, PartialEq, Clone)]
-pub struct ResolveOp {
-    pub src_task_ids: Vec<RenderTaskId>,
-    pub dest_task_id: RenderTaskId,
-}
-
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-pub enum PictureCacheTargetKind {
-    Draw {
-        alpha_batch_container: AlphaBatchContainer,
-    },
-    Blit {
-        task_id: RenderTaskId,
-        sub_rect_offset: DeviceIntVector2D,
-    },
-}
-
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct PictureCacheTarget {
-    pub surface: ResolvedSurfaceTexture,
-    pub kind: PictureCacheTargetKind,
-    pub clear_color: Option<ColorF>,
-    pub dirty_rect: DeviceIntRect,
-    pub valid_rect: DeviceIntRect,
-}
-
-#[cfg_attr(feature = "capture", derive(Serialize))]
-#[cfg_attr(feature = "replay", derive(Deserialize))]
-pub struct TextureCacheRenderTarget {
-    pub target_kind: RenderTargetKind,
-    pub horizontal_blurs: FastHashMap<TextureSource, FrameVec<BlurInstance>>,
-    pub blits: FrameVec<BlitJob>,
-    pub border_segments_complex: FrameVec<BorderInstance>,
-    pub border_segments_solid: FrameVec<BorderInstance>,
-    pub clears: FrameVec<DeviceIntRect>,
-    pub line_decorations: FrameVec<LineDecorationJob>,
-    pub fast_linear_gradients: FrameVec<FastLinearGradientInstance>,
-    pub linear_gradients: FrameVec<LinearGradientInstance>,
-    pub radial_gradients: FrameVec<RadialGradientInstance>,
-    pub conic_gradients: FrameVec<ConicGradientInstance>,
-}
-
-impl TextureCacheRenderTarget {
-    pub fn new(target_kind: RenderTargetKind, memory: &FrameMemory) -> Self {
-        TextureCacheRenderTarget {
-            target_kind,
-            horizontal_blurs: FastHashMap::default(),
-            blits: memory.new_vec(),
-            border_segments_complex: memory.new_vec(),
-            border_segments_solid: memory.new_vec(),
-            clears: memory.new_vec(),
-            line_decorations: memory.new_vec(),
-            fast_linear_gradients: memory.new_vec(),
-            linear_gradients: memory.new_vec(),
-            radial_gradients: memory.new_vec(),
-            conic_gradients: memory.new_vec(),
-        }
-    }
-
-    pub fn add_task(
-        &mut self,
-        task_id: RenderTaskId,
-        render_tasks: &RenderTaskGraph,
-        memory: &FrameMemory,
-    ) {
-        profile_scope!("add_task");
-        let task_address = task_id.into();
-
-        let task = &render_tasks[task_id];
-        let target_rect = task.get_target_rect();
-
-        match task.kind {
+            RenderTaskKind::Blit(ref task_info) => {
+                let target_rect = task.get_target_rect();
+                self.blits.push(BlitJob {
+                    source: task_info.source,
+                    source_rect: task_info.source_rect,
+                    target_rect,
+                });
+            }
             RenderTaskKind::LineDecoration(ref info) => {
                 self.clears.push(target_rect);
 
@@ -770,27 +515,6 @@ impl TextureCacheRenderTarget {
                         LineOrientation::Vertical => 1.0,
                     },
                     wavy_line_thickness: info.wavy_line_thickness,
-                });
-            }
-            RenderTaskKind::HorizontalBlur(ref info) => {
-                add_blur_instances(
-                    &mut self.horizontal_blurs,
-                    BlurDirection::Horizontal,
-                    info.blur_std_deviation,
-                    info.blur_region,
-                    task_address,
-                    task.children[0],
-                    render_tasks,
-                    memory,
-                );
-            }
-            RenderTaskKind::Blit(ref task_info) => {
-                // Add a blit job to copy from an existing render
-                // task to this target.
-                self.blits.push(BlitJob {
-                    source: task_info.source,
-                    source_rect: task_info.source_rect,
-                    target_rect,
                 });
             }
             RenderTaskKind::Border(ref task_info) => {
@@ -825,25 +549,62 @@ impl TextureCacheRenderTarget {
             RenderTaskKind::ConicGradient(ref task_info) => {
                 self.conic_gradients.push(task_info.to_instance(&target_rect));
             }
-            RenderTaskKind::Prim(..) |
             RenderTaskKind::Image(..) |
             RenderTaskKind::Cached(..) |
-            RenderTaskKind::VerticalBlur(..) |
-            RenderTaskKind::Picture(..) |
-            RenderTaskKind::ClipRegion(..) |
-            RenderTaskKind::CacheMask(..) |
-            RenderTaskKind::Readback(..) |
-            RenderTaskKind::Scaling(..) |
-            RenderTaskKind::TileComposite(..) |
-            RenderTaskKind::Empty(..) |
-            RenderTaskKind::SvgFilter(..) |
-            RenderTaskKind::SVGFENode(..) => {
-                panic!("BUG: unexpected task kind for texture cache target");
+            RenderTaskKind::TileComposite(..) => {
+                panic!("Should not be added to color target!");
             }
+            RenderTaskKind::Readback(..) => {}
             #[cfg(test)]
             RenderTaskKind::Test(..) => {}
         }
+
+        build_sub_pass(
+            task_id,
+            task,
+            gpu_buffer_builder,
+            render_tasks,
+            transforms,
+            ctx,
+            &mut self.clip_masks,
+        );
     }
+
+    pub fn needs_depth(&self) -> bool {
+        self.alpha_batch_containers.iter().any(|ab| {
+            !ab.opaque_batches.is_empty()
+        })
+    }
+}
+
+#[cfg_attr(feature = "capture", derive(Serialize))]
+#[cfg_attr(feature = "replay", derive(Deserialize))]
+#[derive(Debug, PartialEq, Clone)]
+pub struct ResolveOp {
+    pub src_task_ids: Vec<RenderTaskId>,
+    pub dest_task_id: RenderTaskId,
+}
+
+#[cfg_attr(feature = "capture", derive(Serialize))]
+#[cfg_attr(feature = "replay", derive(Deserialize))]
+pub enum PictureCacheTargetKind {
+    Draw {
+        alpha_batch_container: AlphaBatchContainer,
+    },
+    Blit {
+        task_id: RenderTaskId,
+        sub_rect_offset: DeviceIntVector2D,
+    },
+}
+
+#[cfg_attr(feature = "capture", derive(Serialize))]
+#[cfg_attr(feature = "replay", derive(Deserialize))]
+pub struct PictureCacheTarget {
+    pub surface: ResolvedSurfaceTexture,
+    pub kind: PictureCacheTargetKind,
+    pub clear_color: Option<ColorF>,
+    pub dirty_rect: DeviceIntRect,
+    pub valid_rect: DeviceIntRect,
 }
 
 fn add_blur_instances(

@@ -33,12 +33,10 @@
 #include "nsIDownloader.h"
 #include "nsIURI.h"
 #include "nsIWidget.h"
-#include "nsIThread.h"
+#include "nsWindowsHelpers.h"
 
 #include "mozilla/Attributes.h"
 #include "mozilla/EventForwards.h"
-#include "mozilla/HalScreenConfiguration.h"
-#include "mozilla/HashTable.h"
 #include "mozilla/LazyIdleThread.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/Vector.h"
@@ -416,11 +414,8 @@ class WinUtils {
    * returns the LayoutDeviceIntRegion.
    */
   static LayoutDeviceIntRegion ConvertHRGNToRegion(HRGN aRgn);
-  /**
-   * Performs the inverse of ConvertHRGNToRegion.
-   * The region must be cleaned up with DeleteObject().
-   */
-  static HRGN RegionToHRGN(const LayoutDeviceIntRegion&);
+  /** Performs the inverse of ConvertHRGNToRegion. */
+  static nsAutoRegion RegionToHRGN(const LayoutDeviceIntRegion&);
 
   /**
    * ToIntRect converts a Windows RECT to a LayoutDeviceIntRect.
@@ -560,6 +555,8 @@ class WinUtils {
 
   static bool GetClassName(HWND aHwnd, nsAString& aName);
 
+  static bool MicaEnabled();
+
   static void EnableWindowOcclusion(const bool aEnable);
 
   static bool GetTimezoneName(wchar_t* aBuffer);
@@ -572,6 +569,8 @@ class WinUtils {
   static bool GetAutoRotationState(AR_STATE* aRotationState);
 
   static void GetClipboardFormatAsString(UINT aFormat, nsAString& aOutput);
+
+  static nsresult GetProcessImageName(DWORD aProcessId, nsAString& aName);
 
  private:
   static WhitelistVec BuildWhitelist();

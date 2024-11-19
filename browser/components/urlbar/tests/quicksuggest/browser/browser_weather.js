@@ -7,32 +7,25 @@
 
 "use strict";
 
-ChromeUtils.defineESModuleGetters(this, {
-  UrlbarProviderWeather: "resource:///modules/UrlbarProviderWeather.sys.mjs",
-});
-
-// This test takes a while and can time out in verify mode. Each task is run
-// twice, once with Rust enabled and once with it disabled. Once we remove the
-// JS backend this should improve a lot, but for now request a longer timeout.
+// This test takes a while and can time out in verify mode.
 requestLongerTimeout(5);
 
 add_setup(async function () {
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
-    remoteSettingsRecords: [
-      {
-        type: "weather",
-        weather: MerinoTestUtils.WEATHER_RS_DATA,
-      },
+    remoteSettingsRecords: [QuickSuggestTestUtils.weatherRecord()],
+    prefs: [
+      ["suggest.quicksuggest.sponsored", true],
+      ["weather.featureGate", true],
     ],
   });
   await MerinoTestUtils.initWeather();
 });
 
 // Basic checks of the row DOM.
-add_tasks_with_rust(async function dom() {
+add_task(async function dom() {
   await UrlbarTestUtils.promiseAutocompleteResultPopup({
     window,
-    value: MerinoTestUtils.WEATHER_KEYWORD,
+    value: "weather",
   });
 
   let resultIndex = 1;
@@ -52,7 +45,7 @@ add_tasks_with_rust(async function dom() {
 
 // This test ensures the browser navigates to the weather webpage after
 // the weather result is selected.
-add_tasks_with_rust(async function test_weather_result_selection() {
+add_task(async function test_weather_result_selection() {
   let tab = await BrowserTestUtils.openNewForegroundTab(gBrowser);
   let browserLoadedPromise = BrowserTestUtils.browserLoaded(
     tab.linkedBrowser,
@@ -61,7 +54,7 @@ add_tasks_with_rust(async function test_weather_result_selection() {
 
   await UrlbarTestUtils.promiseAutocompleteResultPopup({
     window,
-    value: MerinoTestUtils.WEATHER_KEYWORD,
+    value: "weather",
   });
 
   info(`Select the weather result`);
@@ -84,16 +77,12 @@ add_tasks_with_rust(async function test_weather_result_selection() {
 
 // Does a search, clicks the "Show less frequently" result menu command, and
 // repeats both steps until the min keyword length cap is reached.
-add_tasks_with_rust(async function showLessFrequentlyCapReached_manySearches() {
+add_task(async function showLessFrequentlyCapReached_manySearches() {
   // Set up a min keyword length and cap.
   await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: {
-        keywords: ["weather"],
-        min_keyword_length: 3,
-      },
-    },
+    QuickSuggestTestUtils.weatherRecord({
+      min_keyword_length: 3,
+    }),
     {
       type: "configuration",
       configuration: {
@@ -170,26 +159,19 @@ add_tasks_with_rust(async function showLessFrequentlyCapReached_manySearches() {
 
   await UrlbarTestUtils.promisePopupClose(window);
   await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: MerinoTestUtils.WEATHER_RS_DATA,
-    },
+    QuickSuggestTestUtils.weatherRecord(),
   ]);
   UrlbarPrefs.clear("weather.minKeywordLength");
 });
 
 // Repeatedly clicks the "Show less frequently" result menu command after doing
 // a single search until the min keyword length cap is reached.
-add_tasks_with_rust(async function showLessFrequentlyCapReached_oneSearch() {
+add_task(async function showLessFrequentlyCapReached_oneSearch() {
   // Set up a min keyword length and cap.
   await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: {
-        keywords: ["weather"],
-        min_keyword_length: 3,
-      },
-    },
+    QuickSuggestTestUtils.weatherRecord({
+      min_keyword_length: 3,
+    }),
     {
       type: "configuration",
       configuration: {
@@ -245,28 +227,25 @@ add_tasks_with_rust(async function showLessFrequentlyCapReached_oneSearch() {
   gURLBar.view.resultMenu.hidePopup(true);
   await UrlbarTestUtils.promisePopupClose(window);
   await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    {
-      type: "weather",
-      weather: MerinoTestUtils.WEATHER_RS_DATA,
-    },
+    QuickSuggestTestUtils.weatherRecord(),
   ]);
   UrlbarPrefs.clear("weather.minKeywordLength");
 });
 
 // Tests the "Not interested" result menu dismissal command.
-add_tasks_with_rust(async function notInterested() {
+add_task(async function notInterested() {
   await UrlbarTestUtils.promiseAutocompleteResultPopup({
     window,
-    value: MerinoTestUtils.WEATHER_KEYWORD,
+    value: "weather",
   });
   await doDismissTest("not_interested");
 });
 
 // Tests the "Not relevant" result menu dismissal command.
-add_tasks_with_rust(async function notRelevant() {
+add_task(async function notRelevant() {
   await UrlbarTestUtils.promiseAutocompleteResultPopup({
     window,
-    value: MerinoTestUtils.WEATHER_KEYWORD,
+    value: "weather",
   });
   await doDismissTest("not_relevant");
 });
@@ -355,14 +334,14 @@ async function doDismissTest(command) {
 // Tests the "Report inaccurate location" result menu command immediately
 // followed by a dismissal command to make sure other commands still work
 // properly while the urlbar session remains ongoing.
-add_tasks_with_rust(async function inaccurateLocationAndDismissal() {
+add_task(async function inaccurateLocationAndDismissal() {
   await doSessionOngoingCommandTest("inaccurate_location");
 });
 
 // Tests the "Show less frequently" result menu command immediately followed by
 // a dismissal command to make sure other commands still work properly while the
 // urlbar session remains ongoing.
-add_tasks_with_rust(async function showLessFrequentlyAndDismissal() {
+add_task(async function showLessFrequentlyAndDismissal() {
   await doSessionOngoingCommandTest("show_less_frequently");
   UrlbarPrefs.clear("weather.minKeywordLength");
 });
@@ -371,7 +350,7 @@ async function doSessionOngoingCommandTest(command) {
   // Trigger the suggestion.
   await UrlbarTestUtils.promiseAutocompleteResultPopup({
     window,
-    value: MerinoTestUtils.WEATHER_KEYWORD,
+    value: "weather",
   });
 
   let resultIndex = 1;
@@ -398,11 +377,11 @@ async function doSessionOngoingCommandTest(command) {
 }
 
 // Test for menu item to mange the suggest.
-add_tasks_with_rust(async function manage() {
+add_task(async function manage() {
   await BrowserTestUtils.withNewTab({ gBrowser }, async browser => {
     await UrlbarTestUtils.promiseAutocompleteResultPopup({
       window,
-      value: MerinoTestUtils.WEATHER_KEYWORD,
+      value: "weather",
     });
 
     let resultIndex = 1;
@@ -434,7 +413,7 @@ add_tasks_with_rust(async function manage() {
 });
 
 // Test for simple UI.
-add_tasks_with_rust(async function simpleUI() {
+add_task(async function simpleUI() {
   const testData = [
     {
       weatherSimpleUI: true,
@@ -454,7 +433,7 @@ add_tasks_with_rust(async function simpleUI() {
 
     await UrlbarTestUtils.promiseAutocompleteResultPopup({
       window,
-      value: MerinoTestUtils.WEATHER_KEYWORD,
+      value: "weather",
     });
 
     let resultIndex = 1;
@@ -486,14 +465,11 @@ add_tasks_with_rust(async function simpleUI() {
 });
 
 function assertIsWeatherResult(result, isWeatherResult) {
-  let provider = UrlbarPrefs.get("quickSuggestRustEnabled")
-    ? UrlbarProviderQuickSuggest
-    : UrlbarProviderWeather;
   if (isWeatherResult) {
     Assert.equal(
       result.providerName,
-      provider.name,
-      "Result should be from a weather provider"
+      UrlbarProviderQuickSuggest.name,
+      "Result should be from UrlbarProviderQuickSuggest"
     );
     Assert.equal(
       UrlbarUtils.searchEngagementTelemetryType(result),
@@ -503,8 +479,8 @@ function assertIsWeatherResult(result, isWeatherResult) {
   } else {
     Assert.notEqual(
       result.providerName,
-      provider.name,
-      "Result should not be from a weather provider"
+      UrlbarProviderQuickSuggest.name,
+      "Result should not be from UrlbarProviderQuickSuggest"
     );
     Assert.notEqual(
       UrlbarUtils.searchEngagementTelemetryType(result),

@@ -50,12 +50,30 @@ body {
   &:not([chromehidden~="toolbar"]) {
     min-width: 450px;
     min-height: 120px;
+
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media (-moz-bool-pref: "sidebar.verticalTabs") {
+      min-width: 800px;
+
+      @media (-moz-platform: macos) {
+        min-width: 670px;
+      }
+    }
   }
 
   /* z-indices that fight on the browser stack */
   --browser-stack-z-index-devtools-splitter: 1;
   --browser-stack-z-index-dialog-stack: 2;
   --browser-stack-z-index-rdm-toolbar: 3;
+
+  /* z-indices that fight in the general browser / toolbox area */
+  --browser-area-z-index-toolbox: 0;
+  --browser-area-z-index-sidebar: 1;
+  --browser-area-z-index-tabbox: 2;
+  --browser-area-z-index-sidebar-splitter: 3;
+
+  /* on macOS the animation of the toolbox in fullscreen needs the toolbox to be higher */
+  --browser-area-z-index-toolbox-while-animating: 4;
 
   --toolbarbutton-border-radius: 4px;
   --identity-box-margin-inline: 4px;
@@ -116,6 +134,8 @@ body {
 
 #navigator-toolbox {
   appearance: none;
+  position: relative;
+  z-index: var(--browser-area-z-index-toolbox);
 
   background-color: var(--toolbox-non-lwt-bgcolor);
   color: var(--toolbox-non-lwt-textcolor);
@@ -130,6 +150,17 @@ body {
 
   &[fullscreenShouldAnimate] {
     transition: 0.8s margin-top ease-out;
+  }
+
+  /* While we are animating / have animated in the titlebar from macOS,
+   * the z-indices are subtly different to accommodate the sidebar better.
+   *
+   * We also give the toolbox a shadow and border in this case.
+   */
+  &.fullscreen-with-menubar {
+    z-index: var(--browser-area-z-index-toolbox-while-animating);
+    box-shadow: var(--content-area-shadow);
+    border-bottom-color: var(--chrome-content-separator-color);
   }
 
   :root[customizing] & {
@@ -162,7 +193,7 @@ body {
   /* Reset linux padding */
   padding: 0;
 
-  &:not(.titlebar-color) {
+  &:not(.browser-titlebar) {
     background-color: var(--toolbar-bgcolor);
     color: var(--toolbar-color);
     border-style: none;
@@ -171,7 +202,7 @@ body {
 
 /* Title bar */
 
-#titlebar {
+.browser-titlebar {
   -moz-window-dragging: drag;
 
   :root[tabsintitlebar] & {
@@ -199,7 +230,7 @@ body {
     }
   }
 
-  #toolbar-menubar[autohide="true"]:not([inactive]) + #TabsToolbar > & {
+  #toolbar-menubar[autohide="true"]:not([inactive]) ~ :is(#TabsToolbar, #nav-bar) > & {
     visibility: hidden;
   }
 
@@ -235,10 +266,15 @@ body {
   }
 }
 
-/* Hide the TabsToolbar titlebar controls if the menubar is permanently shown.
+/* Hide the TabsToolbar/nav-bar titlebar controls if the menubar is permanently shown.
  * (That is, if the menu bar doesn't autohide, and we're not in a fullscreen or
  * popup window.) */
-:root:not([chromehidden~="menubar"], [inFullscreen]) #toolbar-menubar[autohide="false"] + #TabsToolbar > :is(.titlebar-buttonbox-container, .titlebar-spacer) {
+:root:not([chromehidden~="menubar"], [inFullscreen]) #toolbar-menubar[autohide="false"] ~ :is(#TabsToolbar, #nav-bar) > :is(.titlebar-buttonbox-container, .titlebar-spacer) {
+  display: none;
+}
+
+/* Only show the titlebar buttons and spacers in the first visible toolbar. */
+#navigator-toolbox:not([tabs-hidden]) > #nav-bar > :is(.titlebar-buttonbox-container, .titlebar-spacer) {
   display: none;
 }
 
@@ -262,6 +298,19 @@ body {
 #toolbar-menubar {
   &[autohide="true"] {
     overflow: hidden;
+
+    /* For linux and windows, when temporarily showing the menu bar, make it at least
+       as tall as the tab toolbar such that the window controls don't appear to move up.
+       For MacOS, autohide is never true on the menubar.
+    */
+    :root[tabsintitlebar] #navigator-toolbox:not([tabs-hidden]) > & {
+      min-height: var(--tabstrip-min-height);
+    }
+    /* adjust the height of the auto-hiding toolbar menubar when the tabstrip is
+       hidden and we need to match the height of the nav-bar. */
+    :root[tabsintitlebar] #navigator-toolbox[tabs-hidden] > & {
+      min-height: calc(var(--urlbar-min-height) + 2 * var(--urlbar-padding-block));
+    }
 
     &[inactive]:not([customizing]) {
       min-height: 0 !important;
@@ -291,13 +340,6 @@ body {
 
   &[tabs-hidden] {
     border-top-style: none;
-  }
-
-  /* The address bar needs to be able to render outside of the toolbar, but as
-   * long as it's within the toolbar's bounds we can clip the toolbar so that the
-   * rendering pipeline doesn't reserve an enormous texture for it. */
-  &:not([urlbar-exceeds-toolbar-bounds]) {
-    overflow: clip;
   }
 
   :root[sessionrestored][lwtheme] & {
@@ -476,12 +518,23 @@ menupopup::part(drop-indicator) {
 
 /* Private browsing indicator */
 
-#private-browsing-indicator-with-label {
+.private-browsing-indicator-with-label {
   align-items: center;
   margin-inline: 7px;
 
-  :root:not([privatebrowsingmode=temporary]) & {
+  :root:not([privatebrowsingmode=temporary]) &,
+  #navigator-toolbox:not([tabs-hidden]) #nav-bar > & {
     display: none;
+  }
+
+  #navigator-toolbox[tabs-hidden] #nav-bar > & {
+    margin-inline-end: 12px;
+
+  /* Hide the private browsing indicator
+    label when vertical tabs are enabled */
+    > .private-browsing-indicator-label {
+      display: none;
+    }
   }
 }
 
@@ -502,6 +555,7 @@ menupopup::part(drop-indicator) {
 #screenshotsPagePanel {
   position: relative;
   max-height: 0;
+  z-index: 1; /* Above the web content in this stack. */
 }
 
 /* Override theme colors since the picker uses extra colors that

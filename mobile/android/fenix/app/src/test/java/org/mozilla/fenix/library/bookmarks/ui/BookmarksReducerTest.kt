@@ -178,6 +178,23 @@ class BookmarksReducerTest {
     }
 
     @Test
+    fun `WHEN a folder is created THEN remove the select folder state and update the edit bookmark state`() {
+        val state = BookmarksState.default.copy(
+            bookmarksSelectFolderState = BookmarksSelectFolderState(outerSelectionGuid = "guid"),
+            bookmarksEditBookmarkState = BookmarksEditBookmarkState(
+                bookmark = BookmarkItem.Bookmark("url", "title", "url", "guid"),
+                folder = BookmarkItem.Folder("parentTitle", "parentGuid"),
+            ),
+        )
+
+        val folder = BookmarkItem.Folder("New Bookmark", "guid")
+        val result = bookmarksReducer(state, AddFolderAction.FolderCreated(folder))
+
+        assertEquals(folder, result.bookmarksEditBookmarkState?.folder)
+        assertNull(result.bookmarksSelectFolderState)
+    }
+
+    @Test
     fun `GIVEN we are on the add folder screen WHEN back is clicked THEN add folder state is removed`() {
         val state = BookmarksState.default.copy(
             bookmarksAddFolderState = BookmarksAddFolderState(
@@ -581,6 +598,25 @@ class BookmarksReducerTest {
         val result = bookmarksReducer(state, SnackbarAction.Undo)
         assertEquals(BookmarksSnackbarState.None, result.bookmarksSnackbarState)
         assertEquals(1, result.bookmarkItems.size)
+    }
+
+    @Test
+    fun `GIVEN a undo snackbar is displayed WHEN another item is deleted THEN append the item to be deleted`() {
+        val state = BookmarksState.default.copy(
+            bookmarkItems = listOf(BookmarkItem.Folder("Bookmark Folder", "guid0")),
+            bookmarksSnackbarState = BookmarksSnackbarState.UndoDeletion(listOf("guid0")),
+        )
+
+        val bookmarkToDelete = BookmarkItem.Bookmark(
+            guid = "guid1",
+            title = "title",
+            url = "url",
+            previewImageUrl = "previewImage",
+        )
+
+        val result = bookmarksReducer(state, BookmarksListMenuAction.Bookmark.DeleteClicked(bookmarkToDelete))
+        val expected = BookmarksSnackbarState.UndoDeletion(guidsToDelete = listOf("guid0", "guid1"))
+        assertEquals(expected, result.bookmarksSnackbarState)
     }
 
     @Test

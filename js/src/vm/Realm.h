@@ -393,6 +393,12 @@ class JS::Realm : public JS::shadow::Realm {
   bool allocatedDuringIncrementalGC_;
   bool initializingGlobal_ = true;
 
+  // Indicates that we are tracing all execution within this realm, i.e.,
+  // recording every entrance into exit from each function, among other
+  // things. See ExecutionTracer.h for where the bulk of this work
+  // happens.
+  bool isTracingExecution_ = false;
+
   js::UniquePtr<js::coverage::LCovRealm> lcovRealm_ = nullptr;
 
  public:
@@ -691,6 +697,30 @@ class JS::Realm : public JS::shadow::Realm {
   void setIsDebuggee();
   void unsetIsDebuggee();
 
+  bool isTracingExecution() { return isTracingExecution_; }
+
+  void enableExecutionTracing() {
+    MOZ_ASSERT(!debuggerObservesCoverage());
+
+    isTracingExecution_ = true;
+    setIsDebuggee();
+    updateDebuggerObservesAllExecution();
+  }
+
+  void disableExecutionTracing() {
+    if (!isTracingExecution_) {
+      return;
+    }
+
+    isTracingExecution_ = false;
+    // updateDebuggerObservesAllExecution always wants isDebuggee to be true,
+    // so we just have weird ordering here to play nicely with it
+    updateDebuggerObservesAllExecution();
+    if (!hasDebuggers()) {
+      unsetIsDebuggee();
+    }
+  }
+
   DebuggerVector& getDebuggers(const JS::AutoRequireNoGC& nogc) {
     return debuggers_;
   };
@@ -808,6 +838,16 @@ class JS::Realm : public JS::shadow::Realm {
   }
 
   js::RealmFuses realmFuses;
+
+  // Allocation site used by binding code to provide feedback
+  // on allocation heap for DOM allocation functions.
+  //
+  // See  CallIRGenerator::tryAttachCallNative
+  js::gc::AllocSite* localAllocSite = nullptr;
+
+  static size_t offsetOfLocalAllocSite() {
+    return offsetof(JS::Realm, localAllocSite);
+  }
 
  private:
   void purgeForOfPicChain();

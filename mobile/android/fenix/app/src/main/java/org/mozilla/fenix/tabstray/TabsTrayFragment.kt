@@ -844,10 +844,11 @@ class TabsTrayFragment : AppCompatDialogFragment() {
     @VisibleForTesting
     internal fun showBookmarkSnackbar(
         tabSize: Int,
+        parentFolderTitle: String?,
     ) {
         FenixSnackbar
             .make(requireView())
-            .bookmarkMessage(tabSize)
+            .bookmarkMessage(tabSize, parentFolderTitle)
             .anchorWithAction(getSnackbarAnchor()) {
                 findNavController().navigate(
                     TabsTrayFragmentDirections.actionGlobalBookmarkFragment(BookmarkRoot.Mobile.id),
@@ -857,9 +858,9 @@ class TabsTrayFragment : AppCompatDialogFragment() {
             .show()
     }
 
-    @Suppress("MaxLineLength")
     private fun findPreviousDialogFragment(): DownloadCancelDialogFragment? {
-        return parentFragmentManager.findFragmentByTag(DOWNLOAD_CANCEL_DIALOG_FRAGMENT_TAG) as? DownloadCancelDialogFragment
+        return parentFragmentManager
+            .findFragmentByTag(DOWNLOAD_CANCEL_DIALOG_FRAGMENT_TAG) as? DownloadCancelDialogFragment
     }
 
     private fun getSnackbarAnchor(): View? = when {

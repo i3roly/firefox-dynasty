@@ -2,7 +2,7 @@
    https://creativecommons.org/publicdomain/zero/1.0/ */
 
 // This test checks that searching for "@" provides restrict keywords
-// (@bookmarks, @history, @tabs), and verifies that selecting one of
+// (@bookmarks, @history, @tabs, @actions) and verifies that selecting one of
 // these keywords enters the appropriate search mode.
 
 "use strict";
@@ -29,11 +29,14 @@ async function getRestrictKeywordResult(window, restrictToken) {
 
   for (let index = 0; !restrictResult && index < resultCount; index++) {
     let details = await UrlbarTestUtils.getDetailsOfResultAt(window, index);
+    let category = details.result.payload.l10nRestrictKeyword;
+    let keyword = `@${category?.toLowerCase()}`;
+    let symbol = details.result.payload.keyword;
 
-    if (details.result.payload.keyword == restrictToken) {
+    if (symbol == restrictToken) {
       Assert.equal(
         details.displayed.title,
-        `Search with ${details.result.payload.l10nRestrictKeyword}`,
+        `${keyword} - Search ${category}`,
         "The result's title is set correctly."
       );
 
@@ -72,6 +75,7 @@ async function assertRestrictKeywordResult(window, restrictToken) {
   await UrlbarTestUtils.assertSearchMode(window, {
     ...searchMode,
     entry: "keywordoffer",
+    restrictType: "keyword",
   });
 
   const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
@@ -92,6 +96,7 @@ add_task(async function test_search_restrict_keyword_results() {
     UrlbarTokenizer.RESTRICT.HISTORY,
     UrlbarTokenizer.RESTRICT.BOOKMARK,
     UrlbarTokenizer.RESTRICT.OPENPAGE,
+    UrlbarTokenizer.RESTRICT.ACTION,
   ];
 
   for (const restrictToken of restrictTokens) {

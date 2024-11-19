@@ -114,6 +114,7 @@ internal class BookmarksTelemetryMiddleware : Middleware<BookmarksState, Bookmar
                     .forEach { BookmarksManagement.shared.record(NoExtras()) }
             }
             is BookmarksListMenuAction.Folder.DeleteClicked,
+            CloseClicked,
             AddFolderClicked,
             is BookmarkLongClicked,
             is BookmarksListMenuAction.Bookmark.DeleteClicked,
@@ -133,6 +134,7 @@ internal class BookmarksTelemetryMiddleware : Middleware<BookmarksState, Bookmar
             is SelectFolderAction.ItemClicked,
             AddFolderAction.ParentFolderClicked,
             SignIntoSyncClicked,
+            is AddFolderAction.FolderCreated,
             is AddFolderAction.TitleChanged,
             is EditBookmarkAction.TitleChanged,
             is EditBookmarkAction.URLChanged,

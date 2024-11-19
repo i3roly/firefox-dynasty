@@ -46,6 +46,15 @@ treeherder:
         'Btime-STP': 'Browsertime performance tests on Safari Technology Preview'
         'Btime-CaR': 'Browsertime performance tests on Chromium-as-Release'
         'Btime-nofis-CaR': 'Browsertime performance tests on Chromium-as-Release without fission enabled'
+        'Btime-slow3G': 'Browsertime network benchmark tests with slow3G condition'
+        'Btime-ChR-slow3G': 'Browsertime network benchmark tests with slow3G condition'
+        'Btime-CaR-slow3G': 'Browsertime network benchmark tests with slow3G condition'
+        'Btime-fast5G': 'Browsertime network benchmark tests with fast5G condition'
+        'Btime-ChR-fast5G': 'Browsertime network benchmark tests with fast5G condition'
+        'Btime-CaR-fast5G': 'Browsertime network benchmark tests with fast5G condition'
+        'Btime-busy5G': 'Browsertime network benchmark tests with busy5G condition'
+        'Btime-ChR-busy5G': 'Browsertime network benchmark tests with busy5G condition'
+        'Btime-CaR-busy5G': 'Browsertime network benchmark tests with busy5G condition'
         'Fetch': 'Fetch and store content'
         'Fxfn': 'Firefox functional tests'
         'l10n-bump': 'L10n Bumper'
@@ -79,6 +88,8 @@ treeherder:
         'M-nofis-cf': 'Mochitests confirm failure without fission enabled'
         'M-nofis-ship': "Mochitests without fission and with SHIP (session history in parent) enabled (Android-specific)"
         'M-nofis-ship-cf': "Mochitests confirm failure: no fission + with SHIP (session history in parent) on (Android-only)"
+        'M-nogpu': 'Mochitests without GPU process enabled'
+        'M-nogpu-cf': 'Mochitests confirm failure without GPU process enabled'
         'M-spi': 'Mochitests with socket process'
         'M-spi-cf': 'Mochitests confirm failure with socket process'
         'M-spi-nofis': 'Mochitests with socket process without fission enabled'
@@ -110,6 +121,9 @@ treeherder:
         'M-msix': 'Mochitests from MSIX builds'
         'M-msix-cf': 'Mochitests confirm failure from MSIX builds'
         'M-osint': 'Mochitests tagged with os-integration'
+        'Mn': 'Marionette tests'
+        'Mn-swr': 'Marionette tests with software webrender enabled'
+        'Mn-headless': 'Marionette tests running in headless mode'
         'MSI': 'Repack installers into MSIs'
         'MSIs': 'Signing of Repacked installers of MSIs'
         'MSIX': 'Repack into MSIX package'
@@ -123,6 +137,8 @@ treeherder:
         'R-nofis-cf': 'Reftests confirm failure without fission enabled'
         'R-nofis-ship': 'Reftests without fission and with SHIP (session history in parent) enabled (Android specific)'
         'R-nofis-ship-cf': 'Reftests confirm failure: no fission + with SHIP (session history in parent) on (Android-only)'
+        'R-nogpu': 'Reftests without GPU process enabled'
+        'R-nogpu-cf': 'Reftests confirm failure without GPU process enabled'
         'R-swr': 'Reftests with software webrender enabled'
         'R-swr-cf': 'Reftests confirm failure with software webrender enabled'
         'R-swr-nofis': 'Reftests with software webrender enabled without fission enabled'
@@ -165,6 +181,10 @@ treeherder:
         'W-pb': 'Web platform tests with private browsing enabled'
         'W-emewmf': 'Web platform tests with Windows Media Foundation based CDM enabled'
         'W-emewmf-cf': 'Web platform tests confirm failure with Windows Media Foundation based CDM enabled'
+        'W-async': 'Web platform tests with parent process dispatching enabled'
+        'W-async-cf': 'Web platform tests with parent process dispatching enabled'
+        'W-wd-async': 'Web platform tests for WebDriver with parent process dispatching enabled'
+        'W-wd-async-cf': 'Web platform tests for WebDriver with parent process dispatching enabled'
         'X': 'Xpcshell tests'
         'X-cf': 'Xpcshell tests confirm failure'
         'X-condprof': 'Xpcshell tests with a conditioned profile'
@@ -203,6 +223,7 @@ treeherder:
         'Ub20': 'Packages for Ubuntu 20.04'
         'Ub22': 'Packages for Ubuntu 22.04'
         'Ub22a64': 'AArch64 packages for Ubuntu 22.04'
+        'Ub24': 'Packages for Ubuntu 24.04'
         'I': 'Docker Image Builds'
         'TA': 'Toolchain builds for Android'
         'TL': 'Toolchain builds for Linux 64-bits'
@@ -905,11 +926,16 @@ workers:
             implementation: generic-worker
             os: linux
             worker-type: 't-linux-vm-2204-wayland'
-        t-linux-wayland-snap:
+        t-linux-2204-wayland-snap:
             provisioner: '{trust-domain}-t'
             implementation: generic-worker
             os: linux
             worker-type: 't-linux-2204-wayland-snap'
+        t-linux-2404-wayland-snap:
+            provisioner: '{trust-domain}-t'
+            implementation: generic-worker
+            os: linux
+            worker-type: 't-linux-2404-wayland-snap'
         t-osx-1015-r8:
             provisioner: releng-hardware
             implementation: generic-worker
@@ -1041,7 +1067,6 @@ mac-signing:
                       - "/Contents/Library/LaunchServices/org.mozilla.updater"
                       - "/Contents/MacOS/XUL"
                       - "/Contents/MacOS/pingsender"
-                      - "/Contents/MacOS/minidump-analyzer"
                       - "/Contents/MacOS/nmhproxy"
                       - "/Contents/MacOS/*.dylib"
                       - "/Contents/Resources/gmp-clearkey/*/*.dylib"
@@ -1085,7 +1110,6 @@ mac-signing:
                       - "/Contents/MacOS/updater.app"
                       - "/Contents/Library/LaunchServices/org.mozilla.updater"
                       - "/Contents/MacOS/pingsender"
-                      - "/Contents/MacOS/minidump-analyzer"
                       - "/Contents/MacOS/nmhproxy"
                       - "/Contents/Frameworks/ChannelPrefs.framework"
 
