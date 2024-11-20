@@ -579,7 +579,6 @@ class nsChildView final : public nsBaseWidget {
   InputContext mInputContext;
 
   NSView* mParentView;
-  nsIWidget* mParentWidget;
 
 #ifdef ACCESSIBILITY
   // weak ref to this childview's associated mozAccessible for speed reasons
