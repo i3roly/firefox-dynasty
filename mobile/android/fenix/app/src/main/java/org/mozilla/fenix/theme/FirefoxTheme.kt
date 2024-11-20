@@ -37,22 +37,21 @@ enum class Theme {
          *
          * @param allowPrivateTheme Boolean used to control whether [Theme.Private] is an option
          * for [FirefoxTheme] colors.
-         * @param isCustomTab Boolean whether theme is used for a custom tab.
          *
          * @return the current [Theme] that is displayed.
          */
         @Composable
-        fun getTheme(allowPrivateTheme: Boolean = true, isCustomTab: Boolean = false): Theme {
-            val settings = LocalContext.current.settings()
-            val isPrivateMode =
-                settings.lastKnownMode.isPrivate || (isCustomTab && settings.openLinksInAPrivateTab)
-
-            return when {
-                allowPrivateTheme && !inComposePreview && isPrivateMode -> Private
-                isSystemInDarkTheme() -> Dark
-                else -> Light
+        fun getTheme(allowPrivateTheme: Boolean = true) =
+            if (allowPrivateTheme &&
+                !inComposePreview &&
+                LocalContext.current.settings().lastKnownMode.isPrivate
+            ) {
+                Private
+            } else if (isSystemInDarkTheme()) {
+                Dark
+            } else {
+                Light
             }
-        }
     }
 }
 
@@ -188,6 +187,8 @@ private val darkColorPalette = FirefoxColors(
     borderCritical = PhotonColors.Red20,
     borderToolbarDivider = PhotonColors.DarkGrey60,
     ripple = PhotonColors.White,
+    tabActive = PhotonColors.DarkGrey30,
+    tabInactive = PhotonColors.DarkGrey80,
 )
 
 private val lightColorPalette = FirefoxColors(
@@ -269,6 +270,8 @@ private val lightColorPalette = FirefoxColors(
     borderCritical = PhotonColors.Red70,
     borderToolbarDivider = PhotonColors.LightGrey10,
     ripple = PhotonColors.Black,
+    tabActive = PhotonColors.LightGrey10,
+    tabInactive = PhotonColors.LightGrey20,
 )
 
 private val privateColorPalette = darkColorPalette.copy(
@@ -279,6 +282,8 @@ private val privateColorPalette = darkColorPalette.copy(
     borderPrimary = PhotonColors.Ink05,
     borderSecondary = PhotonColors.Ink10,
     borderToolbarDivider = PhotonColors.Violet80,
+    tabActive = PhotonColors.Purple60,
+    tabInactive = PhotonColors.Ink90,
 )
 
 /**
@@ -365,6 +370,8 @@ class FirefoxColors(
     borderCritical: Color,
     borderToolbarDivider: Color,
     ripple: Color,
+    tabActive: Color,
+    tabInactive: Color,
 ) {
     // Layers
 
@@ -673,6 +680,14 @@ class FirefoxColors(
     var ripple by mutableStateOf(ripple)
         private set
 
+    // Tab Active
+    var tabActive by mutableStateOf(tabActive)
+        private set
+
+    // Tab Inactive
+    var tabInactive by mutableStateOf(tabInactive)
+        private set
+
     /**
      * Updates the existing colors with the provided [FirefoxColors].
      */
@@ -756,6 +771,8 @@ class FirefoxColors(
         borderCritical = other.borderCritical
         borderToolbarDivider = other.borderToolbarDivider
         ripple = other.ripple
+        tabActive = other.tabActive
+        tabInactive = other.tabInactive
     }
 
     /**
@@ -841,6 +858,8 @@ class FirefoxColors(
         borderWarning: Color = this.borderCritical,
         borderToolbarDivider: Color = this.borderToolbarDivider,
         ripple: Color = this.ripple,
+        tabActive: Color = this.tabActive,
+        tabInactive: Color = this.tabInactive,
     ): FirefoxColors = FirefoxColors(
         layer1 = layer1,
         layer2 = layer2,
@@ -920,6 +939,8 @@ class FirefoxColors(
         borderCritical = borderWarning,
         borderToolbarDivider = borderToolbarDivider,
         ripple = ripple,
+        tabActive = tabActive,
+        tabInactive = tabInactive,
     )
 }
 

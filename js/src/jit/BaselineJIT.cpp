@@ -19,6 +19,7 @@
 #include "jit/BaselineCodeGen.h"
 #include "jit/BaselineIC.h"
 #include "jit/CalleeToken.h"
+#include "jit/Ion.h"
 #include "jit/JitCommon.h"
 #include "jit/JitRuntime.h"
 #include "jit/JitSpewer.h"
@@ -215,10 +216,18 @@ MethodStatus jit::BaselineCompile(JSContext* cx, JSScript* script,
   TempAllocator temp(&cx->tempLifoAlloc());
   JitContext jctx(cx);
 
-  BaselineCompiler compiler(cx, temp, script);
+  GlobalLexicalEnvironmentObject* globalLexical =
+      &cx->global()->lexicalEnvironment();
+  JSObject* globalThis = globalLexical->thisObject();
+  BaselineCompiler compiler(cx, temp, script, globalLexical, globalThis);
   if (!compiler.init()) {
     ReportOutOfMemory(cx);
     return Method_Error;
+  }
+
+  bool ionCompileable = IsIonEnabled(cx) && CanIonCompileScript(cx, script);
+  if (!ionCompileable) {
+    compiler.setIonCompileable(false);
   }
 
   if (forceDebugInstrumentation) {

@@ -87,6 +87,7 @@
   _(IntlGuardToCollator)                           \
   _(IntlGuardToDateTimeFormat)                     \
   _(IntlGuardToDisplayNames)                       \
+  _(IntlGuardToDurationFormat)                     \
   _(IntlGuardToListFormat)                         \
   _(IntlGuardToNumberFormat)                       \
   _(IntlGuardToPluralRules)                        \
@@ -95,6 +96,7 @@
   _(IntlGuardToSegments)                           \
   _(IntlGuardToSegmentIterator)                    \
                                                    \
+  _(MapConstructor)                                \
   _(MapGet)                                        \
   _(MapHas)                                        \
                                                    \
@@ -151,6 +153,7 @@
   _(RegExpInstanceOptimizable)                     \
   _(GetFirstDollarIndex)                           \
                                                    \
+  _(SetConstructor)                                \
   _(SetHas)                                        \
   _(SetSize)                                       \
                                                    \

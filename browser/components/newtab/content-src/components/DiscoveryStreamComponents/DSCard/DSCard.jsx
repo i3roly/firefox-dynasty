@@ -230,6 +230,26 @@ export class _DSCard extends React.PureComponent {
       },
     ];
 
+    this.largeCardImageSizes = [
+      {
+        mediaMatcher: "(min-width: 1122px)",
+        width: 220,
+        height: 220,
+      },
+
+      {
+        mediaMatcher: "(min-width: 866px)",
+        width: 218,
+        height: 109,
+      },
+
+      {
+        mediaMatcher: "(max-width: 610px)",
+        width: 202,
+        height: 101,
+      },
+    ];
+
     this.listCardImageSizes = [
       {
         mediaMatcher: "(min-width: 1122px)",
@@ -653,9 +673,10 @@ export class _DSCard extends React.PureComponent {
       : ``;
     const listCardClassName = isListCard ? `list-feed-card` : ``;
     const fakespotClassName = isFakespot ? `fakespot` : ``;
-    const sectionsCardsClassName = mayHaveSectionsCards
-      ? `sections-card-ui`
-      : ``;
+    const sectionsCardsClassName = [
+      mayHaveSectionsCards ? `sections-card-ui` : ``,
+      this.props.sectionsClassNames,
+    ].join(" ");
     const titleLinesName = `ds-card-title-lines-${titleLines}`;
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
@@ -665,6 +686,8 @@ export class _DSCard extends React.PureComponent {
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
     }
+
+    // TODO: Add logic to assign this.largeCardImageSizes
 
     let stpButton = () => {
       return (
@@ -693,8 +716,12 @@ export class _DSCard extends React.PureComponent {
     };
     return (
       <article
-        className={`ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName}  ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
+        className={`ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
         ref={this.setContextMenuButtonHostRef}
+        data-position-one={this.props["data-position-one"]}
+        data-position-two={this.props["data-position-one"]}
+        data-position-three={this.props["data-position-one"]}
+        data-position-four={this.props["data-position-one"]}
       >
         {this.props.showTopics &&
           !this.props.mayHaveSectionsCards &&

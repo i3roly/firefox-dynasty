@@ -55,6 +55,69 @@ add_setup(async function init() {
   await MerinoTestUtils.initGeolocation();
 });
 
+// Yelp ML should be disabled when the relevant prefs are disabled.
+add_task(async function yelpDisabled() {
+  gMakeSuggestionsStub.returns({ intent: "yelp_intent", subject: "burgers" });
+  let expectedResult = makeExpectedResult({
+    url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Yokohama%2C+Kanagawa",
+    originalUrl: "https://www.yelp.com/search?find_desc=burgers",
+    displayUrl: "yelp.com/search?find_desc=burgers&find_loc=Yokohama,+Kanagawa",
+    title: "burgers in Yokohama, Kanagawa",
+  });
+
+  let prefs = [
+    // These disable the Yelp feature itself, including Rust suggestions.
+    "suggest.quicksuggest.sponsored",
+    "suggest.yelp",
+    "yelp.featureGate",
+
+    // These disable Yelp ML suggestions but leave the Yelp feature enabled.
+    // This test doesn't add any Yelp data to remote settings, but if it did,
+    // Yelp Rust suggestions would still be triggered.
+    "yelp.mlEnabled",
+    "browser.ml.enable",
+    "quicksuggest.mlEnabled",
+  ];
+  for (let pref of prefs) {
+    info("Starting subtest for pref: " + pref);
+
+    // Before disabling the pref, first make sure the suggestion is added.
+    info("Doing search 1");
+    await check_results({
+      context: createContext("burgers", {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [expectedResult],
+    });
+
+    // Now disable the pref.
+    info("Disabling pref and doing search 2");
+    UrlbarPrefs.set(pref, false);
+    await check_results({
+      context: createContext("burgers", {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [],
+    });
+
+    // Revert.
+    UrlbarPrefs.set(pref, true);
+    await QuickSuggestTestUtils.forceSync();
+
+    // Make sure Yelp is added again.
+    info("Doing search 3 after re-enabling the pref");
+    await check_results({
+      context: createContext("burgers", {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [expectedResult],
+    });
+  }
+});
+
 // Runs through a variety of mock intents.
 add_task(async function intents() {
   let tests = [
@@ -392,6 +455,81 @@ async function doCacheTest({ expectedScore, expectedRust }) {
     "The suggestion should have borrowed its score from the Rust 'coffee' suggestion"
   );
 }
+
+// Tests the "Not relevant" command: a dismissed suggestion shouldn't be added.
+add_task(async function notRelevant() {
+  gMakeSuggestionsStub.returns({ intent: "yelp_intent", subject: "burgers" });
+  let result = makeExpectedResult({
+    url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Yokohama%2C+Kanagawa",
+    originalUrl: "https://www.yelp.com/search?find_desc=burgers",
+    displayUrl: "yelp.com/search?find_desc=burgers&find_loc=Yokohama,+Kanagawa",
+    title: "burgers in Yokohama, Kanagawa",
+  });
+
+  info("Doing initial search to verify the suggestion is matched");
+  await check_results({
+    context: createContext("burgers", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [result],
+  });
+
+  info("Triggering the 'Not relevant' command");
+  QuickSuggest.getFeature("YelpSuggestions").handleCommand(
+    {
+      controller: { removeResult() {} },
+    },
+    result,
+    "not_relevant"
+  );
+  await QuickSuggest.blockedSuggestions._test_readyPromise;
+
+  Assert.ok(
+    await QuickSuggest.blockedSuggestions.has(result.payload.originalUrl),
+    "The result's URL should be blocked"
+  );
+
+  info("Doing search for blocked suggestion");
+  await check_results({
+    context: createContext("burgers", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [],
+  });
+
+  info("Doing search for a suggestion that wasn't blocked");
+  gMakeSuggestionsStub.returns({ intent: "yelp_intent", subject: "ramen" });
+  await check_results({
+    context: createContext("ramen", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [
+      makeExpectedResult({
+        url: "https://www.yelp.com/search?find_desc=ramen&find_loc=Yokohama%2C+Kanagawa",
+        originalUrl: "https://www.yelp.com/search?find_desc=ramen",
+        displayUrl:
+          "yelp.com/search?find_desc=ramen&find_loc=Yokohama,+Kanagawa",
+        title: "ramen in Yokohama, Kanagawa",
+      }),
+    ],
+  });
+
+  info("Clearing blocked suggestions");
+  await QuickSuggest.blockedSuggestions.clear();
+
+  info("Doing search for unblocked suggestion");
+  gMakeSuggestionsStub.returns({ intent: "yelp_intent", subject: "burgers" });
+  await check_results({
+    context: createContext("burgers", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [result],
+  });
+});
 
 function makeExpectedResult({
   url,

@@ -233,22 +233,15 @@ class nsBlockFrame : public nsContainerFrame {
   // Given that we have a ::marker frame, does it actually draw something, i.e.,
   // do we have either a 'list-style-type' or 'list-style-image' that is
   // not 'none', and no 'content'?
-  bool MarkerIsEmpty() const;
+  // This is expected to be used only for outside markers, and when the caller
+  // already has a pointer to the marker frame.
+  bool MarkerIsEmpty(const nsIFrame* aMarker) const;
 
   // Return true if this frame has a ::marker frame.
   bool HasMarker() const { return HasAnyStateBits(NS_BLOCK_HAS_MARKER); }
 
-  // Return true if this frame has an inside ::marker frame.
-  bool HasInsideMarker() const {
-    return HasMarker() && StyleList()->mListStylePosition ==
-                              mozilla::StyleListStylePosition::Inside;
-  }
-
   // Return true if this frame has an outside ::marker frame.
-  bool HasOutsideMarker() const {
-    return HasMarker() && StyleList()->mListStylePosition ==
-                              mozilla::StyleListStylePosition::Outside;
-  }
+  bool HasOutsideMarker() const;
 
   /**
    * @return the first-letter frame or nullptr if we don't have one.

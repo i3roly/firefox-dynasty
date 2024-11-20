@@ -65,6 +65,7 @@ export const TELEMETRY_PREF = "telemetry";
 export const EVENTS_TELEMETRY_PREF = "telemetry.ut.events";
 export const PREF_UNIFIED_ADS_SPOCS_ENABLED = "unifiedAds.spocs.enabled";
 export const PREF_UNIFIED_ADS_TILES_ENABLED = "unifiedAds.tiles.enabled";
+const PREF_ENDPOINTS = "discoverystream.endpoints";
 const PREF_SHOW_SPONSORED_STORIES = "showSponsored";
 const PREF_SHOW_SPONSORED_TOPSITES = "showSponsoredTopSites";
 
@@ -97,8 +98,6 @@ ChromeUtils.defineLazyGetter(
   () => lazy.TelemetrySession.getMetadata("").sessionId
 );
 
-// The scalar category for TopSites of Contextual Services
-const SCALAR_CATEGORY_TOPSITES = "contextual.services.topsites";
 // `contextId` is a unique identifier used by Contextual Services
 const CONTEXT_ID_PREF = "browser.contextual-services.contextId";
 ChromeUtils.defineLazyGetter(lazy, "contextId", () => {
@@ -195,11 +194,8 @@ export class TelemetryFeed {
       "browser-open-newtab-start"
     );
     // Set two scalars for the "deletion-request" ping (See bug 1602064 and 1729474)
-    Services.telemetry.scalarSet(
-      "deletion.request.impression_id",
-      this._impressionId
-    );
-    Services.telemetry.scalarSet("deletion.request.context_id", lazy.contextId);
+    Glean.deletionRequest.impressionId.set(this._impressionId);
+    Glean.deletionRequest.contextId.set(lazy.contextId);
     Glean.newtab.locale.set(Services.locale.appLocaleAsBCP47);
     Glean.newtabHandoffPreference.enabled.set(
       lazy.handoffToAwesomebarPrefValue
@@ -668,11 +664,9 @@ export class TelemetryFeed {
     const session = this.sessions.get(au.getPortIdOfSender(action));
     if (type === "impression") {
       pingType = "topsites-impression";
-      Services.telemetry.keyedScalarAdd(
-        `${SCALAR_CATEGORY_TOPSITES}.impression`,
-        `${source}_${legacyTelemetryPosition}`,
-        1
-      );
+      Glean.contextualServicesTopsites.impression[
+        `${source}_${legacyTelemetryPosition}`
+      ].add(1);
       if (session) {
         Glean.topsites.impression.record({
           advertiser_name,
@@ -684,11 +678,9 @@ export class TelemetryFeed {
       }
     } else if (type === "click") {
       pingType = "topsites-click";
-      Services.telemetry.keyedScalarAdd(
-        `${SCALAR_CATEGORY_TOPSITES}.click`,
-        `${source}_${legacyTelemetryPosition}`,
-        1
-      );
+      Glean.contextualServicesTopsites.click[
+        `${source}_${legacyTelemetryPosition}`
+      ].add(1);
       if (session) {
         Glean.topsites.click.record({
           advertiser_name,
@@ -975,6 +967,14 @@ export class TelemetryFeed {
     if (!data.position && data.position !== 0) {
       throw new Error(
         `[Unified ads callback] Missing argument (No position). Cannot send telemetry event.`
+      );
+    }
+
+    // Make sure the callback endpoint is allowed
+    const allowed = this._prefs.get(PREF_ENDPOINTS).split(",");
+    if (!allowed.some(prefix => data.url.startsWith(prefix))) {
+      throw new Error(
+        `[Unified ads callback] Not one of allowed prefixes (${allowed})`
       );
     }
 

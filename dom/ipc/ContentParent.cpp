@@ -68,6 +68,7 @@
 #include "mozilla/ProfilerLabels.h"
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/RecursiveMutex.h"
+#include "mozilla/RDDProcessManager.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/ScriptPreloader.h"
 #include "mozilla/Components.h"
@@ -1226,7 +1227,7 @@ void ContentParent::LogAndAssertFailedPrincipalValidationInfo(
   } else {
     principalType.AssignLiteral("Unknown");
   }
-  extra.principalType = Some(principalType);
+  extra.principaltype = Some(principalType);
   extra.value = Some(aMethod);
 
   // Do not send telemetry when chrome-debugging is enabled
@@ -2963,6 +2964,12 @@ bool ContentParent::InitInternal(ProcessPriority aInitialPriority) {
                               namespaces);
 
   gpm->AddListener(this);
+
+  if (StaticPrefs::media_rdd_process_enabled()) {
+    // Ensure the RDD process has been started.
+    RDDProcessManager* rdd = RDDProcessManager::Get();
+    rdd->LaunchRDDProcess();
+  }
 
   nsStyleSheetService* sheetService = nsStyleSheetService::GetInstance();
   if (sheetService) {

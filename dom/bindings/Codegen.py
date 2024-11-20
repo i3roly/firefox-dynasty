@@ -59,18 +59,22 @@ INSTANCE_RESERVED_SLOTS = 1
 GLOBAL_NAMES_PHF_SIZE = 256
 
 
+def reservedSlot(slotIndex, forXray):
+    base = "DOM_EXPANDO_RESERVED_SLOTS" if forXray else "DOM_INSTANCE_RESERVED_SLOTS"
+    return "(%s + %d)" % (base, slotIndex)
+
+
+def getSlotIndex(member, descriptor):
+    slotIndex = member.slotIndices[descriptor.interface.identifier.name]
+    return slotIndex[0] if isinstance(slotIndex, tuple) else slotIndex
+
+
 def memberReservedSlot(member, descriptor):
-    return (
-        "(DOM_INSTANCE_RESERVED_SLOTS + %d)"
-        % member.slotIndices[descriptor.interface.identifier.name]
-    )
+    return reservedSlot(getSlotIndex(member, descriptor), False)
 
 
 def memberXrayExpandoReservedSlot(member, descriptor):
-    return (
-        "(xpc::JSSLOT_EXPANDO_COUNT + %d)"
-        % member.slotIndices[descriptor.interface.identifier.name]
-    )
+    return reservedSlot(getSlotIndex(member, descriptor), True)
 
 
 def mayUseXrayExpandoSlots(descriptor, attr):
@@ -79,6 +83,20 @@ def mayUseXrayExpandoSlots(descriptor, attr):
     # slots on the reflector for caching.  Also, for interfaces that
     # don't want Xrays we obviously never use the Xray expando slot.
     return descriptor.wantsXrays and not attr.type.isGeckoInterface()
+
+
+def reflectedHTMLAttributesArrayIndex(descriptor, attr):
+    slots = attr.slotIndices[descriptor.interface.identifier.name]
+    return slots[1]
+
+
+def getReflectedHTMLAttributesIface(descriptor):
+    iface = descriptor.interface
+    while iface:
+        if iface.reflectedHTMLAttributesReturningFrozenArray:
+            return iface
+        iface = iface.parent
+    return None
 
 
 def toStringBool(arg):
@@ -654,7 +672,14 @@ class CGDOMJSClass(CGThing):
             reservedSlots = "JSCLASS_GLOBAL_APPLICATION_SLOTS"
         else:
             classFlags += "JSCLASS_HAS_RESERVED_SLOTS(%d)" % slotCount
-            traceHook = "nullptr"
+            iface = getReflectedHTMLAttributesIface(self.descriptor)
+            if iface:
+                traceHook = (
+                    "%s::ReflectedHTMLAttributeSlots::Trace"
+                    % toBindingNamespace(iface.identifier.name)
+                )
+            else:
+                traceHook = "nullptr"
             reservedSlots = slotCount
         if self.descriptor.interface.hasProbablyShortLivingWrapper():
             if not self.descriptor.wrapperCache:
@@ -785,6 +810,14 @@ class CGXrayExpandoJSClass(CGThing):
         return ""
 
     def define(self):
+        iface = getReflectedHTMLAttributesIface(self.descriptor)
+        if iface:
+            ops = (
+                "&%s::ReflectedHTMLAttributeSlots::sXrayExpandoObjectClassOps"
+                % toBindingNamespace(iface.identifier.name)
+            )
+        else:
+            ops = "&xpc::XrayExpandoObjectClassOps"
         return fill(
             """
             // This may allocate too many slots, because we only really need
@@ -792,9 +825,11 @@ class CGXrayExpandoJSClass(CGThing):
             // allocating slots only for those would make the slot index
             // computations much more complicated, so let's do this the simple
             // way for now.
-            DEFINE_XRAY_EXPANDO_CLASS(static, sXrayExpandoObjectClass, ${memberSlots});
+            DEFINE_XRAY_EXPANDO_CLASS_WITH_OPS(static, sXrayExpandoObjectClass, ${memberSlots},
+                                               ${ops});
             """,
             memberSlots=self.descriptor.interface.totalMembersInSlots,
+            ops=ops,
         )
 
 
@@ -2025,6 +2060,31 @@ class CGGetWrapperCacheHook(CGAbstractClassHook):
         )
 
 
+class CGDefineHTMLAttributeSlots(CGThing):
+    """
+    Function to get the slots object for reflected HTML attributes that return
+    a FrozenArray<Element> value.
+    """
+
+    def __init__(self, descriptor):
+        self.descriptor = descriptor
+        CGThing.__init__(self)
+
+    def declare(self):
+        atts = self.descriptor.interface.reflectedHTMLAttributesReturningFrozenArray
+        return fill(
+            """
+            using ReflectedHTMLAttributeSlots = binding_detail::ReflectedHTMLAttributeSlots<${slotIndex}, ${xraySlotIndex}, ${arrayLength}>;
+            """,
+            slotIndex=reservedSlot(atts.slotIndex, False),
+            xraySlotIndex=reservedSlot(atts.slotIndex, True),
+            arrayLength=atts.totalMembersInSlots,
+        )
+
+    def define(self):
+        return ""
+
+
 def finalizeHook(descriptor, hookName, gcx, obj):
     finalize = "JS::SetReservedSlot(%s, DOM_OBJECT_SLOT, JS::UndefinedValue());\n" % obj
     if descriptor.interface.getExtendedAttribute("LegacyOverrideBuiltIns"):
@@ -2064,6 +2124,12 @@ def finalizeHook(descriptor, hookName, gcx, obj):
                 """,
                 slot=memberReservedSlot(m, descriptor),
             )
+    iface = getReflectedHTMLAttributesIface(descriptor)
+    if iface:
+        finalize += "%s::ReflectedHTMLAttributeSlots::Finalize(%s);\n" % (
+            toBindingNamespace(iface.identifier.name),
+            obj,
+        )
     if descriptor.wrapperCache:
         finalize += "ClearWrapper(self, self, %s);\n" % obj
     if descriptor.isGlobal():
@@ -4952,6 +5018,12 @@ class CGClearCachedValueMethod(CGAbstractMethod):
 
     def definition_body(self):
         slotIndex = memberReservedSlot(self.member, self.descriptor)
+        clearCachedValue = fill(
+            """
+            JS::SetReservedSlot(obj, ${slotIndex}, JS::UndefinedValue());
+            """,
+            slotIndex=slotIndex,
+        )
         if self.member.getExtendedAttribute("StoreInSlot"):
             # We have to root things and save the old value in case
             # regetting fails, so we can restore it.
@@ -4979,17 +5051,46 @@ class CGClearCachedValueMethod(CGAbstractMethod):
             declObj = "JSObject* obj;\n"
             noopRetval = ""
             saveMember = ""
+            if self.member.getExtendedAttribute(
+                "ReflectedHTMLAttributeReturningFrozenArray"
+            ):
+                clearCachedValue = fill(
+                    """
+                    ReflectedHTMLAttributeSlots::Clear(obj, ${arrayIndex});
+                    """,
+                    arrayIndex=reflectedHTMLAttributesArrayIndex(
+                        self.descriptor, self.member
+                    ),
+                )
             regetMember = ""
 
         if self.descriptor.wantsXrays:
-            clearXrayExpandoSlots = fill(
-                """
-                xpc::ClearXrayExpandoSlots(obj, ${xraySlotIndex});
-                """,
-                xraySlotIndex=memberXrayExpandoReservedSlot(
-                    self.member, self.descriptor
-                ),
-            )
+            if self.member.getExtendedAttribute("StoreInSlot"):
+                cx = "JS::RootingContext::get(aCx)"
+            else:
+                cx = "RootingCx()"
+            if self.member.getExtendedAttribute(
+                "ReflectedHTMLAttributeReturningFrozenArray"
+            ):
+                clearXrayExpandoSlots = fill(
+                    """
+                    ReflectedHTMLAttributeSlots::ClearInXrays(${cx}, obj, ${arrayIndex});
+                    """,
+                    cx=cx,
+                    arrayIndex=reflectedHTMLAttributesArrayIndex(
+                        self.descriptor, self.member
+                    ),
+                )
+            else:
+                clearXrayExpandoSlots = fill(
+                    """
+                    ClearXrayExpandoSlots(${cx}, obj, ${xraySlotIndex});
+                    """,
+                    cx=cx,
+                    xraySlotIndex=memberXrayExpandoReservedSlot(
+                        self.member, self.descriptor
+                    ),
+                )
         else:
             clearXrayExpandoSlots = ""
 
@@ -5001,7 +5102,7 @@ class CGClearCachedValueMethod(CGAbstractMethod):
               return${noopRetval};
             }
             $*{saveMember}
-            JS::SetReservedSlot(obj, ${slotIndex}, JS::UndefinedValue());
+            $*{clearCachedValue}
             $*{clearXrayExpandoSlots}
             $*{regetMember}
             """,
@@ -5009,6 +5110,7 @@ class CGClearCachedValueMethod(CGAbstractMethod):
             noopRetval=noopRetval,
             saveMember=saveMember,
             slotIndex=slotIndex,
+            clearCachedValue=clearCachedValue,
             clearXrayExpandoSlots=clearXrayExpandoSlots,
             regetMember=regetMember,
         )
@@ -9651,6 +9753,24 @@ class CGPerSignatureCall(CGThing):
 
             # slotStorageSteps are steps that run once we have entered the
             # slotStorage compartment.
+            if self.idlNode.getExtendedAttribute(
+                "ReflectedHTMLAttributeReturningFrozenArray"
+            ):
+                storeInSlot = fill(
+                    """
+                    array[${arrayIndex}] = storedVal;
+                    """,
+                    arrayIndex=reflectedHTMLAttributesArrayIndex(
+                        self.descriptor, self.idlNode
+                    ),
+                )
+            else:
+                storeInSlot = dedent(
+                    """
+                    JS::SetReservedSlot(slotStorage, slotIndex, storedVal);
+                    """
+                )
+
             slotStorageSteps = fill(
                 """
                 // Make a copy so that we don't do unnecessary wrapping on args.rval().
@@ -9658,9 +9778,10 @@ class CGPerSignatureCall(CGThing):
                 if (!${maybeWrap}(cx, &storedVal)) {
                   return false;
                 }
-                JS::SetReservedSlot(slotStorage, slotIndex, storedVal);
+                $*{storeInSlot}
                 """,
                 maybeWrap=getMaybeWrapValueFuncForType(self.idlNode.type),
+                storeInSlot=storeInSlot,
             )
 
             checkForXray = mayUseXrayExpandoSlots(self.descriptor, self.idlNode)
@@ -11182,7 +11303,7 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
             # to cache it.  The question is, which object?  For dictionary and
             # sequence return values, we want to use a slot on the Xray expando
             # if we're called via Xrays, and a slot on our reflector otherwise.
-            # On the other hand, when dealing with some interfacce types
+            # On the other hand, when dealing with some interface types
             # (e.g. window.document) we want to avoid calling the getter more
             # than once.  In the case of window.document, it's because the
             # getter can start returning null, which would get hidden in the
@@ -11195,7 +11316,7 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
             # we know that in the interface type case the returned object is
             # wrappercached.  So creating Xrays to it is reasonable.
             if mayUseXrayExpandoSlots(self.descriptor, self.attr):
-                prefix += fill(
+                prefix += dedent(
                     """
                     // Have to either root across the getter call or reget after.
                     bool isXray;
@@ -11203,35 +11324,37 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
                     if (!slotStorage) {
                       return false;
                     }
-                    const size_t slotIndex = isXray ? ${xraySlotIndex} : ${slotIndex};
-                    """,
-                    xraySlotIndex=memberXrayExpandoReservedSlot(
-                        self.attr, self.descriptor
-                    ),
-                    slotIndex=memberReservedSlot(self.attr, self.descriptor),
+                    """
                 )
             else:
-                prefix += fill(
+                prefix += dedent(
                     """
                     // Have to either root across the getter call or reget after.
                     JS::Rooted<JSObject*> slotStorage(cx, js::UncheckedUnwrap(obj, /* stopAtWindowProxy = */ false));
                     MOZ_ASSERT(IsDOMObject(slotStorage));
-                    const size_t slotIndex = ${slotIndex};
-                    """,
-                    slotIndex=memberReservedSlot(self.attr, self.descriptor),
+                    """
                 )
 
             if self.attr.getExtendedAttribute(
                 "ReflectedHTMLAttributeReturningFrozenArray"
             ):
                 argsPre.append("hasCachedValue ? &useCachedValue : nullptr")
-                prefix += dedent(
+                isXray = (
+                    "isXray"
+                    if mayUseXrayExpandoSlots(self.descriptor, self.attr)
+                    else "false"
+                )
+                prefix += fill(
                     """
-                    MOZ_ASSERT(slotIndex < JSCLASS_RESERVED_SLOTS(JS::GetClass(slotStorage)));
-                    JS::Rooted<JS::Value> cachedVal(cx, JS::GetReservedSlot(slotStorage, slotIndex));
+                    auto& array = ReflectedHTMLAttributeSlots::GetOrCreate(slotStorage, ${isXray});
+                    JS::Rooted<JS::Value> cachedVal(cx, array[${arrayIndex}]);
                     bool hasCachedValue = !cachedVal.isUndefined();
                     bool useCachedValue = false;
-                    """
+                    """,
+                    isXray=isXray,
+                    arrayIndex=reflectedHTMLAttributesArrayIndex(
+                        self.descriptor, self.attr
+                    ),
                 )
                 maybeReturnCachedVal = fill(
                     """
@@ -11250,6 +11373,23 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
                     clearCachedValue=MakeClearCachedValueNativeName(self.attr),
                 )
             else:
+                if mayUseXrayExpandoSlots(self.descriptor, self.attr):
+                    prefix += fill(
+                        """
+                        const size_t slotIndex = isXray ? ${xraySlotIndex} : ${slotIndex};
+                        """,
+                        xraySlotIndex=memberXrayExpandoReservedSlot(
+                            self.attr, self.descriptor
+                        ),
+                        slotIndex=memberReservedSlot(self.attr, self.descriptor),
+                    )
+                else:
+                    prefix += fill(
+                        """
+                        const size_t slotIndex = ${slotIndex};
+                        """,
+                        slotIndex=memberReservedSlot(self.attr, self.descriptor),
+                    )
                 prefix += fill(
                     """
                     MOZ_ASSERT(slotIndex < JSCLASS_RESERVED_SLOTS(JS::GetClass(slotStorage)));
@@ -16222,6 +16362,29 @@ class CGDOMJSProxyHandler_className(ClassMethod):
         )
 
 
+class CGDOMJSProxyHandler_trace(ClassMethod):
+    def __init__(self, descriptor):
+        args = [Argument("JSTracer*", "trc"), Argument("JSObject*", "proxy")]
+        ClassMethod.__init__(
+            self,
+            "trace",
+            "void",
+            args,
+            virtual=True,
+            override=True,
+            const=True,
+        )
+        self.descriptor = descriptor
+
+    def getBody(self):
+        iface = getReflectedHTMLAttributesIface(self.descriptor)
+        return "return %s::ReflectedHTMLAttributeSlots::Trace(%s, %s);\n" % (
+            toBindingNamespace(iface.identifier.name),
+            self.args[0].name,
+            self.args[1].name,
+        )
+
+
 class CGDOMJSProxyHandler_finalizeInBackground(ClassMethod):
     def __init__(self, descriptor):
         args = [Argument("const JS::Value&", "priv")]
@@ -16328,7 +16491,7 @@ class CGDOMJSProxyHandler_getElements(ClassMethod):
             ${nativeType}* self = UnwrapProxy(proxy);
             uint32_t length = self->Length(${callerType});
             // Compute the end of the indices we'll get ourselves
-            uint32_t ourEnd = std::max(begin, std::min(end, length));
+            uint32_t ourEnd = std::clamp(length, begin, end);
 
             for (uint32_t index = begin; index < ourEnd; ++index) {
               $*{get}
@@ -16660,6 +16823,8 @@ class CGDOMJSProxyHandler(CGClass):
             CGJSProxyHandler_getInstance("DOMProxyHandler"),
             CGDOMJSProxyHandler_delete(descriptor),
         ]
+        if getReflectedHTMLAttributesIface(descriptor):
+            methods.append(CGDOMJSProxyHandler_trace(descriptor))
         constructors = [
             ClassConstructor([], constexpr=True, visibility="public", explicit=True)
         ]
@@ -16864,6 +17029,9 @@ class CGDescriptor(CGThing):
                     cgThings.append(
                         CGTemplateForSpecializedSetter(descriptor, template)
                     )
+
+        if descriptor.interface.reflectedHTMLAttributesReturningFrozenArray:
+            cgThings.append(CGDefineHTMLAttributeSlots(descriptor))
 
         for m in descriptor.interface.members:
             if m.isMethod() and m.identifier.name == "QueryInterface":
@@ -18907,6 +19075,9 @@ class CGBindingRoot(CGThing):
         bindingDeclareHeaders["mozilla/dom/BindingUtils.h"] = any(
             d.isObject() for t in unionTypes for d in t.flatMemberTypes
         )
+        bindingDeclareHeaders["mozilla/dom/JSSlots.h"] = any(
+            d.interface.reflectedHTMLAttributesReturningFrozenArray for d in descriptors
+        )
         bindingHeaders["mozilla/dom/IterableIterator.h"] = any(
             (
                 d.interface.isIteratorInterface()
@@ -19244,6 +19415,14 @@ class CGBindingRoot(CGThing):
             if not ancestor:
                 continue
             bindingHeaders[CGHeaders.getDeclarationFilename(ancestor)] = True
+
+        for d in descriptors:
+            ancestor = d.interface.parent
+            while ancestor:
+                if ancestor.reflectedHTMLAttributesReturningFrozenArray:
+                    bindingHeaders[CGHeaders.getDeclarationFilename(ancestor)] = True
+                    break
+                ancestor = ancestor.parent
 
         cgthings.extend(traverseMethods)
         cgthings.extend(unlinkMethods)

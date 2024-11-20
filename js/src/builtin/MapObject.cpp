@@ -29,6 +29,7 @@
 #  include "vm/TupleType.h"
 #endif
 
+#include "builtin/OrderedHashTableObject-inl.h"
 #include "gc/GCContext-inl.h"
 #include "gc/Marking-inl.h"
 #include "vm/GeckoProfiler-inl.h"
@@ -243,13 +244,15 @@ bool GlobalObject::initMapIteratorProto(JSContext* cx,
 }
 
 template <typename TableObject>
-static inline bool HasNurseryMemory(TableObject* t) {
-  return t->getReservedSlot(TableObject::HasNurseryMemorySlot).toBoolean();
+static inline bool HasRegisteredNurseryRanges(TableObject* t) {
+  Value v = t->getReservedSlot(TableObject::RegisteredNurseryRangesSlot);
+  return v.toBoolean();
 }
 
 template <typename TableObject>
-static inline void SetHasNurseryMemory(TableObject* t, bool b) {
-  t->setReservedSlot(TableObject::HasNurseryMemorySlot, JS::BooleanValue(b));
+static inline void SetRegisteredNurseryRanges(TableObject* t, bool b) {
+  t->setReservedSlot(TableObject::RegisteredNurseryRangesSlot,
+                     JS::BooleanValue(b));
 }
 
 MapIteratorObject* MapIteratorObject::create(JSContext* cx, HandleObject obj,
@@ -296,12 +299,12 @@ MapIteratorObject* MapIteratorObject::create(JSContext* cx, HandleObject obj,
   bool insideNursery = IsInsideNursery(iterobj);
   MOZ_ASSERT(insideNursery == nursery.isInside(buffer));
 
-  if (insideNursery && !HasNurseryMemory(mapobj.get())) {
-    if (!cx->nursery().addMapWithNurseryMemory(mapobj)) {
+  if (insideNursery && !HasRegisteredNurseryRanges(mapobj.get())) {
+    if (!cx->nursery().addMapWithNurseryRanges(mapobj)) {
       ReportOutOfMemory(cx);
       return nullptr;
     }
-    SetHasNurseryMemory(mapobj.get(), true);
+    SetRegisteredNurseryRanges(mapobj.get(), true);
   }
 
   auto range = MapObject::Table(mapobj).createRange(buffer, insideNursery);
@@ -353,10 +356,6 @@ size_t MapIteratorObject::objectMoved(JSObject* obj, JSObject* old) {
       new (buffer) MapObject::Table::Range(mapObj, *range, iteratorIsInNursery);
   range->~Range();
   iter->setReservedSlot(MapIteratorObject::RangeSlot, PrivateValue(newRange));
-
-  if (iteratorIsInNursery && iter->target()) {
-    SetHasNurseryMemory(iter->target(), true);
-  }
 
   return size;
 }
@@ -476,7 +475,8 @@ const JSClassOps MapObject::classOps_ = {
 };
 
 const ClassSpec MapObject::classSpec_ = {
-    GenericCreateConstructor<MapObject::construct, 0, gc::AllocKind::FUNCTION>,
+    GenericCreateConstructor<MapObject::construct, 0, gc::AllocKind::FUNCTION,
+                             &jit::JitInfo_MapConstructor>,
     GenericCreatePrototype<MapObject>,
     MapObject::staticMethods,
     MapObject::staticProperties,
@@ -493,7 +493,7 @@ const JSClass MapObject::class_ = {
     "Map",
     JSCLASS_DELAY_METADATA_BUILDER |
         JSCLASS_HAS_RESERVED_SLOTS(MapObject::SlotCount) |
-        JSCLASS_HAS_CACHED_PROTO(JSProto_Map) | JSCLASS_FOREGROUND_FINALIZE |
+        JSCLASS_HAS_CACHED_PROTO(JSProto_Map) | JSCLASS_BACKGROUND_FINALIZE |
         JSCLASS_SKIP_NURSERY_FINALIZE,
     &MapObject::classOps_, &MapObject::classSpec_, &MapObject::classExtension_};
 
@@ -662,16 +662,10 @@ template <typename ObjectT>
 bool MapObject::getKeysAndValuesInterleaved(
     HandleObject obj, JS::MutableHandle<GCVector<JS::Value>> entries) {
   MapObject* mapObj = &obj->as<MapObject>();
-
-  for (Table::Range r = Table(mapObj).all(); !r.empty(mapObj);
-       r.popFront(mapObj)) {
-    if (!entries.append(r.front(mapObj).key.get()) ||
-        !entries.append(r.front(mapObj).value)) {
-      return false;
-    }
-  }
-
-  return true;
+  auto appendEntry = [&entries](auto& entry) {
+    return entries.append(entry.key.get()) && entries.append(entry.value);
+  };
+  return Table(mapObj).forEachEntry(appendEntry);
 }
 
 bool MapObject::set(JSContext* cx, HandleObject obj, HandleValue k,
@@ -707,27 +701,72 @@ bool MapObject::setWithHashableKey(JSContext* cx, const HashableValue& key,
   return true;
 }
 
-MapObject* MapObject::create(JSContext* cx,
-                             HandleObject proto /* = nullptr */) {
+MapObject* MapObject::createWithProto(JSContext* cx, HandleObject proto,
+                                      NewObjectKind newKind) {
+  MOZ_ASSERT(proto);
+
   AutoSetNewObjectMetadata metadata(cx);
-  MapObject* mapObj = NewObjectWithClassProto<MapObject>(cx, proto);
+  auto* mapObj =
+      NewObjectWithGivenProtoAndKinds<MapObject>(cx, proto, allocKind, newKind);
   if (!mapObj) {
     return nullptr;
   }
 
-  if (!UnbarrieredTable(mapObj).init(cx)) {
-    return nullptr;
-  }
-
-  bool insideNursery = IsInsideNursery(mapObj);
-  if (insideNursery && !cx->nursery().addMapWithNurseryMemory(mapObj)) {
-    ReportOutOfMemory(cx);
-    return nullptr;
-  }
-
+  UnbarrieredTable(mapObj).initSlots();
   mapObj->initReservedSlot(NurseryKeysSlot, PrivateValue(nullptr));
-  mapObj->initReservedSlot(HasNurseryMemorySlot,
-                           JS::BooleanValue(insideNursery));
+  mapObj->initReservedSlot(RegisteredNurseryRangesSlot, BooleanValue(false));
+  return mapObj;
+}
+
+MapObject* MapObject::create(JSContext* cx,
+                             HandleObject proto /* = nullptr */) {
+  MOZ_ASSERT(gc::ForegroundToBackgroundAllocKind(
+                 gc::GetGCObjectKind(SlotCount)) == allocKind,
+             "allocKind constant doesn't match SlotCount");
+
+  if (proto) {
+    return createWithProto(cx, proto, GenericObject);
+  }
+
+  // This is the common case so use the template object's shape to optimize the
+  // allocation.
+  MapObject* templateObj = GlobalObject::getOrCreateMapTemplateObject(cx);
+  if (!templateObj) {
+    return nullptr;
+  }
+
+  AutoSetNewObjectMetadata metadata(cx);
+  Rooted<SharedShape*> shape(cx, templateObj->sharedShape());
+  auto* mapObj =
+      NativeObject::create<MapObject>(cx, allocKind, gc::Heap::Default, shape);
+  if (!mapObj) {
+    return nullptr;
+  }
+
+  UnbarrieredTable(mapObj).initSlots();
+  mapObj->initReservedSlot(NurseryKeysSlot, PrivateValue(nullptr));
+  mapObj->initReservedSlot(RegisteredNurseryRangesSlot, BooleanValue(false));
+  return mapObj;
+}
+
+// static
+MapObject* GlobalObject::getOrCreateMapTemplateObject(JSContext* cx) {
+  GlobalObjectData& data = cx->global()->data();
+  if (MapObject* obj = data.mapObjectTemplate) {
+    return obj;
+  }
+
+  Rooted<JSObject*> proto(cx,
+                          GlobalObject::getOrCreatePrototype(cx, JSProto_Map));
+  if (!proto) {
+    return nullptr;
+  }
+  auto* mapObj = MapObject::createWithProto(cx, proto, TenuredObject);
+  if (!mapObj) {
+    return nullptr;
+  }
+
+  data.mapObjectTemplate.init(mapObj);
   return mapObj;
 }
 
@@ -741,47 +780,43 @@ size_t MapObject::sizeOfData(mozilla::MallocSizeOf mallocSizeOf) {
 }
 
 void MapObject::finalize(JS::GCContext* gcx, JSObject* obj) {
-  MOZ_ASSERT(gcx->onMainThread());
-
   MapObject* mapObj = &obj->as<MapObject>();
-
-  MOZ_ASSERT_IF(obj->isTenured(), !UnbarrieredTable(mapObj).hasNurseryRanges());
+  MOZ_ASSERT(!IsInsideNursery(mapObj));
+  MOZ_ASSERT(!UnbarrieredTable(mapObj).hasNurseryRanges());
 
 #ifdef DEBUG
   // If we're finalizing a tenured map then it cannot contain nursery things,
   // because we evicted the nursery at the start of collection and writing a
   // nursery thing into the table would require it to be live, which means it
   // would have been marked.
-  if (obj->isTenured()) {
-    size_t count = 0;
-    for (auto r = UnbarrieredTable(mapObj).all(); !r.empty(mapObj);
-         r.popFront(mapObj)) {
-      Value key = r.front(mapObj).key;
-      MOZ_ASSERT_IF(key.isGCThing(), !IsInsideNursery(key.toGCThing()));
-      Value value = r.front(mapObj).value;
-      MOZ_ASSERT_IF(value.isGCThing(), !IsInsideNursery(value.toGCThing()));
-      count++;
-      if (count == 1000) {
-        break;
-      }
-    }
-  }
+  UnbarrieredTable(mapObj).forEachEntryUpTo(1000, [](auto& entry) {
+    Value key = entry.key;
+    MOZ_ASSERT_IF(key.isGCThing(), !IsInsideNursery(key.toGCThing()));
+    Value value = entry.value;
+    MOZ_ASSERT_IF(value.isGCThing(), !IsInsideNursery(value.toGCThing()));
+  });
 #endif
 
-  // No post barriers are required for nursery tables. Finalized tenured tables
-  // do not contain nursery GC things, so do not require post barriers. Pre
-  // barriers are not required during finalization.
+  // Finalized tenured maps do not contain nursery GC things, so do not require
+  // post barriers. Pre barriers are not required for finalization.
   UnbarrieredTable(mapObj).destroy(gcx);
 }
 
 size_t MapObject::objectMoved(JSObject* obj, JSObject* old) {
-  Table(&obj->as<MapObject>()).updateRangesAfterMove(&old->as<MapObject>());
+  auto* mapObj = &obj->as<MapObject>();
+
+  Table(mapObj).updateRangesAfterMove(&old->as<MapObject>());
+
+  if (IsInsideNursery(old)) {
+    Nursery& nursery = mapObj->runtimeFromMainThread()->gc.nursery();
+    Table(mapObj).maybeMoveBufferOnPromotion(nursery);
+  }
+
   return 0;
 }
 
 void MapObject::clearNurseryRangesBeforeMinorGC() {
   Table(this).destroyNurseryRanges();
-  SetHasNurseryMemory(this, false);
 }
 
 /* static */
@@ -789,26 +824,16 @@ MapObject* MapObject::sweepAfterMinorGC(JS::GCContext* gcx, MapObject* mapobj) {
   Nursery& nursery = gcx->runtime()->gc.nursery();
   bool wasInCollectedRegion = nursery.inCollectedRegion(mapobj);
   if (wasInCollectedRegion && !IsForwarded(mapobj)) {
-    finalize(gcx, mapobj);
+    // This MapObject is dead.
     return nullptr;
   }
 
   mapobj = MaybeForwarded(mapobj);
 
-  bool insideNursery = IsInsideNursery(mapobj);
-  if (insideNursery) {
-    SetHasNurseryMemory(mapobj, true);
-  }
-
-  if (wasInCollectedRegion && mapobj->isTenured()) {
-    Table(mapobj).trackMallocBufferOnPromotion();
-  }
-
-  if (!HasNurseryMemory(mapobj)) {
-    return nullptr;
-  }
-
-  return mapobj;
+  // Keep |mapobj| registered with the nursery if it still has nursery ranges.
+  bool hasNurseryRanges = Table(mapobj).hasNurseryRanges();
+  SetRegisteredNurseryRanges(mapobj, hasNurseryRanges);
+  return hasNurseryRanges ? mapobj : nullptr;
 }
 
 bool MapObject::construct(JSContext* cx, unsigned argc, Value* vp) {
@@ -1174,12 +1199,12 @@ SetIteratorObject* SetIteratorObject::create(JSContext* cx, HandleObject obj,
   bool insideNursery = IsInsideNursery(iterobj);
   MOZ_ASSERT(insideNursery == nursery.isInside(buffer));
 
-  if (insideNursery && !HasNurseryMemory(setobj.get())) {
-    if (!cx->nursery().addSetWithNurseryMemory(setobj)) {
+  if (insideNursery && !HasRegisteredNurseryRanges(setobj.get())) {
+    if (!cx->nursery().addSetWithNurseryRanges(setobj)) {
       ReportOutOfMemory(cx);
       return nullptr;
     }
-    SetHasNurseryMemory(setobj.get(), true);
+    SetRegisteredNurseryRanges(setobj.get(), true);
   }
 
   auto range = SetObject::Table(setobj).createRange(buffer, insideNursery);
@@ -1232,10 +1257,6 @@ size_t SetIteratorObject::objectMoved(JSObject* obj, JSObject* old) {
       new (buffer) SetObject::Table::Range(setObj, *range, iteratorIsInNursery);
   range->~Range();
   iter->setReservedSlot(SetIteratorObject::RangeSlot, PrivateValue(newRange));
-
-  if (iteratorIsInNursery && iter->target()) {
-    SetHasNurseryMemory(iter->target(), true);
-  }
 
   return size;
 }
@@ -1312,7 +1333,8 @@ const JSClassOps SetObject::classOps_ = {
 };
 
 const ClassSpec SetObject::classSpec_ = {
-    GenericCreateConstructor<SetObject::construct, 0, gc::AllocKind::FUNCTION>,
+    GenericCreateConstructor<SetObject::construct, 0, gc::AllocKind::FUNCTION,
+                             &jit::JitInfo_SetConstructor>,
     GenericCreatePrototype<SetObject>,
     nullptr,
     SetObject::staticProperties,
@@ -1329,7 +1351,7 @@ const JSClass SetObject::class_ = {
     "Set",
     JSCLASS_DELAY_METADATA_BUILDER |
         JSCLASS_HAS_RESERVED_SLOTS(SetObject::SlotCount) |
-        JSCLASS_HAS_CACHED_PROTO(JSProto_Set) | JSCLASS_FOREGROUND_FINALIZE |
+        JSCLASS_HAS_CACHED_PROTO(JSProto_Set) | JSCLASS_BACKGROUND_FINALIZE |
         JSCLASS_SKIP_NURSERY_FINALIZE,
     &SetObject::classOps_, &SetObject::classSpec_, &SetObject::classExtension_};
 
@@ -1401,15 +1423,8 @@ const JSPropertySpec SetObject::staticProperties[] = {
 bool SetObject::keys(JSContext* cx, HandleObject obj,
                      JS::MutableHandle<GCVector<JS::Value>> keys) {
   SetObject* setObj = &obj->as<SetObject>();
-
-  for (Table::Range r = Table(setObj).all(); !r.empty(setObj);
-       r.popFront(setObj)) {
-    if (!keys.append(r.front(setObj).get())) {
-      return false;
-    }
-  }
-
-  return true;
+  auto appendEntry = [&keys](auto& entry) { return keys.append(entry.get()); };
+  return Table(setObj).forEachEntry(appendEntry);
 }
 
 bool SetObject::add(JSContext* cx, HandleObject obj, HandleValue k) {
@@ -1431,27 +1446,73 @@ bool SetObject::addHashableValue(JSContext* cx, const HashableValue& value) {
   return Table(this).put(cx, value);
 }
 
+SetObject* SetObject::createWithProto(JSContext* cx, HandleObject proto,
+                                      NewObjectKind newKind) {
+  MOZ_ASSERT(proto);
+
+  AutoSetNewObjectMetadata metadata(cx);
+  auto* setObj =
+      NewObjectWithGivenProtoAndKinds<SetObject>(cx, proto, allocKind, newKind);
+  if (!setObj) {
+    return nullptr;
+  }
+
+  UnbarrieredTable(setObj).initSlots();
+  setObj->initReservedSlot(NurseryKeysSlot, PrivateValue(nullptr));
+  setObj->initReservedSlot(RegisteredNurseryRangesSlot, BooleanValue(false));
+  return setObj;
+}
+
 SetObject* SetObject::create(JSContext* cx,
                              HandleObject proto /* = nullptr */) {
+  MOZ_ASSERT(gc::ForegroundToBackgroundAllocKind(
+                 gc::GetGCObjectKind(SlotCount)) == allocKind,
+             "allocKind constant doesn't match SlotCount");
+
+  if (proto) {
+    return createWithProto(cx, proto, GenericObject);
+  }
+
+  // This is the common case so use the template object's shape to optimize the
+  // allocation.
+  SetObject* templateObj = GlobalObject::getOrCreateSetTemplateObject(cx);
+  if (!templateObj) {
+    return nullptr;
+  }
+
   AutoSetNewObjectMetadata metadata(cx);
-  SetObject* obj = NewObjectWithClassProto<SetObject>(cx, proto);
-  if (!obj) {
+  Rooted<SharedShape*> shape(cx, templateObj->sharedShape());
+  auto* setObj =
+      NativeObject::create<SetObject>(cx, allocKind, gc::Heap::Default, shape);
+  if (!setObj) {
     return nullptr;
   }
 
-  if (!UnbarrieredTable(obj).init(cx)) {
+  UnbarrieredTable(setObj).initSlots();
+  setObj->initReservedSlot(NurseryKeysSlot, PrivateValue(nullptr));
+  setObj->initReservedSlot(RegisteredNurseryRangesSlot, BooleanValue(false));
+  return setObj;
+}
+
+// static
+SetObject* GlobalObject::getOrCreateSetTemplateObject(JSContext* cx) {
+  GlobalObjectData& data = cx->global()->data();
+  if (SetObject* obj = data.setObjectTemplate) {
+    return obj;
+  }
+
+  Rooted<JSObject*> proto(cx,
+                          GlobalObject::getOrCreatePrototype(cx, JSProto_Set));
+  if (!proto) {
+    return nullptr;
+  }
+  auto* setObj = SetObject::createWithProto(cx, proto, TenuredObject);
+  if (!setObj) {
     return nullptr;
   }
 
-  bool insideNursery = IsInsideNursery(obj);
-  if (insideNursery && !cx->nursery().addSetWithNurseryMemory(obj)) {
-    ReportOutOfMemory(cx);
-    return nullptr;
-  }
-
-  obj->initReservedSlot(NurseryKeysSlot, PrivateValue(nullptr));
-  obj->initReservedSlot(HasNurseryMemorySlot, JS::BooleanValue(insideNursery));
-  return obj;
+  data.setObjectTemplate.init(setObj);
+  return setObj;
 }
 
 void SetObject::trace(JSTracer* trc, JSObject* obj) {
@@ -1469,43 +1530,41 @@ size_t SetObject::sizeOfData(mozilla::MallocSizeOf mallocSizeOf) {
 }
 
 void SetObject::finalize(JS::GCContext* gcx, JSObject* obj) {
-  MOZ_ASSERT(gcx->onMainThread());
-
   SetObject* setObj = &obj->as<SetObject>();
+  MOZ_ASSERT(!IsInsideNursery(setObj));
+  MOZ_ASSERT(!UnbarrieredTable(setObj).hasNurseryRanges());
 
 #ifdef DEBUG
   // If we're finalizing a tenured set then it cannot contain nursery things,
   // because we evicted the nursery at the start of collection and writing a
   // nursery thing into the set would require it to be live, which means it
   // would have been marked.
-  if (obj->isTenured()) {
-    size_t count = 0;
-    for (auto r = UnbarrieredTable(setObj).all(); !r.empty(setObj);
-         r.popFront(setObj)) {
-      Value key = r.front(setObj);
-      MOZ_ASSERT_IF(key.isGCThing(), !IsInsideNursery(key.toGCThing()));
-      count++;
-      if (count == 1000) {
-        break;
-      }
-    }
-  }
+  UnbarrieredTable(setObj).forEachEntryUpTo(1000, [](auto& entry) {
+    Value key = entry;
+    MOZ_ASSERT_IF(key.isGCThing(), !IsInsideNursery(key.toGCThing()));
+  });
 #endif
 
-  // No post barriers are required for nursery sets. Finalized tenured sets do
-  // not contain nursery GC things, so do not require post barriers. Pre
-  // barriers are not required for finalization.
+  // Finalized tenured sets do not contain nursery GC things, so do not require
+  // post barriers. Pre barriers are not required for finalization.
   UnbarrieredTable(setObj).destroy(gcx);
 }
 
 size_t SetObject::objectMoved(JSObject* obj, JSObject* old) {
-  Table(&obj->as<SetObject>()).updateRangesAfterMove(&old->as<SetObject>());
+  auto* setObj = &obj->as<SetObject>();
+
+  Table(setObj).updateRangesAfterMove(&old->as<SetObject>());
+
+  if (IsInsideNursery(old)) {
+    Nursery& nursery = setObj->runtimeFromMainThread()->gc.nursery();
+    Table(setObj).maybeMoveBufferOnPromotion(nursery);
+  }
+
   return 0;
 }
 
 void SetObject::clearNurseryRangesBeforeMinorGC() {
   Table(this).destroyNurseryRanges();
-  SetHasNurseryMemory(this, false);
 }
 
 /* static */
@@ -1513,26 +1572,16 @@ SetObject* SetObject::sweepAfterMinorGC(JS::GCContext* gcx, SetObject* setobj) {
   Nursery& nursery = gcx->runtime()->gc.nursery();
   bool wasInCollectedRegion = nursery.inCollectedRegion(setobj);
   if (wasInCollectedRegion && !IsForwarded(setobj)) {
-    finalize(gcx, setobj);
+    // This SetObject is dead.
     return nullptr;
   }
 
   setobj = MaybeForwarded(setobj);
 
-  bool insideNursery = IsInsideNursery(setobj);
-  if (insideNursery) {
-    SetHasNurseryMemory(setobj, true);
-  }
-
-  if (wasInCollectedRegion && setobj->isTenured()) {
-    Table(setobj).trackMallocBufferOnPromotion();
-  }
-
-  if (!HasNurseryMemory(setobj)) {
-    return nullptr;
-  }
-
-  return setobj;
+  // Keep |setobj| registered with the nursery if it still has nursery ranges.
+  bool hasNurseryRanges = Table(setobj).hasNurseryRanges();
+  SetRegisteredNurseryRanges(setobj, hasNurseryRanges);
+  return hasNurseryRanges ? setobj : nullptr;
 }
 
 bool SetObject::isBuiltinAdd(HandleValue add) {
@@ -1780,12 +1829,12 @@ bool SetObject::copy(JSContext* cx, unsigned argc, Value* vp) {
   }
 
   auto* from = &args[0].toObject().as<SetObject>();
-  for (auto range = Table(from).all(); !range.empty(from);
-       range.popFront(from)) {
-    HashableValue value = range.front(from).get();
-    if (!result->addHashableValue(cx, value)) {
-      return false;
-    }
+
+  auto addToResult = [cx, result](auto& entry) {
+    return result->addHashableValue(cx, entry);
+  };
+  if (!Table(from).forEachEntry(addToResult)) {
+    return false;
   }
 
   args.rval().setObject(*result);

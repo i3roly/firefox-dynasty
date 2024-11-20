@@ -3060,6 +3060,19 @@ class _DSCard extends (external_React_default()).PureComponent {
       width: 202,
       height: 101
     }];
+    this.largeCardImageSizes = [{
+      mediaMatcher: "(min-width: 1122px)",
+      width: 220,
+      height: 220
+    }, {
+      mediaMatcher: "(min-width: 866px)",
+      width: 218,
+      height: 109
+    }, {
+      mediaMatcher: "(max-width: 610px)",
+      width: 202,
+      height: 101
+    }];
     this.listCardImageSizes = [{
       mediaMatcher: "(min-width: 1122px)",
       width: 75,
@@ -3425,7 +3438,7 @@ class _DSCard extends (external_React_default()).PureComponent {
     const imageGradientClassName = imageGradient ? `ds-card-image-gradient` : ``;
     const listCardClassName = isListCard ? `list-feed-card` : ``;
     const fakespotClassName = isFakespot ? `fakespot` : ``;
-    const sectionsCardsClassName = mayHaveSectionsCards ? `sections-card-ui` : ``;
+    const sectionsCardsClassName = [mayHaveSectionsCards ? `sections-card-ui` : ``, this.props.sectionsClassNames].join(" ");
     const titleLinesName = `ds-card-title-lines-${titleLines}`;
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
@@ -3434,6 +3447,9 @@ class _DSCard extends (external_React_default()).PureComponent {
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
     }
+
+    // TODO: Add logic to assign this.largeCardImageSizes
+
     let stpButton = () => {
       return /*#__PURE__*/external_React_default().createElement("button", {
         className: "card-stp-button",
@@ -3453,8 +3469,12 @@ class _DSCard extends (external_React_default()).PureComponent {
       })));
     };
     return /*#__PURE__*/external_React_default().createElement("article", {
-      className: `ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName}  ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
-      ref: this.setContextMenuButtonHostRef
+      className: `ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
+      ref: this.setContextMenuButtonHostRef,
+      "data-position-one": this.props["data-position-one"],
+      "data-position-two": this.props["data-position-one"],
+      "data-position-three": this.props["data-position-one"],
+      "data-position-four": this.props["data-position-one"]
     }, this.props.showTopics && !this.props.mayHaveSectionsCards && this.props.topic && !isListCard && /*#__PURE__*/external_React_default().createElement("span", {
       className: "ds-card-topic",
       "data-l10n-id": `newtab-topic-label-${this.props.topic}`
@@ -9117,7 +9137,7 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
    */
   function fillSpocPositionsForPlacement(
     data,
-    spocsConfig,
+    spocsPositions,
     spocsData,
     placementName
   ) {
@@ -9128,7 +9148,7 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       spocIndexPlacementMap[placementName] = 0;
     }
     const results = [...data];
-    for (let position of spocsConfig.positions) {
+    for (let position of spocsPositions) {
       const spoc = spocsData[spocIndexPlacementMap[placementName]];
       // If there are no spocs left, we can stop filling positions.
       if (!spoc) {
@@ -9202,27 +9222,18 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
   };
 
   // TODO update devtools to show placements
-  const handleSpocs = (data, component) => {
+  const handleSpocs = (data, spocsPositions, spocsPlacement) => {
     let result = [...data];
     // Do we ever expect to possibly have a spoc.
-    if (
-      component.spocs &&
-      component.spocs.positions &&
-      component.spocs.positions.length
-    ) {
-      const placement = component.placement || {};
-      const placementName = placement.name || "spocs";
+    if (spocsPositions?.length) {
+      const placement = spocsPlacement || {};
+      const placementName = placement.name || "newtab_spocs";
       const spocsData = spocs.data[placementName];
       // We expect a spoc, spocs are loaded, and the server returned spocs.
-      if (
-        spocs.loaded &&
-        spocsData &&
-        spocsData.items &&
-        spocsData.items.length
-      ) {
+      if (spocs.loaded && spocsData?.items?.length) {
         result = fillSpocPositionsForPlacement(
           result,
-          component.spocs,
+          spocsPositions,
           spocsData.items,
           placementName
         );
@@ -9231,21 +9242,30 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     return result;
   };
 
+  const handleSections = (sections = [], recommendations = []) => {
+    let result = sections.sort((a, b) => a.receivedRank - b.receivedRank);
+
+    const sectionsMap = recommendations.reduce((acc, recommendation) => {
+      const { section } = recommendation;
+      acc[section] = acc[section] || [];
+      acc[section].push(recommendation);
+      return acc;
+    }, {});
+
+    result.forEach(section => {
+      const { sectionKey } = section;
+      section.data = sectionsMap[sectionKey];
+    });
+
+    return result;
+  };
+
   const handleComponent = component => {
-    if (
-      component.spocs &&
-      component.spocs.positions &&
-      component.spocs.positions.length
-    ) {
+    if (component?.spocs?.positions?.length) {
       const placement = component.placement || {};
-      const placementName = placement.name || "spocs";
+      const placementName = placement.name || "newtab_spocs";
       const spocsData = spocs.data[placementName];
-      if (
-        spocs.loaded &&
-        spocsData &&
-        spocsData.items &&
-        spocsData.items.length
-      ) {
+      if (spocs.loaded && spocsData?.items?.length) {
         return {
           ...component,
           data: {
@@ -9271,13 +9291,15 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     positions[component.type] = positions[component.type] || 0;
     let data = {
       recommendations: [],
+      sections: [],
     };
 
     const feed = feeds.data[component.feed.url];
-    if (feed && feed.data) {
+    if (feed?.data) {
       data = {
         ...feed.data,
         recommendations: [...(feed.data.recommendations || [])],
+        sections: [...(feed.data.sections || [])],
       };
     }
 
@@ -9289,10 +9311,47 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
         ),
       };
     }
+    const spocsPositions = component?.spocs?.positions;
+    const spocsPlacement = component?.placement;
 
+    const sectionsEnabled = prefs["discoverystream.sections.enabled"];
     data = {
       ...data,
-      recommendations: handleSpocs(data.recommendations, component),
+      ...(sectionsEnabled
+        ? {
+            sections: handleSections(data.sections, data.recommendations).map(
+              section => {
+                const sectionsSpocsPositions = [];
+                section.layout.responsiveLayouts
+                  // Initial position for spocs is going to be for the smallest breakpoint.
+                  // We can then move it from there via breakpoints.
+                  .find(item => item.columnCount === 1)
+                  .tiles.forEach(tile => {
+                    if (tile.hasAd) {
+                      sectionsSpocsPositions.push({ index: tile.position });
+                    }
+                  });
+                return {
+                  ...section,
+                  data: handleSpocs(
+                    section.data,
+                    sectionsSpocsPositions,
+                    spocsPlacement
+                  ),
+                };
+              }
+            ),
+            // We don't fill spocs in recs if sections are enabled,
+            // because recs are not going to be seen.
+            recommendations: data.recommendations,
+          }
+        : {
+            recommendations: handleSpocs(
+              data.recommendations,
+              spocsPositions,
+              spocsPlacement
+            ),
+          }),
     };
 
     let items = 0;
@@ -9387,7 +9446,6 @@ function CardSections({
     sections
   } = data;
   const isEmpty = recommendations?.length === 0 || !sections;
-  const sortedSections = sections?.sort((a, b) => a.receivedRank - b.receivedRank);
   const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
   const {
     saveToPocketCard
@@ -9398,20 +9456,33 @@ function CardSections({
   const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
   const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
 
-  // useMemo to only get sorted recs when the data prop changes
-  const sortedRecs = (0,external_React_namespaceObject.useMemo)(() => {
-    return data.recommendations.reduce((acc, recommendation) => {
-      const {
-        section
-      } = recommendation;
-      acc[section] = acc[section] || [];
-      acc[section].push(recommendation);
-      return acc;
-    }, {});
-  }, [data]);
   // Handle a render before feed has been fetched by displaying nothing
   if (!data) {
     return null;
+  }
+  function getLayoutData(responsiveLayout, index) {
+    let layoutData = {
+      position: {},
+      classNames: []
+    };
+    responsiveLayout.flatMap(layout => layout.tiles.filter((_, tileIndex) => tileIndex === index).forEach(tile => {
+      layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
+      layoutData.position[`col${layout.columnCount}`] = tile.position;
+    }));
+    return layoutData;
+  }
+
+  // function to determine amount of tiles shown per section per viewport
+  function getMaxTiles(responsiveLayout) {
+    return responsiveLayout.flatMap(layout => layout).reduce((acc, t) => {
+      acc[t.columnCount] = t.tiles.length;
+
+      // Update maxTile if current tile count is greater
+      if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+        acc.maxTile = t.tiles.length;
+      }
+      return acc;
+    }, {});
   }
   return isEmpty ? /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-card-grid empty"
@@ -9421,12 +9492,18 @@ function CardSections({
     feed: feed
   })) : /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-section-wrapper"
-  }, sortedSections.map(section => {
+  }, sections.map(section => {
     const {
       sectionKey,
       title,
       subtitle
     } = section;
+    const {
+      responsiveLayouts
+    } = section.layout;
+    const {
+      maxTile
+    } = getMaxTiles(responsiveLayouts);
     return /*#__PURE__*/external_React_default().createElement("section", {
       key: sectionKey,
       className: "ds-section"
@@ -9438,7 +9515,12 @@ function CardSections({
       className: "section-subtitle"
     }, subtitle)), /*#__PURE__*/external_React_default().createElement("div", {
       className: "ds-section-grid ds-card-grid"
-    }, sortedRecs[sectionKey].slice(0, 4).map(rec => {
+    }, section.data.slice(0, maxTile).map((rec, index) => {
+      const layoutData = getLayoutData(responsiveLayouts, index);
+      const {
+        classNames,
+        position
+      } = layoutData;
       return /*#__PURE__*/external_React_default().createElement(DSCard, {
         key: `dscard-${rec.id}`,
         pos: rec.pos,
@@ -9480,7 +9562,12 @@ function CardSections({
         ctaButtonSponsors: ctaButtonSponsors,
         ctaButtonVariant: ctaButtonVariant,
         spocMessageVariant: spocMessageVariant,
-        saveToPocketCard: saveToPocketCard
+        saveToPocketCard: saveToPocketCard,
+        sectionsClassNames: classNames.join(" "),
+        "data-position-one": position.col1,
+        "data-position-two": position.col2,
+        "data-position-three": position.col3,
+        "data-position-four": position.col4
       });
     })));
   }));
@@ -10095,6 +10182,7 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       }, /*#__PURE__*/external_React_default().createElement("input", {
         id: category,
         style: style,
+        type: "radio",
         onClick: this.handleCategory,
         className: "wallpaper-input"
       }), /*#__PURE__*/external_React_default().createElement("label", {
@@ -10811,8 +10899,11 @@ function LocationSearch({
     onChange: handleChange,
     value: userInput,
     onKeyDown: handleKeyDown
-  }), /*#__PURE__*/external_React_default().createElement("button", {
-    className: "close-icon",
+  }), /*#__PURE__*/external_React_default().createElement("moz-button", {
+    class: "close-icon",
+    type: "icon ghost",
+    size: "small",
+    iconSrc: "chrome://global/skin/icons/close.svg",
     onClick: handleCloseSearch
   }), /*#__PURE__*/external_React_default().createElement("datalist", {
     id: "merino-location-list"

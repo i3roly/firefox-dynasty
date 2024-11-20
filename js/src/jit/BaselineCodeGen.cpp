@@ -66,10 +66,11 @@ class PlainObject;
 
 namespace jit {
 
-BaselineCompilerHandler::BaselineCompilerHandler(JSContext* cx,
-                                                 MacroAssembler& masm,
+BaselineCompilerHandler::BaselineCompilerHandler(MacroAssembler& masm,
                                                  TempAllocator& alloc,
-                                                 JSScript* script)
+                                                 JSScript* script,
+                                                 JSObject* globalLexical,
+                                                 JSObject* globalThis)
     : frame_(script, masm),
       alloc_(alloc),
       analysis_(alloc, script),
@@ -78,28 +79,31 @@ BaselineCompilerHandler::BaselineCompilerHandler(JSContext* cx,
 #endif
       script_(script),
       pc_(script->code()),
+      globalLexicalEnvironment_(globalLexical),
+      globalThis_(globalThis),
       icEntryIndex_(0),
       compileDebugInstrumentation_(script->isDebuggee()),
-      ionCompileable_(IsIonEnabled(cx) && CanIonCompileScript(cx, script)) {
+      ionCompileable_(true) {
 }
 
-BaselineInterpreterHandler::BaselineInterpreterHandler(JSContext* cx,
-                                                       MacroAssembler& masm)
+BaselineInterpreterHandler::BaselineInterpreterHandler(MacroAssembler& masm)
     : frame_(masm) {}
 
 template <typename Handler>
 template <typename... HandlerArgs>
 BaselineCodeGen<Handler>::BaselineCodeGen(JSContext* cx, TempAllocator& alloc,
                                           HandlerArgs&&... args)
-    : handler(cx, masm, std::forward<HandlerArgs>(args)...),
+    : handler(masm, std::forward<HandlerArgs>(args)...),
       cx(cx),
       runtime(CompileRuntime::get(cx->runtime())),
       masm(cx, alloc),
       frame(handler.frame()) {}
 
 BaselineCompiler::BaselineCompiler(JSContext* cx, TempAllocator& alloc,
-                                   JSScript* script)
-    : BaselineCodeGen(cx, alloc, /* HandlerArgs = */ alloc, script) {
+                                   JSScript* script, JSObject* globalLexical,
+                                   JSObject* globalThis)
+    : BaselineCodeGen(cx, alloc, /* HandlerArgs = */ alloc, script,
+                      globalLexical, globalThis) {
 #ifdef JS_CODEGEN_NONE
   MOZ_CRASH();
 #endif
@@ -109,7 +113,7 @@ BaselineInterpreterGenerator::BaselineInterpreterGenerator(JSContext* cx,
                                                            TempAllocator& alloc)
     : BaselineCodeGen(cx, alloc /* no handlerArgs */) {}
 
-bool BaselineCompilerHandler::init(JSContext* cx) {
+bool BaselineCompilerHandler::init() {
   if (!analysis_.init(alloc_)) {
     return false;
   }
@@ -132,7 +136,7 @@ bool BaselineCompilerHandler::init(JSContext* cx) {
 }
 
 bool BaselineCompiler::init() {
-  if (!handler.init(cx)) {
+  if (!handler.init()) {
     return false;
   }
 
@@ -237,6 +241,12 @@ MethodStatus BaselineCompiler::compile() {
     return Method_Error;
   }
 
+  if (MOZ_UNLIKELY(compileDebugInstrumentation()) &&
+      !cx->runtime()->jitRuntime()->ensureDebugTrapHandler(
+          cx, DebugTrapHandlerKind::Compiler)) {
+    return Method_Error;
+  }
+
   MOZ_ASSERT(!script->hasBaselineScript());
 
   perfSpewer_.recordOffset(masm, "Prologue");
@@ -244,9 +254,8 @@ MethodStatus BaselineCompiler::compile() {
     return Method_Error;
   }
 
-  MethodStatus status = emitBody();
-  if (status != Method_Compiled) {
-    return status;
+  if (!emitBody()) {
+    return Method_Error;
   }
 
   perfSpewer_.recordOffset(masm, "Epilogue");
@@ -913,7 +922,7 @@ void BaselineInterpreterCodeGen::subtractScriptSlotsSize(Register reg,
 template <>
 void BaselineCompilerCodeGen::loadGlobalLexicalEnvironment(Register dest) {
   MOZ_ASSERT(!handler.script()->hasNonSyntacticScope());
-  masm.movePtr(ImmGCPtr(&cx->global()->lexicalEnvironment()), dest);
+  masm.movePtr(ImmGCPtr(handler.globalLexicalEnvironment()), dest);
 }
 
 template <>
@@ -926,7 +935,7 @@ void BaselineInterpreterCodeGen::loadGlobalLexicalEnvironment(Register dest) {
 template <>
 void BaselineCompilerCodeGen::pushGlobalLexicalEnvironmentValue(
     ValueOperand scratch) {
-  frame.push(ObjectValue(cx->global()->lexicalEnvironment()));
+  frame.push(ObjectValue(*handler.globalLexicalEnvironment()));
 }
 
 template <>
@@ -939,7 +948,7 @@ void BaselineInterpreterCodeGen::pushGlobalLexicalEnvironmentValue(
 
 template <>
 void BaselineCompilerCodeGen::loadGlobalThisValue(ValueOperand dest) {
-  JSObject* thisObj = cx->global()->lexicalEnvironment().thisObject();
+  JSObject* thisObj = handler.globalThis();
   masm.moveValue(ObjectValue(*thisObj), dest);
 }
 
@@ -1646,10 +1655,6 @@ bool BaselineCompiler::emitDebugTrap() {
                  DebugAPI::hasBreakpointsAt(script, handler.pc());
 
   // Emit patchable call to debug trap handler.
-  if (!cx->runtime()->jitRuntime()->ensureDebugTrapHandler(
-          cx, DebugTrapHandlerKind::Compiler)) {
-    return false;
-  }
   JitCode* handlerCode =
       runtime->jitRuntime()->debugTrapHandler(DebugTrapHandlerKind::Compiler);
   CodeOffset nativeOffset = masm.toggledCall(handlerCode, enabled);
@@ -6603,7 +6608,7 @@ bool BaselineCodeGen<Handler>::emitEpilogue() {
   return true;
 }
 
-MethodStatus BaselineCompiler::emitBody() {
+bool BaselineCompiler::emitBody() {
   AutoCreatedBy acb(masm, "BaselineCompiler::emitBody");
 
   JSScript* script = handler.script();
@@ -6656,21 +6661,21 @@ MethodStatus BaselineCompiler::emitBody() {
       uint32_t nativeOffset = masm.currentOffset();
       if (!resumeOffsetEntries_.emplaceBack(pcOffset, nativeOffset)) {
         ReportOutOfMemory(cx);
-        return Method_Error;
+        return false;
       }
     }
 
     // Emit traps for breakpoints and step mode.
     if (MOZ_UNLIKELY(compileDebugInstrumentation()) && !emitDebugTrap()) {
-      return Method_Error;
+      return false;
     }
 
     perfSpewer_.recordInstruction(cx, masm, handler.pc(), frame);
 
-#define EMIT_OP(OP, ...)                                       \
-  case JSOp::OP: {                                             \
-    AutoCreatedBy acb(masm, "op=" #OP);                        \
-    if (MOZ_UNLIKELY(!this->emit_##OP())) return Method_Error; \
+#define EMIT_OP(OP, ...)                                \
+  case JSOp::OP: {                                      \
+    AutoCreatedBy acb(masm, "op=" #OP);                 \
+    if (MOZ_UNLIKELY(!this->emit_##OP())) return false; \
   } break;
 
     switch (op) {
@@ -6695,7 +6700,7 @@ MethodStatus BaselineCompiler::emitBody() {
   }
 
   MOZ_ASSERT(JSOp(*prevpc) == JSOp::RetRval || JSOp(*prevpc) == JSOp::Return);
-  return Method_Compiled;
+  return true;
 }
 
 bool BaselineInterpreterGenerator::emitDebugTrap() {
@@ -6827,10 +6832,6 @@ bool BaselineInterpreterGenerator::emitInterpreterLoop() {
   // Emit debug trap handler code (target of patchable call instructions). This
   // is just a tail call to the debug trap handler trampoline code.
   {
-    if (!cx->runtime()->jitRuntime()->ensureDebugTrapHandler(
-            cx, DebugTrapHandlerKind::Interpreter)) {
-      return false;
-    }
     JitCode* handlerCode = runtime->jitRuntime()->debugTrapHandler(
         DebugTrapHandlerKind::Interpreter);
     debugTrapHandlerOffset_ = masm.currentOffset();
@@ -6901,6 +6902,11 @@ void BaselineInterpreterGenerator::emitOutOfLineCodeCoverageInstrumentation() {
 
 bool BaselineInterpreterGenerator::generate(BaselineInterpreter& interpreter) {
   AutoCreatedBy acb(masm, "BaselineInterpreterGenerator::generate");
+
+  if (!cx->runtime()->jitRuntime()->ensureDebugTrapHandler(
+          cx, DebugTrapHandlerKind::Interpreter)) {
+    return false;
+  }
 
   perfSpewer_.recordOffset(masm, "Prologue");
   if (!emitPrologue()) {

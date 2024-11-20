@@ -291,6 +291,9 @@ class BaselineCompilerHandler {
   JSScript* script_;
   jsbytecode* pc_;
 
+  JSObject* globalLexicalEnvironment_;
+  JSObject* globalThis_;
+
   // Index of the current ICEntry in the script's JitScript.
   uint32_t icEntryIndex_;
 
@@ -300,10 +303,11 @@ class BaselineCompilerHandler {
  public:
   using FrameInfoT = CompilerFrameInfo;
 
-  BaselineCompilerHandler(JSContext* cx, MacroAssembler& masm,
-                          TempAllocator& alloc, JSScript* script);
+  BaselineCompilerHandler(MacroAssembler& masm, TempAllocator& alloc,
+                          JSScript* script, JSObject* globalLexical,
+                          JSObject* globalThis);
 
-  [[nodiscard]] bool init(JSContext* cx);
+  [[nodiscard]] bool init();
 
   CompilerFrameInfo& frame() { return frame_; }
 
@@ -336,6 +340,7 @@ class BaselineCompilerHandler {
   }
 
   bool maybeIonCompileable() const { return ionCompileable_; }
+  void setIonCompileable(bool value) { ionCompileable_ = value; }
 
   uint32_t icEntryIndex() const { return icEntryIndex_; }
   void moveToNextICEntry() { icEntryIndex_++; }
@@ -356,6 +361,11 @@ class BaselineCompilerHandler {
   }
 
   bool canHaveFixedSlots() const { return script()->nfixed() != 0; }
+
+  JSObject* globalLexicalEnvironment() const {
+    return globalLexicalEnvironment_;
+  }
+  JSObject* globalThis() const { return globalThis_; }
 };
 
 using BaselineCompilerCodeGen = BaselineCodeGen<BaselineCompilerHandler>;
@@ -375,7 +385,8 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
   BaselinePerfSpewer perfSpewer_;
 
  public:
-  BaselineCompiler(JSContext* cx, TempAllocator& alloc, JSScript* script);
+  BaselineCompiler(JSContext* cx, TempAllocator& alloc, JSScript* script,
+                   JSObject* globalLexical, JSObject* globalThis);
   [[nodiscard]] bool init();
 
   MethodStatus compile();
@@ -386,9 +397,10 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
   void setCompileDebugInstrumentation() {
     handler.setCompileDebugInstrumentation();
   }
+  void setIonCompileable(bool value) { handler.setIonCompileable(value); }
 
  private:
-  MethodStatus emitBody();
+  bool emitBody();
 
   [[nodiscard]] bool emitDebugTrap();
 };
@@ -426,7 +438,7 @@ class BaselineInterpreterHandler {
  public:
   using FrameInfoT = InterpreterFrameInfo;
 
-  explicit BaselineInterpreterHandler(JSContext* cx, MacroAssembler& masm);
+  explicit BaselineInterpreterHandler(MacroAssembler& masm);
 
   InterpreterFrameInfo& frame() { return frame_; }
 

@@ -12,6 +12,9 @@ Usage: $(basename "$0") [-p product]
            [--use-mozilla-central]
            # Use archive.m.o instead of the taskcluster index to get xpcshell
            [--use-ftp-builds]
+           # Use git rather than hg. Using git does not currently support cloning (use
+           # --skip-repo as well).
+           [--use-git]
            # One (or more) of the following actions must be specified.
            --hsts | --hpkp | --remote-settings | --suffix-list | --mobile-experiments | --ct-logs
            -b branch
@@ -21,44 +24,139 @@ Usage: $(basename "$0") [-p product]
            [--skip-clone]
            # Performs a dry run - no commits are created.
            [-n]
+           # Skips pushing of the repository - create a commit but does not try
+           # to push it.
+           [--skip-push]
 
 EOF
 }
 
+# Defaults
 PRODUCT="firefox"
-BRANCH=""
-PLATFORM_EXT="tar.bz2"
-UNPACK_CMD="tar jxf"
+DRY_RUN=false
 CLOSED_TREE=false
 DONTBUILD=false
 APPROVAL=false
+
+DO_PRELOAD_PINSET=false
+DO_HSTS=false
+DO_HPKP=false
+DO_REMOTE_SETTINGS=false
+DO_SUFFIX_LIST=false
+DO_MOBILE_EXPERIMENTS=false
+DO_CT_LOGS=false
+
 CLONE_REPO=true
+
+USE_MC=false
+USE_TC=true
+USE_GIT=false
+SKIP_PUSH=false
+
+# Parse our command-line options.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h) usage; exit 0 ;;
+    -p) PRODUCT="$2"; shift ;;
+    -b) BRANCH="$2"; shift ;;
+    -n) DRY_RUN=true ;;
+    -c) CLOSED_TREE=true ;;
+    -d) DONTBUILD=true ;;
+    -a) APPROVAL=true ;;
+    --pinset) DO_PRELOAD_PINSET=true ;;
+    --hsts) DO_HSTS=true ;;
+    --hpkp) DO_HPKP=true ;;
+    --remote-settings) DO_REMOTE_SETTINGS=true ;;
+    --suffix-list) DO_SUFFIX_LIST=true ;;
+    --mobile-experiments) DO_MOBILE_EXPERIMENTS=true ;;
+    --ct-logs) DO_CT_LOGS=true ;;
+    --skip-clone) CLONE_REPO=false ;;
+    --skip-push) SKIP_PUSH=true ;;
+    -t) TOPSRCDIR="$2"; shift ;;
+    --use-mozilla-central) USE_MC=true ;;
+    --use-ftp-builds) USE_TC=false ;;
+    --use-git) USE_GIT=true ;;
+    -*) usage
+      exit 11 ;;
+    *)  break ;; # terminate while loop
+  esac
+  shift
+done
+
+# Must supply a code branch to work with.
+if [ "${BRANCH}" == "" ]; then
+  echo "Error: You must specify a branch with -b branchname." >&2
+  usage
+  exit 12
+fi
+
+# Must choose at least one update action.
+if [ "$DO_HSTS" == "false" ] && [ "$DO_HPKP" == "false" ] && [ "$DO_REMOTE_SETTINGS" == "false" ] && [ "$DO_SUFFIX_LIST" == "false" ] && [ "$DO_MOBILE_EXPERIMENTS" == false ] && [ "$DO_CT_LOGS" == false ]
+then
+  echo "Error: you must specify at least one action from: --hsts, --hpkp, --remote-settings, or --suffix-list" >&2
+  usage
+  exit 13
+fi
+
+# per-product constants
+case "${PRODUCT}" in
+  thunderbird)
+    COMMIT_AUTHOR="tbirdbld <tbirdbld@thunderbird.net>"
+    ;;
+  firefox)
+    ;;
+  *)
+    echo "Error: Invalid product specified"
+    usage
+    exit 14
+    ;;
+esac
+
+if [ "${TOPSRCDIR}" == "" ]; then
+  TOPSRCDIR="$(basename "${BRANCH}")"
+fi
+
+case "${BRANCH}" in
+  mozilla-central|comm-central|try )
+    HGREPO="https://${HGHOST}/${BRANCH}"
+    ;;
+  mozilla-*|comm-* )
+    HGREPO="https://${HGHOST}/releases/${BRANCH}"
+    ;;
+  * )
+    HGREPO="https://${HGHOST}/projects/${BRANCH}"
+    ;;
+esac
+
+BROWSER_ARCHIVE="target.${PLATFORM_EXT}"
+TESTS_ARCHIVE="target.common.tests.tar.gz"
+
+PLATFORM_EXT="tar.bz2"
+UNPACK_CMD="tar jxf"
 COMMIT_AUTHOR='ffxbld <ffxbld@mozilla.com>'
-TOPSRCDIR=''
 HGHOST="hg.mozilla.org"
 STAGEHOST="archive.mozilla.org"
 WGET="wget -nv"
 UNTAR="tar -zxf"
 DIFF="$(command -v diff) -u"
-BASEDIR="${HOME}"
-
-SCRIPTDIR="$(realpath "$(dirname "$0")")"
-HG="$(command -v hg)"
-DATADIR="${BASEDIR}/data"
-mkdir -p "${DATADIR}"
-
-USE_MC=false
-USE_TC=true
 JQ="$(command -v jq)"
 
-DO_HSTS=false
+if [ "${USE_GIT}" == "true" ]; then
+  GIT="$(command -v git)"
+else
+  HG="$(command -v hg)"
+fi
+
+BASEDIR="${HOME}"
+SCRIPTDIR="$(realpath "$(dirname "$0")")"
+DATADIR="${BASEDIR}/data"
+
 HSTS_PRELOAD_SCRIPT="${SCRIPTDIR}/getHSTSPreloadList.js"
 HSTS_PRELOAD_ERRORS="nsSTSPreloadList.errors"
 HSTS_PRELOAD_INC_OLD="${DATADIR}/nsSTSPreloadList.inc"
 HSTS_PRELOAD_INC_NEW="${BASEDIR}/${PRODUCT}/nsSTSPreloadList.inc"
 HSTS_UPDATED=false
 
-DO_HPKP=false
 HPKP_PRELOAD_SCRIPT="${SCRIPTDIR}/genHPKPStaticPins.js"
 HPKP_PRELOAD_ERRORS="StaticHPKPins.errors"
 HPKP_PRELOAD_JSON="${DATADIR}/PreloadedHPKPins.json"
@@ -67,26 +165,21 @@ HPKP_PRELOAD_INPUT="${DATADIR}/${HPKP_PRELOAD_INC}"
 HPKP_PRELOAD_OUTPUT="${DATADIR}/${HPKP_PRELOAD_INC}.out"
 HPKP_UPDATED=false
 
-DO_REMOTE_SETTINGS=false
 REMOTE_SETTINGS_SERVER=''
-REMOTE_SETTINGS_OUTPUT="${DATADIR}/remote-settings.out"
-REMOTE_SETTINGS_DIR="/services/settings/dumps"
+REMOTE_SETTINGS_DIR="${TOPSRCDIR}/services/settings/dumps"
 REMOTE_SETTINGS_UPDATED=false
 
-DO_SUFFIX_LIST=false
 PUBLIC_SUFFIX_URL="https://publicsuffix.org/list/public_suffix_list.dat"
 PUBLIC_SUFFIX_LOCAL="public_suffix_list.dat"
 HG_SUFFIX_LOCAL="effective_tld_names.dat"
 HG_SUFFIX_PATH="/netwerk/dns/${HG_SUFFIX_LOCAL}"
 SUFFIX_LIST_UPDATED=false
 
-DO_MOBILE_EXPERIMENTS=false
 EXPERIMENTER_URL="https://experimenter.services.mozilla.com/api/v6/experiments-first-run/"
 FENIX_INITIAL_EXPERIMENTS="mobile/android/fenix/app/src/main/res/raw/initial_experiments.json"
 FOCUS_INITIAL_EXPERIMENTS="mobile/android/focus-android/app/src/main/res/raw/initial_experiments.json"
 MOBILE_EXPERIMENTS_UPDATED=false
 
-DO_CT_LOGS=false
 CT_LOG_UPDATE_SCRIPT="${SCRIPTDIR}/getCTKnownLogs.py"
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-.}"
@@ -100,6 +193,14 @@ EXPERIMENTER_DIFF_ARTIFACT="${ARTIFACTS_DIR}/initial_experiments.diff"
 # duplicate the functionality of taskcluster-lib-urls, but in bash..
 queue_base="$TASKCLUSTER_ROOT_URL/api/queue/v1"
 index_base="$TASKCLUSTER_ROOT_URL/api/index/v1"
+
+function create_repo_diff() {
+  if [ "${USE_GIT}" == "true" ]; then
+    ${GIT} -C "${TOPSRCDIR}" diff -u "$1" > "$2"
+  else
+    ${HG} -R "${TOPSRCDIR}" diff "$1" > "$2"
+  fi
+}
 
 # Cleanup common artifacts.
 function preflight_cleanup {
@@ -301,6 +402,8 @@ function compare_suffix_lists {
 }
 
 function compare_remote_settings_files {
+  # cd "${TOPSRCDIR}"
+
   REMOTE_SETTINGS_SERVER="https://firefox.settings.services.mozilla.com/v1"
 
   # 1. List remote settings collections from server.
@@ -312,15 +415,15 @@ function compare_remote_settings_files {
 
     # 3. Check to see if the collection exists in the dump directory of the repository,
     #    if it does not then we aren't keeping the dump, and so we skip it.
-    local_dump_file="${TOPSRCDIR}${REMOTE_SETTINGS_DIR}/${bucket}/${collection}.json"
+    local_dump_file="${REMOTE_SETTINGS_DIR}/${bucket}/${collection}.json"
     if [ ! -r "${local_dump_file}" ]; then
       continue
     fi
 
-    # 4. Download server version into REMOTE_SETTINGS_OUTPUT folder
+    # 4. Download server version into REMOTE_SETTINGS_DIR folder
     remote_records_url="$REMOTE_SETTINGS_SERVER/buckets/${bucket}/collections/${collection}/changeset?_expected=${last_modified}"
-    local_location_output="$REMOTE_SETTINGS_OUTPUT/${bucket}/${collection}.json"
-    mkdir -p "$REMOTE_SETTINGS_OUTPUT/${bucket}"
+    local_location_output="$REMOTE_SETTINGS_DIR/${bucket}/${collection}.json"
+
     # We sort both the keys and the records in search-config-v2 to make it
     # easier to read and to experiment with making changes via the dump file.
     if [ "${collection}" = "search-config-v2" ]; then
@@ -355,7 +458,9 @@ function compare_remote_settings_files {
   done
 
   echo "INFO: diffing old/new remote settings dumps..."
-  ${DIFF} -r "${TOPSRCDIR}${REMOTE_SETTINGS_DIR}" "${REMOTE_SETTINGS_OUTPUT}" > "${REMOTE_SETTINGS_DIFF_ARTIFACT}"
+  create_repo_diff "${REMOTE_SETTINGS_DIR}" "${REMOTE_SETTINGS_DIFF_ARTIFACT}"
+
+  # cd "${BASEDIR}"
   if [ -s "${REMOTE_SETTINGS_DIFF_ARTIFACT}" ]
   then
     return 0
@@ -376,29 +481,30 @@ function update_remote_settings_attachment() {
   # These paths match _readAttachmentDump in services/settings/Attachments.sys.mjs.
   local path_to_attachment="${bucket}/${collection}/${attachment_id}"
   local path_to_meta="${bucket}/${collection}/${attachment_id}.meta.json"
-  local old_meta="${TOPSRCDIR}${REMOTE_SETTINGS_DIR}/${path_to_meta}"
-  local new_meta="$REMOTE_SETTINGS_OUTPUT/${path_to_meta}"
+  local meta_file="${REMOTE_SETTINGS_DIR}/${path_to_meta}"
 
   # Those files should have been created by compare_remote_settings_files before the function call.
-  local local_location_output="$REMOTE_SETTINGS_OUTPUT/${bucket}/${collection}.json"
+  local source_collection_location="${REMOTE_SETTINGS_DIR}/${bucket}/${collection}.json"
 
-  # Download the current meta data files.
-  mkdir -p "$REMOTE_SETTINGS_OUTPUT/${bucket}/${collection}"
-  ${JQ} -cj <"$local_location_output" "${jq_attachment_selector}" > "${new_meta}"
-
-  if cmp --silent "${old_meta}" "${new_meta}" ; then
+  # Exact the metadata for this attachment from the already downloaded collection,
+  # and compare with our current metadata to see if the attachment has changed or not.
+  # Uses cmp for fast compare (rather than repository tools).
+  if ${JQ} -cj "${jq_attachment_selector}" < "${source_collection_location}" | cmp --silent - "${meta_file}"; then
     # Metadata not changed, don't bother downloading the attachments themselves.
     return
   fi
   # Metadata changed. Download attachments.
+
+  # Save the metadata.
+  ${JQ} -cj <"${source_collection_location}" "${jq_attachment_selector}" > "${meta_file}"
 
   echo "INFO: Downloading updated remote settings dump: ${bucket}/${collection}/${attachment_id}"
 
   if [ -z "${ATTACHMENT_BASE_URL}" ] ; then
     ATTACHMENT_BASE_URL=$(${WGET} -qO- "${REMOTE_SETTINGS_SERVER}" | ${JQ} -r .capabilities.attachments.base_url)
   fi
-  attachment_path_from_meta=$(${JQ} -r < "${new_meta}" .attachment.location)
-  ${WGET} -qO "${REMOTE_SETTINGS_OUTPUT}/${path_to_attachment}" "${ATTACHMENT_BASE_URL}${attachment_path_from_meta}"
+  attachment_path_from_meta=$(${JQ} -r < "${meta_file}" .attachment.location)
+  ${WGET} -qO "${REMOTE_SETTINGS_DIR}/${path_to_attachment}" "${ATTACHMENT_BASE_URL}${attachment_path_from_meta}"
 }
 
 function compare_mobile_experiments() {
@@ -448,11 +554,6 @@ function stage_hpkp_files {
   cp -f "${HPKP_PRELOAD_OUTPUT}" "${TOPSRCDIR}/security/manager/ssl/${HPKP_PRELOAD_INC}"
 }
 
-function stage_remote_settings_files {
-  cd "${BASEDIR}"
-  cp -a "${REMOTE_SETTINGS_OUTPUT}"/* "${TOPSRCDIR}${REMOTE_SETTINGS_DIR}"
-}
-
 function stage_tld_suffix_files {
   cd "${BASEDIR}"
   cp -a "${PUBLIC_SUFFIX_LOCAL}" "${TOPSRCDIR}/${HG_SUFFIX_PATH}"
@@ -467,6 +568,11 @@ function stage_mobile_experiments_files {
 
 # Push all pending commits to Phabricator
 function push_repo {
+  if [ "${SKIP_PUSH}" == "true" ]; then
+    echo "Skipping push due to --skip-push"
+    return 0
+  fi
+
   cd "${TOPSRCDIR}"
   if [ ! -r "${HOME}/.arcrc" ]
   then
@@ -497,83 +603,9 @@ function push_repo {
 
 # Main
 
-# Parse our command-line options.
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -h) usage; exit 0 ;;
-    -p) PRODUCT="$2"; shift ;;
-    -b) BRANCH="$2"; shift ;;
-    -n) DRY_RUN=true ;;
-    -c) CLOSED_TREE=true ;;
-    -d) DONTBUILD=true ;;
-    -a) APPROVAL=true ;;
-    --pinset) DO_PRELOAD_PINSET=true ;;
-    --hsts) DO_HSTS=true ;;
-    --hpkp) DO_HPKP=true ;;
-    --remote-settings) DO_REMOTE_SETTINGS=true ;;
-    --suffix-list) DO_SUFFIX_LIST=true ;;
-    --mobile-experiments) DO_MOBILE_EXPERIMENTS=true ;;
-    --ct-logs) DO_CT_LOGS=true ;;
-    --skip-clone) CLONE_REPO=false ;;
-    -t) TOPSRCDIR="$2"; shift ;;
-    --use-mozilla-central) USE_MC=true ;;
-    --use-ftp-builds) USE_TC=false ;;
-    -*) usage
-      exit 11 ;;
-    *)  break ;; # terminate while loop
-  esac
-  shift
-done
-
-# Must supply a code branch to work with.
-if [ "${BRANCH}" == "" ]; then
-  echo "Error: You must specify a branch with -b branchname." >&2
-  usage
-  exit 12
-fi
-
-# Must choose at least one update action.
-if [ "$DO_HSTS" == "false" ] && [ "$DO_HPKP" == "false" ] && [ "$DO_REMOTE_SETTINGS" == "false" ] && [ "$DO_SUFFIX_LIST" == "false" ] && [ "$DO_MOBILE_EXPERIMENTS" == false ] && [ "$DO_CT_LOGS" == false ]
-then
-  echo "Error: you must specify at least one action from: --hsts, --hpkp, --remote-settings, or --suffix-list" >&2
-  usage
-  exit 13
-fi
-
-# per-product constants
-case "${PRODUCT}" in
-  thunderbird)
-    COMMIT_AUTHOR="tbirdbld <tbirdbld@thunderbird.net>"
-    ;;
-  firefox)
-    ;;
-  *)
-    echo "Error: Invalid product specified"
-    usage
-    exit 14
-    ;;
-esac
-
-if [ "${TOPSRCDIR}" == "" ]; then
-  TOPSRCDIR="$(basename "${BRANCH}")"
-fi
-
-case "${BRANCH}" in
-  mozilla-central|comm-central|try )
-    HGREPO="https://${HGHOST}/${BRANCH}"
-    ;;
-  mozilla-*|comm-* )
-    HGREPO="https://${HGHOST}/releases/${BRANCH}"
-    ;;
-  * )
-    HGREPO="https://${HGHOST}/projects/${BRANCH}"
-    ;;
-esac
-
-BROWSER_ARCHIVE="target.${PLATFORM_EXT}"
-TESTS_ARCHIVE="target.common.tests.tar.gz"
-
 preflight_cleanup
+
+mkdir -p "${DATADIR}"
 
 # Clone the repository here as some sections will use it for source data, and
 # we'll need it later anyway.
@@ -652,7 +684,6 @@ fi
 
 if [ "${REMOTE_SETTINGS_UPDATED}" == "true" ]
 then
-  stage_remote_settings_files
   COMMIT_MESSAGE="${COMMIT_MESSAGE} remote-settings"
 fi
 
@@ -685,10 +716,16 @@ if [ ${APPROVAL} == true ]; then
   COMMIT_MESSAGE="${COMMIT_MESSAGE} - a=repo-update"
 fi
 
-
-if ${HG} -R "${TOPSRCDIR}" commit -u "${COMMIT_AUTHOR}" -m "${COMMIT_MESSAGE}"
-then
-  push_repo
+if [ "${USE_GIT}" == "true" ]; then
+  if ${GIT} -C "${TOPSRCDIR}" commit -a --author "${COMMIT_AUTHOR}" -m "${COMMIT_MESSAGE}"
+  then
+    push_repo
+  fi
+else
+  if ${HG} -R "${TOPSRCDIR}" commit -u "${COMMIT_AUTHOR}" -m "${COMMIT_MESSAGE}"
+  then
+    push_repo
+  fi
 fi
 
 echo "All done"
