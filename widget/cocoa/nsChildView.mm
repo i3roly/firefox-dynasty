@@ -228,10 +228,8 @@ static inline void FlipCocoaScreenCoordinate(NSPoint& inPoint) {
 #pragma mark -
 
 nsChildView::nsChildView()
-    : nsBaseWidget(),
-      mView(nullptr),
+    : mView(nullptr),
       mParentView(nil),
-      mParentWidget(nullptr),
       mCompositingLock("ChildViewCompositing"),
       mBackingScaleFactor(0.0),
       mVisible(false),
@@ -260,12 +258,12 @@ nsChildView::~nsChildView() {
   // mGeckoChild are used throughout the ChildView class to tell if it's safe
   // to use a ChildView object.
   [mView widgetDestroyed];  // Safe if mView is nil.
-  mParentWidget = nil;
   TearDownView();  // Safe if called twice.
 }
 
 
-nsresult nsChildView::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
+nsresult nsChildView::Create(nsIWidget* aParent,
+                             const LayoutDeviceIntRect& aRect,
                              widget::InitData* aInitData) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
@@ -281,14 +279,8 @@ nsresult nsChildView::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRec
 
   BaseCreate(aParent, aInitData);
 
-  mParentWidget = nil;
-  mParentView = nil;
-  if (aParent) {
-    // This is the popup window case. aParent is the nsCocoaWindow for the
-    // popup window, and mParentView will be its content view.
-    mParentWidget = aParent;
-    mParentView = (NSView*)aParent->GetNativeData(NS_NATIVE_WIDGET);
-  }
+  mParentView =
+      mParent ? (NSView*)mParent->GetNativeData(NS_NATIVE_WIDGET) : nullptr;
 
   // create our parallel NSView and hook it up to our parent. Recall
   // that NS_NATIVE_WIDGET is the NSView.
@@ -302,10 +294,11 @@ nsresult nsChildView::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRec
   // If this view was created in a Gecko view hierarchy, the initial state
   // is hidden.  If the view is attached only to a native NSView but has
   // no Gecko parent (as in embedding), the initial state is visible.
-  if (mParentWidget)
+  if (mParent) {
     [mView setHidden:YES];
-  else
+  } else {
     mVisible = true;
+  }
 
   // Hook it up in the NSView hierarchy.
   if (mParentView) {
@@ -391,7 +384,6 @@ void nsChildView::Destroy() {
   nsBaseWidget::Destroy();
 
   NotifyWindowDestroyed();
-  mParentWidget = nil;
 
   TearDownView();
 
@@ -559,7 +551,6 @@ void nsChildView::DidChangeParent(nsIWidget*) {
   }
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
-
 }
 
 float nsChildView::GetDPI() {
@@ -616,7 +607,7 @@ LayoutDeviceIntRect nsChildView::GetBounds() {
 
 LayoutDeviceIntRect nsChildView::GetClientBounds() {
   LayoutDeviceIntRect rect = GetBounds();
-  if (!mParentWidget) {
+  if (!mParent) {
     // For top level widgets we want the position on screen, not the position
     // of this view inside the window.
     rect.MoveTo(WidgetToScreenOffset());
@@ -1263,7 +1254,7 @@ nsresult nsChildView::DispatchEvent(WidgetGUIEvent* event,
   // If the listener is NULL, check if the parent is a popup. If it is, then
   // this child is the popup content view attached to a popup. Get the
   // listener from the parent popup instead.
-  nsCOMPtr<nsIWidget> parentWidget = mParentWidget;
+  nsCOMPtr<nsIWidget> parentWidget = mParent;
   if (!listener && parentWidget) {
     if (parentWidget->GetWindowType() == WindowType::Popup) {
       // Check just in case event->mWidget isn't this widget
@@ -1284,9 +1275,9 @@ nsresult nsChildView::DispatchEvent(WidgetGUIEvent* event,
 
 nsIWidget* nsChildView::GetWidgetForListenerEvents() {
   // If there is no listener, use the parent popup's listener if that exists.
-  if (!mWidgetListener && mParentWidget &&
-      mParentWidget->GetWindowType() == WindowType::Popup) {
-    return mParentWidget;
+  if (!mWidgetListener && mParent &&
+      mParent->GetWindowType() == WindowType::Popup) {
+    return mParent;
   }
 
   return this;
@@ -5222,12 +5213,12 @@ nsresult nsChildView::RestoreHiDPIMode() {
 
 - (void)drawRect:(NSRect)aRect {
   if(nsCocoaFeatures::OnMavericksOrLater()) {
-  NS_WARNING("Unexpected call to drawRect: This view returns YES from "
-             "wantsUpdateLayer, so "
-             "drawRect should not be called.");
+    NS_WARNING("Unexpected call to drawRect: This view returns YES from "
+               "wantsUpdateLayer, so "
+               "drawRect should not be called.");
   } else { //because lion doesn't have these functions we have to duplicate this call
   //to effectively mimic updateLayer
-    [(ChildView*)[self superview] doDrawRect:aRect]; 
+    [(ChildView*)[self superview] doDrawRect:aRect];
   }
 }
 
