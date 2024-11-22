@@ -1075,6 +1075,12 @@ class BrowserRobot {
         Log.i(TAG, "goForwardFromRedesignedToolbar: Clicked the \"Forward\" button")
     }
 
+    fun getCurrentUrl(): String {
+        val searchBar = searchBar()
+        waitForPageToLoad()
+        return searchBar.getText()
+    }
+
     class Transition {
         fun openThreeDotMenu(interact: ThreeDotMenuMainRobot.() -> Unit): ThreeDotMenuMainRobot.Transition {
             Log.i(TAG, "openThreeDotMenu: Waiting for device to be idle for $waitingTime ms")

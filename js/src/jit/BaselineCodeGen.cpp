@@ -66,11 +66,9 @@ class PlainObject;
 
 namespace jit {
 
-BaselineCompilerHandler::BaselineCompilerHandler(MacroAssembler& masm,
-                                                 TempAllocator& alloc,
-                                                 JSScript* script,
-                                                 JSObject* globalLexical,
-                                                 JSObject* globalThis)
+BaselineCompilerHandler::BaselineCompilerHandler(
+    MacroAssembler& masm, TempAllocator& alloc, JSScript* script,
+    JSObject* globalLexical, JSObject* globalThis, uint32_t baseWarmUpThreshold)
     : frame_(script, masm),
       alloc_(alloc),
       analysis_(alloc, script),
@@ -82,6 +80,7 @@ BaselineCompilerHandler::BaselineCompilerHandler(MacroAssembler& masm,
       globalLexicalEnvironment_(globalLexical),
       globalThis_(globalThis),
       icEntryIndex_(0),
+      baseWarmUpThreshold_(baseWarmUpThreshold),
       compileDebugInstrumentation_(script->isDebuggee()),
       ionCompileable_(true) {
 }
@@ -94,16 +93,16 @@ template <typename... HandlerArgs>
 BaselineCodeGen<Handler>::BaselineCodeGen(JSContext* cx, TempAllocator& alloc,
                                           HandlerArgs&&... args)
     : handler(masm, std::forward<HandlerArgs>(args)...),
-      cx(cx),
       runtime(CompileRuntime::get(cx->runtime())),
       masm(cx, alloc),
       frame(handler.frame()) {}
 
 BaselineCompiler::BaselineCompiler(JSContext* cx, TempAllocator& alloc,
                                    JSScript* script, JSObject* globalLexical,
-                                   JSObject* globalThis)
+                                   JSObject* globalThis,
+                                   uint32_t baseWarmUpThreshold)
     : BaselineCodeGen(cx, alloc, /* HandlerArgs = */ alloc, script,
-                      globalLexical, globalThis) {
+                      globalLexical, globalThis, baseWarmUpThreshold) {
 #ifdef JS_CODEGEN_NONE
   MOZ_CRASH();
 #endif
@@ -143,8 +142,7 @@ bool BaselineCompiler::init() {
   return true;
 }
 
-bool BaselineCompilerHandler::recordCallRetAddr(JSContext* cx,
-                                                RetAddrEntry::Kind kind,
+bool BaselineCompilerHandler::recordCallRetAddr(RetAddrEntry::Kind kind,
                                                 uint32_t retOffset) {
   uint32_t pcOffset = script_->pcToOffset(pc_);
 
@@ -159,15 +157,13 @@ bool BaselineCompilerHandler::recordCallRetAddr(JSContext* cx,
                 retAddrEntries_.back().returnOffset().offset() < retOffset);
 
   if (!retAddrEntries_.emplaceBack(pcOffset, kind, CodeOffset(retOffset))) {
-    ReportOutOfMemory(cx);
     return false;
   }
 
   return true;
 }
 
-bool BaselineInterpreterHandler::recordCallRetAddr(JSContext* cx,
-                                                   RetAddrEntry::Kind kind,
+bool BaselineInterpreterHandler::recordCallRetAddr(RetAddrEntry::Kind kind,
                                                    uint32_t retOffset) {
   switch (kind) {
     case RetAddrEntry::Kind::DebugPrologue:
@@ -193,15 +189,11 @@ bool BaselineInterpreterHandler::recordCallRetAddr(JSContext* cx,
 }
 
 bool BaselineInterpreterHandler::addDebugInstrumentationOffset(
-    JSContext* cx, CodeOffset offset) {
-  if (!debugInstrumentationOffsets_.append(offset.offset())) {
-    ReportOutOfMemory(cx);
-    return false;
-  }
-  return true;
+    CodeOffset offset) {
+  return debugInstrumentationOffsets_.append(offset.offset());
 }
 
-MethodStatus BaselineCompiler::compile() {
+MethodStatus BaselineCompiler::compile(JSContext* cx) {
   AutoCreatedBy acb(masm, "BaselineCompiler::compile");
 
   Rooted<JSScript*> script(cx, handler.script());
@@ -251,22 +243,23 @@ MethodStatus BaselineCompiler::compile() {
 
   perfSpewer_.recordOffset(masm, "Prologue");
   if (!emitPrologue()) {
+    ReportOutOfMemory(cx);
     return Method_Error;
   }
 
   if (!emitBody()) {
+    ReportOutOfMemory(cx);
     return Method_Error;
   }
 
   perfSpewer_.recordOffset(masm, "Epilogue");
   if (!emitEpilogue()) {
+    ReportOutOfMemory(cx);
     return Method_Error;
   }
 
   perfSpewer_.recordOffset(masm, "OOLPostBarrierSlot");
-  if (!emitOutOfLinePostBarrierSlot()) {
-    return Method_Error;
-  }
+  emitOutOfLinePostBarrierSlot();
 
   AutoCreatedBy acb2(masm, "exception_tail");
   Linker linker(masm);
@@ -518,12 +511,12 @@ void BaselineInterpreterCodeGen::emitInitializeLocals() {
 // This calls:
 //    void PostWriteBarrier(JSRuntime* rt, JSObject* obj);
 template <typename Handler>
-bool BaselineCodeGen<Handler>::emitOutOfLinePostBarrierSlot() {
+void BaselineCodeGen<Handler>::emitOutOfLinePostBarrierSlot() {
   AutoCreatedBy acb(masm,
                     "BaselineCodeGen<Handler>::emitOutOfLinePostBarrierSlot");
 
   if (!postBarrierSlot_.used()) {
-    return true;
+    return;
   }
 
   masm.bind(&postBarrierSlot_);
@@ -563,7 +556,6 @@ bool BaselineCodeGen<Handler>::emitOutOfLinePostBarrierSlot() {
 
   masm.bind(&skipBarrier);
   masm.ret();
-  return true;
 }
 
 // Scan the a cache IR stub's fields and create an allocation site for any that
@@ -661,7 +653,6 @@ bool BaselineCompilerCodeGen::emitNextIC() {
 
   RetAddrEntry::Kind kind = RetAddrEntry::Kind::IC;
   if (!handler.retAddrEntries().emplaceBack(pcOffset, kind, returnOffset)) {
-    ReportOutOfMemory(cx);
     return false;
   }
 
@@ -785,7 +776,7 @@ bool BaselineCodeGen<Handler>::callVMInternal(VMFunctionId id,
 
   restoreInterpreterPCReg();
 
-  return handler.recordCallRetAddr(cx, kind, callOffset);
+  return handler.recordCallRetAddr(kind, callOffset);
 }
 
 template <typename Handler>
@@ -861,7 +852,7 @@ bool BaselineInterpreterCodeGen::emitIsDebuggeeCheck() {
     restoreInterpreterPCReg();
   }
   masm.bind(&skipCheck);
-  return handler.addDebugInstrumentationOffset(cx, toggleOffset);
+  return handler.addDebugInstrumentationOffset(toggleOffset);
 }
 
 static void MaybeIncrementCodeCoverageCounter(MacroAssembler& masm,
@@ -1423,7 +1414,6 @@ bool BaselineCompilerCodeGen::emitWarmUpCounterIncrement() {
     uint32_t pcOffset = script->pcToOffset(pc);
     uint32_t nativeOffset = masm.currentOffset();
     if (!handler.osrEntries().emplaceBack(pcOffset, nativeOffset)) {
-      ReportOutOfMemory(cx);
       return false;
     }
   }
@@ -1480,9 +1470,8 @@ bool BaselineCompilerCodeGen::emitWarmUpCounterIncrement() {
 
   Label done;
 
-  const OptimizationInfo* info =
-      IonOptimizations.get(OptimizationLevel::Normal);
-  uint32_t warmUpThreshold = info->compilerWarmUpThreshold(cx, script, pc);
+  uint32_t warmUpThreshold = OptimizationInfo::warmUpThresholdForPC(
+      script, pc, handler.baseWarmUpThreshold());
   masm.branch32(Assembler::LessThan, countReg, Imm32(warmUpThreshold), &done);
 
   // Don't trigger Warp compilations from trial-inlined scripts.
@@ -1661,12 +1650,11 @@ bool BaselineCompiler::emitDebugTrap() {
 
   uint32_t pcOffset = script->pcToOffset(handler.pc());
   if (!debugTrapEntries_.emplaceBack(pcOffset, nativeOffset.offset())) {
-    ReportOutOfMemory(cx);
     return false;
   }
 
   // Add a RetAddrEntry for the return offset -> pc mapping.
-  return handler.recordCallRetAddr(cx, RetAddrEntry::Kind::DebugTrap,
+  return handler.recordCallRetAddr(RetAddrEntry::Kind::DebugTrap,
                                    masm.currentOffset());
 }
 
@@ -4707,7 +4695,7 @@ template <typename F1, typename F2>
   Label isNotDebuggee, done;
 
   CodeOffset toggleOffset = masm.toggledJump(&isNotDebuggee);
-  if (!handler.addDebugInstrumentationOffset(cx, toggleOffset)) {
+  if (!handler.addDebugInstrumentationOffset(toggleOffset)) {
     return false;
   }
 
@@ -5862,7 +5850,7 @@ bool BaselineInterpreterCodeGen::emitAfterYieldDebugInstrumentation(
   // If the current Realm is not a debuggee we're done.
   Label done;
   CodeOffset toggleOffset = masm.toggledJump(&done);
-  if (!handler.addDebugInstrumentationOffset(cx, toggleOffset)) {
+  if (!handler.addDebugInstrumentationOffset(toggleOffset)) {
     return false;
   }
   masm.loadPtr(AbsoluteAddress(runtime->addressOfRealm()), scratch);
@@ -6085,7 +6073,7 @@ bool BaselineCodeGen<Handler>::emit_Resume() {
 #endif
 
   // Record the return address so the return offset -> pc mapping works.
-  if (!handler.recordCallRetAddr(cx, RetAddrEntry::Kind::IC,
+  if (!handler.recordCallRetAddr(RetAddrEntry::Kind::IC,
                                  masm.currentOffset())) {
     return false;
   }
@@ -6376,30 +6364,15 @@ bool BaselineCodeGen<Handler>::emit_InitHomeObject() {
   return true;
 }
 
-template <>
-bool BaselineCompilerCodeGen::emit_BuiltinObject() {
-  // Built-in objects are constants for a given global.
-  auto kind = BuiltinObjectKind(GET_UINT8(handler.pc()));
-  JSObject* builtin = BuiltinObjectOperation(cx, kind);
-  if (!builtin) {
-    return false;
-  }
-  frame.push(ObjectValue(*builtin));
-  return true;
-}
+template <typename Handler>
+bool BaselineCodeGen<Handler>::emit_BuiltinObject() {
+  frame.syncStack(0);
 
-template <>
-bool BaselineInterpreterCodeGen::emit_BuiltinObject() {
-  prepareVMCall();
-
-  pushUint8BytecodeOperandArg(R0.scratchReg());
-
-  using Fn = JSObject* (*)(JSContext*, BuiltinObjectKind);
-  if (!callVM<Fn, BuiltinObjectOperation>()) {
+  if (!emitNextIC()) {
     return false;
   }
 
-  masm.tagValue(JSVAL_TYPE_OBJECT, ReturnReg, R0);
+  // Mark R0 as pushed stack value.
   frame.push(R0);
   return true;
 }
@@ -6449,40 +6422,15 @@ bool BaselineCodeGen<Handler>::emit_FunWithProto() {
   return true;
 }
 
-template <>
-bool BaselineCompilerCodeGen::emit_ImportMeta() {
-  // Note: this is like the interpreter implementation, but optimized a bit by
-  // calling GetModuleObjectForScript at compile-time.
-
-  Rooted<ModuleObject*> module(cx, GetModuleObjectForScript(handler.script()));
-
+template <typename Handler>
+bool BaselineCodeGen<Handler>::emit_ImportMeta() {
   frame.syncStack(0);
 
-  prepareVMCall();
-  pushArg(ImmGCPtr(module));
-
-  using Fn = JSObject* (*)(JSContext*, HandleObject);
-  if (!callVM<Fn, js::GetOrCreateModuleMetaObject>()) {
+  if (!emitNextIC()) {
     return false;
   }
 
-  masm.tagValue(JSVAL_TYPE_OBJECT, ReturnReg, R0);
-  frame.push(R0);
-  return true;
-}
-
-template <>
-bool BaselineInterpreterCodeGen::emit_ImportMeta() {
-  prepareVMCall();
-
-  pushScriptArg();
-
-  using Fn = JSObject* (*)(JSContext*, HandleScript);
-  if (!callVM<Fn, ImportMetaOperation>()) {
-    return false;
-  }
-
-  masm.tagValue(JSVAL_TYPE_OBJECT, ReturnReg, R0);
+  // Mark R0 as pushed stack value.
   frame.push(R0);
   return true;
 }
@@ -6660,7 +6608,6 @@ bool BaselineCompiler::emitBody() {
       uint32_t pcOffset = script->pcToOffset(handler.pc());
       uint32_t nativeOffset = masm.currentOffset();
       if (!resumeOffsetEntries_.emplaceBack(pcOffset, nativeOffset)) {
-        ReportOutOfMemory(cx);
         return false;
       }
     }
@@ -6670,7 +6617,7 @@ bool BaselineCompiler::emitBody() {
       return false;
     }
 
-    perfSpewer_.recordInstruction(cx, masm, handler.pc(), frame);
+    perfSpewer_.recordInstruction(masm, handler.pc(), frame);
 
 #define EMIT_OP(OP, ...)                                \
   case JSOp::OP: {                                      \
@@ -6706,7 +6653,6 @@ bool BaselineCompiler::emitBody() {
 bool BaselineInterpreterGenerator::emitDebugTrap() {
   CodeOffset offset = masm.nopPatchableToCall();
   if (!debugTrapOffsets_.append(offset.offset())) {
-    ReportOutOfMemory(cx);
     return false;
   }
 
@@ -6900,7 +6846,8 @@ void BaselineInterpreterGenerator::emitOutOfLineCodeCoverageInstrumentation() {
   masm.ret();
 }
 
-bool BaselineInterpreterGenerator::generate(BaselineInterpreter& interpreter) {
+bool BaselineInterpreterGenerator::generate(JSContext* cx,
+                                            BaselineInterpreter& interpreter) {
   AutoCreatedBy acb(masm, "BaselineInterpreterGenerator::generate");
 
   if (!cx->runtime()->jitRuntime()->ensureDebugTrapHandler(
@@ -6910,23 +6857,24 @@ bool BaselineInterpreterGenerator::generate(BaselineInterpreter& interpreter) {
 
   perfSpewer_.recordOffset(masm, "Prologue");
   if (!emitPrologue()) {
+    ReportOutOfMemory(cx);
     return false;
   }
 
   perfSpewer_.recordOffset(masm, "InterpreterLoop");
   if (!emitInterpreterLoop()) {
+    ReportOutOfMemory(cx);
     return false;
   }
 
   perfSpewer_.recordOffset(masm, "Epilogue");
   if (!emitEpilogue()) {
+    ReportOutOfMemory(cx);
     return false;
   }
 
   perfSpewer_.recordOffset(masm, "OOLPostBarrierSlot");
-  if (!emitOutOfLinePostBarrierSlot()) {
-    return false;
-  }
+  emitOutOfLinePostBarrierSlot();
 
   perfSpewer_.recordOffset(masm, "OOLCodeCoverageInstrumentation");
   emitOutOfLineCodeCoverageInstrumentation();

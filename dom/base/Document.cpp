@@ -1368,7 +1368,6 @@ Document::Document(const char* aContentType)
       mStyleSetFilled(false),
       mQuirkSheetAdded(false),
       mContentEditableSheetAdded(false),
-      mDesignModeSheetAdded(false),
       mMayHaveTitleElement(false),
       mDOMLoadingSet(false),
       mDOMInteractiveSet(false),
@@ -1395,7 +1394,6 @@ Document::Document(const char* aContentType)
       mTooDeepWriteRecursion(false),
       mPendingMaybeEditingStateChanged(false),
       mHasBeenEditable(false),
-      mHasWarnedAboutZoom(false),
       mIsRunningExecCommandByContent(false),
       mIsRunningExecCommandByChromeOrAddon(false),
       mSetCompleteAfterDOMContentLoaded(false),
@@ -3096,9 +3094,9 @@ already_AddRefed<nsIPrincipal> Document::MaybeDowngradePrincipal(
   // extension principal, in the case of extension content scripts).
   auto* basePrin = BasePrincipal::Cast(aPrincipal);
   if (basePrin->Is<ExpandedPrincipal>()) {
-    MOZ_DIAGNOSTIC_ASSERT(false,
-                          "Should never try to create a document with "
-                          "an expanded principal");
+    MOZ_DIAGNOSTIC_CRASH(
+        "Should never try to create a document with "
+        "an expanded principal");
 
     auto* expanded = basePrin->As<ExpandedPrincipal>();
     return do_AddRef(expanded->AllowList().LastElement());
@@ -3280,17 +3278,12 @@ void Document::FillStyleSet() {
   mStyleSetFilled = true;
 }
 
-void Document::RemoveContentEditableStyleSheets() {
+void Document::RemoveContentEditableStyleSheet() {
   MOZ_ASSERT(IsHTMLOrXHTML());
 
   ServoStyleSet& styleSet = EnsureStyleSet();
   auto* cache = GlobalStyleSheetCache::Singleton();
   bool changed = false;
-  if (mDesignModeSheetAdded) {
-    styleSet.RemoveStyleSheet(*cache->DesignModeSheet());
-    mDesignModeSheetAdded = false;
-    changed = true;
-  }
   if (mContentEditableSheetAdded) {
     styleSet.RemoveStyleSheet(*cache->ContentEditableSheet());
     mContentEditableSheetAdded = false;
@@ -3302,7 +3295,7 @@ void Document::RemoveContentEditableStyleSheets() {
   }
 }
 
-void Document::AddContentEditableStyleSheetsToStyleSet(bool aDesignMode) {
+void Document::AddContentEditableStyleSheetToStyleSet() {
   MOZ_ASSERT(IsHTMLOrXHTML());
   MOZ_DIAGNOSTIC_ASSERT(mStyleSetFilled,
                         "Caller should ensure we're being rendered");
@@ -3313,15 +3306,6 @@ void Document::AddContentEditableStyleSheetsToStyleSet(bool aDesignMode) {
   if (!mContentEditableSheetAdded) {
     styleSet.AppendStyleSheet(*cache->ContentEditableSheet());
     mContentEditableSheetAdded = true;
-    changed = true;
-  }
-  if (mDesignModeSheetAdded != aDesignMode) {
-    if (mDesignModeSheetAdded) {
-      styleSet.RemoveStyleSheet(*cache->DesignModeSheet());
-    } else {
-      styleSet.AppendStyleSheet(*cache->DesignModeSheet());
-    }
-    mDesignModeSheetAdded = !mDesignModeSheetAdded;
     changed = true;
   }
   if (changed) {
@@ -6038,7 +6022,7 @@ void Document::TearingDownEditor() {
   if (IsEditingOn()) {
     mEditingState = EditingState::eTearingDown;
     if (IsHTMLOrXHTML()) {
-      RemoveContentEditableStyleSheets();
+      RemoveContentEditableStyleSheet();
     }
   }
 }
@@ -6249,7 +6233,7 @@ nsresult Document::EditingStateChanged() {
     // because new style may change whether focused element will be focusable
     // or not.
     if (IsHTMLOrXHTML()) {
-      AddContentEditableStyleSheetsToStyleSet(designMode);
+      AddContentEditableStyleSheetToStyleSet();
     }
 
     if (designMode) {
@@ -7408,7 +7392,6 @@ void Document::DeletePresShell() {
   mStyleSetFilled = false;
   mQuirkSheetAdded = false;
   mContentEditableSheetAdded = false;
-  mDesignModeSheetAdded = false;
 }
 
 void Document::DisallowBFCaching(uint32_t aStatus) {
@@ -14574,22 +14557,6 @@ void Document::EvaluateMediaQueriesAndReportChanges(bool aRecurse) {
   for (auto& mql : mqls) {
     mql->FireChangeEvent();
   }
-}
-
-void Document::MaybeWarnAboutZoom() {
-  if (mHasWarnedAboutZoom) {
-    return;
-  }
-  const bool usedZoom = Servo_IsPropertyIdRecordedInUseCounter(
-      mStyleUseCounters.get(), eCSSProperty_zoom);
-  if (!usedZoom) {
-    return;
-  }
-
-  mHasWarnedAboutZoom = true;
-  nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "Layout"_ns,
-                                  this, nsContentUtils::eLAYOUT_PROPERTIES,
-                                  "ZoomPropertyWarning");
 }
 
 nsIHTMLCollection* Document::Children() {

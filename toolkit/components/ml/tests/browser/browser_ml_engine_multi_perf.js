@@ -3,8 +3,6 @@
 
 "use strict";
 
-const ITERATIONS = 10;
-
 const ENGINES = {
   intent: {
     engineId: "intent",
@@ -77,6 +75,8 @@ for (let engineKey of Object.keys(ENGINES)) {
     METRICS.push(`${engineKey}-${metric}`);
   }
 }
+METRICS.push(TOTAL_MEMORY_USAGE);
+
 const journal = {};
 for (let metric of METRICS) {
   journal[metric] = [];
@@ -104,6 +104,7 @@ const perfMetadata = {
         { name: `intent-pipeline-ready-memory`, unit: "MB", shouldAlert: true },
         { name: `intent-initialization-memory`, unit: "MB", shouldAlert: true },
         { name: `intent-model-run-memory`, unit: "MB", shouldAlert: true },
+        { name: `intent-total-memory-usage`, unit: "MB", shouldAlert: true },
         {
           name: `suggest-pipeline-ready-latency`,
           unit: "ms",
@@ -126,11 +127,14 @@ const perfMetadata = {
           shouldAlert: true,
         },
         { name: `suggest-model-run-memory`, unit: "MB", shouldAlert: true },
+
+        { name: `suggest-total-memory-usage`, unit: "MB", shouldAlert: true },
         {
           name: `engine3-pipeline-ready-latency`,
           unit: "ms",
           shouldAlert: true,
         },
+
         {
           name: `engine3-initialization-latency`,
           unit: "ms",
@@ -148,6 +152,8 @@ const perfMetadata = {
           shouldAlert: true,
         },
         { name: `engine3-model-run-memory`, unit: "MB", shouldAlert: true },
+
+        { name: `engine3-total-memory-usage`, unit: "MB", shouldAlert: true },
         {
           name: `engine4-pipeline-ready-latency`,
           unit: "ms",
@@ -170,6 +176,7 @@ const perfMetadata = {
           shouldAlert: true,
         },
         { name: `engine4-model-run-memory`, unit: "MB", shouldAlert: true },
+        { name: `engine4-total-memory-usage`, unit: "MB", shouldAlert: true },
       ],
       verbose: true,
       manifest: "perftest.toml",
@@ -188,6 +195,29 @@ for (let metric of METRICS) {
 }
 
 requestLongerTimeout(120);
+
+async function runEngineWithMetrics(
+  engineInstance,
+  engineConfig,
+  iterations = 1
+) {
+  const journal = {};
+  const engine = engineInstance.engine;
+  for (let i = 0; i < iterations; i++) {
+    const res = await engine.run(engineConfig.request);
+    let metrics = fetchMetrics(res.metrics);
+
+    // Collect metrics, prefixing each metric name with engineId
+    for (const [metricName, metricVal] of Object.entries(metrics)) {
+      const prefixedMetricName = `${engineConfig.engineId}-${metricName}`;
+      if (!journal[prefixedMetricName]) {
+        journal[prefixedMetricName] = [];
+      }
+      journal[prefixedMetricName].push(metricVal);
+    }
+  }
+  return journal;
+}
 
 /**
  * Runs inference on an initialized engine instance using the specified request configuration
@@ -237,6 +267,10 @@ add_task(async function test_ml_generic_pipeline_concurrent_separate_phases() {
   }, {});
 
   Assert.ok(true);
+
+  const memUsage = await getTotalMemoryUsage();
+  (combinedJournal["total-memory-usage"] =
+    combinedJournal["total-memory-usage"] || []).push(memUsage);
 
   // Final metrics report
   reportMetrics(combinedJournal);

@@ -14,6 +14,7 @@ var { ExtensionError } = ExtensionUtils;
 
 /**
  * Represents (in the main browser process) a user script.
+ * (legacy MV2-only userScripts API)
  *
  * @param {UserScriptOptions} details
  *        The options object related to the user script
@@ -83,6 +84,79 @@ this.userScripts = class extends ExtensionAPI {
   }
 
   getAPI(context) {
+    const { extension } = context;
+    if (extension.manifestVersion == 2) {
+      return this.getLegacyMV2API(context);
+    }
+
+    function ensureIdsValidAndUnique(publicScriptIds) {
+      let seen = new Set();
+      for (let id of publicScriptIds) {
+        if (!id.length || id.startsWith("_")) {
+          throw new ExtensionError("Invalid id for RegisteredUserScript.");
+        }
+        if (seen.has(id)) {
+          throw new ExtensionError(`Duplicate script id: ${id}`);
+        }
+        seen.add(id);
+      }
+    }
+
+    function ensureValidWorldId(worldId) {
+      if (worldId && (worldId.startsWith("_") || worldId.length > 256)) {
+        // worldId "" is the default world.
+        // worldId starting with "_" are reserved.
+        // worldId length is capped. Limit is consistent with Chrome.
+        throw new ExtensionError(`Invalid worldId: ${worldId}`);
+      }
+    }
+
+    const usm = extension.userScriptsManager;
+
+    return {
+      userScripts: {
+        register: async scripts => {
+          ensureIdsValidAndUnique(scripts.map(s => s.id));
+          scripts.forEach(s => ensureValidWorldId(s.worldId));
+
+          return usm.runWriteTask(async () => {
+            await usm.registerNewScripts(scripts);
+          });
+        },
+
+        update: async scripts => {
+          ensureIdsValidAndUnique(scripts.map(s => s.id));
+          scripts.forEach(s => ensureValidWorldId(s.worldId));
+
+          return usm.runWriteTask(async () => {
+            await usm.updateScripts(scripts);
+          });
+        },
+
+        unregister: async filter => {
+          let ids = filter?.ids;
+          if (ids) {
+            ensureIdsValidAndUnique(ids);
+          }
+          return usm.runWriteTask(async () => {
+            await usm.unregisterScripts(ids);
+          });
+        },
+
+        getScripts: async filter => {
+          let ids = filter?.ids;
+          if (ids) {
+            ensureIdsValidAndUnique(ids);
+          }
+          return usm.runReadTask(async () => {
+            return usm.getScripts(ids);
+          });
+        },
+      },
+    };
+  }
+
+  getLegacyMV2API(context) {
     const { extension } = context;
 
     // Set of the scriptIds registered from this context.

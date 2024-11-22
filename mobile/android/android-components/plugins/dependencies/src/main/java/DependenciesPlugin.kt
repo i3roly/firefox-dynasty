@@ -21,7 +21,6 @@ object Versions {
 
     const val mozilla_glean = "62.0.0"
 
-    const val robolectric = "4.14"
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.12"
     const val okhttp = "4.12.0"
@@ -90,7 +89,7 @@ object Versions {
     const val protobuf_plugin = "0.9.4"
     object Google {
         const val accompanist = "0.36.0"
-        const val firebase_messaging = "24.0.3"
+        const val firebase_messaging = "24.1.0"
         const val material = "1.12.0"
         const val osslicenses_plugin = "0.10.6"
         const val play_review = "2.0.1"
@@ -113,10 +112,11 @@ object Versions {
         const val junit = "5.11.3"
         const val mockito = "5.14.2"
         const val mockk = "1.13.13"
+        const val robolectric = "4.14.1"
     }
 
     object ThirdParty {
-        const val sentry = "7.17.0"
+        const val sentry = "7.18.0"
     }
 }
 
@@ -132,7 +132,7 @@ object ComponentsDependencies {
     const val junit_params = "org.junit.jupiter:junit-jupiter-params:${Versions.Testing.junit}"
     const val junit_vintage = "org.junit.vintage:junit-vintage-engine:${Versions.Testing.junit}"
 
-    const val testing_robolectric = "org.robolectric:robolectric:${Versions.robolectric}"
+    const val testing_robolectric = "org.robolectric:robolectric:${Versions.Testing.robolectric}"
     const val testing_falcon = "com.jraska:falcon:${Versions.Testing.falcon}"
     const val testing_fastlane = "tools.fastlane:screengrab:${Versions.Testing.fastlane}"
     const val testing_mockito = "org.mockito:mockito-core:${Versions.Testing.mockito}"

@@ -332,7 +332,9 @@ class MOZ_STATIC_CLASS OpToFallbackKindTable {
     setKind(JSOp::BindUnqualifiedName, BaselineICFallbackKind::BindName);
     setKind(JSOp::BindUnqualifiedGName, BaselineICFallbackKind::BindName);
 
-    setKind(JSOp::GetIntrinsic, BaselineICFallbackKind::GetIntrinsic);
+    setKind(JSOp::GetIntrinsic, BaselineICFallbackKind::LazyConstant);
+    setKind(JSOp::BuiltinObject, BaselineICFallbackKind::LazyConstant);
+    setKind(JSOp::ImportMeta, BaselineICFallbackKind::LazyConstant);
 
     setKind(JSOp::Call, BaselineICFallbackKind::Call);
     setKind(JSOp::CallContent, BaselineICFallbackKind::Call);
@@ -1236,31 +1238,47 @@ bool FallbackICCodeCompiler::emit_BindName() {
 }
 
 //
-// GetIntrinsic_Fallback
+// LazyConstant_Fallback
 //
 
-bool DoGetIntrinsicFallback(JSContext* cx, BaselineFrame* frame,
+bool DoLazyConstantFallback(JSContext* cx, BaselineFrame* frame,
                             ICFallbackStub* stub, MutableHandleValue res) {
   stub->incrementEnteredCount();
   MaybeNotifyWarp(frame->outerScript(), stub);
 
   RootedScript script(cx, frame->script());
   jsbytecode* pc = StubOffsetToPc(stub, script);
-  mozilla::DebugOnly<JSOp> op = JSOp(*pc);
-  FallbackICSpew(cx, stub, "GetIntrinsic(%s)", CodeName(JSOp(*pc)));
+  JSOp op = JSOp(*pc);
+  FallbackICSpew(cx, stub, "LazyConstant(%s)", CodeName(JSOp(*pc)));
 
-  MOZ_ASSERT(op == JSOp::GetIntrinsic);
+  MOZ_ASSERT(op == JSOp::GetIntrinsic || op == JSOp::BuiltinObject ||
+             op == JSOp::ImportMeta);
 
-  if (!GetIntrinsicOperation(cx, script, pc, res)) {
-    return false;
+  if (op == JSOp::GetIntrinsic) {
+    if (!GetIntrinsicOperation(cx, script, pc, res)) {
+      return false;
+    }
+  } else if (op == JSOp::BuiltinObject) {
+    auto kind = BuiltinObjectKind(GET_UINT8(pc));
+    JSObject* builtinObject = BuiltinObjectOperation(cx, kind);
+    if (!builtinObject) {
+      return false;
+    }
+    res.setObject(*builtinObject);
+  } else {
+    JSObject* metaObject = ImportMetaOperation(cx, script);
+    if (!metaObject) {
+      return false;
+    }
+    res.setObject(*metaObject);
   }
 
-  TryAttachStub<GetIntrinsicIRGenerator>("GetIntrinsic", cx, frame, stub, res);
+  TryAttachStub<LazyConstantIRGenerator>("LazyConstant", cx, frame, stub, res);
 
   return true;
 }
 
-bool FallbackICCodeCompiler::emit_GetIntrinsic() {
+bool FallbackICCodeCompiler::emit_LazyConstant() {
   EmitRestoreTailCallReg(masm);
 
   masm.push(ICStubReg);
@@ -1268,7 +1286,7 @@ bool FallbackICCodeCompiler::emit_GetIntrinsic() {
 
   using Fn =
       bool (*)(JSContext*, BaselineFrame*, ICFallbackStub*, MutableHandleValue);
-  return tailCallVM<Fn, DoGetIntrinsicFallback>(masm);
+  return tailCallVM<Fn, DoLazyConstantFallback>(masm);
 }
 
 //

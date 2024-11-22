@@ -326,6 +326,7 @@ const AVAILABLE_INJECTIONS = [
     bug: "1774005",
     contentScripts: {
       matches: [
+        "*://*.ambrahealth.com/*", // Bug 1930429
         "*://*.webex.com/*", // Bug 1788934
         "*://ifcinema.institutfrancais.com/*", // Bug 1806423
         "*://islamionline.islamicbank.ps/*", // Bug 1821439
@@ -1139,6 +1140,90 @@ const AVAILABLE_INJECTIONS = [
       css: [
         {
           file: "injections/css/bug1873166-nsandi.com-hide-unsupported-message.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "1875540",
+    platform: "all",
+    domain: "allstate.com",
+    bug: "1875540",
+    contentScripts: {
+      matches: ["*://*.allstate.com/*"],
+      css: [
+        {
+          file: "injections/css/bug1875540-allstate.com-hide-unsupported-message.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "1886566",
+    platform: "all",
+    domain: "quezoncity.gov.ph",
+    bug: "1886566",
+    contentScripts: {
+      matches: ["*://qceservices.quezoncity.gov.ph/qcvaxeasy*"],
+      css: [
+        {
+          file: "injections/css/bug1886566-quezoncity.gov.ph-iframe-height.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "1846742",
+    platform: "desktop",
+    domain: "microsoft.com",
+    bug: "1846742",
+    contentScripts: {
+      matches: ["*://www.microsoft.com/*"],
+      js: [
+        {
+          file: "injections/js/bug1846742-microsoft.com-search-key-fix.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "1886591",
+    platform: "all",
+    domain: "la-vache-noire.com",
+    bug: "1886591",
+    contentScripts: {
+      matches: ["*://la-vache-noire.com/*"],
+      css: [
+        {
+          file: "injections/css/bug1886591-la-vache-noire.com-cookie-banner-fix.css",
+        },
+      ],
+    },
+  },
+  {
+    id: "1923286",
+    platform: "desktop",
+    domain: "bing.com",
+    bug: "1923286",
+    contentScripts: {
+      matches: ["*://www.bing.com/images/search*"],
+      js: [
+        {
+          file: "injections/js/bug1923286-bing.com-image-click-fix.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "1930440",
+    platform: "all",
+    domain: "online.singaporepools.com",
+    bug: "1930440",
+    contentScripts: {
+      matches: ["*://online.singaporepools.com/*"],
+      js: [
+        {
+          file: "injections/js/bug1930440-online.singaporepools.com-prevent-unsupported-alert.js",
         },
       ],
     },

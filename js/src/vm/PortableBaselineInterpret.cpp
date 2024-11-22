@@ -5728,9 +5728,9 @@ DEFINE_IC(NewArray, 0, {
   }
 });
 
-DEFINE_IC(GetIntrinsic, 0, {
+DEFINE_IC(LazyConstant, 0, {
   PUSH_FALLBACK_IC_FRAME();
-  if (!DoGetIntrinsicFallback(cx, ctx.frame, fallback, &ctx.state.res)) {
+  if (!DoLazyConstantFallback(cx, ctx.frame, fallback, &ctx.state.res)) {
     goto error;
   }
 });
@@ -7137,16 +7137,10 @@ PBIResult PortableBaselineInterpret(
       }
 
       CASE(ImportMeta) {
-        JSObject* metaObject;
-        {
-          PUSH_EXIT_FRAME();
-          ReservedRooted<JSScript*> script0(&state.script0, frame->script());
-          metaObject = ImportMetaOperation(cx, script0);
-          if (!metaObject) {
-            GOTO_ERROR();
-          }
-        }
-        VIRTPUSH(StackVal(ObjectValue(*metaObject)));
+        IC_ZERO_ARG(0);
+        IC_ZERO_ARG(1);
+        IC_ZERO_ARG(2);
+        INVOKE_IC_AND_PUSH(LazyConstant, false);
         END_OP(ImportMeta);
       }
 
@@ -7762,16 +7756,10 @@ PBIResult PortableBaselineInterpret(
       }
 
       CASE(BuiltinObject) {
-        auto kind = BuiltinObjectKind(GET_UINT8(pc));
-        JSObject* builtin;
-        {
-          PUSH_EXIT_FRAME();
-          builtin = BuiltinObjectOperation(cx, kind);
-          if (!builtin) {
-            GOTO_ERROR();
-          }
-        }
-        VIRTPUSH(StackVal(ObjectValue(*builtin)));
+        IC_ZERO_ARG(0);
+        IC_ZERO_ARG(1);
+        IC_ZERO_ARG(2);
+        INVOKE_IC_AND_PUSH(LazyConstant, false);
         END_OP(BuiltinObject);
       }
 
@@ -8739,7 +8727,7 @@ PBIResult PortableBaselineInterpret(
         IC_ZERO_ARG(0);
         IC_ZERO_ARG(1);
         IC_ZERO_ARG(2);
-        INVOKE_IC_AND_PUSH(GetIntrinsic, false);
+        INVOKE_IC_AND_PUSH(LazyConstant, false);
         END_OP(GetIntrinsic);
       }
 

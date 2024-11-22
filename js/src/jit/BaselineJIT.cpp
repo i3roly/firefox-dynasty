@@ -20,6 +20,7 @@
 #include "jit/BaselineIC.h"
 #include "jit/CalleeToken.h"
 #include "jit/Ion.h"
+#include "jit/IonOptimizationLevels.h"
 #include "jit/JitCommon.h"
 #include "jit/JitRuntime.h"
 #include "jit/JitSpewer.h"
@@ -219,7 +220,10 @@ MethodStatus jit::BaselineCompile(JSContext* cx, JSScript* script,
   GlobalLexicalEnvironmentObject* globalLexical =
       &cx->global()->lexicalEnvironment();
   JSObject* globalThis = globalLexical->thisObject();
-  BaselineCompiler compiler(cx, temp, script, globalLexical, globalThis);
+  uint32_t baseWarmUpThreshold =
+      OptimizationInfo::baseWarmUpThresholdForScript(cx, script);
+  BaselineCompiler compiler(cx, temp, script, globalLexical, globalThis,
+                            baseWarmUpThreshold);
   if (!compiler.init()) {
     ReportOutOfMemory(cx);
     return Method_Error;
@@ -234,7 +238,7 @@ MethodStatus jit::BaselineCompile(JSContext* cx, JSScript* script,
     compiler.setCompileDebugInstrumentation();
   }
 
-  MethodStatus status = compiler.compile();
+  MethodStatus status = compiler.compile(cx);
 
   MOZ_ASSERT_IF(status == Method_Compiled, script->hasBaselineScript());
   MOZ_ASSERT_IF(status != Method_Compiled, !script->hasBaselineScript());
@@ -1005,7 +1009,7 @@ bool jit::GenerateBaselineInterpreter(JSContext* cx,
   if (IsBaselineInterpreterEnabled()) {
     TempAllocator temp(&cx->tempLifoAlloc());
     BaselineInterpreterGenerator generator(cx, temp);
-    return generator.generate(interpreter);
+    return generator.generate(cx, interpreter);
   }
 
   return true;

@@ -14,6 +14,9 @@
   const DIRECTION_BACKWARD = -1;
   const DIRECTION_FORWARD = 1;
 
+  const GROUP_DROP_ACTION_CREATE = 0x1;
+  const GROUP_DROP_ACTION_APPEND = 0x2;
+
   /**
    * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
    * @returns {boolean}
@@ -937,6 +940,7 @@
         : "translateX(" + Math.round(newMargin) + "px)";
     }
 
+    // eslint-disable-next-line complexity
     on_drop(event) {
       var dt = event.dataTransfer;
       var dropEffect = dt.dropEffect;
@@ -979,16 +983,49 @@
         let newTranslateX = oldTranslateX - translateOffsetX;
         let newTranslateY = oldTranslateY - translateOffsetY;
 
-        // Update both translate axis for pinned vertical expanded tabs
-        if (oldTranslateX > 0 && translateOffsetX > tabWidth / 2) {
-          newTranslateX += tabWidth;
-        } else if (oldTranslateX < 0 && -translateOffsetX > tabWidth / 2) {
-          newTranslateX -= tabWidth;
-        }
-        if (oldTranslateY > 0 && translateOffsetY > tabHeight / 2) {
-          newTranslateY += tabHeight;
-        } else if (oldTranslateY < 0 && -translateOffsetY > tabHeight / 2) {
-          newTranslateY -= tabHeight;
+        if (this.#isContainerVerticalPinnedExpanded(draggedTab)) {
+          // Update both translate axis for pinned vertical expanded tabs
+          if (oldTranslateX > 0 && translateOffsetX > tabWidth / 2) {
+            newTranslateX += tabWidth;
+          } else if (oldTranslateX < 0 && -translateOffsetX > tabWidth / 2) {
+            newTranslateX -= tabWidth;
+          }
+          if (oldTranslateY > 0 && translateOffsetY > tabHeight / 2) {
+            newTranslateY += tabHeight;
+          } else if (oldTranslateY < 0 && -translateOffsetY > tabHeight / 2) {
+            newTranslateY -= tabHeight;
+          }
+        } else {
+          let pinned = draggedTab.pinned;
+          let numPinned = gBrowser.pinnedTabCount;
+          let tabs = this.visibleTabs.slice(
+            pinned ? 0 : numPinned,
+            pinned ? numPinned : undefined
+          );
+          let size = this.verticalMode ? "height" : "width";
+          let screenAxis = this.verticalMode ? "screenY" : "screenX";
+          let tabSize = this.verticalMode ? tabHeight : tabWidth;
+          let firstTab = tabs[0];
+          let lastTab = tabs.at(-1);
+          let lastMovingTabScreen = movingTabs.at(-1)[screenAxis];
+          let firstMovingTabScreen = movingTabs[0][screenAxis];
+          let firstBound = firstTab[screenAxis] - firstMovingTabScreen;
+          let lastBound =
+            lastTab[screenAxis] +
+            window.windowUtils.getBoundsWithoutFlushing(lastTab)[size] -
+            (lastMovingTabScreen + tabSize);
+
+          if (this.verticalMode) {
+            newTranslateY = Math.min(
+              Math.max(oldTranslateY, firstBound),
+              lastBound
+            );
+          } else {
+            newTranslateX = Math.min(
+              Math.max(oldTranslateX, firstBound),
+              lastBound
+            );
+          }
         }
 
         let dropIndex;
@@ -1005,8 +1042,10 @@
           incrementDropIndex = false;
         }
 
+        const { groupDropAction, groupDropIndex } = draggedTab._dragData;
+
         let shouldTranslate =
-          !gReduceMotion && !("groupDropIndex" in draggedTab._dragData);
+          !gReduceMotion && groupDropAction != GROUP_DROP_ACTION_CREATE;
         if (this.#isContainerVerticalPinnedExpanded(draggedTab)) {
           shouldTranslate &&=
             (oldTranslateX && oldTranslateX != newTranslateX) ||
@@ -1017,47 +1056,60 @@
           shouldTranslate &&= oldTranslateX && oldTranslateX != newTranslateX;
         }
 
+        if (
+          this.hasAttribute("movingtab-ungroup") &&
+          dropIndex == this.allTabs.length - 1
+        ) {
+          // Allow a tab to ungroup if the last item in the tab strip
+          // is a grouped tab.
+          dropIndex++;
+        }
+
         if (shouldTranslate) {
-          for (let tab of movingTabs) {
-            tab.toggleAttribute("tabdrop-samewindow", true);
-            tab.style.transform = `translate(${newTranslateX}px, ${newTranslateY}px)`;
-            let postTransitionCleanup = () => {
-              tab.removeAttribute("tabdrop-samewindow");
+          if (groupDropAction == GROUP_DROP_ACTION_APPEND) {
+            let groupTab = this.allTabs[groupDropIndex];
+            groupTab.group.addTabs(movingTabs);
+          } else {
+            for (let tab of movingTabs) {
+              tab.toggleAttribute("tabdrop-samewindow", true);
+              tab.style.transform = `translate(${newTranslateX}px, ${newTranslateY}px)`;
+              let postTransitionCleanup = () => {
+                tab.removeAttribute("tabdrop-samewindow");
 
-              this._finishAnimateTabMove();
-              if (dropIndex !== false) {
-                gBrowser.moveTabTo(tab, dropIndex);
-                if (incrementDropIndex) {
-                  dropIndex++;
+                this._finishAnimateTabMove();
+                if (dropIndex !== false) {
+                  gBrowser.moveTabTo(tab, dropIndex);
+                  if (incrementDropIndex) {
+                    dropIndex++;
+                  }
                 }
-              }
 
-              gBrowser.syncThrobberAnimations(tab);
-            };
-            if (gReduceMotion) {
-              postTransitionCleanup();
-            } else {
-              let onTransitionEnd = transitionendEvent => {
-                if (
-                  transitionendEvent.propertyName != "transform" ||
-                  transitionendEvent.originalTarget != tab
-                ) {
-                  return;
-                }
-                tab.removeEventListener("transitionend", onTransitionEnd);
-
-                postTransitionCleanup();
+                gBrowser.syncThrobberAnimations(tab);
               };
-              tab.addEventListener("transitionend", onTransitionEnd);
+              if (gReduceMotion) {
+                postTransitionCleanup();
+              } else {
+                let onTransitionEnd = transitionendEvent => {
+                  if (
+                    transitionendEvent.propertyName != "transform" ||
+                    transitionendEvent.originalTarget != tab
+                  ) {
+                    return;
+                  }
+                  tab.removeEventListener("transitionend", onTransitionEnd);
+
+                  postTransitionCleanup();
+                };
+                tab.addEventListener("transitionend", onTransitionEnd);
+              }
             }
           }
         } else {
-          let groupTab =
-            "groupDropIndex" in draggedTab._dragData
-              ? this.allTabs[draggedTab._dragData.groupDropIndex]
-              : null;
           this._finishAnimateTabMove();
-          if (dropIndex !== false) {
+          if (groupDropAction == GROUP_DROP_ACTION_APPEND) {
+            let groupTab = this.allTabs[groupDropIndex];
+            groupTab.group.addTabs(movingTabs);
+          } else if (dropIndex !== false) {
             for (let tab of movingTabs) {
               gBrowser.moveTabTo(tab, dropIndex);
               if (incrementDropIndex) {
@@ -1065,7 +1117,8 @@
               }
             }
           }
-          if (groupTab) {
+          if (groupDropAction == GROUP_DROP_ACTION_CREATE) {
+            let groupTab = this.allTabs[groupDropIndex];
             gBrowser.addTabGroup([groupTab, ...movingTabs], {
               insertBefore: draggedTab,
               showCreateUI: true,
@@ -2304,6 +2357,7 @@
             "dragover-createGroup"
           );
           delete dragData.groupDropIndex;
+          delete dragData.groupDropAction;
         }
         // If dragging over an ungrouped tab, present the UI for creating a
         // new tab group on drop.
@@ -2318,6 +2372,20 @@
           );
         } else {
           this.removeAttribute("movingtab-createGroup");
+        }
+
+        // If dragging over the last tab in a group, differentiate between
+        // dropping into the group vs. after the group.
+        if (
+          groupDropIndex in this.allTabs &&
+          this.allTabs[groupDropIndex] ==
+            this.allTabs[groupDropIndex].group?.tabs.at(-1)
+        ) {
+          dragData.groupDropIndex = groupDropIndex;
+          dragData.groupDropAction = GROUP_DROP_ACTION_APPEND;
+          let colorCode = this.allTabs[groupDropIndex].group.color;
+          this.#setDragOverGroupColor(colorCode);
+          this.removeAttribute("movingtab-ungroup");
         }
       }
 
@@ -2355,6 +2423,7 @@
       this.#clearDragOverCreateGroupTimer();
 
       dragData.groupDropIndex = groupDropIndex;
+      dragData.groupDropAction = GROUP_DROP_ACTION_CREATE;
       this.toggleAttribute("movingtab-createGroup", true);
       this.removeAttribute("movingtab-ungroup");
       this.allTabs[groupDropIndex].toggleAttribute(

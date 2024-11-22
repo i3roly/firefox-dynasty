@@ -36,8 +36,6 @@ import mozilla.components.browser.state.action.HistoryMetadataAction
 import mozilla.components.concept.engine.prompt.ShareData
 import mozilla.components.lib.state.ext.consumeFrom
 import mozilla.components.lib.state.ext.flowScoped
-import mozilla.components.service.fxa.SyncEngine
-import mozilla.components.service.fxa.sync.SyncReason
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.ktx.kotlin.toShortUrl
 import mozilla.components.ui.widgets.withCenterAlignedButtons
@@ -469,24 +467,12 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
         historyStore.dispatch(HistoryFragmentAction.ExitDeletionMode)
     }
 
-    @Suppress("UnusedPrivateMember")
-    private suspend fun syncHistory() {
-        val accountManager = requireComponents.backgroundServices.accountManager
-        accountManager.syncNow(
-            reason = SyncReason.User,
-            debounce = true,
-            customEngineSubset = listOf(SyncEngine.History),
-        )
-        historyView.historyAdapter.refresh()
-    }
-
     internal class DeleteConfirmationDialogFragment(
         private val store: HistoryFragmentStore,
     ) : DialogFragment() {
         override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
             AlertDialog.Builder(requireContext()).apply {
-                val layout = LayoutInflater.from(context)
-                    .inflate(R.layout.delete_history_time_range_dialog, null)
+                val layout = getLayoutInflater().inflate(R.layout.delete_history_time_range_dialog, null)
                 val radioGroup = layout.findViewById<RadioGroup>(R.id.radio_group)
                 radioGroup.check(R.id.last_hour_button)
                 setView(layout)
@@ -510,7 +496,6 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
             }.create().withCenterAlignedButtons()
     }
 
-    @Suppress("UnusedPrivateMember")
     companion object {
         private const val PAGE_SIZE = 25
     }

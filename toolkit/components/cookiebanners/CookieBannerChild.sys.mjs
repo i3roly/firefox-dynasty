@@ -8,6 +8,7 @@ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  setTimeout: "resource://gre/modules/Timer.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
   setInterval: "resource://gre/modules/Timer.sys.mjs",
   clearInterval: "resource://gre/modules/Timer.sys.mjs",
@@ -73,8 +74,10 @@ export class CookieBannerChild extends JSWindowActorChild {
   // of the actor. Particularly the private browsing check can be expensive.
   #isEnabledCached = null;
   #clickRules;
-  #observerCleanUp;
-  #observerCleanUpTimer;
+  #abortController = new AbortController();
+  #timeoutSignalController = new AbortController();
+  #timeoutTimerID;
+  #hasActiveObserver = false;
   // Indicates whether the page "load" event occurred.
   #didLoad = false;
 
@@ -223,8 +226,17 @@ export class CookieBannerChild extends JSWindowActorChild {
 
     this.#clickRules = rules;
 
-    let { bannerHandled, bannerDetected, matchedRules } =
-      await this.handleCookieBanner();
+    let bannerHandled, bannerDetected, matchedRules;
+    try {
+      ({ bannerHandled, bannerDetected, matchedRules } =
+        await this.handleCookieBanner());
+    } catch (e) {
+      if (DOMException.isInstance(e) && e.name === "AbortError") {
+        lazy.logConsole.debug("handleCookieBanner() has aborted");
+        return;
+      }
+      throw e;
+    }
 
     // Send a message to mark that the cookie banner handling has been executed.
     this.sendAsyncMessage("CookieBanner::MarkSiteExecuted");
@@ -235,7 +247,7 @@ export class CookieBannerChild extends JSWindowActorChild {
     // 1. Detected event.
     if (bannerDetected) {
       lazy.logConsole.info("Detected cookie banner.", {
-        url: this.document?.location.href,
+        url: this.document.location.href,
       });
       // Avoid dispatching a duplicate "cookiebannerdetected" event.
       if (!dispatchedEventsForCookieInjection) {
@@ -246,7 +258,7 @@ export class CookieBannerChild extends JSWindowActorChild {
     // 2. Handled event.
     if (bannerHandled) {
       lazy.logConsole.info("Handled cookie banner.", {
-        url: this.document?.location.href,
+        url: this.document.location.href,
         matchedRules,
       });
 
@@ -272,9 +284,9 @@ export class CookieBannerChild extends JSWindowActorChild {
     }
 
     lazy.logConsole.debug("Observed 'load' event", {
-      href: this.document?.location.href,
-      hasActiveObserver: !!this.#observerCleanUp,
-      observerCleanupTimer: this.#observerCleanUpTimer,
+      href: this.document.location.href,
+      hasActiveObserver: this.#hasActiveObserver,
+      observerCleanupTimer: this.#timeoutTimerID,
     });
 
     // On load reset the timer for cleanup.
@@ -291,14 +303,16 @@ export class CookieBannerChild extends JSWindowActorChild {
    */
   #startOrResetCleanupTimer() {
     // Cancel any already running timeout so we can schedule a new one.
-    if (this.#observerCleanUpTimer) {
+    if (this.#timeoutTimerID) {
       lazy.logConsole.debug(
         "#startOrResetCleanupTimer: Cancelling existing cleanup timeout",
         {
           didLoad: this.#didLoad,
+          id: this.#timeoutTimerID,
         }
       );
-      lazy.clearTimeout(this.#observerCleanUpTimer);
+      lazy.clearTimeout(this.#timeoutTimerID);
+      this.#timeoutTimerID = null;
     }
 
     let durationMS = this.#didLoad
@@ -309,27 +323,29 @@ export class CookieBannerChild extends JSWindowActorChild {
       {
         durationMS,
         didLoad: this.#didLoad,
-        hasObserverCleanup: !!this.#observerCleanUp,
       }
     );
 
-    this.#observerCleanUpTimer = this.contentWindow?.setTimeout(() => {
+    this.#timeoutTimerID = lazy.setTimeout(() => {
       lazy.logConsole.debug(
         "#startOrResetCleanupTimer: Cleanup timeout triggered",
         {
           durationMS,
           didLoad: this.#didLoad,
-          hasObserverCleanup: !!this.#observerCleanUp,
         }
       );
-      this.#observerCleanUpTimer = null;
-      this.#observerCleanUp?.();
+      this.#timeoutTimerID = null;
+      this.#timeoutSignalController.abort();
     }, durationMS);
   }
 
   didDestroy() {
-    // Clean up the observer and timer if needed.
-    this.#observerCleanUp?.();
+    lazy.logConsole.debug("didDestroy() called");
+
+    // Clean up the observer and polling function.
+    this.#abortController.abort();
+    lazy.clearTimeout(this.#timeoutTimerID);
+    this.#timeoutTimerID = null;
   }
 
   /**
@@ -342,7 +358,7 @@ export class CookieBannerChild extends JSWindowActorChild {
    * @returns A promise which resolves when it finishes auto clicking.
    */
   async handleCookieBanner() {
-    lazy.logConsole.debug("handleCookieBanner", this.document?.location.href);
+    lazy.logConsole.debug("handleCookieBanner", this.document.location.href);
 
     // Start timer to clean up detection code (polling and mutation observers).
     this.#startOrResetCleanupTimer();
@@ -389,14 +405,24 @@ export class CookieBannerChild extends JSWindowActorChild {
    * check function or null if the function times out.
    */
   #promiseObserve(checkFn) {
-    if (this.#observerCleanUp) {
+    if (this.#hasActiveObserver) {
       throw new Error(
         "The promiseObserve is called before previous one resolves."
       );
     }
-    lazy.logConsole.debug("#promiseObserve", { didLoad: this.#didLoad });
+    this.#hasActiveObserver = true;
 
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
+      if (this.#abortController.signal.aborted) {
+        reject(this.#abortController.signal.reason);
+        return;
+      }
+
+      if (this.#timeoutSignalController.signal.aborted) {
+        resolve(null);
+        return;
+      }
+
       let win = this.contentWindow;
       // Marks whether a mutation on the site has been observed since we last
       // ran checkFn.
@@ -418,6 +444,23 @@ export class CookieBannerChild extends JSWindowActorChild {
 
       // Start polling checkFn.
       let intervalFn = () => {
+        lazy.logConsole.debug(
+          "#promiseObserve interval function",
+          this.document.location.href
+        );
+
+        if (this.#abortController.signal.aborted) {
+          throw new Error(
+            "The promiseObserve interval function is still running after banner detection has aborted."
+          );
+        }
+
+        if (this.#timeoutSignalController.signal.aborted) {
+          throw new Error(
+            "The promiseObserve interval function is still running after banner detection has timed out."
+          );
+        }
+
         // Nothing changed since last run, skip running checkFn.
         if (!sawMutation) {
           return;
@@ -428,17 +471,17 @@ export class CookieBannerChild extends JSWindowActorChild {
         // A truthy result means we have a hit so we can stop observing.
         let result = checkFn?.();
         if (result) {
-          cleanup(result);
+          cleanUp();
+          resolve(result);
         }
       };
       pollIntervalId = lazy.setInterval(intervalFn, lazy.pollingInterval);
 
-      let cleanup = result => {
+      let cleanUp = () => {
         lazy.logConsole.debug("#promiseObserve cleanup", {
-          result,
           observer,
-          cleanupTimeoutId: this.#observerCleanUpTimer,
           pollIntervalId,
+          href: this.document.location?.href,
         });
 
         // Unregister the observer.
@@ -453,21 +496,31 @@ export class CookieBannerChild extends JSWindowActorChild {
           pollIntervalId = null;
         }
 
-        // Clear the cleanup timeout. This can happen when the actor gets
-        // destroyed before the cleanup timeout itself fires.
-        if (this.#observerCleanUpTimer) {
-          lazy.clearTimeout(this.#observerCleanUpTimer);
-        }
-
-        this.#observerCleanUp = null;
-        resolve(result);
+        this.#hasActiveObserver = false;
+        this.#abortController.signal.removeEventListener(
+          "abort",
+          abortFunction
+        );
+        this.#timeoutSignalController.signal.removeEventListener(
+          "abort",
+          timeoutFunction
+        );
       };
 
-      // The clean up function to clean unfinished observer and timer on timeout
-      // or when the actor destroys.
-      this.#observerCleanUp = () => {
-        cleanup(null);
+      let abortFunction = () => {
+        cleanUp();
+        reject(this.#abortController.signal.reason);
       };
+      this.#abortController.signal.addEventListener("abort", abortFunction);
+
+      let timeoutFunction = () => {
+        cleanUp();
+        resolve(null);
+      };
+      this.#timeoutSignalController.signal.addEventListener(
+        "abort",
+        timeoutFunction
+      );
     });
   }
 

@@ -1587,6 +1587,106 @@ const AVAILABLE_UA_OVERRIDES = [
       },
     },
   },
+  {
+    /*
+     * Bug 1913759 - UA override for playblackdesert.com
+     * Webcompat issue #140522 - https://webcompat.com/issues/140522
+     *
+     * The site says Firefox is unsupported, yet seems to work with a Chrome UA.
+     * (The issue does not seem to exist on Android).
+     */
+    id: "bug1913759",
+    platform: "desktop",
+    domain: "playblackdesert.com",
+    bug: "1913759",
+    config: {
+      matches: ["*://eu-trade.naeu.playblackdesert.com/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1899066 - UA override for app.bookcreator.com
+     * Webcompat issue #52462 - https://webcompat.com/issues/52462
+     *
+     * The site says Firefox is unsupported, yet seems to work with a Chrome UA.
+     */
+    id: "bug1899066",
+    platform: "all",
+    domain: "bookcreator.com",
+    bug: "1899066",
+    config: {
+      matches: ["*://app.bookcreator.com/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1899072 - UA override for passpoint.boingo.com
+     * Webcompat issue #29373 - https://webcompat.com/issues/29373
+     *
+     * The site supports HotSpot 2.0 devices, but only allows MacOSX
+     * Mavericks, iOS 7, or Android Nexus 6 devices without a UA override.
+     */
+    id: "bug1899072",
+    platform: "all",
+    domain: "passpoint.boingo.com",
+    bug: "1899072",
+    config: {
+      matches: ["*://passpoint.boingo.com/*"],
+      uaTransformer: (originalUA, platform) => {
+        if (platform == "android") {
+          return "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) FxQuantum Chrome/130.0.6723.102 Mobile Safari/537.36";
+        } else if (platform == "macos") {
+          return UAHelpers.getDeviceAppropriateChromeUA().replace(
+            / Chrome\/[0-9.]*/,
+            ""
+          );
+        }
+        return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) FxQuantum Version/18.1 Safari/605.1.15";
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1899929 - UA override for selecionases.saude.pe.gov.br
+     * Webcompat issue #127079 - https://webcompat.com/issues/127079
+     *
+     * The site says Firefox is unsupported, yet seems to work with a Chrome UA.
+     */
+    id: "bug1899929",
+    platform: "all",
+    domain: "selecionases.saude.pe.gov.br",
+    bug: "1899929",
+    config: {
+      matches: ["*://selecionases.saude.pe.gov.br/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
+  {
+    /*
+     * Bug 1930632 - UA override for support.hp.com
+     *
+     * The site presents Firefox with a version of the page which
+     * does not load properly. A Chrome UA gets a working version.
+     */
+    id: "bug1930632",
+    platform: "desktop",
+    domain: "support.hp.com",
+    bug: "1930632",
+    config: {
+      matches: ["*://support.hp.com/*"],
+      uaTransformer: () => {
+        return UAHelpers.getDeviceAppropriateChromeUA();
+      },
+    },
+  },
 ];
 
 module.exports = AVAILABLE_UA_OVERRIDES;

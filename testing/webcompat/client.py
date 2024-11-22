@@ -489,6 +489,17 @@ class Client:
 
         return asyncio.create_task(task())
 
+    async def promise_navigation_begins(self, url=None, **kwargs):
+        def check(method, data):
+            if url is None:
+                return data
+            if "url" in data and url in data["url"]:
+                return data
+
+        return await self.promise_event_listener(
+            "browsingContext.navigationStarted", check, **kwargs
+        )
+
     async def promise_console_message_listener(self, msg, **kwargs):
         def check(method, data):
             if "text" in data:
@@ -718,7 +729,7 @@ class Client:
     async def disable_window_alert(self):
         return await self.make_preload_script("window.alert = () => {}")
 
-    async def await_alert(self, text):
+    async def await_alert(self, text, timeout=None):
         if not hasattr(self, "alert_preload_script"):
             self.alert_preload_script = await self.make_preload_script(
                 """
@@ -730,16 +741,27 @@ class Client:
                 "alert_detector",
             )
         return self.alert_preload_script.run(
-            """(msg) => new Promise(done => {
+            """(msg, timeout) => new Promise(done => {
+                    const interval = 200;
+                    let count = 0;
                     const to = setInterval(() => {
-                        if (window.__alerts.includes(msg)) {
-                            clearInterval(to);
-                            done();
+                        for (const a of window.__alerts) {
+                            if (a.includes(msg)) {
+                                clearInterval(to);
+                                done(a);
+                                return;
+                            }
                         }
-                    }, 200);
+                        count += interval;
+                        if (timeout && timeout * 1000 < count) {
+                            clearInterval(to);
+                            done(false);
+                        }
+                    }, interval);
                })
             """,
             text,
+            timeout,
             await_promise=True,
         )
 

@@ -47,6 +47,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.setFragmentResultListener
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
@@ -118,7 +119,6 @@ import org.mozilla.fenix.components.appstate.AppAction.MessagingAction
 import org.mozilla.fenix.components.appstate.AppAction.MessagingAction.MicrosurveyAction
 import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.menu.MenuAccessPoint
-import org.mozilla.fenix.components.toolbar.BottomToolbarContainerIntegration
 import org.mozilla.fenix.components.toolbar.BottomToolbarContainerView
 import org.mozilla.fenix.components.toolbar.FenixTabCounterMenu
 import org.mozilla.fenix.components.toolbar.navbar.HomeNavBar
@@ -275,7 +275,6 @@ class HomeFragment : Fragment() {
     private val historyMetadataFeature = ViewBoundFeatureWrapper<RecentVisitsFeature>()
     private val searchSelectorBinding = ViewBoundFeatureWrapper<SearchSelectorBinding>()
     private val searchSelectorMenuBinding = ViewBoundFeatureWrapper<SearchSelectorMenuBinding>()
-    private val bottomToolbarContainerIntegration = ViewBoundFeatureWrapper<BottomToolbarContainerIntegration>()
     private val homeScreenPopupManager = ViewBoundFeatureWrapper<HomeScreenPopupManager>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -287,6 +286,10 @@ class HomeFragment : Fragment() {
         bundleArgs = args.toBundle()
         if (savedInstanceState != null) {
             bundleArgs.putBoolean(FOCUS_ON_ADDRESS_BAR, false)
+        }
+
+        setFragmentResultListener(SearchDialogFragment.SEARCH_VISIBILITY_RESPONSE_KEY) { _, _ ->
+            resetNavbar()
         }
 
         // DO NOT MOVE ANYTHING BELOW THIS addMarker CALL!
@@ -623,13 +626,17 @@ class HomeFragment : Fragment() {
             parent = binding.homeLayout,
             hideOnScroll = false,
             content = {
+                val searchFragmentAlreadyAdded = parentFragmentManager.fragments.any { it is SearchDialogFragment }
+                val searchFragmentShouldBeAdded = !isConfigChange && bundleArgs.getBoolean(FOCUS_ON_ADDRESS_BAR)
+                val isSearchActive = searchFragmentAlreadyAdded || searchFragmentShouldBeAdded
+
                 FirefoxTheme {
                     Column {
                         val shouldShowNavBarCFR =
                             context.shouldAddNavigationBar() && context.settings().shouldShowNavigationBarCFR
                         val shouldShowMicrosurveyPrompt = !activity.isMicrosurveyPromptDismissed.value
 
-                        if (shouldShowMicrosurveyPrompt && !shouldShowNavBarCFR) {
+                        if (!isSearchActive && shouldShowMicrosurveyPrompt && !shouldShowNavBarCFR) {
                             currentMicrosurvey
                                 ?.let {
                                     if (isToolbarAtBottom) {
@@ -675,7 +682,7 @@ class HomeFragment : Fragment() {
                             Divider()
                         }
 
-                        val showCFR =
+                        val showCFR = !isSearchActive &&
                             homeScreenPopupManager.get()?.navBarCFRVisibility?.collectAsState()?.value ?: false
 
                         CFRPopupLayout(
@@ -754,72 +761,54 @@ class HomeFragment : Fragment() {
                                 }
                             }
 
-                            HomeNavBar(
-                                isPrivateMode = activity.browsingModeManager.mode.isPrivate,
-                                browserStore = context.components.core.store,
-                                menuButton = menuButton,
-                                tabsCounterMenu = tabCounterMenu,
-                                onSearchButtonClick = {
-                                    NavigationBar.homeSearchTapped.record(NoExtras())
-                                    val directions =
-                                        NavGraphDirections.actionGlobalSearchDialog(
-                                            sessionId = null,
-                                        )
+                            if (!isSearchActive) {
+                                HomeNavBar(
+                                    isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                                    browserStore = context.components.core.store,
+                                    menuButton = menuButton,
+                                    tabsCounterMenu = tabCounterMenu,
+                                    onSearchButtonClick = {
+                                        NavigationBar.homeSearchTapped.record(NoExtras())
+                                        val directions =
+                                            NavGraphDirections.actionGlobalSearchDialog(
+                                                sessionId = null,
+                                            )
 
-                                    findNavController().nav(
-                                        findNavController().currentDestination?.id,
-                                        directions,
-                                        BrowserAnimator.getToolbarNavOptions(activity),
-                                    )
-                                },
-                                onTabsButtonClick = {
-                                    NavigationBar.homeTabTrayTapped.record(NoExtras())
-                                    findNavController().nav(
-                                        findNavController().currentDestination?.id,
-                                        NavGraphDirections.actionGlobalTabsTrayFragment(
-                                            page = when (browsingModeManager.mode) {
-                                                BrowsingMode.Normal -> Page.NormalTabs
-                                                BrowsingMode.Private -> Page.PrivateTabs
-                                            },
-                                        ),
-                                    )
-                                },
-                                onTabsButtonLongPress = {
-                                    NavigationBar.homeTabTrayLongTapped.record(NoExtras())
-                                },
-                                onMenuButtonClick = {
-                                    findNavController().nav(
-                                        findNavController().currentDestination?.id,
-                                        HomeFragmentDirections.actionGlobalMenuDialogFragment(
-                                            accesspoint = MenuAccessPoint.Home,
-                                        ),
-                                    )
-                                },
-                            )
+                                        findNavController().nav(
+                                            findNavController().currentDestination?.id,
+                                            directions,
+                                            BrowserAnimator.getToolbarNavOptions(activity),
+                                        )
+                                    },
+                                    onTabsButtonClick = {
+                                        NavigationBar.homeTabTrayTapped.record(NoExtras())
+                                        findNavController().nav(
+                                            findNavController().currentDestination?.id,
+                                            NavGraphDirections.actionGlobalTabsTrayFragment(
+                                                page = when (browsingModeManager.mode) {
+                                                    BrowsingMode.Normal -> Page.NormalTabs
+                                                    BrowsingMode.Private -> Page.PrivateTabs
+                                                },
+                                            ),
+                                        )
+                                    },
+                                    onTabsButtonLongPress = {
+                                        NavigationBar.homeTabTrayLongTapped.record(NoExtras())
+                                    },
+                                    onMenuButtonClick = {
+                                        findNavController().nav(
+                                            findNavController().currentDestination?.id,
+                                            HomeFragmentDirections.actionGlobalMenuDialogFragment(
+                                                accesspoint = MenuAccessPoint.Home,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             },
-        ).apply {
-            // When HomeFragment is initializing, SearchDialogFragment might already be visible. Navbar and search
-            // dialog positioned at bottom shouldn't be visible at the same time.
-            val searchFragmentAlreadyAdded = parentFragmentManager.fragments.any { it is SearchDialogFragment }
-            val searchFragmentShouldBeAdded = !isConfigChange && bundleArgs.getBoolean(FOCUS_ON_ADDRESS_BAR)
-            val shouldShowNavbar = !isToolbarAtBottom || !searchFragmentAlreadyAdded && !searchFragmentShouldBeAdded
-            toolbarContainerView.isVisible = shouldShowNavbar
-        }
-
-        bottomToolbarContainerIntegration.set(
-            feature = BottomToolbarContainerIntegration(
-                toolbar = bottomToolbarContainerView.toolbarContainerView,
-                store = requireComponents.core.store,
-                appStore = requireComponents.appStore,
-                bottomToolbarContainerView = bottomToolbarContainerView,
-                sessionId = null,
-                findInPageFeature = { null },
-            ),
-            owner = this,
-            view = binding.root,
         )
     }
 
@@ -918,6 +907,19 @@ class HomeFragment : Fragment() {
             View.VISIBLE,
             elevation,
         )
+    }
+
+    /**
+     * Build and show a new navbar.
+     * Useful when needed to force an update of it's layout.
+     */
+    private fun resetNavbar() {
+        val safeContext = context ?: return
+        if (!safeContext.shouldAddNavigationBar()) return
+
+        // Prevent showing two navigation bars at the same time.
+        binding.root.removeView(bottomToolbarContainerView.toolbarContainerView)
+        reinitializeNavBar()
     }
 
     private fun updateToolbarViewUI(@DrawableRes id: Int, visibility: Int, elevation: Float) {

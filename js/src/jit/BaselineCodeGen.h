@@ -37,7 +37,6 @@ class BaselineCodeGen {
  protected:
   Handler handler;
 
-  JSContext* cx;
   CompileRuntime* runtime;
   StackMacroAssembler masm;
 
@@ -253,7 +252,6 @@ class BaselineCodeGen {
 
   [[nodiscard]] bool emitPrologue();
   [[nodiscard]] bool emitEpilogue();
-  [[nodiscard]] bool emitOutOfLinePostBarrierSlot();
   [[nodiscard]] bool emitStackCheck();
   [[nodiscard]] bool emitDebugPrologue();
   [[nodiscard]] bool emitDebugEpilogue();
@@ -268,6 +266,8 @@ class BaselineCodeGen {
 
   void emitProfilerEnterFrame();
   void emitProfilerExitFrame();
+
+  void emitOutOfLinePostBarrierSlot();
 };
 
 using RetAddrEntryVector = js::Vector<RetAddrEntry, 16, SystemAllocPolicy>;
@@ -297,6 +297,8 @@ class BaselineCompilerHandler {
   // Index of the current ICEntry in the script's JitScript.
   uint32_t icEntryIndex_;
 
+  uint32_t baseWarmUpThreshold_;
+
   bool compileDebugInstrumentation_;
   bool ionCompileable_;
 
@@ -305,7 +307,7 @@ class BaselineCompilerHandler {
 
   BaselineCompilerHandler(MacroAssembler& masm, TempAllocator& alloc,
                           JSScript* script, JSObject* globalLexical,
-                          JSObject* globalThis);
+                          JSObject* globalThis, uint32_t baseWarmUpThreshold);
 
   [[nodiscard]] bool init();
 
@@ -350,7 +352,7 @@ class BaselineCompilerHandler {
   RetAddrEntryVector& retAddrEntries() { return retAddrEntries_; }
   OSREntryVector& osrEntries() { return osrEntries_; }
 
-  [[nodiscard]] bool recordCallRetAddr(JSContext* cx, RetAddrEntry::Kind kind,
+  [[nodiscard]] bool recordCallRetAddr(RetAddrEntry::Kind kind,
                                        uint32_t retOffset);
 
   // If a script has more |nslots| than this the stack check must account
@@ -366,6 +368,8 @@ class BaselineCompilerHandler {
     return globalLexicalEnvironment_;
   }
   JSObject* globalThis() const { return globalThis_; }
+
+  uint32_t baseWarmUpThreshold() const { return baseWarmUpThreshold_; }
 };
 
 using BaselineCompilerCodeGen = BaselineCodeGen<BaselineCompilerHandler>;
@@ -386,10 +390,11 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
 
  public:
   BaselineCompiler(JSContext* cx, TempAllocator& alloc, JSScript* script,
-                   JSObject* globalLexical, JSObject* globalThis);
+                   JSObject* globalLexical, JSObject* globalThis,
+                   uint32_t baseWarmUpThreshold);
   [[nodiscard]] bool init();
 
-  MethodStatus compile();
+  MethodStatus compile(JSContext* cx);
 
   bool compileDebugInstrumentation() const {
     return handler.compileDebugInstrumentation();
@@ -474,14 +479,13 @@ class BaselineInterpreterHandler {
     return false;
   }
 
-  [[nodiscard]] bool addDebugInstrumentationOffset(JSContext* cx,
-                                                   CodeOffset offset);
+  [[nodiscard]] bool addDebugInstrumentationOffset(CodeOffset offset);
 
   const BaselineInterpreter::CallVMOffsets& callVMOffsets() const {
     return callVMOffsets_;
   }
 
-  [[nodiscard]] bool recordCallRetAddr(JSContext* cx, RetAddrEntry::Kind kind,
+  [[nodiscard]] bool recordCallRetAddr(RetAddrEntry::Kind kind,
                                        uint32_t retOffset);
 
   bool maybeIonCompileable() const { return true; }
@@ -520,7 +524,7 @@ class BaselineInterpreterGenerator final : private BaselineInterpreterCodeGen {
  public:
   explicit BaselineInterpreterGenerator(JSContext* cx, TempAllocator& alloc);
 
-  [[nodiscard]] bool generate(BaselineInterpreter& interpreter);
+  [[nodiscard]] bool generate(JSContext* cx, BaselineInterpreter& interpreter);
 
  private:
   [[nodiscard]] bool emitInterpreterLoop();

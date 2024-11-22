@@ -3570,8 +3570,6 @@ class Document : public nsINode,
   }
   void SetDevToolsWatchingDOMMutations(bool aValue);
 
-  void MaybeWarnAboutZoom();
-
   // https://drafts.csswg.org/cssom-view/#evaluate-media-queries-and-report-changes
   void EvaluateMediaQueriesAndReportChanges(bool aRecurse);
 
@@ -4261,8 +4259,8 @@ class Document : public nsINode,
     // FIXME(emilio): Can SVG documents be in quirks mode anyway?
     return mCompatMode == eCompatibility_NavQuirks && !IsSVGDocument();
   }
-  void AddContentEditableStyleSheetsToStyleSet(bool aDesignMode);
-  void RemoveContentEditableStyleSheets();
+  void AddContentEditableStyleSheetToStyleSet();
+  void RemoveContentEditableStyleSheet();
   void AddStyleSheetToStyleSets(StyleSheet&);
   void RemoveStyleSheetFromStyleSets(StyleSheet&);
   void NotifyStyleSheetApplicableStateChanged();
@@ -4818,9 +4816,6 @@ class Document : public nsINode,
   // Whether we have a contenteditable.css stylesheet in the style set.
   bool mContentEditableSheetAdded : 1;
 
-  // Whether we have a designmode.css stylesheet in the style set.
-  bool mDesignModeSheetAdded : 1;
-
   // True if this document has ever had an HTML or SVG <title> element
   // bound to it
   bool mMayHaveTitleElement : 1;
@@ -4901,12 +4896,6 @@ class Document : public nsINode,
   // mHasBeenEditable is set to true when mEditingState is firstly set to
   // eDesignMode or eContentEditable.
   bool mHasBeenEditable : 1;
-
-  // Whether we've warned about the CSS zoom property.
-  //
-  // We don't use the general deprecated operation mechanism for this because we
-  // also record this as a `CountedUnknownProperty`.
-  bool mHasWarnedAboutZoom : 1;
 
   // While we're handling an execCommand call by web app, set
   // to true.

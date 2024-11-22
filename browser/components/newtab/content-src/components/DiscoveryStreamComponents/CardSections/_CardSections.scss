@@ -1,23 +1,123 @@
 @mixin section-card-small {
-  // styles
   grid-row: span 1;
   grid-column: span 1;
+  flex-direction: row;
+  position: relative;
+  align-items: center;
+  gap: var(--space-medium);
+  padding: var(--space-large);
+
+  .img-wrapper {
+    width: 127px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    aspect-ratio: 1/1;
+
+    .ds-image.img {
+      width: 100%;
+      height: 100%;
+      padding-top: 0;
+      min-width: 100%;
+    }
+
+    .ds-image.img img {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--border-radius-medium) var(--border-radius-medium);
+      object-fit: cover;
+    }
+  }
+
+  &:not(.placeholder) {
+    .img-wrapper>.ds-image.img>img {
+      width: 100%;
+      border-radius: var(--border-radius-medium) var(--border-radius-medium);
+    }
+  }
+
+  .ds-card-link {
+    inset-inline-end: 0;
+  }
+
+  .meta {
+    padding: var(--space-xsmall) 0;
+
+    .info-wrap .title {
+      font-size: var(--font-size-small);
+      margin-bottom: 0;
+    }
+
+    .info-wrap .excerpt {
+      display: none;
+    }
+
+    .sections-card-footer {
+      padding-top: var(--space-small);
+    }
+  }
+
+  .card-stp-button-hover-background {
+    padding-block-start: unset;
+  }
+
+  .card-stp-button-position-wrapper {
+    inset-inline-end: 28px;
+
+    .card-stp-button {
+      display: none;
+    }
+  }
 }
 
 @mixin section-card-medium {
-  // styles
   grid-row: span 2;
   grid-column: span 1;
+  flex-direction: column;
+  padding: 0;
+  align-items: initial;
+  gap: initial;
+
+  .img-wrapper {
+    width: 100%;
+    position: relative;
+    // reset values inherited from small card mixin
+    flex-grow: initial;
+    flex-shrink: initial;
+    aspect-ratio: initial;
+  }
+
+  &:not(.placeholder) {
+    .img-wrapper>.ds-image.img>img {
+      border-radius: var(--border-radius-large) var(--border-radius-large) 0 0;
+    }
+  }
+
+  .meta {
+    padding: var(--space-large);
+
+    .info-wrap {
+      .title {
+        // show only 2 lines of copy
+        font-size: var(--font-size-root);
+        margin-bottom: var(--space-small);
+      }
+
+      .excerpt {
+        display: block;
+        -webkit-line-clamp: 2;
+      }
+    }
+  }
 }
 
 // DS Large Card
 @mixin section-card-large {
-  // styles
   grid-row: span 2;
   grid-column: span 2;
 
   &.ds-card.sections-card-ui {
-    @media (min-width: $break-point-widest) {
+    @media (min-width: $break-point-layout-variant ) and (max-width: $break-point-widest ),
+      (min-width: $break-point-sections-variant ) {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: var(--space-xlarge);
@@ -50,13 +150,84 @@
   }
 }
 
+// Bug 1930974 - Override parent wrapper width for topsites container
+// Use (almost all) default wrapper widths with the sections-grid breakpoints
+.has-sections-grid .ds-outer-wrapper-breakpoint-override {
+  .ds-layout-topsites {
+    width: 100vw;
+    margin-inline-start: 50%;
+    transform: translate3d(-50%, 0, 0);
+
+    > div {
+      width: 266px;
+      margin-inline: auto;
+
+      @media (min-width: $break-point-medium) {
+        width: 266px;
+      }
+
+      @media (min-width: $break-point-layout-variant) {
+        width: 510px;
+      }
+
+      @media (min-width: $break-point-widest) {
+        width: 986px;
+      }
+    }
+  }
+
+  // Note this breakpoint doesn't use set the same default width (746px).
+  // The sections layout uses a different $break-point-layout-variant but not $break-point-large.
+  // This rule below maintains the topsites layout to stack two rows x four tiles
+  // when the sections grid changes to a two column layout
+  @media (min-width: $break-point-large) {
+    .ds-layout-topsites .hide-for-narrow {
+      display: inline-block;
+    }
+  }
+}
+
+// Bug 1930974 - Override parent wrapper width for topsites container
+// Use the variant a/b wrapper widths
+.has-sections-grid.layout-variant-a .ds-outer-wrapper-breakpoint-override,
+.has-sections-grid.layout-variant-b .ds-outer-wrapper-breakpoint-override {
+  .ds-layout-topsites {
+    width: 100vw;
+    margin-inline-start: 50%;
+    transform: translate3d(-50%, 0, 0);
+
+    > div {
+      margin-inline: auto;
+      width: 346px;
+
+      @media (min-width: $break-point-medium) {
+        width: 346px;
+      }
+
+      @media (min-width: $break-point-layout-variant) {
+        width: 659px;
+      }
+
+      @media (min-width: $break-point-widest) {
+        width: 989px;
+      }
+
+      @media (min-width: $break-point-sections-variant) {
+        width: 1311px;
+      }
+    }
+
+  }
+}
+
 .has-sections-grid {
   .ds-outer-wrapper-breakpoint-override main {
     width: auto;
 
     .ds-card {
-      // TODO update width once new card layouts have been added
-      max-width: 100%;
+      // card should take up availible space in grid
+      width: 100%;
+      height: 100%;
     }
 
     .body-wrapper {
@@ -183,10 +354,10 @@
 
   @media (min-width: $break-point-widest) {
     grid-template-columns: repeat(3, 300px);
-    grid-gap: var(--space-xlarge);
+    gap: var(--space-large);
 
     @for $i from 0 through 6 {
-      .ds-card[data-property-three="#{$i}"] {
+      .ds-card[data-position-three="#{$i}"] {
         order: $i;
       }
     }
@@ -209,7 +380,7 @@
     grid-template-columns: repeat(4, 300px);
 
     @for $i from 0 through 6 {
-      .ds-card[data-property-four="#{$i}"] {
+      .ds-card[data-position-four="#{$i}"] {
         order: $i;
       }
     }

@@ -10,6 +10,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Preferences: "resource://gre/modules/Preferences.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  ProcessType: "resource://gre/modules/ProcessType.sys.mjs",
 });
 
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
@@ -296,59 +297,72 @@ export class UserCharacteristicsPageService {
 
     let data = {};
     // Returns true if we need to try again
-    const attemptRender = async () => {
+    const attemptRender = async allowSoftwareRenderer => {
       const diagnostics = {
-        count: 0,
+        winCount: 0,
+        tabCount: 0,
         closed: 0,
         noActor: 0,
         noDebugInfo: 0,
         notHW: 0,
+        remoteTypes: [],
       };
       // Try to find a window that supports hardware rendering
-      let foundActor = null;
+      let acceleratedActor = null;
       let fallbackActor = null;
       for (const win of Services.wm.getEnumerator("navigator:browser")) {
-        diagnostics.count++;
+        diagnostics.winCount++;
         if (win.closed) {
           diagnostics.closed++;
           continue;
         }
 
-        const actor =
-          win.gBrowser.selectedBrowser.browsingContext?.currentWindowGlobal.getActor(
-            actorName
+        for (const tab of win.gBrowser.tabs) {
+          diagnostics.tabCount++;
+          diagnostics.remoteTypes.push(
+            sanitizeRemoteType(tab.linkedBrowser.remoteType)
           );
 
-        if (!actor) {
-          diagnostics.noActor++;
-          continue;
-        }
+          const actor = await promiseTry(() =>
+            tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
+              actorName
+            )
+          ).catch(async e => {
+            lazy.console.error("Error getting actor", e);
+            this.handledErrors.push(await stringifyError(e));
+          });
 
-        // Example data: {"backendType":3,"drawTargetType":0,"isAccelerated":false,"isShared":true}
-        const debugInfo = await timeoutPromise(
-          actor.sendQuery("CanvasRendering:GetDebugInfo"),
-          5000
-        ).catch(async e => {
-          lazy.console.error("Canvas rendering debug info failed", e);
-          this.handledErrors.push(await stringifyError(e));
-        });
-        if (!debugInfo) {
-          diagnostics.noDebugInfo++;
-          continue;
-        }
+          if (!actor) {
+            diagnostics.noActor++;
+            continue;
+          }
 
-        lazy.console.debug("Canvas rendering debug info", debugInfo);
+          // Example data: {"backendType":3,"drawTargetType":0,"isAccelerated":false,"isShared":true}
+          const debugInfo = await timeoutPromise(
+            actor.sendQuery("CanvasRendering:GetDebugInfo"),
+            5000
+          ).catch(async e => {
+            lazy.console.error("Canvas rendering debug info failed", e);
+            this.handledErrors.push(await stringifyError(e));
+          });
+          if (!debugInfo) {
+            diagnostics.noDebugInfo++;
+            continue;
+          }
 
-        fallbackActor = actor;
-        if (debugInfo.isAccelerated) {
-          foundActor = actor;
-          break;
+          lazy.console.debug("Canvas rendering debug info", debugInfo);
+
+          fallbackActor = actor;
+          if (debugInfo.isAccelerated) {
+            acceleratedActor = actor;
+            break;
+          }
+          diagnostics.notHW++;
         }
-        diagnostics.notHW++;
       }
 
       // If we didn't find a hardware accelerated window, we use the last one
-      const actor = foundActor || fallbackActor;
+      const actor = acceleratedActor || fallbackActor;
 
       if (!actor) {
         lazy.console.error("No actor found for canvas rendering");
@@ -360,42 +374,59 @@ export class UserCharacteristicsPageService {
       // Ask it to render the canvases.
       // Timeout after 1 minute to give multiple
       // chances to render canvases.
-      try {
-        data = await timeoutPromise(
-          actor.sendQuery("CanvasRendering:Render", {
-            hwRenderingExpected: !!foundActor,
-          }),
-          1 * 60 * 1000
-        );
-      } catch (e) {
-        lazy.console.error(
-          "Canvas rendering timed out or actor was destroyed (tab closed etc.)",
-          e
+      if (allowSoftwareRenderer || acceleratedActor) {
+        try {
+          data = await timeoutPromise(
+            actor.sendQuery("CanvasRendering:Render", {
+              hwRenderingExpected: !!acceleratedActor,
+            }),
+            1 * 60 * 1000
+          );
+        } catch (e) {
+          lazy.console.error(
+            "Canvas rendering timed out or actor was destroyed (tab closed etc.)",
+            e
+          );
+          return {
+            error: { message: await stringifyError(e), diagnostics },
+            retry: true,
+          };
+        }
+
+        // Successfully rendered at least some canvases, maybe all of them
+        lazy.console.debug(
+          `Canvases rendered because ${
+            acceleratedActor
+              ? "we found a hardware accelerated window"
+              : "we allowed software rendering"
+          }`
         );
         return {
-          error: { message: await stringifyError(e), diagnostics },
-          retry: true,
+          error: null,
+          retry: false,
         };
       }
 
-      // Successfully rendered at least some canvases, maybe all of them
-      return {
-        error:
-          !foundActor && fallbackActor
-            ? { message: "NO_HW_ACTOR", diagnostics }
-            : null,
-        retry: false,
-      };
+      // We have a fallback actor, but we don't want to use it for software rendering
+      lazy.console.error(
+        "No hardware accelerated windows found and software rendering is not allowed"
+      );
+      return { error: { message: "NO_HW_ACTOR", diagnostics }, retry: true };
     };
 
     // Try to render canvases
     let result = null;
-    while ((result = await attemptRender()).retry) {
+    let tries = 1;
+    while (
+      (result = await attemptRender(tries === 5 || Cu.isInAutomation)).retry
+    ) {
+      // We either don't have hardware accelerated windows or we failed to render canvases.
       this.handledErrors.push(result.error);
-      // If we failed to render canvases, try again.
-      // This can happen if the user closes the tab before we render the canvases.
+      // We allow software rendering on the fifth try.
+      tries++;
+      // Rendering might fail if the user closes the tab before we render the canvases.
       // Wait for a bit before trying again
-      await new Promise(resolve => lazy.setTimeout(resolve, 5 * 1000));
+      await new Promise(resolve => lazy.setTimeout(resolve, 10 * 1000));
     }
 
     if (!result.retry && result.error) {
@@ -924,4 +955,29 @@ function promiseTry(func) {
       reject(error);
     }
   });
+}
+
+// Remote type may include current site url, which is not needed.
+// We only need the remote type.
+// See https://firefox-source-docs.mozilla.org/dom/ipc/process_model.html
+// and search for $SITE for processes that have site information.
+// We return unknown if it isn't one of the known types.
+function sanitizeRemoteType(remoteTypeStr) {
+  if (!remoteTypeStr) {
+    return "null";
+  }
+
+  const remoteTypes = remoteTypeStr.split("=");
+  if (remoteTypes.length >= 2) {
+    return isValidRemoteType(remoteTypes[0]) ? remoteTypes[0] : "unknown";
+  }
+
+  return isValidRemoteType(remoteTypeStr) ? remoteTypeStr : "unknown";
+}
+
+function isValidRemoteType(sanitizedRemoteType) {
+  return (
+    lazy.ProcessType.fluentNameFromProcessTypeString(sanitizedRemoteType) !==
+    lazy.ProcessType.kFallback
+  );
 }
