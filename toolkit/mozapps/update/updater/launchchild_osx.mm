@@ -119,7 +119,7 @@ void LaunchMacApp(int argc, const char** argv) {
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
     } else {
       NSError *error=nil;
-      [[NSWorkspace sharedWorkspace] launchApplicationAtURL:[NSBundle mainBundle].bundleURL
+      [[NSWorkspace sharedWorkspace] launchApplicationAtURL:[NSURL fileURLWithPath:launchPath]
                                                     options:NSWorkspaceLaunchAsync|NSWorkspaceLaunchNewInstance
                                               configuration:@{NSWorkspaceLaunchConfigurationArguments:arguments}
                                                       error:&error];
